@@ -525,5 +525,54 @@ namespace CNA::Internal::Backends::WebGPU
         std::unordered_map<int, WGPURenderPipeline> alphaTestPipelines_;
         std::unordered_map<int, WGPURenderPipeline> alphaTestColoredPipelines_;
         std::vector<AlphaTestDrawCommand> alphaTestDrawCommands_;
+
+        // WEBGPU-24: dual_texture3d.wgsl -- DualTextureEffect (two texture layers sampled at the
+        // same UV, `tex1.rgb*=2.0; result=tex1*tex2*tint`, matching
+        // VulkanGraphicsBackend's dual_texture3d.{vert,frag}.glsl /
+        // dual_texture_colored3d.vert.glsl). Genuinely new bind-group shape (unlike alpha_test3d,
+        // which reused textured3d's layouts unchanged): group 1 needs THREE bindings (one shared
+        // sampler + two textures), so this is the first WebGPU 3D shader family with its own
+        // dedicated dualTextureBindGroupLayout_/dualTexturePipelineLayout_ -- group 0 (the primary
+        // UBO) is still coloredBindGroupLayout_, reused unchanged (DualTextureEffect has no
+        // lighting and no alpha test, so FillExtUniforms()'s existing layout already covers it).
+        // No fog (same deliberate deferral as the other 3D shaders).
+        struct DualTextureDrawCommand
+        {
+            std::vector<std::uint8_t> vertexData;
+            std::vector<std::uint8_t> indexData;
+            bool indexed = false;
+            bool index32 = false;
+            std::uint32_t vertexCount = 0;
+            std::uint32_t indexCount = 0;
+            WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
+            std::array<float, 32> uniforms{};
+            bool depthTest = false;
+            bool depthWrite = false;
+            int depthFunc = 3;
+            const WebGPUTextureBackend* texture0 = nullptr;
+            const WebGPUTextureBackend* texture1 = nullptr;
+            int textureFilter = 0;
+            int addressU = 1;
+            int addressV = 1;
+            bool hasVertexColor = false;   ///< stride 24 vs stride 20
+        };
+        void CreateDualTextureResources();
+        void DestroyDualTextureResources();
+        [[nodiscard]] WGPURenderPipeline GetOrCreatePipelineDualTexture3D(std::size_t stride,
+                                                                          WGPUPrimitiveTopology topology,
+                                                                          bool depthTest, bool depthWrite,
+                                                                          int depthFunc);
+        void QueueDualTextureDraw(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
+                                  const Matrix& world, const Matrix& view, const Matrix& projection,
+                                  PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
+        void RenderDualTextureDraws(WGPURenderPassEncoder pass);
+
+        WGPUShaderModule dualTextureShader_ = nullptr;          ///< stride 20 (no vertex colour)
+        WGPUShaderModule dualTextureColoredShader_ = nullptr;   ///< stride 24 (vertex colour tint)
+        WGPUBindGroupLayout dualTextureBindGroupLayout_ = nullptr;  ///< group 1: sampler + texture0 + texture1
+        WGPUPipelineLayout dualTexturePipelineLayout_ = nullptr;    ///< group 0 (UBO, coloredBindGroupLayout_) + group 1
+        std::unordered_map<int, WGPURenderPipeline> dualTexturePipelines_;
+        std::unordered_map<int, WGPURenderPipeline> dualTextureColoredPipelines_;
+        std::vector<DualTextureDrawCommand> dualTextureDrawCommands_;
     };
 }

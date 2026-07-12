@@ -593,6 +593,7 @@ namespace CNA::Internal::Backends::WebGPU
         DestroyTexturedResources();
         DestroyLitTexturedResources();
         DestroyAlphaTestResources();
+        DestroyDualTextureResources();
         for (WGPUBindGroup bg : pendingBindGroupReleases_) wgpuBindGroupRelease(bg);
         for (WGPUBuffer buf : pendingBufferReleases_) wgpuBufferRelease(buf);
         for (WGPUSampler& sampler : samplerCache_)
@@ -809,6 +810,8 @@ namespace CNA::Internal::Backends::WebGPU
             CreateLitTexturedResources();
         if (formatChanged || alphaTestShader_ == nullptr)
             CreateAlphaTestResources();
+        if (formatChanged || dualTextureShader_ == nullptr)
+            CreateDualTextureResources();
     }
 
     void WebGPUGraphicsBackend::RecreateDepthTexture()
@@ -1853,6 +1856,255 @@ struct VertexOutput {
         return created;
     }
 
+    void WebGPUGraphicsBackend::DestroyDualTextureResources()
+    {
+        for (auto& [key, pipe] : dualTexturePipelines_)
+        {
+            if (pipe != nullptr) wgpuRenderPipelineRelease(pipe);
+        }
+        dualTexturePipelines_.clear();
+        for (auto& [key, pipe] : dualTextureColoredPipelines_)
+        {
+            if (pipe != nullptr) wgpuRenderPipelineRelease(pipe);
+        }
+        dualTextureColoredPipelines_.clear();
+        if (dualTexturePipelineLayout_ != nullptr) wgpuPipelineLayoutRelease(dualTexturePipelineLayout_);
+        if (dualTextureBindGroupLayout_ != nullptr) wgpuBindGroupLayoutRelease(dualTextureBindGroupLayout_);
+        if (dualTextureShader_ != nullptr) wgpuShaderModuleRelease(dualTextureShader_);
+        if (dualTextureColoredShader_ != nullptr) wgpuShaderModuleRelease(dualTextureColoredShader_);
+        dualTexturePipelineLayout_ = nullptr;
+        dualTextureBindGroupLayout_ = nullptr;
+        dualTextureShader_ = nullptr;
+        dualTextureColoredShader_ = nullptr;
+    }
+
+    void WebGPUGraphicsBackend::CreateDualTextureResources()
+    {
+        DestroyDualTextureResources();
+        if (surfaceFormat_ == WGPUTextureFormat_Undefined || coloredBindGroupLayout_ == nullptr)
+            return;
+
+        // Ported from VulkanGraphicsBackend's dual_texture3d.{vert,frag}.glsl. DualTextureEffect
+        // has no lighting and no alpha test, so group 0 reuses coloredBindGroupLayout_/the primary
+        // Uniforms layout unchanged. Group 1 is a NEW shape (one shared sampler + two textures,
+        // since DualTextureEffect samples both layers at the same UV with one shared
+        // TextureFilter/AddressMode, matching every other WebGPU 3D shader's own
+        // single-sampler-per-draw simplification).
+        static constexpr char shaderSource[] = R"WGSL(
+struct Uniforms {
+    mvp: mat4x4f,
+    diffuseColor: vec4f,
+    ambientLighting: vec4f,
+    light0DirTexture: vec4f,
+    light0DiffuseVertexColor: vec4f,
+};
+@group(0) @binding(0) var<uniform> u: Uniforms;
+@group(1) @binding(0) var texSampler: sampler;
+@group(1) @binding(1) var tex0: texture_2d<f32>;
+@group(1) @binding(2) var tex1: texture_2d<f32>;
+
+struct VertexInput {
+    @location(0) position: vec3f,
+    @location(1) uv: vec2f,
+};
+struct VertexOutput {
+    @builtin(position) position: vec4f,
+    @location(0) uv: vec2f,
+};
+@vertex fn vs_main(input: VertexInput) -> VertexOutput {
+    var output: VertexOutput;
+    output.position = u.mvp * vec4f(input.position, 1.0);
+    output.uv = input.uv;
+    return output;
+}
+@fragment fn fs_main(input: VertexOutput) -> @location(0) vec4f {
+    var sample0 = textureSample(tex0, texSampler, input.uv);
+    let sample1 = textureSample(tex1, texSampler, input.uv);
+    sample0 = vec4f(sample0.rgb * 2.0, sample0.a);
+    return sample0 * sample1 * u.diffuseColor;
+}
+)WGSL";
+
+        WGPUShaderSourceWGSL wgsl{};
+        wgsl.chain.sType = WGPUSType_ShaderSourceWGSL;
+        wgsl.code = StringView(shaderSource);
+        WGPUShaderModuleDescriptor shaderDescriptor{};
+        shaderDescriptor.label = StringView("CNA WebGPU DualTexture3D WGSL");
+        shaderDescriptor.nextInChain = &wgsl.chain;
+        dualTextureShader_ = wgpuDeviceCreateShaderModule(device_, &shaderDescriptor);
+        if (dualTextureShader_ == nullptr)
+            throw std::runtime_error("CNA WebGPU: failed to create DualTexture3D shader");
+
+        // WEBGPU-24: stride 24 (VertexPositionColorTexture) variant -- adds vertex-colour tint,
+        // mirroring colored_textured3d.wgsl's own mixing formula.
+        static constexpr char coloredShaderSource[] = R"WGSL(
+struct Uniforms {
+    mvp: mat4x4f,
+    diffuseColor: vec4f,
+    ambientLighting: vec4f,
+    light0DirTexture: vec4f,
+    light0DiffuseVertexColor: vec4f,
+};
+@group(0) @binding(0) var<uniform> u: Uniforms;
+@group(1) @binding(0) var texSampler: sampler;
+@group(1) @binding(1) var tex0: texture_2d<f32>;
+@group(1) @binding(2) var tex1: texture_2d<f32>;
+
+struct VertexInput {
+    @location(0) position: vec3f,
+    @location(1) color: vec4f,
+    @location(2) uv: vec2f,
+};
+struct VertexOutput {
+    @builtin(position) position: vec4f,
+    @location(0) uv: vec2f,
+    @location(1) tint: vec4f,
+};
+@vertex fn vs_main(input: VertexInput) -> VertexOutput {
+    var output: VertexOutput;
+    output.position = u.mvp * vec4f(input.position, 1.0);
+    output.uv = input.uv;
+    let vertexColorEnabled = u.light0DiffuseVertexColor.w;
+    output.tint = select(u.diffuseColor, input.color * u.diffuseColor, vertexColorEnabled > 0.5);
+    return output;
+}
+@fragment fn fs_main(input: VertexOutput) -> @location(0) vec4f {
+    var sample0 = textureSample(tex0, texSampler, input.uv);
+    let sample1 = textureSample(tex1, texSampler, input.uv);
+    sample0 = vec4f(sample0.rgb * 2.0, sample0.a);
+    return sample0 * sample1 * input.tint;
+}
+)WGSL";
+
+        WGPUShaderSourceWGSL coloredWgsl{};
+        coloredWgsl.chain.sType = WGPUSType_ShaderSourceWGSL;
+        coloredWgsl.code = StringView(coloredShaderSource);
+        WGPUShaderModuleDescriptor coloredShaderDescriptor{};
+        coloredShaderDescriptor.label = StringView("CNA WebGPU DualTextureColored3D WGSL");
+        coloredShaderDescriptor.nextInChain = &coloredWgsl.chain;
+        dualTextureColoredShader_ = wgpuDeviceCreateShaderModule(device_, &coloredShaderDescriptor);
+        if (dualTextureColoredShader_ == nullptr)
+            throw std::runtime_error("CNA WebGPU: failed to create DualTextureColored3D shader");
+
+        std::array<WGPUBindGroupLayoutEntry, 3> layoutEntries{};
+        layoutEntries[0].binding = 0;
+        layoutEntries[0].visibility = WGPUShaderStage_Fragment;
+        layoutEntries[0].sampler.type = WGPUSamplerBindingType_Filtering;
+        layoutEntries[1].binding = 1;
+        layoutEntries[1].visibility = WGPUShaderStage_Fragment;
+        layoutEntries[1].texture.sampleType = WGPUTextureSampleType_Float;
+        layoutEntries[1].texture.viewDimension = WGPUTextureViewDimension_2D;
+        layoutEntries[1].texture.multisampled = false;
+        layoutEntries[2].binding = 2;
+        layoutEntries[2].visibility = WGPUShaderStage_Fragment;
+        layoutEntries[2].texture.sampleType = WGPUTextureSampleType_Float;
+        layoutEntries[2].texture.viewDimension = WGPUTextureViewDimension_2D;
+        layoutEntries[2].texture.multisampled = false;
+        WGPUBindGroupLayoutDescriptor bindLayoutDescriptor{};
+        bindLayoutDescriptor.label = StringView("CNA WebGPU DualTexture3D BindGroupLayout");
+        bindLayoutDescriptor.entryCount = layoutEntries.size();
+        bindLayoutDescriptor.entries = layoutEntries.data();
+        dualTextureBindGroupLayout_ = wgpuDeviceCreateBindGroupLayout(device_, &bindLayoutDescriptor);
+
+        std::array<WGPUBindGroupLayout, 2> groupLayouts{coloredBindGroupLayout_, dualTextureBindGroupLayout_};
+        WGPUPipelineLayoutDescriptor pipelineLayoutDescriptor{};
+        pipelineLayoutDescriptor.label = StringView("CNA WebGPU DualTexture3D PipelineLayout");
+        pipelineLayoutDescriptor.bindGroupLayoutCount = groupLayouts.size();
+        pipelineLayoutDescriptor.bindGroupLayouts = groupLayouts.data();
+        dualTexturePipelineLayout_ = wgpuDeviceCreatePipelineLayout(device_, &pipelineLayoutDescriptor);
+
+        if (dualTextureBindGroupLayout_ == nullptr || dualTexturePipelineLayout_ == nullptr)
+            throw std::runtime_error("CNA WebGPU: failed to create DualTexture3D GPU resources");
+    }
+
+    WGPURenderPipeline WebGPUGraphicsBackend::GetOrCreatePipelineDualTexture3D(std::size_t stride,
+                                                                                WGPUPrimitiveTopology topology,
+                                                                                bool depthTest, bool depthWrite,
+                                                                                int depthFunc)
+    {
+        const int key = ((static_cast<int>(stride) * 8 + static_cast<int>(topology)) * 8 + depthFunc) * 4 +
+                        (depthTest ? 2 : 0) + (depthWrite ? 1 : 0);
+        auto& cache = (stride == 24) ? dualTextureColoredPipelines_ : dualTexturePipelines_;
+        if (auto it = cache.find(key); it != cache.end())
+            return it->second;
+
+        WGPUVertexAttribute attributes[3]{};
+        std::uint32_t attributeCount = 0;
+        std::uint64_t arrayStride = stride;
+        WGPUShaderModule shaderModule = dualTextureShader_;
+
+        if (stride == 24)
+        {
+            struct ColoredTexturedVertex { float x, y, z; std::uint8_t r, g, b, a; float u, v; };
+            attributes[0].format = WGPUVertexFormat_Float32x3;
+            attributes[0].offset = offsetof(ColoredTexturedVertex, x);
+            attributes[0].shaderLocation = 0;
+            attributes[1].format = WGPUVertexFormat_Unorm8x4;
+            attributes[1].offset = offsetof(ColoredTexturedVertex, r);
+            attributes[1].shaderLocation = 1;
+            attributes[2].format = WGPUVertexFormat_Float32x2;
+            attributes[2].offset = offsetof(ColoredTexturedVertex, u);
+            attributes[2].shaderLocation = 2;
+            attributeCount = 3;
+            arrayStride = sizeof(ColoredTexturedVertex);
+            shaderModule = dualTextureColoredShader_;
+        }
+        else
+        {
+            struct TexturedVertex { float x, y, z; float u, v; };
+            attributes[0].format = WGPUVertexFormat_Float32x3;
+            attributes[0].offset = offsetof(TexturedVertex, x);
+            attributes[0].shaderLocation = 0;
+            attributes[1].format = WGPUVertexFormat_Float32x2;
+            attributes[1].offset = offsetof(TexturedVertex, u);
+            attributes[1].shaderLocation = 1;
+            attributeCount = 2;
+            arrayStride = sizeof(TexturedVertex);
+        }
+
+        WGPUVertexBufferLayout vertexBufferLayout{};
+        vertexBufferLayout.arrayStride = arrayStride;
+        vertexBufferLayout.stepMode = WGPUVertexStepMode_Vertex;
+        vertexBufferLayout.attributeCount = attributeCount;
+        vertexBufferLayout.attributes = attributes;
+
+        WGPUColorTargetState target{};
+        target.format = surfaceFormat_;
+        target.writeMask = WGPUColorWriteMask_All;
+        WGPUFragmentState fragment{};
+        fragment.module = shaderModule;
+        fragment.entryPoint = StringView("fs_main");
+        fragment.targetCount = 1;
+        fragment.targets = &target;
+
+        WGPURenderPipelineDescriptor pipeline{};
+        pipeline.label = StringView("CNA WebGPU DualTexture3D Pipeline");
+        pipeline.layout = dualTexturePipelineLayout_;
+        pipeline.vertex.module = shaderModule;
+        pipeline.vertex.entryPoint = StringView("vs_main");
+        pipeline.vertex.bufferCount = 1;
+        pipeline.vertex.buffers = &vertexBufferLayout;
+        pipeline.primitive.topology = topology;
+        pipeline.primitive.frontFace = WGPUFrontFace_CCW;
+        pipeline.primitive.cullMode = WGPUCullMode_None;
+        pipeline.multisample.count = 1;
+        pipeline.multisample.mask = std::numeric_limits<std::uint32_t>::max();
+        pipeline.multisample.alphaToCoverageEnabled = false;
+        pipeline.fragment = &fragment;
+
+        WGPUDepthStencilState depthStencil = WGPU_DEPTH_STENCIL_STATE_INIT;
+        depthStencil.format = WGPUTextureFormat_Depth24PlusStencil8;
+        depthStencil.depthWriteEnabled = depthWrite ? WGPUOptionalBool_True : WGPUOptionalBool_False;
+        depthStencil.depthCompare = depthTest ? ToWGPUCompareFunction(depthFunc) : WGPUCompareFunction_Always;
+        pipeline.depthStencil = &depthStencil;
+
+        WGPURenderPipeline created = wgpuDeviceCreateRenderPipeline(device_, &pipeline);
+        if (created == nullptr)
+            throw std::runtime_error("CNA WebGPU: failed to create DualTexture3D pipeline");
+        cache[key] = created;
+        return created;
+    }
+
     WGPUSampler WebGPUGraphicsBackend::GetOrCreateSampler(int textureFilter, int addressU, int addressV)
     {
         const int index = SamplerCacheIndex(textureFilter, addressU, addressV);
@@ -2129,6 +2381,7 @@ struct VertexOutput {
         RenderTexturedDraws(pass);
         RenderLitTexturedDraws(pass);
         RenderAlphaTestDraws(pass);
+        RenderDualTextureDraws(pass);
         RenderSprites(pass);
         wgpuRenderPassEncoderEnd(pass);
         wgpuRenderPassEncoderRelease(pass);
@@ -2463,37 +2716,47 @@ struct VertexOutput {
                                                   const GpuDrawParams& params)
     {
         const auto& webgpuVb = static_cast<const WebGPUVertexBufferBackend&>(vb);
-        // Matches VulkanGraphicsBackend's own dispatch precedence: alpha test takes priority over
-        // lit-textured for stride 32 (an AlphaTestEffect draw on a VertexPositionNormalTexture
-        // buffer uses the alpha-test shader, not lit_textured3d -- the normal is simply unread).
+        // Matches VulkanGraphicsBackend's own dispatch precedence: alpha test wins over
+        // dual-texture/env-map/skinned/lit-textured; dual-texture wins over env-map/skinned/
+        // lit-textured (an AlphaTestEffect or DualTextureEffect draw on a
+        // VertexPositionNormalTexture buffer never reaches lit_textured3d -- the normal is simply
+        // unread in both cases).
         const bool needsAlphaTest = params.alphaTest[2] < 0.0f || params.alphaTest[3] < 0.0f;
-        const bool needsUnsupportedEffect = !needsAlphaTest &&
-                                            (params.dualTexture || params.envMapping || params.skinned);
+        const bool needsDualTexture = !needsAlphaTest && params.dualTexture;
+        const bool needsUnsupportedEffect = !needsAlphaTest && !needsDualTexture &&
+                                            (params.envMapping || params.skinned);
         const std::size_t stride = webgpuVb.Stride();
         if (needsAlphaTest && (stride == 20 || stride == 24 || stride == 32) && params.texture0 != nullptr)
         {
             QueueAlphaTestDraw(vb, nullptr, world, view, projection, primitive, primitiveCount, params);
             return;
         }
-        if (!needsUnsupportedEffect && !needsAlphaTest && stride == 16)
+        if (needsDualTexture && (stride == 20 || stride == 24) &&
+            params.texture0 != nullptr && params.texture1 != nullptr)
+        {
+            QueueDualTextureDraw(vb, nullptr, world, view, projection, primitive, primitiveCount, params);
+            return;
+        }
+        if (!needsUnsupportedEffect && !needsAlphaTest && !needsDualTexture && stride == 16)
         {
             QueueColoredDraw(vb, nullptr, world, view, projection, primitive, primitiveCount, &params);
             return;
         }
-        if (!needsUnsupportedEffect && !needsAlphaTest && (stride == 20 || stride == 24) &&
+        if (!needsUnsupportedEffect && !needsAlphaTest && !needsDualTexture && (stride == 20 || stride == 24) &&
             params.texture0 != nullptr)
         {
             QueueTexturedDraw(vb, nullptr, world, view, projection, primitive, primitiveCount, params);
             return;
         }
-        if (!needsUnsupportedEffect && !needsAlphaTest && stride == 32 && params.texture0 != nullptr)
+        if (!needsUnsupportedEffect && !needsAlphaTest && !needsDualTexture && stride == 32 &&
+            params.texture0 != nullptr)
         {
             QueueLitTexturedDraw(vb, nullptr, world, view, projection, primitive, primitiveCount, params);
             return;
         }
-        // No dual-texture/env-map/skinned shader exists yet (Phase 58 remaining WGSL variants) --
-        // fall back exactly like IGraphicsBackend's own default implementation did before this
-        // override existed. This will itself throw for anything other than a stride-16 buffer
+        // No env-map/skinned shader exists yet (Phase 58 remaining WGSL variants) -- fall back
+        // exactly like IGraphicsBackend's own default implementation did before this override
+        // existed. This will itself throw for anything other than a stride-16 buffer
         // (DrawColoredPrimitives' own requirement), matching the pre-existing "unsupported, fail
         // loudly" behaviour.
         DrawColoredPrimitives(vb, world, view, projection, primitive, primitiveCount);
@@ -2506,26 +2769,34 @@ struct VertexOutput {
     {
         const auto& webgpuVb = static_cast<const WebGPUVertexBufferBackend&>(vb);
         const bool needsAlphaTest = params.alphaTest[2] < 0.0f || params.alphaTest[3] < 0.0f;
-        const bool needsUnsupportedEffect = !needsAlphaTest &&
-                                            (params.dualTexture || params.envMapping || params.skinned);
+        const bool needsDualTexture = !needsAlphaTest && params.dualTexture;
+        const bool needsUnsupportedEffect = !needsAlphaTest && !needsDualTexture &&
+                                            (params.envMapping || params.skinned);
         const std::size_t stride = webgpuVb.Stride();
         if (needsAlphaTest && (stride == 20 || stride == 24 || stride == 32) && params.texture0 != nullptr)
         {
             QueueAlphaTestDraw(vb, &ib, world, view, projection, primitive, primitiveCount, params);
             return;
         }
-        if (!needsUnsupportedEffect && !needsAlphaTest && stride == 16)
+        if (needsDualTexture && (stride == 20 || stride == 24) &&
+            params.texture0 != nullptr && params.texture1 != nullptr)
+        {
+            QueueDualTextureDraw(vb, &ib, world, view, projection, primitive, primitiveCount, params);
+            return;
+        }
+        if (!needsUnsupportedEffect && !needsAlphaTest && !needsDualTexture && stride == 16)
         {
             QueueColoredDraw(vb, &ib, world, view, projection, primitive, primitiveCount, &params);
             return;
         }
-        if (!needsUnsupportedEffect && !needsAlphaTest && (stride == 20 || stride == 24) &&
+        if (!needsUnsupportedEffect && !needsAlphaTest && !needsDualTexture && (stride == 20 || stride == 24) &&
             params.texture0 != nullptr)
         {
             QueueTexturedDraw(vb, &ib, world, view, projection, primitive, primitiveCount, params);
             return;
         }
-        if (!needsUnsupportedEffect && !needsAlphaTest && stride == 32 && params.texture0 != nullptr)
+        if (!needsUnsupportedEffect && !needsAlphaTest && !needsDualTexture && stride == 32 &&
+            params.texture0 != nullptr)
         {
             QueueLitTexturedDraw(vb, &ib, world, view, projection, primitive, primitiveCount, params);
             return;
@@ -2938,6 +3209,137 @@ struct VertexOutput {
         }
 
         alphaTestDrawCommands_.push_back(std::move(command));
+        framePending_ = true;
+    }
+
+    void WebGPUGraphicsBackend::RenderDualTextureDraws(WGPURenderPassEncoder pass)
+    {
+        for (const DualTextureDrawCommand& command : dualTextureDrawCommands_)
+        {
+            if (command.vertexCount == 0 || command.vertexData.empty() ||
+                command.texture0 == nullptr || command.texture1 == nullptr)
+                continue;
+
+            WGPUBufferDescriptor vbDescriptor{};
+            vbDescriptor.label = StringView("CNA WebGPU DualTexture3D VertexBuffer");
+            vbDescriptor.usage = WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst;
+            vbDescriptor.size = Align4(command.vertexData.size());
+            WGPUBuffer vertexBuffer = wgpuDeviceCreateBuffer(device_, &vbDescriptor);
+            wgpuQueueWriteBuffer(queue_, vertexBuffer, 0, command.vertexData.data(), command.vertexData.size());
+
+            WGPUBufferDescriptor uboDescriptor{};
+            uboDescriptor.label = StringView("CNA WebGPU DualTexture3D UBO");
+            uboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
+            uboDescriptor.size = sizeof(command.uniforms);
+            WGPUBuffer uniformBuffer = wgpuDeviceCreateBuffer(device_, &uboDescriptor);
+            wgpuQueueWriteBuffer(queue_, uniformBuffer, 0, command.uniforms.data(), sizeof(command.uniforms));
+
+            WGPUBindGroupEntry uboEntry{};
+            uboEntry.binding = 0;
+            uboEntry.buffer = uniformBuffer;
+            uboEntry.size = sizeof(command.uniforms);
+            WGPUBindGroupDescriptor uboBindDescriptor{};
+            uboBindDescriptor.label = StringView("CNA WebGPU DualTexture3D UBO BindGroup");
+            uboBindDescriptor.layout = coloredBindGroupLayout_;
+            uboBindDescriptor.entryCount = 1;
+            uboBindDescriptor.entries = &uboEntry;
+            WGPUBindGroup uboBindGroup = wgpuDeviceCreateBindGroup(device_, &uboBindDescriptor);
+
+            WGPUSampler sampler = GetOrCreateSampler(command.textureFilter, command.addressU, command.addressV);
+            std::array<WGPUBindGroupEntry, 3> texEntries{};
+            texEntries[0].binding = 0;
+            texEntries[0].sampler = sampler;
+            texEntries[1].binding = 1;
+            texEntries[1].textureView = command.texture0->View();
+            texEntries[2].binding = 2;
+            texEntries[2].textureView = command.texture1->View();
+            WGPUBindGroupDescriptor texBindDescriptor{};
+            texBindDescriptor.label = StringView("CNA WebGPU DualTexture3D Texture BindGroup");
+            texBindDescriptor.layout = dualTextureBindGroupLayout_;
+            texBindDescriptor.entryCount = texEntries.size();
+            texBindDescriptor.entries = texEntries.data();
+            WGPUBindGroup texBindGroup = wgpuDeviceCreateBindGroup(device_, &texBindDescriptor);
+
+            WGPURenderPipeline pipe = GetOrCreatePipelineDualTexture3D(command.hasVertexColor ? 24 : 20,
+                                                                       command.topology, command.depthTest,
+                                                                       command.depthWrite, command.depthFunc);
+            wgpuRenderPassEncoderSetPipeline(pass, pipe);
+            wgpuRenderPassEncoderSetBindGroup(pass, 0, uboBindGroup, 0, nullptr);
+            wgpuRenderPassEncoderSetBindGroup(pass, 1, texBindGroup, 0, nullptr);
+            wgpuRenderPassEncoderSetVertexBuffer(pass, 0, vertexBuffer, 0, command.vertexData.size());
+
+            if (command.indexed && !command.indexData.empty())
+            {
+                WGPUBufferDescriptor ibDescriptor{};
+                ibDescriptor.label = StringView("CNA WebGPU DualTexture3D IndexBuffer");
+                ibDescriptor.usage = WGPUBufferUsage_Index | WGPUBufferUsage_CopyDst;
+                ibDescriptor.size = Align4(command.indexData.size());
+                WGPUBuffer indexBuffer = wgpuDeviceCreateBuffer(device_, &ibDescriptor);
+                wgpuQueueWriteBuffer(queue_, indexBuffer, 0, command.indexData.data(), command.indexData.size());
+                wgpuRenderPassEncoderSetIndexBuffer(pass, indexBuffer,
+                    command.index32 ? WGPUIndexFormat_Uint32 : WGPUIndexFormat_Uint16,
+                    0, command.indexData.size());
+                wgpuRenderPassEncoderDrawIndexed(pass, command.indexCount, 1, 0, 0, 0);
+                pendingBufferReleases_.push_back(indexBuffer);
+            }
+            else
+            {
+                wgpuRenderPassEncoderDraw(pass, command.vertexCount, 1, 0, 0);
+            }
+
+            pendingBindGroupReleases_.push_back(uboBindGroup);
+            pendingBindGroupReleases_.push_back(texBindGroup);
+            pendingBufferReleases_.push_back(uniformBuffer);
+            pendingBufferReleases_.push_back(vertexBuffer);
+        }
+        dualTextureDrawCommands_.clear();
+    }
+
+    void WebGPUGraphicsBackend::QueueDualTextureDraw(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
+                                                      const Matrix& world, const Matrix& view, const Matrix& projection,
+                                                      PrimitiveType primitive, int primitiveCount,
+                                                      const GpuDrawParams& params)
+    {
+        const auto& webgpuVb = static_cast<const WebGPUVertexBufferBackend&>(vb);
+        const std::size_t stride = webgpuVb.Stride();
+        if (stride != 20 && stride != 24)
+            throw std::invalid_argument("CNA WebGPU: QueueDualTextureDraw requires a stride-20 "
+                                        "or stride-24 vertex buffer");
+        if (params.texture0 == nullptr || params.texture1 == nullptr)
+            throw std::invalid_argument("CNA WebGPU: QueueDualTextureDraw requires both texture0 "
+                                        "and texture1 to be bound");
+
+        DualTextureDrawCommand command;
+        command.hasVertexColor = (stride == 24);
+        const auto& shadow = webgpuVb.ShadowData();
+        const std::size_t byteOffset = static_cast<std::size_t>(params.vertexStart) * stride;
+        if (byteOffset <= shadow.size())
+            command.vertexData.assign(shadow.begin() + static_cast<std::ptrdiff_t>(byteOffset), shadow.end());
+        command.topology = ToTopology(primitive);
+        command.depthTest = depthTestEnabled_;
+        command.depthFunc = depthCompareFunction_;
+        command.depthWrite = depthWriteEnabled_;
+        command.texture0 = static_cast<const WebGPUTextureBackend*>(params.texture0);
+        command.texture1 = static_cast<const WebGPUTextureBackend*>(params.texture1);
+        const Matrix wvp = world * view * projection;
+        FillExtUniforms(command.uniforms, wvp, params);
+
+        if (ib != nullptr)
+        {
+            const auto& webgpuIb = static_cast<const WebGPUIndexBufferBackend&>(*ib);
+            command.indexed = true;
+            command.index32 = webgpuIb.IsThirtyTwoBit();
+            command.indexData = webgpuIb.ShadowData();
+            command.indexCount = static_cast<std::uint32_t>(PrimitiveIndexCount(primitive, primitiveCount));
+            command.vertexCount = static_cast<std::uint32_t>(webgpuVb.GetVertexCount()) -
+                                  static_cast<std::uint32_t>(params.vertexStart);
+        }
+        else
+        {
+            command.vertexCount = static_cast<std::uint32_t>(PrimitiveVertexCount(primitive, primitiveCount));
+        }
+
+        dualTextureDrawCommands_.push_back(std::move(command));
         framePending_ = true;
     }
 
