@@ -477,5 +477,53 @@ namespace CNA::Internal::Backends::WebGPU
         WGPUPipelineLayout litPipelineLayout_ = nullptr;     ///< group 0 (lit UBOs) + group 1 (texture, texturedBindGroupLayout_ reused)
         std::unordered_map<int, WGPURenderPipeline> litTexturedPipelines_;
         std::vector<LitTexturedDrawCommand> litTexturedDrawCommands_;
+
+        // WEBGPU-23/34/72: alpha_test3d.wgsl -- AlphaTestEffect's per-pixel alpha discard, matching
+        // VulkanGraphicsBackend's alpha_test3d.{vert,frag}.glsl / alpha_test_colored3d.vert.glsl.
+        // AlphaTestEffect has no lighting, so its 32-float uniform block repurposes the
+        // ambient/light0 slots (Phase 57's [20..23]) for {alphaRef, alphaTolerance, passWeight,
+        // failWeight} instead -- same 128-byte size/shape as colored3d's UBO, so this reuses
+        // coloredBindGroupLayout_ (group 0) and texturedBindGroupLayout_ (group 1) unchanged, no
+        // new bind group layout needed. Supports strides 20 (VertexPositionTexture), 24
+        // (VertexPositionColorTexture, vertex-colour tint), and 32 (VertexPositionNormalTexture,
+        // normal attribute simply unread) via one shared "uncolored" shader module for strides
+        // 20/32 (only the vertex buffer layout differs) plus a separate "colored" shader module
+        // for stride 24. No fog (same deliberate deferral as the other 3D shaders).
+        struct AlphaTestDrawCommand
+        {
+            std::vector<std::uint8_t> vertexData;
+            std::vector<std::uint8_t> indexData;
+            bool indexed = false;
+            bool index32 = false;
+            std::uint32_t vertexCount = 0;
+            std::uint32_t indexCount = 0;
+            WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
+            std::array<float, 32> uniforms{};
+            bool depthTest = false;
+            bool depthWrite = false;
+            int depthFunc = 3;
+            const WebGPUTextureBackend* texture = nullptr;
+            int textureFilter = 0;
+            int addressU = 1;
+            int addressV = 1;
+            std::size_t stride = 20;   ///< 20, 24, or 32 -- selects vertex layout + shader module
+            bool hasVertexColor = false;
+        };
+        void CreateAlphaTestResources();
+        void DestroyAlphaTestResources();
+        [[nodiscard]] WGPURenderPipeline GetOrCreatePipelineAlphaTest3D(std::size_t stride,
+                                                                        WGPUPrimitiveTopology topology,
+                                                                        bool depthTest, bool depthWrite,
+                                                                        int depthFunc);
+        void QueueAlphaTestDraw(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
+                                const Matrix& world, const Matrix& view, const Matrix& projection,
+                                PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
+        void RenderAlphaTestDraws(WGPURenderPassEncoder pass);
+
+        WGPUShaderModule alphaTestShader_ = nullptr;          ///< strides 20/32 (no vertex colour)
+        WGPUShaderModule alphaTestColoredShader_ = nullptr;   ///< stride 24 (vertex colour tint)
+        std::unordered_map<int, WGPURenderPipeline> alphaTestPipelines_;
+        std::unordered_map<int, WGPURenderPipeline> alphaTestColoredPipelines_;
+        std::vector<AlphaTestDrawCommand> alphaTestDrawCommands_;
     };
 }

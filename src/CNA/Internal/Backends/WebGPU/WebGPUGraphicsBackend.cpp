@@ -262,6 +262,22 @@ namespace CNA::Internal::Backends::WebGPU
             out[64] = normalMatrix[6]; out[65] = normalMatrix[7]; out[66] = normalMatrix[8]; out[67] = 0.0f;
         }
 
+        // Mirrors VulkanGraphicsBackend::FillAlphaTestPushConst() field-for-field. AlphaTestEffect
+        // has no lighting, so this repurposes the [20..23]/[24] slots (ambient/light0/
+        // vertexColorEnabled in FillExtUniforms) for {alphaRef, alphaTolerance, passWeight,
+        // failWeight, vertexColorEnabled} instead -- same 128-byte total size, so it still fits
+        // the existing coloredBindGroupLayout_ unchanged.
+        void FillAlphaTestUniforms(std::array<float, 32>& out, const Matrix& wvp, const GpuDrawParams& p)
+        {
+            wvp.ToColumnMajor(out.data());
+            out[16] = p.diffuseColor[0]; out[17] = p.diffuseColor[1];
+            out[18] = p.diffuseColor[2]; out[19] = p.diffuseColor[3];
+            out[20] = p.alphaTest[0]; out[21] = p.alphaTest[1];
+            out[22] = p.alphaTest[2]; out[23] = p.alphaTest[3];
+            out[24] = p.vertexColorEnabled ? 1.0f : 0.0f;
+            for (int i = 25; i < 32; ++i) out[i] = 0.0f;
+        }
+
         [[nodiscard]] bool IsSurfaceRecoverable(WGPUSurfaceGetCurrentTextureStatus status)
         {
             return status == WGPUSurfaceGetCurrentTextureStatus_Timeout ||
@@ -576,6 +592,7 @@ namespace CNA::Internal::Backends::WebGPU
         DestroyColoredResources();
         DestroyTexturedResources();
         DestroyLitTexturedResources();
+        DestroyAlphaTestResources();
         for (WGPUBindGroup bg : pendingBindGroupReleases_) wgpuBindGroupRelease(bg);
         for (WGPUBuffer buf : pendingBufferReleases_) wgpuBufferRelease(buf);
         for (WGPUSampler& sampler : samplerCache_)
@@ -790,6 +807,8 @@ namespace CNA::Internal::Backends::WebGPU
             CreateTexturedResources();
         if (formatChanged || litTexturedShader_ == nullptr)
             CreateLitTexturedResources();
+        if (formatChanged || alphaTestShader_ == nullptr)
+            CreateAlphaTestResources();
     }
 
     void WebGPUGraphicsBackend::RecreateDepthTexture()
@@ -1593,6 +1612,247 @@ struct VertexOutput {
         return created;
     }
 
+    void WebGPUGraphicsBackend::DestroyAlphaTestResources()
+    {
+        for (auto& [key, pipe] : alphaTestPipelines_)
+        {
+            if (pipe != nullptr) wgpuRenderPipelineRelease(pipe);
+        }
+        alphaTestPipelines_.clear();
+        for (auto& [key, pipe] : alphaTestColoredPipelines_)
+        {
+            if (pipe != nullptr) wgpuRenderPipelineRelease(pipe);
+        }
+        alphaTestColoredPipelines_.clear();
+        if (alphaTestShader_ != nullptr) wgpuShaderModuleRelease(alphaTestShader_);
+        if (alphaTestColoredShader_ != nullptr) wgpuShaderModuleRelease(alphaTestColoredShader_);
+        alphaTestShader_ = nullptr;
+        alphaTestColoredShader_ = nullptr;
+    }
+
+    void WebGPUGraphicsBackend::CreateAlphaTestResources()
+    {
+        DestroyAlphaTestResources();
+        if (surfaceFormat_ == WGPUTextureFormat_Undefined || texturedBindGroupLayout_ == nullptr)
+            return;
+
+        // Ported from VulkanGraphicsBackend's alpha_test3d.{vert,frag}.glsl. AlphaTestEffect has
+        // no lighting, so the primary Uniforms block repurposes [20..23]/[24] for
+        // {alphaRef, alphaTolerance, passWeight, failWeight, vertexColorEnabled} instead (see
+        // FillAlphaTestUniforms()) -- same 128-byte shape, so this reuses coloredBindGroupLayout_
+        // (group 0) and texturedBindGroupLayout_ (group 1) unchanged; no new bind group layout or
+        // pipeline layout needed.
+        static constexpr char shaderSource[] = R"WGSL(
+struct Uniforms {
+    mvp: mat4x4f,
+    diffuseColor: vec4f,
+    alphaTest: vec4f,
+    extra: vec4f,
+};
+@group(0) @binding(0) var<uniform> u: Uniforms;
+@group(1) @binding(0) var texSampler: sampler;
+@group(1) @binding(1) var tex: texture_2d<f32>;
+
+struct VertexInput {
+    @location(0) position: vec3f,
+    @location(1) uv: vec2f,
+};
+struct VertexOutput {
+    @builtin(position) position: vec4f,
+    @location(0) uv: vec2f,
+};
+@vertex fn vs_main(input: VertexInput) -> VertexOutput {
+    var output: VertexOutput;
+    output.position = u.mvp * vec4f(input.position, 1.0);
+    output.uv = input.uv;
+    return output;
+}
+@fragment fn fs_main(input: VertexOutput) -> @location(0) vec4f {
+    let color = textureSample(tex, texSampler, input.uv) * u.diffuseColor;
+    let alpha = color.a;
+    let useTolerance = u.alphaTest.y > 0.0;
+    let lessTest = (alpha < u.alphaTest.x);
+    let toleranceTest = (abs(alpha - u.alphaTest.x) < u.alphaTest.y);
+    let passTest = select(lessTest, toleranceTest, useTolerance);
+    let w = select(u.alphaTest.w, u.alphaTest.z, passTest);
+    if (w < 0.0) {
+        discard;
+    }
+    return color;
+}
+)WGSL";
+
+        WGPUShaderSourceWGSL wgsl{};
+        wgsl.chain.sType = WGPUSType_ShaderSourceWGSL;
+        wgsl.code = StringView(shaderSource);
+        WGPUShaderModuleDescriptor shaderDescriptor{};
+        shaderDescriptor.label = StringView("CNA WebGPU AlphaTest3D WGSL");
+        shaderDescriptor.nextInChain = &wgsl.chain;
+        alphaTestShader_ = wgpuDeviceCreateShaderModule(device_, &shaderDescriptor);
+        if (alphaTestShader_ == nullptr)
+            throw std::runtime_error("CNA WebGPU: failed to create AlphaTest3D shader");
+
+        // WEBGPU-23: stride 24 (VertexPositionColorTexture) variant -- same shape as
+        // colored_textured3d.wgsl's own vertex-colour mixing, combined with the alpha-test
+        // discard above.
+        static constexpr char coloredShaderSource[] = R"WGSL(
+struct Uniforms {
+    mvp: mat4x4f,
+    diffuseColor: vec4f,
+    alphaTest: vec4f,
+    extra: vec4f,
+};
+@group(0) @binding(0) var<uniform> u: Uniforms;
+@group(1) @binding(0) var texSampler: sampler;
+@group(1) @binding(1) var tex: texture_2d<f32>;
+
+struct VertexInput {
+    @location(0) position: vec3f,
+    @location(1) color: vec4f,
+    @location(2) uv: vec2f,
+};
+struct VertexOutput {
+    @builtin(position) position: vec4f,
+    @location(0) uv: vec2f,
+    @location(1) tint: vec4f,
+};
+@vertex fn vs_main(input: VertexInput) -> VertexOutput {
+    var output: VertexOutput;
+    output.position = u.mvp * vec4f(input.position, 1.0);
+    output.uv = input.uv;
+    let vertexColorEnabled = u.extra.x;
+    output.tint = select(u.diffuseColor, input.color * u.diffuseColor, vertexColorEnabled > 0.5);
+    return output;
+}
+@fragment fn fs_main(input: VertexOutput) -> @location(0) vec4f {
+    let color = textureSample(tex, texSampler, input.uv) * input.tint;
+    let alpha = color.a;
+    let useTolerance = u.alphaTest.y > 0.0;
+    let lessTest = (alpha < u.alphaTest.x);
+    let toleranceTest = (abs(alpha - u.alphaTest.x) < u.alphaTest.y);
+    let passTest = select(lessTest, toleranceTest, useTolerance);
+    let w = select(u.alphaTest.w, u.alphaTest.z, passTest);
+    if (w < 0.0) {
+        discard;
+    }
+    return color;
+}
+)WGSL";
+
+        WGPUShaderSourceWGSL coloredWgsl{};
+        coloredWgsl.chain.sType = WGPUSType_ShaderSourceWGSL;
+        coloredWgsl.code = StringView(coloredShaderSource);
+        WGPUShaderModuleDescriptor coloredShaderDescriptor{};
+        coloredShaderDescriptor.label = StringView("CNA WebGPU AlphaTestColored3D WGSL");
+        coloredShaderDescriptor.nextInChain = &coloredWgsl.chain;
+        alphaTestColoredShader_ = wgpuDeviceCreateShaderModule(device_, &coloredShaderDescriptor);
+        if (alphaTestColoredShader_ == nullptr)
+            throw std::runtime_error("CNA WebGPU: failed to create AlphaTestColored3D shader");
+    }
+
+    WGPURenderPipeline WebGPUGraphicsBackend::GetOrCreatePipelineAlphaTest3D(std::size_t stride,
+                                                                              WGPUPrimitiveTopology topology,
+                                                                              bool depthTest, bool depthWrite,
+                                                                              int depthFunc)
+    {
+        const int key = ((static_cast<int>(stride) * 8 + static_cast<int>(topology)) * 8 + depthFunc) * 4 +
+                        (depthTest ? 2 : 0) + (depthWrite ? 1 : 0);
+        auto& cache = (stride == 24) ? alphaTestColoredPipelines_ : alphaTestPipelines_;
+        if (auto it = cache.find(key); it != cache.end())
+            return it->second;
+
+        WGPUVertexAttribute attributes[3]{};
+        std::uint32_t attributeCount = 0;
+        std::uint64_t arrayStride = stride;
+        WGPUShaderModule shaderModule = alphaTestShader_;
+
+        if (stride == 24)
+        {
+            struct ColoredTexturedVertex { float x, y, z; std::uint8_t r, g, b, a; float u, v; };
+            attributes[0].format = WGPUVertexFormat_Float32x3;
+            attributes[0].offset = offsetof(ColoredTexturedVertex, x);
+            attributes[0].shaderLocation = 0;
+            attributes[1].format = WGPUVertexFormat_Unorm8x4;
+            attributes[1].offset = offsetof(ColoredTexturedVertex, r);
+            attributes[1].shaderLocation = 1;
+            attributes[2].format = WGPUVertexFormat_Float32x2;
+            attributes[2].offset = offsetof(ColoredTexturedVertex, u);
+            attributes[2].shaderLocation = 2;
+            attributeCount = 3;
+            arrayStride = sizeof(ColoredTexturedVertex);
+            shaderModule = alphaTestColoredShader_;
+        }
+        else if (stride == 32)
+        {
+            // VertexPositionNormalTexture: position (offset 0) + UV (offset 24, past the unread
+            // 12-byte normal) -- one shared shader for strides 20 and 32, only the vertex buffer
+            // layout differs.
+            struct LitTexturedVertex { float x, y, z, nx, ny, nz, u, v; };
+            attributes[0].format = WGPUVertexFormat_Float32x3;
+            attributes[0].offset = offsetof(LitTexturedVertex, x);
+            attributes[0].shaderLocation = 0;
+            attributes[1].format = WGPUVertexFormat_Float32x2;
+            attributes[1].offset = offsetof(LitTexturedVertex, u);
+            attributes[1].shaderLocation = 1;
+            attributeCount = 2;
+            arrayStride = sizeof(LitTexturedVertex);
+        }
+        else
+        {
+            struct TexturedVertex { float x, y, z; float u, v; };
+            attributes[0].format = WGPUVertexFormat_Float32x3;
+            attributes[0].offset = offsetof(TexturedVertex, x);
+            attributes[0].shaderLocation = 0;
+            attributes[1].format = WGPUVertexFormat_Float32x2;
+            attributes[1].offset = offsetof(TexturedVertex, u);
+            attributes[1].shaderLocation = 1;
+            attributeCount = 2;
+            arrayStride = sizeof(TexturedVertex);
+        }
+
+        WGPUVertexBufferLayout vertexBufferLayout{};
+        vertexBufferLayout.arrayStride = arrayStride;
+        vertexBufferLayout.stepMode = WGPUVertexStepMode_Vertex;
+        vertexBufferLayout.attributeCount = attributeCount;
+        vertexBufferLayout.attributes = attributes;
+
+        WGPUColorTargetState target{};
+        target.format = surfaceFormat_;
+        target.writeMask = WGPUColorWriteMask_All;
+        WGPUFragmentState fragment{};
+        fragment.module = shaderModule;
+        fragment.entryPoint = StringView("fs_main");
+        fragment.targetCount = 1;
+        fragment.targets = &target;
+
+        WGPURenderPipelineDescriptor pipeline{};
+        pipeline.label = StringView("CNA WebGPU AlphaTest3D Pipeline");
+        pipeline.layout = texturedPipelineLayout_;
+        pipeline.vertex.module = shaderModule;
+        pipeline.vertex.entryPoint = StringView("vs_main");
+        pipeline.vertex.bufferCount = 1;
+        pipeline.vertex.buffers = &vertexBufferLayout;
+        pipeline.primitive.topology = topology;
+        pipeline.primitive.frontFace = WGPUFrontFace_CCW;
+        pipeline.primitive.cullMode = WGPUCullMode_None;
+        pipeline.multisample.count = 1;
+        pipeline.multisample.mask = std::numeric_limits<std::uint32_t>::max();
+        pipeline.multisample.alphaToCoverageEnabled = false;
+        pipeline.fragment = &fragment;
+
+        WGPUDepthStencilState depthStencil = WGPU_DEPTH_STENCIL_STATE_INIT;
+        depthStencil.format = WGPUTextureFormat_Depth24PlusStencil8;
+        depthStencil.depthWriteEnabled = depthWrite ? WGPUOptionalBool_True : WGPUOptionalBool_False;
+        depthStencil.depthCompare = depthTest ? ToWGPUCompareFunction(depthFunc) : WGPUCompareFunction_Always;
+        pipeline.depthStencil = &depthStencil;
+
+        WGPURenderPipeline created = wgpuDeviceCreateRenderPipeline(device_, &pipeline);
+        if (created == nullptr)
+            throw std::runtime_error("CNA WebGPU: failed to create AlphaTest3D pipeline");
+        cache[key] = created;
+        return created;
+    }
+
     WGPUSampler WebGPUGraphicsBackend::GetOrCreateSampler(int textureFilter, int addressU, int addressV)
     {
         const int index = SamplerCacheIndex(textureFilter, addressU, addressV);
@@ -1868,6 +2128,7 @@ struct VertexOutput {
         RenderColoredDraws(pass);
         RenderTexturedDraws(pass);
         RenderLitTexturedDraws(pass);
+        RenderAlphaTestDraws(pass);
         RenderSprites(pass);
         wgpuRenderPassEncoderEnd(pass);
         wgpuRenderPassEncoderRelease(pass);
@@ -2202,29 +2463,39 @@ struct VertexOutput {
                                                   const GpuDrawParams& params)
     {
         const auto& webgpuVb = static_cast<const WebGPUVertexBufferBackend&>(vb);
-        const bool needsUnsupportedEffect = params.dualTexture || params.envMapping || params.skinned ||
-                                            params.alphaTest[2] < 0.0f || params.alphaTest[3] < 0.0f;
-        if (!needsUnsupportedEffect && webgpuVb.Stride() == 16)
+        // Matches VulkanGraphicsBackend's own dispatch precedence: alpha test takes priority over
+        // lit-textured for stride 32 (an AlphaTestEffect draw on a VertexPositionNormalTexture
+        // buffer uses the alpha-test shader, not lit_textured3d -- the normal is simply unread).
+        const bool needsAlphaTest = params.alphaTest[2] < 0.0f || params.alphaTest[3] < 0.0f;
+        const bool needsUnsupportedEffect = !needsAlphaTest &&
+                                            (params.dualTexture || params.envMapping || params.skinned);
+        const std::size_t stride = webgpuVb.Stride();
+        if (needsAlphaTest && (stride == 20 || stride == 24 || stride == 32) && params.texture0 != nullptr)
+        {
+            QueueAlphaTestDraw(vb, nullptr, world, view, projection, primitive, primitiveCount, params);
+            return;
+        }
+        if (!needsUnsupportedEffect && !needsAlphaTest && stride == 16)
         {
             QueueColoredDraw(vb, nullptr, world, view, projection, primitive, primitiveCount, &params);
             return;
         }
-        if (!needsUnsupportedEffect && (webgpuVb.Stride() == 20 || webgpuVb.Stride() == 24) &&
+        if (!needsUnsupportedEffect && !needsAlphaTest && (stride == 20 || stride == 24) &&
             params.texture0 != nullptr)
         {
             QueueTexturedDraw(vb, nullptr, world, view, projection, primitive, primitiveCount, params);
             return;
         }
-        if (!needsUnsupportedEffect && webgpuVb.Stride() == 32 && params.texture0 != nullptr)
+        if (!needsUnsupportedEffect && !needsAlphaTest && stride == 32 && params.texture0 != nullptr)
         {
             QueueLitTexturedDraw(vb, nullptr, world, view, projection, primitive, primitiveCount, params);
             return;
         }
-        // No alpha-test/dual-texture/env-map/skinned shader exists yet (Phase 58 remaining WGSL
-        // variants) -- fall back exactly like IGraphicsBackend's own default implementation did
-        // before this override existed. This will itself throw for anything other than a
-        // stride-16 buffer (DrawColoredPrimitives' own requirement), matching the pre-existing
-        // "unsupported, fail loudly" behaviour.
+        // No dual-texture/env-map/skinned shader exists yet (Phase 58 remaining WGSL variants) --
+        // fall back exactly like IGraphicsBackend's own default implementation did before this
+        // override existed. This will itself throw for anything other than a stride-16 buffer
+        // (DrawColoredPrimitives' own requirement), matching the pre-existing "unsupported, fail
+        // loudly" behaviour.
         DrawColoredPrimitives(vb, world, view, projection, primitive, primitiveCount);
     }
 
@@ -2234,20 +2505,27 @@ struct VertexOutput {
                                                          const GpuDrawParams& params)
     {
         const auto& webgpuVb = static_cast<const WebGPUVertexBufferBackend&>(vb);
-        const bool needsUnsupportedEffect = params.dualTexture || params.envMapping || params.skinned ||
-                                            params.alphaTest[2] < 0.0f || params.alphaTest[3] < 0.0f;
-        if (!needsUnsupportedEffect && webgpuVb.Stride() == 16)
+        const bool needsAlphaTest = params.alphaTest[2] < 0.0f || params.alphaTest[3] < 0.0f;
+        const bool needsUnsupportedEffect = !needsAlphaTest &&
+                                            (params.dualTexture || params.envMapping || params.skinned);
+        const std::size_t stride = webgpuVb.Stride();
+        if (needsAlphaTest && (stride == 20 || stride == 24 || stride == 32) && params.texture0 != nullptr)
+        {
+            QueueAlphaTestDraw(vb, &ib, world, view, projection, primitive, primitiveCount, params);
+            return;
+        }
+        if (!needsUnsupportedEffect && !needsAlphaTest && stride == 16)
         {
             QueueColoredDraw(vb, &ib, world, view, projection, primitive, primitiveCount, &params);
             return;
         }
-        if (!needsUnsupportedEffect && (webgpuVb.Stride() == 20 || webgpuVb.Stride() == 24) &&
+        if (!needsUnsupportedEffect && !needsAlphaTest && (stride == 20 || stride == 24) &&
             params.texture0 != nullptr)
         {
             QueueTexturedDraw(vb, &ib, world, view, projection, primitive, primitiveCount, params);
             return;
         }
-        if (!needsUnsupportedEffect && webgpuVb.Stride() == 32 && params.texture0 != nullptr)
+        if (!needsUnsupportedEffect && !needsAlphaTest && stride == 32 && params.texture0 != nullptr)
         {
             QueueLitTexturedDraw(vb, &ib, world, view, projection, primitive, primitiveCount, params);
             return;
@@ -2533,6 +2811,133 @@ struct VertexOutput {
         }
 
         litTexturedDrawCommands_.push_back(std::move(command));
+        framePending_ = true;
+    }
+
+    void WebGPUGraphicsBackend::RenderAlphaTestDraws(WGPURenderPassEncoder pass)
+    {
+        for (const AlphaTestDrawCommand& command : alphaTestDrawCommands_)
+        {
+            if (command.vertexCount == 0 || command.vertexData.empty() || command.texture == nullptr)
+                continue;
+
+            WGPUBufferDescriptor vbDescriptor{};
+            vbDescriptor.label = StringView("CNA WebGPU AlphaTest3D VertexBuffer");
+            vbDescriptor.usage = WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst;
+            vbDescriptor.size = Align4(command.vertexData.size());
+            WGPUBuffer vertexBuffer = wgpuDeviceCreateBuffer(device_, &vbDescriptor);
+            wgpuQueueWriteBuffer(queue_, vertexBuffer, 0, command.vertexData.data(), command.vertexData.size());
+
+            WGPUBufferDescriptor uboDescriptor{};
+            uboDescriptor.label = StringView("CNA WebGPU AlphaTest3D UBO");
+            uboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
+            uboDescriptor.size = sizeof(command.uniforms);
+            WGPUBuffer uniformBuffer = wgpuDeviceCreateBuffer(device_, &uboDescriptor);
+            wgpuQueueWriteBuffer(queue_, uniformBuffer, 0, command.uniforms.data(), sizeof(command.uniforms));
+
+            WGPUBindGroupEntry uboEntry{};
+            uboEntry.binding = 0;
+            uboEntry.buffer = uniformBuffer;
+            uboEntry.size = sizeof(command.uniforms);
+            WGPUBindGroupDescriptor uboBindDescriptor{};
+            uboBindDescriptor.label = StringView("CNA WebGPU AlphaTest3D UBO BindGroup");
+            uboBindDescriptor.layout = coloredBindGroupLayout_;
+            uboBindDescriptor.entryCount = 1;
+            uboBindDescriptor.entries = &uboEntry;
+            WGPUBindGroup uboBindGroup = wgpuDeviceCreateBindGroup(device_, &uboBindDescriptor);
+
+            WGPUSampler sampler = GetOrCreateSampler(command.textureFilter, command.addressU, command.addressV);
+            std::array<WGPUBindGroupEntry, 2> texEntries{};
+            texEntries[0].binding = 0;
+            texEntries[0].sampler = sampler;
+            texEntries[1].binding = 1;
+            texEntries[1].textureView = command.texture->View();
+            WGPUBindGroupDescriptor texBindDescriptor{};
+            texBindDescriptor.label = StringView("CNA WebGPU AlphaTest3D Texture BindGroup");
+            texBindDescriptor.layout = texturedBindGroupLayout_;
+            texBindDescriptor.entryCount = texEntries.size();
+            texBindDescriptor.entries = texEntries.data();
+            WGPUBindGroup texBindGroup = wgpuDeviceCreateBindGroup(device_, &texBindDescriptor);
+
+            WGPURenderPipeline pipe = GetOrCreatePipelineAlphaTest3D(command.stride, command.topology,
+                                                                     command.depthTest, command.depthWrite,
+                                                                     command.depthFunc);
+            wgpuRenderPassEncoderSetPipeline(pass, pipe);
+            wgpuRenderPassEncoderSetBindGroup(pass, 0, uboBindGroup, 0, nullptr);
+            wgpuRenderPassEncoderSetBindGroup(pass, 1, texBindGroup, 0, nullptr);
+            wgpuRenderPassEncoderSetVertexBuffer(pass, 0, vertexBuffer, 0, command.vertexData.size());
+
+            if (command.indexed && !command.indexData.empty())
+            {
+                WGPUBufferDescriptor ibDescriptor{};
+                ibDescriptor.label = StringView("CNA WebGPU AlphaTest3D IndexBuffer");
+                ibDescriptor.usage = WGPUBufferUsage_Index | WGPUBufferUsage_CopyDst;
+                ibDescriptor.size = Align4(command.indexData.size());
+                WGPUBuffer indexBuffer = wgpuDeviceCreateBuffer(device_, &ibDescriptor);
+                wgpuQueueWriteBuffer(queue_, indexBuffer, 0, command.indexData.data(), command.indexData.size());
+                wgpuRenderPassEncoderSetIndexBuffer(pass, indexBuffer,
+                    command.index32 ? WGPUIndexFormat_Uint32 : WGPUIndexFormat_Uint16,
+                    0, command.indexData.size());
+                wgpuRenderPassEncoderDrawIndexed(pass, command.indexCount, 1, 0, 0, 0);
+                pendingBufferReleases_.push_back(indexBuffer);
+            }
+            else
+            {
+                wgpuRenderPassEncoderDraw(pass, command.vertexCount, 1, 0, 0);
+            }
+
+            pendingBindGroupReleases_.push_back(uboBindGroup);
+            pendingBindGroupReleases_.push_back(texBindGroup);
+            pendingBufferReleases_.push_back(uniformBuffer);
+            pendingBufferReleases_.push_back(vertexBuffer);
+        }
+        alphaTestDrawCommands_.clear();
+    }
+
+    void WebGPUGraphicsBackend::QueueAlphaTestDraw(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
+                                                    const Matrix& world, const Matrix& view, const Matrix& projection,
+                                                    PrimitiveType primitive, int primitiveCount,
+                                                    const GpuDrawParams& params)
+    {
+        const auto& webgpuVb = static_cast<const WebGPUVertexBufferBackend&>(vb);
+        const std::size_t stride = webgpuVb.Stride();
+        if (stride != 20 && stride != 24 && stride != 32)
+            throw std::invalid_argument("CNA WebGPU: QueueAlphaTestDraw requires a stride-20, "
+                                        "-24, or -32 vertex buffer");
+        if (params.texture0 == nullptr)
+            throw std::invalid_argument("CNA WebGPU: QueueAlphaTestDraw requires a bound texture0");
+
+        AlphaTestDrawCommand command;
+        command.stride = stride;
+        command.hasVertexColor = (stride == 24);
+        const auto& shadow = webgpuVb.ShadowData();
+        const std::size_t byteOffset = static_cast<std::size_t>(params.vertexStart) * stride;
+        if (byteOffset <= shadow.size())
+            command.vertexData.assign(shadow.begin() + static_cast<std::ptrdiff_t>(byteOffset), shadow.end());
+        command.topology = ToTopology(primitive);
+        command.depthTest = depthTestEnabled_;
+        command.depthFunc = depthCompareFunction_;
+        command.depthWrite = depthWriteEnabled_;
+        command.texture = static_cast<const WebGPUTextureBackend*>(params.texture0);
+        const Matrix wvp = world * view * projection;
+        FillAlphaTestUniforms(command.uniforms, wvp, params);
+
+        if (ib != nullptr)
+        {
+            const auto& webgpuIb = static_cast<const WebGPUIndexBufferBackend&>(*ib);
+            command.indexed = true;
+            command.index32 = webgpuIb.IsThirtyTwoBit();
+            command.indexData = webgpuIb.ShadowData();
+            command.indexCount = static_cast<std::uint32_t>(PrimitiveIndexCount(primitive, primitiveCount));
+            command.vertexCount = static_cast<std::uint32_t>(webgpuVb.GetVertexCount()) -
+                                  static_cast<std::uint32_t>(params.vertexStart);
+        }
+        else
+        {
+            command.vertexCount = static_cast<std::uint32_t>(PrimitiveVertexCount(primitive, primitiveCount));
+        }
+
+        alphaTestDrawCommands_.push_back(std::move(command));
         framePending_ = true;
     }
 
