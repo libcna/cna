@@ -87,6 +87,57 @@ mark it ✅ from source inspection alone.
 
 ## Phase 57 — WebGPU backend: uniform buffer system (replaces push constants)
 
+> **Recommended concrete entry point (investigated 2026-07-12, not yet implemented — read this
+> before starting Phase 57/58/59/63):** the natural first vertical slice is
+> `WebGPUGraphicsBackend::DrawColoredPrimitives()`/`DrawIndexedColoredPrimitives()` (already
+> declared in the header, currently calling `ThrowUnsupported3DDraw`), because
+> `GraphicsDevice::DrawUserPrimitives()`/`DrawUserIndexedPrimitives()` already call them directly
+> (`GraphicsDevice.cpp:674` and its indexed sibling) for any `VertexPositionColor` (stride-16) draw
+> with an effect applied only for its World/View/Projection matrices — no `BasicEffect`
+> lighting/texture dispatch (`GpuDrawParams`/`DrawPrimitivesEx`, Phase 63's harder path) required.
+> This is exactly `WEBGPU-93`'s own target ("3D coloured-quad pixel test, stride 16").
+>
+> Findings from reading the Vulkan reference implementation (`VulkanGraphicsBackend::
+> DrawColoredPrimitives`, `FillExtPushConst`, `colored3d.vert.glsl`/`.frag.glsl`) that the next
+> session should reuse rather than re-derive:
+> - The 128-byte/32-float UBO layout `WEBGPU-11` asks for is **not** a new design — it's
+>   `FillExtPushConst()`'s existing byte-for-byte layout (`VulkanGraphicsBackend.cpp:3459`):
+>   `[0..15]` MVP (column-major mat4), `[16..19]` diffuseColor, `[20..23]` ambientColor+
+>   lightingEnabled, `[24..27]` light0Dir+textureEnabled, `[28..31]` light0Diffuse+
+>   vertexColorEnabled. Reuse this exact layout so the same UBO/shader-input shape works for
+>   `DrawColoredPrimitives` now and `BasicEffect`'s full `DrawPrimitivesEx` dispatch later (Vulkan's
+>   own `DrawColoredPrimitives` fills the *same* 32-float layout directly, bypassing
+>   `GpuDrawParams`, with `diffuseColor=white` and `vertexColorEnabled=1`, everything else zeroed —
+>   copy that approach, not a bespoke smaller struct).
+> - WGSL's `mat4x4f` + 4×`vec4f` gives the identical 128-byte/16-byte-aligned layout in a
+>   `@group(0) @binding(0) var<uniform>` block — no manual padding needed.
+> - **No Vulkan-style NDC Y-flip is needed.** Vulkan's `colored3d.vert.glsl` negates `pos.y`
+>   because Vulkan's clip space is Y-down by convention; WebGPU (like D3D/Metal, which is what real
+>   XNA's own math already assumes) is Y-up, matching the *already-verified* `QueueSprite()` 2D
+>   path's own `1.0 - 2.0*py/H` formula (no separate flip there either). A plain
+>   `position = mvp * vec4f(pos, 1.0)` should be directly correct. Depth range `[0,1]` also already
+>   matches XNA/WebGPU with no remap, same as Vulkan's own comment says.
+> - **Real lifetime hazard to design around:** `GraphicsDevice::DrawUserPrimitives()` creates its
+>   vertex buffer as a function-local `unique_ptr<IVertexBufferBackend>` that is destroyed right
+>   after `DrawColoredPrimitives()` returns. Since this backend's frame model defers all rendering
+>   to `EnsureFrameRendered()` (matching Vulkan/Bgfx's own "whole frame batched into one pass"
+>   design — see `NEXT.md`'s architecture notes), the draw **cannot** hold onto the caller's
+>   `WebGPUVertexBufferBackend`/its `WGPUBuffer` — it will be gone by render time. Vulkan's own
+>   `DrawColoredPrimitives` sidesteps this by `memcpy`-ing the vertex bytes into its own
+>   `Pending3DDraw::vbData` *immediately*, at call time, not by holding a reference. `WebGPUVertexBufferBackend`
+>   has no CPU-readable accessor today (`Buffer()` only returns the opaque `WGPUBuffer` handle) —
+>   add a small CPU shadow copy (`std::vector<std::uint8_t>`, populated inside
+>   `SetDataWithOptions()`) so `DrawColoredPrimitives` can copy it out synchronously, mirroring
+>   Vulkan's approach, before queuing a `ColoredDrawCommand` for `EnsureFrameRendered()` to actually
+>   build a real `WGPUBuffer` + issue the draw from later (parallel to how `spriteCommands_`/
+>   `RenderSprites()` already work for 2D).
+> - Depth-stencil state: a real pipeline-cache keyed at minimum by `(depthTestEnabled_,
+>   depthWriteEnabled_)` is enough for a first slice (WebGPU pipeline state is largely immutable —
+>   see `docs/webgpu-backend.md`'s architecture notes — so this can't be fully dynamic like
+>   Vulkan's `VkDynamicState`); `CullMode`/`FillMode::WireFrame` can stay unhandled for the very
+>   first slice (tracked separately as `WEBGPU-41`/`WEBGPU-79`/`WEBGPU-115`), documented as a known
+>   gap rather than silently ignored.
+
 | #   | Task                                                                                                          | Status | Notes                                                                 |
 | --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
 | WEBGPU-11 | Design `GpuUniforms` struct (128 bytes = 32 floats) matching Vulkan push constant layout; upload via `wgpuQueueWriteBuffer` | ⬜ | Central UBO for MVP + effect params |
