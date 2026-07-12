@@ -16,6 +16,14 @@
 // Check F -- a sourceRectangle selecting only the right half of a 2x1 (red|blue) texture must
 //   sample blue, not red or an unpredictable blend -- proves source-rectangle cropping, not just
 //   whole-texture sampling.
+// Check G -- a 50%-alpha sprite over black must land strictly between "fully transparent" (black)
+//   and "alpha ignored" (full brightness) -- this test found and fixed a real bug: the sprite
+//   pipeline's blend factors (ONE/ONE_MINUS_SRC_ALPHA, a premultiplied-alpha equation) didn't
+//   match its own shader's straight/non-premultiplied output, so any alpha strictly between 0 and
+//   255 was silently ignored for colour. Fixed to match Vulkan's sprite2d.frag.glsl pairing
+//   (SRC_ALPHA/ONE_MINUS_SRC_ALPHA). The exact resulting value depends on whether the chosen
+//   swapchain format blends in linear or sRGB-encoded space (both are legitimate, backend/
+//   platform-dependent choices), so this asserts direction and magnitude, not an exact value.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
@@ -57,7 +65,7 @@ namespace
 
 class WebGpuClearReadbackTest : public Game
 {
-    static constexpr int kChecks = 6;
+    static constexpr int kChecks = 7;
 
     std::unique_ptr<GraphicsDeviceManager> gdm_;
     SpriteBatch* spriteBatch_ = nullptr;
@@ -132,6 +140,21 @@ protected:
         spriteBatch_->End();
         check(colorNear(readPixel(dev, kSize / 2, kSize / 2), Color::Blue),
               "sourceRectangle selecting the right texel samples blue, not red");
+
+        // Check G: 50%-alpha green sprite over black must land strictly between black and full
+        // green -- proves alpha genuinely attenuates colour, not just an on/off gate.
+        dev.Clear(Color::Black);
+        spriteBatch_->Begin();
+        spriteBatch_->Draw(greenTex_, Rectangle(0, 0, kSize, kSize), Color(255, 255, 255, 128));
+        spriteBatch_->End();
+        {
+            Color c = readPixel(dev, kSize / 2, kSize / 2);
+            const bool ok = c.getGProperty() >= 60 && c.getGProperty() <= 220 &&
+                            c.getRProperty() <= 20 && c.getBProperty() <= 20;
+            std::printf("    (50%%-alpha green over black -> R=%d G=%d B=%d)\n",
+                        c.getRProperty(), c.getGProperty(), c.getBProperty());
+            check(ok, "50%-alpha sprite blends partway between black and full colour");
+        }
 
         std::printf("=== %d/%d PASS ===\n", passCount_, kChecks);
         result_ = (passCount_ == kChecks) ? 0 : 1;

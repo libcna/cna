@@ -829,13 +829,21 @@ struct VertexOutput {
         depthStencil.depthCompare = WGPUCompareFunction_Always;
         pipeline.depthStencil = &depthStencil;
 
+        // Task WEBGPU-91 finding: the sprite fragment shader outputs straight (non-premultiplied)
+        // color -- textureSample(...) * input.color, matching Vulkan's own sprite2d.frag.glsl
+        // exactly. Vulkan pairs that with SRC_ALPHA/ONE_MINUS_SRC_ALPHA (a straight-alpha "over"
+        // blend); this backend previously used ONE/ONE_MINUS_SRC_ALPHA (a premultiplied-alpha
+        // blend equation), which silently ignored partial source alpha entirely for colour (only
+        // alpha=0 or alpha=255 ever looked correct -- any translucent tint rendered fully opaque).
+        // Matching Vulkan's factors here, not premultiplying in the shader, keeps both backends
+        // consistent with the same non-premultiplied shader source.
         WGPUBlendState blend{};
         blend.color.operation = WGPUBlendOperation_Add;
-        blend.color.srcFactor = WGPUBlendFactor_One;
+        blend.color.srcFactor = WGPUBlendFactor_SrcAlpha;
         blend.color.dstFactor = WGPUBlendFactor_OneMinusSrcAlpha;
         blend.alpha.operation = WGPUBlendOperation_Add;
         blend.alpha.srcFactor = WGPUBlendFactor_One;
-        blend.alpha.dstFactor = WGPUBlendFactor_OneMinusSrcAlpha;
+        blend.alpha.dstFactor = WGPUBlendFactor_Zero;
         target.blend = &blend;
         spritePipelineBlend_ = wgpuDeviceCreateRenderPipeline(device_, &pipeline);
         target.blend = nullptr;
