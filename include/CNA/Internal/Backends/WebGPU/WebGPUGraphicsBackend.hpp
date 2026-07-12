@@ -434,5 +434,48 @@ namespace CNA::Internal::Backends::WebGPU
         // executed commands.
         std::vector<WGPUBuffer> pendingBufferReleases_;
         std::vector<WGPUBindGroup> pendingBindGroupReleases_;
+
+        // WEBGPU-22: lit_textured3d (stride 32, VertexPositionNormalTexture). Real Blinn-Phong
+        // lighting (FNA's Lighting.fxh ComputeLights(): 3 directional lights, ambient, specular,
+        // emissive), ported from VulkanGraphicsBackend's lit_textured3d.{vert,frag}.glsl. This is
+        // the first WebGPU 3D shader that needs a SECOND UBO (litBindGroupLayout_, group 0
+        // binding 1) alongside the existing 128-byte primary uniforms (binding 0, still used for
+        // MVP/diffuseColor/ambientColor/lightingEnabled/light0Dir/light0Diffuse/textureEnabled),
+        // since that buffer is already fully packed. Reuses texturedBindGroupLayout_ (group 1:
+        // sampler + texture) unchanged. No fog (same deliberate deferral as the other 3D shaders).
+        struct LitTexturedDrawCommand
+        {
+            std::vector<std::uint8_t> vertexData;
+            std::vector<std::uint8_t> indexData;
+            bool indexed = false;
+            bool index32 = false;
+            std::uint32_t vertexCount = 0;
+            std::uint32_t indexCount = 0;
+            WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
+            std::array<float, 32> uniforms{};
+            std::array<float, 68> lightUniforms{};
+            bool depthTest = false;
+            bool depthWrite = false;
+            int depthFunc = 3;
+            const WebGPUTextureBackend* texture = nullptr;
+            int textureFilter = 0;
+            int addressU = 1;
+            int addressV = 1;
+        };
+        void CreateLitTexturedResources();
+        void DestroyLitTexturedResources();
+        [[nodiscard]] WGPURenderPipeline GetOrCreatePipelineLitTextured3D(WGPUPrimitiveTopology topology,
+                                                                           bool depthTest, bool depthWrite,
+                                                                           int depthFunc);
+        void QueueLitTexturedDraw(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
+                                  const Matrix& world, const Matrix& view, const Matrix& projection,
+                                  PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
+        void RenderLitTexturedDraws(WGPURenderPassEncoder pass);
+
+        WGPUShaderModule litTexturedShader_ = nullptr;
+        WGPUBindGroupLayout litBindGroupLayout_ = nullptr;   ///< group 0: primary UBO (binding 0) + LitLightParams UBO (binding 1)
+        WGPUPipelineLayout litPipelineLayout_ = nullptr;     ///< group 0 (lit UBOs) + group 1 (texture, texturedBindGroupLayout_ reused)
+        std::unordered_map<int, WGPURenderPipeline> litTexturedPipelines_;
+        std::vector<LitTexturedDrawCommand> litTexturedDrawCommands_;
     };
 }

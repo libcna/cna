@@ -6372,6 +6372,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         LABELS "WebGPU"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # WEBGPU-22: lit_textured3d.wgsl / GetOrCreatePipelineLitTextured3D / stride-32 dispatch,
+    # real Blinn-Phong lighting.
+    cna_webgpu_test(cna_test_webgpu_littextured3d examples/webgpu_littextured3d_test.cpp)
+    add_test(NAME WebGPU_LitTextured3D COMMAND cna_test_webgpu_littextured3d)
+    set_tests_properties(WebGPU_LitTextured3D PROPERTIES
+        TIMEOUT 30
+        LABELS "WebGPU"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()
 
 # --- Task 6.1: real two-process ENet loopback test harness ---

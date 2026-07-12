@@ -216,6 +216,52 @@ namespace CNA::Internal::Backends::WebGPU
             out[31] = p.vertexColorEnabled ? 1.0f : 0.0f;
         }
 
+        // Normal matrix = inverse(world3x3), via the cofactor/det shortcut, applied directly to
+        // the already-GPU-space (dumped) world matrix -- mirrors
+        // BgfxGraphicsBackend::ComputeNormalMatrix3x3() byte-for-byte (verified independently
+        // against FNA's own Lighting.fxh: HLSL computes WorldInverseTranspose =
+        // Transpose(Invert(World)) on the CPU and applies it as mul(normal, WorldInverseTranspose)
+        // -- a row-vector multiply. Working through this codebase's established
+        // dump(M) = M^T GPU-column-major convention for both World and the result reduces to
+        // exactly this cofactor inverse of the dumped array, with no shader-side transpose.
+        void ComputeNormalMatrix3x3(const float* w, float out[9])
+        {
+            const float a = w[0], d = w[1], g = w[2];
+            const float b = w[4], e = w[5], h = w[6];
+            const float c = w[8], f = w[9], i = w[10];
+            const float det = a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g);
+            const float invDet = (det != 0.0f) ? (1.0f / det) : 0.0f;
+            out[0] = (e * i - f * h) * invDet; out[1] = -(b * i - c * h) * invDet; out[2] = (b * f - c * e) * invDet;
+            out[3] = -(d * i - f * g) * invDet; out[4] = (a * i - c * g) * invDet; out[5] = -(a * f - c * d) * invDet;
+            out[6] = (d * h - e * g) * invDet; out[7] = -(a * h - b * g) * invDet; out[8] = (a * e - b * d) * invDet;
+        }
+
+        // Secondary UBO for lit_textured3d.wgsl: DirectionalLight1/DirectionalLight2, EmissiveColor,
+        // World (for world-space position), EyePosition, per-light SpecularColor, material
+        // SpecularColor/Power, and the 3x3 normal matrix -- forwarded here since the primary
+        // 128-byte uniform block (FillExtUniforms) is already fully packed. Mirrors
+        // VulkanGraphicsBackend's LitLightParams UBO field-for-field (minus fog, deliberately
+        // deferred like the other WebGPU 3D shaders).
+        void FillLitLightUniforms(std::array<float, 68>& out, const GpuDrawParams& p)
+        {
+            out[0] = p.light1Dir[0]; out[1] = p.light1Dir[1]; out[2] = p.light1Dir[2]; out[3] = 0.0f;
+            out[4] = p.light1Diffuse[0]; out[5] = p.light1Diffuse[1]; out[6] = p.light1Diffuse[2]; out[7] = 0.0f;
+            out[8] = p.light2Dir[0]; out[9] = p.light2Dir[1]; out[10] = p.light2Dir[2]; out[11] = 0.0f;
+            out[12] = p.light2Diffuse[0]; out[13] = p.light2Diffuse[1]; out[14] = p.light2Diffuse[2]; out[15] = 0.0f;
+            out[16] = p.emissiveColor[0]; out[17] = p.emissiveColor[1]; out[18] = p.emissiveColor[2]; out[19] = 0.0f;
+            for (int wi = 0; wi < 16; ++wi) out[20 + wi] = p.worldColMajor[wi];
+            out[36] = p.eyePositionWorld[0]; out[37] = p.eyePositionWorld[1]; out[38] = p.eyePositionWorld[2]; out[39] = 0.0f;
+            out[40] = p.light0Specular[0]; out[41] = p.light0Specular[1]; out[42] = p.light0Specular[2]; out[43] = 0.0f;
+            out[44] = p.light1Specular[0]; out[45] = p.light1Specular[1]; out[46] = p.light1Specular[2]; out[47] = 0.0f;
+            out[48] = p.light2Specular[0]; out[49] = p.light2Specular[1]; out[50] = p.light2Specular[2]; out[51] = 0.0f;
+            out[52] = p.specularColor[0]; out[53] = p.specularColor[1]; out[54] = p.specularColor[2]; out[55] = p.specularPower;
+            float normalMatrix[9];
+            ComputeNormalMatrix3x3(p.worldColMajor, normalMatrix);
+            out[56] = normalMatrix[0]; out[57] = normalMatrix[1]; out[58] = normalMatrix[2]; out[59] = 0.0f;
+            out[60] = normalMatrix[3]; out[61] = normalMatrix[4]; out[62] = normalMatrix[5]; out[63] = 0.0f;
+            out[64] = normalMatrix[6]; out[65] = normalMatrix[7]; out[66] = normalMatrix[8]; out[67] = 0.0f;
+        }
+
         [[nodiscard]] bool IsSurfaceRecoverable(WGPUSurfaceGetCurrentTextureStatus status)
         {
             return status == WGPUSurfaceGetCurrentTextureStatus_Timeout ||
@@ -529,6 +575,7 @@ namespace CNA::Internal::Backends::WebGPU
         DestroySpriteResources();
         DestroyColoredResources();
         DestroyTexturedResources();
+        DestroyLitTexturedResources();
         for (WGPUBindGroup bg : pendingBindGroupReleases_) wgpuBindGroupRelease(bg);
         for (WGPUBuffer buf : pendingBufferReleases_) wgpuBufferRelease(buf);
         for (WGPUSampler& sampler : samplerCache_)
@@ -741,6 +788,8 @@ namespace CNA::Internal::Backends::WebGPU
             CreateColoredResources();
         if (formatChanged || texturedShader_ == nullptr)
             CreateTexturedResources();
+        if (formatChanged || litTexturedShader_ == nullptr)
+            CreateLitTexturedResources();
     }
 
     void WebGPUGraphicsBackend::RecreateDepthTexture()
@@ -1333,6 +1382,217 @@ struct VertexOutput {
         return created;
     }
 
+    void WebGPUGraphicsBackend::DestroyLitTexturedResources()
+    {
+        for (auto& [key, pipe] : litTexturedPipelines_)
+        {
+            if (pipe != nullptr) wgpuRenderPipelineRelease(pipe);
+        }
+        litTexturedPipelines_.clear();
+        if (litPipelineLayout_ != nullptr) wgpuPipelineLayoutRelease(litPipelineLayout_);
+        if (litBindGroupLayout_ != nullptr) wgpuBindGroupLayoutRelease(litBindGroupLayout_);
+        if (litTexturedShader_ != nullptr) wgpuShaderModuleRelease(litTexturedShader_);
+        litPipelineLayout_ = nullptr;
+        litBindGroupLayout_ = nullptr;
+        litTexturedShader_ = nullptr;
+    }
+
+    void WebGPUGraphicsBackend::CreateLitTexturedResources()
+    {
+        DestroyLitTexturedResources();
+        if (surfaceFormat_ == WGPUTextureFormat_Undefined || texturedBindGroupLayout_ == nullptr)
+            return;
+
+        // Ported from VulkanGraphicsBackend's lit_textured3d.{vert,frag}.glsl (itself ported from
+        // FNA's Lighting.fxh ComputeLights()). Group 0 binding 0 is the same primary Uniforms
+        // block as colored3d/textured3d (MVP, diffuseColor, ambientColor+lightingEnabled,
+        // light0Dir+textureEnabled, light0Diffuse); binding 1 is the secondary LitLightParams
+        // block (light1/light2, emissive, world, eye position, per-light specular, material
+        // specular, normal matrix) filled by FillLitLightUniforms(). Group 1 (sampler + texture)
+        // is texturedBindGroupLayout_, reused unchanged.
+        static constexpr char shaderSource[] = R"WGSL(
+struct Uniforms {
+    mvp: mat4x4f,
+    diffuseColor: vec4f,
+    ambientLighting: vec4f,
+    light0DirTexture: vec4f,
+    light0DiffuseVertexColor: vec4f,
+};
+@group(0) @binding(0) var<uniform> u: Uniforms;
+
+struct LitLightParams {
+    light1Dir: vec4f,
+    light1Diffuse: vec4f,
+    light2Dir: vec4f,
+    light2Diffuse: vec4f,
+    emissiveColor: vec4f,
+    world: mat4x4f,
+    eyePos: vec4f,
+    light0Specular: vec4f,
+    light1Specular: vec4f,
+    light2Specular: vec4f,
+    specularColorPower: vec4f,
+    normalMatrixCol0: vec4f,
+    normalMatrixCol1: vec4f,
+    normalMatrixCol2: vec4f,
+};
+@group(0) @binding(1) var<uniform> lp: LitLightParams;
+@group(1) @binding(0) var texSampler: sampler;
+@group(1) @binding(1) var tex: texture_2d<f32>;
+
+struct VertexInput {
+    @location(0) position: vec3f,
+    @location(1) normal: vec3f,
+    @location(2) uv: vec2f,
+};
+struct VertexOutput {
+    @builtin(position) position: vec4f,
+    @location(0) uv: vec2f,
+    @location(1) worldNormal: vec3f,
+    @location(2) worldPos: vec3f,
+};
+@vertex fn vs_main(input: VertexInput) -> VertexOutput {
+    var output: VertexOutput;
+    output.position = u.mvp * vec4f(input.position, 1.0);
+    output.uv = input.uv;
+    let normalMatrix = mat3x3f(lp.normalMatrixCol0.xyz, lp.normalMatrixCol1.xyz, lp.normalMatrixCol2.xyz);
+    output.worldNormal = normalMatrix * input.normal;
+    output.worldPos = (lp.world * vec4f(input.position, 1.0)).xyz;
+    return output;
+}
+@fragment fn fs_main(input: VertexOutput) -> @location(0) vec4f {
+    let textureEnabled = u.light0DirTexture.w;
+    let sampled = select(vec4f(1.0), textureSample(tex, texSampler, input.uv), textureEnabled > 0.5);
+    let lightingEnabled = u.ambientLighting.w;
+    if (lightingEnabled <= 0.5) {
+        return u.diffuseColor * sampled;
+    }
+    let n = normalize(input.worldNormal);
+    let e = normalize(lp.eyePos.xyz - input.worldPos);
+    // A disabled/unconfigured DirectionalLight forwards Direction=(0,0,0) (its DiffuseColor/
+    // SpecularColor are what get zeroed, matching FNA's own DirectionalLight.cs -- Direction
+    // itself is untouched by Enabled=false). normalize() on a true zero vector is undefined and
+    // can poison the whole lightSum/specular computation with NaN on real GPU hardware, even
+    // though that light's own diffuse/specular contribution is already zero -- guard it here.
+    let dir0sq = dot(u.light0DirTexture.xyz, u.light0DirTexture.xyz);
+    let dir1sq = dot(lp.light1Dir.xyz, lp.light1Dir.xyz);
+    let dir2sq = dot(lp.light2Dir.xyz, lp.light2Dir.xyz);
+    let nl0 = select(vec3f(0.0), normalize(u.light0DirTexture.xyz), dir0sq > 0.0);
+    let nl1 = select(vec3f(0.0), normalize(lp.light1Dir.xyz), dir1sq > 0.0);
+    let nl2 = select(vec3f(0.0), normalize(lp.light2Dir.xyz), dir2sq > 0.0);
+    let dotl0 = dot(n, -nl0); let zerol0 = step(0.0, dotl0); let ndotl0 = max(dotl0, 0.0);
+    let dotl1 = dot(n, -nl1); let zerol1 = step(0.0, dotl1); let ndotl1 = max(dotl1, 0.0);
+    let dotl2 = dot(n, -nl2); let zerol2 = step(0.0, dotl2); let ndotl2 = max(dotl2, 0.0);
+    let lightSum = u.ambientLighting.xyz + ndotl0 * u.light0DiffuseVertexColor.xyz
+                   + ndotl1 * lp.light1Diffuse.xyz + ndotl2 * lp.light2Diffuse.xyz;
+    let h0 = normalize(e - nl0); let spec0 = pow(max(dot(h0, n), 0.0) * zerol0, lp.specularColorPower.w);
+    let h1 = normalize(e - nl1); let spec1 = pow(max(dot(h1, n), 0.0) * zerol1, lp.specularColorPower.w);
+    let h2 = normalize(e - nl2); let spec2 = pow(max(dot(h2, n), 0.0) * zerol2, lp.specularColorPower.w);
+    let specularRgb = (spec0 * lp.light0Specular.xyz + spec1 * lp.light1Specular.xyz
+                       + spec2 * lp.light2Specular.xyz) * lp.specularColorPower.xyz;
+    let lit = lightSum * u.diffuseColor.rgb + lp.emissiveColor.xyz;
+    var color = vec4f(lit, u.diffuseColor.a) * sampled;
+    color = vec4f(color.rgb + specularRgb * color.a, color.a);
+    return color;
+}
+)WGSL";
+
+        WGPUShaderSourceWGSL wgsl{};
+        wgsl.chain.sType = WGPUSType_ShaderSourceWGSL;
+        wgsl.code = StringView(shaderSource);
+        WGPUShaderModuleDescriptor shaderDescriptor{};
+        shaderDescriptor.label = StringView("CNA WebGPU LitTextured3D WGSL");
+        shaderDescriptor.nextInChain = &wgsl.chain;
+        litTexturedShader_ = wgpuDeviceCreateShaderModule(device_, &shaderDescriptor);
+
+        std::array<WGPUBindGroupLayoutEntry, 2> layoutEntries{};
+        layoutEntries[0].binding = 0;
+        layoutEntries[0].visibility = WGPUShaderStage_Vertex | WGPUShaderStage_Fragment;
+        layoutEntries[0].buffer.type = WGPUBufferBindingType_Uniform;
+        layoutEntries[0].buffer.minBindingSize = 128;
+        layoutEntries[1].binding = 1;
+        layoutEntries[1].visibility = WGPUShaderStage_Vertex | WGPUShaderStage_Fragment;
+        layoutEntries[1].buffer.type = WGPUBufferBindingType_Uniform;
+        layoutEntries[1].buffer.minBindingSize = 272;
+        WGPUBindGroupLayoutDescriptor bindLayoutDescriptor{};
+        bindLayoutDescriptor.label = StringView("CNA WebGPU LitTextured3D BindGroupLayout");
+        bindLayoutDescriptor.entryCount = layoutEntries.size();
+        bindLayoutDescriptor.entries = layoutEntries.data();
+        litBindGroupLayout_ = wgpuDeviceCreateBindGroupLayout(device_, &bindLayoutDescriptor);
+
+        std::array<WGPUBindGroupLayout, 2> groupLayouts{litBindGroupLayout_, texturedBindGroupLayout_};
+        WGPUPipelineLayoutDescriptor pipelineLayoutDescriptor{};
+        pipelineLayoutDescriptor.label = StringView("CNA WebGPU LitTextured3D PipelineLayout");
+        pipelineLayoutDescriptor.bindGroupLayoutCount = groupLayouts.size();
+        pipelineLayoutDescriptor.bindGroupLayouts = groupLayouts.data();
+        litPipelineLayout_ = wgpuDeviceCreatePipelineLayout(device_, &pipelineLayoutDescriptor);
+
+        if (litTexturedShader_ == nullptr || litBindGroupLayout_ == nullptr || litPipelineLayout_ == nullptr)
+            throw std::runtime_error("CNA WebGPU: failed to create LitTextured3D GPU resources");
+    }
+
+    WGPURenderPipeline WebGPUGraphicsBackend::GetOrCreatePipelineLitTextured3D(WGPUPrimitiveTopology topology,
+                                                                                bool depthTest, bool depthWrite,
+                                                                                int depthFunc)
+    {
+        const int key = (static_cast<int>(topology) * 8 + depthFunc) * 4 + (depthTest ? 2 : 0) + (depthWrite ? 1 : 0);
+        if (auto it = litTexturedPipelines_.find(key); it != litTexturedPipelines_.end())
+            return it->second;
+
+        struct LitTexturedVertex { float x, y, z, nx, ny, nz, u, v; };
+        std::array<WGPUVertexAttribute, 3> attributes{};
+        attributes[0].format = WGPUVertexFormat_Float32x3;
+        attributes[0].offset = offsetof(LitTexturedVertex, x);
+        attributes[0].shaderLocation = 0;
+        attributes[1].format = WGPUVertexFormat_Float32x3;
+        attributes[1].offset = offsetof(LitTexturedVertex, nx);
+        attributes[1].shaderLocation = 1;
+        attributes[2].format = WGPUVertexFormat_Float32x2;
+        attributes[2].offset = offsetof(LitTexturedVertex, u);
+        attributes[2].shaderLocation = 2;
+        WGPUVertexBufferLayout vertexBufferLayout{};
+        vertexBufferLayout.arrayStride = sizeof(LitTexturedVertex);
+        vertexBufferLayout.stepMode = WGPUVertexStepMode_Vertex;
+        vertexBufferLayout.attributeCount = attributes.size();
+        vertexBufferLayout.attributes = attributes.data();
+
+        WGPUColorTargetState target{};
+        target.format = surfaceFormat_;
+        target.writeMask = WGPUColorWriteMask_All;
+        WGPUFragmentState fragment{};
+        fragment.module = litTexturedShader_;
+        fragment.entryPoint = StringView("fs_main");
+        fragment.targetCount = 1;
+        fragment.targets = &target;
+
+        WGPURenderPipelineDescriptor pipeline{};
+        pipeline.label = StringView("CNA WebGPU LitTextured3D Pipeline");
+        pipeline.layout = litPipelineLayout_;
+        pipeline.vertex.module = litTexturedShader_;
+        pipeline.vertex.entryPoint = StringView("vs_main");
+        pipeline.vertex.bufferCount = 1;
+        pipeline.vertex.buffers = &vertexBufferLayout;
+        pipeline.primitive.topology = topology;
+        pipeline.primitive.frontFace = WGPUFrontFace_CCW;
+        pipeline.primitive.cullMode = WGPUCullMode_None;
+        pipeline.multisample.count = 1;
+        pipeline.multisample.mask = std::numeric_limits<std::uint32_t>::max();
+        pipeline.multisample.alphaToCoverageEnabled = false;
+        pipeline.fragment = &fragment;
+
+        WGPUDepthStencilState depthStencil = WGPU_DEPTH_STENCIL_STATE_INIT;
+        depthStencil.format = WGPUTextureFormat_Depth24PlusStencil8;
+        depthStencil.depthWriteEnabled = depthWrite ? WGPUOptionalBool_True : WGPUOptionalBool_False;
+        depthStencil.depthCompare = depthTest ? ToWGPUCompareFunction(depthFunc) : WGPUCompareFunction_Always;
+        pipeline.depthStencil = &depthStencil;
+
+        WGPURenderPipeline created = wgpuDeviceCreateRenderPipeline(device_, &pipeline);
+        if (created == nullptr)
+            throw std::runtime_error("CNA WebGPU: failed to create LitTextured3D pipeline");
+        litTexturedPipelines_[key] = created;
+        return created;
+    }
+
     WGPUSampler WebGPUGraphicsBackend::GetOrCreateSampler(int textureFilter, int addressU, int addressV)
     {
         const int index = SamplerCacheIndex(textureFilter, addressU, addressV);
@@ -1607,6 +1867,7 @@ struct VertexOutput {
         // (World.Draw() then a HUD SpriteBatch pass), both collapsed into this one deferred pass.
         RenderColoredDraws(pass);
         RenderTexturedDraws(pass);
+        RenderLitTexturedDraws(pass);
         RenderSprites(pass);
         wgpuRenderPassEncoderEnd(pass);
         wgpuRenderPassEncoderRelease(pass);
@@ -1954,11 +2215,16 @@ struct VertexOutput {
             QueueTexturedDraw(vb, nullptr, world, view, projection, primitive, primitiveCount, params);
             return;
         }
-        // No lit_textured3d/alpha-test/dual-texture/env-map/skinned shader exists yet (Phase 58
-        // remaining WGSL variants) -- fall back exactly like IGraphicsBackend's own default
-        // implementation did before this override existed. This will itself throw for anything
-        // other than a stride-16 buffer (DrawColoredPrimitives' own requirement), matching the
-        // pre-existing "unsupported, fail loudly" behaviour.
+        if (!needsUnsupportedEffect && webgpuVb.Stride() == 32 && params.texture0 != nullptr)
+        {
+            QueueLitTexturedDraw(vb, nullptr, world, view, projection, primitive, primitiveCount, params);
+            return;
+        }
+        // No alpha-test/dual-texture/env-map/skinned shader exists yet (Phase 58 remaining WGSL
+        // variants) -- fall back exactly like IGraphicsBackend's own default implementation did
+        // before this override existed. This will itself throw for anything other than a
+        // stride-16 buffer (DrawColoredPrimitives' own requirement), matching the pre-existing
+        // "unsupported, fail loudly" behaviour.
         DrawColoredPrimitives(vb, world, view, projection, primitive, primitiveCount);
     }
 
@@ -1979,6 +2245,11 @@ struct VertexOutput {
             params.texture0 != nullptr)
         {
             QueueTexturedDraw(vb, &ib, world, view, projection, primitive, primitiveCount, params);
+            return;
+        }
+        if (!needsUnsupportedEffect && webgpuVb.Stride() == 32 && params.texture0 != nullptr)
+        {
+            QueueLitTexturedDraw(vb, &ib, world, view, projection, primitive, primitiveCount, params);
             return;
         }
         DrawIndexedColoredPrimitives(vb, ib, world, view, projection, primitive, primitiveCount);
@@ -2128,6 +2399,141 @@ struct VertexOutput {
             pendingBufferReleases_.push_back(vertexBuffer);
         }
         texturedDrawCommands_.clear();
+    }
+
+    void WebGPUGraphicsBackend::RenderLitTexturedDraws(WGPURenderPassEncoder pass)
+    {
+        for (const LitTexturedDrawCommand& command : litTexturedDrawCommands_)
+        {
+            if (command.vertexCount == 0 || command.vertexData.empty() || command.texture == nullptr)
+                continue;
+
+            WGPUBufferDescriptor vbDescriptor{};
+            vbDescriptor.label = StringView("CNA WebGPU LitTextured3D VertexBuffer");
+            vbDescriptor.usage = WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst;
+            vbDescriptor.size = Align4(command.vertexData.size());
+            WGPUBuffer vertexBuffer = wgpuDeviceCreateBuffer(device_, &vbDescriptor);
+            wgpuQueueWriteBuffer(queue_, vertexBuffer, 0, command.vertexData.data(), command.vertexData.size());
+
+            WGPUBufferDescriptor uboDescriptor{};
+            uboDescriptor.label = StringView("CNA WebGPU LitTextured3D UBO");
+            uboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
+            uboDescriptor.size = sizeof(command.uniforms);
+            WGPUBuffer uniformBuffer = wgpuDeviceCreateBuffer(device_, &uboDescriptor);
+            wgpuQueueWriteBuffer(queue_, uniformBuffer, 0, command.uniforms.data(), sizeof(command.uniforms));
+
+            WGPUBufferDescriptor lightUboDescriptor{};
+            lightUboDescriptor.label = StringView("CNA WebGPU LitTextured3D LightUBO");
+            lightUboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
+            lightUboDescriptor.size = sizeof(command.lightUniforms);
+            WGPUBuffer lightUniformBuffer = wgpuDeviceCreateBuffer(device_, &lightUboDescriptor);
+            wgpuQueueWriteBuffer(queue_, lightUniformBuffer, 0, command.lightUniforms.data(), sizeof(command.lightUniforms));
+
+            std::array<WGPUBindGroupEntry, 2> uboEntries{};
+            uboEntries[0].binding = 0;
+            uboEntries[0].buffer = uniformBuffer;
+            uboEntries[0].size = sizeof(command.uniforms);
+            uboEntries[1].binding = 1;
+            uboEntries[1].buffer = lightUniformBuffer;
+            uboEntries[1].size = sizeof(command.lightUniforms);
+            WGPUBindGroupDescriptor uboBindDescriptor{};
+            uboBindDescriptor.label = StringView("CNA WebGPU LitTextured3D UBO BindGroup");
+            uboBindDescriptor.layout = litBindGroupLayout_;
+            uboBindDescriptor.entryCount = uboEntries.size();
+            uboBindDescriptor.entries = uboEntries.data();
+            WGPUBindGroup uboBindGroup = wgpuDeviceCreateBindGroup(device_, &uboBindDescriptor);
+
+            WGPUSampler sampler = GetOrCreateSampler(command.textureFilter, command.addressU, command.addressV);
+            std::array<WGPUBindGroupEntry, 2> texEntries{};
+            texEntries[0].binding = 0;
+            texEntries[0].sampler = sampler;
+            texEntries[1].binding = 1;
+            texEntries[1].textureView = command.texture->View();
+            WGPUBindGroupDescriptor texBindDescriptor{};
+            texBindDescriptor.label = StringView("CNA WebGPU LitTextured3D Texture BindGroup");
+            texBindDescriptor.layout = texturedBindGroupLayout_;
+            texBindDescriptor.entryCount = texEntries.size();
+            texBindDescriptor.entries = texEntries.data();
+            WGPUBindGroup texBindGroup = wgpuDeviceCreateBindGroup(device_, &texBindDescriptor);
+
+            WGPURenderPipeline pipe = GetOrCreatePipelineLitTextured3D(command.topology, command.depthTest,
+                                                                       command.depthWrite, command.depthFunc);
+            wgpuRenderPassEncoderSetPipeline(pass, pipe);
+            wgpuRenderPassEncoderSetBindGroup(pass, 0, uboBindGroup, 0, nullptr);
+            wgpuRenderPassEncoderSetBindGroup(pass, 1, texBindGroup, 0, nullptr);
+            wgpuRenderPassEncoderSetVertexBuffer(pass, 0, vertexBuffer, 0, command.vertexData.size());
+
+            if (command.indexed && !command.indexData.empty())
+            {
+                WGPUBufferDescriptor ibDescriptor{};
+                ibDescriptor.label = StringView("CNA WebGPU LitTextured3D IndexBuffer");
+                ibDescriptor.usage = WGPUBufferUsage_Index | WGPUBufferUsage_CopyDst;
+                ibDescriptor.size = Align4(command.indexData.size());
+                WGPUBuffer indexBuffer = wgpuDeviceCreateBuffer(device_, &ibDescriptor);
+                wgpuQueueWriteBuffer(queue_, indexBuffer, 0, command.indexData.data(), command.indexData.size());
+                wgpuRenderPassEncoderSetIndexBuffer(pass, indexBuffer,
+                    command.index32 ? WGPUIndexFormat_Uint32 : WGPUIndexFormat_Uint16,
+                    0, command.indexData.size());
+                wgpuRenderPassEncoderDrawIndexed(pass, command.indexCount, 1, 0, 0, 0);
+                pendingBufferReleases_.push_back(indexBuffer);
+            }
+            else
+            {
+                wgpuRenderPassEncoderDraw(pass, command.vertexCount, 1, 0, 0);
+            }
+
+            pendingBindGroupReleases_.push_back(uboBindGroup);
+            pendingBindGroupReleases_.push_back(texBindGroup);
+            pendingBufferReleases_.push_back(uniformBuffer);
+            pendingBufferReleases_.push_back(lightUniformBuffer);
+            pendingBufferReleases_.push_back(vertexBuffer);
+        }
+        litTexturedDrawCommands_.clear();
+    }
+
+    void WebGPUGraphicsBackend::QueueLitTexturedDraw(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
+                                                      const Matrix& world, const Matrix& view, const Matrix& projection,
+                                                      PrimitiveType primitive, int primitiveCount,
+                                                      const GpuDrawParams& params)
+    {
+        const auto& webgpuVb = static_cast<const WebGPUVertexBufferBackend&>(vb);
+        if (webgpuVb.Stride() != 32)
+            throw std::invalid_argument("CNA WebGPU: QueueLitTexturedDraw requires a stride-32 "
+                                        "(VertexPositionNormalTexture) vertex buffer");
+        if (params.texture0 == nullptr)
+            throw std::invalid_argument("CNA WebGPU: QueueLitTexturedDraw requires a bound texture0");
+
+        LitTexturedDrawCommand command;
+        const auto& shadow = webgpuVb.ShadowData();
+        const std::size_t byteOffset = static_cast<std::size_t>(params.vertexStart) * 32u;
+        if (byteOffset <= shadow.size())
+            command.vertexData.assign(shadow.begin() + static_cast<std::ptrdiff_t>(byteOffset), shadow.end());
+        command.topology = ToTopology(primitive);
+        command.depthTest = depthTestEnabled_;
+        command.depthFunc = depthCompareFunction_;
+        command.depthWrite = depthWriteEnabled_;
+        command.texture = static_cast<const WebGPUTextureBackend*>(params.texture0);
+        const Matrix wvp = world * view * projection;
+        FillExtUniforms(command.uniforms, wvp, params);
+        FillLitLightUniforms(command.lightUniforms, params);
+
+        if (ib != nullptr)
+        {
+            const auto& webgpuIb = static_cast<const WebGPUIndexBufferBackend&>(*ib);
+            command.indexed = true;
+            command.index32 = webgpuIb.IsThirtyTwoBit();
+            command.indexData = webgpuIb.ShadowData();
+            command.indexCount = static_cast<std::uint32_t>(PrimitiveIndexCount(primitive, primitiveCount));
+            command.vertexCount = static_cast<std::uint32_t>(webgpuVb.GetVertexCount()) -
+                                  static_cast<std::uint32_t>(params.vertexStart);
+        }
+        else
+        {
+            command.vertexCount = static_cast<std::uint32_t>(PrimitiveVertexCount(primitive, primitiveCount));
+        }
+
+        litTexturedDrawCommands_.push_back(std::move(command));
+        framePending_ = true;
     }
 
     void WebGPUGraphicsBackend::QueueTexturedDraw(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,

@@ -4,11 +4,13 @@
 > on Linux desktop**, was reached 2026-07-12 (`WEBGPU-124`–`WEBGPU-131`, all ✅ — see Phase 56.1).
 > This does not mean feature parity with Vulkan, Android support, or browser WebGPU: those remain
 > future work (Phase 57 onward), now open per `WEBGPU-131`'s own acceptance criteria — and, as of
-> 2026-07-12, genuinely started: `DrawColoredPrimitives`/`DrawIndexedColoredPrimitives` (a
-> `VertexPositionColor`, stride-16, unlit/untextured 3D draw with real depth testing) work
-> end-to-end, verified by the `WebGPU_Colored3D` CTest. Full BasicEffect/texture/lighting dispatch
-> (`WEBGPU-66`) and the other 8 WGSL shader variants remain open — see the Active execution order
-> below.
+> 2026-07-12, well underway: `colored3d`/`textured3d`/`colored_textured3d`/`lit_textured3d` (strides
+> 16/20/24/32) all work end-to-end through real `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx`
+> `GpuDrawParams` dispatch, including real depth testing and — as of `lit_textured3d` — real
+> Blinn-Phong lighting (3 directional lights, ambient, specular, emissive), verified by
+> `WebGPU_Colored3D`/`WebGPU_DrawPrimitivesEx`/`WebGPU_Textured3D`/`WebGPU_ColoredTextured3D`/
+> `WebGPU_LitTextured3D`. Alpha-test/dual-texture/env-map/skinned dispatch and their WGSL shaders
+> remain open — see the Active execution order below.
 >
 > **Status legend:** ✅ implemented *and verified against its stated acceptance criteria*;
 > 🟨 code or documentation exists but has not met those criteria; ⬜ not implemented.
@@ -63,10 +65,27 @@
    - `WEBGPU-21` (`colored_textured3d.wgsl`, stride 24) — combines the vertex-colour mixing from
      `colored3d.wgsl` with `textured3d.wgsl`'s sampling in one shader, reusing its exact bind
      groups. `WebGPU_ColoredTextured3D` CTest, 3/3, git-stash-verified.
-   - Next: `WEBGPU-22` (`lit_textured3d.wgsl`, stride 32, first real lighting — a materially
-     different task than the three done so far, since none of them touch the lighting math at
-     all) and its `WEBGPU-33` dispatch, or the remaining `WEBGPU-66` scope (alpha test/dual
-     texture/env map/skinned dispatch).
+   - `WEBGPU-22`/`33` (`lit_textured3d.wgsl`, stride 32, VertexPositionNormalTexture) — the first
+     WebGPU 3D shader with real lighting: FNA's `Lighting.fxh` `ComputeLights()` (3 directional
+     lights, ambient, Blinn-Phong specular, emissive), ported from
+     `VulkanGraphicsBackend`'s `lit_textured3d.{vert,frag}.glsl`. Needed a *second* UBO
+     (`litBindGroupLayout_`, group 0 binding 1 — `LitLightParams`, 272 bytes) since the primary
+     128-byte uniform block is already full; the normal matrix (`inverse(world3x3)`, no shader-side
+     transpose given this codebase's `dump(M)=M^T` GPU-column-major convention — verified two ways:
+     independently against FNA's `EffectHelpers.SetLightingMatrices`/`Lighting.fxh` formula, and by
+     confirming it matches `BgfxGraphicsBackend::ComputeNormalMatrix3x3`'s already-shipped output
+     byte-for-byte) is computed CPU-side and forwarded pre-baked, since WGSL has no built-in
+     `inverse()`. Found+fixed a real shader robustness bug along the way: a disabled/unconfigured
+     `DirectionalLight` forwards `Direction=(0,0,0)` (only its Diffuse/Specular get zeroed, matching
+     FNA's own `DirectionalLight.cs`), and `normalize()` on a true zero vector is undefined — can
+     poison the whole light sum with NaN on real GPU hardware even though that light's own
+     contribution is already zero; guarded with a `select()`-based safe-normalize. `WebGPU_LitTextured3D`
+     CTest, 4/4, git-stash-verified (reverting the backend changes makes
+     `DrawPrimitivesEx` fall through to `DrawColoredPrimitives`, which aborts on the stride-32
+     buffer). No fog (same deliberate deferral as the other 3 stride variants).
+   - Next: the remaining `WEBGPU-66` scope (alpha test/dual texture/env map/skinned dispatch), or
+     the next Phase 58 shader (`alpha_test3d.wgsl`, `dual_texture3d.wgsl`, `env_map3d.wgsl`,
+     `skinned3d.wgsl`, `instanced3d.wgsl`).
 
 For every task: use a clean build directory, pass `CNA_WEBGPU_ROOT` and
 `CNA_WEBGPU_AUTO_DOWNLOAD=OFF`, record the exact command and result in the task note, and do not
@@ -185,7 +204,7 @@ mark it ✅ from source inspection alone.
 | WEBGPU-19 | Write `colored3d.wgsl` — 3D vertex shader (float3 pos + ubyte4 color), flat fragment; UBO for MVP | ✅ | Verified 2026-07-12: embedded WGSL in `CreateColoredResources()`, compiles and is runtime-verified by `WebGPU_Colored3D` (4/4 checks, including a genuine depth-test proof — see `WEBGPU-32`/`WEBGPU-64`/`65`). No fog (unlike Vulkan's `colored3d.vert.glsl`, which layers a separate fog UBO on top) — not tracked as its own WEBGPU-N task, deliberately deferred. |
 | WEBGPU-20 | Write `textured3d.wgsl` — 3D vertex (float3 pos + float2 UV); texture2D sampler in fragment | ✅ | Verified 2026-07-12: embedded WGSL in `CreateTexturedResources()`, `@group(1)` sampler+texture, reuses `@group(0)` UBO from `colored3d.wgsl`. `WebGPU_Textured3D` CTest (3/3): a solid-colour texture samples correctly, `DiffuseColor` genuinely multiplies the sampled colour (not just passed through), and the indexed draw path works too. No fog, same deliberate deferral as `colored3d.wgsl`. |
 | WEBGPU-21 | Write `colored_textured3d.wgsl` — float3 + ubyte4 color + float2 UV; multiply tex×color in fragment | ✅ | Verified 2026-07-12: embedded WGSL in `CreateTexturedResources()`, reuses `textured3d.wgsl`'s exact UBO (group 0) and texture (group 1) bind groups — same `texturedPipelineLayout_`, just a different vertex layout (3 attributes) and shader combining `colored3d.wgsl`'s vertex-colour mixing with `textured3d.wgsl`'s sampling. `WebGPU_ColoredTextured3D` CTest (3/3): vertex colour and texture colour both genuinely multiply (not one silently ignored), and `VertexColorEnabled=false` still correctly falls back to `DiffuseColor`. |
-| WEBGPU-22 | Write `lit_textured3d.wgsl` — float3 pos + float3 normal + float2 UV; Blinn-Phong lighting in fragment | ⬜ | stride=32 |
+| WEBGPU-22 | Write `lit_textured3d.wgsl` — float3 pos + float3 normal + float2 UV; Blinn-Phong lighting in fragment | ✅ | Verified 2026-07-12: embedded WGSL in `CreateLitTexturedResources()`, ported from `VulkanGraphicsBackend`'s `lit_textured3d.{vert,frag}.glsl` (itself from FNA's `Lighting.fxh` `ComputeLights()`). Second UBO (`litBindGroupLayout_`, group 0 binding 1, `LitLightParams`/272 bytes) carries `DirectionalLight1`/`2`, `EmissiveColor`, `World`, eye position, per-light + material specular, and a CPU-precomputed normal matrix (WGSL has no `inverse()`); group 1 (sampler+texture) reuses `texturedBindGroupLayout_` unchanged. `WebGPU_LitTextured3D` CTest (4/4, git-stash-verified): unlit fallback still works, a light facing the surface fully illuminates it, a light behind it contributes nothing (real N·L gating, not "always bright"), and ambient reaches the shader with no directional light at all. No fog, same deliberate deferral as the other 3 stride variants. |
 | WEBGPU-23 | Write `alpha_test3d.wgsl` — per-pixel alpha discard matching XNA AlphaTestEffect semantics | ⬜ | |
 | WEBGPU-24 | Write `dual_texture3d.wgsl` — two texture samplers, multiply/blend in fragment | ⬜ | |
 | WEBGPU-25 | Write `env_map3d.wgsl` — cube map sampler + reflection vector from normal | ⬜ | |
@@ -203,7 +222,7 @@ mark it ✅ from source inspection alone.
 | WEBGPU-30 | Pipeline cache: `std::unordered_map<uint64_t, WGPURenderPipeline>` with MakeKey(topo, depth, blend, cull, stride, wireframe, msaa) | ⬜ | Mirror Vulkan MakeKey / GetOrCreate* |
 | WEBGPU-31 | `GetOrCreatePipeline2D()` — sprite pipeline (stride=24, Sprite2DVertex layout, no depth) | ✅ | Opaque and premultiplied-alpha variants are runtime-verified: `WEBGPU-126`'s validation scene and `WEBGPU-130`'s independent `../mobile-eggbert` application both render correctly through this pipeline. |
 | WEBGPU-32 | `GetOrCreatePipelineColored3D()` — stride=16, VPC layout | ✅ | Verified 2026-07-12: cached by `(topology, depthFunc, depthTest, depthWrite)`, `Float32x3` position + `Unorm8x4` color at stride 16. `WebGPU_Colored3D`'s two depth-order checks (far-then-near and near-then-far both correctly resolve to the near quad, not "last draw wins") prove genuine `WGPUCompareFunction` depth comparison, not just "a pipeline was created." |
-| WEBGPU-33 | `GetOrCreatePipelineExt3D()` — stride 20/24/32 dispatch matching Vulkan | 🟨 | Strides 20 (`GetOrCreatePipelineTextured3D()`) and 24 (`GetOrCreatePipelineColoredTextured3D()`) done, both cached by `(topology, depthFunc, depthTest, depthWrite)` matching `WEBGPU-32`'s shape, verified 2026-07-12 by `WebGPU_Textured3D`/`WebGPU_ColoredTextured3D`. Stride 32 (`lit_textured3d.wgsl`, `WEBGPU-22`, real lighting) remains open — no shader exists yet. |
+| WEBGPU-33 | `GetOrCreatePipelineExt3D()` — stride 20/24/32 dispatch matching Vulkan | ✅ | Strides 20 (`GetOrCreatePipelineTextured3D()`), 24 (`GetOrCreatePipelineColoredTextured3D()`), and 32 (`GetOrCreatePipelineLitTextured3D()`) all done, all cached by `(topology, depthFunc, depthTest, depthWrite)` matching `WEBGPU-32`'s shape, verified 2026-07-12 by `WebGPU_Textured3D`/`WebGPU_ColoredTextured3D`/`WebGPU_LitTextured3D`. |
 | WEBGPU-34 | `GetOrCreatePipelineAlphaTest3D()` — alpha discard variant | ⬜ | |
 | WEBGPU-35 | `GetOrCreatePipelineDualTex3D()` — two-texture variant | ⬜ | |
 | WEBGPU-36 | `GetOrCreatePipelineEnvMap3D()` — cube map variant | ⬜ | |
@@ -263,7 +282,7 @@ mark it ✅ from source inspection alone.
 | --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
 | WEBGPU-64 | `DrawPrimitives()`: bind colored3d pipeline + UBO + vertex buffer + `wgpuRenderPassEncoderDraw` | ✅ | No literal `DrawPrimitives()` method exists on `IGraphicsBackend` (checked 2026-07-12) — this row's described capability *is* `DrawColoredPrimitives()`, implemented and verified (`WEBGPU-91`'s vertical slice, see `WEBGPU-32`). `WebGPU_Colored3D`'s Check A (`DrawUserPrimitives`, non-indexed) exercises exactly this path. |
 | WEBGPU-65 | `DrawIndexedPrimitives()`: bind index buffer + `wgpuRenderPassEncoderDrawIndexed` | ✅ | Same clarification as `WEBGPU-64` — this is `DrawIndexedColoredPrimitives()`. `WebGPU_Colored3D`'s Check B (`DrawUserIndexedPrimitives`, 4 verts + 6 indices) verifies it specifically, not just the non-indexed path. |
-| WEBGPU-66 | `DrawPrimitivesEx()`: dispatch by `GpuDrawParams` (stride, textureEnabled, lightingEnabled, dualTexture, skinned, instanced) | 🟨 | Verified 2026-07-12 for stride 16 (`colored3d.wgsl`), stride 20 (`textured3d.wgsl`, requires `params.texture0 != nullptr`) and stride 24 (`colored_textured3d.wgsl`, same texture requirement): all three forward the caller's real `GpuDrawParams` (`DiffuseColor`, `VertexColorEnabled`, texture binding) via `FillExtUniforms()` (mirrors Vulkan's `FillExtPushConst()` field-for-field), instead of the `DrawColoredPrimitives` fallback's hardcoded white/true/no-texture. `WebGPU_DrawPrimitivesEx`/`WebGPU_Textured3D`/`WebGPU_ColoredTextured3D` CTests prove this concretely. Stride 32 (`lit_textured3d.wgsl`, real lighting) remains open, as do other effects (alpha test/dual texture/env map/skinned) — all still fall back to `DrawColoredPrimitives()` exactly as the interface default did. |
+| WEBGPU-66 | `DrawPrimitivesEx()`: dispatch by `GpuDrawParams` (stride, textureEnabled, lightingEnabled, dualTexture, skinned, instanced) | 🟨 | Verified 2026-07-12 for stride 16 (`colored3d.wgsl`), stride 20 (`textured3d.wgsl`, requires `params.texture0 != nullptr`), stride 24 (`colored_textured3d.wgsl`, same texture requirement), and stride 32 (`lit_textured3d.wgsl`, same texture requirement, real Blinn-Phong lighting when `LightingEnabled`, transparent unlit fallback otherwise): all four forward the caller's real `GpuDrawParams` via `FillExtUniforms()`/`FillLitLightUniforms()` (mirrors Vulkan's `FillExtPushConst()`/`LitLightParams` field-for-field), instead of the `DrawColoredPrimitives` fallback's hardcoded white/true/no-texture. `WebGPU_DrawPrimitivesEx`/`WebGPU_Textured3D`/`WebGPU_ColoredTextured3D`/`WebGPU_LitTextured3D` CTests prove this concretely. Other effects (alpha test/dual texture/env map/skinned) remain open — still fall back to `DrawColoredPrimitives()` exactly as the interface default did. |
 | WEBGPU-67 | `DrawUserPrimitives()`: transient `WGPUBuffer` (COPY_DST + VERTEX, mappedAtCreation=false); upload + draw + release | ✅ | `RenderColoredDraws()` creates a transient `WGPUBuffer` (`Vertex\|CopyDst`) per draw, `wgpuQueueWriteBuffer`s the CPU shadow-copy into it, draws, and releases it after the frame's command buffer is submitted (not `mappedAtCreation` — uses the same queue-write pattern as every other buffer upload in this backend, an equally valid approach). |
 | WEBGPU-68 | `DrawInstancedPrimitivesEx()`: second vertex buffer binding (per-instance mat4 world transforms) | ⬜ | |
 | WEBGPU-69 | PrimitiveType mapping: TriangleList→`WGPUPrimitiveTopology_TriangleList`, TriangleStrip→Strip, LineList→LineList, LineStrip→LineStrip, PointList→PointList | ✅ | All 5 `PrimitiveType` values map via the existing `ToTopology()` (unchanged); now genuinely exercised by real 3D draw dispatch (`WEBGPU-64`/`65`), not just present in source. `WebGPU_Colored3D` only exercises `TriangleList` directly, but the pipeline cache is keyed by topology so the other 4 follow the same, now-proven code path. |
