@@ -199,6 +199,23 @@ namespace CNA::Internal::Backends::WebGPU
             out[31] = 1.0f;
         }
 
+        // Mirrors VulkanGraphicsBackend::FillExtPushConst() field-for-field (real GpuDrawParams
+        // this time, not DrawColoredPrimitives()'s hardcoded white/vertex-color-always-true
+        // values) -- used by DrawPrimitivesEx()'s stride-16 dispatch so a BasicEffect draw's real
+        // DiffuseColor/VertexColorEnabled actually reach the shader.
+        void FillExtUniforms(std::array<float, 32>& out, const Matrix& wvp, const GpuDrawParams& p)
+        {
+            wvp.ToColumnMajor(out.data());
+            out[16] = p.diffuseColor[0]; out[17] = p.diffuseColor[1];
+            out[18] = p.diffuseColor[2]; out[19] = p.diffuseColor[3];
+            out[20] = p.ambientColor[0]; out[21] = p.ambientColor[1]; out[22] = p.ambientColor[2];
+            out[23] = p.lightingEnabled ? 1.0f : 0.0f;
+            out[24] = p.light0Dir[0]; out[25] = p.light0Dir[1]; out[26] = p.light0Dir[2];
+            out[27] = p.textureEnabled ? 1.0f : 0.0f;
+            out[28] = p.light0Diffuse[0]; out[29] = p.light0Diffuse[1]; out[30] = p.light0Diffuse[2];
+            out[31] = p.vertexColorEnabled ? 1.0f : 0.0f;
+        }
+
         [[nodiscard]] bool IsSurfaceRecoverable(WGPUSurfaceGetCurrentTextureStatus status)
         {
             return status == WGPUSurfaceGetCurrentTextureStatus_Timeout ||
@@ -1582,7 +1599,8 @@ struct VertexOutput {
 
     void WebGPUGraphicsBackend::QueueColoredDraw(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
                                                   const Matrix& world, const Matrix& view, const Matrix& projection,
-                                                  PrimitiveType primitive, int primitiveCount)
+                                                  PrimitiveType primitive, int primitiveCount,
+                                                  const GpuDrawParams* params)
     {
         const auto& webgpuVb = static_cast<const WebGPUVertexBufferBackend&>(vb);
         if (webgpuVb.Stride() != 16)
@@ -1590,12 +1608,24 @@ struct VertexOutput {
                                         "(VertexPositionColor) vertex buffer");
 
         ColoredDrawCommand command;
-        command.vertexData = webgpuVb.ShadowData();
+        const int vertexStart = params != nullptr ? params->vertexStart : 0;
+        const auto& shadow = webgpuVb.ShadowData();
+        const std::size_t byteOffset = static_cast<std::size_t>(vertexStart) * 16u;
+        if (byteOffset <= shadow.size())
+            command.vertexData.assign(shadow.begin() + static_cast<std::ptrdiff_t>(byteOffset), shadow.end());
         command.topology = ToTopology(primitive);
         command.depthTest = depthTestEnabled_;
         command.depthFunc = depthCompareFunction_;
         command.depthWrite = depthWriteEnabled_;
-        FillColoredUniforms(command.uniforms, world, view, projection);
+        if (params != nullptr)
+        {
+            const Matrix wvp = world * view * projection;
+            FillExtUniforms(command.uniforms, wvp, *params);
+        }
+        else
+        {
+            FillColoredUniforms(command.uniforms, world, view, projection);
+        }
 
         if (ib != nullptr)
         {
@@ -1604,7 +1634,8 @@ struct VertexOutput {
             command.index32 = webgpuIb.IsThirtyTwoBit();
             command.indexData = webgpuIb.ShadowData();
             command.indexCount = static_cast<std::uint32_t>(PrimitiveIndexCount(primitive, primitiveCount));
-            command.vertexCount = static_cast<std::uint32_t>(webgpuVb.GetVertexCount());
+            command.vertexCount = static_cast<std::uint32_t>(webgpuVb.GetVertexCount()) -
+                                  static_cast<std::uint32_t>(vertexStart);
         }
         else
         {
@@ -1628,6 +1659,39 @@ struct VertexOutput {
                                                                PrimitiveType primitive, int primitiveCount)
     {
         QueueColoredDraw(vb, &ib, world, view, projection, primitive, primitiveCount);
+    }
+
+    void WebGPUGraphicsBackend::DrawPrimitivesEx(const IVertexBufferBackend& vb,
+                                                  const Matrix& world, const Matrix& view, const Matrix& projection,
+                                                  PrimitiveType primitive, int primitiveCount,
+                                                  const GpuDrawParams& params)
+    {
+        const auto& webgpuVb = static_cast<const WebGPUVertexBufferBackend&>(vb);
+        if (webgpuVb.Stride() != 16 || params.dualTexture || params.envMapping || params.skinned ||
+            params.alphaTest[2] < 0.0f || params.alphaTest[3] < 0.0f)
+        {
+            // No textured3d/lit_textured3d/alpha-test/dual-texture/env-map/skinned shader exists
+            // yet (Phase 58 remaining WGSL variants) -- fall back exactly like IGraphicsBackend's
+            // own default implementation did before this override existed.
+            DrawColoredPrimitives(vb, world, view, projection, primitive, primitiveCount);
+            return;
+        }
+        QueueColoredDraw(vb, nullptr, world, view, projection, primitive, primitiveCount, &params);
+    }
+
+    void WebGPUGraphicsBackend::DrawIndexedPrimitivesEx(const IVertexBufferBackend& vb, const IIndexBufferBackend& ib,
+                                                         const Matrix& world, const Matrix& view, const Matrix& projection,
+                                                         PrimitiveType primitive, int primitiveCount,
+                                                         const GpuDrawParams& params)
+    {
+        const auto& webgpuVb = static_cast<const WebGPUVertexBufferBackend&>(vb);
+        if (webgpuVb.Stride() != 16 || params.dualTexture || params.envMapping || params.skinned ||
+            params.alphaTest[2] < 0.0f || params.alphaTest[3] < 0.0f)
+        {
+            DrawIndexedColoredPrimitives(vb, ib, world, view, projection, primitive, primitiveCount);
+            return;
+        }
+        QueueColoredDraw(vb, &ib, world, view, projection, primitive, primitiveCount, &params);
     }
 
     void WebGPUGraphicsBackend::RenderColoredDraws(WGPURenderPassEncoder pass)

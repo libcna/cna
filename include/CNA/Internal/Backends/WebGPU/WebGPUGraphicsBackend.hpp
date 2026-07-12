@@ -217,6 +217,22 @@ namespace CNA::Internal::Backends::WebGPU
                                           const IIndexBufferBackend& ib,
                                           const Matrix& world, const Matrix& view, const Matrix& projection,
                                           PrimitiveType primitive, int primitiveCount) override;
+        // Real GpuDrawParams dispatch for stride-16 (VertexPositionColor) draws only -- reuses
+        // the exact same colored3d.wgsl/GetOrCreatePipelineColored3D() infrastructure as
+        // DrawColoredPrimitives(), but fills the uniform buffer from the caller's real
+        // DiffuseColor/VertexColorEnabled instead of hardcoded white/true. Other strides (20/24/32,
+        // needing textured3d/lit_textured3d -- not yet written, see plan_webgpu.md Phase 58) and
+        // other effects (alpha test/dual texture/env map/skinned) fall back to
+        // DrawColoredPrimitives()/DrawIndexedColoredPrimitives(), replicating exactly what
+        // IGraphicsBackend's own default implementation already did before this override existed.
+        void DrawPrimitivesEx(const IVertexBufferBackend& vb,
+                              const Matrix& world, const Matrix& view, const Matrix& projection,
+                              PrimitiveType primitive, int primitiveCount,
+                              const GpuDrawParams& params) override;
+        void DrawIndexedPrimitivesEx(const IVertexBufferBackend& vb, const IIndexBufferBackend& ib,
+                                     const Matrix& world, const Matrix& view, const Matrix& projection,
+                                     PrimitiveType primitive, int primitiveCount,
+                                     const GpuDrawParams& params) override;
 
         void QueueSprite(const WebGPUTextureBackend& texture,
                          const Rectangle& destinationRectangle,
@@ -258,9 +274,13 @@ namespace CNA::Internal::Backends::WebGPU
         [[nodiscard]] WGPURenderPipeline GetOrCreatePipelineColored3D(WGPUPrimitiveTopology topology,
                                                                        bool depthTest, bool depthWrite,
                                                                        int depthFunc);
+        // params == nullptr: the legacy DrawColoredPrimitives path (hardcoded white diffuse,
+        // vertexColorEnabled=true, vertexStart=0). params != nullptr: DrawPrimitivesEx's real
+        // GpuDrawParams dispatch (stride-16 only -- caller must have already verified the stride).
         void QueueColoredDraw(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
                               const Matrix& world, const Matrix& view, const Matrix& projection,
-                              PrimitiveType primitive, int primitiveCount);
+                              PrimitiveType primitive, int primitiveCount,
+                              const GpuDrawParams* params = nullptr);
         void CaptureReadback(WGPUCommandEncoder encoder, WGPUTexture surfaceTexture);
         // Acquires a swapchain texture if none is currently held, and renders any pending
         // Clear()/sprite work into it. Called on demand by both Present() and ReadBackbuffer()

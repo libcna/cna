@@ -43,16 +43,22 @@
 3. `WEBGPU-92` — 🟨 partial (sampler address-mode pixel assertions still open — everything else is
    now covered, including partial-alpha blend since `WEBGPU-132`). `WEBGPU-99` — buffer disposal/
    `SetDataOptions`/vertex-format tests, not yet started.
-4. 3D backlog (Phases 57–66) is now underway: the first real vertical slice — `WEBGPU-11`/`13`/`14`
-   (UBO + bind group), `WEBGPU-19` (`colored3d.wgsl`), `WEBGPU-32` (pipeline, with genuine
-   depth-test verification), `WEBGPU-64`/`65`/`67`/`69` (`DrawColoredPrimitives`/
-   `DrawIndexedColoredPrimitives`, real draw dispatch) — landed 2026-07-12, `WebGPU_Colored3D`
-   CTest, 4/4 checks, git-stash-verified. Also found+fixed a real, separate gap along the way:
-   `WebGPUGraphicsBackend::ApplyDepthStencilState()` was entirely unimplemented (`GraphicsDevice.
-   DepthStencilState` had zero effect on this backend), now handles the depth portion (`WEBGPU-39`
-   partial). Next: `WEBGPU-20`–`27` (the other 8 WGSL shaders) and `WEBGPU-33`+ (their pipelines),
-   or `WEBGPU-66` (real `DrawPrimitivesEx`/`GpuDrawParams` dispatch — lighting/texture/fog, not
-   just the colour-only fallback).
+4. 3D backlog (Phases 57–66) is now underway, all landed 2026-07-12:
+   - First vertical slice — `WEBGPU-11`/`13`/`14` (UBO + bind group), `WEBGPU-19`
+     (`colored3d.wgsl`), `WEBGPU-32` (pipeline, with genuine depth-test verification),
+     `WEBGPU-64`/`65`/`67`/`69` (`DrawColoredPrimitives`/`DrawIndexedColoredPrimitives`, real draw
+     dispatch) — `WebGPU_Colored3D` CTest, 4/4, git-stash-verified. Found+fixed a real, separate
+     gap along the way: `ApplyDepthStencilState()` was entirely unimplemented (`GraphicsDevice.
+     DepthStencilState` had zero effect on this backend), now handles the depth portion
+     (`WEBGPU-39` partial).
+   - `WEBGPU-66` (`DrawPrimitivesEx`/`DrawIndexedPrimitivesEx`, real `GpuDrawParams` dispatch) —
+     stride-16 case only, reusing the same `colored3d.wgsl`/pipeline: a `BasicEffect`'s real
+     `DiffuseColor`/`VertexColorEnabled` now reach the shader instead of the
+     `DrawColoredPrimitives` fallback's hardcoded white/true. `WebGPU_DrawPrimitivesEx` CTest, 3/3,
+     git-stash-verified.
+   - Next: `WEBGPU-20`–`27` (the other 8 WGSL shaders — `textured3d` next, unblocks strides 20/24)
+     and `WEBGPU-33`+ (their pipelines), or the remaining `WEBGPU-66` scope (alpha test/dual
+     texture/env map/skinned dispatch, real lighting).
 
 For every task: use a clean build directory, pass `CNA_WEBGPU_ROOT` and
 `CNA_WEBGPU_AUTO_DOWNLOAD=OFF`, record the exact command and result in the task note, and do not
@@ -249,7 +255,7 @@ mark it ✅ from source inspection alone.
 | --- | ------------------------------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------- |
 | WEBGPU-64 | `DrawPrimitives()`: bind colored3d pipeline + UBO + vertex buffer + `wgpuRenderPassEncoderDraw` | ✅ | No literal `DrawPrimitives()` method exists on `IGraphicsBackend` (checked 2026-07-12) — this row's described capability *is* `DrawColoredPrimitives()`, implemented and verified (`WEBGPU-91`'s vertical slice, see `WEBGPU-32`). `WebGPU_Colored3D`'s Check A (`DrawUserPrimitives`, non-indexed) exercises exactly this path. |
 | WEBGPU-65 | `DrawIndexedPrimitives()`: bind index buffer + `wgpuRenderPassEncoderDrawIndexed` | ✅ | Same clarification as `WEBGPU-64` — this is `DrawIndexedColoredPrimitives()`. `WebGPU_Colored3D`'s Check B (`DrawUserIndexedPrimitives`, 4 verts + 6 indices) verifies it specifically, not just the non-indexed path. |
-| WEBGPU-66 | `DrawPrimitivesEx()`: dispatch by `GpuDrawParams` (stride, textureEnabled, lightingEnabled, dualTexture, skinned, instanced) | ⬜ | Still not overridden — `IGraphicsBackend::DrawPrimitivesEx()`'s own default implementation falls back to `DrawColoredPrimitives()`, so simple (unlit, untextured, `VertexColorEnabled`-only) `BasicEffect`/`Model.Draw()` calls now render via that fallback instead of throwing, but real lighting/texture/fog dispatch is still open. |
+| WEBGPU-66 | `DrawPrimitivesEx()`: dispatch by `GpuDrawParams` (stride, textureEnabled, lightingEnabled, dualTexture, skinned, instanced) | 🟨 | Verified 2026-07-12 for the stride-16 (`VertexPositionColor`) case: `WebGPUGraphicsBackend::DrawPrimitivesEx()`/`DrawIndexedPrimitivesEx()` now forward the caller's real `GpuDrawParams` (`DiffuseColor`, `VertexColorEnabled`) into `colored3d.wgsl` via `FillExtUniforms()` (mirrors Vulkan's `FillExtPushConst()` field-for-field), instead of `DrawColoredPrimitives()`'s hardcoded white/true. `WebGPU_DrawPrimitivesEx` CTest proves this: `VertexColorEnabled=false` + a non-white `DiffuseColor` now renders the *diffuse* colour, not the raw (white) vertex colour the old fallback always showed regardless of the effect's settings. Other strides (20/24/32, needing `textured3d`/`lit_textured3d`) and other effects (alpha test/dual texture/env map/skinned) still fall back to `DrawColoredPrimitives()` exactly as the interface default did — real lighting/texture/fog dispatch for those remains open. |
 | WEBGPU-67 | `DrawUserPrimitives()`: transient `WGPUBuffer` (COPY_DST + VERTEX, mappedAtCreation=false); upload + draw + release | ✅ | `RenderColoredDraws()` creates a transient `WGPUBuffer` (`Vertex\|CopyDst`) per draw, `wgpuQueueWriteBuffer`s the CPU shadow-copy into it, draws, and releases it after the frame's command buffer is submitted (not `mappedAtCreation` — uses the same queue-write pattern as every other buffer upload in this backend, an equally valid approach). |
 | WEBGPU-68 | `DrawInstancedPrimitivesEx()`: second vertex buffer binding (per-instance mat4 world transforms) | ⬜ | |
 | WEBGPU-69 | PrimitiveType mapping: TriangleList→`WGPUPrimitiveTopology_TriangleList`, TriangleStrip→Strip, LineList→LineList, LineStrip→LineStrip, PointList→PointList | ✅ | All 5 `PrimitiveType` values map via the existing `ToTopology()` (unchanged); now genuinely exercised by real 3D draw dispatch (`WEBGPU-64`/`65`), not just present in source. `WebGPU_Colored3D` only exercises `TriangleList` directly, but the pipeline cache is keyed by topology so the other 4 follow the same, now-proven code path. |
