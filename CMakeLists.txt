@@ -403,6 +403,15 @@ if(CNA_BUILD_EXAMPLES)
                 "${CMAKE_CURRENT_SOURCE_DIR}/examples/demo_2d/Content"
                 "$<TARGET_FILE_DIR:cna_demo_2d>/Content"
             COMMENT "Copying Content next to cna_demo_2d executable")
+        if(CNA_GRAPHICS_BACKEND STREQUAL "WEBGPU" AND CNA_WEBGPU_RUNTIME_LIBRARY)
+            add_custom_command(TARGET cna_demo_2d POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "${CNA_WEBGPU_RUNTIME_LIBRARY}" "$<TARGET_FILE_DIR:cna_demo_2d>"
+                COMMENT "Copying wgpu-native runtime next to cna_demo_2d")
+            if(UNIX AND NOT APPLE)
+                set_property(TARGET cna_demo_2d APPEND PROPERTY BUILD_RPATH "$ORIGIN")
+            endif()
+        endif()
         if(WIN32)
             set_target_properties(cna_demo_2d PROPERTIES WIN32_EXECUTABLE TRUE)
             cna_copy_sdl_runtime(cna_demo_2d)

@@ -28,6 +28,30 @@ The extracted root must contain `include/webgpu.h` (or `include/webgpu/webgpu.h`
 SDL3_image and SDL3_mixer submodules, plus the sibling `../sharp-runtime` checkout, must be
 present.
 
+For the verified Linux x86_64 layout, an extracted package may be placed at
+`vendor/wgpu-native/` with `include/webgpu/webgpu.h` and `lib/libwgpu_native.so`. The following
+clean offline sequence builds a self-contained demo directory:
+
+```bash
+cmake -S . -B /tmp/cna-webgpu-128 \
+  -DCNA_GRAPHICS_BACKEND=WEBGPU \
+  -DCNA_WEBGPU_ROOT="$PWD/vendor/wgpu-native" \
+  -DCNA_WEBGPU_AUTO_DOWNLOAD=OFF \
+  -DCNA_BUILD_TESTS=OFF \
+  -DCNA_BUILD_EXAMPLES=ON \
+  -DCMAKE_BUILD_TYPE=Debug
+cmake --build /tmp/cna-webgpu-128 --target cna_demo_2d -j1
+cd /tmp/cna-webgpu-128
+readelf -d ./cna_demo_2d | grep -E 'NEEDED.*wgpu|RUNPATH'
+ldd ./cna_demo_2d | grep libwgpu_native.so
+timeout 60s ./cna_demo_2d --smoke 120
+```
+
+The WebGPU CMake target links wgpu-native by filename despite the package library lacking an ELF
+SONAME, copies the runtime beside `cna_demo_2d`, and gives the executable a `$ORIGIN` runtime path.
+This enables the executable to use its sibling `libwgpu_native.so` rather than requiring the
+original package location at runtime.
+
 CNA enables compiler caching automatically when `ccache` is installed. The setting is applied
 before the sibling `sharp-runtime` project is added, so both CNA and `sharp-runtime` objects are
 reused across compatible build directories. Disable it with `-DCNA_USE_CCACHE=OFF`; existing custom

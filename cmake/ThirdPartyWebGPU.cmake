@@ -136,6 +136,7 @@ function(cna_configure_webgpu)
         add_library(WebGPU::WebGPU SHARED IMPORTED GLOBAL)
         set_target_properties(WebGPU::WebGPU PROPERTIES
             IMPORTED_LOCATION "${_webgpu_library}"
+            IMPORTED_NO_SONAME TRUE
             INTERFACE_INCLUDE_DIRECTORIES "${_webgpu_include_dir}")
         set(CNA_WEBGPU_RUNTIME_LIBRARY "${_webgpu_library}" CACHE INTERNAL "wgpu-native runtime library")
     endif()
