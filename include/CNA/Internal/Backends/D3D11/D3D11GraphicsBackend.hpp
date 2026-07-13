@@ -12,6 +12,8 @@
 #include <dxgi1_5.h>
 #include <wrl/client.h>
 
+#include <cstddef>
+
 namespace CNA::Internal::Backends::D3D11
 {
     using Microsoft::WRL::ComPtr;
@@ -232,5 +234,15 @@ namespace CNA::Internal::Backends::D3D11
 
         // Phase DX5 (DX-32): per-(shader,stride) ID3D11InputLayout cache.
         D3D11InputLayoutCache inputLayoutCache_;
+
+        // Phase DX8 (DX-60/DX-61): persistent, lazily-created dynamic constant buffers for the
+        // colored3d pipeline's PerDraw (b0) / FogParams (b1) cbuffers -- created once, updated via
+        // Map(WRITE_DISCARD)/Unmap on every DrawColoredPrimitives() call rather than recreated per
+        // draw (mirrors D3D11Buffers.hpp's own "grow, never recreate" discipline).
+        ComPtr<ID3D11Buffer> perDrawConstantBuffer_;
+        ComPtr<ID3D11Buffer> fogConstantBuffer_;
+        ID3D11Buffer* GetOrCreatePerDrawConstantBufferEXT();
+        ID3D11Buffer* GetOrCreateFogConstantBufferEXT();
+        void UpdateDynamicConstantBufferEXT(ID3D11Buffer* buffer, const void* data, std::size_t byteCount);
     };
 }

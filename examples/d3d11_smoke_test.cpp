@@ -45,6 +45,11 @@
 //   SetScissorRect()'s direct RSSetViewports()/RSSetScissorRects() round-trip. Behavioral pixel
 //   correctness of blend/stencil *output* needs an actual draw call (Phase DX8), proven exactly
 //   this far, honestly, and no further -- same bar Check N already set for MRT.
+// Check P (DX-60/DX-60a/DX-61) -- the first real 3D triangle this backend has ever drawn: a real
+//   colored3d pipeline (D3DPerDrawConstants/D3DFogConstants constant buffers, DX-32's input layout,
+//   DX-15-embed's shaders) actually painted via DrawColoredPrimitives()/DrawIndexedColoredPrimitives()
+//   -- the same screen pixel reads back the Clear() background color before the draw and the exact
+//   vertex color after it, both for the non-indexed and indexed draw paths.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
@@ -603,7 +608,81 @@ protected:
             backend.SetViewport(0, 0, vw, vh, 0.0f, 1.0f);
         }
 
-        const int totalChecks = 3 + 10 + 1 + 2 + 2 + 2 + 2 + 2 + 1 + 1 + 2 + 1 + 13;
+        // Check P (DX-60/DX-60a/DX-61) -- the first real 3D triangle this backend has ever drawn.
+        // A real colored3d draw (input layout + VS/PS + PerDraw/FogParams constant buffers, all
+        // wired for real) paints a known solid-red vertex color over a known-blue-cleared
+        // background; reading back the SAME pixel before and after the draw call (blue -> red)
+        // proves the fragment genuinely came from the draw, not a stale/cached readback. Exercised
+        // for both the non-indexed (DrawColoredPrimitives) and indexed (DrawIndexedColoredPrimitives)
+        // paths. State is reset to a known-safe baseline first (opaque blend, depth/stencil off,
+        // no culling) so this check doesn't depend on whatever Check O happened to leave bound.
+        {
+            backend.ApplyBlendState(0, 0, 1, 1, 0, 0);                        // Opaque
+            backend.ApplyDepthStencilState(false, false, 0, false, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, 0);
+            backend.ApplyRasterizerState(0 /*CullMode::None*/, 0 /*FillMode::Solid*/, false, 0.0f, 0.0f);
+
+            struct VPC { float x, y, z; uint32_t color; };
+            // A single triangle covering the entire NDC square (-1..1, -1..1) via the standard
+            // "oversized triangle" trick -- with world=view=projection=Identity, Mvp=Identity, so
+            // these Position values ARE clip-space coordinates directly (no separate transform to
+            // reason about). Color 0xFF0000FF packed as R8G8B8A8 = (R=0xFF,G=0x00,B=0x00,A=0xFF)
+            // opaque red, same byte convention Check E already established.
+            static const VPC kTri[3] = {
+                {-1.0f, -1.0f, 0.0f, 0xFF0000FFu},
+                { 3.0f, -1.0f, 0.0f, 0xFF0000FFu},
+                {-1.0f,  3.0f, 0.0f, 0xFF0000FFu},
+            };
+            auto vb = backend.CreateVertexBuffer(3);
+            vb->SetData(kTri, 3, sizeof(VPC));
+
+            const Microsoft::Xna::Framework::Rectangle centerRegion(28, 28, 4, 4);
+            std::vector<Color> before(4 * 4, Color(0, 0, 0, 0));
+            std::vector<Color> after(4 * 4, Color(0, 0, 0, 0));
+
+            // Non-indexed path.
+            dev.Clear(Color(0, 0, 255, 255));
+            dev.GetBackBufferData(&centerRegion, before.data(), 0, static_cast<int>(before.size()));
+            backend.DrawColoredPrimitives(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                          Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1);
+            dev.GetBackBufferData(&centerRegion, after.data(), 0, static_cast<int>(after.size()));
+
+            bool beforeIsBlue = true, afterIsRed = true;
+            for (const Color& p : before)
+                if (p.getRProperty() != 0 || p.getGProperty() != 0 || p.getBProperty() != 255 || p.getAProperty() != 255)
+                    beforeIsBlue = false;
+            for (const Color& p : after)
+                if (p.getRProperty() != 255 || p.getGProperty() != 0 || p.getBProperty() != 0 || p.getAProperty() != 255)
+                    afterIsRed = false;
+            check(beforeIsBlue && afterIsRed,
+                  "D3D11GraphicsBackend::DrawColoredPrimitives(): real colored3d draw paints exact "
+                  "vertex color over the Clear() background at the same readback location");
+
+            // Indexed path: same triangle, via DrawIndexedColoredPrimitives.
+            static const uint16_t kTriIdx[3] = {0, 1, 2};
+            auto ib = backend.CreateIndexBuffer16(3);
+            ib->SetData16(kTriIdx, 3);
+
+            dev.Clear(Color(0, 0, 255, 255));
+            std::vector<Color> beforeIdx(4 * 4, Color(0, 0, 0, 0));
+            std::vector<Color> afterIdx(4 * 4, Color(0, 0, 0, 0));
+            dev.GetBackBufferData(&centerRegion, beforeIdx.data(), 0, static_cast<int>(beforeIdx.size()));
+            backend.DrawIndexedColoredPrimitives(*vb, *ib, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                                 Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1);
+            dev.GetBackBufferData(&centerRegion, afterIdx.data(), 0, static_cast<int>(afterIdx.size()));
+
+            bool beforeIdxIsBlue = true, afterIdxIsRed = true;
+            for (const Color& p : beforeIdx)
+                if (p.getRProperty() != 0 || p.getGProperty() != 0 || p.getBProperty() != 255 || p.getAProperty() != 255)
+                    beforeIdxIsBlue = false;
+            for (const Color& p : afterIdx)
+                if (p.getRProperty() != 255 || p.getGProperty() != 0 || p.getBProperty() != 0 || p.getAProperty() != 255)
+                    afterIdxIsRed = false;
+            check(beforeIdxIsBlue && afterIdxIsRed,
+                  "D3D11GraphicsBackend::DrawIndexedColoredPrimitives(): real colored3d indexed draw "
+                  "paints exact vertex color over the Clear() background at the same readback location");
+        }
+
+        const int totalChecks = 3 + 10 + 1 + 2 + 2 + 2 + 2 + 2 + 1 + 1 + 2 + 1 + 13 + 2;
         std::printf("=== %d/%d PASS ===\n", passCount_, totalChecks);
         result_ = (passCount_ == totalChecks) ? 0 : 1;
         Exit();

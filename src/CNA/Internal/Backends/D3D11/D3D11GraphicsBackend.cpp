@@ -4,6 +4,8 @@
 #include "CNA/Internal/Backends/D3D11/D3D11Textures.hpp"
 #include "CNA/Internal/Backends/D3D11/D3D11RenderTargets.hpp"
 #include "CNA/Internal/Backends/D3D11/D3D11OcclusionQuery.hpp"
+#include "CNA/Internal/Backends/D3DCommon/D3DShaderCache.hpp"
+#include "CNA/Internal/Backends/D3DCommon/D3DConstantBuffers.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -21,6 +23,33 @@ namespace CNA::Internal::Backends::D3D11
             char buf[32];
             std::snprintf(buf, sizeof(buf), "0x%08lX", static_cast<unsigned long>(hr));
             return buf;
+        }
+
+        /// Same per-PrimitiveType vertex-count formula every other backend duplicates locally
+        /// (Vulkan/EasyGL's own VertexCountForPrimitives) -- not shared via a common header today,
+        /// so this follows the existing precedent rather than introducing a new one.
+        int VertexCountForPrimitives(PrimitiveType pt, int primitiveCount)
+        {
+            switch (pt)
+            {
+            case PrimitiveType::TriangleList:  return primitiveCount * 3;
+            case PrimitiveType::TriangleStrip: return primitiveCount + 2;
+            case PrimitiveType::LineList:      return primitiveCount * 2;
+            case PrimitiveType::LineStrip:     return primitiveCount + 1;
+            }
+            return 0;
+        }
+
+        D3D11_PRIMITIVE_TOPOLOGY ToD3D11Topology(PrimitiveType pt)
+        {
+            switch (pt)
+            {
+            case PrimitiveType::TriangleList:  return D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+            case PrimitiveType::TriangleStrip: return D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP;
+            case PrimitiveType::LineList:      return D3D11_PRIMITIVE_TOPOLOGY_LINELIST;
+            case PrimitiveType::LineStrip:     return D3D11_PRIMITIVE_TOPOLOGY_LINESTRIP;
+            }
+            return D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
         }
     }
 
@@ -478,7 +507,16 @@ namespace CNA::Internal::Backends::D3D11
         }
         if (!rts || count <= 0)
         {
-            return; // UnbindAsRenderTarget() above already restored the back buffer, if needed.
+            // Phase DX8 bugfix (found via DX-61's first real draw-call test): a prior MRT bind
+            // (this same method, count>0 below) deliberately never sets currentCustomRT_ -- the
+            // comment at the bottom of this function explains why -- so the branch above only
+            // restores the back buffer when the prior bind went through SetRenderTarget2D().
+            // Unconditionally (and idempotently -- harmless if it's already the back buffer)
+            // restore here too, so unbinding after an MRT bind doesn't leave OMSetRenderTargets
+            // (and this backend's own currentColorRTVs_/currentDSV_ tracking) pointing at render
+            // target views the caller may be about to destroy (dangling GPU state).
+            RestoreBackBufferRenderTargetEXT();
+            return;
         }
 
         const int n = std::min(count, static_cast<int>(D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT));
@@ -661,12 +699,109 @@ namespace CNA::Internal::Backends::D3D11
         return std::make_unique<D3D11IndexBufferBackend>(device_.Get(), context_.Get(), index_capacity, true);
     }
 
+    ID3D11Buffer* D3D11GraphicsBackend::GetOrCreatePerDrawConstantBufferEXT()
+    {
+        if (!perDrawConstantBuffer_)
+        {
+            D3D11_BUFFER_DESC desc{};
+            desc.ByteWidth = sizeof(D3DCommon::D3DPerDrawConstants);
+            desc.Usage = D3D11_USAGE_DYNAMIC;
+            desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+            desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+            const HRESULT hr = device_->CreateBuffer(&desc, nullptr, perDrawConstantBuffer_.ReleaseAndGetAddressOf());
+            if (FAILED(hr))
+                throw std::runtime_error("D3D11GraphicsBackend: PerDraw constant buffer creation failed, hr=" + FormatHr(hr));
+        }
+        return perDrawConstantBuffer_.Get();
+    }
+
+    ID3D11Buffer* D3D11GraphicsBackend::GetOrCreateFogConstantBufferEXT()
+    {
+        if (!fogConstantBuffer_)
+        {
+            D3D11_BUFFER_DESC desc{};
+            desc.ByteWidth = sizeof(D3DCommon::D3DFogConstants);
+            desc.Usage = D3D11_USAGE_DYNAMIC;
+            desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+            desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+            const HRESULT hr = device_->CreateBuffer(&desc, nullptr, fogConstantBuffer_.ReleaseAndGetAddressOf());
+            if (FAILED(hr))
+                throw std::runtime_error("D3D11GraphicsBackend: Fog constant buffer creation failed, hr=" + FormatHr(hr));
+        }
+        return fogConstantBuffer_.Get();
+    }
+
+    void D3D11GraphicsBackend::UpdateDynamicConstantBufferEXT(
+        ID3D11Buffer* buffer, const void* data, std::size_t byteCount)
+    {
+        D3D11_MAPPED_SUBRESOURCE mapped{};
+        const HRESULT hr = context_->Map(buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
+        if (FAILED(hr))
+            throw std::runtime_error("D3D11GraphicsBackend: constant buffer Map failed, hr=" + FormatHr(hr));
+        std::memcpy(mapped.pData, data, byteCount);
+        context_->Unmap(buffer, 0);
+    }
+
     void D3D11GraphicsBackend::DrawColoredPrimitives(
         const IVertexBufferBackend& vb, const Matrix& world, const Matrix& view, const Matrix& projection,
         PrimitiveType primitive, int primitiveCount)
     {
-        (void)vb; (void)world; (void)view; (void)projection; (void)primitive; (void)primitiveCount;
-        throw std::runtime_error("D3D11GraphicsBackend::DrawColoredPrimitives: not yet implemented (plan_dx.md Phase DX8)");
+        // DX-61: colored3d (stride 16, unlit vertex-color) is the only real draw pipeline so far --
+        // matches this method's own header doc ("equivalent to BasicEffect with
+        // VertexColorEnabled = true"). Other strides/variants still throw via DrawPrimitivesEx's
+        // default fallback until Phase DX8's remaining tasks (DX-62 onward) land them.
+        const auto& d3dVb = static_cast<const D3D11VertexBufferBackend&>(vb);
+        const std::size_t stride = d3dVb.GetStrideEXT() > 0 ? d3dVb.GetStrideEXT() : 16;
+        if (stride != 16)
+        {
+            throw std::runtime_error(
+                "D3D11GraphicsBackend::DrawColoredPrimitives: only stride-16 (VertexPositionColor) "
+                "is implemented so far (plan_dx.md DX-61); other strides land in DX-62 onward");
+        }
+
+        constexpr auto variant = D3DCommon::D3DShaderVariant::Colored3d;
+        auto vs = D3DCommon::CreateVertexShaderForVariant(device_.Get(), variant);
+        auto ps = D3DCommon::CreatePixelShaderForVariant(device_.Get(), variant);
+        if (!vs || !ps)
+            throw std::runtime_error("DrawColoredPrimitives: failed to create colored3d shader objects");
+
+        auto layout = inputLayoutCache_.GetOrCreate(device_.Get(), variant, stride);
+        if (!layout)
+            throw std::runtime_error("DrawColoredPrimitives: failed to create colored3d input layout");
+
+        // DX-60: PerDraw (b0) -- historical "raw vertex color" convention for this no-GpuDrawParams
+        // legacy path (diffuseColor=white, vertexColorEnabled=true), matching every other backend's
+        // own DrawColoredPrimitives behavior (Task 364).
+        D3DCommon::D3DPerDrawConstants perDraw{};
+        const Matrix wvp = world * view * projection;
+        wvp.ToColumnMajor(perDraw.Mvp); // row-major flat layout, matches HLSL row_major cbuffer field
+        perDraw.DiffuseColor[0] = perDraw.DiffuseColor[1] = perDraw.DiffuseColor[2] = perDraw.DiffuseColor[3] = 1.0f;
+        perDraw.VertexColorEnabled = 1.0f;
+
+        // FogParams (b1) -- fog disabled; this legacy path carries no GpuDrawParams to enable it.
+        D3DCommon::D3DFogConstants fog{};
+        fog.FogStartEnd[1] = 1.0f;
+
+        ID3D11Buffer* perDrawCB = GetOrCreatePerDrawConstantBufferEXT();
+        ID3D11Buffer* fogCB = GetOrCreateFogConstantBufferEXT();
+        UpdateDynamicConstantBufferEXT(perDrawCB, &perDraw, sizeof(perDraw));
+        UpdateDynamicConstantBufferEXT(fogCB, &fog, sizeof(fog));
+
+        ID3D11Buffer* vbRaw = d3dVb.GetBufferEXT();
+        const UINT strideU = static_cast<UINT>(stride);
+        const UINT offset = 0;
+        context_->IASetVertexBuffers(0, 1, &vbRaw, &strideU, &offset);
+        context_->IASetInputLayout(layout.Get());
+        context_->IASetPrimitiveTopology(ToD3D11Topology(primitive));
+        context_->VSSetShader(vs.Get(), nullptr, 0);
+        context_->PSSetShader(ps.Get(), nullptr, 0);
+
+        ID3D11Buffer* cbs[2] = { perDrawCB, fogCB };
+        context_->VSSetConstantBuffers(0, 2, cbs);
+        context_->PSSetConstantBuffers(0, 2, cbs);
+
+        const UINT vertexCount = static_cast<UINT>(VertexCountForPrimitives(primitive, primitiveCount));
+        context_->Draw(vertexCount, 0);
     }
 
     void D3D11GraphicsBackend::DrawIndexedColoredPrimitives(
@@ -674,8 +809,57 @@ namespace CNA::Internal::Backends::D3D11
         const Matrix& world, const Matrix& view, const Matrix& projection,
         PrimitiveType primitive, int primitiveCount)
     {
-        (void)vb; (void)ib; (void)world; (void)view; (void)projection; (void)primitive; (void)primitiveCount;
-        throw std::runtime_error("D3D11GraphicsBackend::DrawIndexedColoredPrimitives: not yet implemented (plan_dx.md Phase DX8)");
+        // DX-61: indexed counterpart of DrawColoredPrimitives above -- same colored3d-only scope.
+        const auto& d3dVb = static_cast<const D3D11VertexBufferBackend&>(vb);
+        const auto& d3dIb = static_cast<const D3D11IndexBufferBackend&>(ib);
+        const std::size_t stride = d3dVb.GetStrideEXT() > 0 ? d3dVb.GetStrideEXT() : 16;
+        if (stride != 16)
+        {
+            throw std::runtime_error(
+                "D3D11GraphicsBackend::DrawIndexedColoredPrimitives: only stride-16 "
+                "(VertexPositionColor) is implemented so far (plan_dx.md DX-61)");
+        }
+
+        constexpr auto variant = D3DCommon::D3DShaderVariant::Colored3d;
+        auto vs = D3DCommon::CreateVertexShaderForVariant(device_.Get(), variant);
+        auto ps = D3DCommon::CreatePixelShaderForVariant(device_.Get(), variant);
+        if (!vs || !ps)
+            throw std::runtime_error("DrawIndexedColoredPrimitives: failed to create colored3d shader objects");
+
+        auto layout = inputLayoutCache_.GetOrCreate(device_.Get(), variant, stride);
+        if (!layout)
+            throw std::runtime_error("DrawIndexedColoredPrimitives: failed to create colored3d input layout");
+
+        D3DCommon::D3DPerDrawConstants perDraw{};
+        const Matrix wvp = world * view * projection;
+        wvp.ToColumnMajor(perDraw.Mvp);
+        perDraw.DiffuseColor[0] = perDraw.DiffuseColor[1] = perDraw.DiffuseColor[2] = perDraw.DiffuseColor[3] = 1.0f;
+        perDraw.VertexColorEnabled = 1.0f;
+
+        D3DCommon::D3DFogConstants fog{};
+        fog.FogStartEnd[1] = 1.0f;
+
+        ID3D11Buffer* perDrawCB = GetOrCreatePerDrawConstantBufferEXT();
+        ID3D11Buffer* fogCB = GetOrCreateFogConstantBufferEXT();
+        UpdateDynamicConstantBufferEXT(perDrawCB, &perDraw, sizeof(perDraw));
+        UpdateDynamicConstantBufferEXT(fogCB, &fog, sizeof(fog));
+
+        ID3D11Buffer* vbRaw = d3dVb.GetBufferEXT();
+        const UINT strideU = static_cast<UINT>(stride);
+        const UINT offset = 0;
+        context_->IASetVertexBuffers(0, 1, &vbRaw, &strideU, &offset);
+        context_->IASetIndexBuffer(d3dIb.GetBufferEXT(), d3dIb.GetFormatEXT(), 0);
+        context_->IASetInputLayout(layout.Get());
+        context_->IASetPrimitiveTopology(ToD3D11Topology(primitive));
+        context_->VSSetShader(vs.Get(), nullptr, 0);
+        context_->PSSetShader(ps.Get(), nullptr, 0);
+
+        ID3D11Buffer* cbs[2] = { perDrawCB, fogCB };
+        context_->VSSetConstantBuffers(0, 2, cbs);
+        context_->PSSetConstantBuffers(0, 2, cbs);
+
+        const UINT indexCount = static_cast<UINT>(VertexCountForPrimitives(primitive, primitiveCount));
+        context_->DrawIndexed(indexCount, 0, 0);
     }
 }
 

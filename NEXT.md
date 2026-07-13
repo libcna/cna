@@ -1,38 +1,47 @@
 # NEXT.md — CNA Project Handoff
 
-> **D3D11 graphics backend now exists as real, verified code (2026-07-13); Phase DX3 (`D3DCommon`),
-> Phase DX5 (vertex/index buffers + input layout), Phase DX6 (textures + render targets), and
-> Phase DX7 (state objects) are now all fully closed.**
+> **D3D11 graphics backend now exists as real, verified code (2026-07-13); this backend has now
+> rendered its first real, pixel-verified 3D triangle.** Phase DX3 (`D3DCommon`), Phase DX5
+> (vertex/index buffers + input layout), Phase DX6 (textures + render targets), Phase DX7 (state
+> objects), and Phase DX8's foundational tasks (`DX-60`/`DX-60a`/`DX-61` — constant buffers + the
+> `colored3d` draw pipeline) are now closed.
 > `CNA_GRAPHICS_BACKEND=D3D11` is a working CMake option; `D3D11GraphicsBackend` implements every
 > `IGraphicsBackend` pure virtual (real device/swap-chain/back-buffer/clear/present/readback, real
 > vertex/index buffers + input layout cache, real 2D/cube/3D textures + 2D/cube render targets +
 > MSAA + MRT + sampler cache + occlusion queries, real blend/depth-stencil/rasterizer state objects
-> + viewport/scissor; honest "not yet implemented" throws remain only for draw calls/SpriteBatch,
-> Phase DX8/DX9). `ctest -R D3D11` passes 2/2 (`D3D11_Smoke` + `D3D11_Common`, **65 checks total**,
-> up from 52) running through DXVK 2.6.0 on a real GPU (AMD Radeon 780M/RADV) via Wine on this
-> Debian machine. `D3DCommon` (format/state/vertex-layout mapping + shader cache) is real and
-> tested. `DX-13-hlsl`/`DX-14-compile`/`DX-15-embed` (HLSL shaders, real DXBC compile, real
-> shader-object creation) closed Phase DX3 earlier in this session; `DX-30`/`DX-31`/`DX-32` (real
-> buffers + input layout) closed Phase DX5; Phase DX6 (`DX-40`–`DX-47`, textures/render targets/
-> MSAA/MRT/occlusion queries, plus a genuine `Clear()`-target-tracking bug fix) closed next. **Phase
-> DX7 (`DX-50`–`DX-53`) now closes all 4 state-object rows**: new `D3D11BlendStateCache`/
-> `D3D11DepthStencilStateCache`/`D3D11RasterizerStateCache` (`D3D11StateObjectCache.hpp`/`.cpp`)
-> create+cache real `ID3D11BlendState`/`ID3D11DepthStencilState`/`ID3D11RasterizerState` objects
-> from the raw XNA ordinals `Apply*State()` already carries, via `DX-12-state` plus a new
-> `D3DStateMapping::StencilOperationToD3D11`. **A real, documented finding**: XNA's `DepthBias`
-> float uses the same "r"-scaled convention this project's Vulkan/EasyGL backends already feed
-> unscaled into `vkCmdSetDepthBias`/`glPolygonOffset` (Task 767) — D3D11's own `DepthBias` field is
-> the same convention but `INT`, so this task rounds rather than truncates. Also implemented
-> `SetBlendFactor()`/`SetReferenceStencil()` (Task 870/319 standalone-immediate-effect properties)
-> and `SetViewport()`/`SetScissorRect()`. All proven via new `D3D11_Smoke` Check O (cache identity/
-> distinctness for all 3 state types, real bind confirmed via `OMGetBlendState()`/
-> `OMGetDepthStencilState()`/`RSGetState()`, standalone re-bind, viewport/scissor round-trip) —
-> **42/42 smoke checks pass**, up from 29/29. Next step is **Phase DX8** (shaders and stock
-> effects — the largest remaining phase: constant buffer structs, per-variant pipeline wiring, and
-> the first real draw calls). Full detail, task-by-task, lives in `plan_dx.md` (`DX-1`–`DX-53`,
-> `DX-80` closed). Project owner authorized 2026-07-13 continuing autonomously through Phase DX8 →
-> DX9 → DX10 → DX11, and Phase DX12 (D3D12) afterward if time allows; `DX-90` (real-Windows
-> checklist) stays `needs_human` — no such machine available in this environment.
+> + viewport/scissor, and now a real `colored3d` `DrawColoredPrimitives()`/
+> `DrawIndexedColoredPrimitives()` draw path; honest "not yet implemented" throws remain for every
+> other stride/shader variant and SpriteBatch, rest of Phase DX8/DX9). `ctest -R D3D11` passes 2/2
+> (`D3D11_Smoke` + `D3D11_Common`, **67 checks total**, up from 65) running through DXVK 2.6.0 on a
+> real GPU (AMD Radeon 780M/RADV) via Wine on this Debian machine. `D3DCommon` (format/state/
+> vertex-layout mapping + shader cache + now constant-buffer struct layouts) is real and tested.
+> `DX-13-hlsl`/`DX-14-compile`/`DX-15-embed` (HLSL shaders, real DXBC compile, real shader-object
+> creation) closed Phase DX3 earlier in this session; `DX-30`/`DX-31`/`DX-32` (real buffers + input
+> layout) closed Phase DX5; Phase DX6 (`DX-40`–`DX-47`, textures/render targets/MSAA/MRT/occlusion
+> queries, plus a genuine `Clear()`-target-tracking bug fix) closed next; Phase DX7 (`DX-50`–`DX-53`,
+> real cached blend/depth-stencil/rasterizer state objects + viewport/scissor, plus a real
+> `DepthBias` float→INT rounding fix) closed after that.
+>
+> **Phase DX8's foundational tasks now closed**: new header-only `D3DConstantBuffers.hpp`
+> (`D3DCommon`) defines `D3DPerDrawConstants`/`D3DFogConstants`/`D3DLightingConstants`/
+> `D3DBoneConstants`, every field offset `static_assert`-verified against the real HLSL `cbuffer`
+> declarations (not guessed). `DrawColoredPrimitives()`/`DrawIndexedColoredPrimitives()` (previously
+> honest throws) now do a real `colored3d` draw — cached shader + input layout + two lazily-created
+> persistent constant buffers, updated via `Map`/`Unmap` each draw — for stride-16
+> (`VertexPositionColor`) only; other strides still throw a clear, named-successor error. **A real,
+> independent bug found and fixed getting the first pixel test to pass**: `DX-46`'s
+> `SetRenderTargets(nullptr, 0)` never restored the back buffer after a prior MRT bind (only the
+> single-target path's tracking triggered the restore), leaving the device context bound to
+> render-target views a test's `unique_ptr`s had already destroyed. New `D3D11_Smoke` Check P
+> proves it for real: clears to a known blue, reads back a fixed region (confirms blue), draws a
+> real NDC-covering triangle with solid vertex color, reads back the *same* region again (confirms
+> red) — for both the indexed and non-indexed draw paths. **44/44 smoke checks pass**, up from
+> 42/42. Next step is the **rest of Phase DX8** (`DX-62`–`DX-69`, `DX-58` — the other 9 shader
+> variants, fog wiring, custom `ShaderEffect`), then Phase DX9 (SpriteBatch). Full detail,
+> task-by-task, lives in `plan_dx.md` (`DX-1`–`DX-61`, `DX-80` closed). Project owner authorized
+> 2026-07-13 continuing autonomously through the rest of Phase DX8 → DX9 → DX10 → DX11, and Phase
+> DX12 (D3D12) afterward if time allows; `DX-90` (real-Windows checklist) stays `needs_human` — no
+> such machine available in this environment.
 > **This is a brand-new architectural front for the project — read `plan_dx.md`'s own status banner
 > before touching it.** The pre-existing EasyGL/Vulkan/Bgfx/SDL_Renderer/Headless/Software/WebGPU
 > work summarized below is unchanged by this; full history for that lives in `plan_graphics.md`/
@@ -109,7 +118,7 @@ directory in this checkout) — cosmetic, pre-existing, not a CNA bug, do not ch
 | Vulkan | 4371/4373 pass (2 hardware skips), as of 2026-07-11 | 127/128 pass — 1 pre-existing failure (`Vulkan_DepthBias`) |
 | Bgfx | 4375/4377 pass (2 hardware skips), as of 2026-07-11 | 104/106 pass — 2 pre-existing failures (`Bgfx_RenderTarget2D_MsaaResolve`, `Bgfx_RenderTargetCube_DepthFormat`, DEFERRED — Task 952) |
 | Software | 4371/4373 pass, as of 2026-07-13 | 6 CTests, 29/29 checks |
-| D3D11 | **Does not build** (see §4) | **2/2 pass, 65/65 checks** (`D3D11_Smoke` 42 checks, `D3D11_Common` 23 checks), verified 2026-07-13 via `ctest --test-dir cmake-build-d3d11 -R D3D11` |
+| D3D11 | **Does not build** (see §4) | **2/2 pass, 67/67 checks** (`D3D11_Smoke` 44 checks, `D3D11_Common` 23 checks), verified 2026-07-13 via `ctest --test-dir cmake-build-d3d11 -R D3D11` |
 | Headless, WebGPU | Not re-verified this session | See `plan_headless.md`/`plan_webgpu.md` for their own last-verified status |
 
 All EasyGL/Vulkan/Bgfx/Software numbers above are carried over from the last session that actually
@@ -131,8 +140,14 @@ exclusively on D3D11. The D3D11 numbers are fresh, verified today.
   Real blend/depth-stencil/rasterizer state objects (cached, from the raw XNA ordinals
   `Apply*State()` already carries) plus `SetBlendFactor()`/`SetReferenceStencil()`/`SetViewport()`/
   `SetScissorRect()` (`DX-50`–`DX-53`) close Phase DX7, including a real, documented
-  `DepthBias` float→D3D11-`INT` unit-conversion finding (round, not truncate). See §3 for the
-  itemized list and §4/§5 for what's still open.
+  `DepthBias` float→D3D11-`INT` unit-conversion finding (round, not truncate). **Phase DX8's
+  foundational tasks (`DX-60`/`DX-60a`/`DX-61`) now close too — this backend's first real, pixel-
+  verified 3D triangle**: new `D3DConstantBuffers.hpp` (`D3DCommon`) defines the GPU-packed
+  constant-buffer structs (offsets `static_assert`-verified against the real HLSL), and
+  `DrawColoredPrimitives()`/`DrawIndexedColoredPrimitives()` now do a real `colored3d` draw for
+  stride-16 (`VertexPositionColor`). Found+fixed a real independent bug along the way: `DX-46`'s
+  `SetRenderTargets(nullptr, 0)` never restored the back buffer after a prior MRT bind. See §3 for
+  the itemized list and §4/§5 for what's still open.
 - **Software backend Phase S9** (`SOFTWARE-80`–`84`, 2026-07-13, `plan_software.md`): real bilinear
   texture sampling, real backface culling, real near-plane polygon clipping, `DualTextureEffect`/
   `EnvironmentMapEffect`/`SkinnedEffect` support, and a cross-backend diagnostic tool confirming
@@ -152,19 +167,21 @@ registered `ctest` pixel-verification examples under `examples/`. New this sessi
 
 ### Does NOT work yet
 
-- **D3D11**: any draw call, `SpriteBatch`, custom `ShaderEffect` compilation — all honest
-  `throw`-based "not yet implemented" stubs naming their own future `plan_dx.md` phase (DX8/DX9).
-  Vertex/index buffers and cached input layouts are real (`DX-30`/`DX-31`/`DX-32`, Phase DX5
-  closed); textures, cube/3D textures, 2D/cube render targets (incl. real MSAA), MRT, sampler
+- **D3D11**: `SpriteBatch`, custom `ShaderEffect` compilation, and every draw call **except**
+  `colored3d` (stride-16 `VertexPositionColor`, unlit vertex-color) — all still honest `throw`-based
+  "not yet implemented" stubs naming their own future `plan_dx.md` row (`DX-62`–`DX-69`, `DX-58`,
+  Phase DX9). Vertex/index buffers and cached input layouts are real (`DX-30`/`DX-31`/`DX-32`, Phase
+  DX5 closed); textures, cube/3D textures, 2D/cube render targets (incl. real MSAA), MRT, sampler
   cache, and occlusion queries are real (`DX-40`–`DX-47`, Phase DX6 closed); blend/depth-stencil/
-  rasterizer state objects + viewport/scissor are real (`DX-50`–`DX-53`, Phase DX7 closed) — but
-  nothing draws with any of them yet: no constant buffers, no pipeline/draw-call wiring, no shader
-  texture-sampling wiring (that's Phase DX8). MRT's per-target MSAA-resolve/mip-regen-on-unbind is
-  only wired for the single-target case (`DX-43`), not yet for N>1 (`DX-46`'s own honest scope
-  note). Blend/depth-stencil/rasterizer state objects are proven created+cached+bound, but not yet
-  proven to affect actual pixel output (needs a real draw call, Phase DX8). The 5 combo `Clear*`
-  variants, window resize, and device-lost recovery are implemented but not yet exercised by any
-  test.
+  rasterizer state objects + viewport/scissor are real (`DX-50`–`DX-53`, Phase DX7 closed);
+  `colored3d`'s constant buffers + draw pipeline are real and pixel-verified (`DX-60`/`DX-60a`/
+  `DX-61`, Phase DX8's foundational tasks closed) — but every other shader variant/stride still
+  throws, and `colored3d` itself carries no `GpuDrawParams` (no textures/lighting/fog/alpha-test —
+  those are `DrawPrimitivesEx`'s job, still using the default `IGraphicsBackend` fallback that
+  degrades to `DrawColoredPrimitives`, which now at least works instead of throwing). MRT's
+  per-target MSAA-resolve/mip-regen-on-unbind is only wired for the single-target case (`DX-43`),
+  not yet for N>1 (`DX-46`'s own honest scope note). The 5 combo `Clear*` variants, window resize,
+  and device-lost recovery are implemented but not yet exercised by any test.
 - **D3D11 + `CnaTests`**: the full pre-existing GTest suite does not build under this backend —
   ~10 test files call POSIX-only `::setenv()` directly (see §4).
 - **D3D12**: nothing exists — not even the CMake `STRINGS`/option-flag entry (`plan_dx.md` design
