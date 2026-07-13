@@ -141,6 +141,7 @@ namespace CNA::Internal::Backends::SdlRenderer
 
         // 3D pipeline: NOT supported by the SDL_Renderer backend.
         // @note Status: STUB. Every entry point throws std::runtime_error.
+        [[nodiscard]] bool SupportsDepthStencil() const override { return false; }
         void ClearColorAndDepth(float r, float g, float b, float a, float depth) override;
         void ClearDepth(float depth) override;
         void ClearStencil(int stencil) override;

@@ -272,6 +272,32 @@ namespace Microsoft::Xna::Framework::Graphics
                     "'depth' must be between 0.0 and 1.0.");
         }
 
+        // Matches FNA's own GraphicsDevice.Clear(ClearOptions, ...), which masks DepthBuffer/
+        // Stencil out of `options` when the currently active target has no real depth-stencil
+        // buffer, rather than forwarding a clear request the backend cannot honor. Ask the
+        // BACKEND (Task 708's own precedent for RenderTarget2D), not the merely-requested XNA-
+        // level format, since a backend may honor no depth/stencil buffer at all regardless of
+        // what was requested (SDL_Renderer is entirely 2D-only and never has one). Without this,
+        // GraphicsDevice::Clear(const Color&) -- which unconditionally requests
+        // Target|DepthBuffer|Stencil, matching FNA's own single-argument overload -- crashes on
+        // SDL_RENDERER instead of degrading to a color-only clear.
+        bool hasRealDepthBuffer;
+        if (!currentRenderTargets_.empty())
+        {
+            const auto* rt = dynamic_cast<RenderTarget2D*>(currentRenderTargets_[0].getRenderTargetProperty());
+            const bool depthFormatRequested = rt && rt->getDepthStencilFormatProperty() != DepthFormat::None;
+            const auto* rtBackend = rt ? rt->GetRenderTargetBackend() : nullptr;
+            hasRealDepthBuffer = rtBackend && rtBackend->HasRealDepthBuffer(depthFormatRequested);
+        }
+        else
+        {
+            hasRealDepthBuffer = backend_->SupportsDepthStencil();
+        }
+        if (!hasRealDepthBuffer)
+        {
+            options &= ClearOptions::Target;
+        }
+
         const float r = static_cast<float>(color.getRProperty()) / 255.0f;
         const float g = static_cast<float>(color.getGProperty()) / 255.0f;
         const float b = static_cast<float>(color.getBProperty()) / 255.0f;

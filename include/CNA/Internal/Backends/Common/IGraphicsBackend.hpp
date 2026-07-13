@@ -557,6 +557,20 @@ namespace CNA::Internal::Backends
         // ---- 3D pipeline ----
 
         /**
+         * @brief Whether this backend can maintain a real depth/stencil buffer at all, for the
+         * default back buffer (as opposed to an explicit RenderTarget2D, which has its own
+         * per-instance IRenderTargetBackend::HasRealDepthBuffer() query).
+         *
+         * Most backends are 3D-capable and honor whatever depth/stencil format the presentation
+         * parameters request, so the default is `true`. A backend that is entirely 2D-only
+         * (SDL_Renderer) never has a depth/stencil buffer regardless of what was requested and
+         * overrides this to `false` — used by GraphicsDevice::Clear(ClearOptions, ...) to mask
+         * DepthBuffer/Stencil out of a clear request instead of forwarding it to a
+         * ClearColorDepthAndStencil()-style method this backend cannot honor.
+         */
+        [[nodiscard]] virtual bool SupportsDepthStencil() const { return true; }
+
+        /**
          * @brief Clears color and depth buffers in a single call.
          *
          * @param r,g,b,a    Clear color in range 0..1.

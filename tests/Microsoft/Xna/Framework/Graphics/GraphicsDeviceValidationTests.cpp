@@ -5,6 +5,7 @@
 #include <stdexcept>
 #include <vector>
 
+#include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetBinding.hpp"
@@ -12,6 +13,7 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "System/ObjectDisposedException.hpp"
 
+using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
 using Microsoft::Xna::Framework::Graphics::RenderTargetBinding;
@@ -141,4 +143,18 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_Empty_DoesNotThrow)
 {
     GraphicsDevice gd;
     EXPECT_NO_THROW(gd.SetRenderTargets({}));
+}
+
+// Regression test for a real reported crash (cna-template/missing.md): the single-argument
+// Clear(const Color&) overload matches FNA's own semantics by requesting
+// Target|DepthBuffer|Stencil together, which used to forward unconditionally to
+// ClearColorDepthAndStencil() -- a hard throw on SDL_Renderer, since that backend is entirely
+// 2D-only and never has a depth/stencil buffer at all. GraphicsDevice::Clear(ClearOptions, ...)
+// now masks DepthBuffer/Stencil out of the request when IGraphicsBackend::SupportsDepthStencil()
+// reports false, degrading to a color-only clear instead of crashing (matching FNA's own
+// dsFormat == DepthFormat.None masking behavior in GraphicsDevice.Clear(ClearOptions, ...)).
+TEST(GraphicsDeviceValidationTest, Clear_SingleArgumentColorOverload_DoesNotThrow)
+{
+    GraphicsDevice gd;
+    EXPECT_NO_THROW(gd.Clear(Color::CornflowerBlue));
 }
