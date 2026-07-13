@@ -3,6 +3,8 @@
 // fence-based synchronization. Clear()/Present()/draw calls are still honest "not yet implemented"
 // stubs -- see D3D12GraphicsBackend.hpp's class doc comment for exactly why and what's next.
 #include "CNA/Internal/Backends/D3D12/D3D12GraphicsBackend.hpp"
+#include "CNA/Internal/Backends/D3D12/D3D12Buffers.hpp"
+#include "CNA/Internal/Backends/D3D12/D3D12Textures.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -325,7 +327,10 @@ namespace CNA::Internal::Backends::D3D12
         const std::uint64_t valueToSignal = nextFenceValue_++;
         HRESULT hr = commandQueue_->Signal(fence_.Get(), valueToSignal);
         if (FAILED(hr))
+        {
+            CheckDeviceRemovedEXT(hr); // DX-110: detection-only here, matching D3D11's own convention
             throw std::runtime_error("ID3D12CommandQueue::Signal failed, hr=" + FormatHr(hr));
+        }
 
         if (fence_->GetCompletedValue() < valueToSignal)
         {
@@ -341,7 +346,10 @@ namespace CNA::Internal::Backends::D3D12
         const std::uint64_t valueToSignal = nextFenceValue_++;
         HRESULT hr = commandQueue_->Signal(fence_.Get(), valueToSignal);
         if (FAILED(hr))
+        {
+            CheckDeviceRemovedEXT(hr);
             throw std::runtime_error("ID3D12CommandQueue::Signal failed, hr=" + FormatHr(hr));
+        }
 
         const std::uint64_t previousValueForThisFrame = frameFenceValues_[frameIndex];
         if (previousValueForThisFrame != 0 && fence_->GetCompletedValue() < previousValueForThisFrame)
@@ -354,6 +362,82 @@ namespace CNA::Internal::Backends::D3D12
 
         frameFenceValues_[frameIndex] = valueToSignal;
         return valueToSignal;
+    }
+
+    void D3D12GraphicsBackend::CheckDeviceRemovedEXT(HRESULT hr) const
+    {
+        if (hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET)
+        {
+            const HRESULT reason = device_ ? device_->GetDeviceRemovedReason() : hr;
+            SDL_Log("[D3D12] Device removed/reset! reason=%s (plan_dx.md DX-110)", FormatHr(reason).c_str());
+        }
+    }
+
+    void D3D12GraphicsBackend::RecreateDeviceEXT()
+    {
+        // Best-effort drain of anything in flight before tearing down -- mirrors the destructor's
+        // own drain (it's not safe to release a fence/allocator/command list the GPU may still be
+        // referencing, even on a real device-removed event, since the removal only affects future
+        // submissions, not necessarily work already in the queue).
+        if (fence_ && fenceEvent_)
+        {
+            for (int i = 0; i < kFramesInFlight; ++i)
+            {
+                if (frameFenceValues_[i] != 0 && fence_->GetCompletedValue() < frameFenceValues_[i])
+                {
+                    fence_->SetEventOnCompletion(frameFenceValues_[i], fenceEvent_);
+                    WaitForSingleObject(fenceEvent_, INFINITE);
+                }
+            }
+        }
+
+        // Drop every ComPtr tied to the (possibly removed) device -- further calls against a
+        // removed device's own objects are meaningless, and holding onto them would also leak.
+        swapChain_.Reset();
+        swapChainAvailable_ = false;
+        commandList_.Reset();
+        for (auto& allocator : commandAllocators_) allocator.Reset();
+        if (fenceEvent_) { CloseHandle(fenceEvent_); fenceEvent_ = nullptr; }
+        fence_.Reset();
+        cbvSrvUavHeap_.Reset();
+        dsvHeap_.Reset();
+        rtvHeap_.Reset();
+        commandQueue_.Reset();
+        device_.Reset();
+        factory_.Reset();
+
+        rtvHeapNextIndex_ = 0;
+        dsvHeapNextIndex_ = 0;
+        cbvSrvUavHeapNextIndex_ = 0;
+        nextFenceValue_ = 1;
+        for (auto& value : frameFenceValues_) value = 0;
+        debugLayerEnabled_ = false;
+        allowTearingSupported_ = false;
+
+        // Every previously-tracked resource's real D3D12 object is gone along with the removed
+        // device -- DX-109's own vertex/index buffers and textures would need to be recreated by
+        // their owning Texture2D/VertexBuffer/etc. wrapper objects (out of this backend's own
+        // scope -- GraphicsDevice-level content-reload is a separate, larger concern XNA itself
+        // handles via GraphicsDevice::DeviceReset, not something this constructor-time recreation
+        // can or should attempt), so the tracker itself must be cleared rather than left holding
+        // stale pointers into freed memory.
+        resourceStates_.Clear();
+
+        // Recreate every device-lifetime group from scratch, identical to construction.
+        CreateDeviceResources();
+        CreateCommandQueueResources();
+        CreateDescriptorHeapResources();
+        CreateCommandListResources();
+        CreateFenceResources();
+        if (window_) CreateSwapChainResources();
+
+        SDL_Log("[D3D12] RecreateDeviceEXT(): device-lifetime resources fully recreated after a "
+                "(real or forced) device-removed event (plan_dx.md DX-110) -- feature level 0x%04x, "
+                "debug layer %s, tearing %s, swap chain %s.",
+                static_cast<unsigned>(featureLevel_),
+                debugLayerEnabled_ ? "enabled" : "disabled",
+                allowTearingSupported_ ? "supported" : "unsupported",
+                swapChainAvailable_ ? "available" : "unavailable");
     }
 
     void D3D12GraphicsBackend::Clear(float, float, float, float) { NotYetImplemented("Clear"); }
@@ -373,9 +457,9 @@ namespace CNA::Internal::Backends::D3D12
 
     void D3D12GraphicsBackend::SetPresentationMode(int) { /* no-op until DX-106 onward */ }
 
-    std::unique_ptr<ITextureBackend> D3D12GraphicsBackend::CreateTexture(const ImageData&)
+    std::unique_ptr<ITextureBackend> D3D12GraphicsBackend::CreateTexture(const ImageData& data)
     {
-        NotYetImplemented("CreateTexture");
+        return std::make_unique<D3D12TextureBackend>(this, data);
     }
 
     std::unique_ptr<ISpriteBatchBackend> D3D12GraphicsBackend::CreateSpriteBatch()
@@ -394,14 +478,19 @@ namespace CNA::Internal::Backends::D3D12
     void D3D12GraphicsBackend::SetBlendEnabled(bool) { NotYetImplemented("SetBlendEnabled"); }
     void D3D12GraphicsBackend::SetDepthWriteEnabled(bool) { NotYetImplemented("SetDepthWriteEnabled"); }
 
-    std::unique_ptr<IVertexBufferBackend> D3D12GraphicsBackend::CreateVertexBuffer(int)
+    std::unique_ptr<IVertexBufferBackend> D3D12GraphicsBackend::CreateVertexBuffer(int vertex_capacity)
     {
-        NotYetImplemented("CreateVertexBuffer");
+        return std::make_unique<D3D12VertexBufferBackend>(this, vertex_capacity);
     }
 
-    std::unique_ptr<IIndexBufferBackend> D3D12GraphicsBackend::CreateIndexBuffer16(int)
+    std::unique_ptr<IIndexBufferBackend> D3D12GraphicsBackend::CreateIndexBuffer16(int index_capacity)
     {
-        NotYetImplemented("CreateIndexBuffer16");
+        return std::make_unique<D3D12IndexBufferBackend>(this, index_capacity, /*thirtyTwoBit=*/false);
+    }
+
+    std::unique_ptr<IIndexBufferBackend> D3D12GraphicsBackend::CreateIndexBuffer32(int index_capacity)
+    {
+        return std::make_unique<D3D12IndexBufferBackend>(this, index_capacity, /*thirtyTwoBit=*/true);
     }
 
     void D3D12GraphicsBackend::DrawColoredPrimitives(const IVertexBufferBackend&,

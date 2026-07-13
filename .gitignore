@@ -15,6 +15,7 @@ cmake-build-software/*
 cmake-build-d3d11/*
 cmake-build-d3d12/*
 vkd3d-proton.cache.write
+vkd3d-proton.cache
 vendor/wgpu-native/
 cmake-build-input-easygl/*
 cmake-build-input-vulkan/*

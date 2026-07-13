@@ -10,6 +10,7 @@
 // Windows-only (see CMakeLists.txt's FATAL_ERROR guard for non-Windows CNA_GRAPHICS_BACKEND=D3D12).
 
 #include "../Common/IGraphicsBackend.hpp"
+#include "D3D12ResourceStateTracker.hpp"
 
 #include <d3d12.h>
 #include <dxgi1_5.h>
@@ -81,6 +82,11 @@ namespace CNA::Internal::Backends::D3D12
 
         std::unique_ptr<IVertexBufferBackend> CreateVertexBuffer(int vertex_capacity) override;
         std::unique_ptr<IIndexBufferBackend> CreateIndexBuffer16(int index_capacity) override;
+        /// DX-109: real 32-bit index buffer -- explicitly overridden. D3D11's own Phase DX5 fork
+        /// found and fixed a real bug where forgetting this override let every 32-bit index-buffer
+        /// request silently alias to a 16-bit buffer (IGraphicsBackend's own default just delegates
+        /// to CreateIndexBuffer16); overriding it here from the start avoids repeating that bug.
+        std::unique_ptr<IIndexBufferBackend> CreateIndexBuffer32(int index_capacity) override;
 
         void DrawColoredPrimitives(const IVertexBufferBackend& vb,
                                    const Matrix& world, const Matrix& view, const Matrix& projection,
@@ -122,6 +128,11 @@ namespace CNA::Internal::Backends::D3D12
         /** @brief The shader-visible CBV/SRV/UAV heap itself, for SetDescriptorHeaps() calls. */
         [[nodiscard]] ID3D12DescriptorHeap* GetCbvSrvUavHeapEXT() const { return cbvSrvUavHeap_.Get(); }
 
+        /** @brief DX-106/DX-109: the single, shared per-resource barrier-state tracker every real
+         *  D3D12 resource (buffers, textures -- DX-109) registers with and transitions through, so
+         *  barrier correctness is enforced in one place rather than ad-hoc per call site. */
+        [[nodiscard]] D3D12ResourceStateTracker& GetResourceStateTrackerEXT() { return resourceStates_; }
+
         /** @brief Real per-frame command allocator for @p frameIndex (0..kFramesInFlight-1). */
         [[nodiscard]] ID3D12CommandAllocator* GetCommandAllocatorEXT(int frameIndex) const
         {
@@ -147,6 +158,28 @@ namespace CNA::Internal::Backends::D3D12
          *  loop needs before resetting that frame's command allocator. Returns the fence value
          *  just signaled (for tests to assert against GetCompletedValue()). */
         std::uint64_t SignalAndWaitForFrameEXT(int frameIndex);
+
+        /** @brief DX-110: logs (does not throw or recover) when @p hr is
+         *  DXGI_ERROR_DEVICE_REMOVED/DXGI_ERROR_DEVICE_RESET, including the real
+         *  GetDeviceRemovedReason() -- mirrors D3D11GraphicsBackend::CheckDeviceRemoved's own
+         *  detection-only convention exactly (design decision 12's "never assume, always check"
+         *  discipline applied to device loss too). Called from ExecuteCommandListAndWaitEXT()/
+         *  SignalAndWaitForFrameEXT() whenever ID3D12CommandQueue::Signal() itself fails. */
+        void CheckDeviceRemovedEXT(HRESULT hr) const;
+
+        /** @brief DX-110: the real recovery path -- unlike D3D11's own DX-27 (detection+logging
+         *  only, full recovery deferred to DX-90's real hardware), D3D12 documentation treats
+         *  device-removed recovery as expected to handle from the start, so this genuinely tears
+         *  down and recreates every device-lifetime resource DX-102 through DX-105 built (device,
+         *  factory, command queue, all 3 descriptor heaps with their bump allocators reset to 0,
+         *  every per-frame command allocator + the shared command list, the fence + its counters),
+         *  clears the shared D3D12ResourceStateTracker (every previously-tracked resource's D3D12
+         *  object is gone along with the removed device), and re-attempts the swap chain if a
+         *  window was supplied. Honest scope boundary: this recreation logic is real and directly
+         *  callable/testable (see examples/d3d12_smoke_test.cpp), but this dev loop cannot trigger
+         *  a genuine DXGI_ERROR_DEVICE_REMOVED to prove the *trigger* path -- only DX-90/DX-114's
+         *  real hardware can. NOXNA -- not part of any IGraphicsBackend contract. */
+        void RecreateDeviceEXT();
 
     private:
         [[noreturn]] static void NotYetImplemented(const char* what);
@@ -207,5 +240,9 @@ namespace CNA::Internal::Backends::D3D12
         // fail gracefully instead of throwing.
         ComPtr<IDXGISwapChain3> swapChain_;
         bool swapChainAvailable_ = false;
+
+        // DX-106/DX-109: single shared per-resource barrier-state tracker, registered with by every
+        // real D3D12 resource this backend creates (vertex/index buffers, textures -- DX-109).
+        D3D12ResourceStateTracker resourceStates_;
     };
 }
