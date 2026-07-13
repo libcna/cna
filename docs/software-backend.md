@@ -1,0 +1,130 @@
+# Software (CPU rasterizer) graphics backend
+
+## Status
+
+The Software backend is a **CPU-only rasterizer graphics backend**, verified 2026-07-13. Select it
+with:
+
+```bash
+cmake -S . -B cmake-build-software \
+  -DCNA_GRAPHICS_BACKEND=SOFTWARE \
+  -DCMAKE_BUILD_TYPE=Debug \
+  -DCNA_BUILD_TESTS=ON
+cmake --build cmake-build-software -j
+```
+
+No extra dependencies are needed — like `HEADLESS`, this backend never touches SDL's video
+subsystem, OpenGL, Vulkan, or any GPU library. It only needs the same SDL3/SDL3_image/SDL3_mixer
+and `../sharp-runtime` checkout every other backend already requires.
+
+## What this backend is for (and isn't)
+
+Every other CNA backend needs a real window and a real GPU context to run at all. `HEADLESS`
+solves that for testing game *logic* by never touching a GPU either — but it never renders a real
+pixel; `ReadBackbuffer()` just reports the last `Clear()` color for every pixel.
+
+Software is different: it actually **rasterizes real triangles** into a CPU-owned RGBA8
+framebuffer, entirely in software (a real edge-function rasterizer, real perspective-correct
+attribute interpolation, a real per-pixel depth test). `GraphicsDevice::GetBackBufferData()`/
+`ReadBackbuffer()` return genuinely correct pixels — no GPU, window, or display server involved at
+any point. That makes it useful for:
+
+- **Deterministic pixel tests** that need no GPU driver, display server, or Xvfb at all — unlike
+  the existing EasyGL/BGFX/Vulkan golden-image tests (see `docs/graphics-backend-feature-matrix.md`),
+  which all need a real GPU context even under Xvfb.
+- **Server/CI environments** with no GPU whatsoever.
+- **Verifying basic XNA primitive/effect behavior** (does a triangle with these vertices, this
+  effect, this blend state produce the pixels you'd expect) as a fast, portable reference.
+- **Cross-backend diagnostics**: comparing a real GPU backend's output against this backend's
+  independently-implemented rasterizer can help localize whether a rendering bug is in shared
+  code, a specific GPU backend, or expected-but-undocumented behavior (see `plan_software.md`
+  `SOFTWARE-61`, not yet implemented as an automated test).
+
+**What it proves:** "this triangle, with this effect state, this texture, and this blend mode,
+produces these exact pixels" — a real, independently-derived rendering result, not a fake one.
+**What it is not:** a real-time gameplay backend. There is no SIMD, no multithreading, no
+tiling/binning — correctness and determinism are the goals, not speed (see `plan_software.md`
+design decision 1).
+
+## Writing a Software test
+
+Like `HEADLESS`, a Software test is a normal `Game` subclass — the only difference is the backend
+selected at CMake configure time. See `examples/software_smoke_test.cpp`,
+`examples/software_rasterizer_test.cpp`, and `examples/software_effects_test.cpp` for full working
+examples. The pattern:
+
+```cpp
+class MyPixelTest : public Game
+{
+    void Draw(const GameTime&) override
+    {
+        auto& dev = getGraphicsDeviceProperty();
+        dev.Clear(Color::Black, 1.0f);
+
+        // ... build a VertexBuffer, apply a BasicEffect, draw ...
+        BasicEffect fx(dev);
+        fx.VertexColorEnabled = true;   // real XNA default is false -- opt in explicitly
+        fx.Apply();
+        dev.SetVertexBuffer(&vb);
+        dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 1);
+        dev.SetVertexBuffer(nullptr);
+
+        // Real, correct pixels -- no GPU involved at all.
+        const Rectangle region(x, y, 1, 1);
+        Color pixel(0, 0, 0, 0);
+        dev.GetBackBufferData(&region, &pixel, 0, 1);
+        // assert on pixel.getRProperty()/getGProperty()/getBProperty()/getAProperty()
+
+        Exit();
+    }
+};
+```
+
+A reminder that both real games and this backend's own tests need to remember: `BasicEffect`'s
+`VertexColorEnabled` defaults to `false` in real XNA/FNA — a plain `BasicEffect` with no explicit
+opt-in ignores vertex colors entirely (this backend faithfully reproduces that, and it's exactly
+what caused `Software_Rasterizer`'s tests to briefly fail while `DrawPrimitivesEx` was first wired
+up — see `plan_software.md` `SOFTWARE-50`'s notes for the full story).
+
+## Known limitations (2026-07-13)
+
+- **`TriangleList` only.** `TriangleStrip`/`LineList`/`LineStrip`/`PointListEXT` all throw a clear
+  "only TriangleList is supported in v1" error rather than silently misrendering.
+- **Vertex strides 16/20/24 only** (`VertexPositionColor`/`VertexPositionTexture`/
+  `VertexPositionColorTexture`). Stride 32 (`VertexPositionNormalTexture`) and any other stride
+  throw a clear "unsupported vertex stride" error — lighting (which would need the normal) is out
+  of scope for v1 anyway.
+- **No lighting, no fog.** `BasicEffect`'s `EnableDefaultLighting()`/fog properties have no effect
+  on this backend's output — only `VertexColorEnabled`, `TextureEnabled`/`Texture`, and
+  `DiffuseColor`/`Alpha` are read.
+- **No `DualTextureEffect`/`EnvironmentMapEffect`/`SkinnedEffect`-specific behavior.** These
+  effects' `FillGpuDrawParams()` output (dual texture, env map, skinning) isn't read — only the
+  same `BasicEffect` subset every draw goes through.
+- **No MRT, no MSAA, no mipmapping, no cube/3D textures.** `CreateRenderTargetCube`/
+  `CreateTextureCube`/`CreateTexture3D` all return `nullptr` (the shared `IGraphicsBackend` default
+  — this backend doesn't override them).
+- **Only two blend modes are distinguished**: `Opaque` (exact preset match: `colorSrcBlend=One`,
+  `colorDstBlend=Zero`) and a single simplified "over" alpha-composite formula for everything else
+  (`AlphaBlend`/`NonPremultiplied`/`Additive`-ish presets all get treated the same way). This is a
+  real, deliberate v1 simplification (`plan_software.md` design decision 7), not a full
+  blend-equation interpreter.
+- **Nearest-neighbor texture sampling only** — no bilinear filtering, no mipmapping, no texture
+  address modes (`Wrap`/`Clamp`/`Mirror` all behave the same: UVs are simply clamped to the
+  texture's own bounds).
+- **No backface culling** — both triangle winding orders are always accepted
+  (`RasterizerState.CullMode` has no effect). A real, intentional v1 simplification: proving
+  correct rasterization exists at all came first.
+- **Minimal near-plane handling.** A triangle with any vertex at or behind the near plane
+  (`clip.W <= ~0`) is culled entirely rather than properly clipped (splitting it into 1-2 new
+  triangles at the near plane). Not yet exercised by a dedicated test with geometry deliberately
+  crossing the near plane.
+- **Custom `ShaderEffect` (arbitrary GLSL/HLSL/WGSL source) compiles but doesn't actually execute**
+  — mirrors `HEADLESS-16`'s own precedent exactly: the source is accepted without compiling, and
+  only effects whose `FillGpuDrawParams()` output matches this backend's fixed `BasicEffect`-subset
+  pixel-shading path will render correctly.
+- **`Present()` is a no-op**; there is no way to visually inspect a Software-rendered frame on
+  screen in this backend's current form. An opt-in "blit the CPU framebuffer to a real window"
+  mode is a reasonable future addition (`plan_software.md` design decision 3) but isn't needed for
+  this backend's actual value proposition (deterministic, GPU-free pixel tests).
+
+See `plan_software.md` for the full task-by-task status and design rationale.

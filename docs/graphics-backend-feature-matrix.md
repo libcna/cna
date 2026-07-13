@@ -12,6 +12,15 @@ game logic headlessly (no window, no GPU, no display server) for fast CI tests â
 itself via argument checks, resource-lifecycle tracking, and draw-call/state-change counters instead
 of pixel output. See `plan_headless.md` for its own status.
 
+The **Software** backend (`CNA_GRAPHICS_BACKEND=SOFTWARE`, tracked in `../plan_software.md`) is
+also **not yet** a column here, but for a different reason than Headless: unlike Headless, it
+*does* render real pixels (a genuine CPU rasterizer), so it could plausibly become a real
+pixel-parity comparison column once its feature set is broad enough â€” v1 only covers `TriangleList`,
+a `BasicEffect` subset (no lighting/fog), nearest-neighbor texturing, and a simplified
+`Opaque`/`AlphaBlend` distinction, too narrow for a meaningful row-by-row comparison against the
+established backends yet. Worth revisiting as `plan_software.md`'s scope grows. See
+`docs/software-backend.md` for its current capability boundary.
+
 **Supersedes `docs/coverage.md`**, which is dated 2026-06-21
 and predates almost this entire session's work
 (dozens of real bugs fixed across all 4 backends, an entire SDL_Renderer 2D-only audit phase,
