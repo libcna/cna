@@ -90,19 +90,33 @@ up — see `plan_software.md` `SOFTWARE-50`'s notes for the full story).
 
 - **`TriangleList` only.** `TriangleStrip`/`LineList`/`LineStrip`/`PointListEXT` all throw a clear
   "only TriangleList is supported in v1" error rather than silently misrendering.
-- **Vertex strides 16/20/24 only** (`VertexPositionColor`/`VertexPositionTexture`/
-  `VertexPositionColorTexture`). Stride 32 (`VertexPositionNormalTexture`) and any other stride
-  throw a clear "unsupported vertex stride" error — lighting (which would need the normal) is out
-  of scope for v1 anyway.
-- **No lighting, no fog.** `BasicEffect`'s `EnableDefaultLighting()`/fog properties have no effect
-  on this backend's output — only `VertexColorEnabled`, `TextureEnabled`/`Texture`, and
-  `DiffuseColor`/`Alpha` are read.
-- **No `DualTextureEffect`/`EnvironmentMapEffect`/`SkinnedEffect`-specific behavior.** These
-  effects' `FillGpuDrawParams()` output (dual texture, env map, skinning) isn't read — only the
-  same `BasicEffect` subset every draw goes through.
-- **No MRT, no MSAA, no mipmapping, no cube/3D textures.** `CreateRenderTargetCube`/
-  `CreateTextureCube`/`CreateTexture3D` all return `nullptr` (the shared `IGraphicsBackend` default
-  — this backend doesn't override them).
+- **Vertex strides 16/20/24/32/52** (`VertexPositionColor`/`VertexPositionTexture`/
+  `VertexPositionColorTexture`/`VertexPositionNormalTexture`/`VertexPositionNormalTextureSkinned`).
+  Any other stride throws a clear "unsupported vertex stride" error.
+- **No per-light diffuse lighting, no fog.** `BasicEffect`'s `EnableDefaultLighting()`/fog
+  properties (and the equivalent lighting inputs on `EnvironmentMapEffect`/`SkinnedEffect`) have no
+  effect on this backend's output — only `VertexColorEnabled`, `TextureEnabled`/`Texture`, and
+  `DiffuseColor`/`Alpha` are read; the "lit" base color is always just
+  `vertexColor*diffuseColor*texture0`, with no per-light `NdotL` sum, ambient, or emissive term.
+- **`DualTextureEffect`/`EnvironmentMapEffect`/`SkinnedEffect` are supported** (`SOFTWARE-82`),
+  minus the lighting caveat above:
+  - `DualTextureEffect`: real second-texture sampling, FNA's own
+    `color.rgb*=2; color *= overlay*diffuse` formula. Both textures reuse the same UV (this
+    backend has no genuine 2-UV vertex format — an established simplification, matching this
+    codebase's own Vulkan `dual_texture3d` shaders' precedent).
+  - `EnvironmentMapEffect`: real 6-face RGBA8 cube map storage (`CreateTextureCube` now returns a
+    working backend, no mipmaps) and a real reflection vector (`reflect(-eyeVector, worldNormal)`)
+    sampled against it, with Fresnel edge-weighting and the specular-tint term. The normal is
+    transformed by `World` directly rather than the mathematically-correct
+    `WorldInverseTranspose` — exact for uniform-scale/no-shear `World` matrices, a real
+    simplification for non-uniform scale.
+  - `SkinnedEffect`: real per-vertex bone-transform blending (up to 4 weighted bones,
+    `WeightsPerVertex`-gated) applied to the vertex position before the standard
+    World\*View\*Projection transform.
+- **No MRT, no MSAA, no mipmapping, no 3D textures, no render-target cube maps.**
+  `CreateRenderTargetCube`/`CreateTexture3D` still return `nullptr` (the shared `IGraphicsBackend`
+  default — this backend doesn't override them); only plain (non-render-target) `TextureCube`s are
+  real.
 - **Only two blend modes are distinguished**: `Opaque` (exact preset match: `colorSrcBlend=One`,
   `colorDstBlend=Zero`) and a single simplified "over" alpha-composite formula for everything else
   (`AlphaBlend`/`NonPremultiplied`/`Additive`-ish presets all get treated the same way). This is a

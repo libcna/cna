@@ -37,6 +37,10 @@ namespace CNA::Internal::Backends::Software
             float invW = 1.0f;          ///< 1 / clip.W, used to un-premultiply interpolated attributes.
             float r = 0.0f, g = 0.0f, b = 0.0f, a = 0.0f;  ///< Vertex color * invW, 0..1 range.
             float u = 0.0f, v = 0.0f;   ///< Texture coordinate * invW (Phase S5).
+            /// World-space position/normal * invW (SOFTWARE-82, EnvironmentMapEffect only) --
+            /// same premultiply-then-divide perspective-correct interpolation treatment as color/uv.
+            float wpx = 0.0f, wpy = 0.0f, wpz = 0.0f;
+            float nx = 0.0f, ny = 0.0f, nz = 1.0f;
         };
 
         /// One vertex in clip space (before the perspective divide), attributes NOT premultiplied
@@ -47,6 +51,9 @@ namespace CNA::Internal::Backends::Software
             float x = 0.0f, y = 0.0f, z = 0.0f, w = 1.0f;
             float r = 1.0f, g = 1.0f, b = 1.0f, a = 1.0f;
             float u = 0.0f, v = 0.0f;
+            /// World-space position/normal (SOFTWARE-82, EnvironmentMapEffect only).
+            float wpx = 0.0f, wpy = 0.0f, wpz = 0.0f;
+            float nx = 0.0f, ny = 0.0f, nz = 1.0f;
         };
 
         /// Reads a packed little-endian RGBA8 Color (Microsoft::Xna::Framework::Color's own
@@ -93,6 +100,12 @@ namespace CNA::Internal::Backends::Software
             out.a = a.a + t * (b.a - a.a);
             out.u = a.u + t * (b.u - a.u);
             out.v = a.v + t * (b.v - a.v);
+            out.wpx = a.wpx + t * (b.wpx - a.wpx);
+            out.wpy = a.wpy + t * (b.wpy - a.wpy);
+            out.wpz = a.wpz + t * (b.wpz - a.wpz);
+            out.nx = a.nx + t * (b.nx - a.nx);
+            out.ny = a.ny + t * (b.ny - a.ny);
+            out.nz = a.nz + t * (b.nz - a.nz);
             return out;
         }
 
@@ -143,6 +156,12 @@ namespace CNA::Internal::Backends::Software
             out.a = cv.a * invW;
             out.u = cv.u * invW;
             out.v = cv.v * invW;
+            out.wpx = cv.wpx * invW;
+            out.wpy = cv.wpy * invW;
+            out.wpz = cv.wpz * invW;
+            out.nx = cv.nx * invW;
+            out.ny = cv.ny * invW;
+            out.nz = cv.nz * invW;
             return out;
         }
 
@@ -197,6 +216,66 @@ namespace CNA::Internal::Backends::Software
             g = bilerp(1);
             b = bilerp(2);
             a = bilerp(3);
+        }
+
+        /// SOFTWARE-82: applies a column-major 4x4 matrix (GpuDrawParams::worldColMajor's own
+        /// layout, and SkinnedEffect's boneTransforms per-bone entries) to a vector using the
+        /// standard column-vector convention `v' = M*v` -- deliberately NOT going through CNA's
+        /// own Matrix type (which is row-major/row-vector), to avoid a transpose round-trip for
+        /// data that already arrives in exactly this flat, column-major layout. `w=1` applies
+        /// translation (for a position); `w=0` ignores it (for a direction/normal).
+        Vector3 ApplyAffineColumnMajor(const float* m, const Vector3& v, float w)
+        {
+            return Vector3(
+                m[0] * v.X + m[4] * v.Y + m[8]  * v.Z + m[12] * w,
+                m[1] * v.X + m[5] * v.Y + m[9]  * v.Z + m[13] * w,
+                m[2] * v.X + m[6] * v.Y + m[10] * v.Z + m[14] * w);
+        }
+
+        /// SOFTWARE-82: standard cube-map face selection (largest-magnitude axis picks the face,
+        /// its sign picks Positive/Negative) and per-face UV projection, matching the classic
+        /// OpenGL/D3D convention. Nearest-neighbor only (no cross-face bilinear filtering at cube
+        /// seams -- a real, deliberate simplification, consistent with this backend's existing
+        /// "correctness over performance/fidelity, simple wins over exhaustive" stance).
+        void SampleCubeMap(const SoftwareTextureCubeBackend& cube, const Vector3& dir,
+                          float& r, float& g, float& b, float& a)
+        {
+            const float ax = std::abs(dir.X), ay = std::abs(dir.Y), az = std::abs(dir.Z);
+            int face; float u, v, ma;
+            if (ax >= ay && ax >= az)
+            {
+                face = dir.X > 0.0f ? 0 : 1;               // PositiveX : NegativeX
+                u = dir.X > 0.0f ? -dir.Z : dir.Z;
+                v = -dir.Y;
+                ma = ax;
+            }
+            else if (ay >= ax && ay >= az)
+            {
+                face = dir.Y > 0.0f ? 2 : 3;               // PositiveY : NegativeY
+                u = dir.X;
+                v = dir.Y > 0.0f ? dir.Z : -dir.Z;
+                ma = ay;
+            }
+            else
+            {
+                face = dir.Z > 0.0f ? 4 : 5;               // PositiveZ : NegativeZ
+                u = dir.Z > 0.0f ? dir.X : -dir.X;
+                v = -dir.Y;
+                ma = az;
+            }
+            const float s = std::clamp((u / ma + 1.0f) * 0.5f, 0.0f, 1.0f);
+            const float t = std::clamp((v / ma + 1.0f) * 0.5f, 0.0f, 1.0f);
+
+            const int size = std::max(1, cube.GetSize());
+            const int px = std::clamp(static_cast<int>(s * static_cast<float>(size)), 0, size - 1);
+            const int py = std::clamp(static_cast<int>(t * static_cast<float>(size)), 0, size - 1);
+            const auto& pixels = cube.FacePixels(face);
+            const std::size_t idx = (static_cast<std::size_t>(py) * static_cast<std::size_t>(size) +
+                                    static_cast<std::size_t>(px)) * 4u;
+            r = pixels[idx + 0] / 255.0f;
+            g = pixels[idx + 1] / 255.0f;
+            b = pixels[idx + 2] / 255.0f;
+            a = pixels[idx + 3] / 255.0f;
         }
 
         /// SOFTWARE-81: whether a triangle with the given signed screen-space `area` should be
@@ -287,17 +366,52 @@ namespace CNA::Internal::Backends::Software
 
         /// Transforms a vertex whose byte layout is inferred from `stride` (plan_software.md
         /// design decision 2: 16=VertexPositionColor, 20=VertexPositionTexture,
-        /// 24=VertexPositionColorTexture) into clip space, for the DrawPrimitivesEx/
-        /// DrawIndexedPrimitivesEx path. `vertexColorEnabled` mirrors GpuDrawParams' own flag --
-        /// when false, vertex color is treated as opaque white so it doesn't affect the eventual
-        /// texture/diffuse modulation, matching a real Effect's own VertexColorEnabled=false
-        /// behavior. Attributes are left un-premultiplied; near-plane clipping (SOFTWARE-83)
-        /// happens on ClipVertex, before the perspective divide.
+        /// 24=VertexPositionColorTexture, 32=VertexPositionNormalTexture (SOFTWARE-82,
+        /// EnvironmentMapEffect), 52=VertexPositionNormalTextureSkinned (SOFTWARE-82,
+        /// SkinnedEffect)) into clip space, for the DrawPrimitivesEx/DrawIndexedPrimitivesEx path.
+        /// `params.vertexColorEnabled` mirrors GpuDrawParams' own flag -- when false (or for a
+        /// stride with no Color field at all), vertex color is treated as opaque white so it
+        /// doesn't affect the eventual texture/diffuse modulation, matching a real Effect's own
+        /// VertexColorEnabled=false behavior. Attributes are left un-premultiplied; near-plane
+        /// clipping (SOFTWARE-83) happens on ClipVertex, before the perspective divide.
         ClipVertex BuildGenericClipVertex(const std::uint8_t* raw, std::size_t stride, const Matrix& combined,
-                                          bool vertexColorEnabled)
+                                          const GpuDrawParams& params)
         {
             Vector3 position;
             std::memcpy(&position, raw, sizeof(Vector3));
+            Vector3 normal(0.0f, 0.0f, 1.0f);
+            bool haveNormal = false;
+
+            if (stride == 52 && params.skinned)
+            {
+                // VertexPositionNormalTextureSkinned: Position@0, Normal@12, TextureCoordinate@24,
+                // BlendWeight@32 (4 floats), BlendIndices@48 (4 bytes). Blend up to
+                // weightsPerVertex bone matrices (column-major, GpuDrawParams::boneTransforms'
+                // own layout -- Task 895's "only sum the first N pairs" behavior) and apply the
+                // blended matrix to Position/Normal BEFORE the standard World*View*Projection
+                // transform below, mirroring FNA's own Skin(vin, boneCount) step.
+                Vector4 blendWeight;
+                std::memcpy(&blendWeight, raw + 32, sizeof(Vector4));
+                std::uint8_t blendIndices[4];
+                std::memcpy(blendIndices, raw + 48, 4);
+                const float weights[4] = {blendWeight.X, blendWeight.Y, blendWeight.Z, blendWeight.W};
+
+                float blended[16] = {};
+                const int n = std::clamp(params.weightsPerVertex, 1, 4);
+                for (int k = 0; k < n; ++k)
+                {
+                    const int boneIndex = std::clamp(static_cast<int>(blendIndices[k]), 0, 71);
+                    const float* bone = &params.boneTransforms[static_cast<std::size_t>(boneIndex) * 16u];
+                    for (int e = 0; e < 16; ++e)
+                        blended[e] += bone[e] * weights[k];
+                }
+
+                position = ApplyAffineColumnMajor(blended, position, 1.0f);
+                std::memcpy(&normal, raw + 12, sizeof(Vector3));
+                normal = ApplyAffineColumnMajor(blended, normal, 0.0f);
+                haveNormal = true;
+            }
+
             const Vector4 clip = Vector4::Transform(position, combined);
 
             ClipVertex out;
@@ -318,8 +432,40 @@ namespace CNA::Internal::Backends::Software
                 std::memcpy(&out.u, raw + 16, sizeof(float));
                 std::memcpy(&out.v, raw + 20, sizeof(float));
             }
+            else if (stride == 32)
+            {
+                // VertexPositionNormalTexture: Position@0, Normal@12, TextureCoordinate@24.
+                std::memcpy(&normal, raw + 12, sizeof(Vector3));
+                haveNormal = true;
+                std::memcpy(&out.u, raw + 24, sizeof(float));
+                std::memcpy(&out.v, raw + 28, sizeof(float));
+            }
+            else if (stride == 52)
+            {
+                std::memcpy(&out.u, raw + 24, sizeof(float));
+                std::memcpy(&out.v, raw + 28, sizeof(float));
+            }
 
-            if (!vertexColorEnabled)
+            if (haveNormal && params.envMapping)
+            {
+                // World-space position/normal for the reflection vector (SOFTWARE-82). Uses
+                // World directly rather than the mathematically-correct WorldInverseTranspose for
+                // the normal -- an intentional simplification, exact for uniform-scale/no-shear
+                // World matrices and only distorting the reflection for non-uniform scale, which
+                // this backend's own existing "correctness over full fidelity" stance accepts.
+                const Vector3 worldPos = ApplyAffineColumnMajor(params.worldColMajor, position, 1.0f);
+                Vector3 worldNormal = ApplyAffineColumnMajor(params.worldColMajor, normal, 0.0f);
+                const float len = std::sqrt(worldNormal.X * worldNormal.X + worldNormal.Y * worldNormal.Y +
+                                            worldNormal.Z * worldNormal.Z);
+                if (len > 1e-8f)
+                {
+                    worldNormal.X /= len; worldNormal.Y /= len; worldNormal.Z /= len;
+                }
+                out.wpx = worldPos.X; out.wpy = worldPos.Y; out.wpz = worldPos.Z;
+                out.nx = worldNormal.X; out.ny = worldNormal.Y; out.nz = worldNormal.Z;
+            }
+
+            if (!params.vertexColorEnabled)
             {
                 out.r = out.g = out.b = out.a = 1.0f;
             }
@@ -346,12 +492,22 @@ namespace CNA::Internal::Backends::Software
         /// SpriteBatch paths: adds nearest-neighbor texture sampling, diffuseColor modulation, and
         /// a simplified Opaque/AlphaBlend choice (design decisions 7/6) on top of RasterizeTriangle's
         /// depth-tested, perspective-correct color interpolation. Backface culling per `cullMode`
-        /// (SOFTWARE-81; raw ordinal, see ShouldCullTriangle()).
+        /// (SOFTWARE-81; raw ordinal, see ShouldCullTriangle()). `params.dualTexture`/`envMapping`
+        /// (SOFTWARE-82) select DualTextureEffect's second-texture blend or EnvironmentMapEffect's
+        /// cube-map reflection on top of the same base texture/diffuse/vertex-color path -- no
+        /// per-light diffuse lighting is computed for either (design decision 6: no lighting
+        /// engine in v1), so the "lit" base color is just vertexColor*diffuseColor*texture0, the
+        /// same simplification already used for the plain BasicEffect path.
         void RasterizeTriangleShaded(SoftwareFramebuffer& fb, bool depthTestEnabled, bool blendEnabled,
-                                     int cullMode, bool textureEnabled, const SoftwareTextureBackend* texture,
-                                     float diffuseR, float diffuseG, float diffuseB, float diffuseA,
+                                     int cullMode, const GpuDrawParams& params,
                                      const RasterVertex& v0, const RasterVertex& v1, const RasterVertex& v2)
         {
+            const auto* texture0 = dynamic_cast<const SoftwareTextureBackend*>(params.texture0);
+            const auto* texture1 = dynamic_cast<const SoftwareTextureBackend*>(params.texture1);
+            const auto* envMap = dynamic_cast<const SoftwareTextureCubeBackend*>(params.envMap);
+            const bool useDualTexture = params.dualTexture && texture0 != nullptr && texture1 != nullptr;
+            const bool useEnvMap = params.envMapping && envMap != nullptr;
+
             const float area = EdgeFunction(v0.x, v0.y, v1.x, v1.y, v2.x, v2.y);
             if (area == 0.0f)
                 return;
@@ -401,22 +557,81 @@ namespace CNA::Internal::Backends::Software
                     float b = (lambda0 * v0.b + lambda1 * v1.b + lambda2 * v2.b) / invW;
                     float a = (lambda0 * v0.a + lambda1 * v1.a + lambda2 * v2.a) / invW;
 
-                    if (textureEnabled && texture != nullptr)
+                    const bool needUV = useDualTexture || useEnvMap || (params.textureEnabled && texture0 != nullptr);
+                    float u = 0.0f, v = 0.0f;
+                    if (needUV)
                     {
-                        const float u = (lambda0 * v0.u + lambda1 * v1.u + lambda2 * v2.u) / invW;
-                        const float v = (lambda0 * v0.v + lambda1 * v1.v + lambda2 * v2.v) / invW;
+                        u = (lambda0 * v0.u + lambda1 * v1.u + lambda2 * v2.u) / invW;
+                        v = (lambda0 * v0.v + lambda1 * v1.v + lambda2 * v2.v) / invW;
+                    }
+
+                    if (useDualTexture)
+                    {
+                        // DualTextureEffect (SOFTWARE-82): color.rgb*=2; color *= overlay*diffuse
+                        // (FNA's PSDualTexture) -- both textures reuse the SAME uv (this backend
+                        // has no genuine 2-UV vertex format; established precedent already set by
+                        // this codebase's own Vulkan dual_texture3d shaders).
+                        float t0r, t0g, t0b, t0a;
+                        SampleBilinear(*texture0, u, v, t0r, t0g, t0b, t0a);
+                        float t1r, t1g, t1b, t1a;
+                        SampleBilinear(*texture1, u, v, t1r, t1g, t1b, t1a);
+                        r *= (t0r * 2.0f) * t1r;
+                        g *= (t0g * 2.0f) * t1g;
+                        b *= (t0b * 2.0f) * t1b;
+                        a *= t0a * t1a;
+                    }
+                    else if (params.textureEnabled && texture0 != nullptr)
+                    {
                         float texR, texG, texB, texA;
-                        SampleBilinear(*texture, u, v, texR, texG, texB, texA);
+                        SampleBilinear(*texture0, u, v, texR, texG, texB, texA);
                         r *= texR;
                         g *= texG;
                         b *= texB;
                         a *= texA;
                     }
 
-                    r *= diffuseR;
-                    g *= diffuseG;
-                    b *= diffuseB;
-                    a *= diffuseA;
+                    r *= params.diffuseColor[0];
+                    g *= params.diffuseColor[1];
+                    b *= params.diffuseColor[2];
+                    a *= params.diffuseColor[3];
+
+                    if (useEnvMap)
+                    {
+                        // EnvironmentMapEffect (SOFTWARE-82), FNA's PSEnvMap/PSEnvMapSpecular
+                        // formula, minus the per-light diffuse sum (design decision 6): base color
+                        // is what r/g/b/a already are at this point (vertexColor*diffuseColor*
+                        // texture0), used as-is instead of ComputeLights' lit result.
+                        const float wpx = (lambda0 * v0.wpx + lambda1 * v1.wpx + lambda2 * v2.wpx) / invW;
+                        const float wpy = (lambda0 * v0.wpy + lambda1 * v1.wpy + lambda2 * v2.wpy) / invW;
+                        const float wpz = (lambda0 * v0.wpz + lambda1 * v1.wpz + lambda2 * v2.wpz) / invW;
+                        float nx = (lambda0 * v0.nx + lambda1 * v1.nx + lambda2 * v2.nx) / invW;
+                        float ny = (lambda0 * v0.ny + lambda1 * v1.ny + lambda2 * v2.ny) / invW;
+                        float nz = (lambda0 * v0.nz + lambda1 * v1.nz + lambda2 * v2.nz) / invW;
+                        const float nLen = std::sqrt(nx * nx + ny * ny + nz * nz);
+                        if (nLen > 1e-8f) { nx /= nLen; ny /= nLen; nz /= nLen; }
+
+                        float ex = params.eyePositionWorld[0] - wpx;
+                        float ey = params.eyePositionWorld[1] - wpy;
+                        float ez = params.eyePositionWorld[2] - wpz;
+                        const float eLen = std::sqrt(ex * ex + ey * ey + ez * ez);
+                        if (eLen > 1e-8f) { ex /= eLen; ey /= eLen; ez /= eLen; }
+
+                        // reflect(-E, N) = 2*dot(N,E)*N - E (HLSL's reflect(I,N) = I-2*dot(N,I)*N
+                        // with I=-E).
+                        const float nDotE = nx * ex + ny * ey + nz * ez;
+                        const Vector3 reflDir(2.0f * nDotE * nx - ex, 2.0f * nDotE * ny - ey, 2.0f * nDotE * nz - ez);
+                        float envR, envG, envB, envA;
+                        SampleCubeMap(*envMap, reflDir, envR, envG, envB, envA);
+
+                        const float viewAngle = nDotE;
+                        const float blendFactor = params.fresnelEnabled
+                            ? std::pow(std::max(1.0f - std::abs(viewAngle), 0.0f), params.fresnelFactor) * params.envMapAmount
+                            : params.envMapAmount;
+
+                        r = r * (1.0f - blendFactor) + (envR * a) * blendFactor + params.envMapSpecular[0] * envA * a;
+                        g = g * (1.0f - blendFactor) + (envG * a) * blendFactor + params.envMapSpecular[1] * envA * a;
+                        b = b * (1.0f - blendFactor) + (envB * a) * blendFactor + params.envMapSpecular[2] * envA * a;
+                    }
 
                     fb.depthBuffer[pixelIndex] = depth;
 
@@ -570,6 +785,51 @@ namespace CNA::Internal::Backends::Software
         // precedent for the same real scope trim.
     }
 
+    // ---- SoftwareTextureCubeBackend (SOFTWARE-82) ----
+
+    SoftwareTextureCubeBackend::SoftwareTextureCubeBackend(int size) : size_(size)
+    {
+        const std::size_t faceBytes = static_cast<std::size_t>(size) * static_cast<std::size_t>(size) * 4u;
+        for (auto& face : faces_)
+            face.assign(faceBytes, 0u);
+    }
+
+    void SoftwareTextureCubeBackend::SetData(int face, int level, int x, int y, int w, int h,
+                                             const void* data, int)
+    {
+        if (level != 0 || data == nullptr || face < 0 || face > 5)
+            return;  // mirrors SoftwareTextureBackend::UpdatePixelsLevel's no-op-beyond-level-0 precedent
+        const auto* src = static_cast<const std::uint8_t*>(data);
+        std::vector<std::uint8_t>& pixels = faces_[static_cast<std::size_t>(face)];
+        const std::size_t rowBytes = static_cast<std::size_t>(w) * 4u;
+        for (int row = 0; row < h; ++row)
+        {
+            const std::size_t dstOffset = (static_cast<std::size_t>(y + row) * static_cast<std::size_t>(size_) +
+                                          static_cast<std::size_t>(x)) * 4u;
+            std::copy(src + static_cast<std::size_t>(row) * rowBytes,
+                     src + static_cast<std::size_t>(row) * rowBytes + rowBytes,
+                     pixels.begin() + static_cast<std::ptrdiff_t>(dstOffset));
+        }
+    }
+
+    void SoftwareTextureCubeBackend::GetData(int face, int level, int x, int y, int w, int h,
+                                             void* data, int) const
+    {
+        if (level != 0 || data == nullptr || face < 0 || face > 5)
+            return;
+        auto* dst = static_cast<std::uint8_t*>(data);
+        const std::vector<std::uint8_t>& pixels = faces_[static_cast<std::size_t>(face)];
+        const std::size_t rowBytes = static_cast<std::size_t>(w) * 4u;
+        for (int row = 0; row < h; ++row)
+        {
+            const std::size_t srcOffset = (static_cast<std::size_t>(y + row) * static_cast<std::size_t>(size_) +
+                                          static_cast<std::size_t>(x)) * 4u;
+            std::copy(pixels.begin() + static_cast<std::ptrdiff_t>(srcOffset),
+                     pixels.begin() + static_cast<std::ptrdiff_t>(srcOffset) + static_cast<std::ptrdiff_t>(rowBytes),
+                     dst + static_cast<std::size_t>(row) * rowBytes);
+        }
+    }
+
     // ---- SoftwareRenderTargetBackend ----
 
     SoftwareRenderTargetBackend::SoftwareRenderTargetBackend(int w, int h, int depthFormat, bool mipMap,
@@ -700,10 +960,11 @@ namespace CNA::Internal::Backends::Software
         const bool depthTestEnabled = owner_.IsDepthTestEnabled();
         const bool blendEnabled = owner_.IsBlendEnabled();
         const int cullMode = owner_.GetCullMode();
-        RasterizeTriangleShaded(fb, depthTestEnabled, blendEnabled, cullMode, true, swTexture, 1.0f, 1.0f, 1.0f, 1.0f,
-                                rv0, rv1, rv2);
-        RasterizeTriangleShaded(fb, depthTestEnabled, blendEnabled, cullMode, true, swTexture, 1.0f, 1.0f, 1.0f, 1.0f,
-                                rv2, rv3, rv0);
+        GpuDrawParams spriteParams;
+        spriteParams.texture0 = swTexture;
+        spriteParams.textureEnabled = true;
+        RasterizeTriangleShaded(fb, depthTestEnabled, blendEnabled, cullMode, spriteParams, rv0, rv1, rv2);
+        RasterizeTriangleShaded(fb, depthTestEnabled, blendEnabled, cullMode, spriteParams, rv2, rv3, rv0);
     }
 
     // ---- SoftwareGraphicsBackend ----
@@ -785,6 +1046,11 @@ namespace CNA::Internal::Backends::Software
     std::unique_ptr<ITextureBackend> SoftwareGraphicsBackend::CreateTexture(const ImageData& data)
     {
         return std::make_unique<SoftwareTextureBackend>(data);
+    }
+
+    std::unique_ptr<ITextureCubeBackend> SoftwareGraphicsBackend::CreateTextureCube(int size, bool, int)
+    {
+        return std::make_unique<SoftwareTextureCubeBackend>(size);
     }
 
     std::unique_ptr<ISpriteBatchBackend> SoftwareGraphicsBackend::CreateSpriteBatch()
@@ -991,10 +1257,11 @@ namespace CNA::Internal::Backends::Software
     }
 
     // Phase S5/S6 (SOFTWARE-40..43, 50): the effect-aware draw path -- stride-inferred vertex
-    // layout (design decision 2), nearest-neighbor texture sampling, diffuseColor modulation, and
-    // the simplified Opaque/AlphaBlend choice (design decision 7). lightingEnabled/fogEnabled/
-    // dualTexture/envMapping/skinned are all explicitly out of scope for v1 (design decision 6) --
-    // GpuDrawParams' other fields are simply not read here.
+    // layout (design decision 2), nearest-neighbor/bilinear texture sampling, diffuseColor
+    // modulation, and the simplified Opaque/AlphaBlend choice (design decision 7).
+    // dualTexture/envMapping/skinned are supported (SOFTWARE-82; strides 32/52, see
+    // BuildGenericClipVertex/RasterizeTriangleShaded) but without any per-light diffuse lighting
+    // sum -- lightingEnabled/fogEnabled remain out of scope for v1 (design decision 6).
     void SoftwareGraphicsBackend::DrawPrimitivesEx(const IVertexBufferBackend& vb, const Matrix& world,
                                                    const Matrix& view, const Matrix& projection,
                                                    PrimitiveType primitive, int primitiveCount,
@@ -1006,17 +1273,21 @@ namespace CNA::Internal::Backends::Software
             throw std::runtime_error("SoftwareGraphicsBackend::DrawPrimitivesEx: only TriangleList is supported in v1");
         if (params.textureEnabled && params.texture0 == nullptr)
             throw std::runtime_error("SoftwareGraphicsBackend::DrawPrimitivesEx: TextureEnabled=true but texture0 is null");
+        if (params.dualTexture && params.texture1 == nullptr)
+            throw std::runtime_error("SoftwareGraphicsBackend::DrawPrimitivesEx: dualTexture=true but texture1 is null");
+        if (params.envMapping && params.envMap == nullptr)
+            throw std::runtime_error("SoftwareGraphicsBackend::DrawPrimitivesEx: envMapping=true but envMap is null");
         if (primitiveCount * 3 > vb.GetVertexCount())
             throw std::runtime_error(
                 "SoftwareGraphicsBackend::DrawPrimitivesEx: primitiveCount needs more vertices than the bound buffer has");
 
         const auto& swVb = static_cast<const SoftwareVertexBufferBackend&>(vb);
         const std::size_t stride = swVb.Stride();
-        if (stride != 16 && stride != 20 && stride != 24)
+        if (stride != 16 && stride != 20 && stride != 24 && stride != 32 && stride != 52)
             throw std::runtime_error(
-                "SoftwareGraphicsBackend::DrawPrimitivesEx: unsupported vertex stride (only 16/20/24 supported in v1)");
+                "SoftwareGraphicsBackend::DrawPrimitivesEx: unsupported vertex stride "
+                "(only 16/20/24/32/52 supported in v1)");
 
-        const auto* texture = dynamic_cast<const SoftwareTextureBackend*>(params.texture0);
         const std::uint8_t* base = swVb.Data().data();
 
         const Matrix combined = world * view * projection;
@@ -1030,7 +1301,7 @@ namespace CNA::Internal::Backends::Software
             for (int k = 0; k < 3; ++k)
             {
                 const std::uint8_t* raw = base + static_cast<std::size_t>(i * 3 + k) * stride;
-                cv[k] = BuildGenericClipVertex(raw, stride, combined, params.vertexColorEnabled);
+                cv[k] = BuildGenericClipVertex(raw, stride, combined, params);
             }
 
             ClipVertex clipped[4];
@@ -1042,13 +1313,9 @@ namespace CNA::Internal::Backends::Software
             for (int k = 0; k < clippedCount; ++k)
                 rv[k] = ClipVertexToRasterVertex(clipped[k], vw, vh);
 
-            RasterizeTriangleShaded(fb, depthTestEnabled_, blendEnabled_, cullMode_, params.textureEnabled, texture,
-                                    params.diffuseColor[0], params.diffuseColor[1], params.diffuseColor[2],
-                                    params.diffuseColor[3], rv[0], rv[1], rv[2]);
+            RasterizeTriangleShaded(fb, depthTestEnabled_, blendEnabled_, cullMode_, params, rv[0], rv[1], rv[2]);
             if (clippedCount == 4)
-                RasterizeTriangleShaded(fb, depthTestEnabled_, blendEnabled_, cullMode_, params.textureEnabled, texture,
-                                        params.diffuseColor[0], params.diffuseColor[1], params.diffuseColor[2],
-                                        params.diffuseColor[3], rv[0], rv[2], rv[3]);
+                RasterizeTriangleShaded(fb, depthTestEnabled_, blendEnabled_, cullMode_, params, rv[0], rv[2], rv[3]);
         }
     }
 
@@ -1063,6 +1330,10 @@ namespace CNA::Internal::Backends::Software
             throw std::runtime_error("SoftwareGraphicsBackend::DrawIndexedPrimitivesEx: only TriangleList is supported in v1");
         if (params.textureEnabled && params.texture0 == nullptr)
             throw std::runtime_error("SoftwareGraphicsBackend::DrawIndexedPrimitivesEx: TextureEnabled=true but texture0 is null");
+        if (params.dualTexture && params.texture1 == nullptr)
+            throw std::runtime_error("SoftwareGraphicsBackend::DrawIndexedPrimitivesEx: dualTexture=true but texture1 is null");
+        if (params.envMapping && params.envMap == nullptr)
+            throw std::runtime_error("SoftwareGraphicsBackend::DrawIndexedPrimitivesEx: envMapping=true but envMap is null");
         if (primitiveCount * 3 > ib.GetIndexCount())
             throw std::runtime_error(
                 "SoftwareGraphicsBackend::DrawIndexedPrimitivesEx: primitiveCount needs more indices than the bound buffer has");
@@ -1070,11 +1341,11 @@ namespace CNA::Internal::Backends::Software
         const auto& swVb = static_cast<const SoftwareVertexBufferBackend&>(vb);
         const auto& swIb = static_cast<const SoftwareIndexBufferBackend&>(ib);
         const std::size_t stride = swVb.Stride();
-        if (stride != 16 && stride != 20 && stride != 24)
+        if (stride != 16 && stride != 20 && stride != 24 && stride != 32 && stride != 52)
             throw std::runtime_error(
-                "SoftwareGraphicsBackend::DrawIndexedPrimitivesEx: unsupported vertex stride (only 16/20/24 supported in v1)");
+                "SoftwareGraphicsBackend::DrawIndexedPrimitivesEx: unsupported vertex stride "
+                "(only 16/20/24/32/52 supported in v1)");
 
-        const auto* texture = dynamic_cast<const SoftwareTextureBackend*>(params.texture0);
         const std::uint8_t* vbBase = swVb.Data().data();
         const std::uint8_t* ibBase = swIb.Data().data();
         const bool thirtyTwoBit = swIb.IsThirtyTwoBit();
@@ -1103,7 +1374,7 @@ namespace CNA::Internal::Backends::Software
             {
                 const std::uint32_t idx = readIndex(i * 3 + k);
                 const std::uint8_t* raw = vbBase + static_cast<std::size_t>(idx) * stride;
-                cv[k] = BuildGenericClipVertex(raw, stride, combined, params.vertexColorEnabled);
+                cv[k] = BuildGenericClipVertex(raw, stride, combined, params);
             }
 
             ClipVertex clipped[4];
@@ -1115,13 +1386,9 @@ namespace CNA::Internal::Backends::Software
             for (int k = 0; k < clippedCount; ++k)
                 rv[k] = ClipVertexToRasterVertex(clipped[k], vw, vh);
 
-            RasterizeTriangleShaded(fb, depthTestEnabled_, blendEnabled_, cullMode_, params.textureEnabled, texture,
-                                    params.diffuseColor[0], params.diffuseColor[1], params.diffuseColor[2],
-                                    params.diffuseColor[3], rv[0], rv[1], rv[2]);
+            RasterizeTriangleShaded(fb, depthTestEnabled_, blendEnabled_, cullMode_, params, rv[0], rv[1], rv[2]);
             if (clippedCount == 4)
-                RasterizeTriangleShaded(fb, depthTestEnabled_, blendEnabled_, cullMode_, params.textureEnabled, texture,
-                                        params.diffuseColor[0], params.diffuseColor[1], params.diffuseColor[2],
-                                        params.diffuseColor[3], rv[0], rv[2], rv[3]);
+                RasterizeTriangleShaded(fb, depthTestEnabled_, blendEnabled_, cullMode_, params, rv[0], rv[2], rv[3]);
         }
     }
 }

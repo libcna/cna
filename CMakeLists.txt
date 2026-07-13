@@ -6529,6 +6529,12 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SOFTWARE")
     set_tests_properties(Software_Clipping PROPERTIES
         TIMEOUT 30
         LABELS "Software")
+
+    cna_software_test(cna_test_software_dual_envmap_skinned examples/software_dual_envmap_skinned_test.cpp)
+    add_test(NAME Software_DualEnvmapSkinned COMMAND cna_test_software_dual_envmap_skinned)
+    set_tests_properties(Software_DualEnvmapSkinned PROPERTIES
+        TIMEOUT 30
+        LABELS "Software")
 endif()
 
 # --- Task 6.1: real two-process ENet loopback test harness ---

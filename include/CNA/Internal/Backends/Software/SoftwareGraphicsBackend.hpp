@@ -2,6 +2,7 @@
 
 #include "../Common/IGraphicsBackend.hpp"
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -125,10 +126,32 @@ namespace CNA::Internal::Backends::Software
         bool bound_ = false;
     };
 
-    // Cube-map render targets, TextureCube, Texture3D, and hardware occlusion queries are out of
-    // scope for v1 (plan_software.md Boundaries) -- CreateRenderTargetCube/CreateTextureCube/
-    // CreateTexture3D/CreateOcclusionQuery all keep IGraphicsBackend's own shared default
-    // (returns nullptr), so no stub classes are needed for them here.
+    /// SOFTWARE-82: real 6-face RGBA8 cube map storage, for EnvironmentMapEffect. Mip levels
+    /// beyond 0 aren't stored (mirrors SoftwareTextureBackend::UpdatePixelsLevel's own no-op
+    /// precedent -- no mipmapping support in v1).
+    class SoftwareTextureCubeBackend final : public ITextureCubeBackend
+    {
+    public:
+        explicit SoftwareTextureCubeBackend(int size);
+
+        void SetData(int face, int level, int x, int y, int w, int h,
+                    const void* data, int dataLength) override;
+        void GetData(int face, int level, int x, int y, int w, int h,
+                    void* data, int dataLength) const override;
+
+        [[nodiscard]] int GetSize() const { return size_; }
+        /// Real RGBA8 pixel storage for one of the 6 faces (CubeMapFace ordinal 0-5), size*size*4
+        /// bytes -- the rasterizer's cube sampler (SOFTWARE-82) reads directly from here.
+        [[nodiscard]] const std::vector<std::uint8_t>& FacePixels(int face) const { return faces_[face]; }
+
+    private:
+        int size_ = 0;
+        std::array<std::vector<std::uint8_t>, 6> faces_;
+    };
+
+    // Cube-map render targets, Texture3D, and hardware occlusion queries remain out of scope for
+    // v1 (plan_software.md Boundaries) -- CreateRenderTargetCube/CreateTexture3D/
+    // CreateOcclusionQuery all keep IGraphicsBackend's own shared default (returns nullptr).
 
     class SoftwareEffectBackend final : public IEffectBackend
     {
@@ -233,6 +256,8 @@ namespace CNA::Internal::Backends::Software
         void SetRenderTarget2D(IRenderTargetBackend* rt) override;
         std::unique_ptr<IEffectBackend> CreateEffectBackend(const std::string& vertSrc,
                                                              const std::string& fragSrc) override;
+        std::unique_ptr<ITextureCubeBackend> CreateTextureCube(int size, bool mipMap,
+                                                                int surfaceFormat) override;
 
         void ApplyBlendState(int colorSrcBlend, int alphaSrcBlend, int colorDstBlend, int alphaDstBlend,
                              int colorBlendFunc, int alphaBlendFunc) override;
