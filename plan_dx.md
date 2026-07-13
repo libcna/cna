@@ -1,5 +1,15 @@
 # Direct3D 11 / Direct3D 12 Graphics Backends — Implementation Plan
 
+> **Status (2026-07-14): Phase DX1 through Phase DX11 are ALL closed** — every task except
+> `DX-90`/`DX-91` (real-Windows hardware, `needs_human`, no such machine available in this dev
+> environment) and Phase DX12 (D3D12, separately authorized but not yet started). D3D11 is a real,
+> feature-complete-per-this-plan backend: 6 CTest binaries, 96+ checks, all passing through
+> Wine+DXVK on a real GPU. See the dedicated milestone paragraphs below (search "also closed") for
+> each phase's own real proof, or jump straight to `docs/d3d11-backend.md` for the current-state
+> summary. The paragraphs immediately below are kept as the original, blow-by-blow session history
+> (Phase DX1 → DX2 → DX4's core → `DX-80`, 2026-07-13) — historically accurate at the time each was
+> written, not stale placeholders.
+>
 > **Status: Phase DX1 + Phase DX2 + Phase DX4's core + `DX-80` all closed 2026-07-13**, authorized
 > and completed the same day. `D3D11GraphicsBackend` is real code now, not just a plan:
 > `include/CNA/Internal/Backends/D3D11/D3D11GraphicsBackend.hpp`/`.cpp` implement every
@@ -248,6 +258,22 @@
 > (Check AC, added 2026-07-14) close `DX-69`'s own honestly-flagged "fog wired but not exercised by
 > a dedicated on/off pixel test" gap. **Phase DX11 (docs) is the only phase left before Direct3D 12
 > can be considered.**
+>
+> **Phase DX11 (docs, `DX-95`–`DX-98`) also closed 2026-07-14 — every phase of this plan is now
+> closed except the two explicitly-deferred real-Windows-hardware rows and Phase DX12 itself.** New
+> `docs/d3d11-backend.md` (mirrors `docs/software-backend.md`/`docs/headless-backend.md`'s own
+> structure), a real `D3D11` column added to every applicable table in
+> `docs/graphics-backend-feature-matrix.md` (honestly mixing ✅/🟨/⬜ per row rather than blanket-✅ing
+> anything the underlying code merely supports), a new "Build (Windows cross-compilation — D3D11
+> backend)" section + "Tested Compilers" row in `README.md`, and confirmation that `NEXT.md` has
+> cross-referenced this plan since Phase DX1. **This is the actual milestone**: Phase DX1 through
+> DX11 are all ✅ — real device/swap-chain/back-buffer, a shared `D3DCommon` mapping/shader/
+> constant-buffer core, all 10 stock HLSL shader variants + custom `ShaderEffect`, real vertex/index
+> buffers, textures/render targets (MSAA/MRT/occlusion queries), cached state objects, a real
+> SpriteBatch, and a cross-cutting test suite (mutation-verified, DXVK-engagement-gated) — **6 CTest
+> binaries, 96+ checks, all passing through Wine+DXVK on a real GPU**. What's left: `DX-90`/`DX-91`
+> (real Windows hardware — `needs_human`, no such machine available here) and Phase DX12 (D3D12,
+> separately authorized by the project owner to start "later if time allows," not yet begun).
 >
 > **Direct3D 11 is the actual near-term target; Direct3D 12 is written up in full but authorized to
 > follow once D3D11 is substantially complete** — see "Why D3D11 first, D3D12 later" below.
@@ -742,12 +768,17 @@ each capability — this phase names the cross-cutting suites, not "when to star
 
 ## Phase DX11 — Docs
 
+**Closed 2026-07-14 — this is the last phase of the D3D11 plan itself.** Phase DX1 through DX11 are
+now all ✅ except the two explicitly-deferred, real-Windows-hardware-gated rows (`DX-90`/`DX-91`,
+`needs_human`, no such machine available in this dev environment). Phase DX12 (D3D12) remains
+separately authorized-but-not-started (design decision 9) — see that phase's own intro.
+
 | # | Task | Status | Notes |
 |---|---|---|---|
-| DX-95 | `docs/d3d11-backend.md`: what it's for, current capability boundary, the Wine+DXVK dev-loop setup (`DX-2`/`DX-3`), how to write a test, known limitations — mirrors `docs/software-backend.md`/`docs/headless-backend.md`'s own structure | ⬜ | Write incrementally as capabilities land (`plan_software.md` Phase S8's own discipline), not all at the end. |
-| DX-96 | `docs/graphics-backend-feature-matrix.md`: add a `D3D11` column once its feature set is broad enough for a meaningful row-by-row comparison (mirrors how `HEADLESS`/`SOFTWARE` were each given their own explanatory note instead of a premature column) | ⬜ | |
-| DX-97 | `README.md`: add D3D11 to the "Tested Compilers" table and a "Build (Windows cross-compilation — D3D11 backend)" section, mirroring the existing `SDL_RENDERER` MinGW-w64 section exactly | ⬜ | |
-| DX-98 | Cross-reference this plan from `NEXT.md` once Phase DX1 actually starts (not before — this plan is not yet authorized, see the status banner) | ⬜ | |
+| DX-95 | `docs/d3d11-backend.md`: what it's for, current capability boundary, the Wine+DXVK dev-loop setup (`DX-2`/`DX-3`), how to write a test, known limitations — mirrors `docs/software-backend.md`/`docs/headless-backend.md`'s own structure | ✅ | **Closed 2026-07-14.** New `docs/d3d11-backend.md`, structured to match `docs/software-backend.md`/`docs/headless-backend.md` exactly (Status → What it's for/isn't → Development environment → Writing a test → Known limitations). Known-limitations list is honest and specific, not generic: real-Windows gate (`DX-90`/`DX-91`), device-lost recovery detection-only (`DX-27`), untested debug-layer-missing fallback (`DX-21`), the 5 combo `Clear*` variants untested beyond plain `Clear` (`DX-25`), specular highlights not pixel-verified (the lit-branch test zeroes specular for CPU-comparison determinism), multi-light/`EmissiveColor` not separately discriminating-tested, mip-chain/`DepthStencilFormat` fidelity untested, `Model`/`SpriteFont` not separately exercised, and the pre-existing unrelated `cna_reference_dump`/`cna_demo_2d` link failure found during `DX-81`. Written as a single pass now that the backend is feature-complete, not incrementally — this plan's own session already recorded each capability's real status row-by-row as it landed, so there was no stale-doc risk to avoid by writing earlier. |
+| DX-96 | `docs/graphics-backend-feature-matrix.md`: add a `D3D11` column once its feature set is broad enough for a meaningful row-by-row comparison (mirrors how `HEADLESS`/`SOFTWARE` were each given their own explanatory note instead of a premature column) | ✅ | **Closed 2026-07-14.** Added a real `D3D11` column to every applicable table (2D SpriteBatch/SpriteFont, Stock Effects, RenderTarget/MSAA/mip/depth, Texture2D/Texture3D/TextureCube, GraphicsDevice state objects, OcclusionQuery, Model), plus a new doc-level explanation of what a D3D11 ✅/🟨/⬜ cell actually means (✅ = real GPU-facing check this session; 🟨 = implemented but not independently pixel-verified; ⬜ = not attempted this session — distinct from this doc's pre-existing ❌, "tested and found broken"). Deliberately did **not** blanket-✅ every row just because the underlying capability exists in code — cross-checked each cell against what a fork's own commit report actually claimed was tested (e.g. specular highlights, multi-light BasicEffect/EnvironmentMapEffect/SkinnedEffect variants, `SpriteFont`, `Model`, mip chains, and 4 of 5 `Clear*` combo variants are honestly 🟨/⬜, not ✅, despite the underlying code existing). |
+| DX-97 | `README.md`: add D3D11 to the "Tested Compilers" table and a "Build (Windows cross-compilation — D3D11 backend)" section, mirroring the existing `SDL_RENDERER` MinGW-w64 section exactly | ✅ | **Closed 2026-07-14.** New "Tested Compilers" row (Linux→Windows cross, MinGW-w64, D3D11, ✅ verified building + 6-CTest/96+-check suite under Wine+DXVK, real-Windows gate noted inline) and a new "Build (Windows cross-compilation — D3D11 backend)" section mirroring `SDL_RENDERER`'s own section shape (toolchain install, exact CMake invocation, exact `ctest` invocation), plus a new Project-Status bullet alongside the existing per-backend bullets (`SDL_RENDERER`/`EASYGL`/`VULKAN`/`BGFX`/`WEBGPU`). The older §6 backend-selection bullet list (`SDL_RENDERER`/`EASYGL`/`BGFX`/`VULKAN`) was found to already be stale before this task (missing `HEADLESS`/`SOFTWARE`/`WEBGPU` too, not just `D3D11`) — left as a pre-existing, out-of-scope gap rather than opportunistically fixed here. |
+| DX-98 | Cross-reference this plan from `NEXT.md` once Phase DX1 actually starts (not before — this plan is not yet authorized, see the status banner) | ✅ | **Closed 2026-07-14.** This row's original gating condition is long since satisfied — the plan was authorized 2026-07-13 and Phases DX1–DX11 are now closed. `NEXT.md` has cross-referenced `plan_dx.md` since the very first Phase DX1/DX2 fork this session (top-of-file banner + §1 project summary), and every subsequent fork kept it current; this task's own closing pass (see below) re-verified and refreshed it once more end-to-end rather than assuming the running updates were still fully accurate. |
 
 ---
 
