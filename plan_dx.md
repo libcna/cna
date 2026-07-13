@@ -136,11 +136,14 @@ parity" discipline already documented for `SDL_RENDERER`):
      tooling that turns them into embeddable bytecode (`DX-13`–`DX-15`) — this directly mirrors the
      project's own already-proven Vulkan precedent (`src/CNA/Internal/Backends/Vulkan/shaders/
      compile_shaders.py` → `spirv_shaders.hpp`, GLSL→SPIR-V, checked-in generated header, no
-     runtime shader compiler dependency). D3D11 and D3D12 both accept Shader Model 5 DXBC bytecode
-     from the same HLSL source and the same offline compiler (`fxc`/`D3DCompile`), so **one shared
-     HLSL source tree and one shared compile step cover both backends** — no second shader language
-     or toolchain fork needed for v1. (DXIL/`dxc` is a possible later upgrade for D3D12 specifically,
-     not required — see Phase DX12's own notes.)
+     runtime shader compiler dependency). D3D12 genuinely can consume Shader Model 5 DXBC bytecode
+     compiled from the same HLSL source and the same offline compiler (`fxc`/`D3DCompile`) as D3D11
+     — so **one shared HLSL source tree and one shared compile step can bootstrap both backends**,
+     stated carefully: this is exactly right and sufficient for D3D11, but for D3D12 it is a
+     **compatible starting point, not a promise of the final shader system** — DXIL/`dxc`, newer
+     shader models, a modern root-signature-driven binding workflow, and (eventually) ray-tracing
+     shaders are all legitimate future D3D12-specific upgrades this plan should not be read as
+     ruling out. See Phase DX12's own notes (`DX-107`/`DX-111`).
    - The stride-keyed vertex-format-inference convention this project already uses on
      WebGPU/Software (`DX-16`) — reused, not reinvented.
 5. **HLSL shader strategy: offline-compiled bytecode, not runtime `D3DCompile`.** Mirrors the
@@ -184,6 +187,45 @@ parity" discipline already documented for `SDL_RENDERER`):
    Same convention as `plan_software.md`'s Phase S9: a concrete, scoped-out task list the project
    owner can approve later, one task or one batch at a time — not a vague "someday" note. Do not
    start Phase DX12 without an explicit go-ahead, even after Phase DX1–DX11 (D3D11) is fully done.
+10. **COM object lifetime: one decided convention before Phase DX2 lands, not per-file
+    improvisation.** `Microsoft::WRL::ComPtr<T>` is the obvious default on real Windows/MSVC, but
+    its availability and ergonomics under MinGW-w64 — this project's actual *primary* Debian
+    dev-loop compiler (Phase DX1) — are not something to assume without checking (`DX-6`). Options:
+    `Microsoft::WRL::ComPtr` (Windows-only, MinGW support varies by version/headers actually
+    present); `wil::com_ptr` (an extra vendored dependency); a small project-local `CNA::ComPtr<T>`
+    (mirrors this project's own "add a minimal stub rather than a new dependency" philosophy, see
+    `CLAUDE.md`'s SharpRuntime-extension rule); or raw `IUnknown::Release()` wrapped in whatever
+    RAII pattern this codebase already uses elsewhere. **Leaning recommendation, not yet decided**:
+    a small project-local `ComPtr<T>` unless `DX-6` finds `Microsoft::WRL::ComPtr` genuinely clean
+    under the already-standardized MinGW-w64 toolchain — this avoids tying the backend to a
+    Windows-only header/dependency question when the primary dev loop is Linux-hosted cross-
+    compilation. Whichever is chosen, **every** `ID3D11*`/`IDXGI*`/`ID3D12*` interface pointer
+    anywhere in `D3D11GraphicsBackend`/`D3D12GraphicsBackend`/`D3DCommon` uses it — no bare
+    `Release()` call sites. Without this, leaks on resize, double-releases, and forgotten releases
+    on a partially-failed initialization are the expected failure mode for a hand-rolled D3D
+    backend, not a hypothetical risk.
+11. **Two independent resource-lifetime groups: `CreateDeviceResources()` and
+    `CreateWindowSizeDependentResources()`.** Device-level resources (device, context, immutable
+    state-object caches, compiled shaders) are created once and only torn down on device-removed
+    recovery (`DX-27`). Window-size-dependent resources (swap chain, back-buffer RTV, default DSV,
+    viewport) are recreated on resize (`DX-29`) *and* on device-removed recovery — but a plain
+    resize must never touch the first group. This directly shapes how Phase DX4's tasks are split
+    (`DX-20`/`DX-21` = device group; `DX-22`–`DX-24` = window-size group) — a flat, undivided
+    "create everything" function is exactly what makes resize and device-loss recovery fragile in a
+    hand-rolled D3D backend.
+12. **D3D11 device creation degrades gracefully — the debug layer and higher feature levels are
+    best-effort, not hard requirements.** A build that only ever ran under Wine+DXVK (which does
+    not require the real D3D11 SDK debug layer to be installed) must not implicitly assume every
+    real Windows machine has it — `DX-21` retries device creation without
+    `D3D11_CREATE_DEVICE_DEBUG` on `DXGI_ERROR_SDK_COMPONENT_MISSING` and logs
+    `"D3D11 debug layer unavailable; retrying without it."` rather than failing outright. Likewise
+    `DX-20` requests feature levels as a fallback list (`11_1`→`11_0`→`10_1`→`10_0`, with a
+    retry-without-11_1 path for drivers that reject an explicit 11.1 request with `E_INVALIDARG`)
+    rather than a single hardcoded `D3D_FEATURE_LEVEL_11_0`. CNA's actual minimum feature
+    requirement can still end up being 11.0 in practice (reject anything the negotiation returns
+    below that) — the point is that the *negotiation* should be broad enough not to fail
+    unnecessarily on real hardware this plan hasn't been tested against yet, and the backend should
+    record and report whatever feature level it actually got.
 
 ---
 
@@ -230,8 +272,9 @@ a task ✅ without both. Tasks whose acceptance criteria genuinely require real 
 | DX-1 | Confirm `cmake/toolchains/mingw-w64.cmake` (already used for `SDL_RENDERER`, see `README.md`) also resolves `<d3d11.h>`/`<dxgi.h>`/`<d3dcompiler.h>` and their import libs (`libd3d11.a`/`libdxgi.a`/`libdxguid.a`/`libd3dcompiler.a`) from the `mingw-w64` apt package on this machine | ⬜ | Spike task: a throwaway `.cpp` that just includes the headers and links the libs, built via the existing toolchain file, no CNA integration yet. If anything is missing/thin, record exactly what and consider whether Windows SDK headers need to be vendored instead (design decision 3's caveat). |
 | DX-2 | Install and configure a dedicated Wine prefix + DXVK for D3D11 testing (`WINEPREFIX=~/.wine-cna-d3d11`, DXVK's `d3d11.dll`/`dxgi.dll` installed into it), following the project owner's own researched steps | ⬜ | Document exact install commands in `docs/d3d11-backend.md` (Phase DX11) once confirmed working, not just in this plan. |
 | DX-3 | `scripts/run-wine-dxvk.sh` wrapper (mirrors the existing `scripts/run-all-backend-smoke-tests.sh` convention): sets `WINEPREFIX`, optional `DXVK_HUD`/`DXVK_LOG_LEVEL`, execs `wine64 "$1"` | ⬜ | Needed so CTest registration (Phase DX10) can invoke Windows `.exe` test binaries the same way a human would from the CLI. |
-| DX-4 | Prove the loop end-to-end with a minimal non-CNA smoke program: create a bare `ID3D11Device`+swap chain, clear to a known color, run under `wine64` with DXVK installed, confirm no crash/error in `DXVK_LOG_LEVEL=info` output | ⬜ | This is the "does the whole chain actually work on this machine" gate before any CNA-specific code is written — do not skip straight to Phase DX2 without this passing. |
+| DX-4 | Prove the loop end-to-end with a minimal non-CNA smoke program: create a bare `ID3D11Device`+swap chain, clear to a known color, run under `wine64` with DXVK installed, confirm no crash/error in `DXVK_LOG_LEVEL=info` output **and confirm DXVK is actually the thing that ran** (see Notes) | ⬜ | Merely "ran under Wine without crashing" is not sufficient — Wine can silently fall back to its own `WineD3D` implementation instead of DXVK if the DXVK DLL override isn't actually in effect, which would make every later pixel test's "passed under Wine" claim meaningless. Confirm: (1) a DXVK log file was actually created in the configured `DXVK_LOG_PATH`; (2) its contents identify a real DXVK device/adapter line (DXVK logs its own version and the selected Vulkan device on startup); (3) optionally, run once with `DXVK_HUD=devinfo,version` and visually confirm the HUD shows a DXVK version string, not nothing/WineD3D. Record the exact verification method used in `docs/d3d11-backend.md` (`DX-95`) so every later test run can be spot-checked the same way. |
 | DX-5 | Document the CLion CMake-profile setup the project owner described (separate `Windows-D3D11-MinGW` profile, custom "run" step invoking `scripts/run-wine-dxvk.sh`) | ⬜ | Documentation-only task; no new CMake logic beyond what Phase DX2 adds. |
+| DX-6 | Decide the COM object lifetime convention (design decision 10) before any Phase DX2 code lands: spike whether `Microsoft::WRL::ComPtr<T>` builds cleanly against this project's actual MinGW-w64 toolchain (`cmake/toolchains/mingw-w64.cmake`); if not (or if it's awkward), implement a small project-local `CNA::ComPtr<T>` in `D3DCommon` instead | ⬜ | This decision gates every later task that touches a `ID3D11*`/`IDXGI*` pointer — resolve it once, here, not piecemeal as each later task happens to need a COM pointer. |
 
 ---
 
@@ -242,7 +285,7 @@ a task ✅ without both. Tasks whose acceptance criteria genuinely require real 
 | DX-10 | Add `"D3D11"` and `"D3D12"` to `CNA_GRAPHICS_BACKEND`'s CMake `STRINGS` property and matching `CNA_BACKEND_D3D11`/`CNA_BACKEND_D3D12` option flags, following the exact existing pattern (`CMakeLists.txt` lines ~94–139) | ⬜ | `D3D12`'s option flag can exist from the start (cheap), even though Phase DX12 itself is not authorized — matches how every other backend option is declared together. |
 | DX-11 | `FATAL_ERROR` guard: reject `CNA_GRAPHICS_BACKEND` = `D3D11`/`D3D12` when `CMAKE_SYSTEM_NAME` is not `Windows`, with a message pointing at `cmake/toolchains/mingw-w64.cmake` (design decision 2) | ⬜ | Place near the existing `BGFX`-platform-`WARNING` check (`CMakeLists.txt` line ~161) for discoverability, but as `FATAL_ERROR` not `WARNING` — these truly cannot build elsewhere. |
 | DX-12 | `cna_backend_graphics_d3dcommon` static library target + `cna_backend_graphics_d3d11`/`cna_backend_graphics_d3d12` targets (`elseif(CNA_GRAPHICS_BACKEND STREQUAL "D3D11")` / `"D3D12"` blocks, mirroring every existing backend's own block) | ⬜ | `d3d11`/`d3d12` targets each `target_link_libraries(... cna_backend_graphics_d3dcommon d3d11 dxgi dxguid d3dcompiler)` (D3D12 additionally links `d3d12`) — see design decision 3, no `find_package`/`FetchContent` needed. |
-| DX-13 | `include/CNA/Internal/Backends/D3D11/D3D11GraphicsBackend.hpp` + `src/CNA/Internal/Backends/D3D11/D3D11GraphicsBackend.cpp`: a class implementing every `IGraphicsBackend` pure virtual — real where Phase DX2 can make it real (construction/teardown), honest stubs elsewhere until later phases replace them (mirrors `HEADLESS-3`/`SOFTWARE-3`'s own bar: `CnaTests` must link cleanly against it even before most methods are real) | ⬜ | |
+| DX-13 | `include/CNA/Internal/Backends/D3D11/D3D11GraphicsBackend.hpp` + `src/CNA/Internal/Backends/D3D11/D3D11GraphicsBackend.cpp`: a class implementing every `IGraphicsBackend` pure virtual — real where Phase DX2 can make it real (construction/teardown), honest stubs elsewhere until later phases replace them (mirrors `HEADLESS-3`/`SOFTWARE-3`'s own bar: `CnaTests` must link cleanly against it even before most methods are real) | ⬜ | Every COM interface member on this class uses whatever pointer convention `DX-6` decided (design decision 10) from the very first commit — do not start with bare pointers "for now" and convert later. |
 | DX-14 | `CreateGraphicsBackend()` factory dispatch for `D3D11` (and a placeholder, throwing-if-selected dispatch for `D3D12` until Phase DX12 starts) | ⬜ | |
 | DX-15 | First real build: Windows cross-build via `cmake/toolchains/mingw-w64.cmake -DCNA_GRAPHICS_BACKEND=D3D11`, confirm `CNA` and `CnaTests` targets both link | ⬜ | This is the actual "does the skeleton compile" gate for the whole plan. |
 
@@ -268,15 +311,23 @@ Phase DX4–DX9 task actually needs it, per the "Active execution order" note ab
 
 ## Phase DX4 — D3D11 device, swap chain, back buffer
 
+Split into two independent resource-lifetime groups per design decision 11 —
+`CreateDeviceResources()` (`DX-20`/`DX-21`) and `CreateWindowSizeDependentResources()`
+(`DX-22`–`DX-24`) — specifically so resize (`DX-29`) and device-removed recovery (`DX-27`) each
+touch only the group they actually need to.
+
 | # | Task | Status | Notes |
 |---|---|---|---|
-| DX-20 | `ID3D11Device`/`ID3D11DeviceContext` creation via `D3D11CreateDeviceAndSwapChain` (feature level 11.0, `D3D11_SDK_VERSION`), debug layer enabled in debug builds (`D3D11_CREATE_DEVICE_DEBUG`) | ⬜ | |
-| DX-21 | `IDXGISwapChain` creation targeting the real `HWND` from `SDL_PROP_WINDOW_WIN32_HWND_POINTER` (design decision 7), sized from `PresentationParameters` | ⬜ | |
-| DX-22 | Back-buffer `ID3D11RenderTargetView` + default depth-stencil `ID3D11Texture2D`/`ID3D11DepthStencilView`, sized to match the swap chain, recreated on resize | ⬜ | |
-| DX-23 | Real `Clear(r,g,b,a)` (`ClearRenderTargetView`) and depth/stencil-inclusive `Clear*` variants (`ClearDepthStencilView`) | ⬜ | |
-| DX-24 | Real `Present()` (`IDXGISwapChain::Present`), `SetSwapInterval`/`SetPresentationMode` mapped to the sync-interval/present-flags arguments | ⬜ | |
-| DX-25 | `ReadBackbuffer()`/`GetBackBufferData()`: real GPU→CPU readback via a staging `ID3D11Texture2D` (`D3D11_USAGE_STAGING` + `CopyResource` + `Map`) — this backend's first genuine pixel-correctness proof, same bar `SOFTWARE-13` set | ⬜ | First real pixel test candidate (Phase DX10): clear to a known color, read back, assert exact match. |
-| DX-26 | Window resize handling: swap chain `ResizeBuffers`, RTV/DSV recreation, viewport update | ⬜ | |
+| DX-20 | `CreateDeviceResources()`: `ID3D11Device`/`ID3D11DeviceContext` creation via `D3D11CreateDevice` (**not** the combined `...AndSwapChain` entry point — device creation is deliberately separated from swap-chain creation, design decision 11), requesting feature levels as a fallback array `{11_1, 11_0, 10_1, 10_0}`; if the call returns `E_INVALIDARG` retry once with `11_1` dropped from the array (some drivers reject an explicit 11.1 request outright), `D3D11_SDK_VERSION` | ⬜ | Record the actual obtained `D3D_FEATURE_LEVEL` (`GetFeatureLevel()`) and log it (design decision 12). CNA may still end up rejecting anything below 11.0 once negotiation completes — that's a separate policy decision from making the negotiation itself broad. |
+| DX-21 | Debug layer as best-effort: attempt the `DX-20` call with `flags \| D3D11_CREATE_DEVICE_DEBUG` first; if it returns `DXGI_ERROR_SDK_COMPONENT_MISSING`, retry the *exact same* call with that flag cleared and log `"D3D11 debug layer unavailable; retrying without it."` (design decision 12) — the debug layer must never be a hard requirement for the backend to construct | ⬜ | This is the concrete reason `DX-20` is split out of `D3D11CreateDeviceAndSwapChain`: the retry-without-debug-layer logic needs to wrap the device-creation call specifically. A debug build that only ever ran under Wine (where DXVK doesn't require the real D3D11 SDK debug layer to be installed) must not silently assume every real Windows machine has it — this exact gap is why `DX-90`'s real-Windows checklist exists. |
+| DX-22 | `CreateWindowSizeDependentResources()`, part 1 — modern swap-chain creation: `IDXGIDevice` (`QueryInterface` off the `ID3D11Device`) → `IDXGIAdapter` (`GetParent`) → `IDXGIFactory2` (`GetParent`) → `IDXGIFactory2::CreateSwapChainForHwnd`, targeting the real `HWND` from `SDL_PROP_WINDOW_WIN32_HWND_POINTER` (design decision 7), sized from `PresentationParameters`, flip-model (`DXGI_SWAP_EFFECT_FLIP_DISCARD`) | ⬜ | Deliberately not the legacy `D3D11CreateDeviceAndSwapChain` combined path — the modern DXGI factory chain is what makes flip-model presentation (and `DX-23`'s tearing query) possible. A throwaway `D3D11CreateDeviceAndSwapChain`-based spike is fine for `DX-4`'s own non-CNA smoke test, but the real backend uses this path from the start, not as a later "modernization" pass. |
+| DX-23 | Tearing-support query: `IDXGIFactory5::CheckFeatureSupport(DXGI_FEATURE_PRESENT_ALLOW_TEARING, ...)`; store the result for `DX-26`'s use | ⬜ | Not universally available — query, don't assume. Confirm during `DX-4`/here what DXVK itself reports for this under Wine, since that's this project's primary dev-loop environment. |
+| DX-24 | `CreateWindowSizeDependentResources()`, part 2 — back-buffer `ID3D11RenderTargetView` + default depth-stencil `ID3D11Texture2D`/`ID3D11DepthStencilView`, sized to match the swap chain | ⬜ | |
+| DX-25 | Real `Clear(r,g,b,a)` (`ClearRenderTargetView`) and depth/stencil-inclusive `Clear*` variants (`ClearDepthStencilView`) | ⬜ | |
+| DX-26 | Real `Present()`: sync interval and tearing are **backend state**, not a direct D3D11 "set swap interval" API — there is no such entry point. `SetSwapInterval`/`SetPresentationMode` just update stored fields (`vsyncEnabled_`; `allowTearing_` gated by `DX-23`'s query result); `Present()` itself computes `UINT syncInterval = vsyncEnabled_ ? 1 : 0` and `UINT flags = (allowTearing_ && !vsyncEnabled_) ? DXGI_PRESENT_ALLOW_TEARING : 0`, then calls `swapChain->Present(syncInterval, flags)` | ⬜ | Corrects this plan's own earlier, inaccurate framing of `SetSwapInterval` as something mapped directly onto a present-time call — it's a state write now, applied every `Present()`. |
+| DX-27 | Device-lost/removed **detection**, starting here in Phase DX4 — not deferred to `DX-90`: check the `HRESULT` returned by `Present()` (and any other call that can surface it) for `DXGI_ERROR_DEVICE_REMOVED`/`DXGI_ERROR_DEVICE_RESET`; on either, call `device->GetDeviceRemovedReason()` and log/report the reason | ⬜ | Detection/diagnostics only at this stage — full automatic recreate-everything recovery is real, additional work, legitimately deferred, but every later phase's draw/present call sites should already be able to surface "the device is gone" instead of silently misbehaving or crashing. `DX-90` verifies this against a *real* device-removal scenario on real hardware/driver, which Wine+DXVK cannot manufacture convincingly. |
+| DX-28 | `ReadBackbuffer()`/`GetBackBufferData()`: real GPU→CPU readback via a staging `ID3D11Texture2D` (`D3D11_USAGE_STAGING` + `CopyResource` + `Map`) — this backend's first genuine pixel-correctness proof, same bar `SOFTWARE-13` set | ⬜ | First real pixel test candidate (Phase DX10): clear to a known color, read back, assert exact match. |
+| DX-29 | Window resize handling: tear down and recreate **only** `CreateWindowSizeDependentResources()`'s outputs (`DX-22`–`DX-24`: swap chain `ResizeBuffers`, RTV/DSV recreation, viewport update) — `CreateDeviceResources()`'s device/context/shader/state caches (`DX-20`/`DX-21`) are untouched (design decision 11) | ⬜ | |
 
 ---
 
@@ -358,7 +409,8 @@ each capability — this phase names the cross-cutting suites, not "when to star
 | DX-82 | State-object tests: blend/depth-stencil/rasterizer, mirroring the existing `Vulkan_BlendState_*`/`Vulkan_DepthStencilState_*` test family | ⬜ | |
 | DX-83 | Resize/swap-chain tests: `BackBufferWidth`/`Height` changes, fullscreen toggle (Wine-only verification here; real fullscreen-transition behavior needs the real-Windows checklist, `DX-90`) | ⬜ | |
 | DX-84 | `Discriminating power independently verified` pass for at least the first landed pixel test (`git stash`/targeted-mutation methodology, per this project's established convention) — sets the pattern for every later D3D11 test | ⬜ | |
-| DX-90 | **Real-Windows verification checklist** (cannot be satisfied by Wine+DXVK alone — see "Development environment" above): real DXGI present-mode/tearing behavior; device-lost/removed handling; WARP fallback; at least one real driver each from Intel/AMD/NVIDIA if available; D3D11 debug-layer warnings reviewed for anything Wine's DXVK path would have masked; MSVC build (not just MinGW) at least compiles and passes the same test suite | ⬜ | Do not mark Phase DX4–DX9 "done" project-wide from Wine-only results — this checklist is the actual completion gate, matching this project's own "Wine proves the logic, not real-hardware parity" rule for `SDL_RENDERER`. |
+| DX-85 | `scripts/run-wine-dxvk.sh` (or the CTest harness built on top of it) asserts DXVK was actually engaged for the run, not silently a `WineD3D` fallback — reuses `DX-4`'s own verification method (DXVK log file exists and identifies a real DXVK device/adapter line) as an automated check, not just a one-time manual spike | ⬜ | Directly closes the gap the project owner flagged: "pouhé spuštění pod Wine nestačí" (merely running under Wine isn't enough) — without this, the whole D3D11 pixel-test suite could quietly be validating `WineD3D`'s behavior instead of DXVK's (i.e., instead of a real Direct3D-semantics path), and nobody would notice from green CTest output alone. |
+| DX-90 | **Real-Windows verification checklist** (cannot be satisfied by Wine+DXVK alone — see "Development environment" above): real DXGI present-mode/tearing behavior; **full** device-lost/removed recovery (`DX-27` only added detection+logging; actually recreating all resources after a real device-removal event on real hardware is verified here); WARP fallback; at least one real driver each from Intel/AMD/NVIDIA if available; D3D11 debug-layer warnings reviewed for anything Wine's DXVK path would have masked (including confirming `DX-21`'s debug-layer-missing fallback path is never silently hit on a machine that should have it); MSVC build (not just MinGW) at least compiles and passes the same test suite | ⬜ | Do not mark Phase DX4–DX9 "done" project-wide from Wine-only results — this checklist is the actual completion gate, matching this project's own "Wine proves the logic, not real-hardware parity" rule for `SDL_RENDERER`. |
 
 ---
 
@@ -390,11 +442,11 @@ grained than the D3D11 phases above, since detailed design should wait until D3D
 | DX-104 | Command allocators + command lists, per-frame-in-flight (matches this project's own Vulkan/Bgfx "batch a frame's draws" precedent conceptually, but D3D12 needs its own explicit allocator-reset lifecycle) | ⬜ | |
 | DX-105 | Fences + frame synchronization (`ID3D12Fence`, `GetCompletedValue`/`SetEventOnCompletion`), N-frames-in-flight back-pressure | ⬜ | |
 | DX-106 | Resource barriers: explicit `D3D12_RESOURCE_BARRIER` transitions for every render-target/texture state change this backend needs (present↔render-target, shader-resource↔render-target, etc.) | ⬜ | The single biggest source of "silently wrong" bugs in a first D3D12 backend, per the project owner's own research notes — needs real, deliberate state tracking per resource, not ad-hoc barrier calls. |
-| DX-107 | Pipeline state objects (PSOs): one per (shader variant, input layout, blend/depth/rasterizer state combination) — reuse `D3DCommon`'s `DX-12-state` mapping tables and `DX-13-hlsl`/`hlsl_shaders.hpp` bytecode (DXBC, same source as D3D11 — design decision 5) | ⬜ | PSO explosion (every state combination needs its own object) is a real design question — decide a caching/hashing strategy before implementing the first few, not after. |
+| DX-107 | Pipeline state objects (PSOs): one per (shader variant, input layout, blend/depth/rasterizer state combination) — reuse `D3DCommon`'s `DX-12-state` mapping tables and, as a bootstrap, `DX-13-hlsl`/`hlsl_shaders.hpp`'s DXBC bytecode (same source as D3D11, design decision 5) — PSOs accept DXBC directly, no DXIL requirement to get a first D3D12 draw working | ⬜ | PSO explosion (every state combination needs its own object) is a real design question — decide a caching/hashing strategy before implementing the first few, not after. If a later D3D12-specific need (e.g. a modern root-signature-driven binding model, or a shader feature DXBC/SM5 can't express) forces a move to DXIL/`dxc`, that's an expected, legitimate evolution of this task, not a sign the DXBC bootstrap was a mistake. |
 | DX-108 | Root signatures: constant-buffer/SRV/sampler binding layout, one per shader-variant family (mirrors `D3DCommon`'s CBuffer layout from `DX-60`, reused not reinvented) | ⬜ | |
 | DX-109 | Vertex/index buffers, textures, render targets — same resource *content* as D3D11's `DX-30`–`DX-45`, but through `ID3D12Resource`/`CreateCommittedResource` + explicit upload-heap staging instead of D3D11's implicit driver-managed uploads | ⬜ | |
 | DX-110 | Device-removed recovery: `ID3D12Device::GetDeviceRemovedReason`, a real recreate-everything path (this is a case D3D11 backends often skip; D3D12 documentation treats it as expected to handle) | ⬜ | |
-| DX-111 | Port the same shader/effect variant set D3D11 lands in Phase DX8, reusing `D3DCommon`'s HLSL sources unchanged (design decision 5) | ⬜ | Should be substantially cheaper than D3D11's own Phase DX8, since the actual shading math and CBuffer layout were already solved there — this phase is about the D3D12 command/resource plumbing around them, not new shader math. |
+| DX-111 | Port the same shader/effect variant set D3D11 lands in Phase DX8, reusing `D3DCommon`'s HLSL sources and DXBC bytecode as the starting point (design decision 5) — treat this as the compatible bootstrap it is, not a claim that D3D11's exact shader binaries are D3D12's permanent, final shader system | ⬜ | Should be substantially cheaper than D3D11's own Phase DX8, since the actual shading math and CBuffer layout were already solved there — this phase is about the D3D12 command/resource plumbing around them, not new shader math. If D3D12-specific work later (root signatures, DXIL, ray tracing) needs a genuinely different shader representation, that's a separate, explicitly scoped follow-up task, not scope creep into this one. |
 | DX-112 | SpriteBatch, matching D3D11's `DX-70`–`DX-72` | ⬜ | |
 | DX-113 | Tests: same shape as `DX-80`–`DX-84`, plus D3D12-specific cases (barrier-transition correctness, fence/frame-in-flight back-pressure, device-removed recovery) | ⬜ | |
 | DX-114 | Real-Windows verification checklist, same shape as `DX-90` plus DXR/ray-tracing feature-level detection if that ever becomes a project goal (explicitly out of scope for v1 — see "Why these backends" above) | ⬜ | |
@@ -426,3 +478,12 @@ grained than the D3D11 phases above, since detailed design should wait until D3D
 - If `DX-12-state`'s "D3D11 and D3D12 enum values are numerically identical" assumption turns out
   false for some enum, that's a legitimate, expected finding to record — not a blocker, just don't
   let it silently produce a wrong mapping for the divergent case.
+- **Do not skip `DX-21`'s debug-layer fallback or `DX-20`'s feature-level fallback array "since it
+  works under Wine anyway"** (design decision 12) — Wine+DXVK is not evidence that a hardcoded
+  `D3D11_CREATE_DEVICE_DEBUG`/`D3D_FEATURE_LEVEL_11_0`-only path is safe on real Windows; this is
+  exactly the kind of gap that only shows up on `DX-90`'s real-Windows pass, expensively, if skipped
+  here.
+- **Do not leave `DX-6`'s COM-pointer-convention decision unresolved past Phase DX2** — every task
+  from Phase DX4 onward creates COM objects; retrofitting a `ComPtr<T>` convention after several
+  phases already have bare `Release()` call sites is a much larger cleanup than deciding once,
+  early (design decision 10).
