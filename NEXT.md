@@ -7,9 +7,11 @@
 > (`D3D11_Smoke` + `D3D11_Common`, 26 checks total) running through DXVK 2.6.0 on a real GPU (AMD
 > Radeon 780M/RADV) via Wine on this Debian machine. `D3DCommon` (the shared format/state/vertex-
 > layout mapping core) is also real and tested. `DX-13-hlsl` (all 20 HLSL shader files, hand-ported
-> line-by-line from the Vulkan GLSL, not yet compiler-verified) also closed 2026-07-13 — next step
-> is `DX-14-compile` (offline HLSL→DXBC compile pipeline). Full detail, task-by-task, lives in
-> `plan_dx.md` (`DX-1`–`DX-29`, `DX-80`, `DX-13-hlsl` closed). Project owner authorized 2026-07-13
+> line-by-line from the Vulkan GLSL) and `DX-14-compile` (real `D3DCompile()` run via Wine+DXVK —
+> all 20 shaders compiled cleanly on the first pass, zero HLSL bugs found, bytes embedded in
+> `hlsl_shaders.hpp`) both closed 2026-07-13 — next step is `DX-15-embed` (wire the compiled DXBC
+> bytes into `CreateVertexShader`/`CreatePixelShader`). Full detail, task-by-task, lives in
+> `plan_dx.md` (`DX-1`–`DX-29`, `DX-80`, `DX-13-hlsl`, `DX-14-compile` closed). Project owner authorized 2026-07-13
 > continuing autonomously through the rest of Phase DX3 → DX5 → DX6 → DX7 → DX8 → DX9 → DX10 → DX11,
 > and Phase DX12 (D3D12) afterward if time allows; `DX-90` (real-Windows checklist) stays
 > `needs_human` — no such machine available in this environment.
