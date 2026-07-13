@@ -488,6 +488,11 @@ directly without the env vars above already set).
   pass creation code beyond what Tasks 871/950 already scope — both backends' render-pass/view
   clear behavior has several interacting call sites; changes need the same site-by-site care Task
   871 required, not a sweeping rewrite.
+- **Do not start `plan_dx.md`'s D3D11/D3D12 backend tasks** without explicit go-ahead — that plan
+  (Windows-only Direct3D 11 + Direct3D 12 backends, D3D11 first, D3D12 explicitly deferred to its
+  own Phase DX12) was written up 2026-07-13 at the project owner's request but is entirely
+  unauthorized so far: zero code exists, not even the CMake `CNA_GRAPHICS_BACKEND` wiring. Pick it
+  up only when told to.
 
 ---
 
