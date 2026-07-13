@@ -22,7 +22,10 @@
 #include "Microsoft/Xna/Framework/Quaternion.hpp"
 #include "Microsoft/Xna/Framework/Media/Song.hpp"
 #include "System/IO/FileStream.hpp"
-#if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
+// Must match CMakeLists.txt's CNA_FFMPEG_AVAILABLE condition (MINGW OR EMSCRIPTEN OR ANDROID) --
+// VideoDecoder.cpp/VideoPlayer.cpp/Video.cpp are excluded from the build on all three, so
+// Video::Video() has no definition to link against on any of them, not just Emscripten/Android.
+#if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__) && !defined(__MINGW32__) && !defined(__MINGW32__)
 #include "Microsoft/Xna/Framework/Media/Video/Video.hpp"
 #endif
 
@@ -1102,7 +1105,7 @@ namespace Microsoft::Xna::Framework::Content
             }
         };
 
-#if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
+#if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__) && !defined(__MINGW32__)
         class VideoTypeReader : public ContentTypeReader<Media::Video>
         {
         public:
@@ -1133,7 +1136,7 @@ namespace Microsoft::Xna::Framework::Content
         RegisterTypeReader<std::shared_ptr<Graphics::SkinnedModelEXT>>(
             std::make_unique<SkinnedModelTypeReader>());
         RegisterTypeReader<Media::Song>(std::make_unique<SongTypeReader>());
-#if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__)
+#if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__) && !defined(__MINGW32__)
         RegisterTypeReader<Media::Video>(std::make_unique<VideoTypeReader>());
 #endif
     }
