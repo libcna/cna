@@ -92,6 +92,40 @@ namespace CNA::Internal::Backends::D3DCommon
     static_assert(offsetof(D3DLightingConstants, FogColorEnabled) == 224, "D3DLightingConstants field offset mismatch vs HLSL");
     static_assert(sizeof(D3DLightingConstants) % 16 == 0, "D3D11 constant buffer ByteWidth must be a 16-byte multiple");
 
+    /// DX-64: matches alpha_test3d.vert.hlsl / alpha_test3d.frag.hlsl's shared
+    /// `cbuffer PerDraw : register(b0)` byte-for-byte (128 bytes). A dedicated struct, not a reuse
+    /// of D3DPerDrawConstants above -- alpha_test3d's HLSL declares a genuinely different field set
+    /// (AlphaRef/AlphaTol/AlphaPassW/AlphaFailW instead of Ambient/Lighting/Light0, and folds fog
+    /// directly into this single buffer instead of a separate FogParams cbuffer, since
+    /// alpha_test3d.glsl's own single push-constant block already had no second UBO to forward fog
+    /// through -- DX-13-hlsl ported that shape as-is).
+    struct alignas(16) D3DAlphaTestConstants
+    {
+        float Mvp[16];              ///< offset 0 (64 bytes), row_major -- see D3DPerDrawConstants::Mvp.
+        float DiffuseColor[4];      ///< offset 64
+        float AlphaRef;             ///< offset 80: reference alpha value
+        float AlphaTol;             ///< offset 84: tolerance (>0 = equality test, 0 = comparison)
+        float AlphaPassW;           ///< offset 88: weight when test passes (<0 = discard)
+        float AlphaFailW;           ///< offset 92: weight when test fails  (<0 = discard)
+        float VertexColorEnabled;   ///< offset 96 (unused by alpha_test3d's VSInput -- no color attribute)
+        float FogEnabled;           ///< offset 100
+        float FogStart;             ///< offset 104
+        float FogEnd;               ///< offset 108
+        float FogColor[3];          ///< offset 112
+    };
+    static_assert(sizeof(D3DAlphaTestConstants) == 128, "D3DAlphaTestConstants must match alpha_test3d's real 128-byte HLSL cbuffer size");
+    static_assert(offsetof(D3DAlphaTestConstants, DiffuseColor) == 64, "D3DAlphaTestConstants field offset mismatch vs HLSL");
+    static_assert(offsetof(D3DAlphaTestConstants, AlphaRef) == 80, "D3DAlphaTestConstants field offset mismatch vs HLSL");
+    static_assert(offsetof(D3DAlphaTestConstants, AlphaTol) == 84, "D3DAlphaTestConstants field offset mismatch vs HLSL");
+    static_assert(offsetof(D3DAlphaTestConstants, AlphaPassW) == 88, "D3DAlphaTestConstants field offset mismatch vs HLSL");
+    static_assert(offsetof(D3DAlphaTestConstants, AlphaFailW) == 92, "D3DAlphaTestConstants field offset mismatch vs HLSL");
+    static_assert(offsetof(D3DAlphaTestConstants, VertexColorEnabled) == 96, "D3DAlphaTestConstants field offset mismatch vs HLSL");
+    static_assert(offsetof(D3DAlphaTestConstants, FogEnabled) == 100, "D3DAlphaTestConstants field offset mismatch vs HLSL");
+    static_assert(offsetof(D3DAlphaTestConstants, FogStart) == 104, "D3DAlphaTestConstants field offset mismatch vs HLSL");
+    static_assert(offsetof(D3DAlphaTestConstants, FogEnd) == 108, "D3DAlphaTestConstants field offset mismatch vs HLSL");
+    static_assert(offsetof(D3DAlphaTestConstants, FogColor) == 112, "D3DAlphaTestConstants field offset mismatch vs HLSL");
+    static_assert(sizeof(D3DAlphaTestConstants) % 16 == 0, "D3D11 constant buffer ByteWidth must be a 16-byte multiple");
+
     /// DX-60a: matches skinned3d.vert.hlsl's `cbuffer BoneBlock : register(b1)` byte-for-byte --
     /// the SkinnedEffect 72-bone array, kept as its OWN separate constant buffer rather than folded
     /// into D3DPerDrawConstants/D3DLightingConstants, so the common per-draw buffer's size and

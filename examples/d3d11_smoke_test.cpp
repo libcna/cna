@@ -50,6 +50,19 @@
 //   DX-15-embed's shaders) actually painted via DrawColoredPrimitives()/DrawIndexedColoredPrimitives()
 //   -- the same screen pixel reads back the Clear() background color before the draw and the exact
 //   vertex color after it, both for the non-indexed and indexed draw paths.
+// Check Q (DX-62) -- DrawPrimitivesEx()/DrawIndexedPrimitivesEx() with real GpuDrawParams (not the
+//   hardcoded legacy path): textured3d (stride 20) samples a known texture color exactly
+//   (diffuseColor=white), proven for both the non-indexed and indexed entry points since both share
+//   DrawPrimitivesExImpl(); colored_textured3d (stride 24) multiplies a known vertex color through a
+//   white texture, proving VertexColorEnabled's real effect, not just the texture sample alone.
+// Check R (DX-63) -- lit_textured3d (stride 32): the unlit branch (LightingEnabled=false) samples
+//   diffuseColor*texture exactly, same bar as Check Q; the lit branch (LightingEnabled=true) isn't
+//   byte-exact-asserted (real Blinn-Phong math) but is proven to genuinely run -- its output pixel
+//   is confirmed to differ from both the unlit result and the Clear() background, i.e. the GPU
+//   actually computed something new, not a stale/cached value.
+// Check S (DX-64) -- alpha_test3d: an alpha value that fails the test (AlphaTol=0, alpha>=ref) is
+//   confirmed to genuinely discard (the Clear() background survives the draw untouched); an alpha
+//   value that passes is confirmed to draw the exact texture color, including its own alpha byte.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
@@ -80,6 +93,7 @@ using namespace Microsoft::Xna::Framework::Graphics;
 using namespace CNA::Internal::Backends::D3D11;
 using CNA::Internal::Backends::ImageData;
 using CNA::Internal::Backends::IRenderTargetBackend;
+using CNA::Internal::Backends::GpuDrawParams;
 using CNA::Internal::Backends::D3DCommon::D3DShaderVariant;
 using CNA::Internal::Backends::D3DCommon::CreateVertexShaderForVariant;
 using CNA::Internal::Backends::D3DCommon::CreatePixelShaderForVariant;
@@ -682,7 +696,245 @@ protected:
                   "paints exact vertex color over the Clear() background at the same readback location");
         }
 
-        const int totalChecks = 3 + 10 + 1 + 2 + 2 + 2 + 2 + 2 + 1 + 1 + 2 + 1 + 13 + 2;
+        const Microsoft::Xna::Framework::Rectangle centerRegion28(28, 28, 4, 4);
+
+        // Check Q (DX-62): textured3d (stride 20) + colored_textured3d (stride 24) via real
+        // GpuDrawParams, using the same before/after-Clear() discipline Check P established.
+        {
+            backend.ApplySamplerState(0, 1 /*TextureFilter::Point*/, 0, 0, 1);
+
+            struct VPT { float x, y, z; float u, v; };
+            static const VPT kTriTex[3] = {
+                {-1.0f, -1.0f, 0.0f, 0.0f, 1.0f},
+                { 3.0f, -1.0f, 0.0f, 2.0f, 1.0f},
+                {-1.0f,  3.0f, 0.0f, 0.0f, -1.0f},
+            };
+            auto vbTex = backend.CreateVertexBuffer(3);
+            vbTex->SetData(kTriTex, 3, sizeof(VPT));
+
+            ImageData img;
+            img.width = 2; img.height = 2; img.mipLevels = 1;
+            img.pixels.resize(2 * 2 * 4);
+            for (int i = 0; i < 4; ++i)
+            {
+                img.pixels[i * 4 + 0] = 11; img.pixels[i * 4 + 1] = 22;
+                img.pixels[i * 4 + 2] = 33; img.pixels[i * 4 + 3] = 255;
+            }
+            auto tex = backend.CreateTexture(img);
+
+            GpuDrawParams tp;
+            tp.texture0 = tex.get();
+            tp.textureEnabled = true;
+            // diffuseColor left at its default (1,1,1,1) so outColor == the raw sampled texel exactly.
+
+            std::vector<Color> beforeQ(4 * 4, Color(0, 0, 0, 0));
+            std::vector<Color> afterQ(4 * 4, Color(0, 0, 0, 0));
+            dev.Clear(Color(0, 255, 0, 255));
+            dev.GetBackBufferData(&centerRegion28, beforeQ.data(), 0, static_cast<int>(beforeQ.size()));
+            backend.DrawPrimitivesEx(*vbTex, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                     Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, tp);
+            dev.GetBackBufferData(&centerRegion28, afterQ.data(), 0, static_cast<int>(afterQ.size()));
+
+            bool beforeIsGreen = true, afterIsTexColor = true;
+            for (const Color& p : beforeQ)
+                if (p.getRProperty() != 0 || p.getGProperty() != 255 || p.getBProperty() != 0 || p.getAProperty() != 255)
+                    beforeIsGreen = false;
+            for (const Color& p : afterQ)
+                if (p.getRProperty() != 11 || p.getGProperty() != 22 || p.getBProperty() != 33 || p.getAProperty() != 255)
+                    afterIsTexColor = false;
+            check(beforeIsGreen && afterIsTexColor,
+                  "D3D11GraphicsBackend::DrawPrimitivesEx(): real textured3d draw samples the exact "
+                  "texture color (diffuseColor=white) over the Clear() background (plan_dx.md DX-62)");
+
+            // Indexed path, same textured3d draw -- proves DrawIndexedPrimitivesEx shares the same
+            // real pipeline (DrawPrimitivesExImpl), not just the non-indexed entry point.
+            static const uint16_t kTriTexIdx[3] = {0, 1, 2};
+            auto ibTex = backend.CreateIndexBuffer16(3);
+            ibTex->SetData16(kTriTexIdx, 3);
+            dev.Clear(Color(0, 255, 0, 255));
+            backend.DrawIndexedPrimitivesEx(*vbTex, *ibTex, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                            Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, tp);
+            std::vector<Color> afterQIdx(4 * 4, Color(0, 0, 0, 0));
+            dev.GetBackBufferData(&centerRegion28, afterQIdx.data(), 0, static_cast<int>(afterQIdx.size()));
+            bool afterQIdxIsTexColor = true;
+            for (const Color& p : afterQIdx)
+                if (p.getRProperty() != 11 || p.getGProperty() != 22 || p.getBProperty() != 33 || p.getAProperty() != 255)
+                    afterQIdxIsTexColor = false;
+            check(afterQIdxIsTexColor,
+                  "D3D11GraphicsBackend::DrawIndexedPrimitivesEx(): indexed textured3d draw shares "
+                  "the same real pipeline and samples the exact texture color");
+
+            // colored_textured3d (stride 24): a white texture tinted by an exact vertex color,
+            // proving VertexColorEnabled's real multiply, not just the texture sample alone.
+            struct VPCT { float x, y, z; uint32_t color; float u, v; };
+            const uint32_t kVertColor = 0xFFF0A050u; // A=255,B=240,G=160,R=80 (R8G8B8A8 byte order)
+            static VPCT kTriColTex[3];
+            kTriColTex[0] = { -1.0f, -1.0f, 0.0f, kVertColor, 0.0f, 1.0f };
+            kTriColTex[1] = {  3.0f, -1.0f, 0.0f, kVertColor, 2.0f, 1.0f };
+            kTriColTex[2] = { -1.0f,  3.0f, 0.0f, kVertColor, 0.0f, -1.0f };
+            auto vbColTex = backend.CreateVertexBuffer(3);
+            vbColTex->SetData(kTriColTex, 3, sizeof(VPCT));
+
+            ImageData whiteImg;
+            whiteImg.width = 2; whiteImg.height = 2; whiteImg.mipLevels = 1;
+            whiteImg.pixels.assign(2 * 2 * 4, 255);
+            auto whiteTex = backend.CreateTexture(whiteImg);
+
+            GpuDrawParams ctp;
+            ctp.texture0 = whiteTex.get();
+            ctp.textureEnabled = true;
+            ctp.vertexColorEnabled = true;
+
+            dev.Clear(Color(0, 255, 0, 255));
+            backend.DrawPrimitivesEx(*vbColTex, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                     Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, ctp);
+            std::vector<Color> afterCT(4 * 4, Color(0, 0, 0, 0));
+            dev.GetBackBufferData(&centerRegion28, afterCT.data(), 0, static_cast<int>(afterCT.size()));
+            bool afterCTIsVertColor = true;
+            for (const Color& p : afterCT)
+                if (p.getRProperty() != 80 || p.getGProperty() != 160 || p.getBProperty() != 240 || p.getAProperty() != 255)
+                    afterCTIsVertColor = false;
+            check(afterCTIsVertColor,
+                  "D3D11GraphicsBackend::DrawPrimitivesEx(): real colored_textured3d draw multiplies "
+                  "the exact vertex color through a white texture (plan_dx.md DX-62)");
+        }
+
+        // Check R (DX-63): lit_textured3d (stride 32). The unlit branch is byte-exact (same bar as
+        // Check Q); the lit branch's real Blinn-Phong math is only checked for plausibility -- it
+        // must genuinely differ from both the unlit result and the Clear() background.
+        {
+            struct VPNT { float x, y, z; float nx, ny, nz; float u, v; };
+            static const VPNT kTriLit[3] = {
+                {-1.0f, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f},
+                { 3.0f, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 2.0f, 1.0f},
+                {-1.0f,  3.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, -1.0f},
+            };
+            auto vbLit = backend.CreateVertexBuffer(3);
+            vbLit->SetData(kTriLit, 3, sizeof(VPNT));
+
+            ImageData img;
+            img.width = 2; img.height = 2; img.mipLevels = 1;
+            img.pixels.resize(2 * 2 * 4);
+            for (int i = 0; i < 4; ++i)
+            {
+                img.pixels[i * 4 + 0] = 44; img.pixels[i * 4 + 1] = 55;
+                img.pixels[i * 4 + 2] = 66; img.pixels[i * 4 + 3] = 255;
+            }
+            auto tex = backend.CreateTexture(img);
+
+            GpuDrawParams unlitP;
+            unlitP.texture0 = tex.get();
+            unlitP.textureEnabled = true;
+            unlitP.lightingEnabled = false;
+
+            dev.Clear(Color(0, 0, 255, 255));
+            backend.DrawPrimitivesEx(*vbLit, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                     Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, unlitP);
+            std::vector<Color> unlitResult(4 * 4, Color(0, 0, 0, 0));
+            dev.GetBackBufferData(&centerRegion28, unlitResult.data(), 0, static_cast<int>(unlitResult.size()));
+            bool unlitIsTexColor = true;
+            for (const Color& p : unlitResult)
+                if (p.getRProperty() != 44 || p.getGProperty() != 55 || p.getBProperty() != 66 || p.getAProperty() != 255)
+                    unlitIsTexColor = false;
+            check(unlitIsTexColor,
+                  "D3D11GraphicsBackend::DrawPrimitivesEx(): real lit_textured3d unlit branch samples "
+                  "diffuseColor*texture exactly (plan_dx.md DX-63)");
+
+            GpuDrawParams litP = unlitP;
+            litP.lightingEnabled = true;
+            litP.ambientColor[0] = 0.5f; litP.ambientColor[1] = 0.5f; litP.ambientColor[2] = 0.5f;
+            litP.specularColor[0] = 0.0f; litP.specularColor[1] = 0.0f; litP.specularColor[2] = 0.0f;
+
+            dev.Clear(Color(0, 0, 255, 255));
+            backend.DrawPrimitivesEx(*vbLit, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                     Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, litP);
+            std::vector<Color> litResult(4 * 4, Color(0, 0, 0, 0));
+            dev.GetBackBufferData(&centerRegion28, litResult.data(), 0, static_cast<int>(litResult.size()));
+            bool litDiffersFromUnlitAndBackground = true;
+            for (std::size_t i = 0; i < litResult.size(); ++i)
+            {
+                const Color& lp = litResult[i];
+                const Color& up = unlitResult[i];
+                const bool sameAsUnlit = (lp.getRProperty() == up.getRProperty() && lp.getGProperty() == up.getGProperty()
+                                         && lp.getBProperty() == up.getBProperty());
+                const bool sameAsBackground = (lp.getRProperty() == 0 && lp.getGProperty() == 0 && lp.getBProperty() == 255);
+                if (sameAsUnlit || sameAsBackground) litDiffersFromUnlitAndBackground = false;
+            }
+            check(litDiffersFromUnlitAndBackground,
+                  "D3D11GraphicsBackend::DrawPrimitivesEx(): real lit_textured3d lit branch genuinely "
+                  "computes a different color than both the unlit result and the Clear() background "
+                  "(plan_dx.md DX-63)");
+        }
+
+        // Check S (DX-64): alpha_test3d. A failing alpha genuinely discards (Clear() background
+        // survives); a passing alpha draws the exact texture color, including its own alpha byte.
+        {
+            struct VPT { float x, y, z; float u, v; };
+            static const VPT kTriAT[3] = {
+                {-1.0f, -1.0f, 0.0f, 0.0f, 1.0f},
+                { 3.0f, -1.0f, 0.0f, 2.0f, 1.0f},
+                {-1.0f,  3.0f, 0.0f, 0.0f, -1.0f},
+            };
+            auto vbAT = backend.CreateVertexBuffer(3);
+            vbAT->SetData(kTriAT, 3, sizeof(VPT));
+
+            ImageData img;
+            img.width = 2; img.height = 2; img.mipLevels = 1;
+            img.pixels.resize(2 * 2 * 4);
+            for (int i = 0; i < 4; ++i)
+            {
+                img.pixels[i * 4 + 0] = 200; img.pixels[i * 4 + 1] = 100;
+                img.pixels[i * 4 + 2] = 50;  img.pixels[i * 4 + 3] = 128; // alpha=128/255 ~ 0.502
+            }
+            auto tex = backend.CreateTexture(img);
+
+            GpuDrawParams atp;
+            atp.texture0 = tex.get();
+            atp.textureEnabled = true;
+            // AlphaTol=0 (comparison mode) -> passTest = alpha < AlphaRef; failW<0 -> discard on fail.
+            atp.alphaTest[0] = 0.5f;  // AlphaRef
+            atp.alphaTest[1] = 0.0f;  // AlphaTol
+            atp.alphaTest[2] = 1.0f;  // AlphaPassW (>=0, never discard on pass)
+            atp.alphaTest[3] = -1.0f; // AlphaFailW (<0, discard on fail)
+
+            // Sub-check 1: alpha=128/255 is NOT < 0.5 -> fails -> discard -> background survives.
+            dev.Clear(Color(0, 255, 0, 255));
+            backend.DrawPrimitivesEx(*vbAT, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                     Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, atp);
+            std::vector<Color> discardResult(4 * 4, Color(0, 0, 0, 0));
+            dev.GetBackBufferData(&centerRegion28, discardResult.data(), 0, static_cast<int>(discardResult.size()));
+            bool stillGreen = true;
+            for (const Color& p : discardResult)
+                if (p.getRProperty() != 0 || p.getGProperty() != 255 || p.getBProperty() != 0 || p.getAProperty() != 255)
+                    stillGreen = false;
+            check(stillGreen,
+                  "D3D11GraphicsBackend::DrawPrimitivesEx(): real alpha_test3d discard() genuinely "
+                  "drops a failing pixel, leaving the Clear() background untouched (plan_dx.md DX-64)");
+
+            // Sub-check 2: replace the texture's alpha with 64/255 (< 0.5) -> passes -> drawn exactly.
+            std::vector<uint8_t> passPixels(2 * 2 * 4);
+            for (int i = 0; i < 4; ++i)
+            {
+                passPixels[i * 4 + 0] = 200; passPixels[i * 4 + 1] = 100;
+                passPixels[i * 4 + 2] = 50;  passPixels[i * 4 + 3] = 64;
+            }
+            tex->UpdatePixelsLevel(0, passPixels.data(), 2, 2);
+
+            dev.Clear(Color(0, 255, 0, 255));
+            backend.DrawPrimitivesEx(*vbAT, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                     Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, atp);
+            std::vector<Color> passResult(4 * 4, Color(0, 0, 0, 0));
+            dev.GetBackBufferData(&centerRegion28, passResult.data(), 0, static_cast<int>(passResult.size()));
+            bool passIsExact = true;
+            for (const Color& p : passResult)
+                if (p.getRProperty() != 200 || p.getGProperty() != 100 || p.getBProperty() != 50 || p.getAProperty() != 64)
+                    passIsExact = false;
+            check(passIsExact,
+                  "D3D11GraphicsBackend::DrawPrimitivesEx(): real alpha_test3d draws the exact texture "
+                  "color (including its own alpha byte) when the test passes (plan_dx.md DX-64)");
+        }
+
+        const int totalChecks = 3 + 10 + 1 + 2 + 2 + 2 + 2 + 2 + 1 + 1 + 2 + 1 + 13 + 2 + 3 + 2 + 2;
         std::printf("=== %d/%d PASS ===\n", passCount_, totalChecks);
         result_ = (passCount_ == totalChecks) ? 0 : 1;
         Exit();

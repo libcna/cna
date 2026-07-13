@@ -149,14 +149,30 @@ namespace CNA::Internal::Backends::D3D11
         /// is used to go straight back to the back buffer.
         void RestoreBackBufferRenderTargetEXT();
 
-        // ---- IGraphicsBackend: honest "not yet implemented" stubs (Phase DX8+) ----
-        std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() override;
+        // ---- IGraphicsBackend: real (Phase DX8, DX-61) ----
         void DrawColoredPrimitives(const IVertexBufferBackend& vb,
                                    const Matrix& world, const Matrix& view, const Matrix& projection,
                                    PrimitiveType primitive, int primitiveCount) override;
         void DrawIndexedColoredPrimitives(const IVertexBufferBackend& vb, const IIndexBufferBackend& ib,
                                           const Matrix& world, const Matrix& view, const Matrix& projection,
                                           PrimitiveType primitive, int primitiveCount) override;
+
+        // ---- IGraphicsBackend: real (Phase DX8, DX-62/DX-63/DX-64/DX-69-partial) ----
+        // Covers stride 16/20/24 (colored3d/textured3d/colored_textured3d, sharing D3DPerDrawConstants/
+        // D3DFogConstants), stride 32 (lit_textured3d, DX-63) and alpha-test (DX-64, any of those 3
+        // strides -- alpha_test3d's HLSL is stride-agnostic). DualTexture/EnvMap/Skinned (DX-65/66/67)
+        // still throw a named "not yet implemented" error -- explicitly out of this task's scope.
+        void DrawPrimitivesEx(const IVertexBufferBackend& vb,
+                              const Matrix& world, const Matrix& view, const Matrix& projection,
+                              PrimitiveType primitive, int primitiveCount,
+                              const GpuDrawParams& params) override;
+        void DrawIndexedPrimitivesEx(const IVertexBufferBackend& vb, const IIndexBufferBackend& ib,
+                                     const Matrix& world, const Matrix& view, const Matrix& projection,
+                                     PrimitiveType primitive, int primitiveCount,
+                                     const GpuDrawParams& params) override;
+
+        // ---- IGraphicsBackend: honest "not yet implemented" stubs (Phase DX8+/DX9) ----
+        std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() override;
 
     private:
         void CreateDeviceResources();
@@ -169,6 +185,16 @@ namespace CNA::Internal::Backends::D3D11
         void EnsureSwapChainSize();
         /// DX-27: device-lost/removed detection (not full automatic recovery yet).
         void CheckDeviceRemoved(HRESULT hr) const;
+
+        /// DX-62/DX-63/DX-64: shared implementation for DrawPrimitivesEx/DrawIndexedPrimitivesEx --
+        /// @p ib is nullptr for the non-indexed path (context_->Draw), non-null for the indexed path
+        /// (context_->DrawIndexed), avoiding duplicating the whole variant-selection/constant-buffer
+        /// block between the two public overrides (they differ only in index-buffer binding + which
+        /// of Draw/DrawIndexed is finally called).
+        void DrawPrimitivesExImpl(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
+                                  const Matrix& world, const Matrix& view, const Matrix& projection,
+                                  PrimitiveType primitive, int primitiveCount,
+                                  const GpuDrawParams& params);
 
         SDL_Window* window_ = nullptr;
         int width_ = 0;
@@ -244,5 +270,13 @@ namespace CNA::Internal::Backends::D3D11
         ID3D11Buffer* GetOrCreatePerDrawConstantBufferEXT();
         ID3D11Buffer* GetOrCreateFogConstantBufferEXT();
         void UpdateDynamicConstantBufferEXT(ID3D11Buffer* buffer, const void* data, std::size_t byteCount);
+
+        // Phase DX8 (DX-63/DX-64): same "grow, never recreate" persistent dynamic constant buffers
+        // as above, one each for lit_textured3d's LitLightParams (b1) and alpha_test3d's single
+        // combined PerDraw (b0) cbuffer.
+        ComPtr<ID3D11Buffer> lightingConstantBuffer_;
+        ComPtr<ID3D11Buffer> alphaTestConstantBuffer_;
+        ID3D11Buffer* GetOrCreateLightingConstantBufferEXT();
+        ID3D11Buffer* GetOrCreateAlphaTestConstantBufferEXT();
     };
 }
