@@ -16,10 +16,13 @@
 > `RenderTarget2D`/`RenderTargetCube`/custom `ShaderEffect` all have dedicated test coverage.
 > `HEADLESS-5`/`11`/`32`/`33`/`40`/`61` (env-var mode parsing, the 32-bit `IndexBuffer` path, the
 > per-frame statistics diff, and per-type alive-resource counts) closed 2026-07-13 via a fourth
-> CTest, `Headless_CoverageGaps`. A few validation/scoping corners remain intentionally narrowed
-> from their original wording once real interface constraints were discovered during
-> implementation — see each task's own Notes column and the "Implementation notes" section after
-> the task tables for the honest specifics.
+> CTest, `Headless_CoverageGaps`. `HEADLESS-51`/`64` (per-effect coverage for `AlphaTestEffect`/
+> `DualTextureEffect`/`EnvironmentMapEffect`/`SkinnedEffect`/`Model.Draw()`) closed the same day via
+> a fifth CTest, `Headless_Effects`, which also surfaced a genuine, previously-undocumented
+> behavioral finding (see "Implementation notes"). A few validation/scoping corners remain
+> intentionally narrowed from their original wording once real interface constraints were
+> discovered during implementation — see each task's own Notes column and the "Implementation
+> notes" section after the task tables for the honest specifics.
 >
 > **Why a Headless backend:** every existing backend (`SDL_RENDERER`/`EASYGL`/`BGFX`/`VULKAN`/`WEBGPU`)
 > needs a real window and a real GPU context to run at all, which makes them unsuitable for fast,
@@ -169,7 +172,7 @@ This is the actual point of the backend — the other phases exist to make this 
 | # | Task | Status | Notes |
 |---|---|---|---|
 | HEADLESS-50 | Verify `GraphicsDeviceManager`/`Game::Run()` completes a full init → update/draw loop → shutdown cycle against the `HEADLESS` backend with **zero** SDL video-subsystem calls (confirm via `SDL_WasInit(SDL_INIT_VIDEO)` or equivalent in a test) | ✅ | Verified 2026-07-13: `Headless_Smoke` runs a full 3-frame `Game::Run()` cycle with `DISPLAY`/`WAYLAND_DISPLAY` both explicitly unset and `SDL_VIDEODRIVER` empty, asserts `SDL_WasInit(SDL_INIT_VIDEO) == 0`, and exits cleanly — the core promise of this whole backend, proven end-to-end, not just claimed. |
-| HEADLESS-51 | Verify `SpriteBatch`, every stock `Effect` (`BasicEffect`, `AlphaTestEffect`, `DualTextureEffect`, `EnvironmentMapEffect`, `SkinnedEffect`), and `Model.Draw()` all route through the `HEADLESS` backend without requiring a display, a GPU, or throwing | 🟨 | `SpriteBatch`, `BasicEffect`, and a custom `ShaderEffect` (via `SpriteBatch::Begin(..., &effect)`) verified via `Headless_Smoke`/`Headless_ResourceBackends`. `AlphaTestEffect`/`DualTextureEffect`/`EnvironmentMapEffect`/`SkinnedEffect`/`Model.Draw()` are still not individually exercised — they all route through the same `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` path already proven to work for `BasicEffect`, and nothing effect-specific in their `FillGpuDrawParams()` implementations should behave differently against this backend, but that's an inference from code reading, not a verified fact for each one individually. |
+| HEADLESS-51 | Verify `SpriteBatch`, every stock `Effect` (`BasicEffect`, `AlphaTestEffect`, `DualTextureEffect`, `EnvironmentMapEffect`, `SkinnedEffect`), and `Model.Draw()` all route through the `HEADLESS` backend without requiring a display, a GPU, or throwing | ✅ | `SpriteBatch`, `BasicEffect`, and a custom `ShaderEffect` verified via `Headless_Smoke`/`Headless_ResourceBackends`. **`AlphaTestEffect`/`DualTextureEffect`/`EnvironmentMapEffect`/`SkinnedEffect`/`Model.Draw()` closed 2026-07-13** via a new CTest, `Headless_Effects` (9/9): a real, non-obvious asymmetry was found and confirmed, not just inferred — `DualTextureEffect`/`EnvironmentMapEffect`/`SkinnedEffect`'s `FillGpuDrawParams()` unconditionally set `TextureEnabled` (plus their own extra flag) regardless of whether a texture was actually assigned, so `HeadlessGraphicsBackend::DrawPrimitivesEx`'s `HEADLESS-22` validation genuinely throws if the game forgot to set one (verified: throws without the texture, doesn't throw with it, for all three). `AlphaTestEffect` only sets `TextureEnabled` when a texture was actually assigned, so it degrades gracefully either way (verified both ways too). `SkinnedEffect`'s bone-count check never trips regardless, since the constructor seeds 72 identity bone transforms by default. `Model.Draw()` verified via a procedural 2-`ModelBone`/1-`ModelMesh`/1-`ModelMeshPart` model (mirroring `examples/easygl_model_draw_test.cpp`'s own proven shape) producing exactly 1 `DrawIndexedPrimitives` call with no throw. |
 | HEADLESS-52 | `Mouse`/`Keyboard`/`GamePad` input backends: confirm (or, if needed, adjust) that input polling degrades gracefully with no real window to receive OS input events, rather than crashing on a null window handle | ✅ | **Audited 2026-07-13, no fix needed — all three are already safe.** `Mouse`: every path that could reach a null window (`SetPosition`, relative-mode getter/setter) explicitly null-checks first (`Mouse.cpp`); paths that don't null-check (`SetCaptureEXT`, `GetGlobalPositionEXT`, `WarpGlobalEXT`, `SetCursor`) call SDL entry points that themselves degrade gracefully (`SDL_Unsupported`/fallback/no-op) when the video-driver function pointers are unset, since `SDL_Mouse` is a static struct usable pre-init. `Keyboard`: no window/handle dependency anywhere; `SDL_keyboard` state is a static struct, keymap lookups null-guard internally. `GamePad`/`SdlInputBridge`: no window dependency at all; every SDL call that could receive a null window is guarded, and mouse/keyboard/text-input OS events structurally cannot fire without a real window in the first place. `SDL_PollEvent` itself is safe with zero SDL subsystems initialized (verified against SDL3 source: locking a null mutex no-ops, an inactive event queue just returns false). **One real, deliberate finding, not a bug**: `Game::DoInitialize()` unconditionally calls `SDL_InitSubSystem(SDL_INIT_GAMEPAD)` (which implies `JOYSTICK`+`EVENTS`) with no `CNA_BACKEND_HEADLESS` guard — none of those three require `SDL_INIT_VIDEO` or a display server, so this doesn't contradict `HEADLESS-50`'s "no display server needed" claim, but it does mean a real `Game::Run()` loop under `HEADLESS` still touches *some* real SDL subsystem state (gamepad hot-plug becomes genuinely live), worth knowing if a test wants zero SDL involvement of any kind. |
 | HEADLESS-53 | CTest registration: a genuine headless smoke test — construct a `Game` subclass exercising `LoadContent`/`Update`/`Draw` against the `HEADLESS` backend, run N frames, assert on `HeadlessStatistics`, tear down, assert no leaks | ✅ | `Headless_Smoke` registered and passing (10/10 checks, ~0.11s, no `SDL_VIDEODRIVER`/`DISPLAY` environment needed at all — the only CTest in this whole project that doesn't). |
 | HEADLESS-54 | `docs/`: document how/why to use the `HEADLESS` backend for CI game-logic tests, explicitly distinguishing it from the pixel-asserted tests the other backends use (`HEADLESS` proves "the game ran without crashing and did the right number of draws/state changes", not "the pixels are correct") | ✅ | `docs/headless-backend.md` added 2026-07-13: what it's for/not for, `CNA_HEADLESS_MODE` usage, a full test-writing walkthrough, known limitations, and the `../mobile-eggbert` real-world validation result — mirrors `docs/webgpu-backend.md`'s own structure for consistency. |
@@ -188,7 +191,7 @@ cross-cutting test suites that don't belong to one single implementation task.
 | HEADLESS-61 | Draw-call/state-change counting tests: a known, fixed sequence of `Draw*`/`SetBlendState`/etc. calls produces the exact expected `HeadlessStatistics` values, both cumulative and per-frame | ✅ | Cumulative counters verified exactly (`Headless_Smoke` Check C). Per-frame diffing **closed 2026-07-13** — see `HEADLESS-32`. |
 | HEADLESS-62 | Leak-detection tests: deliberately leak a resource (never `Dispose()`/never let it go out of scope) and confirm `AssertNoLeaks()`/teardown reports it; then dispose it and confirm the same run reports clean | ✅ | Verified 2026-07-13 (`Headless_Smoke` Checks D/E). |
 | HEADLESS-63 | Mode-switching tests: the exact same invalid-argument call throws under `HeadlessValidation`/`HeadlessTrace` and does not throw under `HeadlessFast` | ✅ | `HeadlessValidation` vs `HeadlessFast` verified for an invalid draw call (`Headless_Smoke` Check F). `HeadlessTrace`'s *logging* behaviour (as opposed to its validation behaviour specifically) is now also verified (`Headless_ResourceBackends` Check F) — `TraceEnabled()`/`ValidationEnabled()` share the same `mode != Fast` gate in `HeadlessSharedState`, so validation necessarily also holds in `HeadlessTrace`; not re-asserted with a second invalid-draw-call test since it would exercise the identical code path. |
-| HEADLESS-64 | End-to-end headless test: a small synthetic game (a few sprites, one 3D model, one custom effect) runs N frames entirely under `HEADLESS`, asserting both on `HeadlessStatistics` and on captured `SpriteBatch`/`Effect` call data from `HEADLESS-16`/`17`, with zero real rendering anywhere in the run | 🟨 | `Headless_Smoke` is this test, scoped down from the original wording: it uses a `VertexBuffer`/`IndexBuffer` triangle + `SpriteBatch` + `Texture2D`, not a full `Model`/custom `ShaderEffect` — proves the backend works for the core draw/resource paths genuinely used, not the full breadth of effect types. Asserts on `HeadlessStatistics` (`GetStatistics()`) but not yet on `SpriteBatch`'s captured `LastBatch()` draw-call data specifically. |
+| HEADLESS-64 | End-to-end headless test: a small synthetic game (a few sprites, one 3D model, one custom effect) runs N frames entirely under `HEADLESS`, asserting both on `HeadlessStatistics` and on captured `SpriteBatch`/`Effect` call data from `HEADLESS-16`/`17`, with zero real rendering anywhere in the run | ✅ | `Headless_Smoke` covers the sprite + custom-`Effect` + `VertexBuffer`/`IndexBuffer` triangle path, asserting on `HeadlessStatistics`. **The one 3D model requirement closed 2026-07-13** via `Headless_Effects`' `Model.Draw()` check (see `HEADLESS-51`) — a real `Model`/`ModelMesh`/`ModelMeshPart` draws with an exact `drawCallCount` assertion. `SpriteBatch`'s `LastBatch()` captured-draw-call data still isn't separately asserted on (only the aggregate `drawCallCount`) — a small, non-blocking remaining gap. |
 
 ---
 
@@ -205,8 +208,11 @@ labels, trace log export, and viewport/scissor-vs-bound-target validation are al
 verified (`HEADLESS-23`/`40`/`41`/`42`); the per-frame statistics diff (`HEADLESS-32`/`61`), the
 per-type alive-resource breakdown (`HEADLESS-33`), the 32-bit `IndexBuffer` path (`HEADLESS-11`),
 and `CNA_HEADLESS_MODE` environment-variable parsing (`HEADLESS-5`) are all now verified by
-dedicated tests (`Headless_CoverageGaps`); and `../mobile-eggbert`, a real third-party game, builds
-and runs 20+ seconds with zero crashes under this backend.
+dedicated tests (`Headless_CoverageGaps`); `AlphaTestEffect`/`DualTextureEffect`/
+`EnvironmentMapEffect`/`SkinnedEffect`/`Model.Draw()` are now individually verified end-to-end
+(`HEADLESS-51`/`64`, `Headless_Effects`), which also surfaced a real, previously-undocumented
+behavioral asymmetry between effects (see below); and `../mobile-eggbert`, a real third-party
+game, builds and runs 20+ seconds with zero crashes under this backend.
 
 What's genuinely narrower than the original task wording, discovered while implementing against the
 *real* `IGraphicsBackend` interface rather than the plan's own upfront guesses:
@@ -221,10 +227,18 @@ What's genuinely narrower than the original task wording, discovered while imple
   `SetScissorRect`/`SetViewport`, but still not literally every `IGraphicsBackend` method
   (`ClearDepth`/`ClearStencil`/`SetDepthTestEnabled`/etc. and the `Create*` factories don't log) —
   the highest-value call sites for diagnosing a failing test are covered, not literally everything.
-- Effect coverage beyond `BasicEffect`/custom `ShaderEffect` (`AlphaTestEffect`/`DualTextureEffect`/
-  `EnvironmentMapEffect`/`SkinnedEffect`/`Model.Draw()`) is still inference from shared code reading
-  rather than individually tested — they route through the same proven `DrawPrimitivesEx`/
-  `DrawIndexedPrimitivesEx` path, but that's not the same as a dedicated test per effect.
+- `SpriteBatch`'s captured `LastBatch()` draw-call data (texture/rects/color/rotation/effects per
+  `Draw()` call) is implemented but not yet separately asserted on by any test — only the aggregate
+  `drawCallCount` is checked.
+
+Closed 2026-07-13, previously listed here as inference-only: effect coverage beyond `BasicEffect`/
+custom `ShaderEffect` (`AlphaTestEffect`/`DualTextureEffect`/`EnvironmentMapEffect`/`SkinnedEffect`/
+`Model.Draw()`, `HEADLESS-51`/`64`) — this turned up a genuine, non-obvious behavioral asymmetry
+rather than just confirming the inference: `DualTextureEffect`/`EnvironmentMapEffect`/`SkinnedEffect`
+unconditionally set `TextureEnabled` in `FillGpuDrawParams()` regardless of whether a texture was
+actually assigned, so they genuinely throw under `HeadlessValidation` if a game forgets to set one,
+while `AlphaTestEffect` degrades gracefully either way. Worth knowing for real game code, not just a
+test-coverage checkbox.
 
 None of the above were silently dropped — each is recorded in its own task row above with the
 specific reason. Picking any of them back up is a reasonable next step, but none of them block the

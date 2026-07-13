@@ -106,16 +106,23 @@ Key APIs on `HeadlessGraphicsBackend` (all `NOXNA`, not part of the XNA surface)
   `IGraphicsBackend`'s `ApplyBlendState()`/etc. take raw `int`/`bool`/`float` parameters, not object
   references, so there is no state-object identity left for the backend to check by the time a call
   reaches it. This is a real, permanent interface constraint, not a temporary gap.
-- `AlphaTestEffect`/`DualTextureEffect`/`EnvironmentMapEffect`/`SkinnedEffect`/`Model.Draw()` are
-  not individually exercised by a dedicated test yet (they share the same `DrawPrimitivesEx`/
-  `DrawIndexedPrimitivesEx` path already proven for `BasicEffect`, but that's inference, not proof).
+- `SpriteBatch`'s captured `LastBatch()` draw-call data (texture/rects/color/rotation/effects per
+  `Draw()` call) is implemented but not yet separately asserted on by any test — only the aggregate
+  `drawCallCount` is checked.
 
 Resolved since the first commit: viewport/scissor validation now cross-references the actual
 bound-target size (not just non-negative dimensions); creation-site tracking is implemented via an
 explicit `PushDebugLabel()`/`PopDebugLabel()` API (see below) rather than left as an unused field;
-and (2026-07-13) `CNA_HEADLESS_MODE` environment-variable parsing, the 32-bit `IndexBuffer` path,
+(2026-07-13) `CNA_HEADLESS_MODE` environment-variable parsing, the 32-bit `IndexBuffer` path,
 `GetLastFrameStatistics()`'s per-frame diff math, and `AliveResources()`'s per-type breakdown are
-all now verified by a fourth CTest, `Headless_CoverageGaps`.
+all now verified by a fourth CTest, `Headless_CoverageGaps`; and `AlphaTestEffect`/
+`DualTextureEffect`/`EnvironmentMapEffect`/`SkinnedEffect`/`Model.Draw()` are individually verified
+end-to-end by a fifth CTest, `Headless_Effects` — which also surfaced a real behavioral finding:
+`DualTextureEffect`/`EnvironmentMapEffect`/`SkinnedEffect` unconditionally set `TextureEnabled` in
+their `FillGpuDrawParams()` regardless of whether a texture was actually assigned, so they genuinely
+throw under `HeadlessValidation` if a game forgets to set one, while `AlphaTestEffect` degrades
+gracefully either way (its texture is truly optional). Worth knowing when writing a real game
+against these effects, not just a Headless test-coverage note.
 
 ## Debug labels and trace log export
 
