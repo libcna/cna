@@ -27,9 +27,26 @@
 //   GetSwapChainEXT() == nullptr, by design (see class doc comment) -- confirms the crash-prone path
 //   was never touched by this run.
 //
+// plan_dx.md DX-106/DX-107/DX-108 (this revision) add:
+// Check G -- D3D12ResourceStateTracker (DX-106): a real throwaway committed buffer resource is
+//   registered, transitioned through 2 distinct states (a real barrier IS emitted + tracked state
+//   updates), then re-requested at the state it's already in (NO redundant barrier emitted, proven
+//   via the real bool return, not just documented) -- this is the actual point of the class.
+// Check H -- D3D12RootSignatureCache (DX-108): two GetOrCreate() calls with the IDENTICAL (numCbvs,
+//   numSrvs, numSamplers) shape return the SAME cached object (pointer identity); a genuinely
+//   different shape returns a DIFFERENT object -- real cache-hit/cache-miss proof, not assumed.
+// Check I -- D3D12PipelineStateCache (DX-107): a real ID3D12PipelineState is created end-to-end for
+//   the colored3d variant (stride 16) via CreateGraphicsPipelineState against a real root signature
+//   from Check H, through Wine+vkd3d-proton on the real GPU -- the actual "first real D3D12 PSO"
+//   proof this task exists for. A second GetOrCreate() with an identical desc proves cache-hit
+//   identity, same pattern as Check H.
+//
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
 #include "CNA/Internal/Backends/D3D12/D3D12GraphicsBackend.hpp"
+#include "CNA/Internal/Backends/D3D12/D3D12ResourceStateTracker.hpp"
+#include "CNA/Internal/Backends/D3D12/D3D12RootSignatureCache.hpp"
+#include "CNA/Internal/Backends/D3D12/D3D12PipelineStateCache.hpp"
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 
 #include <cstdio>
@@ -37,6 +54,11 @@
 
 using CNA::Internal::Backends::GraphicsBackendCreateArgs;
 using CNA::Internal::Backends::D3D12::D3D12GraphicsBackend;
+using CNA::Internal::Backends::D3D12::D3D12ResourceStateTracker;
+using CNA::Internal::Backends::D3D12::D3D12RootSignatureCache;
+using CNA::Internal::Backends::D3D12::D3D12PipelineStateCache;
+using CNA::Internal::Backends::D3D12::D3D12PipelineStateDesc;
+using CNA::Internal::Backends::D3DCommon::D3DShaderVariant;
 
 namespace
 {
@@ -159,6 +181,96 @@ int main()
     // ---- Check F: off-screen construction never touches the swap chain ----
     Check(!backend.IsSwapChainAvailableEXT(), "F1: off-screen construction leaves swap chain unavailable");
     Check(backend.GetSwapChainEXT() == nullptr, "F2: GetSwapChainEXT() is null off-screen");
+
+    ID3D12Device* device = backend.GetDeviceEXT();
+
+    // ---- Check G: D3D12ResourceStateTracker (DX-106), against a real throwaway committed buffer ----
+    {
+        D3D12_HEAP_PROPERTIES heapProps{};
+        heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
+
+        D3D12_RESOURCE_DESC bufDesc{};
+        bufDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+        bufDesc.Width = 256;
+        bufDesc.Height = 1;
+        bufDesc.DepthOrArraySize = 1;
+        bufDesc.MipLevels = 1;
+        bufDesc.Format = DXGI_FORMAT_UNKNOWN;
+        bufDesc.SampleDesc.Count = 1;
+        bufDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+
+        Microsoft::WRL::ComPtr<ID3D12Resource> dummyResource;
+        HRESULT hr = device->CreateCommittedResource(
+            &heapProps, D3D12_HEAP_FLAG_NONE, &bufDesc,
+            D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(dummyResource.ReleaseAndGetAddressOf()));
+        Check(SUCCEEDED(hr) && dummyResource != nullptr, "G1: real throwaway committed buffer resource created");
+
+        D3D12ResourceStateTracker tracker;
+        tracker.TrackResource(dummyResource.Get(), D3D12_RESOURCE_STATE_COMMON);
+        Check(tracker.GetTrackedStateEXT(dummyResource.Get()) == D3D12_RESOURCE_STATE_COMMON,
+              "G2: freshly tracked resource reports its registered initial state");
+
+        ID3D12CommandAllocator* allocator = backend.GetCommandAllocatorEXT(0);
+        ID3D12GraphicsCommandList* cmdList = backend.GetCommandListEXT();
+        allocator->Reset();
+        cmdList->Reset(allocator, nullptr);
+
+        bool emitted1 = tracker.TransitionTo(cmdList, dummyResource.Get(), D3D12_RESOURCE_STATE_COPY_DEST);
+        Check(emitted1, "G3: TransitionTo a genuinely different state emits a real barrier (returns true)");
+        Check(tracker.GetTrackedStateEXT(dummyResource.Get()) == D3D12_RESOURCE_STATE_COPY_DEST,
+              "G4: tracked state updates to the new state after a real transition");
+
+        bool emitted2 = tracker.TransitionTo(cmdList, dummyResource.Get(), D3D12_RESOURCE_STATE_COPY_DEST);
+        Check(!emitted2, "G5: TransitionTo the SAME state emits NO redundant barrier (returns false)");
+
+        bool emitted3 = tracker.TransitionTo(cmdList, dummyResource.Get(), D3D12_RESOURCE_STATE_GENERIC_READ);
+        Check(emitted3, "G6: TransitionTo a different state again emits a real barrier");
+
+        cmdList->Close();
+        bool threw = false;
+        try { backend.ExecuteCommandListAndWaitEXT(cmdList); }
+        catch (const std::exception&) { threw = true; }
+        Check(!threw, "G7: command list recording the real transition barriers submits+executes cleanly");
+    }
+
+    // ---- Check H: D3D12RootSignatureCache (DX-108) ----
+    Microsoft::WRL::ComPtr<ID3D12RootSignature> rootSigColored3d;
+    {
+        D3D12RootSignatureCache rootSigCache;
+        rootSigColored3d = rootSigCache.GetOrCreate(device, /*numCbvs=*/2, /*numSrvs=*/0, /*numSamplers=*/0);
+        Check(rootSigColored3d != nullptr, "H1: real ID3D12RootSignature created for colored3d's (2,0,0) shape");
+
+        auto rootSigColored3dAgain = rootSigCache.GetOrCreate(device, 2, 0, 0);
+        Check(rootSigColored3dAgain.Get() == rootSigColored3d.Get(),
+              "H2: identical (numCbvs,numSrvs,numSamplers) shape returns the SAME cached object");
+
+        auto rootSigTextured3d = rootSigCache.GetOrCreate(device, 2, 1, 1);
+        Check(rootSigTextured3d != nullptr && rootSigTextured3d.Get() != rootSigColored3d.Get(),
+              "H3: a genuinely different (2,1,1) shape returns a real, DIFFERENT object");
+    }
+
+    // ---- Check I: D3D12PipelineStateCache (DX-107) -- the first real D3D12 PSO this backend has ever created ----
+    {
+        D3D12PipelineStateCache psoCache;
+        D3D12PipelineStateDesc desc;
+        desc.variant = D3DShaderVariant::Colored3d;
+        desc.strideInBytes = 16;
+
+        auto pso = psoCache.GetOrCreate(device, rootSigColored3d.Get(), desc,
+                                        DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_UNKNOWN);
+        Check(pso != nullptr, "I1: real ID3D12PipelineState created for colored3d/stride16/default state");
+
+        auto psoAgain = psoCache.GetOrCreate(device, rootSigColored3d.Get(), desc,
+                                             DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_UNKNOWN);
+        Check(psoAgain.Get() == pso.Get(), "I2: identical desc returns the SAME cached PSO object");
+
+        D3D12PipelineStateDesc desc2 = desc;
+        desc2.cullMode = 1; // CullMode::None -- a genuinely different rasterizer state.
+        auto psoDifferent = psoCache.GetOrCreate(device, rootSigColored3d.Get(), desc2,
+                                                 DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_UNKNOWN);
+        Check(psoDifferent != nullptr && psoDifferent.Get() != pso.Get(),
+              "I3: a genuinely different state tuple returns a real, DIFFERENT PSO object");
+    }
 
     std::printf("\n%s: %d failure(s)\n", g_failures == 0 ? "RESULT: ALL PASS" : "RESULT: FAILURES", g_failures);
     return g_failures == 0 ? 0 : 1;
