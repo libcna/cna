@@ -91,8 +91,8 @@ if(EMSCRIPTEN OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
 else()
     set(_cna_default_backend "SDL_RENDERER")
 endif()
-set(CNA_GRAPHICS_BACKEND "${_cna_default_backend}" CACHE STRING "Graphics backend to use (SDL_RENDERER, EASYGL, BGFX, VULKAN, WEBGPU, or HEADLESS)")
-set_property(CACHE CNA_GRAPHICS_BACKEND PROPERTY STRINGS "SDL_RENDERER" "EASYGL" "BGFX" "VULKAN" "WEBGPU" "HEADLESS")
+set(CNA_GRAPHICS_BACKEND "${_cna_default_backend}" CACHE STRING "Graphics backend to use (SDL_RENDERER, EASYGL, BGFX, VULKAN, WEBGPU, HEADLESS, or SOFTWARE)")
+set_property(CACHE CNA_GRAPHICS_BACKEND PROPERTY STRINGS "SDL_RENDERER" "EASYGL" "BGFX" "VULKAN" "WEBGPU" "HEADLESS" "SOFTWARE")
 
 option(CNA_BACKEND_SDL_RENDERER "Enable SDL_Renderer graphics backend" OFF)
 option(CNA_BACKEND_EASY_GL "Enable easy-gl graphics backend" OFF)
@@ -100,9 +100,10 @@ option(CNA_BACKEND_BGFX "Enable bgfx graphics backend" OFF)
 option(CNA_BACKEND_VULKAN "Enable Vulkan graphics backend" OFF)
 option(CNA_BACKEND_WEBGPU "Enable WebGPU graphics backend (wgpu-native)" OFF)
 option(CNA_BACKEND_HEADLESS "Enable Headless (no GPU/window) graphics backend" OFF)
+option(CNA_BACKEND_SOFTWARE "Enable Software (CPU rasterizer) graphics backend" OFF)
 
 set(_cna_explicit_backend_selection OFF)
-if(CNA_BACKEND_SDL_RENDERER OR CNA_BACKEND_EASY_GL OR CNA_BACKEND_BGFX OR CNA_BACKEND_VULKAN OR CNA_BACKEND_WEBGPU OR CNA_BACKEND_HEADLESS)
+if(CNA_BACKEND_SDL_RENDERER OR CNA_BACKEND_EASY_GL OR CNA_BACKEND_BGFX OR CNA_BACKEND_VULKAN OR CNA_BACKEND_WEBGPU OR CNA_BACKEND_HEADLESS OR CNA_BACKEND_SOFTWARE)
     set(_cna_explicit_backend_selection ON)
 endif()
 
@@ -125,6 +126,9 @@ if(_cna_explicit_backend_selection)
     endif()
     if(CNA_BACKEND_HEADLESS)
         list(APPEND _cna_enabled_backends "HEADLESS")
+    endif()
+    if(CNA_BACKEND_SOFTWARE)
+        list(APPEND _cna_enabled_backends "SOFTWARE")
     endif()
 
     list(LENGTH _cna_enabled_backends _cna_enabled_backends_count)
@@ -212,6 +216,11 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "HEADLESS")
     set(BACKEND_DIR "src/CNA/Internal/Backends/Headless")
     set(BACKEND_TARGET "cna_backend_graphics_headless")
     add_compile_definitions(CNA_BACKEND_HEADLESS)
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "SOFTWARE")
+    message(STATUS "CNA: Using SOFTWARE (CPU rasterizer) graphics backend")
+    set(BACKEND_DIR "src/CNA/Internal/Backends/Software")
+    set(BACKEND_TARGET "cna_backend_graphics_software")
+    add_compile_definitions(CNA_BACKEND_SOFTWARE)
 else()
 
     message(FATAL_ERROR "CNA: Unknown graphics backend: ${CNA_GRAPHICS_BACKEND}")
@@ -6470,6 +6479,32 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "HEADLESS")
     set_tests_properties(Headless_TraceDiff PROPERTIES
         TIMEOUT 30
         LABELS "Headless")
+endif()
+
+# plan_software.md: Software (CPU rasterizer) graphics backend tests. Deliberately no
+# SDL_VIDEODRIVER/DISPLAY environment -- like HEADLESS, this backend never needs either.
+if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SOFTWARE")
+    enable_testing()
+
+    macro(cna_software_test target src)
+        add_executable(${target} ${src})
+        if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
+            target_link_libraries(${target} PRIVATE
+                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                SHARP_RUNTIME SDL3::SDL3)
+        else()
+            target_link_libraries(${target} PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+        endif()
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(${target} PRIVATE SDL3::SDL3main)
+        endif()
+    endmacro()
+
+    cna_software_test(cna_test_software_smoke examples/software_smoke_test.cpp)
+    add_test(NAME Software_Smoke COMMAND cna_test_software_smoke)
+    set_tests_properties(Software_Smoke PROPERTIES
+        TIMEOUT 30
+        LABELS "Software")
 endif()
 
 # --- Task 6.1: real two-process ENet loopback test harness ---

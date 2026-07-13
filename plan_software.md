@@ -1,8 +1,15 @@
 # Software (CPU) Rasterizer Graphics Backend — Implementation Plan
 
-> **Status: planning, 2026-07-13.** No code written yet. This plan captures the design and a
-> phased task breakdown for `CNA_GRAPHICS_BACKEND=SOFTWARE`, proposed by the project owner as a
-> testing-oriented backend, not a sixth backend meant for real gameplay.
+> **Status: Phases S1-S3 landed and verified, 2026-07-13.** `CNA_GRAPHICS_BACKEND=SOFTWARE`
+> configures, builds, and `CnaTests` (the full pre-existing GTest corpus) links and runs cleanly
+> against it -- **4371/4373 pass with `DISPLAY`/`WAYLAND_DISPLAY` unset and `SDL_VIDEODRIVER`
+> empty** (2 skips are unrelated hardware-sensor tests that skip on every backend). A dedicated
+> `Software_Smoke` CTest (6/6) proves this backend's actual reason to exist: `Clear()` followed by
+> `GraphicsDevice::GetBackBufferData()` returns the exact clear color, a bound `RenderTarget2D` has
+> a genuinely independent framebuffer from the backbuffer, and `VertexBuffer`/`IndexBuffer` (both
+> 16- and 32-bit) round-trip real data -- all with **no window, no GPU, no display server**.
+> `DrawColoredPrimitives`/`DrawIndexedColoredPrimitives` are still argument-validating placeholders
+> only (Phase S4 replaces them with the real rasterizer) -- no triangle has been rasterized yet.
 >
 > **Status legend:** ✅ implemented *and verified against its stated acceptance criteria*;
 > 🟨 code or documentation exists but has not met those criteria; ⬜ not implemented.
@@ -110,10 +117,10 @@ without both.
 
 | # | Task | Status | Notes |
 |---|---|---|---|
-| SOFTWARE-1 | Add `"SOFTWARE"` to `CNA_GRAPHICS_BACKEND`'s CMake `STRINGS` property and a matching `CNA_BACKEND_SOFTWARE` option flag, following the exact existing pattern for `SDL_RENDERER`/`EASYGL`/`BGFX`/`VULKAN`/`WEBGPU`/`HEADLESS` | ⬜ | |
-| SOFTWARE-2 | `cna_backend_graphics_software` static library target (`elseif(CNA_GRAPHICS_BACKEND STREQUAL "SOFTWARE")` block, mirrors `HEADLESS`'s own) | ⬜ | No external deps needed beyond what every backend already requires (SDL3 for windowing types only, never SDL's rendering/GL/Vulkan surface). |
-| SOFTWARE-3 | `include/CNA/Internal/Backends/Software/SoftwareGraphicsBackend.hpp` + `.cpp`: class implementing every `IGraphicsBackend` pure virtual — initially real where Phase S1 can make it real (Clear/Present/viewport), honest no-op/throwing stubs elsewhere until later phases replace them | ⬜ | |
-| SOFTWARE-4 | Factory dispatch for `SOFTWARE`; extend the existing `#ifdef CNA_BACKEND_HEADLESS` guards in `GraphicsDevice`'s constructor and `createOrAttachWindow()` to also cover `CNA_BACKEND_SOFTWARE` (design decision 4) | ⬜ | |
+| SOFTWARE-1 | Add `"SOFTWARE"` to `CNA_GRAPHICS_BACKEND`'s CMake `STRINGS` property and a matching `CNA_BACKEND_SOFTWARE` option flag, following the exact existing pattern for `SDL_RENDERER`/`EASYGL`/`BGFX`/`VULKAN`/`WEBGPU`/`HEADLESS` | ✅ | Verified 2026-07-13: configures cleanly with `-DCNA_GRAPHICS_BACKEND=SOFTWARE`; `-DCNA_BACKEND_SOFTWARE=ON` explicit-option form also wired in. |
+| SOFTWARE-2 | `cna_backend_graphics_software` static library target (`elseif(CNA_GRAPHICS_BACKEND STREQUAL "SOFTWARE")` block, mirrors `HEADLESS`'s own) | ✅ | Verified 2026-07-13: builds clean, no external deps beyond SDL3 (windowing types only, via the shared `IGraphicsBackend.hpp` forward declarations -- never touches SDL's actual rendering/GL/Vulkan surface). |
+| SOFTWARE-3 | `include/CNA/Internal/Backends/Software/SoftwareGraphicsBackend.hpp` + `.cpp`: class implementing every `IGraphicsBackend` pure virtual — initially real where Phase S1 can make it real (Clear/Present/viewport), honest no-op/throwing stubs elsewhere until later phases replace them | ✅ | Verified 2026-07-13: implements every pure virtual (`Clear`/`Present`/`GetViewportSize`/`SetVirtualResolution`/`SetPresentationMode`/`GetWindowInternal`/`GetRendererInternal`/`CreateTexture`/`CreateSpriteBatch`/all 6 `Clear*` variants/`SetDepthTestEnabled`/`SetBlendEnabled`/`SetDepthWriteEnabled`/`CreateVertexBuffer`/`CreateIndexBuffer16`/`DrawColoredPrimitives`/`DrawIndexedColoredPrimitives`) plus the optional extension points a full game needs (render targets, effects, sprite batch). `CnaTests` (the full pre-existing GTest corpus) links and runs cleanly against it (4371/4373 pass, 2 unrelated hardware-sensor skips), confirming interface completeness — the same verification bar `HEADLESS-3` set. `Clear`/`Present`/`GetViewportSize`/`ReadBackbuffer`/render-target binding are genuinely real (Phase S2); `DrawColoredPrimitives`/`DrawIndexedColoredPrimitives` are still argument-validating placeholders, honestly not yet rasterizing (Phase S4's job). |
+| SOFTWARE-4 | Factory dispatch for `SOFTWARE`; extend the existing `#ifdef CNA_BACKEND_HEADLESS` guards in `GraphicsDevice`'s constructor and `createOrAttachWindow()` to also cover `CNA_BACKEND_SOFTWARE` (design decision 4) | ✅ | Verified 2026-07-13: both guard sites now read `#if defined(CNA_BACKEND_HEADLESS) \|\| defined(CNA_BACKEND_SOFTWARE)`. `Software_Smoke` CTest confirms `SDL_WasInit(SDL_INIT_VIDEO) == 0` and `GetWindowInternal() == nullptr` end-to-end, and the full `CnaTests` suite runs with `DISPLAY`/`WAYLAND_DISPLAY` unset and `SDL_VIDEODRIVER` empty. Rebuilt `EASYGL` and `HEADLESS` after this change to confirm zero regression to either (both still build and pass their own test suites unchanged). |
 
 ---
 
@@ -121,11 +128,11 @@ without both.
 
 | # | Task | Status | Notes |
 |---|---|---|---|
-| SOFTWARE-10 | CPU color framebuffer (RGBA8, `std::vector<uint8_t>`) sized to the backbuffer (`PresentationParameters`); real `Clear(r,g,b,a)` fills every pixel | ⬜ | |
-| SOFTWARE-11 | CPU depth buffer (`std::vector<float>`), real `ClearDepth`/depth-inclusive `Clear*` variants | ⬜ | |
-| SOFTWARE-12 | `SoftwareRenderTargetBackend`: `CreateRenderTarget2D`/`SetRenderTarget2D` binds an alternate CPU color+depth buffer pair sized to that target, instead of the default backbuffer pair | ⬜ | |
-| SOFTWARE-13 | `ReadBackbuffer()`/`GraphicsDevice::GetBackBufferData()`: real `memcpy` from the currently-bound CPU framebuffer — no faking, this is the backend's core value proposition | ⬜ | |
-| SOFTWARE-14 | `Present()`: no-op by default, matching the headless/CI/server use cases | ⬜ | |
+| SOFTWARE-10 | CPU color framebuffer (RGBA8, `std::vector<uint8_t>`) sized to the backbuffer (`PresentationParameters`); real `Clear(r,g,b,a)` fills every pixel | ✅ | Verified 2026-07-13 (`Software_Smoke` Check B): `Clear(Color(20,40,60,255))` followed by `GetBackBufferData()` returns exactly that color for every pixel in the queried region — not a fiction, a real per-pixel write-then-read round trip. |
+| SOFTWARE-11 | CPU depth buffer (`std::vector<float>`), real `ClearDepth`/depth-inclusive `Clear*` variants | ✅ | `SoftwareFramebuffer::ClearDepthValue()` implemented and wired into `ClearDepth`/`ClearColorAndDepth`/`ClearDepthAndStencil`/`ClearColorDepthAndStencil`. Not yet exercised by a dedicated depth-readback test (no public API reads the depth buffer directly) — depth *correctness* will be verified properly once Phase S4's depth-test-driven rasterizer lands and can be proven via occlusion (a nearer triangle correctly occluding a farther one), a much stronger test than reading the raw buffer. |
+| SOFTWARE-12 | `SoftwareRenderTargetBackend`: `CreateRenderTarget2D`/`SetRenderTarget2D` binds an alternate CPU color+depth buffer pair sized to that target, instead of the default backbuffer pair | ✅ | Verified 2026-07-13 (`Software_Smoke` Check C): binding an 8×8 `RenderTarget2D`, clearing it to a distinct color, then unbinding and reading the backbuffer confirms both framebuffers are genuinely independent — the render target's clear never touched the backbuffer's own pixels. |
+| SOFTWARE-13 | `ReadBackbuffer()`/`GraphicsDevice::GetBackBufferData()`: real `memcpy` from the currently-bound CPU framebuffer — no faking, this is the backend's core value proposition | ✅ | Implemented as a real per-pixel copy (not literally `memcpy`, since out-of-bounds region requests are zero-filled rather than reading garbage) from `CurrentFramebuffer()`. Verified by the same `Software_Smoke` Checks B/C above. |
+| SOFTWARE-14 | `Present()`: no-op by default, matching the headless/CI/server use cases | ✅ | Implemented as a genuine no-op (`{}`), matching design decision 3. |
 
 ---
 
@@ -133,9 +140,9 @@ without both.
 
 | # | Task | Status | Notes |
 |---|---|---|---|
-| SOFTWARE-20 | `SoftwareVertexBufferBackend`: stores raw bytes + stride (real storage, not discarded, mirroring `HeadlessVertexBufferBackend`'s own `ShadowData()` pattern) | ⬜ | |
-| SOFTWARE-21 | `SoftwareIndexBufferBackend`: 16- and 32-bit, real storage | ⬜ | |
-| SOFTWARE-22 | Stride-based vertex format inference (design decision 2): 16→`VertexPositionColor`, 20→`VertexPositionTexture`, 24→`VertexPositionColorTexture`. 32-byte (`VertexPositionNormalTexture`) explicitly deferred (needs lighting, out of scope for v1) | ⬜ | |
+| SOFTWARE-20 | `SoftwareVertexBufferBackend`: stores raw bytes + stride (real storage, not discarded, mirroring `HeadlessVertexBufferBackend`'s own `ShadowData()` pattern) | ✅ | Verified 2026-07-13 (`Software_Smoke` Check D): real `VertexBuffer`s at strides 16 (`VertexPositionColor`)/20 (`VertexPositionTexture`)/24 (`VertexPositionColorTexture`) all round-trip real vertex data through `SetData()` without throwing. `Data()`/`Stride()` accessors exist for Phase S4's rasterizer to read from directly. |
+| SOFTWARE-21 | `SoftwareIndexBufferBackend`: 16- and 32-bit, real storage | ✅ | Verified 2026-07-13 (`Software_Smoke` Check E): both a 16-bit and a 32-bit `IndexBuffer` round-trip real index data without throwing. A genuine bit-width mismatch (`SetData16` on a buffer declared 32-bit or vice versa) throws `std::runtime_error`, mirroring `HeadlessIndexBufferBackend`'s own precedent. |
+| SOFTWARE-22 | Stride-based vertex format inference (design decision 2): 16→`VertexPositionColor`, 20→`VertexPositionTexture`, 24→`VertexPositionColorTexture`. 32-byte (`VertexPositionNormalTexture`) explicitly deferred (needs lighting, out of scope for v1) | 🟨 | The three v1 strides are exercised end-to-end by `Software_Smoke` Check D (proving `SetData()` accepts and stores each correctly), but the actual *dispatch* logic (reading `Stride()` to decide which vertex layout to interpret raw bytes as) doesn't exist yet — there is no rasterizer to dispatch to until Phase S4. Recorded as re-opened once S4 lands, not silently claimed complete. |
 
 ---
 
