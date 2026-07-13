@@ -12,6 +12,7 @@ cmake-build-sdl/*
 cmake-build-webgpu/*
 cmake-build-headless/*
 cmake-build-software/*
+cmake-build-d3d11/*
 vendor/wgpu-native/
 cmake-build-input-easygl/*
 cmake-build-input-vulkan/*

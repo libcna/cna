@@ -91,8 +91,8 @@ if(EMSCRIPTEN OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
 else()
     set(_cna_default_backend "SDL_RENDERER")
 endif()
-set(CNA_GRAPHICS_BACKEND "${_cna_default_backend}" CACHE STRING "Graphics backend to use (SDL_RENDERER, EASYGL, BGFX, VULKAN, WEBGPU, HEADLESS, or SOFTWARE)")
-set_property(CACHE CNA_GRAPHICS_BACKEND PROPERTY STRINGS "SDL_RENDERER" "EASYGL" "BGFX" "VULKAN" "WEBGPU" "HEADLESS" "SOFTWARE")
+set(CNA_GRAPHICS_BACKEND "${_cna_default_backend}" CACHE STRING "Graphics backend to use (SDL_RENDERER, EASYGL, BGFX, VULKAN, WEBGPU, HEADLESS, SOFTWARE, or D3D11)")
+set_property(CACHE CNA_GRAPHICS_BACKEND PROPERTY STRINGS "SDL_RENDERER" "EASYGL" "BGFX" "VULKAN" "WEBGPU" "HEADLESS" "SOFTWARE" "D3D11")
 
 option(CNA_BACKEND_SDL_RENDERER "Enable SDL_Renderer graphics backend" OFF)
 option(CNA_BACKEND_EASY_GL "Enable easy-gl graphics backend" OFF)
@@ -101,9 +101,10 @@ option(CNA_BACKEND_VULKAN "Enable Vulkan graphics backend" OFF)
 option(CNA_BACKEND_WEBGPU "Enable WebGPU graphics backend (wgpu-native)" OFF)
 option(CNA_BACKEND_HEADLESS "Enable Headless (no GPU/window) graphics backend" OFF)
 option(CNA_BACKEND_SOFTWARE "Enable Software (CPU rasterizer) graphics backend" OFF)
+option(CNA_BACKEND_D3D11 "Enable Direct3D 11 graphics backend (Windows only)" OFF)
 
 set(_cna_explicit_backend_selection OFF)
-if(CNA_BACKEND_SDL_RENDERER OR CNA_BACKEND_EASY_GL OR CNA_BACKEND_BGFX OR CNA_BACKEND_VULKAN OR CNA_BACKEND_WEBGPU OR CNA_BACKEND_HEADLESS OR CNA_BACKEND_SOFTWARE)
+if(CNA_BACKEND_SDL_RENDERER OR CNA_BACKEND_EASY_GL OR CNA_BACKEND_BGFX OR CNA_BACKEND_VULKAN OR CNA_BACKEND_WEBGPU OR CNA_BACKEND_HEADLESS OR CNA_BACKEND_SOFTWARE OR CNA_BACKEND_D3D11)
     set(_cna_explicit_backend_selection ON)
 endif()
 
@@ -130,6 +131,9 @@ if(_cna_explicit_backend_selection)
     if(CNA_BACKEND_SOFTWARE)
         list(APPEND _cna_enabled_backends "SOFTWARE")
     endif()
+    if(CNA_BACKEND_D3D11)
+        list(APPEND _cna_enabled_backends "D3D11")
+    endif()
 
     list(LENGTH _cna_enabled_backends _cna_enabled_backends_count)
     if(NOT _cna_enabled_backends_count EQUAL 1)
@@ -137,6 +141,16 @@ if(_cna_explicit_backend_selection)
     endif()
 
     list(GET _cna_enabled_backends 0 CNA_GRAPHICS_BACKEND)
+endif()
+
+# plan_dx.md design decision 2: D3D11 genuinely cannot build anywhere but Windows (native or
+# MinGW/MSVC cross-compile) -- d3d11.h/dxgi.h do not exist elsewhere. Unlike BGFX's soft
+# WARNING-only platform check below, this is a hard FATAL_ERROR.
+if(CNA_GRAPHICS_BACKEND STREQUAL "D3D11" AND NOT CMAKE_SYSTEM_NAME STREQUAL "Windows")
+    message(FATAL_ERROR
+        "CNA: D3D11 backend only builds when targeting Windows. Either build natively on "
+        "Windows, or cross-compile from Linux with "
+        "-DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64.cmake")
 endif()
 
 if(CNA_GRAPHICS_BACKEND STREQUAL "EASYGL")
@@ -221,6 +235,11 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "SOFTWARE")
     set(BACKEND_DIR "src/CNA/Internal/Backends/Software")
     set(BACKEND_TARGET "cna_backend_graphics_software")
     add_compile_definitions(CNA_BACKEND_SOFTWARE)
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "D3D11")
+    message(STATUS "CNA: Using D3D11 graphics backend")
+    set(BACKEND_DIR "src/CNA/Internal/Backends/D3D11")
+    set(BACKEND_TARGET "cna_backend_graphics_d3d11")
+    add_compile_definitions(CNA_BACKEND_D3D11)
 else()
 
     message(FATAL_ERROR "CNA: Unknown graphics backend: ${CNA_GRAPHICS_BACKEND}")
@@ -275,6 +294,11 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "WEBGPU")
                 "${CNA_WEBGPU_RUNTIME_LIBRARY}" "$<TARGET_FILE_DIR:${BACKEND_TARGET}>"
             VERBATIM)
     endif()
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "D3D11")
+    # plan_dx.md design decision 3: minimal confirmed link set only (DX-1) -- d3dcompiler is
+    # deliberately NOT linked here, it belongs only to the offline shader-compile tool / DX-58's
+    # runtime custom-effect path, never the main backend target.
+    target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 d3d11 dxgi)
 endif()
 
 file(GLOB_RECURSE CNA_SOURCES CONFIGURE_DEPENDS
@@ -6547,11 +6571,46 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SOFTWARE")
     cna_software_test(cna_diag_software examples/cross_backend_diagnostic_scene.cpp)
 endif()
 
+# plan_dx.md DX-80: D3D11 CTest registration. The built .exe is a Windows PE binary (this backend
+# is Windows-only/cross-compiled, design decision 2) -- CTest itself still runs on the Linux host,
+# so the test COMMAND is scripts/run-wine-dxvk.sh (DX-3) wrapping the real executable, not the
+# executable directly.
+if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D11")
+    enable_testing()
+
+    macro(cna_d3d11_test target src)
+        add_executable(${target} ${src})
+        target_link_libraries(${target} PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(${target} PRIVATE SDL3::SDL3main)
+        endif()
+        if(MINGW)
+            target_link_options(${target} PRIVATE -static-libgcc -static-libstdc++)
+            # Same known mingw-w64/GCC PE-COFF toolchain limitation CnaTests already works around
+            # (std::type_info::operator== emitted as vague linkage the linker fails to fold) --
+            # see this file's own CnaTests MINGW block for the full explanation.
+            target_link_options(${target} PRIVATE -Wl,--allow-multiple-definition)
+            cna_copy_mingw_runtime(${target})
+            cna_copy_sdl_runtime(${target})
+        endif()
+    endmacro()
+
+    cna_d3d11_test(cna_test_d3d11_smoke examples/d3d11_smoke_test.cpp)
+    add_test(NAME D3D11_Smoke
+        COMMAND ${CMAKE_SOURCE_DIR}/scripts/run-wine-dxvk.sh $<TARGET_FILE:cna_test_d3d11_smoke>)
+    set_tests_properties(D3D11_Smoke PROPERTIES
+        TIMEOUT 60
+        LABELS "D3D11")
+endif()
+
 # --- Task 6.1: real two-process ENet loopback test harness ---
 # A tiny standalone (non-GTest) executable playing "host" or "client", spawned twice as
 # independent OS processes by tests/CNA/Internal/Net/TwoProcessLoopbackTest.cpp. See NEXT.md /
 # the approved Phase 6 plan for why this exists separately from every Phase 5 single-process test.
-if(CNA_ENABLE_NET AND CNA_BUILD_TESTS)
+# Uses POSIX-only <sys/resource.h>/posix_spawn -- excluded on the same platforms its own consumer
+# test (TwoProcessLoopbackTest.cpp) already is, above, rather than only excluding the test source
+# and leaving this executable target to fail the build on its own.
+if(CNA_ENABLE_NET AND CNA_BUILD_TESTS AND NOT (WIN32 OR EMSCRIPTEN OR ANDROID))
     add_executable(cna_net_two_process_harness
         tools/net/net_two_process_harness.cpp
     )
