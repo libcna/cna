@@ -1,29 +1,37 @@
 # NEXT.md — CNA Project Handoff
 
 > **D3D11 graphics backend now exists as real, verified code (2026-07-13); Phase DX3 (`D3DCommon`),
-> Phase DX5 (vertex/index buffers + input layout), and Phase DX6 (textures + render targets) are
-> now all fully closed.**
+> Phase DX5 (vertex/index buffers + input layout), Phase DX6 (textures + render targets), and
+> Phase DX7 (state objects) are now all fully closed.**
 > `CNA_GRAPHICS_BACKEND=D3D11` is a working CMake option; `D3D11GraphicsBackend` implements every
 > `IGraphicsBackend` pure virtual (real device/swap-chain/back-buffer/clear/present/readback, real
 > vertex/index buffers + input layout cache, real 2D/cube/3D textures + 2D/cube render targets +
-> MSAA + MRT + sampler cache + occlusion queries; honest "not yet implemented" throws remain only
-> for draw calls/SpriteBatch, Phase DX8/DX9). `ctest -R D3D11` passes 2/2 (`D3D11_Smoke` +
-> `D3D11_Common`, **52 checks total**, up from 41) running through DXVK 2.6.0 on a real GPU (AMD
-> Radeon 780M/RADV) via Wine on this Debian machine. `D3DCommon` (format/state/vertex-layout mapping
-> + shader cache) is real and tested. `DX-13-hlsl`/`DX-14-compile`/`DX-15-embed` (HLSL shaders, real
-> DXBC compile, real shader-object creation) closed Phase DX3 earlier in this session; `DX-30`/
-> `DX-31`/`DX-32` (real buffers + input layout) closed Phase DX5. **Phase DX6 (`DX-40`–`DX-47`) now
-> closes with a genuine, load-bearing fix, not just new classes**: `Clear()`/`ClearColorAndDepth`/
-> etc. were hardcoded to the back buffer's own RTV/DSV since Phase DX4 — now routed through new
-> `currentColorRTVs_`/`currentDSV_` tracking so a bound custom render target (or MRT set) is what
-> actually gets cleared. New `D3D11Textures.hpp`/`.cpp` (2D/cube/3D textures), `D3D11RenderTargets.
-> hpp`/`.cpp` (2D/cube render targets, real device-queried MSAA via `CheckMultisampleQualityLevels`,
-> confirmed 4x on this machine), `D3D11SamplerCache.hpp`/`.cpp`, `D3D11OcclusionQuery.hpp`/`.cpp`.
-> MRT (`DX-46`) is one real `OMSetRenderTargets` call binding up to 8 targets. All round-trip/
-> creation-proven via 7 new `D3D11_Smoke` checks (H–N, 29/29 total, up from 18/18). Next step is
-> **Phase DX7** (state objects). Full detail, task-by-task, lives in `plan_dx.md` (`DX-1`–`DX-47`,
-> `DX-80` closed). Project owner authorized 2026-07-13 continuing autonomously through Phase DX7 →
-> DX8 → DX9 → DX10 → DX11, and Phase DX12 (D3D12) afterward if time allows; `DX-90` (real-Windows
+> MSAA + MRT + sampler cache + occlusion queries, real blend/depth-stencil/rasterizer state objects
+> + viewport/scissor; honest "not yet implemented" throws remain only for draw calls/SpriteBatch,
+> Phase DX8/DX9). `ctest -R D3D11` passes 2/2 (`D3D11_Smoke` + `D3D11_Common`, **65 checks total**,
+> up from 52) running through DXVK 2.6.0 on a real GPU (AMD Radeon 780M/RADV) via Wine on this
+> Debian machine. `D3DCommon` (format/state/vertex-layout mapping + shader cache) is real and
+> tested. `DX-13-hlsl`/`DX-14-compile`/`DX-15-embed` (HLSL shaders, real DXBC compile, real
+> shader-object creation) closed Phase DX3 earlier in this session; `DX-30`/`DX-31`/`DX-32` (real
+> buffers + input layout) closed Phase DX5; Phase DX6 (`DX-40`–`DX-47`, textures/render targets/
+> MSAA/MRT/occlusion queries, plus a genuine `Clear()`-target-tracking bug fix) closed next. **Phase
+> DX7 (`DX-50`–`DX-53`) now closes all 4 state-object rows**: new `D3D11BlendStateCache`/
+> `D3D11DepthStencilStateCache`/`D3D11RasterizerStateCache` (`D3D11StateObjectCache.hpp`/`.cpp`)
+> create+cache real `ID3D11BlendState`/`ID3D11DepthStencilState`/`ID3D11RasterizerState` objects
+> from the raw XNA ordinals `Apply*State()` already carries, via `DX-12-state` plus a new
+> `D3DStateMapping::StencilOperationToD3D11`. **A real, documented finding**: XNA's `DepthBias`
+> float uses the same "r"-scaled convention this project's Vulkan/EasyGL backends already feed
+> unscaled into `vkCmdSetDepthBias`/`glPolygonOffset` (Task 767) — D3D11's own `DepthBias` field is
+> the same convention but `INT`, so this task rounds rather than truncates. Also implemented
+> `SetBlendFactor()`/`SetReferenceStencil()` (Task 870/319 standalone-immediate-effect properties)
+> and `SetViewport()`/`SetScissorRect()`. All proven via new `D3D11_Smoke` Check O (cache identity/
+> distinctness for all 3 state types, real bind confirmed via `OMGetBlendState()`/
+> `OMGetDepthStencilState()`/`RSGetState()`, standalone re-bind, viewport/scissor round-trip) —
+> **42/42 smoke checks pass**, up from 29/29. Next step is **Phase DX8** (shaders and stock
+> effects — the largest remaining phase: constant buffer structs, per-variant pipeline wiring, and
+> the first real draw calls). Full detail, task-by-task, lives in `plan_dx.md` (`DX-1`–`DX-53`,
+> `DX-80` closed). Project owner authorized 2026-07-13 continuing autonomously through Phase DX8 →
+> DX9 → DX10 → DX11, and Phase DX12 (D3D12) afterward if time allows; `DX-90` (real-Windows
 > checklist) stays `needs_human` — no such machine available in this environment.
 > **This is a brand-new architectural front for the project — read `plan_dx.md`'s own status banner
 > before touching it.** The pre-existing EasyGL/Vulkan/Bgfx/SDL_Renderer/Headless/Software/WebGPU
@@ -101,7 +109,7 @@ directory in this checkout) — cosmetic, pre-existing, not a CNA bug, do not ch
 | Vulkan | 4371/4373 pass (2 hardware skips), as of 2026-07-11 | 127/128 pass — 1 pre-existing failure (`Vulkan_DepthBias`) |
 | Bgfx | 4375/4377 pass (2 hardware skips), as of 2026-07-11 | 104/106 pass — 2 pre-existing failures (`Bgfx_RenderTarget2D_MsaaResolve`, `Bgfx_RenderTargetCube_DepthFormat`, DEFERRED — Task 952) |
 | Software | 4371/4373 pass, as of 2026-07-13 | 6 CTests, 29/29 checks |
-| D3D11 | **Does not build** (see §4) | **2/2 pass, 52/52 checks** (`D3D11_Smoke` 29 checks, `D3D11_Common` 23 checks), verified 2026-07-13 via `ctest --test-dir cmake-build-d3d11 -R D3D11` |
+| D3D11 | **Does not build** (see §4) | **2/2 pass, 65/65 checks** (`D3D11_Smoke` 42 checks, `D3D11_Common` 23 checks), verified 2026-07-13 via `ctest --test-dir cmake-build-d3d11 -R D3D11` |
 | Headless, WebGPU | Not re-verified this session | See `plan_headless.md`/`plan_webgpu.md` for their own last-verified status |
 
 All EasyGL/Vulkan/Bgfx/Software numbers above are carried over from the last session that actually
@@ -120,7 +128,11 @@ exclusively on D3D11. The D3D11 numbers are fresh, verified today.
   cube render targets (with real device-queried MSAA and a fix so `Clear()` targets whatever's
   actually bound instead of always the back buffer), MRT, a sampler cache, and occlusion queries
   (`DX-40`–`DX-47`) close Phase DX6 — each round-trip/creation-proven via new `D3D11_Smoke` checks.
-  See §3 for the itemized list and §4/§5 for what's still open.
+  Real blend/depth-stencil/rasterizer state objects (cached, from the raw XNA ordinals
+  `Apply*State()` already carries) plus `SetBlendFactor()`/`SetReferenceStencil()`/`SetViewport()`/
+  `SetScissorRect()` (`DX-50`–`DX-53`) close Phase DX7, including a real, documented
+  `DepthBias` float→D3D11-`INT` unit-conversion finding (round, not truncate). See §3 for the
+  itemized list and §4/§5 for what's still open.
 - **Software backend Phase S9** (`SOFTWARE-80`–`84`, 2026-07-13, `plan_software.md`): real bilinear
   texture sampling, real backface culling, real near-plane polygon clipping, `DualTextureEffect`/
   `EnvironmentMapEffect`/`SkinnedEffect` support, and a cross-backend diagnostic tool confirming
@@ -144,12 +156,15 @@ registered `ctest` pixel-verification examples under `examples/`. New this sessi
   `throw`-based "not yet implemented" stubs naming their own future `plan_dx.md` phase (DX8/DX9).
   Vertex/index buffers and cached input layouts are real (`DX-30`/`DX-31`/`DX-32`, Phase DX5
   closed); textures, cube/3D textures, 2D/cube render targets (incl. real MSAA), MRT, sampler
-  cache, and occlusion queries are real (`DX-40`–`DX-47`, Phase DX6 closed) — but nothing draws
-  with any of them yet: no constant buffers, no pipeline/draw-call wiring, no shader texture-
-  sampling wiring (that's Phase DX8). MRT's per-target MSAA-resolve/mip-regen-on-unbind is only
-  wired for the single-target case (`DX-43`), not yet for N>1 (`DX-46`'s own honest scope note).
-  The 5 combo `Clear*` variants, window resize, and device-lost recovery are implemented but not
-  yet exercised by any test.
+  cache, and occlusion queries are real (`DX-40`–`DX-47`, Phase DX6 closed); blend/depth-stencil/
+  rasterizer state objects + viewport/scissor are real (`DX-50`–`DX-53`, Phase DX7 closed) — but
+  nothing draws with any of them yet: no constant buffers, no pipeline/draw-call wiring, no shader
+  texture-sampling wiring (that's Phase DX8). MRT's per-target MSAA-resolve/mip-regen-on-unbind is
+  only wired for the single-target case (`DX-43`), not yet for N>1 (`DX-46`'s own honest scope
+  note). Blend/depth-stencil/rasterizer state objects are proven created+cached+bound, but not yet
+  proven to affect actual pixel output (needs a real draw call, Phase DX8). The 5 combo `Clear*`
+  variants, window resize, and device-lost recovery are implemented but not yet exercised by any
+  test.
 - **D3D11 + `CnaTests`**: the full pre-existing GTest suite does not build under this backend —
   ~10 test files call POSIX-only `::setenv()` directly (see §4).
 - **D3D12**: nothing exists — not even the CMake `STRINGS`/option-flag entry (`plan_dx.md` design
@@ -183,11 +198,12 @@ Most recent first. Full detail (exact code, discriminating-power verification) i
 
 ## 4. Current blocker / main problem
 
-**No hard blocker on the active D3D11 work.** `plan_dx.md`'s next unstarted step is **Phase DX6**
-(textures and render targets) — Phase DX3 (`D3DCommon`, all HLSL shader porting/compiling/
-embedding) and Phase DX5 (vertex/index buffers + input layout) are both now fully closed, and the
-project owner has authorized continuing autonomously through the rest of the plan — see this file's
-own top banner and `plan_dx.md`'s.
+**No hard blocker on the active D3D11 work.** `plan_dx.md`'s next unstarted step is **Phase DX8**
+(shaders and stock effects — constant buffer structs, per-variant pipeline wiring, and the first
+real draw calls) — Phase DX3 (`D3DCommon`, all HLSL shader porting/compiling/embedding), Phase DX5
+(vertex/index buffers + input layout), Phase DX6 (textures/render targets), and Phase DX7 (state
+objects) are all now fully closed, and the project owner has authorized continuing autonomously
+through the rest of the plan — see this file's own top banner and `plan_dx.md`'s.
 
 **One real, separate, documented problem**: the full `CnaTests` GTest suite does not build under
 `CNA_GRAPHICS_BACKEND=D3D11`.
@@ -346,39 +362,32 @@ desktop session with real GPU access — re-verify before assuming either claim 
 
 ## 8. Next smallest tasks
 
-1. **Phase DX7 — D3D11 state objects** (`plan_dx.md`, next unstarted phase as of 2026-07-13):
-   `ID3D11BlendState`/`ID3D11DepthStencilState`/`ID3D11RasterizerState` creation/caching from XNA
-   `BlendState`/`DepthStencilState`/`RasterizerState`, via `D3DStateMapping`'s already-closed
-   `DX-12-state` table, wired into `ApplyBlendState`/`ApplyDepthStencilState`/`ApplyRasterizerState`/
-   `SetBlendFactor`/`SetReferenceStencil`/`SetScissorRect`/`SetViewport` (currently all no-ops on
-   `D3D11GraphicsBackend`). Already authorized — no go-ahead needed, see §9. Read `plan_dx.md`'s
-   Phase DX7 table for the exact row list before starting.
-2. **Phase DX8 — D3D11 stock effects** (`plan_dx.md`, after DX7): `DX-60`/`DX-60a`'s explicit
-   GPU-packed constant-buffer structs are the single most consequential design task in this phase
-   (get the HLSL `cbuffer` packing right once) — read that row's own warning against a raw
-   `memcpy(GpuDrawParams)` shortcut before starting. This is what finally makes
-   `DrawColoredPrimitives`/`DrawIndexedColoredPrimitives`/`DrawPrimitivesEx` real instead of
-   throwing "not yet implemented".
-3. **Decide Task 945** (manual HLSL→GLSL port vs. `dxc`+`SPIRV-Cross` tooling for Phase 78, the
+1. **Phase DX8 — D3D11 stock effects** (`plan_dx.md`, next unstarted phase as of 2026-07-13, after
+   DX7's close): `DX-60`/`DX-60a`'s explicit GPU-packed constant-buffer structs are the single most
+   consequential design task in this phase (get the HLSL `cbuffer` packing right once) — read that
+   row's own warning against a raw `memcpy(GpuDrawParams)` shortcut before starting. This is what
+   finally makes `DrawColoredPrimitives`/`DrawIndexedColoredPrimitives`/`DrawPrimitivesEx` real
+   instead of throwing "not yet implemented". Already authorized — no go-ahead needed, see §9. Read
+   `plan_dx.md`'s Phase DX8 table for the exact row list before starting.
+2. **Decide Task 945** (manual HLSL→GLSL port vs. `dxc`+`SPIRV-Cross` tooling for Phase 78, the
    *unrelated* `../cna-samples` shader-conversion track) — Task 946's data point is in (manual
    porting scaled fine for BloomSample's 3 shaders). Needs project-owner input, do not decide
    unilaterally.
-4. **Phase 79 standing queue** (Tasks 957–1076, `plan_graphics.md`): a full re-audit of all 153
+3. **Phase 79 standing queue** (Tasks 957–1076, `plan_graphics.md`): a full re-audit of all 153
    `../cna-samples`-catalogued samples, one task per sample. Start with Task 1006 or any `⬜` row —
    do not touch `⛔` rows (structural/permanent, no CNA action possible).
-5. Task 952 (`RenderTargetCube` depth-gating bug on Bgfx) remains **DEFERRED**, not a next task —
+4. Task 952 (`RenderTargetCube` depth-gating bug on Bgfx) remains **DEFERRED**, not a next task —
    see §9.
 
 ---
 
 ## 9. Do not do yet
 
-- **`plan_dx.md`'s Phase DX7 onward (state objects, Phase DX8's stock effects, `SpriteBatch`,
-  tests, docs) is authorized** — the project owner authorized continuing autonomously through
-  Phase DX3 → DX5 → DX6 → DX7 → DX8 → DX9 → DX10 → DX11 on 2026-07-13 (Phases DX1/DX2/DX3/DX5/DX6/
-  DX4-core/`DX-80` are already closed as of this session, see the banner and `plan_dx.md`'s own
-  status banner). Only Phase DX12 (D3D12) and `DX-90` (needs a real Windows machine) remain gated —
-  see the next two bullets.
+- **`plan_dx.md`'s Phase DX8 onward (stock effects, `SpriteBatch`, tests, docs) is authorized** —
+  the project owner authorized continuing autonomously through Phase DX3 → DX5 → DX6 → DX7 → DX8 →
+  DX9 → DX10 → DX11 on 2026-07-13 (Phases DX1/DX2/DX3/DX5/DX6/DX7/DX4-core/`DX-80` are already
+  closed as of this session, see the banner and `plan_dx.md`'s own status banner). Only Phase DX12
+  (D3D12) and `DX-90` (needs a real Windows machine) remain gated — see the next two bullets.
 - **Do not start `plan_dx.md`'s Phase DX12 (Direct3D 12)** — explicitly deferred, needs a separate,
   later authorization even after all of D3D11 is done (`plan_dx.md` design decision 9).
 - **Do not opportunistically fix the `CnaTests`-under-D3D11 `::setenv` portability gap** (§4) — a

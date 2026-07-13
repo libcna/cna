@@ -51,4 +51,13 @@ namespace CNA::Internal::Backends::D3DCommon
     /// enumerator names were themselves modeled after D3D's min/mag/mip filter naming convention,
     /// so this is a direct, unambiguous one-to-one mapping (no derived/composed bit twiddling).
     D3D11_FILTER TextureFilterToD3D11(int textureFilter);
+
+    /// Maps an XNA StencilOperation ordinal (Microsoft::Xna::Framework::Graphics::StencilOperation
+    /// cast to int) to the corresponding D3D11_STENCIL_OP. XNA's Increment/Decrement (wrapping) map
+    /// to D3D11_STENCIL_OP_INCR/DECR; XNA's IncrementSaturation/DecrementSaturation (clamping) map
+    /// to D3D11_STENCIL_OP_INCR_SAT/DECR_SAT -- these are two genuinely distinct D3D11 ops, not
+    /// interchangeable. Returns D3D11_STENCIL_OP_KEEP for an unrecognized ordinal (Phase DX7,
+    /// DX-51 -- used by Phase DX3's D3D12 consumer too, design decision 4: D3D11_STENCIL_OP and
+    /// D3D12_STENCIL_OP share identical enumerator values, verified against both SDK headers).
+    D3D11_STENCIL_OP StencilOperationToD3D11(int stencilOperation);
 }

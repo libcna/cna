@@ -6,6 +6,7 @@
 #include "Microsoft/Xna/Framework/Graphics/CompareFunction.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CullMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/FillMode.hpp"
+#include "Microsoft/Xna/Framework/Graphics/StencilOperation.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureAddressMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureFilter.hpp"
 
@@ -111,6 +112,22 @@ namespace CNA::Internal::Backends::D3DCommon
             case TextureFilter::MinPointMagLinearMipLinear:  return D3D11_FILTER_MIN_POINT_MAG_MIP_LINEAR;
             case TextureFilter::MinPointMagLinearMipPoint:   return D3D11_FILTER_MIN_POINT_MAG_LINEAR_MIP_POINT;
             default:                                           return D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+        }
+    }
+
+    D3D11_STENCIL_OP StencilOperationToD3D11(int stencilOperation)
+    {
+        switch (static_cast<StencilOperation>(stencilOperation))
+        {
+            case StencilOperation::Keep:                 return D3D11_STENCIL_OP_KEEP;
+            case StencilOperation::Zero:                 return D3D11_STENCIL_OP_ZERO;
+            case StencilOperation::Replace:              return D3D11_STENCIL_OP_REPLACE;
+            case StencilOperation::Increment:            return D3D11_STENCIL_OP_INCR;
+            case StencilOperation::Decrement:            return D3D11_STENCIL_OP_DECR;
+            case StencilOperation::IncrementSaturation:  return D3D11_STENCIL_OP_INCR_SAT;
+            case StencilOperation::DecrementSaturation:  return D3D11_STENCIL_OP_DECR_SAT;
+            case StencilOperation::Invert:               return D3D11_STENCIL_OP_INVERT;
+            default:                                       return D3D11_STENCIL_OP_KEEP;
         }
     }
 }

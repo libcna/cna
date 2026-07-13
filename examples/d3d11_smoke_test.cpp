@@ -36,6 +36,15 @@
 //   call binding both RTVs, and Clear() correctly clears both (a real multi-target readback, not
 //   just "the call didn't throw") -- MRT output without an actual multi-target-writing shader
 //   (Phase DX8) is proven exactly this far, honestly, and no further.
+// Check O (DX-50/DX-51/DX-52/DX-53) -- D3D11BlendStateCache/D3D11DepthStencilStateCache/
+//   D3D11RasterizerStateCache each create a real state object, cache it (identical XNA params ->
+//   identical object, different params -> different object), and ApplyBlendState()/
+//   ApplyDepthStencilState()/ApplyRasterizerState() genuinely bind it (confirmed via
+//   OMGetBlendState()/OMGetDepthStencilState()/RSGetState()) -- plus SetBlendFactor()/
+//   SetReferenceStencil()'s standalone re-bind (Task 870/319 parity) and SetViewport()/
+//   SetScissorRect()'s direct RSSetViewports()/RSSetScissorRects() round-trip. Behavioral pixel
+//   correctness of blend/stencil *output* needs an actual draw call (Phase DX8), proven exactly
+//   this far, honestly, and no further -- same bar Check N already set for MRT.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
@@ -51,6 +60,7 @@
 #include "CNA/Internal/Backends/D3D11/D3D11RenderTargets.hpp"
 #include "CNA/Internal/Backends/D3D11/D3D11SamplerCache.hpp"
 #include "CNA/Internal/Backends/D3D11/D3D11OcclusionQuery.hpp"
+#include "CNA/Internal/Backends/D3D11/D3D11StateObjectCache.hpp"
 #include "CNA/Internal/Backends/D3DCommon/D3DShaderCache.hpp"
 #include "CNA/Internal/Graphics/ImageData.hpp"
 
@@ -485,7 +495,115 @@ protected:
                   "D3D11GraphicsBackend::SetRenderTargets() (MRT): one OMSetRenderTargets binds both targets, Clear() writes both");
         }
 
-        const int totalChecks = 3 + 10 + 1 + 2 + 2 + 2 + 2 + 2 + 1 + 1 + 2 + 1;
+        // Check O (DX-50/DX-51/DX-52/DX-53): real ID3D11BlendState/DepthStencilState/
+        // RasterizerState creation+caching+binding, plus SetViewport()/SetScissorRect()'s direct
+        // RSSetViewports()/RSSetScissorRects() round-trip. Behavioral pixel-correctness of
+        // blend/stencil *output* needs an actual draw call (Phase DX8, not yet available) -- this
+        // check honestly proves creation, caching identity/distinctness, and real device binding,
+        // same honest bound Check J/K/N already established for render targets/MRT.
+        {
+            // BlendState: NonPremultiplied-style (SourceAlpha/InvSourceAlpha/Add on both channels)
+            // -- deliberately not the Opaque combo, so BlendEnable ends up TRUE.
+            auto& blendCache = backend.GetBlendStateCacheEXT();
+            auto blendA1 = blendCache.GetOrCreate(device, 4, 4, 5, 5, 0, 0);   // SourceAlpha/InvSourceAlpha/Add
+            auto blendA2 = blendCache.GetOrCreate(device, 4, 4, 5, 5, 0, 0);
+            auto blendB = blendCache.GetOrCreate(device, 0, 0, 1, 1, 0, 0);    // Opaque
+            check(blendA1.Get() != nullptr && blendA1.Get() == blendA2.Get(),
+                  "D3D11BlendStateCache: identical XNA blend params return the identical object");
+            check(blendA1.Get() != blendB.Get(),
+                  "D3D11BlendStateCache: different XNA blend params return a different object");
+
+            backend.ApplyBlendState(4, 4, 5, 5, 0, 0);
+            ID3D11BlendState* boundBlend = nullptr;
+            float boundBlendFactor[4] = {};
+            UINT boundSampleMask = 0;
+            context->OMGetBlendState(&boundBlend, boundBlendFactor, &boundSampleMask);
+            check(boundBlend == blendA1.Get(),
+                  "D3D11GraphicsBackend::ApplyBlendState(): OMSetBlendState actually bound the cached object");
+            if (boundBlend) boundBlend->Release();
+
+            backend.SetBlendFactor(0.25f, 0.5f, 0.75f, 1.0f);
+            ID3D11BlendState* boundBlend2 = nullptr;
+            context->OMGetBlendState(&boundBlend2, boundBlendFactor, &boundSampleMask);
+            check(boundBlend2 == blendA1.Get() &&
+                  boundBlendFactor[0] == 0.25f && boundBlendFactor[1] == 0.5f &&
+                  boundBlendFactor[2] == 0.75f && boundBlendFactor[3] == 1.0f,
+                  "D3D11GraphicsBackend::SetBlendFactor(): re-binds the current blend state with the new factor, standalone");
+            if (boundBlend2) boundBlend2->Release();
+
+            // DepthStencilState: depth+stencil enabled, distinct front-face ops.
+            auto& dsCache = backend.GetDepthStencilStateCacheEXT();
+            auto dsA1 = dsCache.GetOrCreate(device, true, true, 2 /*Less*/, true, 0 /*Always*/,
+                                            2 /*Replace*/, 0 /*Keep*/, 0 /*Keep*/, 0xFF, 0xFF,
+                                            false, 0, 0, 0, 0);
+            auto dsA2 = dsCache.GetOrCreate(device, true, true, 2, true, 0, 2, 0, 0, 0xFF, 0xFF,
+                                            false, 0, 0, 0, 0);
+            auto dsB = dsCache.GetOrCreate(device, false, false, 0, false, 0, 0, 0, 0, 0xFF, 0xFF,
+                                           false, 0, 0, 0, 0);
+            check(dsA1.Get() != nullptr && dsA1.Get() == dsA2.Get(),
+                  "D3D11DepthStencilStateCache: identical XNA depth-stencil params return the identical object");
+            check(dsA1.Get() != dsB.Get(),
+                  "D3D11DepthStencilStateCache: different XNA depth-stencil params return a different object");
+
+            backend.ApplyDepthStencilState(true, true, 2, true, 0, 2, 0, 0, 0xFF, 0xFF, 77,
+                                           false, 0, 0, 0, 0);
+            ID3D11DepthStencilState* boundDS = nullptr;
+            UINT boundRef = 0;
+            context->OMGetDepthStencilState(&boundDS, &boundRef);
+            check(boundDS == dsA1.Get() && boundRef == 77,
+                  "D3D11GraphicsBackend::ApplyDepthStencilState(): OMSetDepthStencilState bound the cached object with the reference value");
+            if (boundDS) boundDS->Release();
+
+            backend.SetReferenceStencil(123);
+            ID3D11DepthStencilState* boundDS2 = nullptr;
+            context->OMGetDepthStencilState(&boundDS2, &boundRef);
+            check(boundDS2 == dsA1.Get() && boundRef == 123,
+                  "D3D11GraphicsBackend::SetReferenceStencil(): re-binds the current depth-stencil state with the new reference, standalone");
+            if (boundDS2) boundDS2->Release();
+
+            // RasterizerState: cull-back/solid vs. cull-none/wireframe.
+            auto& rsCache = backend.GetRasterizerStateCacheEXT();
+            auto rsA1 = rsCache.GetOrCreate(device, 2 /*CullCounterClockwiseFace*/, 0 /*Solid*/, false, 0.0f, 0.0f);
+            auto rsA2 = rsCache.GetOrCreate(device, 2, 0, false, 0.0f, 0.0f);
+            auto rsB = rsCache.GetOrCreate(device, 0 /*None*/, 1 /*WireFrame*/, true, 1.0f, 2.0f);
+            check(rsA1.Get() != nullptr && rsA1.Get() == rsA2.Get(),
+                  "D3D11RasterizerStateCache: identical XNA rasterizer params return the identical object");
+            check(rsA1.Get() != rsB.Get(),
+                  "D3D11RasterizerStateCache: different XNA rasterizer params return a different object");
+
+            backend.ApplyRasterizerState(2, 0, false, 0.0f, 0.0f);
+            ID3D11RasterizerState* boundRS = nullptr;
+            context->RSGetState(&boundRS);
+            check(boundRS == rsA1.Get(),
+                  "D3D11GraphicsBackend::ApplyRasterizerState(): RSSetState actually bound the cached object");
+            if (boundRS) boundRS->Release();
+
+            // Viewport / scissor rect round-trip.
+            backend.SetViewport(2, 3, 40, 30, 0.1f, 0.9f);
+            UINT vpCount = 1;
+            D3D11_VIEWPORT boundVp{};
+            context->RSGetViewports(&vpCount, &boundVp);
+            check(vpCount == 1 && boundVp.TopLeftX == 2.0f && boundVp.TopLeftY == 3.0f &&
+                  boundVp.Width == 40.0f && boundVp.Height == 30.0f &&
+                  boundVp.MinDepth == 0.1f && boundVp.MaxDepth == 0.9f,
+                  "D3D11GraphicsBackend::SetViewport(): RSSetViewports round-trips the exact rectangle and depth range");
+
+            backend.SetScissorRect(5, 6, 20, 10);
+            UINT rectCount = 1;
+            D3D11_RECT boundRect{};
+            context->RSGetScissorRects(&rectCount, &boundRect);
+            check(rectCount == 1 && boundRect.left == 5 && boundRect.top == 6 &&
+                  boundRect.right == 25 && boundRect.bottom == 16,
+                  "D3D11GraphicsBackend::SetScissorRect(): RSSetScissorRects round-trips as (x,y,x+w,y+h)");
+
+            // Restore the window-size viewport so nothing downstream (there is nothing after this
+            // check today, but keep the invariant honest) is left with a stale small viewport.
+            int vw = 0, vh = 0;
+            backend.GetViewportSize(vw, vh);
+            backend.SetViewport(0, 0, vw, vh, 0.0f, 1.0f);
+        }
+
+        const int totalChecks = 3 + 10 + 1 + 2 + 2 + 2 + 2 + 2 + 1 + 1 + 2 + 1 + 13;
         std::printf("=== %d/%d PASS ===\n", passCount_, totalChecks);
         result_ = (passCount_ == totalChecks) ? 0 : 1;
         Exit();

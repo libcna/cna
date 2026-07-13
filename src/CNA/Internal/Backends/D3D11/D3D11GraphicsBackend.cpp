@@ -527,6 +527,91 @@ namespace CNA::Internal::Backends::D3D11
         return std::make_unique<D3D11OcclusionQueryBackend>(device_.Get(), context_.Get());
     }
 
+    void D3D11GraphicsBackend::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
+                                               int colorDstBlend, int alphaDstBlend,
+                                               int colorBlendFunc, int alphaBlendFunc)
+    {
+        currentBlendState_ = blendStateCache_.GetOrCreate(
+            device_.Get(), colorSrcBlend, alphaSrcBlend, colorDstBlend, alphaDstBlend,
+            colorBlendFunc, alphaBlendFunc);
+        context_->OMSetBlendState(currentBlendState_.Get(), currentBlendFactor_, 0xFFFFFFFFu);
+    }
+
+    void D3D11GraphicsBackend::ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable,
+                                                       int depthFunc,
+                                                       bool stencilEnable, int stencilFunc,
+                                                       int stencilPass, int stencilFail, int stencilDepthFail,
+                                                       int stencilMask, int stencilWriteMask, int referenceStencil,
+                                                       bool twoSidedStencilMode,
+                                                       int ccwStencilFunc, int ccwStencilPass,
+                                                       int ccwStencilFail, int ccwStencilDepthFail)
+    {
+        currentDepthStencilState_ = depthStencilStateCache_.GetOrCreate(
+            device_.Get(), depthEnable, depthWriteEnable, depthFunc,
+            stencilEnable, stencilFunc, stencilPass, stencilFail, stencilDepthFail,
+            stencilMask, stencilWriteMask,
+            twoSidedStencilMode, ccwStencilFunc, ccwStencilPass, ccwStencilFail, ccwStencilDepthFail);
+        currentReferenceStencil_ = referenceStencil;
+        context_->OMSetDepthStencilState(currentDepthStencilState_.Get(),
+                                         static_cast<UINT>(currentReferenceStencil_));
+    }
+
+    void D3D11GraphicsBackend::ApplyRasterizerState(int cullMode, int fillMode,
+                                                    bool scissorTestEnable,
+                                                    float depthBias, float slopeScaleDepthBias)
+    {
+        auto state = rasterizerStateCache_.GetOrCreate(
+            device_.Get(), cullMode, fillMode, scissorTestEnable, depthBias, slopeScaleDepthBias);
+        context_->RSSetState(state.Get());
+    }
+
+    void D3D11GraphicsBackend::SetBlendFactor(float r, float g, float b, float a)
+    {
+        currentBlendFactor_[0] = r;
+        currentBlendFactor_[1] = g;
+        currentBlendFactor_[2] = b;
+        currentBlendFactor_[3] = a;
+        // Task 870/319 (mirrored from DX-51's own SetReferenceStencil below): BlendFactor is a
+        // real, independent device property -- it must take effect immediately even if no new
+        // ApplyBlendState() call happens, by re-binding whatever blend state is already current
+        // with the new factor. If no blend state has been applied yet, there is nothing to
+        // re-bind (the next ApplyBlendState() call will pick up currentBlendFactor_ itself).
+        if (currentBlendState_)
+            context_->OMSetBlendState(currentBlendState_.Get(), currentBlendFactor_, 0xFFFFFFFFu);
+    }
+
+    void D3D11GraphicsBackend::SetReferenceStencil(int value)
+    {
+        currentReferenceStencil_ = value;
+        // Same standalone-property discipline as SetBlendFactor above (Task 870/319): re-bind the
+        // current depth-stencil state object with the new reference value.
+        if (currentDepthStencilState_)
+            context_->OMSetDepthStencilState(currentDepthStencilState_.Get(),
+                                             static_cast<UINT>(currentReferenceStencil_));
+    }
+
+    void D3D11GraphicsBackend::SetScissorRect(int x, int y, int w, int h)
+    {
+        D3D11_RECT rect{};
+        rect.left = x;
+        rect.top = y;
+        rect.right = x + std::max(0, w);
+        rect.bottom = y + std::max(0, h);
+        context_->RSSetScissorRects(1, &rect);
+    }
+
+    void D3D11GraphicsBackend::SetViewport(int x, int y, int w, int h, float minDepth, float maxDepth)
+    {
+        D3D11_VIEWPORT vp{};
+        vp.TopLeftX = static_cast<float>(x);
+        vp.TopLeftY = static_cast<float>(y);
+        vp.Width = static_cast<float>(std::max(0, w));
+        vp.Height = static_cast<float>(std::max(0, h));
+        vp.MinDepth = minDepth;
+        vp.MaxDepth = maxDepth;
+        context_->RSSetViewports(1, &vp);
+    }
+
     void D3D11GraphicsBackend::TrackCurrentRenderTargetEXT(
         ID3D11RenderTargetView* const* rtvs, int count, ID3D11DepthStencilView* dsv)
     {

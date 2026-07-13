@@ -6,6 +6,7 @@
 #include "../Common/IGraphicsBackend.hpp"
 #include "D3D11InputLayoutCache.hpp"
 #include "D3D11SamplerCache.hpp"
+#include "D3D11StateObjectCache.hpp"
 
 #include <d3d11.h>
 #include <dxgi1_5.h>
@@ -106,6 +107,33 @@ namespace CNA::Internal::Backends::D3D11
         void ApplySamplerState(int slot, int filter, int addressU, int addressV, int maxAnisotropy) override;
         std::unique_ptr<IOcclusionQueryBackend> CreateOcclusionQuery() override;
 
+        // ---- IGraphicsBackend: real (Phase DX7) ----
+        void ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
+                             int colorDstBlend, int alphaDstBlend,
+                             int colorBlendFunc, int alphaBlendFunc) override;
+        void ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable,
+                                    int depthFunc,
+                                    bool stencilEnable, int stencilFunc,
+                                    int stencilPass, int stencilFail, int stencilDepthFail,
+                                    int stencilMask, int stencilWriteMask, int referenceStencil,
+                                    bool twoSidedStencilMode,
+                                    int ccwStencilFunc, int ccwStencilPass,
+                                    int ccwStencilFail, int ccwStencilDepthFail) override;
+        void ApplyRasterizerState(int cullMode, int fillMode,
+                                  bool scissorTestEnable,
+                                  float depthBias = 0.0f,
+                                  float slopeScaleDepthBias = 0.0f) override;
+        void SetBlendFactor(float r, float g, float b, float a) override;
+        void SetReferenceStencil(int value) override;
+        void SetScissorRect(int x, int y, int w, int h) override;
+        void SetViewport(int x, int y, int w, int h, float minDepth, float maxDepth) override;
+
+        /// Exposes the blend/depth-stencil/rasterizer state caches (NOXNA) -- Phase DX8's draw-call
+        /// wiring reuses these directly rather than re-implementing the same caching.
+        [[nodiscard]] D3D11BlendStateCache& GetBlendStateCacheEXT() { return blendStateCache_; }
+        [[nodiscard]] D3D11DepthStencilStateCache& GetDepthStencilStateCacheEXT() { return depthStencilStateCache_; }
+        [[nodiscard]] D3D11RasterizerStateCache& GetRasterizerStateCacheEXT() { return rasterizerStateCache_; }
+
         /// NOXNA (Phase DX6): updates Clear()'s target-RTV/DSV tracking to point at a custom
         /// render target's own views. Called by D3D11RenderTargetBackend::BindAsRenderTarget()/
         /// D3D11RenderTargetCubeBackend::BindAsRenderTargetFace() -- those own the real
@@ -180,6 +208,19 @@ namespace CNA::Internal::Backends::D3D11
 
         // Phase DX6 (DX-44): sampler-state cache shared by ApplySamplerState().
         D3D11SamplerCache samplerCache_;
+
+        // Phase DX7 (DX-50/DX-51/DX-52): blend/depth-stencil/rasterizer state caches, plus the
+        // currently-bound state objects and the two standalone-settable values (blend factor,
+        // reference stencil) that OMSetBlendState()/OMSetDepthStencilState() need re-supplied on
+        // every bind but which XNA allows changing independently of a full Apply*State() call
+        // (GraphicsDevice.BlendFactor, GraphicsDevice.ReferenceStencil -- Task 870/319).
+        D3D11BlendStateCache blendStateCache_;
+        D3D11DepthStencilStateCache depthStencilStateCache_;
+        D3D11RasterizerStateCache rasterizerStateCache_;
+        ComPtr<ID3D11BlendState> currentBlendState_;
+        ComPtr<ID3D11DepthStencilState> currentDepthStencilState_;
+        float currentBlendFactor_[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+        int currentReferenceStencil_ = 0;
 
         // Presentation policy (plan_dx.md design decision 13: capability vs. policy, kept separate).
         bool vsyncEnabled_ = true;
