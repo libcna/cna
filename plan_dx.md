@@ -2,13 +2,17 @@
 
 > **Status (2026-07-14): Phase DX1 through Phase DX11 are ALL closed** — every task except
 > `DX-90`/`DX-91` (real-Windows hardware, `needs_human`, no such machine available in this dev
-> environment) and Phase DX12 (D3D12, separately authorized but not yet started). D3D11 is a real,
-> feature-complete-per-this-plan backend: 6 CTest binaries, 96+ checks, all passing through
-> Wine+DXVK on a real GPU. See the dedicated milestone paragraphs below (search "also closed") for
-> each phase's own real proof, or jump straight to `docs/d3d11-backend.md` for the current-state
-> summary. The paragraphs immediately below are kept as the original, blow-by-blow session history
-> (Phase DX1 → DX2 → DX4's core → `DX-80`, 2026-07-13) — historically accurate at the time each was
-> written, not stale placeholders.
+> environment). D3D11 is a real, feature-complete-per-this-plan backend: 6 CTest binaries, 96+
+> checks, all passing through Wine+DXVK on a real GPU. See the dedicated milestone paragraphs below
+> (search "also closed") for each phase's own real proof, or jump straight to
+> `docs/d3d11-backend.md` for the current-state summary. **Phase DX12 (D3D12) is now authorized and
+> underway** — `DX-100`'s own real spike (2026-07-14) found the D3D12 device/queue/fence/
+> command-list path genuinely works locally via Wine+vkd3d-proton (DXR 1.1/SM 6.8 negotiated, more
+> capable than D3D11's own DXVK path), but swap-chain creation specifically crashes/fails under the
+> tested setup — see that row's own Notes for the full evidence and the recommended off-screen-proof
+> workaround for `DX-101` onward. The paragraphs immediately below are kept as the original,
+> blow-by-blow session history (Phase DX1 → DX2 → DX4's core → `DX-80`, 2026-07-13) — historically
+> accurate at the time each was written, not stale placeholders.
 >
 > **Status: Phase DX1 + Phase DX2 + Phase DX4's core + `DX-80` all closed 2026-07-13**, authorized
 > and completed the same day. `D3D11GraphicsBackend` is real code now, not just a plan:
@@ -784,15 +788,27 @@ separately authorized-but-not-started (design decision 9) — see that phase's o
 
 ## Phase DX12 — Direct3D 12 backend (deferred, none authorized yet)
 
-Every row below is written up as a concrete, scoped task per design decision 9 — **none of these
-are authorized for implementation**. Do not start this phase without an explicit project-owner
-go-ahead, even after D3D11 (Phases DX1–DX11) is fully done and verified on real Windows. Coarser-
-grained than the D3D11 phases above, since detailed design should wait until D3D11's own experience
-(what actually worked, what Wine/DXVK-equivalent tooling exists for D3D12) can inform it.
+Every row below is written up as a concrete, scoped task per design decision 9. The project owner
+authorized starting this phase 2026-07-13 ("later if time allows," after D3D11/Phases DX1–DX11 were
+fully completed the same session) — implementation may proceed. Coarser-grained than the D3D11
+phases above, since detailed design should wait until D3D11's own experience (what actually worked,
+what Wine/DXVK-equivalent tooling exists for D3D12) can inform it.
+
+**`DX-100`'s own spike (closed 🟨 2026-07-14) already changed this phase's sequencing once**, exactly
+as that row anticipated: the D3D12 device/queue/fence/command-list programming model is real and
+usable locally via Wine+vkd3d-proton (even more capable than D3D11's DXVK path — DXR 1.1, SM 6.8
+negotiated on this machine's GPU), but `CreateSwapChainForHwnd` specifically crashes or fails under
+the tested drop-in-DLL setup — see `DX-100`'s own Notes for the full evidence and two concrete ways
+forward. **Until that swap-chain gap is resolved or deliberately routed around, `DX-102` onward
+should default to option (b) from `DX-100`'s Notes: off-screen/readback-only proof (an
+`ID3D12Resource` render target + staging-heap readback, no `IDXGISwapChain`) for local Wine-based
+development**, deferring swap-chain/`Present()`-specific proof to a real-Windows/Windows-CI/VM pass
+much earlier than D3D11's own `DX-90` did — do not silently assume a working swap chain further into
+this phase without re-verifying it.
 
 | # | Task | Status | Notes |
 |---|---|---|---|
-| DX-100 | Spike: does Wine + vkd3d-proton give a usable local D3D12 dev loop on this Debian machine, equivalent to D3D11's DXVK path? | ⬜ | **Do this first, before committing to the rest of this phase's ordering** — if vkd3d-proton under Wine turns out unreliable, most of Phase DX12's own dev-and-test loop needs to shift toward Windows CI/VM much earlier than D3D11's did, and that changes how tasks below should be sequenced. |
+| DX-100 | Spike: does Wine + vkd3d-proton give a usable local D3D12 dev loop on this Debian machine, equivalent to D3D11's DXVK path? | 🟨 | **Spiked 2026-07-14 — real, mixed result: device/compute path yes, presentation path no (not with the approach tried).** MinGW headers: `d3d12.h`/`d3d12sdklayers.h`/`d3d12shader.h`/`d3d12video.h` + `libd3d12.a` all present under `/usr/x86_64-w64-mingw32/{include,lib}` (same as `DX-1` found for D3D11) — **`d3dx12.h` (Microsoft's optional C++ helper header) is absent**, so any future task must not assume it's available; use raw `ID3D12*` calls directly. No system `vkd3d-proton` apt package is installed (`dpkg -l` empty; Debian's own `libvkd3d1`/`libvkd3d-shader1`/`libvkd3d-utils1` packages exist in `apt-cache search` but are a *different*, Linux-native library Wine's built-in D3D12 support can use — not the same thing as vkd3d-proton's Windows-PE `d3d12.dll`/`d3d12core.dll` override). Real vkd3d-proton binaries **were** available locally without any new install, bundled inside this machine's existing Steam "Proton - Experimental" installation (`.../files/lib/wine/vkd3d-proton/{x86_64,i386}-windows/{d3d12,d3d12core}.dll`) — copied into a dedicated `~/.wine-cna-d3d12` prefix's `system32`/`syswow64` plus `HKCU\Software\Wine\DllOverrides` set to `native`, the exact same no-sudo, project-local-prefix pattern `DX-2`/`DX-3` already established for DXVK, so this required no new elevated/system-wide changes. A real throwaway spike (`D3D12CreateDevice`/`CheckFeatureSupport`/`CreateCommandQueue`/`CreateDXGIFactory2`+tearing/`CreateFence`/`CreateCommandAllocator`/`CreateCommandList`, cross-built via `x86_64-w64-mingw32-g++ -ld3d12 -ldxgi`, run under plain `wine` — Debian's system Wine 10.0, not Proton's own patched build) **succeeded genuinely and completely for every one of those calls** — real vkd3d-proton log lines confirm real engagement (`vkd3d-proton - build: 4232071c346c0a7`, `vkd3d-proton - applicationVersion: 3.1.0`), against a real GPU with **feature level negotiated to `0xC100` = `D3D_FEATURE_LEVEL_12_1`, DXR 1.1 ray-tracing support, and Shader Model 6.8** (AMD RADV/Vulkan-backed) — genuinely more capable than D3D11's own DXVK path reported, not just "also works." **The one real, evidenced failure**: `CreateSwapChainForHwnd` (a plain-Wine-`dxgi.dll`-owned entry point, not vkd3d-proton's) — with `DXGI_SWAP_EFFECT_FLIP_DISCARD` (this plan's own D3D11 convention, design decision matching `DX-23`) it **hard-crashes** (unhandled page fault deep inside Wine's builtin `dxgi.dll`/`wined3d` swap-chain internals, confirmed via a live WineDbg backtrace attach); with the older `DXGI_SWAP_EFFECT_DISCARD` it fails *cleanly* instead (`DXGI_ERROR_INVALID_CALL`, `0x887A0001`) — no crash, but still no working swap chain either way. Root cause, not just a symptom: vanilla Debian Wine's own `dxgi.dll` was built/tested against `wined3d`-backed (DXVK/D3D11-style) devices, and doesn't know how to hand a real `ID3D12CommandQueue` to its own swap-chain presentation path — that integration normally lives inside Proton's own patched Wine+DXGI fork, not upstream/Debian Wine. **Attempted the natural fallback** — running the exact same spike through Proton's own bundled `wine` binary (`.../Proton - Experimental/files/bin/wine`) against the same prefix — and it failed immediately (exit 53, no spike output at all, only a `wineserver: using server-side synchronization` line), consistent with a Wine-build/prefix-format mismatch; Proton's own Wine expects its own launch environment (`STEAM_COMPAT_DATA_PATH` etc.), not a bare `wineboot`-initialized prefix, and reproducing that properly is a distinct, non-trivial side effort **not attempted further within this spike's scope**. **Recommendation for DX-101 onward**: the D3D12 *device/resource/command* programming model (queues, fences, command lists/allocators, and by extension the coming PSO/root-signature/resource-barrier/buffer/texture work in `DX-103`–`DX-109`) is provably developable locally on this Debian machine via Wine+vkd3d-proton, same convenience D3D11's DXVK path gave — **but on-screen presentation specifically (the swap-chain half of `DX-102`, and anything depending on a real `Present()`) is not proven working via this approach** and should not be assumed to "just work" the way `DX-23` did for D3D11. Two real options for whoever picks up `DX-101`: (a) invest real effort in properly replicating Proton's own launch environment for swap-chain testing specifically (not ruled out, just not achieved by this spike's lighter-weight attempt), or (b) lean the local dev/test loop on off-screen, swap-chain-free proof (render to an `ID3D12Resource` render-target-view texture, read back via a staging heap, no `IDXGISwapChain` involved at all — D3D12 doesn't strictly require a swap chain to draw) for everything through `DX-109`, and defer swap-chain/`Present()`-specific proof to a real-Windows or Windows-CI/VM pass **much earlier** than D3D11's own `DX-90` deferred it — this second option most directly matches this row's own original stated purpose. Spike artifacts (`d3d12_spike*.cpp`, not part of the CNA build) were scratch-only and not checked in; the finding itself is what's preserved here. |
 | DX-101 | **Full `D3D12` CMake wiring, all of it deferred here rather than pre-staged in Phase DX2** (see that phase's own intro): add `"D3D12"` to `CNA_GRAPHICS_BACKEND`'s `STRINGS` property and a `CNA_BACKEND_D3D12` option flag; extend `DX-11`'s `FATAL_ERROR` non-Windows guard to also cover `D3D12`; add the `cna_backend_graphics_d3d12` target (`elseif(CNA_GRAPHICS_BACKEND STREQUAL "D3D12")` block) linking `d3d12`/`dxgi` plus `D3DCommon` — same minimal-link-set discipline as `DX-12`/design decision 3, `dxguid`/`d3dcompiler` only if `DX-100`'s own spike actually found them necessary, not assumed to carry over unchanged from D3D11's own confirmed set; add the `CreateGraphicsBackend()` factory dispatch for `D3D12` | ⬜ | Until this task runs, `-DCNA_GRAPHICS_BACKEND=D3D12` is simply not a recognized value — by design, so no D3D12 scaffolding exists ahead of explicit authorization (design decision 9). |
 | DX-102 | `ID3D12Device` creation, command queue (`ID3D12CommandQueue`), `IDXGISwapChain` (flip-model, `DXGI_SWAP_EFFECT_FLIP_DISCARD`) | ⬜ | |
 | DX-103 | Descriptor heaps: RTV heap, DSV heap, CBV/SRV/UAV heap (shader-visible), allocation strategy | ⬜ | |
