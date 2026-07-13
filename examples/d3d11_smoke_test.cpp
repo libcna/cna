@@ -115,6 +115,8 @@
 #include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 
+#include <SDL3/SDL.h>
+
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -1382,7 +1384,120 @@ protected:
                   "color, not the stock sprite2d pipeline's (plan_dx.md DX-71)");
         }
 
-        const int totalChecks = 3 + 10 + 1 + 2 + 2 + 2 + 2 + 2 + 1 + 1 + 2 + 1 + 13 + 2 + 3 + 2 + 2 + 1 + 1 + 1 + 1 + 3 + 2 + 2 + 2;
+        // Check AB (DX-83) -- a real backbuffer resize genuinely exercises D3D11's DX-29
+        // EnsureSwapChainSize()/ResizeBuffers() path (previously implemented but never exercised,
+        // per that row's own honest gap note), and Clear()+GetBackBufferData() after the resize
+        // reads back the NEW size's data correctly -- not stale/wrong-sized. Resized via the same
+        // public GraphicsDeviceManager path a real game uses (setPreferredBackBufferWidth/Height +
+        // ApplyChanges()), which calls SDL_SetWindowSize(); EnsureSwapChainSize() itself only picks
+        // the new size up lazily (SDL_GetWindowSizeInPixels) on the next Present()/Clear() cycle, so
+        // this polls across a few frames the same way this project's own Vulkan/EasyGL resize tests
+        // do under Wine/Xvfb's own asynchronous window-manager resize delivery -- Wine-only
+        // verification, matching this row's own explicit scope (real-Windows fullscreen-transition
+        // behavior is DX-90's job, not this one).
+        {
+            gdm_->setPreferredBackBufferWidthProperty(96);
+            gdm_->setPreferredBackBufferHeightProperty(80);
+            gdm_->ApplyChanges();
+
+            bool resized = false;
+            for (int frame = 0; frame < 30 && !resized; ++frame)
+            {
+                dev.Clear(Color(30, 60, 90, 255));
+                dev.Present();
+                const auto& vp = dev.getViewportProperty();
+                if (vp.getWidthProperty() == 96 && vp.getHeightProperty() == 80)
+                {
+                    resized = true;
+                }
+                else
+                {
+                    SDL_Delay(20);
+                }
+            }
+            check(resized, "DX-83: GraphicsDeviceManager resize to 96x80 eventually converges "
+                            "(viewport reflects the new size within 30 frames)");
+
+            dev.Clear(Color(30, 60, 90, 255));
+            const Microsoft::Xna::Framework::Rectangle newCorner(0, 0, 1, 1);
+            const Microsoft::Xna::Framework::Rectangle nearNewEdge(90, 74, 1, 1);
+            Color cornerPixel(0, 0, 0, 0), edgePixel(0, 0, 0, 0);
+            dev.GetBackBufferData(&newCorner, &cornerPixel, 0, 1);
+            dev.GetBackBufferData(&nearNewEdge, &edgePixel, 0, 1);
+            const auto isClearColor = [](const Color& p) {
+                return p.getRProperty() == 30 && p.getGProperty() == 60 && p.getBProperty() == 90;
+            };
+            check(isClearColor(cornerPixel) && isClearColor(edgePixel),
+                  "DX-83: after resize, Clear()+GetBackBufferData() reads the exact clear color "
+                  "at the origin AND near the new (96,80) far edge -- proves the resized back "
+                  "buffer/RTV/DSV/viewport are genuinely the new size, not stale/clamped/wrong");
+
+            const bool ppMatches =
+                (dev.getPresentationParametersProperty().getBackBufferWidthProperty() == 96 &&
+                 dev.getPresentationParametersProperty().getBackBufferHeightProperty() == 80);
+            check(ppMatches, "DX-83: PresentationParameters reflects the new 96x80 size post-resize");
+
+            // Restore to the test's original 64x64 so nothing downstream is affected (this is the
+            // last check in the file, but keep the habit anyway).
+            gdm_->setPreferredBackBufferWidthProperty(64);
+            gdm_->setPreferredBackBufferHeightProperty(64);
+            gdm_->ApplyChanges();
+        }
+
+        // Check AC (DX-69/DX-81) -- a dedicated fog-on/fog-off pixel test, closing DX-69's own
+        // honestly-flagged gap ("not yet exercised by a dedicated fog-on/fog-off pixel test...
+        // belongs in Phase DX10"). Uses colored3d (DX-13-hlsl's own formula, colored3d.vert.hlsl:
+        // fogFactor = fogEnabled ? saturate((FogEnd-Z)/(FogEnd-FogStart)) : 1.0, colored3d.frag.hlsl:
+        // outColor.rgb = lerp(FogColor, vertexColor, fogFactor)) via the same real DrawPrimitivesEx
+        // path Checks Q-W already exercise. A single quad at object-space Z=0.5, FogStart=0.0/
+        // FogEnd=0.5 makes fogFactor land exactly on 0 when fog is enabled (pure FogColor) vs 1
+        // when it's not (pure vertex color) -- an exact, unambiguous discrimination, not "some
+        // blend happened".
+        {
+            struct VPCz { float x, y, z; uint32_t color; };
+            const uint32_t kRed = 0xFF0000FFu; // A=255,B=0,G=0,R=255 (R8G8B8A8 byte order)
+            static const VPCz kTriFog[3] = {
+                {-1.0f, -1.0f, 0.5f, kRed},
+                { 3.0f, -1.0f, 0.5f, kRed},
+                {-1.0f,  3.0f, 0.5f, kRed},
+            };
+            auto vbFog = backend.CreateVertexBuffer(3);
+            vbFog->SetData(kTriFog, 3, sizeof(VPCz));
+
+            GpuDrawParams fogOff;
+            fogOff.vertexColorEnabled = true;
+            fogOff.fogEnabled = false;
+            fogOff.fogColor[0] = 0.0f; fogOff.fogColor[1] = 1.0f; fogOff.fogColor[2] = 0.0f;
+            fogOff.fogStart = 0.0f;
+            fogOff.fogEnd = 0.5f;
+
+            const Microsoft::Xna::Framework::Rectangle centerRegionFog(30, 30, 1, 1);
+            dev.Clear(Color(10, 10, 10, 255));
+            backend.DrawPrimitivesEx(*vbFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                     Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, fogOff);
+            Color fogOffPixel(0, 0, 0, 0);
+            dev.GetBackBufferData(&centerRegionFog, &fogOffPixel, 0, 1);
+            check(fogOffPixel.getRProperty() == 255 && fogOffPixel.getGProperty() == 0 &&
+                  fogOffPixel.getBProperty() == 0,
+                  "D3D11GraphicsBackend::DrawPrimitivesEx(): fogEnabled=false leaves colored3d's "
+                  "exact vertex color unblended (plan_dx.md DX-69/DX-81)");
+
+            GpuDrawParams fogOn = fogOff;
+            fogOn.fogEnabled = true;
+
+            dev.Clear(Color(10, 10, 10, 255));
+            backend.DrawPrimitivesEx(*vbFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                     Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, fogOn);
+            Color fogOnPixel(0, 0, 0, 0);
+            dev.GetBackBufferData(&centerRegionFog, &fogOnPixel, 0, 1);
+            check(fogOnPixel.getRProperty() == 0 && fogOnPixel.getGProperty() == 255 &&
+                  fogOnPixel.getBProperty() == 0,
+                  "D3D11GraphicsBackend::DrawPrimitivesEx(): fogEnabled=true with Z at FogEnd "
+                  "genuinely blends all the way to the exact FogColor (fogFactor=0), distinctly "
+                  "different from the fogEnabled=false case above (plan_dx.md DX-69/DX-81)");
+        }
+
+        const int totalChecks = 3 + 10 + 1 + 2 + 2 + 2 + 2 + 2 + 1 + 1 + 2 + 1 + 13 + 2 + 3 + 2 + 2 + 1 + 1 + 1 + 1 + 3 + 2 + 2 + 2 + 3 + 2;
         std::printf("=== %d/%d PASS ===\n", passCount_, totalChecks);
         result_ = (passCount_ == totalChecks) ? 0 : 1;
         Exit();

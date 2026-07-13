@@ -6620,7 +6620,35 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D11")
         COMMAND ${CMAKE_SOURCE_DIR}/scripts/run-wine-dxvk.sh $<TARGET_FILE:cna_test_d3d11_common>)
     set_tests_properties(D3D11_Common PROPERTIES
         TIMEOUT 30
-        LABELS "D3D11")
+        LABELS "D3D11"
+        # DX-85: this binary never creates a D3D11 device (pure-function mapping-table checks
+        # only), so it legitimately never prints a "DXVK: <version>" line -- tell the wrapper's
+        # DXVK-engagement gate not to misreport that as a WineD3D fallback.
+        ENVIRONMENT "CNA_D3D11_SKIP_DXVK_GATE=1")
+
+    # DX-82: state-object pixel-behaviour tests, reusing the same backend-agnostic EasyGL-authored
+    # sources Vulkan already reuses verbatim (they only touch the public GraphicsDevice/BasicEffect
+    # API, nothing EasyGL-specific) -- real behavioural proof through the full public draw path,
+    # not just "the D3D11 state object was created/bound" (Phase DX7's own, narrower bar).
+    cna_d3d11_test(cna_test_d3d11_blendstate_opaque examples/easygl_blendstate_opaque_test.cpp)
+    add_test(NAME D3D11_BlendState_Opaque
+        COMMAND ${CMAKE_SOURCE_DIR}/scripts/run-wine-dxvk.sh $<TARGET_FILE:cna_test_d3d11_blendstate_opaque>)
+    set_tests_properties(D3D11_BlendState_Opaque PROPERTIES TIMEOUT 60 LABELS "D3D11")
+
+    cna_d3d11_test(cna_test_d3d11_blendstate_alphablend examples/easygl_blendstate_alphablend_test.cpp)
+    add_test(NAME D3D11_BlendState_AlphaBlend
+        COMMAND ${CMAKE_SOURCE_DIR}/scripts/run-wine-dxvk.sh $<TARGET_FILE:cna_test_d3d11_blendstate_alphablend>)
+    set_tests_properties(D3D11_BlendState_AlphaBlend PROPERTIES TIMEOUT 60 LABELS "D3D11")
+
+    cna_d3d11_test(cna_test_d3d11_depthstencilstate_stencil_enable examples/easygl_depthstencilstate_stencil_enable_test.cpp)
+    add_test(NAME D3D11_DepthStencilState_StencilEnable
+        COMMAND ${CMAKE_SOURCE_DIR}/scripts/run-wine-dxvk.sh $<TARGET_FILE:cna_test_d3d11_depthstencilstate_stencil_enable>)
+    set_tests_properties(D3D11_DepthStencilState_StencilEnable PROPERTIES TIMEOUT 60 LABELS "D3D11")
+
+    cna_d3d11_test(cna_test_d3d11_rasterizerstate_cullmode examples/easygl_rasterizerstate_cullmode_test.cpp)
+    add_test(NAME D3D11_RasterizerState_CullMode
+        COMMAND ${CMAKE_SOURCE_DIR}/scripts/run-wine-dxvk.sh $<TARGET_FILE:cna_test_d3d11_rasterizerstate_cullmode>)
+    set_tests_properties(D3D11_RasterizerState_CullMode PROPERTIES TIMEOUT 60 LABELS "D3D11")
 endif()
 
 # --- Task 6.1: real two-process ENet loopback test harness ---
