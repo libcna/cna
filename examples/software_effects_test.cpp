@@ -26,6 +26,7 @@
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
@@ -71,6 +72,10 @@ protected:
     void Draw(const GameTime&) override
     {
         auto& dev = getGraphicsDeviceProperty();
+        // These checks' quads were authored for pixel-correctness, not to match XNA's winding
+        // convention, and are back-facing under the real default (CullCounterClockwise) --
+        // disable culling (SOFTWARE-81) so this file keeps testing what it was designed to test.
+        dev.setRasterizerStateProperty(RasterizerState::CullNone);
 
         // Check A: nearest-neighbor texture sampling via a 2x2 checker texture on a full-screen quad.
         {

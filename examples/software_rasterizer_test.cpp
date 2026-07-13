@@ -40,6 +40,7 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 
@@ -81,6 +82,10 @@ protected:
     void Draw(const GameTime&) override
     {
         auto& dev = getGraphicsDeviceProperty();
+        // These checks' triangles were authored for pixel-correctness, not to match XNA's winding
+        // convention, and are back-facing under the real default (CullCounterClockwise) --
+        // disable culling (SOFTWARE-81) so this file keeps testing what it was designed to test.
+        dev.setRasterizerStateProperty(RasterizerState::CullNone);
 
         // Check A: a large solid-red triangle covering the screen center.
         {

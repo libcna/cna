@@ -108,12 +108,14 @@ up — see `plan_software.md` `SOFTWARE-50`'s notes for the full story).
   (`AlphaBlend`/`NonPremultiplied`/`Additive`-ish presets all get treated the same way). This is a
   real, deliberate v1 simplification (`plan_software.md` design decision 7), not a full
   blend-equation interpreter.
-- **Nearest-neighbor texture sampling only** — no bilinear filtering, no mipmapping, no texture
-  address modes (`Wrap`/`Clamp`/`Mirror` all behave the same: UVs are simply clamped to the
-  texture's own bounds).
-- **No backface culling** — both triangle winding orders are always accepted
-  (`RasterizerState.CullMode` has no effect). A real, intentional v1 simplification: proving
-  correct rasterization exists at all came first.
+- **Bilinear texture sampling always on** (`SOFTWARE-80`) — standard half-texel-offset bilinear
+  with clamp-to-edge at the boundaries, but no mipmapping and no real texture address modes
+  (`Wrap`/`Clamp`/`Mirror` all behave the same: UVs are simply clamped to the texture's own
+  bounds). Not gated by `SamplerState.Filter`.
+- **Backface culling respects `RasterizerState.CullMode`** (`SOFTWARE-81`) — `None`/
+  `CullClockwiseFace`/`CullCounterClockwiseFace` are all honored, including by
+  `SpriteBatch`'s own quads (matching real FNA, whose `SpriteBatch` defaults to
+  `CullCounterClockwise` rather than `CullNone`).
 - **Minimal near-plane handling.** A triangle with any vertex at or behind the near plane
   (`clip.W <= ~0`) is culled entirely rather than properly clipped (splitting it into 1-2 new
   triangles at the near plane). Not yet exercised by a dedicated test with geometry deliberately

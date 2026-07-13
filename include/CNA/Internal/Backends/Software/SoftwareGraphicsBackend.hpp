@@ -286,6 +286,11 @@ namespace CNA::Internal::Backends::Software
         /// SpriteBatch::Begin() applies its BlendState the same way any other draw does.
         [[nodiscard]] bool IsBlendEnabled() const { return blendEnabled_; }
         [[nodiscard]] bool IsDepthTestEnabled() const { return depthTestEnabled_; }
+        /// The raw CullMode ordinal from the most recent ApplyRasterizerState() call (SOFTWARE-81).
+        /// Used by SoftwareSpriteBatchBackend so its quads are culled the same way real FNA's
+        /// SpriteBatch is: FNA's own SpriteBatch defaults its RasterizerState to
+        /// CullCounterClockwise (not CullNone), and its quad winding is authored to survive that.
+        [[nodiscard]] int GetCullMode() const { return cullMode_; }
 
     private:
         SoftwareFramebuffer backbuffer_;
@@ -296,5 +301,12 @@ namespace CNA::Internal::Backends::Software
         /// Opaque (false) vs. simplified AlphaBlend (true) -- design decision 7. Defaults to
         /// false, matching real XNA/FNA's own default GraphicsDevice.BlendState (Opaque).
         bool blendEnabled_ = false;
+        /// Raw CullMode ordinal (0=None, 1=CullClockwiseFace, 2=CullCounterClockwiseFace) from the
+        /// most recent ApplyRasterizerState() call (SOFTWARE-81). Defaults to 2
+        /// (CullCounterClockwiseFace), matching real XNA/FNA's own default
+        /// RasterizerState.CullCounterClockwise -- GraphicsDevice's constructor applies this for
+        /// real via ApplyRasterizerState() before any game code runs, so this default rarely
+        /// matters in practice, but is kept consistent with the real default for clarity.
+        int cullMode_ = 2;
     };
 }

@@ -138,17 +138,32 @@ namespace CNA::Internal::Backends::Software
             a = bilerp(3);
         }
 
+        /// SOFTWARE-81: whether a triangle with the given signed screen-space `area` should be
+        /// culled under the given raw CullMode ordinal (0=None, 1=CullClockwiseFace,
+        /// 2=CullCounterClockwiseFace). In this backend's screen-space convention (Y grows
+        /// downward, matching the framebuffer's own top-left-origin layout), a NEGATIVE signed
+        /// area corresponds to clockwise winding as displayed and a POSITIVE area to
+        /// counter-clockwise -- verified empirically via `Software_Culling` against real XNA/FNA's
+        /// documented default (`RasterizerState.CullCounterClockwise`, which must keep the
+        /// conventionally-front-facing, clockwise-as-displayed winding order visible).
+        bool ShouldCullTriangle(float area, int cullMode)
+        {
+            if (cullMode == 0) return false;                    // None
+            if (cullMode == 1) return area < 0.0f;               // CullClockwiseFace
+            return area > 0.0f;                                  // CullCounterClockwiseFace (default)
+        }
+
         /// Fills one triangle into `fb` using a standard edge-function/barycentric rasterizer,
-        /// with a per-pixel depth test against `fb.depthBuffer` when `depthTestEnabled`. Accepts
-        /// either triangle winding order (no backface culling in v1 -- CullNone-equivalent
-        /// always, a real scope simplification: SOFTWARE-32 is about proving correct rasterization
-        /// exists at all, not the full RasterizerState feature set).
-        void RasterizeTriangle(SoftwareFramebuffer& fb, bool depthTestEnabled,
+        /// with a per-pixel depth test against `fb.depthBuffer` when `depthTestEnabled` and
+        /// backface culling per `cullMode` (SOFTWARE-81; raw ordinal, see ShouldCullTriangle()).
+        void RasterizeTriangle(SoftwareFramebuffer& fb, bool depthTestEnabled, int cullMode,
                                const RasterVertex& v0, const RasterVertex& v1, const RasterVertex& v2)
         {
             const float area = EdgeFunction(v0.x, v0.y, v1.x, v1.y, v2.x, v2.y);
             if (area == 0.0f)
                 return;  // degenerate (zero-area) triangle
+            if (ShouldCullTriangle(area, cullMode))
+                return;
 
             const float minXf = std::min({v0.x, v1.x, v2.x});
             const float maxXf = std::max({v0.x, v1.x, v2.x});
@@ -289,14 +304,17 @@ namespace CNA::Internal::Backends::Software
         /// General-purpose triangle fill for the DrawPrimitivesEx/DrawIndexedPrimitivesEx and
         /// SpriteBatch paths: adds nearest-neighbor texture sampling, diffuseColor modulation, and
         /// a simplified Opaque/AlphaBlend choice (design decisions 7/6) on top of RasterizeTriangle's
-        /// depth-tested, perspective-correct color interpolation.
+        /// depth-tested, perspective-correct color interpolation. Backface culling per `cullMode`
+        /// (SOFTWARE-81; raw ordinal, see ShouldCullTriangle()).
         void RasterizeTriangleShaded(SoftwareFramebuffer& fb, bool depthTestEnabled, bool blendEnabled,
-                                     bool textureEnabled, const SoftwareTextureBackend* texture,
+                                     int cullMode, bool textureEnabled, const SoftwareTextureBackend* texture,
                                      float diffuseR, float diffuseG, float diffuseB, float diffuseA,
                                      const RasterVertex& v0, const RasterVertex& v1, const RasterVertex& v2)
         {
             const float area = EdgeFunction(v0.x, v0.y, v1.x, v1.y, v2.x, v2.y);
             if (area == 0.0f)
+                return;
+            if (ShouldCullTriangle(area, cullMode))
                 return;
 
             const float minXf = std::min({v0.x, v1.x, v2.x});
@@ -640,9 +658,10 @@ namespace CNA::Internal::Backends::Software
         SoftwareFramebuffer& fb = owner_.CurrentFramebuffer();
         const bool depthTestEnabled = owner_.IsDepthTestEnabled();
         const bool blendEnabled = owner_.IsBlendEnabled();
-        RasterizeTriangleShaded(fb, depthTestEnabled, blendEnabled, true, swTexture, 1.0f, 1.0f, 1.0f, 1.0f,
+        const int cullMode = owner_.GetCullMode();
+        RasterizeTriangleShaded(fb, depthTestEnabled, blendEnabled, cullMode, true, swTexture, 1.0f, 1.0f, 1.0f, 1.0f,
                                 rv0, rv1, rv2);
-        RasterizeTriangleShaded(fb, depthTestEnabled, blendEnabled, true, swTexture, 1.0f, 1.0f, 1.0f, 1.0f,
+        RasterizeTriangleShaded(fb, depthTestEnabled, blendEnabled, cullMode, true, swTexture, 1.0f, 1.0f, 1.0f, 1.0f,
                                 rv2, rv3, rv0);
     }
 
@@ -772,7 +791,10 @@ namespace CNA::Internal::Backends::Software
         depthTestEnabled_ = depthEnable;
     }
 
-    void SoftwareGraphicsBackend::ApplyRasterizerState(int, int, bool, float, float) {}
+    void SoftwareGraphicsBackend::ApplyRasterizerState(int cullMode, int, bool, float, float)
+    {
+        cullMode_ = cullMode;
+    }
 
     void SoftwareGraphicsBackend::ApplySamplerState(int slot, int, int, int, int)
     {
@@ -858,7 +880,7 @@ namespace CNA::Internal::Backends::Software
             if (!allValid)
                 continue;  // SOFTWARE-34: minimal near-plane handling -- cull, don't clip, in v1.
 
-            RasterizeTriangle(fb, depthTestEnabled_, rv[0], rv[1], rv[2]);
+            RasterizeTriangle(fb, depthTestEnabled_, cullMode_, rv[0], rv[1], rv[2]);
         }
     }
 
@@ -915,7 +937,7 @@ namespace CNA::Internal::Backends::Software
             if (!allValid)
                 continue;
 
-            RasterizeTriangle(fb, depthTestEnabled_, rv[0], rv[1], rv[2]);
+            RasterizeTriangle(fb, depthTestEnabled_, cullMode_, rv[0], rv[1], rv[2]);
         }
     }
 
@@ -969,7 +991,7 @@ namespace CNA::Internal::Backends::Software
             if (!allValid)
                 continue;
 
-            RasterizeTriangleShaded(fb, depthTestEnabled_, blendEnabled_, params.textureEnabled, texture,
+            RasterizeTriangleShaded(fb, depthTestEnabled_, blendEnabled_, cullMode_, params.textureEnabled, texture,
                                     params.diffuseColor[0], params.diffuseColor[1], params.diffuseColor[2],
                                     params.diffuseColor[3], rv[0], rv[1], rv[2]);
         }
@@ -1036,7 +1058,7 @@ namespace CNA::Internal::Backends::Software
             if (!allValid)
                 continue;
 
-            RasterizeTriangleShaded(fb, depthTestEnabled_, blendEnabled_, params.textureEnabled, texture,
+            RasterizeTriangleShaded(fb, depthTestEnabled_, blendEnabled_, cullMode_, params.textureEnabled, texture,
                                     params.diffuseColor[0], params.diffuseColor[1], params.diffuseColor[2],
                                     params.diffuseColor[3], rv[0], rv[1], rv[2]);
         }

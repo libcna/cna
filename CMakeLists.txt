@@ -6517,6 +6517,12 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SOFTWARE")
     set_tests_properties(Software_Effects PROPERTIES
         TIMEOUT 30
         LABELS "Software")
+
+    cna_software_test(cna_test_software_culling examples/software_culling_test.cpp)
+    add_test(NAME Software_Culling COMMAND cna_test_software_culling)
+    set_tests_properties(Software_Culling PROPERTIES
+        TIMEOUT 30
+        LABELS "Software")
 endif()
 
 # --- Task 6.1: real two-process ENet loopback test harness ---
