@@ -446,6 +446,8 @@ recovery (`DX-27`) is the only path that touches all three.
 | DX-43 | `D3D11RenderTargetBackend`/`D3D11RenderTargetCubeBackend`: offscreen `ID3D11RenderTargetView`(s) + matching depth-stencil, `BindAsRenderTarget`/`UnbindAsRenderTarget` via `OMSetRenderTargets` | ⬜ | |
 | DX-44 | `ID3D11SamplerState` creation/caching from `SamplerState` (filter/address-mode, via `DX-12-state`'s mapping table) | ⬜ | |
 | DX-45 | MSAA render target support (`DXGI_SAMPLE_DESC`, resolve via `ResolveSubresource`) | ⬜ | The flip-model swap chain itself (`DX-23`) always has `SampleDesc.Count=1` — flip-model presentation does not support an MSAA back buffer directly. MSAA lives entirely in a separate offscreen `ID3D11Texture2D` render target (`DX-43`), `ResolveSubresource`'d into the non-MSAA back buffer (or an intermediate non-MSAA texture) before `Present()`. |
+| DX-46 | `SetRenderTargets(IRenderTargetBackend* const* rts, int count)` — real multiple-render-target (MRT) support: bind up to `D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT` (8) `ID3D11RenderTargetView*`s in one `OMSetRenderTargets` call, not just the first target via the inherited single-target default | ⬜ | **Gap found during a post-hoc capability review (2026-07-13), not part of the plan's original task list** — `IGraphicsBackend::SetRenderTargets()` has a real default-to-single-target fallback (`SetRenderTarget2D(count>0?rts[0]:nullptr)`), so this was silently missing from every phase above until this row was added. Needed for design decision 6's own "full parity with EasyGL/Vulkan/Bgfx" goal — those 3 backends all support MRT (with known caveats, e.g. `EasyGL_MRT_TwoAttachments`'s own pre-existing bug, `NEXT.md` §5). Depends on `DX-43`'s single-target `D3D11RenderTargetBackend` existing first. |
+| DX-47 | `D3D11OcclusionQueryBackend` (`IOcclusionQueryBackend`): `ID3D11Query` created with `D3D11_QUERY_OCCLUSION`; `Begin()`/`End()` map directly to `ID3D11DeviceContext::Begin`/`End`; `IsComplete()` via `GetData(query, nullptr, 0, D3D11_ASYNC_GETDATA_DONOTFLUSH) == S_OK`; `PixelCount()` via `GetData(query, &count, sizeof(UINT64), 0)` | ⬜ | **Gap found during the same post-hoc capability review as `DX-46`, not part of the plan's original task list** — `IGraphicsBackend::CreateOcclusionQuery()` has a real default (`return nullptr`), so a game calling it against the D3D11 backend just silently gets no occlusion query support instead of a build error, making this an easy gap to miss without deliberately checking. `IOcclusionQueryBackend::PixelCount()` returns `int`, but `ID3D11Query`'s occlusion result is a 64-bit pixel count (`UINT64`) — needs an explicit, documented narrowing/clamp, not a silent truncation (mirrors this project's own EasyGL note that `GL_ANY_SAMPLES_PASSED` on GLES3 only returns 0/1, not an exact count — D3D11's `D3D11_QUERY_OCCLUSION` *does* give an exact count, so this backend can be more precise than EasyGL here, not less). |
 
 ---
 
@@ -584,3 +586,11 @@ grained than the D3D11 phases above, since detailed design should wait until D3D
   from Phase DX4 onward creates COM objects; retrofitting a `ComPtr<T>` convention after several
   phases already have bare `Release()` call sites is a much larger cleanup than deciding once,
   early (design decision 10).
+- **`DX-46`/`DX-47` (MRT, occlusion queries) exist precisely because `IGraphicsBackend`'s real
+  default fallbacks (`SetRenderTargets()` silently degrades to single-target;
+  `CreateOcclusionQuery()` silently returns `nullptr`) make a missing capability invisible instead
+  of a build/link error** — when scoping any future backend (D3D12 or otherwise) against this
+  interface, don't assume the task list originally written up is exhaustive just because it
+  compiles; cross-check the interface's own optional/defaulted virtuals against what's actually
+  implemented, the same way this gap was found (2026-07-13, comparing D3D11's real capability
+  against EasyGL's).
