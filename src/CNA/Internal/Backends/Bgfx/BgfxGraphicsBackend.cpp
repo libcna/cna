@@ -1136,6 +1136,7 @@ namespace CNA::Internal::Backends::Bgfx
                 alphaTestUnif_      = bgfx::createUniform("u_alphaTest",      bgfx::UniformType::Vec4);
                 texColor3DSampler2_ = bgfx::createUniform("s_texColor2",      bgfx::UniformType::Sampler);
                 bonesUnif_          = bgfx::createUniform("u_bones",          bgfx::UniformType::Mat4, 72);
+                weightsPerVertex3DUnif_ = bgfx::createUniform("u_weightsPerVertex", bgfx::UniformType::Vec4);
                 vpInstanced3DUnif_  = bgfx::createUniform("u_vp",            bgfx::UniformType::Mat4);
 
                 world3DUnif_         = bgfx::createUniform("u_world",          bgfx::UniformType::Mat4);
@@ -1232,6 +1233,7 @@ namespace CNA::Internal::Backends::Bgfx
         destroyU(alphaTestUnif_);
         destroyU(texColor3DSampler2_);
         destroyU(bonesUnif_);
+        destroyU(weightsPerVertex3DUnif_);
         destroyU(vpInstanced3DUnif_);
         destroyU(world3DUnif_);
         destroyU(normalMatrix3DUnif_);
@@ -2319,6 +2321,17 @@ namespace CNA::Internal::Backends::Bgfx
             bgfx::setUniform(light0Dir3DUnif_, dir);
             float diff[4] = { params.light0Diffuse[0], params.light0Diffuse[1], params.light0Diffuse[2], 0.0f };
             bgfx::setUniform(light0Diff3DUnif_, diff);
+            // Task 893: DirectionalLight1/DirectionalLight2 diffuse forwarding.
+            float dir1[4] = { params.light1Dir[0], params.light1Dir[1], params.light1Dir[2], 0.0f };
+            bgfx::setUniform(light1Dir3DUnif_, dir1);
+            float diff1[4] = { params.light1Diffuse[0], params.light1Diffuse[1],
+                                params.light1Diffuse[2], 0.0f };
+            bgfx::setUniform(light1Diff3DUnif_, diff1);
+            float dir2[4] = { params.light2Dir[0], params.light2Dir[1], params.light2Dir[2], 0.0f };
+            bgfx::setUniform(light2Dir3DUnif_, dir2);
+            float diff2[4] = { params.light2Diffuse[0], params.light2Diffuse[1],
+                                params.light2Diffuse[2], 0.0f };
+            bgfx::setUniform(light2Diff3DUnif_, diff2);
             float litEn[4] = { params.lightingEnabled ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f };
             bgfx::setUniform(lightingEn3DUnif_, litEn);
             // Task 899: EmissiveColor was never forwarded to the skinned3d shader at all -- see
@@ -2326,8 +2339,30 @@ namespace CNA::Internal::Backends::Bgfx
             float emissive[4] = { params.emissiveColor[0], params.emissiveColor[1],
                                    params.emissiveColor[2], 0.0f };
             bgfx::setUniform(emissiveColor3DUnif_, emissive);
+            // Task 894: World (for world-space position -> eye vector), EyePosition, and
+            // per-light + material specular.
+            bgfx::setUniform(world3DUnif_, params.worldColMajor);
+            float eyePos[4] = { params.eyePositionWorld[0], params.eyePositionWorld[1],
+                                 params.eyePositionWorld[2], 0.0f };
+            bgfx::setUniform(eyePos3DUnif_, eyePos);
+            float spec0[4] = { params.light0Specular[0], params.light0Specular[1],
+                                params.light0Specular[2], 0.0f };
+            bgfx::setUniform(light0Spec3DUnif_, spec0);
+            float spec1[4] = { params.light1Specular[0], params.light1Specular[1],
+                                params.light1Specular[2], 0.0f };
+            bgfx::setUniform(light1Spec3DUnif_, spec1);
+            float spec2[4] = { params.light2Specular[0], params.light2Specular[1],
+                                params.light2Specular[2], 0.0f };
+            bgfx::setUniform(light2Spec3DUnif_, spec2);
+            float specColorPower[4] = { params.specularColor[0], params.specularColor[1],
+                                         params.specularColor[2], params.specularPower };
+            bgfx::setUniform(specularColorPower3DUnif_, specColorPower);
             if (params.boneCount > 0 && bgfx::isValid(bonesUnif_))
                 bgfx::setUniform(bonesUnif_, params.boneTransforms, static_cast<uint16_t>(params.boneCount));
+            // Task 895: FNA's real Skin(vin, boneCount) only sums the first WeightsPerVertex
+            // (1, 2, or 4) weight/index pairs.
+            float weightsPerVertex[4] = { static_cast<float>(params.weightsPerVertex), 0.0f, 0.0f, 0.0f };
+            bgfx::setUniform(weightsPerVertex3DUnif_, weightsPerVertex);
             if (bgfx::isValid(texColor3DSampler_))
             {
                 if (params.texture0)
@@ -2362,6 +2397,17 @@ namespace CNA::Internal::Backends::Bgfx
             float diff[4] = { params.light0Diffuse[0], params.light0Diffuse[1],
                                params.light0Diffuse[2], 0.0f };
             bgfx::setUniform(light0Diff3DUnif_, diff);
+            // Task 890: DirectionalLight1/DirectionalLight2 diffuse forwarding.
+            float dir1[4] = { params.light1Dir[0], params.light1Dir[1], params.light1Dir[2], 0.0f };
+            bgfx::setUniform(light1Dir3DUnif_, dir1);
+            float diff1[4] = { params.light1Diffuse[0], params.light1Diffuse[1],
+                                params.light1Diffuse[2], 0.0f };
+            bgfx::setUniform(light1Diff3DUnif_, diff1);
+            float dir2[4] = { params.light2Dir[0], params.light2Dir[1], params.light2Dir[2], 0.0f };
+            bgfx::setUniform(light2Dir3DUnif_, dir2);
+            float diff2[4] = { params.light2Diffuse[0], params.light2Diffuse[1],
+                                params.light2Diffuse[2], 0.0f };
+            bgfx::setUniform(light2Diff3DUnif_, diff2);
             float amount[4] = { params.envMapAmount, params.fresnelEnabled ? 1.0f : 0.0f, 0.0f, 0.0f };
             bgfx::setUniform(envMapAmountUnif_, amount);
             float specular[4] = { params.envMapSpecular[0], params.envMapSpecular[1],
@@ -2691,6 +2737,17 @@ namespace CNA::Internal::Backends::Bgfx
             bgfx::setUniform(light0Dir3DUnif_, dir);
             float diff[4] = { params.light0Diffuse[0], params.light0Diffuse[1], params.light0Diffuse[2], 0.0f };
             bgfx::setUniform(light0Diff3DUnif_, diff);
+            // Task 893: DirectionalLight1/DirectionalLight2 diffuse forwarding.
+            float dir1[4] = { params.light1Dir[0], params.light1Dir[1], params.light1Dir[2], 0.0f };
+            bgfx::setUniform(light1Dir3DUnif_, dir1);
+            float diff1[4] = { params.light1Diffuse[0], params.light1Diffuse[1],
+                                params.light1Diffuse[2], 0.0f };
+            bgfx::setUniform(light1Diff3DUnif_, diff1);
+            float dir2[4] = { params.light2Dir[0], params.light2Dir[1], params.light2Dir[2], 0.0f };
+            bgfx::setUniform(light2Dir3DUnif_, dir2);
+            float diff2[4] = { params.light2Diffuse[0], params.light2Diffuse[1],
+                                params.light2Diffuse[2], 0.0f };
+            bgfx::setUniform(light2Diff3DUnif_, diff2);
             float litEn[4] = { params.lightingEnabled ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f };
             bgfx::setUniform(lightingEn3DUnif_, litEn);
             // Task 899: EmissiveColor was never forwarded to the skinned3d shader at all -- see
@@ -2698,8 +2755,30 @@ namespace CNA::Internal::Backends::Bgfx
             float emissive[4] = { params.emissiveColor[0], params.emissiveColor[1],
                                    params.emissiveColor[2], 0.0f };
             bgfx::setUniform(emissiveColor3DUnif_, emissive);
+            // Task 894: World (for world-space position -> eye vector), EyePosition, and
+            // per-light + material specular.
+            bgfx::setUniform(world3DUnif_, params.worldColMajor);
+            float eyePos[4] = { params.eyePositionWorld[0], params.eyePositionWorld[1],
+                                 params.eyePositionWorld[2], 0.0f };
+            bgfx::setUniform(eyePos3DUnif_, eyePos);
+            float spec0[4] = { params.light0Specular[0], params.light0Specular[1],
+                                params.light0Specular[2], 0.0f };
+            bgfx::setUniform(light0Spec3DUnif_, spec0);
+            float spec1[4] = { params.light1Specular[0], params.light1Specular[1],
+                                params.light1Specular[2], 0.0f };
+            bgfx::setUniform(light1Spec3DUnif_, spec1);
+            float spec2[4] = { params.light2Specular[0], params.light2Specular[1],
+                                params.light2Specular[2], 0.0f };
+            bgfx::setUniform(light2Spec3DUnif_, spec2);
+            float specColorPower[4] = { params.specularColor[0], params.specularColor[1],
+                                         params.specularColor[2], params.specularPower };
+            bgfx::setUniform(specularColorPower3DUnif_, specColorPower);
             if (params.boneCount > 0 && bgfx::isValid(bonesUnif_))
                 bgfx::setUniform(bonesUnif_, params.boneTransforms, static_cast<uint16_t>(params.boneCount));
+            // Task 895: FNA's real Skin(vin, boneCount) only sums the first WeightsPerVertex
+            // (1, 2, or 4) weight/index pairs.
+            float weightsPerVertex[4] = { static_cast<float>(params.weightsPerVertex), 0.0f, 0.0f, 0.0f };
+            bgfx::setUniform(weightsPerVertex3DUnif_, weightsPerVertex);
             if (bgfx::isValid(texColor3DSampler_))
             {
                 if (params.texture0)
@@ -2734,6 +2813,17 @@ namespace CNA::Internal::Backends::Bgfx
             float diff[4] = { params.light0Diffuse[0], params.light0Diffuse[1],
                                params.light0Diffuse[2], 0.0f };
             bgfx::setUniform(light0Diff3DUnif_, diff);
+            // Task 890: DirectionalLight1/DirectionalLight2 diffuse forwarding.
+            float dir1[4] = { params.light1Dir[0], params.light1Dir[1], params.light1Dir[2], 0.0f };
+            bgfx::setUniform(light1Dir3DUnif_, dir1);
+            float diff1[4] = { params.light1Diffuse[0], params.light1Diffuse[1],
+                                params.light1Diffuse[2], 0.0f };
+            bgfx::setUniform(light1Diff3DUnif_, diff1);
+            float dir2[4] = { params.light2Dir[0], params.light2Dir[1], params.light2Dir[2], 0.0f };
+            bgfx::setUniform(light2Dir3DUnif_, dir2);
+            float diff2[4] = { params.light2Diffuse[0], params.light2Diffuse[1],
+                                params.light2Diffuse[2], 0.0f };
+            bgfx::setUniform(light2Diff3DUnif_, diff2);
             float amount[4] = { params.envMapAmount, params.fresnelEnabled ? 1.0f : 0.0f, 0.0f, 0.0f };
             bgfx::setUniform(envMapAmountUnif_, amount);
             float specular[4] = { params.envMapSpecular[0], params.envMapSpecular[1],

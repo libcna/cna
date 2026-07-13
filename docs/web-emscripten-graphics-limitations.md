@@ -6,11 +6,10 @@ Task 459 status write-up for that path, scoped to the **graphics backend specifi
 input, and device support under Emscripten are already covered elsewhere (`NEXTdevices.md`,
 `noxna_devices.md`) and are out of scope here.
 
-**This document explicitly does NOT cover WebGPU.** A dedicated Emscripten target using a native
-`wgpu-native`/WebGPU backend is tracked separately as Phase 69 (`plan_webgpu.md`, Tasks WEBGPU-1
-through WEBGPU-123) and remains **hard out of scope project-wide** until the project owner
-explicitly lifts that restriction (see `CLAUDE.md`). Everything in this document concerns the
-already-existing `EasyGL`-over-WebGL2 path, which is unrelated to that prohibition.
+**This document covers only the existing EasyGL-over-WebGL2 browser path.** The project owner
+activated the native `wgpu-native` backend on 2026-07-12, but browser/Emscripten WebGPU remains a
+separate unimplemented workstream tracked in `plan_webgpu.md`. Nothing below should be read as a
+status report for the native WebGPU backend.
 
 ## Status headline: real build scaffolding, zero verified execution
 
@@ -97,9 +96,14 @@ in this project**:
   Emscripten.
 - **Anisotropic filtering requires the `EXT_texture_filter_anisotropic` WebGL extension**, which is
   not guaranteed present on every browser/GPU combination (unlike desktop GL, where it is
-  near-universal). Combined with Task 918's already-tracked finding that `EasyGL` has **no real
-  anisotropic filtering implementation at all** on any platform today, this is currently moot — but
-  worth re-checking once Task 918 is actually implemented.
+  near-universal). **Task 918 (fixed, 2026-07-09)** added real `EasyGL` anisotropic filtering,
+  gated on `HasExtension("GL_EXT_texture_filter_anisotropic")` and clamped to the live driver's
+  reported cap — so on Emscripten specifically, whether anisotropic filtering actually does anything
+  now genuinely depends on whether the browser/GPU exposes the WebGL variant of that extension; this
+  has **not been empirically confirmed against a real browser** (matching this whole section's own
+  "design-time, unverified" scope) — if the extension is absent, `TextureFilter::Anisotropic`
+  correctly falls back to the plain trilinear filter set already in place, it just won't be a
+  currently-untracked bug if that happens on Web the way it briefly was on desktop EasyGL pre-918.
 - **Texture format support is narrower** than desktop GL's — WebGL 2 guarantees a smaller baseline
   set of internal formats and compressed-texture extensions vary significantly by browser/GPU. CNA's
   own `SurfaceFormat::Color`-only constraint (Task 176, already enforced identically on every
@@ -127,7 +131,7 @@ device/adapter-model concern rather than a rendering-backend one.
 | Graphics integration/pixel tests (`examples/*_test.cpp`) | Explicitly excluded on Emscripten — zero coverage |
 | WebGL context-loss handling (`EasyGLGraphicsBackend.cpp`) | Real, non-trivial code; never run against a real browser |
 | GLES3/WebGL2 capability gaps vs. desktop GL | Anticipated only, not verified; current `SurfaceFormat`/anisotropy constraints happen to sidestep most of them today |
-| WebGPU (Phase 69) | Explicitly out of scope — separate, unstarted, hard-forbidden project-wide |
+| WebGPU | Native `wgpu-native` backend is now active and experimental; browser/Emscripten WebGPU remains unimplemented and is tracked separately in `plan_webgpu.md` |
 
 **Recommendation for whoever eventually does the first real Emscripten build**: start by getting
 `cna_house3d_demo` (the one target with a WebGL version pin already) running in an actual browser

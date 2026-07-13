@@ -23,6 +23,15 @@ TEST(GraphicsBackendCompileDefinitionsTest, ExactlyOneGraphicsBackendIsSelected)
 #ifdef CNA_BACKEND_VULKAN
     ++enabled;
 #endif
+#ifdef CNA_BACKEND_WEBGPU
+    ++enabled;
+#endif
+#ifdef CNA_BACKEND_HEADLESS
+    ++enabled;
+#endif
+#ifdef CNA_BACKEND_SOFTWARE
+    ++enabled;
+#endif
 
     EXPECT_EQ(enabled, 1);
 }

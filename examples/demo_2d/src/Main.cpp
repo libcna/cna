@@ -25,6 +25,8 @@ int main(int argc, char* argv[]) {
             game->SetSmokeFrames(std::stoi(argv[++i]));
         else if (std::string(argv[i]) == "--smoke")
             game->SetSmokeFrames(3);
+        else if (std::string(argv[i]) == "--webgpu-2d-validation")
+            game->SetWebGpu2DValidation(true);
     }
 
     game->Run();  // Launching of the game.

@@ -1,7 +1,8 @@
 # Graphics Implementation Task Plan
 
-> Goal: XNA 4.0 Graphics namespace fully implemented — all 4 backends
-> (SDL_Renderer, EasyGL, Vulkan, Bgfx).
+> Goal: XNA 4.0 Graphics namespace fully implemented across the four established backends
+> (SDL_Renderer, EasyGL, Vulkan, Bgfx) and the experimental fifth WebGPU backend tracked in
+> `plan_webgpu.md`.
 >
 > **SDL_Renderer is intentionally 2D-only.** All 3D calls throw `std::runtime_error`.
 > This is correct XNA/FNA behavior — SDL_Renderer cannot do 3D.
@@ -11,8 +12,8 @@
 > including the full Phase 70–73 backend-perfection wave below.
 > **WebGPU (Phases 56–69) lives in a separate file, [`plan_webgpu.md`](plan_webgpu.md)**,
 > numbered `WEBGPU-1`–`WEBGPU-123` — moved out of this file entirely (2026-07-07) to keep the
-> parked WebGPU work fully separate from this active backlog; WebGPU is deliberately
-> deprioritized regardless — see "Execution order" below.
+> WebGPU work separate from this established-backend backlog. The project owner lifted the former
+> prohibition and explicitly activated that workstream on 2026-07-12.
 >
 > **Completed tasks 1–500 live in a separate archive file,
 > [`plan_graphics_20260708.md`](plan_graphics_20260708.md)**, moved out of this file (2026-07-08)
@@ -28,11 +29,10 @@
 > pointer only once every row it currently shows here is ✅; a phase with any open row keeps its
 > full table in place regardless of how many of its other rows are already done.
 
-> ⛔ **WEBGPU IS FORBIDDEN FOR NOW.** Do not work on anything in `plan_webgpu.md` — do not
-> start, stub, scaffold, or plan implementation — until the project owner explicitly lifts this
-> restriction. This is a hard prohibition, not just a priority/ordering note; see `CLAUDE.md`
-> ("WebGPU Is Forbidden For Now"), which is authoritative. When working through this file
-> autonomously, `plan_webgpu.md` is entirely out of scope.
+> ✅ **WEBGPU IS NOW AUTHORIZED.** The project owner lifted the restriction on 2026-07-12 and
+> requested direct implementation. Its task statuses and capability boundary are maintained in
+> `plan_webgpu.md` and `docs/webgpu-backend.md`; do not fold unfinished WebGPU parity claims into
+> the mature four-backend completion figures in this file.
 
 ## Execution order (priority, not document order)
 
@@ -51,8 +51,9 @@
    done than Bgfx (per-slot samplers, instancing, wireframe, MSAA, RenderTargetCube, stock-effect
    SPIR-V shaders), so this phase is gap-closure sized, not a full replication — plus the two
    SpriteBatch bugs found 2026-07-02 (multi-batch, dropped `SamplerState`).
-6. **WebGPU** (`plan_webgpu.md`, Phases 56–69, `WEBGPU-1`+) — parked. Revisit only after 1–5
-   above are done.
+6. **WebGPU** (`plan_webgpu.md`, Phases 56–69, `WEBGPU-1`+) — active experimental workstream
+   since the owner's explicit 2026-07-12 reprioritization. Its remaining parity work can proceed
+   independently, while changes must avoid regressions in items 1–5.
 
 > Phases 70–73 physically appear after Phase 55 (Task 663) in this document (append-only) but
 > run **before** the now-relocated WebGPU work — see the priority order above, not the phase
@@ -618,7 +619,7 @@ All 100 original tasks addressed.
 | 457 | Add automated smoke test selecting every backend available on the machine        | ✅      | **CLOSED — added a `GraphicsSmoke` CTest label to the 4 existing per-backend smoke tests, plus a new local orchestrator script running all 4 sequentially with a combined pass/fail summary; deferred the actual CI-wiring decision as new Task 919.** Investigated existing coverage first (per standing "check before designing something new" discipline): all 4 backends already had their own working 3-frame smoke test (`EasyGL_House3D_SmokeTest`/Task 85, `Vulkan_Demo2D_SmokeTest`/Task 88, `Bgfx_Demo2D_SmokeTest`/Task 89, `SDL_Renderer_Demo2D_SmokeTest`/Task 730), each just running the shared demo binary headlessly (`--smoke 3`) via `CMakeLists.txt`'s `add_test`, but with **no CTest `LABELS` tying them together** (unlike the input suite's own established `LABELS input` convention, `CNA_INPUT_TEST_FILTER`) and **no mechanism to run all 4 backend configurations in one pass** — `CNA_GRAPHICS_BACKEND` is confirmed a single-value, compile-time cache option (one backend per build directory), with no runtime "is backend X available" detection anywhere in the graphics code. Also found a real, exact precedent already merged and running: `.github/workflows/input-ci.yml`, a genuine 4-backend GitHub Actions matrix (EasyGL/SDL_RENDERER/Vulkan/bgfx + an ASan/UBSan EasyGL variant) that configures, builds, and runs `ctest -L input` via `xvfb-run` on `ubuntu-24.04` for every push/PR to `feature/input`/`develop`/`master` — proving this repo's CI is already real and 4-backend-matrix-capable, not merely local/sandboxed. **Scope decision**: creating or modifying a `.github/workflows/*.yml` file is a fundamentally different kind of change from every other artifact this task touches — once merged, it starts running automatically and repeatedly on shared CI infrastructure (consuming Actions minutes on every future push/PR), unlike a one-time source/test/doc change. That falls squarely under this project's own "modifying CI/CD pipelines" category that warrants the project owner's explicit sign-off rather than autonomous action, even under this session's otherwise-broad "commit and push per finished task" authorization (which was granted for ordinary source-code changes, not for authoring new recurring CI automation). Rather than either silently creating the workflow or silently dropping the "CI-friendly" half of this task's own framing, split the work: **done here** — (1) added `LABELS GraphicsSmoke` to all 4 existing `set_tests_properties` blocks (`CMakeLists.txt`, 4 one-line additions, zero behavior change to the tests themselves); (2) added `scripts/run-all-backend-smoke-tests.sh`, a new local orchestrator that iterates the 4 backends against this project's own persistent per-backend build directories (`cmake-build-debug`=EASYGL, `cmake-build-vulkan`, `cmake-build-bgfx`, `cmake-build-sdl`), configuring fresh only if a build dir doesn't already exist, building with the project's own established `-j4 -- -k` convention (tolerating the one already-known, unrelated `cna_demo_xact` Content-copy build error rather than treating it as a false "backend unavailable" signal — an early draft of this script wrongly gated on the aggregate build exit code and reported all 4 backends as unavailable purely because of that one irrelevant target; fixed to let `ctest` itself be the real pass/fail signal instead), then running `ctest -L GraphicsSmoke --output-on-failure` and printing a combined per-backend PASS/FAIL/SKIPPED summary with a non-zero exit if any backend that DID build had a failing smoke test (a backend whose build directory doesn't exist and can't be freshly configured, e.g. missing system Vulkan/GL dependencies, is reported SKIPPED — "not available on this machine" — rather than failing the run, matching this task's own literal "every backend available on the machine" framing). **Deferred, not done here**: actually wiring this into `.github/workflows/` (e.g. a new `graphics-smoke-ci.yml` copying `input-ci.yml`'s exact matrix/dependency-install boilerplate but filtering `ctest -L GraphicsSmoke` instead of `-L input`) — tracked as new Task 919 below, requiring the project owner's explicit go-ahead before creating, given its recurring, shared-resource-consuming nature. **Discriminating power verified via sabotage-and-revert**: temporarily renamed `cmake-build-sdl/cna_demo_2d` out of the way — `ctest -L GraphicsSmoke` correctly reported `SDL_Renderer_Demo2D_SmokeTest` as `Not Run`/`FAILED` (exit code 8), confirming the script's `if ctest ...; then PASS; else FAIL` branch genuinely discriminates; restored the binary and reconfirmed a clean 100% pass. **Full script run, all 4 backends** (build dirs already existed and were already up to date from Task 456's own regression): `EASYGL PASS`, `VULKAN PASS`, `BGFX PASS`, `SDL_RENDERER PASS`, each `ctest -L GraphicsSmoke` showing "100% tests passed, 0 tests failed out of 1" — confirming the label correctly isolates exactly the one relevant smoke test per backend, with zero cross-backend interference (run strictly sequentially, never concurrently, matching this project's own hard testing rule). |
 | 919 | Decide whether/how to wire the new `GraphicsSmoke` CTest label into real CI — e.g. a new `.github/workflows/graphics-smoke-ci.yml` copying `input-ci.yml`'s exact 4-backend matrix/dependency-install pattern but running `ctest -L GraphicsSmoke` instead of `-L input` (Task 457 finding) | ⬜ | **BLOCKED on project-owner sign-off — not a technical unknown, a scope/authorization decision.** Task 457 deliberately stopped short of creating or modifying any `.github/workflows/*.yml` file: doing so would start automatically and repeatedly running on shared CI infrastructure for every future push/PR once merged (consuming GitHub Actions minutes indefinitely), which is qualitatively different from every other artifact this session's autonomous "commit and push per finished task" authorization was granted for (ordinary source/test/doc changes). The actual work is small and already fully prototyped locally: `scripts/run-all-backend-smoke-tests.sh` (Task 457) already does everything a CI job would need — it would just need `input-ci.yml`'s own dependency-install/checkout/submodule boilerplate copied verbatim into a new workflow file, swapping its `ctest -L input` for `-L GraphicsSmoke` (or literally invoking `scripts/run-all-backend-smoke-tests.sh` from inside CI, since it now exists). Needs an explicit decision from the project owner on: (a) whether a graphics-focused CI job is wanted at all (vs. relying on `input-ci.yml`'s existing coverage, which incidentally already builds all 4 graphics backends even though it only runs the *input* test label — a `-L GraphicsSmoke` job would be genuinely additive, not redundant, since it exercises the actual rendering path `input-ci.yml` doesn't touch), and (b) which branches/triggers it should run on (`feature/graphics` specifically, given that's this session's own active branch, vs. only `develop`/`master` like `input-ci.yml`). |
 | 458 | Add backend-specific skip mechanism for tests requiring unavailable GPU features | ✅      | **CLOSED — confirmed the existing mechanism is already adequate (2 complementary layers, both idiomatic and correct); found and fixed 1 real, previously-undocumented stale test exclusion along the way (no new abstraction added — a 3rd layer would be premature).** Investigated before writing any code (per standing discipline): this project already has exactly 2 complementary layers handling "a test needs different behavior/coverage per backend because of a genuine capability gap." **Layer 1 (registration-level, fully robust)**: the per-backend `cna_easygl_test()`/`cna_vulkan_test()`/`cna_bgfx_test()`/`cna_sdl_test()` CMake macros are each defined only inside their own backend's `if(CNA_GRAPHICS_BACKEND STREQUAL "...")` block — a backend-specific example test simply never exists/compiles for other backends, no runtime skip needed. **Layer 2 (in-body compile-time branching for the 2 real shared cross-backend cases that need it)**: `GraphicsDeviceValidationTests.cpp`'s `SetRenderTargets_FourTargets_DoesNotThrow` branches `EXPECT_THROW`/`EXPECT_NO_THROW` on `#if defined(CNA_BACKEND_SDL_RENDERER)` (Task 709's own permanent, correctly-documented single-render-target architectural limitation — verified still accurate, no staleness), and `TextureCubeTests.cpp`'s `DDSFromStreamEXTDecodesAllSixFacesWithDistinctColours` conditionally includes/excludes an exact-colour `GetData` assertion block. Searched the whole `tests/` tree for `GTEST_SKIP()`: 177 call sites, all unrelated (environment-availability skips — no display, no audio device, no microphone — none backend/GPU-feature-based). Confirmed via `IGraphicsBackend`/`GraphicsDevice` header greps that **no runtime capability-query API exists** (Task 456's new capability dump is `std::cout`-only, not queryable by test code) — and confirmed no test currently needs one, so building one now would be speculative infrastructure with zero consumers, not a real fix. **Real bug found and fixed while verifying Layer 2's 2nd case**: `TextureCubeTests.cpp`'s `#if defined(CNA_BACKEND_EASYGL) \|\| defined(CNA_BACKEND_VULKAN)` exclusion of Bgfx was **stale** — its own comment ("Bgfx: TextureCube::GetData has no GPU readback path at all") predates Task 914's real fix to `BgfxTextureCubeBackend::GetData`, already confirmed working via Task 455/456's own `Bgfx_TextureCube_Mip_RoundTrip`/`Bgfx_TextureCube_PartialRect_RoundTrip` pixel tests, but this specific shared unit test's DDS-decode path had never been re-verified against that fix and was silently skipping real assertion coverage on Bgfx ever since. **Verified empirically, both directions**: temporarily added Bgfx to the `#if` and rebuilt+ran just this test on the Bgfx `CnaTests` binary — genuinely PASSED with correct real per-face colour data read back from the GPU (not a false pass — confirmed real numeric colour values, not skipped); separately temporarily added SDL_Renderer too — genuinely FAILED (buffer stayed zero-initialized), confirming SDL_Renderer's implicit exclusion remains correct and matches Task 725's own documented "construction succeeds silently with a null backend" finding. Fixed by permanently including Bgfx in the assertion (3-way `#if`: EasyGL/Vulkan/Bgfx) and rewriting the comment to explain both the Bgfx fix-history and the still-correct SDL_Renderer exclusion. **Scope decision — no new "skip mechanism" abstraction added**: with only 2 real call sites in the entire test suite, both already clear and well-commented, and both branching *assertions* rather than literally skipping whole tests, extracting a generic macro/helper would be premature abstraction with no discovered need (matches this project's own "three similar lines is better than a premature abstraction" discipline) — the existing idiomatic `#if defined(CNA_BACKEND_X)` pattern *is* the mechanism, now doubly verified correct rather than assumed correct. **Full regression, all 4 backends** (this shared test file is compiled into every backend's `CnaTests` binary): EasyGL 4510/4513 passed (3 known baseline), Vulkan 4438/4447 passed (9 known baseline), Bgfx 4412/4414 passed (2 known baseline, including Task 455's flaky `MipChain`), SDL_Renderer 4410/4421 passed (11 known baseline) — zero new failures anywhere, and the fixed `DDSFromStreamEXTDecodesAllSixFacesWithDistinctColours` test now genuinely exercises Bgfx's real GetData path on every future regression rather than silently skipping it. |
-| 459 | Document Web/Emscripten backend limitations separately                           | ✅      | **CLOSED — pure documentation, confirmed genuinely separate from the hard-forbidden WebGPU work before starting.** First confirmed this task is NOT about the prohibited "Emscripten/WebGPU target" (Phase 69, `plan_webgpu.md`, WEBGPU-1 through WEBGPU-123, untouched here per `CLAUDE.md`'s standing project-wide restriction) — it's about the existing, separate `EasyGL`-over-WebGL2 CMake build path, unrelated to that prohibition. Wrote `docs/web-emscripten-graphics-limitations.md`. Read the real `CMakeLists.txt` Emscripten scaffolding directly rather than trusting secondhand summaries: `EasyGL` is the default backend on Emscripten/Linux (WebGL 2 = GLES 3.0); C++ exceptions are force-enabled globally (`-fexceptions -sNO_DISABLE_EXCEPTION_CATCHING=1`, required since `System::Exception`/`EXPECT_THROW` depend on real unwinding); `cna_house3d_demo` (the one 3D demo, EasyGL/Vulkan-gated) explicitly pins `-sMIN_WEBGL_VERSION=2`/`-sMAX_WEBGL_VERSION=2` but `cna_demo_2d`/`cna_demo_sound` do not — an inconsistency documented as worth resolving before real in-browser testing begins, not fixed here (docs-only task). **Key finding — real build scaffolding, zero verified execution**: no `.sdl-prebuilt-emscripten` directory has ever existed on disk, no `cmake-build-*emscripten*` directory has ever existed, no CI workflow builds Emscripten at all, and — critically — the graphics-specific pixel-readback test suite (`examples/*_test.cpp`, the actual mechanism this whole session's backend audit has relied on) is explicitly excluded on Emscripten via `if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32 ...)` (4 call sites in `CMakeLists.txt`). `CnaTests` itself does link for Emscripten with real, evidently-exercised `-sASYNCIFY=1` tuning (comment: "confirmed empirically") — but that empirical confirmation is scoped to the `SystemLink`/networking test suite in the same binary, not graphics; Node.js (the usual local Emscripten runner) has no WebGL/canvas implementation at all, so no graphics-touching `CnaTests` case could actually run there without a real browser. **Real, previously-undocumented WebGL-specific code found and highlighted** (not new work, already existed): `EasyGLGraphicsBackend.cpp` has genuine `#if defined(__EMSCRIPTEN__)` handling for real WebGL context loss — `CNA_DebugLoseWebGLContext()`/`CNA_DebugRestoreWebGLContext()` (`EM_JS` calling the real `WEBGL_lose_context` browser extension), `metagl::InstallEmscriptenContextLossCallbacks()` wiring the browser's async `webglcontextlost`/`webglcontextrestored` canvas events, and `DebugSimulateContextLoss()`/`DebugRestoreContext()` correctly branching into two structurally different code paths (Emscripten: 2 separate async browser events; desktop: 1 synchronous immediate context recreate) — real, thought-through code, never exercised against an actual browser. Documented anticipated (not verified) WebGL2/GLES3 capability gaps versus desktop GL (no geometry/tessellation shaders; anisotropic filtering needs `EXT_texture_filter_anisotropic`, currently moot per Task 918's own finding that EasyGL has no real anisotropic support on any platform yet; narrower baseline texture-format support, currently moot per Task 176's `SurfaceFormat::Color`-only constraint; zero WebGL-1 fallback by design). Cross-referenced (not duplicated) `docs/viewport-displaymode-adapter-support.md`'s existing canvas-as-display-model coverage. Docs-only, zero code changed. |
+| 459 | Document Web/Emscripten backend limitations separately                           | ✅      | **CLOSED — pure documentation, confirmed genuinely separate from WebGPU work before starting.** At the time this task was completed, WebGPU was still parked; that restriction was later lifted by the project owner on 2026-07-12. This task is about the existing, separate `EasyGL`-over-WebGL2 CMake build path, not the native `wgpu-native` backend. Wrote `docs/web-emscripten-graphics-limitations.md`. Read the real `CMakeLists.txt` Emscripten scaffolding directly rather than trusting secondhand summaries: `EasyGL` is the default backend on Emscripten/Linux (WebGL 2 = GLES 3.0); C++ exceptions are force-enabled globally (`-fexceptions -sNO_DISABLE_EXCEPTION_CATCHING=1`, required since `System::Exception`/`EXPECT_THROW` depend on real unwinding); `cna_house3d_demo` (the one 3D demo, EasyGL/Vulkan-gated) explicitly pins `-sMIN_WEBGL_VERSION=2`/`-sMAX_WEBGL_VERSION=2` but `cna_demo_2d`/`cna_demo_sound` do not — an inconsistency documented as worth resolving before real in-browser testing begins, not fixed here (docs-only task). **Key finding — real build scaffolding, zero verified execution**: no `.sdl-prebuilt-emscripten` directory has ever existed on disk, no `cmake-build-*emscripten*` directory has ever existed, no CI workflow builds Emscripten at all, and — critically — the graphics-specific pixel-readback test suite (`examples/*_test.cpp`, the actual mechanism this whole session's backend audit has relied on) is explicitly excluded on Emscripten via `if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32 ...)` (4 call sites in `CMakeLists.txt`). `CnaTests` itself does link for Emscripten with real, evidently-exercised `-sASYNCIFY=1` tuning (comment: "confirmed empirically") — but that empirical confirmation is scoped to the `SystemLink`/networking test suite in the same binary, not graphics; Node.js (the usual local Emscripten runner) has no WebGL/canvas implementation at all, so no graphics-touching `CnaTests` case could actually run there without a real browser. **Real, previously-undocumented WebGL-specific code found and highlighted** (not new work, already existed): `EasyGLGraphicsBackend.cpp` has genuine `#if defined(__EMSCRIPTEN__)` handling for real WebGL context loss — `CNA_DebugLoseWebGLContext()`/`CNA_DebugRestoreWebGLContext()` (`EM_JS` calling the real `WEBGL_lose_context` browser extension), `metagl::InstallEmscriptenContextLossCallbacks()` wiring the browser's async `webglcontextlost`/`webglcontextrestored` canvas events, and `DebugSimulateContextLoss()`/`DebugRestoreContext()` correctly branching into two structurally different code paths (Emscripten: 2 separate async browser events; desktop: 1 synchronous immediate context recreate) — real, thought-through code, never exercised against an actual browser. Documented anticipated (not verified) WebGL2/GLES3 capability gaps versus desktop GL (no geometry/tessellation shaders; anisotropic filtering needs `EXT_texture_filter_anisotropic`, currently moot per Task 918's own finding that EasyGL has no real anisotropic support on any platform yet; narrower baseline texture-format support, currently moot per Task 176's `SurfaceFormat::Color`-only constraint; zero WebGL-1 fallback by design). Cross-referenced (not duplicated) `docs/viewport-displaymode-adapter-support.md`'s existing canvas-as-display-model coverage. Docs-only, zero code changed. |
 | 460 | Document Android backend limitations separately                                  | ✅      | **CLOSED — pure documentation, but the live re-verification found a real, currently-active build regression worth surfacing loudly rather than silently repeating a stale "it works" claim.** Wrote `docs/android-graphics-limitations.md`. Confirmed `SDL_RENDERER` is genuinely the Android default (`CMAKE_SYSTEM_NAME STREQUAL "Android"` falls into CMake's own `else` branch of the EasyGL/Linux-or-Emscripten check, verified live via a fresh `cmake -S . -B cmake-build-android` configure showing `-- CNA: Using SDL_RENDERER graphics backend`). Per this session's own "verify, don't just describe" discipline, re-ran `docs/devices-build.md` §4's own documented Android cross-compile command live (NDK 30.0.14904198, `arm64-v8a`, `android-24`, `--target CNA`) rather than trusting its 2026-07-05/06-dated write-up at face value. **Real finding: the cross-compile currently FAILS, before ever reaching any CNA/graphics-backend source file** — 2 unrelated `-Werror` build errors in the sibling `sharp-runtime` repository's own files (`FileStream.hpp`'s `mode_` field flagged `-Wunused-private-field`; `FileSystemInfo.cpp`'s use of `std::chrono::clock_cast`, which this NDK's bundled libc++ does not yet implement) abort the `SHARP_RUNTIME` target — a hard dependency of `CNA` — before `SdlGraphicsBackend.cpp` is ever compiled. This is a genuine regression against `docs/devices-build.md`'s own prior success record for the identical command (`sharp-runtime` is a separate, independently-evolving sibling repo; something committed there since has broken NDK compatibility — identifying exactly what is out of scope, a different repo's own history). **Scope decision**: fixing these 2 bugs is outside this documentation task (different repository, unrelated to any XNA/graphics API work) — tracked as new Task 920 below rather than fixed here, matching the session's established "found a real gap, out of this task's own scope, open a new tracked task" pattern (916-918). Documented honestly that `SdlGraphicsBackend.cpp`'s own Android buildability, and everything in the existing `docs/sdl-renderer-2d-completeness.md` audit (Tasks 666-731, verified only against desktop Linux/X11), remain completely unverified on Android as a direct consequence — no guessing at what would happen once Task 920 is fixed. Also confirmed no real Android graphics demo/Gradle project exists (only `examples/demo_devices/android/`, the devices/sensors demo) and no CI job builds for Android at all. Docs-only from this task's own perspective (the Android cross-compile attempt used an already-existing, ephemeral, gitignored `cmake-build-android` directory — no repository files were modified by the verification itself). |
 | 920 | Fix 2 Android-NDK build regressions in the sibling `sharp-runtime` repository blocking the entire CNA/Android cross-compile: (1) `FileStream.hpp`'s unused `mode_` private field trips `-Werror=unused-private-field`; (2) `FileSystemInfo.cpp`'s unconditional `std::chrono::clock_cast` use isn't implemented by this NDK's bundled libc++ (Task 460 finding) | ⬜ | Found while live-re-verifying `docs/devices-build.md` §4's Android cross-compile command for Task 460 — it used to succeed (per that doc's own 2026-07-05/06 write-up) and now fails at the `SHARP_RUNTIME` target, before `CNA`/any graphics-backend code is ever reached, entirely due to these 2 bugs in the separate `sharp-runtime` sibling repository. Out of this repository's own scope to fix directly (a different git repo entirely) — needs either a `sharp-runtime`-side fix (e.g. `[[maybe_unused]]`/remove the dead field for (1); a manual duration-based conversion instead of `clock_cast`, or a libc++ version/NDK-level feature-test guard, for (2)) or, if `sharp-runtime` is meant to stay untouched from this side, at minimum a decision on whether CNA's own Android cross-compile documentation should be marked "currently blocked, pending upstream fix" indefinitely. Low-risk, well-scoped, not a judgment call — just needs someone with `sharp-runtime` write access/context to pick it up. |
 
@@ -674,8 +675,8 @@ All 100 original tasks addressed.
 ## Phases 56–69 — WebGPU backend
 
 Moved to [`plan_webgpu.md`](plan_webgpu.md) (2026-07-07), renumbered `WEBGPU-1`–`WEBGPU-123`.
-**Still hard-forbidden** — see `CLAUDE.md` ("WebGPU Is Forbidden For Now") and that file's own
-header. No task content changed, only the file location and numbering.
+The project owner lifted the former restriction on 2026-07-12. WebGPU is now an active,
+experimental workstream; task-level status and remaining parity work live in that dedicated file.
 
 ---
 
@@ -864,6 +865,226 @@ Pipeline tooling available in this project.
 
 | #   | Task | Status | Notes |
 | --- | ---- | ------ | ----- |
-| 945 | Decide and document the HLSL→GLSL conversion approach: manual line-by-line port vs. a `SPIRV-Cross`+`dxc`-assisted pipeline | ⬜ | A real, non-obvious design decision — manual porting needs no new tooling but doesn't scale past a handful of shaders; a `dxc` (HLSL→SPIR-V) + `SPIRV-Cross` (SPIR-V→GLSL) pipeline could semi-automate the bulk of the 14 blocked samples but adds 2 new vendored tool dependencies. Recommend deciding based on Task 946's own first attempt (BloomSample's 3 shaders are simple full-screen post-process effects — a good first data point for how well manual porting scales before committing to tooling). |
-| 946 | Prove the chosen workflow end-to-end on BloomSample's 3 shaders (`GaussianBlur`/`BloomCombine`/`BloomExtract`) | ⬜ | First real conversion — these are the simplest custom shaders in the blocked-sample list (full-screen post-process effects over an already-working `RenderTarget2D`, no per-vertex skinning/lighting complexity). Confirms the `.shader.json` + GLSL descriptor round-trip for a non-trivial, previously-untried shader shape before committing to the same approach for the remaining 13 samples. |
+| 945 | Decide and document the HLSL→GLSL conversion approach: manual line-by-line port vs. a `SPIRV-Cross`+`dxc`-assisted pipeline | ⬜ | **Data point now in (Task 946, 2026-07-11)** — still the project owner's call to make, not decided here. Manual porting proved straightforward for BloomSample's 3 shaders (the simplest custom-shader shape in the blocked-sample list): every HLSL construct that needed translation was a mechanical 1:1 substitution (GLSL's stricter typing turns HLSL's implicit scalar↔vector broadcasts and float4→float3 truncation into explicit `vec4(x)`/`.rgb`, nothing structural). No evidence yet that a `dxc`+`SPIRV-Cross` pipeline is *needed* for this shader family, though the remaining 13 blocked samples (vertex/pixel lighting, shadow mapping, particles, etc.) are more complex and not yet attempted — recommend deciding per-sample rather than committing to one approach for all 14 until at least one more, harder sample is attempted. |
+| 946 | Prove the chosen workflow end-to-end on BloomSample's 3 shaders (`GaussianBlur`/`BloomCombine`/`BloomExtract`) | ✅ | **Done, 2026-07-11.** All 3 shaders ported 1:1 to GLSL (reference source: `/rv/tmp/XNAGameStudio/Samples/BloomSample_4_0/BloomPostprocess/Content/*.fx`) and pixel-verified against hand-computed expected values matching each shader's own formula exactly. Required 2 new `ShaderEffect` (NOXNA) capabilities: `SetUniformFloatArray()`/`SetUniformVec2Array()` (`GaussianBlur`'s 15-element `SampleOffsets`/`SampleWeights` arrays — EasyGL's `easy-gl` sibling repo already had the needed `Program::set_uniform_fv()`, no cross-repo change needed) and `SetTexture(unit, Texture2D&)` (`BloomCombine`'s 2nd sampler, matching real XNA's `GraphicsDevice.Textures[unit]=tex`). Also exercised the `.shader.json`+`ContentManager::Load<Effect>()` descriptor round-trip for the first time in this repo (implemented, previously never tested). New tests: `EasyGL_Bloom_Extract`/`_GaussianBlur`/`_Combine` (one shader each) + `EasyGL_Bloom_Pipeline` (all 3 chained exactly like `BloomComponent.cs`'s real 4-pass Draw()). Surfaced and fixed a separate real bug while building the pipeline test: Task 1078, `EasyGLSpriteBatchBackend::FlushBatch()` always sized its viewport/projection to the window instead of a bound `RenderTarget2D` — invisible until a test actually needed a differently-sized intermediate RT (the half-res `renderTarget1`/`renderTarget2` `BloomComponent.cs` itself uses). All EasyGL only — Bgfx's `ShaderEffect` backend is a known no-op stub, Vulkan untouched (out of this task's scope). See `NEXT.md` §3 for the full write-up and Task 945's data point. |
 | 947 | Apply the proven workflow to the remaining 13 shader-blocked samples, one at a time, as each is picked up | ⬜ | `DistortionSample`, `NonPhotoRealistic`, `NormalMapping`, `PerPixelLighting`, `VertexLighting`, `ShadowMapping`, `BillboardSample`, `InstancedModel`, `ShatterEffect`, `Particles3D`, `XmlParticles`, `ShipGame`, `NetRumble` — ongoing, per-sample content work in `../cna-samples`, not a single PR. Re-check each sample's own `missing.md`/`DEFERRED.md` cross-reference before starting in case a different gap (e.g. skeletal animation, Phase 77) also blocks it. |
+
+---
+
+## Phase 79 — Full `../cna-samples` re-audit: one task per catalogued sample (2026-07-11)
+
+> **Scope and purpose.** Per explicit project-owner request (2026-07-11, after Tasks 954/955
+> closed 2 real CNA bugs found while re-checking `SimpleAnimation`): every one of the **153**
+> sample directories `../cna-samples/PLAN.md`/`ignored.md` catalogues (from the official XNA Game
+> Studio 4.0 archive) gets its own row here, re-framed as *"what, if anything, does CNA itself
+> still need so this sample can be ported or finished — and does its currently-recorded status
+> still hold up?"* This phase exists because Tasks 954/955 showed a sample marked "✅ Done" in
+> `../cna-samples/PLAN.md` can still hide a real, unfound CNA-level rendering bug — "done" so far
+> has generally meant "builds and runs," not "pixel-verified against real XNA." **Only samples
+> with a hard, structural, non-CNA reason (a WinForms tool, an XNA 2.0/3.0 archive, an Xbox LIVE
+> service, phone-only hardware, art-only data, a redundant duplicate) are marked `⛔` (permanently
+> out of scope, no CNA action conceivable, no revisit needed unless the reason itself stops
+> applying — see each row). Every other sample is `⬜` — actionable, either as a port, a CNA-gap
+> fix, or (for already-"Done" samples) a re-verification pass — until it's individually confirmed
+> correct against a real XNA/FNA reference, the way Tasks 954/955 did for `SimpleAnimation`.
+>
+> **Source of truth for per-sample status**: `../cna-samples/PLAN.md` (own "Complete Sample Task
+> List", updated 2026-07-10) and `../cna-samples/ignored.md`. **Source of truth for known CNA
+> gaps**: `../cna-samples/DEFERRED.md`'s own Summary Table (30 items, most already ✅ resolved —
+> the still-open ones referenced below are items **#10** (GamePad button shortcut, cosmetic,
+> workaround exists), **#18** (content-pipeline processor extensibility), **#22** (EasyGL
+> `BlendState.ColorWriteChannels` ignored), **#27** (`NetworkSession.SessionProperties` no mutable/
+> replicated accessor), **#28**/**#29** (EasyGL SpriteBatch-before-3D / `DualTextureEffect`
+> vertex-layout gaps, both already worked around in their one affected sample), and the **Phase
+> 78** shader-conversion umbrella (item #11, 14 samples). **Actual sample-porting work itself
+> (writing/fixing `.cpp`/`.hpp`/`Content/` files under `../cna-samples/samples/<Name>/`) belongs
+> in that sibling repo, not here** (same convention as Task 938) — a row below only tracks the
+> **CNA-side** gap/re-verification; where a sample needs no CNA change at all, its row says so
+> explicitly and the only remaining work is the port itself (tracked in `../cna-samples/PLAN.md`,
+> not duplicated here).
+>
+> **`SimpleAnimation` (#050) is deliberately still `⬜`, not `✅`**, despite Tasks 954/955 both
+> closing real bugs this session — flagged for a **future** re-review: (a) pixel-perfect comparison
+> against a real XNA screenshot once convenient (today's verification was "closely matches,"
+> visual/qualitative, not a pixel-diff against a like-for-like animation frame); (b) `CameraShake`
+> (#030), `CustomModelClass` (#052), and `ReachGraphicsDemo` (#005) each have their own independent
+> copy of a `tank`-family FBX/mesh and were flagged, not checked, for the same winding defect
+> Task 954 found and fixed only in `SimpleAnimation`'s own copy; (c) `TankOnHeightmap` (#074) and
+> `SplitScreen` (#076) share the exact same `tank.fbx`/`Tank.cs` source asset and per-mesh-bone gap
+> and should get the identical winding + depth-occlusion scrutiny once their own Task 938 asset-regen
+> follow-up is picked up; (d) the still-open `fbx_ascii2model.py` winding root-cause (Task 954 §5.6)
+> and the two still-open, unrelated bugs found along the way (Bgfx `DrawIndexedPrimitivesEx`
+> `startIndex` bug, Task 954 §8; EasyGL `SpriteBatch` blend-state leak, Task 956) are all
+> candidates to fold into whichever future session re-opens this row.
+
+### Phase 1 — Foundation (#001–012)
+
+| #    | Sample (PLAN.md #) | Status | CNA-side action needed |
+| ---- | ------------------- | ------ | ----------------------- |
+| 957  | PrimitivesSample (001) | ⬜ | Re-verify against current CNA; `../cna-samples/PLAN.md` marks Done, no known CNA gap. |
+| 958  | Primitives3D (002) | ⬜ | Re-verify; ships via the `VertexPositionNormalTexture`-with-dummy-UV workaround (DEFERRED #5) — no CNA change wanted (Task 935 closed, not implemented, by explicit project-owner decision). |
+| 959  | TexturesAndColors (003) | ⬜ | Re-verify against current CNA; no known CNA gap. |
+| 960  | StockEffects (004) | ⛔ | Ships only an effect-source + CLI compiler, no runnable `Game` — structural, not a CNA gap. No revisit trigger. |
+| 961  | ReachGraphicsDemo (005) | ⬜ | 5/6 demo scenes done; `SkinnedDemo` blocked on DEFERRED #13 (skeletal animation, partially done — re-check once Phase 77 fully lands). Also flagged (see phase intro) to check its own `saucer.fbx`/`model.fbx` for the same winding defect Task 954 found in `SimpleAnimation`'s `tank.fbx` (DEFERRED #30 already suspects this). |
+| 962  | SpriteEffects (006) | ⬜ | Re-verify; no known CNA gap. |
+| 963  | SpriteSheet (007) | ⬜ | Re-verify; no known CNA gap. |
+| 964  | ShapeRendering (008) | ⬜ | Re-verify; no known CNA gap. |
+| 965  | InputReporter (009) | ⬜ | Re-verify; no known CNA gap. |
+| 966  | InputSequence (010) | ⬜ | Re-verify; no known CNA gap. |
+| 967  | SafeArea (011) | ⬜ | Re-verify; no known CNA gap. |
+| 968  | GeneratedGeometry (012) | ⬜ | Re-verify; no known CNA gap. |
+
+### Phase 2 — 2D Games & Gameplay (#013–030)
+
+| #    | Sample (PLAN.md #) | Status | CNA-side action needed |
+| ---- | ------------------- | ------ | ----------------------- |
+| 969  | Platformer (013) | ⬜ | Re-verify; no known CNA gap. |
+| 970  | Spacewar (014) | ⬜ | `RenderTarget2D` itself now resolved (DEFERRED #12) — re-check whether Model + custom shaders (#11, Phase 78) + XACT audio are still the only remaining blockers before re-confirming Placeholder status. |
+| 971  | TicTacToe (015) | ⬜ | Re-verify; no known CNA gap. |
+| 972  | Bounce (016) | ⬜ | Re-verify; no known CNA gap. |
+| 973  | CollisionSample (017) | ⬜ | Re-verify; no known CNA gap. |
+| 974  | PerPixelCollision (018) | ⬜ | Re-verify; no known CNA gap. |
+| 975  | RectangleCollision (019) | ⬜ | Re-verify; no known CNA gap. |
+| 976  | TransformedCollision (020) | ⬜ | Re-verify; no known CNA gap. |
+| 977  | PathDrawing (021) | ⬜ | Re-verify; no known CNA gap. |
+| 978  | Pathfinding (022) | ⬜ | Re-verify; no known CNA gap. |
+| 979  | WaypointSample (023) | ⬜ | Re-verify; no known CNA gap. |
+| 980  | FlockingSample (024) | ⬜ | Re-verify; no known CNA gap. |
+| 981  | ChaseAndEvade (025) | ⬜ | Re-verify; no known CNA gap. |
+| 982  | AimingSample (026) | ⬜ | Re-verify; no known CNA gap. |
+| 983  | FuzzyLogic (027) | ⬜ | Re-verify; no known CNA gap. |
+| 984  | ColorReplacement (028) | ⬜ | Blocked on custom `ReplaceColor.fx` shader (DEFERRED #11, Phase 78) — model conversion itself already unblocked (#6). |
+| 985  | ParticleSample (029) | ⬜ | Re-verify; no known CNA gap. |
+| 986  | CameraShake (030) | ⬜ | Re-verify; **also check this sample's own independent `tank`-family mesh copy for the same winding defect Task 954 fixed in `SimpleAnimation`** (see phase intro, point b). |
+
+### Phase 3 — 3D Graphics & Shaders (#031–049)
+
+| #    | Sample (PLAN.md #) | Status | CNA-side action needed |
+| ---- | ------------------- | ------ | ----------------------- |
+| 987  | BloomSample (031) | ⬜ | Blocked on 3 custom shaders (DEFERRED #11, Phase 78 Task 946 — the planned first conversion target). `RenderTarget2D` itself already resolved (#12). |
+| 988  | DistortionSample (032) | ⬜ | Blocked on custom shader (#11, Phase 78 Task 947). |
+| 989  | NonPhotoRealistic (033) | ⬜ | Blocked on custom shader (#11, Phase 78 Task 947). |
+| 990  | NormalMapping (034) | ⬜ | Blocked on custom shader (#11, Phase 78 Task 947). |
+| 991  | PerPixelLighting (035) | ⬜ | Blocked on custom shader (#11, Phase 78 Task 947). |
+| 992  | VertexLighting (036) | ⬜ | Blocked on custom shader (#11, Phase 78 Task 947). |
+| 993  | RimLighting (037) | ⬜ | Re-verify; ported via a `Content.Load<TextureCube>`/`Content.Load<Model>` bypass — re-check whether items #14/#26 being since fully resolved lets this drop the bypass. |
+| 994  | ShadowMapping (038) | ⬜ | Blocked on custom shader (#11, Phase 78 Task 947). |
+| 995  | BillboardSample (039) | ⬜ | Blocked on custom shader (#11, Phase 78 Task 947). |
+| 996  | InstancedModel (040) | ⬜ | Blocked on custom shader (#11, Phase 78 Task 947). |
+| 997  | LensFlare (041) | ⬜ | Re-verify; cosmetic gap open (DEFERRED #22, EasyGL ignores `BlendState.ColorWriteChannels`, not started) — confirm still non-blocking. |
+| 998  | ShatterEffect (042) | ⬜ | Blocked on custom shader (#11, Phase 78 Task 947). |
+| 999  | Particles3D (043) | ⬜ | Blocked on custom shader (#11, Phase 78 Task 947). |
+| 1000 | Particles2DPipeline (044) | ⬜ | Re-verify; no known CNA gap. |
+| 1001 | XmlParticles (045) | ⬜ | Blocked on custom shader (#11, Phase 78 Task 947). |
+| 1002 | Graphics3D (046) | ⬜ | Re-verify; shipped with a component-lifecycle workaround (DEFERRED #23, now confirmed correct XNA/FNA behavior, not a CNA bug — workaround should stay). |
+| 1003 | PickingSample (047) | ⬜ | Re-verify; same #23 workaround note as Graphics3D. |
+| 1004 | TrianglePicking (048) | ⬜ | Re-verify; uses the `fbx_ascii2model.py --picking` sidecar (DEFERRED #25 workaround) since `VertexBuffer`/`IndexBuffer::GetData()` didn't exist at the time — that gap is now resolved (Task 930); re-check whether the sidecar can be retired in favor of the real `GetData()` API. |
+| 1005 | HeightmapCollision (049) | ⬜ | Re-verify; no known CNA gap (hand-built runtime terrain mesh). |
+
+### Phase 4 — Models & Animation (#050–058)
+
+| #    | Sample (PLAN.md #) | Status | CNA-side action needed |
+| ---- | ------------------- | ------ | ----------------------- |
+| 1006 | **SimpleAnimation (050)** | ⬜ | **Deliberately not marked Done — see this phase's own intro for the full future-re-review list** (points a–d): pixel-perfect XNA comparison still pending; `CameraShake`/`CustomModelClass`/`ReachGraphicsDemo`'s own independent tank-mesh copies not yet checked for Task 954's winding defect; `TankOnHeightmap`/`SplitScreen` share the same asset family; `fbx_ascii2model.py`'s winding root cause (Task 954 §5.6), the Bgfx `startIndex` bug (Task 954 §8), and the `SpriteBatch` blend-leak bug (Task 956) are all still open. Update `../cna-samples/PLAN.md`'s own stale "🚧 Placeholder" line for #050 to ✅ Done (it already has real, working source — this status line was not kept in sync with Tasks 954/955). |
+| 1007 | CustomModelAnimation (051) | ⬜ | Blocked on skeletal animation (DEFERRED #13 — partially done, loader/`Model::Draw` wiring landed Phase 77, but this sample's own port not yet attempted against it). |
+| 1008 | CustomModelClass (052) | ⬜ | Re-verify; **check for the same tank/model-family winding defect per this phase's intro** if it shares an asset with `SimpleAnimation`'s family (confirm asset identity first — `../cna-samples/PLAN.md` doesn't currently say). |
+| 1009 | CustomModelEffect (053) | ⬜ | Blocked on content-pipeline processor extensibility (DEFERRED #18, not started). |
+| 1010 | SkinningSample (054) | ⬜ | Blocked on skeletal animation (DEFERRED #13, partially done — re-check against current Phase 77 state). |
+| 1011 | SkinnedModelExtensions (055) | ⬜ | Blocked on skeletal animation (DEFERRED #13, same as above). |
+| 1012 | CPUSkinning (056) | ⬜ | Blocked on skeletal animation (DEFERRED #13, same as above). |
+| 1013 | InverseKinematics (057) | ⬜ | Re-verify; no known CNA gap. |
+| 1014 | ChaseCamera (058) | ⬜ | Re-verify; no known CNA gap. |
+
+### Phase 5 — Audio (#059–060)
+
+| #    | Sample (PLAN.md #) | Status | CNA-side action needed |
+| ---- | ------------------- | ------ | ----------------------- |
+| 1015 | Audio3D (059) | ⬜ | Re-verify; no known CNA gap. |
+| 1016 | SoundAndMusic (060) | ⬜ | Re-verify; no known CNA gap. |
+
+### Phase 6 — Full Games & Starter Kits (#061–074)
+
+| #    | Sample (PLAN.md #) | Status | CNA-side action needed |
+| ---- | ------------------- | ------ | ----------------------- |
+| 1017 | MarbleMaze (061) | ⬜ | Re-verify; no known CNA gap (confirmed a 2nd `assimp`-export winding-inversion quirk — asset-tooling, not CNA). |
+| 1018 | NetRumble (062) | ⬜ | Blocked on custom shader (#11, Phase 78 Task 947); networking itself already unblocked. |
+| 1019 | HoneycombRush (063) | ⬜ | Re-verify; no known CNA gap. |
+| 1020 | HoneycombRushTrainingKit (064) | ⛔ | Redundant multi-exercise variant of already-ported `HoneycombRush` (063) — structural, no CNA gap. No revisit trigger. |
+| 1021 | NinjAcademy (065) | ⬜ | Re-verify; no known CNA gap. |
+| 1022 | ShipGame (066) | ⬜ | Blocked on custom shader (#11, Phase 78 Task 947). |
+| 1023 | CatapultWars (067) | ⬜ | Re-verify; no known CNA gap. |
+| 1024 | CatapultWarsTrainingKit (068) | ⛔ | Redundant multi-exercise variant of already-ported `CatapultWars` (067) — structural, no CNA gap. No revisit trigger. |
+| 1025 | CardsStarterKit (069) | ⬜ | Re-verify; no known CNA gap. |
+| 1026 | RolePlayingGame (070) | ⬜ | Re-verify; shipped with some combat/screens simplified — confirm that simplification isn't masking a real CNA gap. |
+| 1027 | Yacht (071) | ⬜ | Re-verify; no known CNA gap. |
+| 1028 | GameStateManagement (072) | ⬜ | Re-verify; no known CNA gap. |
+| 1029 | SoccerPitch (073) | ⬜ | Re-verify; no known CNA gap. |
+| 1030 | TankOnHeightmap (074) | ⬜ | Same `tank.fbx`/`Tank.cs` per-mesh `ModelBone` gap as SplitScreen (076) — Task 938's own asset-regen follow-up still open. **Shares `SimpleAnimation`'s asset family — apply the same winding + depth-occlusion scrutiny (Tasks 954/955) once ported.** |
+
+### Phase 7 — Advanced, UI, Misc (#075–083, #102)
+
+| #    | Sample (PLAN.md #) | Status | CNA-side action needed |
+| ---- | ------------------- | ------ | ----------------------- |
+| 1031 | NGSMSample (075) | ⛔ | Even with Xbox LIVE lobby networking (#17, done), the sample's own "Single Player" path is an intentionally empty stub per the original's own documentation — structural, no CNA gap could ever unblock real gameplay here. No revisit trigger. |
+| 1032 | SplitScreen (076) | ⬜ | Needs per-mesh `ModelBone` support (DEFERRED #6 addendum) — landed (Tasks 936/937); Task 938's own asset-regen follow-up for this sample specifically still open. Shares `tank.fbx` family with `SimpleAnimation`/`TankOnHeightmap` — same future scrutiny applies. |
+| 1033 | DynamicMenu (077) | ⬜ | Re-verify; no known CNA gap. |
+| 1034 | LocalizationSample (078) | ⬜ | Re-verify; no known CNA gap. |
+| 1035 | GesturesSample (079) | ⬜ | Re-verify; no known CNA gap. |
+| 1036 | TouchThumbsticks (080) | ⬜ | Re-verify; no known CNA gap. |
+| 1037 | PerformanceMeasuring (081) | ⬜ | Re-verify; no known CNA gap. |
+| 1038 | UISample (082) | ⬜ | Re-verify; no known CNA gap. |
+| 1039 | SnowShovel (083) | ⬜ | Re-verify; no known CNA gap. |
+| 1040 | Orientation (102) | ⬜ | Re-verify; miscategorized as phone-hardware originally, has zero accelerometer/sensor dependency — no known CNA gap. |
+
+### Deferred appendix — Phone Hardware / Avatar / WinForms / Xbox LIVE Networking (#084–111)
+
+| #    | Sample (PLAN.md #) | Status | CNA-side action needed |
+| ---- | ------------------- | ------ | ----------------------- |
+| 1041 | AccelerometerSample (084) | ⬜ | Re-verify; ported via the original's own emulator keyboard-tilt fallback code (user go/no-go approved) — no CNA gap. |
+| 1042 | AvatarAnimationBlending (085) | ⛔ | Xbox LIVE Avatar body/animation content system, permanently retired — CNA's opt-in substitute-body `AvatarRenderer::EnableRealRenderingEXT` path exists but was judged not faithful enough (user go/no-go, 2026-07-10). Revisit trigger: only if the substitute rendering quality is ever substantially improved and the project owner chooses to revisit that go/no-go. |
+| 1043 | AvatarMultipleAnimations (086) | ⛔ | Same Xbox LIVE Avatar dependency and same permanent-skip decision as 085. |
+| 1044 | AvatarShadows (087) | ⛔ | Same Xbox LIVE Avatar dependency and same permanent-skip decision as 085. |
+| 1045 | BingMaps (088) | ⛔ | External Bing Maps web API/service — not a CNA framework capability. No revisit trigger. |
+| 1046 | BingMapsPathFinding (089) | ⛔ | Same external Bing Maps dependency as 088. |
+| 1047 | BitmapFontMaker (090) | ⛔ | WinForms design-time tool, not a runnable `Game` — structural. No revisit trigger. |
+| 1048 | ClientServerSample (091) | ⬜ | Re-verify; shipped with 3 networking workarounds (DEFERRED #19–21, all now independently ✅ resolved at the CNA level too) — confirm the sample's own workarounds can be simplified/removed now that the underlying gaps are fixed. |
+| 1049 | ContentManifestExtensions (092) | ⛔ | Content-pipeline extension only, no executable — structural. No revisit trigger. |
+| 1050 | CurveEditor (093) | ⛔ | WinForms animation-curve editing tool, not a `Game` — structural. No revisit trigger. |
+| 1051 | CustomAvatarAnimation (094) | ⛔ | Same Xbox LIVE Avatar dependency and same permanent-skip decision as 085. |
+| 1052 | GeolocationSample (095) | ⛔ | Real phone GPS hardware; SDL has no portable geolocation API (unlike the accelerometer, covered generically by `SDL_Sensor`) — structural. Revisit trigger: only if SDL or a portable geolocation shim ever becomes available. |
+| 1053 | InvitesSample (096) | ⛔ | Xbox LIVE friends/invite/presence system tied to a real Xbox LIVE account, not LAN `NetworkSession` discovery — structural, unlike `ClientServerSample`/`NetworkPrediction`/`PeerToPeer`. No revisit trigger. |
+| 1054 | MemoryMadnessLab (097) | ⛔ | WP7 teaching-lab exercise + accompanying document, not a standalone sample — structural. No revisit trigger. |
+| 1055 | MicrophoneEcho (098) | ⬜ | Re-verify; no known CNA gap (DEFERRED #16 resolved). |
+| 1056 | ModelImporterSample (099) | ⛔ | Content-pipeline extension only, no executable — structural. No revisit trigger. |
+| 1057 | NetworkPrediction (100) | ⬜ | Re-verify; confirmed zero networking workarounds needed — flagged that `NetworkSession.SessionProperties` has no mutable/replicated accessor (DEFERRED #27, not started, worked around via an explicit options packet) — re-check whether #27 is worth fixing at the CNA level now. |
+| 1058 | ObjectPlacementOnAvatar (101) | ⛔ | Same Xbox LIVE Avatar dependency and same permanent-skip decision as 085. |
+| 1059 | PeerToPeer (103) | ⬜ | Re-verify; confirmed zero networking workarounds needed, doesn't use `SessionProperties` (item #27 not applicable here) — no known CNA gap. |
+| 1060 | PerformanceUtility (104) | ⛔ | Utility library only, no standalone executable — structural. No revisit trigger. |
+| 1061 | PushNotifications (105) | ⛔ | Windows Phone push notification service, no desktop analog — structural. No revisit trigger. |
+| 1062 | SavingEmbeddedImages (106) | ⛔ | Windows Phone media library API, no desktop analog — structural. No revisit trigger. |
+| 1063 | TiltPerspective (107) | ⬜ | Re-verify; ported via a genuinely invented keyboard-tilt scheme (user go/no-go approved, no original fallback existed) — no CNA gap. |
+| 1064 | WinFormsContent (108) | ⛔ | WinForms host window, not a `Game` — structural. No revisit trigger. |
+| 1065 | WinFormsGraphics (109) | ⛔ | WinForms host window, not a `Game` — structural. No revisit trigger. |
+| 1066 | WP7MusicManagement (110) | ⛔ | Windows Phone 7 media-library management API, no desktop analog (contrast with the already-ported `SoundAndMusic`/`Audio3D`, which use the portable `SoundEffect`/`Song` APIs) — structural. No revisit trigger. |
+| 1067 | XnaGraphicsProfileChecker (111) | ⛔ | WinForms diagnostic tool, not a `Game` — structural. No revisit trigger. |
+
+### Everything else (#112–153) — 42 samples with no individual `PLAN.md` number, grouped by identical reason
+
+> These never got an individual numbered `PLAN.md` entry (see `../cna-samples/ignored.md`) because
+> each one's exclusion reason is shared identically by every other sample in its group — grouping
+> them keeps this phase's table from padding out with 42 rows that would each say the exact same
+> thing. Every reason below is structural (XNA version, file format, licensing/authorship, or
+> platform), not a CNA capability gap — **none of these 42 can ever become CNA tasks**, matching
+> `ignored.md`'s own framing exactly.
+
+| #    | Group | Samples | Status | Reason |
+| ---- | ----- | ------- | ------ | ------ |
+| 1068 | XNA 2.0/3.0/3.1 archives | BasicEffectShader, Catapult, MaterialsAndLights, Minjie, MultipassLighting, Pickture, RobotGame, SpriteBatchShader, VectorRumble, SpaceShooter, TiledSprites, RedistributableTTFs (12) | ⛔ | Pre-4.0 XNA API versions (or font files only) — this repo ports the XNA Game Studio 4.0 collection exclusively. No revisit trigger. |
+| 1069 | Avatar asset/rig packs | AvatarAnimPack ×4 (BIN/FBX/Maya/Mod Tool), AvatarRig ×3 (3ds Max 2010/Maya 2009/SoftImage Mod Tool 7.5) (7) | ⛔ | Art/animation/DCC-rigging data only, no C# game code at all. No revisit trigger. |
+| 1070 | Phone/Mango duplicates | GSMSample (Mango/Mango VB/Phone), ModelViewerDemo (Mango), PaddleBattle (Mango/Mango VB), RolePlayingGame (Phone) (7) | ⛔ | Each duplicates an already-ported desktop sample (or is phone-only with no desktop equivalent). No revisit trigger. |
+| 1071 | VB language duplicate | CardsStarterKit (VB) (1) | ⛔ | Visual Basic duplicate of already-ported `CardsStarterKit` (069, C#). No revisit trigger. |
+| 1072 | Silverlight/WP7-native code | CustomIndeterminateProgressBar, NonLinear WP SL Navigation, PushRecipe WP7, SilverlightMicrophone, TombstoningSample, LevelStarterKit (6) | ⛔ | Silverlight controls/apps or WP7 app-lifecycle demos, not XNA `Game`s at all. No revisit trigger. |
+| 1073 | Image/resource-only directories | ButtonImages, ControllerImages, LobbyChatImages (3) | ⛔ | Image assets only, consumed by other already-catalogued samples — no code. No revisit trigger. |
+| 1074 | Third-party/community kits | Riemers Tutorials, XNA-4-Racing-Game-Kit, Movipa (3) | ⛔ | Not official Microsoft samples — outside this repo's stated scope (the official XNA Game Studio 4.0 collection). No revisit trigger. |
+| 1075 | Unversioned/incomplete starter kit | UnitConverterStarterKit (1) | ⛔ | Directory contains only a license file and an empty stub subfolder — no real sample content to port. No revisit trigger. |
+| 1076 | Misc/non-code | XNA XNB Format (docs), SoundLab (standalone tool) (2) | ⛔ | Documentation-only or a standalone authoring tool, not an XNA game sample. No revisit trigger. |

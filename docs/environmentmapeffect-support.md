@@ -149,11 +149,11 @@ in narrow isolation but compose correctly when combined in one scene.
 | `Clone()` preserves `FogColor` | ✅ fixed Task 392 | ✅ fixed Task 392 | ✅ fixed Task 392 |
 | Cube-map blend: `lerp` not additive | ✅ fixed Task 394 | ✅ fixed Task 394 | ✅ fixed Task 394 |
 | `EnvironmentMapSpecular × envmap.a` | ✅ fixed Task 395 | ✅ fixed Task 395 | ✅ fixed Task 395 |
-| Base lerp `envColor × combinedAlpha` | ❌ Task 891 | ❌ Task 891 | ❌ Task 891 |
+| Base lerp `envColor × combinedAlpha` | ✅ fixed Task 891 | ✅ fixed Task 891 | ✅ fixed Task 891 |
 | Fresnel edge-weighting | ✅ fixed Task 396 | ✅ fixed Task 396 | ✅ fixed Task 396 |
 | `EyePosition` → reflection vector | ✅ Task 397 | ✅ Task 397 | ✅ Task 397 |
 | `World` non-uniform-scale normal transform | ✅ fixed Task 398 | ✅ Task 398 (already correct) | ✅ fixed Task 398 |
-| `DirectionalLight1`/`DirectionalLight2` | ❌ Task 890 | ❌ Task 890 | ❌ Task 890 |
+| `DirectionalLight1`/`DirectionalLight2` | ✅ fixed Task 890 (2026-07-11) | ✅ fixed Task 890 | ✅ fixed Task 890 |
 | Cross-backend pixel consistency | ✅ Task 399 | ✅ Task 399 | ✅ Task 399 |
 
 Legend: ✅ verified working · ❌ confirmed not implemented.
@@ -162,12 +162,12 @@ Legend: ✅ verified working · ❌ confirmed not implemented.
 
 Phase 45 opened 3 new tracked tasks:
 
-- **Task 890** (opened by Task 391) — forward `DirectionalLight1`/`DirectionalLight2` on
-  `EnvironmentMapEffect` (all 3 backends), same shape and likely shared fix plumbing as
-  `BasicEffect`'s already-tracked Task 885.
-- **Task 891** (opened by Task 395) — scale the base cube-map lerp target (`envColor`) by
-  combined texture×diffuse alpha on all 3 backends, the other half of the `envmap = ... * color.a`
-  formula not fixed by Task 395's specular-only fix.
+- ~~**Task 890**~~ (opened by Task 391) — **fixed, 2026-07-11**: `DirectionalLight1`/
+  `DirectionalLight2` now forward on `EnvironmentMapEffect` on all 3 backends, mirroring
+  `BasicEffect`'s own fix (Task 885/886). See `NEXT.md` §3 for the full write-up.
+- ~~**Task 891**~~ (opened by Task 395) — **fixed**: the base cube-map lerp target (`envColor`) is
+  now scaled by combined texture×diffuse alpha on all 3 backends, the other half of the
+  `envmap = ... * color.a` formula Task 395's specular-only fix didn't cover.
 - **Task 892** (opened by Task 398) — fix `BasicEffect`'s Bgfx lit-textured normal transform,
   which transforms normals by the full `World×View×Projection` matrix — a worse sibling bug found
   while auditing `EnvironmentMapEffect`'s own normal-matrix bug, invisible in every existing

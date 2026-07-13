@@ -17,14 +17,21 @@ cmake --build build --target CNA CnaTests
 ctest --test-dir build --output-on-failure
 ```
 
+> **Looking for a specific doc?** `docs/` has 57 files — see [`docs/README.md`](docs/README.md)
+> for an index of what's current vs. historical.
+
 ### Project Status
 
-- **`Microsoft::Xna::Framework::Graphics` milestone:** qualified **~90% XNA/FNA compatibility, test-execution-verified** (not estimated) — every one of the ~26 major Graphics classes is present, implemented, and tested; the gap to 100% is 10 named, tracked items (5 confirmed bugs + 5 architecture decisions pending project-owner sign-off). See `docs/graphics-compatibility-report.md` for the full computed breakdown.
-- **Overall maturity:** Active, incremental framework development; XNA API coverage is partial and expanding.
+- **`Microsoft::Xna::Framework::Graphics` milestone:** qualified **~90% XNA/FNA compatibility, test-execution-verified** (not estimated) — every one of the ~26 major Graphics classes is present, implemented, and tested. **As of 2026-07-11, all 5 confirmed bugs behind the original 2026-07-09 milestone declaration are fixed** (Vulkan `BlendState`, EasyGL anisotropic filtering, `IndexElementSize`'s numeric values, `Model`'s root-bone override, `SpriteBatch::Draw`'s optional source rectangle), and Vulkan `OcclusionQuery` (previously architecturally blocked) is fixed too. `docs/graphics-compatibility-report.md` is a dated snapshot from that declaration, kept for its methodology, not current status — see `NEXT.md` §5 for the actively-maintained bug list. What's left to 100% is a smaller set of individually-tracked issues plus a handful of project-owner architecture decisions (e.g. SDL_Renderer `TextureAddressMode::Wrap`/`Mirror`, `Texture3D`/`TextureCube` sampler-bind architecture) — none silent or undocumented.
+- **Overall XNA 4.0 API surface:** 227 of 245 public FNA types are present in CNA (**92.7%**, computed 2026-07-11 by diffing FNA's public type list against CNA's headers) — 100% for `Graphics`/`Audio`/`Input`(+`Touch`)/`Storage`; the real gap is `.Content` (4/12 — no `.xnb` reader, by design) and `.Media` (25/25 present, but 14 are shells). See `docs/xna-4-api-coverage.md`. **Note this is a different metric from the Graphics bullet above** — this one counts whether a type/class exists at all across every XNA namespace (a raw presence count), while the Graphics "~90%" figure is a narrower, bug-weighted quality gate scoped to just the ~26 major Graphics classes (it also counts behavioral correctness, not just presence — Graphics itself is 91/91 = 100% present). The two numbers measuring different things is expected, not a typo or a contradiction.
+- **The two gaps that matter most to a real port:** no `.xnb` content pipeline (CNA loads raw assets + JSON descriptors instead) and no compiled `.fx` shader bytecode support (`Effect(GraphicsDevice&, byte[])`) — the latter is the single biggest real gap, blocking 23 of the 86 official XNA samples in `../cna-samples`. See `docs/migration-guide.md`.
 - **`SDL_RENDERER` backend:** Implemented path focused on practical 2D rendering workflows; 2D-only by design (3D calls throw).
 - **`EASYGL` backend:** Most mature backend overall — implemented OpenGL-based path through `easy-gl`, full 2D+3D pixel-verified coverage.
-- **`VULKAN` backend:** Real, working 3D rendering (all 5 stock effects, render targets, depth/stencil state) — second-most mature backend, with a few named open gaps (e.g. `BlendState` doesn't yet honor arbitrary blend modes; `OcclusionQuery` is architecturally blocked). See `docs/xna-4-api-coverage.md`'s per-backend table for current detail.
-- **`BGFX` backend:** Full 2D+3D pixel-verified parity with EasyGL/Vulkan as of this project's Phase 72; occlusion-query correctness can't be pixel-verified under every sandbox's software GL driver.
+- **`VULKAN` backend:** Real, working 3D rendering (all 5 stock effects, render targets, depth/stencil state, `BlendState`, `OcclusionQuery`) — second-most mature backend; the one remaining named gap is an isolated `RasterizerState.DepthBias` sub-case. See `docs/xna-4-api-coverage.md`'s per-backend table for current detail.
+- **`BGFX` backend:** Broad 2D+3D functionality, largely pixel-verified parity with EasyGL/Vulkan as of this project's Phase 72 — but not unqualified full parity: known real limitations remain, including a `Depth24Stencil8`-attached `RenderTargetCube` face producing no colour output (Task 952, deferred, root cause not yet found), `DrawIndexedPrimitivesEx` silently discarding `startIndex`/`baseVertex` on a sub-range indexed draw (Task 954), and occlusion-query pixel-count correctness that can't be verified under this project's own sandbox's software GL driver. See `NEXT.md` §5 for the current, complete list.
+- **`WEBGPU` backend:** Experimental fifth backend using native `wgpu-native`. The current baseline covers device/surface setup, clear/present, RGBA8 `Texture2D`, vertex/index uploads and WGSL SpriteBatch rendering. It is not yet a 3D-parity replacement for EasyGL/Vulkan/Bgfx; see [`docs/webgpu-backend.md`](docs/webgpu-backend.md) and `plan_webgpu.md`.
+- **Verification methodology:** differential testing against a real, running `FNA.dll` reference implementation (`tools/fna-reference/`), disputed behavior settled against genuine XNA 4.0 on a Windows 7 VM, and a compile-time `NOXNA` purity check (a dedicated CMake build option that turns every non-XNA-tagged declaration into a `[[deprecated]]` warning under `-Werror`) — see `CHECKLIST.md`'s "NOXNA markers" section and `CMakeLists.txt`.
+- **CI is Linux-only and partial** (see `.github/workflows/`): it currently runs only the `Input` and `Devices`/`Sensors` gtest suites — not the full ~4,370-test unit suite and not the ~490-test GPU pixel-test suite across the 4 established graphics backends; the experimental WebGPU backend does not yet have pixel-test coverage. Everything Graphics-related in this README is verified by running the suites locally and by hand, not by an automated Graphics CI gate; there is currently no Windows, macOS, or Android CI at all (Windows/Android are verified manually, per §7/§9 below).
 
 ## 2. 🎯 Goals
 
@@ -397,7 +404,9 @@ int main()
 ## 12. 🛣 Roadmap
 
 - Continue expanding XNA API coverage and behavior parity (incremental, class-by-class).
-- Close the remaining named backend gaps (Vulkan `BlendState`/`OcclusionQuery`, EasyGL anisotropic filtering, `IndexElementSize`'s FNA-compatible numeric values) — see `docs/xna-4-api-coverage.md`.
+- Implement compiled `.fx` shader bytecode support (`Effect(GraphicsDevice&, byte[])`) — the single biggest real gap; it blocks 23 of the 86 official XNA samples in `../cna-samples`.
+- Consider a real `.xnb` content-pipeline reader (currently a deliberate design choice, not a bug — CNA loads raw assets + JSON descriptors instead).
+- Close the remaining named architecture-decision gaps (SDL_Renderer `TextureAddressMode::Wrap`/`Mirror`, SDL_Renderer `Texture3D`/`TextureCube` construction, EasyGL non-`Color` `SurfaceFormat` GPU forwarding, `Texture3D`/`TextureCube` sampler-bind architecture) — see `NEXT.md` §5 and `docs/graphics-backend-feature-matrix.md`.
 - Strengthen cross-platform execution targets and validation coverage.
 
 ## 13. 📜 License

@@ -20,13 +20,23 @@ layout(set = 0, binding = 2) uniform EnvMapParams {
     // Task 899's noted cheap leftover: fog packed into this UBO's spare tail bytes.
     vec4 fogColorEnabled;      // xyz = FogColor, w = fogEnabled
     vec4 fogStartEnd;          // x = fogStart, y = fogEnd, zw = unused
+    // Task 890: DirectionalLight1/DirectionalLight2 diffuse forwarding.
+    vec4 light1Dir_pad;
+    vec4 light1Diff_pad;
+    vec4 light2Dir_pad;
+    vec4 light2Diff_pad;
 } ep;
 
 void main() {
-    vec3 N      = normalize(vWorldNormal);
-    vec3 E      = normalize(vEyeDir);
-    float NdotL = max(dot(N, -ep.light0Dir_pad.xyz), 0.0);
-    vec3 litRGB = (ep.emissive_em.xyz + ep.light0Diff_fresnelEn.xyz * NdotL) * ep.diffuseColor.rgb;
+    vec3 N       = normalize(vWorldNormal);
+    vec3 E       = normalize(vEyeDir);
+    float NdotL0 = max(dot(N, -ep.light0Dir_pad.xyz), 0.0);
+    float NdotL1 = max(dot(N, -ep.light1Dir_pad.xyz), 0.0);
+    float NdotL2 = max(dot(N, -ep.light2Dir_pad.xyz), 0.0);
+    vec3 lightSum = ep.light0Diff_fresnelEn.xyz * NdotL0
+                  + ep.light1Diff_pad.xyz * NdotL1
+                  + ep.light2Diff_pad.xyz * NdotL2;
+    vec3 litRGB = (ep.emissive_em.xyz + lightSum) * ep.diffuseColor.rgb;
     vec4 texColor  = texture(uTexture,  vUV);
     vec3 reflDir   = reflect(-E, N);
     vec4 envSample = texture(uEnvMap, reflDir);

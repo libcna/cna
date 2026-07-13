@@ -9,7 +9,7 @@
 #include "CNA/CNAHelper.hpp"
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
 
-namespace CNA::Internal::Backends { struct GpuDrawParams; }
+namespace CNA::Internal::Backends { struct GpuDrawParams; class IEffectBackend; }
 
 namespace Microsoft::Xna::Framework::Graphics
 {
@@ -154,6 +154,16 @@ namespace Microsoft::Xna::Framework::Graphics
          * a dependency on the concrete ShaderEffect type.
          */
         NOXNA [[nodiscard]] virtual const std::string& GetFragmentSource() const;
+
+        /**
+         * @brief Returns the backend-specific compiled program for this effect, if it is a
+         * source-based effect (e.g. ShaderEffect), or nullptr.
+         *
+         * Overridden by ShaderEffect. Lets a backend (e.g. SpriteBatch) bind the SAME compiled
+         * program the effect itself uses, instead of maintaining a redundant separate copy that
+         * a caller's SetUniformXxx() calls would never actually reach.
+         */
+        NOXNA [[nodiscard]] virtual CNA::Internal::Backends::IEffectBackend* GetEffectBackendPtr() const;
 
         /**
          * @brief Fills a GpuDrawParams struct with this effect's current render parameters.

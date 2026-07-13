@@ -21,3 +21,11 @@ no third-party binary content is currently bundled in this repository.
   standalone, swappable asset pack. Consistent with this, only CNA's own converted binary
   (`.skeleton.bin`/`.clip.bin`) and JSON (`.skinnedmodel.json`) content is intended to ship —
   never the original Mixamo FBX files themselves.
+
+## wgpu-native (optional WebGPU backend dependency)
+
+The experimental `WEBGPU` graphics backend uses `wgpu-native`, a native implementation of the
+WebGPU C API maintained by the gfx-rs project. CNA's CMake integration downloads or consumes an
+unmodified upstream binary release; the library is not copied into the CNA source tree.
+`wgpu-native` is available under the Apache License 2.0 and MIT License. See the upstream release
+package for the complete license texts and notices that apply to the selected binary.

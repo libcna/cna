@@ -24,6 +24,11 @@ layout(set = 0, binding = 2) uniform EnvMapParams {
     // Task 899's noted cheap leftover: fog packed into this UBO's spare tail bytes.
     vec4 fogColorEnabled;  // xyz = FogColor, w = fogEnabled
     vec4 fogStartEnd;      // x = fogStart, y = fogEnd, zw = unused
+    // Task 890: DirectionalLight1/DirectionalLight2 diffuse forwarding.
+    vec4 light1Dir_pad;
+    vec4 light1Diff_pad;
+    vec4 light2Dir_pad;
+    vec4 light2Diff_pad;
 } ep;
 
 void main() {

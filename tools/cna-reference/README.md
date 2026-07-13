@@ -51,10 +51,12 @@ Running the real comparison found exactly one genuine divergence after fixing se
 this new harness itself (`ostringstream`'s default 6-significant-digit precision silently
 truncating large packed-value integers and sub-millimeter float differences; several state-preset
 properties and 7 `SurfaceFormat` `*EXT` enum members missing from the first draft of the C++
-dump): `IndexElementSize`'s numeric values do not match real FNA (`SixteenBits=0`/`ThirtyTwoBits=1`
-in FNA vs. `16`/`32` in CNA) — tracked as `plan_graphics.md` Task 921, not fixed here since it's a
-public-API enum-value change with its own existing (currently-wrong) test coverage to update, out
-of this task's own "build the comparison tooling" scope.
+dump): `IndexElementSize`'s numeric values did not match real FNA at the time (`SixteenBits=0`/
+`ThirtyTwoBits=1` in FNA vs. `16`/`32` in CNA) — tracked as `plan_graphics.md` Task 921, not fixed
+in this task since it was a public-API enum-value change with its own existing (then-wrong) test
+coverage to update, out of this task's own "build the comparison tooling" scope. **Task 921 has
+since fixed this (2026-07-09)** — CNA's `IndexElementSize` now uses `SixteenBits=0`/
+`ThirtyTwoBits=1` too; re-running this comparison today would find no divergence here.
 
 Every other compared value — all 21 enums, all 16 state presets, all 17 `PackedVector` types, and
 all 5 `Viewport.Project`/`Unproject` cases — matches the real, running FNA implementation exactly.

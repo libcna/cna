@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "CNA/Logger.hpp"
 #include <iostream>
@@ -57,6 +58,21 @@ namespace Microsoft::Xna::Framework::Graphics
         if (effectBackend_) effectBackend_->SetUniformInt(name, value);
     }
 
+    void ShaderEffect::SetUniformFloatArray(const char* name, const float* values, int count)
+    {
+        if (effectBackend_) effectBackend_->SetUniformFloatArray(name, values, count);
+    }
+
+    void ShaderEffect::SetUniformVec2Array(const char* name, const float* values, int count)
+    {
+        if (effectBackend_) effectBackend_->SetUniformVec2Array(name, values, count);
+    }
+
+    void ShaderEffect::SetTexture(int unit, Texture2D& texture)
+    {
+        if (effectBackend_) effectBackend_->BindTexture(unit, &texture.GetBackend());
+    }
+
     ShaderEffect::~ShaderEffect() = default;
 
     const std::string& ShaderEffect::getVertexSourceProperty() const { return vertSrc_; }
@@ -72,7 +88,7 @@ namespace Microsoft::Xna::Framework::Graphics
             CNA::Logger::Debug("ShaderEffect::OnApply() — no backend or compile failed.");
     }
 
-    CNA::Internal::Backends::IEffectBackend* ShaderEffect::GetEffectBackend() const
+    CNA::Internal::Backends::IEffectBackend* ShaderEffect::GetEffectBackendPtr() const
     {
         return effectBackend_.get();
     }

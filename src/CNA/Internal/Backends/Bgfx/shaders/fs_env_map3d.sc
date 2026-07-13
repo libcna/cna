@@ -9,6 +9,10 @@ uniform vec4 u_diffuseColor;
 uniform vec4 u_emissiveColor;
 uniform vec4 u_light0Dir;
 uniform vec4 u_light0Diffuse;
+uniform vec4 u_light1Dir;
+uniform vec4 u_light1Diffuse;
+uniform vec4 u_light2Dir;
+uniform vec4 u_light2Diffuse;
 uniform vec4 u_envMapAmount;
 uniform vec4 u_envMapSpecular;
 uniform vec4 u_fogColor;
@@ -17,8 +21,11 @@ void main()
 {
     vec3 N        = normalize(v_normal);
     vec3 E        = normalize(v_eyeDir);
-    float NdotL   = max(dot(N, -normalize(u_light0Dir.xyz)), 0.0);
-    vec3 litRGB   = (u_emissiveColor.xyz + u_light0Diffuse.xyz * NdotL) * u_diffuseColor.xyz;
+    float NdotL0  = max(dot(N, -normalize(u_light0Dir.xyz)), 0.0);
+    float NdotL1  = max(dot(N, -normalize(u_light1Dir.xyz)), 0.0);
+    float NdotL2  = max(dot(N, -normalize(u_light2Dir.xyz)), 0.0);
+    vec3 lightSum = u_light0Diffuse.xyz * NdotL0 + u_light1Diffuse.xyz * NdotL1 + u_light2Diffuse.xyz * NdotL2;
+    vec3 litRGB   = (u_emissiveColor.xyz + lightSum) * u_diffuseColor.xyz;
     vec4 texColor  = texture2D(s_texColor, v_texcoord0);
     vec3 reflDir   = reflect(-E, N);
     vec4 envSample = textureCube(s_envMap, reflDir);

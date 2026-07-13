@@ -110,13 +110,20 @@ protected:
 
         const std::uint8_t alpha = (frame_ < kFadeUpAtFrame) ? kLowAlpha : kHighAlpha;
 
-        dev.setBlendStateProperty(BlendState::Opaque);
-        sb_->Begin();
+        // Task 956 fix: pass the intended BlendState directly to SpriteBatch::Begin() instead of
+        // setting it on GraphicsDevice right before calling the no-arg Begin() overload -- the
+        // no-arg overload's own implicit BlendState::AlphaBlend argument immediately re-applies
+        // and clobbers whatever was just set (SpriteBatch::Begin() always calls
+        // GraphicsDevice.setBlendStateProperty(blendState) itself, see SpriteBatch.cpp). This test
+        // previously only passed because EasyGLSpriteBatchBackend::Begin() separately hardcoded
+        // SrcAlpha/OneMinusSrcAlpha blend factors regardless of any of this -- coincidentally the
+        // same factors BlendState::NonPremultiplied needs -- masking the fact that the explicit
+        // NonPremultiplied request below was never actually reaching the GPU.
+        sb_->Begin(SpriteSortMode::Deferred, BlendState::Opaque);
         sb_->Draw(*bg_, Rectangle(0, 0, kSize, kSize), Rectangle(0, 0, 1, 1), Color::White);
         sb_->End();
 
-        dev.setBlendStateProperty(BlendState::NonPremultiplied);
-        sb_->Begin();
+        sb_->Begin(SpriteSortMode::Deferred, BlendState::NonPremultiplied);
         sb_->Draw(*overlay_, Rectangle(0, 0, kSize, kSize), Rectangle(0, 0, 1, 1),
                   Color(255, 255, 255, static_cast<int>(alpha)));
         sb_->End();

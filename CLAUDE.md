@@ -399,26 +399,28 @@ individual task. Do not push unless the user explicitly asks to push.
 | CNA utilities             | `include/CNA/`, `src/CNA/`                    | NOXNA helpers, logging, etc.   |
 
 Backend selection is compile-time via `CNA_GRAPHICS_BACKEND` CMake option
-(`SDL_RENDERER` | `EASYGL` | `VULKAN` | `BGFX`).
+(`SDL_RENDERER` | `EASYGL` | `VULKAN` | `BGFX` | `WEBGPU`). `WEBGPU` is experimental and has a
+functional native 2D baseline, not yet the 3D/effect parity of the established GPU backends.
 
 ---
 
-## WebGPU Is Forbidden For Now
+## WebGPU Is Active (Experimental)
 
-**Do not implement, plan, or work on any WebGPU-related task, in `plan_webgpu.md` or otherwise,
-until the project owner explicitly lifts this restriction.**
+The project owner explicitly lifted the former WebGPU prohibition on **2026-07-12** and authorized
+implementation as CNA's fifth graphics backend.
 
-- All WebGPU tasks live in their own dedicated file, **`plan_webgpu.md`** (Phases 56–69,
-  `WEBGPU-1`–`WEBGPU-123` — moved out of `plan_graphics.md` and renumbered 2026-07-07; previously
-  Tasks 10001–10161 inline in `plan_graphics.md`), including CMake scaffolding, the
-  `CNA_BACKEND_WEBGPU` backend, `wgpu-native` vendoring, WGSL shaders, and the Emscripten/WASM
-  target (Phase 69).
-- If asked to work through `plan_graphics.md` autonomously, **`plan_webgpu.md` is entirely out of
-  scope** — do not open it, do not start any item in it, do not stub it, do not create
-  WebGPU-related files or CMake options.
-- This is a hard project-wide prohibition, not a priority/ordering note. It stays in force even
-  though `plan_graphics.md`'s own "Execution order" section separately describes WebGPU as
-  deprioritized — treat this section as authoritative if the two ever seem to disagree.
+- WebGPU tasks live in **`plan_webgpu.md`** (`WEBGPU-1`–`WEBGPU-123`). Keep task statuses and
+  limitations current as implementation proceeds.
+- The native backend uses pinned **wgpu-native v29.0.1.1**, selected with
+  `-DCNA_GRAPHICS_BACKEND=WEBGPU`. Prefer `CNA_WEBGPU_ROOT` for reproducible/offline builds; the
+  CMake integration may otherwise download the matching official binary package.
+- The current baseline implements native surface/device setup, clear/present, Texture2D, buffer
+  uploads and WGSL SpriteBatch. Do not describe it as Vulkan-level or full XNA 3D parity until the
+  remaining shader, state, effect, render-target, readback and test tasks are actually complete.
+- Preserve the established backends: WebGPU changes should remain backend-local or common only
+  where a common-interface change is genuinely required and verified across existing backends.
+
+See `docs/webgpu-backend.md` for the current capability boundary.
 
 ---
 

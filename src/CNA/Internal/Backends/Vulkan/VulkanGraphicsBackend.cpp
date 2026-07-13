@@ -4066,7 +4066,7 @@ namespace CNA::Internal::Backends::Vulkan
         VkDescriptorBufferInfo bufInfo{};
         bufInfo.buffer = envMapUBO_[frameIdx];
         bufInfo.offset = 0;
-        bufInfo.range  = 128; // size of one EnvMapParams block in the shader (96 + fog, Task 899)
+        bufInfo.range  = 192; // size of one EnvMapParams block in the shader (96 + fog/899 + light1/2/890)
 
         VkWriteDescriptorSet writes[3]{};
         for (uint32_t i = 0; i < 2; ++i) {
@@ -4891,11 +4891,12 @@ namespace CNA::Internal::Backends::Vulkan
         bufInfo.offset = 0;
         bufInfo.range  = kSkinnedUBOStride;  // one bone palette block
 
-        // binding=2: dynamic fog UBO (Task 899).
+        // binding=2: dynamic fog UBO (Task 899), extended for DirectionalLight1/2 (Task 893).
         VkDescriptorBufferInfo fogBufInfo{};
         fogBufInfo.buffer = skinnedFogUBO_[frameIdx];
         fogBufInfo.offset = 0;
-        fogBufInfo.range  = 32; // vec4 fogColorEnabled + vec4 fogStartEnd
+        // fogColorEnabled+fogStartEnd + light1/2 Dir/Diff (Task 893) + World/eyePos/specular (Task 894)
+        fogBufInfo.range  = 240;
 
         VkWriteDescriptorSet writes[3]{};
         writes[0].sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -5643,9 +5644,9 @@ namespace CNA::Internal::Backends::Vulkan
                     if (draw.envMapDescSet != VK_NULL_HANDLE && envMapUBOPtr_[currentFrame_]) {
                         const uint32_t slot   = envMapUBOSlot++;
                         const uint32_t uboOff = slot * kEnvMapUBOStride;
-                        if (uboOff + 128 <= kEnvMapUBOStride * kEnvMapUBOMaxDraws) {
+                        if (uboOff + 192 <= kEnvMapUBOStride * kEnvMapUBOMaxDraws) {
                             std::memcpy(static_cast<uint8_t*>(envMapUBOPtr_[currentFrame_]) + uboOff,
-                                        draw.envMapUboData, 128);
+                                        draw.envMapUboData, 192);
                         }
                         vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS,
                                                 pipelineLayoutEnvMap3D_, 0, 1,
@@ -5671,9 +5672,9 @@ namespace CNA::Internal::Backends::Vulkan
                         if (skinnedFogUBOPtr_[currentFrame_]) {
                             const uint32_t fogSlot = skinnedFogUBOSlot++;
                             fogOff = fogSlot * kSkinnedFogUBOStride;
-                            if (fogOff + 32 <= kSkinnedFogUBOStride * kSkinnedFogUBOMaxDraws) {
+                            if (fogOff + 240 <= kSkinnedFogUBOStride * kSkinnedFogUBOMaxDraws) {
                                 std::memcpy(static_cast<uint8_t*>(skinnedFogUBOPtr_[currentFrame_]) + fogOff,
-                                            draw.skinnedFogUboData, 32);
+                                            draw.skinnedFogUboData, 240);
                             }
                         }
                         const uint32_t dynOffsets[2] = { boneOff, fogOff };
@@ -6484,6 +6485,30 @@ namespace CNA::Internal::Backends::Vulkan
             d.skinnedFogUboData[2] = params.fogColor[2]; d.skinnedFogUboData[3] = params.fogEnabled ? 1.f : 0.f;
             d.skinnedFogUboData[4] = params.fogStart; d.skinnedFogUboData[5] = params.fogEnd;
             d.skinnedFogUboData[6] = 0.f; d.skinnedFogUboData[7] = 0.f;
+            // Task 893: DirectionalLight1/DirectionalLight2 diffuse forwarding.
+            d.skinnedFogUboData[8]  = params.light1Dir[0]; d.skinnedFogUboData[9]  = params.light1Dir[1];
+            d.skinnedFogUboData[10] = params.light1Dir[2]; d.skinnedFogUboData[11] = 0.f;
+            d.skinnedFogUboData[12] = params.light1Diffuse[0]; d.skinnedFogUboData[13] = params.light1Diffuse[1];
+            d.skinnedFogUboData[14] = params.light1Diffuse[2]; d.skinnedFogUboData[15] = 0.f;
+            d.skinnedFogUboData[16] = params.light2Dir[0]; d.skinnedFogUboData[17] = params.light2Dir[1];
+            d.skinnedFogUboData[18] = params.light2Dir[2]; d.skinnedFogUboData[19] = 0.f;
+            d.skinnedFogUboData[20] = params.light2Diffuse[0]; d.skinnedFogUboData[21] = params.light2Diffuse[1];
+            d.skinnedFogUboData[22] = params.light2Diffuse[2]; d.skinnedFogUboData[23] = 0.f;
+            // Task 894: World matrix (for world-space position -> eye vector), EyePosition,
+            // per-light SpecularColor, and material SpecularColor/SpecularPower.
+            for (int wi = 0; wi < 16; ++wi) d.skinnedFogUboData[24 + wi] = params.worldColMajor[wi];
+            d.skinnedFogUboData[40] = params.eyePositionWorld[0];
+            d.skinnedFogUboData[41] = params.eyePositionWorld[1];
+            d.skinnedFogUboData[42] = params.eyePositionWorld[2];
+            d.skinnedFogUboData[43] = static_cast<float>(params.weightsPerVertex); // Task 895
+            d.skinnedFogUboData[44] = params.specularColor[0]; d.skinnedFogUboData[45] = params.specularColor[1];
+            d.skinnedFogUboData[46] = params.specularColor[2]; d.skinnedFogUboData[47] = params.specularPower;
+            d.skinnedFogUboData[48] = params.light0Specular[0]; d.skinnedFogUboData[49] = params.light0Specular[1];
+            d.skinnedFogUboData[50] = params.light0Specular[2]; d.skinnedFogUboData[51] = 0.f;
+            d.skinnedFogUboData[52] = params.light1Specular[0]; d.skinnedFogUboData[53] = params.light1Specular[1];
+            d.skinnedFogUboData[54] = params.light1Specular[2]; d.skinnedFogUboData[55] = 0.f;
+            d.skinnedFogUboData[56] = params.light2Specular[0]; d.skinnedFogUboData[57] = params.light2Specular[1];
+            d.skinnedFogUboData[58] = params.light2Specular[2]; d.skinnedFogUboData[59] = 0.f;
         } else if (needsEnvMap) {
             EnsureEnvMapResources();
             const auto* vs0 = dynamic_cast<const IVulkanSamplable*>(params.texture0);
@@ -6512,6 +6537,15 @@ namespace CNA::Internal::Backends::Vulkan
             d.envMapUboData[26] = params.fogColor[2]; d.envMapUboData[27] = params.fogEnabled ? 1.f : 0.f;
             d.envMapUboData[28] = params.fogStart; d.envMapUboData[29] = params.fogEnd;
             d.envMapUboData[30] = 0.f; d.envMapUboData[31] = 0.f;
+            // Task 890: DirectionalLight1/DirectionalLight2 diffuse forwarding.
+            d.envMapUboData[32] = params.light1Dir[0]; d.envMapUboData[33] = params.light1Dir[1];
+            d.envMapUboData[34] = params.light1Dir[2]; d.envMapUboData[35] = 0.f;
+            d.envMapUboData[36] = params.light1Diffuse[0]; d.envMapUboData[37] = params.light1Diffuse[1];
+            d.envMapUboData[38] = params.light1Diffuse[2]; d.envMapUboData[39] = 0.f;
+            d.envMapUboData[40] = params.light2Dir[0]; d.envMapUboData[41] = params.light2Dir[1];
+            d.envMapUboData[42] = params.light2Dir[2]; d.envMapUboData[43] = 0.f;
+            d.envMapUboData[44] = params.light2Diffuse[0]; d.envMapUboData[45] = params.light2Diffuse[1];
+            d.envMapUboData[46] = params.light2Diffuse[2]; d.envMapUboData[47] = 0.f;
         } else if (needsDualTex) {
             const auto* vs0 = dynamic_cast<const IVulkanSamplable*>(params.texture0);
             const auto* vs1 = dynamic_cast<const IVulkanSamplable*>(params.texture1);
@@ -6650,6 +6684,30 @@ namespace CNA::Internal::Backends::Vulkan
             d.skinnedFogUboData[2] = params.fogColor[2]; d.skinnedFogUboData[3] = params.fogEnabled ? 1.f : 0.f;
             d.skinnedFogUboData[4] = params.fogStart; d.skinnedFogUboData[5] = params.fogEnd;
             d.skinnedFogUboData[6] = 0.f; d.skinnedFogUboData[7] = 0.f;
+            // Task 893: DirectionalLight1/DirectionalLight2 diffuse forwarding.
+            d.skinnedFogUboData[8]  = params.light1Dir[0]; d.skinnedFogUboData[9]  = params.light1Dir[1];
+            d.skinnedFogUboData[10] = params.light1Dir[2]; d.skinnedFogUboData[11] = 0.f;
+            d.skinnedFogUboData[12] = params.light1Diffuse[0]; d.skinnedFogUboData[13] = params.light1Diffuse[1];
+            d.skinnedFogUboData[14] = params.light1Diffuse[2]; d.skinnedFogUboData[15] = 0.f;
+            d.skinnedFogUboData[16] = params.light2Dir[0]; d.skinnedFogUboData[17] = params.light2Dir[1];
+            d.skinnedFogUboData[18] = params.light2Dir[2]; d.skinnedFogUboData[19] = 0.f;
+            d.skinnedFogUboData[20] = params.light2Diffuse[0]; d.skinnedFogUboData[21] = params.light2Diffuse[1];
+            d.skinnedFogUboData[22] = params.light2Diffuse[2]; d.skinnedFogUboData[23] = 0.f;
+            // Task 894: World matrix (for world-space position -> eye vector), EyePosition,
+            // per-light SpecularColor, and material SpecularColor/SpecularPower.
+            for (int wi = 0; wi < 16; ++wi) d.skinnedFogUboData[24 + wi] = params.worldColMajor[wi];
+            d.skinnedFogUboData[40] = params.eyePositionWorld[0];
+            d.skinnedFogUboData[41] = params.eyePositionWorld[1];
+            d.skinnedFogUboData[42] = params.eyePositionWorld[2];
+            d.skinnedFogUboData[43] = static_cast<float>(params.weightsPerVertex); // Task 895
+            d.skinnedFogUboData[44] = params.specularColor[0]; d.skinnedFogUboData[45] = params.specularColor[1];
+            d.skinnedFogUboData[46] = params.specularColor[2]; d.skinnedFogUboData[47] = params.specularPower;
+            d.skinnedFogUboData[48] = params.light0Specular[0]; d.skinnedFogUboData[49] = params.light0Specular[1];
+            d.skinnedFogUboData[50] = params.light0Specular[2]; d.skinnedFogUboData[51] = 0.f;
+            d.skinnedFogUboData[52] = params.light1Specular[0]; d.skinnedFogUboData[53] = params.light1Specular[1];
+            d.skinnedFogUboData[54] = params.light1Specular[2]; d.skinnedFogUboData[55] = 0.f;
+            d.skinnedFogUboData[56] = params.light2Specular[0]; d.skinnedFogUboData[57] = params.light2Specular[1];
+            d.skinnedFogUboData[58] = params.light2Specular[2]; d.skinnedFogUboData[59] = 0.f;
         } else if (needsEnvMap) {
             EnsureEnvMapResources();
             const auto* vs0 = dynamic_cast<const IVulkanSamplable*>(params.texture0);
@@ -6676,6 +6734,15 @@ namespace CNA::Internal::Backends::Vulkan
             d.envMapUboData[26] = params.fogColor[2]; d.envMapUboData[27] = params.fogEnabled ? 1.f : 0.f;
             d.envMapUboData[28] = params.fogStart; d.envMapUboData[29] = params.fogEnd;
             d.envMapUboData[30] = 0.f; d.envMapUboData[31] = 0.f;
+            // Task 890: DirectionalLight1/DirectionalLight2 diffuse forwarding.
+            d.envMapUboData[32] = params.light1Dir[0]; d.envMapUboData[33] = params.light1Dir[1];
+            d.envMapUboData[34] = params.light1Dir[2]; d.envMapUboData[35] = 0.f;
+            d.envMapUboData[36] = params.light1Diffuse[0]; d.envMapUboData[37] = params.light1Diffuse[1];
+            d.envMapUboData[38] = params.light1Diffuse[2]; d.envMapUboData[39] = 0.f;
+            d.envMapUboData[40] = params.light2Dir[0]; d.envMapUboData[41] = params.light2Dir[1];
+            d.envMapUboData[42] = params.light2Dir[2]; d.envMapUboData[43] = 0.f;
+            d.envMapUboData[44] = params.light2Diffuse[0]; d.envMapUboData[45] = params.light2Diffuse[1];
+            d.envMapUboData[46] = params.light2Diffuse[2]; d.envMapUboData[47] = 0.f;
         } else if (needsDualTex) {
             EnsureDualTexResources();
             const auto* vs0 = dynamic_cast<const IVulkanSamplable*>(params.texture0);

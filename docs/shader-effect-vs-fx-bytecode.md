@@ -43,6 +43,27 @@ full working examples.) **Bgfx's `ShaderEffect` backend is currently a no-op stu
 strings are accepted but ignored, per `docs/xna-4-api-coverage.md` §7 — so this path is EasyGL/
 Vulkan only today.
 
+`ShaderEffect` also exposes (Task 946, EasyGL only so far):
+
+```cpp
+fx.Apply();  // bind the program before setting any uniform, so the write reaches the right one
+fx.SetUniformFloatArray("uWeights", weights, count);   // uniform float uWeights[count];
+fx.SetUniformVec2Array("uOffsets", offsets, count);    // uniform vec2 uOffsets[count]; (offsets holds count*2 floats)
+fx.SetTexture(1, someTexture2D);                        // binds sampler unit 1 (unit 0 is normally
+                                                          // driven by the caller, e.g. SpriteBatch's
+                                                          // own texture parameter)
+```
+
+Use `SetTexture()` for any shader that samples more than one texture in a single draw (matching
+real XNA's `GraphicsDevice.Textures[unit] = someTexture`) — see
+`examples/easygl_bloom_combine_test.cpp` for a worked example (two independent flat-color
+textures combined via a ported `BloomCombine.fx`).
+
+**Loading via `ContentManager`**: `Content.Load<std::shared_ptr<Effect>>("name")` reads a
+`name.shader.json` descriptor (`{"vertex": "...", "fragment": "..."}`, paths relative to the
+content root) and constructs a `ShaderEffect` from the referenced GLSL files — see
+`examples/easygl_bloom_extract_test.cpp` for a full round-trip example.
+
 ## What doesn't work yet: loading a real compiled `.fx` file
 
 A real XNA/FNA game's content build produces a compiled **effect bytecode** blob (the XNA Content

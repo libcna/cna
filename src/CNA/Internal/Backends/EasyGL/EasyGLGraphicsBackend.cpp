@@ -2,6 +2,7 @@
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include <iostream>
+#include <span>
 
 #include "CNA/Platform.hpp"
 
@@ -322,6 +323,28 @@ namespace CNA::Internal::Backends::EasyGL
     {
         const int loc = program_.uniform_location(name);
         if (loc >= 0) program_.set_uniform_matrix4(loc, matrix);
+    }
+
+    void EasyGLEffectBackend::SetUniformFloatArray(const char* name, const float* values, int count)
+    {
+        const int loc = program_.uniform_location(name);
+        if (loc >= 0) program_.set_uniform_fv(loc, std::span<const float>(values, static_cast<std::size_t>(count)), 1);
+    }
+
+    void EasyGLEffectBackend::SetUniformVec2Array(const char* name, const float* values, int count)
+    {
+        const int loc = program_.uniform_location(name);
+        if (loc >= 0) program_.set_uniform_fv(loc, std::span<const float>(values, static_cast<std::size_t>(count) * 2), 2);
+    }
+
+    void EasyGLEffectBackend::BindTexture(int unit, ITextureBackend* texture)
+    {
+        if (!texture) return;
+        const auto textureUnit = static_cast<::metagl::TextureUnit>(
+            static_cast<GLenum>(::metagl::TextureUnit::Texture0) + unit);
+        ::metagl::glActiveTexture(textureUnit);
+        texture->BindGL();
+        ::metagl::glActiveTexture(::metagl::TextureUnit::Texture0);
     }
 
     // --- EasyGLOcclusionQueryBackend ---
@@ -867,7 +890,6 @@ namespace CNA::Internal::Backends::EasyGL
     void EasyGLSpriteBatchBackend::release_gl_handle_only()
     {
         program_.reset_handle_no_gl();
-        customProgram_.reset_handle_no_gl();
         vao_.reset_handle_no_gl();
         vbo_.reset_handle_no_gl();
         ibo_.reset_handle_no_gl();
@@ -879,7 +901,6 @@ namespace CNA::Internal::Backends::EasyGL
         pending_indices_.clear();
         current_texture_ = nullptr;
         transform_ = Matrix::getIdentityProperty();
-        compiledFor_ = nullptr;
         InitializeResources();
     }
 
@@ -981,9 +1002,19 @@ void main()
 
     void EasyGLSpriteBatchBackend::Begin()
     {
+        // Task 956 fix: this previously hardcoded set_blend_enabled(true) +
+        // SrcAlpha/OneMinusSrcAlpha unconditionally, clobbering whatever
+        // EasyGLGraphicsBackend::ApplyBlendState had just set via
+        // GraphicsDevice::setBlendStateProperty(blendState) -- called by SpriteBatch::Begin()
+        // immediately before backend_->Begin() runs (see SpriteBatch.cpp). This both silently
+        // ignored any non-AlphaBlend BlendState passed to SpriteBatch::Begin() (e.g. Opaque or
+        // NonPremultiplied always rendered as if AlphaBlend-with-straight-alpha-factors had been
+        // requested) and left the real GL blend state permanently stuck at that hardcoded value
+        // after End() -- any 3D draw issued afterward without the game explicitly reassigning
+        // BlendState inherited SpriteBatch's leftover raw GL state instead of whatever
+        // GraphicsDevice.BlendState still claimed was active. Matches the same bug shape SDL_Renderer
+        // already fixed (Task 695) -- see docs/sdl-renderer-2d-completeness.md.
         begun = true;
-        device_.set_blend_enabled(true);
-        device_.set_blend_func(::easygl::BlendFactor::SrcAlpha, ::easygl::BlendFactor::OneMinusSrcAlpha);
     }
 
     void EasyGLSpriteBatchBackend::SetTransformMatrix(const Matrix& m)
@@ -1022,51 +1053,36 @@ void main()
         if (pending_vertices_.empty()) return;
 
         // Determine which GL program to use: built-in or custom Effect.
-        // Access vertex/fragment source via virtual Effect::GetVertexSource()/GetFragmentSource()
-        // to avoid a circular dependency on the concrete ShaderEffect type.
+        // Task 1077 fix: bind the SAME compiled program the Effect itself owns
+        // (Effect::GetEffectBackendPtr(), overridden by ShaderEffect) instead of recompiling a
+        // second, independent copy from GLSL source text -- the old recompiled-copy approach
+        // meant any ShaderEffect::SetUniformXxx() call (which writes to the effect's OWN
+        // program) had no way to ever reach the program actually bound for the real draw.
         ::easygl::Program* prog = &program_;
-        if (customEffect_ && !customEffect_->GetVertexSource().empty())
+        if (customEffect_)
         {
-            if (compiledFor_ != customEffect_)
-            {
-                const std::string& vertSrc = customEffect_->GetVertexSource();
-                const std::string& fragSrc = customEffect_->GetFragmentSource();
-
-                ::easygl::Shader vert(::easygl::ShaderType::Vertex);
-                vert.create();
-                vert.compile_from_source(vertSrc.c_str());
-                if (!vert.is_compiled())
-                    std::cerr << "SpriteBatch custom vertex shader failed:\n" << vert.info_log() << "\n";
-
-                ::easygl::Shader frag(::easygl::ShaderType::Fragment);
-                frag.create();
-                frag.compile_from_source(fragSrc.c_str());
-                if (!frag.is_compiled())
-                    std::cerr << "SpriteBatch custom fragment shader failed:\n" << frag.info_log() << "\n";
-
-                customProgram_.create();
-                customProgram_.attach(vert);
-                customProgram_.attach(frag);
-                customProgram_.link();
-                if (!customProgram_.is_linked())
-                    std::cerr << "SpriteBatch custom program link failed:\n" << customProgram_.info_log() << "\n";
-
-                compiledFor_ = customEffect_;
-            }
-            prog = &customProgram_;
-            customEffect_->Apply();
-        }
-        else if (customEffect_)
-        {
-            // Effect has no GLSL source; run OnApply() for parameter side-effects
-            // and register it as the active effect on the device.
+            auto* backend = dynamic_cast<EasyGLEffectBackend*>(customEffect_->GetEffectBackendPtr());
+            if (backend && backend->IsValid())
+                prog = &backend->GetProgram();
             customEffect_->Apply();
         }
 
         prog->use();
 
         int logW = 0, logH = 0;
-        if (graphicsBackend_)
+        int rtW = 0, rtH = 0;
+        // Task 1078: a custom-effect draw into a bound RenderTarget2D must size its viewport
+        // and orthographic projection to that RT, not the window -- getPhysicalSize()/
+        // getLogicalSize() are always window-sized, which only happened to work in every prior
+        // test because those tests' RTs all coincidentally matched the window size.
+        if (graphicsBackend_ && graphicsBackend_->GetCurrentRenderTarget2DSize(rtW, rtH)
+            && rtW > 0 && rtH > 0)
+        {
+            device_.set_viewport(0, 0, rtW, rtH);
+            logW = rtW;
+            logH = rtH;
+        }
+        else if (graphicsBackend_)
         {
             int physW = 0, physH = 0;
             graphicsBackend_->getPhysicalSize(physW, physH);
@@ -1541,6 +1557,14 @@ void main()
     void EasyGLGraphicsBackend::getPhysicalSize(int& width, int& height) const
     {
         SDL_GetWindowSize(window, &width, &height);
+    }
+
+    bool EasyGLGraphicsBackend::GetCurrentRenderTarget2DSize(int& width, int& height) const
+    {
+        if (!currentRt2D_) return false;
+        width  = currentRt2D_->GetWidth();
+        height = currentRt2D_->GetHeight();
+        return true;
     }
 
     bool EasyGLGraphicsBackend::TransformWindowToLogical(float windowX, float windowY,
@@ -2793,6 +2817,10 @@ void main()
 "uniform vec3 uEmissiveColor;\n"
 "uniform vec3 uLight0Dir;\n"
 "uniform vec3 uLight0Diffuse;\n"
+"uniform vec3 uLight1Dir;\n"
+"uniform vec3 uLight1Diffuse;\n"
+"uniform vec3 uLight2Dir;\n"
+"uniform vec3 uLight2Diffuse;\n"
 "uniform float uEnvMapAmount;\n"
 "uniform vec3 uEnvMapSpecular;\n"
 "uniform float uFresnelEnabled;\n"
@@ -2803,8 +2831,11 @@ void main()
 "void main(){\n"
 "    vec3 N=normalize(vWorldNormal);\n"
 "    vec3 E=normalize(vEyeDir);\n"
-"    float NdotL=max(dot(N,-uLight0Dir),0.0);\n"
-"    vec3 litRGB=(uEmissiveColor+uLight0Diffuse*NdotL)*uDiffuseColor.rgb;\n"
+"    float NdotL0=max(dot(N,-uLight0Dir),0.0);\n"
+"    float NdotL1=max(dot(N,-uLight1Dir),0.0);\n"
+"    float NdotL2=max(dot(N,-uLight2Dir),0.0);\n"
+"    vec3 lightSum=uLight0Diffuse*NdotL0+uLight1Diffuse*NdotL1+uLight2Diffuse*NdotL2;\n"
+"    vec3 litRGB=(uEmissiveColor+lightSum)*uDiffuseColor.rgb;\n"
 "    vec4 texColor=texture(uTexture,vUV);\n"
 "    vec3 reflDir=reflect(-E,N);\n"
 "    vec4 envSample=texture(uEnvMap,reflDir);\n"
@@ -2833,6 +2864,10 @@ void main()
         p.loc_emissive      = p.prog.uniform_location("uEmissiveColor");
         p.loc_l0dir         = p.prog.uniform_location("uLight0Dir");
         p.loc_l0diff        = p.prog.uniform_location("uLight0Diffuse");
+        p.loc_l1dir         = p.prog.uniform_location("uLight1Dir");
+        p.loc_l1diff        = p.prog.uniform_location("uLight1Diffuse");
+        p.loc_l2dir         = p.prog.uniform_location("uLight2Dir");
+        p.loc_l2diff        = p.prog.uniform_location("uLight2Diffuse");
         p.loc_envmap_amount   = p.prog.uniform_location("uEnvMapAmount");
         p.loc_envmap_spec     = p.prog.uniform_location("uEnvMapSpecular");
         p.loc_fresnel_enabled = p.prog.uniform_location("uFresnelEnabled");
@@ -2859,21 +2894,27 @@ void main()
 "layout(location=3) in vec4 aBoneWeights;\n"
 "layout(location=4) in uvec4 aBoneIndices;\n"
 "uniform mat4 uWVP;\n"
+"uniform mat4 uWorld;\n"
 "uniform mat4 uBones[72];\n"
+"uniform int uWeightsPerVertex;\n"
 "uniform float uFogEnabled;\n"
 "uniform float uFogStart;\n"
 "uniform float uFogEnd;\n"
 "out vec3 vNormal;\n"
 "out vec2 vUV;\n"
 "out float vFogFactor;\n"
+"out vec3 vWorldPos;\n"
 "void main(){\n"
-"    mat4 skinMat=uBones[aBoneIndices.x]*aBoneWeights.x\n"
-"               +uBones[aBoneIndices.y]*aBoneWeights.y\n"
-"               +uBones[aBoneIndices.z]*aBoneWeights.z\n"
-"               +uBones[aBoneIndices.w]*aBoneWeights.w;\n"
-"    gl_Position=uWVP*skinMat*vec4(aPos,1.0);\n"
+// Task 895: FNA's real Skin(vin, boneCount) only sums the first WeightsPerVertex (1, 2, or 4)
+// weight/index pairs -- matches XNA's own validated property range, so >=2/>=4 gating suffices.
+"    mat4 skinMat=uBones[aBoneIndices.x]*aBoneWeights.x;\n"
+"    if(uWeightsPerVertex>=2) skinMat+=uBones[aBoneIndices.y]*aBoneWeights.y;\n"
+"    if(uWeightsPerVertex>=4) skinMat+=uBones[aBoneIndices.z]*aBoneWeights.z+uBones[aBoneIndices.w]*aBoneWeights.w;\n"
+"    vec4 skinnedPos=skinMat*vec4(aPos,1.0);\n"
+"    gl_Position=uWVP*skinnedPos;\n"
 "    vNormal=normalize(mat3(skinMat)*aNormal);\n"
 "    vUV=aUV;\n"
+"    vWorldPos=(uWorld*skinnedPos).xyz;\n"
 "    vFogFactor=(uFogEnabled>0.5)?clamp((uFogEnd-aPos.z)/max(uFogEnd-uFogStart,1e-6),0.0,1.0):1.0;\n"
 "}\n";
 
@@ -2883,20 +2924,40 @@ void main()
 "in vec3 vNormal;\n"
 "in vec2 vUV;\n"
 "in float vFogFactor;\n"
+"in vec3 vWorldPos;\n"
 "uniform sampler2D uTexture;\n"
 "uniform vec4 uDiffuseColor;\n"
 "uniform vec3 uEmissiveColor;\n"
 "uniform vec3 uLight0Dir;\n"
 "uniform vec3 uLight0Diffuse;\n"
+"uniform vec3 uLight1Dir;\n"
+"uniform vec3 uLight1Diffuse;\n"
+"uniform vec3 uLight2Dir;\n"
+"uniform vec3 uLight2Diffuse;\n"
+"uniform vec3 uLight0Specular;\n"
+"uniform vec3 uLight1Specular;\n"
+"uniform vec3 uLight2Specular;\n"
+"uniform vec3 uSpecularColor;\n"
+"uniform float uSpecularPower;\n"
+"uniform vec3 uEyePosition;\n"
 "uniform vec4 uAlphaTest;\n"
 "uniform vec3 uFogColor;\n"
 "out vec4 FragColor;\n"
 "void main(){\n"
 "    vec3 N=normalize(vNormal);\n"
-"    float NdotL=max(dot(N,-uLight0Dir),0.0);\n"
-"    vec3 litRGB=(uEmissiveColor+uLight0Diffuse*NdotL)*uDiffuseColor.rgb;\n"
+"    vec3 E=normalize(uEyePosition-vWorldPos);\n"
+"    float dotL0=dot(N,-uLight0Dir); float zeroL0=step(0.0,dotL0); float NdotL0=max(dotL0,0.0);\n"
+"    float dotL1=dot(N,-uLight1Dir); float zeroL1=step(0.0,dotL1); float NdotL1=max(dotL1,0.0);\n"
+"    float dotL2=dot(N,-uLight2Dir); float zeroL2=step(0.0,dotL2); float NdotL2=max(dotL2,0.0);\n"
+"    vec3 lightSum=uLight0Diffuse*NdotL0+uLight1Diffuse*NdotL1+uLight2Diffuse*NdotL2;\n"
+"    vec3 litRGB=(uEmissiveColor+lightSum)*uDiffuseColor.rgb;\n"
+"    vec3 h0=normalize(E-uLight0Dir); float spec0=pow(max(dot(h0,N),0.0)*zeroL0,uSpecularPower);\n"
+"    vec3 h1=normalize(E-uLight1Dir); float spec1=pow(max(dot(h1,N),0.0)*zeroL1,uSpecularPower);\n"
+"    vec3 h2=normalize(E-uLight2Dir); float spec2=pow(max(dot(h2,N),0.0)*zeroL2,uSpecularPower);\n"
+"    vec3 specularRGB=(spec0*uLight0Specular+spec1*uLight1Specular+spec2*uLight2Specular)*uSpecularColor;\n"
 "    vec4 texColor=texture(uTexture,vUV);\n"
 "    FragColor=vec4(litRGB*texColor.rgb,uDiffuseColor.a*texColor.a);\n"
+"    FragColor.rgb+=specularRGB*FragColor.a;\n"
 "    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
 "    if(_at<0.0)discard;\n"
 "    FragColor.rgb=mix(uFogColor,FragColor.rgb,vFogFactor);\n"
@@ -2905,12 +2966,24 @@ void main()
         CompileAndLink(prog_skinned_.prog, vsrc, fsrc, "skinned");
         auto& p = prog_skinned_;
         p.loc_wvp       = p.prog.uniform_location("uWVP");
+        p.loc_world     = p.prog.uniform_location("uWorld");
         p.loc_bones     = p.prog.uniform_location("uBones[0]");
+        p.loc_weightsPerVertex = p.prog.uniform_location("uWeightsPerVertex");
         p.loc_texture   = p.prog.uniform_location("uTexture");
         p.loc_diffuse   = p.prog.uniform_location("uDiffuseColor");
         p.loc_emissive  = p.prog.uniform_location("uEmissiveColor");
         p.loc_l0dir     = p.prog.uniform_location("uLight0Dir");
         p.loc_l0diff    = p.prog.uniform_location("uLight0Diffuse");
+        p.loc_l1dir     = p.prog.uniform_location("uLight1Dir");
+        p.loc_l1diff    = p.prog.uniform_location("uLight1Diffuse");
+        p.loc_l2dir     = p.prog.uniform_location("uLight2Dir");
+        p.loc_l2diff    = p.prog.uniform_location("uLight2Diffuse");
+        p.loc_l0spec    = p.prog.uniform_location("uLight0Specular");
+        p.loc_l1spec    = p.prog.uniform_location("uLight1Specular");
+        p.loc_l2spec    = p.prog.uniform_location("uLight2Specular");
+        p.loc_specularcolor = p.prog.uniform_location("uSpecularColor");
+        p.loc_specularpower = p.prog.uniform_location("uSpecularPower");
+        p.loc_eyepos    = p.prog.uniform_location("uEyePosition");
         p.loc_alphatest = p.prog.uniform_location("uAlphaTest");
         p.loc_fog_enabled = p.prog.uniform_location("uFogEnabled");
         p.loc_fog_color   = p.prog.uniform_location("uFogColor");
@@ -3077,6 +3150,38 @@ void main()
         if (p.loc_l0diff >= 0 && p.loc_ambient < 0)
             p.prog.set_uniform(p.loc_l0diff,
                 params.light0Diffuse[0], params.light0Diffuse[1], params.light0Diffuse[2]);
+        // Task 890: EnvironmentMapEffect's own DirectionalLight1/2 forwarding (same generic
+        // Prog3D fields the lit-textured/BasicEffect path above uses, gated the same way via
+        // loc_ambient's absence to identify this is the env-map program).
+        if (p.loc_l1dir >= 0 && p.loc_ambient < 0)
+            p.prog.set_uniform(p.loc_l1dir,
+                params.light1Dir[0], params.light1Dir[1], params.light1Dir[2]);
+        if (p.loc_l1diff >= 0 && p.loc_ambient < 0)
+            p.prog.set_uniform(p.loc_l1diff,
+                params.light1Diffuse[0], params.light1Diffuse[1], params.light1Diffuse[2]);
+        if (p.loc_l2dir >= 0 && p.loc_ambient < 0)
+            p.prog.set_uniform(p.loc_l2dir,
+                params.light2Dir[0], params.light2Dir[1], params.light2Dir[2]);
+        if (p.loc_l2diff >= 0 && p.loc_ambient < 0)
+            p.prog.set_uniform(p.loc_l2diff,
+                params.light2Diffuse[0], params.light2Diffuse[1], params.light2Diffuse[2]);
+        // Task 894: SkinnedEffect's own specular forwarding (same generic Prog3D fields the
+        // lit-textured/BasicEffect path above uses; harmless no-op for env-map, which never
+        // declares these uniforms so loc_l0spec etc. stay -1 there).
+        if (p.loc_l0spec >= 0 && p.loc_ambient < 0)
+            p.prog.set_uniform(p.loc_l0spec,
+                params.light0Specular[0], params.light0Specular[1], params.light0Specular[2]);
+        if (p.loc_l1spec >= 0 && p.loc_ambient < 0)
+            p.prog.set_uniform(p.loc_l1spec,
+                params.light1Specular[0], params.light1Specular[1], params.light1Specular[2]);
+        if (p.loc_l2spec >= 0 && p.loc_ambient < 0)
+            p.prog.set_uniform(p.loc_l2spec,
+                params.light2Specular[0], params.light2Specular[1], params.light2Specular[2]);
+        if (p.loc_specularcolor >= 0 && p.loc_ambient < 0)
+            p.prog.set_uniform(p.loc_specularcolor,
+                params.specularColor[0], params.specularColor[1], params.specularColor[2]);
+        if (p.loc_specularpower >= 0 && p.loc_ambient < 0)
+            p.prog.set_uniform(p.loc_specularpower, params.specularPower);
 
         if (p.loc_eyepos >= 0)
             p.prog.set_uniform(p.loc_eyepos,
@@ -3085,6 +3190,9 @@ void main()
         // Bone palette (SkinnedEffect)
         if (p.loc_bones >= 0 && params.boneCount > 0)
             ::metagl::glUniformMatrix4fv(::metagl::UniformLocation{p.loc_bones}, params.boneCount, 0, params.boneTransforms);
+        // Task 895: WeightsPerVertex (1, 2, or 4) -- only the first N weight/index pairs contribute.
+        if (p.loc_weightsPerVertex >= 0)
+            p.prog.set_uniform(p.loc_weightsPerVertex, params.weightsPerVertex);
 
         if (p.loc_envmap_amount >= 0)
             p.prog.set_uniform(p.loc_envmap_amount, params.envMapAmount);

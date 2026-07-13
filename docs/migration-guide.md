@@ -73,39 +73,69 @@ Per `docs/xna-4-api-coverage.md`'s per-class table (Task 483): `RenderTarget2D`/
 `PresentationParameters`, and `GraphicsAdapter` have **no open gaps on any backend**. Most of the
 rest of the Graphics API surface is fully correct on at least EasyGL.
 
+## The two gaps that actually matter to most ports
+
+Before the smaller caveats below — these two are the ones most likely to block a real port:
+
+- **No `.xnb` content pipeline.** CNA's `ContentManager` does not read compiled `.xnb` binary
+  assets at all — see "Content pipeline" below. If your game ships `.xnb` assets, you cannot point
+  CNA at them unchanged.
+- **`Effect(GraphicsDevice&, byte[])` — compiled `.fx` shader bytecode — is not implemented.** This
+  is the single biggest real gap in CNA today: it is what blocks 23 of the 86 official XNA samples
+  in `../cna-samples`. If your game loads custom `.fx` effects via compiled bytecode (rather than
+  using only the 5 built-in stock effects), plan for this to be unported until this lands.
+
 ## What has caveats — read this before porting anything using these
 
-- **`IndexElementSize` (32-bit index buffers)** — if your game uses
-  `IndexElementSize.ThirtyTwoBits` anywhere your own code reads or compares the enum's *numeric*
-  value (not just passes it symbolically to `IndexBuffer`'s constructor), be aware CNA's current
-  values (`SixteenBits=16`, `ThirtyTwoBits=32`) do not match real FNA's (`0`/`1`). This is a
-  confirmed, open bug (Task 921), found by literally running FNA and CNA side-by-side and diffing
-  their JSON output (`tools/fna-reference/`, `tools/cna-reference/`,
-  `scripts/compare-fna-reference.py` — Tasks 471–479). Ordinary use (passing the enum symbolically
-  to `IndexBuffer`) is unaffected; only code that inspects the raw numeric value is at risk.
-- **Vulkan `BlendState`** — if you pick the Vulkan backend and your game relies on a specific blend
-  mode other than `Opaque` (e.g. additive particle effects, alpha blending with a
-  non-default `BlendFunction`), be aware Vulkan currently hardcodes one blend equation regardless
-  of what `BlendState` you actually set (Task 868, open, confirmed via pixel tests). EasyGL and
-  Bgfx apply the real requested blend state correctly.
-- **EasyGL anisotropic filtering** — `SamplerState`s with `TextureFilter::Anisotropic` silently
-  fall back to plain trilinear filtering on EasyGL (Task 918, open); Vulkan and Bgfx genuinely
-  support it.
-- **`Model` root bone** — if you construct a `Model` directly (not via content loading) and your
-  model's true root bone isn't `bones[0]`, CNA's constructor currently has no way to specify a
-  different root bone index (Task 916, open).
+**Update, 2026-07-11: the four items originally listed in this section are all fixed** — kept here
+briefly so old bookmarks/searches still find them, not because they're still risks:
+
+- ~~`IndexElementSize` (32-bit index buffers)~~ — **fixed, Task 921** (2026-07-09). CNA's values now
+  match FNA exactly (`SixteenBits=0`, `ThirtyTwoBits=1`).
+- ~~Vulkan `BlendState`~~ — **fixed, Task 868** (2026-07-09). Vulkan now applies the real requested
+  blend state, same as EasyGL/Bgfx.
+- ~~EasyGL anisotropic filtering~~ — **fixed, Task 918** (2026-07-09). `TextureFilter::Anisotropic`
+  now issues a real `GL_EXT_texture_filter_anisotropic` call on EasyGL too.
+- ~~`Model` root bone~~ — **fixed, Task 916** (2026-07-09). The constructor now takes an optional
+  `rootBoneIndex` parameter.
+
+Real, currently-open caveats worth knowing about instead:
+
+- ~~EasyGL: a `SpriteBatch.Begin()`/`End()` pair leaks its blend state into subsequent 3D draws~~ —
+  **fixed, Task 956** (2026-07-11). `SpriteBatch::Begin()` on EasyGL used to hardcode its own blend
+  factors regardless of what `BlendState` was requested, and leave that leftover state in effect
+  after `End()`. Now, whatever `BlendState` you pass to `SpriteBatch.Begin()` (or the default
+  `AlphaBlend`) genuinely persists on `GraphicsDevice.BlendState` afterward, matching real FNA — if
+  you draw 3D geometry after a `SpriteBatch` pass without resetting `BlendState` yourself, you get
+  real FNA's own well-known behavior (it inherits the SpriteBatch's blend mode), not leftover
+  garbage state.
+- **EasyGL: a full-backbuffer `SpriteBatch` draw before any 3D draw in the same frame breaks that
+  frame's 3D rendering** (Task 933) — investigated, root cause not yet isolated.
+- **Vulkan `RasterizerState.DepthBias` has no effect** — one isolated, unresolved case.
+- **Bgfx: `DrawIndexedPrimitivesEx`'s non-wireframe path silently discards `startIndex`/`baseVertex`**
+  (Task 954) — not hit by any current CNA sample (every `Model`/`ModelMeshPart` owns its own buffer
+  starting at 0), but affects a genuine sub-range indexed draw if your game does one.
+- ~~`EnvironmentMapEffect` only forwards `DirectionalLight0`~~ — **fixed, Task 890** (2026-07-11):
+  `DirectionalLight1`/`2` now forward correctly on all 3 backends.
+- ~~`SkinnedEffect` only forwards `DirectionalLight0`~~ — **fixed, Task 893** (2026-07-11):
+  `DirectionalLight1`/`2` now forward correctly on all 3 backends.
+- ~~`SkinnedEffect` has no specular term~~ — **fixed, Task 894** (2026-07-11): real half-vector
+  Blinn-Phong specular (`SpecularColor`/`SpecularPower`) now implemented on all 3 backends.
+- ~~`SkinnedEffect`'s `WeightsPerVertex` is a GPU no-op~~ — **fixed, Task 895** (2026-07-11): each
+  backend's skinning vertex shader now only sums the first `WeightsPerVertex` (1, 2, or 4)
+  weight/index pairs, matching FNA's real `Skin(vin, boneCount)` behavior.
 - See `docs/xna-4-api-coverage.md`'s full "Known deviations from XNA/FNA" list (Task 485) for a
   handful of smaller, permanent, intentional deviations (e.g. `GetHashCode()` returns
   `std::size_t` not `int`; a couple of `Texture2D` methods have looser null/argument validation
   than FNA) that are unlikely to affect a typical port but are documented there in full.
+- `NEXT.md` §5 is the actively-maintained current bug list — check it directly for anything not
+  covered above before committing to a backend.
 
 ## What doesn't work at all yet
 
 These need a project-owner architecture decision before they can be implemented — not just more
 engineering time — so don't plan a port around them without checking current status first:
 
-- **Vulkan `OcclusionQuery`** (Task 447) — functionally inert; the backend's deferred-draw
-  recording architecture can't currently correlate a query's Begin/End span with a specific draw.
 - **`SpriteBatch` `TextureAddressMode::Wrap`/`Mirror` on SDL_Renderer** (Tasks 686/687) — no native
   support in the draw path SDL_Renderer's `SpriteBatch` backend uses.
 - **`Texture3D`/`TextureCube` on SDL_Renderer** (Task 725) — construction currently succeeds
@@ -114,6 +144,10 @@ engineering time — so don't plan a port around them without checking current s
 - **Non-`Color` `SurfaceFormat` GPU texture data on any backend** (Task 732) — if your game uses
   compressed or non-8-bit-per-channel texture formats for real GPU sampling (not just file I/O),
   this is currently blocked project-wide.
+
+(Vulkan `OcclusionQuery`, previously listed here as functionally inert pending an architecture
+decision, is **fixed as of Task 447/854, 2026-07-10** — real per-draw-call query correlation is now
+implemented; see `docs/occlusionquery-support.md`.)
 
 ## Content pipeline: the other big difference
 
@@ -136,8 +170,9 @@ hand-built `Model` via its public constructors works today, but loading one thro
 3. Re-export or rewrite your content pipeline — don't expect `.xnb` assets to load unchanged.
 4. Check the "what doesn't work yet" list above against your game's actual feature use before
    committing to a backend.
-5. If your game does anything numeric with `IndexElementSize` beyond passing it to `IndexBuffer`,
-   watch for Task 921 landing (it will change the enum's underlying values to match FNA).
+5. Check whether your game loads custom `.fx` effect bytecode or ships `.xnb` content — both are
+   currently unsupported (see "The two gaps that actually matter" above) and are the most common
+   reasons a real XNA/FNA game can't port as-is yet.
 
 ## 2D compatibility checklist (Task 487)
 
@@ -160,7 +195,7 @@ supported, throws · ⛔ BLOCKED, needs a project-owner decision.
 | `Draw(Texture2D, Vector2 position, Rectangle? source, Color, rotation, origin, Vector2 scale, SpriteEffects, layerDepth)` | ✅ | |
 | `Draw(Texture2D, Rectangle destination, Color)` | ✅ | |
 | `Draw(Texture2D, Rectangle destination, Rectangle? source, Color)` | ✅ | |
-| `Draw(Texture2D, Rectangle destination, Rectangle? source, Color, rotation, origin, SpriteEffects, layerDepth)` | ⚠️ **not present as an XNA-compatible overload** | Real FNA has this as its 7th `Draw` overload (`Rectangle` destination + full rotation/origin/effects/depth). CNA's header only has a `NOXNA`-marked near-equivalent with a **required** `Rectangle` source parameter instead of FNA's `Rectangle?` (optional) — not a drop-in signature match. If your C# code calls this specific overload with a `null` source rectangle, it will not compile against CNA as-is. Not previously tracked; opened as new **Task 922** while verifying this checklist against the real header. |
+| `Draw(Texture2D, Rectangle destination, Rectangle? source, Color, rotation, origin, SpriteEffects, layerDepth)` | ✅ **fixed, Task 922** (2026-07-09) | The real overload now takes an optional `std::optional<Rectangle> sourceRectangle`, matching FNA's `Rectangle?` exactly. Previously this was a `NOXNA`-marked near-equivalent with a required `Rectangle` source parameter — not a drop-in signature match — found while verifying this checklist against the real header. |
 | `SpriteSortMode` (all 4 values) | ✅ | |
 | `transformMatrix` in `Begin()` | ✅ | |
 | Custom `Effect` via `Begin(effect)` | ⚠️ (SDL_Renderer only) | Throws by design on SDL_Renderer (no shader stage there); works on EasyGL/Vulkan/Bgfx. |
@@ -192,8 +227,8 @@ supported, throws · ⛔ BLOCKED, needs a project-owner decision.
 
 | Preset | Status | Note |
 |---|---|---|
-| `BlendState::Opaque`/`AlphaBlend`/`NonPremultiplied`/`Additive` | ✅ | Correct on EasyGL/Bgfx/SDL_Renderer; **Vulkan hardcodes one blend equation regardless of the preset** (Task 868, open) — don't rely on non-`Opaque` blending if targeting Vulkan today. |
-| `SamplerState::PointClamp`/`PointWrap`/`LinearClamp`/`LinearWrap`/`AnisotropicClamp`/`AnisotropicWrap` | ✅ | except `TextureFilter::Anisotropic` silently falls back to trilinear on EasyGL only (Task 918, open); genuinely supported on Vulkan/Bgfx. |
+| `BlendState::Opaque`/`AlphaBlend`/`NonPremultiplied`/`Additive` | ✅ | Correct on all 4 backends — Vulkan's blend-equation-hardcoding bug (Task 868) was fixed 2026-07-09. |
+| `SamplerState::PointClamp`/`PointWrap`/`LinearClamp`/`LinearWrap`/`AnisotropicClamp`/`AnisotropicWrap` | ✅ | `TextureFilter::Anisotropic` is now genuinely supported on all 3 3D backends — EasyGL's trilinear-fallback bug (Task 918) was fixed 2026-07-09. |
 | `TextureAddressMode::Wrap`/`Mirror` on SDL_Renderer specifically | ⛔ BLOCKED | Tasks 686/687 — works on all 3 other backends. |
 
 ## 3D compatibility checklist (Task 488)
@@ -227,8 +262,8 @@ unlike `SpriteBatch::Draw` (Task 922), this area checked out clean.
 | `BasicEffect` | ✅ | ✅ / ✅ / ✅ | None — no open gaps on any 3D backend (per Task 483's table). |
 | `AlphaTestEffect` | ✅ | ✅ / ✅ / ✅ | `VertexColorEnabled` missing on Vulkan/Bgfx (Task 887). |
 | `DualTextureEffect` | ✅ | ✅ / ✅ / ✅ | `VertexColorEnabled` missing on all 3 3D backends (Task 889). |
-| `EnvironmentMapEffect` | ✅ | ✅ / ✅ / ✅ | `DirectionalLight1`/`2` and base-lerp alpha scaling missing on Vulkan/Bgfx (Tasks 890/891). |
-| `SkinnedEffect` | ✅ | ✅ / ✅ / ✅ | `DirectionalLight1`/`2`, `SpecularColor`/`Power`, `WeightsPerVertex` GPU enforcement missing on Vulkan/Bgfx (Tasks 893-895). |
+| `EnvironmentMapEffect` | ✅ | ✅ / ✅ / ✅ | No open gaps — `DirectionalLight1`/`2` (Task 890, fixed 2026-07-11, was missing on all 3 backends not just Vulkan/Bgfx) and base-lerp alpha scaling (Task 891) are both fixed. |
+| `SkinnedEffect` | ✅ | ✅ / ✅ / ✅ | No open gaps — `DirectionalLight1`/`2` (Task 893), `SpecularColor`/`Power` (Task 894), and `WeightsPerVertex` GPU enforcement (Task 895) all fixed 2026-07-11, all three were missing on all 3 backends not just Vulkan/Bgfx. |
 | Fog (all 5 effects) | — | ✅ / ✅ / ✅ | Fully implemented on every 3D backend for every effect, including Vulkan's `env_map3d`/`skinned3d` (Task 899, closed 2026-07-07) — a stale "Vulkan still lacks fog" claim in this same file's own per-backend table (Task 484) was found and corrected while writing this checklist. |
 | `ShaderEffect` (NOXNA custom shader) | ✅ (constructor exists on all 3) | ✅ / ✅ / ❌ | Bgfx's `CreateEffectBackend` returns `nullptr` for it — the one whole-feature 3D gap left. |
 
@@ -243,7 +278,7 @@ an intentional, documented CNA convenience, not a signature mismatch.
 | Member | Status | Note |
 |---|---|---|
 | `Model::Draw(Matrix world, Matrix view, Matrix projection)` | ✅ | Correct on EasyGL/Vulkan/Bgfx; throws on SDL_Renderer by design. |
-| Constructing a `Model` by hand (`NOXNA` constructors) | ⚠️ | Auto-defaults `Root` to `bones[0]` — no parameter to specify a different root bone (Task 916, open). Only matters if your model's true root isn't the first bone in your `bones` list. |
+| Constructing a `Model` by hand (`NOXNA` constructors) | ✅ | **Fixed, Task 916** (2026-07-09) — an optional `rootBoneIndex` parameter (default `0`) now lets you specify a root bone other than `bones[0]`. |
 | Loading a `Model` via `ContentManager` | ⚠️ | CNA's own `.model.json` format, not FNA's `.xnb` — real gaps versus FNA's loader (no bone hierarchy/`ParentBone`/`BoundingSphere`/`Tag` wiring, Task 440). Don't expect an FNA-authored `.xnb` model to load as-is; see "Content pipeline" above. |
 | `ModelMesh`/`ModelBone` collections (`ModelMeshCollection`, `ModelBoneCollection`) | ✅ | `TryGetValue`/`Contains`/`begin()`/`end()` all present (Tasks 432/433). |
 | `Model::CopyBoneTransformsFrom`/`To` | ⚠️ | Loop bound is `Bones.Count`, not the caller array's length like FNA — an intentional, safer deviation (see "Known deviations" list), not a bug. |
@@ -260,7 +295,7 @@ additive, no missing or mismatched FNA-facing overload found.
 |---|---|---|
 | `VertexBuffer`/`IndexBuffer` construction (both FNA overloads) | ✅ | No open gaps (Task 483's table). |
 | `VertexDeclaration` construction (both FNA overloads + `initializer_list` convenience) | ✅ | Construction/assignment confirmed never throws (Task 729). |
-| `IndexElementSize::ThirtyTwoBits` — **only if your code reads the enum's raw numeric value** | ❌ | CNA's `16`/`32` don't match FNA's real `0`/`1` (Task 921, open). Ordinary symbolic use (passing the enum to `IndexBuffer`'s constructor) is unaffected. |
+| `IndexElementSize::ThirtyTwoBits` numeric value | ✅ | **Fixed, Task 921** (2026-07-09) — CNA's values now match FNA's real `0`/`1` exactly (previously `16`/`32`). |
 | `SetDataOptions`/`BufferUsage` | ✅ | No open gaps. |
 
 ## Troubleshooting graphics backend selection (Task 489)
@@ -305,7 +340,9 @@ included) — not repeated here.
 ### Is it a bug, or a known limitation?
 
 Before filing anything, check `docs/xna-4-api-coverage.md`'s "Per-backend Graphics support" table
-(Task 484) and "Known deviations from XNA/FNA" list (Task 485) — most currently-open gaps already
-have a task number and a documented root cause (e.g. Vulkan's fake `BlendState`/868, EasyGL's
-anisotropic-filtering fallback/918, the `IndexElementSize` numeric mismatch/921). If your symptom
-isn't listed there, it's more likely a genuinely new finding worth its own task.
+(Task 484), "Known deviations from XNA/FNA" list (Task 485), and `NEXT.md` §5 (the actively
+maintained current bug list) — most currently-open gaps already have a task number and a documented
+root cause (e.g. Vulkan's `RasterizerState.DepthBias` no-op, Bgfx's `DrawIndexedPrimitivesEx`
+`startIndex`/`baseVertex` gap/954, `EnvironmentMapEffect`/`SkinnedEffect`'s dropped
+`DirectionalLight1`/`2`). If your symptom isn't listed there, it's more likely a genuinely new
+finding worth its own task.

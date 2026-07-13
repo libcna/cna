@@ -9,6 +9,7 @@ layout(location = 4) in uvec4 aBoneIndices;
 layout(location = 0) out vec3 vNormal;
 layout(location = 1) out vec2 vUV;
 layout(location = 2) out float vFogFactor;
+layout(location = 3) out vec3 vWorldPos;
 
 layout(push_constant) uniform PC {
     mat4  mvp;
@@ -30,16 +31,34 @@ layout(set = 0, binding = 1) uniform BoneBlock {
 layout(set = 0, binding = 2) uniform FogParams {
     vec4 fogColorEnabled;  // xyz = FogColor, w = fogEnabled
     vec4 fogStartEnd;      // x = fogStart, y = fogEnd, zw = unused
+    // Task 893: DirectionalLight1/DirectionalLight2 diffuse forwarding.
+    vec4 light1Dir_pad;
+    vec4 light1Diff_pad;
+    vec4 light2Dir_pad;
+    vec4 light2Diff_pad;
+    // Task 894: World matrix + EyePosition + specular (World doesn't fit in the already-128-byte
+    // push constant, so it lives here instead).
+    mat4 world;
+    vec4 eyePos_pad; // w = WeightsPerVertex (Task 895, packed into otherwise-unused padding)
+    vec4 specularColor_power;
+    vec4 light0Spec_pad;
+    vec4 light1Spec_pad;
+    vec4 light2Spec_pad;
 } fog;
 
 void main() {
-    mat4 skinMat = bb.bones[aBoneIndices.x] * aBoneWeights.x
-                 + bb.bones[aBoneIndices.y] * aBoneWeights.y
-                 + bb.bones[aBoneIndices.z] * aBoneWeights.z
-                 + bb.bones[aBoneIndices.w] * aBoneWeights.w;
-    gl_Position = pc.mvp * skinMat * vec4(aPos, 1.0);
+    // Task 895: FNA's real Skin(vin, boneCount) only sums the first WeightsPerVertex (1, 2, or 4)
+    // weight/index pairs -- matches XNA's own validated property range, so >=2/>=4 gating suffices.
+    float weightsPerVertex = fog.eyePos_pad.w;
+    mat4 skinMat = bb.bones[aBoneIndices.x] * aBoneWeights.x;
+    if (weightsPerVertex >= 2.0) skinMat += bb.bones[aBoneIndices.y] * aBoneWeights.y;
+    if (weightsPerVertex >= 4.0) skinMat += bb.bones[aBoneIndices.z] * aBoneWeights.z
+                                          + bb.bones[aBoneIndices.w] * aBoneWeights.w;
+    vec4 skinnedPos = skinMat * vec4(aPos, 1.0);
+    gl_Position = pc.mvp * skinnedPos;
     vNormal     = normalize(mat3(skinMat) * aNormal);
     vUV         = aUV;
+    vWorldPos   = (fog.world * skinnedPos).xyz;
     // Task 899: fog factor from the PRE-SKIN raw object-space Z (matches EasyGL/Bgfx's
     // established SkinnedEffect fog formula exactly -- Task 900/899 bonus scope).
     vFogFactor = (fog.fogColorEnabled.w > 0.5)

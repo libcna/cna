@@ -6,6 +6,26 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# Reuse compiler output across build directories when ccache is available.
+# This is intentionally configured before sharp-runtime is added so the cache
+# also covers that comparatively large dependency. Disable with
+# -DCNA_USE_CCACHE=OFF when diagnosing compiler-launcher issues.
+option(CNA_USE_CCACHE "Use ccache for CNA and sharp-runtime builds when available" ON)
+if(CNA_USE_CCACHE)
+    find_program(CNA_CCACHE_PROGRAM ccache)
+    if(CNA_CCACHE_PROGRAM)
+        if(NOT CMAKE_C_COMPILER_LAUNCHER)
+            set(CMAKE_C_COMPILER_LAUNCHER "${CNA_CCACHE_PROGRAM}" CACHE STRING "C compiler launcher")
+        endif()
+        if(NOT CMAKE_CXX_COMPILER_LAUNCHER)
+            set(CMAKE_CXX_COMPILER_LAUNCHER "${CNA_CCACHE_PROGRAM}" CACHE STRING "C++ compiler launcher")
+        endif()
+        message(STATUS "CNA: compiler cache available (${CNA_CCACHE_PROGRAM}); existing compiler launchers are preserved")
+    else()
+        message(STATUS "CNA: ccache not found; using the build directory's normal incremental object cache")
+    endif()
+endif()
+
 # Emscripten disables C++ exception throw/catch support by default (an uncaught throw aborts
 # the whole runtime instead of unwinding) - this codebase relies on exceptions pervasively
 # (System::Exception hierarchy, EXPECT_THROW tests, etc.), so it must be enabled globally,
@@ -71,16 +91,19 @@ if(EMSCRIPTEN OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
 else()
     set(_cna_default_backend "SDL_RENDERER")
 endif()
-set(CNA_GRAPHICS_BACKEND "${_cna_default_backend}" CACHE STRING "Graphics backend to use (SDL_RENDERER, EASYGL, BGFX, or VULKAN)")
-set_property(CACHE CNA_GRAPHICS_BACKEND PROPERTY STRINGS "SDL_RENDERER" "EASYGL" "BGFX" "VULKAN")
+set(CNA_GRAPHICS_BACKEND "${_cna_default_backend}" CACHE STRING "Graphics backend to use (SDL_RENDERER, EASYGL, BGFX, VULKAN, WEBGPU, HEADLESS, or SOFTWARE)")
+set_property(CACHE CNA_GRAPHICS_BACKEND PROPERTY STRINGS "SDL_RENDERER" "EASYGL" "BGFX" "VULKAN" "WEBGPU" "HEADLESS" "SOFTWARE")
 
 option(CNA_BACKEND_SDL_RENDERER "Enable SDL_Renderer graphics backend" OFF)
 option(CNA_BACKEND_EASY_GL "Enable easy-gl graphics backend" OFF)
 option(CNA_BACKEND_BGFX "Enable bgfx graphics backend" OFF)
 option(CNA_BACKEND_VULKAN "Enable Vulkan graphics backend" OFF)
+option(CNA_BACKEND_WEBGPU "Enable WebGPU graphics backend (wgpu-native)" OFF)
+option(CNA_BACKEND_HEADLESS "Enable Headless (no GPU/window) graphics backend" OFF)
+option(CNA_BACKEND_SOFTWARE "Enable Software (CPU rasterizer) graphics backend" OFF)
 
 set(_cna_explicit_backend_selection OFF)
-if(CNA_BACKEND_SDL_RENDERER OR CNA_BACKEND_EASY_GL OR CNA_BACKEND_BGFX OR CNA_BACKEND_VULKAN)
+if(CNA_BACKEND_SDL_RENDERER OR CNA_BACKEND_EASY_GL OR CNA_BACKEND_BGFX OR CNA_BACKEND_VULKAN OR CNA_BACKEND_WEBGPU OR CNA_BACKEND_HEADLESS OR CNA_BACKEND_SOFTWARE)
     set(_cna_explicit_backend_selection ON)
 endif()
 
@@ -97,6 +120,15 @@ if(_cna_explicit_backend_selection)
     endif()
     if(CNA_BACKEND_VULKAN)
         list(APPEND _cna_enabled_backends "VULKAN")
+    endif()
+    if(CNA_BACKEND_WEBGPU)
+        list(APPEND _cna_enabled_backends "WEBGPU")
+    endif()
+    if(CNA_BACKEND_HEADLESS)
+        list(APPEND _cna_enabled_backends "HEADLESS")
+    endif()
+    if(CNA_BACKEND_SOFTWARE)
+        list(APPEND _cna_enabled_backends "SOFTWARE")
     endif()
 
     list(LENGTH _cna_enabled_backends _cna_enabled_backends_count)
@@ -173,15 +205,22 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "VULKAN")
     add_compile_definitions(CNA_BACKEND_VULKAN)
     find_package(Vulkan REQUIRED)
 elseif(CNA_GRAPHICS_BACKEND STREQUAL "WEBGPU")
-    # cna-template/missing.md: WEBGPU is a real (experimental) 5th CNA backend, but its
-    # implementation has not landed on this branch/checkout yet (it lives on a separate,
-    # not-yet-merged feature branch) -- give a specific, actionable error instead of the generic
-    # "Unknown graphics backend" message below, which reads like a typo rather than "not here yet".
-    message(FATAL_ERROR
-        "CNA: 'WEBGPU' is a known CNA backend name, but this checkout of CNA does not yet define "
-        "a cna_backend_graphics_webgpu target (WEBGPU support has not landed on this branch). "
-        "Check out a CNA revision where WEBGPU support has merged, or use one of the backends "
-        "this checkout actually supports: SDL_RENDERER, EASYGL, BGFX, VULKAN.")
+    message(STATUS "CNA: Using WEBGPU graphics backend")
+    set(BACKEND_DIR "src/CNA/Internal/Backends/WebGPU")
+    set(BACKEND_TARGET "cna_backend_graphics_webgpu")
+    add_compile_definitions(CNA_BACKEND_WEBGPU)
+    include(cmake/ThirdPartyWebGPU.cmake)
+    cna_configure_webgpu()
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "HEADLESS")
+    message(STATUS "CNA: Using HEADLESS (no GPU/window) graphics backend")
+    set(BACKEND_DIR "src/CNA/Internal/Backends/Headless")
+    set(BACKEND_TARGET "cna_backend_graphics_headless")
+    add_compile_definitions(CNA_BACKEND_HEADLESS)
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "SOFTWARE")
+    message(STATUS "CNA: Using SOFTWARE (CPU rasterizer) graphics backend")
+    set(BACKEND_DIR "src/CNA/Internal/Backends/Software")
+    set(BACKEND_TARGET "cna_backend_graphics_software")
+    add_compile_definitions(CNA_BACKEND_SOFTWARE)
 else()
 
     message(FATAL_ERROR "CNA: Unknown graphics backend: ${CNA_GRAPHICS_BACKEND}")
@@ -207,7 +246,7 @@ endif()
 
 # Common backend interfaces
 add_library(cna_backend_graphics_common INTERFACE)
-target_include_directories(cna_backend_graphics_common INTERFACE 
+target_include_directories(cna_backend_graphics_common INTERFACE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
@@ -228,6 +267,14 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "BGFX")
     target_include_directories(${BACKEND_TARGET} PRIVATE ${CNA_BGFX_SHADER_INCLUDE_DIR})
 elseif(CNA_GRAPHICS_BACKEND STREQUAL "VULKAN")
     target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 Vulkan::Vulkan)
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "WEBGPU")
+    target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 WebGPU::WebGPU)
+    if(CNA_WEBGPU_RUNTIME_LIBRARY)
+        add_custom_command(TARGET ${BACKEND_TARGET} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${CNA_WEBGPU_RUNTIME_LIBRARY}" "$<TARGET_FILE_DIR:${BACKEND_TARGET}>"
+            VERBATIM)
+    endif()
 endif()
 
 file(GLOB_RECURSE CNA_SOURCES CONFIGURE_DEPENDS
@@ -374,6 +421,15 @@ if(CNA_BUILD_EXAMPLES)
                 "${CMAKE_CURRENT_SOURCE_DIR}/examples/demo_2d/Content"
                 "$<TARGET_FILE_DIR:cna_demo_2d>/Content"
             COMMENT "Copying Content next to cna_demo_2d executable")
+        if(CNA_GRAPHICS_BACKEND STREQUAL "WEBGPU" AND CNA_WEBGPU_RUNTIME_LIBRARY)
+            add_custom_command(TARGET cna_demo_2d POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "${CNA_WEBGPU_RUNTIME_LIBRARY}" "$<TARGET_FILE_DIR:cna_demo_2d>"
+                COMMENT "Copying wgpu-native runtime next to cna_demo_2d")
+            if(UNIX AND NOT APPLE)
+                set_property(TARGET cna_demo_2d APPEND PROPERTY BUILD_RPATH "$ORIGIN")
+            endif()
+        endif()
         if(WIN32)
             set_target_properties(cna_demo_2d PROPERTIES WIN32_EXECUTABLE TRUE)
             cna_copy_sdl_runtime(cna_demo_2d)
@@ -1299,6 +1355,11 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_software.md SOFTWARE-61/84: this backend's half of the cross-backend diagnostic
+        # dump -- not registered as a ctest, just a plain executable a developer/script runs by
+        # hand alongside SOFTWARE's own cna_diag_software and cna_diag_compare.
+        cna_easygl_test(cna_diag_easygl examples/cross_backend_diagnostic_scene.cpp)
+
         # Task 461: canary proving the new shared PixelTestGame helper (examples/common/) works
         cna_easygl_test(cna_test_easygl_pixeltestgame_smoke
                         examples/easygl_pixeltestgame_smoke_test.cpp)
@@ -1605,6 +1666,51 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 1077: ShaderEffect::SetUniformXxx() must reach the real draw via SpriteBatch
+        cna_easygl_test(cna_test_easygl_shader_effect_spritebatch_uniform
+                        examples/easygl_shader_effect_spritebatch_uniform_test.cpp)
+        add_test(NAME EasyGL_ShaderEffect_SpriteBatch_Uniform
+                 COMMAND cna_test_easygl_shader_effect_spritebatch_uniform)
+        set_tests_properties(EasyGL_ShaderEffect_SpriteBatch_Uniform PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 946: BloomExtract.fx HLSL->GLSL conversion proof + .shader.json ContentManager round-trip
+        cna_easygl_test(cna_test_easygl_bloom_extract
+                        examples/easygl_bloom_extract_test.cpp)
+        add_test(NAME EasyGL_Bloom_Extract
+                 COMMAND cna_test_easygl_bloom_extract)
+        set_tests_properties(EasyGL_Bloom_Extract PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 946: GaussianBlur.fx HLSL->GLSL conversion proof (array uniforms)
+        cna_easygl_test(cna_test_easygl_bloom_gaussianblur
+                        examples/easygl_bloom_gaussianblur_test.cpp)
+        add_test(NAME EasyGL_Bloom_GaussianBlur
+                 COMMAND cna_test_easygl_bloom_gaussianblur)
+        set_tests_properties(EasyGL_Bloom_GaussianBlur PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 946: BloomCombine.fx HLSL->GLSL conversion proof (2nd texture unit)
+        cna_easygl_test(cna_test_easygl_bloom_combine
+                        examples/easygl_bloom_combine_test.cpp)
+        add_test(NAME EasyGL_Bloom_Combine
+                 COMMAND cna_test_easygl_bloom_combine)
+        set_tests_properties(EasyGL_Bloom_Combine PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 946: full 4-pass BloomSample pipeline end-to-end proof (extract->blurH->blurV->combine)
+        cna_easygl_test(cna_test_easygl_bloom_pipeline
+                        examples/easygl_bloom_pipeline_test.cpp)
+        add_test(NAME EasyGL_Bloom_Pipeline
+                 COMMAND cna_test_easygl_bloom_pipeline)
+        set_tests_properties(EasyGL_Bloom_Pipeline PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 133: DualTextureEffect — magenta×yellow→red pixel readback
         cna_easygl_test(cna_test_easygl_dual_texture
                         examples/easygl_dual_texture_test.cpp)
@@ -1706,12 +1812,48 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 890: EnvironmentMapEffect DirectionalLight1/DirectionalLight2 forwarding
+        cna_easygl_test(cna_test_easygl_environmentmapeffect_multilight
+                        examples/easygl_environmentmapeffect_multilight_test.cpp)
+        add_test(NAME EasyGL_EnvironmentMapEffect_MultiLight
+                 COMMAND cna_test_easygl_environmentmapeffect_multilight)
+        set_tests_properties(EasyGL_EnvironmentMapEffect_MultiLight PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 900: SkinnedEffect fog fix verification
         cna_easygl_test(cna_test_easygl_skinnedeffect_fog
                         examples/easygl_skinnedeffect_fog_test.cpp)
         add_test(NAME EasyGL_SkinnedEffect_Fog
                  COMMAND cna_test_easygl_skinnedeffect_fog)
         set_tests_properties(EasyGL_SkinnedEffect_Fog PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 893: SkinnedEffect DirectionalLight1/DirectionalLight2 forwarding
+        cna_easygl_test(cna_test_easygl_skinnedeffect_multilight
+                        examples/easygl_skinnedeffect_multilight_test.cpp)
+        add_test(NAME EasyGL_SkinnedEffect_MultiLight
+                 COMMAND cna_test_easygl_skinnedeffect_multilight)
+        set_tests_properties(EasyGL_SkinnedEffect_MultiLight PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 894: SkinnedEffect real specular highlights
+        cna_easygl_test(cna_test_easygl_skinnedeffect_specular
+                        examples/easygl_skinnedeffect_specular_test.cpp)
+        add_test(NAME EasyGL_SkinnedEffect_Specular
+                 COMMAND cna_test_easygl_skinnedeffect_specular)
+        set_tests_properties(EasyGL_SkinnedEffect_Specular PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 895: SkinnedEffect WeightsPerVertex real GPU enforcement
+        cna_easygl_test(cna_test_easygl_skinnedeffect_weightspervertex
+                        examples/easygl_skinnedeffect_weightspervertex_test.cpp)
+        add_test(NAME EasyGL_SkinnedEffect_WeightsPerVertex
+                 COMMAND cna_test_easygl_skinnedeffect_weightspervertex)
+        set_tests_properties(EasyGL_SkinnedEffect_WeightsPerVertex PROPERTIES
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
@@ -3031,6 +3173,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 956: SpriteBatch's blend state must not leak a hardcoded value into a following 3D draw.
+        cna_easygl_test(cna_test_easygl_spritebatch_blendstate_leak
+                        examples/easygl_spritebatch_blendstate_leak_test.cpp)
+        add_test(NAME EasyGL_SpriteBatch_BlendStateLeak
+                 COMMAND cna_test_easygl_spritebatch_blendstate_leak)
+        set_tests_properties(EasyGL_SpriteBatch_BlendStateLeak PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     endif()
 
     # Vulkan integration tests
@@ -3397,6 +3548,15 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         add_test(NAME Vulkan_EnvironmentMapEffect_AmountZero
                  COMMAND cna_test_vulkan_environmentmapeffect_amount_zero)
         set_tests_properties(Vulkan_EnvironmentMapEffect_AmountZero PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 890: EnvironmentMapEffect DirectionalLight1/DirectionalLight2 forwarding
+        cna_vulkan_test(cna_test_vulkan_environmentmapeffect_multilight
+                        examples/vulkan_environmentmapeffect_multilight_test.cpp)
+        add_test(NAME Vulkan_EnvironmentMapEffect_MultiLight
+                 COMMAND cna_test_vulkan_environmentmapeffect_multilight)
+        set_tests_properties(Vulkan_EnvironmentMapEffect_MultiLight PROPERTIES
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
@@ -3940,6 +4100,33 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         add_test(NAME Vulkan_SkinnedEffect_Fog
                  COMMAND cna_test_vulkan_skinnedeffect_fog)
         set_tests_properties(Vulkan_SkinnedEffect_Fog PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 893: SkinnedEffect DirectionalLight1/DirectionalLight2 forwarding
+        cna_vulkan_test(cna_test_vulkan_skinnedeffect_multilight
+                        examples/vulkan_skinnedeffect_multilight_test.cpp)
+        add_test(NAME Vulkan_SkinnedEffect_MultiLight
+                 COMMAND cna_test_vulkan_skinnedeffect_multilight)
+        set_tests_properties(Vulkan_SkinnedEffect_MultiLight PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 894: SkinnedEffect real specular highlights
+        cna_vulkan_test(cna_test_vulkan_skinnedeffect_specular
+                        examples/vulkan_skinnedeffect_specular_test.cpp)
+        add_test(NAME Vulkan_SkinnedEffect_Specular
+                 COMMAND cna_test_vulkan_skinnedeffect_specular)
+        set_tests_properties(Vulkan_SkinnedEffect_Specular PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 895: SkinnedEffect WeightsPerVertex real GPU enforcement
+        cna_vulkan_test(cna_test_vulkan_skinnedeffect_weightspervertex
+                        examples/vulkan_skinnedeffect_weightspervertex_test.cpp)
+        add_test(NAME Vulkan_SkinnedEffect_WeightsPerVertex
+                 COMMAND cna_test_vulkan_skinnedeffect_weightspervertex)
+        set_tests_properties(Vulkan_SkinnedEffect_WeightsPerVertex PROPERTIES
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
@@ -5169,6 +5356,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Task 890: EnvironmentMapEffect DirectionalLight1/DirectionalLight2 forwarding
+    cna_bgfx_test(cna_test_bgfx_environmentmapeffect_multilight
+                  examples/bgfx_environmentmapeffect_multilight_test.cpp)
+    add_test(NAME Bgfx_EnvironmentMapEffect_MultiLight
+             COMMAND cna_test_bgfx_environmentmapeffect_multilight)
+    set_tests_properties(Bgfx_EnvironmentMapEffect_MultiLight PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # Task 394: EnvironmentMapEffect EnvironmentMapAmount=1 should fully replace lit color
     cna_bgfx_test(cna_test_bgfx_environmentmapeffect_amount_one
                   examples/bgfx_environmentmapeffect_amount_one_test.cpp)
@@ -5539,6 +5735,33 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     add_test(NAME Bgfx_SkinnedEffect_Fog
              COMMAND cna_test_bgfx_skinnedeffect_fog)
     set_tests_properties(Bgfx_SkinnedEffect_Fog PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 893: SkinnedEffect DirectionalLight1/DirectionalLight2 forwarding
+    cna_bgfx_test(cna_test_bgfx_skinnedeffect_multilight
+                  examples/bgfx_skinnedeffect_multilight_test.cpp)
+    add_test(NAME Bgfx_SkinnedEffect_MultiLight
+             COMMAND cna_test_bgfx_skinnedeffect_multilight)
+    set_tests_properties(Bgfx_SkinnedEffect_MultiLight PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 894: SkinnedEffect real specular highlights
+    cna_bgfx_test(cna_test_bgfx_skinnedeffect_specular
+                  examples/bgfx_skinnedeffect_specular_test.cpp)
+    add_test(NAME Bgfx_SkinnedEffect_Specular
+             COMMAND cna_test_bgfx_skinnedeffect_specular)
+    set_tests_properties(Bgfx_SkinnedEffect_Specular PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 895: SkinnedEffect WeightsPerVertex real GPU enforcement
+    cna_bgfx_test(cna_test_bgfx_skinnedeffect_weightspervertex
+                  examples/bgfx_skinnedeffect_weightspervertex_test.cpp)
+    add_test(NAME Bgfx_SkinnedEffect_WeightsPerVertex
+             COMMAND cna_test_bgfx_skinnedeffect_weightspervertex)
+    set_tests_properties(Bgfx_SkinnedEffect_WeightsPerVertex PROPERTIES
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
@@ -6092,6 +6315,238 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
 
 endif()
 
+if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
+   AND CNA_GRAPHICS_BACKEND STREQUAL "WEBGPU")
+    enable_testing()
+    if(TARGET cna_demo_2d)
+        add_test(NAME WebGPU_Native2D_Smoke
+                 COMMAND ${CMAKE_COMMAND}
+                    -DCNA_WEBGPU_DEMO=$<TARGET_FILE:cna_demo_2d>
+                    -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/WebGPUNativeSmokeTest.cmake)
+        set_tests_properties(WebGPU_Native2D_Smoke PROPERTIES
+            TIMEOUT 70
+            LABELS "GraphicsSmoke;WebGPU"
+            SKIP_REGULAR_EXPRESSION "\\[SKIP\\] CNA WebGPU native smoke")
+    else()
+        message(WARNING "CNA WebGPU: native smoke test requires CNA_BUILD_EXAMPLES=ON")
+    endif()
+
+    # WEBGPU-91/92: pixel-asserted readback coverage -- registered the same way as
+    # WebGPU_Native2D_Smoke (SKIP_REGULAR_EXPRESSION for a headless/no-display environment),
+    # since ReadBackbuffer() needs a real GPU-backed surface exactly like the smoke test does.
+    macro(cna_webgpu_test target src)
+        add_executable(${target} ${src})
+        if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
+            target_link_libraries(${target} PRIVATE
+                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                SHARP_RUNTIME)
+        else()
+            target_link_libraries(${target} PRIVATE CNA SHARP_RUNTIME)
+        endif()
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(${target} PRIVATE SDL3::SDL3main)
+        endif()
+        if(CNA_WEBGPU_RUNTIME_LIBRARY)
+            add_custom_command(TARGET ${target} POST_BUILD
+                    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "${CNA_WEBGPU_RUNTIME_LIBRARY}" "$<TARGET_FILE_DIR:${target}>"
+                    COMMENT "Copying wgpu-native runtime next to ${target}")
+            if(UNIX AND NOT APPLE)
+                set_property(TARGET ${target} APPEND PROPERTY BUILD_RPATH "$ORIGIN")
+            endif()
+        endif()
+    endmacro()
+
+    cna_webgpu_test(cna_test_webgpu_clear_readback examples/webgpu_clear_readback_test.cpp)
+    add_test(NAME WebGPU_Clear_Readback COMMAND cna_test_webgpu_clear_readback)
+    set_tests_properties(WebGPU_Clear_Readback PROPERTIES
+        TIMEOUT 30
+        LABELS "WebGPU"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Phase 57/63 vertical slice: DrawColoredPrimitives/DrawIndexedColoredPrimitives.
+    cna_webgpu_test(cna_test_webgpu_colored3d examples/webgpu_colored3d_test.cpp)
+    add_test(NAME WebGPU_Colored3D COMMAND cna_test_webgpu_colored3d)
+    set_tests_properties(WebGPU_Colored3D PROPERTIES
+        TIMEOUT 30
+        LABELS "WebGPU"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Phase 63: DrawPrimitivesEx/DrawIndexedPrimitivesEx real GpuDrawParams dispatch (stride 16).
+    cna_webgpu_test(cna_test_webgpu_drawprimitivesex examples/webgpu_drawprimitivesex_test.cpp)
+    add_test(NAME WebGPU_DrawPrimitivesEx COMMAND cna_test_webgpu_drawprimitivesex)
+    set_tests_properties(WebGPU_DrawPrimitivesEx PROPERTIES
+        TIMEOUT 30
+        LABELS "WebGPU"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Phase 58/59/63: textured3d.wgsl / GetOrCreatePipelineTextured3D / stride-20 dispatch.
+    cna_webgpu_test(cna_test_webgpu_textured3d examples/webgpu_textured3d_test.cpp)
+    add_test(NAME WebGPU_Textured3D COMMAND cna_test_webgpu_textured3d)
+    set_tests_properties(WebGPU_Textured3D PROPERTIES
+        TIMEOUT 30
+        LABELS "WebGPU"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Phase 58/59/63: colored_textured3d.wgsl / GetOrCreatePipelineColoredTextured3D / stride-24.
+    cna_webgpu_test(cna_test_webgpu_coloredtextured3d examples/webgpu_coloredtextured3d_test.cpp)
+    add_test(NAME WebGPU_ColoredTextured3D COMMAND cna_test_webgpu_coloredtextured3d)
+    set_tests_properties(WebGPU_ColoredTextured3D PROPERTIES
+        TIMEOUT 30
+        LABELS "WebGPU"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # WEBGPU-22: lit_textured3d.wgsl / GetOrCreatePipelineLitTextured3D / stride-32 dispatch,
+    # real Blinn-Phong lighting.
+    cna_webgpu_test(cna_test_webgpu_littextured3d examples/webgpu_littextured3d_test.cpp)
+    add_test(NAME WebGPU_LitTextured3D COMMAND cna_test_webgpu_littextured3d)
+    set_tests_properties(WebGPU_LitTextured3D PROPERTIES
+        TIMEOUT 30
+        LABELS "WebGPU"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # WEBGPU-23/34/72: alpha_test3d.wgsl / GetOrCreatePipelineAlphaTest3D / AlphaTestEffect
+    # per-pixel discard, strides 20/24/32.
+    cna_webgpu_test(cna_test_webgpu_alphatest3d examples/webgpu_alphatest3d_test.cpp)
+    add_test(NAME WebGPU_AlphaTest3D COMMAND cna_test_webgpu_alphatest3d)
+    set_tests_properties(WebGPU_AlphaTest3D PROPERTIES
+        TIMEOUT 30
+        LABELS "WebGPU"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # WEBGPU-24: dual_texture3d.wgsl / GetOrCreatePipelineDualTexture3D / DualTextureEffect,
+    # strides 20/24, second texture bind group.
+    cna_webgpu_test(cna_test_webgpu_dualtexture3d examples/webgpu_dualtexture3d_test.cpp)
+    add_test(NAME WebGPU_DualTexture3D COMMAND cna_test_webgpu_dualtexture3d)
+    set_tests_properties(WebGPU_DualTexture3D PROPERTIES
+        TIMEOUT 30
+        LABELS "WebGPU"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+endif()
+
+# plan_headless.md: Headless (no GPU/window) graphics backend tests. Deliberately no
+# SDL_VIDEODRIVER/DISPLAY environment -- the entire point of this backend is running with neither.
+if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "HEADLESS")
+    enable_testing()
+
+    macro(cna_headless_test target src)
+        add_executable(${target} ${src})
+        if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
+            target_link_libraries(${target} PRIVATE
+                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                SHARP_RUNTIME SDL3::SDL3)
+        else()
+            target_link_libraries(${target} PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+        endif()
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(${target} PRIVATE SDL3::SDL3main)
+        endif()
+    endmacro()
+
+    cna_headless_test(cna_test_headless_smoke examples/headless_smoke_test.cpp)
+    add_test(NAME Headless_Smoke COMMAND cna_test_headless_smoke)
+    set_tests_properties(Headless_Smoke PROPERTIES
+        TIMEOUT 30
+        LABELS "Headless")
+
+    cna_headless_test(cna_test_headless_resource_backends examples/headless_resource_backends_test.cpp)
+    add_test(NAME Headless_ResourceBackends COMMAND cna_test_headless_resource_backends)
+    set_tests_properties(Headless_ResourceBackends PROPERTIES
+        TIMEOUT 30
+        LABELS "Headless")
+
+    cna_headless_test(cna_test_headless_validation_extras examples/headless_validation_extras_test.cpp)
+    add_test(NAME Headless_ValidationExtras COMMAND cna_test_headless_validation_extras)
+    set_tests_properties(Headless_ValidationExtras PROPERTIES
+        TIMEOUT 30
+        LABELS "Headless")
+
+    cna_headless_test(cna_test_headless_coverage_gaps examples/headless_coverage_gaps_test.cpp)
+    add_test(NAME Headless_CoverageGaps COMMAND cna_test_headless_coverage_gaps)
+    set_tests_properties(Headless_CoverageGaps PROPERTIES
+        TIMEOUT 30
+        LABELS "Headless")
+
+    cna_headless_test(cna_test_headless_effects examples/headless_effects_test.cpp)
+    add_test(NAME Headless_Effects COMMAND cna_test_headless_effects)
+    set_tests_properties(Headless_Effects PROPERTIES
+        TIMEOUT 30
+        LABELS "Headless")
+
+    cna_headless_test(cna_test_headless_mode_dial examples/headless_mode_dial_test.cpp)
+    add_test(NAME Headless_ModeDial COMMAND cna_test_headless_mode_dial)
+    set_tests_properties(Headless_ModeDial PROPERTIES
+        TIMEOUT 30
+        LABELS "Headless")
+
+    cna_headless_test(cna_test_headless_trace_diff examples/headless_trace_diff_test.cpp)
+    add_test(NAME Headless_TraceDiff COMMAND cna_test_headless_trace_diff)
+    set_tests_properties(Headless_TraceDiff PROPERTIES
+        TIMEOUT 30
+        LABELS "Headless")
+endif()
+
+# plan_software.md: Software (CPU rasterizer) graphics backend tests. Deliberately no
+# SDL_VIDEODRIVER/DISPLAY environment -- like HEADLESS, this backend never needs either.
+if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SOFTWARE")
+    enable_testing()
+
+    macro(cna_software_test target src)
+        add_executable(${target} ${src})
+        if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
+            target_link_libraries(${target} PRIVATE
+                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                SHARP_RUNTIME SDL3::SDL3)
+        else()
+            target_link_libraries(${target} PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+        endif()
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(${target} PRIVATE SDL3::SDL3main)
+        endif()
+    endmacro()
+
+    cna_software_test(cna_test_software_smoke examples/software_smoke_test.cpp)
+    add_test(NAME Software_Smoke COMMAND cna_test_software_smoke)
+    set_tests_properties(Software_Smoke PROPERTIES
+        TIMEOUT 30
+        LABELS "Software")
+
+    cna_software_test(cna_test_software_rasterizer examples/software_rasterizer_test.cpp)
+    add_test(NAME Software_Rasterizer COMMAND cna_test_software_rasterizer)
+    set_tests_properties(Software_Rasterizer PROPERTIES
+        TIMEOUT 30
+        LABELS "Software")
+
+    cna_software_test(cna_test_software_effects examples/software_effects_test.cpp)
+    add_test(NAME Software_Effects COMMAND cna_test_software_effects)
+    set_tests_properties(Software_Effects PROPERTIES
+        TIMEOUT 30
+        LABELS "Software")
+
+    cna_software_test(cna_test_software_culling examples/software_culling_test.cpp)
+    add_test(NAME Software_Culling COMMAND cna_test_software_culling)
+    set_tests_properties(Software_Culling PROPERTIES
+        TIMEOUT 30
+        LABELS "Software")
+
+    cna_software_test(cna_test_software_clipping examples/software_clipping_test.cpp)
+    add_test(NAME Software_Clipping COMMAND cna_test_software_clipping)
+    set_tests_properties(Software_Clipping PROPERTIES
+        TIMEOUT 30
+        LABELS "Software")
+
+    cna_software_test(cna_test_software_dual_envmap_skinned examples/software_dual_envmap_skinned_test.cpp)
+    add_test(NAME Software_DualEnvmapSkinned COMMAND cna_test_software_dual_envmap_skinned)
+    set_tests_properties(Software_DualEnvmapSkinned PROPERTIES
+        TIMEOUT 30
+        LABELS "Software")
+
+    # plan_software.md SOFTWARE-61/84: this backend's half of the cross-backend diagnostic dump --
+    # not registered as a ctest (see cna_diag_compare's own comment above), just a plain
+    # executable a developer/script runs by hand.
+    cna_software_test(cna_diag_software examples/cross_backend_diagnostic_scene.cpp)
+endif()
+
 # --- Task 6.1: real two-process ENet loopback test harness ---
 # A tiny standalone (non-GTest) executable playing "host" or "client", spawned twice as
 # independent OS processes by tests/CNA/Internal/Net/TwoProcessLoopbackTest.cpp. See NEXT.md /
@@ -6140,6 +6595,17 @@ if(CNA_BUILD_TESTS)
         CNA
         SHARP_RUNTIME
     )
+endif()
+
+# --- plan_software.md SOFTWARE-61/84: cross-backend diagnostic comparator ---
+# Standalone, backend-independent (no CNA/SHARP_RUNTIME dependency) tool that diffs two raw
+# 64x64 RGBA8 dumps produced by cross_backend_diagnostic_scene.cpp (built once per backend, see
+# the SOFTWARE and EASYGL sections below) within a tolerance. Not wired into a single ctest run --
+# CNA_GRAPHICS_BACKEND is a compile-time choice, so comparing two backends' output needs two
+# separate builds' dumps; see docs/software-backend.md's "Cross-backend diagnostic" section for
+# the exact manual invocation.
+if(CNA_BUILD_TESTS)
+    add_executable(cna_diag_compare examples/cross_backend_diagnostic_compare.cpp)
 endif()
 
 # --- Task VERIFY-003/DEV-API-002: strict XNA API surface compile check ---

@@ -330,10 +330,43 @@ namespace Microsoft::Xna::Framework::Graphics
         p.emissiveColor[1] = (emissiveColor_.Y + ambientLightColor_.Y * diffuseColor_.Y) * alpha_;
         p.emissiveColor[2] = (emissiveColor_.Z + ambientLightColor_.Z * diffuseColor_.Z) * alpha_;
 
-        const Vector3 ld  = DirectionalLight0.getDiffuseColorProperty();
+        // Task 893 fix: FNA's real SkinnedEffect.fx (via the shared Lighting.fxh
+        // ComputeLights()) sums all 3 directional lights' diffuse contribution, not just
+        // DirectionalLight0 -- matches the same Enabled-gating BasicEffect::FillGpuDrawParams
+        // already applies.
+        const bool    light0On = DirectionalLight0.getEnabledProperty();
+        const Vector3 ld  = light0On ? DirectionalLight0.getDiffuseColorProperty() : Vector3::Zero;
         const Vector3 dir = DirectionalLight0.getDirectionProperty();
         p.light0Dir[0] = dir.X; p.light0Dir[1] = dir.Y; p.light0Dir[2] = dir.Z;
         p.light0Diffuse[0] = ld.X; p.light0Diffuse[1] = ld.Y; p.light0Diffuse[2] = ld.Z;
+
+        const bool    light1On = DirectionalLight1.getEnabledProperty();
+        const Vector3 ld1  = light1On ? DirectionalLight1.getDiffuseColorProperty() : Vector3::Zero;
+        const Vector3 dir1 = DirectionalLight1.getDirectionProperty();
+        p.light1Dir[0] = dir1.X; p.light1Dir[1] = dir1.Y; p.light1Dir[2] = dir1.Z;
+        p.light1Diffuse[0] = ld1.X; p.light1Diffuse[1] = ld1.Y; p.light1Diffuse[2] = ld1.Z;
+
+        const bool    light2On = DirectionalLight2.getEnabledProperty();
+        const Vector3 ld2  = light2On ? DirectionalLight2.getDiffuseColorProperty() : Vector3::Zero;
+        const Vector3 dir2 = DirectionalLight2.getDirectionProperty();
+        p.light2Dir[0] = dir2.X; p.light2Dir[1] = dir2.Y; p.light2Dir[2] = dir2.Z;
+        p.light2Diffuse[0] = ld2.X; p.light2Diffuse[1] = ld2.Y; p.light2Diffuse[2] = ld2.Z;
+
+        // Task 894 fix: FNA's real SkinnedEffect.fx has genuine per-light specular support
+        // (unlike EnvironmentMapEffect, which hardcodes it to zero) -- Lighting.fxh's
+        // ComputeLights() sums each enabled light's own SpecularColor via the Blinn-Phong
+        // half-vector term, then the material's SpecularColor multiplies that summed result once.
+        const Vector3 ls0 = light0On ? DirectionalLight0.getSpecularColorProperty() : Vector3::Zero;
+        const Vector3 ls1 = light1On ? DirectionalLight1.getSpecularColorProperty() : Vector3::Zero;
+        const Vector3 ls2 = light2On ? DirectionalLight2.getSpecularColorProperty() : Vector3::Zero;
+        p.light0Specular[0] = ls0.X; p.light0Specular[1] = ls0.Y; p.light0Specular[2] = ls0.Z;
+        p.light1Specular[0] = ls1.X; p.light1Specular[1] = ls1.Y; p.light1Specular[2] = ls1.Z;
+        p.light2Specular[0] = ls2.X; p.light2Specular[1] = ls2.Y; p.light2Specular[2] = ls2.Z;
+        const Vector3 specularColor = getSpecularColorProperty();
+        p.specularColor[0] = specularColor.X;
+        p.specularColor[1] = specularColor.Y;
+        p.specularColor[2] = specularColor.Z;
+        p.specularPower     = getSpecularPowerProperty();
 
         const Matrix viewInverse  = Matrix::Invert(view_);
         const Vector3 eyePos      = viewInverse.getTranslationProperty();
@@ -348,6 +381,11 @@ namespace Microsoft::Xna::Framework::Graphics
         p.boneCount = static_cast<int>(bones.size());
         for (int i = 0; i < p.boneCount; ++i)
             bones[i].ToColumnMajor(p.boneTransforms + i * 16);
+
+        // Task 895 fix: FNA's real Skin(vin, boneCount) shader only sums the first
+        // WeightsPerVertex weight/index pairs -- CNA's shaders used to always sum all 4
+        // unconditionally regardless of this property.
+        p.weightsPerVertex = weightsPerVertex_;
 
         p.fogEnabled = fogEnabled_;
         const Vector3 fogColor = getFogColorProperty();

@@ -181,6 +181,13 @@ namespace CNA::Internal::Backends::EasyGL
         void SetUniformVec3(const char* name, float x, float y, float z) override;
         void SetUniformVec4(const char* name, float x, float y, float z, float w) override;
         void SetUniformMat4(const char* name, const float* matrix) override;
+        void SetUniformFloatArray(const char* name, const float* values, int count) override;
+        void SetUniformVec2Array(const char* name, const float* values, int count) override;
+        void BindTexture(int unit, ITextureBackend* texture) override;
+
+        /// Returns the underlying compiled program, so a backend (e.g. SpriteBatch) can bind
+        /// the SAME program this ShaderEffect's SetUniformXxx() calls actually write to.
+        [[nodiscard]] ::easygl::Program& GetProgram() { return program_; }
 
     private:
         ::easygl::Program program_;
@@ -228,8 +235,6 @@ namespace CNA::Internal::Backends::EasyGL
         const ITextureBackend* current_texture_ = nullptr;
         Matrix transform_ = Matrix::getIdentityProperty();
         Effect* customEffect_       = nullptr;
-        ::easygl::Program customProgram_;
-        Effect* compiledFor_        = nullptr;
 
         // Raw TextureFilter/TextureAddressMode values set via SetSamplerFilter/SetSamplerAddressMode
         // (SpriteBatch::Begin), applied to texture unit 0 on the next FlushBatch(). Defaults match
@@ -410,6 +415,7 @@ namespace CNA::Internal::Backends::EasyGL
             int loc_emissive      = -1;  ///< vec3 emissive+ambient (env map / skinned)
             int loc_eyepos        = -1;  ///< vec3 camera world pos
             int loc_bones         = -1;  ///< mat4[72] bone palette (SkinnedEffect)
+            int loc_weightsPerVertex = -1;  ///< int 1/2/4 (SkinnedEffect only, Task 895)
             int loc_alphatest     = -1;  ///< vec4 (refVal, tolerance, passW, failW)
             int loc_fog_enabled   = -1;  ///< float 0=off 1=on
             int loc_fog_color     = -1;  ///< vec3 RGB fog colour
@@ -487,6 +493,10 @@ namespace CNA::Internal::Backends::EasyGL
         void GetViewportSize(int& width, int& height) override;
         void getLogicalSize(int& width, int& height) const;
         void getPhysicalSize(int& width, int& height) const;
+        /// Returns the currently-bound single 2D render target's size, if one is bound (Task
+        /// 1078). Used by EasyGLSpriteBatchBackend so a custom-effect draw into a RenderTarget2D
+        /// smaller/larger than the window sizes its viewport/projection to the RT, not the window.
+        [[nodiscard]] bool GetCurrentRenderTarget2DSize(int& width, int& height) const;
         bool TransformWindowToLogical(float windowX, float windowY,
                                       float& logX, float& logY) const override;
         bool TransformLogicalToWindow(float logX, float logY,

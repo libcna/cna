@@ -155,10 +155,16 @@ namespace Microsoft::Xna::Framework::Graphics
         SDL_SetHint(SDL_HINT_ANDROID_TRAP_BACK_BUTTON, "1");
 #endif
 
+        // plan_headless.md design decision 2 / plan_software.md design decision 4: the Headless and
+        // Software backends never create a real window and never touch SDL's video subsystem at
+        // all, so both can run in CI containers with no display server present -- not just a
+        // headless-but-present one.
+#if !defined(CNA_BACKEND_HEADLESS) && !defined(CNA_BACKEND_SOFTWARE)
         if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
         {
             throw makeSdlError("SDL_InitSubSystem(SDL_INIT_VIDEO)");
         }
+#endif
 
         // The Touch Panel needs this for normalized-to-pixel touch coordinate scaling.
         Microsoft::Xna::Framework::Input::Touch::TouchPanel::setDisplayWidthProperty(virtualWidth_);
@@ -1312,6 +1318,15 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsDevice::createOrAttachWindow()
     {
+#if defined(CNA_BACKEND_HEADLESS) || defined(CNA_BACKEND_SOFTWARE)
+        // No real window, ever -- see the constructor's matching guard above.
+        // GraphicsBackendCreateArgs::window stays nullptr; UpdateViewportFromWindow() already
+        // falls back to the backend's own GetViewportSize() first and only touches window_ if
+        // that yields nothing, and applyPresentationParametersToWindow() already early-returns
+        // when window_ is null, so neither needs its own guard.
+        window_ = nullptr;
+        ownsWindow_ = false;
+#else
         const auto requestedHandle = presentationParameters_.getDeviceWindowHandleProperty();
         if (requestedHandle != 0)
         {
@@ -1352,6 +1367,7 @@ namespace Microsoft::Xna::Framework::Graphics
             reinterpret_cast<std::uintptr_t>(window_));
 
         LogWindowDebugState(window_, "after SDL_CreateWindow");
+#endif
     }
 
     void GraphicsDevice::SetContextRecoveryEnabled(bool enabled)
