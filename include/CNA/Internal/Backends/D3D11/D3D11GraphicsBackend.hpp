@@ -67,6 +67,10 @@ namespace CNA::Internal::Backends::D3D11
         [[nodiscard]] bool IsDebugLayerEnabledEXT() const { return debugLayerEnabled_; }
         /// Exposes whether the swap chain was created tearing-capable (NOXNA, DX-23 diagnostics).
         [[nodiscard]] bool IsTearingCapableEXT() const { return allowTearingSupported_ && allowTearingRequested_; }
+        /// Exposes the raw device pointer for tests/diagnostics and for D3DCommon helpers (e.g.
+        /// D3DShaderCache, DX-15-embed) that need a real ID3D11Device* without duplicating this
+        /// backend's own device-creation path (NOXNA).
+        [[nodiscard]] ID3D11Device* GetDeviceEXT() const { return device_.Get(); }
 
         // ---- IGraphicsBackend: honest "not yet implemented" stubs (Phase DX5+) ----
         std::unique_ptr<ITextureBackend> CreateTexture(const ImageData& data) override;

@@ -1,20 +1,22 @@
 # NEXT.md — CNA Project Handoff
 
-> **D3D11 graphics backend now exists as real, verified code (2026-07-13).** `CNA_GRAPHICS_BACKEND=D3D11`
-> is a working CMake option; `D3D11GraphicsBackend` implements every `IGraphicsBackend` pure
-> virtual (real device/swap-chain/back-buffer/clear/present/readback; honest "not yet implemented"
-> throws for buffers/textures/draws/SpriteBatch). `ctest -R D3D11` passes 2/2
-> (`D3D11_Smoke` + `D3D11_Common`, 26 checks total) running through DXVK 2.6.0 on a real GPU (AMD
-> Radeon 780M/RADV) via Wine on this Debian machine. `D3DCommon` (the shared format/state/vertex-
-> layout mapping core) is also real and tested. `DX-13-hlsl` (all 20 HLSL shader files, hand-ported
-> line-by-line from the Vulkan GLSL) and `DX-14-compile` (real `D3DCompile()` run via Wine+DXVK —
-> all 20 shaders compiled cleanly on the first pass, zero HLSL bugs found, bytes embedded in
-> `hlsl_shaders.hpp`) both closed 2026-07-13 — next step is `DX-15-embed` (wire the compiled DXBC
-> bytes into `CreateVertexShader`/`CreatePixelShader`). Full detail, task-by-task, lives in
-> `plan_dx.md` (`DX-1`–`DX-29`, `DX-80`, `DX-13-hlsl`, `DX-14-compile` closed). Project owner authorized 2026-07-13
-> continuing autonomously through the rest of Phase DX3 → DX5 → DX6 → DX7 → DX8 → DX9 → DX10 → DX11,
-> and Phase DX12 (D3D12) afterward if time allows; `DX-90` (real-Windows checklist) stays
-> `needs_human` — no such machine available in this environment.
+> **D3D11 graphics backend now exists as real, verified code (2026-07-13); Phase DX3 (`D3DCommon`)
+> is now fully closed.** `CNA_GRAPHICS_BACKEND=D3D11` is a working CMake option;
+> `D3D11GraphicsBackend` implements every `IGraphicsBackend` pure virtual (real device/swap-chain/
+> back-buffer/clear/present/readback; honest "not yet implemented" throws for buffers/textures/
+> draws/SpriteBatch). `ctest -R D3D11` passes 2/2 (`D3D11_Smoke` + `D3D11_Common`, **36 checks
+> total**, up from 26) running through DXVK 2.6.0 on a real GPU (AMD Radeon 780M/RADV) via Wine on
+> this Debian machine. `D3DCommon` (format/state/vertex-layout mapping + the new shader cache) is
+> real and tested. `DX-13-hlsl` (all 20 HLSL shader files, hand-ported line-by-line from the Vulkan
+> GLSL), `DX-14-compile` (real `D3DCompile()` run via Wine+DXVK — all 20 shaders compiled cleanly,
+> zero HLSL bugs found, bytes embedded in `hlsl_shaders.hpp`), and `DX-15-embed` (new
+> `D3DShaderCache.hpp`/`.cpp`: real `CreateVertexShader`/`CreatePixelShader` calls for all 10
+> variants, proven via a new `D3D11_Smoke` Check D — 13/13 checks pass) are all closed 2026-07-13.
+> Next step is **Phase DX5** (vertex/index buffers). Full detail, task-by-task, lives in
+> `plan_dx.md` (`DX-1`–`DX-29`, `DX-80`, `DX-13-hlsl`, `DX-14-compile`, `DX-15-embed` closed).
+> Project owner authorized 2026-07-13 continuing autonomously through Phase DX5 → DX6 → DX7 → DX8 →
+> DX9 → DX10 → DX11, and Phase DX12 (D3D12) afterward if time allows; `DX-90` (real-Windows
+> checklist) stays `needs_human` — no such machine available in this environment.
 > **This is a brand-new architectural front for the project — read `plan_dx.md`'s own status banner
 > before touching it.** The pre-existing EasyGL/Vulkan/Bgfx/SDL_Renderer/Headless/Software/WebGPU
 > work summarized below is unchanged by this; full history for that lives in `plan_graphics.md`/
@@ -91,7 +93,7 @@ directory in this checkout) — cosmetic, pre-existing, not a CNA bug, do not ch
 | Vulkan | 4371/4373 pass (2 hardware skips), as of 2026-07-11 | 127/128 pass — 1 pre-existing failure (`Vulkan_DepthBias`) |
 | Bgfx | 4375/4377 pass (2 hardware skips), as of 2026-07-11 | 104/106 pass — 2 pre-existing failures (`Bgfx_RenderTarget2D_MsaaResolve`, `Bgfx_RenderTargetCube_DepthFormat`, DEFERRED — Task 952) |
 | Software | 4371/4373 pass, as of 2026-07-13 | 6 CTests, 29/29 checks |
-| D3D11 | **Does not build** (see §4) | **2/2 pass, 26/26 checks** (`D3D11_Smoke` 3 checks, `D3D11_Common` 23 checks), verified 2026-07-13 via `ctest --test-dir cmake-build-d3d11 -R D3D11` |
+| D3D11 | **Does not build** (see §4) | **2/2 pass, 36/36 checks** (`D3D11_Smoke` 13 checks, `D3D11_Common` 23 checks), verified 2026-07-13 via `ctest --test-dir cmake-build-d3d11 -R D3D11` |
 | Headless, WebGPU | Not re-verified this session | See `plan_headless.md`/`plan_webgpu.md` for their own last-verified status |
 
 All EasyGL/Vulkan/Bgfx/Software numbers above are carried over from the last session that actually
@@ -102,8 +104,10 @@ exclusively on D3D11. The D3D11 numbers are fresh, verified today.
 
 - **D3D11 graphics backend** (2026-07-13, this session, `plan_dx.md`): real device/swap-chain/
   back-buffer/`Clear()`/`Present()`/`ReadBackbuffer()`, a shared `D3DCommon` format/state/vertex-
-  layout mapping core, and 2 new CTests. See §3 for the itemized list and §4/§5 for what's still
-  open.
+  layout mapping core, all 10 stock shader variants ported to HLSL and compiler-verified to real
+  DXBC (`DX-13-hlsl`/`DX-14-compile`), and a shader cache that creates real
+  `ID3D11VertexShader`/`ID3D11PixelShader` objects for all of them (`DX-15-embed`) — Phase DX3 is
+  now fully closed. See §3 for the itemized list and §4/§5 for what's still open.
 - **Software backend Phase S9** (`SOFTWARE-80`–`84`, 2026-07-13, `plan_software.md`): real bilinear
   texture sampling, real backface culling, real near-plane polygon clipping, `DualTextureEffect`/
   `EnvironmentMapEffect`/`SkinnedEffect` support, and a cross-backend diagnostic tool confirming
@@ -125,8 +129,11 @@ registered `ctest` pixel-verification examples under `examples/`. New this sessi
 
 - **D3D11**: vertex/index buffers, textures, any draw call, `SpriteBatch`, custom `ShaderEffect`
   compilation — all honest `throw`-based "not yet implemented" stubs naming their own future
-  `plan_dx.md` phase (DX5/DX6/DX8/DX9). The 5 combo `Clear*` variants, window resize, and
-  device-lost recovery are implemented but not yet exercised by any test.
+  `plan_dx.md` phase (DX5/DX6/DX8/DX9). Raw HLSL shader *objects* now create successfully for all
+  10 stock variants (`D3DShaderCache`, `DX-15-embed`), but nothing consumes them yet — no constant
+  buffers, no input-layout binding, no pipeline/draw wiring (that's Phase DX8). The 5 combo `Clear*`
+  variants, window resize, and device-lost recovery are implemented but not yet exercised by any
+  test.
 - **D3D11 + `CnaTests`**: the full pre-existing GTest suite does not build under this backend —
   ~10 test files call POSIX-only `::setenv()` directly (see §4).
 - **D3D12**: nothing exists — not even the CMake `STRINGS`/option-flag entry (`plan_dx.md` design
@@ -145,6 +152,9 @@ Most recent first. Full detail (exact code, discriminating-power verification) i
 
 | Commit(s) | Summary |
 |---|---|
+| (this fork, uncommitted at write time) | **`DX-15-embed`**: new `D3DShaderCache.hpp`/`.cpp` (`D3DShaderVariant` + `CreateVertexShaderForVariant`/`CreatePixelShaderForVariant`/`GetVertexShaderBytecode`/`GetPixelShaderBytecode`), `D3D11GraphicsBackend::GetDeviceEXT()` accessor, and a new `D3D11_Smoke` Check D creating real `ID3D11VertexShader`/`ID3D11PixelShader` objects for all 10 `DX-13-hlsl` variants through a live device — 13/13 checks pass (up from 3/3), `D3D11` CTest total now 36/36. Phase DX3 fully closed. |
+| `18a70bba` | **`DX-14-compile`**: `hlsl_compiler_tool.cpp` (MinGW-built `D3DCompile()`-calling `.exe`) + `compile_shaders_hlsl.py`, run through `scripts/run-wine-dxvk.sh` — all 20 `DX-13-hlsl` shaders compiled cleanly to real DXBC, embedded in `hlsl_shaders.hpp`. |
+| `aa62de83` | **`DX-13-hlsl`**: all 20 HLSL shader files (10 stock variants × vertex/pixel) hand-ported line-by-line from the Vulkan GLSL source into `D3DCommon/shaders/*.hlsl`. |
 | `9f5e13f4`/`6d9cec89` | **D3DCommon shared core** (`plan_dx.md` `DX-11-fmt`/`DX-12-state`/`DX-16-vtx`): `D3DFormatMapping` (full `SurfaceFormat`/`DepthFormat`→`DXGI_FORMAT`), `D3DStateMapping` (`Blend`/`BlendFunction`/`CompareFunction`/`CullMode`/`FillMode`/`TextureAddressMode`/`TextureFilter`→`D3D11_*`, with the D3D11/D3D12 enum-identity claim actually verified against both real SDK headers, not assumed), `D3DVertexFormatHelper` (stride-keyed `D3D11_INPUT_ELEMENT_DESC` arrays). New `D3D11_Common` CTest, 23/23 checks, mutation-verified discriminating (temporarily broke `CullModeToD3D11`, confirmed the test caught it, reverted). |
 | `492a1a26`/`482057ec` | **D3D11GraphicsBackend** (`plan_dx.md` `DX-10`–`DX-29`, `DX-80`): real device creation (feature-level fallback array, graceful debug-layer degradation), factory chain + tearing query, modern flip-model swap chain, back-buffer RTV/depth-stencil, `Clear()`/`Present()`/`ReadBackbuffer()` (RowPitch-aware), device-lost detection scaffolding. `CNA_GRAPHICS_BACKEND=D3D11` CMake wiring (D3D11-only, no D3D12 scaffolding). New `D3D11_Smoke` CTest (3/3, real DXVK-verified pixel round-trip). Along the way, fixed 4 pre-existing MinGW-portability bugs unrelated to D3D11 itself (2 in sibling `sharp-runtime`: `NOMINMAX` redefinition, 2× `-Werror=unused-parameter`; 2 in `cna_graphics`: `ContentManager.cpp`'s `Video`/FFmpeg guard missing `__MINGW32__`, `cna_net_two_process_harness` built unconditionally despite its own consumer test being excluded on `WIN32`). |
 | `f45c8a22` | `ContentManager.cpp`'s `Video`/FFmpeg content-reader registration guard now also excludes `__MINGW32__`, matching `CMakeLists.txt`'s own `CNA_FFMPEG_AVAILABLE` computation (previously only excluded `__EMSCRIPTEN__`/`__ANDROID__`, leaving a MinGW build with an unresolved `Media::Video::Video()` reference). |
@@ -155,9 +165,10 @@ Most recent first. Full detail (exact code, discriminating-power verification) i
 
 ## 4. Current blocker / main problem
 
-**No hard blocker on the active D3D11 work.** `plan_dx.md`'s next unstarted step (`DX-13-hlsl`,
-porting the 10 Vulkan GLSL shader pairs to HLSL) is unauthorized-to-start-past-this-point, not
-technically blocked — see §9.
+**No hard blocker on the active D3D11 work.** `plan_dx.md`'s next unstarted step is **Phase DX5**
+(vertex/index buffers) — Phase DX3 (`D3DCommon`, including all HLSL shader porting/compiling/
+embedding) is now fully closed, and the project owner has authorized continuing autonomously
+through the rest of the plan — see this file's own top banner and `plan_dx.md`'s.
 
 **One real, separate, documented problem**: the full `CnaTests` GTest suite does not build under
 `CNA_GRAPHICS_BACKEND=D3D11`.
