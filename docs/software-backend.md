@@ -37,8 +37,8 @@ any point. That makes it useful for:
   effect, this blend state produce the pixels you'd expect) as a fast, portable reference.
 - **Cross-backend diagnostics**: comparing a real GPU backend's output against this backend's
   independently-implemented rasterizer can help localize whether a rendering bug is in shared
-  code, a specific GPU backend, or expected-but-undocumented behavior (see `plan_software.md`
-  `SOFTWARE-61`, not yet implemented as an automated test).
+  code, a specific GPU backend, or expected-but-undocumented behavior (see "Cross-backend
+  diagnostic" below, `plan_software.md` `SOFTWARE-61`/`SOFTWARE-84`).
 
 **What it proves:** "this triangle, with this effect state, this texture, and this blend mode,
 produces these exact pixels" — a real, independently-derived rendering result, not a fake one.
@@ -85,6 +85,39 @@ A reminder that both real games and this backend's own tests need to remember: `
 opt-in ignores vertex colors entirely (this backend faithfully reproduces that, and it's exactly
 what caused `Software_Rasterizer`'s tests to briefly fail while `DrawPrimitivesEx` was first wired
 up — see `plan_software.md` `SOFTWARE-50`'s notes for the full story).
+
+## Cross-backend diagnostic (SOFTWARE-61/84)
+
+`examples/cross_backend_diagnostic_scene.cpp` renders one simple, fully unlit (vertex-color-only,
+no lighting) triangle and dumps the resulting 64x64 RGBA8 backbuffer to a raw file given as
+`argv[1]`. It is deliberately backend-agnostic (no `#ifdef`) and is built once per backend that
+needs it. `examples/cross_backend_diagnostic_compare.cpp` (built as `cna_diag_compare`, no
+CNA/SHARP_RUNTIME dependency) diffs two such dumps and reports the max/mean per-channel absolute
+difference, failing if the max exceeds a given tolerance.
+
+This is **not** a single automated `ctest` — `CNA_GRAPHICS_BACKEND` is a compile-time choice, so a
+single build only ever links one backend; comparing two needs two separate builds' dumps. Run it
+by hand (or from a script) like this, comparing `SOFTWARE` against `EASYGL`:
+
+```bash
+# 1. Software's dump (built as cna_diag_software in a SOFTWARE-configured build dir)
+cmake --build cmake-build-software --target cna_diag_software cna_diag_compare
+./cmake-build-software/cna_diag_software /tmp/software.rgba
+
+# 2. EasyGL's dump (built as cna_diag_easygl in an EASYGL-configured build dir, needs a real
+#    display -- a real desktop session or Xvfb)
+cmake --build cmake-build-debug --target cna_diag_easygl
+SDL_VIDEODRIVER=x11 DISPLAY=:0 ./cmake-build-debug/cna_diag_easygl /tmp/easygl.rgba
+
+# 3. Compare (tolerance defaults to 40 if omitted)
+./cmake-build-software/cna_diag_compare /tmp/software.rgba /tmp/easygl.rgba 40
+```
+
+Verified 2026-07-13: `SOFTWARE` vs. `EASYGL` on this canonical scene gives a max per-channel
+diff of 1 (mean 0.139) — effectively identical, the residual being ordinary rounding noise, not a
+real rendering discrepancy. The comparator was also checked against a deliberately corrupted dump
+(one channel of one pixel flipped) to confirm it actually fails when the images genuinely differ,
+rather than always passing.
 
 ## Known limitations (2026-07-13)
 

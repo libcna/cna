@@ -1355,6 +1355,11 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_software.md SOFTWARE-61/84: this backend's half of the cross-backend diagnostic
+        # dump -- not registered as a ctest, just a plain executable a developer/script runs by
+        # hand alongside SOFTWARE's own cna_diag_software and cna_diag_compare.
+        cna_easygl_test(cna_diag_easygl examples/cross_backend_diagnostic_scene.cpp)
+
         # Task 461: canary proving the new shared PixelTestGame helper (examples/common/) works
         cna_easygl_test(cna_test_easygl_pixeltestgame_smoke
                         examples/easygl_pixeltestgame_smoke_test.cpp)
@@ -6535,6 +6540,11 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SOFTWARE")
     set_tests_properties(Software_DualEnvmapSkinned PROPERTIES
         TIMEOUT 30
         LABELS "Software")
+
+    # plan_software.md SOFTWARE-61/84: this backend's half of the cross-backend diagnostic dump --
+    # not registered as a ctest (see cna_diag_compare's own comment above), just a plain
+    # executable a developer/script runs by hand.
+    cna_software_test(cna_diag_software examples/cross_backend_diagnostic_scene.cpp)
 endif()
 
 # --- Task 6.1: real two-process ENet loopback test harness ---
@@ -6585,6 +6595,17 @@ if(CNA_BUILD_TESTS)
         CNA
         SHARP_RUNTIME
     )
+endif()
+
+# --- plan_software.md SOFTWARE-61/84: cross-backend diagnostic comparator ---
+# Standalone, backend-independent (no CNA/SHARP_RUNTIME dependency) tool that diffs two raw
+# 64x64 RGBA8 dumps produced by cross_backend_diagnostic_scene.cpp (built once per backend, see
+# the SOFTWARE and EASYGL sections below) within a tolerance. Not wired into a single ctest run --
+# CNA_GRAPHICS_BACKEND is a compile-time choice, so comparing two backends' output needs two
+# separate builds' dumps; see docs/software-backend.md's "Cross-backend diagnostic" section for
+# the exact manual invocation.
+if(CNA_BUILD_TESTS)
+    add_executable(cna_diag_compare examples/cross_backend_diagnostic_compare.cpp)
 endif()
 
 # --- Task VERIFY-003/DEV-API-002: strict XNA API surface compile check ---
