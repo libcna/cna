@@ -3,7 +3,16 @@
 Master, up-to-date cross-backend feature matrix for CNA's four established backends, written for
 Task 451 (Phase 51). The experimental WebGPU backend is intentionally tracked separately in
 [`webgpu-backend.md`](webgpu-backend.md) and `../plan_webgpu.md` until its feature surface is broad
-enough for meaningful parity columns. **Supersedes `docs/coverage.md`**, which is dated 2026-06-21
+enough for meaningful parity columns.
+
+The **Headless** backend (`CNA_GRAPHICS_BACKEND=HEADLESS`, tracked in `../plan_headless.md`) is deliberately
+**not** a column in this matrix: it never renders a single pixel, so none of the below
+correctness/parity rows are meaningful for it. It exists for a different purpose entirely — running
+game logic headlessly (no window, no GPU, no display server) for fast CI tests — and validates
+itself via argument checks, resource-lifecycle tracking, and draw-call/state-change counters instead
+of pixel output. See `plan_headless.md` for its own status.
+
+**Supersedes `docs/coverage.md`**, which is dated 2026-06-21
 and predates almost this entire session's work
 (dozens of real bugs fixed across all 4 backends, an entire SDL_Renderer 2D-only audit phase,
 Model/OcclusionQuery correctness phases) and never covered SDL_Renderer at all. `docs/coverage.md`
