@@ -74,6 +74,23 @@
 //   stale/cached value -- same "before/after Clear()" discipline D3D11's own Check P established
 //   (d3d11_smoke_test.cpp), reused here for the analogous D3D12 proof.
 //
+// plan_dx.md DX-111 (continued -- textured3d/colored_textured3d/lit_textured3d/alpha_test3d) adds:
+// Check N -- DrawPrimitivesEx()/DrawIndexedPrimitivesEx() with real GpuDrawParams: textured3d
+//   (stride 20) samples the exact known texture color (diffuseColor=white) over the Clear()
+//   background, and colored_textured3d (stride 24) multiplies an exact known vertex color through a
+//   white texture -- same rigor as D3D11's own Check Q, adapted to this backend's real SRV
+//   descriptor-table binding (D3D12TextureBackend's own CBV/SRV/UAV-heap SRV handle is bound
+//   directly as the 1-descriptor table base, DX-109's own descriptor already lives in the right
+//   heap -- no separate copy step needed for a single texture).
+// Check O -- lit_textured3d (stride 32): the unlit branch (LightingEnabled=false) samples
+//   diffuseColor*texture exactly, same bar as Check N; the lit branch (LightingEnabled=true) isn't
+//   byte-predicted on the CPU (real Blinn-Phong math) -- it's proven to genuinely differ from both
+//   the unlit result and the Clear() background, same discriminating bar D3D11's own Check R uses.
+// Check P -- alpha_test3d: an alpha value that fails the test (AlphaTol=0, alpha>=ref) genuinely
+//   discards (the Clear() background survives, not the geometry's color); a passing alpha draws the
+//   exact texture color including its own non-255 alpha byte -- same two-sided proof D3D11's own
+//   Check S uses.
+//
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
 #include "CNA/Internal/Backends/D3D12/D3D12GraphicsBackend.hpp"
@@ -104,6 +121,7 @@ using CNA::Internal::Backends::D3DCommon::D3DShaderVariant;
 using CNA::Internal::Graphics::ImageData;
 using CNA::Internal::Backends::Matrix;
 using CNA::Internal::Backends::PrimitiveType;
+using CNA::Internal::Backends::GpuDrawParams;
 
 namespace
 {
@@ -751,6 +769,342 @@ int main()
         Check(regionIs(beforeIdx, 0, 0, 255, 255) && regionIs(afterIdx, 255, 0, 0, 255),
               "M2: DrawIndexedColoredPrimitives() paints the exact vertex color over the Clear() "
               "background at the same off-screen readback location");
+
+        backend.UnbindOffscreenColorTargetEXT();
+    }
+
+    // ---- Check N (DX-111 continued): textured3d + colored_textured3d via real GpuDrawParams ----
+    {
+        constexpr int kRtWidth = 64;
+        constexpr int kRtHeight = 64;
+
+        D3D12_HEAP_PROPERTIES heapProps{};
+        heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
+
+        D3D12_RESOURCE_DESC rtDesc{};
+        rtDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+        rtDesc.Width = kRtWidth;
+        rtDesc.Height = kRtHeight;
+        rtDesc.DepthOrArraySize = 1;
+        rtDesc.MipLevels = 1;
+        rtDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        rtDesc.SampleDesc.Count = 1;
+        rtDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+        rtDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+
+        Microsoft::WRL::ComPtr<ID3D12Resource> rt;
+        HRESULT hrRt = backend.GetDeviceEXT()->CreateCommittedResource(
+            &heapProps, D3D12_HEAP_FLAG_NONE, &rtDesc,
+            D3D12_RESOURCE_STATE_RENDER_TARGET, nullptr, IID_PPV_ARGS(rt.GetAddressOf()));
+        Check(SUCCEEDED(hrRt) && rt != nullptr, "N0: real off-screen RGBA8 render-target resource created");
+        backend.GetResourceStateTrackerEXT().TrackResource(rt.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET);
+
+        D3D12_CPU_DESCRIPTOR_HANDLE rtv = backend.AllocateRtvDescriptorEXT();
+        backend.GetDeviceEXT()->CreateRenderTargetView(rt.Get(), nullptr, rtv);
+        backend.BindOffscreenColorTargetEXT(rt.Get(), rtv, DXGI_FORMAT_R8G8B8A8_UNORM, kRtWidth, kRtHeight);
+
+        auto pixelAt = [&](const std::vector<uint8_t>& buf, int x, int y) -> std::array<uint8_t, 4>
+        {
+            const std::size_t idx = (static_cast<std::size_t>(y) * kRtWidth + static_cast<std::size_t>(x)) * 4;
+            return {buf[idx + 0], buf[idx + 1], buf[idx + 2], buf[idx + 3]};
+        };
+        auto isColor = [](const std::array<uint8_t, 4>& p, uint8_t r, uint8_t g, uint8_t b, uint8_t a)
+        {
+            return p[0] == r && p[1] == g && p[2] == b && p[3] == a;
+        };
+        auto regionIs = [&](const std::vector<uint8_t>& buf, uint8_t r, uint8_t g, uint8_t b, uint8_t a)
+        {
+            for (int y = 28; y < 32; ++y)
+                for (int x = 28; x < 32; ++x)
+                    if (!isColor(pixelAt(buf, x, y), r, g, b, a)) return false;
+            return true;
+        };
+
+        struct VPT { float x, y, z; float u, v; };
+        static const VPT kTriTex[3] = {
+            {-1.0f, -1.0f, 0.0f, 0.0f, 1.0f},
+            { 3.0f, -1.0f, 0.0f, 2.0f, 1.0f},
+            {-1.0f,  3.0f, 0.0f, 0.0f, -1.0f},
+        };
+        D3D12VertexBufferBackend vbTex(&backend, 3);
+        vbTex.SetData(kTriTex, 3, sizeof(VPT));
+
+        ImageData img;
+        img.width = 2; img.height = 2; img.mipLevels = 1;
+        img.pixels.resize(2 * 2 * 4);
+        for (int i = 0; i < 4; ++i)
+        {
+            img.pixels[i * 4 + 0] = 11; img.pixels[i * 4 + 1] = 22;
+            img.pixels[i * 4 + 2] = 33; img.pixels[i * 4 + 3] = 255;
+        }
+        D3D12TextureBackend tex(&backend, img);
+
+        GpuDrawParams tp;
+        tp.texture0 = &tex;
+        tp.textureEnabled = true;
+        // diffuseColor left at its default (1,1,1,1) so outColor == the raw sampled texel exactly.
+
+        backend.Clear(0.0f, 1.0f, 0.0f, 1.0f);
+        auto beforeN = ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight);
+        backend.DrawPrimitivesEx(vbTex, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                 Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, tp);
+        auto afterN = ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight);
+        Check(regionIs(beforeN, 0, 255, 0, 255) && regionIs(afterN, 11, 22, 33, 255),
+              "N1: DrawPrimitivesEx() real textured3d draw samples the exact texture color "
+              "(diffuseColor=white) over the Clear() background (plan_dx.md DX-111)");
+
+        // Indexed path, same textured3d draw -- proves DrawIndexedPrimitivesEx shares the same real
+        // pipeline (DrawPrimitivesExImpl), not just the non-indexed entry point.
+        static const uint16_t kTriTexIdx[3] = {0, 1, 2};
+        D3D12IndexBufferBackend ibTex(&backend, 3, /*thirtyTwoBit=*/false);
+        ibTex.SetData16(kTriTexIdx, 3);
+        backend.Clear(0.0f, 1.0f, 0.0f, 1.0f);
+        backend.DrawIndexedPrimitivesEx(vbTex, ibTex, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                        Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, tp);
+        auto afterNIdx = ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight);
+        Check(regionIs(afterNIdx, 11, 22, 33, 255),
+              "N2: DrawIndexedPrimitivesEx() indexed textured3d draw shares the same real pipeline "
+              "and samples the exact texture color");
+
+        // colored_textured3d (stride 24): a white texture tinted by an exact vertex color, proving
+        // VertexColorEnabled's real multiply, not just the texture sample alone.
+        struct VPCT { float x, y, z; uint32_t color; float u, v; };
+        const uint32_t kVertColor = 0xFFF0A050u; // A=255,B=240,G=160,R=80 (R8G8B8A8 byte order)
+        static VPCT kTriColTex[3];
+        kTriColTex[0] = { -1.0f, -1.0f, 0.0f, kVertColor, 0.0f, 1.0f };
+        kTriColTex[1] = {  3.0f, -1.0f, 0.0f, kVertColor, 2.0f, 1.0f };
+        kTriColTex[2] = { -1.0f,  3.0f, 0.0f, kVertColor, 0.0f, -1.0f };
+        D3D12VertexBufferBackend vbColTex(&backend, 3);
+        vbColTex.SetData(kTriColTex, 3, sizeof(VPCT));
+
+        ImageData whiteImg;
+        whiteImg.width = 2; whiteImg.height = 2; whiteImg.mipLevels = 1;
+        whiteImg.pixels.assign(2 * 2 * 4, 255);
+        D3D12TextureBackend whiteTex(&backend, whiteImg);
+
+        GpuDrawParams ctp;
+        ctp.texture0 = &whiteTex;
+        ctp.textureEnabled = true;
+        ctp.vertexColorEnabled = true;
+
+        backend.Clear(0.0f, 1.0f, 0.0f, 1.0f);
+        backend.DrawPrimitivesEx(vbColTex, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                 Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, ctp);
+        auto afterCT = ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight);
+        Check(regionIs(afterCT, 80, 160, 240, 255),
+              "N3: DrawPrimitivesEx() real colored_textured3d draw multiplies the exact vertex color "
+              "through a white texture (plan_dx.md DX-111)");
+
+        backend.UnbindOffscreenColorTargetEXT();
+    }
+
+    // ---- Check O (DX-111 continued): lit_textured3d (stride 32) ----
+    {
+        constexpr int kRtWidth = 64;
+        constexpr int kRtHeight = 64;
+
+        D3D12_HEAP_PROPERTIES heapProps{};
+        heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
+
+        D3D12_RESOURCE_DESC rtDesc{};
+        rtDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+        rtDesc.Width = kRtWidth;
+        rtDesc.Height = kRtHeight;
+        rtDesc.DepthOrArraySize = 1;
+        rtDesc.MipLevels = 1;
+        rtDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        rtDesc.SampleDesc.Count = 1;
+        rtDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+        rtDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+
+        Microsoft::WRL::ComPtr<ID3D12Resource> rt;
+        HRESULT hrRt = backend.GetDeviceEXT()->CreateCommittedResource(
+            &heapProps, D3D12_HEAP_FLAG_NONE, &rtDesc,
+            D3D12_RESOURCE_STATE_RENDER_TARGET, nullptr, IID_PPV_ARGS(rt.GetAddressOf()));
+        Check(SUCCEEDED(hrRt) && rt != nullptr, "O0: real off-screen RGBA8 render-target resource created");
+        backend.GetResourceStateTrackerEXT().TrackResource(rt.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET);
+
+        D3D12_CPU_DESCRIPTOR_HANDLE rtv = backend.AllocateRtvDescriptorEXT();
+        backend.GetDeviceEXT()->CreateRenderTargetView(rt.Get(), nullptr, rtv);
+        backend.BindOffscreenColorTargetEXT(rt.Get(), rtv, DXGI_FORMAT_R8G8B8A8_UNORM, kRtWidth, kRtHeight);
+
+        auto pixelAt = [&](const std::vector<uint8_t>& buf, int x, int y) -> std::array<uint8_t, 4>
+        {
+            const std::size_t idx = (static_cast<std::size_t>(y) * kRtWidth + static_cast<std::size_t>(x)) * 4;
+            return {buf[idx + 0], buf[idx + 1], buf[idx + 2], buf[idx + 3]};
+        };
+        auto isColor = [](const std::array<uint8_t, 4>& p, uint8_t r, uint8_t g, uint8_t b, uint8_t a)
+        {
+            return p[0] == r && p[1] == g && p[2] == b && p[3] == a;
+        };
+        auto regionIs = [&](const std::vector<uint8_t>& buf, uint8_t r, uint8_t g, uint8_t b, uint8_t a)
+        {
+            for (int y = 28; y < 32; ++y)
+                for (int x = 28; x < 32; ++x)
+                    if (!isColor(pixelAt(buf, x, y), r, g, b, a)) return false;
+            return true;
+        };
+
+        struct VPNT { float x, y, z; float nx, ny, nz; float u, v; };
+        static const VPNT kTriLit[3] = {
+            {-1.0f, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f},
+            { 3.0f, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 2.0f, 1.0f},
+            {-1.0f,  3.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, -1.0f},
+        };
+        D3D12VertexBufferBackend vbLit(&backend, 3);
+        vbLit.SetData(kTriLit, 3, sizeof(VPNT));
+
+        ImageData img;
+        img.width = 2; img.height = 2; img.mipLevels = 1;
+        img.pixels.resize(2 * 2 * 4);
+        for (int i = 0; i < 4; ++i)
+        {
+            img.pixels[i * 4 + 0] = 44; img.pixels[i * 4 + 1] = 55;
+            img.pixels[i * 4 + 2] = 66; img.pixels[i * 4 + 3] = 255;
+        }
+        D3D12TextureBackend tex(&backend, img);
+
+        GpuDrawParams unlitP;
+        unlitP.texture0 = &tex;
+        unlitP.textureEnabled = true;
+        unlitP.lightingEnabled = false;
+
+        backend.Clear(0.0f, 0.0f, 1.0f, 1.0f);
+        backend.DrawPrimitivesEx(vbLit, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                 Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, unlitP);
+        auto unlitResult = ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight);
+        Check(regionIs(unlitResult, 44, 55, 66, 255),
+              "O1: DrawPrimitivesEx() real lit_textured3d unlit branch samples diffuseColor*texture "
+              "exactly (plan_dx.md DX-111)");
+
+        GpuDrawParams litP = unlitP;
+        litP.lightingEnabled = true;
+        litP.ambientColor[0] = 0.5f; litP.ambientColor[1] = 0.5f; litP.ambientColor[2] = 0.5f;
+        litP.specularColor[0] = 0.0f; litP.specularColor[1] = 0.0f; litP.specularColor[2] = 0.0f;
+
+        backend.Clear(0.0f, 0.0f, 1.0f, 1.0f);
+        backend.DrawPrimitivesEx(vbLit, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                 Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, litP);
+        auto litResult = ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight);
+        bool litDiffersFromUnlitAndBackground = true;
+        for (int y = 28; y < 32; ++y)
+        {
+            for (int x = 28; x < 32; ++x)
+            {
+                const auto lp = pixelAt(litResult, x, y);
+                const auto up = pixelAt(unlitResult, x, y);
+                const bool sameAsUnlit = (lp[0] == up[0] && lp[1] == up[1] && lp[2] == up[2]);
+                const bool sameAsBackground = (lp[0] == 0 && lp[1] == 0 && lp[2] == 255);
+                if (sameAsUnlit || sameAsBackground) litDiffersFromUnlitAndBackground = false;
+            }
+        }
+        Check(litDiffersFromUnlitAndBackground,
+              "O2: DrawPrimitivesEx() real lit_textured3d lit branch genuinely computes a different "
+              "color than both the unlit result and the Clear() background (plan_dx.md DX-111)");
+
+        backend.UnbindOffscreenColorTargetEXT();
+    }
+
+    // ---- Check P (DX-111 continued): alpha_test3d ----
+    {
+        constexpr int kRtWidth = 64;
+        constexpr int kRtHeight = 64;
+
+        D3D12_HEAP_PROPERTIES heapProps{};
+        heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
+
+        D3D12_RESOURCE_DESC rtDesc{};
+        rtDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+        rtDesc.Width = kRtWidth;
+        rtDesc.Height = kRtHeight;
+        rtDesc.DepthOrArraySize = 1;
+        rtDesc.MipLevels = 1;
+        rtDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        rtDesc.SampleDesc.Count = 1;
+        rtDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+        rtDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+
+        Microsoft::WRL::ComPtr<ID3D12Resource> rt;
+        HRESULT hrRt = backend.GetDeviceEXT()->CreateCommittedResource(
+            &heapProps, D3D12_HEAP_FLAG_NONE, &rtDesc,
+            D3D12_RESOURCE_STATE_RENDER_TARGET, nullptr, IID_PPV_ARGS(rt.GetAddressOf()));
+        Check(SUCCEEDED(hrRt) && rt != nullptr, "P0: real off-screen RGBA8 render-target resource created");
+        backend.GetResourceStateTrackerEXT().TrackResource(rt.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET);
+
+        D3D12_CPU_DESCRIPTOR_HANDLE rtv = backend.AllocateRtvDescriptorEXT();
+        backend.GetDeviceEXT()->CreateRenderTargetView(rt.Get(), nullptr, rtv);
+        backend.BindOffscreenColorTargetEXT(rt.Get(), rtv, DXGI_FORMAT_R8G8B8A8_UNORM, kRtWidth, kRtHeight);
+
+        auto pixelAt = [&](const std::vector<uint8_t>& buf, int x, int y) -> std::array<uint8_t, 4>
+        {
+            const std::size_t idx = (static_cast<std::size_t>(y) * kRtWidth + static_cast<std::size_t>(x)) * 4;
+            return {buf[idx + 0], buf[idx + 1], buf[idx + 2], buf[idx + 3]};
+        };
+        auto isColor = [](const std::array<uint8_t, 4>& p, uint8_t r, uint8_t g, uint8_t b, uint8_t a)
+        {
+            return p[0] == r && p[1] == g && p[2] == b && p[3] == a;
+        };
+        auto regionIs = [&](const std::vector<uint8_t>& buf, uint8_t r, uint8_t g, uint8_t b, uint8_t a)
+        {
+            for (int y = 28; y < 32; ++y)
+                for (int x = 28; x < 32; ++x)
+                    if (!isColor(pixelAt(buf, x, y), r, g, b, a)) return false;
+            return true;
+        };
+
+        struct VPT { float x, y, z; float u, v; };
+        static const VPT kTriAT[3] = {
+            {-1.0f, -1.0f, 0.0f, 0.0f, 1.0f},
+            { 3.0f, -1.0f, 0.0f, 2.0f, 1.0f},
+            {-1.0f,  3.0f, 0.0f, 0.0f, -1.0f},
+        };
+        D3D12VertexBufferBackend vbAT(&backend, 3);
+        vbAT.SetData(kTriAT, 3, sizeof(VPT));
+
+        ImageData img;
+        img.width = 2; img.height = 2; img.mipLevels = 1;
+        img.pixels.resize(2 * 2 * 4);
+        for (int i = 0; i < 4; ++i)
+        {
+            img.pixels[i * 4 + 0] = 200; img.pixels[i * 4 + 1] = 100;
+            img.pixels[i * 4 + 2] = 50;  img.pixels[i * 4 + 3] = 128; // alpha=128/255 ~ 0.502
+        }
+        D3D12TextureBackend tex(&backend, img);
+
+        GpuDrawParams atp;
+        atp.texture0 = &tex;
+        atp.textureEnabled = true;
+        // AlphaTol=0 (comparison mode) -> passTest = alpha < AlphaRef; failW<0 -> discard on fail.
+        atp.alphaTest[0] = 0.5f;  // AlphaRef
+        atp.alphaTest[1] = 0.0f;  // AlphaTol
+        atp.alphaTest[2] = 1.0f;  // AlphaPassW (>=0, never discard on pass)
+        atp.alphaTest[3] = -1.0f; // AlphaFailW (<0, discard on fail)
+
+        // Sub-check 1: alpha=128/255 is NOT < 0.5 -> fails -> discard -> background survives.
+        backend.Clear(0.0f, 1.0f, 0.0f, 1.0f);
+        backend.DrawPrimitivesEx(vbAT, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                 Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, atp);
+        auto discardResult = ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight);
+        Check(regionIs(discardResult, 0, 255, 0, 255),
+              "P1: DrawPrimitivesEx() real alpha_test3d clip() genuinely drops a failing pixel, "
+              "leaving the Clear() background untouched (plan_dx.md DX-111)");
+
+        // Sub-check 2: replace the texture's alpha with 64/255 (< 0.5) -> passes -> drawn exactly.
+        std::vector<uint8_t> passPixels(2 * 2 * 4);
+        for (int i = 0; i < 4; ++i)
+        {
+            passPixels[i * 4 + 0] = 200; passPixels[i * 4 + 1] = 100;
+            passPixels[i * 4 + 2] = 50;  passPixels[i * 4 + 3] = 64;
+        }
+        tex.UpdatePixelsLevel(0, passPixels.data(), 2, 2);
+
+        backend.Clear(0.0f, 1.0f, 0.0f, 1.0f);
+        backend.DrawPrimitivesEx(vbAT, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                 Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, atp);
+        auto passResult = ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight);
+        Check(regionIs(passResult, 200, 100, 50, 64),
+              "P2: DrawPrimitivesEx() real alpha_test3d draws the exact texture color (including its "
+              "own alpha byte) when the test passes (plan_dx.md DX-111)");
 
         backend.UnbindOffscreenColorTargetEXT();
     }

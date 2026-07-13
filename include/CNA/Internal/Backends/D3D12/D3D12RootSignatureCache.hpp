@@ -39,13 +39,16 @@ namespace CNA::Internal::Backends::D3D12
 
     /// Caches ID3D12RootSignature objects keyed by (numCbvs, numSrvs, numSamplers) -- the binding
     /// *shape* a given shader-variant family needs (DX-108's own "one per shader-variant family"
-    /// framing: colored3d's family needs (2,0,0) [PerDraw@b0, FogParams@b1], textured3d's family
-    /// needs (2,1,1) [+ t0/s0], lit_textured3d needs (2,0,0) too since it folds lighting into the
-    /// same 2-CBV shape via a different byte layout inside the same b0/b1 registers -- the binding
-    /// *shape*, not the per-family byte layout, is what determines root-signature reuse). Any two
-    /// variants with the same (numCbvs, numSrvs, numSamplers) shape genuinely share one root
-    /// signature, matching the D3D12 root-signature's own real constraint: it only describes
-    /// binding slots, not cbuffer contents.
+    /// framing: colored3d's family needs (2,0,0) [PerDraw@b0, FogParams@b1], textured3d/
+    /// colored_textured3d need (2,1,1) [+ t0/s0]. DX-111's own landing of lit_textured3d confirmed
+    /// (by reading the real HLSL, not assuming) that it ALSO needs (2,1,1) -- lit_textured3d.frag.hlsl
+    /// declares its own Texture2D uTexture/SamplerState at t0/s0 just like textured3d, it just folds
+    /// the extra lighting fields into a second CBV (LitLightParams@b1) instead of FogParams -- so it
+    /// shares textured3d's exact root-signature object via this cache, no separate (2,0,0) shape as
+    /// originally speculated here ahead of DX-111 actually landing it. alpha_test3d needs (1,1,1) --
+    /// a single combined PerDraw@b0, no separate FogParams cbuffer. Any two variants with the same
+    /// (numCbvs, numSrvs, numSamplers) shape genuinely share one root signature, matching the D3D12
+    /// root-signature's own real constraint: it only describes binding slots, not cbuffer contents.
     class D3D12RootSignatureCache
     {
     public:

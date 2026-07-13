@@ -451,6 +451,10 @@ namespace CNA::Internal::Backends::D3D12
         perDrawConstantBufferMapped_ = nullptr;
         fogConstantBuffer_.Reset();
         fogConstantBufferMapped_ = nullptr;
+        lightingConstantBuffer_.Reset();
+        lightingConstantBufferMapped_ = nullptr;
+        alphaTestConstantBuffer_.Reset();
+        alphaTestConstantBufferMapped_ = nullptr;
         // The bound off-screen color target (if any) was owned by the caller and lived on the old
         // device -- it's gone too; the caller must recreate its render target and rebind after
         // calling RecreateDeviceEXT(), same as it must recreate any of its own DX-109 resources.
@@ -548,6 +552,29 @@ namespace CNA::Internal::Backends::D3D12
         if (!fogConstantBuffer_)
             CreateUploadConstantBuffer(sizeof(D3DFogConstants), fogConstantBuffer_, fogConstantBufferMapped_);
         return fogConstantBuffer_.Get();
+    }
+
+    ID3D12Resource* D3D12GraphicsBackend::GetOrCreateLightingConstantBufferEXT()
+    {
+        if (!lightingConstantBuffer_)
+            CreateUploadConstantBuffer(sizeof(D3DLightingConstants), lightingConstantBuffer_, lightingConstantBufferMapped_);
+        return lightingConstantBuffer_.Get();
+    }
+
+    ID3D12Resource* D3D12GraphicsBackend::GetOrCreateAlphaTestConstantBufferEXT()
+    {
+        if (!alphaTestConstantBuffer_)
+            CreateUploadConstantBuffer(sizeof(D3DAlphaTestConstants), alphaTestConstantBuffer_, alphaTestConstantBufferMapped_);
+        return alphaTestConstantBuffer_.Get();
+    }
+
+    D3D12_GPU_DESCRIPTOR_HANDLE D3D12GraphicsBackend::GetSrvGpuHandleForTextureEXT(const ITextureBackend* tex) const
+    {
+        D3D12_GPU_DESCRIPTOR_HANDLE handle{};
+        if (tex == nullptr) return handle;
+        if (const auto* t = dynamic_cast<const D3D12TextureBackend*>(tex))
+            return t->GetShaderResourceViewGpuHandleEXT();
+        return handle;
     }
 
     void D3D12GraphicsBackend::Clear(float r, float g, float b, float a)
@@ -825,6 +852,297 @@ namespace CNA::Internal::Backends::D3D12
         if (FAILED(hr))
             throw std::runtime_error("DrawIndexedColoredPrimitives: command list Close failed, hr=" + FormatHr(hr));
         ExecuteCommandListAndWaitEXT(cmdList);
+    }
+
+    // DX-111 (continued): extends the colored3d-only pipeline above to textured3d/colored_textured3d/
+    // lit_textured3d/alpha_test3d -- real GpuDrawParams-driven effect selection, mirroring
+    // D3D11GraphicsBackend::DrawPrimitivesExImpl's own priority-chain shape (alpha-test > lit-textured
+    // (stride 32) > colored/textured/colored_textured bundle by stride). DualTextureEffect/
+    // EnvironmentMapEffect/SkinnedEffect are explicitly NOT handled here -- a separate follow-up task's
+    // job (see the named throw below) -- so this stays honestly scoped rather than silently drawing
+    // the wrong shader for those effects.
+    void D3D12GraphicsBackend::DrawPrimitivesExImpl(
+        const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
+        const Matrix& world, const Matrix& view, const Matrix& projection,
+        PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
+    {
+        if (!boundColorResource_)
+        {
+            NotYetImplemented("DrawPrimitivesEx (no off-screen color target bound -- "
+                              "BindOffscreenColorTargetEXT; see Clear()'s own note)");
+        }
+
+        const auto& d3dVb = static_cast<const D3D12VertexBufferBackend&>(vb);
+        const std::size_t stride = d3dVb.GetStrideEXT() > 0 ? d3dVb.GetStrideEXT() : 16;
+
+        const bool needsAlphaTest = (params.alphaTest[3] < 0.0f || params.alphaTest[2] < 0.0f);
+        // stride==32 always uses lit_textured3d (BasicEffect's VertexPositionNormalTexture path, lit
+        // or not -- the shader itself branches on LightingEnabled), unless alpha-test claims the draw
+        // first -- same priority D3D11's own DrawPrimitivesExImpl uses.
+        const bool needsLitTextured = (stride == 32) && !needsAlphaTest;
+
+        if (!needsAlphaTest && (params.dualTexture || params.envMapping || params.skinned))
+        {
+            throw std::runtime_error(
+                "D3D12GraphicsBackend::DrawPrimitivesEx: DualTextureEffect/EnvironmentMapEffect/"
+                "SkinnedEffect are not yet implemented for D3D12 (plan_dx.md DX-111 -- textured3d/"
+                "colored_textured3d/lit_textured3d/alpha_test3d only so far; the rest is a follow-up)");
+        }
+
+        D3DShaderVariant variant;
+        bool hasTexture;
+        int numCbvs;
+        if (needsAlphaTest)
+        {
+            variant = D3DShaderVariant::AlphaTest3d;
+            hasTexture = true;
+            numCbvs = 1; // alpha_test3d's own single combined PerDraw (b0) -- no separate FogParams cbuffer.
+        }
+        else if (needsLitTextured)
+        {
+            variant = D3DShaderVariant::LitTextured3d;
+            hasTexture = true;
+            numCbvs = 2; // PerDraw (b0) + LitLightParams (b1).
+        }
+        else
+        {
+            hasTexture = (stride != 16);
+            numCbvs = 2; // PerDraw (b0) + FogParams (b1) -- including the stride-16 (colored3d) case.
+            switch (stride)
+            {
+            case 16: variant = D3DShaderVariant::Colored3d; break;
+            case 20: variant = D3DShaderVariant::Textured3d; break;
+            case 24: variant = D3DShaderVariant::ColoredTextured3d; break;
+            default:
+                throw std::runtime_error(
+                    "D3D12GraphicsBackend::DrawPrimitivesEx: unsupported vertex stride " +
+                    std::to_string(stride) + " for the colored/textured bundle (plan_dx.md DX-111)");
+            }
+        }
+
+        const int numSrvs = hasTexture ? 1 : 0;
+        const int numSamplers = hasTexture ? 1 : 0;
+
+        auto rootSig = rootSigCache_.GetOrCreate(device_.Get(), numCbvs, numSrvs, numSamplers);
+        if (!rootSig)
+            throw std::runtime_error("DrawPrimitivesEx: failed to create root signature for the selected variant");
+
+        D3D12PipelineStateDesc psoDesc;
+        psoDesc.variant = variant;
+        psoDesc.strideInBytes = stride;
+        // Same honest hardcoded simplification DrawColoredPrimitives' own doc comment already
+        // explains at length -- no D3D12 rasterizer/depth-stencil-state-cache equivalent to D3D11's
+        // Phase DX7 exists yet for this backend, and no depth-stencil view is bound in this
+        // off-screen-only draw path.
+        psoDesc.depthEnable = false;
+        psoDesc.cullMode = 0; // XNA CullMode::None
+        auto pso = psoCache_.GetOrCreate(device_.Get(), rootSig.Get(), psoDesc, boundColorFormat_, DXGI_FORMAT_UNKNOWN);
+        if (!pso)
+            throw std::runtime_error("DrawPrimitivesEx: failed to create PSO for the selected variant");
+
+        const Matrix wvp = world * view * projection;
+
+        // cbAddresses[i] is bound to root CBV parameter i (b0, b1, ...) -- see each branch below for
+        // which struct/register each variant actually needs, field-for-field matching the real HLSL
+        // cbuffer declarations (D3DConstantBuffers.hpp).
+        D3D12_GPU_VIRTUAL_ADDRESS cbAddresses[2] = {0, 0};
+
+        if (needsAlphaTest)
+        {
+            D3DAlphaTestConstants c{};
+            wvp.ToColumnMajor(c.Mvp);
+            c.DiffuseColor[0] = params.diffuseColor[0];
+            c.DiffuseColor[1] = params.diffuseColor[1];
+            c.DiffuseColor[2] = params.diffuseColor[2];
+            c.DiffuseColor[3] = params.diffuseColor[3];
+            c.AlphaRef           = params.alphaTest[0];
+            c.AlphaTol           = params.alphaTest[1];
+            c.AlphaPassW         = params.alphaTest[2];
+            c.AlphaFailW         = params.alphaTest[3];
+            c.VertexColorEnabled = params.vertexColorEnabled ? 1.0f : 0.0f;
+            c.FogEnabled         = params.fogEnabled ? 1.0f : 0.0f;
+            c.FogStart           = params.fogStart;
+            c.FogEnd             = params.fogEnd;
+            c.FogColor[0] = params.fogColor[0];
+            c.FogColor[1] = params.fogColor[1];
+            c.FogColor[2] = params.fogColor[2];
+
+            ID3D12Resource* cb = GetOrCreateAlphaTestConstantBufferEXT();
+            std::memcpy(alphaTestConstantBufferMapped_, &c, sizeof(c));
+            cbAddresses[0] = cb->GetGPUVirtualAddress();
+        }
+        else if (needsLitTextured)
+        {
+            D3DPerDrawConstants perDraw{};
+            wvp.ToColumnMajor(perDraw.Mvp);
+            perDraw.DiffuseColor[0] = params.diffuseColor[0];
+            perDraw.DiffuseColor[1] = params.diffuseColor[1];
+            perDraw.DiffuseColor[2] = params.diffuseColor[2];
+            perDraw.DiffuseColor[3] = params.diffuseColor[3];
+            perDraw.AmbientColor[0] = params.ambientColor[0];
+            perDraw.AmbientColor[1] = params.ambientColor[1];
+            perDraw.AmbientColor[2] = params.ambientColor[2];
+            perDraw.LightingEnabled = params.lightingEnabled ? 1.0f : 0.0f;
+            perDraw.Light0Dir[0] = params.light0Dir[0];
+            perDraw.Light0Dir[1] = params.light0Dir[1];
+            perDraw.Light0Dir[2] = params.light0Dir[2];
+            perDraw.TextureEnabled = params.textureEnabled ? 1.0f : 0.0f;
+            perDraw.Light0Diffuse[0] = params.light0Diffuse[0];
+            perDraw.Light0Diffuse[1] = params.light0Diffuse[1];
+            perDraw.Light0Diffuse[2] = params.light0Diffuse[2];
+            perDraw.VertexColorEnabled = params.vertexColorEnabled ? 1.0f : 0.0f;
+
+            D3DLightingConstants lighting{};
+            lighting.Light1Dir[0] = params.light1Dir[0];
+            lighting.Light1Dir[1] = params.light1Dir[1];
+            lighting.Light1Dir[2] = params.light1Dir[2];
+            lighting.Light1Diffuse[0] = params.light1Diffuse[0];
+            lighting.Light1Diffuse[1] = params.light1Diffuse[1];
+            lighting.Light1Diffuse[2] = params.light1Diffuse[2];
+            lighting.Light2Dir[0] = params.light2Dir[0];
+            lighting.Light2Dir[1] = params.light2Dir[1];
+            lighting.Light2Dir[2] = params.light2Dir[2];
+            lighting.Light2Diffuse[0] = params.light2Diffuse[0];
+            lighting.Light2Diffuse[1] = params.light2Diffuse[1];
+            lighting.Light2Diffuse[2] = params.light2Diffuse[2];
+            lighting.EmissiveColor[0] = params.emissiveColor[0];
+            lighting.EmissiveColor[1] = params.emissiveColor[1];
+            lighting.EmissiveColor[2] = params.emissiveColor[2];
+            world.ToColumnMajor(lighting.World);
+            lighting.EyePosition[0] = params.eyePositionWorld[0];
+            lighting.EyePosition[1] = params.eyePositionWorld[1];
+            lighting.EyePosition[2] = params.eyePositionWorld[2];
+            lighting.Light0Specular[0] = params.light0Specular[0];
+            lighting.Light0Specular[1] = params.light0Specular[1];
+            lighting.Light0Specular[2] = params.light0Specular[2];
+            lighting.Light1Specular[0] = params.light1Specular[0];
+            lighting.Light1Specular[1] = params.light1Specular[1];
+            lighting.Light1Specular[2] = params.light1Specular[2];
+            lighting.Light2Specular[0] = params.light2Specular[0];
+            lighting.Light2Specular[1] = params.light2Specular[1];
+            lighting.Light2Specular[2] = params.light2Specular[2];
+            lighting.SpecularColorPower[0] = params.specularColor[0];
+            lighting.SpecularColorPower[1] = params.specularColor[1];
+            lighting.SpecularColorPower[2] = params.specularColor[2];
+            lighting.SpecularColorPower[3] = params.specularPower;
+            lighting.FogColorEnabled[0] = params.fogColor[0];
+            lighting.FogColorEnabled[1] = params.fogColor[1];
+            lighting.FogColorEnabled[2] = params.fogColor[2];
+            lighting.FogColorEnabled[3] = params.fogEnabled ? 1.0f : 0.0f;
+            lighting.FogStartEnd[0] = params.fogStart;
+            lighting.FogStartEnd[1] = params.fogEnd;
+
+            ID3D12Resource* perDrawCB  = GetOrCreatePerDrawConstantBufferEXT();
+            ID3D12Resource* lightingCB = GetOrCreateLightingConstantBufferEXT();
+            std::memcpy(perDrawConstantBufferMapped_, &perDraw, sizeof(perDraw));
+            std::memcpy(lightingConstantBufferMapped_, &lighting, sizeof(lighting));
+            cbAddresses[0] = perDrawCB->GetGPUVirtualAddress();
+            cbAddresses[1] = lightingCB->GetGPUVirtualAddress();
+        }
+        else
+        {
+            // colored3d/textured3d/colored_textured3d bundle -- PerDraw (b0) + FogParams (b1), real
+            // GpuDrawParams values (unlike DrawColoredPrimitives' hardcoded legacy path above).
+            D3DPerDrawConstants perDraw{};
+            wvp.ToColumnMajor(perDraw.Mvp);
+            perDraw.DiffuseColor[0] = params.diffuseColor[0];
+            perDraw.DiffuseColor[1] = params.diffuseColor[1];
+            perDraw.DiffuseColor[2] = params.diffuseColor[2];
+            perDraw.DiffuseColor[3] = params.diffuseColor[3];
+            perDraw.TextureEnabled = params.textureEnabled ? 1.0f : 0.0f;
+            perDraw.VertexColorEnabled = params.vertexColorEnabled ? 1.0f : 0.0f;
+
+            D3DFogConstants fog{};
+            fog.FogColorEnabled[0] = params.fogColor[0];
+            fog.FogColorEnabled[1] = params.fogColor[1];
+            fog.FogColorEnabled[2] = params.fogColor[2];
+            fog.FogColorEnabled[3] = params.fogEnabled ? 1.0f : 0.0f;
+            fog.FogStartEnd[0] = params.fogStart;
+            fog.FogStartEnd[1] = params.fogEnd;
+
+            ID3D12Resource* perDrawCB = GetOrCreatePerDrawConstantBufferEXT();
+            ID3D12Resource* fogCB     = GetOrCreateFogConstantBufferEXT();
+            std::memcpy(perDrawConstantBufferMapped_, &perDraw, sizeof(perDraw));
+            std::memcpy(fogConstantBufferMapped_, &fog, sizeof(fog));
+            cbAddresses[0] = perDrawCB->GetGPUVirtualAddress();
+            cbAddresses[1] = fogCB->GetGPUVirtualAddress();
+        }
+
+        const D3D12_GPU_DESCRIPTOR_HANDLE srvHandle = hasTexture ? GetSrvGpuHandleForTextureEXT(params.texture0)
+                                                                  : D3D12_GPU_DESCRIPTOR_HANDLE{};
+
+        ID3D12CommandAllocator* allocator = GetCommandAllocatorEXT(0);
+        ID3D12GraphicsCommandList* cmdList = GetCommandListEXT();
+        allocator->Reset();
+        cmdList->Reset(allocator, pso.Get());
+
+        resourceStates_.TransitionTo(cmdList, boundColorResource_, D3D12_RESOURCE_STATE_RENDER_TARGET);
+        cmdList->OMSetRenderTargets(1, &boundColorRtv_, FALSE, nullptr);
+
+        D3D12_VIEWPORT viewport{0.0f, 0.0f, static_cast<float>(boundColorWidth_), static_cast<float>(boundColorHeight_), 0.0f, 1.0f};
+        D3D12_RECT scissor{0, 0, boundColorWidth_, boundColorHeight_};
+        cmdList->RSSetViewports(1, &viewport);
+        cmdList->RSSetScissorRects(1, &scissor);
+
+        cmdList->SetGraphicsRootSignature(rootSig.Get());
+        cmdList->SetPipelineState(pso.Get());
+        cmdList->IASetPrimitiveTopology(ToD3D12Topology(primitive));
+
+        D3D12_VERTEX_BUFFER_VIEW vbView = d3dVb.GetViewEXT();
+        cmdList->IASetVertexBuffers(0, 1, &vbView);
+        if (ib != nullptr)
+        {
+            const auto& d3dIb = static_cast<const D3D12IndexBufferBackend&>(*ib);
+            D3D12_INDEX_BUFFER_VIEW ibView = d3dIb.GetViewEXT();
+            cmdList->IASetIndexBuffer(&ibView);
+        }
+
+        for (int i = 0; i < numCbvs; ++i)
+            cmdList->SetGraphicsRootConstantBufferView(i, cbAddresses[i]);
+
+        if (hasTexture)
+        {
+            // The SRV descriptor table root parameter comes right after the numCbvs root CBV
+            // parameters (D3D12RootSignatureCache::GetOrCreate's own real parameter ordering).
+            // D3D12TextureBackend's own SRV already lives in this exact heap (it was allocated via
+            // this same backend's AllocateCbvSrvUavDescriptorEXT() at texture-creation time), so its
+            // GPU handle alone is a valid 1-descriptor table base -- no separate copy/consolidation
+            // step is needed for a single-SRV table.
+            ID3D12DescriptorHeap* heaps[] = {cbvSrvUavHeap_.Get()};
+            cmdList->SetDescriptorHeaps(1, heaps);
+            cmdList->SetGraphicsRootDescriptorTable(numCbvs, srvHandle);
+        }
+
+        if (ib != nullptr)
+        {
+            const UINT indexCount = static_cast<UINT>(VertexCountForPrimitives(primitive, primitiveCount));
+            cmdList->DrawIndexedInstanced(indexCount, 1, 0, 0, 0);
+        }
+        else
+        {
+            const UINT vertexCount = static_cast<UINT>(VertexCountForPrimitives(primitive, primitiveCount));
+            cmdList->DrawInstanced(vertexCount, 1, 0, 0);
+        }
+
+        HRESULT hr = cmdList->Close();
+        if (FAILED(hr))
+            throw std::runtime_error("DrawPrimitivesEx: command list Close failed, hr=" + FormatHr(hr));
+        ExecuteCommandListAndWaitEXT(cmdList);
+    }
+
+    void D3D12GraphicsBackend::DrawPrimitivesEx(
+        const IVertexBufferBackend& vb, const Matrix& world, const Matrix& view, const Matrix& projection,
+        PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
+    {
+        DrawPrimitivesExImpl(vb, nullptr, world, view, projection, primitive, primitiveCount, params);
+    }
+
+    void D3D12GraphicsBackend::DrawIndexedPrimitivesEx(
+        const IVertexBufferBackend& vb, const IIndexBufferBackend& ib,
+        const Matrix& world, const Matrix& view, const Matrix& projection,
+        PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
+    {
+        DrawPrimitivesExImpl(vb, &ib, world, view, projection, primitive, primitiveCount, params);
     }
 }
 

@@ -97,6 +97,23 @@ namespace CNA::Internal::Backends::D3D12
                                           const Matrix& world, const Matrix& view, const Matrix& projection,
                                           PrimitiveType primitive, int primitiveCount) override;
 
+        /// DX-111 (continued): real effect-aware dispatch for textured3d/colored_textured3d/
+        /// lit_textured3d/alpha_test3d -- mirrors D3D11GraphicsBackend::DrawPrimitivesEx's own
+        /// priority-chain shape (alpha-test > lit-textured (stride 32) > colored/textured/
+        /// colored_textured bundle), minus the dual-tex/env-map/skinned branches a separate
+        /// follow-up task still owes (see DrawPrimitivesExImpl's own doc comment). Without this
+        /// override, IGraphicsBackend's own default falls back to DrawColoredPrimitives, which is
+        /// stride-16-only and would throw for every one of these variants.
+        void DrawPrimitivesEx(const IVertexBufferBackend& vb,
+                              const Matrix& world, const Matrix& view, const Matrix& projection,
+                              PrimitiveType primitive, int primitiveCount,
+                              const GpuDrawParams& params) override;
+        /// Indexed counterpart of DrawPrimitivesEx above.
+        void DrawIndexedPrimitivesEx(const IVertexBufferBackend& vb, const IIndexBufferBackend& ib,
+                                     const Matrix& world, const Matrix& view, const Matrix& projection,
+                                     PrimitiveType primitive, int primitiveCount,
+                                     const GpuDrawParams& params) override;
+
         // ---- NOXNA (DX-102/DX-103/DX-104/DX-105): real device-lifetime accessors for tests and
         // for whichever Phase DX12 task lands next (DX-106 onward) to build on without duplicating
         // this backend's own device/heap/command-list/fence creation. ----
@@ -226,6 +243,27 @@ namespace CNA::Internal::Backends::D3D12
         void CreateUploadConstantBuffer(UINT byteWidth, ComPtr<ID3D12Resource>& outResource, void*& outMapped);
         ID3D12Resource* GetOrCreatePerDrawConstantBufferEXT();
         ID3D12Resource* GetOrCreateFogConstantBufferEXT();
+        /// DX-111 (continued): LitLightParams (b1) for lit_textured3d -- see D3DLightingConstants.
+        ID3D12Resource* GetOrCreateLightingConstantBufferEXT();
+        /// DX-111 (continued): alpha_test3d's own single combined PerDraw (b0) -- see
+        /// D3DAlphaTestConstants's own doc comment for why this isn't D3DPerDrawConstants.
+        ID3D12Resource* GetOrCreateAlphaTestConstantBufferEXT();
+
+        /// DX-111 (continued): resolves the real SRV GPU descriptor handle to bind for a
+        /// GpuDrawParams texture slot -- mirrors D3D11GraphicsBackend's own GetSrvForTextureEXT,
+        /// but D3D12TextureBackend is the only real ITextureBackend concrete type this backend has
+        /// (D3D12RenderTargetBackend, the D3D11 equivalent's second concrete type, is still owed --
+        /// DX-109's own honest scope note) -- a single dynamic_cast is sufficient today, not a
+        /// gap, just not yet a two-type resolution like D3D11's. Returns a zero-initialized handle
+        /// (ptr==0) if @p tex is null or the cast fails.
+        D3D12_GPU_DESCRIPTOR_HANDLE GetSrvGpuHandleForTextureEXT(const ITextureBackend* tex) const;
+
+        /// DX-111 (continued): shared implementation for DrawPrimitivesEx/DrawIndexedPrimitivesEx --
+        /// @p ib may be null for the non-indexed path (mirrors D3D11GraphicsBackend's own
+        /// DrawPrimitivesExImpl(vb, ib-or-null, ...) shape exactly).
+        void DrawPrimitivesExImpl(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
+                                  const Matrix& world, const Matrix& view, const Matrix& projection,
+                                  PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
 
         SDL_Window* window_ = nullptr;
         int virtualWidth_ = 0;
@@ -284,6 +322,12 @@ namespace CNA::Internal::Backends::D3D12
         void* perDrawConstantBufferMapped_ = nullptr;
         ComPtr<ID3D12Resource> fogConstantBuffer_;
         void* fogConstantBufferMapped_ = nullptr;
+        // DX-111 (continued): textured3d/colored_textured3d/lit_textured3d/alpha_test3d's own
+        // persistent constant buffers, same "map once, reused every draw" convention as above.
+        ComPtr<ID3D12Resource> lightingConstantBuffer_;
+        void* lightingConstantBufferMapped_ = nullptr;
+        ComPtr<ID3D12Resource> alphaTestConstantBuffer_;
+        void* alphaTestConstantBufferMapped_ = nullptr;
 
         // DX-111: the currently-bound off-screen color target (see BindOffscreenColorTargetEXT's own
         // doc comment) -- non-owning, the caller/test retains ownership of the resource itself.
