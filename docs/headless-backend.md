@@ -97,11 +97,9 @@ Key APIs on `HeadlessGraphicsBackend` (all `NOXNA`, not part of the XNA surface)
 
 ## Known limitations (2026-07-13)
 
-- `HeadlessTrace` mode's call log doesn't yet cover every `IGraphicsBackend` method (state-change
-  methods like `ApplyBlendState` aren't logged yet), and creation-site tracking (which line of game
-  code created a leaked resource) has the field but nothing populates it yet.
-- Viewport/scissor validation checks for negative dimensions but doesn't yet cross-reference the
-  currently-bound render target's actual size.
+- `HeadlessTrace` mode's call log doesn't yet cover every `IGraphicsBackend` method — state-change
+  methods like `ApplyBlendState` aren't logged, only the high-value call sites (draws, clears,
+  resource creation, `SetData`, `Present`).
 - "Disposed state object" validation (`BlendState`/`DepthStencilState`/etc.) is not implemented —
   `IGraphicsBackend`'s `ApplyBlendState()`/etc. take raw `int`/`bool`/`float` parameters, not object
   references, so there is no state-object identity left for the backend to check by the time a call
@@ -109,6 +107,29 @@ Key APIs on `HeadlessGraphicsBackend` (all `NOXNA`, not part of the XNA surface)
 - `AlphaTestEffect`/`DualTextureEffect`/`EnvironmentMapEffect`/`SkinnedEffect`/`Model.Draw()` are
   not individually exercised by a dedicated test yet (they share the same `DrawPrimitivesEx`/
   `DrawIndexedPrimitivesEx` path already proven for `BasicEffect`, but that's inference, not proof).
+
+Resolved since the first commit: viewport/scissor validation now cross-references the actual
+bound-target size (not just non-negative dimensions), and creation-site tracking is implemented via
+an explicit `PushDebugLabel()`/`PopDebugLabel()` API (see below) rather than left as an unused
+field — both closed 2026-07-13.
+
+## Debug labels and trace log export
+
+```cpp
+backend.SetMode(HeadlessMode::Trace);
+backend.PushDebugLabel("Level1/EnemySpawner");
+auto vb = std::make_unique<VertexBuffer>(device, decl, count, BufferUsage::None);
+backend.PopDebugLabel();
+
+// ... if `vb` leaks, AssertNoLeaks() reports "Level1/EnemySpawner" alongside it ...
+
+backend.DumpTraceLog();          // writes FormatTraceLog() to stdout
+std::string text = backend.FormatTraceLog();  // or capture it yourself for a CI artifact
+```
+
+`PushDebugLabel()`/`PopDebugLabel()` only affect resources created in `HeadlessTrace` mode — in
+`Fast`/`Validation` they're accepted but have no effect, matching `HeadlessTrace`'s own
+"diagnostic-only, pay nothing for it elsewhere" design.
 
 See `plan_headless.md` for the full task-by-task status and design rationale.
 

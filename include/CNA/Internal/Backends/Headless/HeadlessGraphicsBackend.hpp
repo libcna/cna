@@ -4,6 +4,7 @@
 
 #include <array>
 #include <cstdint>
+#include <cstdio>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -125,10 +126,23 @@ namespace CNA::Internal::Backends::Headless
         std::uint64_t frameIndex = 0;
         std::vector<HeadlessTraceEntry> traceLog;   ///< only populated in HeadlessTrace mode
         std::uint64_t nextCallIndex = 0;
+        /// HEADLESS-41: a real `std::source_location` captured somewhere inside this backend would
+        /// always point at the same Create*() call site per resource type -- no more informative
+        /// than the type name string already is, since every backend method that reaches a real
+        /// game's own `new VertexBuffer(...)` call site would require adding a defaulted
+        /// `std::source_location` parameter to `IGraphicsBackend`'s virtual Create* methods, a
+        /// shared-interface change touching all 5 other backends for a Headless-only diagnostic
+        /// feature. This debug-label stack is the backend-local alternative the plan's own wording
+        /// anticipated ("an explicit debug-label parameter, whichever is more useful"): a test can
+        /// wrap a block of resource creation in Push/PopDebugLabel() and get that label back in a
+        /// leak report, entirely within this backend.
+        std::vector<std::string> debugLabelStack;
 
         [[nodiscard]] bool ValidationEnabled() const { return mode != HeadlessMode::Fast; }
         [[nodiscard]] bool TraceEnabled() const { return mode == HeadlessMode::Trace; }
         void RecordTrace(const std::string& method, const std::string& argsSummary);
+        /// Returns the joined debug-label stack ("outer/inner/...") or empty if nothing is pushed.
+        [[nodiscard]] std::string CurrentDebugLabel() const;
     };
 
     class HeadlessVertexBufferBackend final : public IVertexBufferBackend
@@ -528,6 +542,22 @@ namespace CNA::Internal::Backends::Headless
 
         /// The structured call log accumulated in HeadlessTrace mode (empty in Fast/Validation).
         [[nodiscard]] const std::vector<HeadlessTraceEntry>& TraceLog() const { return state_->traceLog; }
+        /// Renders TraceLog() as human-readable text, one call per line
+        /// ("[frame N #callIndex] method: argsSummary"), for CI logs or diffing between runs
+        /// (plan_headless.md HEADLESS-42).
+        [[nodiscard]] std::string FormatTraceLog() const;
+        /// Convenience wrapper: writes FormatTraceLog() to @p out (stdout by default).
+        void DumpTraceLog(std::FILE* out = stdout) const;
+
+        /// HEADLESS-41: pushes a label onto the debug-label stack; every resource created while it
+        /// is on the stack records the joined stack ("outer/inner/...") as its creation site in
+        /// HeadlessTrace mode (empty string in Fast/Validation, matching the plan's own "only in
+        /// HeadlessTrace mode" wording -- see HeadlessResourceRecord::creationSite). Must be paired
+        /// with PopDebugLabel(); typically used via a scope guard in test code.
+        void PushDebugLabel(const std::string& label) { state_->debugLabelStack.push_back(label); }
+        /// Pops the most recently pushed debug label. No-op (not a throw) if the stack is already
+        /// empty, so a mispaired Pop in test cleanup code doesn't itself become a spurious failure.
+        void PopDebugLabel() { if (!state_->debugLabelStack.empty()) state_->debugLabelStack.pop_back(); }
 
         [[nodiscard]] const std::shared_ptr<HeadlessSharedState>& SharedState() const { return state_; }
 

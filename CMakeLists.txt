@@ -6440,6 +6440,12 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "HEADLESS")
     set_tests_properties(Headless_ResourceBackends PROPERTIES
         TIMEOUT 30
         LABELS "Headless")
+
+    cna_headless_test(cna_test_headless_validation_extras examples/headless_validation_extras_test.cpp)
+    add_test(NAME Headless_ValidationExtras COMMAND cna_test_headless_validation_extras)
+    set_tests_properties(Headless_ValidationExtras PROPERTIES
+        TIMEOUT 30
+        LABELS "Headless")
 endif()
 
 # --- Task 6.1: real two-process ENet loopback test harness ---

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdio>
 #include <cstdlib>
 #include <sstream>
 
@@ -62,6 +63,22 @@ namespace CNA::Internal::Backends::Headless
         traceLog.push_back(std::move(entry));
     }
 
+    std::string HeadlessSharedState::CurrentDebugLabel() const
+    {
+        // Matches RecordTrace()'s own "only in HeadlessTrace mode" gating -- creation-site labels
+        // are a HeadlessTrace-only diagnostic, not something HeadlessValidation/HeadlessFast pay
+        // the string-building cost for.
+        if (!TraceEnabled() || debugLabelStack.empty())
+            return {};
+        std::string joined = debugLabelStack.front();
+        for (std::size_t i = 1; i < debugLabelStack.size(); ++i)
+        {
+            joined += '/';
+            joined += debugLabelStack[i];
+        }
+        return joined;
+    }
+
     // ---- HeadlessResourceRegistry ----
 
     std::uint64_t HeadlessResourceRegistry::Register(const std::string& typeName, const std::string& creationSite)
@@ -109,7 +126,7 @@ namespace CNA::Internal::Backends::Headless
     HeadlessVertexBufferBackend::HeadlessVertexBufferBackend(std::shared_ptr<HeadlessSharedState> state, int vertexCapacity)
         : state_(std::move(state)), capacity_(vertexCapacity)
     {
-        resourceId_ = state_->registry.Register("VertexBuffer");
+        resourceId_ = state_->registry.Register("VertexBuffer", state_->CurrentDebugLabel());
         state_->stats.vertexBuffersCreated++;
         state_->RecordTrace("CreateVertexBuffer", "capacity=" + std::to_string(vertexCapacity));
     }
@@ -146,7 +163,7 @@ namespace CNA::Internal::Backends::Headless
                                                     bool thirtyTwoBit)
         : state_(std::move(state)), capacity_(indexCapacity), thirtyTwoBit_(thirtyTwoBit)
     {
-        resourceId_ = state_->registry.Register("IndexBuffer");
+        resourceId_ = state_->registry.Register("IndexBuffer", state_->CurrentDebugLabel());
         state_->stats.indexBuffersCreated++;
         state_->RecordTrace("CreateIndexBuffer", "capacity=" + std::to_string(indexCapacity) +
                             " thirtyTwoBit=" + (thirtyTwoBit ? "true" : "false"));
@@ -186,7 +203,7 @@ namespace CNA::Internal::Backends::Headless
     HeadlessTextureBackend::HeadlessTextureBackend(std::shared_ptr<HeadlessSharedState> state, const ImageData& data)
         : state_(std::move(state)), width_(data.width), height_(data.height)
     {
-        resourceId_ = state_->registry.Register("Texture2D");
+        resourceId_ = state_->registry.Register("Texture2D", state_->CurrentDebugLabel());
         state_->stats.texturesCreated++;
         pixels_.assign(data.pixels.begin(), data.pixels.end());
         state_->RecordTrace("CreateTexture", "size=" + std::to_string(width_) + "x" + std::to_string(height_));
@@ -196,7 +213,7 @@ namespace CNA::Internal::Backends::Headless
                                            std::string typeNameOverride)
         : state_(std::move(state)), width_(width), height_(height)
     {
-        resourceId_ = state_->registry.Register(typeNameOverride);
+        resourceId_ = state_->registry.Register(typeNameOverride, state_->CurrentDebugLabel());
         pixels_.assign(static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * 4u, 0u);
     }
 
@@ -234,7 +251,7 @@ namespace CNA::Internal::Backends::Headless
         : state_(std::move(state)), width_(w), height_(h), depthFormat_(depthFormat),
           mipMap_(mipMap), multiSampleCount_(multiSampleCount)
     {
-        resourceId_ = state_->registry.Register("RenderTarget2D");
+        resourceId_ = state_->registry.Register("RenderTarget2D", state_->CurrentDebugLabel());
         state_->stats.renderTargetsCreated++;
         pixels_.assign(static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4u, 0u);
         state_->RecordTrace("CreateRenderTarget2D", "size=" + std::to_string(w) + "x" + std::to_string(h));
@@ -262,7 +279,7 @@ namespace CNA::Internal::Backends::Headless
         : state_(std::move(state)), size_(size), depthFormat_(depthFormat), mipMap_(mipMap),
           multiSampleCount_(multiSampleCount)
     {
-        resourceId_ = state_->registry.Register("RenderTargetCube");
+        resourceId_ = state_->registry.Register("RenderTargetCube", state_->CurrentDebugLabel());
         state_->stats.renderTargetCubesCreated++;
         state_->RecordTrace("CreateRenderTargetCube", "size=" + std::to_string(size));
     }
@@ -288,7 +305,7 @@ namespace CNA::Internal::Backends::Headless
                                                     int surfaceFormat)
         : state_(std::move(state)), size_(size), mipMap_(mipMap), surfaceFormat_(surfaceFormat)
     {
-        resourceId_ = state_->registry.Register("TextureCube");
+        resourceId_ = state_->registry.Register("TextureCube", state_->CurrentDebugLabel());
         state_->stats.textureCubesCreated++;
         for (auto& face : facePixels_)
             face.assign(static_cast<std::size_t>(size) * static_cast<std::size_t>(size) * 4u, 0u);
@@ -326,7 +343,7 @@ namespace CNA::Internal::Backends::Headless
         : state_(std::move(state)), width_(w), height_(h), depth_(depth), mipMap_(mipMap),
           surfaceFormat_(surfaceFormat)
     {
-        resourceId_ = state_->registry.Register("Texture3D");
+        resourceId_ = state_->registry.Register("Texture3D", state_->CurrentDebugLabel());
         state_->stats.textures3DCreated++;
         voxels_.assign(static_cast<std::size_t>(w) * static_cast<std::size_t>(h) *
                        static_cast<std::size_t>(depth) * 4u, 0u);
@@ -359,7 +376,7 @@ namespace CNA::Internal::Backends::Headless
 
     HeadlessEffectBackend::HeadlessEffectBackend(std::shared_ptr<HeadlessSharedState> state) : state_(std::move(state))
     {
-        resourceId_ = state_->registry.Register("Effect");
+        resourceId_ = state_->registry.Register("Effect", state_->CurrentDebugLabel());
         state_->stats.effectsCreated++;
     }
 
@@ -403,7 +420,7 @@ namespace CNA::Internal::Backends::Headless
 
     HeadlessSpriteBatchBackend::HeadlessSpriteBatchBackend(std::shared_ptr<HeadlessSharedState> state) : state_(std::move(state))
     {
-        resourceId_ = state_->registry.Register("SpriteBatch");
+        resourceId_ = state_->registry.Register("SpriteBatch", state_->CurrentDebugLabel());
         state_->stats.spriteBatchesCreated++;
     }
 
@@ -470,7 +487,7 @@ namespace CNA::Internal::Backends::Headless
     HeadlessOcclusionQueryBackend::HeadlessOcclusionQueryBackend(std::shared_ptr<HeadlessSharedState> state)
         : state_(std::move(state))
     {
-        resourceId_ = state_->registry.Register("OcclusionQuery");
+        resourceId_ = state_->registry.Register("OcclusionQuery", state_->CurrentDebugLabel());
         state_->stats.occlusionQueriesCreated++;
     }
 
@@ -626,7 +643,24 @@ namespace CNA::Internal::Backends::Headless
         Require(state_, w >= 0 && h >= 0,
                "HeadlessGraphicsBackend::SetScissorRect: negative width/height (" + std::to_string(w) + "x" +
                std::to_string(h) + ")");
-        (void)x; (void)y;
+        Require(state_, x >= 0 && y >= 0,
+               "HeadlessGraphicsBackend::SetScissorRect: negative origin (" + std::to_string(x) + "," +
+               std::to_string(y) + ")");
+        // HEADLESS-23: cross-reference the currently-bound target's real size (GetViewportSize()
+        // already resolves to the bound RenderTarget2D's size, or the virtual/default backbuffer
+        // size when none is bound -- reused rather than duplicating that resolution logic). Skipped
+        // in HeadlessFast (via ValidationEnabled()) so this backend doesn't pay for a
+        // GetViewportSize() call on every scissor change when validation is off.
+        if (state_->ValidationEnabled())
+        {
+            int targetWidth = 0, targetHeight = 0;
+            GetViewportSize(targetWidth, targetHeight);
+            Require(state_, x + w <= targetWidth && y + h <= targetHeight,
+                   "HeadlessGraphicsBackend::SetScissorRect: rectangle (" + std::to_string(x) + "," +
+                   std::to_string(y) + "," + std::to_string(w) + "x" + std::to_string(h) +
+                   ") exceeds the current target's bounds (" + std::to_string(targetWidth) + "x" +
+                   std::to_string(targetHeight) + ")");
+        }
         state_->stats.scissorChangeCount++;
     }
 
@@ -635,9 +669,21 @@ namespace CNA::Internal::Backends::Headless
         Require(state_, w >= 0 && h >= 0,
                "HeadlessGraphicsBackend::SetViewport: negative width/height (" + std::to_string(w) + "x" +
                std::to_string(h) + ")");
+        Require(state_, x >= 0 && y >= 0,
+               "HeadlessGraphicsBackend::SetViewport: negative origin (" + std::to_string(x) + "," +
+               std::to_string(y) + ")");
         Require(state_, minDepth <= maxDepth,
                "HeadlessGraphicsBackend::SetViewport: minDepth must be <= maxDepth");
-        (void)x; (void)y;
+        if (state_->ValidationEnabled())
+        {
+            int targetWidth = 0, targetHeight = 0;
+            GetViewportSize(targetWidth, targetHeight);
+            Require(state_, x + w <= targetWidth && y + h <= targetHeight,
+                   "HeadlessGraphicsBackend::SetViewport: rectangle (" + std::to_string(x) + "," +
+                   std::to_string(y) + "," + std::to_string(w) + "x" + std::to_string(h) +
+                   ") exceeds the current target's bounds (" + std::to_string(targetWidth) + "x" +
+                   std::to_string(targetHeight) + ")");
+        }
         state_->stats.viewportChangeCount++;
     }
 
@@ -793,6 +839,25 @@ namespace CNA::Internal::Backends::Headless
             message << "\n";
         }
         throw HeadlessValidationException(message.str());
+    }
+
+    std::string HeadlessGraphicsBackend::FormatTraceLog() const
+    {
+        std::ostringstream out;
+        for (const HeadlessTraceEntry& entry : state_->traceLog)
+        {
+            out << "[frame " << entry.frameIndex << " #" << entry.callIndex << "] " << entry.method;
+            if (!entry.argsSummary.empty())
+                out << ": " << entry.argsSummary;
+            out << "\n";
+        }
+        return out.str();
+    }
+
+    void HeadlessGraphicsBackend::DumpTraceLog(std::FILE* out) const
+    {
+        const std::string text = FormatTraceLog();
+        std::fwrite(text.data(), 1, text.size(), out);
     }
 }
 
