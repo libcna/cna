@@ -6434,6 +6434,12 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "HEADLESS")
     set_tests_properties(Headless_Smoke PROPERTIES
         TIMEOUT 30
         LABELS "Headless")
+
+    cna_headless_test(cna_test_headless_resource_backends examples/headless_resource_backends_test.cpp)
+    add_test(NAME Headless_ResourceBackends COMMAND cna_test_headless_resource_backends)
+    set_tests_properties(Headless_ResourceBackends PROPERTIES
+        TIMEOUT 30
+        LABELS "Headless")
 endif()
 
 # --- Task 6.1: real two-process ENet loopback test harness ---
