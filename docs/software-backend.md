@@ -142,7 +142,8 @@ rather than always passing.
     sampled against it, with Fresnel edge-weighting and the specular-tint term. The normal is
     transformed by `World` directly rather than the mathematically-correct
     `WorldInverseTranspose` — exact for uniform-scale/no-shear `World` matrices, a real
-    simplification for non-uniform scale.
+    simplification for non-uniform scale. Cube sampling is nearest-neighbor only (no cross-face
+    bilinear filtering at cube seams), unlike the bilinear 2D texture sampling below.
   - `SkinnedEffect`: real per-vertex bone-transform blending (up to 4 weighted bones,
     `WeightsPerVertex`-gated) applied to the vertex position before the standard
     World\*View\*Projection transform.

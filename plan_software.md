@@ -232,11 +232,17 @@ in an approved batch. Ordered roughly by value-for-effort, cheapest/highest-valu
   `GraphicsDeviceManager`-level runtime policy decision (auto-switching the active backend when GPU
   init fails) — a separate, larger, cross-cutting feature, not part of this backend's own scope.
   Flag it as a possible follow-up plan if wanted later; do not fold it into this one.
-- Full `BasicEffect` lighting/fog, `DualTextureEffect`/`EnvironmentMapEffect`/`SkinnedEffect`,
-  `Model.Draw()` with real skinning, MRT, MSAA, mipmapping, anisotropic filtering, cube/3D
-  textures — all explicitly out of scope for v1, matching the owner's own minimal first-version
-  list verbatim (clear; render target; triangle list; basic blending; depth buffer; simple
-  textures; vertex colors; `BasicEffect` subset).
+- Full per-light `BasicEffect` lighting/fog (and the equivalent lighting inputs on
+  `EnvironmentMapEffect`/`SkinnedEffect`), MRT, MSAA, mipmapping, anisotropic filtering, 3D
+  textures, and render-target cube maps remain explicitly out of scope for v1, matching the
+  owner's own minimal first-version list verbatim (clear; render target; triangle list; basic
+  blending; depth buffer; simple textures; vertex colors; `BasicEffect` subset).
+  **`DualTextureEffect`/`EnvironmentMapEffect`/`SkinnedEffect` and plain (non-render-target) cube
+  textures were later lifted out of this out-of-scope list by `SOFTWARE-82`** (Phase S9,
+  2026-07-13, minus the per-light lighting caveat above) — see that row and
+  `docs/software-backend.md`'s Known Limitations for exactly what's supported.
+  `Model.Draw()` with real skinning specifically hasn't been separately verified end-to-end
+  (only the lower-level `SkinnedEffect`/`DrawPrimitivesEx` path was tested).
 - Performance/SIMD/multithreading work is explicitly not a goal (design decision 1) — do not
   spend effort here unless a specific test becomes impractically slow.
 - Do not let `SOFTWARE`-specific code leak into the shared `IGraphicsBackend`/`GpuDrawParams`
