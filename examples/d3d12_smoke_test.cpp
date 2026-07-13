@@ -62,6 +62,18 @@
 //   NEW device -- real proof the recreation path produces a genuinely working backend, not just
 //   non-null pointers.
 //
+// plan_dx.md DX-111 (this revision) adds:
+// Check M -- the first real 3D triangle this D3D12 backend has ever drawn: a genuine
+//   DrawColoredPrimitives()/DrawIndexedColoredPrimitives() call (real root signature + PSO from
+//   Check H/I, real PerDraw/FogParams constant buffers, a real command-list-recorded DrawInstanced/
+//   DrawIndexedInstanced) paints a known solid-red vertex color over a known-blue-cleared
+//   off-screen render target (BindOffscreenColorTargetEXT() -- a minimal internal helper, since a
+//   full public D3D12RenderTargetBackend is still owed, see DX-109's own honest scope note; the
+//   swap chain remains unusable under Wine per DX-100). Reading back the SAME pixel region before
+//   and after each draw call (blue -> red) proves the fragment genuinely came from the draw, not a
+//   stale/cached value -- same "before/after Clear()" discipline D3D11's own Check P established
+//   (d3d11_smoke_test.cpp), reused here for the analogous D3D12 proof.
+//
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
 #include "CNA/Internal/Backends/D3D12/D3D12GraphicsBackend.hpp"
@@ -73,6 +85,7 @@
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "CNA/Internal/Graphics/ImageData.hpp"
 
+#include <array>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -89,6 +102,8 @@ using CNA::Internal::Backends::D3D12::D3D12IndexBufferBackend;
 using CNA::Internal::Backends::D3D12::D3D12TextureBackend;
 using CNA::Internal::Backends::D3DCommon::D3DShaderVariant;
 using CNA::Internal::Graphics::ImageData;
+using CNA::Internal::Backends::Matrix;
+using CNA::Internal::Backends::PrimitiveType;
 
 namespace
 {
@@ -243,6 +258,83 @@ namespace
         }
         const D3D12_RANGE writtenRange{0, 0};
         readback->Unmap(0, &writtenRange);
+        return out;
+    }
+
+    /// DX-111 test scaffolding: same row-pitch-aligned READBACK-buffer technique as
+    /// ReadBackTextureLevel0() above, generalized to any raw RGBA8 ID3D12Resource* (the off-screen
+    /// render target Check M creates, which is not a D3D12TextureBackend).
+    std::vector<uint8_t> ReadBackRenderTargetFull(D3D12GraphicsBackend& backend, ID3D12Resource* resource,
+                                                  int w, int h)
+    {
+        const UINT rowPitch = (static_cast<UINT>(w) * 4 + 255u) & ~255u;
+        const UINT64 bufferSize = static_cast<UINT64>(rowPitch) * static_cast<UINT64>(h);
+
+        D3D12_HEAP_PROPERTIES heapProps{};
+        heapProps.Type = D3D12_HEAP_TYPE_READBACK;
+
+        D3D12_RESOURCE_DESC bufDesc{};
+        bufDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+        bufDesc.Width = bufferSize;
+        bufDesc.Height = 1;
+        bufDesc.DepthOrArraySize = 1;
+        bufDesc.MipLevels = 1;
+        bufDesc.Format = DXGI_FORMAT_UNKNOWN;
+        bufDesc.SampleDesc.Count = 1;
+        bufDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+
+        Microsoft::WRL::ComPtr<ID3D12Resource> readback;
+        HRESULT hr = backend.GetDeviceEXT()->CreateCommittedResource(
+            &heapProps, D3D12_HEAP_FLAG_NONE, &bufDesc,
+            D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(readback.GetAddressOf()));
+        if (FAILED(hr))
+            throw std::runtime_error("ReadBackRenderTargetFull: CreateCommittedResource failed, hr=" + FormatHrLocal(hr));
+
+        D3D12_TEXTURE_COPY_LOCATION dst{};
+        dst.pResource = readback.Get();
+        dst.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+        dst.PlacedFootprint.Offset = 0;
+        dst.PlacedFootprint.Footprint.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        dst.PlacedFootprint.Footprint.Width = static_cast<UINT>(w);
+        dst.PlacedFootprint.Footprint.Height = static_cast<UINT>(h);
+        dst.PlacedFootprint.Footprint.Depth = 1;
+        dst.PlacedFootprint.Footprint.RowPitch = rowPitch;
+
+        D3D12_TEXTURE_COPY_LOCATION src{};
+        src.pResource = resource;
+        src.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+        src.SubresourceIndex = 0;
+
+        ID3D12CommandAllocator* allocator = backend.GetCommandAllocatorEXT(0);
+        ID3D12GraphicsCommandList* cmdList = backend.GetCommandListEXT();
+        allocator->Reset();
+        cmdList->Reset(allocator, nullptr);
+
+        auto& tracker = backend.GetResourceStateTrackerEXT();
+        const D3D12_RESOURCE_STATES priorState = tracker.GetTrackedStateEXT(resource);
+        tracker.TransitionTo(cmdList, resource, D3D12_RESOURCE_STATE_COPY_SOURCE);
+        cmdList->CopyTextureRegion(&dst, 0, 0, 0, &src, nullptr);
+        tracker.TransitionTo(cmdList, resource, priorState);
+
+        hr = cmdList->Close();
+        if (FAILED(hr))
+            throw std::runtime_error("ReadBackRenderTargetFull: command list Close failed, hr=" + FormatHrLocal(hr));
+        backend.ExecuteCommandListAndWaitEXT(cmdList);
+
+        std::vector<uint8_t> out(static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4);
+        uint8_t* mapped = nullptr;
+        const D3D12_RANGE readRange{0, bufferSize};
+        hr = readback->Map(0, &readRange, reinterpret_cast<void**>(&mapped));
+        if (FAILED(hr))
+            throw std::runtime_error("ReadBackRenderTargetFull: Map failed, hr=" + FormatHrLocal(hr));
+        for (int row = 0; row < h; ++row)
+        {
+            std::memcpy(out.data() + static_cast<std::size_t>(row) * w * 4,
+                        mapped + static_cast<std::size_t>(row) * rowPitch,
+                        static_cast<std::size_t>(w) * 4);
+        }
+        const D3D12_RANGE writtenRange2{0, 0};
+        readback->Unmap(0, &writtenRange2);
         return out;
     }
 }
@@ -574,6 +666,93 @@ int main()
               "L6: a NEW vertex buffer created after recreation uploads+reads back correctly through "
               "the new device -- proves the recreated backend is genuinely functional, not just "
               "non-null pointers");
+    }
+
+    // ---- Check M: DX-111 -- the first real D3D12 3D triangle, off-screen ----
+    {
+        constexpr int kRtWidth = 64;
+        constexpr int kRtHeight = 64;
+
+        D3D12_HEAP_PROPERTIES heapProps{};
+        heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
+
+        D3D12_RESOURCE_DESC rtDesc{};
+        rtDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+        rtDesc.Width = kRtWidth;
+        rtDesc.Height = kRtHeight;
+        rtDesc.DepthOrArraySize = 1;
+        rtDesc.MipLevels = 1;
+        rtDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        rtDesc.SampleDesc.Count = 1;
+        rtDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+        rtDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+
+        Microsoft::WRL::ComPtr<ID3D12Resource> rt;
+        HRESULT hrRt = backend.GetDeviceEXT()->CreateCommittedResource(
+            &heapProps, D3D12_HEAP_FLAG_NONE, &rtDesc,
+            D3D12_RESOURCE_STATE_RENDER_TARGET, nullptr, IID_PPV_ARGS(rt.GetAddressOf()));
+        Check(SUCCEEDED(hrRt) && rt != nullptr, "M0: real off-screen RGBA8 render-target resource created");
+
+        backend.GetResourceStateTrackerEXT().TrackResource(rt.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET);
+
+        D3D12_CPU_DESCRIPTOR_HANDLE rtv = backend.AllocateRtvDescriptorEXT();
+        backend.GetDeviceEXT()->CreateRenderTargetView(rt.Get(), nullptr, rtv);
+        backend.BindOffscreenColorTargetEXT(rt.Get(), rtv, DXGI_FORMAT_R8G8B8A8_UNORM, kRtWidth, kRtHeight);
+
+        // Same "oversized triangle covering the entire NDC square" trick and byte-for-byte
+        // discipline D3D11's own Check P established (d3d11_smoke_test.cpp) -- world=view=
+        // projection=Identity, so these Position values ARE clip-space coordinates directly.
+        struct VPC { float x, y, z; uint32_t color; };
+        static const VPC kTri[3] = {
+            {-1.0f, -1.0f, 0.0f, 0xFF0000FFu},
+            { 3.0f, -1.0f, 0.0f, 0xFF0000FFu},
+            {-1.0f,  3.0f, 0.0f, 0xFF0000FFu},
+        };
+        D3D12VertexBufferBackend vb(&backend, 3);
+        vb.SetData(kTri, 3, sizeof(VPC));
+
+        auto pixelAt = [&](const std::vector<uint8_t>& buf, int x, int y) -> std::array<uint8_t, 4>
+        {
+            const std::size_t idx = (static_cast<std::size_t>(y) * kRtWidth + static_cast<std::size_t>(x)) * 4;
+            return {buf[idx + 0], buf[idx + 1], buf[idx + 2], buf[idx + 3]};
+        };
+        auto isColor = [](const std::array<uint8_t, 4>& p, uint8_t r, uint8_t g, uint8_t b, uint8_t a)
+        {
+            return p[0] == r && p[1] == g && p[2] == b && p[3] == a;
+        };
+        auto regionIs = [&](const std::vector<uint8_t>& buf, uint8_t r, uint8_t g, uint8_t b, uint8_t a)
+        {
+            for (int y = 28; y < 32; ++y)
+                for (int x = 28; x < 32; ++x)
+                    if (!isColor(pixelAt(buf, x, y), r, g, b, a)) return false;
+            return true;
+        };
+
+        // Non-indexed path.
+        backend.Clear(0.0f, 0.0f, 1.0f, 1.0f);
+        auto before = ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight);
+        backend.DrawColoredPrimitives(vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                      Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1);
+        auto after = ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight);
+        Check(regionIs(before, 0, 0, 255, 255) && regionIs(after, 255, 0, 0, 255),
+              "M1: DrawColoredPrimitives() paints the exact vertex color over the Clear() background "
+              "at the same off-screen readback location -- the first real D3D12 3D triangle");
+
+        // Indexed path: same triangle, via DrawIndexedColoredPrimitives.
+        static const uint16_t kTriIdx[3] = {0, 1, 2};
+        D3D12IndexBufferBackend ib(&backend, 3, /*thirtyTwoBit=*/false);
+        ib.SetData16(kTriIdx, 3);
+
+        backend.Clear(0.0f, 0.0f, 1.0f, 1.0f);
+        auto beforeIdx = ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight);
+        backend.DrawIndexedColoredPrimitives(vb, ib, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                             Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1);
+        auto afterIdx = ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight);
+        Check(regionIs(beforeIdx, 0, 0, 255, 255) && regionIs(afterIdx, 255, 0, 0, 255),
+              "M2: DrawIndexedColoredPrimitives() paints the exact vertex color over the Clear() "
+              "background at the same off-screen readback location");
+
+        backend.UnbindOffscreenColorTargetEXT();
     }
 
     std::printf("\n%s: %d failure(s)\n", g_failures == 0 ? "RESULT: ALL PASS" : "RESULT: FAILURES", g_failures);

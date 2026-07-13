@@ -5,15 +5,19 @@
 #include "CNA/Internal/Backends/D3D12/D3D12GraphicsBackend.hpp"
 #include "CNA/Internal/Backends/D3D12/D3D12Buffers.hpp"
 #include "CNA/Internal/Backends/D3D12/D3D12Textures.hpp"
+#include "CNA/Internal/Backends/D3DCommon/D3DConstantBuffers.hpp"
 
 #include <SDL3/SDL.h>
 
 #include <cstdio>
+#include <cstring>
 #include <stdexcept>
 #include <string>
 
 namespace CNA::Internal::Backends::D3D12
 {
+    using namespace CNA::Internal::Backends::D3DCommon;
+
     namespace
     {
         std::string FormatHr(HRESULT hr)
@@ -21,6 +25,35 @@ namespace CNA::Internal::Backends::D3D12
             char buf[32];
             std::snprintf(buf, sizeof(buf), "0x%08lX", static_cast<unsigned long>(hr));
             return buf;
+        }
+
+        /// DX-111: same per-PrimitiveType vertex-count formula D3D11GraphicsBackend.cpp's own
+        /// VertexCountForPrimitives (and Vulkan/EasyGL's) already duplicate locally -- not shared via
+        /// a common header today, so this follows the existing precedent rather than introducing one.
+        int VertexCountForPrimitives(PrimitiveType pt, int primitiveCount)
+        {
+            switch (pt)
+            {
+            case PrimitiveType::TriangleList:  return primitiveCount * 3;
+            case PrimitiveType::TriangleStrip: return primitiveCount + 2;
+            case PrimitiveType::LineList:      return primitiveCount * 2;
+            case PrimitiveType::LineStrip:     return primitiveCount + 1;
+            }
+            return 0;
+        }
+
+        /// D3D12_PRIMITIVE_TOPOLOGY is D3D_PRIMITIVE_TOPOLOGY under the hood -- same underlying enum
+        /// D3D11 uses for IASetPrimitiveTopology, just a different typedef name.
+        D3D12_PRIMITIVE_TOPOLOGY ToD3D12Topology(PrimitiveType pt)
+        {
+            switch (pt)
+            {
+            case PrimitiveType::TriangleList:  return D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+            case PrimitiveType::TriangleStrip: return D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP;
+            case PrimitiveType::LineList:      return D3D_PRIMITIVE_TOPOLOGY_LINELIST;
+            case PrimitiveType::LineStrip:     return D3D_PRIMITIVE_TOPOLOGY_LINESTRIP;
+            }
+            return D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
         }
     }
 
@@ -406,6 +439,23 @@ namespace CNA::Internal::Backends::D3D12
         device_.Reset();
         factory_.Reset();
 
+        // DX-111: root-signature/PSO caches and the persistent colored3d constant buffers are all
+        // tied to the (possibly removed) device too -- a stale cached ID3D12RootSignature/
+        // ID3D12PipelineState/mapped ID3D12Resource from before recreation would be meaningless (and
+        // dangerous to keep calling into) against the brand-new device below, exactly the same
+        // reasoning as every ComPtr reset above. Plain member reassignment is sufficient since both
+        // caches are simple movable/copy-assignable value types, not pointers.
+        rootSigCache_ = D3D12RootSignatureCache();
+        psoCache_ = D3D12PipelineStateCache();
+        perDrawConstantBuffer_.Reset();
+        perDrawConstantBufferMapped_ = nullptr;
+        fogConstantBuffer_.Reset();
+        fogConstantBufferMapped_ = nullptr;
+        // The bound off-screen color target (if any) was owned by the caller and lived on the old
+        // device -- it's gone too; the caller must recreate its render target and rebind after
+        // calling RecreateDeviceEXT(), same as it must recreate any of its own DX-109 resources.
+        UnbindOffscreenColorTargetEXT();
+
         rtvHeapNextIndex_ = 0;
         dsvHeapNextIndex_ = 0;
         cbvSrvUavHeapNextIndex_ = 0;
@@ -440,7 +490,90 @@ namespace CNA::Internal::Backends::D3D12
                 swapChainAvailable_ ? "available" : "unavailable");
     }
 
-    void D3D12GraphicsBackend::Clear(float, float, float, float) { NotYetImplemented("Clear"); }
+    void D3D12GraphicsBackend::BindOffscreenColorTargetEXT(ID3D12Resource* resource,
+                                                            D3D12_CPU_DESCRIPTOR_HANDLE rtv,
+                                                            DXGI_FORMAT format, int width, int height)
+    {
+        boundColorResource_ = resource;
+        boundColorRtv_ = rtv;
+        boundColorFormat_ = format;
+        boundColorWidth_ = width;
+        boundColorHeight_ = height;
+    }
+
+    void D3D12GraphicsBackend::UnbindOffscreenColorTargetEXT()
+    {
+        boundColorResource_ = nullptr;
+        boundColorWidth_ = 0;
+        boundColorHeight_ = 0;
+    }
+
+    void D3D12GraphicsBackend::CreateUploadConstantBuffer(UINT byteWidth, ComPtr<ID3D12Resource>& outResource,
+                                                           void*& outMapped)
+    {
+        D3D12_HEAP_PROPERTIES heapProps{};
+        heapProps.Type = D3D12_HEAP_TYPE_UPLOAD;
+
+        D3D12_RESOURCE_DESC desc{};
+        desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+        desc.Width = byteWidth;
+        desc.Height = 1;
+        desc.DepthOrArraySize = 1;
+        desc.MipLevels = 1;
+        desc.Format = DXGI_FORMAT_UNKNOWN;
+        desc.SampleDesc.Count = 1;
+        desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+
+        HRESULT hr = device_->CreateCommittedResource(
+            &heapProps, D3D12_HEAP_FLAG_NONE, &desc,
+            D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(outResource.ReleaseAndGetAddressOf()));
+        if (FAILED(hr))
+            throw std::runtime_error("D3D12GraphicsBackend: constant buffer CreateCommittedResource failed, hr=" + FormatHr(hr));
+
+        const D3D12_RANGE readRange{0, 0}; // never read back on the CPU
+        hr = outResource->Map(0, &readRange, &outMapped);
+        if (FAILED(hr))
+            throw std::runtime_error("D3D12GraphicsBackend: constant buffer Map failed, hr=" + FormatHr(hr));
+    }
+
+    ID3D12Resource* D3D12GraphicsBackend::GetOrCreatePerDrawConstantBufferEXT()
+    {
+        if (!perDrawConstantBuffer_)
+            CreateUploadConstantBuffer(sizeof(D3DPerDrawConstants), perDrawConstantBuffer_, perDrawConstantBufferMapped_);
+        return perDrawConstantBuffer_.Get();
+    }
+
+    ID3D12Resource* D3D12GraphicsBackend::GetOrCreateFogConstantBufferEXT()
+    {
+        if (!fogConstantBuffer_)
+            CreateUploadConstantBuffer(sizeof(D3DFogConstants), fogConstantBuffer_, fogConstantBufferMapped_);
+        return fogConstantBuffer_.Get();
+    }
+
+    void D3D12GraphicsBackend::Clear(float r, float g, float b, float a)
+    {
+        if (!boundColorResource_)
+        {
+            NotYetImplemented("Clear (no off-screen color target bound -- BindOffscreenColorTargetEXT; "
+                              "the swap chain path is unusable under Wine per DX-100, and a full public "
+                              "D3D12RenderTargetBackend is not yet implemented, DX-109's own honest scope note)");
+        }
+
+        ID3D12CommandAllocator* allocator = GetCommandAllocatorEXT(0);
+        ID3D12GraphicsCommandList* cmdList = GetCommandListEXT();
+        allocator->Reset();
+        cmdList->Reset(allocator, nullptr);
+
+        resourceStates_.TransitionTo(cmdList, boundColorResource_, D3D12_RESOURCE_STATE_RENDER_TARGET);
+        const float clearColor[4] = {r, g, b, a};
+        cmdList->ClearRenderTargetView(boundColorRtv_, clearColor, 0, nullptr);
+
+        HRESULT hr = cmdList->Close();
+        if (FAILED(hr))
+            throw std::runtime_error("D3D12GraphicsBackend::Clear: command list Close failed, hr=" + FormatHr(hr));
+        ExecuteCommandListAndWaitEXT(cmdList);
+    }
+
     void D3D12GraphicsBackend::Present() { NotYetImplemented("Present"); }
 
     void D3D12GraphicsBackend::GetViewportSize(int& width, int& height)
@@ -493,18 +626,205 @@ namespace CNA::Internal::Backends::D3D12
         return std::make_unique<D3D12IndexBufferBackend>(this, index_capacity, /*thirtyTwoBit=*/true);
     }
 
-    void D3D12GraphicsBackend::DrawColoredPrimitives(const IVertexBufferBackend&,
-                                                      const Matrix&, const Matrix&, const Matrix&,
-                                                      PrimitiveType, int)
+    void D3D12GraphicsBackend::DrawColoredPrimitives(
+        const IVertexBufferBackend& vb, const Matrix& world, const Matrix& view, const Matrix& projection,
+        PrimitiveType primitive, int primitiveCount)
     {
-        NotYetImplemented("DrawColoredPrimitives");
+        // DX-111: colored3d (stride 16, unlit vertex-color) is the only real D3D12 draw pipeline so
+        // far -- mirrors D3D11's own DX-61 scope exactly (same shader variant, same DXBC bytecode,
+        // design decision 5). Other strides/variants are a follow-up (D3D11's own Phase DX8 took
+        // several further tasks to cover them; nothing here assumes that work carries over for free).
+        if (!boundColorResource_)
+        {
+            NotYetImplemented("DrawColoredPrimitives (no off-screen color target bound -- "
+                              "BindOffscreenColorTargetEXT; see Clear()'s own note)");
+        }
+
+        const auto& d3dVb = static_cast<const D3D12VertexBufferBackend&>(vb);
+        const std::size_t stride = d3dVb.GetStrideEXT() > 0 ? d3dVb.GetStrideEXT() : 16;
+        if (stride != 16)
+        {
+            throw std::runtime_error(
+                "D3D12GraphicsBackend::DrawColoredPrimitives: only stride-16 (VertexPositionColor) "
+                "is implemented so far (plan_dx.md DX-111); other strides are a follow-up");
+        }
+
+        auto rootSig = rootSigCache_.GetOrCreate(device_.Get(), /*numCbvs=*/2, /*numSrvs=*/0, /*numSamplers=*/0);
+        if (!rootSig)
+            throw std::runtime_error("DrawColoredPrimitives: failed to create colored3d root signature");
+
+        D3D12PipelineStateDesc psoDesc;
+        psoDesc.variant = D3DShaderVariant::Colored3d;
+        psoDesc.strideInBytes = 16;
+        // No depth-stencil view is bound in this off-screen-only draw path (dsvFormat=UNKNOWN,
+        // OMSetRenderTargets below passes a null DSV handle) -- the PSO's DepthEnable must agree,
+        // or the draw silently produces no visible output (found via this task's own real Wine+
+        // vkd3d-proton run: the very first attempt at Check M left the default depthEnable=true and
+        // the render target stayed at the Clear() color with no triangle visible at all).
+        psoDesc.depthEnable = false;
+        // No D3D12 rasterizer-state-cache equivalent to D3D11's Phase DX7 exists yet for this
+        // backend (a real, scoped follow-up task, not attempted here) -- CullMode::None (0) is a
+        // deliberate, honest hardcoded simplification for this narrow colored3d bootstrap path,
+        // matching D3D11's own equivalent test-time convention of applying an explicit known-safe
+        // rasterizer baseline before its analogous first-triangle proof (d3d11_smoke_test.cpp's own
+        // Check P). Real finding from this task's own first attempt: leaving the PSO's default
+        // cullMode (XNA's CullCounterClockwiseFace, i.e. real back-face culling ON) silently
+        // produced an empty render target -- the test triangle's real winding, after D3D's NDC->
+        // screen-space Y-flip, was being back-face-culled with no error reported (no debug layer is
+        // available on this Wine+vkd3d-proton dev loop, DX-102's own already-documented gap) --
+        // exactly the kind of silent failure this plan's "verify, don't assume" discipline exists
+        // to catch, confirmed here empirically rather than guessed.
+        psoDesc.cullMode = 0; // XNA CullMode::None
+        auto pso = psoCache_.GetOrCreate(device_.Get(), rootSig.Get(), psoDesc, boundColorFormat_, DXGI_FORMAT_UNKNOWN);
+        if (!pso)
+            throw std::runtime_error("DrawColoredPrimitives: failed to create colored3d PSO");
+
+        // Same "raw vertex color, no GpuDrawParams" legacy convention D3D11's own DrawColoredPrimitives
+        // uses (diffuseColor=white, vertexColorEnabled=true, fog disabled) -- see D3DConstantBuffers.hpp.
+        D3DPerDrawConstants perDraw{};
+        const Matrix wvp = world * view * projection;
+        wvp.ToColumnMajor(perDraw.Mvp);
+        perDraw.DiffuseColor[0] = perDraw.DiffuseColor[1] = perDraw.DiffuseColor[2] = perDraw.DiffuseColor[3] = 1.0f;
+        perDraw.VertexColorEnabled = 1.0f;
+
+        D3DFogConstants fog{};
+        fog.FogStartEnd[1] = 1.0f;
+
+        ID3D12Resource* perDrawCB = GetOrCreatePerDrawConstantBufferEXT();
+        ID3D12Resource* fogCB = GetOrCreateFogConstantBufferEXT();
+        std::memcpy(perDrawConstantBufferMapped_, &perDraw, sizeof(perDraw));
+        std::memcpy(fogConstantBufferMapped_, &fog, sizeof(fog));
+
+        ID3D12CommandAllocator* allocator = GetCommandAllocatorEXT(0);
+        ID3D12GraphicsCommandList* cmdList = GetCommandListEXT();
+        allocator->Reset();
+        cmdList->Reset(allocator, pso.Get());
+
+        resourceStates_.TransitionTo(cmdList, boundColorResource_, D3D12_RESOURCE_STATE_RENDER_TARGET);
+        cmdList->OMSetRenderTargets(1, &boundColorRtv_, FALSE, nullptr);
+
+        D3D12_VIEWPORT viewport{0.0f, 0.0f, static_cast<float>(boundColorWidth_), static_cast<float>(boundColorHeight_), 0.0f, 1.0f};
+        D3D12_RECT scissor{0, 0, boundColorWidth_, boundColorHeight_};
+        cmdList->RSSetViewports(1, &viewport);
+        cmdList->RSSetScissorRects(1, &scissor);
+
+        cmdList->SetGraphicsRootSignature(rootSig.Get());
+        cmdList->SetPipelineState(pso.Get());
+        cmdList->IASetPrimitiveTopology(ToD3D12Topology(primitive));
+
+        D3D12_VERTEX_BUFFER_VIEW vbView = d3dVb.GetViewEXT();
+        cmdList->IASetVertexBuffers(0, 1, &vbView);
+
+        cmdList->SetGraphicsRootConstantBufferView(0, perDrawCB->GetGPUVirtualAddress());
+        cmdList->SetGraphicsRootConstantBufferView(1, fogCB->GetGPUVirtualAddress());
+
+        const UINT vertexCount = static_cast<UINT>(VertexCountForPrimitives(primitive, primitiveCount));
+        cmdList->DrawInstanced(vertexCount, 1, 0, 0);
+
+        HRESULT hr = cmdList->Close();
+        if (FAILED(hr))
+            throw std::runtime_error("DrawColoredPrimitives: command list Close failed, hr=" + FormatHr(hr));
+        ExecuteCommandListAndWaitEXT(cmdList);
     }
 
-    void D3D12GraphicsBackend::DrawIndexedColoredPrimitives(const IVertexBufferBackend&, const IIndexBufferBackend&,
-                                                             const Matrix&, const Matrix&, const Matrix&,
-                                                             PrimitiveType, int)
+    void D3D12GraphicsBackend::DrawIndexedColoredPrimitives(
+        const IVertexBufferBackend& vb, const IIndexBufferBackend& ib,
+        const Matrix& world, const Matrix& view, const Matrix& projection,
+        PrimitiveType primitive, int primitiveCount)
     {
-        NotYetImplemented("DrawIndexedColoredPrimitives");
+        // DX-111: indexed counterpart of DrawColoredPrimitives above -- same colored3d-only scope.
+        if (!boundColorResource_)
+        {
+            NotYetImplemented("DrawIndexedColoredPrimitives (no off-screen color target bound -- "
+                              "BindOffscreenColorTargetEXT; see Clear()'s own note)");
+        }
+
+        const auto& d3dVb = static_cast<const D3D12VertexBufferBackend&>(vb);
+        const auto& d3dIb = static_cast<const D3D12IndexBufferBackend&>(ib);
+        const std::size_t stride = d3dVb.GetStrideEXT() > 0 ? d3dVb.GetStrideEXT() : 16;
+        if (stride != 16)
+        {
+            throw std::runtime_error(
+                "D3D12GraphicsBackend::DrawIndexedColoredPrimitives: only stride-16 (VertexPositionColor) "
+                "is implemented so far (plan_dx.md DX-111); other strides are a follow-up");
+        }
+
+        auto rootSig = rootSigCache_.GetOrCreate(device_.Get(), /*numCbvs=*/2, /*numSrvs=*/0, /*numSamplers=*/0);
+        if (!rootSig)
+            throw std::runtime_error("DrawIndexedColoredPrimitives: failed to create colored3d root signature");
+
+        D3D12PipelineStateDesc psoDesc;
+        psoDesc.variant = D3DShaderVariant::Colored3d;
+        psoDesc.strideInBytes = 16;
+        // No depth-stencil view is bound in this off-screen-only draw path (dsvFormat=UNKNOWN,
+        // OMSetRenderTargets below passes a null DSV handle) -- the PSO's DepthEnable must agree,
+        // or the draw silently produces no visible output (found via this task's own real Wine+
+        // vkd3d-proton run: the very first attempt at Check M left the default depthEnable=true and
+        // the render target stayed at the Clear() color with no triangle visible at all).
+        psoDesc.depthEnable = false;
+        // No D3D12 rasterizer-state-cache equivalent to D3D11's Phase DX7 exists yet for this
+        // backend (a real, scoped follow-up task, not attempted here) -- CullMode::None (0) is a
+        // deliberate, honest hardcoded simplification for this narrow colored3d bootstrap path,
+        // matching D3D11's own equivalent test-time convention of applying an explicit known-safe
+        // rasterizer baseline before its analogous first-triangle proof (d3d11_smoke_test.cpp's own
+        // Check P). Real finding from this task's own first attempt: leaving the PSO's default
+        // cullMode (XNA's CullCounterClockwiseFace, i.e. real back-face culling ON) silently
+        // produced an empty render target -- the test triangle's real winding, after D3D's NDC->
+        // screen-space Y-flip, was being back-face-culled with no error reported (no debug layer is
+        // available on this Wine+vkd3d-proton dev loop, DX-102's own already-documented gap) --
+        // exactly the kind of silent failure this plan's "verify, don't assume" discipline exists
+        // to catch, confirmed here empirically rather than guessed.
+        psoDesc.cullMode = 0; // XNA CullMode::None
+        auto pso = psoCache_.GetOrCreate(device_.Get(), rootSig.Get(), psoDesc, boundColorFormat_, DXGI_FORMAT_UNKNOWN);
+        if (!pso)
+            throw std::runtime_error("DrawIndexedColoredPrimitives: failed to create colored3d PSO");
+
+        D3DPerDrawConstants perDraw{};
+        const Matrix wvp = world * view * projection;
+        wvp.ToColumnMajor(perDraw.Mvp);
+        perDraw.DiffuseColor[0] = perDraw.DiffuseColor[1] = perDraw.DiffuseColor[2] = perDraw.DiffuseColor[3] = 1.0f;
+        perDraw.VertexColorEnabled = 1.0f;
+
+        D3DFogConstants fog{};
+        fog.FogStartEnd[1] = 1.0f;
+
+        ID3D12Resource* perDrawCB = GetOrCreatePerDrawConstantBufferEXT();
+        ID3D12Resource* fogCB = GetOrCreateFogConstantBufferEXT();
+        std::memcpy(perDrawConstantBufferMapped_, &perDraw, sizeof(perDraw));
+        std::memcpy(fogConstantBufferMapped_, &fog, sizeof(fog));
+
+        ID3D12CommandAllocator* allocator = GetCommandAllocatorEXT(0);
+        ID3D12GraphicsCommandList* cmdList = GetCommandListEXT();
+        allocator->Reset();
+        cmdList->Reset(allocator, pso.Get());
+
+        resourceStates_.TransitionTo(cmdList, boundColorResource_, D3D12_RESOURCE_STATE_RENDER_TARGET);
+        cmdList->OMSetRenderTargets(1, &boundColorRtv_, FALSE, nullptr);
+
+        D3D12_VIEWPORT viewport{0.0f, 0.0f, static_cast<float>(boundColorWidth_), static_cast<float>(boundColorHeight_), 0.0f, 1.0f};
+        D3D12_RECT scissor{0, 0, boundColorWidth_, boundColorHeight_};
+        cmdList->RSSetViewports(1, &viewport);
+        cmdList->RSSetScissorRects(1, &scissor);
+
+        cmdList->SetGraphicsRootSignature(rootSig.Get());
+        cmdList->SetPipelineState(pso.Get());
+        cmdList->IASetPrimitiveTopology(ToD3D12Topology(primitive));
+
+        D3D12_VERTEX_BUFFER_VIEW vbView = d3dVb.GetViewEXT();
+        cmdList->IASetVertexBuffers(0, 1, &vbView);
+        D3D12_INDEX_BUFFER_VIEW ibView = d3dIb.GetViewEXT();
+        cmdList->IASetIndexBuffer(&ibView);
+
+        cmdList->SetGraphicsRootConstantBufferView(0, perDrawCB->GetGPUVirtualAddress());
+        cmdList->SetGraphicsRootConstantBufferView(1, fogCB->GetGPUVirtualAddress());
+
+        const UINT indexCount = static_cast<UINT>(VertexCountForPrimitives(primitive, primitiveCount));
+        cmdList->DrawIndexedInstanced(indexCount, 1, 0, 0, 0);
+
+        HRESULT hr = cmdList->Close();
+        if (FAILED(hr))
+            throw std::runtime_error("DrawIndexedColoredPrimitives: command list Close failed, hr=" + FormatHr(hr));
+        ExecuteCommandListAndWaitEXT(cmdList);
     }
 }
 

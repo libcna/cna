@@ -11,6 +11,8 @@
 
 #include "../Common/IGraphicsBackend.hpp"
 #include "D3D12ResourceStateTracker.hpp"
+#include "D3D12PipelineStateCache.hpp"
+#include "D3D12RootSignatureCache.hpp"
 
 #include <d3d12.h>
 #include <dxgi1_5.h>
@@ -181,6 +183,24 @@ namespace CNA::Internal::Backends::D3D12
          *  real hardware can. NOXNA -- not part of any IGraphicsBackend contract. */
         void RecreateDeviceEXT();
 
+        /** @brief DX-111: binds an off-screen color target for Clear()/DrawColoredPrimitives()/
+         *  DrawIndexedColoredPrimitives() to render into. @p resource must already be registered
+         *  with GetResourceStateTrackerEXT() by its owner (matches this project's own convention --
+         *  every real D3D12 resource registers itself at creation, e.g. D3D12VertexBufferBackend's
+         *  own EnsureCapacity()) -- this call only remembers the binding, it does not create or
+         *  track the resource itself. Honest scope note: this is deliberately minimal test/draw
+         *  scaffolding, not a full public D3D12RenderTargetBackend (still owed, matches DX-109's own
+         *  honest triage of render targets out of that task's first pass) -- the real swap-chain
+         *  back buffer would be the production equivalent once DX-100's Wine/vkd3d-proton
+         *  presentation gap is resolved on real Windows hardware (DX-114). NOXNA. */
+        void BindOffscreenColorTargetEXT(ID3D12Resource* resource, D3D12_CPU_DESCRIPTOR_HANDLE rtv,
+                                         DXGI_FORMAT format, int width, int height);
+        /** @brief Clears the off-screen binding set by BindOffscreenColorTargetEXT() -- subsequent
+         *  Clear()/draw calls fall back to the honest "not yet implemented" throw. NOXNA. */
+        void UnbindOffscreenColorTargetEXT();
+        /** @brief Whether an off-screen color target is currently bound (NOXNA diagnostics/tests). */
+        [[nodiscard]] bool HasBoundColorTargetEXT() const { return boundColorResource_ != nullptr; }
+
     private:
         [[noreturn]] static void NotYetImplemented(const char* what);
 
@@ -196,6 +216,16 @@ namespace CNA::Internal::Backends::D3D12
         /// primary D3D12 CTest suite never constructs this backend with a real window (see
         /// examples/d3d12_smoke_test.cpp's own comment block).
         void CreateSwapChainResources();
+
+        /// DX-111: lazily creates (once) an UPLOAD-heap, persistently-mapped constant buffer of
+        /// exactly @p byteWidth bytes -- the standard D3D12 dynamic-CB idiom (map once at creation,
+        /// never Unmap, just memcpy new contents in before each draw; safe here because every draw
+        /// in this backend still submits synchronously via ExecuteCommandListAndWaitEXT(), so there
+        /// is no in-flight GPU access for a new memcpy to race with -- same honest scope note
+        /// D3D12Buffers.hpp's own file comment already makes for SetDataOptions).
+        void CreateUploadConstantBuffer(UINT byteWidth, ComPtr<ID3D12Resource>& outResource, void*& outMapped);
+        ID3D12Resource* GetOrCreatePerDrawConstantBufferEXT();
+        ID3D12Resource* GetOrCreateFogConstantBufferEXT();
 
         SDL_Window* window_ = nullptr;
         int virtualWidth_ = 0;
@@ -244,5 +274,23 @@ namespace CNA::Internal::Backends::D3D12
         // DX-106/DX-109: single shared per-resource barrier-state tracker, registered with by every
         // real D3D12 resource this backend creates (vertex/index buffers, textures -- DX-109).
         D3D12ResourceStateTracker resourceStates_;
+
+        // DX-111: root-signature/PSO caches (shared across every draw call) and the colored3d
+        // constant buffers -- same "persistent, reused across draws" convention D3D11's own
+        // perDrawConstantBuffer_/fogConstantBuffer_ established.
+        D3D12RootSignatureCache rootSigCache_;
+        D3D12PipelineStateCache psoCache_;
+        ComPtr<ID3D12Resource> perDrawConstantBuffer_;
+        void* perDrawConstantBufferMapped_ = nullptr;
+        ComPtr<ID3D12Resource> fogConstantBuffer_;
+        void* fogConstantBufferMapped_ = nullptr;
+
+        // DX-111: the currently-bound off-screen color target (see BindOffscreenColorTargetEXT's own
+        // doc comment) -- non-owning, the caller/test retains ownership of the resource itself.
+        ID3D12Resource* boundColorResource_ = nullptr;
+        D3D12_CPU_DESCRIPTOR_HANDLE boundColorRtv_{};
+        DXGI_FORMAT boundColorFormat_ = DXGI_FORMAT_R8G8B8A8_UNORM;
+        int boundColorWidth_ = 0;
+        int boundColorHeight_ = 0;
     };
 }
