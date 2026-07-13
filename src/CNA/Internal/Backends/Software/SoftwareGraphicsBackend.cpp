@@ -90,6 +90,54 @@ namespace CNA::Internal::Backends::Software
             return (px - ax) * (by - ay) - (py - ay) * (bx - ax);
         }
 
+        /// Bilinear texture sample (SOFTWARE-80), clamp-to-edge at the boundaries -- matches this
+        /// backend's own existing "texture address modes not honored, UVs are simply clamped"
+        /// simplification (docs/software-backend.md) rather than adding real Wrap/Mirror support.
+        /// At the very edge of the texture, clamping collapses both interpolation endpoints to the
+        /// same texel, so this degrades cleanly to the old nearest-neighbor result right at the
+        /// boundary rather than blending with a wrapped-around texel.
+        void SampleBilinear(const SoftwareTextureBackend& texture, float u, float v,
+                           float& r, float& g, float& b, float& a)
+        {
+            const int texW = std::max(1, texture.GetWidth());
+            const int texH = std::max(1, texture.GetHeight());
+            const auto& pixels = texture.Pixels();
+
+            const float tx = u * static_cast<float>(texW) - 0.5f;
+            const float ty = v * static_cast<float>(texH) - 0.5f;
+            const int x0raw = static_cast<int>(std::floor(tx));
+            const int y0raw = static_cast<int>(std::floor(ty));
+            // Clamp x0/x1 (and y0/y1) independently from the RAW (pre-clamp) indices -- clamping
+            // x0 first and then computing x1 = clamp(x0+1, ...) from the already-clamped x0 would
+            // shift x1 to the wrong texel just outside the valid range (a real bug caught by
+            // Software_Effects' own corner-sampling check: it produced a visible blend with the
+            // neighboring texel right at the texture edge instead of correctly collapsing to a
+            // single texel there).
+            const int x0 = std::clamp(x0raw, 0, texW - 1);
+            const int y0 = std::clamp(y0raw, 0, texH - 1);
+            const int x1 = std::clamp(x0raw + 1, 0, texW - 1);
+            const int y1 = std::clamp(y0raw + 1, 0, texH - 1);
+            const float fx = std::clamp(tx - std::floor(tx), 0.0f, 1.0f);
+            const float fy = std::clamp(ty - std::floor(ty), 0.0f, 1.0f);
+
+            const auto sample = [&](int px, int py, int channel) -> float {
+                const std::size_t idx = (static_cast<std::size_t>(py) * static_cast<std::size_t>(texW) +
+                                        static_cast<std::size_t>(px)) * 4u + static_cast<std::size_t>(channel);
+                return pixels[idx] / 255.0f;
+            };
+
+            const auto bilerp = [&](int channel) -> float {
+                const float top = sample(x0, y0, channel) * (1.0f - fx) + sample(x1, y0, channel) * fx;
+                const float bottom = sample(x0, y1, channel) * (1.0f - fx) + sample(x1, y1, channel) * fx;
+                return top * (1.0f - fy) + bottom * fy;
+            };
+
+            r = bilerp(0);
+            g = bilerp(1);
+            b = bilerp(2);
+            a = bilerp(3);
+        }
+
         /// Fills one triangle into `fb` using a standard edge-function/barycentric rasterizer,
         /// with a per-pixel depth test against `fb.depthBuffer` when `depthTestEnabled`. Accepts
         /// either triangle winding order (no backface culling in v1 -- CullNone-equivalent
@@ -298,17 +346,12 @@ namespace CNA::Internal::Backends::Software
                     {
                         const float u = (lambda0 * v0.u + lambda1 * v1.u + lambda2 * v2.u) / invW;
                         const float v = (lambda0 * v0.v + lambda1 * v1.v + lambda2 * v2.v) / invW;
-                        const int texW = std::max(1, texture->GetWidth());
-                        const int texH = std::max(1, texture->GetHeight());
-                        const int tx = std::clamp(static_cast<int>(u * static_cast<float>(texW)), 0, texW - 1);
-                        const int ty = std::clamp(static_cast<int>(v * static_cast<float>(texH)), 0, texH - 1);
-                        const auto& pixels = texture->Pixels();
-                        const std::size_t ti = (static_cast<std::size_t>(ty) * static_cast<std::size_t>(texW) +
-                                                static_cast<std::size_t>(tx)) * 4u;
-                        r *= pixels[ti + 0] / 255.0f;
-                        g *= pixels[ti + 1] / 255.0f;
-                        b *= pixels[ti + 2] / 255.0f;
-                        a *= pixels[ti + 3] / 255.0f;
+                        float texR, texG, texB, texA;
+                        SampleBilinear(*texture, u, v, texR, texG, texB, texA);
+                        r *= texR;
+                        g *= texG;
+                        b *= texB;
+                        a *= texA;
                     }
 
                     r *= diffuseR;
