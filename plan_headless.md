@@ -19,10 +19,12 @@
 > CTest, `Headless_CoverageGaps`. `HEADLESS-51`/`64` (per-effect coverage for `AlphaTestEffect`/
 > `DualTextureEffect`/`EnvironmentMapEffect`/`SkinnedEffect`/`Model.Draw()`) closed the same day via
 > a fifth CTest, `Headless_Effects`, which also surfaced a genuine, previously-undocumented
-> behavioral finding (see "Implementation notes"). A few validation/scoping corners remain
-> intentionally narrowed from their original wording once real interface constraints were
-> discovered during implementation — see each task's own Notes column and the "Implementation
-> notes" section after the task tables for the honest specifics.
+> behavioral finding (see "Implementation notes"). `HEADLESS-60` (dual-mode Validation-throws/
+> Fast-doesn't-throw confirmation for every `HEADLESS-20`/`22`/`23`/`24` rule, not just the one
+> representative `HEADLESS-21` case) closed the same day via a sixth CTest, `Headless_ModeDial`. A
+> few validation/scoping corners remain intentionally narrowed from their original wording once
+> real interface constraints were discovered during implementation — see each task's own Notes
+> column and the "Implementation notes" section after the task tables for the honest specifics.
 >
 > **Why a Headless backend:** every existing backend (`SDL_RENDERER`/`EASYGL`/`BGFX`/`VULKAN`/`WEBGPU`)
 > needs a real window and a real GPU context to run at all, which makes them unsuitable for fast,
@@ -187,7 +189,7 @@ cross-cutting test suites that don't belong to one single implementation task.
 
 | # | Task | Status | Notes |
 |---|---|---|---|
-| HEADLESS-60 | Bounds/argument-validation tests per `Headless*Backend` class: confirm each `HEADLESS-20`–`24` rule actually throws under `HeadlessValidation` and does *not* throw under `HeadlessFast` (proving the mode dial genuinely does something, not just cosmetic) | 🟨 | The `HEADLESS-21` (draw-call index-count) rule is verified both ways in `Headless_Smoke`. `HEADLESS-20`/`22`/`23`/`24`'s specific rules are implemented (see their own rows) but not each individually asserted on by a test yet — only the one representative case was chosen to prove the mode dial itself works, per this task's own stated goal, rather than exhaustively re-testing every rule twice. |
+| HEADLESS-60 | Bounds/argument-validation tests per `Headless*Backend` class: confirm each `HEADLESS-20`–`24` rule actually throws under `HeadlessValidation` and does *not* throw under `HeadlessFast` (proving the mode dial genuinely does something, not just cosmetic) | ✅ | **Closed 2026-07-13** via a new CTest, `Headless_ModeDial` (10/10): `HEADLESS-21` was already verified both ways in `Headless_Smoke`. This test adds `HEADLESS-20` (`HeadlessVertexBufferBackend::SetData()`/`HeadlessIndexBufferBackend::SetData16()` past capacity — talks directly to the backend objects via `HeadlessGraphicsBackend::SharedState()`, since this rule is specifically about the backend's own `Require()` check), `HEADLESS-22` (a `DualTextureEffect` draw missing its second texture), `HEADLESS-23` (`SetScissorRect()` with a negative origin — the Fast-mode half wasn't previously shown), and `HEADLESS-24` (`ApplySamplerState()` with an out-of-range slot, 16, not previously tested at all) — each throws under `HeadlessValidation` and does not throw under `HeadlessFast`, confirmed in one dedicated place. |
 | HEADLESS-61 | Draw-call/state-change counting tests: a known, fixed sequence of `Draw*`/`SetBlendState`/etc. calls produces the exact expected `HeadlessStatistics` values, both cumulative and per-frame | ✅ | Cumulative counters verified exactly (`Headless_Smoke` Check C). Per-frame diffing **closed 2026-07-13** — see `HEADLESS-32`. |
 | HEADLESS-62 | Leak-detection tests: deliberately leak a resource (never `Dispose()`/never let it go out of scope) and confirm `AssertNoLeaks()`/teardown reports it; then dispose it and confirm the same run reports clean | ✅ | Verified 2026-07-13 (`Headless_Smoke` Checks D/E). |
 | HEADLESS-63 | Mode-switching tests: the exact same invalid-argument call throws under `HeadlessValidation`/`HeadlessTrace` and does not throw under `HeadlessFast` | ✅ | `HeadlessValidation` vs `HeadlessFast` verified for an invalid draw call (`Headless_Smoke` Check F). `HeadlessTrace`'s *logging* behaviour (as opposed to its validation behaviour specifically) is now also verified (`Headless_ResourceBackends` Check F) — `TraceEnabled()`/`ValidationEnabled()` share the same `mode != Fast` gate in `HeadlessSharedState`, so validation necessarily also holds in `HeadlessTrace`; not re-asserted with a second invalid-draw-call test since it would exercise the identical code path. |
@@ -211,8 +213,11 @@ and `CNA_HEADLESS_MODE` environment-variable parsing (`HEADLESS-5`) are all now 
 dedicated tests (`Headless_CoverageGaps`); `AlphaTestEffect`/`DualTextureEffect`/
 `EnvironmentMapEffect`/`SkinnedEffect`/`Model.Draw()` are now individually verified end-to-end
 (`HEADLESS-51`/`64`, `Headless_Effects`), which also surfaced a real, previously-undocumented
-behavioral asymmetry between effects (see below); and `../mobile-eggbert`, a real third-party
-game, builds and runs 20+ seconds with zero crashes under this backend.
+behavioral asymmetry between effects (see below); every `HEADLESS-20`/`22`/`23`/`24` validation
+rule is now confirmed both ways (throws under `HeadlessValidation`, doesn't under `HeadlessFast`)
+in one dedicated place (`HEADLESS-60`, `Headless_ModeDial`), not just the one representative
+`HEADLESS-21` case; and `../mobile-eggbert`, a real third-party game, builds and runs 20+ seconds
+with zero crashes under this backend.
 
 What's genuinely narrower than the original task wording, discovered while implementing against the
 *real* `IGraphicsBackend` interface rather than the plan's own upfront guesses:

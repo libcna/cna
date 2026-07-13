@@ -122,7 +122,10 @@ end-to-end by a fifth CTest, `Headless_Effects` — which also surfaced a real b
 their `FillGpuDrawParams()` regardless of whether a texture was actually assigned, so they genuinely
 throw under `HeadlessValidation` if a game forgets to set one, while `AlphaTestEffect` degrades
 gracefully either way (its texture is truly optional). Worth knowing when writing a real game
-against these effects, not just a Headless test-coverage note.
+against these effects, not just a Headless test-coverage note; and (2026-07-13) every
+`HEADLESS-20`/`22`/`23`/`24` validation rule is now confirmed both ways — throws under
+`HeadlessValidation`, does not throw under `HeadlessFast` — in one dedicated sixth CTest,
+`Headless_ModeDial`, not just the one representative draw-call-bounds case shown elsewhere.
 
 ## Debug labels and trace log export
 

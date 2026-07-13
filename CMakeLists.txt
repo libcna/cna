@@ -6458,6 +6458,12 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "HEADLESS")
     set_tests_properties(Headless_Effects PROPERTIES
         TIMEOUT 30
         LABELS "Headless")
+
+    cna_headless_test(cna_test_headless_mode_dial examples/headless_mode_dial_test.cpp)
+    add_test(NAME Headless_ModeDial COMMAND cna_test_headless_mode_dial)
+    set_tests_properties(Headless_ModeDial PROPERTIES
+        TIMEOUT 30
+        LABELS "Headless")
 endif()
 
 # --- Task 6.1: real two-process ENet loopback test harness ---
