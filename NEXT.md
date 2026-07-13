@@ -22,10 +22,20 @@
 > queue/heaps/command-lists/barriers/PSOs/root-signatures/resources) around off-screen,
 > swap-chain-free proof (`ID3D12Resource` render target + staging-heap readback) for local Wine-based
 > development, deferring swap-chain/`Present()` proof to a real-Windows/CI-VM pass much earlier than
-> D3D11's own `DX-90` did. **`DX-101` (full D3D12 CMake wiring) is now closed too (2026-07-14,
-`cmake-build-d3d12` builds clean, skeleton `D3D12GraphicsBackend` in place)** -- `DX-102`
-(device/command-queue/swap-chain) is the concrete next step. Below is
-> this session's own chronological history (kept for detail, not rewritten):
+> D3D11's own `DX-90` did. **`DX-101` (full D3D12 CMake wiring) is closed (2026-07-14,
+> `cmake-build-d3d12` builds clean, skeleton `D3D12GraphicsBackend` in place).** **`DX-102`/`DX-103`/
+> `DX-104`/`DX-105` are now closed too (2026-07-14)** — device-lifetime resources are real: `ID3D12Device`
+> (real feature-level retry loop, `12_1` on the first try), `ID3D12CommandQueue`, 3 real descriptor
+> heaps (bump-allocated), 2 per-frame `ID3D12CommandAllocator`s + 1 reused `ID3D12GraphicsCommandList`
+> (`kFramesInFlight = 2`, matching Vulkan's own constant), and a real `ID3D12Fence` with a genuine
+> N-frames-in-flight back-pressure primitive. New `D3D12_Smoke` CTest, **18/18 checks**, all off-screen
+> (`window = nullptr`) so the suite never touches the crash-prone swap-chain path, gated by a real
+> `vkd3d-proton - applicationVersion: ...` log-line check (`scripts/run-wine-vkd3d.sh`). **Swap-chain
+> creation remains the one real, unresolved gap** — implemented for real, but a dedicated by-hand
+> diagnostic (`examples/d3d12_swapchain_diag.cpp`, not a CTest) reproduced `DX-100`'s exact crash with
+> a full symbolized backtrace: a null-pointer read inside Wine's own `dxgi.dll`
+> (`vkd3d_instance_get_vk_instance(instance=0)`). **Next concrete step: `DX-106`** (resource barriers).
+> Below is this session's own chronological history (kept for detail, not rewritten):
 >
 > Phase DX3 (`D3DCommon`), Phase DX5
 > (vertex/index buffers + input layout), Phase DX6 (textures + render targets), Phase DX7 (state
@@ -221,7 +231,7 @@ API-surface changes.
 | `cmake-build-sdl` | SDL_Renderer | Clean as of 2026-07-10 (not rebuilt this session) |
 | `cmake-build-android` | SDL_Renderer (NDK) | Blocked — Task 920 (sibling `sharp-runtime` NDK build regressions) |
 | `cmake-build-d3d11` | D3D11 (Windows cross-compile, MinGW-w64) | **Verified clean 2026-07-13**: `CNA` and `cna_backend_graphics_d3dcommon`/`cna_backend_graphics_d3d11` build clean; `cna_test_d3d11_smoke`/`cna_test_d3d11_common` build, link, and run correctly under Wine+DXVK. **`CnaTests` itself does NOT build** for this backend — genuinely blocked (see §4), not silently skipped. |
-| `cmake-build-d3d12` | D3D12 (Windows cross-compile, MinGW-w64) | **New 2026-07-14 (DX-101)**: `CNA` and `cna_backend_graphics_d3dcommon`/`cna_backend_graphics_d3d12` build clean. `D3D12GraphicsBackend` is a skeleton only — every `IGraphicsBackend` method honestly throws "not yet implemented"; nothing executable to run under Wine+vkd3d-proton yet (`DX-102` onward). |
+| `cmake-build-d3d12` | D3D12 (Windows cross-compile, MinGW-w64) | **Updated 2026-07-14 (DX-102/103/104/105)**: `CNA` and both D3D12 backend targets build clean. `D3D12GraphicsBackend`'s device-lifetime resources are now REAL (device/queue/heaps/command-lists/fence) — `Clear()`/`Present()`/draws still honestly throw (`DX-106` onward: barriers/PSOs/root-signatures/resources). `D3D12_Smoke` CTest: **18/18 checks pass** through Wine+vkd3d-proton (off-screen only). Swap-chain creation is implemented but crashes under this Wine setup (real, evidenced, see `plan_dx.md` `DX-102`'s row) — a by-hand diagnostic exists (`cna_diag_d3d12_swapchain`, not a CTest) to reproduce it. |
 
 The `cna_demo_xact` example fails to build on every backend (missing `examples/demo_xact/Content`
 directory in this checkout) — cosmetic, pre-existing, not a CNA bug, do not chase it (§9).
@@ -235,11 +245,13 @@ directory in this checkout) — cosmetic, pre-existing, not a CNA bug, do not ch
 | Bgfx | 4375/4377 pass (2 hardware skips), as of 2026-07-11 | 104/106 pass — 2 pre-existing failures (`Bgfx_RenderTarget2D_MsaaResolve`, `Bgfx_RenderTargetCube_DepthFormat`, DEFERRED — Task 952) |
 | Software | 4371/4373 pass, as of 2026-07-13 | 6 CTests, 29/29 checks |
 | D3D11 | **Does not build** (see §4) | **6/6 pass, 92 `D3D11_Smoke`/`D3D11_Common` checks + 10 more assertions across 4 new state-object tests** (`D3D11_Smoke` 69, `D3D11_Common` 23, `D3D11_BlendState_Opaque`/`AlphaBlend`, `D3D11_DepthStencilState_StencilEnable`, `D3D11_RasterizerState_CullMode`), verified 2026-07-14 via `ctest --test-dir cmake-build-d3d11 -R D3D11` |
+| D3D12 | Not applicable yet (no `CnaTests` target for this backend) | **1/1 pass, 18/18 checks** (`D3D12_Smoke`, off-screen device/queue/heaps/command-lists/fence), verified 2026-07-14 via `ctest --test-dir cmake-build-d3d12 -R D3D12` (3 consecutive real runs, 100% pass each — an earlier draft had one intermittent failure from a flawed test assertion, fixed, see `plan_dx.md` `DX-105`'s row) |
 | Headless, WebGPU | Not re-verified this session | See `plan_headless.md`/`plan_webgpu.md` for their own last-verified status |
 
 All EasyGL/Vulkan/Bgfx/Software numbers above are carried over from the last session that actually
 touched those backends (2026-07-10/11/13) — **not re-verified in this session**, which worked
-exclusively on D3D11. The D3D11 numbers are fresh, verified today.
+exclusively on D3D11/D3D12. The D3D11 numbers are unchanged from earlier this session; the D3D12
+numbers are fresh, verified just now.
 
 ### Recently implemented
 
@@ -540,16 +552,19 @@ desktop session with real GPU access — re-verify before assuming either claim 
 
 ## 8. Next smallest tasks
 
-1. **Phase DX12 (D3D12), continue with `DX-102`** (`plan_dx.md`) — `DX-100`'s spike and `DX-101`'s
-   CMake wiring are both closed (2026-07-14): the device/queue/fence/command-list path is real and
-   usable locally via Wine+vkd3d-proton (feature level `12_1`, DXR 1.1, SM 6.8 negotiated), but
-   `CreateSwapChainForHwnd` crashes/fails under vanilla Wine's own `dxgi.dll`; `CNA_GRAPHICS_BACKEND=
-   D3D12` now builds clean (`cmake-build-d3d12`, real `cna_backend_graphics_d3d12` target, factory
-   dispatch) with a skeleton `D3D12GraphicsBackend` (all `IGraphicsBackend` pure virtuals throw
-   honestly). **Next step: `DX-102`** (device/command-queue/swap-chain) — build it around
-   off-screen/swap-chain-free proof (an `ID3D12Resource` render target + staging-heap readback, no
-   `IDXGISwapChain`) rather than assuming presentation works, per `DX-100`'s own recommendation.
-   Already authorized — no go-ahead needed, but see §9 for what's still off-limits.
+1. **Phase DX12 (D3D12), continue with `DX-106`** (`plan_dx.md`) — `DX-100`/`DX-101`/`DX-102`/
+   `DX-103`/`DX-104`/`DX-105` are all closed (2026-07-14): real `ID3D12Device` (feature level `12_1`
+   negotiated), `ID3D12CommandQueue`, 3 real descriptor heaps, 2 per-frame `ID3D12CommandAllocator`s
+   + 1 reused `ID3D12GraphicsCommandList`, and a real `ID3D12Fence` with a genuine N-frames-in-flight
+   back-pressure primitive — all proven via `D3D12_Smoke` (18/18 checks, off-screen only). Swap-chain
+   creation is implemented for real but crashes under this Wine setup (a null-pointer read inside
+   Wine's own `dxgi.dll`, reproduced with a full backtrace via the new by-hand
+   `cna_diag_d3d12_swapchain` diagnostic — not a CTest, since it always crashes here). **Next step:
+   `DX-106`** (resource barriers — explicit `D3D12_RESOURCE_BARRIER` state tracking per resource;
+   the plan's own row flags this as "the single biggest source of silently-wrong bugs in a first
+   D3D12 backend," needs real deliberate design, not ad-hoc calls), then `DX-107` (PSOs) and `DX-108`
+   (root signatures) before any real off-screen resource/draw work (`DX-109`) can land. Already
+   authorized — no go-ahead needed, but see §9 for what's still off-limits.
 2. **Decide Task 945** (manual HLSL→GLSL port vs. `dxc`+`SPIRV-Cross` tooling for Phase 78, the
    *unrelated* `../cna-samples` shader-conversion track) — Task 946's data point is in (manual
    porting scaled fine for BloomSample's 3 shaders). Needs project-owner input, do not decide

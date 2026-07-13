@@ -6667,6 +6667,44 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D11")
     set_tests_properties(D3D11_RasterizerState_CullMode PROPERTIES TIMEOUT 60 LABELS "D3D11")
 endif()
 
+# plan_dx.md DX-102/103/104/105: D3D12 CTest registration, mirroring DX-80's own D3D11 macro
+# exactly. Run via scripts/run-wine-vkd3d.sh (DX-100's own Wine+vkd3d-proton dev loop, a distinct
+# Wine prefix from D3D11's DXVK one -- see that script's own comment header for why).
+if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D12")
+    enable_testing()
+
+    macro(cna_d3d12_test target src)
+        add_executable(${target} ${src})
+        target_link_libraries(${target} PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(${target} PRIVATE SDL3::SDL3main)
+        endif()
+        if(MINGW)
+            target_link_options(${target} PRIVATE -static-libgcc -static-libstdc++)
+            target_link_options(${target} PRIVATE -Wl,--allow-multiple-definition)
+            cna_copy_mingw_runtime(${target})
+            cna_copy_sdl_runtime(${target})
+        endif()
+    endmacro()
+
+    # DX-102/103/104/105: off-screen device/queue/heap/command-list/fence proof -- deliberately
+    # never constructs a window/swap chain (see examples/d3d12_smoke_test.cpp's own header comment
+    # for why), so this stays genuinely green on this Wine+vkd3d-proton dev loop.
+    cna_d3d12_test(cna_test_d3d12_smoke examples/d3d12_smoke_test.cpp)
+    add_test(NAME D3D12_Smoke
+        COMMAND ${CMAKE_SOURCE_DIR}/scripts/run-wine-vkd3d.sh $<TARGET_FILE:cna_test_d3d12_smoke>)
+    set_tests_properties(D3D12_Smoke PROPERTIES
+        TIMEOUT 60
+        LABELS "D3D12")
+
+    # plan_dx.md DX-102: real (window-attached) swap-chain diagnostic -- deliberately NOT
+    # registered as a CTest (mirrors cna_diag_software's own "real executable, not a ctest"
+    # precedent above), since DX-100's own spike already found this crashes under vanilla Wine's
+    # dxgi.dll; a permanently-registered, always-crashing CTest would just be noise. Built so a
+    # developer/script can still run it by hand for a real, up-to-date reading.
+    cna_d3d12_test(cna_diag_d3d12_swapchain examples/d3d12_swapchain_diag.cpp)
+endif()
+
 # --- Task 6.1: real two-process ENet loopback test harness ---
 # A tiny standalone (non-GTest) executable playing "host" or "client", spawned twice as
 # independent OS processes by tests/CNA/Internal/Net/TwoProcessLoopbackTest.cpp. See NEXT.md /
