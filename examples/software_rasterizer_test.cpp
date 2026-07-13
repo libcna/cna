@@ -3,12 +3,13 @@
 // works -- real, pixel-verified triangle rendering with no GPU, no window, no display server.
 //
 // Draws go through the normal GraphicsDevice::DrawPrimitives()/DrawIndexedPrimitives() public API
-// with a default (identity World/View/Projection) BasicEffect applied -- GraphicsDevice routes
-// these to IGraphicsBackend::DrawPrimitivesEx()/DrawIndexedPrimitivesEx(), whose *default*
-// implementation (SoftwareGraphicsBackend doesn't override either yet -- that's Phase S6) falls
-// back to DrawColoredPrimitives()/DrawIndexedColoredPrimitives(), which is what Phase S4 actually
-// implements. So this is already exercising the real rasterizer end-to-end through the exact same
-// public API a real game uses, not a backend-internal-only code path.
+// with a BasicEffect applied (VertexColorEnabled explicitly set true -- it defaults to false in
+// real XNA/FNA, so a plain BasicEffect ignores vertex colors entirely unless a game opts in).
+// GraphicsDevice routes these to IGraphicsBackend::DrawPrimitivesEx()/DrawIndexedPrimitivesEx(),
+// which SoftwareGraphicsBackend overrides directly (Phase S6) using the same rasterizer core
+// Phase S4's DrawColoredPrimitives()/DrawIndexedColoredPrimitives() proved correct. So this is
+// exercising the real rasterizer end-to-end through the exact same public API a real game uses,
+// not a backend-internal-only code path.
 //
 // Since World/View/Projection are all identity, clip.W == 1 for every vertex and NDC coordinates
 // equal the raw vertex positions directly -- this lets the test place vertices at exact,
@@ -92,6 +93,7 @@ protected:
             VertexBuffer vb(dev, 3);
             vb.SetData(verts, 3);
             BasicEffect fx(dev);
+            fx.VertexColorEnabled = true;
             fx.Apply();
             dev.SetVertexBuffer(&vb);
             dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 1);
@@ -118,6 +120,7 @@ protected:
             VertexBuffer vb(dev, 3);
             vb.SetData(verts, 3);
             BasicEffect fx(dev);
+            fx.VertexColorEnabled = true;
             fx.Apply();
             dev.SetVertexBuffer(&vb);
             dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 1);
@@ -147,6 +150,7 @@ protected:
                 { Vector3( 2.0f,  0.0f, 0.2f), Color::Red },
             };
             BasicEffect fx(dev);
+            fx.VertexColorEnabled = true;
             fx.Apply();
 
             // Check C: far-then-near -- near (red) must win.
@@ -196,6 +200,7 @@ protected:
             const std::uint16_t indices[3] = {0, 1, 2};
             ib.SetData(indices, 0, 3);
             BasicEffect fx(dev);
+            fx.VertexColorEnabled = true;
             fx.Apply();
 
             dev.SetVertexBuffer(&vb);

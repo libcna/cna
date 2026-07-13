@@ -266,6 +266,13 @@ namespace CNA::Internal::Backends::Software
         void DrawIndexedColoredPrimitives(const IVertexBufferBackend& vb, const IIndexBufferBackend& ib,
                                           const Matrix& world, const Matrix& view, const Matrix& projection,
                                           PrimitiveType primitive, int primitiveCount) override;
+        void DrawPrimitivesEx(const IVertexBufferBackend& vb, const Matrix& world, const Matrix& view,
+                              const Matrix& projection, PrimitiveType primitive, int primitiveCount,
+                              const GpuDrawParams& params) override;
+        void DrawIndexedPrimitivesEx(const IVertexBufferBackend& vb, const IIndexBufferBackend& ib,
+                                     const Matrix& world, const Matrix& view, const Matrix& projection,
+                                     PrimitiveType primitive, int primitiveCount,
+                                     const GpuDrawParams& params) override;
 
         // ---- Software-specific, NOXNA-equivalent debug/testing API ----
 
@@ -273,6 +280,12 @@ namespace CNA::Internal::Backends::Software
         /// none is bound) -- real, CPU-owned pixel/depth storage.
         [[nodiscard]] SoftwareFramebuffer& CurrentFramebuffer();
         [[nodiscard]] const SoftwareFramebuffer& CurrentFramebuffer() const;
+        /// Whether the current BlendState is anything other than the Opaque preset (design
+        /// decision 7: only Opaque/AlphaBlend are distinguished in v1). Used by
+        /// SoftwareSpriteBatchBackend to decide whether to alpha-blend its own quads, since
+        /// SpriteBatch::Begin() applies its BlendState the same way any other draw does.
+        [[nodiscard]] bool IsBlendEnabled() const { return blendEnabled_; }
+        [[nodiscard]] bool IsDepthTestEnabled() const { return depthTestEnabled_; }
 
     private:
         SoftwareFramebuffer backbuffer_;
@@ -280,5 +293,8 @@ namespace CNA::Internal::Backends::Software
         int virtualWidth_ = 0;
         int virtualHeight_ = 0;
         bool depthTestEnabled_ = true;
+        /// Opaque (false) vs. simplified AlphaBlend (true) -- design decision 7. Defaults to
+        /// false, matching real XNA/FNA's own default GraphicsDevice.BlendState (Opaque).
+        bool blendEnabled_ = false;
     };
 }

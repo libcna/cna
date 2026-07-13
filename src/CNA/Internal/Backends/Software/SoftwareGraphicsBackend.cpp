@@ -36,6 +36,7 @@ namespace CNA::Internal::Backends::Software
             float depth = 0.0f;         ///< Post-divide Z, 0..1 (D3D/XNA convention).
             float invW = 1.0f;          ///< 1 / clip.W, used to un-premultiply interpolated attributes.
             float r = 0.0f, g = 0.0f, b = 0.0f, a = 0.0f;  ///< Vertex color * invW, 0..1 range.
+            float u = 0.0f, v = 0.0f;   ///< Texture coordinate * invW (Phase S5).
         };
 
         /// Reads a packed little-endian RGBA8 Color (Microsoft::Xna::Framework::Color's own
@@ -154,6 +155,194 @@ namespace CNA::Internal::Backends::Software
                     fb.color[colorIndex + 1] = static_cast<std::uint8_t>(std::clamp(g, 0.0f, 1.0f) * 255.0f);
                     fb.color[colorIndex + 2] = static_cast<std::uint8_t>(std::clamp(b, 0.0f, 1.0f) * 255.0f);
                     fb.color[colorIndex + 3] = static_cast<std::uint8_t>(std::clamp(a, 0.0f, 1.0f) * 255.0f);
+                }
+            }
+        }
+
+        // ---- Phase S5/S6: generalized (textured/blended/effect-driven) rasterization ----
+
+        /// Transforms a vertex whose byte layout is inferred from `stride` (plan_software.md
+        /// design decision 2: 16=VertexPositionColor, 20=VertexPositionTexture,
+        /// 24=VertexPositionColorTexture) into screen space, for the DrawPrimitivesEx/
+        /// DrawIndexedPrimitivesEx path. `vertexColorEnabled` mirrors GpuDrawParams' own flag --
+        /// when false, vertex color is treated as opaque white so it doesn't affect the eventual
+        /// texture/diffuse modulation, matching a real Effect's own VertexColorEnabled=false
+        /// behavior. Returns false (cull the whole triangle) for the same near-plane reason as
+        /// TransformPositionColorVertex.
+        bool TransformGenericVertex(const std::uint8_t* raw, std::size_t stride, const Matrix& combined,
+                                    int viewportWidth, int viewportHeight, bool vertexColorEnabled,
+                                    RasterVertex& out)
+        {
+            Vector3 position;
+            std::memcpy(&position, raw, sizeof(Vector3));
+
+            const Vector4 clip = Vector4::Transform(position, combined);
+            if (clip.W <= 1e-5f)
+                return false;
+
+            const float invW = 1.0f / clip.W;
+            const float ndcX = clip.X * invW;
+            const float ndcY = clip.Y * invW;
+            const float ndcZ = clip.Z * invW;
+
+            out.x = (ndcX * 0.5f + 0.5f) * static_cast<float>(viewportWidth);
+            out.y = (1.0f - (ndcY * 0.5f + 0.5f)) * static_cast<float>(viewportHeight);
+            out.depth = ndcZ;
+            out.invW = invW;
+
+            float r = 1.0f, g = 1.0f, b = 1.0f, a = 1.0f;
+            float u = 0.0f, v = 0.0f;
+            if (stride == 16)
+            {
+                UnpackColorBytes(raw + 12, r, g, b, a);
+            }
+            else if (stride == 20)
+            {
+                std::memcpy(&u, raw + 12, sizeof(float));
+                std::memcpy(&v, raw + 16, sizeof(float));
+            }
+            else if (stride == 24)
+            {
+                UnpackColorBytes(raw + 12, r, g, b, a);
+                std::memcpy(&u, raw + 16, sizeof(float));
+                std::memcpy(&v, raw + 20, sizeof(float));
+            }
+
+            if (!vertexColorEnabled)
+            {
+                r = g = b = a = 1.0f;
+            }
+
+            out.r = r * invW;
+            out.g = g * invW;
+            out.b = b * invW;
+            out.a = a * invW;
+            out.u = u * invW;
+            out.v = v * invW;
+            return true;
+        }
+
+        /// Builds a RasterVertex directly from already-final screen-space pixel coordinates, with
+        /// no perspective divide needed (invW=1) -- used by SpriteBatch's own 2D quads, which are
+        /// placed directly in screen space rather than going through World*View*Projection.
+        RasterVertex MakeScreenSpaceVertex(float x, float y, float depth,
+                                           float r, float g, float b, float a, float u, float v)
+        {
+            RasterVertex out;
+            out.x = x;
+            out.y = y;
+            out.depth = depth;
+            out.invW = 1.0f;
+            out.r = r; out.g = g; out.b = b; out.a = a;
+            out.u = u; out.v = v;
+            return out;
+        }
+
+        /// General-purpose triangle fill for the DrawPrimitivesEx/DrawIndexedPrimitivesEx and
+        /// SpriteBatch paths: adds nearest-neighbor texture sampling, diffuseColor modulation, and
+        /// a simplified Opaque/AlphaBlend choice (design decisions 7/6) on top of RasterizeTriangle's
+        /// depth-tested, perspective-correct color interpolation.
+        void RasterizeTriangleShaded(SoftwareFramebuffer& fb, bool depthTestEnabled, bool blendEnabled,
+                                     bool textureEnabled, const SoftwareTextureBackend* texture,
+                                     float diffuseR, float diffuseG, float diffuseB, float diffuseA,
+                                     const RasterVertex& v0, const RasterVertex& v1, const RasterVertex& v2)
+        {
+            const float area = EdgeFunction(v0.x, v0.y, v1.x, v1.y, v2.x, v2.y);
+            if (area == 0.0f)
+                return;
+
+            const float minXf = std::min({v0.x, v1.x, v2.x});
+            const float maxXf = std::max({v0.x, v1.x, v2.x});
+            const float minYf = std::min({v0.y, v1.y, v2.y});
+            const float maxYf = std::max({v0.y, v1.y, v2.y});
+
+            const int minX = std::max(0, static_cast<int>(std::floor(minXf)));
+            const int maxX = std::min(fb.width - 1, static_cast<int>(std::ceil(maxXf)));
+            const int minY = std::max(0, static_cast<int>(std::floor(minYf)));
+            const int maxY = std::min(fb.height - 1, static_cast<int>(std::ceil(maxYf)));
+
+            for (int y = minY; y <= maxY; ++y)
+            {
+                for (int x = minX; x <= maxX; ++x)
+                {
+                    const float px = static_cast<float>(x) + 0.5f;
+                    const float py = static_cast<float>(y) + 0.5f;
+
+                    const float w0 = EdgeFunction(v1.x, v1.y, v2.x, v2.y, px, py);
+                    const float w1 = EdgeFunction(v2.x, v2.y, v0.x, v0.y, px, py);
+                    const float w2 = EdgeFunction(v0.x, v0.y, v1.x, v1.y, px, py);
+
+                    const bool inside = (w0 >= 0.0f && w1 >= 0.0f && w2 >= 0.0f) ||
+                                        (w0 <= 0.0f && w1 <= 0.0f && w2 <= 0.0f);
+                    if (!inside)
+                        continue;
+
+                    const float lambda0 = w0 / area;
+                    const float lambda1 = w1 / area;
+                    const float lambda2 = w2 / area;
+
+                    const float depth = lambda0 * v0.depth + lambda1 * v1.depth + lambda2 * v2.depth;
+
+                    const std::size_t pixelIndex = static_cast<std::size_t>(y) * static_cast<std::size_t>(fb.width) +
+                                                   static_cast<std::size_t>(x);
+                    if (depthTestEnabled && depth > fb.depthBuffer[pixelIndex])
+                        continue;
+
+                    const float invW = lambda0 * v0.invW + lambda1 * v1.invW + lambda2 * v2.invW;
+                    float r = (lambda0 * v0.r + lambda1 * v1.r + lambda2 * v2.r) / invW;
+                    float g = (lambda0 * v0.g + lambda1 * v1.g + lambda2 * v2.g) / invW;
+                    float b = (lambda0 * v0.b + lambda1 * v1.b + lambda2 * v2.b) / invW;
+                    float a = (lambda0 * v0.a + lambda1 * v1.a + lambda2 * v2.a) / invW;
+
+                    if (textureEnabled && texture != nullptr)
+                    {
+                        const float u = (lambda0 * v0.u + lambda1 * v1.u + lambda2 * v2.u) / invW;
+                        const float v = (lambda0 * v0.v + lambda1 * v1.v + lambda2 * v2.v) / invW;
+                        const int texW = std::max(1, texture->GetWidth());
+                        const int texH = std::max(1, texture->GetHeight());
+                        const int tx = std::clamp(static_cast<int>(u * static_cast<float>(texW)), 0, texW - 1);
+                        const int ty = std::clamp(static_cast<int>(v * static_cast<float>(texH)), 0, texH - 1);
+                        const auto& pixels = texture->Pixels();
+                        const std::size_t ti = (static_cast<std::size_t>(ty) * static_cast<std::size_t>(texW) +
+                                                static_cast<std::size_t>(tx)) * 4u;
+                        r *= pixels[ti + 0] / 255.0f;
+                        g *= pixels[ti + 1] / 255.0f;
+                        b *= pixels[ti + 2] / 255.0f;
+                        a *= pixels[ti + 3] / 255.0f;
+                    }
+
+                    r *= diffuseR;
+                    g *= diffuseG;
+                    b *= diffuseB;
+                    a *= diffuseA;
+
+                    fb.depthBuffer[pixelIndex] = depth;
+
+                    const std::size_t colorIndex = pixelIndex * 4;
+                    if (!blendEnabled)
+                    {
+                        fb.color[colorIndex + 0] = static_cast<std::uint8_t>(std::clamp(r, 0.0f, 1.0f) * 255.0f);
+                        fb.color[colorIndex + 1] = static_cast<std::uint8_t>(std::clamp(g, 0.0f, 1.0f) * 255.0f);
+                        fb.color[colorIndex + 2] = static_cast<std::uint8_t>(std::clamp(b, 0.0f, 1.0f) * 255.0f);
+                        fb.color[colorIndex + 3] = static_cast<std::uint8_t>(std::clamp(a, 0.0f, 1.0f) * 255.0f);
+                    }
+                    else
+                    {
+                        // Simplified "over" alpha compositing (design decision 7): result =
+                        // src*srcAlpha + dst*(1-srcAlpha) on all 4 channels -- one formula covering
+                        // AlphaBlend/NonPremultiplied/Additive-ish real BlendState presets alike,
+                        // an intentional v1 simplification rather than a full blend-equation
+                        // interpreter.
+                        const float dstR = fb.color[colorIndex + 0] / 255.0f;
+                        const float dstG = fb.color[colorIndex + 1] / 255.0f;
+                        const float dstB = fb.color[colorIndex + 2] / 255.0f;
+                        const float dstA = fb.color[colorIndex + 3] / 255.0f;
+                        const float invA = 1.0f - a;
+                        fb.color[colorIndex + 0] = static_cast<std::uint8_t>(std::clamp(r * a + dstR * invA, 0.0f, 1.0f) * 255.0f);
+                        fb.color[colorIndex + 1] = static_cast<std::uint8_t>(std::clamp(g * a + dstG * invA, 0.0f, 1.0f) * 255.0f);
+                        fb.color[colorIndex + 2] = static_cast<std::uint8_t>(std::clamp(b * a + dstB * invA, 0.0f, 1.0f) * 255.0f);
+                        fb.color[colorIndex + 3] = static_cast<std::uint8_t>(std::clamp(a + dstA * invA, 0.0f, 1.0f) * 255.0f);
+                    }
                 }
             }
         }
@@ -307,9 +496,12 @@ namespace CNA::Internal::Backends::Software
     }
 
     // ---- SoftwareSpriteBatchBackend ----
-    // Phase S6 (SOFTWARE-51) wires these Draw() calls to the shared rasterizer core -- a textured
-    // quad through the same DrawPrimitivesEx-equivalent path used for 3D draws. Stubbed as no-ops
-    // here so the class is complete and linkable before that phase lands.
+    // Phase S6 (SOFTWARE-51): a SpriteBatch::Draw() call is just a textured quad (2 triangles)
+    // placed directly in screen-pixel space (SpriteBatch never goes through World*View*Projection,
+    // unlike 3D draws) -- reuses RasterizeTriangleShaded, the same rasterizer core DrawPrimitivesEx
+    // uses. The quad-corner construction (destinationRectangle/sourceRectangle/origin/rotation/
+    // SpriteEffects) mirrors EasyGLGraphicsBackend::EasyGLSpriteBatchBackend::Draw()'s own proven
+    // formula, adapted to feed this backend's rasterizer directly instead of a GPU vertex buffer.
 
     SoftwareSpriteBatchBackend::SoftwareSpriteBatchBackend(SoftwareGraphicsBackend& owner) : owner_(owner) {}
 
@@ -327,10 +519,89 @@ namespace CNA::Internal::Backends::Software
         begun_ = false;
     }
 
-    void SoftwareSpriteBatchBackend::Draw(const ITextureBackend&, float, float) {}
-    void SoftwareSpriteBatchBackend::Draw(const ITextureBackend&, const Rectangle&, const Rectangle&, const Color&) {}
-    void SoftwareSpriteBatchBackend::Draw(const ITextureBackend&, const Rectangle&, const Rectangle&, const Color&,
-                                          float, const Vector2&, SpriteEffects, float) {}
+    void SoftwareSpriteBatchBackend::Draw(const ITextureBackend& texture, float x, float y)
+    {
+        Draw(texture, Rectangle(static_cast<int>(x), static_cast<int>(y), texture.GetWidth(), texture.GetHeight()),
+             Rectangle(0, 0, texture.GetWidth(), texture.GetHeight()), Color(255, 255, 255, 255),
+             0.0f, Vector2(0.0f, 0.0f), SpriteEffects::None, 0.0f);
+    }
+
+    void SoftwareSpriteBatchBackend::Draw(const ITextureBackend& texture, const Rectangle& destinationRectangle,
+                                          const Rectangle& sourceRectangle, const Color& color)
+    {
+        Draw(texture, destinationRectangle, sourceRectangle, color, 0.0f, Vector2(0.0f, 0.0f),
+             SpriteEffects::None, 0.0f);
+    }
+
+    void SoftwareSpriteBatchBackend::Draw(const ITextureBackend& texture, const Rectangle& destinationRectangle,
+                                          const Rectangle& sourceRectangle, const Color& color, float rotation,
+                                          const Vector2& origin, SpriteEffects effects, float layerDepth)
+    {
+        if (!begun_)
+            throw std::runtime_error("SoftwareSpriteBatchBackend::Draw: Draw() called before Begin()");
+
+        const auto* swTexture = dynamic_cast<const SoftwareTextureBackend*>(&texture);
+
+        const float texW = static_cast<float>(std::max(1, texture.GetWidth()));
+        const float texH = static_cast<float>(std::max(1, texture.GetHeight()));
+        float u1 = static_cast<float>(sourceRectangle.X) / texW;
+        float v1 = static_cast<float>(sourceRectangle.Y) / texH;
+        float u2 = static_cast<float>(sourceRectangle.X + sourceRectangle.Width) / texW;
+        float v2 = static_cast<float>(sourceRectangle.Y + sourceRectangle.Height) / texH;
+        if ((static_cast<int>(effects) & static_cast<int>(SpriteEffects::FlipHorizontally)) != 0) std::swap(u1, u2);
+        if ((static_cast<int>(effects) & static_cast<int>(SpriteEffects::FlipVertically)) != 0) std::swap(v1, v2);
+
+        const float r = color.getRProperty() / 255.0f;
+        const float g = color.getGProperty() / 255.0f;
+        const float b = color.getBProperty() / 255.0f;
+        const float a = color.getAProperty() / 255.0f;
+
+        const float dx = static_cast<float>(destinationRectangle.X);
+        const float dy = static_cast<float>(destinationRectangle.Y);
+        const float dw = static_cast<float>(destinationRectangle.Width);
+        const float dh = static_cast<float>(destinationRectangle.Height);
+        const float sw = static_cast<float>(std::max(1, sourceRectangle.Width));
+        const float sh = static_cast<float>(std::max(1, sourceRectangle.Height));
+        const float ox = origin.X;
+        const float oy = origin.Y;
+        const float scaleX = dw / sw;
+        const float scaleY = dh / sh;
+
+        const float p0x = (0.0f - ox) * scaleX, p0y = (0.0f - oy) * scaleY;
+        const float p1x = (sw - ox) * scaleX, p1y = (0.0f - oy) * scaleY;
+        const float p2x = (sw - ox) * scaleX, p2y = (sh - oy) * scaleY;
+        const float p3x = (0.0f - ox) * scaleX, p3y = (sh - oy) * scaleY;
+
+        const float cosR = std::cos(rotation);
+        const float sinR = std::sin(rotation);
+
+        const auto placeCorner = [&](float px, float py) -> Vector2 {
+            const float rx = dx + px * cosR - py * sinR;
+            const float ry = dy + px * sinR + py * cosR;
+            // SpriteBatch::SetTransformMatrix()'s optional 2D transform, applied as a point
+            // transform (z=0) directly on the already screen-space corner.
+            const Vector3 transformed = Vector3::Transform(Vector3(rx, ry, 0.0f), transformMatrix_);
+            return Vector2(transformed.X, transformed.Y);
+        };
+
+        const Vector2 c0 = placeCorner(p0x, p0y);
+        const Vector2 c1 = placeCorner(p1x, p1y);
+        const Vector2 c2 = placeCorner(p2x, p2y);
+        const Vector2 c3 = placeCorner(p3x, p3y);
+
+        const RasterVertex rv0 = MakeScreenSpaceVertex(c0.X, c0.Y, layerDepth, r, g, b, a, u1, v1);
+        const RasterVertex rv1 = MakeScreenSpaceVertex(c1.X, c1.Y, layerDepth, r, g, b, a, u2, v1);
+        const RasterVertex rv2 = MakeScreenSpaceVertex(c2.X, c2.Y, layerDepth, r, g, b, a, u2, v2);
+        const RasterVertex rv3 = MakeScreenSpaceVertex(c3.X, c3.Y, layerDepth, r, g, b, a, u1, v2);
+
+        SoftwareFramebuffer& fb = owner_.CurrentFramebuffer();
+        const bool depthTestEnabled = owner_.IsDepthTestEnabled();
+        const bool blendEnabled = owner_.IsBlendEnabled();
+        RasterizeTriangleShaded(fb, depthTestEnabled, blendEnabled, true, swTexture, 1.0f, 1.0f, 1.0f, 1.0f,
+                                rv0, rv1, rv2);
+        RasterizeTriangleShaded(fb, depthTestEnabled, blendEnabled, true, swTexture, 1.0f, 1.0f, 1.0f, 1.0f,
+                                rv2, rv3, rv0);
+    }
 
     // ---- SoftwareGraphicsBackend ----
 
@@ -441,7 +712,16 @@ namespace CNA::Internal::Backends::Software
         return effect;
     }
 
-    void SoftwareGraphicsBackend::ApplyBlendState(int, int, int, int, int, int) {}
+    void SoftwareGraphicsBackend::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
+                                                  int colorDstBlend, int alphaDstBlend, int, int)
+    {
+        // Blend::One=0, Blend::Zero=1 -> Opaque preset (src=One, dst=Zero), the only combination
+        // v1 treats as "no blending" -- matches EasyGLGraphicsBackend::ApplyBlendState's own exact
+        // Opaque-detection formula (design decision 7: only Opaque/AlphaBlend distinguished in v1;
+        // any other combination is treated as the simplified AlphaBlend case).
+        blendEnabled_ = !(colorSrcBlend == 0 && colorDstBlend == 1 &&
+                          alphaSrcBlend == 0 && alphaDstBlend == 1);
+    }
 
     void SoftwareGraphicsBackend::ApplyDepthStencilState(bool depthEnable, bool, int, bool, int, int, int, int, int,
                                                          int, int, bool, int, int, int, int)
@@ -593,6 +873,129 @@ namespace CNA::Internal::Backends::Software
                 continue;
 
             RasterizeTriangle(fb, depthTestEnabled_, rv[0], rv[1], rv[2]);
+        }
+    }
+
+    // Phase S5/S6 (SOFTWARE-40..43, 50): the effect-aware draw path -- stride-inferred vertex
+    // layout (design decision 2), nearest-neighbor texture sampling, diffuseColor modulation, and
+    // the simplified Opaque/AlphaBlend choice (design decision 7). lightingEnabled/fogEnabled/
+    // dualTexture/envMapping/skinned are all explicitly out of scope for v1 (design decision 6) --
+    // GpuDrawParams' other fields are simply not read here.
+    void SoftwareGraphicsBackend::DrawPrimitivesEx(const IVertexBufferBackend& vb, const Matrix& world,
+                                                   const Matrix& view, const Matrix& projection,
+                                                   PrimitiveType primitive, int primitiveCount,
+                                                   const GpuDrawParams& params)
+    {
+        if (primitiveCount <= 0)
+            throw std::runtime_error("SoftwareGraphicsBackend::DrawPrimitivesEx: primitiveCount must be > 0");
+        if (primitive != PrimitiveType::TriangleList)
+            throw std::runtime_error("SoftwareGraphicsBackend::DrawPrimitivesEx: only TriangleList is supported in v1");
+        if (params.textureEnabled && params.texture0 == nullptr)
+            throw std::runtime_error("SoftwareGraphicsBackend::DrawPrimitivesEx: TextureEnabled=true but texture0 is null");
+        if (primitiveCount * 3 > vb.GetVertexCount())
+            throw std::runtime_error(
+                "SoftwareGraphicsBackend::DrawPrimitivesEx: primitiveCount needs more vertices than the bound buffer has");
+
+        const auto& swVb = static_cast<const SoftwareVertexBufferBackend&>(vb);
+        const std::size_t stride = swVb.Stride();
+        if (stride != 16 && stride != 20 && stride != 24)
+            throw std::runtime_error(
+                "SoftwareGraphicsBackend::DrawPrimitivesEx: unsupported vertex stride (only 16/20/24 supported in v1)");
+
+        const auto* texture = dynamic_cast<const SoftwareTextureBackend*>(params.texture0);
+        const std::uint8_t* base = swVb.Data().data();
+
+        const Matrix combined = world * view * projection;
+        SoftwareFramebuffer& fb = CurrentFramebuffer();
+        int vw = 0, vh = 0;
+        GetViewportSize(vw, vh);
+
+        for (int i = 0; i < primitiveCount; ++i)
+        {
+            RasterVertex rv[3];
+            bool allValid = true;
+            for (int k = 0; k < 3; ++k)
+            {
+                const std::uint8_t* raw = base + static_cast<std::size_t>(i * 3 + k) * stride;
+                if (!TransformGenericVertex(raw, stride, combined, vw, vh, params.vertexColorEnabled, rv[k]))
+                {
+                    allValid = false;
+                    break;
+                }
+            }
+            if (!allValid)
+                continue;
+
+            RasterizeTriangleShaded(fb, depthTestEnabled_, blendEnabled_, params.textureEnabled, texture,
+                                    params.diffuseColor[0], params.diffuseColor[1], params.diffuseColor[2],
+                                    params.diffuseColor[3], rv[0], rv[1], rv[2]);
+        }
+    }
+
+    void SoftwareGraphicsBackend::DrawIndexedPrimitivesEx(const IVertexBufferBackend& vb, const IIndexBufferBackend& ib,
+                                                          const Matrix& world, const Matrix& view,
+                                                          const Matrix& projection, PrimitiveType primitive,
+                                                          int primitiveCount, const GpuDrawParams& params)
+    {
+        if (primitiveCount <= 0)
+            throw std::runtime_error("SoftwareGraphicsBackend::DrawIndexedPrimitivesEx: primitiveCount must be > 0");
+        if (primitive != PrimitiveType::TriangleList)
+            throw std::runtime_error("SoftwareGraphicsBackend::DrawIndexedPrimitivesEx: only TriangleList is supported in v1");
+        if (params.textureEnabled && params.texture0 == nullptr)
+            throw std::runtime_error("SoftwareGraphicsBackend::DrawIndexedPrimitivesEx: TextureEnabled=true but texture0 is null");
+        if (primitiveCount * 3 > ib.GetIndexCount())
+            throw std::runtime_error(
+                "SoftwareGraphicsBackend::DrawIndexedPrimitivesEx: primitiveCount needs more indices than the bound buffer has");
+
+        const auto& swVb = static_cast<const SoftwareVertexBufferBackend&>(vb);
+        const auto& swIb = static_cast<const SoftwareIndexBufferBackend&>(ib);
+        const std::size_t stride = swVb.Stride();
+        if (stride != 16 && stride != 20 && stride != 24)
+            throw std::runtime_error(
+                "SoftwareGraphicsBackend::DrawIndexedPrimitivesEx: unsupported vertex stride (only 16/20/24 supported in v1)");
+
+        const auto* texture = dynamic_cast<const SoftwareTextureBackend*>(params.texture0);
+        const std::uint8_t* vbBase = swVb.Data().data();
+        const std::uint8_t* ibBase = swIb.Data().data();
+        const bool thirtyTwoBit = swIb.IsThirtyTwoBit();
+
+        const Matrix combined = world * view * projection;
+        SoftwareFramebuffer& fb = CurrentFramebuffer();
+        int vw = 0, vh = 0;
+        GetViewportSize(vw, vh);
+
+        const auto readIndex = [&](int i) -> std::uint32_t {
+            if (thirtyTwoBit)
+            {
+                std::uint32_t val;
+                std::memcpy(&val, ibBase + static_cast<std::size_t>(i) * sizeof(std::uint32_t), sizeof(std::uint32_t));
+                return val;
+            }
+            std::uint16_t val;
+            std::memcpy(&val, ibBase + static_cast<std::size_t>(i) * sizeof(std::uint16_t), sizeof(std::uint16_t));
+            return val;
+        };
+
+        for (int i = 0; i < primitiveCount; ++i)
+        {
+            RasterVertex rv[3];
+            bool allValid = true;
+            for (int k = 0; k < 3; ++k)
+            {
+                const std::uint32_t idx = readIndex(i * 3 + k);
+                const std::uint8_t* raw = vbBase + static_cast<std::size_t>(idx) * stride;
+                if (!TransformGenericVertex(raw, stride, combined, vw, vh, params.vertexColorEnabled, rv[k]))
+                {
+                    allValid = false;
+                    break;
+                }
+            }
+            if (!allValid)
+                continue;
+
+            RasterizeTriangleShaded(fb, depthTestEnabled_, blendEnabled_, params.textureEnabled, texture,
+                                    params.diffuseColor[0], params.diffuseColor[1], params.diffuseColor[2],
+                                    params.diffuseColor[3], rv[0], rv[1], rv[2]);
         }
     }
 }

@@ -1,19 +1,19 @@
 # Software (CPU) Rasterizer Graphics Backend — Implementation Plan
 
-> **Status: Phases S1-S4 landed and verified, 2026-07-13.** `CNA_GRAPHICS_BACKEND=SOFTWARE`
+> **Status: Phases S1-S6 landed and verified, 2026-07-13.** `CNA_GRAPHICS_BACKEND=SOFTWARE`
 > configures, builds, and `CnaTests` (the full pre-existing GTest corpus) links and runs cleanly
 > against it -- **4371/4373 pass with `DISPLAY`/`WAYLAND_DISPLAY` unset and `SDL_VIDEODRIVER`
 > empty** (2 skips are unrelated hardware-sensor tests that skip on every backend). This backend now
-> actually **rasterizes real triangles** -- `DrawColoredPrimitives`/`DrawIndexedColoredPrimitives`
-> transform vertices through `World*View*Projection`, perspective-divide, and fill them with a real
-> edge-function rasterizer, with a genuinely working per-pixel depth test and perspective-correct
-> vertex-color interpolation. `Software_Smoke` (6/6) proves the framebuffer/readback/resource-
-> storage foundation; the new `Software_Rasterizer` CTest (5/5) proves the rasterizer itself: exact
-> solid-color output, correct barycentric color interpolation, and **order-independent depth
-> occlusion** (drawing a near-red then far-blue triangle, and the reverse order, both correctly
-> leave red visible) -- all with **no window, no GPU, no display server**.
-> `TriangleList` only in v1; no texture sampling, blending, or `BasicEffect`/`SpriteBatch`
-> integration yet (Phases S5/S6).
+> renders a genuinely complete `BasicEffect`-subset 2D/3D pipeline entirely on the CPU: real
+> triangle rasterization (`World*View*Projection` transform, perspective divide, edge-function
+> fill, per-pixel depth test, perspective-correct color/UV interpolation), nearest-neighbor texture
+> sampling, `DiffuseColor` modulation, a simplified `Opaque`/`AlphaBlend` choice, and a real
+> pixel-correct `SpriteBatch` path reusing the same rasterizer core. Three CTests, 16 checks total:
+> `Software_Smoke` (6/6, framebuffer/readback/resource-storage foundation), `Software_Rasterizer`
+> (5/5, solid-color output, barycentric color interpolation, **order-independent depth occlusion**),
+> `Software_Effects` (5/5, texture sampling, diffuse modulation, both blend modes, `SpriteBatch`) --
+> all with **no window, no GPU, no display server**. `TriangleList` only in v1; no lighting/fog,
+> other effect types, or MRT/cube/3D textures (see Boundaries).
 >
 > **Status legend:** ✅ implemented *and verified against its stated acceptance criteria*;
 > 🟨 code or documentation exists but has not met those criteria; ⬜ not implemented.
@@ -166,10 +166,10 @@ without both.
 
 | # | Task | Status | Notes |
 |---|---|---|---|
-| SOFTWARE-40 | Vertex-color modulation (`vertexColorEnabled` path) | ⬜ | |
-| SOFTWARE-41 | Nearest-neighbor texture sampling (`textureEnabled`/`texture0`), reading the already-stored CPU-side pixel data every `ITextureBackend` implementation already keeps | ⬜ | Bilinear sampling is a reasonable v2 stretch goal, not required for v1. |
-| SOFTWARE-42 | Basic blending: `Opaque` (direct write) and `AlphaBlend` (`SrcAlpha`/`InvSrcAlpha`) only in v1 (design decision 7); other `ApplyBlendState(...)` inputs fall back to `AlphaBlend` behavior rather than a general blend-equation interpreter | ⬜ | |
-| SOFTWARE-43 | `diffuseColor`/alpha modulation from `GpuDrawParams` (BasicEffect's material color) | ⬜ | |
+| SOFTWARE-40 | Vertex-color modulation (`vertexColorEnabled` path) | ✅ | `TransformGenericVertex()` reads real per-vertex color at stride 16/24 (position+color strides) and forces opaque white when `GpuDrawParams.vertexColorEnabled` is false — matches real XNA: `BasicEffect.VertexColorEnabled` itself defaults to `false`, so a plain `BasicEffect` ignores vertex colors unless a game opts in. Discovered directly while debugging `Software_Rasterizer`'s initial post-Phase-S6 regression (see `SOFTWARE-50`'s notes) — a real behavioral fact, not a rasterizer bug. |
+| SOFTWARE-41 | Nearest-neighbor texture sampling (`textureEnabled`/`texture0`), reading the already-stored CPU-side pixel data every `ITextureBackend` implementation already keeps | ✅ | Verified 2026-07-13 (`Software_Effects` Check A): a full-screen quad textured with a 2x2 checker (`Texture2D::CreateFromPixels`) samples the correct texel near two opposite corners. `params.texture0` is `dynamic_cast` to `SoftwareTextureBackend` (the only `ITextureBackend` concrete type this backend's `CreateTexture()` produces); a render target bound as a sampled texture is not yet supported (would need a similar cast to `SoftwareRenderTargetBackend`, deferred). Bilinear sampling remains a v2 stretch goal. |
+| SOFTWARE-42 | Basic blending: `Opaque` (direct write) and `AlphaBlend` (`SrcAlpha`/`InvSrcAlpha`) only in v1 (design decision 7); other `ApplyBlendState(...)` inputs fall back to `AlphaBlend` behavior rather than a general blend-equation interpreter | ✅ | `ApplyBlendState()` detects the exact `Opaque` preset (`colorSrcBlend=One(0), colorDstBlend=Zero(1)` for both color/alpha) using the identical formula `EasyGLGraphicsBackend::ApplyBlendState()` already uses — any other combination is treated as a single simplified "over" alpha-composite formula. Verified via `Software_Effects` Checks C/D: a half-alpha red quad over a solid blue background renders fully opaque red under `BlendState::Opaque`, and a genuine red/blue mix under `BlendState::AlphaBlend`. |
+| SOFTWARE-43 | `diffuseColor`/alpha modulation from `GpuDrawParams` (BasicEffect's material color) | ✅ | Verified 2026-07-13 (`Software_Effects` Check B): `BasicEffect.DiffuseColor=(0.5,0,0)` tints a white texture to half-intensity red. Applied after texture sampling, matching the order real BasicEffect/XNA shaders apply material color. |
 
 ---
 
@@ -177,9 +177,9 @@ without both.
 
 | # | Task | Status | Notes |
 |---|---|---|---|
-| SOFTWARE-50 | Wire `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` to the Phase S4/S5 rasterizer using `GpuDrawParams`' `vertexColorEnabled`/`textureEnabled`/`texture0`/`diffuseColor`/`worldColMajor` fields; `lightingEnabled`/`fogEnabled`/`dualTexture`/`envMapping`/`skinned` explicitly out of scope for v1 | ⬜ | |
-| SOFTWARE-51 | `SpriteBatch` reuses the same rasterizer for its quad draws (design decision 5) — a real, pixel-correct CPU `SpriteBatch` path | ⬜ | |
-| SOFTWARE-52 | Custom `ShaderEffect` (arbitrary GLSL/HLSL/WGSL source): accept without compiling (mirrors `HEADLESS-16`), document that only effects whose `FillGpuDrawParams()` output matches v1's fixed pixel-shading path will render correctly (design decision 8) | ⬜ | |
+| SOFTWARE-50 | Wire `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` to the Phase S4/S5 rasterizer using `GpuDrawParams`' `vertexColorEnabled`/`textureEnabled`/`texture0`/`diffuseColor`/`worldColMajor` fields; `lightingEnabled`/`fogEnabled`/`dualTexture`/`envMapping`/`skinned` explicitly out of scope for v1 | ✅ | Verified 2026-07-13 via `Software_Effects` (5/5) and re-verified `Software_Rasterizer` (5/5) still passing through the now-real `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` overrides (previously only reachable via `IGraphicsBackend`'s own default fallback to `DrawColoredPrimitives`). Stride validated (16/20/24 only; other strides throw a clear error); `params.textureEnabled && texture0==nullptr` throws, mirroring `HEADLESS-22`'s own precedent. **Real bug caught by this exact wiring**: `Software_Rasterizer`'s existing checks briefly went 0/5 the moment this override landed, because `BasicEffect.VertexColorEnabled` defaults to `false` in real XNA/FNA (verified directly in `BasicEffect.hpp`) — the fallback path `DrawColoredPrimitives` had been implicitly always treating color as enabled, masking this. Fixed by updating the test to explicitly set `VertexColorEnabled = true` (matching how a real game would), not by changing the (correct) new behavior. |
+| SOFTWARE-51 | `SpriteBatch` reuses the same rasterizer for its quad draws (design decision 5) — a real, pixel-correct CPU `SpriteBatch` path | ✅ | `SoftwareSpriteBatchBackend::Draw()` builds its quad corners using the exact same formula as `EasyGLGraphicsBackend::EasyGLSpriteBatchBackend::Draw()` (destination/source rectangle, origin, rotation, `SpriteEffects` flip), then feeds two triangles directly into `RasterizeTriangleShaded()` in screen-pixel space (no `World*View*Projection` — SpriteBatch never uses one). `transformMatrix_` is applied as a 2D point transform on the already-placed corners. Verified via `Software_Effects` Check E: a solid-color texture drawn via `SpriteBatch::Draw()` lands at the exact requested screen position. Rotation/origin/`SpriteEffects` flip are implemented (reusing the proven formula) but not yet covered by a dedicated test — a real, acknowledged gap. |
+| SOFTWARE-52 | Custom `ShaderEffect` (arbitrary GLSL/HLSL/WGSL source): accept without compiling (mirrors `HEADLESS-16`), document that only effects whose `FillGpuDrawParams()` output matches v1's fixed pixel-shading path will render correctly (design decision 8) | ✅ | Already implemented since Phase S1 (`SoftwareEffectBackend::CompileProgram()`): accepts any non-empty vertex/fragment source without compiling, mirroring `HEADLESS-16`. Not yet exercised by a dedicated Software test (Headless has one via `Headless_ResourceBackends`); the underlying behavior is identical and low-risk, so this is a documentation/test-coverage gap, not an implementation gap. |
 
 ---
 
