@@ -39,6 +39,16 @@ namespace CNA::Internal::Backends::Software
             float u = 0.0f, v = 0.0f;   ///< Texture coordinate * invW (Phase S5).
         };
 
+        /// One vertex in clip space (before the perspective divide), attributes NOT premultiplied
+        /// by W (SOFTWARE-83). Clip space is still linear -- position and attributes can both be
+        /// interpolated with a plain lerp here, unlike the post-divide RasterVertex above.
+        struct ClipVertex
+        {
+            float x = 0.0f, y = 0.0f, z = 0.0f, w = 1.0f;
+            float r = 1.0f, g = 1.0f, b = 1.0f, a = 1.0f;
+            float u = 0.0f, v = 0.0f;
+        };
+
         /// Reads a packed little-endian RGBA8 Color (Microsoft::Xna::Framework::Color's own
         /// documented layout: R in bits 0-7, G in 8-15, B in 16-23, A in 24-31) directly from raw
         /// vertex bytes -- avoids depending on the Color type's public API just to unpack 4 bytes.
@@ -53,36 +63,87 @@ namespace CNA::Internal::Backends::Software
         /// Transforms a VertexPositionColor vertex (Position at offset 0, Color at offset 12 --
         /// DrawColoredPrimitives/DrawIndexedColoredPrimitives's own fixed layout, matching the
         /// interface's documented "equivalent to BasicEffect with VertexColorEnabled = true")
-        /// into screen space. Returns false (vertex not usable) if the vertex is behind or on the
-        /// near plane -- the caller culls the whole triangle in that case (SOFTWARE-34: minimal
-        /// near-plane handling, no polygon clipping in v1).
-        bool TransformPositionColorVertex(const std::uint8_t* raw, const Matrix& combined,
-                                          int viewportWidth, int viewportHeight, RasterVertex& out)
+        /// into clip space. Attributes are left un-premultiplied -- near-plane clipping (SOFTWARE-83)
+        /// happens on ClipVertex, before the perspective divide.
+        ClipVertex BuildPositionColorClipVertex(const std::uint8_t* raw, const Matrix& combined)
         {
             Vector3 position;
             std::memcpy(&position, raw, sizeof(Vector3));
-
             const Vector4 clip = Vector4::Transform(position, combined);
-            if (clip.W <= 1e-5f)
-                return false;
 
-            const float invW = 1.0f / clip.W;
-            const float ndcX = clip.X * invW;
-            const float ndcY = clip.Y * invW;
-            const float ndcZ = clip.Z * invW;
+            ClipVertex out;
+            out.x = clip.X; out.y = clip.Y; out.z = clip.Z; out.w = clip.W;
+            UnpackColorBytes(raw + sizeof(Vector3), out.r, out.g, out.b, out.a);
+            return out;
+        }
 
+        /// Linearly interpolates two clip-space vertices -- valid because clip space (unlike
+        /// screen space) is still linear; the perspective divide is exactly the step that makes
+        /// interpolation non-linear, and it hasn't happened yet here.
+        ClipVertex LerpClipVertex(const ClipVertex& a, const ClipVertex& b, float t)
+        {
+            ClipVertex out;
+            out.x = a.x + t * (b.x - a.x);
+            out.y = a.y + t * (b.y - a.y);
+            out.z = a.z + t * (b.z - a.z);
+            out.w = a.w + t * (b.w - a.w);
+            out.r = a.r + t * (b.r - a.r);
+            out.g = a.g + t * (b.g - a.g);
+            out.b = a.b + t * (b.b - a.b);
+            out.a = a.a + t * (b.a - a.a);
+            out.u = a.u + t * (b.u - a.u);
+            out.v = a.v + t * (b.v - a.v);
+            return out;
+        }
+
+        /// SOFTWARE-83: clips a triangle against the single near-plane half-space `w > kNearEpsilon`
+        /// using Sutherland-Hodgman, writing up to 4 output vertices to `out` and returning the
+        /// count (0 = triangle entirely behind the near plane and fully discarded; 3 = no clipping
+        /// needed or one corner clipped off; 4 = two corners clipped off, forming a quad). Preserves
+        /// the input winding order, so backface culling (SOFTWARE-81) on the result stays correct.
+        int ClipTriangleNearPlane(const ClipVertex verts[3], ClipVertex out[4])
+        {
+            constexpr float kNearEpsilon = 1e-5f;
+            int count = 0;
+            for (int i = 0; i < 3; ++i)
+            {
+                const ClipVertex& cur = verts[i];
+                const ClipVertex& prev = verts[(i + 2) % 3];
+                const bool curIn = cur.w > kNearEpsilon;
+                const bool prevIn = prev.w > kNearEpsilon;
+                if (curIn != prevIn)
+                {
+                    const float t = (kNearEpsilon - prev.w) / (cur.w - prev.w);
+                    out[count++] = LerpClipVertex(prev, cur, t);
+                }
+                if (curIn)
+                    out[count++] = cur;
+            }
+            return count;
+        }
+
+        /// Converts one clip-space vertex into a screen-space RasterVertex: perspective divide,
+        /// viewport transform, and premultiplying color/UV by invW for perspective-correct
+        /// barycentric interpolation later.
+        RasterVertex ClipVertexToRasterVertex(const ClipVertex& cv, int viewportWidth, int viewportHeight)
+        {
+            const float invW = 1.0f / cv.w;
+            const float ndcX = cv.x * invW;
+            const float ndcY = cv.y * invW;
+            const float ndcZ = cv.z * invW;
+
+            RasterVertex out;
             out.x = (ndcX * 0.5f + 0.5f) * static_cast<float>(viewportWidth);
             out.y = (1.0f - (ndcY * 0.5f + 0.5f)) * static_cast<float>(viewportHeight);
             out.depth = ndcZ;
             out.invW = invW;
-
-            float r, g, b, a;
-            UnpackColorBytes(raw + sizeof(Vector3), r, g, b, a);
-            out.r = r * invW;
-            out.g = g * invW;
-            out.b = b * invW;
-            out.a = a * invW;
-            return true;
+            out.r = cv.r * invW;
+            out.g = cv.g * invW;
+            out.b = cv.b * invW;
+            out.a = cv.a * invW;
+            out.u = cv.u * invW;
+            out.v = cv.v * invW;
+            return out;
         }
 
         float EdgeFunction(float ax, float ay, float bx, float by, float px, float py)
@@ -226,63 +287,43 @@ namespace CNA::Internal::Backends::Software
 
         /// Transforms a vertex whose byte layout is inferred from `stride` (plan_software.md
         /// design decision 2: 16=VertexPositionColor, 20=VertexPositionTexture,
-        /// 24=VertexPositionColorTexture) into screen space, for the DrawPrimitivesEx/
+        /// 24=VertexPositionColorTexture) into clip space, for the DrawPrimitivesEx/
         /// DrawIndexedPrimitivesEx path. `vertexColorEnabled` mirrors GpuDrawParams' own flag --
         /// when false, vertex color is treated as opaque white so it doesn't affect the eventual
         /// texture/diffuse modulation, matching a real Effect's own VertexColorEnabled=false
-        /// behavior. Returns false (cull the whole triangle) for the same near-plane reason as
-        /// TransformPositionColorVertex.
-        bool TransformGenericVertex(const std::uint8_t* raw, std::size_t stride, const Matrix& combined,
-                                    int viewportWidth, int viewportHeight, bool vertexColorEnabled,
-                                    RasterVertex& out)
+        /// behavior. Attributes are left un-premultiplied; near-plane clipping (SOFTWARE-83)
+        /// happens on ClipVertex, before the perspective divide.
+        ClipVertex BuildGenericClipVertex(const std::uint8_t* raw, std::size_t stride, const Matrix& combined,
+                                          bool vertexColorEnabled)
         {
             Vector3 position;
             std::memcpy(&position, raw, sizeof(Vector3));
-
             const Vector4 clip = Vector4::Transform(position, combined);
-            if (clip.W <= 1e-5f)
-                return false;
 
-            const float invW = 1.0f / clip.W;
-            const float ndcX = clip.X * invW;
-            const float ndcY = clip.Y * invW;
-            const float ndcZ = clip.Z * invW;
+            ClipVertex out;
+            out.x = clip.X; out.y = clip.Y; out.z = clip.Z; out.w = clip.W;
 
-            out.x = (ndcX * 0.5f + 0.5f) * static_cast<float>(viewportWidth);
-            out.y = (1.0f - (ndcY * 0.5f + 0.5f)) * static_cast<float>(viewportHeight);
-            out.depth = ndcZ;
-            out.invW = invW;
-
-            float r = 1.0f, g = 1.0f, b = 1.0f, a = 1.0f;
-            float u = 0.0f, v = 0.0f;
             if (stride == 16)
             {
-                UnpackColorBytes(raw + 12, r, g, b, a);
+                UnpackColorBytes(raw + 12, out.r, out.g, out.b, out.a);
             }
             else if (stride == 20)
             {
-                std::memcpy(&u, raw + 12, sizeof(float));
-                std::memcpy(&v, raw + 16, sizeof(float));
+                std::memcpy(&out.u, raw + 12, sizeof(float));
+                std::memcpy(&out.v, raw + 16, sizeof(float));
             }
             else if (stride == 24)
             {
-                UnpackColorBytes(raw + 12, r, g, b, a);
-                std::memcpy(&u, raw + 16, sizeof(float));
-                std::memcpy(&v, raw + 20, sizeof(float));
+                UnpackColorBytes(raw + 12, out.r, out.g, out.b, out.a);
+                std::memcpy(&out.u, raw + 16, sizeof(float));
+                std::memcpy(&out.v, raw + 20, sizeof(float));
             }
 
             if (!vertexColorEnabled)
             {
-                r = g = b = a = 1.0f;
+                out.r = out.g = out.b = out.a = 1.0f;
             }
-
-            out.r = r * invW;
-            out.g = g * invW;
-            out.b = b * invW;
-            out.a = a * invW;
-            out.u = u * invW;
-            out.v = v * invW;
-            return true;
+            return out;
         }
 
         /// Builds a RasterVertex directly from already-final screen-space pixel coordinates, with
@@ -866,21 +907,25 @@ namespace CNA::Internal::Backends::Software
 
         for (int i = 0; i < primitiveCount; ++i)
         {
-            RasterVertex rv[3];
-            bool allValid = true;
+            ClipVertex cv[3];
             for (int k = 0; k < 3; ++k)
             {
                 const std::uint8_t* raw = base + static_cast<std::size_t>(i * 3 + k) * stride;
-                if (!TransformPositionColorVertex(raw, combined, vw, vh, rv[k]))
-                {
-                    allValid = false;
-                    break;
-                }
+                cv[k] = BuildPositionColorClipVertex(raw, combined);
             }
-            if (!allValid)
-                continue;  // SOFTWARE-34: minimal near-plane handling -- cull, don't clip, in v1.
+
+            ClipVertex clipped[4];
+            const int clippedCount = ClipTriangleNearPlane(cv, clipped);  // SOFTWARE-83
+            if (clippedCount == 0)
+                continue;
+
+            RasterVertex rv[4];
+            for (int k = 0; k < clippedCount; ++k)
+                rv[k] = ClipVertexToRasterVertex(clipped[k], vw, vh);
 
             RasterizeTriangle(fb, depthTestEnabled_, cullMode_, rv[0], rv[1], rv[2]);
+            if (clippedCount == 4)
+                RasterizeTriangle(fb, depthTestEnabled_, cullMode_, rv[0], rv[2], rv[3]);
         }
     }
 
@@ -922,22 +967,26 @@ namespace CNA::Internal::Backends::Software
 
         for (int i = 0; i < primitiveCount; ++i)
         {
-            RasterVertex rv[3];
-            bool allValid = true;
+            ClipVertex cv[3];
             for (int k = 0; k < 3; ++k)
             {
                 const std::uint32_t idx = readIndex(i * 3 + k);
                 const std::uint8_t* raw = vbBase + static_cast<std::size_t>(idx) * stride;
-                if (!TransformPositionColorVertex(raw, combined, vw, vh, rv[k]))
-                {
-                    allValid = false;
-                    break;
-                }
+                cv[k] = BuildPositionColorClipVertex(raw, combined);
             }
-            if (!allValid)
+
+            ClipVertex clipped[4];
+            const int clippedCount = ClipTriangleNearPlane(cv, clipped);  // SOFTWARE-83
+            if (clippedCount == 0)
                 continue;
 
+            RasterVertex rv[4];
+            for (int k = 0; k < clippedCount; ++k)
+                rv[k] = ClipVertexToRasterVertex(clipped[k], vw, vh);
+
             RasterizeTriangle(fb, depthTestEnabled_, cullMode_, rv[0], rv[1], rv[2]);
+            if (clippedCount == 4)
+                RasterizeTriangle(fb, depthTestEnabled_, cullMode_, rv[0], rv[2], rv[3]);
         }
     }
 
@@ -977,23 +1026,29 @@ namespace CNA::Internal::Backends::Software
 
         for (int i = 0; i < primitiveCount; ++i)
         {
-            RasterVertex rv[3];
-            bool allValid = true;
+            ClipVertex cv[3];
             for (int k = 0; k < 3; ++k)
             {
                 const std::uint8_t* raw = base + static_cast<std::size_t>(i * 3 + k) * stride;
-                if (!TransformGenericVertex(raw, stride, combined, vw, vh, params.vertexColorEnabled, rv[k]))
-                {
-                    allValid = false;
-                    break;
-                }
+                cv[k] = BuildGenericClipVertex(raw, stride, combined, params.vertexColorEnabled);
             }
-            if (!allValid)
+
+            ClipVertex clipped[4];
+            const int clippedCount = ClipTriangleNearPlane(cv, clipped);  // SOFTWARE-83
+            if (clippedCount == 0)
                 continue;
+
+            RasterVertex rv[4];
+            for (int k = 0; k < clippedCount; ++k)
+                rv[k] = ClipVertexToRasterVertex(clipped[k], vw, vh);
 
             RasterizeTriangleShaded(fb, depthTestEnabled_, blendEnabled_, cullMode_, params.textureEnabled, texture,
                                     params.diffuseColor[0], params.diffuseColor[1], params.diffuseColor[2],
                                     params.diffuseColor[3], rv[0], rv[1], rv[2]);
+            if (clippedCount == 4)
+                RasterizeTriangleShaded(fb, depthTestEnabled_, blendEnabled_, cullMode_, params.textureEnabled, texture,
+                                        params.diffuseColor[0], params.diffuseColor[1], params.diffuseColor[2],
+                                        params.diffuseColor[3], rv[0], rv[2], rv[3]);
         }
     }
 
@@ -1043,24 +1098,30 @@ namespace CNA::Internal::Backends::Software
 
         for (int i = 0; i < primitiveCount; ++i)
         {
-            RasterVertex rv[3];
-            bool allValid = true;
+            ClipVertex cv[3];
             for (int k = 0; k < 3; ++k)
             {
                 const std::uint32_t idx = readIndex(i * 3 + k);
                 const std::uint8_t* raw = vbBase + static_cast<std::size_t>(idx) * stride;
-                if (!TransformGenericVertex(raw, stride, combined, vw, vh, params.vertexColorEnabled, rv[k]))
-                {
-                    allValid = false;
-                    break;
-                }
+                cv[k] = BuildGenericClipVertex(raw, stride, combined, params.vertexColorEnabled);
             }
-            if (!allValid)
+
+            ClipVertex clipped[4];
+            const int clippedCount = ClipTriangleNearPlane(cv, clipped);  // SOFTWARE-83
+            if (clippedCount == 0)
                 continue;
+
+            RasterVertex rv[4];
+            for (int k = 0; k < clippedCount; ++k)
+                rv[k] = ClipVertexToRasterVertex(clipped[k], vw, vh);
 
             RasterizeTriangleShaded(fb, depthTestEnabled_, blendEnabled_, cullMode_, params.textureEnabled, texture,
                                     params.diffuseColor[0], params.diffuseColor[1], params.diffuseColor[2],
                                     params.diffuseColor[3], rv[0], rv[1], rv[2]);
+            if (clippedCount == 4)
+                RasterizeTriangleShaded(fb, depthTestEnabled_, blendEnabled_, cullMode_, params.textureEnabled, texture,
+                                        params.diffuseColor[0], params.diffuseColor[1], params.diffuseColor[2],
+                                        params.diffuseColor[3], rv[0], rv[2], rv[3]);
         }
     }
 }

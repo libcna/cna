@@ -116,10 +116,12 @@ up — see `plan_software.md` `SOFTWARE-50`'s notes for the full story).
   `CullClockwiseFace`/`CullCounterClockwiseFace` are all honored, including by
   `SpriteBatch`'s own quads (matching real FNA, whose `SpriteBatch` defaults to
   `CullCounterClockwise` rather than `CullNone`).
-- **Minimal near-plane handling.** A triangle with any vertex at or behind the near plane
-  (`clip.W <= ~0`) is culled entirely rather than properly clipped (splitting it into 1-2 new
-  triangles at the near plane). Not yet exercised by a dedicated test with geometry deliberately
-  crossing the near plane.
+- **Real near-plane polygon clipping** (`SOFTWARE-83`) — a triangle crossing the near plane
+  (`clip.W <= ~0`) is split into 1-2 new triangles at the clip plane (interpolating position and
+  color/UV together), rather than the whole triangle being discarded. Clipping still happens at
+  the camera's eye plane specifically (`clip.W <= ~0`), not at the projection's configured near
+  clip distance — a vertex clipped there necessarily lands at an enormous (but finite, correct)
+  screen position after the perspective divide.
 - **Custom `ShaderEffect` (arbitrary GLSL/HLSL/WGSL source) compiles but doesn't actually execute**
   — mirrors `HEADLESS-16`'s own precedent exactly: the source is accepted without compiling, and
   only effects whose `FillGpuDrawParams()` output matches this backend's fixed `BasicEffect`-subset
