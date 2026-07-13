@@ -109,6 +109,10 @@ namespace CNA::Internal::Backends::D3D11
         void ApplySamplerState(int slot, int filter, int addressU, int addressV, int maxAnisotropy) override;
         std::unique_ptr<IOcclusionQueryBackend> CreateOcclusionQuery() override;
 
+        // ---- IGraphicsBackend: real (Phase DX8, DX-58 -- custom ShaderEffect) ----
+        std::unique_ptr<IEffectBackend> CreateEffectBackend(const std::string& vertSrc,
+                                                             const std::string& fragSrc) override;
+
         // ---- IGraphicsBackend: real (Phase DX7) ----
         void ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
                              int colorDstBlend, int alphaDstBlend,
@@ -171,7 +175,13 @@ namespace CNA::Internal::Backends::D3D11
                                      PrimitiveType primitive, int primitiveCount,
                                      const GpuDrawParams& params) override;
 
-        // ---- IGraphicsBackend: honest "not yet implemented" stubs (Phase DX8+/DX9) ----
+        // ---- IGraphicsBackend: real (Phase DX8, DX-68 -- instanced3d) ----
+        void DrawInstancedPrimitivesEx(const IVertexBufferBackend& vb, const IIndexBufferBackend& ib,
+                                       const Matrix& world, const Matrix& view, const Matrix& projection,
+                                       PrimitiveType primitive, int primitiveCount, int instanceCount,
+                                       const GpuDrawParams& params) override;
+
+        // ---- IGraphicsBackend: honest "not yet implemented" stubs (Phase DX9) ----
         std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() override;
 
     private:
@@ -278,5 +288,28 @@ namespace CNA::Internal::Backends::D3D11
         ComPtr<ID3D11Buffer> alphaTestConstantBuffer_;
         ID3D11Buffer* GetOrCreateLightingConstantBufferEXT();
         ID3D11Buffer* GetOrCreateAlphaTestConstantBufferEXT();
+
+        // Phase DX8 (DX-65/DX-66/DX-67): same "grow, never recreate" persistent dynamic constant
+        // buffers, one each for dual_texture3d's own FogParams (b2) instance (kept separate from
+        // fogConstantBuffer_ even though the struct shape is identical, D3DFogConstants -- purely
+        // to avoid coupling an unrelated variant's bind-slot lifetime to this one), env_map3d's
+        // PerDraw (b0)/EnvMapParams (b2), skinned3d's BoneBlock (b1)/FogParams (b2, D3DSkinnedExtraConstants).
+        ComPtr<ID3D11Buffer> dualTexFogConstantBuffer_;
+        ComPtr<ID3D11Buffer> envMapPerDrawConstantBuffer_;
+        ComPtr<ID3D11Buffer> envMapConstantBuffer_;
+        ComPtr<ID3D11Buffer> boneConstantBuffer_;
+        ComPtr<ID3D11Buffer> skinnedExtraConstantBuffer_;
+        ID3D11Buffer* GetOrCreateDualTexFogConstantBufferEXT();
+        ID3D11Buffer* GetOrCreateEnvMapPerDrawConstantBufferEXT();
+        ID3D11Buffer* GetOrCreateEnvMapConstantBufferEXT();
+        ID3D11Buffer* GetOrCreateBoneConstantBufferEXT();
+        ID3D11Buffer* GetOrCreateSkinnedExtraConstantBufferEXT();
+
+        // Phase DX8 (DX-68): instanced3d's fixed 5-element input layout (POSITION0 @ slot 0,
+        // per-vertex; INSTANCEWORLD0-3 @ slot 1, per-instance, stride 64) -- independent of the
+        // bound vertex buffer's own stride (the shader only reads Position, DX-13-hlsl's own row
+        // notes), so unlike D3D11InputLayoutCache this needs no stride key, just one cached layout.
+        ComPtr<ID3D11InputLayout> instancedInputLayout_;
+        ID3D11InputLayout* GetOrCreateInstancedInputLayoutEXT();
     };
 }

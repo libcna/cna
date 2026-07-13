@@ -137,4 +137,71 @@ namespace CNA::Internal::Backends::D3DCommon
     };
     static_assert(sizeof(D3DBoneConstants) == 72 * 64, "D3DBoneConstants must match BoneBlock's real 4608-byte HLSL cbuffer size (72 mat4)");
     static_assert(sizeof(D3DBoneConstants) % 16 == 0, "D3D11 constant buffer ByteWidth must be a 16-byte multiple");
+
+    /// DX-67: matches skinned3d.vert.hlsl / skinned3d.frag.hlsl's shared
+    /// `cbuffer FogParams : register(b2)` byte-for-byte (240 bytes). Named "extra" rather than
+    /// "fog" since fog is only the first 32 bytes -- BoneBlock (b1) leaves this cbuffer to also
+    /// carry DirectionalLight1/2, the World matrix, EyePosition, and per-light specular (the
+    /// 128-byte PerDraw buffer has no spare room, same reasoning D3DLightingConstants documents
+    /// for lit_textured3d).
+    struct alignas(16) D3DSkinnedExtraConstants
+    {
+        float FogColorEnabled[4];      ///< offset 0:   xyz = FogColor, w = fogEnabled
+        float FogStartEnd[4];          ///< offset 16:  x = fogStart, y = fogEnd, zw = unused
+        float Light1Dir[4];            ///< offset 32:  xyz + pad
+        float Light1Diffuse[4];        ///< offset 48
+        float Light2Dir[4];            ///< offset 64
+        float Light2Diffuse[4];        ///< offset 80
+        float World[16];               ///< offset 96:  row_major float4x4 (64 bytes)
+        float EyePosition[4];          ///< offset 160: xyz, w = WeightsPerVertex (1/2/4, DX-67/Task 895)
+        float SpecularColorPower[4];   ///< offset 176: xyz = SpecularColor, w = SpecularPower
+        float Light0Specular[4];       ///< offset 192
+        float Light1Specular[4];       ///< offset 208
+        float Light2Specular[4];       ///< offset 224
+    };
+    static_assert(sizeof(D3DSkinnedExtraConstants) == 240, "D3DSkinnedExtraConstants must match skinned3d's real 240-byte FogParams cbuffer size");
+    static_assert(offsetof(D3DSkinnedExtraConstants, Light1Dir) == 32, "D3DSkinnedExtraConstants field offset mismatch vs HLSL");
+    static_assert(offsetof(D3DSkinnedExtraConstants, World) == 96, "D3DSkinnedExtraConstants field offset mismatch vs HLSL");
+    static_assert(offsetof(D3DSkinnedExtraConstants, EyePosition) == 160, "D3DSkinnedExtraConstants field offset mismatch vs HLSL");
+    static_assert(offsetof(D3DSkinnedExtraConstants, SpecularColorPower) == 176, "D3DSkinnedExtraConstants field offset mismatch vs HLSL");
+    static_assert(offsetof(D3DSkinnedExtraConstants, Light0Specular) == 192, "D3DSkinnedExtraConstants field offset mismatch vs HLSL");
+    static_assert(sizeof(D3DSkinnedExtraConstants) % 16 == 0, "D3D11 constant buffer ByteWidth must be a 16-byte multiple");
+
+    /// DX-66: matches env_map3d.vert.hlsl's `cbuffer PerDraw : register(b0)` byte-for-byte (128
+    /// bytes) -- a genuinely different shape from D3DPerDrawConstants (just Mvp + World, no
+    /// material/lighting fields -- those live in D3DEnvMapConstants below at register(b2) instead).
+    struct alignas(16) D3DEnvMapPerDrawConstants
+    {
+        float Mvp[16];    ///< row_major float4x4, offset 0 (64 bytes).
+        float World[16];  ///< row_major float4x4, offset 64 (64 bytes).
+    };
+    static_assert(sizeof(D3DEnvMapPerDrawConstants) == 128, "D3DEnvMapPerDrawConstants must match env_map3d's real 128-byte PerDraw cbuffer size");
+    static_assert(offsetof(D3DEnvMapPerDrawConstants, World) == 64, "D3DEnvMapPerDrawConstants field offset mismatch vs HLSL");
+    static_assert(sizeof(D3DEnvMapPerDrawConstants) % 16 == 0, "D3D11 constant buffer ByteWidth must be a 16-byte multiple");
+
+    /// DX-66: matches env_map3d.vert.hlsl / env_map3d.frag.hlsl's shared
+    /// `cbuffer EnvMapParams : register(b2)` byte-for-byte (192 bytes) -- field names below use the
+    /// vertex-shader-side naming; the pixel shader reinterprets the same bytes with its own field
+    /// names (Light0DiffFresnelEn.w = fresnelEnabled, EnvMapSpecFresnelF.w = fresnelFactor), same
+    /// underlying layout either way.
+    struct alignas(16) D3DEnvMapConstants
+    {
+        float EyePosition[4];        ///< offset 0:   xyz + pad
+        float DiffuseColor[4];       ///< offset 16
+        float EmissiveAmount[4];     ///< offset 32:  xyz = EmissiveColor, w = envMapAmount
+        float Light0Dir[4];          ///< offset 48:  xyz + pad
+        float Light0DiffuseFresnel[4]; ///< offset 64: xyz = Light0Diffuse, w = fresnelEnabled (0/1)
+        float EnvMapSpecularFresnel[4]; ///< offset 80: xyz = envMapSpecular, w = fresnelFactor
+        float FogColorEnabled[4];    ///< offset 96:  xyz = FogColor, w = fogEnabled
+        float FogStartEnd[4];        ///< offset 112: x = fogStart, y = fogEnd, zw = unused
+        float Light1Dir[4];          ///< offset 128: xyz + pad
+        float Light1Diffuse[4];      ///< offset 144
+        float Light2Dir[4];          ///< offset 160: xyz + pad
+        float Light2Diffuse[4];      ///< offset 176
+    };
+    static_assert(sizeof(D3DEnvMapConstants) == 192, "D3DEnvMapConstants must match EnvMapParams's real 192-byte HLSL cbuffer size");
+    static_assert(offsetof(D3DEnvMapConstants, EmissiveAmount) == 32, "D3DEnvMapConstants field offset mismatch vs HLSL");
+    static_assert(offsetof(D3DEnvMapConstants, FogColorEnabled) == 96, "D3DEnvMapConstants field offset mismatch vs HLSL");
+    static_assert(offsetof(D3DEnvMapConstants, Light1Dir) == 128, "D3DEnvMapConstants field offset mismatch vs HLSL");
+    static_assert(sizeof(D3DEnvMapConstants) % 16 == 0, "D3D11 constant buffer ByteWidth must be a 16-byte multiple");
 }

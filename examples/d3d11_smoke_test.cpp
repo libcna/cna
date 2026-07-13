@@ -63,6 +63,16 @@
 // Check S (DX-64) -- alpha_test3d: an alpha value that fails the test (AlphaTol=0, alpha>=ref) is
 //   confirmed to genuinely discard (the Clear() background survives the draw untouched); an alpha
 //   value that passes is confirmed to draw the exact texture color, including its own alpha byte.
+// Check T (DX-65) -- dual_texture3d: two textures sampled and combined (tex1.rgb*2 * tex2 * Tint)
+//   produce the exact expected byte result, proving the real two-SRV/two-sampler bind path.
+// Check U (DX-66) -- env_map3d: a TextureCube sampled via a geometrically-constrained reflection
+//   direction (camera far down +Z, vertex normal facing the camera) samples one specific,
+//   distinctly-colored cube face exactly -- proving the cube SRV bind + EnvMapParams cbuffer path.
+// Check V (DX-67) -- skinned3d: a single-bone identity transform (BoneBlock genuinely populated,
+//   not left zero-initialized) combined with ambient=white/specular=zeroed samples the exact
+//   texture color, proving the real BoneBlock + FogParams(extra) constant buffer path.
+// Check W (DX-68) -- instanced3d: DrawInstancedPrimitivesEx() with one identity-transform instance
+//   (via the per-instance INSTANCEWORLD0-3 buffer) outputs the exact instance DiffuseColor.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
@@ -79,6 +89,7 @@
 #include "CNA/Internal/Backends/D3D11/D3D11SamplerCache.hpp"
 #include "CNA/Internal/Backends/D3D11/D3D11OcclusionQuery.hpp"
 #include "CNA/Internal/Backends/D3D11/D3D11StateObjectCache.hpp"
+#include "CNA/Internal/Backends/D3D11/D3D11EffectBackend.hpp"
 #include "CNA/Internal/Backends/D3DCommon/D3DShaderCache.hpp"
 #include "CNA/Internal/Graphics/ImageData.hpp"
 
@@ -934,7 +945,278 @@ protected:
                   "color (including its own alpha byte) when the test passes (plan_dx.md DX-64)");
         }
 
-        const int totalChecks = 3 + 10 + 1 + 2 + 2 + 2 + 2 + 2 + 1 + 1 + 2 + 1 + 13 + 2 + 3 + 2 + 2;
+        // Check T (DX-65): dual_texture3d. tex1.rgb *= 2.0, outColor = tex1 * tex2 * Tint. Both
+        // textures are uniform 2x2 so exact texel values are unaffected by bilinear vs. point
+        // sampling. tex1=(50,60,70,200), tex2=white -> expected (100,120,140,200).
+        {
+            backend.ApplySamplerState(0, 1 /*TextureFilter::Point*/, 0, 0, 1);
+            backend.ApplySamplerState(1, 1 /*TextureFilter::Point*/, 0, 0, 1);
+
+            struct VPT2 { float x, y, z; float u, v; };
+            static const VPT2 kTriDT[3] = {
+                {-1.0f, -1.0f, 0.0f, 0.0f, 1.0f},
+                { 3.0f, -1.0f, 0.0f, 2.0f, 1.0f},
+                {-1.0f,  3.0f, 0.0f, 0.0f, -1.0f},
+            };
+            auto vbDT = backend.CreateVertexBuffer(3);
+            vbDT->SetData(kTriDT, 3, sizeof(VPT2));
+
+            ImageData img1;
+            img1.width = 2; img1.height = 2; img1.mipLevels = 1;
+            img1.pixels.resize(2 * 2 * 4);
+            for (int i = 0; i < 4; ++i)
+            {
+                img1.pixels[i * 4 + 0] = 50; img1.pixels[i * 4 + 1] = 60;
+                img1.pixels[i * 4 + 2] = 70; img1.pixels[i * 4 + 3] = 200;
+            }
+            auto tex1 = backend.CreateTexture(img1);
+
+            ImageData img2;
+            img2.width = 2; img2.height = 2; img2.mipLevels = 1;
+            img2.pixels.assign(2 * 2 * 4, 255);
+            auto tex2 = backend.CreateTexture(img2);
+
+            GpuDrawParams dtp;
+            dtp.texture0 = tex1.get();
+            dtp.texture1 = tex2.get();
+            dtp.dualTexture = true;
+            dtp.textureEnabled = true;
+
+            dev.Clear(Color(0, 0, 255, 255));
+            backend.DrawPrimitivesEx(*vbDT, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                     Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, dtp);
+            std::vector<Color> dtResult(4 * 4, Color(0, 0, 0, 0));
+            dev.GetBackBufferData(&centerRegion28, dtResult.data(), 0, static_cast<int>(dtResult.size()));
+            bool dtIsExact = true;
+            for (const Color& p : dtResult)
+                if (p.getRProperty() != 100 || p.getGProperty() != 120 || p.getBProperty() != 140 || p.getAProperty() != 200)
+                    dtIsExact = false;
+            check(dtIsExact,
+                  "D3D11GraphicsBackend::DrawPrimitivesEx(): real dual_texture3d combines both real "
+                  "SRVs (tex1.rgb*2 * tex2) to the exact expected byte result (plan_dx.md DX-65)");
+        }
+
+        // Check U (DX-66): env_map3d. Camera placed far down -Z from a +Z-facing surface, ambient/
+        // lighting/specular all zeroed by geometry+params so only the env-map term (envMapAmount=1,
+        // fresnel disabled) survives -- reflDir resolves to almost exactly (0,0,-1), landing deep
+        // inside the cube's -Z face (D3D11 native slice order +X,-X,+Y,-Y,+Z,-Z -> index 5), which
+        // is the only face given a distinct, uniform, non-black color.
+        {
+            struct VPNTE { float x, y, z; float nx, ny, nz; float u, v; };
+            static const VPNTE kTriEnv[3] = {
+                {-1.0f, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f},
+                { 3.0f, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 2.0f, 1.0f},
+                {-1.0f,  3.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, -1.0f},
+            };
+            auto vbEnv = backend.CreateVertexBuffer(3);
+            vbEnv->SetData(kTriEnv, 3, sizeof(VPNTE));
+
+            ImageData whiteImg;
+            whiteImg.width = 2; whiteImg.height = 2; whiteImg.mipLevels = 1;
+            whiteImg.pixels.assign(2 * 2 * 4, 255);
+            auto whiteTex = backend.CreateTexture(whiteImg);
+
+            auto cube = backend.CreateTextureCube(8, false, 0);
+            std::vector<uint8_t> blackFace(8 * 8 * 4, 0);
+            std::vector<uint8_t> negZFace(8 * 8 * 4);
+            for (int i = 0; i < 8 * 8; ++i)
+            {
+                negZFace[i * 4 + 0] = 10; negZFace[i * 4 + 1] = 20;
+                negZFace[i * 4 + 2] = 30; negZFace[i * 4 + 3] = 255;
+            }
+            for (int face = 0; face < 6; ++face)
+            {
+                const auto& data = (face == 5) ? negZFace : blackFace; // face 5 = -Z
+                cube->SetData(face, 0, 0, 0, 8, 8, data.data(), static_cast<int>(data.size()));
+            }
+
+            GpuDrawParams ep;
+            ep.texture0 = whiteTex.get();
+            ep.textureEnabled = true;
+            ep.envMap = cube.get();
+            ep.envMapping = true;
+            ep.envMapAmount = 1.0f;
+            ep.eyePositionWorld[0] = 0.0f; ep.eyePositionWorld[1] = 0.0f; ep.eyePositionWorld[2] = -10.0f;
+
+            dev.Clear(Color(0, 0, 255, 255));
+            backend.DrawPrimitivesEx(*vbEnv, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                     Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, ep);
+            std::vector<Color> envResult(4 * 4, Color(0, 0, 0, 0));
+            dev.GetBackBufferData(&centerRegion28, envResult.data(), 0, static_cast<int>(envResult.size()));
+            bool envIsExact = true;
+            for (const Color& p : envResult)
+                if (p.getRProperty() != 10 || p.getGProperty() != 20 || p.getBProperty() != 30 || p.getAProperty() != 255)
+                    envIsExact = false;
+            check(envIsExact,
+                  "D3D11GraphicsBackend::DrawPrimitivesEx(): real env_map3d samples the exact "
+                  "distinctly-colored cube face via the real TextureCube SRV (plan_dx.md DX-66)");
+        }
+
+        // Check V (DX-67): skinned3d. A single identity bone (BoneBlock genuinely populated from
+        // GpuDrawParams::boneTransforms, not left zero-initialized -- an all-zero bone matrix would
+        // degenerate the transform and fail this check) combined with ambient=white and
+        // specular=zeroed (light0's own diffuse contribution is already zero by construction: the
+        // vertex normal (0,0,1) is perpendicular to the default light0Dir (0,-1,0)) leaves
+        // outColor == the exact sampled texture color.
+        {
+            struct VPNTS { float x, y, z; float nx, ny, nz; float u, v;
+                          float bw0, bw1, bw2, bw3; uint8_t bi0, bi1, bi2, bi3; };
+            static const VPNTS kTriSkin[3] = {
+                {-1.0f, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0},
+                { 3.0f, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 2.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0},
+                {-1.0f,  3.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, -1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0},
+            };
+            auto vbSkin = backend.CreateVertexBuffer(3);
+            vbSkin->SetData(kTriSkin, 3, sizeof(VPNTS));
+
+            ImageData img;
+            img.width = 2; img.height = 2; img.mipLevels = 1;
+            img.pixels.resize(2 * 2 * 4);
+            for (int i = 0; i < 4; ++i)
+            {
+                img.pixels[i * 4 + 0] = 77; img.pixels[i * 4 + 1] = 88;
+                img.pixels[i * 4 + 2] = 99; img.pixels[i * 4 + 3] = 255;
+            }
+            auto tex = backend.CreateTexture(img);
+
+            GpuDrawParams sp;
+            sp.texture0 = tex.get();
+            sp.textureEnabled = true;
+            sp.skinned = true;
+            sp.boneCount = 1;
+            sp.weightsPerVertex = 1;
+            Matrix::getIdentityProperty().ToColumnMajor(sp.boneTransforms);
+            sp.ambientColor[0] = 1.0f; sp.ambientColor[1] = 1.0f; sp.ambientColor[2] = 1.0f;
+            sp.specularColor[0] = 0.0f; sp.specularColor[1] = 0.0f; sp.specularColor[2] = 0.0f;
+            sp.eyePositionWorld[0] = 0.0f; sp.eyePositionWorld[1] = 0.0f; sp.eyePositionWorld[2] = -10.0f;
+
+            dev.Clear(Color(0, 255, 0, 255));
+            backend.DrawPrimitivesEx(*vbSkin, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                     Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, sp);
+            std::vector<Color> skinResult(4 * 4, Color(0, 0, 0, 0));
+            dev.GetBackBufferData(&centerRegion28, skinResult.data(), 0, static_cast<int>(skinResult.size()));
+            bool skinIsExact = true;
+            for (const Color& p : skinResult)
+                if (p.getRProperty() != 77 || p.getGProperty() != 88 || p.getBProperty() != 99 || p.getAProperty() != 255)
+                    skinIsExact = false;
+            check(skinIsExact,
+                  "D3D11GraphicsBackend::DrawPrimitivesEx(): real skinned3d with a genuinely-populated "
+                  "single identity bone samples the exact texture color (plan_dx.md DX-67)");
+        }
+
+        // Check W (DX-68): instanced3d. DrawInstancedPrimitivesEx() with one identity-transform
+        // instance (the per-instance INSTANCEWORLD0-3 buffer, not the per-vertex one) outputs the
+        // exact per-instance DiffuseColor -- both color components at their saturated 0/1 extremes,
+        // so there is no rounding ambiguity in the final UNORM8 byte comparison.
+        {
+            struct VP3 { float x, y, z; };
+            static const VP3 kTriInst[3] = {
+                {-1.0f, -1.0f, 0.0f},
+                { 3.0f, -1.0f, 0.0f},
+                {-1.0f,  3.0f, 0.0f},
+            };
+            auto vbInst = backend.CreateVertexBuffer(3);
+            vbInst->SetData(kTriInst, 3, sizeof(VP3));
+
+            static const uint16_t kTriInstIdx[3] = {0, 1, 2};
+            auto ibInst = backend.CreateIndexBuffer16(3);
+            ibInst->SetData16(kTriInstIdx, 3);
+
+            // One identity-transform instance: 4 float4 rows (INSTANCEWORLD0-3).
+            static const float kInstanceWorld[16] = {
+                1.0f, 0.0f, 0.0f, 0.0f,
+                0.0f, 1.0f, 0.0f, 0.0f,
+                0.0f, 0.0f, 1.0f, 0.0f,
+                0.0f, 0.0f, 0.0f, 1.0f,
+            };
+            auto instVb = backend.CreateVertexBuffer(1);
+            instVb->SetData(kInstanceWorld, 1, sizeof(kInstanceWorld));
+
+            GpuDrawParams ip;
+            ip.instanceVb = instVb.get();
+            ip.diffuseColor[0] = 1.0f; ip.diffuseColor[1] = 1.0f;
+            ip.diffuseColor[2] = 0.0f; ip.diffuseColor[3] = 1.0f;
+
+            dev.Clear(Color(0, 0, 255, 255));
+            backend.DrawInstancedPrimitivesEx(*vbInst, *ibInst, Matrix::getIdentityProperty(),
+                                              Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                              PrimitiveType::TriangleList, 1, 1, ip);
+            std::vector<Color> instResult(4 * 4, Color(0, 0, 0, 0));
+            dev.GetBackBufferData(&centerRegion28, instResult.data(), 0, static_cast<int>(instResult.size()));
+            bool instIsExact = true;
+            for (const Color& p : instResult)
+                if (p.getRProperty() != 255 || p.getGProperty() != 255 || p.getBProperty() != 0 || p.getAProperty() != 255)
+                    instIsExact = false;
+            check(instIsExact,
+                  "D3D11GraphicsBackend::DrawInstancedPrimitivesEx(): real instanced3d draw with a "
+                  "genuine per-instance world buffer outputs the exact instance DiffuseColor (plan_dx.md DX-68)");
+        }
+
+        // Check X (DX-58): custom ShaderEffect. Runtime D3DCompile() of arbitrary HLSL source (not
+        // one of DX-13-hlsl's offline-compiled stock variants) compiles successfully, Bind() drives
+        // a real manual draw (through the raw device context -- SpriteBatch, the real future
+        // caller, doesn't exist yet, Phase DX9) whose color is genuinely driven by
+        // SetUniformVec4()'s fixed-slot constant buffer, and a deliberately broken HLSL source
+        // fails cleanly with a real, non-empty compiler error instead of crashing or silently
+        // "succeeding".
+        {
+            ID3D11DeviceContext* rawContext = backend.GetContextEXT();
+
+            auto effect = backend.CreateEffectBackend(
+                "struct VSIn { float2 pos:POSITION0; float2 uv:TEXCOORD0; float4 col:COLOR0; };\n"
+                "struct VSOut { float4 pos:SV_Position; float4 col:TEXCOORD0; };\n"
+                "cbuffer CB : register(b0) { float4 pad0[5]; float4 uColor; float4 uFloat0; };\n"
+                "VSOut main(VSIn input) { VSOut o; o.pos=float4(input.pos,0,1); o.col=input.col*uColor; return o; }",
+                "struct PSIn { float4 pos:SV_Position; float4 col:TEXCOORD0; };\n"
+                "float4 main(PSIn input):SV_Target { return input.col; }");
+            check(effect && effect->IsValid(),
+                  "D3D11GraphicsBackend::CreateEffectBackend(): real runtime D3DCompile() of "
+                  "arbitrary HLSL source compiles successfully (plan_dx.md DX-58)");
+
+            bool effIsExact = false;
+            if (effect && effect->IsValid())
+            {
+                effect->SetUniformVec4("uColor", 0.0f, 1.0f, 0.0f, 1.0f); // green -- 0/1 only, no rounding ambiguity
+                effect->Bind();
+
+                struct SpriteVtx { float x, y, u, v, r, g, b, a; };
+                static const SpriteVtx kTriFx[3] = {
+                    {-1.0f, -1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f},
+                    { 3.0f, -1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f},
+                    {-1.0f,  3.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f},
+                };
+                auto vbFx = backend.CreateVertexBuffer(3);
+                vbFx->SetData(kTriFx, 3, sizeof(SpriteVtx));
+                auto& d3dVbFx = static_cast<D3D11VertexBufferBackend&>(*vbFx);
+
+                ID3D11Buffer* vbRaw = d3dVbFx.GetBufferEXT();
+                UINT stride = sizeof(SpriteVtx);
+                UINT offset = 0;
+                rawContext->IASetVertexBuffers(0, 1, &vbRaw, &stride, &offset);
+                rawContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+                dev.Clear(Color(0, 0, 255, 255));
+                rawContext->Draw(3, 0);
+
+                std::vector<Color> effResult(4 * 4, Color(0, 0, 0, 0));
+                dev.GetBackBufferData(&centerRegion28, effResult.data(), 0, static_cast<int>(effResult.size()));
+                effIsExact = true;
+                for (const Color& p : effResult)
+                    if (p.getRProperty() != 0 || p.getGProperty() != 255 || p.getBProperty() != 0 || p.getAProperty() != 255)
+                        effIsExact = false;
+            }
+            check(effIsExact,
+                  "D3D11EffectBackend::Bind(): a real custom-compiled shader pair, driven by "
+                  "SetUniformVec4()'s fixed-slot constant buffer, draws the exact expected color "
+                  "(plan_dx.md DX-58)");
+
+            auto badEffect = backend.CreateEffectBackend("this is not valid HLSL {{{", "also not valid ]]]");
+            check(badEffect && !badEffect->IsValid() && !badEffect->GetCompileError().empty(),
+                  "D3D11GraphicsBackend::CreateEffectBackend(): a deliberately broken HLSL source "
+                  "fails CompileProgram() with a real, non-empty compiler error message (plan_dx.md DX-58)");
+        }
+
+        const int totalChecks = 3 + 10 + 1 + 2 + 2 + 2 + 2 + 2 + 1 + 1 + 2 + 1 + 13 + 2 + 3 + 2 + 2 + 1 + 1 + 1 + 1 + 3;
         std::printf("=== %d/%d PASS ===\n", passCount_, totalChecks);
         result_ = (passCount_ == totalChecks) ? 0 : 1;
         Exit();

@@ -4,6 +4,7 @@
 #include "CNA/Internal/Backends/D3D11/D3D11Textures.hpp"
 #include "CNA/Internal/Backends/D3D11/D3D11RenderTargets.hpp"
 #include "CNA/Internal/Backends/D3D11/D3D11OcclusionQuery.hpp"
+#include "CNA/Internal/Backends/D3D11/D3D11EffectBackend.hpp"
 #include "CNA/Internal/Backends/D3DCommon/D3DShaderCache.hpp"
 #include "CNA/Internal/Backends/D3DCommon/D3DConstantBuffers.hpp"
 
@@ -64,6 +65,19 @@ namespace CNA::Internal::Backends::D3D11
             if (const auto* t = dynamic_cast<const D3D11TextureBackend*>(tex))
                 return t->GetShaderResourceViewEXT();
             if (const auto* rt = dynamic_cast<const D3D11RenderTargetBackend*>(tex))
+                return rt->GetShaderResourceViewEXT();
+            return nullptr;
+        }
+
+        /// DX-66: same two-concrete-type resolution as GetSrvForTextureEXT above, but for
+        /// ITextureCubeBackend (env_map3d's TextureCube) -- a plain D3D11TextureCubeBackend, or a
+        /// D3D11RenderTargetCubeBackend used as a sampled cube texture.
+        ID3D11ShaderResourceView* GetSrvForTextureCubeEXT(const ITextureCubeBackend* tex)
+        {
+            if (tex == nullptr) return nullptr;
+            if (const auto* t = dynamic_cast<const D3D11TextureCubeBackend*>(tex))
+                return t->GetShaderResourceViewEXT();
+            if (const auto* rt = dynamic_cast<const D3D11RenderTargetCubeBackend*>(tex))
                 return rt->GetShaderResourceViewEXT();
             return nullptr;
         }
@@ -581,6 +595,15 @@ namespace CNA::Internal::Backends::D3D11
         return std::make_unique<D3D11OcclusionQueryBackend>(device_.Get(), context_.Get());
     }
 
+    std::unique_ptr<IEffectBackend> D3D11GraphicsBackend::CreateEffectBackend(
+        const std::string& vertSrc, const std::string& fragSrc)
+    {
+        auto backend = std::make_unique<D3D11EffectBackend>(device_.Get(), context_.Get());
+        if (!vertSrc.empty() && !fragSrc.empty())
+            backend->CompileProgram(vertSrc, fragSrc);
+        return backend;
+    }
+
     void D3D11GraphicsBackend::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
                                                int colorDstBlend, int alphaDstBlend,
                                                int colorBlendFunc, int alphaBlendFunc)
@@ -910,15 +933,116 @@ namespace CNA::Internal::Backends::D3D11
         return alphaTestConstantBuffer_.Get();
     }
 
+    ID3D11Buffer* D3D11GraphicsBackend::GetOrCreateDualTexFogConstantBufferEXT()
+    {
+        if (!dualTexFogConstantBuffer_)
+        {
+            D3D11_BUFFER_DESC desc{};
+            desc.ByteWidth = sizeof(D3DCommon::D3DFogConstants);
+            desc.Usage = D3D11_USAGE_DYNAMIC;
+            desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+            desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+            const HRESULT hr = device_->CreateBuffer(&desc, nullptr, dualTexFogConstantBuffer_.ReleaseAndGetAddressOf());
+            if (FAILED(hr))
+                throw std::runtime_error("D3D11GraphicsBackend: DualTex Fog constant buffer creation failed, hr=" + FormatHr(hr));
+        }
+        return dualTexFogConstantBuffer_.Get();
+    }
+
+    ID3D11Buffer* D3D11GraphicsBackend::GetOrCreateEnvMapPerDrawConstantBufferEXT()
+    {
+        if (!envMapPerDrawConstantBuffer_)
+        {
+            D3D11_BUFFER_DESC desc{};
+            desc.ByteWidth = sizeof(D3DCommon::D3DEnvMapPerDrawConstants);
+            desc.Usage = D3D11_USAGE_DYNAMIC;
+            desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+            desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+            const HRESULT hr = device_->CreateBuffer(&desc, nullptr, envMapPerDrawConstantBuffer_.ReleaseAndGetAddressOf());
+            if (FAILED(hr))
+                throw std::runtime_error("D3D11GraphicsBackend: EnvMap PerDraw constant buffer creation failed, hr=" + FormatHr(hr));
+        }
+        return envMapPerDrawConstantBuffer_.Get();
+    }
+
+    ID3D11Buffer* D3D11GraphicsBackend::GetOrCreateEnvMapConstantBufferEXT()
+    {
+        if (!envMapConstantBuffer_)
+        {
+            D3D11_BUFFER_DESC desc{};
+            desc.ByteWidth = sizeof(D3DCommon::D3DEnvMapConstants);
+            desc.Usage = D3D11_USAGE_DYNAMIC;
+            desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+            desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+            const HRESULT hr = device_->CreateBuffer(&desc, nullptr, envMapConstantBuffer_.ReleaseAndGetAddressOf());
+            if (FAILED(hr))
+                throw std::runtime_error("D3D11GraphicsBackend: EnvMap constant buffer creation failed, hr=" + FormatHr(hr));
+        }
+        return envMapConstantBuffer_.Get();
+    }
+
+    ID3D11Buffer* D3D11GraphicsBackend::GetOrCreateBoneConstantBufferEXT()
+    {
+        if (!boneConstantBuffer_)
+        {
+            D3D11_BUFFER_DESC desc{};
+            desc.ByteWidth = sizeof(D3DCommon::D3DBoneConstants);
+            desc.Usage = D3D11_USAGE_DYNAMIC;
+            desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+            desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+            const HRESULT hr = device_->CreateBuffer(&desc, nullptr, boneConstantBuffer_.ReleaseAndGetAddressOf());
+            if (FAILED(hr))
+                throw std::runtime_error("D3D11GraphicsBackend: Bone constant buffer creation failed, hr=" + FormatHr(hr));
+        }
+        return boneConstantBuffer_.Get();
+    }
+
+    ID3D11Buffer* D3D11GraphicsBackend::GetOrCreateSkinnedExtraConstantBufferEXT()
+    {
+        if (!skinnedExtraConstantBuffer_)
+        {
+            D3D11_BUFFER_DESC desc{};
+            desc.ByteWidth = sizeof(D3DCommon::D3DSkinnedExtraConstants);
+            desc.Usage = D3D11_USAGE_DYNAMIC;
+            desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+            desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+            const HRESULT hr = device_->CreateBuffer(&desc, nullptr, skinnedExtraConstantBuffer_.ReleaseAndGetAddressOf());
+            if (FAILED(hr))
+                throw std::runtime_error("D3D11GraphicsBackend: Skinned Extra constant buffer creation failed, hr=" + FormatHr(hr));
+        }
+        return skinnedExtraConstantBuffer_.Get();
+    }
+
+    ID3D11InputLayout* D3D11GraphicsBackend::GetOrCreateInstancedInputLayoutEXT()
+    {
+        if (!instancedInputLayout_)
+        {
+            static const D3D11_INPUT_ELEMENT_DESC kElements[] = {
+                { "POSITION",      0, DXGI_FORMAT_R32G32B32_FLOAT,    0, 0,  D3D11_INPUT_PER_VERTEX_DATA,   0 },
+                { "INSTANCEWORLD", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 0,  D3D11_INPUT_PER_INSTANCE_DATA, 1 },
+                { "INSTANCEWORLD", 1, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 16, D3D11_INPUT_PER_INSTANCE_DATA, 1 },
+                { "INSTANCEWORLD", 2, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 32, D3D11_INPUT_PER_INSTANCE_DATA, 1 },
+                { "INSTANCEWORLD", 3, DXGI_FORMAT_R32G32B32A32_FLOAT, 1, 48, D3D11_INPUT_PER_INSTANCE_DATA, 1 },
+            };
+
+            const uint8_t* vsBytes = nullptr;
+            std::size_t vsSize = 0;
+            D3DCommon::GetVertexShaderBytecode(D3DCommon::D3DShaderVariant::Instanced3d, vsBytes, vsSize);
+            if (vsBytes == nullptr || vsSize == 0)
+                return nullptr;
+
+            device_->CreateInputLayout(kElements, ARRAYSIZE(kElements), vsBytes, vsSize,
+                                       instancedInputLayout_.ReleaseAndGetAddressOf());
+        }
+        return instancedInputLayout_.Get();
+    }
+
     void D3D11GraphicsBackend::DrawPrimitivesExImpl(
         const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
         const Matrix& world, const Matrix& view, const Matrix& projection,
         PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
     {
-        // DX-62/DX-63/DX-64: real effect-aware variant dispatch. DualTexture/EnvMap/Skinned
-        // (DX-65/DX-66/DX-67) are deliberately NOT implemented here -- they throw a named error
-        // rather than silently falling through to the wrong shader, matching this backend's
-        // established honest-stub discipline.
+        // DX-62/DX-63/DX-64/DX-65/DX-66/DX-67: real effect-aware variant dispatch.
         const auto& d3dVb = static_cast<const D3D11VertexBufferBackend&>(vb);
         const std::size_t stride = d3dVb.GetStrideEXT() > 0 ? d3dVb.GetStrideEXT() : 16;
 
@@ -932,22 +1056,33 @@ namespace CNA::Internal::Backends::D3D11
         const bool needsLitTextured = (stride == 32) && !needsAlphaTest && !needsDualTex
                                      && !needsEnvMap && !needsSkinned;
 
-        if (needsDualTex)
+        // DX-65: dual_texture3d.vert.hlsl's VSInput is Position+UV only (20 bytes) -- the 24-byte
+        // dual_texture_colored3d variant was deliberately not ported (DX-13-hlsl's own row notes).
+        if (needsDualTex && stride != 20)
             throw std::runtime_error(
-                "D3D11GraphicsBackend::DrawPrimitivesEx: DualTextureEffect (dual_texture3d) is not "
-                "yet implemented (plan_dx.md DX-65)");
-        if (needsEnvMap)
+                "D3D11GraphicsBackend::DrawPrimitivesEx: DualTextureEffect (dual_texture3d) only "
+                "supports stride 20 (VertexPositionTexture); dual_texture_colored3d was not ported "
+                "(plan_dx.md DX-13-hlsl)");
+        // DX-66: env_map3d.vert.hlsl's VSInput is Position+Normal+UV (32 bytes).
+        if (needsEnvMap && stride != 32)
             throw std::runtime_error(
-                "D3D11GraphicsBackend::DrawPrimitivesEx: EnvironmentMapEffect (env_map3d) is not "
-                "yet implemented (plan_dx.md DX-66)");
-        if (needsSkinned)
+                "D3D11GraphicsBackend::DrawPrimitivesEx: EnvironmentMapEffect (env_map3d) requires "
+                "stride 32 (VertexPositionNormalTexture)");
+        // DX-67: skinned3d.vert.hlsl's VSInput is Position+Normal+UV+BoneWeights+BoneIndices (52 bytes).
+        if (needsSkinned && stride != 52)
             throw std::runtime_error(
-                "D3D11GraphicsBackend::DrawPrimitivesEx: SkinnedEffect (skinned3d) is not yet "
-                "implemented (plan_dx.md DX-67)");
+                "D3D11GraphicsBackend::DrawPrimitivesEx: SkinnedEffect (skinned3d) requires stride "
+                "52 (VertexPositionNormalTextureSkinned)");
 
         D3DCommon::D3DShaderVariant variant;
         if (needsAlphaTest)
             variant = D3DCommon::D3DShaderVariant::AlphaTest3d;
+        else if (needsDualTex)
+            variant = D3DCommon::D3DShaderVariant::DualTexture3d;
+        else if (needsEnvMap)
+            variant = D3DCommon::D3DShaderVariant::EnvMap3d;
+        else if (needsSkinned)
+            variant = D3DCommon::D3DShaderVariant::Skinned3d;
         else if (needsLitTextured)
             variant = D3DCommon::D3DShaderVariant::LitTextured3d;
         else
@@ -974,9 +1109,29 @@ namespace CNA::Internal::Backends::D3D11
             throw std::runtime_error("DrawPrimitivesEx: failed to create input layout for the selected variant/stride");
 
         const Matrix wvp = world * view * projection;
-        ID3D11ShaderResourceView* srv0 = GetSrvForTextureEXT(params.texture0);
 
-        ID3D11Buffer* cbs[2] = { nullptr, nullptr };
+        // DX-65/DX-66: dual_texture3d needs t0+t1 (both Texture2D); env_map3d needs t0 (Texture2D)
+        // + t1 (TextureCube). Every other variant only ever binds t0 -- srvs[1] stays null, which
+        // is harmless for a shader that declares no t1 register.
+        ID3D11ShaderResourceView* srvs[2] = { nullptr, nullptr };
+        if (needsDualTex)
+        {
+            srvs[0] = GetSrvForTextureEXT(params.texture0);
+            srvs[1] = GetSrvForTextureEXT(params.texture1);
+        }
+        else if (needsEnvMap)
+        {
+            srvs[0] = GetSrvForTextureEXT(params.texture0);
+            srvs[1] = GetSrvForTextureCubeEXT(params.envMap);
+        }
+        else
+        {
+            srvs[0] = GetSrvForTextureEXT(params.texture0);
+        }
+
+        // 3 contiguous slots (b0/b1/b2) always fully rebound below (unused slots explicitly null)
+        // so no variant can see a stale buffer left bound by a previous, different-shaped draw.
+        ID3D11Buffer* cbs[3] = { nullptr, nullptr, nullptr };
 
         if (needsAlphaTest)
         {
@@ -1003,6 +1158,179 @@ namespace CNA::Internal::Backends::D3D11
             ID3D11Buffer* cb = GetOrCreateAlphaTestConstantBufferEXT();
             UpdateDynamicConstantBufferEXT(cb, &c, sizeof(c));
             cbs[0] = cb;
+        }
+        else if (needsDualTex)
+        {
+            // DX-65: dual_texture3d's PerDraw (b0) is the same shape as D3DPerDrawConstants; its
+            // FogParams cbuffer is at register(b2) instead of (b1) -- t0/s0 and t1/s1 are already
+            // the two texture samplers, so fog moved to the next free slot (DX-13-hlsl's own note).
+            D3DCommon::D3DPerDrawConstants perDraw{};
+            wvp.ToColumnMajor(perDraw.Mvp);
+            perDraw.DiffuseColor[0] = params.diffuseColor[0];
+            perDraw.DiffuseColor[1] = params.diffuseColor[1];
+            perDraw.DiffuseColor[2] = params.diffuseColor[2];
+            perDraw.DiffuseColor[3] = params.diffuseColor[3];
+            perDraw.TextureEnabled = params.textureEnabled ? 1.0f : 0.0f;
+            perDraw.VertexColorEnabled = params.vertexColorEnabled ? 1.0f : 0.0f;
+
+            D3DCommon::D3DFogConstants fog{};
+            fog.FogColorEnabled[0] = params.fogColor[0];
+            fog.FogColorEnabled[1] = params.fogColor[1];
+            fog.FogColorEnabled[2] = params.fogColor[2];
+            fog.FogColorEnabled[3] = params.fogEnabled ? 1.0f : 0.0f;
+            fog.FogStartEnd[0] = params.fogStart;
+            fog.FogStartEnd[1] = params.fogEnd;
+
+            ID3D11Buffer* perDrawCB = GetOrCreatePerDrawConstantBufferEXT();
+            ID3D11Buffer* fogCB = GetOrCreateDualTexFogConstantBufferEXT();
+            UpdateDynamicConstantBufferEXT(perDrawCB, &perDraw, sizeof(perDraw));
+            UpdateDynamicConstantBufferEXT(fogCB, &fog, sizeof(fog));
+            cbs[0] = perDrawCB;
+            cbs[2] = fogCB;
+        }
+        else if (needsEnvMap)
+        {
+            // DX-66: env_map3d's own PerDraw (b0) is Mvp+World only (D3DEnvMapPerDrawConstants) --
+            // a genuinely different shape from D3DPerDrawConstants; material/lighting/fog live in
+            // EnvMapParams (b2) instead (D3DEnvMapConstants), field-for-field matching
+            // env_map3d.vert.hlsl/.frag.hlsl's real cbuffer declaration.
+            D3DCommon::D3DEnvMapPerDrawConstants perDraw{};
+            wvp.ToColumnMajor(perDraw.Mvp);
+            world.ToColumnMajor(perDraw.World);
+
+            D3DCommon::D3DEnvMapConstants c{};
+            c.EyePosition[0] = params.eyePositionWorld[0];
+            c.EyePosition[1] = params.eyePositionWorld[1];
+            c.EyePosition[2] = params.eyePositionWorld[2];
+            c.DiffuseColor[0] = params.diffuseColor[0];
+            c.DiffuseColor[1] = params.diffuseColor[1];
+            c.DiffuseColor[2] = params.diffuseColor[2];
+            c.DiffuseColor[3] = params.diffuseColor[3];
+            c.EmissiveAmount[0] = params.emissiveColor[0];
+            c.EmissiveAmount[1] = params.emissiveColor[1];
+            c.EmissiveAmount[2] = params.emissiveColor[2];
+            c.EmissiveAmount[3] = params.envMapAmount;
+            c.Light0Dir[0] = params.light0Dir[0];
+            c.Light0Dir[1] = params.light0Dir[1];
+            c.Light0Dir[2] = params.light0Dir[2];
+            c.Light0DiffuseFresnel[0] = params.light0Diffuse[0];
+            c.Light0DiffuseFresnel[1] = params.light0Diffuse[1];
+            c.Light0DiffuseFresnel[2] = params.light0Diffuse[2];
+            c.Light0DiffuseFresnel[3] = params.fresnelEnabled ? 1.0f : 0.0f;
+            c.EnvMapSpecularFresnel[0] = params.envMapSpecular[0];
+            c.EnvMapSpecularFresnel[1] = params.envMapSpecular[1];
+            c.EnvMapSpecularFresnel[2] = params.envMapSpecular[2];
+            c.EnvMapSpecularFresnel[3] = params.fresnelFactor;
+            c.FogColorEnabled[0] = params.fogColor[0];
+            c.FogColorEnabled[1] = params.fogColor[1];
+            c.FogColorEnabled[2] = params.fogColor[2];
+            c.FogColorEnabled[3] = params.fogEnabled ? 1.0f : 0.0f;
+            c.FogStartEnd[0] = params.fogStart;
+            c.FogStartEnd[1] = params.fogEnd;
+            c.Light1Dir[0] = params.light1Dir[0];
+            c.Light1Dir[1] = params.light1Dir[1];
+            c.Light1Dir[2] = params.light1Dir[2];
+            c.Light1Diffuse[0] = params.light1Diffuse[0];
+            c.Light1Diffuse[1] = params.light1Diffuse[1];
+            c.Light1Diffuse[2] = params.light1Diffuse[2];
+            c.Light2Dir[0] = params.light2Dir[0];
+            c.Light2Dir[1] = params.light2Dir[1];
+            c.Light2Dir[2] = params.light2Dir[2];
+            c.Light2Diffuse[0] = params.light2Diffuse[0];
+            c.Light2Diffuse[1] = params.light2Diffuse[1];
+            c.Light2Diffuse[2] = params.light2Diffuse[2];
+
+            ID3D11Buffer* perDrawCB = GetOrCreateEnvMapPerDrawConstantBufferEXT();
+            ID3D11Buffer* envCB = GetOrCreateEnvMapConstantBufferEXT();
+            UpdateDynamicConstantBufferEXT(perDrawCB, &perDraw, sizeof(perDraw));
+            UpdateDynamicConstantBufferEXT(envCB, &c, sizeof(c));
+            cbs[0] = perDrawCB;
+            cbs[2] = envCB;
+        }
+        else if (needsSkinned)
+        {
+            // DX-67: skinned3d's PerDraw (b0) is the same shape as D3DPerDrawConstants; BoneBlock
+            // (b1, D3DBoneConstants, DX-60a) holds the 72-matrix array; FogParams (b2,
+            // D3DSkinnedExtraConstants) carries fog + DirectionalLight1/2 + World + EyePosition +
+            // specular (the 128-byte PerDraw buffer has no spare room for those, same reasoning
+            // D3DLightingConstants documents for lit_textured3d).
+            D3DCommon::D3DPerDrawConstants perDraw{};
+            wvp.ToColumnMajor(perDraw.Mvp);
+            perDraw.DiffuseColor[0] = params.diffuseColor[0];
+            perDraw.DiffuseColor[1] = params.diffuseColor[1];
+            perDraw.DiffuseColor[2] = params.diffuseColor[2];
+            perDraw.DiffuseColor[3] = params.diffuseColor[3];
+            perDraw.AmbientColor[0] = params.ambientColor[0];
+            perDraw.AmbientColor[1] = params.ambientColor[1];
+            perDraw.AmbientColor[2] = params.ambientColor[2];
+            perDraw.LightingEnabled = params.lightingEnabled ? 1.0f : 0.0f;
+            perDraw.Light0Dir[0] = params.light0Dir[0];
+            perDraw.Light0Dir[1] = params.light0Dir[1];
+            perDraw.Light0Dir[2] = params.light0Dir[2];
+            perDraw.TextureEnabled = params.textureEnabled ? 1.0f : 0.0f;
+            perDraw.Light0Diffuse[0] = params.light0Diffuse[0];
+            perDraw.Light0Diffuse[1] = params.light0Diffuse[1];
+            perDraw.Light0Diffuse[2] = params.light0Diffuse[2];
+            perDraw.VertexColorEnabled = params.vertexColorEnabled ? 1.0f : 0.0f;
+
+            // DX-60a/DX-67: params.boneTransforms is filled via Matrix::ToColumnMajor() at the
+            // XNA-API call site (SkinnedEffect::SetBoneTransforms, SkinnedEffect.cpp:383) -- the
+            // SAME function DX-60/DX-61's own report established emits raw row-major M11..M44
+            // bytes, exactly what BoneBlock's `row_major float4x4 Bones[72]` wants unchanged. A
+            // straight memcpy is therefore correct here, no per-matrix transpose needed.
+            D3DCommon::D3DBoneConstants bones{};
+            const int boneCount = std::min(params.boneCount, 72);
+            if (boneCount > 0)
+                std::memcpy(bones.Bones, params.boneTransforms,
+                           static_cast<std::size_t>(boneCount) * 16u * sizeof(float));
+
+            D3DCommon::D3DSkinnedExtraConstants extra{};
+            extra.FogColorEnabled[0] = params.fogColor[0];
+            extra.FogColorEnabled[1] = params.fogColor[1];
+            extra.FogColorEnabled[2] = params.fogColor[2];
+            extra.FogColorEnabled[3] = params.fogEnabled ? 1.0f : 0.0f;
+            extra.FogStartEnd[0] = params.fogStart;
+            extra.FogStartEnd[1] = params.fogEnd;
+            extra.Light1Dir[0] = params.light1Dir[0];
+            extra.Light1Dir[1] = params.light1Dir[1];
+            extra.Light1Dir[2] = params.light1Dir[2];
+            extra.Light1Diffuse[0] = params.light1Diffuse[0];
+            extra.Light1Diffuse[1] = params.light1Diffuse[1];
+            extra.Light1Diffuse[2] = params.light1Diffuse[2];
+            extra.Light2Dir[0] = params.light2Dir[0];
+            extra.Light2Dir[1] = params.light2Dir[1];
+            extra.Light2Dir[2] = params.light2Dir[2];
+            extra.Light2Diffuse[0] = params.light2Diffuse[0];
+            extra.Light2Diffuse[1] = params.light2Diffuse[1];
+            extra.Light2Diffuse[2] = params.light2Diffuse[2];
+            world.ToColumnMajor(extra.World);
+            extra.EyePosition[0] = params.eyePositionWorld[0];
+            extra.EyePosition[1] = params.eyePositionWorld[1];
+            extra.EyePosition[2] = params.eyePositionWorld[2];
+            extra.EyePosition[3] = static_cast<float>(params.weightsPerVertex); // DX-67/Task 895
+            extra.SpecularColorPower[0] = params.specularColor[0];
+            extra.SpecularColorPower[1] = params.specularColor[1];
+            extra.SpecularColorPower[2] = params.specularColor[2];
+            extra.SpecularColorPower[3] = params.specularPower;
+            extra.Light0Specular[0] = params.light0Specular[0];
+            extra.Light0Specular[1] = params.light0Specular[1];
+            extra.Light0Specular[2] = params.light0Specular[2];
+            extra.Light1Specular[0] = params.light1Specular[0];
+            extra.Light1Specular[1] = params.light1Specular[1];
+            extra.Light1Specular[2] = params.light1Specular[2];
+            extra.Light2Specular[0] = params.light2Specular[0];
+            extra.Light2Specular[1] = params.light2Specular[1];
+            extra.Light2Specular[2] = params.light2Specular[2];
+
+            ID3D11Buffer* perDrawCB = GetOrCreatePerDrawConstantBufferEXT();
+            ID3D11Buffer* boneCB = GetOrCreateBoneConstantBufferEXT();
+            ID3D11Buffer* extraCB = GetOrCreateSkinnedExtraConstantBufferEXT();
+            UpdateDynamicConstantBufferEXT(perDrawCB, &perDraw, sizeof(perDraw));
+            UpdateDynamicConstantBufferEXT(boneCB, &bones, sizeof(bones));
+            UpdateDynamicConstantBufferEXT(extraCB, &extra, sizeof(extra));
+            cbs[0] = perDrawCB;
+            cbs[1] = boneCB;
+            cbs[2] = extraCB;
         }
         else if (needsLitTextured)
         {
@@ -1118,10 +1446,12 @@ namespace CNA::Internal::Backends::D3D11
         context_->VSSetShader(vs.Get(), nullptr, 0);
         context_->PSSetShader(ps.Get(), nullptr, 0);
 
-        const UINT cbCount = cbs[1] != nullptr ? 2u : 1u;
-        context_->VSSetConstantBuffers(0, cbCount, cbs);
-        context_->PSSetConstantBuffers(0, cbCount, cbs);
-        context_->PSSetShaderResources(0, 1, &srv0);
+        // Always rebind the full 3-slot/2-SRV range (unused slots explicitly null, see cbs'/srvs'
+        // own declaration comments above) -- no variant can see a stale binding left by whatever
+        // differently-shaped draw call ran immediately before this one.
+        context_->VSSetConstantBuffers(0, 3, cbs);
+        context_->PSSetConstantBuffers(0, 3, cbs);
+        context_->PSSetShaderResources(0, 2, srvs);
 
         if (ib != nullptr)
         {
@@ -1148,6 +1478,66 @@ namespace CNA::Internal::Backends::D3D11
         PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
     {
         DrawPrimitivesExImpl(vb, &ib, world, view, projection, primitive, primitiveCount, params);
+    }
+
+    void D3D11GraphicsBackend::DrawInstancedPrimitivesEx(
+        const IVertexBufferBackend& vb, const IIndexBufferBackend& ib,
+        const Matrix& world, const Matrix& view, const Matrix& projection,
+        PrimitiveType primitive, int primitiveCount, int instanceCount, const GpuDrawParams& params)
+    {
+        // DX-68: matches VulkanGraphicsBackend::DrawInstancedPrimitivesEx's own fallback -- no
+        // per-instance VB means this isn't really an instanced draw at all.
+        if (params.instanceVb == nullptr)
+        {
+            DrawIndexedPrimitivesEx(vb, ib, world, view, projection, primitive, primitiveCount, params);
+            return;
+        }
+
+        const auto& d3dVb     = static_cast<const D3D11VertexBufferBackend&>(vb);
+        const auto& d3dIb     = static_cast<const D3D11IndexBufferBackend&>(ib);
+        const auto& d3dInstVb = static_cast<const D3D11VertexBufferBackend&>(*params.instanceVb);
+        const std::size_t perVertexStride = d3dVb.GetStrideEXT() > 0 ? d3dVb.GetStrideEXT() : 16;
+        constexpr std::size_t kInstanceStride = 64; // 4 x float4 rows (INSTANCEWORLD0-3)
+
+        constexpr auto variant = D3DCommon::D3DShaderVariant::Instanced3d;
+        auto vs = D3DCommon::CreateVertexShaderForVariant(device_.Get(), variant);
+        auto ps = D3DCommon::CreatePixelShaderForVariant(device_.Get(), variant);
+        if (!vs || !ps)
+            throw std::runtime_error("DrawInstancedPrimitivesEx: failed to create instanced3d shader objects");
+
+        ID3D11InputLayout* layout = GetOrCreateInstancedInputLayoutEXT();
+        if (!layout)
+            throw std::runtime_error("DrawInstancedPrimitivesEx: failed to create instanced3d input layout");
+
+        // instanced3d.vert.hlsl's PerDraw (b0) is byte-identical to D3DPerDrawConstants -- its
+        // first field is named "Vp" (view*projection only, world comes from the per-instance
+        // buffer instead) rather than "Mvp", same struct reused for the byte layout only.
+        D3DCommon::D3DPerDrawConstants perDraw{};
+        const Matrix vp = view * projection;
+        vp.ToColumnMajor(perDraw.Mvp);
+        perDraw.DiffuseColor[0] = params.diffuseColor[0];
+        perDraw.DiffuseColor[1] = params.diffuseColor[1];
+        perDraw.DiffuseColor[2] = params.diffuseColor[2];
+        perDraw.DiffuseColor[3] = params.diffuseColor[3];
+
+        ID3D11Buffer* perDrawCB = GetOrCreatePerDrawConstantBufferEXT();
+        UpdateDynamicConstantBufferEXT(perDrawCB, &perDraw, sizeof(perDraw));
+
+        ID3D11Buffer* vbs[2] = { d3dVb.GetBufferEXT(), d3dInstVb.GetBufferEXT() };
+        UINT strides[2] = { static_cast<UINT>(perVertexStride), static_cast<UINT>(kInstanceStride) };
+        UINT offsets[2] = { 0, 0 };
+        context_->IASetVertexBuffers(0, 2, vbs, strides, offsets);
+        context_->IASetIndexBuffer(d3dIb.GetBufferEXT(), d3dIb.GetFormatEXT(), 0);
+        context_->IASetInputLayout(layout);
+        context_->IASetPrimitiveTopology(ToD3D11Topology(primitive));
+        context_->VSSetShader(vs.Get(), nullptr, 0);
+        context_->PSSetShader(ps.Get(), nullptr, 0);
+        context_->VSSetConstantBuffers(0, 1, &perDrawCB);
+        context_->PSSetConstantBuffers(0, 1, &perDrawCB);
+
+        const UINT indexCount = static_cast<UINT>(VertexCountForPrimitives(primitive, primitiveCount));
+        const UINT instCount = static_cast<UINT>(std::max(1, instanceCount));
+        context_->DrawIndexedInstanced(indexCount, instCount, 0, 0, 0);
     }
 }
 

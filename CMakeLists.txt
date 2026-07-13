@@ -305,10 +305,11 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "WEBGPU")
             VERBATIM)
     endif()
 elseif(CNA_GRAPHICS_BACKEND STREQUAL "D3D11")
-    # plan_dx.md design decision 3: minimal confirmed link set only (DX-1) -- d3dcompiler is
-    # deliberately NOT linked here, it belongs only to the offline shader-compile tool / DX-58's
-    # runtime custom-effect path, never the main backend target.
-    target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 d3d11 dxgi cna_backend_graphics_d3dcommon)
+    # plan_dx.md design decision 3 (DX-1): d3d11/dxgi is the confirmed minimal link set for the
+    # stock offline-compiled shader pipeline. d3dcompiler is linked too, specifically for DX-58's
+    # runtime D3DCompile() custom-ShaderEffect path (D3D11EffectBackend) -- confirmed safe to link
+    # in isolation by DX-1/DX-14-compile's own spikes; the offline stock pipeline never calls it.
+    target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 d3d11 dxgi d3dcompiler cna_backend_graphics_d3dcommon)
 endif()
 
 file(GLOB_RECURSE CNA_SOURCES CONFIGURE_DEPENDS
