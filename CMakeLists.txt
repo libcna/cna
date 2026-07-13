@@ -172,6 +172,16 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "VULKAN")
     set(BACKEND_TARGET "cna_backend_graphics_vulkan")
     add_compile_definitions(CNA_BACKEND_VULKAN)
     find_package(Vulkan REQUIRED)
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "WEBGPU")
+    # cna-template/missing.md: WEBGPU is a real (experimental) 5th CNA backend, but its
+    # implementation has not landed on this branch/checkout yet (it lives on a separate,
+    # not-yet-merged feature branch) -- give a specific, actionable error instead of the generic
+    # "Unknown graphics backend" message below, which reads like a typo rather than "not here yet".
+    message(FATAL_ERROR
+        "CNA: 'WEBGPU' is a known CNA backend name, but this checkout of CNA does not yet define "
+        "a cna_backend_graphics_webgpu target (WEBGPU support has not landed on this branch). "
+        "Check out a CNA revision where WEBGPU support has merged, or use one of the backends "
+        "this checkout actually supports: SDL_RENDERER, EASYGL, BGFX, VULKAN.")
 else()
 
     message(FATAL_ERROR "CNA: Unknown graphics backend: ${CNA_GRAPHICS_BACKEND}")

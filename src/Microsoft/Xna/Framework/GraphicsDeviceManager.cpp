@@ -69,8 +69,18 @@ namespace Microsoft::Xna::Framework
 
         registerServices();
 
-        // Match the old CNA behavior: give the backend a valid initial logical size.
-        ApplyChanges();
+        // Deliberately NOT calling ApplyChanges() here (cna-template/missing.md): Game's own
+        // device already exists with sane defaults at this point (CNA's Game always pre-owns its
+        // GraphicsDevice, unlike real FNA, where GraphicsDeviceManager creates it), and
+        // Game::DoInitialize() unconditionally calls CreateDevice() shortly after this
+        // constructor returns -- so calling ApplyChanges() here just did the exact same backend
+        // reconfiguration (SetPresentationMode + Reset) twice in a row for every Game that owns a
+        // GraphicsDeviceManager, causing a visible double-reconfiguration flicker on startup.
+        // Matches FNA's own explicit guidance (GraphicsDeviceManager.cs, ApplyChanges()): "Note
+        // that if you hit this block, it's probably because you called ApplyChanges in the
+        // constructor. The device created here gets destroyed and recreated by the game, so maybe
+        // don't do that!" -- Game::DoInitialize()'s own CreateDevice() call is the single source
+        // of truth for first-time setup.
     }
 
     GraphicsDeviceManager::~GraphicsDeviceManager()
