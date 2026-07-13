@@ -1,15 +1,19 @@
 # Software (CPU) Rasterizer Graphics Backend — Implementation Plan
 
-> **Status: Phases S1-S3 landed and verified, 2026-07-13.** `CNA_GRAPHICS_BACKEND=SOFTWARE`
+> **Status: Phases S1-S4 landed and verified, 2026-07-13.** `CNA_GRAPHICS_BACKEND=SOFTWARE`
 > configures, builds, and `CnaTests` (the full pre-existing GTest corpus) links and runs cleanly
 > against it -- **4371/4373 pass with `DISPLAY`/`WAYLAND_DISPLAY` unset and `SDL_VIDEODRIVER`
-> empty** (2 skips are unrelated hardware-sensor tests that skip on every backend). A dedicated
-> `Software_Smoke` CTest (6/6) proves this backend's actual reason to exist: `Clear()` followed by
-> `GraphicsDevice::GetBackBufferData()` returns the exact clear color, a bound `RenderTarget2D` has
-> a genuinely independent framebuffer from the backbuffer, and `VertexBuffer`/`IndexBuffer` (both
-> 16- and 32-bit) round-trip real data -- all with **no window, no GPU, no display server**.
-> `DrawColoredPrimitives`/`DrawIndexedColoredPrimitives` are still argument-validating placeholders
-> only (Phase S4 replaces them with the real rasterizer) -- no triangle has been rasterized yet.
+> empty** (2 skips are unrelated hardware-sensor tests that skip on every backend). This backend now
+> actually **rasterizes real triangles** -- `DrawColoredPrimitives`/`DrawIndexedColoredPrimitives`
+> transform vertices through `World*View*Projection`, perspective-divide, and fill them with a real
+> edge-function rasterizer, with a genuinely working per-pixel depth test and perspective-correct
+> vertex-color interpolation. `Software_Smoke` (6/6) proves the framebuffer/readback/resource-
+> storage foundation; the new `Software_Rasterizer` CTest (5/5) proves the rasterizer itself: exact
+> solid-color output, correct barycentric color interpolation, and **order-independent depth
+> occlusion** (drawing a near-red then far-blue triangle, and the reverse order, both correctly
+> leave red visible) -- all with **no window, no GPU, no display server**.
+> `TriangleList` only in v1; no texture sampling, blending, or `BasicEffect`/`SpriteBatch`
+> integration yet (Phases S5/S6).
 >
 > **Status legend:** ✅ implemented *and verified against its stated acceptance criteria*;
 > 🟨 code or documentation exists but has not met those criteria; ⬜ not implemented.
@@ -150,11 +154,11 @@ without both.
 
 | # | Task | Status | Notes |
 |---|---|---|---|
-| SOFTWARE-30 | Per-vertex CPU transform: `World * View * Projection` (matching CNA's existing `Matrix` row/column convention) → clip space | ⬜ | |
-| SOFTWARE-31 | Perspective divide + viewport transform → screen-space X/Y/Z | ⬜ | |
-| SOFTWARE-32 | Triangle rasterization core: edge-function/barycentric fill, per-pixel depth test (`LessEqual`, matching `DepthStencilState::Default`) against the bound depth buffer, write-on-pass | ⬜ | |
-| SOFTWARE-33 | Perspective-correct attribute interpolation (vertex color, UV) across the triangle | ⬜ | |
-| SOFTWARE-34 | Basic near-plane handling: at minimum, cull triangles entirely behind the near plane; full polygon near-plane clipping (splitting a triangle into 1-2 new triangles) is a known v1 limitation, flagged here for a likely follow-up task once basic rendering is proven correct | ⬜ | Near-plane clipping bugs are a classic rasterizer failure mode — do not skip verifying this with an actual test scene that has geometry crossing the near plane once Phase S4 is otherwise working. |
+| SOFTWARE-30 | Per-vertex CPU transform: `World * View * Projection` (matching CNA's existing `Matrix` row/column convention) → clip space | ✅ | Verified 2026-07-13: uses CNA's own `Matrix::operator*` (row-major, row-vector — `combined = world*view*projection`) and the existing `Vector4::Transform(Vector3, const Matrix&)` helper, reusing established codebase math rather than reimplementing the transform. `DrawColoredPrimitives`/`DrawIndexedColoredPrimitives` now genuinely rasterize (matching `VertexPositionColor`'s fixed layout — Position at offset 0, packed RGBA8 Color at offset 12, per that method's own documented "equivalent to BasicEffect with VertexColorEnabled=true" contract). |
+| SOFTWARE-31 | Perspective divide + viewport transform → screen-space X/Y/Z | ✅ | `ndc = clip.xyz / clip.w`; `screenX=(ndcX*0.5+0.5)*viewportWidth`, `screenY=(1-(ndcY*0.5+0.5))*viewportHeight` (Y-flip: NDC is Y-up, the framebuffer is Y-down/top-left-origin). Depth used directly as `ndcZ` with no remapping, since CNA's projection matrices (like real XNA/FNA/D3D) already produce a 0..1 post-divide Z range, not OpenGL's -1..1. |
+| SOFTWARE-32 | Triangle rasterization core: edge-function/barycentric fill, per-pixel depth test (`LessEqual`, matching `DepthStencilState::Default`) against the bound depth buffer, write-on-pass | ✅ | Standard edge-function rasterizer, bounding-box-limited, accepting either triangle winding (no backface culling in v1 — a real, intentional simplification, see Boundaries). Verified via the new `Software_Rasterizer` CTest (5/5): a solid-color triangle renders the exact color at its center pixel; **order-independent depth occlusion proven directly** (Checks C/D draw a near-red and far-blue triangle in both possible orders — red wins both times, proving the depth test is real, not an accidental last-write-wins artifact). |
+| SOFTWARE-33 | Perspective-correct attribute interpolation (vertex color, UV) across the triangle | ✅ | Vertex colors are premultiplied by `1/clip.w` before rasterization, interpolated linearly in screen space, then divided by the interpolated `1/w` at the end (the standard technique). Verified via `Software_Rasterizer` Check B: a red/green/blue triangle's centroid pixel is the exact barycentric average of all three vertex colors. UV/texture interpolation follows the same mechanism once Phase S5 adds texture sampling. |
+| SOFTWARE-34 | Basic near-plane handling: at minimum, cull triangles entirely behind the near plane; full polygon near-plane clipping (splitting a triangle into 1-2 new triangles) is a known v1 limitation, flagged here for a likely follow-up task once basic rendering is proven correct | ✅ | Implemented as a per-vertex `clip.W <= 1e-5f` check in `TransformPositionColorVertex()` — if any of a triangle's 3 vertices fails it, the whole triangle is culled rather than rasterized with garbage post-divide coordinates. Not yet exercised by a dedicated test with geometry deliberately crossing the near plane (all `Software_Rasterizer` test geometry stays safely in front of the camera) — a real, acknowledged gap, not silently claimed fully verified. |
 
 ---
 

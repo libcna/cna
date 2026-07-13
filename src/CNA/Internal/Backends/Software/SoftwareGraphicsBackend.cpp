@@ -1,11 +1,164 @@
 #include "CNA/Internal/Backends/Software/SoftwareGraphicsBackend.hpp"
 
+#include "Microsoft/Xna/Framework/Vector4.hpp"
+
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <stdexcept>
 
 namespace CNA::Internal::Backends::Software
 {
+    namespace
+    {
+        using Vector3 = Microsoft::Xna::Framework::Vector3;
+        using Vector4 = Microsoft::Xna::Framework::Vector4;
+
+        // ---- Phase S4 rasterizer core ----
+        //
+        // Works entirely in CNA's own native row-major/row-vector Matrix convention (matching
+        // IGraphicsBackend.hpp's own documented "combined = world * view * projection" order) --
+        // no GPU/shader column-major conversion is needed since this backend never talks to a
+        // real GPU at all.
+        //
+        // Depth convention: CNA's Matrix::CreatePerspectiveFieldOfView/CreateOrthographic (like
+        // real XNA/FNA/D3D) already produce a clip.Z/clip.W range of 0..1 after the perspective
+        // divide (not OpenGL's -1..1), so the post-divide Z is used directly as the depth-buffer
+        // value with no extra remapping.
+
+        /// One vertex, fully transformed into screen space and ready to rasterize. `invW` and the
+        /// color channels are already perspective-divided (color premultiplied by invW) so
+        /// barycentric interpolation across a triangle is perspective-correct with a single divide
+        /// at the end -- the standard technique.
+        struct RasterVertex
+        {
+            float x = 0.0f, y = 0.0f;   ///< Screen-space pixel coordinates.
+            float depth = 0.0f;         ///< Post-divide Z, 0..1 (D3D/XNA convention).
+            float invW = 1.0f;          ///< 1 / clip.W, used to un-premultiply interpolated attributes.
+            float r = 0.0f, g = 0.0f, b = 0.0f, a = 0.0f;  ///< Vertex color * invW, 0..1 range.
+        };
+
+        /// Reads a packed little-endian RGBA8 Color (Microsoft::Xna::Framework::Color's own
+        /// documented layout: R in bits 0-7, G in 8-15, B in 16-23, A in 24-31) directly from raw
+        /// vertex bytes -- avoids depending on the Color type's public API just to unpack 4 bytes.
+        void UnpackColorBytes(const std::uint8_t* bytes, float& r, float& g, float& b, float& a)
+        {
+            r = bytes[0] / 255.0f;
+            g = bytes[1] / 255.0f;
+            b = bytes[2] / 255.0f;
+            a = bytes[3] / 255.0f;
+        }
+
+        /// Transforms a VertexPositionColor vertex (Position at offset 0, Color at offset 12 --
+        /// DrawColoredPrimitives/DrawIndexedColoredPrimitives's own fixed layout, matching the
+        /// interface's documented "equivalent to BasicEffect with VertexColorEnabled = true")
+        /// into screen space. Returns false (vertex not usable) if the vertex is behind or on the
+        /// near plane -- the caller culls the whole triangle in that case (SOFTWARE-34: minimal
+        /// near-plane handling, no polygon clipping in v1).
+        bool TransformPositionColorVertex(const std::uint8_t* raw, const Matrix& combined,
+                                          int viewportWidth, int viewportHeight, RasterVertex& out)
+        {
+            Vector3 position;
+            std::memcpy(&position, raw, sizeof(Vector3));
+
+            const Vector4 clip = Vector4::Transform(position, combined);
+            if (clip.W <= 1e-5f)
+                return false;
+
+            const float invW = 1.0f / clip.W;
+            const float ndcX = clip.X * invW;
+            const float ndcY = clip.Y * invW;
+            const float ndcZ = clip.Z * invW;
+
+            out.x = (ndcX * 0.5f + 0.5f) * static_cast<float>(viewportWidth);
+            out.y = (1.0f - (ndcY * 0.5f + 0.5f)) * static_cast<float>(viewportHeight);
+            out.depth = ndcZ;
+            out.invW = invW;
+
+            float r, g, b, a;
+            UnpackColorBytes(raw + sizeof(Vector3), r, g, b, a);
+            out.r = r * invW;
+            out.g = g * invW;
+            out.b = b * invW;
+            out.a = a * invW;
+            return true;
+        }
+
+        float EdgeFunction(float ax, float ay, float bx, float by, float px, float py)
+        {
+            return (px - ax) * (by - ay) - (py - ay) * (bx - ax);
+        }
+
+        /// Fills one triangle into `fb` using a standard edge-function/barycentric rasterizer,
+        /// with a per-pixel depth test against `fb.depthBuffer` when `depthTestEnabled`. Accepts
+        /// either triangle winding order (no backface culling in v1 -- CullNone-equivalent
+        /// always, a real scope simplification: SOFTWARE-32 is about proving correct rasterization
+        /// exists at all, not the full RasterizerState feature set).
+        void RasterizeTriangle(SoftwareFramebuffer& fb, bool depthTestEnabled,
+                               const RasterVertex& v0, const RasterVertex& v1, const RasterVertex& v2)
+        {
+            const float area = EdgeFunction(v0.x, v0.y, v1.x, v1.y, v2.x, v2.y);
+            if (area == 0.0f)
+                return;  // degenerate (zero-area) triangle
+
+            const float minXf = std::min({v0.x, v1.x, v2.x});
+            const float maxXf = std::max({v0.x, v1.x, v2.x});
+            const float minYf = std::min({v0.y, v1.y, v2.y});
+            const float maxYf = std::max({v0.y, v1.y, v2.y});
+
+            const int minX = std::max(0, static_cast<int>(std::floor(minXf)));
+            const int maxX = std::min(fb.width - 1, static_cast<int>(std::ceil(maxXf)));
+            const int minY = std::max(0, static_cast<int>(std::floor(minYf)));
+            const int maxY = std::min(fb.height - 1, static_cast<int>(std::ceil(maxYf)));
+
+            for (int y = minY; y <= maxY; ++y)
+            {
+                for (int x = minX; x <= maxX; ++x)
+                {
+                    const float px = static_cast<float>(x) + 0.5f;
+                    const float py = static_cast<float>(y) + 0.5f;
+
+                    const float w0 = EdgeFunction(v1.x, v1.y, v2.x, v2.y, px, py);
+                    const float w1 = EdgeFunction(v2.x, v2.y, v0.x, v0.y, px, py);
+                    const float w2 = EdgeFunction(v0.x, v0.y, v1.x, v1.y, px, py);
+
+                    const bool inside = (w0 >= 0.0f && w1 >= 0.0f && w2 >= 0.0f) ||
+                                        (w0 <= 0.0f && w1 <= 0.0f && w2 <= 0.0f);
+                    if (!inside)
+                        continue;
+
+                    const float lambda0 = w0 / area;
+                    const float lambda1 = w1 / area;
+                    const float lambda2 = w2 / area;
+
+                    // Post-divide depth interpolates linearly in screen space -- no perspective
+                    // correction needed for this one attribute (a well-known rasterization
+                    // property), unlike color/UV below.
+                    const float depth = lambda0 * v0.depth + lambda1 * v1.depth + lambda2 * v2.depth;
+
+                    const std::size_t pixelIndex = static_cast<std::size_t>(y) * static_cast<std::size_t>(fb.width) +
+                                                   static_cast<std::size_t>(x);
+                    if (depthTestEnabled && depth > fb.depthBuffer[pixelIndex])
+                        continue;
+
+                    const float invW = lambda0 * v0.invW + lambda1 * v1.invW + lambda2 * v2.invW;
+                    const float r = (lambda0 * v0.r + lambda1 * v1.r + lambda2 * v2.r) / invW;
+                    const float g = (lambda0 * v0.g + lambda1 * v1.g + lambda2 * v2.g) / invW;
+                    const float b = (lambda0 * v0.b + lambda1 * v1.b + lambda2 * v2.b) / invW;
+                    const float a = (lambda0 * v0.a + lambda1 * v1.a + lambda2 * v2.a) / invW;
+
+                    fb.depthBuffer[pixelIndex] = depth;
+
+                    const std::size_t colorIndex = pixelIndex * 4;
+                    fb.color[colorIndex + 0] = static_cast<std::uint8_t>(std::clamp(r, 0.0f, 1.0f) * 255.0f);
+                    fb.color[colorIndex + 1] = static_cast<std::uint8_t>(std::clamp(g, 0.0f, 1.0f) * 255.0f);
+                    fb.color[colorIndex + 2] = static_cast<std::uint8_t>(std::clamp(b, 0.0f, 1.0f) * 255.0f);
+                    fb.color[colorIndex + 3] = static_cast<std::uint8_t>(std::clamp(a, 0.0f, 1.0f) * 255.0f);
+                }
+            }
+        }
+    }
+
     // ---- SoftwareFramebuffer ----
 
     void SoftwareFramebuffer::Resize(int w, int h)
@@ -342,22 +495,105 @@ namespace CNA::Internal::Backends::Software
         return std::make_unique<SoftwareIndexBufferBackend>(index_capacity, true);
     }
 
-    // Phase S4 (SOFTWARE-30..34) replaces these bodies with the real transform/rasterize/depth-test
-    // pipeline. For now they validate the same primitive/vertex-count consistency every other
-    // backend's shared GraphicsDevice layer already expects, without producing any pixels yet.
-    void SoftwareGraphicsBackend::DrawColoredPrimitives(const IVertexBufferBackend&, const Matrix&, const Matrix&,
-                                                        const Matrix&, PrimitiveType, int primitiveCount)
+    // Phase S4 (SOFTWARE-30..34): real transform/rasterize/depth-test pipeline. TriangleList only
+    // in v1 (the owner's own stated minimal first-version scope) -- other PrimitiveType values
+    // throw rather than silently misrendering.
+    void SoftwareGraphicsBackend::DrawColoredPrimitives(const IVertexBufferBackend& vb, const Matrix& world,
+                                                        const Matrix& view, const Matrix& projection,
+                                                        PrimitiveType primitive, int primitiveCount)
     {
         if (primitiveCount <= 0)
             throw std::runtime_error("SoftwareGraphicsBackend::DrawColoredPrimitives: primitiveCount must be > 0");
+        if (primitive != PrimitiveType::TriangleList)
+            throw std::runtime_error("SoftwareGraphicsBackend::DrawColoredPrimitives: only TriangleList is supported in v1");
+        if (primitiveCount * 3 > vb.GetVertexCount())
+            throw std::runtime_error(
+                "SoftwareGraphicsBackend::DrawColoredPrimitives: primitiveCount needs more vertices than the bound buffer has");
+
+        const auto& swVb = static_cast<const SoftwareVertexBufferBackend&>(vb);
+        const std::uint8_t* base = swVb.Data().data();
+        const std::size_t stride = swVb.Stride();
+
+        const Matrix combined = world * view * projection;
+        SoftwareFramebuffer& fb = CurrentFramebuffer();
+        int vw = 0, vh = 0;
+        GetViewportSize(vw, vh);
+
+        for (int i = 0; i < primitiveCount; ++i)
+        {
+            RasterVertex rv[3];
+            bool allValid = true;
+            for (int k = 0; k < 3; ++k)
+            {
+                const std::uint8_t* raw = base + static_cast<std::size_t>(i * 3 + k) * stride;
+                if (!TransformPositionColorVertex(raw, combined, vw, vh, rv[k]))
+                {
+                    allValid = false;
+                    break;
+                }
+            }
+            if (!allValid)
+                continue;  // SOFTWARE-34: minimal near-plane handling -- cull, don't clip, in v1.
+
+            RasterizeTriangle(fb, depthTestEnabled_, rv[0], rv[1], rv[2]);
+        }
     }
 
-    void SoftwareGraphicsBackend::DrawIndexedColoredPrimitives(const IVertexBufferBackend&, const IIndexBufferBackend&,
-                                                               const Matrix&, const Matrix&, const Matrix&,
-                                                               PrimitiveType, int primitiveCount)
+    void SoftwareGraphicsBackend::DrawIndexedColoredPrimitives(const IVertexBufferBackend& vb, const IIndexBufferBackend& ib,
+                                                               const Matrix& world, const Matrix& view, const Matrix& projection,
+                                                               PrimitiveType primitive, int primitiveCount)
     {
         if (primitiveCount <= 0)
             throw std::runtime_error("SoftwareGraphicsBackend::DrawIndexedColoredPrimitives: primitiveCount must be > 0");
+        if (primitive != PrimitiveType::TriangleList)
+            throw std::runtime_error("SoftwareGraphicsBackend::DrawIndexedColoredPrimitives: only TriangleList is supported in v1");
+        if (primitiveCount * 3 > ib.GetIndexCount())
+            throw std::runtime_error(
+                "SoftwareGraphicsBackend::DrawIndexedColoredPrimitives: primitiveCount needs more indices than the bound buffer has");
+
+        const auto& swVb = static_cast<const SoftwareVertexBufferBackend&>(vb);
+        const auto& swIb = static_cast<const SoftwareIndexBufferBackend&>(ib);
+        const std::uint8_t* vbBase = swVb.Data().data();
+        const std::size_t stride = swVb.Stride();
+        const std::uint8_t* ibBase = swIb.Data().data();
+        const bool thirtyTwoBit = swIb.IsThirtyTwoBit();
+
+        const Matrix combined = world * view * projection;
+        SoftwareFramebuffer& fb = CurrentFramebuffer();
+        int vw = 0, vh = 0;
+        GetViewportSize(vw, vh);
+
+        const auto readIndex = [&](int i) -> std::uint32_t {
+            if (thirtyTwoBit)
+            {
+                std::uint32_t v;
+                std::memcpy(&v, ibBase + static_cast<std::size_t>(i) * sizeof(std::uint32_t), sizeof(std::uint32_t));
+                return v;
+            }
+            std::uint16_t v;
+            std::memcpy(&v, ibBase + static_cast<std::size_t>(i) * sizeof(std::uint16_t), sizeof(std::uint16_t));
+            return v;
+        };
+
+        for (int i = 0; i < primitiveCount; ++i)
+        {
+            RasterVertex rv[3];
+            bool allValid = true;
+            for (int k = 0; k < 3; ++k)
+            {
+                const std::uint32_t idx = readIndex(i * 3 + k);
+                const std::uint8_t* raw = vbBase + static_cast<std::size_t>(idx) * stride;
+                if (!TransformPositionColorVertex(raw, combined, vw, vh, rv[k]))
+                {
+                    allValid = false;
+                    break;
+                }
+            }
+            if (!allValid)
+                continue;
+
+            RasterizeTriangle(fb, depthTestEnabled_, rv[0], rv[1], rv[2]);
+        }
     }
 }
 

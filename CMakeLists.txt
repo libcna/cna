@@ -6505,6 +6505,12 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SOFTWARE")
     set_tests_properties(Software_Smoke PROPERTIES
         TIMEOUT 30
         LABELS "Software")
+
+    cna_software_test(cna_test_software_rasterizer examples/software_rasterizer_test.cpp)
+    add_test(NAME Software_Rasterizer COMMAND cna_test_software_rasterizer)
+    set_tests_properties(Software_Rasterizer PROPERTIES
+        TIMEOUT 30
+        LABELS "Software")
 endif()
 
 # --- Task 6.1: real two-process ENet loopback test harness ---
