@@ -618,17 +618,20 @@ namespace CNA::Internal::Backends::Headless
     void HeadlessGraphicsBackend::ApplyBlendState(int, int, int, int, int, int)
     {
         state_->stats.blendStateChangeCount++;
+        state_->RecordTrace("ApplyBlendState", "");
     }
 
     void HeadlessGraphicsBackend::ApplyDepthStencilState(bool, bool, int, bool, int, int, int, int, int, int, int,
                                                       bool, int, int, int, int)
     {
         state_->stats.depthStencilStateChangeCount++;
+        state_->RecordTrace("ApplyDepthStencilState", "");
     }
 
     void HeadlessGraphicsBackend::ApplyRasterizerState(int, int, bool, float, float)
     {
         state_->stats.rasterizerStateChangeCount++;
+        state_->RecordTrace("ApplyRasterizerState", "");
     }
 
     void HeadlessGraphicsBackend::ApplySamplerState(int slot, int, int, int, int)
@@ -636,6 +639,7 @@ namespace CNA::Internal::Backends::Headless
         Require(state_, slot >= 0 && slot < 16,
                "HeadlessGraphicsBackend::ApplySamplerState: slot must be 0..15, got " + std::to_string(slot));
         state_->stats.samplerStateChangeCount++;
+        state_->RecordTrace("ApplySamplerState", "slot=" + std::to_string(slot));
     }
 
     void HeadlessGraphicsBackend::SetScissorRect(int x, int y, int w, int h)
@@ -662,6 +666,8 @@ namespace CNA::Internal::Backends::Headless
                    std::to_string(targetHeight) + ")");
         }
         state_->stats.scissorChangeCount++;
+        state_->RecordTrace("SetScissorRect", std::to_string(x) + "," + std::to_string(y) + "," +
+                            std::to_string(w) + "x" + std::to_string(h));
     }
 
     void HeadlessGraphicsBackend::SetViewport(int x, int y, int w, int h, float minDepth, float maxDepth)

@@ -97,9 +97,11 @@ Key APIs on `HeadlessGraphicsBackend` (all `NOXNA`, not part of the XNA surface)
 
 ## Known limitations (2026-07-13)
 
-- `HeadlessTrace` mode's call log doesn't yet cover every `IGraphicsBackend` method — state-change
-  methods like `ApplyBlendState` aren't logged, only the high-value call sites (draws, clears,
-  resource creation, `SetData`, `Present`).
+- `HeadlessTrace` mode's call log now covers draws, clears, resource creation, `SetData`,
+  `Present`, and the four `Apply*State` methods plus `SetScissorRect`/`SetViewport`, but still not
+  literally every `IGraphicsBackend` method (`ClearDepth`/`ClearStencil`/`SetDepthTestEnabled`/etc.
+  and the `Create*` factories don't log) — the highest-value call sites for diagnosing a failing
+  test are covered, not literally everything.
 - "Disposed state object" validation (`BlendState`/`DepthStencilState`/etc.) is not implemented —
   `IGraphicsBackend`'s `ApplyBlendState()`/etc. take raw `int`/`bool`/`float` parameters, not object
   references, so there is no state-object identity left for the backend to check by the time a call
@@ -109,9 +111,11 @@ Key APIs on `HeadlessGraphicsBackend` (all `NOXNA`, not part of the XNA surface)
   `DrawIndexedPrimitivesEx` path already proven for `BasicEffect`, but that's inference, not proof).
 
 Resolved since the first commit: viewport/scissor validation now cross-references the actual
-bound-target size (not just non-negative dimensions), and creation-site tracking is implemented via
-an explicit `PushDebugLabel()`/`PopDebugLabel()` API (see below) rather than left as an unused
-field — both closed 2026-07-13.
+bound-target size (not just non-negative dimensions); creation-site tracking is implemented via an
+explicit `PushDebugLabel()`/`PopDebugLabel()` API (see below) rather than left as an unused field;
+and (2026-07-13) `CNA_HEADLESS_MODE` environment-variable parsing, the 32-bit `IndexBuffer` path,
+`GetLastFrameStatistics()`'s per-frame diff math, and `AliveResources()`'s per-type breakdown are
+all now verified by a fourth CTest, `Headless_CoverageGaps`.
 
 ## Debug labels and trace log export
 
