@@ -202,6 +202,25 @@ without both.
 
 ---
 
+## Phase S9 — v2 improvement candidates (proposed 2026-07-13, none authorized yet)
+
+Every row below is a real, scoped-down v1 limitation from Phases S1-S8, listed here as concrete
+follow-up candidates rather than left as a vague "could be better later" note. **None of these are
+authorized for implementation** — each needs an explicit go-ahead before starting, one at a time or
+in an approved batch. Ordered roughly by value-for-effort, cheapest/highest-value first.
+
+| # | Task | Status | Notes |
+|---|---|---|---|
+| SOFTWARE-80 | Bilinear texture sampling (currently nearest-neighbor only, `SOFTWARE-41`) | ⬜ | Small, local change to the texture-sampling step in `RasterizeTriangleShaded()` — sample the 4 nearest texels and blend by fractional UV offset instead of a single nearest lookup. No architectural impact. |
+| SOFTWARE-81 | Backface culling (`RasterizerState.CullMode`) — currently both winding orders always accepted (`SOFTWARE-32`'s own noted simplification) | ⬜ | The signed triangle `area` computed in `RasterizeTriangle`/`RasterizeTriangleShaded` already encodes winding — just needs `ApplyRasterizerState()` to store the current `CullMode` and the rasterizer to skip triangles whose area sign doesn't match the requested facing (respecting `CullClockwiseFace`/`CullCounterClockwiseFace`/`None`). |
+| SOFTWARE-82 | `DualTextureEffect`/`EnvironmentMapEffect`/`SkinnedEffect`-specific `GpuDrawParams` fields (second texture, env map, bone transforms) — currently only the `BasicEffect` subset (`vertexColorEnabled`/`textureEnabled`/`diffuseColor`) is read, matching design decision 6 | ⬜ | Needs the 32-byte `VertexPositionNormalTexture` stride (currently rejected) plus a skinned-vertex stride for `SkinnedEffect`, and reading `params.dualTexture`/`texture1`, `params.envMapping`/`envMap`, `params.skinned`/`boneTransforms`/`boneCount` in the shading step. Medium effort — the plumbing (`RasterVertex`, `TransformGenericVertex`) already exists to extend, but no lighting math exists yet (`EnvironmentMapEffect`'s reflection vector needs a normal + eye position, currently not carried at all). |
+| SOFTWARE-83 | Real near-plane polygon clipping (split a triangle crossing the near plane into 1-2 new triangles) instead of culling the whole triangle (`SOFTWARE-34`'s own acknowledged v1 gap) | ⬜ | Classic rasterizer correctness work — needs a dedicated test with geometry deliberately crossing the near plane, and care with clip-space interpolation of all attributes (color/UV) at the new clip-plane-intersection vertices, not just position. |
+| SOFTWARE-84 | `SOFTWARE-61`'s cross-backend diagnostic test: render an identical scene on `SOFTWARE` and a real GPU backend, compare within a tolerance | ⬜ | Needs a real GPU backend + display available in the same test run as `SOFTWARE` (Xvfb or the real desktop session) — a test-infrastructure question as much as a backend one. Directly serves the owner's original "diagnostika rozdílů mezi backendy" use case. |
+| SOFTWARE-85 | Optional opt-in "blit the CPU framebuffer to a real window" mode, so a `SOFTWARE`-rendered frame can be visually inspected instead of only pixel-asserted (`Present()` is currently a pure no-op) | ⬜ | Would need `#ifdef CNA_BACKEND_HEADLESS \|\| defined(CNA_BACKEND_SOFTWARE)`'s window-skip guard in `GraphicsDevice.cpp` to gain a third, opt-in state for `SOFTWARE` specifically (window created but backend still self-renders in software, then blits) — touches shared code, more invasive than the others on this list. Lowest priority: not needed for this backend's actual value proposition (deterministic, GPU-free pixel tests). |
+| SOFTWARE-86 | Performance work (SIMD/multithreading/tiling) | ⬜ | Explicitly NOT a goal per design decision 1 — only revisit if a specific real test becomes impractically slow, not preemptively. |
+
+---
+
 ## Boundaries (stop and ask, don't improvise)
 
 - **GPU-init-failure fallback** (one of the owner's stated use cases) is a `Game`/
