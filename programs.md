@@ -201,7 +201,68 @@ Only needed for `-DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64.cmake` builds
 §9, "Build (Linux → Windows cross-compilation with MinGW-w64)"). Not needed for any Linux-native
 backend.
 
-## 9. Out of scope here: Android (NDK)
+## 9. Optional: D3D11 backend Wine+DXVK dev loop (`plan_dx.md`)
+
+```bash
+sudo apt-get install -y dxvk-wine64
+```
+
+Only needed if you're working on the `D3D11`/`D3D12` graphics backend plan (`plan_dx.md`, not yet
+implemented as of this writing — Phase DX1 only). Not needed for any other backend or task in this
+repo. Builds on §8 (`mingw-w64`) — this is the piece that lets a cross-compiled `D3D11` `.exe`
+actually be *run and pixel-tested* on this Debian machine instead of only compiled.
+
+- **`dxvk-wine64`** — DXVK (Vulkan-based Direct3D 8/9/10/11 translation layer for Wine), the 64-bit
+  build. Pulls in two more packages automatically via `Recommends`: **`dxvk`** (a small meta-package
+  that ships `dxvk-setup(1)`, a Debian-specific install/uninstall helper — nicer than manually
+  symlinking DLLs into a Wine prefix) and **`dxvk-wine32:i386`** (the 32-bit build; not needed by
+  this project, which only targets `x86_64-w64-mingw32`, but harmless to have). If you want to skip
+  the unneeded 32-bit build: `sudo apt-get install -y --no-install-recommends dxvk-wine64`.
+- Wine itself (`wine`/`wine64`/`libwine` packages) does **not** need a separate install command here
+  — it's already covered by whatever installed `wine`/`winetricks` on this machine previously (not
+  itself part of this project's build requirements list, since only the `D3D11`/`D3D12` plan needs
+  it). **Real environment finding**: this Debian's Wine 10.0 packaging has **no separate `wine64`
+  command** — only `wine`, which auto-detects a PE32 vs. PE32+ (32/64-bit) executable and runs it
+  correctly either way. Scripts/docs written against older Wine docs that assume `wine64` exists as
+  its own binary will need to use `wine` instead (see `scripts/run-wine-dxvk.sh`).
+
+**Setting up a dedicated Wine prefix with DXVK installed** (this project's own convention —
+`plan_dx.md` `DX-2`, keeps this isolated from any other Wine prefix you might have):
+
+```bash
+export WINEPREFIX=~/.wine-cna-d3d11
+wineboot --init
+dxvk-setup install
+```
+
+`dxvk-setup install` symlinks `system32/d3d11.dll`/`dxgi.dll` (and the other D3D8/9/10 DLLs) inside
+`$WINEPREFIX` directly to `/usr/lib/dxvk/wine64/*.dll.so` and sets the matching
+`HKCU\Software\Wine\DllOverrides` registry entries to `native` — Debian's own DXVK integration loads
+the `.so` build directly as a "native" module, rather than the typical upstream-DXVK-zip approach of
+copying `.dll` files and setting `native,builtin` overrides. Functionally equivalent; worth knowing
+if you're cross-referencing DXVK's own upstream install instructions, which describe the zip-based
+approach instead.
+
+**Verifying DXVK is actually engaged, not silently falling back to `WineD3D`** — this is the one
+easy way to get a false sense of security (running under Wine ≠ running under DXVK specifically),
+so always check the log, not just "did it run without crashing":
+
+```bash
+export WINEPREFIX=~/.wine-cna-d3d11
+export DXVK_LOG_PATH=/tmp/dxvk-logs
+export DXVK_LOG_LEVEL=info
+scripts/run-wine-dxvk.sh path/to/your.exe
+cat /tmp/dxvk-logs/*.log | head -5
+```
+
+A real DXVK run's log starts with lines like `DXVK: 2.6.0`, `Build: x86_64 gcc ...`, and a real
+adapter name (e.g. `AMD Radeon 780M (RADV PHOENIX)` on this machine, via the `radv` Mesa Vulkan
+driver — `llvmpipe`, the CPU/software Vulkan adapter, is explicitly skipped and logged as such
+unless no real GPU is available). If DXVK's DLL override isn't actually in effect, the same D3D11
+calls would instead go through Wine's own built-in `WineD3D` — which also runs without crashing, so
+a missing/absent DXVK log file (not an error!) is the actual tell, not a visible failure.
+
+## 10. Out of scope here: Android (NDK)
 
 Android cross-compilation needs the Android NDK (not an apt package — a separate SDK/NDK download
 and toolchain file), and is currently **blocked** by pre-existing build regressions in the sibling
