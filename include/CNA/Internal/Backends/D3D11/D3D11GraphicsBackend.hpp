@@ -4,6 +4,7 @@
 // Windows-only (see CMakeLists.txt's FATAL_ERROR guard for non-Windows CNA_GRAPHICS_BACKEND=D3D11).
 
 #include "../Common/IGraphicsBackend.hpp"
+#include "D3D11InputLayoutCache.hpp"
 
 #include <d3d11.h>
 #include <dxgi1_5.h>
@@ -15,10 +16,11 @@ namespace CNA::Internal::Backends::D3D11
 
     /**
      * D3D11 graphics backend (plan_dx.md). Implements IGraphicsBackend on top of Direct3D 11 via
-     * DXGI, with real device/swap-chain/back-buffer/clear/present/readback (Phase DX4) and honest
-     * "not yet implemented" stubs for everything Phase DX5 onward will add (vertex/index buffers,
-     * textures, draw calls, SpriteBatch) -- mirrors plan_software.md/plan_headless.md's own
-     * "CnaTests must link cleanly even before most methods are real" bar.
+     * DXGI, with real device/swap-chain/back-buffer/clear/present/readback (Phase DX4) and real
+     * vertex/index buffers + input layout caching (Phase DX5). Everything Phase DX6 onward will
+     * add (textures, draw calls, SpriteBatch) is still an honest "not yet implemented" stub --
+     * mirrors plan_software.md/plan_headless.md's own "CnaTests must link cleanly even before most
+     * methods are real" bar.
      *
      * Resource lifetime is split into three independent groups (plan_dx.md design decision 11):
      *   - Device lifetime (device_/context_/factory_/allowTearingSupported_/featureLevel_):
@@ -71,12 +73,22 @@ namespace CNA::Internal::Backends::D3D11
         /// D3DShaderCache, DX-15-embed) that need a real ID3D11Device* without duplicating this
         /// backend's own device-creation path (NOXNA).
         [[nodiscard]] ID3D11Device* GetDeviceEXT() const { return device_.Get(); }
+        /// Exposes the real device context for D3DCommon/tests that need to issue Map/Unmap or
+        /// draw calls without duplicating this backend's own context-creation path (NOXNA,
+        /// DX-30/DX-31's buffer backends both need this).
+        [[nodiscard]] ID3D11DeviceContext* GetContextEXT() const { return context_.Get(); }
+        /// Exposes the per-(shader,stride) ID3D11InputLayout cache (NOXNA, DX-32) -- shared by
+        /// tests now and by Phase DX8's draw-call wiring later.
+        [[nodiscard]] D3D11InputLayoutCache& GetInputLayoutCacheEXT() { return inputLayoutCache_; }
 
-        // ---- IGraphicsBackend: honest "not yet implemented" stubs (Phase DX5+) ----
-        std::unique_ptr<ITextureBackend> CreateTexture(const ImageData& data) override;
-        std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() override;
+        // ---- IGraphicsBackend: real (Phase DX5) ----
         std::unique_ptr<IVertexBufferBackend> CreateVertexBuffer(int vertex_capacity) override;
         std::unique_ptr<IIndexBufferBackend> CreateIndexBuffer16(int index_capacity) override;
+        std::unique_ptr<IIndexBufferBackend> CreateIndexBuffer32(int index_capacity) override;
+
+        // ---- IGraphicsBackend: honest "not yet implemented" stubs (Phase DX6+) ----
+        std::unique_ptr<ITextureBackend> CreateTexture(const ImageData& data) override;
+        std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() override;
         void DrawColoredPrimitives(const IVertexBufferBackend& vb,
                                    const Matrix& world, const Matrix& view, const Matrix& projection,
                                    PrimitiveType primitive, int primitiveCount) override;
@@ -124,5 +136,8 @@ namespace CNA::Internal::Backends::D3D11
 
         int virtualWidth_ = 0;
         int virtualHeight_ = 0;
+
+        // Phase DX5 (DX-32): per-(shader,stride) ID3D11InputLayout cache.
+        D3D11InputLayoutCache inputLayoutCache_;
     };
 }

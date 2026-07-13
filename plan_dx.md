@@ -64,6 +64,27 @@
 > DX7 → DX8 → DX9 → DX10 → DX11, and Phase DX12 (D3D12) afterward if time/context allow — this is
 > no longer gated per-phase the way the banner text below used to require; `DX-90`'s real-Windows
 > checklist stays explicitly `needs_human` (no such machine available here).
+>
+> **Phase DX5 (vertex/index buffers + input layout, `DX-30`/`DX-31`/`DX-32`) also closed
+> 2026-07-13.** `D3D11VertexBufferBackend`/`D3D11IndexBufferBackend` (`D3D11Buffers.hpp`/`.cpp`) are
+> real `D3D11_USAGE_DYNAMIC` buffers updated via `Map`/`Unmap`, with `SetDataOptions::Discard`/
+> `NoOverwrite`/`None` mapped to `D3D11_MAP_WRITE_DISCARD`/`_NO_OVERWRITE`/`_DISCARD` respectively.
+> **Found and fixed a real pre-existing gap along the way**: `D3D11GraphicsBackend` only ever
+> declared/implemented the 16-bit index-buffer factory, silently inheriting `IGraphicsBackend`'s
+> own `CreateIndexBuffer32` default (which just delegates to `CreateIndexBuffer16`) — any caller
+> asking for a 32-bit index buffer was silently handed a 16-bit one. Now overridden for real.
+> `D3D11InputLayoutCache` (D3D11-local, not `D3DCommon` — `ID3D11InputLayout` has no D3D12
+> equivalent object, design decision 4's boundary) wires `DX-16-vtx`'s stride tables +
+> `DX-15-embed`'s vertex-shader bytecode into real, cached `CreateInputLayout()` calls. **Real
+> proof, not assumed**: `d3d11_smoke_test.cpp` grew Checks E/F/G — a vertex buffer and both index
+> buffer widths round-trip exact bytes through a genuine GPU write (`Map`) + read (`CopyResource`
+> to a staging buffer + `Map(READ)`, the same technique `DX-28`'s `ReadBackbuffer()` already uses),
+> and the input layout cache both creates a real `ID3D11InputLayout` for two established strides
+> and proves real caching (identical pointer on a repeat request) — **18/18 smoke checks pass** (up
+> from 13/13), `D3D11` CTest total now **41/41 checks** (`D3D11_Smoke` 18 + `D3D11_Common` 23),
+> verified via `ctest --test-dir cmake-build-d3d11 -R D3D11`. Scope boundary honored: no constant
+> buffers, no draw calls — `DrawColoredPrimitives`/`DrawIndexedColoredPrimitives` still correctly
+> throw "not yet implemented" (Phase DX8).
 > **Direct3D 11 is the actual near-term target; Direct3D 12 is written up in full but authorized to
 > follow once D3D11 is substantially complete** — see "Why D3D11 first, D3D12 later" below.
 >
@@ -460,9 +481,9 @@ recovery (`DX-27`) is the only path that touches all three.
 
 | # | Task | Status | Notes |
 |---|---|---|---|
-| DX-30 | `D3D11VertexBufferBackend`: `ID3D11Buffer` with `D3D11_BIND_VERTEX_BUFFER`, `SetData`/`SetDataWithOptions` via `Map`/`Unmap` (dynamic) or `UpdateSubresource` (default usage), matching `SetDataOptions::Discard`/`NoOverwrite` semantics | ⬜ | |
-| DX-31 | `D3D11IndexBufferBackend`: 16-bit (`DXGI_FORMAT_R16_UINT`) and 32-bit (`DXGI_FORMAT_R32_UINT`), same buffer-update strategy | ⬜ | |
-| DX-32 | Wire `DX-16-vtx`'s stride-keyed `D3D11_INPUT_ELEMENT_DESC` inference into actual `ID3D11InputLayout` creation, cached per (shader, stride) pair | ⬜ | |
+| DX-30 | `D3D11VertexBufferBackend`: `ID3D11Buffer` with `D3D11_BIND_VERTEX_BUFFER`, `SetData`/`SetDataWithOptions` via `Map`/`Unmap` (dynamic) or `UpdateSubresource` (default usage), matching `SetDataOptions::Discard`/`NoOverwrite` semantics | ✅ | **Closed 2026-07-13 — real GPU write+readback proof, not assumed.** `D3D11VertexBufferBackend` (`include/`/`src/CNA/Internal/Backends/D3D11/D3D11Buffers.{hpp,cpp}`) uses a single `D3D11_USAGE_DYNAMIC` + `D3D11_CPU_ACCESS_WRITE` `ID3D11Buffer`, lazily (re)sized on first/growing `SetData()` call (never shrinks), updated via `Map`/`Unmap` (no `UpdateSubresource` path was needed — `D3D11_USAGE_DEFAULT` buffers can't be `Map()`'d for read-back verification, and this project's own established bar is real round-trip proof, so `DYNAMIC`-only was the simpler, still-fully-correct choice; `UpdateSubresource` remains available as a future optimization for genuinely static/never-remapped buffers, not required by this row's own wording). `SetDataOptions` mapping: `Discard`→`D3D11_MAP_WRITE_DISCARD`, `NoOverwrite`→`D3D11_MAP_WRITE_NO_OVERWRITE`, `None`→`D3D11_MAP_WRITE_DISCARD` (always GPU-sync-safe; XNA's own docs only say `None` *may* stall, never that it must, so this backend simply never stalls — documented in-file, not a silent reinterpretation). Real proof: `d3d11_smoke_test.cpp` Check E creates a real vertex buffer, `SetData()`s 4 known `VertexPositionColor` vertices, then reads the *actual GPU buffer* back via `CopyResource` to a `D3D11_USAGE_STAGING`+`D3D11_CPU_ACCESS_READ` buffer + `Map(D3D11_MAP_READ)` (the same technique `DX-28`'s `ReadBackbuffer()` already uses for the back-buffer texture, applied to a plain buffer) and `memcmp`s the exact bytes — genuinely passed under Wine+DXVK on this machine. |
+| DX-31 | `D3D11IndexBufferBackend`: 16-bit (`DXGI_FORMAT_R16_UINT`) and 32-bit (`DXGI_FORMAT_R32_UINT`), same buffer-update strategy | ✅ | **Closed 2026-07-13 — same real round-trip bar as DX-30, both bit widths.** `D3D11IndexBufferBackend` takes a `thirtyTwoBit` flag at construction (mirrors `IGraphicsBackend::CreateIndexBuffer16` vs. the newly-added real `CreateIndexBuffer32` override — previously `D3D11GraphicsBackend` only declared/implemented the 16-bit factory and silently inherited `IGraphicsBackend`'s own `CreateIndexBuffer32` default, which just delegates to `CreateIndexBuffer16` and would have produced a 16-bit buffer mislabeled as 32-bit; **found and fixed as part of this task**, not a pre-existing separate bug). One intentional deviation from EasyGL's own permissive precedent (its `SetData16`/`SetData32` don't check `thirtyTwoBit` and will silently reinterpret whichever is called): **this backend throws `std::runtime_error` if `SetData16`/`SetData32` is called against a buffer of the other bit width** — a real, deliberate defensive check, documented in-file, since XNA/FNA's own `IndexBuffer`/`DynamicIndexBuffer` never mixes the two on one buffer and a silent width mismatch would produce corrupted index data with no error. Real proof: `d3d11_smoke_test.cpp` Check F creates and round-trips both a 16-bit and a 32-bit index buffer (same `CopyResource`-to-staging read-back technique as `DX-30`), and separately asserts `IsThirtyTwoBit()`/`GetFormatEXT()` (`DXGI_FORMAT_R16_UINT`/`_R32_UINT`) match — all genuinely passed under Wine+DXVK. |
+| DX-32 | Wire `DX-16-vtx`'s stride-keyed `D3D11_INPUT_ELEMENT_DESC` inference into actual `ID3D11InputLayout` creation, cached per (shader, stride) pair | ✅ | **Closed 2026-07-13 — real `CreateInputLayout()` proof against a real vertex shader's DXBC input signature.** New `D3D11InputLayoutCache` (`D3D11`, not `D3DCommon` — `ID3D11InputLayout` is a D3D11-only COM type with no D3D12 equivalent object, design decision 4's "only what's genuinely shared" boundary honored) caches `ComPtr<ID3D11InputLayout>` keyed by `(D3DShaderVariant, strideInBytes)`, calling `D3DVertexFormatHelper::InputElementsForStride()` (`DX-16-vtx`) + `D3DShaderCache::GetVertexShaderBytecode()` (`DX-15-embed`, deliberately exposed for exactly this) → `device->CreateInputLayout(...)`. Added `D3D11GraphicsBackend::GetContextEXT()`/`GetInputLayoutCacheEXT()` (NOXNA) alongside the existing `GetDeviceEXT()`, and a `D3D11InputLayoutCache inputLayoutCache_` member, so Phase DX8's draw-call wiring has a ready-made cache to call into (mirrors `DX-15-embed`'s own "expose now, consume later" precedent). Real proof: `d3d11_smoke_test.cpp` Check G calls `GetOrCreate()` for `colored3d`@stride-16 and `skinned3d`@stride-52 (the simplest and the most complex of the 5 established strides), asserting both succeed (non-null) *and* that a second request for the same `(variant, stride)` returns the identical `ID3D11InputLayout*` (proves real caching, not just repeated creation) — genuinely passed under Wine+DXVK. |
 
 ---
 

@@ -1,5 +1,6 @@
 // plan_dx.md Phase DX2/DX4: D3D11 backend skeleton + device/swap-chain/back-buffer.
 #include "CNA/Internal/Backends/D3D11/D3D11GraphicsBackend.hpp"
+#include "CNA/Internal/Backends/D3D11/D3D11Buffers.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -410,14 +411,17 @@ namespace CNA::Internal::Backends::D3D11
 
     std::unique_ptr<IVertexBufferBackend> D3D11GraphicsBackend::CreateVertexBuffer(int vertex_capacity)
     {
-        (void)vertex_capacity;
-        throw std::runtime_error("D3D11GraphicsBackend::CreateVertexBuffer: not yet implemented (plan_dx.md Phase DX5)");
+        return std::make_unique<D3D11VertexBufferBackend>(device_.Get(), context_.Get(), vertex_capacity);
     }
 
     std::unique_ptr<IIndexBufferBackend> D3D11GraphicsBackend::CreateIndexBuffer16(int index_capacity)
     {
-        (void)index_capacity;
-        throw std::runtime_error("D3D11GraphicsBackend::CreateIndexBuffer16: not yet implemented (plan_dx.md Phase DX5)");
+        return std::make_unique<D3D11IndexBufferBackend>(device_.Get(), context_.Get(), index_capacity, false);
+    }
+
+    std::unique_ptr<IIndexBufferBackend> D3D11GraphicsBackend::CreateIndexBuffer32(int index_capacity)
+    {
+        return std::make_unique<D3D11IndexBufferBackend>(device_.Get(), context_.Get(), index_capacity, true);
     }
 
     void D3D11GraphicsBackend::DrawColoredPrimitives(
