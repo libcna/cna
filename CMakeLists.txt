@@ -91,8 +91,8 @@ if(EMSCRIPTEN OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
 else()
     set(_cna_default_backend "SDL_RENDERER")
 endif()
-set(CNA_GRAPHICS_BACKEND "${_cna_default_backend}" CACHE STRING "Graphics backend to use (SDL_RENDERER, EASYGL, BGFX, VULKAN, WEBGPU, HEADLESS, SOFTWARE, or D3D11)")
-set_property(CACHE CNA_GRAPHICS_BACKEND PROPERTY STRINGS "SDL_RENDERER" "EASYGL" "BGFX" "VULKAN" "WEBGPU" "HEADLESS" "SOFTWARE" "D3D11")
+set(CNA_GRAPHICS_BACKEND "${_cna_default_backend}" CACHE STRING "Graphics backend to use (SDL_RENDERER, EASYGL, BGFX, VULKAN, WEBGPU, HEADLESS, SOFTWARE, D3D11, or D3D12)")
+set_property(CACHE CNA_GRAPHICS_BACKEND PROPERTY STRINGS "SDL_RENDERER" "EASYGL" "BGFX" "VULKAN" "WEBGPU" "HEADLESS" "SOFTWARE" "D3D11" "D3D12")
 
 option(CNA_BACKEND_SDL_RENDERER "Enable SDL_Renderer graphics backend" OFF)
 option(CNA_BACKEND_EASY_GL "Enable easy-gl graphics backend" OFF)
@@ -102,9 +102,10 @@ option(CNA_BACKEND_WEBGPU "Enable WebGPU graphics backend (wgpu-native)" OFF)
 option(CNA_BACKEND_HEADLESS "Enable Headless (no GPU/window) graphics backend" OFF)
 option(CNA_BACKEND_SOFTWARE "Enable Software (CPU rasterizer) graphics backend" OFF)
 option(CNA_BACKEND_D3D11 "Enable Direct3D 11 graphics backend (Windows only)" OFF)
+option(CNA_BACKEND_D3D12 "Enable Direct3D 12 graphics backend (Windows only)" OFF)
 
 set(_cna_explicit_backend_selection OFF)
-if(CNA_BACKEND_SDL_RENDERER OR CNA_BACKEND_EASY_GL OR CNA_BACKEND_BGFX OR CNA_BACKEND_VULKAN OR CNA_BACKEND_WEBGPU OR CNA_BACKEND_HEADLESS OR CNA_BACKEND_SOFTWARE OR CNA_BACKEND_D3D11)
+if(CNA_BACKEND_SDL_RENDERER OR CNA_BACKEND_EASY_GL OR CNA_BACKEND_BGFX OR CNA_BACKEND_VULKAN OR CNA_BACKEND_WEBGPU OR CNA_BACKEND_HEADLESS OR CNA_BACKEND_SOFTWARE OR CNA_BACKEND_D3D11 OR CNA_BACKEND_D3D12)
     set(_cna_explicit_backend_selection ON)
 endif()
 
@@ -134,6 +135,9 @@ if(_cna_explicit_backend_selection)
     if(CNA_BACKEND_D3D11)
         list(APPEND _cna_enabled_backends "D3D11")
     endif()
+    if(CNA_BACKEND_D3D12)
+        list(APPEND _cna_enabled_backends "D3D12")
+    endif()
 
     list(LENGTH _cna_enabled_backends _cna_enabled_backends_count)
     if(NOT _cna_enabled_backends_count EQUAL 1)
@@ -143,13 +147,14 @@ if(_cna_explicit_backend_selection)
     list(GET _cna_enabled_backends 0 CNA_GRAPHICS_BACKEND)
 endif()
 
-# plan_dx.md design decision 2: D3D11 genuinely cannot build anywhere but Windows (native or
-# MinGW/MSVC cross-compile) -- d3d11.h/dxgi.h do not exist elsewhere. Unlike BGFX's soft
+# plan_dx.md design decision 2: D3D11/D3D12 genuinely cannot build anywhere but Windows (native or
+# MinGW/MSVC cross-compile) -- d3d11.h/d3d12.h/dxgi.h do not exist elsewhere. Unlike BGFX's soft
 # WARNING-only platform check below, this is a hard FATAL_ERROR.
-if(CNA_GRAPHICS_BACKEND STREQUAL "D3D11" AND NOT CMAKE_SYSTEM_NAME STREQUAL "Windows")
+if((CNA_GRAPHICS_BACKEND STREQUAL "D3D11" OR CNA_GRAPHICS_BACKEND STREQUAL "D3D12")
+        AND NOT CMAKE_SYSTEM_NAME STREQUAL "Windows")
     message(FATAL_ERROR
-        "CNA: D3D11 backend only builds when targeting Windows. Either build natively on "
-        "Windows, or cross-compile from Linux with "
+        "CNA: ${CNA_GRAPHICS_BACKEND} backend only builds when targeting Windows. Either build "
+        "natively on Windows, or cross-compile from Linux with "
         "-DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64.cmake")
 endif()
 
@@ -240,6 +245,11 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "D3D11")
     set(BACKEND_DIR "src/CNA/Internal/Backends/D3D11")
     set(BACKEND_TARGET "cna_backend_graphics_d3d11")
     add_compile_definitions(CNA_BACKEND_D3D11)
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "D3D12")
+    message(STATUS "CNA: Using D3D12 graphics backend")
+    set(BACKEND_DIR "src/CNA/Internal/Backends/D3D12")
+    set(BACKEND_TARGET "cna_backend_graphics_d3d12")
+    add_compile_definitions(CNA_BACKEND_D3D12)
 else()
 
     message(FATAL_ERROR "CNA: Unknown graphics backend: ${CNA_GRAPHICS_BACKEND}")
@@ -310,6 +320,12 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "D3D11")
     # runtime D3DCompile() custom-ShaderEffect path (D3D11EffectBackend) -- confirmed safe to link
     # in isolation by DX-1/DX-14-compile's own spikes; the offline stock pipeline never calls it.
     target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 d3d11 dxgi d3dcompiler cna_backend_graphics_d3dcommon)
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "D3D12")
+    # plan_dx.md DX-100/DX-101: d3d12+dxgi alone was confirmed sufficient for device/queue/
+    # command-list creation by DX-100's own spike -- start from that minimum, same discipline as
+    # DX-12/design decision 3. dxguid/d3dcompiler are deliberately NOT linked yet; add them only
+    # if a later Phase DX12 task's own real build genuinely fails to link without them.
+    target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 d3d12 dxgi cna_backend_graphics_d3dcommon)
 endif()
 
 file(GLOB_RECURSE CNA_SOURCES CONFIGURE_DEPENDS

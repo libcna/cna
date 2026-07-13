@@ -22,7 +22,9 @@
 > queue/heaps/command-lists/barriers/PSOs/root-signatures/resources) around off-screen,
 > swap-chain-free proof (`ID3D12Resource` render target + staging-heap readback) for local Wine-based
 > development, deferring swap-chain/`Present()` proof to a real-Windows/CI-VM pass much earlier than
-> D3D11's own `DX-90` did. `DX-101` (full D3D12 CMake wiring) is the concrete next step. Below is
+> D3D11's own `DX-90` did. **`DX-101` (full D3D12 CMake wiring) is now closed too (2026-07-14,
+`cmake-build-d3d12` builds clean, skeleton `D3D12GraphicsBackend` in place)** -- `DX-102`
+(device/command-queue/swap-chain) is the concrete next step. Below is
 > this session's own chronological history (kept for detail, not rewritten):
 >
 > Phase DX3 (`D3DCommon`), Phase DX5
@@ -143,9 +145,13 @@
 > backend)" section mirroring `SDL_RENDERER`'s own. **Phase DX12 (D3D12) is now underway** — `DX-100`
 > (the phase's own first task, a Wine+vkd3d-proton dev-loop spike) is closed 🟨: device/queue/fence/
 > command-list all real (DXR 1.1/SM 6.8 negotiated), but `CreateSwapChainForHwnd` crashes/fails under
-> vanilla Wine's own `dxgi.dll` — see `plan_dx.md`'s `DX-100` row for the full evidence. `DX-101`
-> (full D3D12 CMake wiring) is the next concrete step, building around off-screen swap-chain-free
-> proof per `DX-100`'s own recommendation.
+> vanilla Wine's own `dxgi.dll` — see `plan_dx.md`'s `DX-100` row for the full evidence.
+> **`DX-101` (full D3D12 CMake wiring) also closed 2026-07-14**: `CNA_GRAPHICS_BACKEND=D3D12` is
+> now a real, working CMake option (`cmake-build-d3d12`, MinGW-w64 cross-build, `CNA` links clean —
+> real build proof, not assumed); links only `d3d12`+`dxgi` (`DX-100`'s own confirmed minimum, no
+> `dxguid`/`d3dcompiler`). New `D3D12GraphicsBackend` skeleton implements all 21 `IGraphicsBackend`
+> pure virtuals with honest throws — no real D3D12 API calls yet. `DX-102` (device/command-queue/
+> swap-chain, off-screen-first per `DX-100`'s own recommendation) is the next concrete step.
 > **This is a brand-new architectural front for the project — read `plan_dx.md`'s own status banner
 > before touching it.** The pre-existing EasyGL/Vulkan/Bgfx/SDL_Renderer/Headless/Software/WebGPU
 > work summarized below is unchanged by this; full history for that lives in `plan_graphics.md`/
@@ -169,8 +175,10 @@ API-surface changes.
   Windows-only backend, cross-compiled from this Debian machine via MinGW-w64 and verified locally
   through Wine+DXVK; only `DX-90`/`DX-91` (real-Windows hardware) remain `needs_human`. **Direct3D
   12 (`plan_dx.md` Phase DX12) is now underway** — `DX-100`'s Wine+vkd3d-proton spike is closed 🟨
-  (device/queue/fence/command-list real; swap-chain creation crashes/fails, see that row); `DX-101`
-  (full D3D12 CMake wiring) is next. Everything else
+  (device/queue/fence/command-list real; swap-chain creation crashes/fails, see that row);
+  `DX-101` (full D3D12 CMake wiring) also closed 2026-07-14 (`cmake-build-d3d12` links clean); a
+  skeleton `D3D12GraphicsBackend` exists with honest "not yet implemented" throws — `DX-102`
+  (device/command-queue/swap-chain) is next. Everything else
   (Phase 79's 153-sample `../cna-samples` re-audit, Task 945's HLSL→GLSL tooling decision, Task
   952's deferred Bgfx bug) is unchanged standing backlog — see §5/§8/§9.
 - **Key architectural decisions:**
@@ -213,6 +221,7 @@ API-surface changes.
 | `cmake-build-sdl` | SDL_Renderer | Clean as of 2026-07-10 (not rebuilt this session) |
 | `cmake-build-android` | SDL_Renderer (NDK) | Blocked — Task 920 (sibling `sharp-runtime` NDK build regressions) |
 | `cmake-build-d3d11` | D3D11 (Windows cross-compile, MinGW-w64) | **Verified clean 2026-07-13**: `CNA` and `cna_backend_graphics_d3dcommon`/`cna_backend_graphics_d3d11` build clean; `cna_test_d3d11_smoke`/`cna_test_d3d11_common` build, link, and run correctly under Wine+DXVK. **`CnaTests` itself does NOT build** for this backend — genuinely blocked (see §4), not silently skipped. |
+| `cmake-build-d3d12` | D3D12 (Windows cross-compile, MinGW-w64) | **New 2026-07-14 (DX-101)**: `CNA` and `cna_backend_graphics_d3dcommon`/`cna_backend_graphics_d3d12` build clean. `D3D12GraphicsBackend` is a skeleton only — every `IGraphicsBackend` method honestly throws "not yet implemented"; nothing executable to run under Wine+vkd3d-proton yet (`DX-102` onward). |
 
 The `cna_demo_xact` example fails to build on every backend (missing `examples/demo_xact/Content`
 directory in this checkout) — cosmetic, pre-existing, not a CNA bug, do not chase it (§9).
@@ -313,11 +322,14 @@ registered `ctest` pixel-verification examples under `examples/`. New this sessi
   is complete per `plan_dx.md`'s own scope** — only `DX-90`/`DX-91` (real Windows hardware) remain
   open, both `needs_human`. **D3D12 (Phase DX12) is now underway** — `DX-100`'s spike closed 🟨
   2026-07-14 (device/queue/fence/command-list real via Wine+vkd3d-proton; swap-chain creation
-  crashes/fails, see that row's Notes); `DX-101` (CMake wiring) is next, see §8/§9.
+  crashes/fails, see that row's Notes); `DX-101` (CMake wiring) also closed 2026-07-14
+  (`cmake-build-d3d12` builds clean, skeleton `D3D12GraphicsBackend` in place); `DX-102`
+  (device/command-queue/swap-chain) is next, see §8/§9.
 - **D3D11 + `CnaTests`**: the full pre-existing GTest suite does not build under this backend —
   ~10 test files call POSIX-only `::setenv()` directly (see §4).
-- **D3D12**: still nothing implemented beyond `DX-100`'s own throwaway (unchecked-in) spike — no
-  CMake `STRINGS`/option-flag entry yet (`DX-101`, the next concrete step).
+- **D3D12**: `DX-100`'s throwaway spike + `DX-101`'s real CMake wiring/skeleton are closed
+  (`CNA_GRAPHICS_BACKEND=D3D12` builds clean); everything past the skeleton (`DX-102` onward,
+  device/command-queue/swap-chain) is still unimplemented.
 - XNA compiled `.fx` bytecode (`Effect` constructor throws `NotImplementedException`) — Phase 74.
 - `Texture3D`/`TextureCube` cannot be bound as a shader sampler through the generic `EffectParameter`
   path — Task 863, needs an architecture decision (see §5).
@@ -362,9 +374,11 @@ D3D12 device/queue/fence/command-list path is real and works locally (feature le
 Shader Model 6.8 negotiated via vkd3d-proton DLLs already present in this machine's Steam Proton
 install — no new system install needed), but `CreateSwapChainForHwnd` crashes (`FLIP_DISCARD`) or
 fails cleanly (`DXGI_ERROR_INVALID_CALL` with plain `DISCARD`) under vanilla Debian Wine's own
-`dxgi.dll` — see `plan_dx.md`'s `DX-100` row for the full evidence. **The concrete next step is
-`DX-101`** (full D3D12 CMake wiring), building `DX-102` onward around off-screen/swap-chain-free
-proof per `DX-100`'s own recommendation, and deferring swap-chain/`Present()` proof to a real-
+`dxgi.dll` — see `plan_dx.md`'s `DX-100` row for the full evidence. **`DX-101` (full D3D12 CMake
+wiring) is also closed (2026-07-14)** — `CNA_GRAPHICS_BACKEND=D3D12` builds clean
+(`cmake-build-d3d12`), a skeleton `D3D12GraphicsBackend` exists with honest throws. **The concrete
+next step is `DX-102`** (device/command-queue/swap-chain), building it off-screen/swap-chain-free
+first per `DX-100`'s own recommendation, and deferring swap-chain/`Present()` proof to a real-
 Windows/CI-VM pass much earlier than D3D11's `DX-90` did. Outside the D3D plan, the standing backlog
 (Phase 79's 153-sample `../cna-samples` re-audit, Task 945's HLSL→GLSL tooling decision, Task 952's
 deferred Bgfx bug) is unchanged — see §8/§9.
@@ -526,16 +540,16 @@ desktop session with real GPU access — re-verify before assuming either claim 
 
 ## 8. Next smallest tasks
 
-1. **Phase DX12 (D3D12), continue with `DX-101`** (`plan_dx.md`) — `DX-100`'s spike is closed 🟨
-   (2026-07-14): the device/queue/fence/command-list path is real and usable locally via Wine+
-   vkd3d-proton (feature level `12_1`, DXR 1.1, SM 6.8 negotiated), but `CreateSwapChainForHwnd`
-   crashes/fails under vanilla Wine's own `dxgi.dll` — see that row's Notes for the full evidence
-   and its two recommended paths forward. **Next step: `DX-101`** (full D3D12 CMake wiring —
-   `CNA_GRAPHICS_BACKEND=D3D12`, `cna_backend_graphics_d3d12` target, factory dispatch), building
-   `DX-102` onward around off-screen/swap-chain-free proof (an `ID3D12Resource` render target +
-   staging-heap readback, no `IDXGISwapChain`) rather than assuming presentation works, per
-   `DX-100`'s own recommendation. Already authorized — no go-ahead needed, but see §9 for what's
-   still off-limits.
+1. **Phase DX12 (D3D12), continue with `DX-102`** (`plan_dx.md`) — `DX-100`'s spike and `DX-101`'s
+   CMake wiring are both closed (2026-07-14): the device/queue/fence/command-list path is real and
+   usable locally via Wine+vkd3d-proton (feature level `12_1`, DXR 1.1, SM 6.8 negotiated), but
+   `CreateSwapChainForHwnd` crashes/fails under vanilla Wine's own `dxgi.dll`; `CNA_GRAPHICS_BACKEND=
+   D3D12` now builds clean (`cmake-build-d3d12`, real `cna_backend_graphics_d3d12` target, factory
+   dispatch) with a skeleton `D3D12GraphicsBackend` (all `IGraphicsBackend` pure virtuals throw
+   honestly). **Next step: `DX-102`** (device/command-queue/swap-chain) — build it around
+   off-screen/swap-chain-free proof (an `ID3D12Resource` render target + staging-heap readback, no
+   `IDXGISwapChain`) rather than assuming presentation works, per `DX-100`'s own recommendation.
+   Already authorized — no go-ahead needed, but see §9 for what's still off-limits.
 2. **Decide Task 945** (manual HLSL→GLSL port vs. `dxc`+`SPIRV-Cross` tooling for Phase 78, the
    *unrelated* `../cna-samples` shader-conversion track) — Task 946's data point is in (manual
    porting scaled fine for BloomSample's 3 shaders). Needs project-owner input, do not decide
@@ -613,12 +627,13 @@ otherwise). Inspect only the files that task names -- do not go exploring unrela
 not refactor anything you find along the way that isn't directly required for this task.
 
 Phase DX1 through DX11 of plan_dx.md (D3D11 backend) are ALL closed (2026-07-14) -- do not re-do
-this work. Phase DX12 (D3D12) is authorized and underway -- DX-100 (Wine+vkd3d-proton spike) is
-closed 🟨 (device/queue/fence/command-list real; swap-chain creation crashes/fails under vanilla
-Wine's dxgi.dll, see that row's Notes). Continue with DX-101 (full D3D12 CMake wiring) and proceed
-without re-asking; see §9 for what stays off-limits (no merging D3D11/D3D12 into one class; do not
-assume swap-chain/Present() support works locally -- build around off-screen/readback proof instead
-per DX-100's own recommendation).
+this work. Phase DX12 (D3D12) is authorized and underway -- DX-100 (Wine+vkd3d-proton spike) and
+DX-101 (full D3D12 CMake wiring) are both closed (device/queue/fence/command-list real; swap-chain
+creation crashes/fails under vanilla Wine's dxgi.dll, see DX-100's row's Notes; CNA_GRAPHICS_BACKEND=
+D3D12 now builds clean with a skeleton D3D12GraphicsBackend that honestly throws everywhere). Continue
+with DX-102 (device/command-queue/swap-chain) and proceed without re-asking; see §9 for what stays
+off-limits (no merging D3D11/D3D12 into one class; do not assume swap-chain/Present() support works
+locally -- build around off-screen/readback proof instead per DX-100's own recommendation).
 
 Make one small, verified improvement:
 1. Investigate/reproduce the issue first (run the exact failing command from §4/§8).
