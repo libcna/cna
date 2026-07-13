@@ -23,11 +23,11 @@ namespace CNA::Internal::Backends::D3D11
 
     /**
      * D3D11 graphics backend (plan_dx.md). Implements IGraphicsBackend on top of Direct3D 11 via
-     * DXGI, with real device/swap-chain/back-buffer/clear/present/readback (Phase DX4) and real
-     * vertex/index buffers + input layout caching (Phase DX5). Everything Phase DX6 onward will
-     * add (textures, draw calls, SpriteBatch) is still an honest "not yet implemented" stub --
-     * mirrors plan_software.md/plan_headless.md's own "CnaTests must link cleanly even before most
-     * methods are real" bar.
+     * DXGI: real device/swap-chain/back-buffer/clear/present/readback (Phase DX4), vertex/index
+     * buffers + input layout caching (Phase DX5), textures/render targets/MSAA/MRT/occlusion
+     * queries (Phase DX6), blend/depth-stencil/rasterizer state objects (Phase DX7), all 10 stock
+     * shader variants + custom ShaderEffect (Phase DX8), and SpriteBatch (Phase DX9). Phase DX10
+     * (broader test coverage) and DX11 (docs) are what remains unstarted.
      *
      * Resource lifetime is split into three independent groups (plan_dx.md design decision 11):
      *   - Device lifetime (device_/context_/factory_/allowTearingSupported_/featureLevel_):
@@ -181,7 +181,7 @@ namespace CNA::Internal::Backends::D3D11
                                        PrimitiveType primitive, int primitiveCount, int instanceCount,
                                        const GpuDrawParams& params) override;
 
-        // ---- IGraphicsBackend: honest "not yet implemented" stubs (Phase DX9) ----
+        // ---- IGraphicsBackend: real (Phase DX9, DX-70/DX-71/DX-72) ----
         std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() override;
 
     private:

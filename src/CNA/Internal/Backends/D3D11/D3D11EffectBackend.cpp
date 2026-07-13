@@ -117,11 +117,11 @@ namespace CNA::Internal::Backends::D3D11
         // Vulkan), so there is no deferred state for Unbind() to undo.
     }
 
-    // DX-58: mirrors VulkanEffectBackend's exact fixed-slot convention byte-for-byte (128-byte
-    // buffer: [16..79]=mat4 matrix, [80..95]=vec4 color, [96..99]=float/int slot 0) -- `name` is
-    // deliberately ignored, matching Vulkan's own `/*name*/`-discarding precedent. [0..15] (the
-    // vpSize slot Vulkan's SpriteBatch runtime sets automatically) is left unused here since no
-    // SpriteBatch integration exists yet to set it (Phase DX9).
+    // DX-58/DX-71: mirrors VulkanEffectBackend's exact fixed-slot convention byte-for-byte
+    // (128-byte buffer: [0..15]=vpSize (vec2, set automatically by D3D11SpriteBatchBackend --
+    // see SetViewportSizeEXT below), [16..79]=mat4 matrix, [80..95]=vec4 color, [96..99]=
+    // float/int slot 0) -- `name` is deliberately ignored, matching Vulkan's own
+    // `/*name*/`-discarding precedent.
     void D3D11EffectBackend::SetUniformMat4(const char* /*name*/, const float* matrix)
     {
         std::memcpy(pushConst_ + 4, matrix, 64);
@@ -150,5 +150,11 @@ namespace CNA::Internal::Backends::D3D11
     void D3D11EffectBackend::SetUniformInt(const char* /*name*/, int value)
     {
         pushConst_[24] = static_cast<float>(value);
+    }
+
+    void D3D11EffectBackend::SetViewportSizeEXT(float width, float height)
+    {
+        pushConst_[0] = width;
+        pushConst_[1] = height;
     }
 }

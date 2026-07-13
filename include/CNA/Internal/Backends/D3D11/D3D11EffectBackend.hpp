@@ -13,10 +13,12 @@
 // Scope boundary (honest, not a placeholder): CompileProgram()/Bind()/Unbind()/IsValid()/
 // GetCompileError()/the uniform setters are real and independently GPU-tested here (compile a
 // trivial custom vertex+pixel shader pair at runtime, draw a real triangle with it, read back the
-// exact pixel color driven by a uniform). Actually wiring Bind()'s output into SpriteBatch's own
-// per-sprite draw loop is Phase DX9's job -- SpriteBatch doesn't exist yet for this backend
-// (D3D11GraphicsBackend::CreateSpriteBatch() still throws). BindTexture() is not overridden (uses
-// IEffectBackend's own no-op default) -- deliberately out of this task's scope.
+// exact pixel color driven by a uniform). Phase DX9 (DX-71) wires Bind()'s output into
+// D3D11SpriteBatchBackend's own per-sprite draw loop, and adds SetViewportSizeEXT() below to fill
+// the [0..15]-byte vpSize slot this file's push-constant-contract comment always reserved for it.
+// BindTexture() is not overridden (uses IEffectBackend's own no-op default) -- texture unit 0 is
+// bound by the caller (SpriteBatch) for both the stock and custom-effect paths, per
+// IEffectBackend::BindTexture()'s own doc comment.
 
 #include "../Common/IGraphicsBackend.hpp"
 
@@ -46,6 +48,12 @@ namespace CNA::Internal::Backends::D3D11
         void SetUniformVec2(const char* name, float x, float y) override;
         void SetUniformFloat(const char* name, float value) override;
         void SetUniformInt(const char* name, int value) override;
+
+        /// DX-71 (Phase DX9): writes the [0..15]-byte vpSize slot this class's own header comment
+        /// already reserved for it -- mirrors VulkanEffectBackend's "set automatically by the
+        /// sprite-batch runtime" convention (the game/effect author never calls this; SpriteBatch's
+        /// backend does, once per FlushBatch(), immediately before Bind()). NOXNA.
+        void SetViewportSizeEXT(float width, float height);
 
     private:
         ComPtr<ID3D11Device> device_;

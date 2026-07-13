@@ -73,6 +73,23 @@
 //   texture color, proving the real BoneBlock + FogParams(extra) constant buffer path.
 // Check W (DX-68) -- instanced3d: DrawInstancedPrimitivesEx() with one identity-transform instance
 //   (via the per-instance INSTANCEWORLD0-3 buffer) outputs the exact instance DiffuseColor.
+// Check X (DX-58) -- custom ShaderEffect: runtime D3DCompile() of arbitrary HLSL, driven manually
+//   (SpriteBatch didn't exist yet at the time this check was written).
+// Check Y (DX-70) -- real, end-to-end D3D11SpriteBatchBackend via the actual public
+//   Microsoft::Xna::Framework::Graphics::SpriteBatch/Texture2D classes (not the raw backend
+//   interface): a 2x2 per-corner-colored texture drawn at a known destination rect reads back the
+//   exact color in each of the 4 quadrants (PointClamp, no filtering ambiguity), and a second draw
+//   with SpriteEffects::FlipHorizontally is confirmed to genuinely swap the top-left/top-right
+//   quadrants -- not just "didn't throw".
+// Check Z (DX-72) -- TextureAddressMode::Wrap/Mirror via SpriteBatch, both proven with a probe
+//   pixel chosen to give a DIFFERENT color than Clamp (or, for Mirror, than either Wrap or Clamp)
+//   would produce at that exact point -- a real discriminating test, not merely "some color came
+//   back". D3D11 has genuine sampler address-mode support (D3D11SamplerCache, DX-44) and should
+//   not inherit SDL_Renderer's own documented Wrap/Mirror gap.
+// Check AA (DX-71) -- a custom Effect passed to SpriteBatch::Begin(..., effect) draws sprites
+//   through that effect's own compiled shader (a deliberate color inversion) instead of the stock
+//   sprite2d pipeline, proving D3D11EffectBackend::SetViewportSizeEXT()'s automatic vpSize slot
+//   and the shared texture-binding path both work for the custom-effect draw path for real.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
@@ -92,6 +109,11 @@
 #include "CNA/Internal/Backends/D3D11/D3D11EffectBackend.hpp"
 #include "CNA/Internal/Backends/D3DCommon/D3DShaderCache.hpp"
 #include "CNA/Internal/Graphics/ImageData.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 
 #include <cstdio>
 #include <cstdlib>
@@ -1216,7 +1238,151 @@ protected:
                   "fails CompileProgram() with a real, non-empty compiler error message (plan_dx.md DX-58)");
         }
 
-        const int totalChecks = 3 + 10 + 1 + 2 + 2 + 2 + 2 + 2 + 1 + 1 + 2 + 1 + 13 + 2 + 3 + 2 + 2 + 1 + 1 + 1 + 1 + 3;
+        // Shared 2x2 per-corner-colored texture for Checks Y/Z/AA below: TL=red, TR=green,
+        // BL=blue, BR=yellow, all opaque -- an asymmetric pattern so placement/flip/wrap/mirror
+        // are all genuinely distinguishable from a readback, not just "some color present".
+        Texture2D cornerTex(dev, 2, 2);
+        {
+            const Color kCorners[4] = {
+                Color(255, 0, 0, 255),   // (0,0) top-left    = red
+                Color(0, 255, 0, 255),   // (1,0) top-right   = green
+                Color(0, 0, 255, 255),   // (0,1) bottom-left = blue
+                Color(255, 255, 0, 255), // (1,1) bottom-right= yellow
+            };
+            cornerTex.SetData(kCorners, 4);
+        }
+
+        // Check Y (DX-70): real end-to-end SpriteBatch draw through the actual public API.
+        {
+            SamplerState pointClamp = SamplerState::PointClamp;
+
+            SpriteBatch batch(dev);
+            dev.Clear(Color(10, 10, 10, 255));
+            batch.Begin(SpriteSortMode::Deferred, BlendState::Opaque, &pointClamp, nullptr, nullptr);
+            batch.Draw(cornerTex, Microsoft::Xna::Framework::Rectangle(0, 0, 32, 32),
+                      Microsoft::Xna::Framework::Rectangle(0, 0, 2, 2), Color::White);
+            batch.End();
+
+            auto readPixel = [&](int x, int y) -> Color {
+                const Microsoft::Xna::Framework::Rectangle region(x, y, 1, 1);
+                Color px(0, 0, 0, 0);
+                dev.GetBackBufferData(&region, &px, 0, 1);
+                return px;
+            };
+            auto isColor = [](const Color& p, int r, int g, int b) {
+                return p.getRProperty() == r && p.getGProperty() == g && p.getBProperty() == b && p.getAProperty() == 255;
+            };
+
+            const Color tl = readPixel(4, 4), tr = readPixel(20, 4), bl = readPixel(4, 20), br = readPixel(20, 20);
+            check(isColor(tl, 255, 0, 0) && isColor(tr, 0, 255, 0) && isColor(bl, 0, 0, 255) && isColor(br, 255, 255, 0),
+                  "D3D11SpriteBatchBackend::Draw(): a real quad-batched sprite2d draw places all 4 "
+                  "corner colors at the exact expected destination pixels (plan_dx.md DX-70)");
+
+            dev.Clear(Color(10, 10, 10, 255));
+            batch.Begin(SpriteSortMode::Deferred, BlendState::Opaque, &pointClamp, nullptr, nullptr);
+            batch.Draw(cornerTex, Microsoft::Xna::Framework::Rectangle(0, 0, 32, 32),
+                      Microsoft::Xna::Framework::Rectangle(0, 0, 2, 2), Color::White,
+                      0.0f, Vector2(0, 0), SpriteEffects::FlipHorizontally, 0.0f);
+            batch.End();
+            const Color flippedLeft = readPixel(4, 4), flippedRight = readPixel(20, 4);
+            check(isColor(flippedLeft, 0, 255, 0) && isColor(flippedRight, 255, 0, 0),
+                  "D3D11SpriteBatchBackend::Draw(): SpriteEffects::FlipHorizontally genuinely swaps "
+                  "the sampled quadrants, not just accepted without effect (plan_dx.md DX-70)");
+        }
+
+        // Check Z (DX-72): TextureAddressMode::Wrap/Mirror, each proven with a probe pixel that
+        // gives a genuinely different color than the other two address modes would produce there
+        // (see this file's own top-of-file comment for the UV math).
+        {
+            SpriteBatch batch(dev);
+            const Microsoft::Xna::Framework::Rectangle destRect(0, 0, 32, 32);
+            const Microsoft::Xna::Framework::Rectangle srcRect(0, 0, 4, 4); // 2x texture size -> UV 0..2
+
+            auto readPixel = [&](int x, int y) -> Color {
+                const Microsoft::Xna::Framework::Rectangle region(x, y, 1, 1);
+                Color px(0, 0, 0, 0);
+                dev.GetBackBufferData(&region, &px, 0, 1);
+                return px;
+            };
+            auto isColor = [](const Color& p, int r, int g, int b) {
+                return p.getRProperty() == r && p.getGProperty() == g && p.getBProperty() == b && p.getAProperty() == 255;
+            };
+
+            SamplerState pointWrap = SamplerState::PointWrap;
+            dev.Clear(Color(10, 10, 10, 255));
+            batch.Begin(SpriteSortMode::Deferred, BlendState::Opaque, &pointWrap, nullptr, nullptr);
+            batch.Draw(cornerTex, destRect, srcRect, Color::White);
+            batch.End();
+            const Color wrapProbe = readPixel(4, 20); // v~1.28 -> tile-repeat row0 (red); Clamp would give blue here.
+            check(isColor(wrapProbe, 255, 0, 0),
+                  "D3D11SpriteBatchBackend: TextureAddressMode::Wrap genuinely tiles past UV 1.0 "
+                  "instead of clamping to the edge color (plan_dx.md DX-72)");
+
+            SamplerState pointMirror;
+            pointMirror.setFilterProperty(TextureFilter::Point);
+            pointMirror.setAddressUProperty(TextureAddressMode::Mirror);
+            pointMirror.setAddressVProperty(TextureAddressMode::Mirror);
+            dev.Clear(Color(10, 10, 10, 255));
+            batch.Begin(SpriteSortMode::Deferred, BlendState::Opaque, &pointMirror, nullptr, nullptr);
+            batch.Draw(cornerTex, destRect, srcRect, Color::White);
+            batch.End();
+            const Color mirrorProbe = readPixel(4, 28); // v~1.78 -> mirrored back to row0 (red); Wrap/Clamp both give blue here.
+            check(isColor(mirrorProbe, 255, 0, 0),
+                  "D3D11SpriteBatchBackend: TextureAddressMode::Mirror genuinely reflects past UV "
+                  "1.0 (distinct from both Wrap's repeat and Clamp's edge-extend at the same probe "
+                  "point) (plan_dx.md DX-72)");
+        }
+
+        // Check AA (DX-71): a custom Effect passed to SpriteBatch::Begin(..., effect) draws through
+        // that effect's own shader (here, a deliberate RGB color inversion) instead of the stock
+        // sprite2d pipeline -- proving D3D11EffectBackend::SetViewportSizeEXT()'s automatic vpSize
+        // slot (this custom vertex shader has no other way to map pixel-space Position to NDC) and
+        // the shared t0/s0 texture-binding path SpriteBatch drives for both pipelines.
+        {
+            ShaderEffect invertEffect(dev,
+                "struct VSIn { float2 pos:POSITION0; float2 uv:TEXCOORD0; float4 col:COLOR0; };\n"
+                "struct VSOut { float4 pos:SV_Position; float2 uv:TEXCOORD0; float4 col:TEXCOORD1; };\n"
+                "cbuffer CB : register(b0) { float4 vpSize; float4 pad1[4]; float4 uColor; float4 uFloat0; };\n"
+                "VSOut main(VSIn input) {\n"
+                "    VSOut o;\n"
+                "    float2 ndc = (input.pos / vpSize.xy) * 2.0 - 1.0;\n"
+                "    o.pos = float4(ndc.x, -ndc.y, 0.0, 1.0);\n"
+                "    o.uv = input.uv;\n"
+                "    o.col = input.col;\n"
+                "    return o;\n"
+                "}",
+                "Texture2D texSampler : register(t0);\n"
+                "SamplerState texSamplerSampler : register(s0);\n"
+                "struct PSIn { float4 pos:SV_Position; float2 uv:TEXCOORD0; float4 col:TEXCOORD1; };\n"
+                "float4 main(PSIn input) : SV_Target {\n"
+                "    float4 texColor = texSampler.Sample(texSamplerSampler, input.uv);\n"
+                "    return float4(float3(1.0, 1.0, 1.0) - texColor.rgb, 1.0);\n"
+                "}");
+            check(invertEffect.IsEffectValid(),
+                  "ShaderEffect (D3D11): a runtime-compiled custom HLSL pair for SpriteBatch's own "
+                  "Sprite2DVertex contract compiles successfully (plan_dx.md DX-71)");
+
+            SamplerState pointClamp = SamplerState::PointClamp;
+            SpriteBatch batch(dev);
+            dev.Clear(Color(10, 10, 10, 255));
+            batch.Begin(SpriteSortMode::Deferred, BlendState::Opaque, &pointClamp, nullptr, nullptr, &invertEffect);
+            batch.Draw(cornerTex, Microsoft::Xna::Framework::Rectangle(0, 0, 32, 32),
+                      Microsoft::Xna::Framework::Rectangle(0, 0, 2, 2), Color::White);
+            batch.End();
+
+            const Microsoft::Xna::Framework::Rectangle region(4, 4, 1, 1);
+            Color inverted(0, 0, 0, 0);
+            dev.GetBackBufferData(&region, &inverted, 0, 1);
+            // Top-left texel is red (255,0,0); inverted RGB = (0,255,255), alpha forced to 255 by
+            // the custom shader itself (not inverted) -- an exact, unambiguous 8-bit round-trip.
+            check(inverted.getRProperty() == 0 && inverted.getGProperty() == 255 &&
+                  inverted.getBProperty() == 255 && inverted.getAProperty() == 255,
+                  "D3D11SpriteBatchBackend + SpriteBatch::Begin(effect): sprites draw through the "
+                  "custom Effect's own shader, producing its exact expected (inverted) output "
+                  "color, not the stock sprite2d pipeline's (plan_dx.md DX-71)");
+        }
+
+        const int totalChecks = 3 + 10 + 1 + 2 + 2 + 2 + 2 + 2 + 1 + 1 + 2 + 1 + 13 + 2 + 3 + 2 + 2 + 1 + 1 + 1 + 1 + 3 + 2 + 2 + 2;
         std::printf("=== %d/%d PASS ===\n", passCount_, totalChecks);
         result_ = (passCount_ == totalChecks) ? 0 : 1;
         Exit();

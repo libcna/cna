@@ -198,9 +198,29 @@
 > (one real pre-existing bug found and fixed along the way, in the DX-60/61 foundational work — see
 > that row)**: new Checks T/U/V/W/X. **58/58 smoke checks pass** (up from 51/51), `D3D11` CTest
 > total now **81/81 checks** (`D3D11_Smoke` 58 + `D3D11_Common` 23), verified via
-> `ctest --test-dir cmake-build-d3d11 -R D3D11`. **`Phase DX9` (SpriteBatch) is next** — and is now
-> the real remaining dependency for both `sprite2d` and `DX-58`'s full end-to-end integration, not
-> just its own row list.
+> `ctest --test-dir cmake-build-d3d11 -R D3D11`.
+>
+> **Phase DX9 (SpriteBatch, `DX-70`/`DX-71`/`DX-72`) also closed 2026-07-13 — D3D11 now has a real
+> SpriteBatch, resolving both of Phase DX8's own deferred dependencies (`sprite2d`'s draw path and
+> `DX-58`'s end-to-end integration) in the same task.** New `D3D11SpriteBatchBackend`
+> (`D3D11SpriteBatch.hpp`/`.cpp`), structurally mirroring `EasyGLSpriteBatchBackend`'s immediate-
+> flush-per-texture-change quad batcher rather than `VulkanSpriteBatchBackend`'s frame-end-snapshot
+> design (D3D11's context is already immediate-mode, same as GL). **One real, deliberate
+> improvement over Vulkan's own precedent**: `SetTransformMatrix()` genuinely works here (Vulkan
+> leaves it a silent no-op) — applied on the CPU, per vertex, via `Vector2::Transform()`, since
+> `sprite2d.vert.hlsl`'s real contract has no projection-matrix uniform to fold it into GPU-side.
+> `DX-71` reuses `DX-58`'s `D3D11EffectBackend` directly, adding `SetViewportSizeEXT()` to fill the
+> `vpSize` slot that class's own header comment had already reserved. `DX-72` needed no new
+> implementation at all — `D3D11SamplerCache` (`DX-44`) already handles Wrap/Mirror for real; this
+> row is purely the verification that it does. **Tested through the real public API**
+> (`Microsoft::Xna::Framework::Graphics::SpriteBatch`+`Texture2D`, not the raw backend interface) —
+> 6 new checks (Y/Z/AA), every one passing on the first real Wine+DXVK run on the real GPU,
+> including two deliberately *discriminating* probe pixels for Wrap/Mirror (chosen so a broken
+> Clamp-fallback would read a genuinely different, wrong color, not just "a color"). **64/64 smoke
+> checks pass** (up from 58/58), `D3D11` CTest total now **87/87 checks** (`D3D11_Smoke` 64 +
+> `D3D11_Common` 23), verified via `ctest --test-dir cmake-build-d3d11 -R D3D11`. **Phase DX10
+> (broader test coverage) and Phase DX11 (docs) are what remains before Direct3D 12 can be
+> considered.**
 >
 > **Direct3D 11 is the actual near-term target; Direct3D 12 is written up in full but authorized to
 > follow once D3D11 is substantially complete** — see "Why D3D11 first, D3D12 later" below.
@@ -655,11 +675,23 @@ the order below — cheapest/most-foundational shader variant first, same orderi
 
 ## Phase DX9 — SpriteBatch
 
+**Closed 2026-07-13 — D3D11 has a real, GPU-verified SpriteBatch.** All 3 rows below landed
+together (`D3D11SpriteBatchBackend`, `include/`/`src/CNA/Internal/Backends/D3D11/D3D11SpriteBatch.hpp`/`.cpp`),
+wired into `D3D11GraphicsBackend::CreateSpriteBatch()`. Structurally mirrors
+`EasyGLSpriteBatchBackend` (immediate-flush-per-texture-change quad batcher — D3D11's context is
+already immediate-mode, no reason to defer like `VulkanSpriteBatchBackend`'s frame-end snapshot
+design). Tested through the **real public API** (`Microsoft::Xna::Framework::Graphics::SpriteBatch`
++ `Texture2D`, not the raw backend interface directly) — 6 new checks (Y/Z/AA) in
+`examples/d3d11_smoke_test.cpp`'s `D3D11_Smoke` CTest, every one passing on the first real run
+through Wine+DXVK on the real GPU: `ctest --test-dir cmake-build-d3d11 -R D3D11` → 2/2 tests,
+**87/87 checks** (`D3D11_Smoke` 64, `D3D11_Common` 23) — up from 81/81 (`D3D11_Smoke` 58,
+`D3D11_Common` 23) at the end of Phase DX8, i.e. 6 new checks (Y/Z/AA), all passing on the first run.
+
 | # | Task | Status | Notes |
 |---|---|---|---|
-| DX-70 | `D3D11SpriteBatchBackend`: quad batching feeding the `sprite2d` pipeline from `DX-68`, matching `EasyGLSpriteBatchBackend`'s own destination/source-rect/origin/rotation/`SpriteEffects`-flip formula | ⬜ | |
-| DX-71 | Custom `Effect` via `SpriteBatch::Begin(effect)` | ⬜ | |
-| DX-72 | `TextureAddressMode::Wrap`/`Mirror` via SpriteBatch (a real gap on `SDL_Renderer`, per `docs/graphics-backend-feature-matrix.md` — D3D11 should not inherit that limitation, it has real sampler address-mode support) | ⬜ | |
+| DX-70 | `D3D11SpriteBatchBackend`: quad batching feeding the `sprite2d` pipeline from `DX-68`, matching `EasyGLSpriteBatchBackend`'s own destination/source-rect/origin/rotation/`SpriteEffects`-flip formula | ✅ | **Closed 2026-07-13.** Real growable `D3D11VertexBufferBackend`/`D3D11IndexBufferBackend` (reused as-is from `DX-30`/`DX-31`, full re-upload per flush — batches are XNA-scale, not worth persistent-append complexity), a dedicated `sprite2DInputLayout_` (POSITION0/TEXCOORD0/COLOR0, the same fixed `Sprite2DVertex` shape `D3D11EffectBackend` already hardcodes — **not** reusable via `D3D11InputLayoutCache`, since that cache is keyed only by byte-stride and stride-32 already means the unrelated `VertexPositionNormalTexture` layout; a real, deliberately-checked collision this row avoided rather than silently reusing the wrong layout), and the exact EasyGL quad/flip math (destination/source-rect/origin/rotation, no `[0,1]` UV clamp — matches FNA). **One real, deliberate improvement over `VulkanSpriteBatchBackend`'s own known gap**: `SetTransformMatrix()` is genuinely implemented (Vulkan leaves it a silent no-op) — `sprite2d.vert.hlsl`'s real contract (`DX-13-hlsl`) has no projection-matrix uniform at all (just `ViewportSize`), so the transform is applied on the CPU, per vertex, via `Vector2::Transform()`, before upload — mathematically equivalent to XNA/EasyGL's GPU-side `transform * orthographicProjection` composition, just evaluated CPU-side, and it applies uniformly to both the stock and custom-effect draw paths since both consume the same already-transformed vertex buffer. Real GPU proof: `examples/d3d11_smoke_test.cpp` Check Y, through the **actual public `SpriteBatch`/`Texture2D` API**, not the raw backend — a 2×2 per-corner-colored texture drawn at a known destination rect reads back the exact color in all 4 quadrants (`PointClamp`, no filtering ambiguity), and a second draw with `SpriteEffects::FlipHorizontally` is confirmed to genuinely swap the top-left/top-right quadrants. |
+| DX-71 | Custom `Effect` via `SpriteBatch::Begin(effect)` | ✅ | **Closed 2026-07-13.** Reuses `D3D11EffectBackend` (`DX-58`) directly — `FlushBatch()` resolves `customEffect_->GetEffectBackendPtr()`, calls the new `D3D11EffectBackend::SetViewportSizeEXT()` (fills the `[0..15]`-byte `vpSize` slot that class's own header comment always reserved for it, mirroring `VulkanEffectBackend`'s "set automatically by the sprite-batch runtime" convention — the game/effect author never calls it), then `Effect::Apply()` + `Bind()`. Texture unit 0 (`t0`/`s0`) is always bound by `D3D11SpriteBatchBackend` itself for *both* the stock and custom-effect paths (`IEffectBackend::BindTexture()`'s own doc comment — `D3D11EffectBackend` deliberately never overrides it). Real GPU proof: Check AA compiles a real custom HLSL pair at runtime (`ShaderEffect`, consuming the fixed `Sprite2DVertex` contract + the newly-wired `vpSize` slot to do its own pixel→NDC mapping, since this custom shader has no other way to reach `ViewportSize`) that deliberately inverts RGB; drawing the same 2×2 corner texture through `SpriteBatch::Begin(..., &invertEffect)` reads back the exact inverted color, not the stock `sprite2d` pipeline's un-inverted one — proves the whole custom-effect-via-SpriteBatch path end-to-end, not just "compiled". |
+| DX-72 | `TextureAddressMode::Wrap`/`Mirror` via SpriteBatch (a real gap on `SDL_Renderer`, per `docs/graphics-backend-feature-matrix.md` — D3D11 should not inherit that limitation, it has real sampler address-mode support) | ✅ | **Closed 2026-07-13.** Sampler creation for sprite draws already goes through `D3D11SamplerCache` (`DX-44`) via `owner_->ApplySamplerState(0, pendingFilter_, pendingAddressU_, pendingAddressV_, 1)` — no D3D11-specific work needed beyond `DX-70` itself; this row is the **verification** that Wrap/Mirror genuinely work, not a separate implementation. Real GPU proof: Check Z uses a `sourceRectangle` 2× the texture size (UV range `0..2`) and two probe pixels **each deliberately chosen to read a different color than the other two address modes would produce at that exact point** (not merely "some color came back") — the `Wrap` probe reads the tile-repeated top row (red) where `Clamp` would read the bottom-edge-extended color (blue); the `Mirror` probe reads the reflected top row (red) where *both* `Wrap` and `Clamp` would read blue. Both passed exactly as predicted on the first real run. |
 
 ---
 

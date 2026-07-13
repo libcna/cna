@@ -204,4 +204,15 @@ namespace CNA::Internal::Backends::D3DCommon
     static_assert(offsetof(D3DEnvMapConstants, FogColorEnabled) == 96, "D3DEnvMapConstants field offset mismatch vs HLSL");
     static_assert(offsetof(D3DEnvMapConstants, Light1Dir) == 128, "D3DEnvMapConstants field offset mismatch vs HLSL");
     static_assert(sizeof(D3DEnvMapConstants) % 16 == 0, "D3D11 constant buffer ByteWidth must be a 16-byte multiple");
+
+    /// DX-70: matches sprite2d.vert.hlsl's `cbuffer PerDraw : register(b0)` byte-for-byte -- just a
+    /// `float2 ViewportSize` (8 bytes), padded out to the required 16-byte buffer-size multiple.
+    /// SpriteBatch's own quad-batching backend is this struct's only consumer.
+    struct alignas(16) D3DSprite2DConstants
+    {
+        float ViewportSize[2];   ///< offset 0
+        float _Pad[2];           ///< offset 8 (unread by the shader, pads ByteWidth to 16)
+    };
+    static_assert(sizeof(D3DSprite2DConstants) == 16, "D3DSprite2DConstants must be a 16-byte buffer (sprite2d's real PerDraw cbuffer is only 8 bytes of shader-visible data)");
+    static_assert(sizeof(D3DSprite2DConstants) % 16 == 0, "D3D11 constant buffer ByteWidth must be a 16-byte multiple");
 }

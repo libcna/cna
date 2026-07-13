@@ -5,6 +5,7 @@
 #include "CNA/Internal/Backends/D3D11/D3D11RenderTargets.hpp"
 #include "CNA/Internal/Backends/D3D11/D3D11OcclusionQuery.hpp"
 #include "CNA/Internal/Backends/D3D11/D3D11EffectBackend.hpp"
+#include "CNA/Internal/Backends/D3D11/D3D11SpriteBatch.hpp"
 #include "CNA/Internal/Backends/D3DCommon/D3DShaderCache.hpp"
 #include "CNA/Internal/Backends/D3DCommon/D3DConstantBuffers.hpp"
 
@@ -720,7 +721,7 @@ namespace CNA::Internal::Backends::D3D11
 
     std::unique_ptr<ISpriteBatchBackend> D3D11GraphicsBackend::CreateSpriteBatch()
     {
-        throw std::runtime_error("D3D11GraphicsBackend::CreateSpriteBatch: not yet implemented (plan_dx.md Phase DX9)");
+        return std::make_unique<D3D11SpriteBatchBackend>(this);
     }
 
     std::unique_ptr<IVertexBufferBackend> D3D11GraphicsBackend::CreateVertexBuffer(int vertex_capacity)

@@ -1,10 +1,10 @@
 # NEXT.md — CNA Project Handoff
 
-> **D3D11 graphics backend now exists as real, verified code (2026-07-13); this backend has now
-> rendered its first real, pixel-verified 3D triangle.** Phase DX3 (`D3DCommon`), Phase DX5
+> **D3D11 graphics backend now exists as real, verified code (2026-07-13); it now has a full stock
+> 3D shader/effect set AND a real, GPU-verified SpriteBatch.** Phase DX3 (`D3DCommon`), Phase DX5
 > (vertex/index buffers + input layout), Phase DX6 (textures + render targets), Phase DX7 (state
-> objects), and Phase DX8's foundational tasks (`DX-60`/`DX-60a`/`DX-61` — constant buffers + the
-> `colored3d` draw pipeline) are now closed.
+> objects), Phase DX8 (all 10 stock shader variants + custom `ShaderEffect`), and Phase DX9
+> (`D3D11SpriteBatchBackend`) are now closed.
 > `CNA_GRAPHICS_BACKEND=D3D11` is a working CMake option; `D3D11GraphicsBackend` implements every
 > `IGraphicsBackend` pure virtual (real device/swap-chain/back-buffer/clear/present/readback, real
 > vertex/index buffers + input layout cache, real 2D/cube/3D textures + 2D/cube render targets +
@@ -65,13 +65,31 @@
 > linked into the main backend target for real) mirroring `VulkanEffectBackend`'s own fixed-slot
 > uniform convention — independently GPU-proven but not yet wired into an actual `SpriteBatch` draw
 > loop. **58/58 smoke checks pass** (up from 51/51), `D3D11` CTest total now **81/81 checks**
-> (`D3D11_Smoke` 58 + `D3D11_Common` 23). Full detail, task-by-task, lives in `plan_dx.md`
-> (`DX-1`–`DX-69`, `DX-58`, `DX-80` all closed except `DX-69`'s own fog-pixel-test gap, honestly
-> 🟨). **`Phase DX9` (SpriteBatch) is next** — and is now the real remaining dependency for both
-> `sprite2d` and `DX-58`'s full end-to-end integration. Project owner authorized 2026-07-13
-> continuing autonomously through the rest of Phase DX8 → DX9 → DX10 → DX11, and Phase DX12 (D3D12)
-> afterward if time allows; `DX-90` (real-Windows checklist) stays `needs_human` — no such machine
-> available in this environment.
+> (`D3D11_Smoke` 58 + `D3D11_Common` 23).
+>
+> **Phase DX9 (SpriteBatch, `DX-70`/`DX-71`/`DX-72`) is now CLOSED (2026-07-13) — resolving both of
+> Phase DX8's own deferred dependencies (`sprite2d`'s draw path, `DX-58`'s end-to-end integration)
+> in the same task.** New `D3D11SpriteBatchBackend` (`D3D11SpriteBatch.hpp`/`.cpp`) mirrors
+> `EasyGLSpriteBatchBackend`'s immediate-flush-per-texture-change quad batcher (D3D11's context is
+> already immediate-mode — no reason for `VulkanSpriteBatchBackend`'s frame-end-snapshot design).
+> **One real, deliberate improvement over Vulkan's own precedent**: `SetTransformMatrix()`
+> genuinely works here (`VulkanSpriteBatchBackend` leaves it a silent no-op) — applied per-vertex on
+> the CPU via `Vector2::Transform()`, since `sprite2d.vert.hlsl` has no projection-matrix uniform to
+> fold it into GPU-side. `DX-71` reuses `D3D11EffectBackend` (`DX-58`) directly, adding
+> `SetViewportSizeEXT()` to fill the `vpSize` slot that class had already reserved. `DX-72` needed
+> no new implementation — `D3D11SamplerCache` (`DX-44`) already handles Wrap/Mirror correctly; this
+> row is purely verification. **Tested through the real public API**
+> (`Microsoft::Xna::Framework::Graphics::SpriteBatch`+`Texture2D`, not the raw backend interface) —
+> 6 new checks (Y/Z/AA), all passing on the first real Wine+DXVK run on the real GPU, including two
+> deliberately *discriminating* Wrap/Mirror probe pixels (chosen so a broken Clamp-fallback would
+> read a different, wrong color). **64/64 smoke checks pass** (up from 58/58), `D3D11` CTest total
+> now **87/87 checks** (`D3D11_Smoke` 64 + `D3D11_Common` 23), verified via
+> `ctest --test-dir cmake-build-d3d11 -R D3D11`. Full detail, task-by-task, lives in `plan_dx.md`
+> (`DX-1`–`DX-72`, `DX-80` all closed except `DX-69`'s own fog-pixel-test gap, honestly 🟨).
+> **`Phase DX10` (broader test coverage) is next**, then `Phase DX11` (docs) — Project owner
+> authorized 2026-07-13 continuing autonomously through Phase DX3 → DX9 → DX10 → DX11 (now done
+> through DX9), and Phase DX12 (D3D12) afterward if time allows; `DX-90` (real-Windows checklist)
+> stays `needs_human` — no such machine available in this environment.
 > **This is a brand-new architectural front for the project — read `plan_dx.md`'s own status banner
 > before touching it.** The pre-existing EasyGL/Vulkan/Bgfx/SDL_Renderer/Headless/Software/WebGPU
 > work summarized below is unchanged by this; full history for that lives in `plan_graphics.md`/
@@ -148,7 +166,7 @@ directory in this checkout) — cosmetic, pre-existing, not a CNA bug, do not ch
 | Vulkan | 4371/4373 pass (2 hardware skips), as of 2026-07-11 | 127/128 pass — 1 pre-existing failure (`Vulkan_DepthBias`) |
 | Bgfx | 4375/4377 pass (2 hardware skips), as of 2026-07-11 | 104/106 pass — 2 pre-existing failures (`Bgfx_RenderTarget2D_MsaaResolve`, `Bgfx_RenderTargetCube_DepthFormat`, DEFERRED — Task 952) |
 | Software | 4371/4373 pass, as of 2026-07-13 | 6 CTests, 29/29 checks |
-| D3D11 | **Does not build** (see §4) | **2/2 pass, 81/81 checks** (`D3D11_Smoke` 58 checks, `D3D11_Common` 23 checks), verified 2026-07-13 via `ctest --test-dir cmake-build-d3d11 -R D3D11` |
+| D3D11 | **Does not build** (see §4) | **2/2 pass, 87/87 checks** (`D3D11_Smoke` 64 checks, `D3D11_Common` 23 checks), verified 2026-07-13 via `ctest --test-dir cmake-build-d3d11 -R D3D11` |
 | Headless, WebGPU | Not re-verified this session | See `plan_headless.md`/`plan_webgpu.md` for their own last-verified status |
 
 All EasyGL/Vulkan/Bgfx/Software numbers above are carried over from the last session that actually
@@ -202,29 +220,30 @@ registered `ctest` pixel-verification examples under `examples/`. New this sessi
 
 ### Does NOT work yet
 
-- **D3D11**: `SpriteBatch` is still an honest `throw`-based "not yet implemented" stub (`plan_dx.md`
-  Phase DX9, not started). **Every stock 3D shader variant now has a real, pixel-verified draw
-  pipeline** (`colored3d`/`textured3d`/`colored_textured3d`/`lit_textured3d`/`alpha_test3d`/
-  `dual_texture3d`/`env_map3d`/`skinned3d`/`instanced3d` — Phase DX8, `DX-60`–`DX-69`, fully closed
-  2026-07-13), reachable via real `DrawPrimitivesEx()`/`DrawIndexedPrimitivesEx()`/
-  `DrawInstancedPrimitivesEx()` overrides driven by actual `GpuDrawParams` (textures/vertex-color/
-  lighting/alpha-test/fog/two-texture/cube-map/bone-skinning/per-instance-world all wired) —
-  `colored3d` via the legacy `DrawColoredPrimitives()` path still carries no `GpuDrawParams`
-  (hardcoded white/no-fog, Task 364 parity with every other backend's identical legacy path). Custom
-  `ShaderEffect` (`DX-58`) also real — runtime `D3DCompile()` genuinely compiles arbitrary HLSL and
-  drives a real draw, but isn't wired into any actual `SpriteBatch` call path yet (that path doesn't
-  exist). `sprite2d`'s own shader/pipeline objects exist and are provably creatable, but — like
-  `DX-58` — have no real draw-dispatch consumer until `SpriteBatch` (Phase DX9) lands; that's now
-  the genuine remaining dependency for both. Vertex/index buffers and cached input layouts are real
-  (`DX-30`/`DX-31`/`DX-32`, Phase DX5 closed); textures, cube/3D textures, 2D/cube render targets
-  (incl. real MSAA), MRT, sampler cache, and occlusion queries are real (`DX-40`–`DX-47`, Phase DX6
-  closed); blend/depth-stencil/rasterizer state objects + viewport/scissor are real (`DX-50`–`DX-53`,
-  Phase DX7 closed). `DX-69` fog wiring is real for all 8 fog-capable variants (`sprite2d`/
-  `instanced3d` genuinely have no fog cbuffer to wire) but not yet exercised by a dedicated
-  fog-on/off pixel test. MRT's per-target MSAA-resolve/mip-regen-on-unbind is only wired for the
-  single-target case (`DX-43`), not yet for N>1 (`DX-46`'s own honest scope note). The 5 combo
-  `Clear*` variants, window resize, and device-lost recovery are implemented but not yet exercised
-  by any test.
+- **D3D11**: **Every stock 3D shader variant now has a real, pixel-verified draw pipeline**
+  (`colored3d`/`textured3d`/`colored_textured3d`/`lit_textured3d`/`alpha_test3d`/`dual_texture3d`/
+  `env_map3d`/`skinned3d`/`instanced3d` — Phase DX8, `DX-60`–`DX-69`, fully closed 2026-07-13),
+  reachable via real `DrawPrimitivesEx()`/`DrawIndexedPrimitivesEx()`/`DrawInstancedPrimitivesEx()`
+  overrides driven by actual `GpuDrawParams` (textures/vertex-color/lighting/alpha-test/fog/
+  two-texture/cube-map/bone-skinning/per-instance-world all wired) — `colored3d` via the legacy
+  `DrawColoredPrimitives()` path still carries no `GpuDrawParams` (hardcoded white/no-fog, Task 364
+  parity with every other backend's identical legacy path). **`SpriteBatch` is now real too**
+  (`D3D11SpriteBatchBackend`, Phase DX9, `DX-70`/`DX-71`/`DX-72`, closed 2026-07-13) — quad
+  batching through the stock `sprite2d` pipeline, `SpriteEffects` flip, a genuinely-working
+  `SetTransformMatrix()` (unlike Vulkan's own silent no-op), real `TextureAddressMode::Wrap`/
+  `Mirror`, and custom `Effect`-via-`SpriteBatch::Begin(effect)` reusing `D3D11EffectBackend`
+  (`DX-58`) — all GPU-proven through the actual public `SpriteBatch`/`Texture2D` API. Vertex/index
+  buffers and cached input layouts are real (`DX-30`/`DX-31`/`DX-32`, Phase DX5 closed); textures,
+  cube/3D textures, 2D/cube render targets (incl. real MSAA), MRT, sampler cache, and occlusion
+  queries are real (`DX-40`–`DX-47`, Phase DX6 closed); blend/depth-stencil/rasterizer state
+  objects + viewport/scissor are real (`DX-50`–`DX-53`, Phase DX7 closed). `DX-69` fog wiring is
+  real for all 8 fog-capable variants (`sprite2d`/`instanced3d` genuinely have no fog cbuffer to
+  wire) but not yet exercised by a dedicated fog-on/off pixel test. MRT's per-target
+  MSAA-resolve/mip-regen-on-unbind is only wired for the single-target case (`DX-43`), not yet for
+  N>1 (`DX-46`'s own honest scope note). The 5 combo `Clear*` variants, window resize, and
+  device-lost recovery are implemented but not yet exercised by any test. **Phase DX10** (broader,
+  dedicated test coverage beyond the smoke-test-style checks above) and **Phase DX11** (docs,
+  `docs/d3d11-backend.md`) are the remaining unstarted phases before D3D11 is considered complete.
 - **D3D11 + `CnaTests`**: the full pre-existing GTest suite does not build under this backend —
   ~10 test files call POSIX-only `::setenv()` directly (see §4).
 - **D3D12**: nothing exists — not even the CMake `STRINGS`/option-flag entry (`plan_dx.md` design
@@ -243,6 +262,7 @@ Most recent first. Full detail (exact code, discriminating-power verification) i
 
 | Commit(s) | Summary |
 |---|---|
+| *(pending)* | **Phase DX9 fully closed (`DX-70`/`DX-71`/`DX-72`)**: new `D3D11SpriteBatchBackend` (`D3D11SpriteBatch.hpp`/`.cpp`) — real quad batching feeding the stock `sprite2d` pipeline (destination/source-rect/origin/rotation/`SpriteEffects`-flip, matching `EasyGLSpriteBatchBackend`'s formula), a genuinely-working `SetTransformMatrix()` (CPU-side `Vector2::Transform()` per vertex — a real improvement over `VulkanSpriteBatchBackend`'s own silent no-op), custom `Effect` support reusing `D3D11EffectBackend` (`DX-58`) via a new `SetViewportSizeEXT()` that fills the `vpSize` slot that class had already reserved, and real `TextureAddressMode::Wrap`/`Mirror` (no new implementation needed — `D3D11SamplerCache`, `DX-44`, already handled it; this row is verification). Tested through the **real public `SpriteBatch`/`Texture2D` API**, not the raw backend interface — 6 new `D3D11_Smoke` Checks Y/Z/AA, all passing on the first real Wine+DXVK run, including two deliberately discriminating Wrap/Mirror probe pixels. 64/64 smoke checks pass (up from 58/58), `D3D11` CTest total now 87/87. |
 | `6c591a0b` | **Phase DX8 fully closed (`DX-65`/`DX-66`/`DX-67`/`DX-68`/`DX-69`/`DX-58`)**: `dual_texture3d` (two real SRVs/samplers, fog at `register(b2)`), `env_map3d` (new `D3DEnvMapPerDrawConstants`/`D3DEnvMapConstants`, real `TextureCube` SRV via new `GetSrvForTextureCubeEXT()`, reflection direction geometrically constrained to land inside one distinct cube face), `skinned3d` (new `D3DSkinnedExtraConstants`, `D3DBoneConstants` genuinely populated via `memcpy` from `GpuDrawParams::boneTransforms` — confirmed not a transpose bug), `instanced3d` (real `DrawInstancedPrimitivesEx()`, new fixed `INSTANCEWORLD0`–`3` instanced input layout) all draw for real now; `sprite2d` deliberately left unwired (real home is `SpriteBatch`, Phase DX9). `DX-69` fog now wired for all 8 fog-capable variants. `DX-58`: new `D3D11EffectBackend` (runtime `D3DCompile()`, `d3dcompiler` now linked into the main backend target for real), mirrors `VulkanEffectBackend`'s fixed-slot uniform convention — independently GPU-proven, not yet consumed by a `SpriteBatch` draw loop. 5 new `D3D11_Smoke` Checks T/U/V/W/X, all passing on the first real run — 58/58 checks (up from 51/51), `D3D11` CTest total now 81/81. |
 | `d55c5fab` | **`DX-62`/`DX-63`/`DX-64` (+ `DX-69` partial)**: new `DrawPrimitivesEx()`/`DrawIndexedPrimitivesEx()` overrides (sharing one `DrawPrimitivesExImpl` helper) give real `GpuDrawParams`-driven draws for `textured3d`/`colored_textured3d` (stride 20/24), `lit_textured3d` (stride 32, first real `D3DLightingConstants` consumer, full Blinn-Phong), and `alpha_test3d` (new `D3DAlphaTestConstants` struct); `dual_texture3d`/`env_map3d`/`skinned3d` throw named not-yet-implemented errors. New `D3D11_Smoke` Checks Q/R/S — exact texture sampling, exact vertex-color tinting, lit-vs-unlit plausibility, and `clip()` discard/pass both proven for real — 51/51 checks pass (up from 44/44), `D3D11` CTest total now 74/74. Zero bugs found. |
 | `dc9fa753` | **Phase DX8 foundational tasks (`DX-60`/`DX-60a`/`DX-61`)**: new `D3DConstantBuffers.hpp` (`D3DPerDrawConstants`/`D3DFogConstants`/`D3DLightingConstants`/`D3DBoneConstants`, offsets `static_assert`-verified against the real HLSL). `DrawColoredPrimitives()`/`DrawIndexedColoredPrimitives()` now do a real `colored3d` draw (stride-16 only) instead of throwing. Found+fixed a real gap: `SetRenderTargets(nullptr, 0)` never restored the back buffer after a prior MRT bind. New `D3D11_Smoke` Check P — the backend's first real, pixel-verified 3D triangle — 44/44 checks pass (up from 42/42), `D3D11` CTest total now 67/67. |
@@ -262,12 +282,13 @@ Most recent first. Full detail (exact code, discriminating-power verification) i
 
 ## 4. Current blocker / main problem
 
-**No hard blocker on the active D3D11 work.** `plan_dx.md`'s next unstarted step is **Phase DX8**
-(shaders and stock effects — constant buffer structs, per-variant pipeline wiring, and the first
-real draw calls) — Phase DX3 (`D3DCommon`, all HLSL shader porting/compiling/embedding), Phase DX5
-(vertex/index buffers + input layout), Phase DX6 (textures/render targets), and Phase DX7 (state
-objects) are all now fully closed, and the project owner has authorized continuing autonomously
-through the rest of the plan — see this file's own top banner and `plan_dx.md`'s.
+**No hard blocker on the active D3D11 work.** `plan_dx.md`'s next unstarted step is **Phase DX10**
+(broader, dedicated test coverage beyond the smoke-test-style checks Phases DX4–DX9 already added),
+then **Phase DX11** (docs, `docs/d3d11-backend.md`) — Phase DX3 (`D3DCommon`), Phase DX5
+(vertex/index buffers + input layout), Phase DX6 (textures/render targets), Phase DX7 (state
+objects), Phase DX8 (all 10 stock shader variants + custom `ShaderEffect`), and Phase DX9
+(`SpriteBatch`) are all now fully closed, and the project owner has authorized continuing
+autonomously through the rest of the plan — see this file's own top banner and `plan_dx.md`'s.
 
 **One real, separate, documented problem**: the full `CnaTests` GTest suite does not build under
 `CNA_GRAPHICS_BACKEND=D3D11`.
@@ -426,18 +447,17 @@ desktop session with real GPU access — re-verify before assuming either claim 
 
 ## 8. Next smallest tasks
 
-1. **Phase DX8 — remaining rows** (`plan_dx.md`, as of 2026-07-13: `DX-60`/`DX-60a`/`DX-61`/`DX-62`/
-   `DX-63`/`DX-64` closed, `DX-69` partial for those 5 variants). Next: `DX-65` (`dual_texture3d`,
-   two-sampler `DualTextureEffect`), `DX-66` (`env_map3d`, needs `DX-41`'s `TextureCube` — already
-   real), `DX-67` (`skinned3d`, wire `DX-60a`'s already-defined `D3DBoneConstants`), `DX-68`
-   (`sprite2d`+`instanced3d` — `instanced3d` needs `DrawInstancedPrimitivesEx` and a per-instance
-   vertex buffer slot, matching `GpuDrawParams::instanceVb`; note `DX-13-hlsl`'s own row flagged that
-   `instanced3d.vert.hlsl` uses project-local `INSTANCEWORLD0`–`3` semantics with no established
-   input-layout convention yet), then `DX-58` (custom `ShaderEffect` runtime `D3DCompile()` path).
-   `DrawPrimitivesExImpl` in `D3D11GraphicsBackend.cpp` already has the priority-chain scaffolding
-   (`needsDualTex`/`needsEnvMap`/`needsSkinned` currently just throw) — extend it in place rather
-   than restructuring. Already authorized — no go-ahead needed, see §9. Read `plan_dx.md`'s Phase
-   DX8 table for the exact row list before starting.
+1. **Phase DX10 — tests** (`plan_dx.md`, as of 2026-07-13: Phase DX8 and Phase DX9 both fully
+   closed — every stock 3D shader variant, custom `ShaderEffect`, and `SpriteBatch` all draw for
+   real and are GPU-proven via the smoke-test-style `D3D11_Smoke`/`D3D11_Common` CTests). Phase
+   DX10's own job is broader, more systematic/dedicated test coverage than those two smoke tests
+   provide (per this project's own `CLAUDE.md` testing bar — every public method/overload/constant
+   needs its own coverage, not just an ad-hoc pixel check bolted onto a shared smoke-test file).
+   Read `plan_dx.md`'s Phase DX10 table for the exact row list before starting; known open,
+   honestly-flagged gaps worth folding in here: `DX-69`'s fog-on/off pixel test (fog wiring is real
+   but never exercised with `fogEnabled=true`), the 5 combo `Clear*` variants, window resize
+   (`DX-29`), and device-lost recovery (`DX-27`) are all implemented but never exercised by a test.
+   Already authorized — no go-ahead needed, see §9.
 2. **Decide Task 945** (manual HLSL→GLSL port vs. `dxc`+`SPIRV-Cross` tooling for Phase 78, the
    *unrelated* `../cna-samples` shader-conversion track) — Task 946's data point is in (manual
    porting scaled fine for BloomSample's 3 shaders). Needs project-owner input, do not decide
@@ -452,11 +472,11 @@ desktop session with real GPU access — re-verify before assuming either claim 
 
 ## 9. Do not do yet
 
-- **`plan_dx.md`'s Phase DX8 onward (stock effects, `SpriteBatch`, tests, docs) is authorized** —
-  the project owner authorized continuing autonomously through Phase DX3 → DX5 → DX6 → DX7 → DX8 →
-  DX9 → DX10 → DX11 on 2026-07-13 (Phases DX1/DX2/DX3/DX5/DX6/DX7/DX4-core/`DX-80` are already
-  closed as of this session, see the banner and `plan_dx.md`'s own status banner). Only Phase DX12
-  (D3D12) and `DX-90` (needs a real Windows machine) remain gated — see the next two bullets.
+- **`plan_dx.md`'s Phase DX10 onward (tests, docs) is authorized** — the project owner authorized
+  continuing autonomously through Phase DX3 → DX5 → DX6 → DX7 → DX8 → DX9 → DX10 → DX11 on
+  2026-07-13 (Phases DX1/DX2/DX3/DX5/DX6/DX7/DX8/DX9/DX4-core/`DX-80` are already closed as of this
+  session, see the banner and `plan_dx.md`'s own status banner). Only Phase DX12 (D3D12) and
+  `DX-90` (needs a real Windows machine) remain gated — see the next two bullets.
 - **Do not start `plan_dx.md`'s Phase DX12 (Direct3D 12)** — explicitly deferred, needs a separate,
   later authorization even after all of D3D11 is done (`plan_dx.md` design decision 9).
 - **Do not opportunistically fix the `CnaTests`-under-D3D11 `::setenv` portability gap** (§4) — a
