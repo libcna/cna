@@ -6,8 +6,13 @@
 > throws for buffers/textures/draws/SpriteBatch). `ctest -R D3D11` passes 2/2
 > (`D3D11_Smoke` + `D3D11_Common`, 26 checks total) running through DXVK 2.6.0 on a real GPU (AMD
 > Radeon 780M/RADV) via Wine on this Debian machine. `D3DCommon` (the shared format/state/vertex-
-> layout mapping core) is also real and tested. Full detail, task-by-task, lives in `plan_dx.md`
-> (`DX-1`–`DX-29`, `DX-80` closed; `DX-13-hlsl` HLSL shader porting is the next unstarted step).
+> layout mapping core) is also real and tested. `DX-13-hlsl` (all 20 HLSL shader files, hand-ported
+> line-by-line from the Vulkan GLSL, not yet compiler-verified) also closed 2026-07-13 — next step
+> is `DX-14-compile` (offline HLSL→DXBC compile pipeline). Full detail, task-by-task, lives in
+> `plan_dx.md` (`DX-1`–`DX-29`, `DX-80`, `DX-13-hlsl` closed). Project owner authorized 2026-07-13
+> continuing autonomously through the rest of Phase DX3 → DX5 → DX6 → DX7 → DX8 → DX9 → DX10 → DX11,
+> and Phase DX12 (D3D12) afterward if time allows; `DX-90` (real-Windows checklist) stays
+> `needs_human` — no such machine available in this environment.
 > **This is a brand-new architectural front for the project — read `plan_dx.md`'s own status banner
 > before touching it.** The pre-existing EasyGL/Vulkan/Bgfx/SDL_Renderer/Headless/Software/WebGPU
 > work summarized below is unchanged by this; full history for that lives in `plan_graphics.md`/
