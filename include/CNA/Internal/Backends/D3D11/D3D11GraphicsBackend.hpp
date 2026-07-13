@@ -5,6 +5,7 @@
 
 #include "../Common/IGraphicsBackend.hpp"
 #include "D3D11InputLayoutCache.hpp"
+#include "D3D11SamplerCache.hpp"
 
 #include <d3d11.h>
 #include <dxgi1_5.h>
@@ -13,6 +14,9 @@
 namespace CNA::Internal::Backends::D3D11
 {
     using Microsoft::WRL::ComPtr;
+
+    class D3D11RenderTargetBackend;
+    class D3D11RenderTargetCubeBackend;
 
     /**
      * D3D11 graphics backend (plan_dx.md). Implements IGraphicsBackend on top of Direct3D 11 via
@@ -86,8 +90,36 @@ namespace CNA::Internal::Backends::D3D11
         std::unique_ptr<IIndexBufferBackend> CreateIndexBuffer16(int index_capacity) override;
         std::unique_ptr<IIndexBufferBackend> CreateIndexBuffer32(int index_capacity) override;
 
-        // ---- IGraphicsBackend: honest "not yet implemented" stubs (Phase DX6+) ----
+        // ---- IGraphicsBackend: real (Phase DX6) ----
         std::unique_ptr<ITextureBackend> CreateTexture(const ImageData& data) override;
+        std::unique_ptr<ITexture3DBackend> CreateTexture3D(int w, int h, int depth, bool mipMap, int surfaceFormat) override;
+        std::unique_ptr<ITextureCubeBackend> CreateTextureCube(int size, bool mipMap, int surfaceFormat) override;
+        std::unique_ptr<IRenderTargetBackend> CreateRenderTarget2D(int w, int h, int depthFormat,
+                                                                    bool preserveContents = false,
+                                                                    bool mipMap = false,
+                                                                    int multiSampleCount = 0) override;
+        void SetRenderTarget2D(IRenderTargetBackend* rt) override;
+        std::unique_ptr<IRenderTargetCubeBackend> CreateRenderTargetCube(int size, int depthFormat,
+                                                                          bool mipMap = false,
+                                                                          int multiSampleCount = 0) override;
+        void SetRenderTargets(IRenderTargetBackend* const* rts, int count) override;
+        void ApplySamplerState(int slot, int filter, int addressU, int addressV, int maxAnisotropy) override;
+        std::unique_ptr<IOcclusionQueryBackend> CreateOcclusionQuery() override;
+
+        /// NOXNA (Phase DX6): updates Clear()'s target-RTV/DSV tracking to point at a custom
+        /// render target's own views. Called by D3D11RenderTargetBackend::BindAsRenderTarget()/
+        /// D3D11RenderTargetCubeBackend::BindAsRenderTargetFace() -- those own the real
+        /// OMSetRenderTargets()/viewport call, this only updates what Clear() (and friends) target
+        /// next, since D3D11 has no single "currently bound FBO" the backend can query back.
+        void TrackCurrentRenderTargetEXT(ID3D11RenderTargetView* const* rtvs, int count, ID3D11DepthStencilView* dsv);
+        /// NOXNA (Phase DX6): restores the real back-buffer OM binding + viewport, and Clear()'s
+        /// tracking to match. Called by D3D11RenderTargetBackend/D3D11RenderTargetCubeBackend's
+        /// own UnbindAsRenderTarget() (after any MSAA resolve / mip regeneration they still need
+        /// to do), and internally whenever SetRenderTarget2D(nullptr)/SetRenderTargets(nullptr, 0)
+        /// is used to go straight back to the back buffer.
+        void RestoreBackBufferRenderTargetEXT();
+
+        // ---- IGraphicsBackend: honest "not yet implemented" stubs (Phase DX8+) ----
         std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() override;
         void DrawColoredPrimitives(const IVertexBufferBackend& vb,
                                    const Matrix& world, const Matrix& view, const Matrix& projection,
@@ -128,6 +160,26 @@ namespace CNA::Internal::Backends::D3D11
         ComPtr<ID3D11RenderTargetView> backBufferRTV_;
         ComPtr<ID3D11Texture2D> depthStencilTexture_;
         ComPtr<ID3D11DepthStencilView> depthStencilView_;
+
+        // Phase DX6: tracks whatever Clear()/ClearX should actually target -- the back buffer by
+        // default, or a custom render target's own views once SetRenderTarget2D/SetRenderTargets
+        // binds one (D3D11 has no globally-queryable "current FBO" the way GL does, so this
+        // backend must track it explicitly; see TrackCurrentRenderTargetEXT/
+        // RestoreBackBufferRenderTargetEXT). Raw, non-owning pointers -- lifetime is owned by
+        // backBufferRTV_/depthStencilView_ or by whichever D3D11RenderTargetBackend is currently
+        // bound (which outlives the binding, owned by the caller's RenderTarget2D/Cube).
+        ID3D11RenderTargetView* currentColorRTVs_[D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT] = {};
+        int currentRTVCount_ = 0;
+        ID3D11DepthStencilView* currentDSV_ = nullptr;
+        /// Non-owning; nullptr means the back buffer is the active render target. Used so
+        /// SetRenderTarget2D/SetRenderTargets can finalize (MSAA resolve / mip regen) whatever was
+        /// previously bound before switching to something else, matching how GraphicsDevice only
+        /// ever calls SetRenderTarget2D(nullptr) to signal "go back to the back buffer" rather
+        /// than calling the old target's UnbindAsRenderTarget() itself.
+        D3D11RenderTargetBackend* currentCustomRT_ = nullptr;
+
+        // Phase DX6 (DX-44): sampler-state cache shared by ApplySamplerState().
+        D3D11SamplerCache samplerCache_;
 
         // Presentation policy (plan_dx.md design decision 13: capability vs. policy, kept separate).
         bool vsyncEnabled_ = true;

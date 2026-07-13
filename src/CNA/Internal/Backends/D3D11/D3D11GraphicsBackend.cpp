@@ -1,6 +1,9 @@
 // plan_dx.md Phase DX2/DX4: D3D11 backend skeleton + device/swap-chain/back-buffer.
 #include "CNA/Internal/Backends/D3D11/D3D11GraphicsBackend.hpp"
 #include "CNA/Internal/Backends/D3D11/D3D11Buffers.hpp"
+#include "CNA/Internal/Backends/D3D11/D3D11Textures.hpp"
+#include "CNA/Internal/Backends/D3D11/D3D11RenderTargets.hpp"
+#include "CNA/Internal/Backends/D3D11/D3D11OcclusionQuery.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -197,6 +200,12 @@ namespace CNA::Internal::Backends::D3D11
         vp.MinDepth = 0.0f;
         vp.MaxDepth = 1.0f;
         context_->RSSetViewports(1, &vp);
+
+        // Phase DX6: Clear()/ClearX target whatever's tracked here -- initialise/reset it to the
+        // back buffer every time this is (re)created (construction, and DX-29 resize).
+        currentColorRTVs_[0] = backBufferRTV_.Get();
+        currentRTVCount_ = 1;
+        currentDSV_ = depthStencilView_.Get();
     }
 
     void D3D11GraphicsBackend::ReleaseWindowSizeDependentViews()
@@ -250,7 +259,13 @@ namespace CNA::Internal::Backends::D3D11
     void D3D11GraphicsBackend::Clear(float r, float g, float b, float a)
     {
         const float color[4] = { r, g, b, a };
-        context_->ClearRenderTargetView(backBufferRTV_.Get(), color);
+        // Phase DX6: clears whatever's currently bound (custom render target(s) or MRT set), not
+        // always the back buffer -- matches every other backend's "clear the active target(s)"
+        // semantics once SetRenderTarget2D/SetRenderTargets has bound something.
+        for (int i = 0; i < currentRTVCount_; ++i)
+        {
+            if (currentColorRTVs_[i]) context_->ClearRenderTargetView(currentColorRTVs_[i], color);
+        }
     }
 
     void D3D11GraphicsBackend::Present()
@@ -353,41 +368,43 @@ namespace CNA::Internal::Backends::D3D11
     void D3D11GraphicsBackend::ClearColorAndDepth(float r, float g, float b, float a, float depth)
     {
         Clear(r, g, b, a);
-        context_->ClearDepthStencilView(depthStencilView_.Get(), D3D11_CLEAR_DEPTH, depth, 0);
+        if (currentDSV_) context_->ClearDepthStencilView(currentDSV_, D3D11_CLEAR_DEPTH, depth, 0);
     }
 
     void D3D11GraphicsBackend::ClearDepth(float depth)
     {
-        context_->ClearDepthStencilView(depthStencilView_.Get(), D3D11_CLEAR_DEPTH, depth, 0);
+        if (currentDSV_) context_->ClearDepthStencilView(currentDSV_, D3D11_CLEAR_DEPTH, depth, 0);
     }
 
     void D3D11GraphicsBackend::ClearStencil(int stencil)
     {
-        context_->ClearDepthStencilView(
-            depthStencilView_.Get(), D3D11_CLEAR_STENCIL, 1.0f, static_cast<UINT8>(stencil));
+        if (currentDSV_)
+            context_->ClearDepthStencilView(
+                currentDSV_, D3D11_CLEAR_STENCIL, 1.0f, static_cast<UINT8>(stencil));
     }
 
     void D3D11GraphicsBackend::ClearDepthAndStencil(float depth, int stencil)
     {
-        context_->ClearDepthStencilView(
-            depthStencilView_.Get(), D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, depth,
-            static_cast<UINT8>(stencil));
+        if (currentDSV_)
+            context_->ClearDepthStencilView(
+                currentDSV_, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, depth, static_cast<UINT8>(stencil));
     }
 
     void D3D11GraphicsBackend::ClearColorAndStencil(float r, float g, float b, float a, int stencil)
     {
         Clear(r, g, b, a);
-        context_->ClearDepthStencilView(
-            depthStencilView_.Get(), D3D11_CLEAR_STENCIL, 1.0f, static_cast<UINT8>(stencil));
+        if (currentDSV_)
+            context_->ClearDepthStencilView(
+                currentDSV_, D3D11_CLEAR_STENCIL, 1.0f, static_cast<UINT8>(stencil));
     }
 
     void D3D11GraphicsBackend::ClearColorDepthAndStencil(
         float r, float g, float b, float a, float depth, int stencil)
     {
         Clear(r, g, b, a);
-        context_->ClearDepthStencilView(
-            depthStencilView_.Get(), D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, depth,
-            static_cast<UINT8>(stencil));
+        if (currentDSV_)
+            context_->ClearDepthStencilView(
+                currentDSV_, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, depth, static_cast<UINT8>(stencil));
     }
 
     // State setters: stored/applied for real once Phase DX7 (state objects) lands. Storing them
@@ -400,8 +417,143 @@ namespace CNA::Internal::Backends::D3D11
 
     std::unique_ptr<ITextureBackend> D3D11GraphicsBackend::CreateTexture(const ImageData& data)
     {
-        (void)data;
-        throw std::runtime_error("D3D11GraphicsBackend::CreateTexture: not yet implemented (plan_dx.md Phase DX6)");
+        return std::make_unique<D3D11TextureBackend>(device_.Get(), context_.Get(), data);
+    }
+
+    std::unique_ptr<ITexture3DBackend> D3D11GraphicsBackend::CreateTexture3D(
+        int w, int h, int depth, bool mipMap, int surfaceFormat)
+    {
+        return std::make_unique<D3D11Texture3DBackend>(device_.Get(), context_.Get(), w, h, depth, mipMap, surfaceFormat);
+    }
+
+    std::unique_ptr<ITextureCubeBackend> D3D11GraphicsBackend::CreateTextureCube(
+        int size, bool mipMap, int surfaceFormat)
+    {
+        return std::make_unique<D3D11TextureCubeBackend>(device_.Get(), context_.Get(), size, mipMap, surfaceFormat);
+    }
+
+    std::unique_ptr<IRenderTargetBackend> D3D11GraphicsBackend::CreateRenderTarget2D(
+        int w, int h, int depthFormat, bool preserveContents, bool mipMap, int multiSampleCount)
+    {
+        (void)preserveContents; // D3D11_USAGE_DEFAULT + ResolveSubresource-on-unbind already always
+                                 // preserves prior contents across binds (no "discard on bind" path
+                                 // exists in this backend) -- matches EasyGL/Vulkan's own honoring
+                                 // of RenderTargetUsage as a hint GraphicsDevice.SetRenderTarget()
+                                 // itself acts on (an explicit Clear() call), not something the
+                                 // backend needs to special-case at creation time.
+        return std::make_unique<D3D11::D3D11RenderTargetBackend>(
+            this, device_.Get(), context_.Get(), w, h, depthFormat, mipMap, multiSampleCount);
+    }
+
+    void D3D11GraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* rt)
+    {
+        if (currentCustomRT_) currentCustomRT_->UnbindAsRenderTarget();
+        if (!rt)
+        {
+            currentCustomRT_ = nullptr;
+            return;
+        }
+        auto* d3drt = static_cast<D3D11RenderTargetBackend*>(rt);
+        currentCustomRT_ = d3drt;
+        d3drt->BindAsRenderTarget();
+    }
+
+    std::unique_ptr<IRenderTargetCubeBackend> D3D11GraphicsBackend::CreateRenderTargetCube(
+        int size, int depthFormat, bool mipMap, int multiSampleCount)
+    {
+        (void)multiSampleCount; // D3D11RenderTargetCubeBackend deliberately doesn't support MSAA
+                                 // (see its own header comment) -- silently ignored, same as every
+                                 // other backend's undocumented-parameter-combination behavior
+                                 // rather than throwing on a combination a game is unlikely to hit.
+        return std::make_unique<D3D11::D3D11RenderTargetCubeBackend>(
+            this, device_.Get(), context_.Get(), size, depthFormat, mipMap);
+    }
+
+    void D3D11GraphicsBackend::SetRenderTargets(IRenderTargetBackend* const* rts, int count)
+    {
+        if (currentCustomRT_)
+        {
+            currentCustomRT_->UnbindAsRenderTarget();
+            currentCustomRT_ = nullptr;
+        }
+        if (!rts || count <= 0)
+        {
+            return; // UnbindAsRenderTarget() above already restored the back buffer, if needed.
+        }
+
+        const int n = std::min(count, static_cast<int>(D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT));
+        ID3D11RenderTargetView* rtvs[D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT] = {};
+        for (int i = 0; i < n; ++i)
+        {
+            auto* d3drt = rts[i] ? static_cast<D3D11RenderTargetBackend*>(rts[i]) : nullptr;
+            rtvs[i] = d3drt ? d3drt->GetRTVEXT() : nullptr;
+        }
+
+        auto* first = rts[0] ? static_cast<D3D11RenderTargetBackend*>(rts[0]) : nullptr;
+        ID3D11DepthStencilView* dsv = first ? first->GetDSVEXT() : nullptr;
+        const int w = first ? first->GetWidth() : width_;
+        const int h = first ? first->GetHeight() : height_;
+
+        context_->OMSetRenderTargets(static_cast<UINT>(n), rtvs, dsv);
+
+        D3D11_VIEWPORT vp{};
+        vp.TopLeftX = 0.0f;
+        vp.TopLeftY = 0.0f;
+        vp.Width = static_cast<float>(w);
+        vp.Height = static_cast<float>(h);
+        vp.MinDepth = 0.0f;
+        vp.MaxDepth = 1.0f;
+        context_->RSSetViewports(1, &vp);
+
+        TrackCurrentRenderTargetEXT(rtvs, n, dsv);
+        // Note (DX-46 scope decision): MRT targets are NOT tracked in currentCustomRT_, so an MSAA
+        // resolve / mip regeneration on any individual target in this set is not automatically
+        // triggered when switching away from this MRT binding -- single-target MSAA/mip render
+        // targets (SetRenderTarget2D above) are fully finalized; the N>1 MRT case is real binding
+        // + real Clear() support, honestly not carrying the same finalize-on-unbind guarantee yet
+        // (no draw path exists to actually exercise MRT output until Phase DX8 lands anyway).
+    }
+
+    void D3D11GraphicsBackend::ApplySamplerState(int slot, int filter, int addressU, int addressV, int maxAnisotropy)
+    {
+        if (slot < 0 || slot >= D3D11_COMMONSHADER_SAMPLER_SLOT_COUNT) return;
+        auto sampler = samplerCache_.GetOrCreate(device_.Get(), filter, addressU, addressV, maxAnisotropy);
+        ID3D11SamplerState* raw = sampler.Get();
+        context_->PSSetSamplers(static_cast<UINT>(slot), 1, &raw);
+    }
+
+    std::unique_ptr<IOcclusionQueryBackend> D3D11GraphicsBackend::CreateOcclusionQuery()
+    {
+        return std::make_unique<D3D11OcclusionQueryBackend>(device_.Get(), context_.Get());
+    }
+
+    void D3D11GraphicsBackend::TrackCurrentRenderTargetEXT(
+        ID3D11RenderTargetView* const* rtvs, int count, ID3D11DepthStencilView* dsv)
+    {
+        currentRTVCount_ = std::clamp(count, 0, static_cast<int>(D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT));
+        for (int i = 0; i < currentRTVCount_; ++i) currentColorRTVs_[i] = rtvs[i];
+        for (int i = currentRTVCount_; i < D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT; ++i) currentColorRTVs_[i] = nullptr;
+        currentDSV_ = dsv;
+    }
+
+    void D3D11GraphicsBackend::RestoreBackBufferRenderTargetEXT()
+    {
+        ID3D11RenderTargetView* rtv = backBufferRTV_.Get();
+        context_->OMSetRenderTargets(1, &rtv, depthStencilView_.Get());
+
+        D3D11_VIEWPORT vp{};
+        vp.TopLeftX = 0.0f;
+        vp.TopLeftY = 0.0f;
+        vp.Width = static_cast<float>(width_);
+        vp.Height = static_cast<float>(height_);
+        vp.MinDepth = 0.0f;
+        vp.MaxDepth = 1.0f;
+        context_->RSSetViewports(1, &vp);
+
+        currentColorRTVs_[0] = backBufferRTV_.Get();
+        currentRTVCount_ = 1;
+        for (int i = 1; i < D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT; ++i) currentColorRTVs_[i] = nullptr;
+        currentDSV_ = depthStencilView_.Get();
     }
 
     std::unique_ptr<ISpriteBatchBackend> D3D11GraphicsBackend::CreateSpriteBatch()

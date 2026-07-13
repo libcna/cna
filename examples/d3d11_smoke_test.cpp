@@ -15,6 +15,27 @@
 // Check G (DX-32) -- D3D11InputLayoutCache actually calls CreateInputLayout() against a real
 //   vertex shader's DXBC input signature for a couple of DX-16-vtx's established strides, and
 //   caching returns the identical object on a second request for the same (variant, stride).
+// Check H (DX-40) -- a real D3D11TextureBackend round-trips known RGBA8 pixel data: constructed
+//   from an ImageData, then read back via a staging-texture copy and compared byte-for-byte.
+// Check I (DX-41/DX-42) -- D3D11TextureCubeBackend/D3D11Texture3DBackend SetData()+GetData() also
+//   round-trip exact bytes for a sub-region of one cube face / one 3D slice.
+// Check J (DX-43) -- a real offscreen D3D11RenderTargetBackend: BindAsRenderTarget(), Clear() (now
+//   routed to whatever's actually bound, not hardcoded to the back buffer), UnbindAsRenderTarget(),
+//   then a direct staging-texture readback of the render target's own color texture confirms the
+//   exact clear color -- and a follow-up back-buffer Clear()+readback confirms Unbind() genuinely
+//   restored the back buffer as Clear()'s target (not left pointing at the old RT).
+// Check K (DX-45) -- same round-trip proof for an MSAA render target, whose ResolveSubresource()
+//   (triggered by UnbindAsRenderTarget()) must produce the same clear color in the resolved,
+//   sampleable texture.
+// Check L (DX-44) -- D3D11SamplerCache creates a real ID3D11SamplerState and returns the identical
+//   object for a repeat request with the same XNA-level sampler fields.
+// Check M (DX-47) -- a real ID3D11Query(D3D11_QUERY_OCCLUSION) completes and reports data through
+//   Begin()/End()/IsComplete()/PixelCount() (drawless, so PixelCount() is 0 -- the point of this
+//   check is that the query object is real and GetData() succeeds, not a nonzero count).
+// Check N (DX-46) -- SetRenderTargets() with 2 render targets performs one real OMSetRenderTargets
+//   call binding both RTVs, and Clear() correctly clears both (a real multi-target readback, not
+//   just "the call didn't throw") -- MRT output without an actual multi-target-writing shader
+//   (Phase DX8) is proven exactly this far, honestly, and no further.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
@@ -26,7 +47,12 @@
 
 #include "CNA/Internal/Backends/D3D11/D3D11GraphicsBackend.hpp"
 #include "CNA/Internal/Backends/D3D11/D3D11Buffers.hpp"
+#include "CNA/Internal/Backends/D3D11/D3D11Textures.hpp"
+#include "CNA/Internal/Backends/D3D11/D3D11RenderTargets.hpp"
+#include "CNA/Internal/Backends/D3D11/D3D11SamplerCache.hpp"
+#include "CNA/Internal/Backends/D3D11/D3D11OcclusionQuery.hpp"
 #include "CNA/Internal/Backends/D3DCommon/D3DShaderCache.hpp"
+#include "CNA/Internal/Graphics/ImageData.hpp"
 
 #include <cstdio>
 #include <cstdlib>
@@ -37,6 +63,8 @@
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
 using namespace CNA::Internal::Backends::D3D11;
+using CNA::Internal::Backends::ImageData;
+using CNA::Internal::Backends::IRenderTargetBackend;
 using CNA::Internal::Backends::D3DCommon::D3DShaderVariant;
 using CNA::Internal::Backends::D3DCommon::CreateVertexShaderForVariant;
 using CNA::Internal::Backends::D3DCommon::CreatePixelShaderForVariant;
@@ -67,6 +95,43 @@ namespace
 
         std::vector<uint8_t> result(byteWidth);
         std::memcpy(result.data(), mapped.pData, byteWidth);
+        context->Unmap(staging.Get(), 0);
+        return result;
+    }
+
+    /// Reads a w*h RGBA8 region starting at (x,y) out of subresource 0 of an arbitrary
+    /// ID3D11Texture2D via the same staging-texture CopyResource+Map(READ) technique
+    /// D3D11GraphicsBackend::ReadBackbuffer() uses for the swap chain's own back buffer --
+    /// test-only, since production code never reads a color/render-target texture back this way.
+    std::vector<uint8_t> ReadTexture2DRegion(ID3D11Device* device, ID3D11DeviceContext* context,
+                                             ID3D11Texture2D* texture, int x, int y, int w, int h)
+    {
+        D3D11_TEXTURE2D_DESC desc{};
+        texture->GetDesc(&desc);
+        D3D11_TEXTURE2D_DESC stagingDesc = desc;
+        stagingDesc.Usage = D3D11_USAGE_STAGING;
+        stagingDesc.BindFlags = 0;
+        stagingDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+        stagingDesc.MiscFlags = 0;
+
+        Microsoft::WRL::ComPtr<ID3D11Texture2D> staging;
+        if (FAILED(device->CreateTexture2D(&stagingDesc, nullptr, staging.GetAddressOf())))
+            return {};
+        context->CopyResource(staging.Get(), texture);
+
+        D3D11_MAPPED_SUBRESOURCE mapped{};
+        if (FAILED(context->Map(staging.Get(), 0, D3D11_MAP_READ, 0, &mapped)))
+            return {};
+
+        std::vector<uint8_t> result(static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4);
+        for (int row = 0; row < h; ++row)
+        {
+            const uint8_t* src = static_cast<const uint8_t*>(mapped.pData)
+                                + static_cast<std::size_t>(y + row) * mapped.RowPitch
+                                + static_cast<std::size_t>(x) * 4;
+            std::memcpy(result.data() + static_cast<std::size_t>(row) * static_cast<std::size_t>(w) * 4,
+                       src, static_cast<std::size_t>(w) * 4);
+        }
         context->Unmap(staging.Get(), 0);
         return result;
     }
@@ -237,7 +302,190 @@ protected:
                   "D3D11InputLayoutCache: skinned3d @ stride 52 creates a real ID3D11InputLayout");
         }
 
-        const int totalChecks = 3 + 10 + 1 + 2 + 2;
+        // Check H (DX-40): a real 2D texture round-trips exact RGBA8 bytes, both at construction
+        // (level 0 from ImageData) and via a later UpdatePixelsLevel() replacement.
+        {
+            ImageData img;
+            img.width = 4;
+            img.height = 4;
+            img.mipLevels = 1;
+            img.pixels.resize(4 * 4 * 4);
+            for (int i = 0; i < 4 * 4; ++i)
+            {
+                img.pixels[i * 4 + 0] = 10; img.pixels[i * 4 + 1] = 20;
+                img.pixels[i * 4 + 2] = 30; img.pixels[i * 4 + 3] = 255;
+            }
+            auto tex = backend.CreateTexture(img);
+            auto* d3dTex = static_cast<D3D11TextureBackend*>(tex.get());
+            const auto readBack = ReadTexture2DRegion(device, context, d3dTex->GetTextureEXT(), 0, 0, 4, 4);
+            check(tex->GetWidth() == 4 && tex->GetHeight() == 4 && readBack == img.pixels,
+                  "D3D11TextureBackend: constructor upload round-trips exact RGBA8 pixel bytes");
+
+            std::vector<uint8_t> newPixels(4 * 4 * 4);
+            for (int i = 0; i < 4 * 4; ++i)
+            {
+                newPixels[i * 4 + 0] = 99; newPixels[i * 4 + 1] = 88;
+                newPixels[i * 4 + 2] = 77; newPixels[i * 4 + 3] = 255;
+            }
+            tex->UpdatePixelsLevel(0, newPixels.data(), 4, 4);
+            const auto readBack2 = ReadTexture2DRegion(device, context, d3dTex->GetTextureEXT(), 0, 0, 4, 4);
+            check(readBack2 == newPixels,
+                  "D3D11TextureBackend: UpdatePixelsLevel() round-trips exact replacement bytes");
+        }
+
+        // Check I (DX-41/DX-42): cube-map and 3D texture SetData()/GetData() round-trip exact
+        // bytes for a sub-region -- one face + a sub-volume, not just level 0's full extent.
+        {
+            auto cube = backend.CreateTextureCube(8, false, 0);
+            std::vector<uint8_t> faceData(4 * 4 * 4);
+            for (int i = 0; i < 4 * 4; ++i)
+            {
+                faceData[i * 4 + 0] = 1; faceData[i * 4 + 1] = 2;
+                faceData[i * 4 + 2] = 3; faceData[i * 4 + 3] = 255;
+            }
+            cube->SetData(2, 0, 2, 2, 4, 4, faceData.data(), static_cast<int>(faceData.size()));
+            std::vector<uint8_t> readFace(4 * 4 * 4, 0);
+            cube->GetData(2, 0, 2, 2, 4, 4, readFace.data(), static_cast<int>(readFace.size()));
+            check(readFace == faceData,
+                  "D3D11TextureCubeBackend: SetData()/GetData() round-trip exact bytes for one face's sub-region");
+
+            auto vol = backend.CreateTexture3D(4, 4, 4, false, 0);
+            std::vector<uint8_t> sliceData(2 * 2 * 2 * 4);
+            for (int i = 0; i < 2 * 2 * 2; ++i)
+            {
+                sliceData[i * 4 + 0] = 9; sliceData[i * 4 + 1] = 8;
+                sliceData[i * 4 + 2] = 7; sliceData[i * 4 + 3] = 255;
+            }
+            vol->SetData(0, 1, 1, 1, 2, 2, 2, sliceData.data(), static_cast<int>(sliceData.size()));
+            std::vector<uint8_t> readSlice(2 * 2 * 2 * 4, 0);
+            vol->GetData(0, 1, 1, 1, 2, 2, 2, readSlice.data(), static_cast<int>(readSlice.size()));
+            check(readSlice == sliceData,
+                  "D3D11Texture3DBackend: SetData()/GetData() round-trip exact bytes for a sub-volume");
+        }
+
+        // Check J (DX-43): BindAsRenderTarget()+Clear() (now routed to whatever's bound, not the
+        // hardcoded back buffer) writes the exact color into the render target's own texture, and
+        // UnbindAsRenderTarget() genuinely restores the back buffer as Clear()'s next target.
+        {
+            auto rt = backend.CreateRenderTarget2D(8, 8, 0 /*DepthFormat::None*/, false, false, 0);
+            auto* d3dRt = static_cast<D3D11RenderTargetBackend*>(rt.get());
+            backend.SetRenderTarget2D(rt.get());
+            dev.Clear(Color(11, 22, 33, 255));
+            backend.SetRenderTarget2D(nullptr);
+
+            const auto rtPixels = ReadTexture2DRegion(device, context, d3dRt->GetSampleableTextureEXT(), 0, 0, 4, 4);
+            bool rtMatches = true;
+            for (int i = 0; i < 4 * 4 && rtMatches; ++i)
+            {
+                rtMatches = rtPixels[i * 4 + 0] == 11 && rtPixels[i * 4 + 1] == 22 &&
+                           rtPixels[i * 4 + 2] == 33 && rtPixels[i * 4 + 3] == 255;
+            }
+            check(rtMatches,
+                  "D3D11RenderTargetBackend: BindAsRenderTarget()+Clear() writes the exact color into the RT's own texture");
+
+            dev.Clear(Color(44, 55, 66, 255));
+            const Microsoft::Xna::Framework::Rectangle bbRegion(0, 0, 4, 4);
+            std::vector<Color> bbPixels(4 * 4, Color(0, 0, 0, 0));
+            dev.GetBackBufferData(&bbRegion, bbPixels.data(), 0, static_cast<int>(bbPixels.size()));
+            bool bbMatches = true;
+            for (const Color& p : bbPixels)
+            {
+                if (p.getRProperty() != 44 || p.getGProperty() != 55 || p.getBProperty() != 66 ||
+                    p.getAProperty() != 255)
+                {
+                    bbMatches = false;
+                    break;
+                }
+            }
+            check(bbMatches,
+                  "D3D11RenderTargetBackend: UnbindAsRenderTarget() genuinely restores the back buffer as Clear()'s target");
+        }
+
+        // Check K (DX-45): an MSAA render target's ResolveSubresource()-on-unbind produces the
+        // exact clear color in the resolved, sampleable texture. Pass/fail is purely about pixel
+        // correctness -- whether the device actually granted real multi-sampling (vs. this
+        // backend's own real, device-queried fallback to single-sample) is printed as
+        // diagnostics, not gated on, since that's real hardware/driver capability, not a bug here.
+        {
+            auto rtMsaa = backend.CreateRenderTarget2D(8, 8, 0, false, false, 4);
+            auto* d3dRtMsaa = static_cast<D3D11RenderTargetBackend*>(rtMsaa.get());
+            backend.SetRenderTarget2D(rtMsaa.get());
+            dev.Clear(Color(77, 88, 99, 255));
+            backend.SetRenderTarget2D(nullptr);
+
+            const auto resolved = ReadTexture2DRegion(
+                device, context, d3dRtMsaa->GetSampleableTextureEXT(), 0, 0, 4, 4);
+            bool msaaMatches = true;
+            for (int i = 0; i < 4 * 4 && msaaMatches; ++i)
+            {
+                msaaMatches = resolved[i * 4 + 0] == 77 && resolved[i * 4 + 1] == 88 &&
+                             resolved[i * 4 + 2] == 99 && resolved[i * 4 + 3] == 255;
+            }
+            check(msaaMatches,
+                  "D3D11RenderTargetBackend (MSAA): Clear()+resolve-on-unbind produces the exact color in the resolved texture");
+            std::printf("    MSAA: requested 4x, device-applied %dx\n", d3dRtMsaa->GetMultiSampleCount());
+        }
+
+        // Check L (DX-44): the sampler cache creates a real ID3D11SamplerState, caches it for
+        // identical XNA-level state, and creates a distinct object for different state; then
+        // exercise the backend's own ApplySamplerState() (PSSetSamplers wiring) end-to-end.
+        {
+            D3D11SamplerCache cache;
+            auto s1 = cache.GetOrCreate(device, 0, 0, 0, 1);
+            auto s2 = cache.GetOrCreate(device, 0, 0, 0, 1);
+            auto s3 = cache.GetOrCreate(device, 2, 1, 1, 4);
+            check(s1 != nullptr && s1.Get() == s2.Get() && s3 != nullptr && s3.Get() != s1.Get() &&
+                      cache.GetCacheSizeEXT() == 2,
+                  "D3D11SamplerCache: caches identical XNA-level state, creates a distinct object for different state");
+            backend.ApplySamplerState(0, 0, 0, 0, 1);
+        }
+
+        // Check M (DX-47): a real ID3D11Query(D3D11_QUERY_OCCLUSION) completes and reports data.
+        // PixelCount() == 0 is expected here (no draws occur between Begin()/End()) -- the point
+        // of this check is that the query object is real and GetData() succeeds, not a nonzero
+        // count (this backend has no draw path to exercise until Phase DX8).
+        {
+            auto oq = backend.CreateOcclusionQuery();
+            oq->Begin();
+            oq->End();
+            context->Flush();
+            bool completed = false;
+            for (int i = 0; i < 100000 && !completed; ++i) completed = oq->IsComplete();
+            check(oq != nullptr && completed,
+                  "D3D11OcclusionQueryBackend: a real ID3D11Query completes and reports data");
+            check(oq->PixelCount() == 0,
+                  "D3D11OcclusionQueryBackend: PixelCount() is 0 with no draws between Begin()/End()");
+        }
+
+        // Check N (DX-46): SetRenderTargets() with 2 targets performs one real OMSetRenderTargets
+        // call binding both RTVs, and Clear() writes the exact color into both -- real MRT
+        // binding + clear, honestly not a claim about multi-target shader output (no draw path
+        // exists yet, Phase DX8).
+        {
+            auto rtA = backend.CreateRenderTarget2D(4, 4, 0, false, false, 0);
+            auto rtB = backend.CreateRenderTarget2D(4, 4, 0, false, false, 0);
+            auto* d3dRtA = static_cast<D3D11RenderTargetBackend*>(rtA.get());
+            auto* d3dRtB = static_cast<D3D11RenderTargetBackend*>(rtB.get());
+            IRenderTargetBackend* rts[2] = { rtA.get(), rtB.get() };
+            backend.SetRenderTargets(rts, 2);
+            dev.Clear(Color(123, 45, 67, 255));
+            backend.SetRenderTargets(nullptr, 0);
+
+            const auto pixelsA = ReadTexture2DRegion(device, context, d3dRtA->GetSampleableTextureEXT(), 0, 0, 4, 4);
+            const auto pixelsB = ReadTexture2DRegion(device, context, d3dRtB->GetSampleableTextureEXT(), 0, 0, 4, 4);
+            bool mrtMatches = true;
+            for (int i = 0; i < 4 * 4 && mrtMatches; ++i)
+            {
+                mrtMatches = pixelsA[i * 4 + 0] == 123 && pixelsA[i * 4 + 1] == 45 &&
+                            pixelsA[i * 4 + 2] == 67 && pixelsA[i * 4 + 3] == 255 &&
+                            pixelsB[i * 4 + 0] == 123 && pixelsB[i * 4 + 1] == 45 &&
+                            pixelsB[i * 4 + 2] == 67 && pixelsB[i * 4 + 3] == 255;
+            }
+            check(mrtMatches,
+                  "D3D11GraphicsBackend::SetRenderTargets() (MRT): one OMSetRenderTargets binds both targets, Clear() writes both");
+        }
+
+        const int totalChecks = 3 + 10 + 1 + 2 + 2 + 2 + 2 + 2 + 1 + 1 + 2 + 1;
         std::printf("=== %d/%d PASS ===\n", passCount_, totalChecks);
         result_ = (passCount_ == totalChecks) ? 0 : 1;
         Exit();
