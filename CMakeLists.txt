@@ -270,6 +270,16 @@ target_include_directories(cna_backend_graphics_common INTERFACE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
+# plan_dx.md design decision 4: D3DCommon shared core, consumed by cna_backend_graphics_d3d11 (and,
+# once Phase DX12 is authorized, cna_backend_graphics_d3d12). Only built when actually needed --
+# same discipline as every other on-demand backend dependency in this file.
+if(CNA_GRAPHICS_BACKEND STREQUAL "D3D11" OR CNA_GRAPHICS_BACKEND STREQUAL "D3D12")
+    file(GLOB D3DCOMMON_SOURCES "src/CNA/Internal/Backends/D3DCommon/*.cpp")
+    add_library(cna_backend_graphics_d3dcommon STATIC ${D3DCOMMON_SOURCES})
+    target_link_libraries(cna_backend_graphics_d3dcommon PUBLIC cna_backend_graphics_common SHARP_RUNTIME d3d11 dxgi)
+    target_include_directories(cna_backend_graphics_d3dcommon PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+endif()
+
 # Backend target
 file(GLOB BACKEND_SOURCES "${BACKEND_DIR}/*.cpp")
 add_library(${BACKEND_TARGET} STATIC ${BACKEND_SOURCES})
@@ -298,7 +308,7 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "D3D11")
     # plan_dx.md design decision 3: minimal confirmed link set only (DX-1) -- d3dcompiler is
     # deliberately NOT linked here, it belongs only to the offline shader-compile tool / DX-58's
     # runtime custom-effect path, never the main backend target.
-    target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 d3d11 dxgi)
+    target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 d3d11 dxgi cna_backend_graphics_d3dcommon)
 endif()
 
 file(GLOB_RECURSE CNA_SOURCES CONFIGURE_DEPENDS
@@ -6600,6 +6610,15 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D11")
         COMMAND ${CMAKE_SOURCE_DIR}/scripts/run-wine-dxvk.sh $<TARGET_FILE:cna_test_d3d11_smoke>)
     set_tests_properties(D3D11_Smoke PROPERTIES
         TIMEOUT 60
+        LABELS "D3D11")
+
+    # Phase DX3: pure-function checks for D3DCommon's format/state/vertex-layout mapping tables --
+    # no device/window/GPU needed.
+    cna_d3d11_test(cna_test_d3d11_common examples/d3d11_common_test.cpp)
+    add_test(NAME D3D11_Common
+        COMMAND ${CMAKE_SOURCE_DIR}/scripts/run-wine-dxvk.sh $<TARGET_FILE:cna_test_d3d11_common>)
+    set_tests_properties(D3D11_Common PROPERTIES
+        TIMEOUT 30
         LABELS "D3D11")
 endif()
 
