@@ -422,6 +422,7 @@ namespace CNA::Internal::Backends::Headless
     {
         resourceId_ = state_->registry.Register("SpriteBatch", state_->CurrentDebugLabel());
         state_->stats.spriteBatchesCreated++;
+        state_->RecordTrace("CreateSpriteBatch", "");
     }
 
     HeadlessSpriteBatchBackend::~HeadlessSpriteBatchBackend()
@@ -489,6 +490,7 @@ namespace CNA::Internal::Backends::Headless
     {
         resourceId_ = state_->registry.Register("OcclusionQuery", state_->CurrentDebugLabel());
         state_->stats.occlusionQueriesCreated++;
+        state_->RecordTrace("CreateOcclusionQuery", "");
     }
 
     HeadlessOcclusionQueryBackend::~HeadlessOcclusionQueryBackend()
@@ -691,22 +693,48 @@ namespace CNA::Internal::Backends::Headless
                    std::to_string(targetHeight) + ")");
         }
         state_->stats.viewportChangeCount++;
+        state_->RecordTrace("SetViewport", std::to_string(x) + "," + std::to_string(y) + "," +
+                            std::to_string(w) + "x" + std::to_string(h));
     }
 
     void HeadlessGraphicsBackend::ClearColorAndDepth(float r, float g, float b, float a, float /*depth*/)
     { Clear(r, g, b, a); }
-    void HeadlessGraphicsBackend::ClearDepth(float /*depth*/) { state_->stats.clearCount++; }
-    void HeadlessGraphicsBackend::ClearStencil(int /*stencil*/) { state_->stats.clearCount++; }
-    void HeadlessGraphicsBackend::ClearDepthAndStencil(float /*depth*/, int /*stencil*/) { state_->stats.clearCount++; }
+    void HeadlessGraphicsBackend::ClearDepth(float /*depth*/)
+    {
+        state_->stats.clearCount++;
+        state_->RecordTrace("ClearDepth", "");
+    }
+    void HeadlessGraphicsBackend::ClearStencil(int /*stencil*/)
+    {
+        state_->stats.clearCount++;
+        state_->RecordTrace("ClearStencil", "");
+    }
+    void HeadlessGraphicsBackend::ClearDepthAndStencil(float /*depth*/, int /*stencil*/)
+    {
+        state_->stats.clearCount++;
+        state_->RecordTrace("ClearDepthAndStencil", "");
+    }
     void HeadlessGraphicsBackend::ClearColorAndStencil(float r, float g, float b, float a, int /*stencil*/)
     { Clear(r, g, b, a); }
     void HeadlessGraphicsBackend::ClearColorDepthAndStencil(float r, float g, float b, float a, float /*depth*/,
                                                         int /*stencil*/)
     { Clear(r, g, b, a); }
 
-    void HeadlessGraphicsBackend::SetDepthTestEnabled(bool /*enabled*/) { state_->stats.depthStencilStateChangeCount++; }
-    void HeadlessGraphicsBackend::SetBlendEnabled(bool /*enabled*/) { state_->stats.blendStateChangeCount++; }
-    void HeadlessGraphicsBackend::SetDepthWriteEnabled(bool /*enabled*/) { state_->stats.depthStencilStateChangeCount++; }
+    void HeadlessGraphicsBackend::SetDepthTestEnabled(bool enabled)
+    {
+        state_->stats.depthStencilStateChangeCount++;
+        state_->RecordTrace("SetDepthTestEnabled", enabled ? "true" : "false");
+    }
+    void HeadlessGraphicsBackend::SetBlendEnabled(bool enabled)
+    {
+        state_->stats.blendStateChangeCount++;
+        state_->RecordTrace("SetBlendEnabled", enabled ? "true" : "false");
+    }
+    void HeadlessGraphicsBackend::SetDepthWriteEnabled(bool enabled)
+    {
+        state_->stats.depthStencilStateChangeCount++;
+        state_->RecordTrace("SetDepthWriteEnabled", enabled ? "true" : "false");
+    }
 
     std::unique_ptr<IVertexBufferBackend> HeadlessGraphicsBackend::CreateVertexBuffer(int vertex_capacity)
     {
@@ -864,6 +892,52 @@ namespace CNA::Internal::Backends::Headless
     {
         const std::string text = FormatTraceLog();
         std::fwrite(text.data(), 1, text.size(), out);
+    }
+
+    HeadlessTraceLogDiff CompareTraceLogs(const std::vector<HeadlessTraceEntry>& baseline,
+                                          const std::vector<HeadlessTraceEntry>& current)
+    {
+        const std::size_t n = std::min(baseline.size(), current.size());
+        for (std::size_t i = 0; i < n; ++i)
+        {
+            const HeadlessTraceEntry& a = baseline[i];
+            const HeadlessTraceEntry& b = current[i];
+            if (a.frameIndex != b.frameIndex || a.method != b.method || a.argsSummary != b.argsSummary)
+                return HeadlessTraceLogDiff{false, i};
+        }
+        if (baseline.size() != current.size())
+            return HeadlessTraceLogDiff{false, n};
+        return HeadlessTraceLogDiff{true, 0};
+    }
+
+    std::string FormatTraceLogDiff(const std::vector<HeadlessTraceEntry>& baseline,
+                                   const std::vector<HeadlessTraceEntry>& current)
+    {
+        const HeadlessTraceLogDiff diff = CompareTraceLogs(baseline, current);
+        std::ostringstream out;
+        if (diff.identical)
+        {
+            out << "Trace logs are identical (" << baseline.size() << " entries).\n";
+            return out.str();
+        }
+
+        auto formatEntry = [](const std::vector<HeadlessTraceEntry>& log, std::size_t i) -> std::string {
+            if (i >= log.size())
+                return "<end of log>";
+            const HeadlessTraceEntry& e = log[i];
+            std::ostringstream s;
+            s << "[frame " << e.frameIndex << " #" << e.callIndex << "] " << e.method;
+            if (!e.argsSummary.empty())
+                s << ": " << e.argsSummary;
+            return s.str();
+        };
+
+        out << "Trace logs diverge at entry #" << diff.firstDivergingIndex << ":\n";
+        out << "  baseline: " << formatEntry(baseline, diff.firstDivergingIndex) << "\n";
+        out << "  current:  " << formatEntry(current, diff.firstDivergingIndex) << "\n";
+        if (baseline.size() != current.size())
+            out << "  (baseline has " << baseline.size() << " entries, current has " << current.size() << ")\n";
+        return out.str();
     }
 }
 

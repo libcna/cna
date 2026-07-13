@@ -113,6 +113,30 @@ namespace CNA::Internal::Backends::Headless
         std::string argsSummary;
     };
 
+    /// Result of comparing two HeadlessTrace logs (HEADLESS-43). `firstDivergingIndex` is only
+    /// meaningful when `identical` is false: it names the position (0-indexed) of the first entry
+    /// that differs, or -- if one log is a strict prefix of the other -- the position where the
+    /// shorter log ends.
+    struct HeadlessTraceLogDiff
+    {
+        bool identical = true;
+        std::size_t firstDivergingIndex = 0;
+    };
+
+    /// Compares two HeadlessTrace logs entry-by-entry (frameIndex/method/argsSummary; `callIndex`
+    /// is deliberately excluded since it is a redundant position counter, not meaningful call
+    /// content). Intended for catching behavioral drift between two runs of the same
+    /// (ideally deterministic) game across commits, independent of any pixel output --
+    /// plan_headless.md HEADLESS-43.
+    [[nodiscard]] HeadlessTraceLogDiff CompareTraceLogs(const std::vector<HeadlessTraceEntry>& baseline,
+                                                         const std::vector<HeadlessTraceEntry>& current);
+
+    /// Renders CompareTraceLogs()'s result as human-readable text: either a one-line "identical"
+    /// summary, or the first diverging entry from each log side-by-side plus an entry-count note
+    /// if the logs are different lengths.
+    [[nodiscard]] std::string FormatTraceLogDiff(const std::vector<HeadlessTraceEntry>& baseline,
+                                                  const std::vector<HeadlessTraceEntry>& current);
+
     /// State shared by a HeadlessGraphicsBackend and every Headless*Backend resource it creates: the
     /// active mode, the resource registry, and the running statistics. Held via shared_ptr so a
     /// resource backend's lifetime is never coupled to the owning HeadlessGraphicsBackend outliving it

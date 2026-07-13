@@ -97,11 +97,6 @@ Key APIs on `HeadlessGraphicsBackend` (all `NOXNA`, not part of the XNA surface)
 
 ## Known limitations (2026-07-13)
 
-- `HeadlessTrace` mode's call log now covers draws, clears, resource creation, `SetData`,
-  `Present`, and the four `Apply*State` methods plus `SetScissorRect`/`SetViewport`, but still not
-  literally every `IGraphicsBackend` method (`ClearDepth`/`ClearStencil`/`SetDepthTestEnabled`/etc.
-  and the `Create*` factories don't log) — the highest-value call sites for diagnosing a failing
-  test are covered, not literally everything.
 - "Disposed state object" validation (`BlendState`/`DepthStencilState`/etc.) is not implemented —
   `IGraphicsBackend`'s `ApplyBlendState()`/etc. take raw `int`/`bool`/`float` parameters, not object
   references, so there is no state-object identity left for the backend to check by the time a call
@@ -122,10 +117,17 @@ end-to-end by a fifth CTest, `Headless_Effects` — which also surfaced a real b
 their `FillGpuDrawParams()` regardless of whether a texture was actually assigned, so they genuinely
 throw under `HeadlessValidation` if a game forgets to set one, while `AlphaTestEffect` degrades
 gracefully either way (its texture is truly optional). Worth knowing when writing a real game
-against these effects, not just a Headless test-coverage note; and (2026-07-13) every
+against these effects, not just a Headless test-coverage note; (2026-07-13) every
 `HEADLESS-20`/`22`/`23`/`24` validation rule is now confirmed both ways — throws under
 `HeadlessValidation`, does not throw under `HeadlessFast` — in one dedicated sixth CTest,
-`Headless_ModeDial`, not just the one representative draw-call-bounds case shown elsewhere.
+`Headless_ModeDial`, not just the one representative draw-call-bounds case shown elsewhere; and
+(2026-07-13) `HeadlessTrace`'s call log now covers every draw/clear/resource-creation/`SetData`/
+`Present`/state-change call site (`ClearDepth`/`ClearStencil`/`ClearDepthAndStencil`/
+`SetDepthTestEnabled`/`SetBlendEnabled`/`SetDepthWriteEnabled`/`CreateSpriteBatch`/
+`CreateOcclusionQuery` were the last untraced ones), verified by a seventh CTest,
+`Headless_TraceDiff`, which also introduces `CompareTraceLogs()`/`FormatTraceLogDiff()` (see
+below) and, while closing it, caught and fixed a real bug: `SetViewport` had never actually been
+wired into `RecordTrace()` despite an earlier commit message claiming it was.
 
 ## Debug labels and trace log export
 
@@ -144,6 +146,26 @@ std::string text = backend.FormatTraceLog();  // or capture it yourself for a CI
 `PushDebugLabel()`/`PopDebugLabel()` only affect resources created in `HeadlessTrace` mode — in
 `Fast`/`Validation` they're accepted but have no effect, matching `HeadlessTrace`'s own
 "diagnostic-only, pay nothing for it elsewhere" design.
+
+## Trace-log diffing
+
+Two `HeadlessTrace`-mode runs of the same (ideally deterministic) game can be compared directly to
+catch behavioral drift between commits, independent of any pixel output:
+
+```cpp
+// captured from run A (e.g. against `main`) and run B (e.g. against your branch)
+const std::vector<HeadlessTraceEntry>& logA = backendA.TraceLog();
+const std::vector<HeadlessTraceEntry>& logB = backendB.TraceLog();
+
+const HeadlessTraceLogDiff diff = CompareTraceLogs(logA, logB);
+if (!diff.identical)
+    std::cerr << FormatTraceLogDiff(logA, logB);  // "Trace logs diverge at entry #N: ..."
+```
+
+`CompareTraceLogs()` compares entries by `frameIndex`/`method`/`argsSummary` (not `callIndex`,
+which is just a position counter). `FormatTraceLogDiff()` renders either a one-line "identical"
+summary or the first diverging entry from each log side-by-side, plus an entry-count note if the
+logs are different lengths.
 
 See `plan_headless.md` for the full task-by-task status and design rationale.
 

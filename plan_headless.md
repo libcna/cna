@@ -21,10 +21,15 @@
 > a fifth CTest, `Headless_Effects`, which also surfaced a genuine, previously-undocumented
 > behavioral finding (see "Implementation notes"). `HEADLESS-60` (dual-mode Validation-throws/
 > Fast-doesn't-throw confirmation for every `HEADLESS-20`/`22`/`23`/`24` rule, not just the one
-> representative `HEADLESS-21` case) closed the same day via a sixth CTest, `Headless_ModeDial`. A
-> few validation/scoping corners remain intentionally narrowed from their original wording once
-> real interface constraints were discovered during implementation — see each task's own Notes
-> column and the "Implementation notes" section after the task tables for the honest specifics.
+> representative `HEADLESS-21` case) closed the same day via a sixth CTest, `Headless_ModeDial`.
+> `HEADLESS-40`'s remaining trace-log call sites and `HEADLESS-43`'s trace-log diff tooling (both
+> previously deprioritized as low-value/aspirational) closed the same day via a seventh CTest,
+> `Headless_TraceDiff`, on explicit request — which also caught and fixed a real pre-existing bug:
+> `SetViewport` had never actually been wired into `RecordTrace()` despite an earlier commit
+> message claiming it was. A few validation/scoping corners remain intentionally narrowed from
+> their original wording once real interface constraints were discovered during implementation —
+> see each task's own Notes column and the "Implementation notes" section after the task tables
+> for the honest specifics.
 >
 > **Why a Headless backend:** every existing backend (`SDL_RENDERER`/`EASYGL`/`BGFX`/`VULKAN`/`WEBGPU`)
 > needs a real window and a real GPU context to run at all, which makes them unsuitable for fast,
@@ -160,10 +165,10 @@ All tasks in this phase are active only in `HeadlessValidation`/`HeadlessTrace` 
 
 | # | Task | Status | Notes |
 |---|---|---|---|
-| HEADLESS-40 | Structured call log: every `IGraphicsBackend`-surface method call recorded (method name, a short argument summary, frame index, monotonic call index) into an in-memory buffer | 🟨 | `RecordTrace()`/`TraceLog()` infrastructure implemented and wired into `SetData`, `Clear`, `Present`, `DrawColoredPrimitives`/`DrawIndexedColoredPrimitives`, resource creation, and (added 2026-07-13) `ApplyBlendState`/`ApplyDepthStencilState`/`ApplyRasterizerState`/`ApplySamplerState`/`SetScissorRect`/`SetViewport` — verified via `Headless_CoverageGaps` Check A (all four `Apply*State` calls appear in `FormatTraceLog()`'s output after a `HeadlessTrace`-mode run). Mode-gating verified 2026-07-13 (`Headless_ResourceBackends` Check F). Still not literally every method: `ClearDepth`/`ClearStencil`/`ClearDepthAndStencil`/`SetDepthTestEnabled`/`SetBlendEnabled`/`SetDepthWriteEnabled` and the `Create*` factory methods below vertex/index buffers don't log — the highest-value call sites (draws, clears, resource creation, state changes, `SetData`, `Present`) are covered, which is what any real test-failure diagnosis actually needs. |
+| HEADLESS-40 | Structured call log: every `IGraphicsBackend`-surface method call recorded (method name, a short argument summary, frame index, monotonic call index) into an in-memory buffer | ✅ | `RecordTrace()`/`TraceLog()` infrastructure wired into every draw/clear/resource-creation/`SetData`/`Present`/`Apply*State` call site. **Closed 2026-07-13** via a new CTest, `Headless_TraceDiff`: added the remaining `ClearDepth`/`ClearStencil`/`ClearDepthAndStencil`/`SetDepthTestEnabled`/`SetBlendEnabled`/`SetDepthWriteEnabled` and the last two untraced `Create*` factories (`CreateSpriteBatch`/`CreateOcclusionQuery`). Also caught and fixed a real pre-existing bug in the process: an earlier commit message claimed `SetViewport` had been wired into `RecordTrace()` alongside `SetScissorRect`, but only `SetScissorRect` actually had been — `SetViewport` silently never logged anything. The remaining unlogged surface (`ClearColorAndDepth`/`ClearColorAndStencil`/`ClearColorDepthAndStencil` all just delegate to the already-logged `Clear()`; `GetViewportSize`/`ReadBackbuffer` are queries, not state changes) is not meaningfully more to add. |
 | HEADLESS-41 | Creation-site tracking: every `Headless*Backend` resource created in `HeadlessTrace` mode also records `std::source_location` (or an explicit debug-label parameter, whichever is more useful in this codebase's call sites) so a leak report can point at the exact `new Texture2D(...)`/`VertexBuffer(...)` call responsible | ✅ | **Closed 2026-07-13, chose the debug-label option explicitly** (not `std::source_location`): auto-capturing a real game's own call site would require adding a defaulted `std::source_location` parameter to every `IGraphicsBackend` virtual `Create*()` method — a shared-interface change touching all 5 other backends for a Headless-only diagnostic, and even then a `std::source_location` captured *inside* `HeadlessGraphicsBackend.cpp` itself (the only backend-local option) would always point at the same line per resource type, no more informative than the type name string already is. Implemented instead as `PushDebugLabel()`/`PopDebugLabel()`: a test wraps a block of resource creation and gets that label back in `AssertNoLeaks()`'s report, entirely backend-local, only active in `HeadlessTrace` mode (matches the original "only in HeadlessTrace mode" wording). Verified via `Headless_ValidationExtras` Checks E/F: a labeled leaked resource's report contains the label text; a resource created outside any label scope reports no creation site at all (proves it's genuinely opt-in per resource, not a blanket behaviour). |
 | HEADLESS-42 | Trace log export: dump the accumulated log to stdout or a file at end of run, in a format that's easy to diff between two CI runs | ✅ | **Closed 2026-07-13.** `FormatTraceLog()` renders the log as human-readable text (`[frame N #callIndex] method: argsSummary`, one call per line); `DumpTraceLog(FILE* = stdout)` is a thin convenience wrapper a test can also point at a real file for CI diffing. Verified via `Headless_ValidationExtras` Checks G/H. |
-| HEADLESS-43 | (Aspirational, low priority) Trace-log comparison tooling: diff two runs' logs to catch behavioral drift in game logic between commits, independent of any pixel output | ⬜ | Not implemented, as originally flagged as aspirational/non-blocking. |
+| HEADLESS-43 | (Aspirational, low priority) Trace-log comparison tooling: diff two runs' logs to catch behavioral drift in game logic between commits, independent of any pixel output | ✅ | **Closed 2026-07-13** (explicitly requested despite the earlier low-priority framing): free functions `CompareTraceLogs()`/`FormatTraceLogDiff()` compare two `std::vector<HeadlessTraceEntry>` snapshots (from two separate `HeadlessGraphicsBackend` runs) entry-by-entry on `frameIndex`/`method`/`argsSummary` (deliberately excluding `callIndex`, a redundant position counter). Reports the first diverging entry, or a length mismatch if one log is a strict prefix of the other. Verified via `Headless_TraceDiff` (7/7): identical sequences compare identical; a genuine mid-sequence divergence (different `SetViewport` size) is located at the correct index; a prefix-only log diverges at its own length; `FormatTraceLogDiff()` renders both a one-line "identical" summary and a human-readable divergence report. |
 
 ---
 
@@ -216,8 +221,11 @@ dedicated tests (`Headless_CoverageGaps`); `AlphaTestEffect`/`DualTextureEffect`
 behavioral asymmetry between effects (see below); every `HEADLESS-20`/`22`/`23`/`24` validation
 rule is now confirmed both ways (throws under `HeadlessValidation`, doesn't under `HeadlessFast`)
 in one dedicated place (`HEADLESS-60`, `Headless_ModeDial`), not just the one representative
-`HEADLESS-21` case; and `../mobile-eggbert`, a real third-party game, builds and runs 20+ seconds
-with zero crashes under this backend.
+`HEADLESS-21` case; `HeadlessTrace`'s call log now covers every state-change/clear/draw/resource-
+creation/`SetData`/`Present` call site (`HEADLESS-40`) and a trace-log diff tool exists
+(`HEADLESS-43`, `Headless_TraceDiff`) — closing this pair also caught and fixed a real bug, a
+previously-untraced `SetViewport` call (see below); and `../mobile-eggbert`, a real third-party
+game, builds and runs 20+ seconds with zero crashes under this backend.
 
 What's genuinely narrower than the original task wording, discovered while implementing against the
 *real* `IGraphicsBackend` interface rather than the plan's own upfront guesses:
@@ -228,10 +236,15 @@ What's genuinely narrower than the original task wording, discovered while imple
   Resource lifetime tracking (register/unregister) is real and is what actually backs leak
   detection — the literal "disposed guard" framing was the part that didn't fit reality. Confirmed
   as a permanent interface constraint, not a temporary gap — no further action planned.
-- **`HeadlessTrace`'s call log (`HEADLESS-40`)** now also covers the four `Apply*State` methods plus
-  `SetScissorRect`/`SetViewport`, but still not literally every `IGraphicsBackend` method
-  (`ClearDepth`/`ClearStencil`/`SetDepthTestEnabled`/etc. and the `Create*` factories don't log) —
-  the highest-value call sites for diagnosing a failing test are covered, not literally everything.
+
+**A real bug found and fixed while closing HEADLESS-40/43, not just a documentation gap**: the
+commit that first added `Apply*State`/`SetScissorRect`/`SetViewport` trace coverage claimed
+`SetViewport` was included, but only `SetScissorRect` actually was — `SetViewport` silently never
+recorded a trace entry. Caught by `Headless_TraceDiff`'s divergence-index check failing in a way
+that only made sense if `SetViewport` wasn't in the log at all; fixed by adding the missing
+`RecordTrace()` call. A reminder that a commit message asserting "X and Y both changed" needs the
+same verification as the code itself — this one went unverified for two commits before the diff
+tool's own test exposed it.
 - `SpriteBatch`'s captured `LastBatch()` draw-call data (texture/rects/color/rotation/effects per
   `Draw()` call) is implemented but not yet separately asserted on by any test — only the aggregate
   `drawCallCount` is checked.
