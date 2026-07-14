@@ -251,9 +251,14 @@ namespace CNA::Internal::Backends::D3D12
 
         cmdList->SetGraphicsRootConstantBufferView(0, cb->GetGPUVirtualAddress());
 
-        ID3D12DescriptorHeap* heaps[] = {owner_->GetCbvSrvUavHeapEXT()};
-        cmdList->SetDescriptorHeaps(1, heaps);
+        // DX-119: SpriteBatch always samples XNA texture slot 0 (GraphicsDevice.Textures[0]/
+        // SamplerStates[0]) -- real, runtime-settable SamplerState, not a hardcoded default,
+        // bound at root parameter index 2 (root sig shape (1,1,1): CBV@0, SRV table@1, sampler
+        // table@2, D3D12RootSignatureCache's own real parameter ordering).
+        ID3D12DescriptorHeap* heaps[] = {owner_->GetCbvSrvUavHeapEXT(), owner_->GetSamplerHeapEXT()};
+        cmdList->SetDescriptorHeaps(2, heaps);
         cmdList->SetGraphicsRootDescriptorTable(1, GetSrvGpuHandle(currentTexture_));
+        cmdList->SetGraphicsRootDescriptorTable(2, owner_->GetSamplerGpuHandleEXT(0));
 
         cmdList->DrawIndexedInstanced(static_cast<UINT>(pendingIndices_.size()), 1, 0, 0, 0);
 

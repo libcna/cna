@@ -13,6 +13,7 @@
 #include "D3D12ResourceStateTracker.hpp"
 #include "D3D12PipelineStateCache.hpp"
 #include "D3D12RootSignatureCache.hpp"
+#include "D3D12SamplerCache.hpp"
 #include "D3D12TextureCube.hpp"
 
 #include <d3d12.h>
@@ -141,6 +142,16 @@ namespace CNA::Internal::Backends::D3D12
                                   bool scissorTestEnable,
                                   float depthBias = 0.0f,
                                   float slopeScaleDepthBias = 0.0f) override;
+        /// DX-119: real, runtime-settable per-slot SamplerState -- tracks the given slot's raw XNA
+        /// TextureFilter/AddressU/AddressV/MaxAnisotropy ordinals (cheap; D3D12 has no persistent
+        /// pipeline sampler-binding state to update immediately, unlike D3D11's PSSetSamplers).
+        /// Real resolution into a D3D12SamplerCache descriptor happens at draw time
+        /// (GetSamplerGpuHandleEXT), for whichever of the 2 texture slots (0/1) this backend's
+        /// shaders actually sample -- GraphicsDevice.SamplerStates has 16 slots total, but no CNA
+        /// stock shader declares more than 2 texture registers (t0/t1), so slots 2-15 are tracked
+        /// (harmless, no-op) but never consumed by any draw.
+        void ApplySamplerState(int slot, int filter, int addressU, int addressV,
+                               int maxAnisotropy) override;
 
         std::unique_ptr<IVertexBufferBackend> CreateVertexBuffer(int vertex_capacity) override;
         std::unique_ptr<IIndexBufferBackend> CreateIndexBuffer16(int index_capacity) override;
@@ -216,6 +227,17 @@ namespace CNA::Internal::Backends::D3D12
                                             D3D12_GPU_DESCRIPTOR_HANDLE& outGpu);
         /** @brief The shader-visible CBV/SRV/UAV heap itself, for SetDescriptorHeaps() calls. */
         [[nodiscard]] ID3D12DescriptorHeap* GetCbvSrvUavHeapEXT() const { return cbvSrvUavHeap_.Get(); }
+        /** @brief DX-119: same as AllocateCbvSrvUavDescriptorEXT(), for the shader-visible SAMPLER
+         *  heap. Throws if the heap is exhausted. */
+        void AllocateSamplerDescriptorEXT(D3D12_CPU_DESCRIPTOR_HANDLE& outCpu,
+                                          D3D12_GPU_DESCRIPTOR_HANDLE& outGpu);
+        /** @brief DX-119: the shader-visible SAMPLER heap itself, for SetDescriptorHeaps() calls. */
+        [[nodiscard]] ID3D12DescriptorHeap* GetSamplerHeapEXT() const { return samplerHeap_.Get(); }
+        /** @brief DX-119: resolves a real GPU sampler descriptor handle for texture slot @p slot
+         *  (0 or 1, this backend's only real texture registers) from whatever SamplerState was last
+         *  applied via ApplySamplerState(slot, ...) -- defaults to LINEAR/WRAP (this backend's own
+         *  pre-DX-119 hardcoded default) if ApplySamplerState was never called for that slot. */
+        D3D12_GPU_DESCRIPTOR_HANDLE GetSamplerGpuHandleEXT(int slot);
 
         /** @brief DX-106/DX-109: the single, shared per-resource barrier-state tracker every real
          *  D3D12 resource (buffers, textures -- DX-109) registers with and transitions through, so
@@ -451,15 +473,37 @@ namespace CNA::Internal::Backends::D3D12
         static constexpr UINT kRtvHeapCapacity = 32;
         static constexpr UINT kDsvHeapCapacity = 8;
         static constexpr UINT kCbvSrvUavHeapCapacity = 64;
+        // DX-119: one sampler slot per distinct XNA SamplerState combination actually used across a
+        // test/game's lifetime, not per draw (D3D12SamplerCache only allocates on a genuine cache
+        // miss) -- 16 is a generous first-implementation capacity (matches
+        // SamplerStateCollection::MaxSamplers, the max distinct slots a game could theoretically set
+        // to 16 all-different states), same "simple fixed bump allocator, no free-list yet" honest
+        // scope as every other DX-103 heap.
+        static constexpr UINT kSamplerHeapCapacity = 16;
         ComPtr<ID3D12DescriptorHeap> rtvHeap_;
         ComPtr<ID3D12DescriptorHeap> dsvHeap_;
         ComPtr<ID3D12DescriptorHeap> cbvSrvUavHeap_;
+        ComPtr<ID3D12DescriptorHeap> samplerHeap_;
         UINT rtvDescriptorSize_ = 0;
         UINT dsvDescriptorSize_ = 0;
         UINT cbvSrvUavDescriptorSize_ = 0;
+        UINT samplerDescriptorSize_ = 0;
         UINT rtvHeapNextIndex_ = 0;
         UINT dsvHeapNextIndex_ = 0;
         UINT cbvSrvUavHeapNextIndex_ = 0;
+        UINT samplerHeapNextIndex_ = 0;
+
+        // DX-119: real sampler cache + per-slot tracked XNA-level SamplerState (updated by
+        // ApplySamplerState, matching GraphicsDevice::applySamplerStatesToBackend()'s own
+        // SamplerStateCollection::MaxSamplers=16 slot count). Defaults match this backend's own
+        // pre-DX-119 hardcoded LINEAR/WRAP default exactly, so a draw against a texture slot that
+        // never had ApplySamplerState() called on it behaves identically to before this task.
+        static constexpr int kMaxSamplerSlots = 16;
+        D3D12SamplerCache samplerCache_;
+        int currentSamplerFilter_[kMaxSamplerSlots];
+        int currentSamplerAddressU_[kMaxSamplerSlots];
+        int currentSamplerAddressV_[kMaxSamplerSlots];
+        int currentSamplerMaxAnisotropy_[kMaxSamplerSlots];
 
         // DX-104: per-frame command allocators + one reused direct command list.
         ComPtr<ID3D12CommandAllocator> commandAllocators_[kFramesInFlight];

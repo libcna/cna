@@ -2145,6 +2145,147 @@ int main()
         backend.UnbindOffscreenColorTargetEXT();
     }
 
+    // ---- Check Z (DX-119): real, runtime-settable per-slot SamplerState -- a genuine
+    // TextureAddressMode::Wrap-vs-Clamp discriminating probe (D3D11's own DX-72 methodology),
+    // proving ApplySamplerState() actually reaches the real D3D12 sampler bound to a draw, not a
+    // hardcoded LINEAR/WRAP default. ----
+    {
+        constexpr int kRtWidth = 64;
+        constexpr int kRtHeight = 64;
+
+        D3D12_HEAP_PROPERTIES heapProps{};
+        heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
+
+        D3D12_RESOURCE_DESC rtDesc{};
+        rtDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+        rtDesc.Width = kRtWidth;
+        rtDesc.Height = kRtHeight;
+        rtDesc.DepthOrArraySize = 1;
+        rtDesc.MipLevels = 1;
+        rtDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        rtDesc.SampleDesc.Count = 1;
+        rtDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+        rtDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+
+        Microsoft::WRL::ComPtr<ID3D12Resource> rt;
+        HRESULT hrRt = backend.GetDeviceEXT()->CreateCommittedResource(
+            &heapProps, D3D12_HEAP_FLAG_NONE, &rtDesc,
+            D3D12_RESOURCE_STATE_RENDER_TARGET, nullptr, IID_PPV_ARGS(rt.GetAddressOf()));
+        Check(SUCCEEDED(hrRt) && rt != nullptr, "Z0: real off-screen RGBA8 render-target resource created");
+        backend.GetResourceStateTrackerEXT().TrackResource(rt.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET);
+
+        D3D12_CPU_DESCRIPTOR_HANDLE rtv = backend.AllocateRtvDescriptorEXT();
+        backend.GetDeviceEXT()->CreateRenderTargetView(rt.Get(), nullptr, rtv);
+        backend.BindOffscreenColorTargetEXT(rt.Get(), rtv, DXGI_FORMAT_R8G8B8A8_UNORM, kRtWidth, kRtHeight);
+
+        // No depth test for this check -- reset to a known, predictable state regardless of what
+        // Check Y's own DepthStencilState/RasterizerState left tracked (state persists across
+        // checks, mirroring real GraphicsDevice behavior).
+        backend.ApplyDepthStencilState(false, false, 3, false, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, 0);
+        backend.ApplyRasterizerState(/*cullMode=*/0 /*CullMode::None*/, /*fillMode=*/0, /*scissor=*/false);
+
+        auto pixelAt = [&](const std::vector<uint8_t>& buf, int x, int y) -> std::array<uint8_t, 4>
+        {
+            const std::size_t idx = (static_cast<std::size_t>(y) * kRtWidth + static_cast<std::size_t>(x)) * 4;
+            return {buf[idx + 0], buf[idx + 1], buf[idx + 2], buf[idx + 3]};
+        };
+        auto isColor = [](const std::array<uint8_t, 4>& p, uint8_t r, uint8_t g, uint8_t b, uint8_t a)
+        {
+            return p[0] == r && p[1] == g && p[2] == b && p[3] == a;
+        };
+        // A 4-pixel-wide probe region comfortably inside the U in (1.0, 1.5) band derived below --
+        // never straddles a wrap-repeat boundary (see the U-range comment on kQuad).
+        auto probeIs = [&](const std::vector<uint8_t>& buf, uint8_t r, uint8_t g, uint8_t b, uint8_t a)
+        {
+            for (int y = 28; y < 32; ++y)
+                for (int x = 56; x < 60; ++x)
+                    if (!isColor(pixelAt(buf, x, y), r, g, b, a)) return false;
+            return true;
+        };
+
+        // Full-viewport quad, U linear from 0.0 (left) to 1.6 (right), V held constant at 0.5 (mid-
+        // texel on both rows of the 2x2 texture below, so only the U axis is under test). At the
+        // probe region (screen x in [56,60) of a 64-wide target), pixel-center NDC x lands in
+        // [0.7656, 0.859] (D3D rasterizes at pixel CENTERS, px+0.5, per this session's own earlier
+        // SpriteBatch-test finding) -- U = (ndcX+1)/2 * 1.6 lands in [1.4125, 1.4875], i.e. strictly
+        // inside (1.0, 1.5): Wrap's fractional part is (1.0, 1.5), always < 1.5 so it never reaches
+        // the far/left-column-again boundary at fractional 0.0 -- consistently samples texel column
+        // 0 (fractional U in (0,0.5) after wrapping). Clamp holds at U=1.0 exactly, consistently
+        // sampling texel column 1 (the rightmost). Point filtering (no linear blending) makes both
+        // outcomes exact, not approximate.
+        struct VPT { float x, y, z; float u, v; };
+        static const VPT kQuad[6] = {
+            {-1.0f, -1.0f, 0.0f, 0.0f, 0.5f},
+            { 1.0f, -1.0f, 0.0f, 1.6f, 0.5f},
+            {-1.0f,  1.0f, 0.0f, 0.0f, 0.5f},
+            {-1.0f,  1.0f, 0.0f, 0.0f, 0.5f},
+            { 1.0f, -1.0f, 0.0f, 1.6f, 0.5f},
+            { 1.0f,  1.0f, 0.0f, 1.6f, 0.5f},
+        };
+        D3D12VertexBufferBackend vbQuad(&backend, 6);
+        vbQuad.SetData(kQuad, 6, sizeof(VPT));
+
+        // 2x2 texture, RED in column 0, GREEN in column 1, both rows identical (V-axis irrelevant
+        // to this test, held constant above).
+        ImageData img;
+        img.width = 2; img.height = 2; img.mipLevels = 1;
+        img.pixels.resize(2 * 2 * 4);
+        for (int row = 0; row < 2; ++row)
+        {
+            const std::size_t base = static_cast<std::size_t>(row) * 2 * 4;
+            img.pixels[base + 0] = 255; img.pixels[base + 1] = 0;   img.pixels[base + 2] = 0;   img.pixels[base + 3] = 255; // col0 red
+            img.pixels[base + 4] = 0;   img.pixels[base + 5] = 255; img.pixels[base + 6] = 0;   img.pixels[base + 7] = 255; // col1 green
+        }
+        D3D12TextureBackend texZ(&backend, img);
+
+        GpuDrawParams zp;
+        zp.texture0 = &texZ;
+        zp.textureEnabled = true;
+
+        backend.ApplySamplerState(0, /*filter=*/1 /*TextureFilter::Point*/,
+                                  /*addressU=*/0 /*TextureAddressMode::Wrap*/,
+                                  /*addressV=*/0 /*Wrap*/, /*maxAnisotropy=*/1);
+        backend.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+        backend.DrawPrimitivesEx(vbQuad, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                 Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 2, zp);
+        auto afterWrap = ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight);
+        Check(probeIs(afterWrap, 255, 0, 0, 255),
+              "Z1: real ApplySamplerState(..., AddressU=Wrap) genuinely tiles past U=1.0 -- probe "
+              "samples texel column 0 (red), U's wrapped fractional part (plan_dx.md DX-119)");
+
+        backend.ApplySamplerState(0, /*filter=*/1 /*Point*/,
+                                  /*addressU=*/1 /*TextureAddressMode::Clamp*/,
+                                  /*addressV=*/1 /*Clamp*/, /*maxAnisotropy=*/1);
+        backend.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+        backend.DrawPrimitivesEx(vbQuad, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                 Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 2, zp);
+        auto afterClamp = ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight);
+        Check(probeIs(afterClamp, 0, 255, 0, 255),
+              "Z2: real ApplySamplerState(..., AddressU=Clamp) genuinely holds at U=1.0 -- SAME "
+              "geometry/UVs as Z1, opposite outcome (texel column 1, green), purely from the "
+              "SamplerState change -- proves this is a real, live sampler binding, not a hardcoded "
+              "default (plan_dx.md DX-119)");
+
+        // Cache identity/distinctness proof, mirroring D3D11SamplerCache's own established pattern
+        // (D3D11's Check L, DX-44). Note: state (currentSamplerAddressU_ etc.) is tracked, not
+        // reset between checks -- Z2 left slot 0 at Clamp, so apply Wrap explicitly BEFORE reading
+        // each handle below, not after (fetching a handle reflects whatever was last applied).
+        backend.ApplySamplerState(0, 1, 0, 0, 1); // Wrap/Point
+        D3D12_GPU_DESCRIPTOR_HANDLE wrapHandle1 = backend.GetSamplerGpuHandleEXT(0);
+        backend.ApplySamplerState(0, 1, 0, 0, 1); // re-apply the exact same Wrap/Point state
+        D3D12_GPU_DESCRIPTOR_HANDLE wrapHandle2 = backend.GetSamplerGpuHandleEXT(0);
+        Check(wrapHandle1.ptr == wrapHandle2.ptr,
+              "Z3: identical SamplerState (Point/Wrap) resolves to the SAME cached sampler "
+              "descriptor handle, not a fresh heap slot every call");
+        backend.ApplySamplerState(0, 1, 1, 1, 1); // Clamp/Point -- genuinely different state
+        D3D12_GPU_DESCRIPTOR_HANDLE clampHandle = backend.GetSamplerGpuHandleEXT(0);
+        Check(clampHandle.ptr != wrapHandle1.ptr,
+              "Z4: a genuinely different SamplerState (Point/Clamp) resolves to a DIFFERENT cached "
+              "sampler descriptor handle");
+
+        backend.UnbindOffscreenColorTargetEXT();
+    }
+
     std::printf("\n%s: %d failure(s)\n", g_failures == 0 ? "RESULT: ALL PASS" : "RESULT: FAILURES", g_failures);
     return g_failures == 0 ? 0 : 1;
 }

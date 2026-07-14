@@ -75,6 +75,18 @@ namespace CNA::Internal::Backends::D3D12
         // DX-116: mirrors D3D11GraphicsBackend's own constructor exactly.
         vsyncEnabled_ = args.swapInterval > 0;
 
+        // DX-119: default every tracked sampler slot to this backend's own pre-DX-119 hardcoded
+        // default (TextureFilter::Linear=0, TextureAddressMode::Wrap=0, MaxAnisotropy=4 matching
+        // XNA's own SamplerState.Default) -- a draw against a slot ApplySamplerState() never
+        // touched behaves identically to before this task.
+        for (int i = 0; i < kMaxSamplerSlots; ++i)
+        {
+            currentSamplerFilter_[i] = 0;
+            currentSamplerAddressU_[i] = 0;
+            currentSamplerAddressV_[i] = 0;
+            currentSamplerMaxAnisotropy_[i] = 4;
+        }
+
         CreateDeviceResources();
         CreateCommandQueueResources();
         CreateDescriptorHeapResources();
@@ -236,10 +248,14 @@ namespace CNA::Internal::Backends::D3D12
         createHeap(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, kRtvHeapCapacity, false, rtvHeap_, "RTV");
         createHeap(D3D12_DESCRIPTOR_HEAP_TYPE_DSV, kDsvHeapCapacity, false, dsvHeap_, "DSV");
         createHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, kCbvSrvUavHeapCapacity, true, cbvSrvUavHeap_, "CBV_SRV_UAV");
+        // DX-119: real per-slot SamplerState needs its own shader-visible SAMPLER heap -- D3D12
+        // forbids mixing sampler descriptors into the CBV_SRV_UAV heap type.
+        createHeap(D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER, kSamplerHeapCapacity, true, samplerHeap_, "SAMPLER");
 
         rtvDescriptorSize_ = device_->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
         dsvDescriptorSize_ = device_->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
         cbvSrvUavDescriptorSize_ = device_->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+        samplerDescriptorSize_ = device_->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER);
     }
 
     void D3D12GraphicsBackend::CreateCommandListResources()
@@ -430,6 +446,41 @@ namespace CNA::Internal::Backends::D3D12
         ++cbvSrvUavHeapNextIndex_;
     }
 
+    void D3D12GraphicsBackend::AllocateSamplerDescriptorEXT(D3D12_CPU_DESCRIPTOR_HANDLE& outCpu,
+                                                             D3D12_GPU_DESCRIPTOR_HANDLE& outGpu)
+    {
+        if (samplerHeapNextIndex_ >= kSamplerHeapCapacity)
+            throw std::runtime_error("D3D12GraphicsBackend: SAMPLER descriptor heap exhausted (DX-119's fixed capacity)");
+        outCpu = samplerHeap_->GetCPUDescriptorHandleForHeapStart();
+        outCpu.ptr += static_cast<SIZE_T>(samplerHeapNextIndex_) * samplerDescriptorSize_;
+        outGpu = samplerHeap_->GetGPUDescriptorHandleForHeapStart();
+        outGpu.ptr += static_cast<UINT64>(samplerHeapNextIndex_) * samplerDescriptorSize_;
+        ++samplerHeapNextIndex_;
+    }
+
+    D3D12_GPU_DESCRIPTOR_HANDLE D3D12GraphicsBackend::GetSamplerGpuHandleEXT(int slot)
+    {
+        if (slot < 0 || slot >= kMaxSamplerSlots)
+            slot = 0;
+        return samplerCache_.GetOrCreate(
+            device_.Get(), currentSamplerFilter_[slot], currentSamplerAddressU_[slot],
+            currentSamplerAddressV_[slot], currentSamplerMaxAnisotropy_[slot],
+            [this](D3D12_CPU_DESCRIPTOR_HANDLE& cpu, D3D12_GPU_DESCRIPTOR_HANDLE& gpu)
+            {
+                AllocateSamplerDescriptorEXT(cpu, gpu);
+            });
+    }
+
+    void D3D12GraphicsBackend::ApplySamplerState(int slot, int filter, int addressU, int addressV,
+                                                 int maxAnisotropy)
+    {
+        if (slot < 0 || slot >= kMaxSamplerSlots) return;
+        currentSamplerFilter_[slot] = filter;
+        currentSamplerAddressU_[slot] = addressU;
+        currentSamplerAddressV_[slot] = addressV;
+        currentSamplerMaxAnisotropy_[slot] = maxAnisotropy;
+    }
+
     void D3D12GraphicsBackend::ExecuteCommandListAndWaitEXT(ID3D12CommandList* commandList)
     {
         commandQueue_->ExecuteCommandLists(1, &commandList);
@@ -514,6 +565,7 @@ namespace CNA::Internal::Backends::D3D12
         if (fenceEvent_) { CloseHandle(fenceEvent_); fenceEvent_ = nullptr; }
         fence_.Reset();
         cbvSrvUavHeap_.Reset();
+        samplerHeap_.Reset();
         dsvHeap_.Reset();
         rtvHeap_.Reset();
         commandQueue_.Reset();
@@ -528,6 +580,13 @@ namespace CNA::Internal::Backends::D3D12
         // caches are simple movable/copy-assignable value types, not pointers.
         rootSigCache_ = D3D12RootSignatureCache();
         psoCache_ = D3D12PipelineStateCache();
+        // DX-119: the sampler cache's own GPU descriptor handles point into the (now-gone)
+        // samplerHeap_ -- cleared so the next GetSamplerGpuHandleEXT() call for any slot creates a
+        // fresh sampler in the freshly-recreated heap below, rather than returning a stale handle.
+        // Tracked XNA-level SamplerState ordinals (currentSamplerFilter_/etc.) intentionally
+        // survive recreation unchanged -- a device-removed event doesn't change what SamplerState
+        // the game itself last set.
+        samplerCache_ = D3D12SamplerCache();
         perDrawConstantBuffer_.Reset();
         perDrawConstantBufferMapped_ = nullptr;
         fogConstantBuffer_.Reset();
@@ -557,6 +616,7 @@ namespace CNA::Internal::Backends::D3D12
         rtvHeapNextIndex_ = 0;
         dsvHeapNextIndex_ = 0;
         cbvSrvUavHeapNextIndex_ = 0;
+        samplerHeapNextIndex_ = 0;
         nextFenceValue_ = 1;
         for (auto& value : frameFenceValues_) value = 0;
         debugLayerEnabled_ = false;
@@ -1310,7 +1370,8 @@ namespace CNA::Internal::Backends::D3D12
             }
         }
 
-        const int numSamplers = numSrvs; // one static sampler per texture slot, s0.. matching t0..
+        const int numSamplers = numSrvs; // DX-119: one real, runtime-settable sampler descriptor
+                                          // table per texture slot, s0.. matching t0..
 
         auto rootSig = rootSigCache_.GetOrCreate(device_.Get(), numCbvs, numSrvs, numSamplers);
         if (!rootSig)
@@ -1708,11 +1769,18 @@ namespace CNA::Internal::Backends::D3D12
         {
             // Each texture's own single-descriptor table root parameter comes right after the
             // numCbvs root CBV parameters, at index numCbvs+i for texture i (D3D12RootSignatureCache
-            // ::GetOrCreate's own real parameter ordering -- see that file's doc comment).
-            ID3D12DescriptorHeap* heaps[] = {cbvSrvUavHeap_.Get()};
-            cmdList->SetDescriptorHeaps(1, heaps);
+            // ::GetOrCreate's own real parameter ordering -- see that file's doc comment). DX-119:
+            // each sampler's own single-descriptor table follows right after that, at index
+            // numCbvs+numSrvs+i -- texture slot i's own real, runtime-settable SamplerState
+            // (GraphicsDevice.SamplerStates[i]), not a hardcoded default. Both the CBV_SRV_UAV heap
+            // and the SAMPLER heap are bound together -- D3D12 allows up to 2 shader-visible heaps
+            // simultaneously, one per heap type.
+            ID3D12DescriptorHeap* heaps[] = {cbvSrvUavHeap_.Get(), samplerHeap_.Get()};
+            cmdList->SetDescriptorHeaps(2, heaps);
             for (int i = 0; i < numSrvs; ++i)
                 cmdList->SetGraphicsRootDescriptorTable(numCbvs + i, srvHandles[i]);
+            for (int i = 0; i < numSrvs; ++i)
+                cmdList->SetGraphicsRootDescriptorTable(numCbvs + numSrvs + i, GetSamplerGpuHandleEXT(i));
         }
 
         if (ib != nullptr)

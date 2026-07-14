@@ -289,14 +289,21 @@ additive blend, cull-mode culling/un-culling, and real per-pixel depth-test gati
 DSV, both draw orderings + a depth-disabled control) are all exact-pixel-verified. A real,
 pre-existing, functionally-inert mislabeling bug was found in `D3D12PipelineStateDesc.hpp`'s own
 default-value comments (documented in `plan_dx.md`'s `DX-118` row, not fixed — regression risk
-avoided by leaving it alone). `D3D12_Smoke` CTest (off-screen only): **104/104 checks**, all 10/10
-stock shader variants + `SpriteBatch` + device-removed recovery + render targets/MRT + real state
-objects. D3D12 still genuinely lacks (real, scoped, documented, not silently dropped — see
-`docs/d3d12-backend.md`'s "Known limitations" and `plan_dx.md`'s Phase DX13): MSAA/mip-chain render
-targets, `Texture3D`, per-slot `SamplerState` (hardcoded static WRAP/linear samplers), occlusion
-queries, and custom `Effect` via `SpriteBatch::Begin(effect)`. **Phase DX13 (D3D12 functional
-completion, `DX-116`/`DX-117`/`DX-118` closed, `DX-119`–`DX-123` open), Phase DX14 (D3D11
-verification hardening), and Phase DX15 (remaining EasyGL-parity gaps) were added 2026-07-14 and are
+avoided by leaving it alone -- fixed in a same-day follow-up commit instead). **`DX-119` (real
+per-slot `SamplerState`) is also closed**: a real `D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER` heap +
+`D3D12SamplerCache` + dynamic per-texture-slot sampler descriptor tables (replacing the old
+hardcoded static LINEAR/WRAP sampler), proven with a genuine `TextureAddressMode::Wrap`-vs-`Clamp`
+discriminating pixel probe (same geometry/UVs, opposite sampled color, purely from the
+`SamplerState` change) plus cache identity/distinctness proof. `D3D12_Smoke` CTest (off-screen
+only): **109/109 checks**, all 10/10 stock shader variants + `SpriteBatch` + device-removed
+recovery + render targets/MRT + real state objects + real per-slot samplers. D3D12 still genuinely
+lacks (real, scoped, documented, not silently dropped — see `docs/d3d12-backend.md`'s "Known
+limitations" and `plan_dx.md`'s Phase DX13): MSAA/mip-chain render targets, `Texture3D`, occlusion
+queries, and custom `Effect` via `SpriteBatch::Begin(effect)` (`D3D12SpriteBatchBackend`'s own
+`SetSamplerFilter`/`SetSamplerAddressMode` wiring to the new sampler system is `DX-133`, now
+unblocked). **Phase DX13 (D3D12 functional completion, `DX-116`–`DX-119` closed, `DX-120`–`DX-123`
+open), Phase DX14 (D3D11 verification hardening), and Phase DX15 (remaining EasyGL-parity gaps)
+were added 2026-07-14 and are
 now authorized and actively in progress** — see
 `plan_dx.md` for the full task list and ordering rationale. Outside the D3D plan, the standing
 backlog (Phase 79's 153-sample `../cna-samples` re-audit, Task 945's HLSL→GLSL tooling decision,
