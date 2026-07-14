@@ -34,7 +34,8 @@ real command queues, descriptor heaps, command lists, fences with genuine N=2-fr
 real per-resource barrier-transition tracker, pipeline state objects (including real runtime-settable
 `BlendState`/`DepthStencilState`/`RasterizerState`), root signatures, real per-slot dynamic
 `SamplerState`, vertex/index buffers, 2D/cube/3D textures, a real `RenderTarget2D`/`RenderTargetCube`/
-MRT implementation with real mip-chain generation, real occlusion queries, all 10 stock HLSL shader
+MRT implementation with real mip-chain generation and device-queried MSAA (2D leg only, resolved via
+`ResolveSubresource()` on unbind), real occlusion queries, all 10 stock HLSL shader
 variants plus the `AlphaTestEffect.VertexColorEnabled`-specific `alpha_test_colored3d` sibling (the
 exact same `hlsl_shaders.hpp` DXBC bytecode `D3D11` compiles and uses — design decision 5's reuse
 bootstrap, not a re-derivation), a real `SpriteBatch` with runtime-compiled custom-`ShaderEffect`
@@ -52,9 +53,6 @@ diagnostic, see "Known limitations"), not just "the API call returned `S_OK`."
 - **Not verified on real Windows.** `plan_dx.md` `DX-114` (the D3D12 equivalent of `D3D11`'s
   `DX-90`) is explicitly `needs_human` — no real Windows machine is available in this dev
   environment.
-- **MSAA render targets.** `D3D12RenderTargetBackend`/`D3D12RenderTargetCubeBackend` are real
-  (`DX-117`) with real mip-chain generation too (`DX-144`), but MSAA is not implemented for either —
-  a real, scoped follow-up, `D3D11`'s own `DX-45` equivalent.
 - **`D3D12TextureCubeBackend::GetData()`** was a no-op — now real (`DX-123`).
 - Runtime-settable blend/depth-stencil/rasterizer state objects, per-slot `SamplerState`, occlusion
   queries, `Texture3D`, custom `ShaderEffect` compilation, and `SpriteBatch::Begin(effect)`'s own
@@ -114,7 +112,7 @@ Like `D3D11`, D3D12 tests are not ordinary `Game`-subclass examples — the rout
 Proton-managed window/`Present()` path to drive one through (Proton's own bootstrap launch is too
 heavy for a normal CTest run, see "Known limitations"). All correctness tests live in
 `examples/d3d12_smoke_test.cpp` (`D3D12_Smoke` CTest, the single registered D3D12 CTest — checks
-lettered A through NN as of `DX-121`/`DX-136`/`DX-144`, **191/191 passing**) and talk to the real
+lettered A through OO as of `DX-117`/`DX-121`/`DX-136`/`DX-144`, **193/193 passing**) and talk to the real
 `ID3D12Device`/command queue/list fairly directly. The general off-screen pixel-readback shape:
 
 ```cpp
@@ -161,13 +159,18 @@ significantly stale; re-derived from source, not copy-edited)
   verification and window resize (`D3D11`'s own `DX-29` equivalent) remain open, real, scoped gaps.
 - **Not verified on real Windows hardware at all.** `DX-114` (MSVC build, real DXGI present/tearing,
   full device-lost recovery trigger, WARP fallback) is `needs_human` — no such machine is available.
-- **MSAA render targets are not implemented.** `D3D12RenderTargetBackend`/
-  `D3D12RenderTargetCubeBackend` are real (`DX-117`, including real MRT and, as of `DX-144`, real
-  mip-chain generation for both 2D and cube — a CPU box-filter downsample cascade, not D3D11's
-  driver-level `GenerateMips()`; `RenderTargetCube` only regenerates the active face's own chain on
-  unbind, the same honest single-active-face scope `D3D11RenderTargetCubeBackend`'s own test coverage
-  already has) — MSAA specifically (`D3D11`'s own `DX-45` equivalent) is the one remaining gap, a
-  real, scoped follow-up.
+- **MSAA render targets** are now real for `D3D12RenderTargetBackend` (`DX-117` follow-up,
+  device-queried via `CheckFeatureSupport(D3D12_FEATURE_MULTISAMPLE_QUALITY_LEVELS)`, resolved via a
+  real `ResolveSubresource()` on unbind, Checks OO0/OO1) — `D3D12RenderTargetBackend`/
+  `D3D12RenderTargetCubeBackend` are otherwise real (`DX-117`, including real MRT and, as of
+  `DX-144`, real mip-chain generation for both 2D and cube — a CPU box-filter downsample cascade,
+  not D3D11's driver-level `GenerateMips()`; `RenderTargetCube` only regenerates the active face's
+  own chain on unbind, the same honest single-active-face scope `D3D11RenderTargetCubeBackend`'s own
+  test coverage already has). **Deliberately not added to `RenderTargetCube`**, matching
+  `D3D11RenderTargetCubeBackend`'s own established scope boundary — combining a texture-cube array
+  with MSAA was judged a narrower, rarer case on both backends identically. Per-target
+  MSAA-resolve-on-unbind for `N>1` MRT (`D3D11`'s own `DX-143` equivalent) was not attempted for
+  D3D12 — a real, scoped follow-up.
 - **Device-removed recovery is real but its trigger is untestable here.** `RecreateDeviceEXT()`
   (`DX-110`) genuinely tears down and rebuilds every device-lifetime resource, and is functionally
   proven (fresh GPU work round-trips through the recreated device) — but a genuine

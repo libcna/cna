@@ -821,14 +821,14 @@ namespace CNA::Internal::Backends::D3D12
     }
 
     std::unique_ptr<IRenderTargetBackend> D3D12GraphicsBackend::CreateRenderTarget2D(
-        int w, int h, int depthFormat, bool /*preserveContents*/, bool mipMap, int /*multiSampleCount*/)
+        int w, int h, int depthFormat, bool /*preserveContents*/, bool mipMap, int multiSampleCount)
     {
         // DX-144: mipMap is now honored -- a real CPU box-filter downsample cascade on
-        // UnbindAsRenderTarget() (see D3D12RenderTargets.hpp/.cpp's own header comment). MSAA is
-        // still deliberately not yet supported (honest, scoped follow-up) -- multiSampleCount is
-        // accepted (matching the interface contract every other backend implements) but not
-        // honored.
-        return std::make_unique<D3D12RenderTargetBackend>(this, device_.Get(), w, h, depthFormat, mipMap);
+        // UnbindAsRenderTarget() (see D3D12RenderTargets.hpp/.cpp's own header comment). DX-117
+        // MSAA follow-up: multiSampleCount is now honored too -- device-queried and clamped to 0
+        // (off) by D3D12RenderTargetBackend's own ClampMultiSampleCount() when unsupported.
+        return std::make_unique<D3D12RenderTargetBackend>(this, device_.Get(), w, h, depthFormat, mipMap,
+                                                           multiSampleCount);
     }
 
     void D3D12GraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* rt)

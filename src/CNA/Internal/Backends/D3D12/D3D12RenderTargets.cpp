@@ -33,6 +33,25 @@ namespace CNA::Internal::Backends::D3D12
             return levels;
         }
 
+        /// MSAA follow-up: real, device-queried MSAA support, mirroring D3D11's own
+        /// ClampMultiSampleCount() (D3D11RenderTargets.cpp) exactly -- never assumes a requested
+        /// sample count is supported. Returns 0 (no MSAA) if requestedCount <= 1 or the device
+        /// reports zero quality levels for it.
+        int ClampMultiSampleCount(ID3D12Device* device, DXGI_FORMAT format, int requestedCount)
+        {
+            if (requestedCount <= 1) return 0;
+            D3D12_FEATURE_DATA_MULTISAMPLE_QUALITY_LEVELS data{};
+            data.Format = format;
+            data.SampleCount = static_cast<UINT>(requestedCount);
+            data.Flags = D3D12_MULTISAMPLE_QUALITY_LEVELS_FLAG_NONE;
+            if (FAILED(device->CheckFeatureSupport(D3D12_FEATURE_MULTISAMPLE_QUALITY_LEVELS, &data, sizeof(data)))
+                || data.NumQualityLevels == 0)
+            {
+                return 0;
+            }
+            return requestedCount;
+        }
+
         /// DX-144: reads back subresource `subresource` (a single mip level, array slice 0) of
         /// `resource` as a w*h RGBA8 byte buffer, via a READBACK-heap CopyTextureRegion -- the same
         /// synchronous readback discipline D3D12Buffers.cpp/D3D12Textures.cpp already establish.
@@ -206,10 +225,17 @@ namespace CNA::Internal::Backends::D3D12
     // -------------------------------------------------------------------------
 
     D3D12RenderTargetBackend::D3D12RenderTargetBackend(
-        D3D12GraphicsBackend* owner, ID3D12Device* device, int w, int h, int depthFormat, bool mipMap)
+        D3D12GraphicsBackend* owner, ID3D12Device* device, int w, int h, int depthFormat, bool mipMap,
+        int multiSampleCount)
         : owner_(owner), device_(device), width_(w), height_(h)
-        , mipMap_(mipMap), levelCount_(mipMap ? CalculateMipLevels(w, h) : 1)
+        , appliedMultiSampleCount_(ClampMultiSampleCount(device, DXGI_FORMAT_R8G8B8A8_UNORM, multiSampleCount))
     {
+        isMsaa_ = appliedMultiSampleCount_ > 0;
+        // Mutually exclusive on the same attachment, same rationale D3D11RenderTargetBackend's own
+        // DX-45 already established -- a full mip chain needs a single-sample source.
+        mipMap_ = mipMap && !isMsaa_;
+        levelCount_ = mipMap_ ? CalculateMipLevels(w, h) : 1;
+
         D3D12_HEAP_PROPERTIES heapProps{};
         heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
 
@@ -220,7 +246,7 @@ namespace CNA::Internal::Backends::D3D12
         colorDesc.DepthOrArraySize = 1;
         colorDesc.MipLevels = static_cast<UINT16>(levelCount_);
         colorDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-        colorDesc.SampleDesc.Count = 1;
+        colorDesc.SampleDesc.Count = isMsaa_ ? static_cast<UINT>(appliedMultiSampleCount_) : 1;
         colorDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
         colorDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
 
@@ -238,20 +264,46 @@ namespace CNA::Internal::Backends::D3D12
         rtv_ = owner_->AllocateRtvDescriptorEXT();
         // Explicit MipSlice=0 (rather than a null desc) -- required once levelCount_ > 1, since an
         // RTV can only ever target exactly one mip level and a null desc's inference is not
-        // guaranteed for a multi-mip resource.
+        // guaranteed for a multi-mip resource. TEXTURE2DMS has no MipSlice field at all (MSAA
+        // resources never have mips, enforced above by the mutual-exclusion rule).
         D3D12_RENDER_TARGET_VIEW_DESC rtvDesc{};
         rtvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-        rtvDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
-        rtvDesc.Texture2D.MipSlice = 0;
+        if (isMsaa_)
+        {
+            rtvDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2DMS;
+        }
+        else
+        {
+            rtvDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
+            rtvDesc.Texture2D.MipSlice = 0;
+        }
         device_->CreateRenderTargetView(colorResource_.Get(), &rtvDesc, rtv_);
+
+        if (isMsaa_)
+        {
+            // The MSAA resource itself is never sampled directly -- ResolveSubresource() into this
+            // separate single-sample resource on UnbindAsRenderTarget() (mirrors
+            // D3D11RenderTargetBackend's own resolveTexture_/DX-45 design exactly). Created in
+            // COMMON, a legal generic initial state for CreateCommittedResource, and tracked from
+            // there -- ResolveMsaaEXT() transitions it to RESOLVE_DEST before the first resolve.
+            D3D12_RESOURCE_DESC resolveDesc = colorDesc;
+            resolveDesc.SampleDesc.Count = 1;
+            resolveDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
+            hr = device_->CreateCommittedResource(
+                &heapProps, D3D12_HEAP_FLAG_NONE, &resolveDesc,
+                D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(resolveResource_.ReleaseAndGetAddressOf()));
+            if (FAILED(hr))
+                throw std::runtime_error("D3D12RenderTargetBackend: CreateCommittedResource(resolve) failed, hr=" + FormatHr(hr));
+            owner_->GetResourceStateTrackerEXT().TrackResource(resolveResource_.Get(), D3D12_RESOURCE_STATE_COMMON);
+        }
 
         D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc{};
         srvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-        srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+        srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D; // always single-sample -- see GetSampleableColorResourceEXT()
         srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
         srvDesc.Texture2D.MipLevels = static_cast<UINT>(levelCount_);
         owner_->AllocateCbvSrvUavDescriptorEXT(srvCpu_, srvGpu_);
-        device_->CreateShaderResourceView(colorResource_.Get(), &srvDesc, srvCpu_);
+        device_->CreateShaderResourceView(isMsaa_ ? resolveResource_.Get() : colorResource_.Get(), &srvDesc, srvCpu_);
 
         const DXGI_FORMAT depthDxgiFormat = D3DCommon::DepthFormatToDxgi(depthFormat);
         hasDepth_ = depthDxgiFormat != DXGI_FORMAT_UNKNOWN;
@@ -264,7 +316,7 @@ namespace CNA::Internal::Backends::D3D12
             depthDesc.DepthOrArraySize = 1;
             depthDesc.MipLevels = 1;
             depthDesc.Format = depthDxgiFormat;
-            depthDesc.SampleDesc.Count = 1;
+            depthDesc.SampleDesc.Count = colorDesc.SampleDesc.Count; // MSAA depth matches MSAA color
             depthDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
 
             D3D12_CLEAR_VALUE depthClear{};
@@ -282,7 +334,7 @@ namespace CNA::Internal::Backends::D3D12
             dsvFormat_ = depthDxgiFormat; // DX-146: needed by BindAsRenderTarget()
             D3D12_DEPTH_STENCIL_VIEW_DESC dsvDesc{};
             dsvDesc.Format = depthDxgiFormat;
-            dsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
+            dsvDesc.ViewDimension = isMsaa_ ? D3D12_DSV_DIMENSION_TEXTURE2DMS : D3D12_DSV_DIMENSION_TEXTURE2D;
             device_->CreateDepthStencilView(depthResource_.Get(), &dsvDesc, dsv_);
         }
     }
@@ -303,8 +355,45 @@ namespace CNA::Internal::Backends::D3D12
 
     void D3D12RenderTargetBackend::UnbindAsRenderTarget()
     {
+        ResolveMsaaEXT();
         GenerateMipsEXT();
         if (owner_) owner_->RestoreBackBufferRenderTargetEXT();
+    }
+
+    void D3D12RenderTargetBackend::ResolveMsaaEXT()
+    {
+        if (!isMsaa_ || !resolveResource_ || !owner_) return;
+
+        // The "any shader stage can read this" resting state every other real texture/resolved
+        // resource in this backend settles into once its content is ready (D3D12Textures.cpp's own
+        // kTextureShaderReadableState) -- ResolveSubresource() needs the two resources in
+        // RESOLVE_SOURCE/RESOLVE_DEST specifically, D3D12's own explicit-transition requirement
+        // D3D11's identical ResolveSubresource() call never needed.
+        constexpr D3D12_RESOURCE_STATES kShaderReadableState =
+            static_cast<D3D12_RESOURCE_STATES>(
+                static_cast<int>(D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE) |
+                static_cast<int>(D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE));
+
+        ID3D12CommandAllocator* allocator = owner_->GetCommandAllocatorEXT(0);
+        ID3D12GraphicsCommandList* cmdList = owner_->GetCommandListEXT();
+        allocator->Reset();
+        cmdList->Reset(allocator, nullptr);
+
+        auto& tracker = owner_->GetResourceStateTrackerEXT();
+        const D3D12_RESOURCE_STATES priorColorState = tracker.GetTrackedStateEXT(colorResource_.Get());
+        tracker.TransitionTo(cmdList, colorResource_.Get(), D3D12_RESOURCE_STATE_RESOLVE_SOURCE);
+        tracker.TransitionTo(cmdList, resolveResource_.Get(), D3D12_RESOURCE_STATE_RESOLVE_DEST);
+        cmdList->ResolveSubresource(resolveResource_.Get(), 0, colorResource_.Get(), 0,
+                                    DXGI_FORMAT_R8G8B8A8_UNORM);
+        // Color goes back to whatever it was (RENDER_TARGET -- the only state BindAsRenderTarget()
+        // ever leaves it in); the resolve target settles into the real shader-readable resting
+        // state so it's immediately valid to sample/read back without a further transition. Its
+        // own pre-resolve state (COMMON at first, RESOLVE_DEST here) is irrelevant once resolved.
+        tracker.TransitionTo(cmdList, colorResource_.Get(), priorColorState);
+        tracker.TransitionTo(cmdList, resolveResource_.Get(), kShaderReadableState);
+
+        if (FAILED(cmdList->Close())) return;
+        owner_->ExecuteCommandListAndWaitEXT(cmdList);
     }
 
     void D3D12RenderTargetBackend::GenerateMipsEXT()

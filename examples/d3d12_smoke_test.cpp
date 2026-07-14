@@ -4009,6 +4009,39 @@ int main()
         }
     }
 
+    // ---- plan_dx.md DX-117 MSAA follow-up: RenderTarget2D MSAA support -- mirrors D3D11's own
+    // already-closed DX-45 methodology exactly: an 8x8 render target requested at 4x MSAA, cleared,
+    // then read back through GetSampleableColorResourceEXT() (the resolved, single-sample resource
+    // ResolveMsaaEXT() writes on unbind) via the same ReadBackRenderTargetFull() helper every other
+    // non-MSAA render-target check above already uses -- proves the real
+    // ResolveSubresource()-on-unbind round-trip produces the exact clear color, not that the device
+    // granted a specific sample count (that's real hardware/driver capability, printed as
+    // diagnostics only, same honest framing DX-45 already established). ----
+    {
+        auto rtMsaa = backend.CreateRenderTarget2D(8, 8, 0 /*DepthFormat::None*/, false, false, 4);
+        auto* d3dRtMsaa = dynamic_cast<D3D12RenderTargetBackend*>(rtMsaa.get());
+        Check(d3dRtMsaa != nullptr, "OO0: D3D12RenderTargetBackend: CreateRenderTarget2D(multiSampleCount=4) "
+              "returns a real backend object (plan_dx.md DX-117)");
+
+        if (d3dRtMsaa != nullptr)
+        {
+            backend.SetRenderTarget2D(rtMsaa.get());
+            backend.Clear(77.0f / 255.0f, 88.0f / 255.0f, 99.0f / 255.0f, 1.0f);
+            backend.SetRenderTarget2D(nullptr); // UnbindAsRenderTarget() -> ResolveMsaaEXT()
+
+            const auto resolved = ReadBackRenderTargetFull(backend, d3dRtMsaa->GetSampleableColorResourceEXT(), 8, 8);
+            bool msaaMatches = resolved.size() == 8u * 8u * 4u;
+            for (std::size_t i = 0; i < 8u * 8u && msaaMatches; ++i)
+                msaaMatches = resolved[i * 4 + 0] == 77 && resolved[i * 4 + 1] == 88 &&
+                             resolved[i * 4 + 2] == 99 && resolved[i * 4 + 3] == 255;
+            Check(msaaMatches,
+                  "OO1: D3D12RenderTargetBackend (MSAA): Clear()+ResolveSubresource()-on-unbind produces "
+                  "the exact color in the resolved, sampleable resource, read back directly from the "
+                  "real GPU resource (plan_dx.md DX-117)");
+            std::printf("    MSAA: requested 4x, device-applied %dx\n", d3dRtMsaa->GetMultiSampleCount());
+        }
+    }
+
     // ================================================================================================
     // plan_dx.md DX-132 / DX-148 / DX-140: the XNA-level public API, through a REAL, WINDOWLESS
     // GraphicsDevice (PresentationParameters::HeadlessEXT).
