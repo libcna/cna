@@ -842,9 +842,18 @@ namespace CNA::Internal::Backends::D3D9
         device_->SetScissorRect(&rect);
     }
 
-    void D3D9GraphicsBackend::ApplySamplerState(int, int, int, int, int)
+    void D3D9GraphicsBackend::ApplySamplerState(int slot, int filter, int addressU, int addressV, int maxAnisotropy)
     {
-        NotYetImplemented("D3D9", "ApplySamplerState (see plan_dx9.md D9-63)");
+        if (slot < 0 || slot >= static_cast<int>(caps_.MaxSimultaneousTextures)) return;
+
+        const DWORD sampler = static_cast<DWORD>(slot);
+        const D3D9FilterTriple filterTriple = TextureFilterToD3D9(filter);
+        device_->SetSamplerState(sampler, D3DSAMP_MINFILTER, static_cast<DWORD>(filterTriple.min));
+        device_->SetSamplerState(sampler, D3DSAMP_MAGFILTER, static_cast<DWORD>(filterTriple.mag));
+        device_->SetSamplerState(sampler, D3DSAMP_MIPFILTER, static_cast<DWORD>(filterTriple.mip));
+        device_->SetSamplerState(sampler, D3DSAMP_ADDRESSU, static_cast<DWORD>(TextureAddressModeToD3D9(addressU)));
+        device_->SetSamplerState(sampler, D3DSAMP_ADDRESSV, static_cast<DWORD>(TextureAddressModeToD3D9(addressV)));
+        device_->SetSamplerState(sampler, D3DSAMP_MAXANISOTROPY, static_cast<DWORD>(maxAnisotropy));
     }
 
     void D3D9GraphicsBackend::SetViewport(int x, int y, int w, int h, float minDepth, float maxDepth)

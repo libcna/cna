@@ -183,6 +183,13 @@ namespace CNA::Internal::Backends::D3D9
         /// Bind/UnbindAsRenderTarget() for what actually changes on the device. Moved out of the
         /// "silently-empty-default" stub section below now that render targets exist to bind.
         void SetRenderTarget2D(IRenderTargetBackend* rt) override;
+        /// D9-63: real -- plain `SetSamplerState()` sequences (design decision 11: no D3D9 sampler
+        /// state objects exist to cache), using the `D9-21` `D3D9StateMapping` tables
+        /// (`TextureFilterToD3D9()`'s own `D3D9FilterTriple`, `TextureAddressModeToD3D9()`). Moved
+        /// out of the "silently-empty-default" stub section below now that `D9-50`'s real textures
+        /// exist to sample -- previously listed there since nothing forced it in early the way
+        /// `ApplyBlendState`/`ApplyDepthStencilState`/`ApplyRasterizerState` were.
+        void ApplySamplerState(int slot, int filter, int addressU, int addressV, int maxAnisotropy) override;
 
         // ---- IGraphicsBackend: silently-empty-default virtuals, explicitly loud until real ----
         // (D9-11's own distinction: these have a `{}` default on IGraphicsBackend itself, so an
@@ -190,11 +197,10 @@ namespace CNA::Internal::Backends::D3D9
         // capability is a build-time-enforced, loud runtime failure instead. NOTE: this list
         // originally missed ApplyBlendState/ApplyDepthStencilState/ApplyRasterizerState/
         // ApplySamplerState -- their `{}` default spans multiple lines, so a single-line `grep
-        // 'virtual.*{}$'` (D9-11's own suggested method) does not find them. The first 3 are real
-        // above (forced by this same discovery); ApplySamplerState is listed here since no texture/
-        // sampler work exists yet to make it real.)
+        // 'virtual.*{}$'` (D9-11's own suggested method) does not find them. All 4 are real above now
+        // (the first 3 forced in early by GraphicsDevice's own constructor; ApplySamplerState by
+        // D9-63, once D9-50's real textures existed to make it meaningful).
         void SetSwapInterval(int interval) override;
-        void ApplySamplerState(int slot, int filter, int addressU, int addressV, int maxAnisotropy) override;
         void SetContextRecoveryEnabled(bool enabled) override;
         void SetStringMarkerEXT(const char* marker) override;
         void DebugSimulateContextLoss() override;

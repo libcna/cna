@@ -76,6 +76,10 @@
 //   (RequiresPowerOfTwoTexturesEXT()/NonPowerOfTwoRequiresClampAddressingEXT()), not assumed. When
 //   the device reports full NPOT support (true here), a genuinely non-power-of-two (5x3) texture
 //   is created and round-tripped for real, proving this backend adds no artificial restriction.
+// Check Y -- a real ApplySamplerState() (D9-63): SetSamplerState() values read back directly from
+//   the device via GetSamplerState() (no draw call needed) exactly match TextureFilter::Point/
+//   TextureAddressMode::Clamp/MaxAnisotropy=4's own D3D9StateMapping translation; an out-of-range
+//   sampler slot silently no-ops rather than throwing.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
@@ -86,6 +90,8 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ClearOptions.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureFilter.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureAddressMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DeviceLostException.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDeviceStatus.hpp"
 
@@ -906,6 +912,48 @@ protected:
             {
                 std::printf("    (skipped NPOT round-trip proof: device requires power-of-2 textures)\n");
             }
+        }
+
+        // Check Y (D9-63) -- a real ApplySamplerState() genuinely pushes SetSamplerState() calls:
+        // read back D3DSAMP_MINFILTER/MAGFILTER/MIPFILTER/ADDRESSU/ADDRESSV/MAXANISOTROPY directly
+        // from the device via GetSamplerState() (no draw call needed to observe this -- D3D9 lets
+        // sampler state be read back independent of any draw) and confirm they exactly match
+        // TextureFilter::Point/TextureAddressMode::Clamp's own D3D9StateMapping translation. An
+        // out-of-range slot is confirmed to silently no-op (matches D3D11's own bound-check
+        // precedent), not throw.
+        {
+            using Microsoft::Xna::Framework::Graphics::TextureFilter;
+            using Microsoft::Xna::Framework::Graphics::TextureAddressMode;
+
+            backend.ApplySamplerState(0, static_cast<int>(TextureFilter::Point),
+                                      static_cast<int>(TextureAddressMode::Clamp),
+                                      static_cast<int>(TextureAddressMode::Clamp), 4);
+
+            DWORD minFilter = 0, magFilter = 0, mipFilter = 0, addrU = 0, addrV = 0, maxAniso = 0;
+            backend.GetDeviceEXT()->GetSamplerState(0, D3DSAMP_MINFILTER, &minFilter);
+            backend.GetDeviceEXT()->GetSamplerState(0, D3DSAMP_MAGFILTER, &magFilter);
+            backend.GetDeviceEXT()->GetSamplerState(0, D3DSAMP_MIPFILTER, &mipFilter);
+            backend.GetDeviceEXT()->GetSamplerState(0, D3DSAMP_ADDRESSU, &addrU);
+            backend.GetDeviceEXT()->GetSamplerState(0, D3DSAMP_ADDRESSV, &addrV);
+            backend.GetDeviceEXT()->GetSamplerState(0, D3DSAMP_MAXANISOTROPY, &maxAniso);
+
+            check(minFilter == D3DTEXF_POINT && magFilter == D3DTEXF_POINT && mipFilter == D3DTEXF_POINT &&
+                  addrU == D3DTADDRESS_CLAMP && addrV == D3DTADDRESS_CLAMP && maxAniso == 4,
+                  "D9-63: ApplySamplerState() genuinely pushes exact SetSamplerState() values "
+                  "(TextureFilter::Point + TextureAddressMode::Clamp + MaxAnisotropy=4), read back directly from the device");
+
+            bool threwOnOutOfRange = false;
+            try
+            {
+                backend.ApplySamplerState(static_cast<int>(backend.GetCapsEXT().MaxSimultaneousTextures) + 5,
+                                          static_cast<int>(TextureFilter::Linear), 0, 0, 1);
+            }
+            catch (...)
+            {
+                threwOnOutOfRange = true;
+            }
+            check(!threwOnOutOfRange,
+                  "D9-63: an out-of-range sampler slot is silently ignored (does not throw), matching D3D11's own bound-check precedent");
         }
 
         std::printf("=== %d/%d PASS (main Game checks) ===\n", passCount, totalCount);
