@@ -3267,6 +3267,50 @@ int main()
               "UpdatePixelsLevel(1, ...) targeted the correct subresource, not level 0 (plan_dx.md DX-141)");
     }
 
+    // plan_dx.md DX-145: RenderTarget2D DepthStencilFormat fidelity for D3D12 -- confirms a render
+    // target actually gets the SPECIFIC depth/stencil DXGI format requested
+    // (D3DFormatMapping.cpp's DepthFormatToDxgi(), the same shared table D3D11 uses), not just some
+    // working depth buffer: Depth16 -> DXGI_FORMAT_D16_UNORM, Depth24/Depth24Stencil8 both ->
+    // DXGI_FORMAT_D24_UNORM_S8_UINT (D3D11 has no pure 24-bit depth-only format, and neither does
+    // this D3D12 mapping -- it deliberately reuses the same table), None -> no depth resource at
+    // all. Reads the real GetDesc().Format off the actual ID3D12Resource, genuine D3D12 API
+    // introspection, not internal state.
+    {
+        auto rtNone = backend.CreateRenderTarget2D(4, 4, 0 /*DepthFormat::None*/);
+        auto* rtNoneImpl = dynamic_cast<D3D12RenderTargetBackend*>(rtNone.get());
+        Check(rtNoneImpl != nullptr && rtNoneImpl->GetDepthResourceEXT() == nullptr,
+              "II0: D3D12RenderTargetBackend: DepthFormat::None creates no depth resource at all "
+              "(plan_dx.md DX-145)");
+
+        auto GetDepthFormat = [](D3D12RenderTargetBackend* rt) -> DXGI_FORMAT
+        {
+            ID3D12Resource* res = rt->GetDepthResourceEXT();
+            if (!res) return DXGI_FORMAT_UNKNOWN;
+            return res->GetDesc().Format;
+        };
+
+        auto rtD16 = backend.CreateRenderTarget2D(4, 4, 1 /*DepthFormat::Depth16*/);
+        auto* rtD16Impl = dynamic_cast<D3D12RenderTargetBackend*>(rtD16.get());
+        Check(rtD16Impl != nullptr && GetDepthFormat(rtD16Impl) == DXGI_FORMAT_D16_UNORM,
+              "II1: D3D12RenderTargetBackend: DepthFormat::Depth16 genuinely creates a "
+              "DXGI_FORMAT_D16_UNORM depth resource, not silently upgraded to a combined "
+              "depth+stencil format (plan_dx.md DX-145)");
+
+        auto rtD24 = backend.CreateRenderTarget2D(4, 4, 2 /*DepthFormat::Depth24*/);
+        auto* rtD24Impl = dynamic_cast<D3D12RenderTargetBackend*>(rtD24.get());
+        Check(rtD24Impl != nullptr && GetDepthFormat(rtD24Impl) == DXGI_FORMAT_D24_UNORM_S8_UINT,
+              "II2: D3D12RenderTargetBackend: DepthFormat::Depth24 lands on the documented "
+              "DXGI_FORMAT_D24_UNORM_S8_UINT fallback, the same shared-format decision D3D11's own "
+              "mapping table already documents (plan_dx.md DX-145)");
+
+        auto rtD24S8 = backend.CreateRenderTarget2D(4, 4, 3 /*DepthFormat::Depth24Stencil8*/);
+        auto* rtD24S8Impl = dynamic_cast<D3D12RenderTargetBackend*>(rtD24S8.get());
+        Check(rtD24S8Impl != nullptr && GetDepthFormat(rtD24S8Impl) == DXGI_FORMAT_D24_UNORM_S8_UINT,
+              "II3: D3D12RenderTargetBackend: DepthFormat::Depth24Stencil8 also creates "
+              "DXGI_FORMAT_D24_UNORM_S8_UINT -- Depth24 and Depth24Stencil8 genuinely share the SAME "
+              "real DXGI resource format (plan_dx.md DX-145)");
+    }
+
     std::printf("\n%s: %d failure(s)\n", g_failures == 0 ? "RESULT: ALL PASS" : "RESULT: FAILURES", g_failures);
     return g_failures == 0 ? 0 : 1;
 }

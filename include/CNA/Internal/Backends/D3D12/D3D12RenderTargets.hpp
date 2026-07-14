@@ -61,6 +61,9 @@ namespace CNA::Internal::Backends::D3D12
         /// like any other texture once unbound (NOXNA -- GetSrvGpuHandleForTextureEXT's own
         /// two-concrete-type resolution, mirroring D3D11GraphicsBackend::GetSrvForTextureEXT).
         [[nodiscard]] D3D12_GPU_DESCRIPTOR_HANDLE GetShaderResourceViewGpuHandleEXT() const { return srvGpu_; }
+        /// Real GPU-resident depth-stencil resource, or null if `depthFormat` was `None`/unrecognized
+        /// (NOXNA -- DX-145 real DXGI-format-fidelity introspection).
+        [[nodiscard]] ID3D12Resource* GetDepthResourceEXT() const { return depthResource_.Get(); }
 
     private:
         D3D12GraphicsBackend* owner_ = nullptr;

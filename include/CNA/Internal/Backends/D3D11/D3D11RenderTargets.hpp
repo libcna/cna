@@ -44,6 +44,14 @@ namespace CNA::Internal::Backends::D3D11
         void UnbindAsRenderTarget() override;
         [[nodiscard]] int GetMultiSampleCount() const override { return appliedMultiSampleCount_; }
 
+        /// DX-143: the real MSAA-resolve/mip-regeneration work UnbindAsRenderTarget() does,
+        /// extracted so D3D11GraphicsBackend::SetRenderTargets()'s MRT (N>1) path can finalize
+        /// each bound target individually when the MRT set itself is replaced/unbound, without
+        /// also triggering UnbindAsRenderTarget()'s own back-buffer-restore side effect (MRT's own
+        /// caller already handles that once, not per-target). UnbindAsRenderTarget() itself now
+        /// just calls this plus the restore, so single-target behavior is unchanged. NOXNA.
+        void ResolveAndGenerateMipsEXT();
+
         /// Real ID3D11RenderTargetView for this target's color attachment (NOXNA).
         [[nodiscard]] ID3D11RenderTargetView* GetRTVEXT() const { return rtv_.Get(); }
         /// Real ID3D11DepthStencilView, or null if depthFormat was None/unrecognized (NOXNA).
@@ -57,6 +65,8 @@ namespace CNA::Internal::Backends::D3D11
         {
             return isMsaa_ ? resolveTexture_.Get() : colorTexture_.Get();
         }
+        /// Real mip-chain level count (1 when `mipMap` was false) -- NOXNA, DX-144 subresource math.
+        [[nodiscard]] int GetLevelCountEXT() const { return levelCount_; }
 
     private:
         D3D11GraphicsBackend* owner_ = nullptr;
@@ -98,6 +108,12 @@ namespace CNA::Internal::Backends::D3D11
         [[nodiscard]] int GetMultiSampleCount() const override { return 0; }
 
         [[nodiscard]] ID3D11ShaderResourceView* GetShaderResourceViewEXT() const { return srv_.Get(); }
+        /// The underlying 6-slice texture-array resource (NOXNA, test/diagnostics mip readback --
+        /// DX-144 -- face `f`'s mip level `m` is subresource `m + f * GetLevelCountEXT()`, the
+        /// standard D3D11 texture-array/mip subresource-index convention).
+        [[nodiscard]] ID3D11Texture2D* GetColorTextureEXT() const { return texture_.Get(); }
+        /// Real mip-chain level count (1 when `mipMap` was false) -- NOXNA, DX-144 subresource math.
+        [[nodiscard]] int GetLevelCountEXT() const { return levelCount_; }
 
     private:
         D3D11GraphicsBackend* owner_ = nullptr;

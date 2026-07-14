@@ -505,8 +505,23 @@ namespace CNA::Internal::Backends::D3D11
             this, device_.Get(), context_.Get(), w, h, depthFormat, mipMap, multiSampleCount);
     }
 
+    void D3D11GraphicsBackend::FlushPendingMRTResolveEXT()
+    {
+        if (currentMRTCount_ <= 0) return;
+        for (int i = 0; i < currentMRTCount_; ++i)
+        {
+            if (currentMRTTargets_[i]) currentMRTTargets_[i]->ResolveAndGenerateMipsEXT();
+            currentMRTTargets_[i] = nullptr;
+        }
+        currentMRTCount_ = 0;
+    }
+
     void D3D11GraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* rt)
     {
+        // DX-143: finalize (MSAA resolve + mip regen) any MRT set that was previously bound via
+        // SetRenderTargets() before switching to a single target or the back buffer -- the real
+        // gap this task closes (an MRT set's own per-target finalize never ran before this).
+        FlushPendingMRTResolveEXT();
         if (currentCustomRT_) currentCustomRT_->UnbindAsRenderTarget();
         if (!rt)
         {
@@ -531,6 +546,10 @@ namespace CNA::Internal::Backends::D3D11
 
     void D3D11GraphicsBackend::SetRenderTargets(IRenderTargetBackend* const* rts, int count)
     {
+        // DX-143: finalize (MSAA resolve + mip regen) any PRIOR MRT set before doing anything else
+        // -- handles MRT->MRT, MRT->single-target (via the currentCustomRT_ branch below not
+        // applying), and MRT->back-buffer (the count<=0 branch below) transitions all in one place.
+        FlushPendingMRTResolveEXT();
         if (currentCustomRT_)
         {
             currentCustomRT_->UnbindAsRenderTarget();
@@ -575,12 +594,14 @@ namespace CNA::Internal::Backends::D3D11
         context_->RSSetViewports(1, &vp);
 
         TrackCurrentRenderTargetEXT(rtvs, n, dsv);
-        // Note (DX-46 scope decision): MRT targets are NOT tracked in currentCustomRT_, so an MSAA
-        // resolve / mip regeneration on any individual target in this set is not automatically
-        // triggered when switching away from this MRT binding -- single-target MSAA/mip render
-        // targets (SetRenderTarget2D above) are fully finalized; the N>1 MRT case is real binding
-        // + real Clear() support, honestly not carrying the same finalize-on-unbind guarantee yet
-        // (no draw path exists to actually exercise MRT output until Phase DX8 lands anyway).
+        // DX-143: MRT targets are still NOT tracked in currentCustomRT_ (a single pointer can't
+        // represent N targets) -- instead tracked in currentMRTTargets_/currentMRTCount_, finalized
+        // by FlushPendingMRTResolveEXT() the next time SetRenderTarget2D()/SetRenderTargets() is
+        // called (this task's own real fix: every individual target's MSAA resolve / mip regen now
+        // genuinely runs when this MRT set is replaced/unbound, not silently skipped).
+        currentMRTCount_ = n;
+        for (int i = 0; i < n; ++i)
+            currentMRTTargets_[i] = rts[i] ? static_cast<D3D11RenderTargetBackend*>(rts[i]) : nullptr;
     }
 
     void D3D11GraphicsBackend::ApplySamplerState(int slot, int filter, int addressU, int addressV, int maxAnisotropy)

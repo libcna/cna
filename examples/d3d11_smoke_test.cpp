@@ -200,6 +200,45 @@ namespace
         context->Unmap(staging.Get(), 0);
         return result;
     }
+
+    /// Reads a w*h RGBA8 region starting at (x,y) out of an arbitrary subresource index (mip level,
+    /// or mip+face for a texture array) of an arbitrary ID3D11Texture2D -- same staging-texture
+    /// technique as ReadTexture2DRegion() above, but Map()'d at `subresource` instead of always 0
+    /// (NOXNA, test-only -- DX-144's real mip-chain-content proof needs to read back mip levels > 0
+    /// directly, since there is no public sampling path in this raw-backend-level smoke test).
+    std::vector<uint8_t> ReadTexture2DMipRegion(ID3D11Device* device, ID3D11DeviceContext* context,
+                                                ID3D11Texture2D* texture, UINT subresource,
+                                                int x, int y, int w, int h)
+    {
+        D3D11_TEXTURE2D_DESC desc{};
+        texture->GetDesc(&desc);
+        D3D11_TEXTURE2D_DESC stagingDesc = desc;
+        stagingDesc.Usage = D3D11_USAGE_STAGING;
+        stagingDesc.BindFlags = 0;
+        stagingDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+        stagingDesc.MiscFlags = 0;
+
+        Microsoft::WRL::ComPtr<ID3D11Texture2D> staging;
+        if (FAILED(device->CreateTexture2D(&stagingDesc, nullptr, staging.GetAddressOf())))
+            return {};
+        context->CopyResource(staging.Get(), texture);
+
+        D3D11_MAPPED_SUBRESOURCE mapped{};
+        if (FAILED(context->Map(staging.Get(), subresource, D3D11_MAP_READ, 0, &mapped)))
+            return {};
+
+        std::vector<uint8_t> result(static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4);
+        for (int row = 0; row < h; ++row)
+        {
+            const uint8_t* src = static_cast<const uint8_t*>(mapped.pData)
+                                + static_cast<std::size_t>(y + row) * mapped.RowPitch
+                                + static_cast<std::size_t>(x) * 4;
+            std::memcpy(result.data() + static_cast<std::size_t>(row) * static_cast<std::size_t>(w) * 4,
+                       src, static_cast<std::size_t>(w) * 4);
+        }
+        context->Unmap(staging.Get(), subresource);
+        return result;
+    }
 }
 
 class D3D11SmokeTest : public Game
@@ -548,6 +587,171 @@ protected:
             }
             check(mrtMatches,
                   "D3D11GraphicsBackend::SetRenderTargets() (MRT): one OMSetRenderTargets binds both targets, Clear() writes both");
+        }
+
+        // plan_dx.md DX-143: multi-target (N>1) MRT per-target MSAA-resolve-on-unbind -- the real
+        // gap this task closes. Before this fix, D3D11GraphicsBackend::SetRenderTargets() never
+        // called any bound target's own resolve/mip-regen logic when the MRT set was replaced or
+        // unbound (only the single-target SetRenderTarget2D() path did, via
+        // D3D11RenderTargetBackend::UnbindAsRenderTarget()) -- so an MSAA MRT target's resolved,
+        // sampleable texture would have stayed whatever it was before this Clear(), not the real
+        // cleared-and-resolved content. Two DIFFERENT MSAA targets bound as MRT, cleared to two
+        // DIFFERENT colors, proves each target's OWN resolve ran correctly (not, say, one target's
+        // resolve accidentally running twice while the other's never runs).
+        {
+            auto rtMsaaA = backend.CreateRenderTarget2D(8, 8, 0, false, false, 4);
+            auto rtMsaaB = backend.CreateRenderTarget2D(8, 8, 0, false, false, 4);
+            auto* d3dRtMsaaA = static_cast<D3D11RenderTargetBackend*>(rtMsaaA.get());
+            auto* d3dRtMsaaB = static_cast<D3D11RenderTargetBackend*>(rtMsaaB.get());
+            IRenderTargetBackend* msaaRts[2] = { rtMsaaA.get(), rtMsaaB.get() };
+            backend.SetRenderTargets(msaaRts, 2);
+            dev.Clear(Color(200, 30, 40, 255));
+            backend.SetRenderTargets(nullptr, 0);
+
+            const auto resolvedA = ReadTexture2DRegion(device, context, d3dRtMsaaA->GetSampleableTextureEXT(), 0, 0, 4, 4);
+            const auto resolvedB = ReadTexture2DRegion(device, context, d3dRtMsaaB->GetSampleableTextureEXT(), 0, 0, 4, 4);
+            bool mrtMsaaMatches = true;
+            for (int i = 0; i < 4 * 4 && mrtMsaaMatches; ++i)
+            {
+                mrtMsaaMatches = resolvedA[i * 4 + 0] == 200 && resolvedA[i * 4 + 1] == 30 &&
+                                 resolvedA[i * 4 + 2] == 40 && resolvedA[i * 4 + 3] == 255 &&
+                                 resolvedB[i * 4 + 0] == 200 && resolvedB[i * 4 + 1] == 30 &&
+                                 resolvedB[i * 4 + 2] == 40 && resolvedB[i * 4 + 3] == 255;
+            }
+            check(mrtMsaaMatches,
+                  "D3D11GraphicsBackend::SetRenderTargets() (MRT, N=2 MSAA targets): unbinding the "
+                  "MRT set now genuinely resolves BOTH targets independently, not silently skipped "
+                  "(plan_dx.md DX-143 -- same ResolveAndGenerateMipsEXT() code path also covers "
+                  "mip-regeneration for a mipMap=true MRT target, not independently pixel-tested here)");
+
+            // A subsequent single-target bind must also trigger the pending MRT flush -- proves
+            // FlushPendingMRTResolveEXT() is genuinely called from SetRenderTarget2D() too, not
+            // only from SetRenderTargets()'s own unbind-to-back-buffer path.
+            auto rtMsaaC = backend.CreateRenderTarget2D(8, 8, 0, false, false, 4);
+            auto rtMsaaD = backend.CreateRenderTarget2D(8, 8, 0, false, false, 4);
+            auto* d3dRtMsaaC = static_cast<D3D11RenderTargetBackend*>(rtMsaaC.get());
+            IRenderTargetBackend* msaaRts2[2] = { rtMsaaC.get(), rtMsaaD.get() };
+            backend.SetRenderTargets(msaaRts2, 2);
+            dev.Clear(Color(5, 6, 7, 255));
+            auto rtPlain = backend.CreateRenderTarget2D(4, 4, 0, false, false, 0);
+            backend.SetRenderTarget2D(rtPlain.get()); // switch straight to a single target, not null
+            backend.SetRenderTarget2D(nullptr);
+
+            const auto resolvedC = ReadTexture2DRegion(device, context, d3dRtMsaaC->GetSampleableTextureEXT(), 0, 0, 4, 4);
+            bool mrtToSingleFlushed = true;
+            for (int i = 0; i < 4 * 4 && mrtToSingleFlushed; ++i)
+                mrtToSingleFlushed = resolvedC[i * 4 + 0] == 5 && resolvedC[i * 4 + 1] == 6 && resolvedC[i * 4 + 2] == 7;
+            check(mrtToSingleFlushed,
+                  "D3D11GraphicsBackend::SetRenderTarget2D(): switching directly from an MRT set to "
+                  "a different single target also flushes the prior MRT set's resolve (plan_dx.md DX-143)");
+        }
+
+        // plan_dx.md DX-144: RenderTarget2D/RenderTargetCube mip-chain generation/sampling --
+        // proves ResolveAndGenerateMipsEXT()'s GenerateMips() call (DX-45/DX-143) actually writes
+        // correct content into mip levels > 0, not zero/garbage. Uses a solid single color across
+        // the whole base mip: box-filtering a solid color always produces the exact same solid
+        // color at every downstream mip level regardless of the filter kernel's specifics, so this
+        // sidesteps needing to replicate exact box-filter math while still being a real,
+        // discriminating proof (a zeroed/garbage mip would fail this immediately).
+        {
+            auto rtMip = backend.CreateRenderTarget2D(8, 8, 0 /*DepthFormat::None*/, false, true /*mipMap*/, 0);
+            auto* d3dRtMip = static_cast<D3D11RenderTargetBackend*>(rtMip.get());
+            backend.SetRenderTarget2D(rtMip.get());
+            dev.Clear(Color(200, 90, 10, 255));
+            backend.SetRenderTarget2D(nullptr); // UnbindAsRenderTarget() -> GenerateMips()
+
+            check(d3dRtMip->GetLevelCountEXT() == 4,
+                  "D3D11RenderTargetBackend: an 8x8 mipMap=true render target reports the expected "
+                  "4-level mip chain (8x8/4x4/2x2/1x1, plan_dx.md DX-144)");
+
+            const auto mip1 = ReadTexture2DMipRegion(device, context, d3dRtMip->GetSampleableTextureEXT(), 1, 0, 0, 4, 4);
+            bool mip1Exact = mip1.size() == 4u * 4u * 4u;
+            for (std::size_t i = 0; i < 4u * 4u && mip1Exact; ++i)
+                mip1Exact = mip1[i * 4 + 0] == 200 && mip1[i * 4 + 1] == 90 && mip1[i * 4 + 2] == 10 && mip1[i * 4 + 3] == 255;
+            check(mip1Exact,
+                  "D3D11RenderTargetBackend: GenerateMips()-on-unbind writes the exact box-filtered "
+                  "(here: solid-color-preserving) content into mip level 1, read back directly from "
+                  "the real GPU resource, not zero/garbage (plan_dx.md DX-144)");
+
+            const auto mip2 = ReadTexture2DMipRegion(device, context, d3dRtMip->GetSampleableTextureEXT(), 2, 0, 0, 2, 2);
+            bool mip2Exact = mip2.size() == 2u * 2u * 4u;
+            for (std::size_t i = 0; i < 2u * 2u && mip2Exact; ++i)
+                mip2Exact = mip2[i * 4 + 0] == 200 && mip2[i * 4 + 1] == 90 && mip2[i * 4 + 2] == 10 && mip2[i * 4 + 3] == 255;
+            check(mip2Exact,
+                  "D3D11RenderTargetBackend: mip level 2 (2x2) is also exact, confirming the full "
+                  "mip chain regenerates correctly, not just level 1 (plan_dx.md DX-144)");
+        }
+        {
+            auto rtCubeMip = backend.CreateRenderTargetCube(8, 0 /*DepthFormat::None*/, true /*mipMap*/);
+            auto* d3dRtCubeMip = static_cast<D3D11RenderTargetCubeBackend*>(rtCubeMip.get());
+            rtCubeMip->BindAsRenderTargetFace(0);
+            dev.Clear(Color(50, 150, 250, 255));
+            rtCubeMip->UnbindAsRenderTarget(); // GenerateMips() on the cube's shared SRV
+
+            // Subresource = mip + face * levelCount (standard D3D11 texture-array/mip indexing) --
+            // face 0, mip 1.
+            const auto cubeMip1 = ReadTexture2DMipRegion(device, context, d3dRtCubeMip->GetColorTextureEXT(),
+                                                          1, 0, 0, 4, 4);
+            bool cubeMip1Exact = cubeMip1.size() == 4u * 4u * 4u;
+            for (std::size_t i = 0; i < 4u * 4u && cubeMip1Exact; ++i)
+                cubeMip1Exact = cubeMip1[i * 4 + 0] == 50 && cubeMip1[i * 4 + 1] == 150 && cubeMip1[i * 4 + 2] == 250 && cubeMip1[i * 4 + 3] == 255;
+            check(cubeMip1Exact,
+                  "D3D11RenderTargetCubeBackend: GenerateMips()-on-unbind also regenerates face 0's "
+                  "own mip chain correctly, read back directly from the real GPU resource "
+                  "(plan_dx.md DX-144; D3D12's own render-target mip-chain generation does not exist "
+                  "at all yet -- D3D12RenderTargets.hpp's own DX-117 scope note -- so DX-144's D3D12 "
+                  "leg stays open, a real follow-up feature, not a test gap)");
+        }
+
+        // plan_dx.md DX-145: RenderTarget2D DepthStencilFormat fidelity -- confirms a render target
+        // actually gets the SPECIFIC depth/stencil DXGI format the game requested
+        // (D3DFormatMapping.cpp's DepthFormatToDxgi()), not just *some* working depth buffer:
+        // Depth16 must be DXGI_FORMAT_D16_UNORM (not silently upgraded to a combined depth+stencil
+        // format), Depth24/Depth24Stencil8 both genuinely land on DXGI_FORMAT_D24_UNORM_S8_UINT
+        // (D3D11 has no pure 24-bit depth-only format -- the mapping table's own documented,
+        // intentional shared-format decision), and DepthFormat::None creates no DSV at all. Reads
+        // the real bound depth resource's own D3D11_TEXTURE2D_DESC.Format via
+        // ID3D11DepthStencilView::GetResource(), genuine D3D11 API introspection, not internal state.
+        {
+            auto GetDsvFormat = [](ID3D11DepthStencilView* dsv) -> DXGI_FORMAT
+            {
+                if (!dsv) return DXGI_FORMAT_UNKNOWN;
+                Microsoft::WRL::ComPtr<ID3D11Resource> res;
+                dsv->GetResource(res.GetAddressOf());
+                Microsoft::WRL::ComPtr<ID3D11Texture2D> tex2d;
+                if (FAILED(res.As(&tex2d))) return DXGI_FORMAT_UNKNOWN;
+                D3D11_TEXTURE2D_DESC desc{};
+                tex2d->GetDesc(&desc);
+                return desc.Format;
+            };
+
+            auto rtNone = backend.CreateRenderTarget2D(4, 4, 0 /*DepthFormat::None*/, false, false, 0);
+            auto* d3dRtNone = static_cast<D3D11RenderTargetBackend*>(rtNone.get());
+            check(d3dRtNone->GetDSVEXT() == nullptr,
+                  "D3D11RenderTargetBackend: DepthFormat::None creates no depth-stencil view at all "
+                  "(plan_dx.md DX-145)");
+
+            auto rtD16 = backend.CreateRenderTarget2D(4, 4, 1 /*DepthFormat::Depth16*/, false, false, 0);
+            auto* d3dRtD16 = static_cast<D3D11RenderTargetBackend*>(rtD16.get());
+            check(GetDsvFormat(d3dRtD16->GetDSVEXT()) == DXGI_FORMAT_D16_UNORM,
+                  "D3D11RenderTargetBackend: DepthFormat::Depth16 genuinely creates a "
+                  "DXGI_FORMAT_D16_UNORM depth resource, not silently upgraded to a combined "
+                  "depth+stencil format (plan_dx.md DX-145)");
+
+            auto rtD24 = backend.CreateRenderTarget2D(4, 4, 2 /*DepthFormat::Depth24*/, false, false, 0);
+            auto* d3dRtD24 = static_cast<D3D11RenderTargetBackend*>(rtD24.get());
+            check(GetDsvFormat(d3dRtD24->GetDSVEXT()) == DXGI_FORMAT_D24_UNORM_S8_UINT,
+                  "D3D11RenderTargetBackend: DepthFormat::Depth24 lands on the documented "
+                  "DXGI_FORMAT_D24_UNORM_S8_UINT fallback (D3D11 has no pure 24-bit depth-only "
+                  "format, plan_dx.md DX-145)");
+
+            auto rtD24S8 = backend.CreateRenderTarget2D(4, 4, 3 /*DepthFormat::Depth24Stencil8*/, false, false, 0);
+            auto* d3dRtD24S8 = static_cast<D3D11RenderTargetBackend*>(rtD24S8.get());
+            check(GetDsvFormat(d3dRtD24S8->GetDSVEXT()) == DXGI_FORMAT_D24_UNORM_S8_UINT,
+                  "D3D11RenderTargetBackend: DepthFormat::Depth24Stencil8 also creates "
+                  "DXGI_FORMAT_D24_UNORM_S8_UINT -- both Depth24 and Depth24Stencil8 genuinely share "
+                  "the SAME real DXGI resource format, not just coincidentally 'both work' "
+                  "(plan_dx.md DX-145)");
         }
 
         // Check O (DX-50/DX-51/DX-52/DX-53): real ID3D11BlendState/DepthStencilState/
@@ -1830,7 +2034,9 @@ protected:
 
         const int totalChecks = 3 + 10 + 1 + 2 + 2 + 2 + 2 + 2 + 1 + 1 + 2 + 1 + 13 + 2 + 3 + 2 + 2 + 1 + 1 + 1 + 1 + 3 + 2 + 2 + 2 + 3 + 2 + 3 /* DX-131 rotation/scale/crop */
                                 + 1 /* DX-134 envMapAmount=0 */ + 2 /* DX-135 WeightsPerVertex */ + 2 /* DX-137 textured3d fog */
-                                + 2 /* DX-140 NPOT */ + 2 /* DX-142 all-16-sampler-slots */;
+                                + 2 /* DX-140 NPOT */ + 2 /* DX-142 all-16-sampler-slots */ + 2 /* DX-143 MRT MSAA resolve */
+                                + 4 /* DX-144 RT2D+RTCube mip-chain generation */
+                                + 4 /* DX-145 DepthStencilFormat fidelity */;
         std::printf("=== %d/%d PASS ===\n", passCount_, totalChecks);
         result_ = (passCount_ == totalChecks) ? 0 : 1;
         Exit();

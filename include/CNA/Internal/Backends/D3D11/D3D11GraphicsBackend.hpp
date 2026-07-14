@@ -244,6 +244,21 @@ namespace CNA::Internal::Backends::D3D11
         /// than calling the old target's UnbindAsRenderTarget() itself.
         D3D11RenderTargetBackend* currentCustomRT_ = nullptr;
 
+        // DX-143: same "finalize whatever was previously bound before switching away" need as
+        // currentCustomRT_ above, but for the MRT (N>1) path -- SetRenderTargets() deliberately
+        // doesn't set currentCustomRT_ for an MRT bind (a single pointer can't represent N
+        // targets), so without this, none of an MRT set's individual MSAA-resolve/mip-regen ever
+        // ran when the set was replaced/unbound (the real gap this task closes). Non-owning, same
+        // lifetime reasoning as currentCustomRT_.
+        D3D11RenderTargetBackend* currentMRTTargets_[D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT] = {};
+        int currentMRTCount_ = 0;
+        /// DX-143: if an MRT set is currently tracked, finalizes each of its targets for real
+        /// (MSAA resolve + mip regeneration, via D3D11RenderTargetBackend::ResolveAndGenerateMipsEXT())
+        /// then clears the tracking -- called at the very start of SetRenderTarget2D()/
+        /// SetRenderTargets() so every path through either function finalizes a prior MRT bind
+        /// before doing anything else. No-op if no MRT set is currently tracked.
+        void FlushPendingMRTResolveEXT();
+
         // Phase DX6 (DX-44): sampler-state cache shared by ApplySamplerState().
         D3D11SamplerCache samplerCache_;
 

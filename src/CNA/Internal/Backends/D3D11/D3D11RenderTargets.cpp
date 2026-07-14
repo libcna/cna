@@ -144,7 +144,7 @@ namespace CNA::Internal::Backends::D3D11
         if (owner_) owner_->TrackCurrentRenderTargetEXT(&rtv, 1, dsv_.Get());
     }
 
-    void D3D11RenderTargetBackend::UnbindAsRenderTarget()
+    void D3D11RenderTargetBackend::ResolveAndGenerateMipsEXT()
     {
         if (isMsaa_ && resolveTexture_)
         {
@@ -155,6 +155,11 @@ namespace CNA::Internal::Backends::D3D11
         {
             context_->GenerateMips(srv_.Get());
         }
+    }
+
+    void D3D11RenderTargetBackend::UnbindAsRenderTarget()
+    {
+        ResolveAndGenerateMipsEXT();
         if (owner_) owner_->RestoreBackBufferRenderTargetEXT();
     }
 
