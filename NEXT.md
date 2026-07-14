@@ -298,14 +298,14 @@ Mutation-verified (hardcoded `RequiresPowerOfTwoTexturesEXT()` to always return 
 exactly the capability assertion went red and the NPOT round-trip proof was consistently skipped).
 `D3D9_Smoke` now 51/51.
 
-### Phase D9-7 — Microsoft's stock effects: vendor, compile, embed: D9-70 CLOSED, D9-71–74 open
+### Phase D9-7 — Microsoft's stock effects: vendor, compile, embed: D9-70/D9-71 CLOSED, D9-72/74 open
 
 | Task | Status |
 |---|---|
 | `D9-70` — vendor the 10 Stock Effects HLSL sources verbatim | ✅ |
-| `D9-71` — offline-compile all 66 entry points to `d3d9_shaders.hpp` | ⬜ |
+| `D9-71` — offline-compile all 66 entry points to `d3d9_shaders.hpp` | ✅ |
 | `D9-72` — transcribe register annotations into `D3D9ShaderRegisters.hpp` | ⬜ |
-| `D9-73` — cross-check against Microsoft's shipped `.fxb` bytecode | 🟨 (already run in Phase D9-0: 61/66 exact; 5 `PixelLighting` variants owed to `D9-84`'s oracle proof) |
+| `D9-73` — cross-check against Microsoft's shipped `.fxb` bytecode | 🟨 (already run in Phase D9-0: 61/66 exact; re-confirmed against the real checked-in header too; 5 `PixelLighting` variants owed to `D9-84`'s oracle proof) |
 | `D9-74` — `D3D9ShaderCache` creates all 66 through a live device | ⬜ |
 
 `D9-70`: all 10 files (`BasicEffect.fx`, `AlphaTestEffect.fx`, `DualTextureEffect.fx`,
@@ -319,6 +319,18 @@ mechanically diffs the vendored copies against the FNA tree; mutation-verified (
 the vendored `BasicEffect.fx`, confirmed the script reports `MISMATCH`/exit 1, reverted). Not a
 CTest — depends on the FNA reference tree being present on the machine, same reasoning `D9-71`'s own
 row gives for its own "run by hand" pipeline.
+
+`D9-71`: new `src/CNA/Internal/Backends/D3D9/shaders/compile_shaders_sm2.py` — parses all 66 entry
+points from the vendored `.fx` files' own `compile [vp]s_2_0 ...` statements via regex (not
+hand-maintained), cross-builds `fxc_tool.cpp` (moved here unchanged from `dx9-spike/`, along with
+`compare_against_fxb.py`) with MinGW-w64, invokes it via a bare `wine` call against
+`~/.wine-cna-d3d9-spike` (not `run-wine-dxvk9.sh` — compiling never opens a device). **Real run:
+66/66 compiled, 0 failures.** Output `d3d9_shaders.hpp` (381 KB, `k<EffectName>_<EntryPointName>`
+array names) confirmed to compile clean as real C++; a second run produced a byte-identical header
+(deterministic). Bonus verification: re-ran `compare_against_fxb.py` against the real checked-in
+header's own bytecode — 61/66 exact matches, the identical 5 `PixelLighting` variants the Phase
+D9-0 spike already found, confirming the real pipeline reproduces the spike's result exactly.
+`dx9-spike/README.md` updated to reflect the move (only `xna-oracle/Oracle.cs` remains there).
 
 ### Does NOT work yet
 
@@ -336,7 +348,8 @@ Most recent first. Full detail lives in `plan_dx9.md` — this is a short index.
 
 | Commit(s) | Summary |
 |---|---|
-| *(pending)* | **`D9-70` closed (vendor Stock Effects HLSL)**: all 10 files copied byte-for-byte from the FNA tree into `src/CNA/Internal/Backends/D3D9/shaders/xna/`, plus `LICENSE`, a provenance `README.md` (66 entry points, grep-verified), and a specific `THIRD_PARTY_NOTICES.md` entry. New `scripts/verify-d3d9-stock-effects-vendored.sh` mechanically diffs against the FNA tree. Mutation-verified (appended a line to the vendored `BasicEffect.fx`, confirmed the script reports `MISMATCH`/exit 1). First row of Phase D9-7. |
+| *(pending)* | **`D9-71` closed (compile all 66 entry points)**: new `compile_shaders_sm2.py` parses the entry-point list from the vendored `.fx` files' own `compile` statements (not hand-maintained), cross-builds the moved-in `fxc_tool.cpp` with MinGW-w64, compiles via a bare `wine` call against `~/.wine-cna-d3d9-spike`. Real run: 66/66 compiled, 0 failures, into a checked-in `d3d9_shaders.hpp` (381 KB) confirmed to compile clean as real C++ and to regenerate byte-identically on a second run. Bonus: re-ran `compare_against_fxb.py` against the real header's own bytecode — 61/66 exact matches, same 5 divergent `PixelLighting` variants the Phase D9-0 spike already found. `fxc_tool.cpp`/`compare_against_fxb.py` fully moved out of `dx9-spike/` into their real home. |
+| `64de9d29` | **`D9-70` closed (vendor Stock Effects HLSL)**: all 10 files copied byte-for-byte from the FNA tree into `src/CNA/Internal/Backends/D3D9/shaders/xna/`, plus `LICENSE`, a provenance `README.md` (66 entry points, grep-verified), and a specific `THIRD_PARTY_NOTICES.md` entry. New `scripts/verify-d3d9-stock-effects-vendored.sh` mechanically diffs against the FNA tree. Mutation-verified (appended a line to the vendored `BasicEffect.fx`, confirmed the script reports `MISMATCH`/exit 1). First row of Phase D9-7. |
 | `eb373571` | **`D9-63` closed (`ApplySamplerState`) — Phase D9-6 down to just `D9-64`**: plain `SetSamplerState()` calls (design decision 11), using the `D9-21` mapping tables; slot bound-checked against real `D3DCAPS9::MaxSimultaneousTextures`, not a hardcoded 16. `D3DSAMP_SRGBTEXTURE` genuinely out of scope (interface signature carries no sRGB parameter, same category as `D9-60`'s own `D3DRS_COLORWRITEENABLE` gap). New `D3D9_Smoke` Check Y (2 checks): values read back via `GetSamplerState()` (no draw needed) confirm an exact match; out-of-range slot silently no-ops. Mutation-verified (hardcoded `D3DSAMP_ADDRESSU` to ignore the requested value, confirmed exactly that assertion went red). `D3D9_Smoke` now 53/53. |
 | `1206fc42` | **`D9-56` closed (NPOT capability) — Phase D9-5 FULLY CLOSED (all 7 rows)**: new NOXNA `RequiresPowerOfTwoTexturesEXT()`/`NonPowerOfTwoRequiresClampAddressingEXT()` surface the real `D3DCAPS9::TextureCaps` `POW2`/`NONPOW2CONDITIONAL` bits. This dev environment's DXVK device reports full, unconditional NPOT support, matching `D9-3`'s own original caps dump. New `D3D9_Smoke` Check X (2 checks): asserts the exact reported capability, then round-trips a genuinely non-power-of-two (5×3) texture for real. Enforcing the `Reach`-profile "no Wrap on NPOT" restriction itself is deferred to `D9-10`/`D9-82` (no draw/sampler path exists yet). Mutation-verified (hardcoded the POW2 helper to always return true, confirmed exactly that assertion went red). `D3D9_Smoke` now 51/51. |
 | `f33d4fe9` | **`D9-55` closed (occlusion queries)**: new `D3D9OcclusionQueryBackend` (`IDirect3DQuery9`, `D3DQUERYTYPE_OCCLUSION`), gated on the official D3D9 support-probe idiom (`CreateQuery(type, nullptr)`). New `D3D9_Smoke` Check W (3 checks). Mutation-verified (forced `IsComplete()` to always return false, confirmed exactly that assertion went red). `D3D9_Smoke` now 49/49. `D9-56` (NPOT) is the only Phase D9-5 row left open. |
@@ -360,10 +373,10 @@ Most recent first. Full detail lives in `plan_dx9.md` — this is a short index.
 **No blocker.** Phases D9-0/D9-1/D9-2/D9-3/D9-4/D9-5 are all fully closed (D9-32/D9-34 honestly 🟨 —
 see their own plan rows for exactly what's deferred and why). Phase D9-6: `D9-60`–`D9-63` are closed
 (`D9-60`/`D9-62` honestly 🟨); only `D9-64` remains, not actionable until a real draw path exists
-(`D9-82`, Phase D9-8). Phase D9-7 (Microsoft's stock effects) is now underway: `D9-70` (vendoring)
-closed. Next smallest task: `D9-71` (offline-compile all 66 entry points to a checked-in
-`d3d9_shaders.hpp`, reusing `dx9-spike/fxc_tool.cpp`'s already-proven `ID3DInclude` handler) — needs
-the real Microsoft `d3dcompiler_47.dll`, only present in `~/.wine-cna-d3d9-spike`.
+(`D9-82`, Phase D9-8). Phase D9-7 (Microsoft's stock effects): `D9-70`/`D9-71` closed (all 66 entry
+points now compile to a checked-in `d3d9_shaders.hpp`). Next smallest task: `D9-72` (transcribe
+Microsoft's `_vs(c#)`/`_ps(c#)` register annotations into `D3D9ShaderRegisters.hpp`, `static_assert`
+the C++ upload structs against it) — a pure transcription task, no device/compiler needed.
 
 ---
 
@@ -431,20 +444,15 @@ cmake -S . -B cmake-build-d3d9 \
 **Phases D9-0 through D9-5 are all fully closed** (`D9-32`/`D9-34` honestly 🟨 — see `plan_dx9.md`
 for exactly what's deferred to `D9-100`/`D9-A`/`D9-140` and why). Phase D9-6: `D9-60`–`D9-63` closed
 (`D9-60`/`D9-62` honestly 🟨); only `D9-64` remains open, and it isn't actionable yet. Phase D9-7:
-`D9-70` (vendoring) closed.
+`D9-70`/`D9-71` closed (all 66 shaders vendored and compiled into a checked-in `d3d9_shaders.hpp`).
 
-1. **`D9-71`** — offline-compile all 66 vendored entry points to a checked-in `d3d9_shaders.hpp`,
-   reusing `dx9-spike/fxc_tool.cpp`'s already-proven `ID3DInclude` handler (do not rewrite it).
-   Entry-point list is parsed from the `.fx` files' own `compile [vp]s_2_0 ...` statements, not
-   hand-maintained. Locked-in compile flags: `D3DCOMPILE_OPTIMIZATION_LEVEL3`, no others (the exact
-   configuration `D9-1`/`D9-73` already proved gives 61/66 exact Microsoft matches). Run in
-   `~/.wine-cna-d3d9-spike` (the only prefix with the real `d3dcompiler_47.dll`) — bare `wine` call,
-   not through `run-wine-dxvk9.sh` (compiling never opens a device).
-2. **`D9-72`** — transcribe Microsoft's `_vs(c#)`/`_ps(c#)` register annotations into
-   `D3D9ShaderRegisters.hpp`; `static_assert` the C++ upload structs against it.
-3. **`D9-74`** — `D3D9ShaderCache` creating all 66 shaders through a live device (needs `D9-71`
-   first, and a device — install DXVK into `~/.wine-cna-d3d9-spike` too, or a 4th prefix).
-4. **`D9-64`** (reuse the backend-agnostic `easygl_blendstate_*`/`easygl_depthstencilstate_*`/
+1. **`D9-72`** — transcribe Microsoft's `_vs(c#)`/`_ps(c#)` register annotations into
+   `D3D9ShaderRegisters.hpp`; `static_assert` the C++ upload structs against it. Pure transcription,
+   no device/compiler needed.
+2. **`D9-74`** — `D3D9ShaderCache` creating all 66 shaders through a live device (needs a real
+   device — install DXVK into `~/.wine-cna-d3d9-spike` too, or a 4th prefix; `D9-71`'s own bytecode
+   is already embedded and ready to feed `CreateVertexShader`/`CreatePixelShader`).
+3. **`D9-64`** (reuse the backend-agnostic `easygl_blendstate_*`/`easygl_depthstencilstate_*`/
    `easygl_rasterizerstate_*` CTest sources verbatim) — needs a real draw path (`D9-82`, Phase D9-8)
    to mean anything; sequence it once that phase lands, not before.
 

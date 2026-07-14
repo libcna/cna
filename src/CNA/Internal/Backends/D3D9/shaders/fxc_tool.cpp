@@ -1,5 +1,17 @@
-// D9-1 spike: compile one entry point of an XNA Stock Effect .fx to D3D9 bytecode.
+// SPDX-License-Identifier: MS-PL
+// plan_dx9.md Phase D9-7 (D9-71): compiles one entry point of a vendored XNA Stock Effect .fx to
+// real D3D9 bytecode via the actual Microsoft d3dcompiler_47.dll (design decision 5 -- no native
+// Linux D3DCompile() implementation exists, so this cross-compiles with MinGW-w64 and runs under
+// Wine). Proven in Phase D9-0 (66/66 entry points compiled, 0 failures) -- moved here unchanged
+// from dx9-spike/fxc_tool.cpp, not rewritten. Its own ID3DInclude handler resolves
+// Macros.fxh/Common.fxh/Lighting.fxh/Structures.fxh relative to the .fx file's own directory,
+// which src/CNA/Internal/Backends/D3DCommon/shaders/hlsl_compiler_tool.cpp does not need (no
+// XNA-style #include tree there).
+//
 // usage: fxc_tool.exe <file.fx> <entry> <target> <out.bin> [--strip]
+// --strip is a dead option -- Phase D9-0 found the real fxc silently ignores the Effect-framework
+// tail (VertexShader/PixelShader arrays, Technique) at /T vs_2_0/ps_2_0, so it is never used by
+// compile_shaders_sm2.py; kept only so this file stays otherwise identical to the proven spike.
 #include <d3dcompiler.h>
 #include <wrl/client.h>
 #include <cstdio>

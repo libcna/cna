@@ -5,12 +5,13 @@ Everything here **has actually been run and has actually worked** on this machin
 in a session scratchpad that does not survive, and rewriting working, proven code from a
 plan's prose is a waste.
 
-When the D3D9 backend gets a real home in the repo, these move into it:
+**`fxc_tool.cpp` and `compare_against_fxb.py` have moved** (Phase D9-7, `D9-71`) to their real home:
+`src/CNA/Internal/Backends/D3D9/shaders/` (alongside the new `compile_shaders_sm2.py` driver and
+the checked-in, auto-generated `d3d9_shaders.hpp`). This directory keeps only what has not moved
+yet:
 
 | File | Belongs in |
 |------|-----------|
-| `fxc_tool.cpp` | `src/CNA/Internal/Backends/D3D9/shaders/` (alongside a `compile_shaders_sm2.py` driver, mirroring `D3DCommon/shaders/hlsl_compiler_tool.cpp`) |
-| `compare_against_fxb.py` | same directory — it is `D9-73`'s verification oracle, and design decision 4 makes it a **standing obligation**, not a one-off |
 | `xna-oracle/Oracle.cs` | the seed of Phase D9-A's reference app (`tests/` or `tools/`, to be decided) |
 
 ---
