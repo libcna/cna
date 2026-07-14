@@ -112,6 +112,7 @@
 #include "CNA/Internal/Graphics/ImageData.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteFont.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
@@ -2360,6 +2361,118 @@ protected:
                   "level 0 (plan_dx.md DX-126)");
         }
 
+        // plan_dx.md DX-127: SpriteFont D3D11-specific glyph placement/spacing/newline/flip test,
+        // mirroring D3D12's already-closed DX-132 (examples/d3d12_smoke_test.cpp Checks KK2-KK5)
+        // and EasyGL's own established fixture (Tasks 424-429): an 8x8 solid-white atlas per
+        // glyph, zero cropping offset, zero left/right kerning bearing, so a glyph's destination
+        // rect maps exactly and any placement error is a hard pixel difference. Unlike D3D12,
+        // D3D11's real swap chain works directly under plain Wine, so this draws straight to the
+        // back buffer (this file's own established style) instead of needing an offscreen
+        // RenderTarget2D/PresentationParameters::HeadlessEXT detour.
+        {
+            Texture2D atlas(dev, 16, 8); // two 8x8 glyph cells side by side
+            std::vector<Color> atlasPx(16 * 8, Color(255, 255, 255, 255));
+            atlas.SetData(atlasPx.data(), 16 * 8);
+
+            std::vector<Microsoft::Xna::Framework::Rectangle> glyphBounds = {
+                Microsoft::Xna::Framework::Rectangle(0, 0, 8, 8), Microsoft::Xna::Framework::Rectangle(8, 0, 8, 8) };
+            std::vector<Microsoft::Xna::Framework::Rectangle> cropping = {
+                Microsoft::Xna::Framework::Rectangle(0, 0, 8, 8), Microsoft::Xna::Framework::Rectangle(0, 0, 8, 8) };
+            std::vector<SharpRuntime::charcs> chars = { u'A', u'B' };
+            std::vector<Vector3> kerning = { Vector3(0.0f, 8.0f, 0.0f), Vector3(0.0f, 8.0f, 0.0f) };
+            SpriteFont font(atlas, glyphBounds, cropping, chars,
+                            /*lineSpacing=*/8, /*spacing=*/0.0f, kerning,
+                            std::optional<SharpRuntime::charcs>(std::nullopt));
+
+            SpriteBatch fontBatch(dev);
+
+            auto readPixelF = [&](int x, int y) -> Color {
+                const Microsoft::Xna::Framework::Rectangle region(x, y, 1, 1);
+                Color px(0, 0, 0, 0);
+                dev.GetBackBufferData(&region, &px, 0, 1);
+                return px;
+            };
+            auto isWhiteF = [](const Color& c) {
+                return c.getRProperty() > 200 && c.getGProperty() > 200 && c.getBProperty() > 200;
+            };
+            auto isBlackF = [](const Color& c) {
+                return c.getRProperty() < 60 && c.getGProperty() < 60 && c.getBProperty() < 60;
+            };
+
+            // (a) Single glyph at (4,4) -> occupies exactly [4,12) x [4,12).
+            dev.Clear(Color(0, 0, 0, 255));
+            fontBatch.Begin();
+            fontBatch.DrawString(font, "A", Vector2(4.0f, 4.0f), Color::White);
+            fontBatch.End();
+            const bool glyphPlaced = isWhiteF(readPixelF(8, 8))    // inside
+                && isBlackF(readPixelF(3, 8))    // just left of the left edge
+                && isBlackF(readPixelF(12, 8))   // just right of the right edge
+                && isBlackF(readPixelF(8, 3))    // just above the top edge
+                && isBlackF(readPixelF(8, 12));  // just below the bottom edge
+            check(glyphPlaced,
+                  "SpriteBatch::DrawString(): places a single glyph at EXACTLY its destination rect "
+                  "(4,4,8,8) -- checked inside plus all four edge midpoints, so an X-only or Y-only "
+                  "misplacement cannot pass (plan_dx.md DX-127)");
+
+            // (b) Two glyphs -> the second must advance by exactly one glyph width (8px).
+            dev.Clear(Color(0, 0, 0, 255));
+            fontBatch.Begin();
+            fontBatch.DrawString(font, "AB", Vector2(0.0f, 0.0f), Color::White);
+            fontBatch.End();
+            const bool spacingOk = isWhiteF(readPixelF(4, 4))    // glyph 'A' cell [0,8)
+                && isWhiteF(readPixelF(12, 4))   // glyph 'B' cell [8,16) -- advanced by 8
+                && isBlackF(readPixelF(20, 4));  // nothing beyond the second glyph
+            check(spacingOk,
+                  "SpriteBatch::DrawString(\"AB\"): advances the SECOND glyph by exactly one glyph "
+                  "width -- both cells are drawn and nothing spills past them (plan_dx.md DX-127)");
+
+            // (c) Newline -> the second line must drop by exactly lineSpacing (8px), back to x=0.
+            dev.Clear(Color(0, 0, 0, 255));
+            fontBatch.Begin();
+            fontBatch.DrawString(font, "A\nA", Vector2(0.0f, 0.0f), Color::White);
+            fontBatch.End();
+            const bool newlineOk = isWhiteF(readPixelF(4, 4))    // line 1, y in [0,8)
+                && isWhiteF(readPixelF(4, 12))   // line 2, y in [8,16) -- dropped by lineSpacing
+                && isBlackF(readPixelF(12, 4));  // line 1 has ONE glyph -- x reset, not advanced
+            check(newlineOk,
+                  "SpriteBatch::DrawString(\"A\\nA\"): drops the second line by exactly lineSpacing "
+                  "AND resets x to the start -- a newline that only did one of the two cannot pass "
+                  "(plan_dx.md DX-127)");
+
+            // (d) SpriteEffects::FlipVertically -- an ASYMMETRIC glyph is required, otherwise a flip
+            // of a solid block is indistinguishable from no flip at all. Atlas glyph 'A' is white
+            // only in its TOP half; flipped, the white must land in the BOTTOM half.
+            std::vector<Color> halfPx(16 * 8, Color(0, 0, 0, 255));
+            for (int y = 0; y < 4; ++y)
+                for (int x = 0; x < 8; ++x)
+                    halfPx[static_cast<std::size_t>(y) * 16 + x] = Color(255, 255, 255, 255);
+            Texture2D atlasHalf(dev, 16, 8);
+            atlasHalf.SetData(halfPx.data(), 16 * 8);
+            SpriteFont fontHalf(atlasHalf, glyphBounds, cropping, chars,
+                                8, 0.0f, kerning, std::optional<SharpRuntime::charcs>(std::nullopt));
+
+            dev.Clear(Color(0, 0, 0, 255));
+            fontBatch.Begin();
+            fontBatch.DrawString(fontHalf, "A", Vector2(0.0f, 0.0f), Color::White,
+                                 0.0f, Vector2(0.0f, 0.0f), 1.0f, SpriteEffects::None, 0.0f);
+            fontBatch.End();
+            const bool noFlipOk = isWhiteF(readPixelF(4, 2))   // top half white
+                && isBlackF(readPixelF(4, 6));  // bottom half black
+
+            dev.Clear(Color(0, 0, 0, 255));
+            fontBatch.Begin();
+            fontBatch.DrawString(fontHalf, "A", Vector2(0.0f, 0.0f), Color::White,
+                                 0.0f, Vector2(0.0f, 0.0f), 1.0f, SpriteEffects::FlipVertically, 0.0f);
+            fontBatch.End();
+            const bool flipOk = isBlackF(readPixelF(4, 2))     // top half now black
+                && isWhiteF(readPixelF(4, 6));    // bottom half now white -- genuinely flipped
+
+            check(noFlipOk && flipOk,
+                  "SpriteBatch::DrawString(): SpriteEffects::FlipVertically genuinely flips a glyph -- "
+                  "an asymmetric (top-half-white) glyph lands top-half-white unflipped and "
+                  "bottom-half-white flipped, so a no-op flip cannot pass (plan_dx.md DX-127)");
+        }
+
         const int totalChecks = 2 /* SetDepthTestEnabled real, not a no-op */
                                 + 3 + 10 + 1 + 2 + 2 + 2 + 2 + 2 + 1 + 1 + 2 + 1 + 13 + 2 + 3 + 2 + 2 + 1 + 1 + 1 + 1 + 3 + 2 + 2 + 2 + 3 + 2 + 3 /* DX-131 rotation/scale/crop */
                                 + 1 /* DX-134 envMapAmount=0 */ + 2 /* DX-135 WeightsPerVertex */ + 2 /* DX-137 textured3d fog */
@@ -2369,7 +2482,8 @@ protected:
                                 + 2 /* DX-147 occlusion query visible-vs-occluded */
                                 + 4 /* DX-124 multi-light + EmissiveColor discrimination */
                                 + 2 /* DX-125 specular-highlight discrimination */
-                                + 3 /* DX-126 mip level > 0 upload/readback */;
+                                + 3 /* DX-126 mip level > 0 upload/readback */
+                                + 4 /* DX-127 SpriteFont glyph placement/spacing/newline/flip */;
         std::printf("=== %d/%d PASS ===\n", passCount_, totalChecks);
         result_ = (passCount_ == totalChecks) ? 0 : 1;
         Exit();
