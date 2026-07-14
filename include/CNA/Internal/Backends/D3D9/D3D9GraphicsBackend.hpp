@@ -21,6 +21,9 @@ namespace CNA::Internal::Backends::D3D9
 {
     using Microsoft::WRL::ComPtr;
 
+    class D3D9RenderTargetBackend;
+    class D3D9RenderTargetCubeBackend;
+
     /**
      * D3D9 graphics backend (plan_dx9.md). Implements IGraphicsBackend on top of plain Direct3D 9
      * (Direct3DCreate9, not D3D9Ex -- design decision 2), targeting Microsoft's own XNA 4.0 Stock
@@ -90,6 +93,38 @@ namespace CNA::Internal::Backends::D3D9
         /// plan note on D3D9Texture3DBackend's own class doc comment) -- returns nullptr when the
         /// device reports no volume-texture support.
         std::unique_ptr<ITexture3DBackend> CreateTexture3D(int w, int h, int depth, bool mipMap, int surfaceFormat) override;
+        /// D9-53: real D3D9RenderTargetBackend (D3DUSAGE_RENDERTARGET, D3DPOOL_DEFAULT). `mipMap`
+        /// is accepted but not yet honored (see D3D9RenderTargets.hpp's own header comment) --
+        /// `preserveContents` is likewise accepted (matches the interface) but not yet implemented
+        /// on any CNA backend, D3D9 included.
+        std::unique_ptr<IRenderTargetBackend> CreateRenderTarget2D(int w, int h, int depthFormat,
+                                                                    bool preserveContents = false, bool mipMap = false,
+                                                                    int multiSampleCount = 0) override;
+        /// D9-53: real D3D9RenderTargetCubeBackend. MSAA deliberately unsupported for cube render
+        /// targets (matches D3D11RenderTargetCubeBackend's own precedent) -- `multiSampleCount` is
+        /// accepted for signature compatibility and silently ignored.
+        std::unique_ptr<IRenderTargetCubeBackend> CreateRenderTargetCube(int size, int depthFormat,
+                                                                          bool mipMap = false,
+                                                                          int multiSampleCount = 0) override;
+        /// D9-53: explicitly overridden -- IGraphicsBackend's own default
+        /// (`if (rt) rt->BindAsRenderTargetFace(face); else SetRenderTarget2D(nullptr);`) never
+        /// actually calls a bound cube target's own UnbindAsRenderTarget() on the unbind path (it
+        /// calls SetRenderTarget2D(nullptr) instead, which only restores the back buffer via
+        /// currentCustomRT_'s own 2D-only tracking -- a cube-face bind never sets that field, so
+        /// the default would silently leave the device pointed at a stale/destroyed cube face
+        /// surface). Found empirically via this backend's own Check T (D3D9_Smoke); tracked here
+        /// via a second, cube-specific currentCustomCubeRT_ field so unbinding genuinely restores
+        /// the device's default back-buffer/depth-stencil surfaces.
+        void SetRenderTargetCubeFace(IRenderTargetCubeBackend* rt, int face) override;
+        /// D9-53: real MSAA-support probe backing D3D9RenderTargetBackend's own clamp -- queries
+        /// IDirect3D9::CheckDeviceMultiSampleType() for `format`/`requested`, returning 0 if
+        /// `requested` <= 1 or the device does not support that exact sample count (matches
+        /// D3D11RenderTargetBackend's own all-or-nothing clamp, no step-down ladder). NOXNA.
+        [[nodiscard]] int ClampMultiSampleCountEXT(D3DFORMAT format, int requested) const;
+        /// D9-53: restores the device's own default back-buffer/depth-stencil surfaces -- called by
+        /// SetRenderTarget2D(nullptr) and by a D3D9RenderTargetBackend/D3D9RenderTargetCubeBackend's
+        /// own UnbindAsRenderTarget(). NOXNA (mirrors D3D11GraphicsBackend::RestoreBackBufferRenderTargetEXT()).
+        void RestoreBackBufferRenderTargetEXT();
 
         // ---- IGraphicsBackend: pure virtual, NotYetImplemented until later D3D9 tasks land ----
         void SetDepthTestEnabled(bool enabled) override;
@@ -129,6 +164,10 @@ namespace CNA::Internal::Backends::D3D9
                                   float depthBias = 0.0f,
                                   float slopeScaleDepthBias = 0.0f) override;
         void SetScissorRect(int x, int y, int w, int h) override;
+        /// D9-53: real -- see D3D9RenderTargetBackend/D3D9RenderTargetCubeBackend's own
+        /// Bind/UnbindAsRenderTarget() for what actually changes on the device. Moved out of the
+        /// "silently-empty-default" stub section below now that render targets exist to bind.
+        void SetRenderTarget2D(IRenderTargetBackend* rt) override;
 
         // ---- IGraphicsBackend: silently-empty-default virtuals, explicitly loud until real ----
         // (D9-11's own distinction: these have a `{}` default on IGraphicsBackend itself, so an
@@ -140,7 +179,6 @@ namespace CNA::Internal::Backends::D3D9
         // above (forced by this same discovery); ApplySamplerState is listed here since no texture/
         // sampler work exists yet to make it real.)
         void SetSwapInterval(int interval) override;
-        void SetRenderTarget2D(IRenderTargetBackend* rt) override;
         void ApplySamplerState(int slot, int filter, int addressU, int addressV, int maxAnisotropy) override;
         void SetContextRecoveryEnabled(bool enabled) override;
         void SetStringMarkerEXT(const char* marker) override;
@@ -201,6 +239,13 @@ namespace CNA::Internal::Backends::D3D9
         /// currently lost -- called at the top of every rendering entry point (Clear/ClearX/
         /// ReadBackbuffer), matching real XNA's behavior of refusing to render to a lost device.
         void ThrowIfDeviceLost() const;
+        /// D9-53: re-queries and caches the device's own implicit default depth-stencil surface
+        /// (defaultDepthStencilSurface_) -- must run immediately after device creation/Reset(),
+        /// while it is still the currently-bound one (before any custom render target ever gets
+        /// bound), since IDirect3DDevice9::GetDepthStencilSurface() only ever returns whichever
+        /// surface is CURRENTLY bound, with no separate "get the implicit one" query. Null (cleared)
+        /// when no depth format was requested, matching the back buffer having no depth (Check J).
+        void CacheDefaultDepthStencilSurfaceEXT();
 
         SDL_Window* window_ = nullptr;
         int width_ = 0;
@@ -238,5 +283,21 @@ namespace CNA::Internal::Backends::D3D9
         ComPtr<IDirect3D9> d3d9_;
         ComPtr<IDirect3DDevice9> device_;
         D3DCAPS9 caps_{};
+        /// D9-53: the device's own implicit default depth-stencil surface, cached by
+        /// CacheDefaultDepthStencilSurfaceEXT() so RestoreBackBufferRenderTargetEXT() can restore it
+        /// after a custom render target's depth-stencil surface was bound in its place. Null when no
+        /// depth format was requested.
+        ComPtr<IDirect3DSurface9> defaultDepthStencilSurface_;
+
+        /// D9-53: the currently-bound custom 2D render target, or null when the back buffer is
+        /// active. Raw, non-owning -- lifetime is owned by whoever holds the IRenderTargetBackend
+        /// (mirrors D3D11GraphicsBackend::currentCustomRT_'s identical lifetime reasoning). MRT
+        /// (D9-54) is not tracked here yet -- unimplemented, inherits IGraphicsBackend's own
+        /// SetRenderTargets() default (binds only the first target via this same field).
+        D3D9RenderTargetBackend* currentCustomRT_ = nullptr;
+        /// D9-53: the currently-bound custom cube-map render target face, or null when none is
+        /// bound. Separate from currentCustomRT_ (a cube target is a distinct type from a 2D one) --
+        /// see SetRenderTargetCubeFace()'s own doc comment for why this field exists at all.
+        D3D9RenderTargetCubeBackend* currentCustomCubeRT_ = nullptr;
     };
 }

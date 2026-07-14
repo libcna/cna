@@ -54,6 +54,16 @@
 // Check R -- D3D9TextureCubeBackend/D3D9Texture3DBackend SetData()+GetData() round-trip exact
 //   bytes for a sub-region/sub-volume (D9-51), gated on the real D3DCAPS9 the device reports
 //   (D3DPTEXTURECAPS_CUBEMAP / MaxVolumeExtent) rather than assumed universal.
+// Check S -- a real D3D9RenderTargetBackend (D9-53): bind, Clear() through the public
+//   GraphicsDevice API, read back the render target's OWN surface (GetRenderTargetData(), since a
+//   render-target texture is not directly Lockable) for an exact color match, confirm a real
+//   depth-stencil surface exists, then unbind and confirm the back buffer is genuinely restored.
+// Check T -- D3D9RenderTargetCubeBackend (D9-53): bind one face, Clear(), read back that face's
+//   own surface for an exact match, then confirm unbinding restores the back buffer.
+// Check U -- an MSAA D3D9RenderTargetBackend (D9-53), gated on the real device-reported sample
+//   support (IDirect3D9::CheckDeviceMultiSampleType()): Clear() into the multisampled surface,
+//   unbind (StretchRect-resolves into the sampleable texture), confirm the resolved texture holds
+//   the exact color.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
@@ -70,6 +80,7 @@
 #include "CNA/Internal/Backends/D3D9/D3D9GraphicsBackend.hpp"
 #include "CNA/Internal/Backends/D3D9/D3D9Buffers.hpp"
 #include "CNA/Internal/Backends/D3D9/D3D9Textures.hpp"
+#include "CNA/Internal/Backends/D3D9/D3D9RenderTargets.hpp"
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "CNA/Internal/Graphics/ImageData.hpp"
 
@@ -94,6 +105,40 @@ namespace
         ++totalCount;
         std::printf("[%s] %s\n", ok ? "PASS" : "FAIL", label);
         if (ok) ++passCount;
+    }
+
+    /// D9-53 test helper: reads back an arbitrary render-target IDirect3DSurface9* as RGBA8, via
+    /// the same CreateOffscreenPlainSurface(SYSTEMMEM)+GetRenderTargetData()+LockRect(READONLY)
+    /// dance D3D9GraphicsBackend::ReadBackbuffer() already uses for the back buffer itself -- this
+    /// is a genuine D3D9 requirement (a D3DUSAGE_RENDERTARGET/D3DPOOL_DEFAULT surface is generally
+    /// not directly Lockable), not a test-only shortcut. Assumes D3DFMT_A8B8G8R8 (this backend's own
+    /// RGBA8-storage convention -- see D3D9Textures.hpp/D3D9RenderTargets.hpp), so no swapRB needed.
+    /// Returns an empty vector on any failure.
+    std::vector<uint8_t> ReadRenderTargetSurfaceD3D9(IDirect3DDevice9* device, IDirect3DSurface9* surface)
+    {
+        D3DSURFACE_DESC desc{};
+        surface->GetDesc(&desc);
+
+        ComPtr<IDirect3DSurface9> sysmem;
+        if (FAILED(device->CreateOffscreenPlainSurface(desc.Width, desc.Height, desc.Format,
+                                                        D3DPOOL_SYSTEMMEM, sysmem.GetAddressOf(), nullptr)))
+            return {};
+        if (FAILED(device->GetRenderTargetData(surface, sysmem.Get())))
+            return {};
+
+        D3DLOCKED_RECT locked{};
+        if (FAILED(sysmem->LockRect(&locked, nullptr, D3DLOCK_READONLY)))
+            return {};
+
+        std::vector<uint8_t> out(static_cast<std::size_t>(desc.Width) * desc.Height * 4);
+        for (UINT row = 0; row < desc.Height; ++row)
+        {
+            std::memcpy(out.data() + static_cast<std::size_t>(row) * desc.Width * 4,
+                       static_cast<const uint8_t*>(locked.pBits) + static_cast<std::size_t>(row) * locked.Pitch,
+                       static_cast<std::size_t>(desc.Width) * 4);
+        }
+        sysmem->UnlockRect();
+        return out;
     }
 }
 
@@ -530,6 +575,153 @@ protected:
             else
             {
                 std::printf("    (skipped: device does not report volume-texture support, MaxVolumeExtent=0)\n");
+            }
+        }
+
+        // Check S (D9-53) -- a real D3D9RenderTargetBackend: bind, Clear() through the real public
+        // GraphicsDevice API, read back the render target's OWN color surface (not the back
+        // buffer) via GetRenderTargetData() (a render-target texture is not directly Lockable, a
+        // real D3D9 restriction -- ReadRenderTargetSurfaceD3D9() above uses the same dance
+        // ReadBackbuffer() itself already relies on), confirm a real depth-stencil surface exists,
+        // then unbind and confirm the back buffer is genuinely restored and still independently
+        // clearable/readable (proves RestoreBackBufferRenderTargetEXT() actually works, not just
+        // "didn't crash").
+        {
+            auto rt = backend.CreateRenderTarget2D(8, 8, static_cast<int>(DepthFormat::Depth24Stencil8),
+                                                   false, false, 0);
+            auto& d3d9Rt = static_cast<D3D9RenderTargetBackend&>(*rt);
+
+            check(rt->GetWidth() == 8 && rt->GetHeight() == 8 &&
+                  d3d9Rt.GetDepthStencilSurfaceEXT() != nullptr &&
+                  rt->HasRealDepthBuffer(true),
+                  "D9-53: D3D9RenderTargetBackend created with the requested size and a real depth-stencil surface");
+
+            backend.SetRenderTarget2D(rt.get());
+            dev.Clear(Color(90, 100, 110, 255));
+            backend.SetRenderTarget2D(nullptr);
+
+            const auto rtPixels = ReadRenderTargetSurfaceD3D9(backend.GetDeviceEXT(), d3d9Rt.GetColorSurfaceEXT());
+            bool rtMatch = rtPixels.size() == static_cast<std::size_t>(8 * 8 * 4);
+            for (std::size_t i = 0; rtMatch && i < rtPixels.size(); i += 4)
+            {
+                if (rtPixels[i + 0] != 90 || rtPixels[i + 1] != 100 ||
+                    rtPixels[i + 2] != 110 || rtPixels[i + 3] != 255)
+                {
+                    rtMatch = false;
+                }
+            }
+            check(rtMatch, "D9-53: BindAsRenderTarget()+Clear() writes the exact color into the render target's own surface");
+
+            dev.Clear(Color(5, 6, 7, 255));
+            const Microsoft::Xna::Framework::Rectangle backBufferRegion(0, 0, 4, 4);
+            std::vector<Color> backBufferPixels(4 * 4, Color(0, 0, 0, 0));
+            dev.GetBackBufferData(&backBufferRegion, backBufferPixels.data(), 0,
+                                  static_cast<int>(backBufferPixels.size()));
+            bool backBufferMatch = true;
+            for (const Color& p : backBufferPixels)
+            {
+                if (p.getRProperty() != 5 || p.getGProperty() != 6 || p.getBProperty() != 7 ||
+                    p.getAProperty() != 255)
+                {
+                    backBufferMatch = false;
+                    break;
+                }
+            }
+            check(backBufferMatch,
+                  "D9-53: SetRenderTarget2D(nullptr) genuinely restores the back buffer -- Clear()+readback exact afterward");
+        }
+
+        // Check T (D9-53) -- D3D9RenderTargetCubeBackend: bind one face, Clear(), read back that
+        // face's own surface, unbind, confirm the back buffer is restored again.
+        {
+            auto cubeRt = backend.CreateRenderTargetCube(8, static_cast<int>(DepthFormat::None));
+            auto& d3d9CubeRt = static_cast<D3D9RenderTargetCubeBackend&>(*cubeRt);
+
+            constexpr int kFace = 2; // +Y (D3DCUBEMAP_FACE_POSITIVE_Y == 2)
+            backend.SetRenderTargetCubeFace(cubeRt.get(), kFace);
+            // Target-only clear: calling SetRenderTargetCubeFace() directly on the backend (to
+            // test D3D9RenderTargetCubeBackend itself) bypasses GraphicsDevice's own
+            // currentRenderTargets_ tracking, so its Clear(Color) overload's depth/stencil-presence
+            // heuristic would incorrectly assume the SWAP CHAIN's own depth-stencil format (this
+            // cube render target genuinely has none, DepthFormat::None above) -- an explicit
+            // Target-only clear sidesteps that heuristic entirely rather than fighting it.
+            dev.Clear(ClearOptions::Target, Color(150, 160, 170, 255), 1.0f, 0);
+
+            ComPtr<IDirect3DSurface9> faceSurface;
+            d3d9CubeRt.GetTextureEXT()->GetCubeMapSurface(static_cast<D3DCUBEMAP_FACES>(kFace), 0, faceSurface.GetAddressOf());
+            const auto facePixels = ReadRenderTargetSurfaceD3D9(backend.GetDeviceEXT(), faceSurface.Get());
+
+            backend.SetRenderTargetCubeFace(nullptr, 0);
+
+            bool faceMatch = facePixels.size() == static_cast<std::size_t>(8 * 8 * 4);
+            for (std::size_t i = 0; faceMatch && i < facePixels.size(); i += 4)
+            {
+                if (facePixels[i + 0] != 150 || facePixels[i + 1] != 160 ||
+                    facePixels[i + 2] != 170 || facePixels[i + 3] != 255)
+                {
+                    faceMatch = false;
+                }
+            }
+            check(cubeRt->GetSize() == 8 && faceMatch,
+                  "D9-53: D3D9RenderTargetCubeBackend::BindAsRenderTargetFace()+Clear() writes the exact color into that face");
+
+            dev.Clear(Color(11, 12, 13, 255));
+            const Microsoft::Xna::Framework::Rectangle backBufferRegion2(0, 0, 4, 4);
+            std::vector<Color> backBufferPixels2(4 * 4, Color(0, 0, 0, 0));
+            dev.GetBackBufferData(&backBufferRegion2, backBufferPixels2.data(), 0,
+                                  static_cast<int>(backBufferPixels2.size()));
+            bool backBufferMatch2 = true;
+            for (const Color& p : backBufferPixels2)
+            {
+                if (p.getRProperty() != 11 || p.getGProperty() != 12 || p.getBProperty() != 13 ||
+                    p.getAProperty() != 255)
+                {
+                    backBufferMatch2 = false;
+                    break;
+                }
+            }
+            check(backBufferMatch2,
+                  "D9-53: unbinding the cube render target genuinely restores the back buffer");
+        }
+
+        // Check U (D9-53) -- MSAA render target, gated on the real device-reported support
+        // (D3D9GraphicsBackend::ClampMultiSampleCountEXT(), backed by
+        // IDirect3D9::CheckDeviceMultiSampleType()) rather than assumed: Clear() into the
+        // multisampled offscreen surface, unbind (which StretchRect-resolves into the sampleable
+        // texture), and confirm the RESOLVED texture holds the exact clear color.
+        {
+            const int clamped = backend.ClampMultiSampleCountEXT(D3DFMT_A8B8G8R8, 4);
+            if (clamped > 1)
+            {
+                auto msaaRt = backend.CreateRenderTarget2D(8, 8, static_cast<int>(DepthFormat::None), false, false, 4);
+                auto& d3d9MsaaRt = static_cast<D3D9RenderTargetBackend&>(*msaaRt);
+                check(d3d9MsaaRt.GetMultiSampleCount() > 1,
+                      "D9-53: MSAA D3D9RenderTargetBackend reports a real, device-clamped sample count > 1");
+
+                backend.SetRenderTarget2D(msaaRt.get());
+                // Target-only clear -- same reasoning as Check T: this MSAA target has
+                // DepthFormat::None, and binding it via the backend directly bypasses
+                // GraphicsDevice's own currentRenderTargets_ tracking that Clear(Color)'s
+                // depth/stencil-presence heuristic relies on.
+                dev.Clear(ClearOptions::Target, Color(200, 210, 220, 255), 1.0f, 0);
+                backend.SetRenderTarget2D(nullptr);
+
+                const auto resolved = ReadRenderTargetSurfaceD3D9(backend.GetDeviceEXT(), d3d9MsaaRt.GetColorSurfaceEXT());
+                bool resolvedMatch = resolved.size() == static_cast<std::size_t>(8 * 8 * 4);
+                for (std::size_t i = 0; resolvedMatch && i < resolved.size(); i += 4)
+                {
+                    if (resolved[i + 0] != 200 || resolved[i + 1] != 210 ||
+                        resolved[i + 2] != 220 || resolved[i + 3] != 255)
+                    {
+                        resolvedMatch = false;
+                    }
+                }
+                check(resolvedMatch,
+                      "D9-53: MSAA render target Clear()+unbind-resolve (StretchRect) produces the exact color in the resolved texture");
+            }
+            else
+            {
+                std::printf("    (skipped: device does not report 4x MSAA support for D3DFMT_A8B8G8R8)\n");
             }
         }
 

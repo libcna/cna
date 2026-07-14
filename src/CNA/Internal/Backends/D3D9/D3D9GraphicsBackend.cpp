@@ -9,6 +9,7 @@
 #include "CNA/Internal/Backends/D3D9/D3D9FormatMapping.hpp"
 #include "CNA/Internal/Backends/D3D9/D3D9StateMapping.hpp"
 #include "CNA/Internal/Backends/D3D9/D3D9Textures.hpp"
+#include "CNA/Internal/Backends/D3D9/D3D9RenderTargets.hpp"
 
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DeviceLostException.hpp"
@@ -200,6 +201,8 @@ namespace CNA::Internal::Backends::D3D9
                     " PixelShaderVersion=" + FormatHr(caps_.PixelShaderVersion));
             }
         }
+
+        CacheDefaultDepthStencilSurfaceEXT();
     }
 
     void D3D9GraphicsBackend::EnsureDeviceSize()
@@ -217,6 +220,23 @@ namespace CNA::Internal::Backends::D3D9
         height_ = h;
         presentationDirty_ = false;
 
+        // D9-53 fix (found while wiring up render targets): Reset() genuinely fails/misbehaves if
+        // any D3DPOOL_DEFAULT resource (a dynamic vertex/index buffer, a render target) is still
+        // allocated -- this app-initiated resize path was calling Reset() directly without ever
+        // releasing them, unlike PerformResetRecovery()'s own identical release loop. Each resource
+        // recreates lazily on its own next use, same as the device-lost path.
+        for (ID3D9DefaultPoolResourceEXT* resource : defaultPoolResources_)
+        {
+            resource->ReleaseDefaultPoolResourceEXT();
+        }
+        // D9-53 fix (found the hard way via DXVK's own "Device reset failed because device still
+        // has alive losable resources" warning): a cached ComPtr<IDirect3DSurface9> obtained via
+        // GetDepthStencilSurface()/GetBackBuffer() counts as an app-held reference to a losable
+        // resource -- Reset() genuinely fails while one is still alive, a real, well-known D3D9
+        // gotcha, not a DXVK quirk. Must release before Reset(), re-cache after (CacheDefault...()
+        // below already does the re-cache half).
+        defaultDepthStencilSurface_.Reset();
+
         D3DPRESENT_PARAMETERS pp = BuildPresentParameters();
         HRESULT hr = device_->Reset(&pp);
         if (FAILED(hr))
@@ -225,6 +245,12 @@ namespace CNA::Internal::Backends::D3D9
         // Reset() invalidates the device's own render-state defaults (e.g. the viewport) --
         // restore what GraphicsDevice itself does not proactively re-push after a resize.
         SetViewport(0, 0, width_, height_, 0.0f, 1.0f);
+        CacheDefaultDepthStencilSurfaceEXT();
+        // Reset() always reverts the active render target to the (new) back buffer -- any
+        // previously-bound custom render target is no longer genuinely active, and its own
+        // D3DPOOL_DEFAULT resources were just released above anyway.
+        currentCustomRT_ = nullptr;
+        currentCustomCubeRT_ = nullptr;
     }
 
     void D3D9GraphicsBackend::UpdatePresentationFormatEXT(int backBufferFormat, int depthStencilFormat,
@@ -266,6 +292,10 @@ namespace CNA::Internal::Backends::D3D9
         {
             resource->ReleaseDefaultPoolResourceEXT();
         }
+        // D9-53 fix: see EnsureDeviceSize()'s identical line -- a cached ComPtr<IDirect3DSurface9>
+        // from GetDepthStencilSurface() is itself an app-held reference to a losable resource and
+        // must be released before Reset() too, not just the registered D3DPOOL_DEFAULT resources.
+        defaultDepthStencilSurface_.Reset();
 
         D3DPRESENT_PARAMETERS pp = BuildPresentParameters();
         HRESULT hr = device_->Reset(&pp);
@@ -278,6 +308,12 @@ namespace CNA::Internal::Backends::D3D9
         }
 
         SetViewport(0, 0, width_, height_, 0.0f, 1.0f);
+        CacheDefaultDepthStencilSurfaceEXT();
+        // Same reasoning as EnsureDeviceSize()'s identical line: Reset() always reverts to the back
+        // buffer, and any previously-bound custom render target's D3DPOOL_DEFAULT resources were
+        // just released above.
+        currentCustomRT_ = nullptr;
+        currentCustomCubeRT_ = nullptr;
         deviceLost_ = false;
 
         if (deviceEventCallback_) deviceEventCallback_(BackendDeviceEvent::Reset);
@@ -556,6 +592,84 @@ namespace CNA::Internal::Backends::D3D9
         return std::make_unique<D3D9Texture3DBackend>(device_.Get(), w, h, depth, mipMap, surfaceFormat);
     }
 
+    std::unique_ptr<IRenderTargetBackend> D3D9GraphicsBackend::CreateRenderTarget2D(
+        int w, int h, int depthFormat, bool /*preserveContents*/, bool /*mipMap*/, int multiSampleCount)
+    {
+        return std::make_unique<D3D9RenderTargetBackend>(*this, device_.Get(), w, h, depthFormat, multiSampleCount);
+    }
+
+    std::unique_ptr<IRenderTargetCubeBackend> D3D9GraphicsBackend::CreateRenderTargetCube(
+        int size, int depthFormat, bool /*mipMap*/, int /*multiSampleCount*/)
+    {
+        return std::make_unique<D3D9RenderTargetCubeBackend>(*this, device_.Get(), size, depthFormat);
+    }
+
+    int D3D9GraphicsBackend::ClampMultiSampleCountEXT(D3DFORMAT format, int requested) const
+    {
+        if (requested <= 1) return 0;
+        // D3D9's D3DMULTISAMPLE_TYPE enumerators for 2..16 samples are numerically equal to the
+        // sample count itself (D3DMULTISAMPLE_2_SAMPLES=2, ... D3DMULTISAMPLE_16_SAMPLES=16), so
+        // `requested` casts directly -- no lookup table needed.
+        DWORD qualityLevels = 0;
+        const HRESULT hr = d3d9_->CheckDeviceMultiSampleType(
+            D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, format, !isFullScreen_,
+            static_cast<D3DMULTISAMPLE_TYPE>(requested), &qualityLevels);
+        return SUCCEEDED(hr) ? requested : 0;
+    }
+
+    void D3D9GraphicsBackend::RestoreBackBufferRenderTargetEXT()
+    {
+        ComPtr<IDirect3DSurface9> backBuffer;
+        device_->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, backBuffer.GetAddressOf());
+        device_->SetRenderTarget(0, backBuffer.Get());
+        device_->SetDepthStencilSurface(defaultDepthStencilSurface_.Get());
+    }
+
+    void D3D9GraphicsBackend::CacheDefaultDepthStencilSurfaceEXT()
+    {
+        defaultDepthStencilSurface_.Reset();
+        if (HasDepthBuffer(depthStencilFormatOrdinal_))
+        {
+            device_->GetDepthStencilSurface(defaultDepthStencilSurface_.GetAddressOf());
+        }
+    }
+
+    void D3D9GraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* rt)
+    {
+        if (currentCustomCubeRT_)
+        {
+            currentCustomCubeRT_->UnbindAsRenderTarget();
+            currentCustomCubeRT_ = nullptr;
+        }
+        if (currentCustomRT_) currentCustomRT_->UnbindAsRenderTarget();
+        if (!rt)
+        {
+            currentCustomRT_ = nullptr;
+            return;
+        }
+        auto* d3d9Rt = static_cast<D3D9RenderTargetBackend*>(rt);
+        currentCustomRT_ = d3d9Rt;
+        d3d9Rt->BindAsRenderTarget();
+    }
+
+    void D3D9GraphicsBackend::SetRenderTargetCubeFace(IRenderTargetCubeBackend* rt, int face)
+    {
+        if (currentCustomRT_)
+        {
+            currentCustomRT_->UnbindAsRenderTarget();
+            currentCustomRT_ = nullptr;
+        }
+        if (currentCustomCubeRT_) currentCustomCubeRT_->UnbindAsRenderTarget();
+        if (!rt)
+        {
+            currentCustomCubeRT_ = nullptr;
+            return;
+        }
+        auto* d3d9CubeRt = static_cast<D3D9RenderTargetCubeBackend*>(rt);
+        currentCustomCubeRT_ = d3d9CubeRt;
+        d3d9CubeRt->BindAsRenderTargetFace(face);
+    }
+
     std::unique_ptr<ISpriteBatchBackend> D3D9GraphicsBackend::CreateSpriteBatch()
     {
         NotYetImplemented("D3D9", "CreateSpriteBatch (see plan_dx9.md D9-90)");
@@ -564,11 +678,6 @@ namespace CNA::Internal::Backends::D3D9
     void D3D9GraphicsBackend::SetSwapInterval(int)
     {
         NotYetImplemented("D3D9", "SetSwapInterval (see plan_dx9.md D9-30)");
-    }
-
-    void D3D9GraphicsBackend::SetRenderTarget2D(IRenderTargetBackend*)
-    {
-        NotYetImplemented("D3D9", "SetRenderTarget2D (see plan_dx9.md D9-53)");
     }
 
     void D3D9GraphicsBackend::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
