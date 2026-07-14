@@ -2240,6 +2240,70 @@ protected:
                   "(plan_dx.md DX-124)");
         }
 
+        // plan_dx.md DX-125: specular-highlight (SpecularColor/SpecularPower) pixel test. A real
+        // methodology that avoids the byte-exact-CPU-replication problem this row's own text
+        // originally documented -- rather than reproducing the view-angle-dependent Blinn-Phong
+        // math for a byte-exact comparison, this picks geometry where the math collapses to an
+        // exact, hand-derivable value: eye at (0,0,-10), surface normal (0,0,-1), light1
+        // traveling (0,0,1) (so "direction to light" = (0,0,-1), identical to the view direction)
+        // -- the half-vector H = normalize(view+toLight) then equals N exactly, so dot(H,N)=1 and
+        // pow(1,SpecularPower)=1 regardless of the actual power value. Mirrors D3D12's own
+        // already-closed DX-139 (examples/d3d12_smoke_test.cpp Checks FF1/FF2) exactly.
+        {
+            struct VPNT { float x, y, z; float nx, ny, nz; float u, v; };
+            static const VPNT kTriFF[3] = {
+                {-1.0f, -1.0f, 0.0f, 0.0f, 0.0f, -1.0f, 0.0f, 1.0f},
+                { 3.0f, -1.0f, 0.0f, 0.0f, 0.0f, -1.0f, 2.0f, 1.0f},
+                {-1.0f,  3.0f, 0.0f, 0.0f, 0.0f, -1.0f, 0.0f, -1.0f},
+            };
+            auto vbFF = backend.CreateVertexBuffer(3);
+            vbFF->SetData(kTriFF, 3, sizeof(VPNT));
+
+            ImageData whiteImg;
+            whiteImg.width = 2; whiteImg.height = 2; whiteImg.mipLevels = 1;
+            whiteImg.pixels.assign(2 * 2 * 4, 255);
+            auto whiteTexFF = backend.CreateTexture(whiteImg);
+
+            GpuDrawParams sp;
+            sp.texture0 = whiteTexFF.get();
+            sp.textureEnabled = true;
+            sp.lightingEnabled = true;
+            sp.diffuseColor[0] = 1.0f; sp.diffuseColor[1] = 1.0f; sp.diffuseColor[2] = 1.0f; sp.diffuseColor[3] = 1.0f;
+            sp.ambientColor[0] = 0.0f; sp.ambientColor[1] = 0.0f; sp.ambientColor[2] = 0.0f;
+            sp.light0Diffuse[0] = 0.0f; sp.light0Diffuse[1] = 0.0f; sp.light0Diffuse[2] = 0.0f; // no diffuse noise
+            sp.light1Dir[0] = 0.0f; sp.light1Dir[1] = 0.0f; sp.light1Dir[2] = 1.0f;             // travels +Z
+            sp.light1Diffuse[0] = 0.0f; sp.light1Diffuse[1] = 0.0f; sp.light1Diffuse[2] = 0.0f; // diffuse off too
+            sp.light1Specular[0] = 1.0f; sp.light1Specular[1] = 1.0f; sp.light1Specular[2] = 1.0f;
+            sp.eyePositionWorld[0] = 0.0f; sp.eyePositionWorld[1] = 0.0f; sp.eyePositionWorld[2] = -10.0f;
+            sp.specularColor[0] = 1.0f; sp.specularColor[1] = 1.0f; sp.specularColor[2] = 1.0f;
+            sp.specularPower = 16.0f;
+
+            const Microsoft::Xna::Framework::Rectangle centerRegionFF(30, 30, 1, 1);
+
+            dev.Clear(Color(0, 0, 0, 255));
+            backend.DrawPrimitivesEx(*vbFF, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                     Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, sp);
+            Color specOn(0, 0, 0, 0);
+            dev.GetBackBufferData(&centerRegionFF, &specOn, 0, 1);
+            check(specOn.getRProperty() == 255 && specOn.getGProperty() == 255 && specOn.getBProperty() == 255,
+                  "D3D11GraphicsBackend::DrawPrimitivesEx(): real lit_textured3d -- Blinn-Phong "
+                  "specular at a geometry deliberately chosen so dot(H,N)=1 exactly contributes the "
+                  "exact expected full-white highlight, with diffuse/ambient/emissive all zero "
+                  "(plan_dx.md DX-125)");
+
+            GpuDrawParams spOff = sp;
+            spOff.specularColor[0] = 0.0f; spOff.specularColor[1] = 0.0f; spOff.specularColor[2] = 0.0f;
+            dev.Clear(Color(0, 0, 0, 255));
+            backend.DrawPrimitivesEx(*vbFF, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                     Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, spOff);
+            Color specOff(0, 0, 0, 0);
+            dev.GetBackBufferData(&centerRegionFF, &specOff, 0, 1);
+            check(specOff.getRProperty() == 0 && specOff.getGProperty() == 0 && specOff.getBProperty() == 0,
+                  "D3D11GraphicsBackend::DrawPrimitivesEx(): the SAME geometry/light with material "
+                  "SpecularColor zeroed produces exact black -- proves the prior check's white came "
+                  "genuinely from the specular term, not diffuse/ambient/emissive (plan_dx.md DX-125)");
+        }
+
         const int totalChecks = 2 /* SetDepthTestEnabled real, not a no-op */
                                 + 3 + 10 + 1 + 2 + 2 + 2 + 2 + 2 + 1 + 1 + 2 + 1 + 13 + 2 + 3 + 2 + 2 + 1 + 1 + 1 + 1 + 3 + 2 + 2 + 2 + 3 + 2 + 3 /* DX-131 rotation/scale/crop */
                                 + 1 /* DX-134 envMapAmount=0 */ + 2 /* DX-135 WeightsPerVertex */ + 2 /* DX-137 textured3d fog */
@@ -2247,7 +2311,8 @@ protected:
                                 + 4 /* DX-144 RT2D+RTCube mip-chain generation */
                                 + 4 /* DX-145 DepthStencilFormat fidelity */
                                 + 2 /* DX-147 occlusion query visible-vs-occluded */
-                                + 4 /* DX-124 multi-light + EmissiveColor discrimination */;
+                                + 4 /* DX-124 multi-light + EmissiveColor discrimination */
+                                + 2 /* DX-125 specular-highlight discrimination */;
         std::printf("=== %d/%d PASS ===\n", passCount_, totalChecks);
         result_ = (passCount_ == totalChecks) ? 0 : 1;
         Exit();
