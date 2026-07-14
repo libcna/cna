@@ -1,19 +1,29 @@
 # Direct3D 11 / Direct3D 12 Graphics Backends — Implementation Plan
 
-> **Status (2026-07-14): Phase DX1 through Phase DX11 are ALL closed** — every task except
-> `DX-90`/`DX-91` (real-Windows hardware, `needs_human`, no such machine available in this dev
-> environment). D3D11 is a real, feature-complete-per-this-plan backend: 6 CTest binaries, 96+
-> checks, all passing through Wine+DXVK on a real GPU. See the dedicated milestone paragraphs below
-> (search "also closed") for each phase's own real proof, or jump straight to
-> `docs/d3d11-backend.md` for the current-state summary. **Phase DX12 (D3D12) is now authorized and
-> well underway: `DX-100` through `DX-111` are all closed (`DX-109` carries its own honest 🟨 for
-> render targets/cube/3D textures deliberately triaged beyond what `DX-111` itself needed) — all 10
-> stock shader variants draw real, GPU-pixel-verified triangles off-screen through Wine+vkd3d-proton
-> (`D3D12_Smoke` CTest, 74/74 checks), including a real `D3D12SpriteBatchBackend`. Swap-chain/
-> `Present()` remains a genuine, documented gap (crashes under this dev loop's Wine+vkd3d-proton,
-> real cause identified) deferred to `DX-114`'s real-Windows pass — every other proof in this phase
-> is real device-facing GPU work, not simulated.** `DX-100`'s own real spike (2026-07-14) found the
-> D3D12 device/queue/fence/
+> **Status (2026-07-14): BOTH backends' full software/logic layer are done and Wine-verified.**
+> **D3D11**: Phase DX1 through Phase DX11 are ALL closed — every task except `DX-90`/`DX-91`
+> (real-Windows hardware, `needs_human`, no such machine available in this dev environment). A real,
+> feature-complete-per-this-plan backend: 6 CTest binaries, 96+ checks, all passing through Wine+DXVK
+> on a real GPU, including a working (Wine-verified) swap chain/`Present()`. **D3D12**: Phase DX12
+> (`DX-100` through `DX-113` and `DX-115`) is now ALSO fully closed — every task except `DX-114`
+> (real-Windows hardware, `needs_human`, same constraint as D3D11's `DX-90`). All 10 stock shader
+> variants draw real, GPU-pixel-verified triangles **off-screen** through Wine+vkd3d-proton
+> (`D3D12_Smoke` CTest, 80/80 checks), including a real `D3D12SpriteBatchBackend`, real device-removed
+> recovery, and mutation-tested discriminating power. **D3D12's own additional, headline gap beyond
+> D3D11's**: swap-chain/`Present()` genuinely crashes under this dev loop's Wine+vkd3d-proton (real
+> cause identified — a `dxgi.dll`/vkd3d-proton architecture mismatch, not a CNA bug), so unlike D3D11,
+> D3D12 has **no working local presentation path at all** — every D3D12 proof in this plan is
+> off-screen, and real swap-chain verification is `DX-114`'s job on real Windows hardware. D3D12 also
+> lacks several capabilities D3D11 has for real: a public render-target backend, `Texture3D`,
+> runtime-settable blend/depth-stencil/rasterizer state (PSOs hardcode `depthEnable=false`/
+> `cullMode=None`), per-slot `SamplerState` (samplers are hardcoded static WRAP/linear), and occlusion
+> queries — all real, scoped, honestly-documented follow-up work, not silently dropped. See the
+> dedicated milestone paragraphs below (search "also closed") for each phase's own real proof, or
+> jump straight to `docs/d3d11-backend.md`/`docs/d3d12-backend.md` for the current-state summaries and
+> `docs/graphics-backend-feature-matrix.md` for the full row-by-row comparison. **With DX-114 the only
+> open D3D12 task and it being `needs_human`, there is no further available Debian-side work on this
+> plan barring new instructions.** Full phase-by-phase history follows below. `DX-100`'s own real
+> spike (2026-07-14) found the D3D12 device/queue/fence/
 > command-list path genuinely works locally via Wine+vkd3d-proton (DXR 1.1/SM 6.8 negotiated, more
 > capable than D3D11's own DXVK path), but swap-chain creation specifically crashes/fails under the
 > tested setup — see that row's own Notes for the full evidence and the recommended off-screen-proof
@@ -1021,7 +1031,16 @@ separately authorized-but-not-started (design decision 9) — see that phase's o
 
 ---
 
-## Phase DX12 — Direct3D 12 backend (deferred, none authorized yet)
+## Phase DX12 — Direct3D 12 backend
+
+**Status (2026-07-14): `DX-100` through `DX-113` and `DX-115` are all closed — Phase DX12 is now
+essentially complete for what this Debian dev environment can prove.** Only `DX-114` (real Windows
+hardware) remains, correctly `needs_human` — no such machine is available here. D3D12's own real,
+honestly-documented headline gap is swap-chain presentation: implemented for real but crashing under
+this dev loop's Wine+vkd3d-proton setup (a genuine `dxgi.dll`/vkd3d-proton architecture mismatch, not
+a CNA bug — see `DX-100`/`DX-102`'s own Notes), so every proof in this phase stays off-screen. See
+`docs/d3d12-backend.md` for the current-state summary and `docs/graphics-backend-feature-matrix.md`
+for the row-by-row comparison against `D3D11` and the other established backends.
 
 Every row below is written up as a concrete, scoped task per design decision 9. The project owner
 authorized starting this phase 2026-07-13 ("later if time allows," after D3D11/Phases DX1–DX11 were
@@ -1058,7 +1077,7 @@ this phase without re-verifying it.
 | DX-112 | SpriteBatch, matching D3D11's `DX-70`–`DX-72` | ✅ | **Closed 2026-07-14, real and pixel-verified — `sprite2d` landed first (as this row's own directive required), then this.** New `D3D12SpriteBatchBackend` (`D3D12SpriteBatch.hpp`/`.cpp`) reuses `D3D11SpriteBatchBackend`'s exact destination/source-rect/origin/rotation/`SpriteEffects`-flip quad-building formula (CPU-side XNA geometry math, unchanged) and a real hand-built sprite2d PSO/input-layout (deliberately bypassing the shared stride-keyed `D3D12PipelineStateCache`/`D3DVertexFormatHelper`, since sprite2d's 32-byte `Sprite2DVertex` collides with `VertexPositionNormalTexture`'s own existing stride-32 meaning — the same real collision D3D11's own `DX-70` fork found and worked around). Root signature is genuinely **shared** with `alpha_test3d`'s own `(1,1,1)` object (a root signature only describes binding slots, not cbuffer contents). Real pixel-readback proof (Checks Q–R, `D3D12_Smoke` 61→68/68): exact quad placement, and a genuine `SpriteEffects::FlipHorizontally` proof — a real bug was found and fixed while writing this test itself (not production code): the first attempt's expected-color assertion assumed `UV = px/width` for its readback coordinates, but D3D rasterizes at pixel *centers* (`UV = (px+0.5)/width`), so the LINEAR-filtered static sampler blended in a small amount of the neighboring texel; fixed by widening the test's source texture so each color spans 2 texels instead of 1, making the readback points immune to the exact sub-pixel alignment (blending same-color-with-same-color is exact regardless of weight). **Honest, documented scope gaps (not silently dropped)**: `SpriteBatch::Begin(effect)` (D3D11's own `DX-71`) throws a named error if actually flushed — no D3D12 equivalent of `D3D11EffectBackend`/`DX-58` (runtime `D3DCompile()`-driven custom effects) exists yet for D3D12; `SetSamplerFilter`/`SetSamplerAddressMode` (D3D11's own `DX-72`) are stored but not yet behaviorally real, since no D3D12 dynamic-sampler-state system (a Phase-DX7 equivalent) exists yet either — the root signature's static sampler stays fixed at LINEAR filter/WRAP address mode. |
 | DX-113 | Tests: same shape as `DX-80`–`DX-84`, plus D3D12-specific cases (barrier-transition correctness, fence/frame-in-flight back-pressure, device-removed recovery) | 🟨 | **Closed 2026-07-14 for everything genuinely testable on this dev loop — audited what DX-102–111's own landing forks already built informally (`examples/d3d12_smoke_test.cpp` Checks A–U, 74 checks) and closed 2 real gaps found, rather than assuming a blank slate.** DX-81-equivalent audit: all 10 stock variants + `SpriteBatch` already had genuine off-screen pixel-readback coverage (Checks M–U), but — the exact same gap `DX-81`'s own D3D11 audit found — fog on/off had never been independently exercised; closed by new Check V (colored3d bundle via `DrawPrimitivesEx`, same `FogStart=0/FogEnd=0.5`-lands-exactly-on-`fogFactor=0` fixture as D3D11's own Check AC, same DXBC bytecode underneath — `fogEnabled=false` leaves the exact vertex color (V1), `fogEnabled=true` blends all the way to the exact `FogColor` (V2)). Barrier-transition correctness (`D3D12ResourceStateTracker`, Check G) had real redundant-barrier-suppression and multi-step-transition coverage already (G1–G7) but was missing its own documented throw contract — never-tracked-resource calls to `TransitionTo()`/`GetTrackedStateEXT()` are documented in the header to throw `std::runtime_error`, untested; closed by new Checks G8–G10 (a second, deliberately never-`TrackResource()`'d buffer; both calls genuinely throw). Device-removed recovery (`DX-110`'s own Check L1–L6) was already complete on audit, no further action needed. **DX-84-equivalent mutation test, on Check M (`DrawColoredPrimitives`, the first real D3D12 triangle)**: mutated `D3D12GraphicsBackend.cpp`'s non-indexed path (line 773) `perDraw.VertexColorEnabled` from `1.0f` to `0.0f`, rebuilt, reran through Wine+vkd3d-proton — **exactly Check M1 failed (79/80), every other check including the indexed M2 — a separate code path, correctly untouched by this mutation — still passed**; reverted, rebuilt, reconfirmed 80/80. DX-85-equivalent engagement gate (`scripts/run-wine-vkd3d.sh`'s real `vkd3d-proton - applicationVersion:` log check, `CNA_D3D12_SKIP_VKD3D_GATE` opt-out) was already built as part of `DX-102`–`105`'s own landing task — confirmed still correctly wired into the one registered D3D12 CTest (`D3D12_Smoke`; the window-attached swap-chain diagnostic is deliberately never registered as a CTest, per `DX-102`'s own row). **Two genuine, honestly-scoped gaps, not silently closed**: (1) DX-82-equivalent state-object *pixel-behavior* tests are **not applicable yet** — D3D12 has no `D3D11StateObjectCache` equivalent; blend/depth/rasterizer state is currently a hardcoded PSO-desc simplification (`depthEnable=false`/`cullMode=None`, documented at every draw-path branch), not a separate settable object, so there is no runtime-varying state to discriminate a test against yet — this genuinely waits on a future D3D12 rasterizer/blend/depth-stencil-state-cache task, not an oversight here; (2) Check E's fence/frame-in-flight back-pressure proof (E1–E3) is real for the *value-ordering/wait-completion* contract (`SignalAndWaitForFrameEXT`'s own bookkeeping, genuinely exercised and correct), but does **not** independently prove the CPU thread actually *stalls* under real GPU load — the test issues no intervening GPU work, so the `WaitForSingleObject` branch's timing-blocking behavior specifically is plausible-but-unmeasured, an honest gap rather than a fabricated stall scenario forced onto a lightweight smoke test. |
 | DX-114 | Real-Windows verification checklist, same shape as `DX-90` plus DXR/ray-tracing feature-level detection if that ever becomes a project goal (explicitly out of scope for v1 — see "Why these backends" above) | ⬜ | |
-| DX-115 | `docs/d3d12-backend.md` + feature-matrix column + README updates, mirroring `DX-95`–`DX-97` | ⬜ | |
+| DX-115 | `docs/d3d12-backend.md` + feature-matrix column + README updates, mirroring `DX-95`–`DX-97` | ✅ | **Closed 2026-07-14 — the last open task in Phase DX12 (`DX-114` remains, correctly `needs_human`).** New `docs/d3d12-backend.md` (status/scope, Wine+vkd3d-proton dev-loop setup incl. the Steam-Proton-sourced `d3d12.dll`/`d3d12core.dll` + dedicated `~/.wine-cna-d3d12` prefix, how to write a test, a full honest "Known limitations" list led by the swap-chain crash, not buried). `docs/graphics-backend-feature-matrix.md` grew a real `D3D12` column across all 7 applicable tables, mirroring `D3D11`'s own `DX-96` column but independently re-derived per row from `plan_dx.md`'s actual `DX-100`–`DX-113` Notes (not copy-pasted from D3D11's cells) — several rows are honestly ⬜ where D3D11 is ✅/🟨 (no render-target backend, no `Texture3D`, no state-object application, no per-slot `SamplerState`, no occlusion queries, no custom-`Effect`-via-`SpriteBatch`), reflecting D3D12's real, narrower current scope rather than assuming parity. `README.md` gained a `D3D12` bullet in the feature list, a "Build (Windows cross-compilation — D3D12 backend)" section mirroring `D3D11`'s own, and a `D3D12` row in "Tested Compilers". **Confirmed exact current numbers via a real run, not copied from an earlier Notes entry**: `cmake --build cmake-build-d3d12 --target CNA` succeeds; `ctest --test-dir cmake-build-d3d12 -R D3D12 -V` → `D3D12_Smoke`, exactly 80 `[PASS]` lines, `RESULT: ALL PASS: 0 failure(s)`, 100% tests passed — matches `DX-113`'s own closing number, still accurate. Only one CTest binary is registered for D3D12 (`D3D12_Smoke`) — there is no `D3D12_Common`-equivalent pure-function suite yet (unlike D3D11's `D3D11_Common`), and `CnaTests` still doesn't build under this cross-target, same pre-existing `::setenv` portability gap `D3D11`'s own `DX-15` already found and left out of scope. **Phase DX12 is now essentially complete for what this Debian dev environment can prove**: `DX-100` through `DX-113` and `DX-115` are all closed (several 🟨 with real, specific, honestly-documented gaps — swap-chain presentation chief among them); only `DX-114` (real Windows hardware) remains, correctly `needs_human`. |
 
 ---
 

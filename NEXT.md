@@ -1,291 +1,31 @@
 # NEXT.md — CNA Project Handoff
 
-> **D3D11 graphics backend is now complete per `plan_dx.md` (2026-07-14) — Phase DX1 through DX11
-> are ALL closed.** Every task except `DX-90`/`DX-91` (real-Windows hardware, `needs_human`, no such
-> machine available here) is done: real device/swap-chain/back-buffer, a shared `D3DCommon` mapping/
-> shader/constant-buffer core, all 10 stock HLSL shader variants + custom `ShaderEffect`, real
-> vertex/index buffers, textures/render targets (MSAA/MRT/occlusion queries), cached state objects,
-> a real `SpriteBatch`, a cross-cutting mutation-tested/DXVK-gated test suite, and now full docs
-> (`docs/d3d11-backend.md`, a `D3D11` column in `docs/graphics-backend-feature-matrix.md`, a
-> `README.md` build section). **6 CTest binaries, 96+ checks, all passing through Wine+DXVK on a
-> real GPU.** The project owner separately authorized Phase DX12 (D3D12), which is now underway:
-> `DX-100`'s real spike (2026-07-14) found the D3D12 device/queue/fence/command-list path genuinely
-> works locally via Wine+vkd3d-proton (DXR 1.1/SM 6.8 negotiated on this machine's GPU — more
-> capable than D3D11's own DXVK path), using real vkd3d-proton DLLs already present locally inside
-> this machine's Steam "Proton - Experimental" install (no new system install needed, no sudo). **The
-> one real gap**: `CreateSwapChainForHwnd` crashes (`FLIP_DISCARD`) or fails cleanly
-> (`DXGI_ERROR_INVALID_CALL` with plain `DISCARD`) under vanilla Debian Wine's own `dxgi.dll` — that
-> presentation-path integration normally lives in Proton's own patched Wine+DXGI fork, not upstream
-> Wine, and a first attempt at running the spike through Proton's own `wine` binary directly failed
-> (prefix/launch-environment mismatch, not investigated further). See `plan_dx.md`'s `DX-100` row for
-> the full evidence and its recommended path forward: build `DX-101`–`DX-109` (CMake wiring, device/
-> queue/heaps/command-lists/barriers/PSOs/root-signatures/resources) around off-screen,
-> swap-chain-free proof (`ID3D12Resource` render target + staging-heap readback) for local Wine-based
-> development, deferring swap-chain/`Present()` proof to a real-Windows/CI-VM pass much earlier than
-> D3D11's own `DX-90` did. **`DX-101` (full D3D12 CMake wiring) is closed (2026-07-14,
-> `cmake-build-d3d12` builds clean, skeleton `D3D12GraphicsBackend` in place).** **`DX-102`/`DX-103`/
-> `DX-104`/`DX-105` are now closed too (2026-07-14)** — device-lifetime resources are real: `ID3D12Device`
-> (real feature-level retry loop, `12_1` on the first try), `ID3D12CommandQueue`, 3 real descriptor
-> heaps (bump-allocated), 2 per-frame `ID3D12CommandAllocator`s + 1 reused `ID3D12GraphicsCommandList`
-> (`kFramesInFlight = 2`, matching Vulkan's own constant), and a real `ID3D12Fence` with a genuine
-> N-frames-in-flight back-pressure primitive. New `D3D12_Smoke` CTest, **18/18 checks**, all off-screen
-> (`window = nullptr`) so the suite never touches the crash-prone swap-chain path, gated by a real
-> `vkd3d-proton - applicationVersion: ...` log-line check (`scripts/run-wine-vkd3d.sh`). **Swap-chain
-> creation remains the one real, unresolved gap** — implemented for real, but a dedicated by-hand
-> diagnostic (`examples/d3d12_swapchain_diag.cpp`, not a CTest) reproduced `DX-100`'s exact crash with
-> a full symbolized backtrace: a null-pointer read inside Wine's own `dxgi.dll`
-> (`vkd3d_instance_get_vk_instance(instance=0)`). **`DX-106`/`DX-107`/`DX-108` are now closed too
-> (2026-07-14)** — a real `D3D12ResourceStateTracker` (per-resource state map, emits a transition
-> barrier only on a genuine state change, proven against a real throwaway committed buffer), a real
-> `D3D12RootSignatureCache` (keyed by binding shape `(numCbvs, numSrvs, numSamplers)`, root CBVs +
-> a static-sampler SRV table), and a real `D3D12PipelineStateCache` (one PSO per full shader/stride/
-> blend/depth/rasterizer/format tuple — **the first real `ID3D12PipelineState` this backend has ever
-> created**, for `colored3d`/stride-16). `D3DVertexFormatHelper` grew a D3D12 input-element lookup
-> (`InputElementsForStrideD3D12`) since D3D12 bakes the input layout into the PSO desc directly (no
-> `ID3D11InputLayout`-equivalent object). `D3D12_Smoke` CTest grew from 18 to **31/31 checks**, all
-> real, through Wine+vkd3d-proton. Stencil state/scissor-enable are an honest, documented gap in the
-> first PSO desc. **`DX-109`/`DX-110` are now closed too (🟨 honest partial, 2026-07-14)** — real
-> `D3D12VertexBufferBackend`/`D3D12IndexBufferBackend` (`D3D12Buffers.hpp`/`.cpp`) and a real
-> `D3D12TextureBackend` (`D3D12Textures.hpp`/`.cpp`), each via `CreateCommittedResource` (DEFAULT
-> heap) + a fresh UPLOAD-heap staging resource per call + `CopyBufferRegion`/`CopyTextureRegion`,
-> `D3D12ResourceStateTracker`-driven barriers throughout — byte-exact round-trip proof via a real
-> `D3D12_HEAP_TYPE_READBACK` buffer (the off-screen-safe D3D12 equivalent of D3D11's own `DX-28`
-> staging readback). `CreateIndexBuffer32()` explicitly overridden and tested (avoids the exact
-> silent-16-bit-aliasing bug D3D11's own Phase DX5 fork found and fixed). Render targets/cube/3D
-> textures deliberately triaged out this pass (honest 🟨) — buffers + 2D textures are `DX-111`'s
-> actual prerequisite. `RecreateDeviceEXT()` (`DX-110`) genuinely tears down and rebuilds every
-> `DX-102`–`105` device-lifetime resource; proven functional via real post-recreation GPU work (a
-> fresh command-list submission, a brand-new vertex buffer's upload+readback) — the real removal
-> *trigger* itself stays untestable here, same honest `DX-90`-class gap as D3D11's own `DX-27`. **A
-> real bug was caught in this task's own test**: an early Check L draft asserted device-pointer
-> inequality as proof of recreation and genuinely failed (address reuse after a real `Reset()` is
-> legal, not evidence recreation no-op'd) — fixed to assert real functional proof instead.
-> `D3D12_Smoke` CTest grew from 31 to **48/48 checks**, 3 consecutive real runs all green.
-> `Clear()`/`Present()`/draws remain honest throws. **`DX-111` is now closed for 5 of 10 stock
-> variants (🟨, 2026-07-14) — the first real triangles this D3D12 backend has ever drawn,
-> pixel-verified off-screen.** `Clear()`/`DrawColoredPrimitives()`/`DrawIndexedColoredPrimitives()`
-> are real for `colored3d`: a new `BindOffscreenColorTargetEXT()` NOXNA helper stands in for the
-> still-broken swap chain and the still-deferred `D3D12RenderTargetBackend`; draws use a real
-> `(2,0,0)` root signature + `colored3d`/stride-16 PSO, real `D3DPerDrawConstants`/`D3DFogConstants`
-> in persistently-mapped UPLOAD-heap constant buffers, and a real `OMSetRenderTargets`/viewport/
-> vertex-index-buffer/root-CBV/`DrawInstanced`(or indexed) sequence. **A real, silent-failure bug was
-> found and fixed**: the PSO's default state (depth test on with no DSV bound, plus XNA's real
-> back-face-culling default) made the first draw attempt return success but paint nothing — no debug
-> layer exists on this dev loop to report why; root-caused by bisecting (`CullMode::None` fixed it —
-> the test triangle's real winding was silently culled after D3D's NDC→screen-space Y-flip).
-> `D3D12_Smoke` grew 48→51/51 checks (Check M) for `colored3d`. **Extended the same day to
-> `textured3d`/`colored_textured3d`/`lit_textured3d`/`alpha_test3d`** via new
-> `DrawPrimitivesEx()`/`DrawIndexedPrimitivesEx()` overrides mirroring D3D11's own priority-chain
-> dispatch — `dual_texture3d`/`env_map3d`/`skinned3d` explicitly throw named "not yet implemented"
-> rather than silently drawing the wrong shader. Real SRV descriptor-table texture binding (a
-> texture's own SRV, already in the shared CBV/SRV/UAV heap from `DX-109`, is bound directly as the
-> table base). `alpha_test3d` needs its own `(1,1,1)` root-signature shape; `textured3d`/
-> `colored_textured3d`/`lit_textured3d` all share one `(2,1,1)` shape — landing `lit_textured3d` for
-> real corrected a stale `D3D12RootSignatureCache.hpp` doc-comment claim (it had speculatively guessed
-> `(2,0,0)`, written before anyone had read `lit_textured3d.frag.hlsl`'s real `t0`/`s0` binding). Zero
-> new bugs — all 5 new checks passed the first real Wine+vkd3d-proton run. `D3D12_Smoke` grew
-> 51→**61/61 checks** (Checks N/O/P): exact texture sampling, exact vertex-color tinting, lit-vs-unlit
-> plausibility, and `clip()` discard/pass all proven for real, same rigor D3D11's own Checks Q/R/S
-> used. **Honest scope boundary**: 5 of 10 stock variants remain
-> (`dual_texture3d`/`env_map3d`/`skinned3d`/`sprite2d`/`instanced3d`) — unwired follow-up work, and
-> `DX-112` (SpriteBatch) still not attempted (needs `sprite2d` first).
+> **Both `plan_dx.md` backends' full software/logic layer are done and Wine-verified as of
+> 2026-07-14.** **D3D11**: Phase DX1 through DX11 are ALL closed — every task except `DX-90`/`DX-91`
+> (real-Windows hardware, `needs_human`, no such machine available here). 6 CTest binaries, 96+
+> checks, all passing through Wine+DXVK on a real GPU, including a working (Wine-verified) swap
+> chain/`Present()`. **D3D12**: Phase DX12 (`DX-100` through `DX-113` and `DX-115`) is now ALSO fully
+> closed — every task except `DX-114` (real-Windows hardware, `needs_human`, same constraint as
+> D3D11's `DX-90`). `D3D12_Smoke` CTest: 80/80 checks, all 10 stock shader variants (same DXBC as
+> D3D11) + a real `SpriteBatch` + device-removed recovery, all pixel-verified **off-screen**.
+> **D3D12's own additional, headline gap**: swap-chain presentation genuinely crashes under this dev
+> loop's Wine+vkd3d-proton (a real `dxgi.dll`/vkd3d-proton architecture mismatch, not a CNA bug —
+> `plan_dx.md`'s `DX-100`/`DX-102` rows have the full evidence), so D3D12 has no working local
+> presentation path at all, unlike D3D11. D3D12 also still lacks a public render-target backend,
+> `Texture3D`, runtime-settable blend/depth-stencil/rasterizer state (PSOs hardcode
+> `depthEnable=false`/`cullMode=None`), per-slot `SamplerState` (hardcoded static WRAP/linear
+> samplers), and occlusion queries — real, scoped, honestly-documented follow-up work.
 >
-> **`DX-111` extended again (2026-07-14): `dual_texture3d` and `sprite2d` are also now real and
-> pixel-verified — 7 of 10 stock variants done — and `DX-112` (SpriteBatch) is now closed too.**
-> Two real, non-obvious dev-loop bugs were found and fixed, neither caught by inspection, both only
-> surfacing from an actual wrong pixel-readback result: (1) a single 2-descriptor root table for
-> `dual_texture3d`'s 2 SRVs sampled as all-zero under this machine's Wine+vkd3d-proton, even though
-> every CPU-side descriptor write was independently verified correct (heap offsets, handle values,
-> copy targets all sane) — fixed by switching `D3D12RootSignatureCache` to N separate
-> single-descriptor tables (one root param per texture register) instead, simpler code, not just a
-> workaround, documented in that file's own doc comment for later re-verification on real Windows;
-> (2) the first `sprite2d` pixel test assumed `UV = px/width` for its readback coordinates, but D3D
-> rasterizes at pixel *centers* (`UV = (px+0.5)/width`) — a genuine GPU sampling behavior, not a
-> SpriteBatch bug — fixed by widening the test texture so each color spans 2 texels instead of 1.
-> New `D3D12SpriteBatchBackend` mirrors `D3D11SpriteBatchBackend`'s exact quad-building formula and
-> reuses `alpha_test3d`'s own `(1,1,1)` root signature (a root signature only describes binding
-> slots, not cbuffer contents) but needs its own hand-built PSO/input-layout, since sprite2d's
-> 32-byte vertex collides with `VertexPositionNormalTexture`'s existing stride-32 meaning — same real
-> collision D3D11's own `DX-70` fork already found. Honest, documented gaps: `SpriteBatch::Begin(
-> effect)` throws (no D3D12 custom-effect backend exists yet); sampler filter/address-mode setters
-> are stored but not yet behaviorally real (no D3D12 dynamic-sampler-state system exists yet). D3D11
-> rebuilt clean throughout (only shared `D3DVertexFormatHelper`/doc-comment files touched).
-> `D3D12_Smoke` grew 61→**68/68 checks** (Checks Q/R). **Finished the same day: `skinned3d` and
-> `instanced3d` also closed (2026-07-14) — 9 of 10 stock variants real.** `skinned3d` needed no new
-> caching infrastructure (the existing `(numCbvs,numSrvs,numSamplers)`-keyed root-signature/PSO
-> caches already generalize to its `(3,1,1)` shape, stride 52 was already covered by
-> `InputElementsForStrideD3D12`) — just two new persistent constant buffers and a direct port of
-> D3D11's own `needsSkinned` CPU-side field population (including its already-established
-> `boneTransforms` memcpy-not-transpose finding). `instanced3d` needed its own hand-built PSO/
-> input-layout (`GetOrCreateInstancedPsoEXT()`, same reason `sprite2d` did) and a brand-new
-> `DrawInstancedPrimitivesEx()` override (`(1,0,0)` root-signature shape — `instanced3d.frag.hlsl`
-> is genuinely textureless). No new bugs found — both new checks (S/T) passed the first real
-> Wine+vkd3d-proton run. `D3D12_Smoke` grew 68→**72/72 checks**. D3D11 rebuilt clean throughout (no
-> shared `D3DCommon` files touched this time). **`DX-111` closed for real 2026-07-14: `env_map3d`
-> landed — 10 of 10 stock shader variants now real, across every CNA graphics backend including
-> D3D12.** Needed a new `D3D12TextureCubeBackend` (`D3D12TextureCube.hpp`/`.cpp`, real 6-face
-> `ID3D12Resource`, same upload-heap-staging discipline `D3D12TextureBackend` already established;
-> `GetData()` left at the interface default no-op, an honest scope gap). Reused `dual_texture3d`'s
-> exact `(3,2,2)` root-signature/PSO shape — no new cached object. `D3D12_Smoke` grew 72→**74/74
-> checks** (Check U), same geometrically-constrained-reflection proof D3D11's own `DX-66` used. Two
-> real, unrelated bugs found and fixed along the way: the RTV descriptor heap's fixed capacity
-> (`DX-103`, 8 slots) was genuinely exhausted by the growing CTest suite — raised to 32; and
-> `RecreateDeviceEXT()` (`DX-110`) was never resetting `boneConstantBuffer_`/
-> `skinnedExtraConstantBuffer_`/`instancedPso_` despite them being just as device-tied as every other
-> cached resource — fixed in the same pass. D3D11 rebuilt clean throughout. **`DX-101`–`DX-112` are
-> now all ✅ except `DX-109`'s own honest 🟨 (render targets/cube/3D textures beyond `DX-111`'s own
-> needs, still deliberately triaged out). Next concrete step: `DX-113` (test-suite formalization) or
-> `DX-115` (docs) to close out Phase DX12's currently-scoped rows** (`DX-114`, real-Windows
-> checklist, stays `needs_human`).
+> Full task-by-task detail and this session's complete chronological history live in `plan_dx.md`
+> (`DX-1`–`DX-115`) — not duplicated here. Current-state summaries: `docs/d3d11-backend.md`,
+> `docs/d3d12-backend.md`, and `docs/graphics-backend-feature-matrix.md` (full row-by-row
+> `D3D11`/`D3D12` comparison against every established backend).
 >
-> **`DX-113` (test-suite formalization) closed 2026-07-14 — an audit-and-close pass over the 74
-> checks `DX-102`–`111` already built incrementally, not a from-scratch suite.** Found and closed 2
-> real gaps: a dedicated fog on/off pixel test (`D3D12_Smoke` Check V, same fixture/DXBC as D3D11's
-> own Check AC — `fogEnabled=false` leaves the exact vertex color, `fogEnabled=true` blends exactly
-> to `FogColor`) and `D3D12ResourceStateTracker`'s documented-but-untested throw-on-untracked-
-> resource contract (Checks G8–G10). Mutation-tested Check M (`DrawColoredPrimitives`'s non-indexed
-> path, `VertexColorEnabled` `1.0f→0.0f`) — real rebuild+run failed exactly M1 (79/80), left the
-> separate indexed M2 path untouched, then reverted and reconfirmed **`D3D12_Smoke` 80/80 checks**.
-> Two gaps left honestly open rather than forced: D3D12 has no state-object-cache equivalent yet
-> (blend/depth/rasterizer is still a hardcoded PSO simplification, so DX-82-equivalent pixel-behavior
-> testing isn't meaningful until that exists), and Check E's fence back-pressure proof covers value-
-> ordering/wait-completion for real but doesn't independently measure a genuine CPU stall under real
-> GPU load. **The only open Phase DX12 work now is `DX-115` (docs) — `DX-114` stays `needs_human`
-> (real Windows hardware).**
->
-> Below is this session's own chronological history (kept for detail, not rewritten):
->
-> Phase DX3 (`D3DCommon`), Phase DX5
-> (vertex/index buffers + input layout), Phase DX6 (textures + render targets), Phase DX7 (state
-> objects), Phase DX8 (all 10 stock shader variants + custom `ShaderEffect`), and Phase DX9
-> (`D3D11SpriteBatchBackend`) are now closed.
-> `CNA_GRAPHICS_BACKEND=D3D11` is a working CMake option; `D3D11GraphicsBackend` implements every
-> `IGraphicsBackend` pure virtual (real device/swap-chain/back-buffer/clear/present/readback, real
-> vertex/index buffers + input layout cache, real 2D/cube/3D textures + 2D/cube render targets +
-> MSAA + MRT + sampler cache + occlusion queries, real blend/depth-stencil/rasterizer state objects
-> + viewport/scissor, and now a real `colored3d` `DrawColoredPrimitives()`/
-> `DrawIndexedColoredPrimitives()` draw path; honest "not yet implemented" throws remain for every
-> other stride/shader variant and SpriteBatch, rest of Phase DX8/DX9). `ctest -R D3D11` passes 2/2
-> (`D3D11_Smoke` + `D3D11_Common`, **67 checks total**, up from 65) running through DXVK 2.6.0 on a
-> real GPU (AMD Radeon 780M/RADV) via Wine on this Debian machine. `D3DCommon` (format/state/
-> vertex-layout mapping + shader cache + now constant-buffer struct layouts) is real and tested.
-> `DX-13-hlsl`/`DX-14-compile`/`DX-15-embed` (HLSL shaders, real DXBC compile, real shader-object
-> creation) closed Phase DX3 earlier in this session; `DX-30`/`DX-31`/`DX-32` (real buffers + input
-> layout) closed Phase DX5; Phase DX6 (`DX-40`–`DX-47`, textures/render targets/MSAA/MRT/occlusion
-> queries, plus a genuine `Clear()`-target-tracking bug fix) closed next; Phase DX7 (`DX-50`–`DX-53`,
-> real cached blend/depth-stencil/rasterizer state objects + viewport/scissor, plus a real
-> `DepthBias` float→INT rounding fix) closed after that.
->
-> **Phase DX8's foundational tasks now closed**: new header-only `D3DConstantBuffers.hpp`
-> (`D3DCommon`) defines `D3DPerDrawConstants`/`D3DFogConstants`/`D3DLightingConstants`/
-> `D3DBoneConstants`, every field offset `static_assert`-verified against the real HLSL `cbuffer`
-> declarations (not guessed). `DrawColoredPrimitives()`/`DrawIndexedColoredPrimitives()` (previously
-> honest throws) now do a real `colored3d` draw — cached shader + input layout + two lazily-created
-> persistent constant buffers, updated via `Map`/`Unmap` each draw — for stride-16
-> (`VertexPositionColor`) only; other strides still throw a clear, named-successor error. **A real,
-> independent bug found and fixed getting the first pixel test to pass**: `DX-46`'s
-> `SetRenderTargets(nullptr, 0)` never restored the back buffer after a prior MRT bind (only the
-> single-target path's tracking triggered the restore), leaving the device context bound to
-> render-target views a test's `unique_ptr`s had already destroyed. New `D3D11_Smoke` Check P
-> proves it for real: clears to a known blue, reads back a fixed region (confirms blue), draws a
-> real NDC-covering triangle with solid vertex color, reads back the *same* region again (confirms
-> red) — for both the indexed and non-indexed draw paths. **44/44 smoke checks pass**, up from
-> 42/42.
->
-> **`DX-62`/`DX-63`/`DX-64` (and `DX-69`'s fog wiring for those 5 variants) also now closed.** New
-> `DrawPrimitivesEx()`/`DrawIndexedPrimitivesEx()` overrides give this backend its first real,
-> `GpuDrawParams`-driven effect dispatch (mirroring `VulkanGraphicsBackend::DrawPrimitivesEx`'s
-> priority chain): `textured3d`/`colored_textured3d` (stride 20/24), `lit_textured3d` (stride 32,
-> first real consumer of `D3DLightingConstants` — full Blinn-Phong), and `alpha_test3d` (a new
-> dedicated `D3DAlphaTestConstants` struct — its HLSL cbuffer shape genuinely differs from
-> `D3DPerDrawConstants`) all draw for real now; `dual_texture3d`/`env_map3d`/`skinned3d` throw named
-> "not yet implemented" errors instead of silently falling through to the wrong shader. **Zero bugs
-> found on the first real run** — new Checks Q/R/S proved exact texture sampling, exact vertex-color
-> tinting, the lit branch genuinely differing from the unlit one, and `alpha_test3d`'s `clip()`
-> genuinely discarding (background survives) vs. genuinely drawing (exact color incl. a non-255
-> alpha byte) on pass. **51/51 smoke checks pass** (up from 44/44), `D3D11` CTest total now **74/74
-> checks** (`D3D11_Smoke` 51 + `D3D11_Common` 23). `DX-69` fog wiring is real for these 5 variants
-> but not yet exercised by a dedicated fog-on/off pixel check (Checks Q/R/S all draw with
-> `fogEnabled=false`) — an open Phase DX10 gap, not a false claim.
->
-> **Phase DX8 is now FULLY CLOSED (2026-07-13).** `DX-65`/`DX-66`/`DX-67` land real `dual_texture3d`
-> (two real SRVs/samplers), `env_map3d` (a real `TextureCube` SRV, reflection direction constrained
-> by test geometry to land deep inside one distinctly-colored cube face), and `skinned3d` (a
-> genuinely-populated `D3DBoneConstants` buffer, confirmed *not* a row/column-major transpose bug).
-> `DX-68` lands real `DrawInstancedPrimitivesEx()` for `instanced3d` (new fixed `INSTANCEWORLD0`–`3`
-> instanced input layout); `sprite2d` is deliberately left unwired into any draw dispatch — its real
-> home is `SpriteBatch` (Phase DX9, not started). `DX-69` (fog) is now real for all 8 fog-capable
-> variants. `DX-58` adds a new `D3D11EffectBackend` (runtime `D3DCompile()`, `d3dcompiler` now
-> linked into the main backend target for real) mirroring `VulkanEffectBackend`'s own fixed-slot
-> uniform convention — independently GPU-proven but not yet wired into an actual `SpriteBatch` draw
-> loop. **58/58 smoke checks pass** (up from 51/51), `D3D11` CTest total now **81/81 checks**
-> (`D3D11_Smoke` 58 + `D3D11_Common` 23).
->
-> **Phase DX9 (SpriteBatch, `DX-70`/`DX-71`/`DX-72`) is now CLOSED (2026-07-13) — resolving both of
-> Phase DX8's own deferred dependencies (`sprite2d`'s draw path, `DX-58`'s end-to-end integration)
-> in the same task.** New `D3D11SpriteBatchBackend` (`D3D11SpriteBatch.hpp`/`.cpp`) mirrors
-> `EasyGLSpriteBatchBackend`'s immediate-flush-per-texture-change quad batcher (D3D11's context is
-> already immediate-mode — no reason for `VulkanSpriteBatchBackend`'s frame-end-snapshot design).
-> **One real, deliberate improvement over Vulkan's own precedent**: `SetTransformMatrix()`
-> genuinely works here (`VulkanSpriteBatchBackend` leaves it a silent no-op) — applied per-vertex on
-> the CPU via `Vector2::Transform()`, since `sprite2d.vert.hlsl` has no projection-matrix uniform to
-> fold it into GPU-side. `DX-71` reuses `D3D11EffectBackend` (`DX-58`) directly, adding
-> `SetViewportSizeEXT()` to fill the `vpSize` slot that class had already reserved. `DX-72` needed
-> no new implementation — `D3D11SamplerCache` (`DX-44`) already handles Wrap/Mirror correctly; this
-> row is purely verification. **Tested through the real public API**
-> (`Microsoft::Xna::Framework::Graphics::SpriteBatch`+`Texture2D`, not the raw backend interface) —
-> 6 new checks (Y/Z/AA), all passing on the first real Wine+DXVK run on the real GPU, including two
-> deliberately *discriminating* Wrap/Mirror probe pixels (chosen so a broken Clamp-fallback would
-> read a different, wrong color). **64/64 smoke checks pass** (up from 58/58), `D3D11` CTest total
-> now **87/87 checks** (`D3D11_Smoke` 64 + `D3D11_Common` 23), verified via
-> `ctest --test-dir cmake-build-d3d11 -R D3D11`.
->
-> **`Phase DX10` (`DX-81`–`DX-85`) also closed 2026-07-14** — added 4 new CTest entries reusing
-> the exact backend-agnostic `easygl_blendstate_*`/`easygl_depthstencilstate_*`/
-> `easygl_rasterizerstate_*` sources Vulkan already reuses verbatim (`D3D11_BlendState_Opaque`/
-> `AlphaBlend`, `D3D11_DepthStencilState_StencilEnable`, `D3D11_RasterizerState_CullMode` — real
-> pixel-behavior proof, all 4 passing on the first run); closed `DX-29`'s long-flagged
-> never-exercised resize gap for real (Check AB: 64×64→96×80 via the public
-> `GraphicsDeviceManager` API, DXVK's own presenter log confirms the new buffer size, correct
-> post-resize readback); ran a real mutation-test pass on `DX-61`'s `colored3d` triangle check
-> (`DX-84` — first mutation was an honest false negative since that check uses identity matrices,
-> second mutation genuinely broke it, verified reverted); hardened `scripts/run-wine-dxvk.sh`
-> itself to automatically assert a `DXVK: <version>` marker appears in every run (`DX-85`) — caught
-> a real false-positive live (`D3D11_Common` never opens a device, needed its own narrowly-scoped
-> `CNA_D3D11_SKIP_DXVK_GATE=1` opt-out, not a weakened gate); and closed `DX-69`'s own
-> honestly-flagged "fog wired but never exercised by a dedicated on/off pixel test" gap with a new
-> Check AC (exact-color fog-on vs fog-off discrimination). **`D3D11` CTest total now 6 tests, 92
-> embedded `D3D11_Smoke`/`D3D11_Common` checks + 10 more assertions across the 4 new state-object
-> tests** (`D3D11_Smoke` 69 + `D3D11_Common` 23 + 4 new tests), all verified via a real
-> `ctest --test-dir cmake-build-d3d11 -R D3D11` run (6/6 tests pass). Full detail, task-by-task,
-> lives in `plan_dx.md` (`DX-1`–`DX-85` all closed; `DX-90`/`DX-91` stay `needs_human`/best-effort).
->
-> **`Phase DX11` (docs, `DX-95`–`DX-98`) also closed 2026-07-14 — this closes out `plan_dx.md`'s own
-> D3D11 scope entirely.** New `docs/d3d11-backend.md` (mirrors `docs/software-backend.md`/
-> `docs/headless-backend.md`'s structure: status, what it's for/isn't, Wine+DXVK dev-loop, writing a
-> test, an honest known-limitations list — specular highlights untested, multi-light variants
-> untested, mip chains untested, `Model`/`SpriteFont` not separately exercised, the pre-existing
-> unrelated `cna_reference_dump`/`cna_demo_2d` link failure found during `DX-81`, plus the
-> already-known `DX-90`/`DX-91`/`DX-27`/`DX-21`/`DX-25`-combo-variant gaps). A real `D3D11` column
-> added to every applicable table in `docs/graphics-backend-feature-matrix.md`, honestly mixing
-> ✅/🟨/⬜ per row rather than blanket-approving anything the underlying code merely supports.
-> `README.md` gained a "Tested Compilers" row and a full "Build (Windows cross-compilation — D3D11
-> backend)" section mirroring `SDL_RENDERER`'s own. **Phase DX12 (D3D12) is now underway** — `DX-100`
-> through `DX-111` are all closed (2026-07-14, `DX-109` and `DX-111` honest 🟨 partials): real
-> device/queue/heaps/command-lists/fence (`DX-102`–`105`), resource-barrier tracking + a root-
-> signature cache + a pipeline-state-object cache (`DX-106`–`108`), real vertex/index buffers + 2D
-> textures + a tested device-removed recreation path (`DX-109`/`DX-110`, render targets/cube/3D
-> textures deferred), and real, pixel-verified `colored3d`/`textured3d`/`colored_textured3d`/
-> `lit_textured3d`/`alpha_test3d`/`dual_texture3d`/`sprite2d`/`skinned3d`/`instanced3d` draws — **9 of
-> 10 stock variants** — via `DrawColoredPrimitives`/`DrawPrimitivesEx`/`DrawIndexedPrimitivesEx`/
-> `DrawInstancedPrimitivesEx` (`DX-111`; only `env_map3d` still unwired, needs a new
-> `D3D12TextureCubeBackend`), plus a real `D3D12SpriteBatchBackend` (`DX-112` ✅). Swap-chain creation
-> still crashes under vanilla Wine's own `dxgi.dll` (see `plan_dx.md`'s `DX-100` row) — every proof
-> so far is off-screen, via a new `BindOffscreenColorTargetEXT()` NOXNA helper. `D3D12_Smoke` CTest:
-> **72/72 checks**. **Next concrete step: `env_map3d`, then `DX-113`
-> (test-suite formalization)/`DX-115` (docs)**. **This is a brand-new architectural front for the project — read `plan_dx.md`'s own status banner
-> before touching it.** The pre-existing EasyGL/Vulkan/Bgfx/SDL_Renderer/Headless/Software/WebGPU
-> work summarized below is unchanged by this; full history for that lives in `plan_graphics.md`/
+> **With `DX-114` the only open item and it `needs_human` (real Windows hardware), there is no
+> further available Debian-side work on `plan_dx.md` barring new instructions.** This is a
+> brand-new architectural front for the project — read `plan_dx.md`'s own status banner before
+> touching it. The pre-existing EasyGL/Vulkan/Bgfx/SDL_Renderer/Headless/Software/WebGPU work
+> summarized below is unchanged by this; full history for that lives in `plan_graphics.md`/
 > `plan_webgpu.md`/`plan_software.md` and `git log`, not duplicated here.
 
 ## 1. Project summary
@@ -301,15 +41,16 @@ API-surface changes.
 - **Current phase:** the established Linux/desktop backends (EasyGL/Vulkan/Bgfx/SDL_Renderer) and
   the CI-oriented ones (Headless/Software) are mature — Phase 55 already declared a qualified
   **~90% XNA/FNA compatibility milestone** for `Microsoft::Xna::Framework::Graphics`. WebGPU has a
-  working native 2D+partial-3D baseline (`plan_webgpu.md`). **The Direct3D 11 backend
-  (`plan_dx.md`) is now complete per its own plan** (Phase DX1–DX11 all closed, 2026-07-14) — a
-  Windows-only backend, cross-compiled from this Debian machine via MinGW-w64 and verified locally
-  through Wine+DXVK; only `DX-90`/`DX-91` (real-Windows hardware) remain `needs_human`. **Direct3D
-  12 (`plan_dx.md` Phase DX12) is now underway** — `DX-100`'s Wine+vkd3d-proton spike is closed 🟨
-  (device/queue/fence/command-list real; swap-chain creation crashes/fails, see that row);
-  `DX-101` (full D3D12 CMake wiring) also closed 2026-07-14 (`cmake-build-d3d12` links clean); a
-  skeleton `D3D12GraphicsBackend` exists with honest "not yet implemented" throws — `DX-102`
-  (device/command-queue/swap-chain) is next. Everything else
+  working native 2D+partial-3D baseline (`plan_webgpu.md`). **Both Direct3D backends
+  (`plan_dx.md`) now have their full software/logic layer complete and Wine-verified, as of
+  2026-07-14.** Direct3D 11 (Phase DX1–DX11) is fully closed — a Windows-only backend, cross-compiled
+  from this Debian machine via MinGW-w64 and verified locally through Wine+DXVK, including a working
+  swap chain/`Present()`; only `DX-90`/`DX-91` (real-Windows hardware) remain `needs_human`. Direct3D
+  12 (Phase DX12, `DX-100`–`DX-113`/`DX-115`) is also fully closed — same dev-loop approach but via
+  Wine+vkd3d-proton, **off-screen only**: its swap chain genuinely crashes under this dev loop (a
+  real `dxgi.dll`/vkd3d-proton mismatch, not a CNA bug), so only `DX-114` (real-Windows hardware)
+  remains `needs_human` there too. With `DX-114` `needs_human`, there is no further available
+  Debian-side work on `plan_dx.md` barring new instructions. Everything else
   (Phase 79's 153-sample `../cna-samples` re-audit, Task 945's HLSL→GLSL tooling decision, Task
   952's deferred Bgfx bug) is unchanged standing backlog — see §5/§8/§9.
 - **Key architectural decisions:**
@@ -352,7 +93,7 @@ API-surface changes.
 | `cmake-build-sdl` | SDL_Renderer | Clean as of 2026-07-10 (not rebuilt this session) |
 | `cmake-build-android` | SDL_Renderer (NDK) | Blocked — Task 920 (sibling `sharp-runtime` NDK build regressions) |
 | `cmake-build-d3d11` | D3D11 (Windows cross-compile, MinGW-w64) | **Verified clean 2026-07-13**: `CNA` and `cna_backend_graphics_d3dcommon`/`cna_backend_graphics_d3d11` build clean; `cna_test_d3d11_smoke`/`cna_test_d3d11_common` build, link, and run correctly under Wine+DXVK. **`CnaTests` itself does NOT build** for this backend — genuinely blocked (see §4), not silently skipped. |
-| `cmake-build-d3d12` | D3D12 (Windows cross-compile, MinGW-w64) | **Updated 2026-07-14 (DX-113 test-suite formalization closed)**: `CNA` and both D3D12 backend targets build clean. Device-lifetime resources (DX-102-105), resource-barrier state tracking, a PSO cache, a root-signature cache (DX-106-108), real `D3D12VertexBufferBackend`/`D3D12IndexBufferBackend`/`D3D12TextureBackend`/`D3D12TextureCubeBackend` (DX-109, buffers+2D+cube textures — render targets/3D textures still honestly deferred, 🟨) plus a real, tested `RecreateDeviceEXT()` device-removed recovery path (DX-110), and `Clear()`/`DrawColoredPrimitives()`/`DrawIndexedColoredPrimitives()`/`DrawPrimitivesEx()`/`DrawIndexedPrimitivesEx()`/`DrawInstancedPrimitivesEx()` are REAL for **all 10 of 10 stock variants** (`colored3d`/`textured3d`/`colored_textured3d`/`lit_textured3d`/`alpha_test3d`/`dual_texture3d`/`env_map3d`/`sprite2d`/`skinned3d`/`instanced3d`, DX-111 ✅) via a new `BindOffscreenColorTargetEXT()` NOXNA helper standing in for the still-broken swap chain, plus a real `D3D12SpriteBatchBackend` (DX-112 ✅). DX-113 audited that coverage against D3D11's own DX-80–85 methodology, added a dedicated fog on/off test and untracked-resource-throw tests, and mutation-verified Check M's discriminating power (🟨 — real, but 2 honest gaps: no state-object cache exists yet to test against, and fence back-pressure isn't measured under real GPU load). `D3D12_Smoke` CTest: **80/80 checks pass** through Wine+vkd3d-proton (off-screen only). Swap-chain creation is implemented but crashes under this Wine setup (real, evidenced, see `plan_dx.md` `DX-102`'s row) — a by-hand diagnostic exists (`cna_diag_d3d12_swapchain`, not a CTest) to reproduce it. Only `DX-115` (docs) remains open in Phase DX12 — `DX-114` stays `needs_human`. |
+| `cmake-build-d3d12` | D3D12 (Windows cross-compile, MinGW-w64) | **Updated 2026-07-14 (DX-113 test-suite formalization closed)**: `CNA` and both D3D12 backend targets build clean. Device-lifetime resources (DX-102-105), resource-barrier state tracking, a PSO cache, a root-signature cache (DX-106-108), real `D3D12VertexBufferBackend`/`D3D12IndexBufferBackend`/`D3D12TextureBackend`/`D3D12TextureCubeBackend` (DX-109, buffers+2D+cube textures — render targets/3D textures still honestly deferred, 🟨) plus a real, tested `RecreateDeviceEXT()` device-removed recovery path (DX-110), and `Clear()`/`DrawColoredPrimitives()`/`DrawIndexedColoredPrimitives()`/`DrawPrimitivesEx()`/`DrawIndexedPrimitivesEx()`/`DrawInstancedPrimitivesEx()` are REAL for **all 10 of 10 stock variants** (`colored3d`/`textured3d`/`colored_textured3d`/`lit_textured3d`/`alpha_test3d`/`dual_texture3d`/`env_map3d`/`sprite2d`/`skinned3d`/`instanced3d`, DX-111 ✅) via a new `BindOffscreenColorTargetEXT()` NOXNA helper standing in for the still-broken swap chain, plus a real `D3D12SpriteBatchBackend` (DX-112 ✅). DX-113 audited that coverage against D3D11's own DX-80–85 methodology, added a dedicated fog on/off test and untracked-resource-throw tests, and mutation-verified Check M's discriminating power (🟨 — real, but 2 honest gaps: no state-object cache exists yet to test against, and fence back-pressure isn't measured under real GPU load). `D3D12_Smoke` CTest: **80/80 checks pass** through Wine+vkd3d-proton (off-screen only). Swap-chain creation is implemented but crashes under this Wine setup (real, evidenced, see `plan_dx.md` `DX-102`'s row) — a by-hand diagnostic exists (`cna_diag_d3d12_swapchain`, not a CTest) to reproduce it. `DX-115` (docs) is now also closed — Phase DX12 is fully done except `DX-114`, which stays `needs_human`. |
 
 The `cna_demo_xact` example fails to build on every backend (missing `examples/demo_xact/Content`
 directory in this checkout) — cosmetic, pre-existing, not a CNA bug, do not chase it (§9).
@@ -453,28 +194,27 @@ registered `ctest` pixel-verification examples under `examples/`. New this sessi
   closed 2026-07-14** — `docs/d3d11-backend.md`, a `D3D11` column in
   `docs/graphics-backend-feature-matrix.md`, and a `README.md` build section all now exist. **D3D11
   is complete per `plan_dx.md`'s own scope** — only `DX-90`/`DX-91` (real Windows hardware) remain
-  open, both `needs_human`. **D3D12 (Phase DX12) is now underway** — `DX-100`'s spike closed 🟨
-  2026-07-14 (device/queue/fence/command-list real via Wine+vkd3d-proton; swap-chain creation
-  crashes/fails, see that row's Notes); `DX-101` (CMake wiring) also closed 2026-07-14
-  (`cmake-build-d3d12` builds clean, skeleton `D3D12GraphicsBackend` in place); `DX-102`–`DX-105`
-  (device/queue/heaps/command-lists/fence), `DX-106`–`DX-108` (resource-barrier tracking,
-  root-signature cache, pipeline-state-object cache — the first real `ID3D12PipelineState`), and
-  `DX-109`/`DX-110` (real vertex/index buffers + 2D textures, honest 🟨 render-target/cube/3D-texture
-  gap; a real, tested device-removed recreation path), `DX-111` (🟨, real `colored3d`/`textured3d`/
-  `colored_textured3d`/`lit_textured3d`/`alpha_test3d`/`dual_texture3d`/`sprite2d`/`skinned3d`/
-  `instanced3d` draws — 9 of 10 stock variants — via `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx`/
-  `DrawInstancedPrimitivesEx`), and `DX-112` (✅, a real `D3D12SpriteBatchBackend`) are all closed
-  2026-07-14; only `env_map3d` remains, then `DX-113`/`DX-115` — see §8/§9.
+  open, both `needs_human`. **D3D12 (Phase DX12) is now ALSO fully closed** (`DX-100` through
+  `DX-113` and `DX-115`) — real device/queue/heaps/command-lists/fence, resource-barrier tracking, a
+  root-signature cache, a pipeline-state-object cache, real vertex/index buffers + 2D/cube textures,
+  a real tested device-removed recreation path, all 10/10 stock shader variants drawing for real
+  off-screen, a real `D3D12SpriteBatchBackend`, an audited+mutation-tested test suite, and full docs
+  (`docs/d3d12-backend.md`, a `D3D12` column in `docs/graphics-backend-feature-matrix.md`, a
+  `README.md` build section). Only `DX-114` (real Windows hardware) remains, `needs_human` — swap
+  chain/`Present()` is D3D12's own additional real gap (genuinely crashes under this dev loop's
+  Wine+vkd3d-proton, not a CNA bug), so unlike D3D11 no D3D12 proof is on-screen. See §8/§9.
 - **D3D11 + `CnaTests`**: the full pre-existing GTest suite does not build under this backend —
-  ~10 test files call POSIX-only `::setenv()` directly (see §4).
-- **D3D12**: `DX-100`–`DX-112` are all closed (device/queue/heaps/command-lists/fence/barriers/PSOs/
-  root-signatures/vertex-index-buffers/2D-textures/device-removed-recovery all real; 9 of 10 stock
-  shader variants (`colored3d`/`textured3d`/`colored_textured3d`/`lit_textured3d`/`alpha_test3d`/
-  `dual_texture3d`/`sprite2d`/`skinned3d`/`instanced3d`) draw for real via `DrawColoredPrimitives`/
-  `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx`/`DrawInstancedPrimitivesEx`, plus a real
-  `D3D12SpriteBatchBackend`; `D3D12_Smoke` 72/72 checks); render targets/cube/3D textures (`DX-109`'s
-  honest partial) and `env_map3d` (needs a new `D3D12TextureCubeBackend`) are still unimplemented —
-  `Present()` and that one draw path still honestly throw.
+  ~10 test files call POSIX-only `::setenv()` directly (see §4). Same gap applies to D3D12.
+- **D3D12**: all 10/10 stock shader variants (`colored3d`/`textured3d`/`colored_textured3d`/
+  `lit_textured3d`/`alpha_test3d`/`dual_texture3d`/`env_map3d`/`skinned3d`/`sprite2d`/`instanced3d`)
+  draw for real off-screen via `DrawColoredPrimitives`/`DrawPrimitivesEx`/`DrawIndexedPrimitivesEx`/
+  `DrawInstancedPrimitivesEx`, plus a real `D3D12SpriteBatchBackend`; `D3D12_Smoke` 80/80 checks,
+  mutation-verified. Still genuinely missing (not silently dropped, see `docs/d3d12-backend.md`): a
+  public render-target backend, `Texture3D`, runtime-settable blend/depth-stencil/rasterizer state
+  (PSOs hardcode `depthEnable=false`/`cullMode=None`), per-slot `SamplerState` (hardcoded static
+  WRAP/linear samplers), occlusion queries, and custom `Effect` via `SpriteBatch::Begin(effect)`.
+  `Present()`/swap-chain presentation still honestly throw/crash — real verification is `DX-114`'s
+  job on real Windows hardware.
 - XNA compiled `.fx` bytecode (`Effect` constructor throws `NotImplementedException`) — Phase 74.
 - `Texture3D`/`TextureCube` cannot be bound as a shader sampler through the generic `EffectParameter`
   path — Task 863, needs an architecture decision (see §5).
@@ -489,11 +229,15 @@ Most recent first. Full detail (exact code, discriminating-power verification) i
 
 | Commit(s) | Summary |
 |---|---|
-| *(pending)* | **`DX-111` extended again (🟨, 7 of 10 stock variants) — `dual_texture3d` and `sprite2d` now also real and pixel-verified; `DX-112` (SpriteBatch) closed too.** Two real, non-obvious dev-loop bugs found and fixed, neither a CNA logic mistake caught by inspection, both only surfacing from an actual wrong pixel-readback result: (1) `dual_texture3d`'s 2 SRVs via ONE `D3D12_DESCRIPTOR_TABLE` range with `NumDescriptors=2` (populated by a fresh per-draw `CopyDescriptorsSimple` into a contiguous bump-allocated heap-slot pair) sampled as all-zero on the real GPU even though every CPU-side descriptor write was independently verified correct — fixed by switching `D3D12RootSignatureCache` to N SEPARATE single-descriptor tables (one root param per texture register), simpler code, not just a workaround, documented in that file's own doc comment for real-Windows re-verification later; (2) the first `sprite2d` pixel test assumed `UV = px/width` for its readback coordinates, but D3D rasterizes at pixel CENTERS (`UV = (px+0.5)/width`) — a genuine GPU sampling behavior, not a SpriteBatch bug — fixed by widening the test texture so each color spans 2 texels instead of 1. New `D3D12SpriteBatchBackend` (`D3D12SpriteBatch.hpp`/`.cpp`) mirrors `D3D11SpriteBatchBackend`'s exact quad-building formula, reuses `alpha_test3d`'s own `(1,1,1)` root signature, but needs its own hand-built PSO/input-layout (sprite2d's 32-byte vertex collides with `VertexPositionNormalTexture`'s existing stride-32 meaning, same real collision D3D11's own `DX-70` fork already found). Honest, documented gaps: `SpriteBatch::Begin(effect)` throws (no D3D12 custom-effect backend exists yet); sampler filter/address-mode setters are stored but not yet behaviorally real (no D3D12 dynamic-sampler-state system exists yet). `D3D12_Smoke` grew 61→**68/68 checks** (Checks Q/R). Still deferred: `env_map3d`/`skinned3d`/`instanced3d` (3 of 10). |
-| *(pending)* | **`DX-111` extended (🟨, 5 of 10 stock variants) — `textured3d`/`colored_textured3d`/`lit_textured3d`/`alpha_test3d` now also real and pixel-verified, on top of `colored3d` below.** New `D3D12GraphicsBackend::DrawPrimitivesEx()`/`DrawIndexedPrimitivesEx()` overrides (`DrawPrimitivesExImpl`) replicate D3D11's own priority-chain dispatch (alpha-test > lit-textured (stride 32) > colored/textured/colored_textured bundle by stride); `dual_texture3d`/`env_map3d`/`skinned3d` explicitly throw named "not yet implemented" rather than silently drawing the wrong shader. Real SRV descriptor-table texture binding: a `D3D12TextureBackend`'s own SRV (already allocated in the shared CBV/SRV/UAV heap at texture-creation time, `DX-109`) is bound directly as a 1-descriptor table base — no separate copy step. Root-signature shapes: `alpha_test3d` needs its own `(1,1,1)` (single combined `PerDraw@b0`, no separate `FogParams`); `textured3d`/`colored_textured3d`/`lit_textured3d` all share one `(2,1,1)` shape and therefore one cached root-signature object. Landing `lit_textured3d` for real **corrected a stale speculative doc-comment claim** in `D3D12RootSignatureCache.hpp` (it had guessed `(2,0,0)` for `lit_textured3d`, written before anyone had actually read `lit_textured3d.frag.hlsl`'s real `t0`/`s0` texture binding). No new bugs — all 5 new checks (N/O/P) passed the first real Wine+vkd3d-proton run. `D3D12_Smoke` grew 51→**61/61 checks**: exact texture sampling + exact vertex-color tinting (`textured3d`/`colored_textured3d`), lit-vs-unlit-vs-background discrimination (`lit_textured3d`), and genuine `clip()` discard/pass (`alpha_test3d`) — same rigor D3D11's own Checks Q/R/S used. Still deferred: `dual_texture3d`/`env_map3d`/`skinned3d`/`sprite2d`/`instanced3d` (5 of 10) and `DX-112` (SpriteBatch, needs `sprite2d` first). |
-| *(pending)* | **`DX-111` closed (🟨, `colored3d` only) — the first real triangle this D3D12 backend has drawn, pixel-verified off-screen.** New `BindOffscreenColorTargetEXT()`/`UnbindOffscreenColorTargetEXT()` NOXNA helpers on `D3D12GraphicsBackend` bind a caller-owned+tracked `ID3D12Resource`+RTV as a `Clear()`/draw target, standing in for the still-broken swap chain and the still-deferred public `D3D12RenderTargetBackend`. `Clear()` is now real (`ClearRenderTargetView` via the barrier tracker). `DrawColoredPrimitives()`/`DrawIndexedColoredPrimitives()` get/create a real `(2,0,0)` root signature + `colored3d`/stride-16 PSO, populate real `D3DPerDrawConstants`/`D3DFogConstants` (byte-identical to D3D11's) into new persistently-mapped UPLOAD-heap constant buffers (`GetOrCreatePerDrawConstantBufferEXT`/`GetOrCreateFogConstantBufferEXT`), and record a real `OMSetRenderTargets`/viewport/vertex+index-buffer/root-CBV/`DrawInstanced`(or indexed) sequence. `RecreateDeviceEXT()` extended to also reset the root-signature/PSO caches and the constant buffers (all tied to the old device). **Real bug found and fixed**: the PSO's default state (depth test on with no DSV bound, `CullCounterClockwiseFace` default) silently painted nothing on the first real run — no debug layer exists on this dev loop to report why; root-caused by bisecting (disabling depth had no effect; `CullMode::None` fixed it — the test triangle's real winding was back-face-culled after D3D's NDC→screen-space Y-flip), now a documented, hardcoded simplification (no D3D12 rasterizer-state-cache equivalent to D3D11's `DX-52` exists yet). New `D3D12_Smoke` Check M (before/after-`Clear()` pixel-region readback, same discipline as D3D11's Check P, for both the non-indexed and indexed draw paths) — **51/51 checks pass** (up from 48/48). Only `colored3d` landed; the other 9 stock variants and `DX-112` (SpriteBatch) are honest, explicit follow-up work. |
-| *(pending)* | **`DX-109`/`DX-110` closed (🟨 honest partial)**: new `D3D12Buffers.hpp`/`.cpp` (real `D3D12VertexBufferBackend`/`D3D12IndexBufferBackend`, DEFAULT-heap resource + fresh UPLOAD-heap staging per call + `CopyBufferRegion`, `CreateIndexBuffer32()` explicitly overridden and tested) and `D3D12Textures.hpp`/`.cpp` (real `D3D12TextureBackend`, row-pitch-aligned staging buffer + `CopyTextureRegion`, `d3dx12.h` absent so subresource indices computed directly). Both byte-exact round-trip proven via a real `D3D12_HEAP_TYPE_READBACK` buffer. Render targets/cube/3D textures deliberately triaged out (honest 🟨). `D3D12GraphicsBackend` grew a shared `D3D12ResourceStateTracker` member, `CheckDeviceRemovedEXT()` (detection-only, mirrors D3D11's `DX-27`), and `RecreateDeviceEXT()` (a real, tested full device-lifetime-group recreation). A real bug was caught in this task's own test (device-pointer-inequality is not sound proof of recreation — fixed to assert functional proof instead). New `D3D12_Smoke` Checks J/K/L — 48/48 checks pass (up from 31/31), 3 consecutive runs all green. |
-| *(pending)* | **`DX-106`/`DX-107`/`DX-108` closed**: new `D3D12ResourceStateTracker.hpp`/`.cpp` (per-resource `D3D12_RESOURCE_STATES` map, emits a transition barrier only on a genuine state change, proven via 7 new Checks against a real throwaway committed buffer), `D3D12RootSignatureCache.hpp`/`.cpp` (keyed by `(numCbvs, numSrvs, numSamplers)` binding shape, root CBVs + static-sampler SRV table), `D3D12PipelineStateCache.hpp`/`.cpp` (one PSO per full shader/stride/blend/depth/rasterizer/format tuple — **the first real `ID3D12PipelineState` this backend has created**, for `colored3d`/stride-16). `D3DVertexFormatHelper` grew `InputElementsForStrideD3D12()` (D3D12 bakes the input layout into the PSO desc directly, no `ID3D11InputLayout` equivalent). New `D3D12_Smoke` Checks G/H/I — 31/31 checks pass (up from 18/18). Stencil/scissor deliberately not yet part of the PSO key — honest, documented gap. |
+| `18a70bba`+ (DX-115) | **Phase DX12 fully closed — `DX-115` (docs)**: new `docs/d3d12-backend.md`, a `D3D12` column across all 7 applicable `docs/graphics-backend-feature-matrix.md` tables, and a `README.md` build section, mirroring D3D11's own `DX-95`–`DX-97`. Confirmed exact current numbers via a live run: `D3D12_Smoke` 80/80 checks. Only `DX-114` (real Windows hardware) remains open in `plan_dx.md`, `needs_human`. |
+| `724b95f6` | **`DX-113` (test-suite formalization) closed** — audited the 74 checks `DX-102`–`111` already built, closed 2 real gaps (dedicated fog on/off test, `D3D12ResourceStateTracker`'s untracked-resource throw contract), mutation-tested Check M (`VertexColorEnabled` flip → exactly M1 failed, M2 untouched, reverted+reconfirmed). `D3D12_Smoke` 80/80 checks. Two gaps left honestly open (state-object testing not yet applicable; fence stall not independently measured under real GPU load). |
+| `1996141f` | **`DX-111` closed for real — `env_map3d` lands, 10 of 10 stock variants real.** New `D3D12TextureCubeBackend` (6-face `ID3D12Resource`, `GetData()` left at the interface default no-op). Reused `dual_texture3d`'s `(3,2,2)` root-signature/PSO shape. Two unrelated real bugs found and fixed: the RTV descriptor heap's fixed 8-slot capacity was genuinely exhausted by the growing test suite (raised to 32), and `RecreateDeviceEXT()` never reset `boneConstantBuffer_`/`skinnedExtraConstantBuffer_`/`instancedPso_`. `D3D12_Smoke` grew 72→74/74 checks (Check U). |
+| `f2fd9e77` | **`DX-111` extended — `skinned3d`/`instanced3d` land, 9 of 10 stock variants real.** `skinned3d` reused existing caches unchanged (`(3,1,1)` shape); `instanced3d` needed its own hand-built PSO/2-stream input layout + new `DrawInstancedPrimitivesEx()`. No new bugs. `D3D12_Smoke` grew 68→72/72 checks. |
+| `aa2efab3` | **`DX-111` extended again (🟨, 7 of 10 stock variants) — `dual_texture3d` and `sprite2d` now also real and pixel-verified; `DX-112` (SpriteBatch) closed too.** Two real, non-obvious dev-loop bugs found and fixed, neither a CNA logic mistake caught by inspection, both only surfacing from an actual wrong pixel-readback result: (1) `dual_texture3d`'s 2 SRVs via ONE `D3D12_DESCRIPTOR_TABLE` range with `NumDescriptors=2` (populated by a fresh per-draw `CopyDescriptorsSimple` into a contiguous bump-allocated heap-slot pair) sampled as all-zero on the real GPU even though every CPU-side descriptor write was independently verified correct — fixed by switching `D3D12RootSignatureCache` to N SEPARATE single-descriptor tables (one root param per texture register), simpler code, not just a workaround, documented in that file's own doc comment for real-Windows re-verification later; (2) the first `sprite2d` pixel test assumed `UV = px/width` for its readback coordinates, but D3D rasterizes at pixel CENTERS (`UV = (px+0.5)/width`) — a genuine GPU sampling behavior, not a SpriteBatch bug — fixed by widening the test texture so each color spans 2 texels instead of 1. New `D3D12SpriteBatchBackend` (`D3D12SpriteBatch.hpp`/`.cpp`) mirrors `D3D11SpriteBatchBackend`'s exact quad-building formula, reuses `alpha_test3d`'s own `(1,1,1)` root signature, but needs its own hand-built PSO/input-layout (sprite2d's 32-byte vertex collides with `VertexPositionNormalTexture`'s existing stride-32 meaning, same real collision D3D11's own `DX-70` fork already found). Honest, documented gaps: `SpriteBatch::Begin(effect)` throws (no D3D12 custom-effect backend exists yet); sampler filter/address-mode setters are stored but not yet behaviorally real (no D3D12 dynamic-sampler-state system exists yet). `D3D12_Smoke` grew 61→**68/68 checks** (Checks Q/R). Still deferred: `env_map3d`/`skinned3d`/`instanced3d` (3 of 10). |
+| `e6100176` | **`DX-111` extended (🟨, 5 of 10 stock variants) — `textured3d`/`colored_textured3d`/`lit_textured3d`/`alpha_test3d` now also real and pixel-verified, on top of `colored3d` below.** New `D3D12GraphicsBackend::DrawPrimitivesEx()`/`DrawIndexedPrimitivesEx()` overrides (`DrawPrimitivesExImpl`) replicate D3D11's own priority-chain dispatch (alpha-test > lit-textured (stride 32) > colored/textured/colored_textured bundle by stride); `dual_texture3d`/`env_map3d`/`skinned3d` explicitly throw named "not yet implemented" rather than silently drawing the wrong shader. Real SRV descriptor-table texture binding: a `D3D12TextureBackend`'s own SRV (already allocated in the shared CBV/SRV/UAV heap at texture-creation time, `DX-109`) is bound directly as a 1-descriptor table base — no separate copy step. Root-signature shapes: `alpha_test3d` needs its own `(1,1,1)` (single combined `PerDraw@b0`, no separate `FogParams`); `textured3d`/`colored_textured3d`/`lit_textured3d` all share one `(2,1,1)` shape and therefore one cached root-signature object. Landing `lit_textured3d` for real **corrected a stale speculative doc-comment claim** in `D3D12RootSignatureCache.hpp` (it had guessed `(2,0,0)` for `lit_textured3d`, written before anyone had actually read `lit_textured3d.frag.hlsl`'s real `t0`/`s0` texture binding). No new bugs — all 5 new checks (N/O/P) passed the first real Wine+vkd3d-proton run. `D3D12_Smoke` grew 51→**61/61 checks**: exact texture sampling + exact vertex-color tinting (`textured3d`/`colored_textured3d`), lit-vs-unlit-vs-background discrimination (`lit_textured3d`), and genuine `clip()` discard/pass (`alpha_test3d`) — same rigor D3D11's own Checks Q/R/S used. Still deferred: `dual_texture3d`/`env_map3d`/`skinned3d`/`sprite2d`/`instanced3d` (5 of 10) and `DX-112` (SpriteBatch, needs `sprite2d` first). |
+| `0922f3aa` | **`DX-111` closed (🟨, `colored3d` only) — the first real triangle this D3D12 backend has drawn, pixel-verified off-screen.** New `BindOffscreenColorTargetEXT()`/`UnbindOffscreenColorTargetEXT()` NOXNA helpers on `D3D12GraphicsBackend` bind a caller-owned+tracked `ID3D12Resource`+RTV as a `Clear()`/draw target, standing in for the still-broken swap chain and the still-deferred public `D3D12RenderTargetBackend`. `Clear()` is now real (`ClearRenderTargetView` via the barrier tracker). `DrawColoredPrimitives()`/`DrawIndexedColoredPrimitives()` get/create a real `(2,0,0)` root signature + `colored3d`/stride-16 PSO, populate real `D3DPerDrawConstants`/`D3DFogConstants` (byte-identical to D3D11's) into new persistently-mapped UPLOAD-heap constant buffers (`GetOrCreatePerDrawConstantBufferEXT`/`GetOrCreateFogConstantBufferEXT`), and record a real `OMSetRenderTargets`/viewport/vertex+index-buffer/root-CBV/`DrawInstanced`(or indexed) sequence. `RecreateDeviceEXT()` extended to also reset the root-signature/PSO caches and the constant buffers (all tied to the old device). **Real bug found and fixed**: the PSO's default state (depth test on with no DSV bound, `CullCounterClockwiseFace` default) silently painted nothing on the first real run — no debug layer exists on this dev loop to report why; root-caused by bisecting (disabling depth had no effect; `CullMode::None` fixed it — the test triangle's real winding was back-face-culled after D3D's NDC→screen-space Y-flip), now a documented, hardcoded simplification (no D3D12 rasterizer-state-cache equivalent to D3D11's `DX-52` exists yet). New `D3D12_Smoke` Check M (before/after-`Clear()` pixel-region readback, same discipline as D3D11's Check P, for both the non-indexed and indexed draw paths) — **51/51 checks pass** (up from 48/48). Only `colored3d` landed; the other 9 stock variants and `DX-112` (SpriteBatch) are honest, explicit follow-up work. |
+| `c6c0d80e` | **`DX-109`/`DX-110` closed (🟨 honest partial)**: new `D3D12Buffers.hpp`/`.cpp` (real `D3D12VertexBufferBackend`/`D3D12IndexBufferBackend`, DEFAULT-heap resource + fresh UPLOAD-heap staging per call + `CopyBufferRegion`, `CreateIndexBuffer32()` explicitly overridden and tested) and `D3D12Textures.hpp`/`.cpp` (real `D3D12TextureBackend`, row-pitch-aligned staging buffer + `CopyTextureRegion`, `d3dx12.h` absent so subresource indices computed directly). Both byte-exact round-trip proven via a real `D3D12_HEAP_TYPE_READBACK` buffer. Render targets/cube/3D textures deliberately triaged out (honest 🟨). `D3D12GraphicsBackend` grew a shared `D3D12ResourceStateTracker` member, `CheckDeviceRemovedEXT()` (detection-only, mirrors D3D11's `DX-27`), and `RecreateDeviceEXT()` (a real, tested full device-lifetime-group recreation). A real bug was caught in this task's own test (device-pointer-inequality is not sound proof of recreation — fixed to assert functional proof instead). New `D3D12_Smoke` Checks J/K/L — 48/48 checks pass (up from 31/31), 3 consecutive runs all green. |
+| `60d42acf` | **`DX-106`/`DX-107`/`DX-108` closed**: new `D3D12ResourceStateTracker.hpp`/`.cpp` (per-resource `D3D12_RESOURCE_STATES` map, emits a transition barrier only on a genuine state change, proven via 7 new Checks against a real throwaway committed buffer), `D3D12RootSignatureCache.hpp`/`.cpp` (keyed by `(numCbvs, numSrvs, numSamplers)` binding shape, root CBVs + static-sampler SRV table), `D3D12PipelineStateCache.hpp`/`.cpp` (one PSO per full shader/stride/blend/depth/rasterizer/format tuple — **the first real `ID3D12PipelineState` this backend has created**, for `colored3d`/stride-16). `D3DVertexFormatHelper` grew `InputElementsForStrideD3D12()` (D3D12 bakes the input layout into the PSO desc directly, no `ID3D11InputLayout` equivalent). New `D3D12_Smoke` Checks G/H/I — 31/31 checks pass (up from 18/18). Stencil/scissor deliberately not yet part of the PSO key — honest, documented gap. |
 | `18265d75` | **Phase DX11 fully closed (`DX-95`–`DX-98`)**: new `docs/d3d11-backend.md` (mirrors `docs/software-backend.md`/`docs/headless-backend.md`'s structure — status, what it's for/isn't, Wine+DXVK dev-loop setup, writing a test, an honest known-limitations list). A real `D3D11` column added to every applicable table in `docs/graphics-backend-feature-matrix.md` (2D SpriteBatch/SpriteFont, Stock Effects, RenderTarget/MSAA/mip/depth, Texture2D/Texture3D/TextureCube, GraphicsDevice state objects, OcclusionQuery, Model), honestly mixed ✅/🟨/⬜ per row rather than blanket-approved. New "Tested Compilers" row + "Build (Windows cross-compilation — D3D11 backend)" section in `README.md`. This closes `plan_dx.md`'s entire D3D11 scope — only `DX-90`/`DX-91` (real Windows hardware) remain, both `needs_human`. |
 | `911440f2` | **Phase DX10 fully closed (`DX-81`–`DX-85`)**: 4 new CTest entries reusing the exact backend-agnostic `easygl_blendstate_*`/`easygl_depthstencilstate_*`/`easygl_rasterizerstate_*` sources Vulkan already reuses verbatim (`D3D11_BlendState_Opaque`/`AlphaBlend`, `D3D11_DepthStencilState_StencilEnable`, `D3D11_RasterizerState_CullMode`) — real pixel-behavior proof (blend math, stencil gating, winding-order culling), all 4 passing on the first run. New Check AB (`DX-83`) closes `DX-29`'s long-flagged never-exercised resize gap: real 64×64→96×80 resize via `GraphicsDeviceManager`, DXVK's own presenter log confirms the new buffer size, correct post-resize readback. `DX-84`: real mutation-test pass on `DX-61`'s `colored3d` check — a first mutation (reversed WVP order) was an honest false negative since that check uses identity matrices, a second (`VertexColorEnabled` flipped off) genuinely broke it, verified reverted. `DX-85`: `scripts/run-wine-dxvk.sh` now automatically greps every run's output for a `DXVK: <version>` marker and fails loudly (exit 3) if absent, even overriding a 0 exit code from the wrapped program — caught a real false-positive live (`D3D11_Common` never opens a device) and added a distinct, narrowly-scoped `CNA_D3D11_SKIP_DXVK_GATE=1` opt-out for it via CTest `ENVIRONMENT`. New Check AC closes `DX-69`'s own honestly-flagged fog-on/off gap (exact-color discrimination). `D3D11` CTest total now 6 tests, `D3D11_Smoke` 69 + `D3D11_Common` 23 + 4 new tests, all passing. |
 | `5bde8ab5` | **Phase DX9 fully closed (`DX-70`/`DX-71`/`DX-72`)**: new `D3D11SpriteBatchBackend` (`D3D11SpriteBatch.hpp`/`.cpp`) — real quad batching feeding the stock `sprite2d` pipeline (destination/source-rect/origin/rotation/`SpriteEffects`-flip, matching `EasyGLSpriteBatchBackend`'s formula), a genuinely-working `SetTransformMatrix()` (CPU-side `Vector2::Transform()` per vertex — a real improvement over `VulkanSpriteBatchBackend`'s own silent no-op), custom `Effect` support reusing `D3D11EffectBackend` (`DX-58`) via a new `SetViewportSizeEXT()` that fills the `vpSize` slot that class had already reserved, and real `TextureAddressMode::Wrap`/`Mirror` (no new implementation needed — `D3D11SamplerCache`, `DX-44`, already handled it; this row is verification). Tested through the **real public `SpriteBatch`/`Texture2D` API**, not the raw backend interface — 6 new `D3D11_Smoke` Checks Y/Z/AA, all passing on the first real Wine+DXVK run, including two deliberately discriminating Wrap/Mirror probe pixels. 64/64 smoke checks pass (up from 58/58), `D3D11` CTest total now 87/87. |
@@ -516,47 +260,28 @@ Most recent first. Full detail (exact code, discriminating-power verification) i
 
 ## 4. Current blocker / main problem
 
-**No hard blocker — `plan_dx.md`'s D3D11 scope is entirely closed.** Phase DX1 through DX11 are all
-✅ except `DX-90`/`DX-91` (real Windows hardware, `needs_human`, no such machine available here).
-**Phase DX12 (D3D12) is now underway.** `DX-100` (the Wine+vkd3d-proton dev-loop spike, "do this
-first, before committing to the rest of this phase's ordering" per its own row) is closed 🟨: the
-D3D12 device/queue/fence/command-list path is real and works locally (feature level `12_1`, DXR 1.1,
-Shader Model 6.8 negotiated via vkd3d-proton DLLs already present in this machine's Steam Proton
-install — no new system install needed), but `CreateSwapChainForHwnd` crashes (`FLIP_DISCARD`) or
-fails cleanly (`DXGI_ERROR_INVALID_CALL` with plain `DISCARD`) under vanilla Debian Wine's own
-`dxgi.dll` — see `plan_dx.md`'s `DX-100` row for the full evidence. **`DX-101` through `DX-112` are
-all closed (2026-07-14, `DX-109`/`DX-111` honest 🟨 partials)** — `CNA_GRAPHICS_BACKEND=D3D12` builds
-clean (`cmake-build-d3d12`); real device/queue/descriptor-heaps/command-lists/fence (`DX-102`–`105`);
-real per-resource `D3D12_RESOURCE_STATES` barrier tracking, a real root-signature cache, and a real
-pipeline-state-object cache — the first real `ID3D12PipelineState` this backend has created
-(`DX-106`–`108`); real vertex/index buffers + 2D textures with byte-exact GPU round-trip proof, and a
-real, tested device-removed recreation path (`DX-109`/`DX-110`, honest 🟨 — render targets/cube/3D
-textures deliberately triaged out); real, pixel-verified `colored3d`/`textured3d`/
-`colored_textured3d`/`lit_textured3d`/`alpha_test3d`/`dual_texture3d`/`sprite2d`/`skinned3d`/
-`instanced3d` draws — 9 of 10 stock variants — via `DrawColoredPrimitives`/`DrawPrimitivesEx`/
-`DrawIndexedPrimitivesEx`/`DrawInstancedPrimitivesEx` (`DX-111`,
-🟨 — off-screen via a new `BindOffscreenColorTargetEXT()` helper; real silent-failure/dev-loop bugs
-were found and fixed landing this row: a depth-enabled-with-no-DSV-plus-default-culling bug
-(`colored3d`), a stale `(2,0,0)`-shape root-signature-cache doc-comment speculation corrected to the
-real `(2,1,1)` (`lit_textured3d`), a multi-descriptor root table sampling as all-zero under this
-dev loop's Wine+vkd3d-proton — fixed by switching to N separate single-descriptor tables
-(`dual_texture3d`), and a pixel-center-vs-naive-UV test-coordinate mistake (`sprite2d`)); and a real
-`D3D12SpriteBatchBackend` (`DX-112` ✅, reuses `alpha_test3d`'s own root signature, needs its own
-hand-built PSO/input-layout since sprite2d's 32-byte vertex collides with stride-32's existing
-`VertexPositionNormalTexture` meaning). `D3D12_Smoke` CTest: 72/72 checks. `Present()` and
-`env_map3d`'s draw path (the one remaining stock variant) still
-honestly throw. **The concrete next step is extending `DX-111`'s pattern to `env_map3d`**
-(needs a new `D3D12TextureCubeBackend`; reusing `D3DCommon`'s HLSL/DXBC, and the
-root-signature/PSO/constant-buffer conventions `DX-111` itself established — should be substantially
-cheaper now that the pattern is proven repeatedly), then `DX-113` (test-suite formalization)/`DX-115`
-(docs), continuing to build off-screen/swap-chain-free per
-`DX-100`'s own recommendation, and deferring swap-chain/`Present()` proof to a real-Windows/CI-VM
-pass much earlier than D3D11's `DX-90` did. Outside the D3D plan, the standing backlog
-(Phase 79's 153-sample `../cna-samples` re-audit, Task 945's HLSL→GLSL tooling decision, Task 952's
-deferred Bgfx bug) is unchanged — see §8/§9.
+**No hard blocker — `plan_dx.md`'s scope is entirely closed for both backends' software/logic
+layer.** D3D11: Phase DX1 through DX11 are all ✅ except `DX-90`/`DX-91` (real Windows hardware,
+`needs_human`). D3D12: Phase DX12 (`DX-100` through `DX-113`/`DX-115`) is now ALSO all ✅ except
+`DX-114` (real Windows hardware, `needs_human`) — no such machine is available in this dev
+environment for either gate. **D3D12's own additional, real gap beyond D3D11's**: swap-chain
+presentation genuinely crashes under this dev loop's Wine+vkd3d-proton (a `dxgi.dll`/vkd3d-proton
+architecture mismatch, root-caused via WineDbg to a null Vulkan-instance-handle read — not a CNA
+bug, see `plan_dx.md`'s `DX-100`/`DX-102` rows), so every D3D12 proof in this plan is off-screen,
+unlike D3D11 which does have a working (Wine-verified) swap chain. `D3D12_Smoke` CTest: **80/80
+checks**, mutation-tested, all 10/10 stock shader variants + `SpriteBatch` + device-removed
+recovery real. D3D12 still genuinely lacks (real, scoped, documented, not silently dropped — see
+`docs/d3d12-backend.md`'s "Known limitations"): a public render-target backend, `Texture3D`,
+runtime-settable blend/depth-stencil/rasterizer state (PSOs hardcode `depthEnable=false`/
+`cullMode=None`), per-slot `SamplerState` (hardcoded static WRAP/linear samplers), occlusion
+queries, and custom `Effect` via `SpriteBatch::Begin(effect)`. **With `DX-114` the only open task
+and it `needs_human`, there is no further available Debian-side work on `plan_dx.md` barring new
+instructions.** Outside the D3D plan, the standing backlog (Phase 79's 153-sample `../cna-samples`
+re-audit, Task 945's HLSL→GLSL tooling decision, Task 952's deferred Bgfx bug) is unchanged — see
+§8/§9.
 
 **One real, separate, documented problem**: the full `CnaTests` GTest suite does not build under
-`CNA_GRAPHICS_BACKEND=D3D11`.
+`CNA_GRAPHICS_BACKEND=D3D11` (and, by the same root cause, `D3D12`).
 
 - **Symptom**: `cmake --build cmake-build-d3d11 --target CnaTests` fails with
   `error: '::setenv' has not been declared; did you mean 'getenv'?` across roughly 10 test files.
@@ -569,12 +294,11 @@ deferred Bgfx bug) is unchanged — see §8/§9.
   much lighter test coverage needs) recently enough to catch this.
 - **What's already been tried**: nothing yet — found and explicitly left unfixed this session
   (deliberately out of scope; see §9). `CNA` itself and standalone test executables
-  (`cna_test_d3d11_smoke`, `cna_test_d3d11_common`) build and run fine — only the full `CnaTests`
-  target is affected.
-- **Not a blocker for continued backend development**: Phase DX5+ work doesn't need `CnaTests` to
-  build under D3D11 to make progress: this project's own established pattern (Software/Headless
-  backends) is standalone example-based CTests (`examples/d3d11_*.cpp`) until a backend is mature
-  enough to run the full suite.
+  (`cna_test_d3d11_smoke`, `cna_test_d3d11_common`, `d3d12_smoke_test`) build and run fine — only the
+  full `CnaTests` target is affected.
+- **Not a blocker for continued backend development**: this project's own established pattern
+  (Software/Headless backends) is standalone example-based CTests (`examples/d3d11_*.cpp`/
+  `examples/d3d12_*.cpp`) until a backend is mature enough to run the full suite.
 
 ---
 
@@ -712,39 +436,17 @@ desktop session with real GPU access — re-verify before assuming either claim 
 
 ## 8. Next smallest tasks
 
-1. **Phase DX12 (D3D12), land the last 3 stock shader variants (`env_map3d`/`skinned3d`/
-   `instanced3d`), then `DX-113`/`DX-115`** (`plan_dx.md`) — `DX-100` through `DX-112` are all closed
-   (2026-07-14, `DX-109`/`DX-111` honest 🟨 partials): real `ID3D12Device`/`ID3D12CommandQueue`/
-   descriptor heaps/command-lists/fence (`DX-102`–`105`), a real per-resource
-   `D3D12ResourceStateTracker`, a real `D3D12RootSignatureCache` (keyed by binding shape, now N
-   separate single-descriptor SRV tables per texture register rather than one shared multi-descriptor
-   table — see below), a real `D3D12PipelineStateCache` — **the first real `ID3D12PipelineState` this
-   backend has created**, for `colored3d`/stride-16 (`DX-106`–`108`) — real `D3D12VertexBufferBackend`/
-   `D3D12IndexBufferBackend`/`D3D12TextureBackend` (byte-exact GPU round-trip proven via a
-   `D3D12_HEAP_TYPE_READBACK` buffer) plus a real, tested `RecreateDeviceEXT()` device-removed
-   recovery path (`DX-109`/`DX-110`, honest 🟨 — render targets/cube/3D textures deliberately triaged
-   out), real, pixel-verified `colored3d`/`textured3d`/`colored_textured3d`/`lit_textured3d`/
-   `alpha_test3d`/`dual_texture3d`/`sprite2d`/`skinned3d`/`instanced3d` draws — 9 of 10 stock
-   variants — (`DX-111`, 🟨 — `Clear()`/`DrawColoredPrimitives()`/`DrawIndexedColoredPrimitives()`/
-   `DrawPrimitivesEx()`/`DrawIndexedPrimitivesEx()`/`DrawInstancedPrimitivesEx()` via a new
-   `BindOffscreenColorTargetEXT()` NOXNA helper standing in for the still-broken swap chain), and a
-   real `D3D12SpriteBatchBackend` (`DX-112` ✅). Several real bugs were found and fixed along the
-   way — a silent-failure PSO-state bug (depth enabled with no DSV bound, plus default back-face
-   culling) landing `colored3d`; a stale `(2,0,0)`-shape root-signature speculation in
-   `D3D12RootSignatureCache.hpp`'s own doc comment, corrected to the real `(2,1,1)` once
-   `lit_textured3d`'s actual HLSL was read; a multi-descriptor root table (`dual_texture3d`'s 2 SRVs)
-   that sampled as all-zero under this dev loop's Wine+vkd3d-proton even though every CPU-side
-   descriptor write was independently verified correct, fixed by switching to N separate
-   single-descriptor tables; and a `sprite2d` pixel test that assumed `UV = px/width` instead
-   of D3D's real pixel-center convention `UV = (px+0.5)/width` — all proven via `D3D12_Smoke` (72/72
-   checks, off-screen only). Swap-chain creation is implemented for real but crashes under this Wine
-   setup (a null-pointer read inside Wine's own `dxgi.dll`, reproduced with a full backtrace via the
-   by-hand `cna_diag_d3d12_swapchain` diagnostic — not a CTest, since it always crashes here). **Next
-   step: `env_map3d`** (the one remaining stock variant, needs a new `D3D12TextureCubeBackend` —
-   extend `DX-111`'s now-repeatedly-proven root-signature/PSO/constant-buffer/draw-dispatch pattern,
-   see that row's own Notes), then `DX-113` (test-suite formalization, same shape as
-   D3D11's own `DX-80`–`84`) and `DX-115` (docs). Already authorized — no go-ahead needed, but see §9 for what's still
-   off-limits.
+1. **`plan_dx.md` is now fully closed for what this Debian dev environment can prove.** D3D11
+   (Phase DX1–DX11) and D3D12 (Phase DX12, `DX-100`–`DX-113`/`DX-115`) both have their complete
+   software/logic layer done and Wine-verified — `D3D11_Smoke`+`D3D11_Common` 96+ checks,
+   `D3D12_Smoke` 80/80 checks (off-screen only). The only two open rows in the whole plan are
+   `DX-90`/`DX-91` (D3D11 real-Windows checklist) and `DX-114` (D3D12 real-Windows checklist,
+   additionally needs to prove the swap chain that crashes under this dev loop's Wine+vkd3d-proton) —
+   **all three are `needs_human`, requiring an actual Windows machine with a real GPU, not available
+   here.** There is no further available Debian-side work on this plan. If a real Windows machine
+   becomes available, start with `DX-114` (D3D12) or `DX-90` (D3D11) per `plan_dx.md`'s own
+   checklists; until then this item is genuinely blocked, not merely low-priority — move to item 2+
+   below for other independent work.
 2. **Decide Task 945** (manual HLSL→GLSL port vs. `dxc`+`SPIRV-Cross` tooling for Phase 78, the
    *unrelated* `../cna-samples` shader-conversion track) — Task 946's data point is in (manual
    porting scaled fine for BloomSample's 3 shaders). Needs project-owner input, do not decide
@@ -765,14 +467,12 @@ desktop session with real GPU access — re-verify before assuming either claim 
 
 ## 9. Do not do yet
 
-- **`plan_dx.md`'s D3D11 scope (Phase DX1–DX11) is entirely closed** (2026-07-14) — nothing left to
-  authorize there. **Phase DX12 (D3D12) is authorized** (the project owner explicitly authorized it
-  "later if time allows," 2026-07-13) — it is legitimate next work, not gated the way it was before
-  that authorization; `plan_dx.md`'s own design-decision-9 boilerplate text ("D3D11 finishing does
-  not implicitly authorize D3D12") predates that explicit go-ahead and is now superseded for this
-  project specifically — **do not read design decision 9 as still blocking D3D12** without checking
-  this file's own current authorization state first. Only `DX-90`/`DX-91` (needs a real Windows
-  machine) remain genuinely gated — see the next bullet.
+- **`plan_dx.md` is entirely closed for both D3D11 (Phase DX1–DX11) and D3D12 (Phase DX12,
+  `DX-100`–`DX-113`/`DX-115`)** (2026-07-14) — nothing left to authorize or implement there on this
+  Debian machine. Only `DX-90`/`DX-91` (D3D11) and `DX-114` (D3D12) remain, all `needs_human` —
+  a real Windows machine with a real GPU. `plan_dx.md`'s own design-decision-9 boilerplate text
+  ("D3D11 finishing does not implicitly authorize D3D12") is now moot — the project owner already
+  authorized and this session already completed D3D12's own software/logic layer in full.
 - **When working Phase DX12, do not merge D3D11 and D3D12 into one shared device/backend class**
   "for less duplication" — `plan_dx.md` design decision 4 already scoped what's genuinely shared
   (`D3DCommon`); forcing the actual device/command/resource logic to share code across two
@@ -821,33 +521,15 @@ Pick exactly one task from §8 "Next smallest tasks" (default to the first one u
 otherwise). Inspect only the files that task names -- do not go exploring unrelated modules, and do
 not refactor anything you find along the way that isn't directly required for this task.
 
-Phase DX1 through DX11 of plan_dx.md (D3D11 backend) are ALL closed (2026-07-14) -- do not re-do
-this work. Phase DX12 (D3D12) is authorized and underway -- DX-100 through DX-112 are all closed
-(device/queue/heaps/command-lists/fence real, DX-102-105; a real per-resource state-transition
-barrier tracker, a root-signature cache (now N separate single-descriptor SRV tables per texture
-register, not one shared multi-descriptor table -- see below), and pipeline-state-object cache --
-the first real ID3D12PipelineState this backend has created -- DX-106-108; real vertex/index buffers
-+ 2D textures with byte-exact GPU round-trip proof, and a real tested device-removed recreation path
--- DX-109/110, honest partial: render targets/cube/3D textures deliberately triaged out; real,
-pixel-verified colored3d/textured3d/colored_textured3d/lit_textured3d/alpha_test3d/dual_texture3d/
-sprite2d/skinned3d/instanced3d draws -- DX-111, honest partial: 9 of the 10 stock variants landed,
-via a new BindOffscreenColorTargetEXT() helper; and a real D3D12SpriteBatchBackend -- DX-112,
-closed. Several real bugs were found and fixed along the way -- a silent-failure PSO-state bug
-(depth enabled with no DSV bound, plus default back-face culling) landing colored3d; a stale
-(2,0,0)-shape root-signature speculation in D3D12RootSignatureCache.hpp's own doc comment, corrected
-to the real (2,1,1) once lit_textured3d's actual HLSL was read; a multi-descriptor root table for
-dual_texture3d's 2 SRVs that sampled as all-zero under this dev loop's Wine+vkd3d-proton even though
-every CPU-side descriptor write was independently verified correct, fixed by switching to N separate
-single-descriptor tables; and a sprite2d pixel test that assumed UV = px/width instead of D3D's real
-pixel-center convention UV = (px+0.5)/width. Swap-chain creation crashes/fails under vanilla Wine's
-dxgi.dll, see DX-100's/DX-102's own row Notes; CNA_GRAPHICS_BACKEND=D3D12 builds clean, D3D12_Smoke
-passes 72/72 checks. Continue with env_map3d (the one remaining stock variant, needs a new
-D3D12TextureCubeBackend -- extend DX-111's now-repeatedly-proven root-signature/PSO/constant-buffer/
-draw-dispatch pattern), then DX-113 (test-suite formalization) and DX-115 (docs), and proceed
-without re-asking; see §9
-for what stays off-limits (no merging D3D11/D3D12 into one class; do not assume swap-chain/Present()
-support works locally -- build around off-screen/readback proof instead per DX-100's own
-recommendation).
+plan_dx.md (D3D11 + D3D12 backends) is now fully closed for everything this Debian dev environment
+can prove: Phase DX1 through DX11 (D3D11) and Phase DX12 DX-100 through DX-113/DX-115 (D3D12) are
+ALL closed (2026-07-14) -- do not re-do this work. The only open rows in the whole plan are
+DX-90/DX-91 (D3D11 real-Windows checklist) and DX-114 (D3D12 real-Windows checklist, which
+additionally needs to verify the swap chain -- known to crash under this dev loop's
+Wine+vkd3d-proton, root-caused, not a CNA bug) -- all three are needs_human and require an actual
+Windows machine with a real GPU, not available here. Do not attempt them; if such a machine becomes
+available, start with DX-114 or DX-90 per plan_dx.md's own checklists. See §9 for what stays
+off-limits generally (no merging D3D11/D3D12 into one class, etc.).
 
 Make one small, verified improvement:
 1. Investigate/reproduce the issue first (run the exact failing command from §4/§8).

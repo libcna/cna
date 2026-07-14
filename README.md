@@ -31,6 +31,7 @@ ctest --test-dir build --output-on-failure
 - **`BGFX` backend:** Broad 2D+3D functionality, largely pixel-verified parity with EasyGL/Vulkan as of this project's Phase 72 — but not unqualified full parity: known real limitations remain, including a `Depth24Stencil8`-attached `RenderTargetCube` face producing no colour output (Task 952, deferred, root cause not yet found), `DrawIndexedPrimitivesEx` silently discarding `startIndex`/`baseVertex` on a sub-range indexed draw (Task 954), and occlusion-query pixel-count correctness that can't be verified under this project's own sandbox's software GL driver. See `NEXT.md` §5 for the current, complete list.
 - **`WEBGPU` backend:** Experimental fifth backend using native `wgpu-native`. The current baseline covers device/surface setup, clear/present, RGBA8 `Texture2D`, vertex/index uploads and WGSL SpriteBatch rendering. It is not yet a 3D-parity replacement for EasyGL/Vulkan/Bgfx; see [`docs/webgpu-backend.md`](docs/webgpu-backend.md) and `plan_webgpu.md`.
 - **`D3D11` backend:** Windows-only native Direct3D 11 backend, cross-compiled via MinGW-w64 and verified through Wine+DXVK on a real GPU (6 CTest binaries, 96+ checks) — all 10 stock HLSL shader variants (`BasicEffect`/`AlphaTestEffect`/`DualTextureEffect`/`EnvironmentMapEffect`/`SkinnedEffect`), textures/render targets (MRT/MSAA/occlusion queries), state objects, SpriteBatch, and a runtime-`D3DCompile()` custom `ShaderEffect` path are real and pixel-verified. Real-Windows hardware verification (device-lost recovery, WARP fallback, driver-specific parity) is still open. See [`docs/d3d11-backend.md`](docs/d3d11-backend.md) and `plan_dx.md`.
+- **`D3D12` backend:** Windows-only native Direct3D 12 backend, cross-compiled via MinGW-w64 and verified through Wine+vkd3d-proton on a real GPU, **off-screen only** (`D3D12_Smoke` CTest, 80/80 checks) — device/queue/heaps/command-lists/fences/barriers/PSOs/root-signatures are real, all 10 stock HLSL shader variants (same DXBC as `D3D11`) and a real `SpriteBatch` are pixel-verified off-screen, and device-removed recovery is real and functionally proven. Swap-chain presentation is a known, real, unresolved gap on this dev loop (genuine Wine/vkd3d-proton `dxgi.dll` architecture mismatch, not a CNA bug); runtime-settable blend/depth-stencil/rasterizer state, per-slot `SamplerState`, render targets, `Texture3D`, occlusion queries, and real-Windows hardware verification are all still open. See [`docs/d3d12-backend.md`](docs/d3d12-backend.md) and `plan_dx.md`.
 - **Verification methodology:** differential testing against a real, running `FNA.dll` reference implementation (`tools/fna-reference/`), disputed behavior settled against genuine XNA 4.0 on a Windows 7 VM, and a compile-time `NOXNA` purity check (a dedicated CMake build option that turns every non-XNA-tagged declaration into a `[[deprecated]]` warning under `-Werror`) — see `CHECKLIST.md`'s "NOXNA markers" section and `CMakeLists.txt`.
 - **CI is Linux-only and partial** (see `.github/workflows/`): it currently runs only the `Input` and `Devices`/`Sensors` gtest suites — not the full ~4,370-test unit suite and not the ~490-test GPU pixel-test suite across the 4 established graphics backends; the experimental WebGPU backend does not yet have pixel-test coverage. Everything Graphics-related in this README is verified by running the suites locally and by hand, not by an automated Graphics CI gate; there is currently no Windows, macOS, or Android CI at all (Windows/Android are verified manually, per §7/§9 below).
 
@@ -334,6 +335,35 @@ steps); CTest wires this in automatically:
 ctest --test-dir cmake-build-d3d11 -R D3D11 --output-on-failure
 ```
 
+### Build (Windows cross-compilation — D3D12 backend)
+
+A native Direct3D 12 backend, Windows-only (hard-`FATAL_ERROR`-gated at configure time, same as
+`D3D11`). Also developed and verified on this repo's own Debian dev machine via the same MinGW-w64
+cross toolchain, but tested locally through Wine + **vkd3d-proton** (`scripts/run-wine-vkd3d.sh`),
+not DXVK — D3D12 needs a different Windows-D3D-to-Vulkan translation layer than D3D11, with its own
+dedicated Wine prefix. Every check currently runs **off-screen only** — swap-chain presentation is
+a known, real, unresolved gap on this dev loop (see `docs/d3d12-backend.md`). See
+[`docs/d3d12-backend.md`](docs/d3d12-backend.md) and [`plan_dx.md`](plan_dx.md) for full detail.
+
+```bash
+# Install cross toolchain (same package D3D11/SDL_RENDERER's own Windows cross-build uses)
+sudo apt install mingw-w64
+
+git submodule update --init --recursive
+cmake -S . -B cmake-build-d3d12 \
+      -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64.cmake \
+      -DCNA_GRAPHICS_BACKEND=D3D12 \
+      -DCNA_BUILD_TESTS=ON
+cmake --build cmake-build-d3d12 --target CNA
+```
+
+Running the resulting `.exe`s needs a Wine + vkd3d-proton dev-loop, in a prefix separate from
+D3D11's own (`docs/d3d12-backend.md` has full setup steps); CTest wires this in automatically:
+
+```bash
+ctest --test-dir cmake-build-d3d12 -R D3D12 --output-on-failure
+```
+
 ### Run Demo / Verification
 
 This repository intentionally prioritizes framework/runtime development over shipping a bundled game demo executable.
@@ -355,6 +385,7 @@ cmake --build build --target hello-triangle-sdl
 | Windows x86_64 (native) | MinGW-w64 | SDL_RENDERER | planned |
 | Linux → Windows (cross) | MinGW-w64 | SDL_RENDERER | ✅ verified building + full test suite under Wine |
 | Linux → Windows (cross) | MinGW-w64 | D3D11 | ✅ verified building + `D3D11` CTest suite (6 tests, 96+ checks) under Wine+DXVK on a real GPU — real Windows hardware verification still open, see `docs/d3d11-backend.md` |
+| Linux → Windows (cross) | MinGW-w64 | D3D12 | ✅ verified building + `D3D12` CTest suite (1 test, 80/80 checks, off-screen only) under Wine+vkd3d-proton on a real GPU — swap-chain presentation and real Windows hardware verification both still open, see `docs/d3d12-backend.md` |
 | Web (Emscripten) | emcc/Clang (emsdk) | EASYGL | ✅ verified building + running under Node.js |
 | Android (NDK) | Clang (NDK 29/30) | EASYGL | ✅ verified building + running on a real x86_64 emulator |
 
