@@ -335,8 +335,9 @@ namespace CNA::Internal::Backends::D3D12
     // -------------------------------------------------------------------------
 
     D3D12RenderTargetCubeBackend::D3D12RenderTargetCubeBackend(
-        D3D12GraphicsBackend* owner, ID3D12Device* device, int size, int depthFormat)
+        D3D12GraphicsBackend* owner, ID3D12Device* device, int size, int depthFormat, bool mipMap)
         : owner_(owner), device_(device), size_(size)
+        , mipMap_(mipMap), levelCount_(mipMap ? CalculateMipLevels(size, size) : 1)
     {
         D3D12_HEAP_PROPERTIES heapProps{};
         heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
@@ -346,7 +347,7 @@ namespace CNA::Internal::Backends::D3D12
         colorDesc.Width = static_cast<UINT64>(size_);
         colorDesc.Height = static_cast<UINT>(size_);
         colorDesc.DepthOrArraySize = 6;
-        colorDesc.MipLevels = 1;
+        colorDesc.MipLevels = static_cast<UINT16>(levelCount_);
         colorDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
         colorDesc.SampleDesc.Count = 1;
         colorDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
@@ -379,7 +380,7 @@ namespace CNA::Internal::Backends::D3D12
         srvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
         srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURECUBE;
         srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-        srvDesc.TextureCube.MipLevels = 1;
+        srvDesc.TextureCube.MipLevels = static_cast<UINT>(levelCount_);
         owner_->AllocateCbvSrvUavDescriptorEXT(srvCpu_, srvGpu_);
         device_->CreateShaderResourceView(colorResource_.Get(), &srvDesc, srvCpu_);
 
@@ -428,7 +429,42 @@ namespace CNA::Internal::Backends::D3D12
 
     void D3D12RenderTargetCubeBackend::UnbindAsRenderTarget()
     {
+        // DX-144: generate the active face's mip chain BEFORE clearing activeFace_ -- mirrors
+        // D3D12RenderTargetBackend::UnbindAsRenderTarget()'s own "mip-gen before back-buffer
+        // restore" ordering.
+        GenerateMipsEXT();
         activeFace_ = -1;
         if (owner_) owner_->RestoreBackBufferRenderTargetEXT();
+    }
+
+    void D3D12RenderTargetCubeBackend::GenerateMipsEXT()
+    {
+        if (!mipMap_ || levelCount_ <= 1 || !owner_ || activeFace_ < 0) return;
+
+        // Only the face that was actually just drawn to gets its chain regenerated -- mirrors
+        // D3D11RenderTargetCubeBackend's own single-active-face convention (one shared
+        // depth/color resource, only one face is ever the current draw target at a time).
+        const UINT face = static_cast<UINT>(activeFace_);
+        int srcW = size_, srcH = size_;
+        for (int level = 1; level < levelCount_; ++level)
+        {
+            const int dstW = std::max(1, srcW / 2);
+            const int dstH = std::max(1, srcH / 2);
+
+            // Standard D3D12 texture-array/mip subresource-index formula: mip + arraySlice*mipLevels.
+            const UINT srcSubresource = static_cast<UINT>(level - 1) + face * static_cast<UINT>(levelCount_);
+            const UINT dstSubresource = static_cast<UINT>(level) + face * static_cast<UINT>(levelCount_);
+
+            const auto srcPixels = ReadbackSubresourceRGBA8(
+                owner_, device_.Get(), colorResource_.Get(), srcSubresource, srcW, srcH);
+            if (srcPixels.empty()) return; // honest bail-out -- leaves remaining levels undefined, not wrong
+
+            const auto dstPixels = BoxFilterDownsample(srcPixels, srcW, srcH, dstW, dstH);
+            UploadSubresourceRGBA8(
+                owner_, device_.Get(), colorResource_.Get(), dstSubresource,
+                dstPixels.data(), dstW, dstH);
+
+            srcW = dstW; srcH = dstH;
+        }
     }
 }

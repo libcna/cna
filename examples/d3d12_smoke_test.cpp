@@ -3838,6 +3838,103 @@ int main()
         }
     }
 
+    // ---- plan_dx.md DX-144 follow-up: RenderTargetCube mip-chain generation -- same real CPU
+    // box-filter downsample cascade as D3D12RenderTargetBackend's own 2D leg above, extended to
+    // D3D12RenderTargetCubeBackend. Only the active face's chain regenerates on unbind, mirroring
+    // D3D11RenderTargetCubeBackend's own face-0-only test precedent (a real, honest scope match,
+    // not an oversight -- only one face is ever the active draw target at a time). ----
+    {
+        auto rtCubeMip = backend.CreateRenderTargetCube(8, 0 /*DepthFormat::None*/, true /*mipMap*/);
+        auto* d3dRtCubeMip = dynamic_cast<D3D12RenderTargetCubeBackend*>(rtCubeMip.get());
+        Check(d3dRtCubeMip != nullptr && d3dRtCubeMip->GetLevelCountEXT() == 4,
+              "MM0: D3D12RenderTargetCubeBackend: an 8x8 mipMap=true cube render target reports "
+              "the expected 4-level mip chain (8x8/4x4/2x2/1x1, plan_dx.md DX-144)");
+
+        if (d3dRtCubeMip != nullptr)
+        {
+            rtCubeMip->BindAsRenderTargetFace(0);
+            backend.Clear(50.0f / 255.0f, 150.0f / 255.0f, 250.0f / 255.0f, 1.0f);
+            rtCubeMip->UnbindAsRenderTarget(); // GenerateMipsEXT() on face 0
+
+            // Subresource = mip + face*levelCount (standard D3D12 texture-array/mip indexing) --
+            // face 0, mip 1. Reuses the same readback technique as readbackRtMip above, just against
+            // the cube's own color resource and a face-aware subresource index.
+            auto readbackCubeMip = [&](int level, int face, int w, int h) -> std::vector<uint8_t>
+            {
+                const UINT rowPitch = (static_cast<UINT>(w) * 4 + D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1)
+                                     & ~(D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1);
+                const UINT64 bufSize = static_cast<UINT64>(rowPitch) * static_cast<UINT64>(h);
+
+                D3D12_HEAP_PROPERTIES readbackHeapProps{};
+                readbackHeapProps.Type = D3D12_HEAP_TYPE_READBACK;
+                D3D12_RESOURCE_DESC bufDesc{};
+                bufDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+                bufDesc.Width = bufSize;
+                bufDesc.Height = 1;
+                bufDesc.DepthOrArraySize = 1;
+                bufDesc.MipLevels = 1;
+                bufDesc.Format = DXGI_FORMAT_UNKNOWN;
+                bufDesc.SampleDesc.Count = 1;
+                bufDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+
+                Microsoft::WRL::ComPtr<ID3D12Resource> readback;
+                HRESULT hr = backend.GetDeviceEXT()->CreateCommittedResource(
+                    &readbackHeapProps, D3D12_HEAP_FLAG_NONE, &bufDesc,
+                    D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(readback.GetAddressOf()));
+                if (FAILED(hr)) return {};
+
+                D3D12_TEXTURE_COPY_LOCATION dst{};
+                dst.pResource = readback.Get();
+                dst.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+                dst.PlacedFootprint.Footprint.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+                dst.PlacedFootprint.Footprint.Width = static_cast<UINT>(w);
+                dst.PlacedFootprint.Footprint.Height = static_cast<UINT>(h);
+                dst.PlacedFootprint.Footprint.Depth = 1;
+                dst.PlacedFootprint.Footprint.RowPitch = rowPitch;
+
+                D3D12_TEXTURE_COPY_LOCATION src{};
+                src.pResource = d3dRtCubeMip->GetColorResourceEXT();
+                src.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+                src.SubresourceIndex = static_cast<UINT>(level) + static_cast<UINT>(face) * static_cast<UINT>(d3dRtCubeMip->GetLevelCountEXT());
+
+                ID3D12CommandAllocator* allocator = backend.GetCommandAllocatorEXT(0);
+                ID3D12GraphicsCommandList* cmdList = backend.GetCommandListEXT();
+                allocator->Reset();
+                cmdList->Reset(allocator, nullptr);
+                auto& tracker = backend.GetResourceStateTrackerEXT();
+                const D3D12_RESOURCE_STATES priorState = tracker.GetTrackedStateEXT(d3dRtCubeMip->GetColorResourceEXT());
+                tracker.TransitionTo(cmdList, d3dRtCubeMip->GetColorResourceEXT(), D3D12_RESOURCE_STATE_COPY_SOURCE);
+                cmdList->CopyTextureRegion(&dst, 0, 0, 0, &src, nullptr);
+                tracker.TransitionTo(cmdList, d3dRtCubeMip->GetColorResourceEXT(), priorState);
+                hr = cmdList->Close();
+                if (FAILED(hr)) return {};
+                backend.ExecuteCommandListAndWaitEXT(cmdList);
+
+                uint8_t* mapped = nullptr;
+                const D3D12_RANGE mapRange{0, static_cast<SIZE_T>(bufSize)};
+                if (FAILED(readback->Map(0, &mapRange, reinterpret_cast<void**>(&mapped)))) return {};
+                std::vector<uint8_t> out(static_cast<std::size_t>(w) * h * 4);
+                for (int row = 0; row < h; ++row)
+                    std::memcpy(out.data() + static_cast<std::size_t>(row) * w * 4,
+                                mapped + static_cast<std::size_t>(row) * rowPitch,
+                                static_cast<std::size_t>(w) * 4);
+                const D3D12_RANGE writtenRange{0, 0};
+                readback->Unmap(0, &writtenRange);
+                return out;
+            };
+
+            const auto cubeMip1 = readbackCubeMip(1, 0, 4, 4);
+            bool cubeMip1Exact = cubeMip1.size() == 4u * 4u * 4u;
+            for (std::size_t i = 0; i < 4u * 4u && cubeMip1Exact; ++i)
+                cubeMip1Exact = cubeMip1[i * 4 + 0] == 50 && cubeMip1[i * 4 + 1] == 150 &&
+                               cubeMip1[i * 4 + 2] == 250 && cubeMip1[i * 4 + 3] == 255;
+            Check(cubeMip1Exact,
+                  "MM1: D3D12RenderTargetCubeBackend: GenerateMipsEXT()-on-unbind regenerates face "
+                  "0's own mip chain correctly, read back directly from the real GPU resource "
+                  "(plan_dx.md DX-144)");
+        }
+    }
+
     // ================================================================================================
     // plan_dx.md DX-132 / DX-148 / DX-140: the XNA-level public API, through a REAL, WINDOWLESS
     // GraphicsDevice (PresentationParameters::HeadlessEXT).

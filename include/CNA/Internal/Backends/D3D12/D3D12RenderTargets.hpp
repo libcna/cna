@@ -114,7 +114,7 @@ namespace CNA::Internal::Backends::D3D12
     {
     public:
         D3D12RenderTargetCubeBackend(D3D12GraphicsBackend* owner, ID3D12Device* device,
-                                     int size, int depthFormat);
+                                     int size, int depthFormat, bool mipMap = false);
 
         [[nodiscard]] int GetSize() const override { return size_; }
         void BindAsRenderTargetFace(int face) override;
@@ -123,8 +123,17 @@ namespace CNA::Internal::Backends::D3D12
 
         [[nodiscard]] ID3D12Resource* GetColorResourceEXT() const { return colorResource_.Get(); }
         [[nodiscard]] D3D12_GPU_DESCRIPTOR_HANDLE GetShaderResourceViewGpuHandleEXT() const { return srvGpu_; }
+        /// Real mip-chain level count this cube target was allocated with (1 when `mipMap` was
+        /// false) -- NOXNA, DX-144 subresource math/test introspection. Face `f`'s mip level `m` is
+        /// subresource `m + f * GetLevelCountEXT()` (the standard D3D12 texture-array/mip
+        /// subresource-index convention, same as `D3D12TextureCubeBackend`'s own doc comment).
+        [[nodiscard]] int GetLevelCountEXT() const { return levelCount_; }
 
     private:
+        /// DX-144: CPU box-filter downsample cascade, per face, base level (0) -> levelCount_-1,
+        /// called from UnbindAsRenderTarget(). No-op when mipMap_ is false or levelCount_ is 1.
+        void GenerateMipsEXT();
+
         D3D12GraphicsBackend* owner_ = nullptr;
         ComPtr<ID3D12Device> device_;
 
@@ -139,5 +148,7 @@ namespace CNA::Internal::Backends::D3D12
 
         int size_ = 0;
         int activeFace_ = -1;
+        bool mipMap_ = false;
+        int levelCount_ = 1;
     };
 }

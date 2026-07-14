@@ -171,10 +171,11 @@ scheme.
   dedicated D3D12 tests (`DX-132`/`DX-148`/`DX-138`/`DX-139`/`DX-135`, all closed) — this bullet is
   stale as of 2026-07-14 and kept only as a marker that the rest of this "Known limitations" section
   predates several later-closed phases and has not been fully re-audited; treat specific claims here
-  with caution and check `plan_dx.md`'s own row statuses first. **`RenderTarget2D` mip-chain
-  generation is now real** (`DX-144`, a CPU box-filter downsample cascade, not D3D11's driver-level
-  `GenerateMips()`) — `RenderTargetCube` mip-chain generation is NOT yet implemented for D3D12,
-  still a real, honestly-scoped gap.
+  with caution and check `plan_dx.md`'s own row statuses first. **`RenderTarget2D`/`RenderTargetCube`
+  mip-chain generation are both now real** (`DX-144`, a CPU box-filter downsample cascade, not
+  D3D11's driver-level `GenerateMips()`) — `RenderTargetCube` only regenerates the active face's
+  own chain on unbind, the same honest single-active-face scope `D3D11RenderTargetCubeBackend`'s
+  own test coverage already has.
 - **Device-removed recovery is real but its trigger is untestable here.** `RecreateDeviceEXT()`
   (`DX-110`) genuinely tears down and rebuilds every device-lifetime resource, and is functionally
   proven (fresh GPU work round-trips through the recreated device) — but a genuine
