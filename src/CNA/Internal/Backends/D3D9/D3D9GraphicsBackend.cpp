@@ -10,6 +10,7 @@
 #include "CNA/Internal/Backends/D3D9/D3D9StateMapping.hpp"
 #include "CNA/Internal/Backends/D3D9/D3D9Textures.hpp"
 #include "CNA/Internal/Backends/D3D9/D3D9RenderTargets.hpp"
+#include "CNA/Internal/Backends/D3D9/D3D9OcclusionQuery.hpp"
 
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DeviceLostException.hpp"
@@ -742,6 +743,14 @@ namespace CNA::Internal::Backends::D3D9
         // an MRT set must go through SetRenderTargets(nullptr, 0) or SetRenderTarget2D(nullptr)
         // (both unconditionally restore the back buffer), not a single-target bind expecting an
         // implicit MRT-aware unbind first.
+    }
+
+    std::unique_ptr<IOcclusionQueryBackend> D3D9GraphicsBackend::CreateOcclusionQuery()
+    {
+        // Official D3D9 support-probe idiom: CreateQuery(type, nullptr) succeeds iff the device
+        // supports the query type, without actually creating one.
+        if (FAILED(device_->CreateQuery(D3DQUERYTYPE_OCCLUSION, nullptr))) return nullptr;
+        return std::make_unique<D3D9OcclusionQueryBackend>(device_.Get());
     }
 
     std::unique_ptr<ISpriteBatchBackend> D3D9GraphicsBackend::CreateSpriteBatch()

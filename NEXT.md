@@ -59,7 +59,7 @@ plausibly."
 
 | Build dir | Backend | Status |
 |---|---|---|
-| `cmake-build-d3d9` | D3D9 (Windows cross-compile, MinGW-w64) | **Verified clean 2026-07-14**: `cmake -DCNA_GRAPHICS_BACKEND=D3D9 -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64.cmake -DCNA_BUILD_TESTS=ON` configures; `CNA`/`cna_backend_graphics_d3d9`/`cna_test_d3d9_common`/`cna_test_d3d9_smoke` all build clean. `D3D9_Common` 28/28 + `D3D9_Smoke` 46/46 pass via `ctest --test-dir cmake-build-d3d9 -L D3D9`. A real device now creates, clears, presents, reads back pixels, resizes, recovers from a (simulated) device-lost event, round-trips real vertex/index buffer data, round-trips real 2D/cube/volume texture data, creates/binds/clears/reads back real 2D/cube/MSAA render targets, and binds a real 2-target MRT set, all through the actual public `Game`/`GraphicsDeviceManager`/`GraphicsDevice` API. |
+| `cmake-build-d3d9` | D3D9 (Windows cross-compile, MinGW-w64) | **Verified clean 2026-07-14**: `cmake -DCNA_GRAPHICS_BACKEND=D3D9 -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64.cmake -DCNA_BUILD_TESTS=ON` configures; `CNA`/`cna_backend_graphics_d3d9`/`cna_test_d3d9_common`/`cna_test_d3d9_smoke` all build clean. `D3D9_Common` 28/28 + `D3D9_Smoke` 49/49 pass via `ctest --test-dir cmake-build-d3d9 -L D3D9`. A real device now creates, clears, presents, reads back pixels, resizes, recovers from a (simulated) device-lost event, round-trips real vertex/index buffer data, round-trips real 2D/cube/volume texture data, creates/binds/clears/reads back real 2D/cube/MSAA render targets, binds a real 2-target MRT set, and runs a real occlusion query, all through the actual public `Game`/`GraphicsDeviceManager`/`GraphicsDevice` API. |
 
 ### Phase D9-0 — feasibility spikes: CLOSED 2026-07-14
 
@@ -196,7 +196,7 @@ guard), reverted, reconfirmed green. Also confirmed and fixed the exact "pointer
 sound proof of recreation" false-negative this project's own D3D12 work already found once (see
 `plan_dx9.md`'s `D9-40` row). `D3D9_Smoke` is now 30/30 checks.
 
-### Phase D9-5 — textures/render targets/readback: D9-50/D9-51/D9-52/D9-53/D9-54 CLOSED, D9-55–56 open
+### Phase D9-5 — textures/render targets/readback: D9-50–D9-55 CLOSED, D9-56 open
 
 | Task | Status |
 |---|---|
@@ -205,7 +205,7 @@ sound proof of recreation" false-negative this project's own D3D12 work already 
 | `D9-52` — `GetData()` for 2D/cube/3D | ✅ (found empirically: 2D has none to implement — `Texture2D::GetData()` is CPU-shadow-based, same as D3D11; cube/3D genuinely delegate to the backend and are real `LockRect`/`LockBox` reads) |
 | `D9-53` — `D3D9RenderTargetBackend`/`D3D9RenderTargetCubeBackend` (`D3DUSAGE_RENDERTARGET`, `D3DPOOL_DEFAULT`, real MSAA) | ✅ |
 | `D9-54` — MRT via `SetRenderTarget(i, surface)`, capped at `NumSimultaneousRTs`, over-request throws | ✅ |
-| `D9-55` — `D3D9OcclusionQueryBackend` | ⬜ |
+| `D9-55` — `D3D9OcclusionQueryBackend` | ✅ |
 | `D9-56` — NPOT handling driven by `D3DPTEXTURECAPS_POW2`/`NONPOW2CONDITIONAL` | ⬜ |
 
 New `include/`/`src/CNA/Internal/Backends/D3D9/D3D9Textures.hpp`+`.cpp`. All three texture backends use
@@ -262,14 +262,25 @@ Check V (3 checks): a 2-target MRT bind + single `Clear()` writes the exact colo
 own surfaces, unbind restores the back buffer, and over-request throws. Mutation-verified (disabled the
 over-request guard, exactly that assertion went red). `D3D9_Smoke` now 46/46.
 
+`D9-55` (occlusion queries): new `D3D9OcclusionQueryBackend` (`IDirect3DQuery9`,
+`D3DQUERYTYPE_OCCLUSION`) — `Begin()`/`End()` → `Issue(D3DISSUE_BEGIN)`/`Issue(D3DISSUE_END)`;
+`IsComplete()`/`PixelCount()` → `GetData()` (mirrors `D3D11OcclusionQueryBackend`'s shape). Gated on
+the official D3D9 support-probe idiom (`CreateQuery(type, nullptr)`), not assumed. New `D3D9_Smoke`
+Check W (3 checks): real query created, polled to complete within a bounded 30-iteration loop
+(matches `D9-33`'s own resize-convergence convention), `PixelCount()` reads back `0` for a query
+wrapping only a `Clear()` (no draw path exists yet, `D9-82` — a real, honest result, not a stand-in
+for tested geometry). Mutation-verified (forced `IsComplete()` to always return `false`, confirmed
+exactly that one assertion went red — the `PixelCount()==0` assertion correctly stayed green too,
+since `GetData()` "not ready" and "genuinely 0 samples" both honestly return 0, not a masking bug).
+`D3D9_Smoke` now 49/49.
+
 ### Does NOT work yet
 
-MRT, occlusion queries, NPOT capability surfacing (`D9-54`–`56`), draws, `SpriteBatch` — all still throw
-`NotYetImplemented()` or return `nullptr`/inherit the `IGraphicsBackend` default naming their own
-follow-up task, by design. `D9-63` (sampler state) and `D9-64` (reused state CTests) are the remaining
-open rows in Phase D9-6. The mapping tables (`D9-20`–`23`) are now consumed by the render-state push
-path, the buffer-creation path, and the texture/render-target-creation paths; draw consumers still
-come later.
+NPOT capability surfacing (`D9-56`), draws, `SpriteBatch` — all still throw `NotYetImplemented()` or
+inherit the `IGraphicsBackend` default naming their own follow-up task, by design. `D9-63` (sampler
+state) and `D9-64` (reused state CTests) are the remaining open rows in Phase D9-6. The mapping tables
+(`D9-20`–`23`) are now consumed by the render-state push path, the buffer-creation path, and the
+texture/render-target-creation paths; draw consumers still come later.
 
 ---
 
@@ -279,7 +290,8 @@ Most recent first. Full detail lives in `plan_dx9.md` — this is a short index.
 
 | Commit(s) | Summary |
 |---|---|
-| *(pending)* | **`D9-54` closed (MRT)**: real `D3D9GraphicsBackend::SetRenderTargets(rts, count)` (`SetRenderTarget(i, surface)` per slot, unused slots disabled, over-request throws per design decision 13, deliberately not matching D3D11/D3D12's own silent-clamp precedent). Real, unplanned finding: an MRT bind isn't representable by the single-pointer `currentCustomRT_`/`currentCustomCubeRT_` tracking, so unbinding via `SetRenderTargets(nullptr, 0)` silently failed to restore the back buffer — fixed by making `RestoreBackBufferRenderTargetEXT()` unconditional in `SetRenderTarget2D()`'s/`SetRenderTargetCubeFace()`'s own `!rt` branches. New `D3D9_Smoke` Check V (3 checks). Mutation-verified (disabled the over-request guard, exactly that assertion went red). `D3D9_Smoke` now 46/46. `D9-55`–`56` (occlusion/NPOT) remain open. |
+| *(pending)* | **`D9-55` closed (occlusion queries)**: new `D3D9OcclusionQueryBackend` (`IDirect3DQuery9`, `D3DQUERYTYPE_OCCLUSION`), gated on the official D3D9 support-probe idiom (`CreateQuery(type, nullptr)`). New `D3D9_Smoke` Check W (3 checks). Mutation-verified (forced `IsComplete()` to always return false, confirmed exactly that assertion went red). `D3D9_Smoke` now 49/49. `D9-56` (NPOT) is the only Phase D9-5 row left open. |
+| `9c8ccfe9` | **`D9-54` closed (MRT)**: real `D3D9GraphicsBackend::SetRenderTargets(rts, count)` (`SetRenderTarget(i, surface)` per slot, unused slots disabled, over-request throws per design decision 13, deliberately not matching D3D11/D3D12's own silent-clamp precedent). Real, unplanned finding: an MRT bind isn't representable by the single-pointer `currentCustomRT_`/`currentCustomCubeRT_` tracking, so unbinding via `SetRenderTargets(nullptr, 0)` silently failed to restore the back buffer — fixed by making `RestoreBackBufferRenderTargetEXT()` unconditional in `SetRenderTarget2D()`'s/`SetRenderTargetCubeFace()`'s own `!rt` branches. New `D3D9_Smoke` Check V (3 checks). Mutation-verified (disabled the over-request guard, exactly that assertion went red). `D3D9_Smoke` now 46/46. `D9-55`–`56` (occlusion/NPOT) remain open. |
 | `9b309cc5` | **`D9-53` closed**: new `D3D9RenderTargetBackend`/`D3D9RenderTargetCubeBackend` (`D3DUSAGE_RENDERTARGET`, `D3DPOOL_DEFAULT`, registered with the `D9-40` device-lost registry; real MSAA via `CheckDeviceMultiSampleType`, resolved via `StretchRect` on unbind). Three real, unplanned findings fixed: `EnsureDeviceSize()`'s resize path never released `D3DPOOL_DEFAULT` resources before `Reset()` (only the device-lost path did); a cached depth-stencil-surface `ComPtr` is itself an app-held reference to a losable resource and must be released before every `Reset()` too (DXVK's own "still has alive losable resources" diagnostic caught this immediately); `IGraphicsBackend::SetRenderTargetCubeFace()`'s inherited default never actually unbinds a cube target for real, fixed with an explicit override + a second `currentCustomCubeRT_` field. New `D3D9_Smoke` Checks S/T/U (6 checks): 2D/cube/MSAA render targets, each create/bind/Clear/readback (via `GetRenderTargetData()`)/unbind-restores-back-buffer. Mutation-verified (dropped the MSAA resolve `StretchRect` call, exactly Check U's assertion went red). `D3D9_Smoke` now 43/43. `D9-54`–`56` (MRT/occlusion/NPOT) remain open. |
 | `bfadcb0e` | **Phase D9-5 partially closed** (`D9-50`/`D9-51`/`D9-52`): new `D3D9TextureBackend`/`D3D9TextureCubeBackend`/`D3D9Texture3DBackend` (`D3DFMT_A8B8G8R8`, `D3DPOOL_MANAGED`). Found empirically that `D9-52`'s own premise only half-applies: `ITextureBackend` (2D) has no `GetData()` at all — `Texture2D::GetData()` is CPU-shadow-based, same architecture as D3D11 — while `ITextureCubeBackend`/`ITexture3DBackend` genuinely delegate `GetData()` to the backend, and those ARE real `LockRect`/`LockBox` reads, exactly as `D9-4`'s spike predicted (no staging/`SYSTEMMEM` fallback needed). Volume/cube-map creation gated on real `D3DCAPS9` (`MaxVolumeExtent`/`D3DPTEXTURECAPS_CUBEMAP`), not assumed. New `D3D9_Smoke` Checks Q/R (6 checks): exact-byte round-trips via direct locks on the `D3DPOOL_MANAGED` resources (no staging texture needed). Mutation-verified: corrupting the 2D upload's source-row offset turned exactly Check Q's first assertion red, nothing else; reverted, reconfirmed 36/36 green. `D9-53`–`56` (render targets/MRT/occlusion/NPOT) remain open. |
 | `3e855b2d` | **Phase D9-4 fully closed** (`D9-40`/`D9-41`/`D9-42`): real `D3D9VertexBufferBackend`/`D3D9IndexBufferBackend` (16-bit and 32-bit, `CreateIndexBuffer32()` explicitly overridden), `Lock`/`Unlock` with `SetDataOptions` → `D3DLOCK_DISCARD`/`NOOVERWRITE`. Real finding: `D3DUSAGE_DYNAMIC` requires `D3DPOOL_DEFAULT` (forbidden with `POOL_MANAGED`), so these buffers do NOT survive `Reset()` automatically — new `ID3D9DefaultPoolResourceEXT` registry lets `D9-34`'s recovery path release them before `Reset()`, each recreating lazily on next use (real XNA/D3D9 behavior). Mutation-verified (`CreateIndexBuffer32()` temporarily broken to build a 16-bit buffer, caught immediately via a real uncaught exception, reverted). Also avoided the "pointer-inequality isn't sound recreation proof" false-negative this project's own D3D12 work already found once. `D3D9_Smoke` now 30/30. |
@@ -299,11 +311,10 @@ Most recent first. Full detail lives in `plan_dx9.md` — this is a short index.
 **No blocker.** Phases D9-0/D9-1/D9-2/D9-3/D9-4 are fully closed (D9-32/D9-34 honestly 🟨 — see their
 own plan rows for exactly what's deferred and why). Phase D9-6: `D9-60`/`D9-61`/`D9-62` were forced in
 early (real) as a side effect of D9-30's own work; `D9-63`/`D9-64` remain open. Phase D9-5:
-`D9-50`/`D9-51`/`D9-52`/`D9-53`/`D9-54` (2D/cube/volume textures, 2D/cube/MSAA render targets, MRT) are
-now closed; `D9-55`–`56` (occlusion queries, NPOT capability surfacing) remain open. Next smallest
-task: `D9-55` (`D3D9OcclusionQueryBackend`, `D3DQUERYTYPE_OCCLUSION`) — it's the next sequential row in
-Phase D9-5 and nothing blocks it (no draw path is needed to create/begin/end/poll a query object,
-only to make its pixel count meaningful, which is D9-82's job later).
+`D9-50`–`D9-55` (2D/cube/volume textures, 2D/cube/MSAA render targets, MRT, occlusion queries) are now
+closed; `D9-56` (NPOT capability surfacing) is the only remaining open row. Next smallest task:
+`D9-56` (NPOT handling driven by `D3DPTEXTURECAPS_POW2`/`NONPOW2CONDITIONAL`) — closes out Phase D9-5
+entirely; feeds Phase D9-10's Reach/HiDef capability table.
 
 ---
 
@@ -370,17 +381,16 @@ cmake -S . -B cmake-build-d3d9 \
 
 **Phases D9-0/D9-1/D9-2/D9-3/D9-4 are all closed** (`D9-32`/`D9-34` honestly 🟨 — see `plan_dx9.md`
 for exactly what's deferred to `D9-100`/`D9-A`/`D9-140` and why). Phase D9-6: `D9-60`/`D9-61`/`D9-62`
-closed (forced in early). Phase D9-5: `D9-50`/`D9-51`/`D9-52`/`D9-53`/`D9-54` (2D/cube/volume textures,
-2D/cube/MSAA render targets, MRT) closed.
+closed (forced in early). Phase D9-5: `D9-50`–`D9-55` (2D/cube/volume textures, 2D/cube/MSAA render
+targets, MRT, occlusion queries) closed.
 
-1. **`D9-55`** — `D3D9OcclusionQueryBackend` (`D3DQUERYTYPE_OCCLUSION`).
-2. **`D9-56`** — NPOT handling driven by `D3DPTEXTURECAPS_POW2`/`NONPOW2CONDITIONAL` (authenticity,
-   not a limitation to hide — feeds Phase D9-10's Reach/HiDef capability table).
-3. **`D9-63`** — `ApplySamplerState` (now meaningful — `D9-50` textures exist).
-4. **`D9-64`** — reuse the backend-agnostic `easygl_blendstate_*`/`easygl_depthstencilstate_*`/
+1. **`D9-56`** — NPOT handling driven by `D3DPTEXTURECAPS_POW2`/`NONPOW2CONDITIONAL` (authenticity,
+   not a limitation to hide — feeds Phase D9-10's Reach/HiDef capability table). Closes Phase D9-5.
+2. **`D9-63`** — `ApplySamplerState` (now meaningful — `D9-50` textures exist).
+3. **`D9-64`** — reuse the backend-agnostic `easygl_blendstate_*`/`easygl_depthstencilstate_*`/
    `easygl_rasterizerstate_*` CTest sources verbatim (needs a real draw path, `D9-82`, to mean
    anything — likely sequenced after Phase D9-8, not literally next).
-5. Then Phase D9-7 (Microsoft's stock effects: vendor, compile, embed — `D9-70`–`74`).
+4. Then Phase D9-7 (Microsoft's stock effects: vendor, compile, embed — `D9-70`–`74`).
 
 See `plan_dx9.md`'s "Execution order" table for the full sequence beyond this.
 

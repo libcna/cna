@@ -68,6 +68,10 @@
 //   color into BOTH targets' own surfaces, unbind restores the back buffer, and requesting more
 //   targets than D3DCAPS9::NumSimultaneousRTs throws a real, named error instead of silently
 //   degrading (design decision 13).
+// Check W -- a real D3D9OcclusionQueryBackend (D9-55): Begin()/End() issue real
+//   D3DISSUE_BEGIN/D3DISSUE_END commands, IsComplete() eventually reports true (polled), and
+//   PixelCount() reads back 0 for a query that only wraps a Clear() (no draw path exists yet,
+//   D9-82 -- a real, honest result, not a stand-in for tested geometry).
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
@@ -805,6 +809,36 @@ protected:
             else
             {
                 std::printf("    (skipped: device reports NumSimultaneousRTs=%d, need at least 2 for MRT)\n", maxRTs);
+            }
+        }
+
+        // Check W (D9-55) -- a real D3D9OcclusionQueryBackend: Begin()/End() genuinely issue real
+        // D3DISSUE_BEGIN/D3DISSUE_END query commands, IsComplete() eventually reports true (polled,
+        // bounded), and PixelCount() reads back a real GetData() result. No draw path exists yet
+        // (D9-82), so this Begin/End wraps a Clear() rather than actual geometry -- Clear() does not
+        // count as occlusion-testable rendering, so PixelCount()==0 is the correct, real result
+        // here, not a stand-in for "draws 100 pixels" (that proof is D9-82's own job).
+        {
+            auto query = backend.CreateOcclusionQuery();
+            check(query != nullptr, "D9-55: D3D9OcclusionQueryBackend created (device supports D3DQUERYTYPE_OCCLUSION)");
+            if (query)
+            {
+                query->Begin();
+                dev.Clear(Color(1, 2, 3, 255));
+                query->End();
+
+                // Bounded to 30 iterations, matching Check L's own resize-convergence poll
+                // convention -- keeps a genuine failure (IsComplete() never true) fast to detect
+                // instead of burning through a much larger bound at real Present()/vsync cost.
+                bool completed = false;
+                for (int i = 0; i < 30 && !completed; ++i)
+                {
+                    if (query->IsComplete()) { completed = true; break; }
+                    dev.Present();
+                }
+                check(completed, "D9-55: IsComplete() eventually reports true after End() (real GetData() polling)");
+                check(query->PixelCount() == 0,
+                      "D9-55: PixelCount() reads back 0 for a query wrapping only a Clear() (no occlusion-testable draw)");
             }
         }
 

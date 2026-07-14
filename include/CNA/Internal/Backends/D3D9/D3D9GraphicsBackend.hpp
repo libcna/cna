@@ -126,6 +126,11 @@ namespace CNA::Internal::Backends::D3D9
         /// enforce. No independent per-target blending exists either (ApplyBlendState() is a
         /// single global SetRenderState() sequence) -- also trivially satisfied.
         void SetRenderTargets(IRenderTargetBackend* const* rts, int count) override;
+        /// D9-55: real D3D9OcclusionQueryBackend (`IDirect3DQuery9`, `D3DQUERYTYPE_OCCLUSION`).
+        /// Gated on the device genuinely supporting the query type (`CreateQuery(type, nullptr)`,
+        /// the official D3D9 support-probe idiom) -- returns nullptr (the `IGraphicsBackend`-wide
+        /// "unsupported" convention) rather than assuming support.
+        std::unique_ptr<IOcclusionQueryBackend> CreateOcclusionQuery() override;
         /// D9-53: real MSAA-support probe backing D3D9RenderTargetBackend's own clamp -- queries
         /// IDirect3D9::CheckDeviceMultiSampleType() for `format`/`requested`, returning 0 if
         /// `requested` <= 1 or the device does not support that exact sample count (matches
