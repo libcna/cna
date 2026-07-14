@@ -105,7 +105,7 @@ That gap should be closed when this work lands.
 
 | Prefix | Arch | Contains | Do not confuse with |
 |--------|------|----------|---------------------|
-| `~/.wine-cna-d3d9-spike` | win64 | **The real Microsoft `d3dcompiler_47.dll`** (4,346,120 bytes, `winetricks -q d3dcompiler_47`, native override) | — |
+| `~/.wine-cna-d3d9-spike` | win64 | **The real Microsoft `d3dcompiler_47.dll`** (4,346,120 bytes, `winetricks -q d3dcompiler_47`, native override) **+ DXVK** (added `D9-74`, `dxvk-setup install` — same command as `~/.wine-cna-d3d11`'s own DX-2 install). Now has both the real compiler AND a live D3D9 device in one prefix, per `D9-74`'s own row recommendation (option (a): install DXVK here rather than stand up a 4th prefix, since by this point the compiled bytecode is already embedded in a checked-in header and the compiler DLL no longer needs to coexist with the runtime device in the same *step*, only the same *machine*). | — |
 | `~/.wine-cna-xna40` | **win32** | .NET Framework 4.0 + XNA 4.0 Redistributable (`winetricks -q dotnet40 xna40`); all ten `Microsoft.Xna.Framework.*` assemblies in the GAC; an in-prefix `csc.exe` | — |
 | `~/.wine-cna-d3d11` | win64 | **Wine's builtin `d3dcompiler_47.dll`** (1,093,743 bytes) + DXVK | **Leave it alone.** It is what the existing D3D11/D3D12 CTests run against. Wine's builtin compiler **cannot** compile SM2/SM3 — that is exactly why `~/.wine-cna-d3d9-spike` exists as a separate prefix. |
 

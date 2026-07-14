@@ -6814,6 +6814,16 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D9")
     set_tests_properties(D3D9_Smoke PROPERTIES
         TIMEOUT 60
         LABELS "D3D9")
+
+    # D9-74: D3D9ShaderCache creates all 66 embedded stock-effect shaders through a live device --
+    # needs both DXVK and the real compiler's own bytecode output at once (the compiler DLL itself
+    # is no longer needed at this step, D9-71 already embedded its output).
+    cna_d3d9_test(cna_test_d3d9_shadercache examples/d3d9_shadercache_test.cpp)
+    cna_d3d9_ctest_command(_d3d9_shadercache_cmd cna_test_d3d9_shadercache)
+    add_test(NAME D3D9_ShaderCache COMMAND ${_d3d9_shadercache_cmd})
+    set_tests_properties(D3D9_ShaderCache PROPERTIES
+        TIMEOUT 60
+        LABELS "D3D9")
 endif()
 
 # --- Task 6.1: real two-process ENet loopback test harness ---

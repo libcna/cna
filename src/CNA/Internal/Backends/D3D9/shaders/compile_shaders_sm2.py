@@ -153,6 +153,7 @@ def main() -> None:
             "namespace CNA::Internal::Backends::D3D9::Shaders {\n\n"
         ]
 
+        manifest_rows = []
         for filename, effect_name, entry, profile, cpp_name in entries:
             fx_path = XNA_DIR / filename
             out_bin = tmp_dir / f"{effect_name}_{entry}.bin"
@@ -160,6 +161,28 @@ def main() -> None:
             bytecode = compile_one(tool_exe, args.wineprefix, fx_path, entry, profile, out_bin)
             print(f"OK ({len(bytecode)} bytes)")
             parts.append(bytecode_to_cpp_array(cpp_name, bytecode) + "\n")
+
+            is_vs = "true" if profile == "vs_2_0" else "false"
+            manifest_rows.append(
+                f'{{"{effect_name}_{entry}", {cpp_name}, {cpp_name}_size, {is_vs}}}'
+            )
+
+        parts.append(
+            "/// D9-74: every compiled entry point above, in one lookup-by-name table --\n"
+            "/// D3D9ShaderCache's own source of truth for CreateVertexShader()/CreatePixelShader().\n"
+            "/// Regenerated alongside the arrays above; never hand-maintained.\n"
+            "struct D3D9EmbeddedShader\n"
+            "{\n"
+            "    const char* name;      ///< \"<EffectName>_<EntryPointName>\", e.g. \"BasicEffect_VSBasic\".\n"
+            "    const uint8_t* bytecode;\n"
+            "    size_t size;\n"
+            "    bool isVertexShader;   ///< true = vs_2_0 (CreateVertexShader), false = ps_2_0 (CreatePixelShader).\n"
+            "};\n\n"
+            "static constexpr D3D9EmbeddedShader kAllShaders[] = {\n    "
+            + ",\n    ".join(manifest_rows) +
+            "\n};\n"
+            f"static constexpr size_t kAllShadersCount = {len(manifest_rows)};\n\n"
+        )
 
         parts.append("} // namespace CNA::Internal::Backends::D3D9::Shaders\n")
 

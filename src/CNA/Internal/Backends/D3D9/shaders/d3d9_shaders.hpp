@@ -4485,4 +4485,85 @@ static constexpr uint8_t kSpriteEffect_SpritePixelShader[] = {
 };
 static constexpr size_t kSpriteEffect_SpritePixelShader_size = sizeof(kSpriteEffect_SpritePixelShader);
 
+/// D9-74: every compiled entry point above, in one lookup-by-name table --
+/// D3D9ShaderCache's own source of truth for CreateVertexShader()/CreatePixelShader().
+/// Regenerated alongside the arrays above; never hand-maintained.
+struct D3D9EmbeddedShader
+{
+    const char* name;      ///< "<EffectName>_<EntryPointName>", e.g. "BasicEffect_VSBasic".
+    const uint8_t* bytecode;
+    size_t size;
+    bool isVertexShader;   ///< true = vs_2_0 (CreateVertexShader), false = ps_2_0 (CreatePixelShader).
+};
+
+static constexpr D3D9EmbeddedShader kAllShaders[] = {
+    {"BasicEffect_VSBasic", kBasicEffect_VSBasic, kBasicEffect_VSBasic_size, true},
+    {"BasicEffect_VSBasicNoFog", kBasicEffect_VSBasicNoFog, kBasicEffect_VSBasicNoFog_size, true},
+    {"BasicEffect_VSBasicVc", kBasicEffect_VSBasicVc, kBasicEffect_VSBasicVc_size, true},
+    {"BasicEffect_VSBasicVcNoFog", kBasicEffect_VSBasicVcNoFog, kBasicEffect_VSBasicVcNoFog_size, true},
+    {"BasicEffect_VSBasicTx", kBasicEffect_VSBasicTx, kBasicEffect_VSBasicTx_size, true},
+    {"BasicEffect_VSBasicTxNoFog", kBasicEffect_VSBasicTxNoFog, kBasicEffect_VSBasicTxNoFog_size, true},
+    {"BasicEffect_VSBasicTxVc", kBasicEffect_VSBasicTxVc, kBasicEffect_VSBasicTxVc_size, true},
+    {"BasicEffect_VSBasicTxVcNoFog", kBasicEffect_VSBasicTxVcNoFog, kBasicEffect_VSBasicTxVcNoFog_size, true},
+    {"BasicEffect_VSBasicVertexLighting", kBasicEffect_VSBasicVertexLighting, kBasicEffect_VSBasicVertexLighting_size, true},
+    {"BasicEffect_VSBasicVertexLightingVc", kBasicEffect_VSBasicVertexLightingVc, kBasicEffect_VSBasicVertexLightingVc_size, true},
+    {"BasicEffect_VSBasicVertexLightingTx", kBasicEffect_VSBasicVertexLightingTx, kBasicEffect_VSBasicVertexLightingTx_size, true},
+    {"BasicEffect_VSBasicVertexLightingTxVc", kBasicEffect_VSBasicVertexLightingTxVc, kBasicEffect_VSBasicVertexLightingTxVc_size, true},
+    {"BasicEffect_VSBasicOneLight", kBasicEffect_VSBasicOneLight, kBasicEffect_VSBasicOneLight_size, true},
+    {"BasicEffect_VSBasicOneLightVc", kBasicEffect_VSBasicOneLightVc, kBasicEffect_VSBasicOneLightVc_size, true},
+    {"BasicEffect_VSBasicOneLightTx", kBasicEffect_VSBasicOneLightTx, kBasicEffect_VSBasicOneLightTx_size, true},
+    {"BasicEffect_VSBasicOneLightTxVc", kBasicEffect_VSBasicOneLightTxVc, kBasicEffect_VSBasicOneLightTxVc_size, true},
+    {"BasicEffect_VSBasicPixelLighting", kBasicEffect_VSBasicPixelLighting, kBasicEffect_VSBasicPixelLighting_size, true},
+    {"BasicEffect_VSBasicPixelLightingVc", kBasicEffect_VSBasicPixelLightingVc, kBasicEffect_VSBasicPixelLightingVc_size, true},
+    {"BasicEffect_VSBasicPixelLightingTx", kBasicEffect_VSBasicPixelLightingTx, kBasicEffect_VSBasicPixelLightingTx_size, true},
+    {"BasicEffect_VSBasicPixelLightingTxVc", kBasicEffect_VSBasicPixelLightingTxVc, kBasicEffect_VSBasicPixelLightingTxVc_size, true},
+    {"BasicEffect_PSBasic", kBasicEffect_PSBasic, kBasicEffect_PSBasic_size, false},
+    {"BasicEffect_PSBasicNoFog", kBasicEffect_PSBasicNoFog, kBasicEffect_PSBasicNoFog_size, false},
+    {"BasicEffect_PSBasicTx", kBasicEffect_PSBasicTx, kBasicEffect_PSBasicTx_size, false},
+    {"BasicEffect_PSBasicTxNoFog", kBasicEffect_PSBasicTxNoFog, kBasicEffect_PSBasicTxNoFog_size, false},
+    {"BasicEffect_PSBasicVertexLighting", kBasicEffect_PSBasicVertexLighting, kBasicEffect_PSBasicVertexLighting_size, false},
+    {"BasicEffect_PSBasicVertexLightingNoFog", kBasicEffect_PSBasicVertexLightingNoFog, kBasicEffect_PSBasicVertexLightingNoFog_size, false},
+    {"BasicEffect_PSBasicVertexLightingTx", kBasicEffect_PSBasicVertexLightingTx, kBasicEffect_PSBasicVertexLightingTx_size, false},
+    {"BasicEffect_PSBasicVertexLightingTxNoFog", kBasicEffect_PSBasicVertexLightingTxNoFog, kBasicEffect_PSBasicVertexLightingTxNoFog_size, false},
+    {"BasicEffect_PSBasicPixelLighting", kBasicEffect_PSBasicPixelLighting, kBasicEffect_PSBasicPixelLighting_size, false},
+    {"BasicEffect_PSBasicPixelLightingTx", kBasicEffect_PSBasicPixelLightingTx, kBasicEffect_PSBasicPixelLightingTx_size, false},
+    {"AlphaTestEffect_VSAlphaTest", kAlphaTestEffect_VSAlphaTest, kAlphaTestEffect_VSAlphaTest_size, true},
+    {"AlphaTestEffect_VSAlphaTestNoFog", kAlphaTestEffect_VSAlphaTestNoFog, kAlphaTestEffect_VSAlphaTestNoFog_size, true},
+    {"AlphaTestEffect_VSAlphaTestVc", kAlphaTestEffect_VSAlphaTestVc, kAlphaTestEffect_VSAlphaTestVc_size, true},
+    {"AlphaTestEffect_VSAlphaTestVcNoFog", kAlphaTestEffect_VSAlphaTestVcNoFog, kAlphaTestEffect_VSAlphaTestVcNoFog_size, true},
+    {"AlphaTestEffect_PSAlphaTestLtGt", kAlphaTestEffect_PSAlphaTestLtGt, kAlphaTestEffect_PSAlphaTestLtGt_size, false},
+    {"AlphaTestEffect_PSAlphaTestLtGtNoFog", kAlphaTestEffect_PSAlphaTestLtGtNoFog, kAlphaTestEffect_PSAlphaTestLtGtNoFog_size, false},
+    {"AlphaTestEffect_PSAlphaTestEqNe", kAlphaTestEffect_PSAlphaTestEqNe, kAlphaTestEffect_PSAlphaTestEqNe_size, false},
+    {"AlphaTestEffect_PSAlphaTestEqNeNoFog", kAlphaTestEffect_PSAlphaTestEqNeNoFog, kAlphaTestEffect_PSAlphaTestEqNeNoFog_size, false},
+    {"DualTextureEffect_VSDualTexture", kDualTextureEffect_VSDualTexture, kDualTextureEffect_VSDualTexture_size, true},
+    {"DualTextureEffect_VSDualTextureNoFog", kDualTextureEffect_VSDualTextureNoFog, kDualTextureEffect_VSDualTextureNoFog_size, true},
+    {"DualTextureEffect_VSDualTextureVc", kDualTextureEffect_VSDualTextureVc, kDualTextureEffect_VSDualTextureVc_size, true},
+    {"DualTextureEffect_VSDualTextureVcNoFog", kDualTextureEffect_VSDualTextureVcNoFog, kDualTextureEffect_VSDualTextureVcNoFog_size, true},
+    {"DualTextureEffect_PSDualTexture", kDualTextureEffect_PSDualTexture, kDualTextureEffect_PSDualTexture_size, false},
+    {"DualTextureEffect_PSDualTextureNoFog", kDualTextureEffect_PSDualTextureNoFog, kDualTextureEffect_PSDualTextureNoFog_size, false},
+    {"EnvironmentMapEffect_VSEnvMap", kEnvironmentMapEffect_VSEnvMap, kEnvironmentMapEffect_VSEnvMap_size, true},
+    {"EnvironmentMapEffect_VSEnvMapFresnel", kEnvironmentMapEffect_VSEnvMapFresnel, kEnvironmentMapEffect_VSEnvMapFresnel_size, true},
+    {"EnvironmentMapEffect_VSEnvMapOneLight", kEnvironmentMapEffect_VSEnvMapOneLight, kEnvironmentMapEffect_VSEnvMapOneLight_size, true},
+    {"EnvironmentMapEffect_VSEnvMapOneLightFresnel", kEnvironmentMapEffect_VSEnvMapOneLightFresnel, kEnvironmentMapEffect_VSEnvMapOneLightFresnel_size, true},
+    {"EnvironmentMapEffect_PSEnvMap", kEnvironmentMapEffect_PSEnvMap, kEnvironmentMapEffect_PSEnvMap_size, false},
+    {"EnvironmentMapEffect_PSEnvMapNoFog", kEnvironmentMapEffect_PSEnvMapNoFog, kEnvironmentMapEffect_PSEnvMapNoFog_size, false},
+    {"EnvironmentMapEffect_PSEnvMapSpecular", kEnvironmentMapEffect_PSEnvMapSpecular, kEnvironmentMapEffect_PSEnvMapSpecular_size, false},
+    {"EnvironmentMapEffect_PSEnvMapSpecularNoFog", kEnvironmentMapEffect_PSEnvMapSpecularNoFog, kEnvironmentMapEffect_PSEnvMapSpecularNoFog_size, false},
+    {"SkinnedEffect_VSSkinnedVertexLightingOneBone", kSkinnedEffect_VSSkinnedVertexLightingOneBone, kSkinnedEffect_VSSkinnedVertexLightingOneBone_size, true},
+    {"SkinnedEffect_VSSkinnedVertexLightingTwoBones", kSkinnedEffect_VSSkinnedVertexLightingTwoBones, kSkinnedEffect_VSSkinnedVertexLightingTwoBones_size, true},
+    {"SkinnedEffect_VSSkinnedVertexLightingFourBones", kSkinnedEffect_VSSkinnedVertexLightingFourBones, kSkinnedEffect_VSSkinnedVertexLightingFourBones_size, true},
+    {"SkinnedEffect_VSSkinnedOneLightOneBone", kSkinnedEffect_VSSkinnedOneLightOneBone, kSkinnedEffect_VSSkinnedOneLightOneBone_size, true},
+    {"SkinnedEffect_VSSkinnedOneLightTwoBones", kSkinnedEffect_VSSkinnedOneLightTwoBones, kSkinnedEffect_VSSkinnedOneLightTwoBones_size, true},
+    {"SkinnedEffect_VSSkinnedOneLightFourBones", kSkinnedEffect_VSSkinnedOneLightFourBones, kSkinnedEffect_VSSkinnedOneLightFourBones_size, true},
+    {"SkinnedEffect_VSSkinnedPixelLightingOneBone", kSkinnedEffect_VSSkinnedPixelLightingOneBone, kSkinnedEffect_VSSkinnedPixelLightingOneBone_size, true},
+    {"SkinnedEffect_VSSkinnedPixelLightingTwoBones", kSkinnedEffect_VSSkinnedPixelLightingTwoBones, kSkinnedEffect_VSSkinnedPixelLightingTwoBones_size, true},
+    {"SkinnedEffect_VSSkinnedPixelLightingFourBones", kSkinnedEffect_VSSkinnedPixelLightingFourBones, kSkinnedEffect_VSSkinnedPixelLightingFourBones_size, true},
+    {"SkinnedEffect_PSSkinnedVertexLighting", kSkinnedEffect_PSSkinnedVertexLighting, kSkinnedEffect_PSSkinnedVertexLighting_size, false},
+    {"SkinnedEffect_PSSkinnedVertexLightingNoFog", kSkinnedEffect_PSSkinnedVertexLightingNoFog, kSkinnedEffect_PSSkinnedVertexLightingNoFog_size, false},
+    {"SkinnedEffect_PSSkinnedPixelLighting", kSkinnedEffect_PSSkinnedPixelLighting, kSkinnedEffect_PSSkinnedPixelLighting_size, false},
+    {"SpriteEffect_SpriteVertexShader", kSpriteEffect_SpriteVertexShader, kSpriteEffect_SpriteVertexShader_size, true},
+    {"SpriteEffect_SpritePixelShader", kSpriteEffect_SpritePixelShader, kSpriteEffect_SpritePixelShader_size, false}
+};
+static constexpr size_t kAllShadersCount = 66;
+
 } // namespace CNA::Internal::Backends::D3D9::Shaders
