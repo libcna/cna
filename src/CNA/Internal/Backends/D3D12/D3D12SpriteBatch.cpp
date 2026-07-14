@@ -271,6 +271,16 @@ namespace CNA::Internal::Backends::D3D12
 
         cmdList->SetGraphicsRootConstantBufferView(0, cb->GetGPUVirtualAddress());
 
+        // DX-133: pendingFilter_/pendingAddressU_/pendingAddressV_ (set via SetSamplerFilter()/
+        // SetSamplerAddressMode(), i.e. the SamplerState passed to SpriteBatch::Begin()) now
+        // genuinely drive slot 0's real sampler descriptor via DX-119's dynamic sampler system --
+        // mirrors D3D11SpriteBatchBackend's own exact ApplySamplerState() call, same placement
+        // (right before the sampler handle is read below). Before this task, SpriteBatch draws
+        // silently used whatever slot 0's sampler happened to already be (or D3D12GraphicsBackend's
+        // own pre-DX-119 LINEAR/WRAP fallback if nothing had ever called ApplySamplerState) instead
+        // of the SamplerState the game's own SpriteBatch::Begin() call actually requested.
+        owner_->ApplySamplerState(0, pendingFilter_, pendingAddressU_, pendingAddressV_, 1);
+
         // DX-119: SpriteBatch always samples XNA texture slot 0 (GraphicsDevice.Textures[0]/
         // SamplerStates[0]) -- real, runtime-settable SamplerState, not a hardcoded default,
         // bound at root parameter index 2 (root sig shape (1,1,1): CBV@0, SRV table@1, sampler

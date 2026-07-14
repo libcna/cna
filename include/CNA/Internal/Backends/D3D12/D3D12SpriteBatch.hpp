@@ -19,16 +19,12 @@
 // comment already establishes this principle for lit_textured3d/textured3d sharing (2,1,1)).
 //
 // Honest scope gaps, documented rather than silently omitted:
-//   - SetCustomEffect() (D3D11's own DX-71): no D3D12 equivalent of D3D11EffectBackend (a runtime
-//     D3DCompile()-driven custom-HLSL-effect backend) exists yet for D3D12 -- FlushBatch() throws a
-//     named "not yet implemented" error if a non-null custom Effect is actually flushed, rather than
-//     silently falling back to the stock shader (which would render the wrong thing without error).
-//   - SetSamplerFilter()/SetSamplerAddressMode() (D3D11's own DX-72): D3D12 has no per-draw dynamic
-//     sampler-state equivalent yet (no D3D12 Phase-DX7-equivalent state-object system exists) -- the
-//     root signature's static sampler is fixed at LINEAR filter / WRAP address mode (matching every
-//     other D3D12 stock-variant draw's own fixed static sampler, D3D12RootSignatureCache.hpp). The
-//     values passed to these setters are stored but do not yet change actual sampling behavior --
-//     documented here, not silently dropped.
+//   - SetCustomEffect() (D3D11's own DX-71): CLOSED (DX-121) -- a valid custom Effect now draws
+//     through its own real D3D12EffectBackend PSO+constant-buffer, see FlushBatch()'s own branch.
+//   - SetSamplerFilter()/SetSamplerAddressMode() (D3D11's own DX-72): CLOSED (DX-133) -- these now
+//     genuinely drive slot 0's real sampler descriptor via DX-119's dynamic per-slot sampler system
+//     (owner_->ApplySamplerState(0, ...) in FlushBatch(), mirroring D3D11SpriteBatchBackend's own
+//     exact call), not a fixed static sampler.
 //   - Blend state: D3D12 has no Phase-DX7-equivalent blend-state cache yet either -- this PSO uses
 //     the same Opaque-blend default every other D3D12 draw uses today (D3D12PipelineStateDesc's own
 //     default fields). Real alpha-blended sprite compositing is deferred to whenever a D3D12 blend-

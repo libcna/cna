@@ -317,18 +317,23 @@ offset within a 4×4×2 volume, different solid color per Z slice, genuinely exe
 math and per-slice pitch). `DX-123`: real per-face, per-sub-rect readback (two different faces at
 two different offsets, each byte-exact; a genuinely untouched region reads real zero-initialized
 GPU content, not stale CPU-buffer poison — a live-readback proof, not just "some data came back").
-`D3D12_Smoke` CTest (off-screen only): **125/125 checks**, all 10/10 stock shader variants +
+`D3D12_Smoke` CTest (off-screen only): **130/130 checks**, all 10/10 stock shader variants +
 `SpriteBatch` + device-removed recovery + render targets/MRT + real state objects + real per-slot
 samplers + real occlusion queries + real custom `ShaderEffect` + real `Texture3D` + real
-`TextureCube` readback. D3D12 still genuinely lacks (real, scoped, documented, not silently dropped
-— see `docs/d3d12-backend.md`'s "Known limitations" and `plan_dx.md`'s Phase DX15): MSAA/mip-chain
-render targets (`D3D12SpriteBatchBackend`'s own `SetSamplerFilter`/`SetSamplerAddressMode` wiring
-to the new sampler system, `DX-133`, is now unblocked but not yet done). **Phase DX13 is fully
-closed. Phase DX14 (D3D11 verification hardening) and Phase DX15 (remaining EasyGL-parity gaps)
-were added 2026-07-14 and are authorized and actively in progress** — see `plan_dx.md` for the full
-task list and ordering rationale. Outside the D3D plan, the standing backlog (Phase 79's 153-sample
-`../cna-samples` re-audit, Task 945's HLSL→GLSL tooling decision, Task 952's deferred Bgfx bug) is
-unchanged — see §8/§9.
+`TextureCube` readback. **Phase DX13 is fully closed.** Phase DX15 progress (2026-07-14, first
+chunk): `DX-131` (`SpriteBatch` rotation/scale/crop-rect, both D3D11 and D3D12 — `D3D11_Smoke`
+72/72, `D3D12_Smoke` +3 checks) and `DX-133` (D3D12 `SpriteBatch` sampler wiring — a real,
+previously-inert bug fixed: `SetSamplerFilter`/`SetSamplerAddressMode` now genuinely drive slot 0's
+sampler via `ApplySamplerState`, not silently ignored) are both closed. `DX-132` (D3D12 `SpriteFont`
+test) hit a genuine architectural blocker, documented not forced: `GraphicsDevice`'s constructor
+creates a real window for every backend except `HEADLESS`/`SOFTWARE`, and a real windowed
+`GraphicsDevice` under D3D12 on this dev loop would hit the same swap-chain crash `DX-100`/`DX-102`
+already root-caused — left open, see `plan_dx.md`'s own `DX-132` row for the real options. **Phase
+DX14 (D3D11 verification hardening) and the rest of Phase DX15** were added 2026-07-14 and are
+authorized and actively in progress — see `plan_dx.md` for the full task list and ordering
+rationale. Outside the D3D plan, the standing backlog (Phase 79's 153-sample `../cna-samples`
+re-audit, Task 945's HLSL→GLSL tooling decision, Task 952's deferred Bgfx bug) is unchanged — see
+§8/§9.
 
 **One real, separate, documented problem**: the full `CnaTests` GTest suite does not build under
 `CNA_GRAPHICS_BACKEND=D3D11` (and, by the same root cause, `D3D12`).

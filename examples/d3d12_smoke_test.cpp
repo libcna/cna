@@ -1393,6 +1393,152 @@ int main()
               "R3: SpriteEffects::FlipHorizontally genuinely swaps left/right source sampling -- not "
               "just \"a draw call succeeded\" (plan_dx.md DX-112)");
 
+        // ---- DX-131: rotation/scale/crop-rect, D3D12 counterpart of D3D11's own Check Y2/Y3/Y4.
+        // D3D12SpriteBatchBackend's default sampler is bilinear (confirmed empirically while writing
+        // this check: a 1-texel-per-corner fixture read back ~3-6% blended toward the adjacent
+        // texel, e.g. (15,8,239) instead of the exact (0,0,255)) -- same class of issue this file's
+        // own R0-R3 fixture already documents and works around (2 texels per color, not 1). Every
+        // fixture below uses a 2x2-texels-per-color block for exactly that reason. ----
+        {
+            // 4x4 texture, four 2x2 solid-color quadrant blocks -- same corner colors/positions as
+            // D3D11's own DX-131 test, just widened to survive bilinear sampling exactly.
+            ImageData cornerImg;
+            cornerImg.width = 4; cornerImg.height = 4; cornerImg.mipLevels = 1;
+            cornerImg.pixels.resize(4 * 4 * 4);
+            auto setCornerBlock = [&](int bx, int by, uint8_t r, uint8_t g, uint8_t b)
+            {
+                for (int dy = 0; dy < 2; ++dy)
+                    for (int dx = 0; dx < 2; ++dx)
+                    {
+                        const int x = bx * 2 + dx, y = by * 2 + dy;
+                        const std::size_t px = (static_cast<std::size_t>(y) * 4 + static_cast<std::size_t>(x)) * 4;
+                        cornerImg.pixels[px + 0] = r; cornerImg.pixels[px + 1] = g;
+                        cornerImg.pixels[px + 2] = b; cornerImg.pixels[px + 3] = 255;
+                    }
+            };
+            setCornerBlock(0, 0, 255, 0, 0);   // TL red
+            setCornerBlock(1, 0, 0, 255, 0);   // TR green
+            setCornerBlock(0, 1, 0, 0, 255);   // BL blue
+            setCornerBlock(1, 1, 255, 255, 0); // BR yellow
+            D3D12TextureBackend cornerTexD12(&backend, cornerImg);
+
+            constexpr float kPiOverTwo = 1.5707963267948966f;
+
+            // R4 (rotation): destRect(20,20,32,32), origin=(2,2) centered (source is now 4x4, so the
+            // center is (2,2) in source-space units), rotation=pi/2 -> TL(red) ends at NE screen
+            // quadrant, TR(green) at SE, BR(yellow) at SW, BL(blue) at NW -- same derivation as
+            // D3D11's own DX-131 check (destination geometry is scale-invariant to source texel
+            // count, only the fixture widened).
+            backend.Clear(10.0f / 255.0f, 10.0f / 255.0f, 10.0f / 255.0f, 1.0f);
+            sb->Begin();
+            sb->Draw(cornerTexD12, Rectangle(20, 20, 32, 32), Rectangle(0, 0, 4, 4), Color::White,
+                     kPiOverTwo, Vector2(2.0f, 2.0f), SpriteEffects::None, 0.0f);
+            sb->End();
+            auto afterR4 = ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight);
+            const bool r4Ok =
+                isColor(pixelAt(afterR4, 12, 12), 0, 0, 255, 255) &&    // NW = blue (was BL)
+                isColor(pixelAt(afterR4, 28, 12), 255, 0, 0, 255) &&    // NE = red (was TL)
+                isColor(pixelAt(afterR4, 28, 28), 0, 255, 0, 255) &&    // SE = green (was TR)
+                isColor(pixelAt(afterR4, 12, 28), 255, 255, 0, 255);    // SW = yellow (was BR)
+            Check(r4Ok,
+                  "R4: D3D12SpriteBatchBackend::Draw() -- a real 90-degree rotation around a centered "
+                  "origin permutes the 4 corner colors into the geometrically-predicted screen "
+                  "quadrants, same derivation as D3D11's own DX-131 check (plan_dx.md DX-131)");
+
+            // R5 (scale): destRect half the normal size (16x16) -- a pixel inside the old 32x32 size
+            // but outside the new 16x16 one must show the clear color, not sprite content.
+            backend.Clear(10.0f / 255.0f, 10.0f / 255.0f, 10.0f / 255.0f, 1.0f);
+            sb->Begin();
+            sb->Draw(cornerTexD12, Rectangle(0, 0, 16, 16), Rectangle(0, 0, 4, 4), Color::White);
+            sb->End();
+            auto afterR5 = ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight);
+            const bool r5Ok =
+                isColor(pixelAt(afterR5, 4, 4), 255, 0, 0, 255) &&      // inside both sizes -> red (TL)
+                isColor(pixelAt(afterR5, 24, 24), 10, 10, 10, 255);     // inside old size only -> clear color
+            Check(r5Ok,
+                  "R5: D3D12SpriteBatchBackend::Draw() -- a real, distinct destRect SIZE genuinely "
+                  "scales the sprite, same proof shape as D3D11's own DX-131 check (plan_dx.md DX-131)");
+
+            // R6 (source crop-rect): an 8x1 strip texture, 2 texels per color, cropped via
+            // sourceRectangle to just the middle 4 texels (purple-purple-cyan-cyan).
+            ImageData stripImg;
+            stripImg.width = 8; stripImg.height = 1; stripImg.mipLevels = 1;
+            stripImg.pixels.resize(8 * 1 * 4);
+            auto setStripPair = [&](int pairIdx, uint8_t r, uint8_t g, uint8_t b)
+            {
+                for (int i = 0; i < 2; ++i)
+                {
+                    const std::size_t px = (static_cast<std::size_t>(pairIdx) * 2 + static_cast<std::size_t>(i)) * 4;
+                    stripImg.pixels[px + 0] = r; stripImg.pixels[px + 1] = g;
+                    stripImg.pixels[px + 2] = b; stripImg.pixels[px + 3] = 255;
+                }
+            };
+            setStripPair(0, 255, 128, 0);   // texels 0-1: orange -- must NOT appear
+            setStripPair(1, 128, 0, 255);   // texels 2-3: purple -- must appear, left half
+            setStripPair(2, 0, 255, 255);   // texels 4-5: cyan   -- must appear, right half
+            setStripPair(3, 255, 0, 255);   // texels 6-7: magenta -- must NOT appear
+            D3D12TextureBackend stripTexD12(&backend, stripImg);
+
+            backend.Clear(10.0f / 255.0f, 10.0f / 255.0f, 10.0f / 255.0f, 1.0f);
+            sb->Begin();
+            sb->Draw(stripTexD12, Rectangle(0, 0, 32, 16), Rectangle(2, 0, 4, 1), Color::White);
+            sb->End();
+            auto afterR6 = ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight);
+            const bool r6Ok =
+                isColor(pixelAt(afterR6, 8, 4), 128, 0, 255, 255) &&    // left pair -> purple
+                isColor(pixelAt(afterR6, 24, 4), 0, 255, 255, 255);     // right pair -> cyan
+            Check(r6Ok,
+                  "R6: D3D12SpriteBatchBackend::Draw() -- sourceRectangle genuinely crops to only the "
+                  "requested sub-region, same proof shape as D3D11's own DX-131 check (plan_dx.md DX-131)");
+
+            // R7/R8 (DX-133): TextureAddressMode::Wrap/Mirror via SetSamplerFilter()/
+            // SetSamplerAddressMode() -- the raw ISpriteBatchBackend equivalent of what
+            // SpriteBatch::Begin(sortMode, blend, samplerState, ...) passes down. Point filtering
+            // (TextureFilter::Point=1) avoids the bilinear-blend issue entirely (point sampling
+            // never blends adjacent texels), so the ORIGINAL 4x4 cornerTexD12 fixture works
+            // unchanged -- only srcRect widens to (0,0,8,8) to keep the same UV-multiplier-2
+            // (0..2 range) relative to the wider fixture, landing on the exact same probe pixels
+            // D3D11's own Check Z uses. destRect(0,0,32,32), probe (4,20): u~0.28 (left/red-ish
+            // column), v~1.28 (wraps to row 0 = red under Wrap, clamps to row 1 = blue under Clamp).
+            constexpr int kTextureFilterPoint = 1;
+            constexpr int kTextureAddressModeWrap = 0;
+            constexpr int kTextureAddressModeMirror = 2;
+
+            backend.Clear(10.0f / 255.0f, 10.0f / 255.0f, 10.0f / 255.0f, 1.0f);
+            sb->SetSamplerFilter(kTextureFilterPoint);
+            sb->SetSamplerAddressMode(kTextureAddressModeWrap, kTextureAddressModeWrap);
+            sb->Begin();
+            sb->Draw(cornerTexD12, Rectangle(0, 0, 32, 32), Rectangle(0, 0, 8, 8), Color::White);
+            sb->End();
+            auto afterR7 = ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight);
+            Check(isColor(pixelAt(afterR7, 4, 20), 255, 0, 0, 255),
+                  "R7: D3D12SpriteBatchBackend::SetSamplerAddressMode(Wrap) genuinely tiles past UV "
+                  "1.0 instead of clamping to the edge color -- proves real, live sampler wiring, not "
+                  "a stored-but-ignored value (plan_dx.md DX-133)");
+
+            backend.Clear(10.0f / 255.0f, 10.0f / 255.0f, 10.0f / 255.0f, 1.0f);
+            sb->SetSamplerFilter(kTextureFilterPoint);
+            sb->SetSamplerAddressMode(kTextureAddressModeMirror, kTextureAddressModeMirror);
+            sb->Begin();
+            sb->Draw(cornerTexD12, Rectangle(0, 0, 32, 32), Rectangle(0, 0, 8, 8), Color::White);
+            sb->End();
+            auto afterR8 = ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight);
+            Check(isColor(pixelAt(afterR8, 4, 28), 255, 0, 0, 255),
+                  "R8: D3D12SpriteBatchBackend::SetSamplerAddressMode(Mirror) genuinely reflects past "
+                  "UV 1.0 (distinct from both Wrap's repeat and Clamp's edge-extend at the same probe "
+                  "point) (plan_dx.md DX-133)");
+
+            // Reset to the default (LinearClamp-equivalent) for any later check in this file that
+            // relies on the pre-DX-133 default sampling behavior.
+            sb->SetSamplerFilter(0);   // TextureFilter::Linear
+            sb->SetSamplerAddressMode(1, 1); // TextureAddressMode::Clamp
+        }
+
+        // Note on SpriteSortMode (DX-131): sort-mode ordering is implemented entirely in the shared,
+        // backend-agnostic Microsoft::Xna::Framework::Graphics::SpriteBatch.cpp (sorts the pending
+        // draw-call list before handing it to the backend's own Draw() calls, in order) -- there is
+        // no D3D12-specific sort behavior to test; the backend just draws whatever order it's told.
+
         backend.UnbindOffscreenColorTargetEXT();
     }
 

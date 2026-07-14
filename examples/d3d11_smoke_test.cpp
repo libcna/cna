@@ -96,6 +96,7 @@
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
+#include "Microsoft/Xna/Framework/MathHelper.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 
@@ -1292,6 +1293,118 @@ protected:
                   "the sampled quadrants, not just accepted without effect (plan_dx.md DX-70)");
         }
 
+        // Check Y2 (DX-131): rotation/origin -- a 90-degree rotation around the sprite's own center
+        // (origin = (1,1), the center of the 2x2 source rect, in source-space units) rotates a
+        // square's bounding box onto itself (still axis-aligned), permuting which corner color ends
+        // up in which screen quadrant -- a real, geometrically-derived, discriminating prediction,
+        // not just "something rotated". Rotation formula: rx = dx + px*cosR - py*sinR,
+        // ry = dy + px*sinR + py*cosR (D3D11SpriteBatch.cpp, mirrors EasyGL's own). For rotation =
+        // pi/2 (cosR=0, sinR=1): the source's TOP-LEFT (red) vertex ends up at the destination
+        // bounding box's TOP-RIGHT screen quadrant; TOP-RIGHT (green) -> BOTTOM-RIGHT; BOTTOM-RIGHT
+        // (yellow) -> BOTTOM-LEFT; BOTTOM-LEFT (blue) -> TOP-LEFT. destRect (20,20,32,32) with a
+        // centered origin keeps the whole rotated 32x32 bbox within [4,36], safely inside the 64x64
+        // back buffer.
+        {
+            SpriteBatch batch(dev);
+            dev.Clear(Color(10, 10, 10, 255));
+            SamplerState pointClamp2 = SamplerState::PointClamp;
+            batch.Begin(SpriteSortMode::Deferred, BlendState::Opaque, &pointClamp2, nullptr, nullptr);
+            batch.Draw(cornerTex, Microsoft::Xna::Framework::Rectangle(20, 20, 32, 32),
+                      Microsoft::Xna::Framework::Rectangle(0, 0, 2, 2), Color::White,
+                      MathHelper::Pi / 2.0f, Vector2(1.0f, 1.0f), SpriteEffects::None, 0.0f);
+            batch.End();
+
+            auto readPixel2 = [&](int x, int y) -> Color {
+                const Microsoft::Xna::Framework::Rectangle region(x, y, 1, 1);
+                Color px(0, 0, 0, 0);
+                dev.GetBackBufferData(&region, &px, 0, 1);
+                return px;
+            };
+            auto isColor2 = [](const Color& p, int r, int g, int b) {
+                return p.getRProperty() == r && p.getGProperty() == g && p.getBProperty() == b && p.getAProperty() == 255;
+            };
+            const Color nw = readPixel2(12, 12), ne = readPixel2(28, 12), se = readPixel2(28, 28), sw = readPixel2(12, 28);
+            check(isColor2(nw, 0, 0, 255) && isColor2(ne, 255, 0, 0) && isColor2(se, 0, 255, 0) && isColor2(sw, 255, 255, 0),
+                  "D3D11SpriteBatchBackend::Draw(): a real 90-degree rotation around a centered origin "
+                  "permutes the 4 corner colors into the geometrically-predicted screen quadrants -- "
+                  "NW=blue(was BL), NE=red(was TL), SE=green(was TR), SW=yellow(was BR) (plan_dx.md DX-131)");
+        }
+
+        // Check Y3 (DX-131): scale -- a destRect half the size of Check Y's own (16x16 instead of
+        // 32x32) must genuinely shrink the drawn area, not silently ignore the requested size. Probe
+        // a pixel that would have been inside the sprite at the OLD 32x32 size but is outside it at
+        // the new 16x16 size -- confirms scale is real, not just "a sprite of some fixed size drew".
+        {
+            SpriteBatch batch(dev);
+            dev.Clear(Color(10, 10, 10, 255));
+            SamplerState pointClamp3 = SamplerState::PointClamp;
+            batch.Begin(SpriteSortMode::Deferred, BlendState::Opaque, &pointClamp3, nullptr, nullptr);
+            batch.Draw(cornerTex, Microsoft::Xna::Framework::Rectangle(0, 0, 16, 16),
+                      Microsoft::Xna::Framework::Rectangle(0, 0, 2, 2), Color::White);
+            batch.End();
+
+            auto readPixel3 = [&](int x, int y) -> Color {
+                const Microsoft::Xna::Framework::Rectangle region(x, y, 1, 1);
+                Color px(0, 0, 0, 0);
+                dev.GetBackBufferData(&region, &px, 0, 1);
+                return px;
+            };
+            const Color insideSmall = readPixel3(2, 2);   // inside both 16x16 and 32x32 -> red (TL)
+            const Color outsideSmallOnly = readPixel3(24, 24); // inside 32x32, outside 16x16 -> clear color
+            const bool insideOk = insideSmall.getRProperty() == 255 && insideSmall.getGProperty() == 0 &&
+                                  insideSmall.getBProperty() == 0 && insideSmall.getAProperty() == 255;
+            const bool outsideOk = outsideSmallOnly.getRProperty() == 10 && outsideSmallOnly.getGProperty() == 10 &&
+                                   outsideSmallOnly.getBProperty() == 10;
+            check(insideOk && outsideOk,
+                  "D3D11SpriteBatchBackend::Draw(): a real, distinct destRect SIZE genuinely scales the "
+                  "sprite -- a pixel inside the old (larger) size but outside the new (smaller) one shows "
+                  "the clear color, not sprite content (plan_dx.md DX-131)");
+        }
+
+        // Check Y4 (DX-131): source crop-rect -- a fresh 4x1 texture with 4 distinct single-texel
+        // colors, cropped via sourceRectangle to just the middle 2 texels (purple, cyan). Confirms
+        // ONLY the cropped sub-region's content is sampled, not the whole texture squeezed in.
+        {
+            Texture2D stripTex(dev, 4, 1);
+            const Color kStrip[4] = {
+                Color(255, 128, 0, 255),   // 0: orange (must NOT appear -- cropped out)
+                Color(128, 0, 255, 255),   // 1: purple (must appear, left half)
+                Color(0, 255, 255, 255),   // 2: cyan   (must appear, right half)
+                Color(255, 0, 255, 255),   // 3: magenta (must NOT appear -- cropped out)
+            };
+            stripTex.SetData(kStrip, 4);
+
+            SpriteBatch batch(dev);
+            dev.Clear(Color(10, 10, 10, 255));
+            SamplerState pointClamp4 = SamplerState::PointClamp;
+            batch.Begin(SpriteSortMode::Deferred, BlendState::Opaque, &pointClamp4, nullptr, nullptr);
+            batch.Draw(stripTex, Microsoft::Xna::Framework::Rectangle(0, 0, 32, 16),
+                      Microsoft::Xna::Framework::Rectangle(1, 0, 2, 1), Color::White);
+            batch.End();
+
+            auto readPixel4 = [&](int x, int y) -> Color {
+                const Microsoft::Xna::Framework::Rectangle region(x, y, 1, 1);
+                Color px(0, 0, 0, 0);
+                dev.GetBackBufferData(&region, &px, 0, 1);
+                return px;
+            };
+            auto isColor4 = [](const Color& p, int r, int g, int b) {
+                return p.getRProperty() == r && p.getGProperty() == g && p.getBProperty() == b && p.getAProperty() == 255;
+            };
+            const Color left = readPixel4(4, 4), right = readPixel4(28, 4);
+            check(isColor4(left, 128, 0, 255) && isColor4(right, 0, 255, 255),
+                  "D3D11SpriteBatchBackend::Draw(): sourceRectangle genuinely crops to only the "
+                  "requested sub-region (purple/cyan), never the excluded texels (orange/magenta) "
+                  "(plan_dx.md DX-131)");
+        }
+
+        // Note on SpriteSortMode (DX-131): sort-mode ordering (BackToFront/FrontToBack/Texture) is
+        // implemented entirely in the shared, backend-agnostic Microsoft::Xna::Framework::Graphics::
+        // SpriteBatch.cpp (sorts the pending draw-call list before handing it to the backend's own
+        // Draw() calls, in order) -- there is no D3D11-specific sort behavior to test; the backend
+        // just draws whatever order it's told. A dedicated backend-level sort-mode test would
+        // actually be testing shared C++ code, not this backend, so none is added here.
+
         // Check Z (DX-72): TextureAddressMode::Wrap/Mirror, each proven with a probe pixel that
         // gives a genuinely different color than the other two address modes would produce there
         // (see this file's own top-of-file comment for the UV math).
@@ -1497,7 +1610,7 @@ protected:
                   "different from the fogEnabled=false case above (plan_dx.md DX-69/DX-81)");
         }
 
-        const int totalChecks = 3 + 10 + 1 + 2 + 2 + 2 + 2 + 2 + 1 + 1 + 2 + 1 + 13 + 2 + 3 + 2 + 2 + 1 + 1 + 1 + 1 + 3 + 2 + 2 + 2 + 3 + 2;
+        const int totalChecks = 3 + 10 + 1 + 2 + 2 + 2 + 2 + 2 + 1 + 1 + 2 + 1 + 13 + 2 + 3 + 2 + 2 + 1 + 1 + 1 + 1 + 3 + 2 + 2 + 2 + 3 + 2 + 3 /* DX-131 rotation/scale/crop */;
         std::printf("=== %d/%d PASS ===\n", passCount_, totalChecks);
         result_ = (passCount_ == totalChecks) ? 0 : 1;
         Exit();
