@@ -211,6 +211,46 @@ namespace
         return result;
     }
 
+    /// Reads the STENCIL byte of every pixel in a w*h region of a DXGI_FORMAT_D24_UNORM_S8_UINT
+    /// depth-stencil ID3D11Texture2D, via the same staging-texture CopyResource+Map(READ)
+    /// technique as ReadTexture2DRegion() above. D3D11 has no separate depth/stencil "plane"
+    /// subresource index like D3D12 -- a D24_UNORM_S8_UINT resource is one packed 32-bit-per-pixel
+    /// value (little-endian: byte 3 = the S8 stencil byte, bytes 0-2 = the 24-bit depth value), so
+    /// this reads the raw bytes directly rather than needing a plane-slice copy (NOXNA, test-only,
+    /// plan_dx.md DX-130).
+    std::vector<uint8_t> ReadDepthStencilPlane(ID3D11Device* device, ID3D11DeviceContext* context,
+                                               ID3D11Texture2D* dsTexture, int w, int h)
+    {
+        D3D11_TEXTURE2D_DESC desc{};
+        dsTexture->GetDesc(&desc);
+        D3D11_TEXTURE2D_DESC stagingDesc = desc;
+        stagingDesc.Usage = D3D11_USAGE_STAGING;
+        stagingDesc.BindFlags = 0;
+        stagingDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+        stagingDesc.MiscFlags = 0;
+
+        Microsoft::WRL::ComPtr<ID3D11Texture2D> staging;
+        if (FAILED(device->CreateTexture2D(&stagingDesc, nullptr, staging.GetAddressOf())))
+            return {};
+        context->CopyResource(staging.Get(), dsTexture);
+
+        D3D11_MAPPED_SUBRESOURCE mapped{};
+        if (FAILED(context->Map(staging.Get(), 0, D3D11_MAP_READ, 0, &mapped)))
+            return {};
+
+        std::vector<uint8_t> result(static_cast<std::size_t>(w) * static_cast<std::size_t>(h));
+        for (int row = 0; row < h; ++row)
+        {
+            const uint8_t* src = static_cast<const uint8_t*>(mapped.pData)
+                                + static_cast<std::size_t>(row) * mapped.RowPitch;
+            for (int col = 0; col < w; ++col)
+                result[static_cast<std::size_t>(row) * static_cast<std::size_t>(w) + static_cast<std::size_t>(col)]
+                    = src[static_cast<std::size_t>(col) * 4 + 3];
+        }
+        context->Unmap(staging.Get(), 0);
+        return result;
+    }
+
     /// Reads a w*h RGBA8 region starting at (x,y) out of an arbitrary subresource index (mip level,
     /// or mip+face for a texture array) of an arbitrary ID3D11Texture2D -- same staging-texture
     /// technique as ReadTexture2DRegion() above, but Map()'d at `subresource` instead of always 0
@@ -2595,6 +2635,120 @@ protected:
                   "buffer as Clear()'s next target (plan_dx.md DX-129)");
         }
 
+        // plan_dx.md DX-130: the 5 combo Clear* variants dedicated round-trip pixel test --
+        // ClearDepthStencilView() calls already exist and are implemented identically to the
+        // proven plain Clear(r,g,b,a) path, but only plain Clear had a dedicated pixel test until
+        // now. Mirrors D3D12's own already-closed DX-146 methodology exactly: stencil is proven by
+        // a direct GPU readback of the depth-stencil resource's real bytes (D3D11 packs
+        // DXGI_FORMAT_D24_UNORM_S8_UINT as one 32-bit value per pixel -- byte 3 is the stencil
+        // byte, no separate plane-slice copy needed, unlike D3D12); depth is proven by its real
+        // effect on rasterization (the same triangle at the same Z drawn twice, differing ONLY in
+        // the depth value a prior ClearDepth() wrote).
+        {
+            constexpr int kRtW = 32, kRtH = 32;
+            auto rtCl = backend.CreateRenderTarget2D(kRtW, kRtH, /*depthFormat=*/3 /*Depth24Stencil8*/, false, false, 0);
+            auto* d3dRtCl = static_cast<D3D11RenderTargetBackend*>(rtCl.get());
+            check(d3dRtCl->GetDSVEXT() != nullptr,
+                  "D3D11RenderTargetBackend: Depth24Stencil8 render target with a real depth-stencil "
+                  "view created (plan_dx.md DX-130)");
+
+            Microsoft::WRL::ComPtr<ID3D11Resource> dsResource;
+            d3dRtCl->GetDSVEXT()->GetResource(dsResource.GetAddressOf());
+            Microsoft::WRL::ComPtr<ID3D11Texture2D> dsTexture;
+            dsResource.As(&dsTexture);
+
+            backend.SetRenderTarget2D(rtCl.get());
+
+            // --- ClearColorDepthAndStencil: all three at once. ---
+            backend.ClearColorDepthAndStencil(0.0f, 0.0f, 1.0f, 1.0f, /*depth=*/0.75f, /*stencil=*/0x5A);
+            auto stencilAfterAll = ReadDepthStencilPlane(device, context, dsTexture.Get(), kRtW, kRtH);
+            const bool stencilPlaneReadable = !stencilAfterAll.empty();
+            check(stencilPlaneReadable,
+                  "D3D11RenderTargetBackend: the depth-stencil resource's real bytes are readable "
+                  "back from the GPU -- the mechanism the stencil proofs below rely on");
+
+            if (stencilPlaneReadable)
+            {
+                bool allAre5A = true;
+                for (uint8_t v : stencilAfterAll) if (v != 0x5A) { allAre5A = false; break; }
+                check(allAre5A,
+                      "D3D11GraphicsBackend::ClearColorDepthAndStencil(): genuinely wrote 0x5A into "
+                      "EVERY pixel of the real stencil plane, read straight back off the GPU (plan_dx.md DX-130)");
+
+                // --- ClearStencil alone: must change the stencil (depth verified separately below). ---
+                backend.ClearStencil(0x3C);
+                auto stencilAfterStencilOnly = ReadDepthStencilPlane(device, context, dsTexture.Get(), kRtW, kRtH);
+                bool allAre3C = !stencilAfterStencilOnly.empty();
+                for (uint8_t v : stencilAfterStencilOnly) if (v != 0x3C) { allAre3C = false; break; }
+                check(allAre3C,
+                      "D3D11GraphicsBackend::ClearStencil(0x3C): alone genuinely overwrites the "
+                      "stencil plane to 0x3C -- a real, different value than the prior 0x5A, so this "
+                      "is a real clear, not a silent no-op (plan_dx.md DX-130)");
+            }
+
+            // --- Depth: proven by its real effect on the depth test. ---
+            struct VtxZCl { float x, y, z; uint32_t color; };
+            const VtxZCl triZCl[3] = {
+                {-0.9f,  0.9f, 0.5f, 0xFF0000FFu}, // ABGR-packed red
+                { 0.9f,  0.9f, 0.5f, 0xFF0000FFu},
+                { 0.0f, -0.9f, 0.5f, 0xFF0000FFu},
+            };
+            auto vbZCl = backend.CreateVertexBuffer(3);
+            vbZCl->SetData(triZCl, /*vertex_count=*/3, /*stride_in_bytes=*/sizeof(VtxZCl));
+
+            backend.ApplyRasterizerState(/*cullMode=*/0 /*None*/, /*fillMode=*/0 /*Solid*/, false, 0.0f, 0.0f);
+
+            auto drawTriAndSampleCenterCl = [&]() -> Color {
+                backend.DrawColoredPrimitives(*vbZCl, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                              Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1);
+                const auto px = ReadTexture2DRegion(device, context, d3dRtCl->GetSampleableTextureEXT(),
+                                                    kRtW / 2, kRtH / 2, 1, 1);
+                return px.size() >= 4 ? Color(px[0], px[1], px[2], px[3]) : Color(0, 0, 0, 0);
+            };
+
+            // Control: with the depth test OFF, this exact triangle must draw -- isolates "the draw
+            // itself works" from "the depth test rejected it".
+            backend.ApplyDepthStencilState(false, false, 2, false, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, 0);
+            backend.ClearColorAndDepth(0.0f, 0.0f, 1.0f, 1.0f, 0.9f);
+            const Color ctrlPxCl = drawTriAndSampleCenterCl();
+            check(ctrlPxCl.getRProperty() == 255 && ctrlPxCl.getGProperty() == 0,
+                  "D3D11GraphicsBackend: control -- with depth testing OFF, this exact triangle "
+                  "genuinely draws its red, so a following failure can only mean the depth test "
+                  "rejected it, not that the draw is broken");
+            backend.ApplyDepthStencilState(/*depthEnable=*/true, /*depthWriteEnable=*/true,
+                                           /*depthFunc=*/2 /*Less*/, false, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, 0);
+
+            // Depth cleared FAR (0.9): the z=0.5 triangle is nearer -> Less passes -> red is drawn.
+            backend.ClearColorAndDepth(0.0f, 0.0f, 1.0f, 1.0f, /*depth=*/0.9f);
+            const Color passPxCl = drawTriAndSampleCenterCl();
+            check(passPxCl.getRProperty() == 255 && passPxCl.getGProperty() == 0,
+                  "D3D11GraphicsBackend::ClearColorAndDepth(depth=0.9): the z=0.5 triangle passes "
+                  "depthFunc=Less and draws its exact red, proving the cleared DEPTH value is real "
+                  "(plan_dx.md DX-130)");
+
+            // Depth cleared NEAR (0.1): the same z=0.5 triangle is farther -> Less fails -> blue survives.
+            backend.ClearColorAndDepth(0.0f, 0.0f, 1.0f, 1.0f, /*depth=*/0.1f);
+            const Color failPxCl = drawTriAndSampleCenterCl();
+            check(failPxCl.getBProperty() == 255 && failPxCl.getRProperty() == 0,
+                  "D3D11GraphicsBackend::ClearColorAndDepth(depth=0.1): the SAME triangle at the SAME "
+                  "z=0.5 is now correctly REJECTED by the depth test (background survives) -- only "
+                  "the cleared depth value differs, so each Clear* variant genuinely writes the "
+                  "depth it was given, not a fixed default (plan_dx.md DX-130)");
+
+            // --- ClearDepth alone must NOT touch the color target. ---
+            backend.ClearColorAndDepth(0.0f, 1.0f, 0.0f, 1.0f, /*depth=*/0.9f); // green, far depth
+            backend.ClearDepth(0.1f);                                            // depth only
+            const auto afterDepthOnlyCl = ReadTexture2DRegion(device, context, d3dRtCl->GetSampleableTextureEXT(),
+                                                              kRtW / 2, kRtH / 2, 1, 1);
+            check(afterDepthOnlyCl.size() >= 4 && afterDepthOnlyCl[1] == 255 && afterDepthOnlyCl[0] == 0,
+                  "D3D11GraphicsBackend::ClearDepth(): alone leaves the COLOR target untouched (the "
+                  "prior green survives) -- proves each variant clears only what it was asked for "
+                  "(plan_dx.md DX-130)");
+
+            backend.ApplyDepthStencilState(false, false, 2, false, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, 0);
+            backend.SetRenderTarget2D(nullptr);
+        }
+
         const int totalChecks = 2 /* SetDepthTestEnabled real, not a no-op */
                                 + 3 + 10 + 1 + 2 + 2 + 2 + 2 + 2 + 1 + 1 + 2 + 1 + 13 + 2 + 3 + 2 + 2 + 1 + 1 + 1 + 1 + 3 + 2 + 2 + 2 + 3 + 2 + 3 /* DX-131 rotation/scale/crop */
                                 + 1 /* DX-134 envMapAmount=0 */ + 2 /* DX-135 WeightsPerVertex */ + 2 /* DX-137 textured3d fog */
@@ -2607,7 +2761,8 @@ protected:
                                 + 3 /* DX-126 mip level > 0 upload/readback */
                                 + 4 /* DX-127 SpriteFont glyph placement/spacing/newline/flip */
                                 + 1 /* DX-128 Model/ModelMesh runtime-API orchestration */
-                                + 3 /* DX-129 RenderTargetCube bind+clear+readback+unbind proof */;
+                                + 3 /* DX-129 RenderTargetCube bind+clear+readback+unbind proof */
+                                + 8 /* DX-130 combo Clear* variants (DSV, stencil-readable, stencil x2, control, depth x2, color-untouched) */;
         std::printf("=== %d/%d PASS ===\n", passCount_, totalChecks);
         result_ = (passCount_ == totalChecks) ? 0 : 1;
         Exit();

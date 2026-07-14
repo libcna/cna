@@ -7,11 +7,13 @@
 > per-slot dynamic `SamplerState` (16 slots), a real `D3D12OcclusionQueryBackend` (closing Phase
 > DX15's `DX-147` D3D12 half too), a real `D3D12EffectBackend` (custom `ShaderEffect`), a real
 > `D3D12Texture3DBackend`, and real `D3D12TextureCubeBackend::GetData()` readback. `D3D12_Smoke`
-> grew from 80/80 (Phase DX12's own closing number) to **125/125 checks**. Phase DX14 (D3D11
-> verification hardening) and Phase DX15 (remaining EasyGL-parity gaps) are authorized and still
-> open — see those phases' own sections for what's next. Full Phase DX13 detail is in that phase's
-> own section below (search "Phase DX13"); the paragraphs immediately following this one are the
-> original Phase DX1–DX12 closing summary, kept for history.
+> grew from 80/80 (Phase DX12's own closing number) to **125/125 checks**. **Phase DX14 (D3D11
+> verification hardening) is now also fully closed** — all 7 rows (`DX-124`–`DX-130`), `D3D11_Smoke`
+> grew to **120/120 checks**. Phase DX15 (remaining EasyGL-parity gaps) is substantially complete
+> (15/18 rows) with 3 rows honestly still open for real, specific reasons — see that phase's own
+> section. Full Phase DX13/DX14 detail is in those phases' own sections below (search "Phase DX13"/
+> "Phase DX14"); the paragraphs immediately following this one are the original Phase DX1–DX12
+> closing summary, kept for history.
 >
 > **Status (2026-07-14): BOTH backends' full software/logic layer are done and Wine-verified.**
 > **D3D11**: Phase DX1 through Phase DX11 are ALL closed — every task except `DX-90`/`DX-91`
@@ -1274,12 +1276,23 @@ game-code impact (a real XNA game hits `RenderTarget`/state objects/samplers far
 
 ## Phase DX14 — D3D11 verification hardening (implemented-but-unverified gaps)
 
-**Authorized 2026-07-14 by the project owner** (explicit go-ahead alongside Phase DX15). Nothing in
-this phase is a known bug — every row below is real, shipped D3D11 code with no dedicated pixel test
-proving it's correct, as opposed to Phase DX13's D3D12 rows, which were missing code entirely. Lower
-priority than Phase DX13 for that reason: if forced to choose, closing a "might have a latent bug"
-gap on the more-mature D3D11 backend is less urgent than building out D3D12's actually-missing
-functionality.
+**Fully closed 2026-07-14 — all 7 rows (`DX-124`–`DX-130`), real GPU-facing proof throughout.**
+Authorized alongside Phase DX15 (same day). Nothing in this phase was ever a known bug — every row
+was real, shipped D3D11 code with no dedicated pixel test proving it correct, as opposed to Phase
+DX13's D3D12 rows, which were missing code entirely. `D3D11_Smoke` grew from 95/95 (before this
+phase) to **120/120 checks** by the end of it. Highlights: multi-light/`EmissiveColor`/specular
+discrimination for the shared `D3DLightingConstants` path (`DX-124`/`DX-125`, mirroring D3D12's own
+already-closed `DX-138`/`DX-139`); mip level > 0 upload/readback (`DX-126`, mirroring `DX-141`);
+`SpriteFont` glyph placement through the real public API (`DX-127`, mirroring `DX-132`);
+`Model`/`ModelMesh` runtime orchestration (`DX-128`, mirroring `DX-148`); `RenderTargetCube`'s full
+bind+clear+readback+unbind proof plus a new per-face independence check (`DX-129`); and the 5 combo
+`Clear*` variants via direct stencil-byte GPU readback + depth's real rasterization effect (`DX-130`,
+mirroring `DX-146`). **One real, separate regression found and fixed along the way** (surfaced while
+verifying `DX-124`, not part of this phase's own original scope): `DX-15` making `CnaTests.exe`
+genuinely build under the D3D11/D3D12 MinGW cross-targets broke every `ctest -R D3D11`/`-R D3D12`
+invocation in those trees (`gtest_discover_tests()` tried to exec the Windows PE directly on the
+Linux host) — fixed by routing `CnaTests`' own discovery/run through the same Wine wrappers
+`D3D11_Smoke`/`D3D12_Smoke` already use.
 
 | # | Task | Status | Notes |
 |---|---|---|---|
@@ -1289,7 +1302,7 @@ functionality.
 | DX-127 | `SpriteFont` D3D11-specific glyph placement/spacing/newline/flip test, mirroring EasyGL's own already-pixel-verified suite (Tasks 424-429) — builds on already-tested `Texture2D`/`SpriteBatch`/`VertexBuffer` primitives but has no D3D11-specific coverage yet | ✅ | **Closed 2026-07-14 — real proof through the actual public XNA API, mirroring D3D12's own already-closed `DX-132` (`examples/d3d12_smoke_test.cpp` Checks KK2-KK5) and EasyGL's established fixture (Tasks 424-429) exactly: 8×8 solid-white glyph cells, zero cropping/kerning bearing, so a glyph's destination rect maps exactly and any placement error is a hard pixel difference.** Unlike D3D12, D3D11's real swap chain already works directly under plain Wine, so this draws straight to the back buffer (this file's own established style throughout) instead of needing D3D12's offscreen-`RenderTarget2D`/`PresentationParameters::HeadlessEXT` detour. Real proof (`examples/d3d11_smoke_test.cpp`, 4 new checks): a single glyph lands at **exactly** `(4,4,8,8)` — verified inside plus all four edge midpoints, so an X-only or Y-only misplacement cannot pass; `"AB"` advances the second glyph by exactly one glyph width with nothing spilling past it; `"A\nA"` drops the second line by exactly `lineSpacing` **and** resets x to the start; and `SpriteEffects::FlipVertically` is proven against a deliberately **asymmetric** (top-half-white) glyph — lands top-half-white unflipped and bottom-half-white flipped. All 4 passed on the first real Wine+DXVK run — `D3D11_Smoke` 104→**108/108 checks**, confirmed via a real `ctest -R D3D11_Smoke` run. |
 | DX-128 | `Model`/`ModelMesh`/`ModelMeshPart`/`ModelBone` D3D11-specific runtime-API test — not separately exercised against this backend this session | ✅ | **Closed 2026-07-14 — mirrors D3D12's already-closed `DX-148` (`examples/d3d12_smoke_test.cpp` Check KK6) exactly.** Drives `ModelMesh::Draw()`'s REAL orchestration (bone transform folded into the world matrix, `SetVertexBuffer` + `setIndices` + `DrawIndexedPrimitives` + `EffectPass::Apply`) — deliberately **not** a raw `VertexBuffer`/`IndexBuffer` draw wearing a `Model` label, which this row's own text warns against and which would have proven nothing new. A real 2-bone hierarchy (root→child) drives `Model::Draw()`, painting the mesh's exact red over a green clear, read back from the real back buffer (D3D11's own established style — unlike D3D12, which needed an offscreen `RenderTarget2D` detour). Passed on the first real Wine+DXVK run — `D3D11_Smoke` 108→**109/109 checks**, confirmed via a real `ctest -R D3D11_Smoke` run. |
 | DX-129 | `RenderTargetCube` dedicated pixel test — currently only construction is proven real; `RenderTarget2D` has the full bind+clear+readback+unbind-restores-backbuffer proof, `RenderTargetCube` doesn't yet | ✅ | **Closed 2026-07-14 — mirrors `RenderTarget2D`'s own full bind+clear+readback+unbind-restores-backbuffer proof (Check J) for `RenderTargetCube`, plus a per-face independence check that Check J itself never needed to prove.** `BindAsRenderTargetFace(0)`+`Clear()` writes the exact color into face 0's own texture-array slice, read back directly from the real GPU resource; binding face 1 to a genuinely **different** color, then re-reading face 0, proves the two faces are independent slices rather than aliased (the specific risk a shared 6-slice texture array creates that a single `RenderTarget2D` never has to prove); `UnbindAsRenderTarget()` genuinely restores the back buffer as `Clear()`'s next target, same bar as `RenderTarget2D`'s own check. All 3 passed on the first real Wine+DXVK run — `D3D11_Smoke` 109→**112/112 checks**, confirmed via a real `ctest -R D3D11_Smoke` run. |
-| DX-130 | The 5 combo `Clear*` variants (`ClearColorAndDepth`/`ClearDepth`/`ClearStencil`/`ClearDepthAndStencil`/`ClearColorAndStencil`/`ClearColorDepthAndStencil`) dedicated round-trip pixel test — real `ClearDepthStencilView` calls exist and are implemented identically to the proven plain `Clear(r,g,b,a)` path, but only plain `Clear` has a dedicated pixel test (`DX-25`'s own long-standing honest gap) | ⬜ | |
+| DX-130 | The 5 combo `Clear*` variants (`ClearColorAndDepth`/`ClearDepth`/`ClearStencil`/`ClearDepthAndStencil`/`ClearColorAndStencil`/`ClearColorDepthAndStencil`) dedicated round-trip pixel test — real `ClearDepthStencilView` calls exist and are implemented identically to the proven plain `Clear(r,g,b,a)` path, but only plain `Clear` has a dedicated pixel test (`DX-25`'s own long-standing honest gap) | ✅ | **Closed 2026-07-14 — mirrors D3D12's own already-closed `DX-146` methodology exactly (stencil via direct GPU readback, depth via its real effect on rasterization).** New test-only `ReadDepthStencilPlane()` helper reads a `DXGI_FORMAT_D24_UNORM_S8_UINT` resource's real bytes via the same staging-texture technique this file's other readback helpers already use — D3D11 packs depth+stencil as one 32-bit value per pixel (byte 3 = stencil), so no plane-slice copy is needed the way D3D12 requires. Real proof against a real `Depth24Stencil8` render target: `ClearColorDepthAndStencil(stencil=0x5A)` genuinely writes `0x5A` into every pixel of the real stencil bytes, read straight off the GPU; `ClearStencil(0x3C)` alone genuinely overwrites it to a different value, so neither is a silent no-op. Depth is proven by its real effect on rasterization: the same triangle at the same `z=0.5` is drawn twice, differing only in the depth a prior `ClearDepth`/`ClearColorAndDepth` wrote — cleared-to-`0.9` lets it through `depthFunc=Less`, cleared-to-`0.1` correctly rejects it (with an explicit depth-off control check proving the draw itself works first). `ClearDepth()` alone is proven to leave the color target untouched. All 8 checks passed on the first real Wine+DXVK run — `D3D11_Smoke` 112→**120/120 checks**, confirmed via a real `ctest -R D3D11_Smoke` run. **This closes the last open row in Phase DX14 — all 7 rows (`DX-124`–`DX-130`) are now done.** |
 
 ---
 
