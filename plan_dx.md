@@ -1274,9 +1274,9 @@ game-code impact (a real XNA game hits `RenderTarget`/state objects/samplers far
 
 ## Phase DX14 — D3D11 verification hardening (implemented-but-unverified gaps)
 
-**Also not authorized for implementation yet, same discipline as Phase DX13.** Nothing in this
-phase is a known bug — every row below is real, shipped D3D11 code with no dedicated pixel test
-proving it's correct, as opposed to Phase DX13's D3D12 rows, which are missing code entirely. Lower
+**Authorized 2026-07-14 by the project owner** (explicit go-ahead alongside Phase DX15). Nothing in
+this phase is a known bug — every row below is real, shipped D3D11 code with no dedicated pixel test
+proving it's correct, as opposed to Phase DX13's D3D12 rows, which were missing code entirely. Lower
 priority than Phase DX13 for that reason: if forced to choose, closing a "might have a latent bug"
 gap on the more-mature D3D11 backend is less urgent than building out D3D12's actually-missing
 functionality.
@@ -1379,11 +1379,13 @@ those before their prerequisite.
 
 ## Boundaries (stop and ask, don't improvise)
 
-- **Do not start any task in this plan without the project owner's explicit go-ahead** — the whole
-  plan is currently unauthorized (status banner). This is stronger than the usual per-phase caution
-  other plans use, since not even Phase DX1 has been approved yet.
-- **Do not start Phase DX12 (D3D12) even after D3D11 is done**, without a separate, later go-ahead
-  (design decision 9) — D3D11 finishing does not implicitly authorize D3D12.
+- **Historical note**: this boundary originally read "do not start any task in this plan without
+  explicit go-ahead — the whole plan is unauthorized" and "do not start Phase DX12 without a
+  separate go-ahead." Both are now moot — the project owner authorized Phase DX1–DX13 (2026-07-13/
+  14) and Phase DX14/DX15 (2026-07-14), all of which are done or substantially done (see each
+  phase's own section). Kept here only so the *pattern* — don't assume authorization transfers
+  phase-to-phase, always confirm explicitly — carries forward to any future phase (DX16+) that gets
+  added to this plan.
 - **Do not claim real-Windows parity from Wine+DXVK/vkd3d-proton results alone** — `DX-90`/`DX-114`
   are real completion gates, not optional polish, per the "Development environment" section above.
 - **Do not let `D3D11`/`D3D12`-specific code leak into the shared `IGraphicsBackend`/`GpuDrawParams`
