@@ -1109,6 +1109,231 @@ int main()
         backend.UnbindOffscreenColorTargetEXT();
     }
 
+    // ---- Check Q (DX-111 continued): dual_texture3d -- real 2-contiguous-SRV-table binding ----
+    {
+        constexpr int kRtWidth = 64;
+        constexpr int kRtHeight = 64;
+
+        D3D12_HEAP_PROPERTIES heapProps{};
+        heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
+
+        D3D12_RESOURCE_DESC rtDesc{};
+        rtDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+        rtDesc.Width = kRtWidth;
+        rtDesc.Height = kRtHeight;
+        rtDesc.DepthOrArraySize = 1;
+        rtDesc.MipLevels = 1;
+        rtDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        rtDesc.SampleDesc.Count = 1;
+        rtDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+        rtDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+
+        Microsoft::WRL::ComPtr<ID3D12Resource> rt;
+        HRESULT hrRt = backend.GetDeviceEXT()->CreateCommittedResource(
+            &heapProps, D3D12_HEAP_FLAG_NONE, &rtDesc,
+            D3D12_RESOURCE_STATE_RENDER_TARGET, nullptr, IID_PPV_ARGS(rt.GetAddressOf()));
+        Check(SUCCEEDED(hrRt) && rt != nullptr, "Q0: real off-screen RGBA8 render-target resource created");
+        backend.GetResourceStateTrackerEXT().TrackResource(rt.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET);
+
+        D3D12_CPU_DESCRIPTOR_HANDLE rtv = backend.AllocateRtvDescriptorEXT();
+        backend.GetDeviceEXT()->CreateRenderTargetView(rt.Get(), nullptr, rtv);
+        backend.BindOffscreenColorTargetEXT(rt.Get(), rtv, DXGI_FORMAT_R8G8B8A8_UNORM, kRtWidth, kRtHeight);
+
+        auto pixelAt = [&](const std::vector<uint8_t>& buf, int x, int y) -> std::array<uint8_t, 4>
+        {
+            const std::size_t idx = (static_cast<std::size_t>(y) * kRtWidth + static_cast<std::size_t>(x)) * 4;
+            return {buf[idx + 0], buf[idx + 1], buf[idx + 2], buf[idx + 3]};
+        };
+        auto isColor = [](const std::array<uint8_t, 4>& p, uint8_t r, uint8_t g, uint8_t b, uint8_t a)
+        {
+            return p[0] == r && p[1] == g && p[2] == b && p[3] == a;
+        };
+        auto regionIs = [&](const std::vector<uint8_t>& buf, uint8_t r, uint8_t g, uint8_t b, uint8_t a)
+        {
+            for (int y = 28; y < 32; ++y)
+                for (int x = 28; x < 32; ++x)
+                    if (!isColor(pixelAt(buf, x, y), r, g, b, a)) return false;
+            return true;
+        };
+
+        // dual_texture3d.frag.hlsl's real formula: outColor = (tex1.rgb*2, tex1.a) * tex2 * Tint
+        // (Tint = DiffuseColor, default white). tex1=white(255) makes the *2 an exact doubling of
+        // tex2's own byte value with zero rounding ambiguity: (60,80,100)*2 = (120,160,200), all
+        // well under 255 so nothing clamps -- chosen deliberately so this check is byte-exact, not
+        // approximate.
+        struct VPT { float x, y, z; float u, v; };
+        static const VPT kTriDual[3] = {
+            {-1.0f, -1.0f, 0.0f, 0.0f, 1.0f},
+            { 3.0f, -1.0f, 0.0f, 2.0f, 1.0f},
+            {-1.0f,  3.0f, 0.0f, 0.0f, -1.0f},
+        };
+        D3D12VertexBufferBackend vbDual(&backend, 3);
+        vbDual.SetData(kTriDual, 3, sizeof(VPT));
+
+        ImageData whiteImg;
+        whiteImg.width = 2; whiteImg.height = 2; whiteImg.mipLevels = 1;
+        whiteImg.pixels.assign(2 * 2 * 4, 255);
+        D3D12TextureBackend tex0White(&backend, whiteImg);
+
+        ImageData tintImg;
+        tintImg.width = 2; tintImg.height = 2; tintImg.mipLevels = 1;
+        tintImg.pixels.resize(2 * 2 * 4);
+        for (int i = 0; i < 4; ++i)
+        {
+            tintImg.pixels[i * 4 + 0] = 60; tintImg.pixels[i * 4 + 1] = 80;
+            tintImg.pixels[i * 4 + 2] = 100; tintImg.pixels[i * 4 + 3] = 255;
+        }
+        D3D12TextureBackend tex1Tint(&backend, tintImg);
+
+        GpuDrawParams dp;
+        dp.texture0 = &tex0White;
+        dp.texture1 = &tex1Tint;
+        dp.dualTexture = true;
+        dp.textureEnabled = true;
+
+        backend.Clear(0.0f, 1.0f, 0.0f, 1.0f);
+        auto beforeQ = ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight);
+        backend.DrawPrimitivesEx(vbDual, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                 Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, dp);
+        auto afterQ = ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight);
+        Check(regionIs(beforeQ, 0, 255, 0, 255) && regionIs(afterQ, 120, 160, 200, 255),
+              "Q1: DrawPrimitivesEx() real dual_texture3d draw combines two independently-allocated "
+              "textures' SRVs through a genuinely contiguous per-draw descriptor table -- exact "
+              "expected byte result, not just \"a draw call succeeded\" (plan_dx.md DX-111)");
+
+        // Indexed path -- proves the same contiguous-table binding survives DrawIndexedPrimitivesEx.
+        static const uint16_t kTriDualIdx[3] = {0, 1, 2};
+        D3D12IndexBufferBackend ibDual(&backend, 3, /*thirtyTwoBit=*/false);
+        ibDual.SetData16(kTriDualIdx, 3);
+        backend.Clear(0.0f, 1.0f, 0.0f, 1.0f);
+        backend.DrawIndexedPrimitivesEx(vbDual, ibDual, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                        Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, dp);
+        auto afterQIdx = ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight);
+        Check(regionIs(afterQIdx, 120, 160, 200, 255),
+              "Q2: DrawIndexedPrimitivesEx() indexed dual_texture3d draw shares the same real "
+              "2-texture pipeline and produces the same exact result");
+
+        backend.UnbindOffscreenColorTargetEXT();
+    }
+
+    // ---- Check R (DX-112): D3D12SpriteBatchBackend -- real quad-batched sprite draw, flip proof ----
+    {
+        using Microsoft::Xna::Framework::Rectangle;
+        using Microsoft::Xna::Framework::Vector2;
+        using Microsoft::Xna::Framework::Color;
+        using Microsoft::Xna::Framework::Graphics::SpriteEffects;
+
+        constexpr int kRtWidth = 64;
+        constexpr int kRtHeight = 64;
+
+        D3D12_HEAP_PROPERTIES heapProps{};
+        heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
+
+        D3D12_RESOURCE_DESC rtDesc{};
+        rtDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+        rtDesc.Width = kRtWidth;
+        rtDesc.Height = kRtHeight;
+        rtDesc.DepthOrArraySize = 1;
+        rtDesc.MipLevels = 1;
+        rtDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        rtDesc.SampleDesc.Count = 1;
+        rtDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+        rtDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+
+        Microsoft::WRL::ComPtr<ID3D12Resource> rt;
+        HRESULT hrRt = backend.GetDeviceEXT()->CreateCommittedResource(
+            &heapProps, D3D12_HEAP_FLAG_NONE, &rtDesc,
+            D3D12_RESOURCE_STATE_RENDER_TARGET, nullptr, IID_PPV_ARGS(rt.GetAddressOf()));
+        Check(SUCCEEDED(hrRt) && rt != nullptr, "R0: real off-screen RGBA8 render-target resource created");
+        backend.GetResourceStateTrackerEXT().TrackResource(rt.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET);
+
+        D3D12_CPU_DESCRIPTOR_HANDLE rtv = backend.AllocateRtvDescriptorEXT();
+        backend.GetDeviceEXT()->CreateRenderTargetView(rt.Get(), nullptr, rtv);
+        backend.BindOffscreenColorTargetEXT(rt.Get(), rtv, DXGI_FORMAT_R8G8B8A8_UNORM, kRtWidth, kRtHeight);
+
+        auto pixelAt = [&](const std::vector<uint8_t>& buf, int x, int y) -> std::array<uint8_t, 4>
+        {
+            const std::size_t idx = (static_cast<std::size_t>(y) * kRtWidth + static_cast<std::size_t>(x)) * 4;
+            return {buf[idx + 0], buf[idx + 1], buf[idx + 2], buf[idx + 3]};
+        };
+        auto isColor = [](const std::array<uint8_t, 4>& p, uint8_t r, uint8_t g, uint8_t b, uint8_t a)
+        {
+            return p[0] == r && p[1] == g && p[2] == b && p[3] == a;
+        };
+        // Checked well inside each half of the 64-wide render target (x=14..18 / x=46..50), away
+        // from the u=0.5 texel boundary at x=32 -- same "sample exactly at a texel center, away from
+        // any blend edge" discipline every earlier texture check in this file already established.
+        auto leftRegionIs = [&](const std::vector<uint8_t>& buf, uint8_t r, uint8_t g, uint8_t b, uint8_t a)
+        {
+            for (int y = 28; y < 32; ++y)
+                for (int x = 14; x < 18; ++x)
+                    if (!isColor(pixelAt(buf, x, y), r, g, b, a)) return false;
+            return true;
+        };
+        auto rightRegionIs = [&](const std::vector<uint8_t>& buf, uint8_t r, uint8_t g, uint8_t b, uint8_t a)
+        {
+            for (int y = 28; y < 32; ++y)
+                for (int x = 46; x < 50; ++x)
+                    if (!isColor(pixelAt(buf, x, y), r, g, b, a)) return false;
+            return true;
+        };
+
+        // 4x2 texture, both rows identical (Y-axis bilinear blending is a no-op): columns 0-1 are
+        // solid red, columns 2-3 are solid blue -- two texels of EACH color (not one) so that the
+        // readback sample points below, chosen well inside a same-colored pair, are immune to the
+        // GPU's real pixel-center-vs-texel-center bilinear sampling offset (D3D rasterizes at pixel
+        // CENTERS, i.e. UV = (px+0.5)/width, which does NOT land exactly on a single texel's own
+        // center for these render-target/texture dimensions -- confirmed empirically while writing
+        // this check: a 2-texel-wide version of this same texture read back (197,50,33)/(33,80,217)
+        // instead of the exact (200,50,30)/(30,80,220), a ~1.5% blend toward the adjacent texel).
+        // Blending RED with RED (or BLUE with BLUE) is exact regardless of the blend weight, which
+        // is what makes this test byte-exact without needing to solve for a perfectly-aligned pixel.
+        ImageData img;
+        img.width = 4; img.height = 2; img.mipLevels = 1;
+        img.pixels.resize(4 * 2 * 4);
+        for (int row = 0; row < 2; ++row)
+        {
+            const std::size_t rowBase = static_cast<std::size_t>(row) * 4 * 4;
+            for (int col = 0; col < 2; ++col) // columns 0-1: red
+            {
+                const std::size_t px = rowBase + static_cast<std::size_t>(col) * 4;
+                img.pixels[px + 0] = 200; img.pixels[px + 1] = 50;
+                img.pixels[px + 2] = 30;  img.pixels[px + 3] = 255;
+            }
+            for (int col = 2; col < 4; ++col) // columns 2-3: blue
+            {
+                const std::size_t px = rowBase + static_cast<std::size_t>(col) * 4;
+                img.pixels[px + 0] = 30;  img.pixels[px + 1] = 80;
+                img.pixels[px + 2] = 220; img.pixels[px + 3] = 255;
+            }
+        }
+        D3D12TextureBackend tex(&backend, img);
+
+        auto sb = backend.CreateSpriteBatch();
+        Check(sb != nullptr, "R1: CreateSpriteBatch() returns a real D3D12SpriteBatchBackend");
+
+        backend.Clear(0.0f, 1.0f, 0.0f, 1.0f);
+        sb->Begin();
+        sb->Draw(tex, Rectangle(0, 0, kRtWidth, kRtHeight), Rectangle(0, 0, 4, 2), Color::White);
+        sb->End();
+        auto afterR1 = ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight);
+        Check(leftRegionIs(afterR1, 200, 50, 30, 255) && rightRegionIs(afterR1, 30, 80, 220, 255),
+              "R2: D3D12SpriteBatchBackend::Draw() places a real quad-batched sprite at the exact "
+              "expected screen position, sampling the exact source-texel colors (plan_dx.md DX-112)");
+
+        backend.Clear(0.0f, 1.0f, 0.0f, 1.0f);
+        sb->Begin();
+        sb->Draw(tex, Rectangle(0, 0, kRtWidth, kRtHeight), Rectangle(0, 0, 4, 2), Color::White,
+                 0.0f, Vector2(0, 0), SpriteEffects::FlipHorizontally, 0.0f);
+        sb->End();
+        auto afterR2 = ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight);
+        Check(leftRegionIs(afterR2, 30, 80, 220, 255) && rightRegionIs(afterR2, 200, 50, 30, 255),
+              "R3: SpriteEffects::FlipHorizontally genuinely swaps left/right source sampling -- not "
+              "just \"a draw call succeeded\" (plan_dx.md DX-112)");
+
+        backend.UnbindOffscreenColorTargetEXT();
+    }
+
     std::printf("\n%s: %d failure(s)\n", g_failures == 0 ? "RESULT: ALL PASS" : "RESULT: FAILURES", g_failures);
     return g_failures == 0 ? 0 : 1;
 }

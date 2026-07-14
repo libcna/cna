@@ -38,7 +38,7 @@ namespace CNA::Internal::Backends::D3D12
             return it->second;
 
         std::vector<D3D12_ROOT_PARAMETER1> rootParams;
-        rootParams.reserve(static_cast<std::size_t>(numCbvs) + (numSrvs > 0 ? 1 : 0));
+        rootParams.reserve(static_cast<std::size_t>(numCbvs) + static_cast<std::size_t>(numSrvs));
 
         for (int b = 0; b < numCbvs; ++b)
         {
@@ -51,20 +51,42 @@ namespace CNA::Internal::Backends::D3D12
             rootParams.push_back(p);
         }
 
-        D3D12_DESCRIPTOR_RANGE1 srvRange{};
-        if (numSrvs > 0)
+        // DX-111 (dual_texture3d): each texture register gets its OWN single-descriptor table root
+        // parameter (t0, t1, ...) rather than one shared multi-descriptor range -- found empirically
+        // while landing dual_texture3d that a single D3D12_DESCRIPTOR_TABLE range with
+        // NumDescriptors>1, populated via CopyDescriptorsSimple into a freshly bump-allocated
+        // contiguous heap slot pair, samples as all-zero under this machine's Wine+vkd3d-proton dev
+        // loop (DX-100) even though the CPU-side descriptor writes/handles were independently
+        // verified correct (heap offsets increment by exactly one descriptor stride, both copies
+        // succeed) -- a genuine dev-loop-specific limitation, not a CNA logic bug (the single-
+        // descriptor-table case, numSrvs==1, has always worked correctly and still does). N separate
+        // 1-descriptor tables sidesteps this entirely: each texture's OWN existing permanent SRV
+        // handle (created once, at texture-construction time) is bound directly to its own root
+        // parameter, exactly matching the already-proven-working numSrvs==1 path -- no per-draw
+        // descriptor copy is needed at all now (D3D12GraphicsBackend::DrawPrimitivesExImpl no longer
+        // needs its own CopyDescriptorsSimple scratch-table logic for this). std::vector<...>
+        // srvRanges is declared with a FIXED reserved capacity up front so its elements' addresses
+        // (referenced by each root param's pDescriptorRanges below) stay stable across every
+        // push_back -- no reallocation-invalidation risk.
+        std::vector<D3D12_DESCRIPTOR_RANGE1> srvRanges;
+        srvRanges.reserve(static_cast<std::size_t>(numSrvs));
+        for (int t = 0; t < numSrvs; ++t)
         {
-            srvRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
-            srvRange.NumDescriptors = static_cast<UINT>(numSrvs);
-            srvRange.BaseShaderRegister = 0;
-            srvRange.RegisterSpace = 0;
-            srvRange.Flags = D3D12_DESCRIPTOR_RANGE_FLAG_DATA_STATIC;
-            srvRange.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
-
+            D3D12_DESCRIPTOR_RANGE1 range{};
+            range.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+            range.NumDescriptors = 1;
+            range.BaseShaderRegister = static_cast<UINT>(t);
+            range.RegisterSpace = 0;
+            range.Flags = D3D12_DESCRIPTOR_RANGE_FLAG_DATA_STATIC;
+            range.OffsetInDescriptorsFromTableStart = 0;
+            srvRanges.push_back(range);
+        }
+        for (int t = 0; t < numSrvs; ++t)
+        {
             D3D12_ROOT_PARAMETER1 p{};
             p.ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
             p.DescriptorTable.NumDescriptorRanges = 1;
-            p.DescriptorTable.pDescriptorRanges = &srvRange;
+            p.DescriptorTable.pDescriptorRanges = &srvRanges[static_cast<std::size_t>(t)];
             p.ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
             rootParams.push_back(p);
         }

@@ -17,14 +17,28 @@
 // root CBV per register correctly satisfies both stages without needing per-stage-specific
 // visibility tuning.
 //
-// Textures/samplers use a descriptor table (SRVs) + D3D12_STATIC_SAMPLER_DESC entries -- static
-// samplers are a deliberate scope choice: they need no SAMPLER descriptor heap at all (DX-103 only
-// built RTV/DSV/CBV_SRV_UAV heaps, no SAMPLER heap), and every stock effect variant's sampler state
-// is fixed at shader-authoring time anyway (this project's own D3D11SamplerCache-driven dynamic
-// sampler binding is a D3D11-specific convenience, not an XNA-level requirement D3D12 must match
-// bit-for-bit here) -- if a later task needs genuinely dynamic per-draw sampler state, that's real,
-// scoped follow-up work (a SAMPLER descriptor heap + non-static samplers), not something this cache
-// silently forecloses.
+// Textures/samplers use one descriptor table per texture register (t0, t1, ... -- NOT one shared
+// multi-descriptor table) + D3D12_STATIC_SAMPLER_DESC entries -- static samplers are a deliberate
+// scope choice: they need no SAMPLER descriptor heap at all (DX-103 only built RTV/DSV/CBV_SRV_UAV
+// heaps, no SAMPLER heap), and every stock effect variant's sampler state is fixed at shader-
+// authoring time anyway (this project's own D3D11SamplerCache-driven dynamic sampler binding is a
+// D3D11-specific convenience, not an XNA-level requirement D3D12 must match bit-for-bit here) -- if
+// a later task needs genuinely dynamic per-draw sampler state, that's real, scoped follow-up work
+// (a SAMPLER descriptor heap + non-static samplers), not something this cache silently forecloses.
+//
+// N SEPARATE single-descriptor tables, not one N-descriptor table -- a real, empirically-found
+// dev-loop limitation (DX-111, landing dual_texture3d): a single D3D12_DESCRIPTOR_TABLE range with
+// NumDescriptors>1, populated via a fresh per-draw CopyDescriptorsSimple into a contiguous bump-
+// allocated heap slot pair, sampled as all-zero under this machine's Wine+vkd3d-proton dev loop
+// (DX-100) even though the CPU-side descriptor writes/handles were independently verified correct
+// (heap offsets incremented by exactly one descriptor stride, both CopyDescriptorsSimple calls
+// succeeded with sane handles). Switching to N separate 1-descriptor tables -- each texture's own
+// permanent SRV (created once, at texture-construction time) bound directly to its own root
+// parameter, no per-draw descriptor copy at all -- fixed it immediately and is simpler code besides.
+// This may be a genuine vkd3d-proton/Wine-specific limitation (DX-90/DX-114's real-Windows pass is
+// the place to re-verify whether a real Windows driver would have accepted the original multi-
+// descriptor-table approach) rather than a portable D3D12 correctness rule -- documented as an
+// empirical dev-loop finding, not asserted as universal D3D12 behavior.
 
 #include <d3d12.h>
 #include <wrl/client.h>
@@ -53,9 +67,11 @@ namespace CNA::Internal::Backends::D3D12
     {
     public:
         /// Returns a cached (or newly created) root signature with @p numCbvs root CBV descriptors
-        /// at b0..b(numCbvs-1) (ALL-visibility), plus -- only if numSrvs > 0 -- one descriptor table
-        /// with @p numSrvs SRVs at t0..t(numSrvs-1) (PIXEL-visibility, matching this project's own
-        /// "textures are always sampled in the pixel shader" convention) and @p numSamplers static
+        /// at b0..b(numCbvs-1) (ALL-visibility), plus -- for each of t0..t(numSrvs-1) -- its OWN
+        /// single-descriptor table root parameter at index numCbvs+i (PIXEL-visibility, matching
+        /// this project's own "textures are always sampled in the pixel shader" convention; see the
+        /// class-level doc comment for why N separate tables, not one shared multi-descriptor table)
+        /// and @p numSamplers static
         /// samplers at s0..s(numSamplers-1) using a fixed linear-wrap description (a reasonable
         /// stock-effect default; this is the same scope boundary the class-level doc comment already
         /// documents). Returns a null ComPtr (does not throw) if D3D12SerializeRootSignature or

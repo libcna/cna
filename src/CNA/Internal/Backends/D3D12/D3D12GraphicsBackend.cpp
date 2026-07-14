@@ -5,6 +5,7 @@
 #include "CNA/Internal/Backends/D3D12/D3D12GraphicsBackend.hpp"
 #include "CNA/Internal/Backends/D3D12/D3D12Buffers.hpp"
 #include "CNA/Internal/Backends/D3D12/D3D12Textures.hpp"
+#include "CNA/Internal/Backends/D3D12/D3D12SpriteBatch.hpp"
 #include "CNA/Internal/Backends/D3DCommon/D3DConstantBuffers.hpp"
 
 #include <SDL3/SDL.h>
@@ -624,7 +625,7 @@ namespace CNA::Internal::Backends::D3D12
 
     std::unique_ptr<ISpriteBatchBackend> D3D12GraphicsBackend::CreateSpriteBatch()
     {
-        NotYetImplemented("CreateSpriteBatch");
+        return std::make_unique<D3D12SpriteBatchBackend>(this);
     }
 
     void D3D12GraphicsBackend::ClearColorAndDepth(float, float, float, float, float) { NotYetImplemented("ClearColorAndDepth"); }
@@ -876,38 +877,66 @@ namespace CNA::Internal::Backends::D3D12
         const std::size_t stride = d3dVb.GetStrideEXT() > 0 ? d3dVb.GetStrideEXT() : 16;
 
         const bool needsAlphaTest = (params.alphaTest[3] < 0.0f || params.alphaTest[2] < 0.0f);
+        // DX-111 (continued): dual_texture3d is now real (see the needsDualTex branch below);
+        // env_map3d/skinned3d remain an explicit follow-up (need a TextureCube backend and a
+        // 3rd/bone constant buffer respectively, neither built yet for D3D12).
+        const bool needsDualTex = params.dualTexture && !needsAlphaTest;
         // stride==32 always uses lit_textured3d (BasicEffect's VertexPositionNormalTexture path, lit
-        // or not -- the shader itself branches on LightingEnabled), unless alpha-test claims the draw
-        // first -- same priority D3D11's own DrawPrimitivesExImpl uses.
-        const bool needsLitTextured = (stride == 32) && !needsAlphaTest;
+        // or not -- the shader itself branches on LightingEnabled), unless a higher-priority effect
+        // claims the draw first -- same priority D3D11's own DrawPrimitivesExImpl uses.
+        const bool needsLitTextured = (stride == 32) && !needsAlphaTest && !needsDualTex;
 
-        if (!needsAlphaTest && (params.dualTexture || params.envMapping || params.skinned))
+        if (!needsAlphaTest && !needsDualTex && (params.envMapping || params.skinned))
         {
             throw std::runtime_error(
-                "D3D12GraphicsBackend::DrawPrimitivesEx: DualTextureEffect/EnvironmentMapEffect/"
-                "SkinnedEffect are not yet implemented for D3D12 (plan_dx.md DX-111 -- textured3d/"
-                "colored_textured3d/lit_textured3d/alpha_test3d only so far; the rest is a follow-up)");
+                "D3D12GraphicsBackend::DrawPrimitivesEx: EnvironmentMapEffect/SkinnedEffect are not "
+                "yet implemented for D3D12 (plan_dx.md DX-111 -- colored3d/textured3d/"
+                "colored_textured3d/lit_textured3d/alpha_test3d/dual_texture3d only so far; the rest "
+                "is a follow-up)");
         }
+        // dual_texture3d.vert.hlsl's VSInput is Position+UV only (20 bytes), same as D3D11's own
+        // DX-65 finding -- dual_texture_colored3d was never ported (DX-13-hlsl's own row notes).
+        if (needsDualTex && stride != 20)
+            throw std::runtime_error(
+                "D3D12GraphicsBackend::DrawPrimitivesEx: DualTextureEffect (dual_texture3d) only "
+                "supports stride 20 (VertexPositionTexture); dual_texture_colored3d was not ported "
+                "(plan_dx.md DX-13-hlsl)");
 
         D3DShaderVariant variant;
         bool hasTexture;
         int numCbvs;
+        int numSrvs = 0;
         if (needsAlphaTest)
         {
             variant = D3DShaderVariant::AlphaTest3d;
             hasTexture = true;
             numCbvs = 1; // alpha_test3d's own single combined PerDraw (b0) -- no separate FogParams cbuffer.
+            numSrvs = 1;
+        }
+        else if (needsDualTex)
+        {
+            variant = D3DShaderVariant::DualTexture3d;
+            hasTexture = true;
+            // DX-13-hlsl's own note: dual_texture3d's FogParams cbuffer lives at register(b2), not
+            // (b1) -- t0/s0 and t1/s1 already occupy the "next free slot" a single-texture variant
+            // would use for fog. Root signature still needs 3 contiguous CBV slots (b0/b1/b2); b1
+            // goes unused by this shader but is still bound to a valid (dummy) address below so no
+            // root descriptor is ever left unset.
+            numCbvs = 3;
+            numSrvs = 2;
         }
         else if (needsLitTextured)
         {
             variant = D3DShaderVariant::LitTextured3d;
             hasTexture = true;
             numCbvs = 2; // PerDraw (b0) + LitLightParams (b1).
+            numSrvs = 1;
         }
         else
         {
             hasTexture = (stride != 16);
             numCbvs = 2; // PerDraw (b0) + FogParams (b1) -- including the stride-16 (colored3d) case.
+            numSrvs = hasTexture ? 1 : 0;
             switch (stride)
             {
             case 16: variant = D3DShaderVariant::Colored3d; break;
@@ -920,8 +949,7 @@ namespace CNA::Internal::Backends::D3D12
             }
         }
 
-        const int numSrvs = hasTexture ? 1 : 0;
-        const int numSamplers = hasTexture ? 1 : 0;
+        const int numSamplers = numSrvs; // one static sampler per texture slot, s0.. matching t0..
 
         auto rootSig = rootSigCache_.GetOrCreate(device_.Get(), numCbvs, numSrvs, numSamplers);
         if (!rootSig)
@@ -945,7 +973,10 @@ namespace CNA::Internal::Backends::D3D12
         // cbAddresses[i] is bound to root CBV parameter i (b0, b1, ...) -- see each branch below for
         // which struct/register each variant actually needs, field-for-field matching the real HLSL
         // cbuffer declarations (D3DConstantBuffers.hpp).
-        D3D12_GPU_VIRTUAL_ADDRESS cbAddresses[2] = {0, 0};
+        D3D12_GPU_VIRTUAL_ADDRESS cbAddresses[3] = {0, 0, 0};
+        // params.texture0/texture1 for the (up to 2) SRVs this draw binds -- only dual_texture3d
+        // uses the 2nd slot today (env_map3d's 2nd-slot TextureCube is a separate follow-up).
+        const ITextureBackend* srvTextures[2] = {params.texture0, nullptr};
 
         if (needsAlphaTest)
         {
@@ -970,6 +1001,42 @@ namespace CNA::Internal::Backends::D3D12
             ID3D12Resource* cb = GetOrCreateAlphaTestConstantBufferEXT();
             std::memcpy(alphaTestConstantBufferMapped_, &c, sizeof(c));
             cbAddresses[0] = cb->GetGPUVirtualAddress();
+        }
+        else if (needsDualTex)
+        {
+            // DX-13-hlsl's own note: dual_texture3d's PerDraw (b0) is the same shape as
+            // D3DPerDrawConstants; its FogParams cbuffer is at register(b2) instead of (b1) -- t0/s0
+            // and t1/s1 are already the two texture samplers, so fog moved to the next free slot.
+            D3DPerDrawConstants perDraw{};
+            wvp.ToColumnMajor(perDraw.Mvp);
+            perDraw.DiffuseColor[0] = params.diffuseColor[0];
+            perDraw.DiffuseColor[1] = params.diffuseColor[1];
+            perDraw.DiffuseColor[2] = params.diffuseColor[2];
+            perDraw.DiffuseColor[3] = params.diffuseColor[3];
+            perDraw.TextureEnabled = params.textureEnabled ? 1.0f : 0.0f;
+            perDraw.VertexColorEnabled = params.vertexColorEnabled ? 1.0f : 0.0f;
+
+            D3DFogConstants fog{};
+            fog.FogColorEnabled[0] = params.fogColor[0];
+            fog.FogColorEnabled[1] = params.fogColor[1];
+            fog.FogColorEnabled[2] = params.fogColor[2];
+            fog.FogColorEnabled[3] = params.fogEnabled ? 1.0f : 0.0f;
+            fog.FogStartEnd[0] = params.fogStart;
+            fog.FogStartEnd[1] = params.fogEnd;
+
+            ID3D12Resource* perDrawCB = GetOrCreatePerDrawConstantBufferEXT();
+            ID3D12Resource* fogCB     = GetOrCreateFogConstantBufferEXT();
+            std::memcpy(perDrawConstantBufferMapped_, &perDraw, sizeof(perDraw));
+            std::memcpy(fogConstantBufferMapped_, &fog, sizeof(fog));
+            cbAddresses[0] = perDrawCB->GetGPUVirtualAddress();
+            // b1 goes unused by dual_texture3d's own HLSL, but the root signature still declares 3
+            // contiguous CBV slots for this variant (see numCbvs=3 above) -- bind a valid (harmless,
+            // unread) address rather than leaving a root descriptor unset.
+            cbAddresses[1] = perDrawCB->GetGPUVirtualAddress();
+            cbAddresses[2] = fogCB->GetGPUVirtualAddress();
+
+            srvTextures[0] = params.texture0;
+            srvTextures[1] = params.texture1;
         }
         else if (needsLitTextured)
         {
@@ -1068,8 +1135,17 @@ namespace CNA::Internal::Backends::D3D12
             cbAddresses[1] = fogCB->GetGPUVirtualAddress();
         }
 
-        const D3D12_GPU_DESCRIPTOR_HANDLE srvHandle = hasTexture ? GetSrvGpuHandleForTextureEXT(params.texture0)
-                                                                  : D3D12_GPU_DESCRIPTOR_HANDLE{};
+        // DX-111 (dual_texture3d): each texture register (t0, t1, ...) is its own single-descriptor
+        // root table parameter now (D3D12RootSignatureCache's own updated layout -- see that file's
+        // doc comment for the real empirical finding that a single multi-descriptor table, populated
+        // via a fresh per-draw CopyDescriptorsSimple, sampled as all-zero under this machine's Wine+
+        // vkd3d-proton dev loop even though the CPU-side descriptor writes were independently
+        // verified correct). Every texture's own SRV -- created once, at texture-construction time --
+        // is bound directly, exactly like the original single-SRV path; no per-draw descriptor copy
+        // is needed for any variant, dual_texture3d included.
+        D3D12_GPU_DESCRIPTOR_HANDLE srvHandles[2]{};
+        for (int i = 0; i < numSrvs; ++i)
+            srvHandles[i] = GetSrvGpuHandleForTextureEXT(srvTextures[i]);
 
         ID3D12CommandAllocator* allocator = GetCommandAllocatorEXT(0);
         ID3D12GraphicsCommandList* cmdList = GetCommandListEXT();
@@ -1102,15 +1178,13 @@ namespace CNA::Internal::Backends::D3D12
 
         if (hasTexture)
         {
-            // The SRV descriptor table root parameter comes right after the numCbvs root CBV
-            // parameters (D3D12RootSignatureCache::GetOrCreate's own real parameter ordering).
-            // D3D12TextureBackend's own SRV already lives in this exact heap (it was allocated via
-            // this same backend's AllocateCbvSrvUavDescriptorEXT() at texture-creation time), so its
-            // GPU handle alone is a valid 1-descriptor table base -- no separate copy/consolidation
-            // step is needed for a single-SRV table.
+            // Each texture's own single-descriptor table root parameter comes right after the
+            // numCbvs root CBV parameters, at index numCbvs+i for texture i (D3D12RootSignatureCache
+            // ::GetOrCreate's own real parameter ordering -- see that file's doc comment).
             ID3D12DescriptorHeap* heaps[] = {cbvSrvUavHeap_.Get()};
             cmdList->SetDescriptorHeaps(1, heaps);
-            cmdList->SetGraphicsRootDescriptorTable(numCbvs, srvHandle);
+            for (int i = 0; i < numSrvs; ++i)
+                cmdList->SetGraphicsRootDescriptorTable(numCbvs + i, srvHandles[i]);
         }
 
         if (ib != nullptr)

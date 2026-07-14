@@ -217,6 +217,23 @@ namespace CNA::Internal::Backends::D3D12
         void UnbindOffscreenColorTargetEXT();
         /** @brief Whether an off-screen color target is currently bound (NOXNA diagnostics/tests). */
         [[nodiscard]] bool HasBoundColorTargetEXT() const { return boundColorResource_ != nullptr; }
+        /** @brief The currently bound off-screen color resource, or nullptr (NOXNA --
+         *  D3D12SpriteBatchBackend needs this for its own resource-state transition). */
+        [[nodiscard]] ID3D12Resource* GetBoundColorResourceEXT() const { return boundColorResource_; }
+        /** @brief The currently bound off-screen color target's RTV handle (NOXNA). */
+        [[nodiscard]] D3D12_CPU_DESCRIPTOR_HANDLE GetBoundColorRtvEXT() const { return boundColorRtv_; }
+        /** @brief The currently bound off-screen color target's DXGI_FORMAT (NOXNA -- PSO creation
+         *  bakes RTV format in, D3D12SpriteBatchBackend's own PSO needs this). */
+        [[nodiscard]] DXGI_FORMAT GetBoundColorFormatEXT() const { return boundColorFormat_; }
+        /** @brief The currently bound off-screen color target's width/height in pixels (NOXNA --
+         *  D3D12SpriteBatchBackend uses this as sprite2d's ViewportSize, and for the D3D12_VIEWPORT/
+         *  D3D12_RECT it must set up itself, exactly mirroring how DrawPrimitivesExImpl does it). */
+        [[nodiscard]] int GetBoundColorWidthEXT() const { return boundColorWidth_; }
+        [[nodiscard]] int GetBoundColorHeightEXT() const { return boundColorHeight_; } ///< @copydoc GetBoundColorWidthEXT
+        /** @brief The shared root-signature cache (NOXNA -- D3D12SpriteBatchBackend reuses the
+         *  (1,1,1) shape already established by alpha_test3d, same binding-slot layout sprite2d
+         *  needs: 1 CBV @ b0, 1 SRV @ t0, 1 static sampler @ s0). */
+        [[nodiscard]] D3D12RootSignatureCache& GetRootSignatureCacheEXT() { return rootSigCache_; }
 
     private:
         [[noreturn]] static void NotYetImplemented(const char* what);
