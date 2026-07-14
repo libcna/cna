@@ -99,7 +99,7 @@ API-surface changes.
 | `cmake-build-sdl` | SDL_Renderer | Clean as of 2026-07-10 (not rebuilt this session) |
 | `cmake-build-android` | SDL_Renderer (NDK) | Blocked — Task 920 (sibling `sharp-runtime` NDK build regressions) |
 | `cmake-build-d3d11` | D3D11 (Windows cross-compile, MinGW-w64) | **Verified clean 2026-07-13**: `CNA` and `cna_backend_graphics_d3dcommon`/`cna_backend_graphics_d3d11` build clean; `cna_test_d3d11_smoke`/`cna_test_d3d11_common` build, link, and run correctly under Wine+DXVK. **`CnaTests` itself does NOT build** for this backend — genuinely blocked (see §4), not silently skipped. |
-| `cmake-build-d3d12` | D3D12 (Windows cross-compile, MinGW-w64) | **Updated 2026-07-14 (DX-113 test-suite formalization closed)**: `CNA` and both D3D12 backend targets build clean. Device-lifetime resources (DX-102-105), resource-barrier state tracking, a PSO cache, a root-signature cache (DX-106-108), real `D3D12VertexBufferBackend`/`D3D12IndexBufferBackend`/`D3D12TextureBackend`/`D3D12TextureCubeBackend` (DX-109, buffers+2D+cube textures — render targets/3D textures still honestly deferred, 🟨) plus a real, tested `RecreateDeviceEXT()` device-removed recovery path (DX-110), and `Clear()`/`DrawColoredPrimitives()`/`DrawIndexedColoredPrimitives()`/`DrawPrimitivesEx()`/`DrawIndexedPrimitivesEx()`/`DrawInstancedPrimitivesEx()` are REAL for **all 10 of 10 stock variants** (`colored3d`/`textured3d`/`colored_textured3d`/`lit_textured3d`/`alpha_test3d`/`dual_texture3d`/`env_map3d`/`sprite2d`/`skinned3d`/`instanced3d`, DX-111 ✅) via a new `BindOffscreenColorTargetEXT()` NOXNA helper standing in for the still-broken swap chain, plus a real `D3D12SpriteBatchBackend` (DX-112 ✅). DX-113 audited that coverage against D3D11's own DX-80–85 methodology, added a dedicated fog on/off test and untracked-resource-throw tests, and mutation-verified Check M's discriminating power (🟨 — real, but 2 honest gaps: no state-object cache exists yet to test against, and fence back-pressure isn't measured under real GPU load). `D3D12_Smoke` CTest: **80/80 checks pass** through Wine+vkd3d-proton (off-screen only, unchanged — the CTest harness still uses `run-wine-vkd3d.sh`'s system-Wine prefix). **UPDATE 2026-07-14: swap-chain *creation* now genuinely works**, via a properly Proton-managed launch (`scripts/run-proton-vkd3d.sh`, new) — `cna_diag_d3d12_swapchain` reports `IsSwapChainAvailableEXT() = true`, reproduced twice including from a fresh prefix (`plan_dx.md` `DX-102`'s row has the full evidence). `Present()`/back-buffer rendering are still real, separate `NotYetImplemented()` follow-up work. `DX-115` (docs) is now also closed — Phase DX12 is fully done except `DX-114`, which stays `needs_human`. |
+| `cmake-build-d3d12` | D3D12 (Windows cross-compile, MinGW-w64) | **Updated 2026-07-14 (DX-113 test-suite formalization closed)**: `CNA` and both D3D12 backend targets build clean. Device-lifetime resources (DX-102-105), resource-barrier state tracking, a PSO cache, a root-signature cache (DX-106-108), real `D3D12VertexBufferBackend`/`D3D12IndexBufferBackend`/`D3D12TextureBackend`/`D3D12TextureCubeBackend` (DX-109, buffers+2D+cube textures — render targets/3D textures still honestly deferred, 🟨) plus a real, tested `RecreateDeviceEXT()` device-removed recovery path (DX-110), and `Clear()`/`DrawColoredPrimitives()`/`DrawIndexedColoredPrimitives()`/`DrawPrimitivesEx()`/`DrawIndexedPrimitivesEx()`/`DrawInstancedPrimitivesEx()` are REAL for **all 10 of 10 stock variants** (`colored3d`/`textured3d`/`colored_textured3d`/`lit_textured3d`/`alpha_test3d`/`dual_texture3d`/`env_map3d`/`sprite2d`/`skinned3d`/`instanced3d`, DX-111 ✅) via a new `BindOffscreenColorTargetEXT()` NOXNA helper standing in for the still-broken swap chain, plus a real `D3D12SpriteBatchBackend` (DX-112 ✅). DX-113 audited that coverage against D3D11's own DX-80–85 methodology, added a dedicated fog on/off test and untracked-resource-throw tests, and mutation-verified Check M's discriminating power (🟨 — real, but 2 honest gaps: no state-object cache exists yet to test against, and fence back-pressure isn't measured under real GPU load). `D3D12_Smoke` CTest: **80/80 checks pass** through Wine+vkd3d-proton (off-screen only, unchanged — the CTest harness still uses `run-wine-vkd3d.sh`'s system-Wine prefix). **UPDATE 2026-07-14: swap-chain *creation* now genuinely works**, via a properly Proton-managed launch (`scripts/run-proton-vkd3d.sh`, new) — `cna_diag_d3d12_swapchain` reports `IsSwapChainAvailableEXT() = true`, reproduced twice including from a fresh prefix (`plan_dx.md` `DX-102`'s row has the full evidence). `Present()`/back-buffer rendering are still real, separate `NotYetImplemented()` follow-up work. `DX-115` (docs) is now also closed — Phase DX12 is fully done except `DX-114`, which stays `needs_human`. **FINAL UPDATE 2026-07-14: Phase DX13 (`DX-116`–`DX-123`) is now also fully closed** — real `Present()`/back-buffer rendering, render targets/MRT, runtime-settable state objects, per-slot samplers, occlusion queries, custom `ShaderEffect`, `Texture3D`, and `TextureCube::GetData()` readback are all real now. `D3D12_Smoke` CTest: **125/125 checks pass**. See `plan_dx.md`'s Phase DX13 section for full detail; Phase DX14/DX15 are the active work now. |
 
 The `cna_demo_xact` example fails to build on every backend (missing `examples/demo_xact/Content`
 directory in this checkout) — cosmetic, pre-existing, not a CNA bug, do not chase it (§9).
@@ -310,23 +310,25 @@ real too (reusing the same shared root signature), but is honestly **not** indep
 CTest-proven — it needs a real `GraphicsDevice`, whose constructor unconditionally creates a real
 window for any non-Headless/Software backend, the same crash-prone path `DX-100`/`DX-102` already
 found for D3D12 outside a Proton-managed launch (confirmed by reading `GraphicsDevice.cpp`
-directly). **`DX-122` (`D3D12Texture3DBackend`) is also closed**: a real byte-exact sub-volume
-upload/readback round-trip (2×2×2 sub-cube at an off-center `(1,1,0)` offset within a 4×4×2
-volume, different solid color per Z slice, genuinely exercising X/Y/Z offset math and per-slice
-pitch). `D3D12_Smoke` CTest (off-screen only): **122/122 checks**, all 10/10 stock shader
-variants + `SpriteBatch` + device-removed recovery + render targets/MRT + real state objects + real
-per-slot samplers + real occlusion queries + real custom `ShaderEffect` + real `Texture3D`. D3D12
-still genuinely lacks (real, scoped, documented, not silently dropped — see
-`docs/d3d12-backend.md`'s "Known limitations" and `plan_dx.md`'s Phase DX13): MSAA/mip-chain render
-targets and `TextureCube::GetData()` real readback (`DX-123`)
-(`D3D12SpriteBatchBackend`'s own `SetSamplerFilter`/`SetSamplerAddressMode` wiring to the new
-sampler system is `DX-133`, now unblocked). **Phase DX13 (D3D12 functional completion,
-`DX-116`–`DX-122` closed, `DX-123` open), Phase DX14 (D3D11 verification hardening), and
-Phase DX15 (remaining EasyGL-parity gaps) were added 2026-07-14 and are
-now authorized and actively in progress** — see
-`plan_dx.md` for the full task list and ordering rationale. Outside the D3D plan, the standing
-backlog (Phase 79's 153-sample `../cna-samples` re-audit, Task 945's HLSL→GLSL tooling decision,
-Task 952's deferred Bgfx bug) is unchanged — see §8/§9.
+directly). **`DX-122` (`D3D12Texture3DBackend`) and `DX-123` (`D3D12TextureCubeBackend::GetData()`
+real readback) are also closed — Phase DX13 (`DX-116`–`DX-123`) is now FULLY complete.** `DX-122`:
+a real byte-exact sub-volume upload/readback round-trip (2×2×2 sub-cube at an off-center `(1,1,0)`
+offset within a 4×4×2 volume, different solid color per Z slice, genuinely exercising X/Y/Z offset
+math and per-slice pitch). `DX-123`: real per-face, per-sub-rect readback (two different faces at
+two different offsets, each byte-exact; a genuinely untouched region reads real zero-initialized
+GPU content, not stale CPU-buffer poison — a live-readback proof, not just "some data came back").
+`D3D12_Smoke` CTest (off-screen only): **125/125 checks**, all 10/10 stock shader variants +
+`SpriteBatch` + device-removed recovery + render targets/MRT + real state objects + real per-slot
+samplers + real occlusion queries + real custom `ShaderEffect` + real `Texture3D` + real
+`TextureCube` readback. D3D12 still genuinely lacks (real, scoped, documented, not silently dropped
+— see `docs/d3d12-backend.md`'s "Known limitations" and `plan_dx.md`'s Phase DX15): MSAA/mip-chain
+render targets (`D3D12SpriteBatchBackend`'s own `SetSamplerFilter`/`SetSamplerAddressMode` wiring
+to the new sampler system, `DX-133`, is now unblocked but not yet done). **Phase DX13 is fully
+closed. Phase DX14 (D3D11 verification hardening) and Phase DX15 (remaining EasyGL-parity gaps)
+were added 2026-07-14 and are authorized and actively in progress** — see `plan_dx.md` for the full
+task list and ordering rationale. Outside the D3D plan, the standing backlog (Phase 79's 153-sample
+`../cna-samples` re-audit, Task 945's HLSL→GLSL tooling decision, Task 952's deferred Bgfx bug) is
+unchanged — see §8/§9.
 
 **One real, separate, documented problem**: the full `CnaTests` GTest suite does not build under
 `CNA_GRAPHICS_BACKEND=D3D11` (and, by the same root cause, `D3D12`).
@@ -484,17 +486,16 @@ desktop session with real GPU access — re-verify before assuming either claim 
 
 ## 8. Next smallest tasks
 
-1. **`plan_dx.md`'s original Phase DX1–DX12 scope is fully closed for what this Debian dev
-   environment can prove; Phase DX13/DX14/DX15 (authorized 2026-07-14) are the active work now.**
-   D3D11 (Phase DX1–DX11) and D3D12 (Phase DX12, `DX-100`–`DX-113`/`DX-115`) both have their
-   complete original-scope software/logic layer done and Wine/Proton-verified —
-   `D3D11_Smoke`+`D3D11_Common` 96+ checks, `D3D12_Smoke` 80/80 checks (off-screen), and D3D12's
-   swap chain + `Present()` (`DX-116`) now genuinely work through a real Proton launch. The only two
-   rows in Phase DX1–DX12 still open are `DX-90`/`DX-91` (D3D11 real-Windows checklist) and `DX-114`
-   (D3D12 real-Windows checklist) — both `needs_human`, requiring an actual Windows machine with a
-   real GPU, not available here; if one becomes available, start there per `plan_dx.md`'s own
-   checklists. **Current active work**: Phase DX13 (`DX-117` onward — render targets, state
-   objects, samplers, occlusion queries, custom effects), Phase DX14 (D3D11 verification
+1. **`plan_dx.md`'s original Phase DX1–DX12 scope AND Phase DX13 (D3D12 functional completion) are
+   both fully closed. Phase DX14/DX15 (authorized 2026-07-14) are the active work now.**
+   D3D11 (Phase DX1–DX11) and D3D12 (Phase DX12, `DX-100`–`DX-113`/`DX-115`, plus Phase DX13,
+   `DX-116`–`DX-123`) both have their complete software/logic layer done and Wine/Proton-verified —
+   `D3D11_Smoke`+`D3D11_Common` 96+ checks, `D3D12_Smoke` **125/125 checks** (off-screen), and
+   D3D12's swap chain + `Present()` (`DX-116`) now genuinely work through a real Proton launch. The
+   only two rows in Phase DX1–DX12 still open are `DX-90`/`DX-91` (D3D11 real-Windows checklist) and
+   `DX-114` (D3D12 real-Windows checklist) — both `needs_human`, requiring an actual Windows machine
+   with a real GPU, not available here; if one becomes available, start there per `plan_dx.md`'s own
+   checklists. **Current active work**: Phase DX14 (D3D11 verification
    hardening), and Phase DX15 (remaining EasyGL-parity gaps) — see `plan_dx.md` for the full task
    list, priority ordering, and per-row dependencies
    below for other independent work.

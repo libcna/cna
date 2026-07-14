@@ -2560,6 +2560,51 @@ int main()
               "off-center sub-volume upload, including the per-Z-slice color difference (plan_dx.md DX-122)");
     }
 
+    // ---- plan_dx.md DX-123: D3D12TextureCubeBackend::GetData() -- real readback, mirroring
+    // Texture3D's own off-center sub-rect + face-selectivity proof (not just full-face). ----
+    {
+        D3D12TextureCubeBackend ddCube(&backend, 8, false, 0);
+
+        // Two distinctly-colored 4x4 sub-rects, uploaded to two different faces at two different
+        // offsets -- proves GetData() reads the right FACE (not just the right texture) and the
+        // right SUB-RECT (not just face 0 in full).
+        std::vector<uint8_t> face2Data(4 * 4 * 4);
+        std::vector<uint8_t> face4Data(4 * 4 * 4);
+        for (int i = 0; i < 4 * 4; ++i)
+        {
+            face2Data[i * 4 + 0] = 200; face2Data[i * 4 + 1] = 50;
+            face2Data[i * 4 + 2] = 10;  face2Data[i * 4 + 3] = 255;
+            face4Data[i * 4 + 0] = 5;   face4Data[i * 4 + 1] = 250;
+            face4Data[i * 4 + 2] = 100; face4Data[i * 4 + 3] = 255;
+        }
+        ddCube.SetData(/*face=*/2, /*level=*/0, /*x=*/4, /*y=*/0, 4, 4, face2Data.data(), static_cast<int>(face2Data.size()));
+        ddCube.SetData(/*face=*/4, /*level=*/0, /*x=*/0, /*y=*/4, 4, 4, face4Data.data(), static_cast<int>(face4Data.size()));
+
+        std::vector<uint8_t> readbackFace2(face2Data.size(), 0);
+        std::vector<uint8_t> readbackFace4(face4Data.size(), 0);
+        ddCube.GetData(/*face=*/2, /*level=*/0, /*x=*/4, /*y=*/0, 4, 4, readbackFace2.data(), static_cast<int>(readbackFace2.size()));
+        ddCube.GetData(/*face=*/4, /*level=*/0, /*x=*/0, /*y=*/4, 4, 4, readbackFace4.data(), static_cast<int>(readbackFace4.size()));
+
+        Check(readbackFace2 == face2Data,
+              "DD1: D3D12TextureCubeBackend::GetData() round-trips EXACT bytes for a real off-center "
+              "sub-rect upload on face 2 (plan_dx.md DX-123)");
+        Check(readbackFace4 == face4Data,
+              "DD2: GetData() on a DIFFERENT face (4) at a DIFFERENT offset reads its own distinct "
+              "content, not face 2's -- proves real per-face subresource selection, not just "
+              "\"some data came back\" (plan_dx.md DX-123)");
+
+        // A never-written region of face 2 must read back as the texture's real zero-initialized
+        // GPU content, not stale/uninitialized CPU memory -- a genuine live-GPU readback proof.
+        std::vector<uint8_t> untouchedRegion(4 * 4 * 4, 0xAB); // poison the CPU buffer first
+        ddCube.GetData(/*face=*/2, /*level=*/0, /*x=*/0, /*y=*/0, 4, 4, untouchedRegion.data(), static_cast<int>(untouchedRegion.size()));
+        bool untouchedIsZero = true;
+        for (std::size_t i = 0; i < untouchedRegion.size(); ++i)
+            if (untouchedRegion[i] != 0) { untouchedIsZero = false; break; }
+        Check(untouchedIsZero,
+              "DD3: GetData() on face 2's UNTOUCHED region reads real zero-initialized GPU content, "
+              "not the CPU buffer's poison value -- confirms this is a genuine live readback (plan_dx.md DX-123)");
+    }
+
     std::printf("\n%s: %d failure(s)\n", g_failures == 0 ? "RESULT: ALL PASS" : "RESULT: FAILURES", g_failures);
     return g_failures == 0 ? 0 : 1;
 }

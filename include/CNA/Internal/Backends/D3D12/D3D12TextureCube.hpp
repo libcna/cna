@@ -14,10 +14,11 @@
 // to `level + face*mipLevels_`, computed directly.
 //
 // Mirrors D3D11TextureCubeBackend's (DX-41) own XNA-level behavior contract (SetData face/level/
-// sub-rect semantics, 6-face D3D11_RESOURCE_MISC_TEXTURECUBE-equivalent layout) -- GetData() is left
-// at ITextureCubeBackend's own default no-op (real readback was not needed by DX-111's own env_map3d
-// pixel-readback proof, which reads the render-target back, not the cube texture itself; a genuine,
-// honest scope gap versus D3D11's real GetData(), not silently claimed equivalent).
+// sub-rect semantics, 6-face D3D11_RESOURCE_MISC_TEXTURECUBE-equivalent layout). GetData() (DX-123)
+// mirrors D3D11TextureCubeBackend's own real readback -- a D3D12_HEAP_TYPE_READBACK buffer +
+// CopyTextureRegion (with a real D3D12_BOX for the requested sub-rectangle) + Map, the same
+// discipline D3D12Texture3DBackend::GetData already established, generalized with this file's own
+// face-aware subresource-index formula.
 
 #include "../Common/IGraphicsBackend.hpp"
 
@@ -41,6 +42,9 @@ namespace CNA::Internal::Backends::D3D12
 
         void SetData(int face, int level, int x, int y, int w, int h,
                      const void* data, int dataLength) override;
+
+        void GetData(int face, int level, int x, int y, int w, int h,
+                     void* data, int dataLength) const override;
 
         [[nodiscard]] int GetSizeEXT() const { return size_; }
         [[nodiscard]] int GetMipLevelsEXT() const { return mipLevels_; }

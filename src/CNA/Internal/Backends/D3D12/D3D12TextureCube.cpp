@@ -173,4 +173,88 @@ namespace CNA::Internal::Backends::D3D12
             throw std::runtime_error("D3D12TextureCubeBackend: command list Close failed, hr=" + FormatHr(hr));
         backend_->ExecuteCommandListAndWaitEXT(cmdList); // synchronous -- staging is safe to release after this
     }
+
+    void D3D12TextureCubeBackend::GetData(int face, int level, int x, int y, int w, int h,
+                                          void* data, int /*dataLength*/) const
+    {
+        if (level < 0 || level >= mipLevels_ || face < 0 || face >= 6 || w <= 0 || h <= 0) return;
+
+        const UINT rowPitch = AlignUp(static_cast<UINT>(w) * 4, D3D12_TEXTURE_DATA_PITCH_ALIGNMENT);
+        const UINT64 readbackBufferSize = static_cast<UINT64>(rowPitch) * static_cast<UINT64>(h);
+
+        D3D12_HEAP_PROPERTIES readbackHeapProps{};
+        readbackHeapProps.Type = D3D12_HEAP_TYPE_READBACK;
+
+        D3D12_RESOURCE_DESC bufDesc{};
+        bufDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+        bufDesc.Width = readbackBufferSize;
+        bufDesc.Height = 1;
+        bufDesc.DepthOrArraySize = 1;
+        bufDesc.MipLevels = 1;
+        bufDesc.Format = DXGI_FORMAT_UNKNOWN;
+        bufDesc.SampleDesc.Count = 1;
+        bufDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+
+        ComPtr<ID3D12Resource> readback;
+        HRESULT hr = backend_->GetDeviceEXT()->CreateCommittedResource(
+            &readbackHeapProps, D3D12_HEAP_FLAG_NONE, &bufDesc,
+            D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(readback.GetAddressOf()));
+        if (FAILED(hr)) return;
+
+        D3D12_TEXTURE_COPY_LOCATION dst{};
+        dst.pResource = readback.Get();
+        dst.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+        dst.PlacedFootprint.Offset = 0;
+        dst.PlacedFootprint.Footprint.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        dst.PlacedFootprint.Footprint.Width = static_cast<UINT>(w);
+        dst.PlacedFootprint.Footprint.Height = static_cast<UINT>(h);
+        dst.PlacedFootprint.Footprint.Depth = 1;
+        dst.PlacedFootprint.Footprint.RowPitch = rowPitch;
+
+        // Same face/level -> subresource formula SetData() already established (single-plane,
+        // ArraySize=6 collapses D3D12CalcSubresource() to level + face*mipLevels_).
+        const UINT subresource = static_cast<UINT>(level) + static_cast<UINT>(face) * static_cast<UINT>(mipLevels_);
+
+        D3D12_TEXTURE_COPY_LOCATION src{};
+        src.pResource = texture_.Get();
+        src.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+        src.SubresourceIndex = subresource;
+
+        D3D12_BOX srcBox{};
+        srcBox.left = static_cast<UINT>(x);
+        srcBox.top = static_cast<UINT>(y);
+        srcBox.front = 0;
+        srcBox.right = static_cast<UINT>(x + w);
+        srcBox.bottom = static_cast<UINT>(y + h);
+        srcBox.back = 1;
+
+        ID3D12CommandAllocator* allocator = backend_->GetCommandAllocatorEXT(0);
+        ID3D12GraphicsCommandList* cmdList = backend_->GetCommandListEXT();
+        allocator->Reset();
+        cmdList->Reset(allocator, nullptr);
+
+        auto& tracker = backend_->GetResourceStateTrackerEXT();
+        const D3D12_RESOURCE_STATES priorState = tracker.GetTrackedStateEXT(texture_.Get());
+        tracker.TransitionTo(cmdList, texture_.Get(), D3D12_RESOURCE_STATE_COPY_SOURCE);
+        cmdList->CopyTextureRegion(&dst, 0, 0, 0, &src, &srcBox);
+        tracker.TransitionTo(cmdList, texture_.Get(), priorState); // restore -- this is a read-only readback
+
+        hr = cmdList->Close();
+        if (FAILED(hr)) return;
+        backend_->ExecuteCommandListAndWaitEXT(cmdList);
+
+        uint8_t* mapped = nullptr;
+        const D3D12_RANGE mapRange{0, static_cast<SIZE_T>(readbackBufferSize)};
+        if (FAILED(readback->Map(0, &mapRange, reinterpret_cast<void**>(&mapped)))) return;
+
+        uint8_t* out = static_cast<uint8_t*>(data);
+        for (int row = 0; row < h; ++row)
+        {
+            const uint8_t* srcRow = mapped + static_cast<std::size_t>(row) * rowPitch;
+            uint8_t* dstRow = out + static_cast<std::size_t>(row) * static_cast<std::size_t>(w) * 4;
+            std::memcpy(dstRow, srcRow, static_cast<std::size_t>(w) * 4);
+        }
+        const D3D12_RANGE writtenRange{0, 0};
+        readback->Unmap(0, &writtenRange);
+    }
 }
