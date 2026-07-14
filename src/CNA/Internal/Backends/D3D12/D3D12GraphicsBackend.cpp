@@ -1098,9 +1098,22 @@ namespace CNA::Internal::Backends::D3D12
                   depth, stencil, "ClearColorDepthAndStencil");
     }
 
-    void D3D12GraphicsBackend::SetDepthTestEnabled(bool) { NotYetImplemented("SetDepthTestEnabled"); }
-    void D3D12GraphicsBackend::SetBlendEnabled(bool) { NotYetImplemented("SetBlendEnabled"); }
-    void D3D12GraphicsBackend::SetDepthWriteEnabled(bool) { NotYetImplemented("SetDepthWriteEnabled"); }
+    // DX-132/DX-148: these three legacy per-flag setters were still NotYetImplemented() THROWS, so
+    // any game (or shared XNA code, e.g. ModelMesh::Draw()'s own device setup) that called
+    // GraphicsDevice::SetDepthTestEnabled() against D3D12 simply crashed. Found by DX-148's own
+    // Model test, which is the first thing in this project to ever drive the shared GraphicsDevice
+    // path against this backend.
+    //
+    // Depth test/write map cleanly onto the real tracked PSO state DX-118 established, so they are
+    // implemented for real rather than stubbed. SetBlendEnabled has no such clean mapping and is a
+    // deliberate no-op, matching D3D11GraphicsBackend's own established convention for all three:
+    // XNA's real blend configuration always arrives through ApplyBlendState() (from
+    // GraphicsDevice::setBlendStateProperty), and a bare "blend on" carries no source/destination
+    // factors to enable it *with* -- D3D12's PSO derives BlendEnable from those factors
+    // (D3D12PipelineStateCache::DeriveBlendEnable), so there is nothing honest to do here.
+    void D3D12GraphicsBackend::SetDepthTestEnabled(bool enabled) { currentDepthEnable_ = enabled; }
+    void D3D12GraphicsBackend::SetBlendEnabled(bool enabled) { (void)enabled; }
+    void D3D12GraphicsBackend::SetDepthWriteEnabled(bool enabled) { currentDepthWriteEnable_ = enabled; }
 
     void D3D12GraphicsBackend::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
                                                 int colorDstBlend, int alphaDstBlend,

@@ -112,10 +112,45 @@
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "CNA/Internal/Graphics/ImageData.hpp"
 
+// plan_dx.md DX-132/DX-148/DX-140: the XNA-level public API (SpriteFont, Model, Texture2D::
+// FromStream/SaveAsPng) needs a real GraphicsDevice. Until PresentationParameters::HeadlessEXT
+// landed, constructing one for D3D12 forced a real window -> a real swap chain -> the crash path
+// this dev loop's plain Wine cannot survive (DX-100/DX-102). HeadlessEXT makes a genuinely
+// windowless D3D12 GraphicsDevice possible, so these three rows are testable in the ROUTINE
+// (plain-Wine) D3D12 CTest, exactly like every other check in this file.
+#include "Microsoft/Xna/Framework/Color.hpp"
+#include "Microsoft/Xna/Framework/Matrix.hpp"
+#include "Microsoft/Xna/Framework/Rectangle.hpp"
+#include "Microsoft/Xna/Framework/Vector2.hpp"
+#include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsAdapter.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
+#include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Model.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ModelBone.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ModelMesh.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ModelMeshPart.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteEffects.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteFont.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
+#include "System/IO/MemoryStream.hpp"
+
 #include <array>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <functional>
+#include <memory>
+#include <optional>
 #include <vector>
 
 using CNA::Internal::Backends::GraphicsBackendCreateArgs;
@@ -3490,6 +3525,277 @@ int main()
 
         backend.ApplyDepthStencilState(false, false, 2, false, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, 0);
         backend.SetRenderTarget2D(nullptr);
+    }
+
+    // ================================================================================================
+    // plan_dx.md DX-132 / DX-148 / DX-140: the XNA-level public API, through a REAL, WINDOWLESS
+    // GraphicsDevice (PresentationParameters::HeadlessEXT).
+    //
+    // Everything above this point drives the raw IGraphicsBackend directly. SpriteFont, Model and
+    // Texture2D::FromStream/SaveAsPng cannot be reached that way -- they are built ON TOP of
+    // GraphicsDevice (SpriteBatch::DrawString's glyph layout, ModelMesh::Draw's
+    // SetVertexBuffer/setIndices/DrawIndexedPrimitives + EffectPass::Apply orchestration, and
+    // Texture2D's own device-bound construction), and a GraphicsDevice used to mean a real window.
+    //
+    // The drawing is done entirely through the real public XNA API -- that is what is under test.
+    // Only the READBACK reaches into the backend (via RenderTarget2D::GetRenderTargetBackend()), for
+    // the same reason every other check in this file does: there is no back buffer to
+    // GetBackBufferData() from without a swap chain, and the readback mechanism itself is not what
+    // these rows are testing.
+    // ================================================================================================
+    {
+        namespace X = Microsoft::Xna::Framework;
+        namespace XG = Microsoft::Xna::Framework::Graphics;
+
+        constexpr int kW = 32, kH = 32;
+
+        XG::PresentationParameters pp;
+        pp.setBackBufferWidthProperty(kW);
+        pp.setBackBufferHeightProperty(kH);
+        pp.setHeadlessEXTProperty(true); // <-- the whole point: no window, no swap chain, plain Wine
+        XG::GraphicsAdapter& adapter = XG::GraphicsAdapter::getDefaultAdapterProperty();
+        XG::GraphicsDevice dev(adapter, XG::GraphicsProfile::HiDef, pp);
+
+        Check(true, "KK0: a real, WINDOWLESS D3D12 GraphicsDevice constructs (PresentationParameters::"
+                    "HeadlessEXT) -- no SDL video subsystem, no window, no swap chain, under plain Wine "
+                    "(plan_dx.md DX-132/DX-148/DX-140)");
+
+        // The device's own backend -- the RenderTarget2D below belongs to THIS backend, not to the
+        // standalone one the rest of this file uses, so readback must go through it.
+        auto* devBackend = dynamic_cast<D3D12GraphicsBackend*>(&dev.GetBackend());
+        Check(devBackend != nullptr,
+              "KK1: the windowless GraphicsDevice really is backed by a D3D12GraphicsBackend");
+
+        // Renders whatever `drawFn` draws into a fresh RenderTarget2D and returns its RGBA pixels.
+        auto renderToTarget = [&](const X::Color& clearColor,
+                                  const std::function<void()>& drawFn) -> std::vector<uint8_t>
+        {
+            XG::RenderTarget2D rt(dev, kW, kH);
+            dev.SetRenderTarget(&rt);
+            dev.Clear(clearColor);
+            drawFn();
+            dev.SetRenderTarget(nullptr);
+
+            auto* rtb = dynamic_cast<D3D12RenderTargetBackend*>(rt.GetRenderTargetBackend());
+            if (!rtb || !devBackend) return {};
+            return ReadBackRenderTargetFull(*devBackend, rtb->GetColorResourceEXT(), kW, kH);
+        };
+        auto pixelAt = [&](const std::vector<uint8_t>& px, int x, int y) -> X::Color
+        {
+            const std::size_t i = (static_cast<std::size_t>(y) * kW + x) * 4;
+            if (i + 3 >= px.size()) return X::Color(0, 0, 0, 0);
+            return X::Color(px[i + 0], px[i + 1], px[i + 2], px[i + 3]);
+        };
+        auto isWhite = [](const X::Color& c) {
+            return c.getRProperty() > 200 && c.getGProperty() > 200 && c.getBProperty() > 200;
+        };
+        auto isBlack = [](const X::Color& c) {
+            return c.getRProperty() < 60 && c.getGProperty() < 60 && c.getBProperty() < 60;
+        };
+
+        const X::Color kBlack(0, 0, 0, 255);
+
+        // ---- DX-132: SpriteFont -- real glyph placement, spacing, newline, flip. ----
+        // Same minimal hand-built font fixture EasyGL's own pixel tests use (Tasks 424-429): an 8x8
+        // solid-white atlas per glyph, zero cropping offset, zero left/right kerning bearing, so a
+        // glyph's destination rect maps exactly to (position + accumulated advance, 8, 8) and any
+        // placement error is a hard pixel difference, not a subtle blend.
+        {
+            XG::Texture2D atlas(dev, 16, 8);            // two 8x8 glyph cells side by side
+            std::vector<X::Color> atlasPx(16 * 8, X::Color(255, 255, 255, 255));
+            atlas.SetData(atlasPx.data(), 16 * 8);
+
+            std::vector<X::Rectangle> glyphBounds = { X::Rectangle(0, 0, 8, 8), X::Rectangle(8, 0, 8, 8) };
+            std::vector<X::Rectangle> cropping    = { X::Rectangle(0, 0, 8, 8), X::Rectangle(0, 0, 8, 8) };
+            std::vector<SharpRuntime::charcs> chars = { u'A', u'B' };
+            std::vector<X::Vector3> kerning = { X::Vector3(0.0f, 8.0f, 0.0f), X::Vector3(0.0f, 8.0f, 0.0f) };
+            XG::SpriteFont font(atlas, glyphBounds, cropping, chars,
+                                /*lineSpacing=*/8, /*spacing=*/0.0f, kerning,
+                                std::optional<SharpRuntime::charcs>(std::nullopt));
+
+            XG::SpriteBatch sb(dev);
+
+            // (a) Single glyph at (4,4) -> occupies exactly [4,12) x [4,12).
+            auto pxGlyph = renderToTarget(kBlack, [&] {
+                dev.setBlendStateProperty(XG::BlendState::Opaque);
+                sb.Begin();
+                sb.DrawString(font, "A", X::Vector2(4.0f, 4.0f), X::Color::White);
+                sb.End();
+            });
+            const bool glyphPlaced = !pxGlyph.empty()
+                && isWhite(pixelAt(pxGlyph, 8, 8))    // inside
+                && isBlack(pixelAt(pxGlyph, 3, 8))    // just left of the left edge
+                && isBlack(pixelAt(pxGlyph, 12, 8))   // just right of the right edge
+                && isBlack(pixelAt(pxGlyph, 8, 3))    // just above the top edge
+                && isBlack(pixelAt(pxGlyph, 8, 12));  // just below the bottom edge
+            Check(glyphPlaced,
+                  "KK2: SpriteBatch::DrawString() places a single glyph at EXACTLY its destination rect "
+                  "(4,4,8,8) -- checked inside plus all four edge midpoints, so an X-only or Y-only "
+                  "misplacement cannot pass (plan_dx.md DX-132)");
+
+            // (b) Two glyphs -> the second must advance by exactly one glyph width (8px).
+            auto pxSpacing = renderToTarget(kBlack, [&] {
+                dev.setBlendStateProperty(XG::BlendState::Opaque);
+                sb.Begin();
+                sb.DrawString(font, "AB", X::Vector2(0.0f, 0.0f), X::Color::White);
+                sb.End();
+            });
+            const bool spacingOk = !pxSpacing.empty()
+                && isWhite(pixelAt(pxSpacing, 4, 4))    // glyph 'A' cell [0,8)
+                && isWhite(pixelAt(pxSpacing, 12, 4))   // glyph 'B' cell [8,16) -- advanced by 8
+                && isBlack(pixelAt(pxSpacing, 20, 4));  // nothing beyond the second glyph
+            Check(spacingOk,
+                  "KK3: DrawString(\"AB\") advances the SECOND glyph by exactly one glyph width -- both "
+                  "cells are drawn and nothing spills past them (plan_dx.md DX-132)");
+
+            // (c) Newline -> the second line must drop by exactly lineSpacing (8px), back to x=0.
+            auto pxNewline = renderToTarget(kBlack, [&] {
+                dev.setBlendStateProperty(XG::BlendState::Opaque);
+                sb.Begin();
+                sb.DrawString(font, "A\nA", X::Vector2(0.0f, 0.0f), X::Color::White);
+                sb.End();
+            });
+            const bool newlineOk = !pxNewline.empty()
+                && isWhite(pixelAt(pxNewline, 4, 4))    // line 1, y in [0,8)
+                && isWhite(pixelAt(pxNewline, 4, 12))   // line 2, y in [8,16) -- dropped by lineSpacing
+                && isBlack(pixelAt(pxNewline, 12, 4));  // line 1 has ONE glyph -- x reset, not advanced
+            Check(newlineOk,
+                  "KK4: DrawString(\"A\\nA\") drops the second line by exactly lineSpacing AND resets x "
+                  "to the start -- a newline that only did one of the two cannot pass (plan_dx.md DX-132)");
+
+            // (d) SpriteEffects::FlipVertically -- an ASYMMETRIC glyph is required, otherwise a flip of
+            // a solid block is indistinguishable from no flip at all. Rebuild the atlas so glyph 'A'
+            // is white only in its TOP half; flipped, the white must land in the BOTTOM half.
+            std::vector<X::Color> halfPx(16 * 8, X::Color(0, 0, 0, 255));
+            for (int y = 0; y < 4; ++y)
+                for (int x = 0; x < 8; ++x)
+                    halfPx[static_cast<std::size_t>(y) * 16 + x] = X::Color(255, 255, 255, 255);
+            XG::Texture2D atlasHalf(dev, 16, 8);
+            atlasHalf.SetData(halfPx.data(), 16 * 8);
+            XG::SpriteFont fontHalf(atlasHalf, glyphBounds, cropping, chars,
+                                    8, 0.0f, kerning, std::optional<SharpRuntime::charcs>(std::nullopt));
+
+            auto pxNoFlip = renderToTarget(kBlack, [&] {
+                dev.setBlendStateProperty(XG::BlendState::Opaque);
+                sb.Begin();
+                sb.DrawString(fontHalf, "A", X::Vector2(0.0f, 0.0f), X::Color::White,
+                              0.0f, X::Vector2(0.0f, 0.0f), 1.0f, XG::SpriteEffects::None, 0.0f);
+                sb.End();
+            });
+            auto pxFlip = renderToTarget(kBlack, [&] {
+                dev.setBlendStateProperty(XG::BlendState::Opaque);
+                sb.Begin();
+                sb.DrawString(fontHalf, "A", X::Vector2(0.0f, 0.0f), X::Color::White,
+                              0.0f, X::Vector2(0.0f, 0.0f), 1.0f, XG::SpriteEffects::FlipVertically, 0.0f);
+                sb.End();
+            });
+            const bool noFlipOk = !pxNoFlip.empty()
+                && isWhite(pixelAt(pxNoFlip, 4, 2))   // top half white
+                && isBlack(pixelAt(pxNoFlip, 4, 6));  // bottom half black
+            const bool flipOk = !pxFlip.empty()
+                && isBlack(pixelAt(pxFlip, 4, 2))     // top half now black
+                && isWhite(pixelAt(pxFlip, 4, 6));    // bottom half now white -- genuinely flipped
+            Check(noFlipOk && flipOk,
+                  "KK5: SpriteEffects::FlipVertically genuinely flips a glyph -- an asymmetric (top-half-"
+                  "white) glyph lands top-half-white unflipped and bottom-half-white flipped, so a no-op "
+                  "flip cannot pass (plan_dx.md DX-132)");
+        }
+
+        // ---- DX-148: Model / ModelMesh / ModelMeshPart / ModelBone runtime API. ----
+        // Drives ModelMesh::Draw()'s REAL orchestration (SetVertexBuffer + setIndicesProperty +
+        // DrawIndexedPrimitives + EffectPass::Apply through a bone-transformed world matrix), not a
+        // raw VertexBuffer draw wearing a Model label -- which is exactly what DX-148's own row warns
+        // against, and would prove nothing new.
+        {
+            const X::Color red(255, 0, 0, 255);
+            const XG::VertexPositionColor verts[4] = {
+                { X::Vector3(-1.0f,  1.0f, 0.0f), red },
+                { X::Vector3(-1.0f, -1.0f, 0.0f), red },
+                { X::Vector3( 1.0f, -1.0f, 0.0f), red },
+                { X::Vector3( 1.0f,  1.0f, 0.0f), red },
+            };
+            XG::VertexBuffer vb(dev, 4);
+            vb.SetData(verts, 4);
+            const uint16_t indices[6] = { 0, 1, 2, 0, 2, 3 };
+            XG::IndexBuffer ib(dev, 6);
+            ib.SetData(indices, 6);
+
+            XG::BasicEffect fx(dev);
+            fx.VertexColorEnabled = true;
+
+            // A real 2-bone hierarchy: root -> child. Model::Draw multiplies the mesh's absolute
+            // bone transform into the world matrix, so this genuinely exercises the bone path.
+            XG::ModelBone bone0(0, "root");
+            XG::ModelBone bone1(1, "child");
+            bone0.AddChild(&bone1);
+
+            XG::ModelMeshPart part(&vb, &ib, /*numVertices=*/4, /*primitiveCount=*/2,
+                                   /*startIndex=*/0, /*vertexOffset=*/0);
+            XG::ModelMesh mesh(&dev, { &part });
+            part.setEffectProperty(&fx);
+            XG::Model model(&dev, { &bone0, &bone1 }, { &mesh });
+
+            auto pxModel = renderToTarget(X::Color(0, 255, 0, 255), [&] {
+                dev.SetDepthTestEnabled(false);
+                dev.setBlendStateProperty(XG::BlendState::Opaque);
+                dev.setRasterizerStateProperty(XG::RasterizerState::CullNone);
+                model.Draw(X::Matrix::getIdentityProperty(),
+                           X::Matrix::getIdentityProperty(),
+                           X::Matrix::getIdentityProperty());
+            });
+            const X::Color centre = pixelAt(pxModel, kW / 2, kH / 2);
+            Check(!pxModel.empty()
+                      && centre.getRProperty() >= 200
+                      && centre.getGProperty() <= 60
+                      && centre.getBProperty() <= 60,
+                  "KK6: Model::Draw() -> ModelMesh::Draw()'s real orchestration (bone transform + "
+                  "SetVertexBuffer + setIndices + DrawIndexedPrimitives + EffectPass::Apply) paints the "
+                  "mesh's exact red over the green clear, through the D3D12 backend (plan_dx.md DX-148)");
+        }
+
+        // ---- DX-140 (remaining half): Texture2D::SaveAsPng() / FromStream() round-trip. ----
+        // NPOT is already closed; this is the encode/decode path, which needs a GraphicsDevice.
+        {
+            constexpr int kTexW = 4, kTexH = 4;
+            std::vector<X::Color> src(kTexW * kTexH, X::Color(0, 0, 0, 255));
+            for (int i = 0; i < kTexW * kTexH; ++i)
+                src[i] = X::Color(static_cast<uint8_t>(i * 16),      // a genuinely varying pattern,
+                                  static_cast<uint8_t>(255 - i * 16), // not a solid colour: a decoder
+                                  static_cast<uint8_t>((i * 7) % 256),// that dropped/reordered pixels
+                                  255);                               // could not survive this
+            XG::Texture2D original(dev, kTexW, kTexH);
+            original.SetData(src.data(), kTexW * kTexH);
+
+            System::IO::MemoryStream png;
+            original.SaveAsPng(&png, kTexW, kTexH);
+            const bool encoded = png.getLengthProperty() > 0;
+            Check(encoded,
+                  "KK7: Texture2D::SaveAsPng() encodes a real, non-empty PNG through a windowless "
+                  "GraphicsDevice (plan_dx.md DX-140)");
+
+            if (encoded)
+            {
+                png.setPositionProperty(0);
+                XG::Texture2D decoded = XG::Texture2D::FromStream(dev, png);
+                Check(decoded.getWidthProperty() == kTexW && decoded.getHeightProperty() == kTexH,
+                      "KK8: Texture2D::FromStream() decodes that PNG back to the exact original "
+                      "dimensions (plan_dx.md DX-140)");
+
+                std::vector<X::Color> back(kTexW * kTexH, X::Color(0, 0, 0, 0));
+                decoded.GetData(back.data(), kTexW * kTexH);
+                bool exact = true;
+                for (int i = 0; i < kTexW * kTexH; ++i)
+                    if (back[i].getRProperty() != src[i].getRProperty() ||
+                        back[i].getGProperty() != src[i].getGProperty() ||
+                        back[i].getBProperty() != src[i].getBProperty() ||
+                        back[i].getAProperty() != src[i].getAProperty())
+                    { exact = false; break; }
+                Check(exact,
+                      "KK9: SaveAsPng() -> FromStream() round-trips EVERY pixel of a deliberately varying "
+                      "4x4 pattern EXACTLY -- a decoder that dropped, reordered or channel-swapped pixels "
+                      "could not pass (plan_dx.md DX-140)");
+            }
+        }
     }
 
     std::printf("\n%s: %d failure(s)\n", g_failures == 0 ? "RESULT: ALL PASS" : "RESULT: FAILURES", g_failures);

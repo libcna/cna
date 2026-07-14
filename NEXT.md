@@ -235,6 +235,7 @@ Most recent first. Full detail (exact code, discriminating-power verification) i
 
 | Commit(s) | Summary |
 |---|---|
+| `b3289ac6` + this commit | **Phase DX15 FULLY COMPLETE — all 18 rows.** The last 3 rows (`DX-132` D3D12 `SpriteFont`, `DX-148` D3D12 `Model`, `DX-140`'s `FromStream`/`SaveAsPng` half) shared one blocker: they need a real `GraphicsDevice`, which forced a real window → a real swap chain → this dev loop's D3D12 crash path. Fixed by **`PresentationParameters::HeadlessEXT`** (NOXNA): a runtime opt-in for a genuinely windowless device that skips SDL video init entirely (so it needs no display server, and works in CI). Defaults false → production behavior byte-identical. All 3 rows then landed in the **routine plain-Wine** D3D12 CTest. **Real crash bug found**: `SetDepthTestEnabled`/`SetDepthWriteEnabled`/`SetBlendEnabled` were still `NotYetImplemented()` **throws** on D3D12, so any game calling `GraphicsDevice::SetDepthTestEnabled()` crashed — caught by `DX-148`'s Model test, the first thing to ever drive the shared `GraphicsDevice` path against D3D12. `D3D12_Smoke` 159→**169/169**. |
 | `18a70bba`+ (DX-115) | **Phase DX12 fully closed — `DX-115` (docs)**: new `docs/d3d12-backend.md`, a `D3D12` column across all 7 applicable `docs/graphics-backend-feature-matrix.md` tables, and a `README.md` build section, mirroring D3D11's own `DX-95`–`DX-97`. Confirmed exact current numbers via a live run: `D3D12_Smoke` 80/80 checks. Only `DX-114` (real Windows hardware) remains open in `plan_dx.md`, `needs_human`. |
 | `724b95f6` | **`DX-113` (test-suite formalization) closed** — audited the 74 checks `DX-102`–`111` already built, closed 2 real gaps (dedicated fog on/off test, `D3D12ResourceStateTracker`'s untracked-resource throw contract), mutation-tested Check M (`VertexColorEnabled` flip → exactly M1 failed, M2 untouched, reverted+reconfirmed). `D3D12_Smoke` 80/80 checks. Two gaps left honestly open (state-object testing not yet applicable; fence stall not independently measured under real GPU load). |
 | `1996141f` | **`DX-111` closed for real — `env_map3d` lands, 10 of 10 stock variants real.** New `D3D12TextureCubeBackend` (6-face `ID3D12Resource`, `GetData()` left at the interface default no-op). Reused `dual_texture3d`'s `(3,2,2)` root-signature/PSO shape. Two unrelated real bugs found and fixed: the RTV descriptor heap's fixed 8-slot capacity was genuinely exhausted by the growing test suite (raised to 32), and `RecreateDeviceEXT()` never reset `boneConstantBuffer_`/`skinnedExtraConstantBuffer_`/`instancedPso_`. `D3D12_Smoke` grew 72→74/74 checks (Check U). |
@@ -549,19 +550,18 @@ desktop session with real GPU access — re-verify before assuming either claim 
 
 ## 8. Next smallest tasks
 
-1. **`plan_dx.md`'s original Phase DX1–DX12 scope AND Phase DX13 (D3D12 functional completion) are
-   both fully closed. Phase DX14/DX15 (authorized 2026-07-14) are the active work now.**
-   D3D11 (Phase DX1–DX11) and D3D12 (Phase DX12, `DX-100`–`DX-113`/`DX-115`, plus Phase DX13,
-   `DX-116`–`DX-123`) both have their complete software/logic layer done and Wine/Proton-verified —
-   `D3D11_Smoke`+`D3D11_Common` 96+ checks, `D3D12_Smoke` **125/125 checks** (off-screen), and
-   D3D12's swap chain + `Present()` (`DX-116`) now genuinely work through a real Proton launch. The
-   only two rows in Phase DX1–DX12 still open are `DX-90`/`DX-91` (D3D11 real-Windows checklist) and
-   `DX-114` (D3D12 real-Windows checklist) — both `needs_human`, requiring an actual Windows machine
-   with a real GPU, not available here; if one becomes available, start there per `plan_dx.md`'s own
-   checklists. **Current active work**: Phase DX14 (D3D11 verification
-   hardening), and Phase DX15 (remaining EasyGL-parity gaps) — see `plan_dx.md` for the full task
-   list, priority ordering, and per-row dependencies
-   below for other independent work.
+1. **`plan_dx.md` Phases DX1–DX13 AND DX15 are all fully closed. Phase DX14 (D3D11 verification
+   hardening) is the only remaining Debian-side work.**
+   `D3D11_Smoke` **93/93** + `D3D11_Common` 23/23; `D3D12_Smoke` **169/169** — both fully green.
+   Phase DX15 closed all 18 EasyGL-parity rows, including the three that needed a real
+   `GraphicsDevice` (D3D12 `SpriteFont`/`Model`/`Texture2D::FromStream`), unblocked by the new
+   `PresentationParameters::HeadlessEXT` windowless-device mode. The only rows still open anywhere
+   in the plan are `DX-90`/`DX-91` (D3D11 real-Windows checklist) and `DX-114` (D3D12 real-Windows
+   checklist) — both `needs_human`, requiring an actual Windows machine with a real GPU, not
+   available here. **Next available work: Phase DX14** (`DX-124`–`DX-130`: D3D11 multi-light,
+   specular, mip>0, SpriteFont, Model, RenderTargetCube, combo `Clear*` verification tests) — see
+   `plan_dx.md`. Note several of these now have a proven D3D12 counterpart to copy the methodology
+   from, since Phase DX15 already closed the D3D12 legs.
 1a. **2026-07-14: `.github/workflows/d3d-windows-ci.yml` added** (project-owner-approved exception
     to this project's general no-CI-automation stance, scoped narrowly to D3D11/D3D12) — a
     `workflow_dispatch` job that builds `CNA`+backend with native MSVC on `windows-latest` (this
