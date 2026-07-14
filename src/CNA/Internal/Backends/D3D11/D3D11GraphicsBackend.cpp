@@ -471,9 +471,28 @@ namespace CNA::Internal::Backends::D3D11
     // as no-ops now (rather than throwing) matches this project's own precedent (SOFTWARE-3/
     // HEADLESS-3) of a skeleton that's honest about what's not real yet without crashing normal
     // GraphicsDevice construction, which applies default state on every backend.
-    void D3D11GraphicsBackend::SetDepthTestEnabled(bool enabled) { (void)enabled; }
+    // These carry a single bool each, so they rebuild the tracked depth-stencil state with just that
+    // one field changed (see the ds*_ fields' own comment). They were silent no-ops before: a game
+    // calling GraphicsDevice::SetDepthTestEnabled(true) on D3D11 got no depth test at all, while
+    // EasyGL honoured it -- a real, silent cross-backend behavior divergence, found while wiring
+    // D3D12's own equivalents (which were worse still: they threw).
+    void D3D11GraphicsBackend::SetDepthTestEnabled(bool enabled)
+    {
+        if (dsDepthEnable_ == enabled) return;
+        dsDepthEnable_ = enabled;
+        RebindDepthStencilState();
+    }
+
+    void D3D11GraphicsBackend::SetDepthWriteEnabled(bool enabled)
+    {
+        if (dsDepthWriteEnable_ == enabled) return;
+        dsDepthWriteEnable_ = enabled;
+        RebindDepthStencilState();
+    }
+
+    // Deliberate no-op, matching D3D12's own equivalent: a bare "enable blending" has no defined
+    // blend factors in XNA -- real blend configuration always arrives via ApplyBlendState().
     void D3D11GraphicsBackend::SetBlendEnabled(bool enabled) { (void)enabled; }
-    void D3D11GraphicsBackend::SetDepthWriteEnabled(bool enabled) { (void)enabled; }
 
     std::unique_ptr<ITextureBackend> D3D11GraphicsBackend::CreateTexture(const ImageData& data)
     {
@@ -645,12 +664,33 @@ namespace CNA::Internal::Backends::D3D11
                                                        int ccwStencilFunc, int ccwStencilPass,
                                                        int ccwStencilFail, int ccwStencilDepthFail)
     {
-        currentDepthStencilState_ = depthStencilStateCache_.GetOrCreate(
-            device_.Get(), depthEnable, depthWriteEnable, depthFunc,
-            stencilEnable, stencilFunc, stencilPass, stencilFail, stencilDepthFail,
-            stencilMask, stencilWriteMask,
-            twoSidedStencilMode, ccwStencilFunc, ccwStencilPass, ccwStencilFail, ccwStencilDepthFail);
+        dsDepthEnable_ = depthEnable;
+        dsDepthWriteEnable_ = depthWriteEnable;
+        dsDepthFunc_ = depthFunc;
+        dsStencilEnable_ = stencilEnable;
+        dsStencilFunc_ = stencilFunc;
+        dsStencilPass_ = stencilPass;
+        dsStencilFail_ = stencilFail;
+        dsStencilDepthFail_ = stencilDepthFail;
+        dsStencilMask_ = stencilMask;
+        dsStencilWriteMask_ = stencilWriteMask;
+        dsTwoSidedStencilMode_ = twoSidedStencilMode;
+        dsCcwStencilFunc_ = ccwStencilFunc;
+        dsCcwStencilPass_ = ccwStencilPass;
+        dsCcwStencilFail_ = ccwStencilFail;
+        dsCcwStencilDepthFail_ = ccwStencilDepthFail;
         currentReferenceStencil_ = referenceStencil;
+        RebindDepthStencilState();
+    }
+
+    void D3D11GraphicsBackend::RebindDepthStencilState()
+    {
+        currentDepthStencilState_ = depthStencilStateCache_.GetOrCreate(
+            device_.Get(), dsDepthEnable_, dsDepthWriteEnable_, dsDepthFunc_,
+            dsStencilEnable_, dsStencilFunc_, dsStencilPass_, dsStencilFail_, dsStencilDepthFail_,
+            dsStencilMask_, dsStencilWriteMask_,
+            dsTwoSidedStencilMode_, dsCcwStencilFunc_, dsCcwStencilPass_, dsCcwStencilFail_,
+            dsCcwStencilDepthFail_);
         context_->OMSetDepthStencilState(currentDepthStencilState_.Get(),
                                          static_cast<UINT>(currentReferenceStencil_));
     }

@@ -2096,7 +2096,66 @@ protected:
                   "result, not just 'the query completed' (plan_dx.md DX-147)");
         }
 
-        const int totalChecks = 3 + 10 + 1 + 2 + 2 + 2 + 2 + 2 + 1 + 1 + 2 + 1 + 13 + 2 + 3 + 2 + 2 + 1 + 1 + 1 + 1 + 3 + 2 + 2 + 2 + 3 + 2 + 3 /* DX-131 rotation/scale/crop */
+        // Real bug fix (2026-07-14): GraphicsDevice::SetDepthTestEnabled()/SetDepthWriteEnabled()
+        // were SILENT NO-OPS on D3D11 -- a game turning the depth test on got no depth test at all,
+        // while EasyGL honoured it. (D3D12's own equivalents were worse: they threw.) They now
+        // rebuild the tracked depth-stencil state with just that one field changed. Proven by the
+        // depth test's real effect on rasterization: the same near/far draw order is issued twice,
+        // differing ONLY in whether SetDepthTestEnabled() was called -- a no-op cannot pass both.
+        {
+            struct VPCd { float x, y, z; uint32_t color; };
+            const uint32_t kRedD = 0xFF0000FFu;   // R=255
+            const uint32_t kGreenD = 0xFF00FF00u; // G=255
+
+            // Near red quad (z=0.2), then FAR green quad (z=0.8), drawn second.
+            static const VPCd kNear[3] = {
+                {-1.0f, -1.0f, 0.2f, kRedD}, {3.0f, -1.0f, 0.2f, kRedD}, {-1.0f, 3.0f, 0.2f, kRedD}};
+            static const VPCd kFar[3] = {
+                {-1.0f, -1.0f, 0.8f, kGreenD}, {3.0f, -1.0f, 0.8f, kGreenD}, {-1.0f, 3.0f, 0.8f, kGreenD}};
+
+            auto vbNear = backend.CreateVertexBuffer(3);
+            vbNear->SetData(kNear, 3, sizeof(VPCd));
+            auto vbFar = backend.CreateVertexBuffer(3);
+            vbFar->SetData(kFar, 3, sizeof(VPCd));
+
+            GpuDrawParams dp;
+            dp.vertexColorEnabled = true;
+            const Microsoft::Xna::Framework::Rectangle probe(30, 30, 1, 1);
+            const Matrix& I = Matrix::getIdentityProperty();
+
+            auto drawNearThenFar = [&]() {
+                dev.Clear(Color(10, 10, 10, 255));
+                backend.DrawPrimitivesEx(*vbNear, I, I, I, PrimitiveType::TriangleList, 1, dp);
+                backend.DrawPrimitivesEx(*vbFar, I, I, I, PrimitiveType::TriangleList, 1, dp);
+                Color px(0, 0, 0, 0);
+                dev.GetBackBufferData(&probe, &px, 0, 1);
+                return px;
+            };
+
+            // Depth test ON: the far green quad must be REJECTED by the nearer red one already there.
+            backend.SetDepthWriteEnabled(true);
+            backend.SetDepthTestEnabled(true);
+            dev.Clear(Color(10, 10, 10, 255)); // clears depth to 1.0 too
+            const Color withDepth = drawNearThenFar();
+            check(withDepth.getRProperty() == 255 && withDepth.getGProperty() == 0,
+                  "D3D11GraphicsBackend::SetDepthTestEnabled(true): a FARTHER quad drawn after a nearer "
+                  "one is genuinely REJECTED (red survives) -- proves the call really enables the depth "
+                  "test, instead of being the silent no-op it used to be");
+
+            // Depth test OFF: the same far green quad must now overwrite the red one (painter's order).
+            backend.SetDepthTestEnabled(false);
+            const Color withoutDepth = drawNearThenFar();
+            check(withoutDepth.getGProperty() == 255 && withoutDepth.getRProperty() == 0,
+                  "D3D11GraphicsBackend::SetDepthTestEnabled(false): the SAME farther quad now genuinely "
+                  "OVERWRITES the nearer one (green wins) -- only the SetDepthTestEnabled() call differs "
+                  "between the two, so a no-op implementation cannot pass both checks");
+
+            backend.SetDepthTestEnabled(false);
+            backend.SetDepthWriteEnabled(false);
+        }
+
+        const int totalChecks = 2 /* SetDepthTestEnabled real, not a no-op */
+                                + 3 + 10 + 1 + 2 + 2 + 2 + 2 + 2 + 1 + 1 + 2 + 1 + 13 + 2 + 3 + 2 + 2 + 1 + 1 + 1 + 1 + 3 + 2 + 2 + 2 + 3 + 2 + 3 /* DX-131 rotation/scale/crop */
                                 + 1 /* DX-134 envMapAmount=0 */ + 2 /* DX-135 WeightsPerVertex */ + 2 /* DX-137 textured3d fog */
                                 + 2 /* DX-140 NPOT */ + 2 /* DX-142 all-16-sampler-slots */ + 2 /* DX-143 MRT MSAA resolve */
                                 + 4 /* DX-144 RT2D+RTCube mip-chain generation */

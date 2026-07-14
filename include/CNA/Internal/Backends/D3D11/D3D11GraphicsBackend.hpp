@@ -275,6 +275,31 @@ namespace CNA::Internal::Backends::D3D11
         float currentBlendFactor_[4] = {1.0f, 1.0f, 1.0f, 1.0f};
         int currentReferenceStencil_ = 0;
 
+        // The full depth-stencil parameter set currently applied. Tracked field-by-field (not just
+        // as the finished ID3D11DepthStencilState above) so SetDepthTestEnabled()/
+        // SetDepthWriteEnabled() -- which each carry only ONE bool -- can rebuild the state with
+        // just that field changed instead of silently doing nothing. Mirrors D3D12's own
+        // current*_ tracking. Defaults match XNA's DepthStencilState.Default.
+        bool dsDepthEnable_ = true;
+        bool dsDepthWriteEnable_ = true;
+        int dsDepthFunc_ = 3;            // CompareFunction::LessEqual
+        bool dsStencilEnable_ = false;
+        int dsStencilFunc_ = 0;          // CompareFunction::Always
+        int dsStencilPass_ = 0;          // StencilOperation::Keep
+        int dsStencilFail_ = 0;
+        int dsStencilDepthFail_ = 0;
+        int dsStencilMask_ = 0xFF;
+        int dsStencilWriteMask_ = 0xFF;
+        bool dsTwoSidedStencilMode_ = false;
+        int dsCcwStencilFunc_ = 0;
+        int dsCcwStencilPass_ = 0;
+        int dsCcwStencilFail_ = 0;
+        int dsCcwStencilDepthFail_ = 0;
+
+        /// Rebuilds + binds the depth-stencil state from the tracked ds*_ fields above. Shared by
+        /// ApplyDepthStencilState(), SetDepthTestEnabled() and SetDepthWriteEnabled().
+        void RebindDepthStencilState();
+
         // Presentation policy (plan_dx.md design decision 13: capability vs. policy, kept separate).
         bool vsyncEnabled_ = true;
         bool allowTearingRequested_ = true;
