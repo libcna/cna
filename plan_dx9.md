@@ -1,8 +1,9 @@
 # Direct3D 9 Graphics Backend — Implementation Plan
 
-> **Status (2026-07-14): NOT AUTHORIZED for implementation — but both existence gates have now been
-> spiked, and BOTH PASSED.** No implementation task may be started without the project owner's
-> explicit go-ahead. What has been proven, on this machine, with real runs:
+> **Status (2026-07-14): AUTHORIZED FOR IMPLEMENTATION.** The project owner approved implementation
+> through Phase D9-13 (Phase D9-11 "custom `ShaderEffect`" stays ask-first per its own row; Phase
+> D9-14 needs real Windows hardware and is out of scope for this dev environment). Both Phase D9-0
+> existence gates were spiked and BOTH PASSED. What has been proven, on this machine, with real runs:
 >
 > - **`D9-1` ✅ — Microsoft's own XNA 4.0 stock-effect shaders compile.** All **66/66** entry points
 >   across all 6 effects, from Microsoft's **unmodified** `.fx` sources, to real D3D9 bytecode, using
@@ -12,28 +13,32 @@
 > - **`D9-73` 🟨 — and 61 of those 66 are byte-identical to the bytecode Microsoft actually shipped.**
 >   The 5 that differ are all `PixelLighting` variants, and it is a compiler-*version* difference, not
 >   a flag (six flag combinations tested, none matched). Microsoft's originals for those 5 are sitting
->   in the `.fxb`. **This needs one decision from the project owner** — see design decision 4.
+>   in the `.fxb`. This row is DECIDED — see design decision 4.
 > - **`D9-A1`/`D9-A2` ✅ — real XNA 4.0 runs on this machine and renders.** `winetricks dotnet40
 >   xna40` into a dedicated 32-bit prefix; a ~50-line `BasicEffect` reference app, compiled by the
 >   in-prefix `csc.exe` (no Visual Studio, no XNA Game Studio, no content pipeline, no Windows box),
 >   renders a triangle and dumps a PNG whose background is **exactly `Color.CornflowerBlue`
 >   (100,149,237)**. **The oracle this whole plan depends on exists.**
 >
-> **Phase D9-0 is therefore cleared.** What remains before implementation is authorization.
+> **Phase D9-0 is cleared, and implementation is now authorized.**
 >
-> **⚠ A second readiness audit (2026-07-14, independent agent, adversarial) found a real contradiction
-> inside this plan's own rules — see "The `IGraphicsBackend` boundary problem" below.** Two of this
-> plan's headline tasks (`D9-30`'s correct presentation parameters, `D9-34`'s device-lost lifecycle)
-> require adding a narrow, additive channel to `IGraphicsBackend`/`GraphicsBackendCreateArgs`, which
-> this plan's own Boundaries forbid a backend author from doing unilaterally. **This blocks Phase
-> D9-3 past `D9-31`** until the project owner decides whether authenticity is the exception that
-> justifies the extension. The same audit also found and fixed: a stale 64-vs-66 shader count, a
-> self-contradicting D9-73 row, two additional undocumented `ShaderIndex` inputs
-> (`AlphaTestEffect.isEqNe`, `EnvironmentMapEffect.specularEnabled`), a fact/fiction gap in D9-11's
-> "override everything" instruction, an unspecified shader-compile Wine prefix (no prefix currently
-> has both the real compiler and DXVK), and a missing CMake site (7 sites need editing, not 3). All
-> now corrected in place below. A companion fact-check audit verified every concrete path/line-number/
-> source claim in this plan against the actual repo and found the plan otherwise accurate.
+> **RESOLVED 2026-07-14 — "The `IGraphicsBackend` boundary problem" (below) is no longer blocking.**
+> The project owner approved this document's own recommendation: an additive extension to
+> `GraphicsBackendCreateArgs` (new optional fields: `BackBufferFormat`, `DepthStencilFormat`,
+> `IsFullScreen`, `PresentInterval`, `GraphicsProfile`) plus a narrow backend→`GraphicsDevice`
+> device-event notification channel (for `DeviceLost`/`DeviceResetting`/`DeviceReset`), both
+> no-op/ignorable for the other nine backends. `D9-30`/`D9-32`/`D9-33`/`D9-34` are unblocked. The
+> section below is kept as-is for its factual analysis of the problem; treat its "recommendation, not
+> a decision" framing as superseded by this approval.
+>
+> A second readiness audit (2026-07-14, independent agent, adversarial) found the boundary
+> contradiction above, and also found and fixed: a stale 64-vs-66 shader count, a self-contradicting
+> D9-73 row, two additional undocumented `ShaderIndex` inputs (`AlphaTestEffect.isEqNe`,
+> `EnvironmentMapEffect.specularEnabled`), a fact/fiction gap in D9-11's "override everything"
+> instruction, an unspecified shader-compile Wine prefix (no prefix currently has both the real
+> compiler and DXVK), and a missing CMake site (7 sites need editing, not 3). All now corrected in
+> place below. A companion fact-check audit verified every concrete path/line-number/source claim in
+> this plan against the actual repo and found the plan otherwise accurate.
 >
 > **⚠ Read "CNA's divergences from XNA 4.0" below before authorizing anything.** Taking XNA seriously
 > as the specification has already, with zero backend code written, surfaced **six confirmed
@@ -100,11 +105,21 @@ repo documents only the D3D11 prefix — closing that gap is part of `D9-130`.
 **4. If you are working in a parallel worktree (`cna_dx9` on `feature/dx9`) while another agent works
 on D3D11/D3D12 in `cna_graphics` on `feature/graphics`, these rules keep the eventual merge boring:**
 
-- **Never touch `NEXT.md`.** It gets ~500 commits a week from the other agent. Keep all your status in
-  *this* file. `NEXT.md` is reconciled once, by hand, at merge time.
-- **Never touch `IGraphicsBackend.hpp`, `GpuDrawParams`, `D3DCommon/`, `D3D11/`, or `D3D12/`.** The
-  first three are already forbidden by this plan's Boundaries on *correctness* grounds; the last two
-  are where the other agent is actively working right now.
+- **UPDATED 2026-07-14 by the project owner: `NEXT.md` in the `feature/dx9`/`cnadx9` worktree is now
+  the DX9 status file, not off-limits.** The rule below was written when `feature/graphics` was still
+  active and racing `NEXT.md` at ~500 commits/week; that work is done and merged into `develop` (which
+  this branch is based on), so the race condition this rule guarded against no longer exists here. Keep
+  `NEXT.md` in *this* worktree scoped to D3D9 status only (mirroring how `plan_dx.md`/`NEXT.md` related
+  for D3D11/D3D12); point to `plan_dx.md`/`plan_graphics.md` for other backends' history instead of
+  duplicating it. The original rule text is kept below for historical context only:
+  ~~**Never touch `NEXT.md`.** It gets ~500 commits a week from the other agent. Keep all your status in
+  *this* file. `NEXT.md` is reconciled once, by hand, at merge time.~~
+- **`GpuDrawParams`, `D3DCommon/`, `D3D11/`, `D3D12/`: still never touch.** Cross-cutting/out of this
+  plan's scope regardless of worktree state (see Boundaries and "CNA's divergences from XNA 4.0").
+  **`IGraphicsBackend.hpp` (and `GraphicsBackendCreateArgs`): touch is now narrowly authorized** —
+  see the RESOLVED note under "The `IGraphicsBackend` boundary problem" above. Additive only: the
+  agreed new `GraphicsBackendCreateArgs` fields and the one new device-event notification channel,
+  nothing else.
 - Do the `CMakeLists.txt` wiring **early, once, and purely additively** (new `elseif()` blocks *after*
   D3D12's; add `D3D9` to the existing `OR`-conditions). After that, touch it only to register tests.
   It sees ~200 commits a week — every extra edit is a merge conflict you are choosing to have.
@@ -428,6 +443,12 @@ whatever `plan_graphics.md` task the project owner eventually opens.
 
 ## The `IGraphicsBackend` boundary problem — UNRESOLVED, blocks Phase D9-3
 
+> **RESOLVED 2026-07-14 by the project owner: approved as recommended below** — the additive
+> `GraphicsBackendCreateArgs` extension and the narrow device-event notification channel are both
+> authorized. `D9-30`/`D9-32`/`D9-33`/`D9-34` are unblocked. The analysis below is kept for the
+> record; its closing "do not let this recommendation be read as authorization" line no longer
+> applies — it has been read as exactly that, explicitly, by the project owner.
+
 **This is a genuine contradiction inside this plan, found by an independent readiness audit
 2026-07-14, and it is not this document's call to resolve on its own.** Two of this plan's own
 headline deliverables require exactly the thing its own Boundaries forbid.
@@ -468,9 +489,10 @@ creation/lifecycle, not rendering. That said, **this is exactly the kind of ten-
 decision this plan's Boundaries reserve for the project owner** — do not let this recommendation be
 read as authorization.
 
-**Until this is decided:** Phase D9-3 cannot proceed past `D9-31` (`Clear`/`Present`/`ReadBackbuffer`,
-which need no new channel). `D9-30`/`D9-32`/`D9-33`/`D9-34` are blocked, and so — transitively — is
-everything downstream that depends on a fully-initialized device with correct formats.
+~~**Until this is decided:** Phase D9-3 cannot proceed past `D9-31` (`Clear`/`Present`/
+`ReadBackbuffer`, which need no new channel). `D9-30`/`D9-32`/`D9-33`/`D9-34` are blocked, and so —
+transitively — is everything downstream that depends on a fully-initialized device with correct
+formats.~~ **No longer applies — see the RESOLVED note above.**
 
 ---
 
