@@ -61,10 +61,18 @@ namespace CNA::Internal::Backends::D3D12
 
         // ---- IGraphicsBackend: honest "not yet implemented" stubs (DX-106 onward) ----
         void Clear(float r, float g, float b, float a) override;
+        /// DX-116: real Present() -- transitions the currently-bound back buffer to PRESENT,
+        /// calls IDXGISwapChain3::Present() for real, then re-binds the (new) current back buffer
+        /// as the default draw target for the next frame. Throws (NotYetImplemented) if no real
+        /// swap chain is available (e.g. off-screen construction, or this dev loop's own
+        /// documented Wine/vkd3d-proton swap-chain limitation -- see DX-100/DX-102).
         void Present() override;
         void GetViewportSize(int& width, int& height) override;
         void SetVirtualResolution(int width, int height) override;
         void SetPresentationMode(int mode) override;
+        /// DX-116: mirrors D3D11GraphicsBackend::SetSwapInterval exactly -- sync interval is
+        /// backend state applied at the next Present(), not a direct D3D12 API call ahead of time.
+        void SetSwapInterval(int interval) override;
 
         SDL_Window* GetWindowInternal() const override { return window_; }
         SDL_Renderer* GetRendererInternal() const override { return nullptr; }
@@ -262,8 +270,29 @@ namespace CNA::Internal::Backends::D3D12
         /// class-level doc comment for why. A genuine Wine-level crash (as opposed to a clean
         /// HRESULT failure) cannot be caught here or anywhere in-process; that risk is why the
         /// primary D3D12 CTest suite never constructs this backend with a real window (see
-        /// examples/d3d12_smoke_test.cpp's own comment block).
+        /// examples/d3d12_smoke_test.cpp's own comment block). Stores the real swap-chain pixel
+        /// size into width_/height_ (DX-116) -- previously local-only, now needed by
+        /// CreateWindowSizeDependentViews()'s own depth-stencil-buffer sizing.
         void CreateSwapChainResources();
+        /// DX-116: acquires each of the kFramesInFlight real back-buffer resources (GetBuffer()) +
+        /// their RTVs, registers each with the shared D3D12ResourceStateTracker (DX-106) in its
+        /// real starting state (D3D12_RESOURCE_STATE_PRESENT), creates a back-buffer-sized
+        /// depth-stencil resource+DSV (mirrors D3D11's own DX-24 default, though not yet wired
+        /// into any OMSetRenderTargets call -- every draw path still hardcodes a null DSV,
+        /// DX-107/DX-111's own documented depthEnable=false simplification; created here for
+        /// parity/completeness, real depth-test support is DX-118's job), and binds the current
+        /// back buffer as the default Clear()/draw target -- mirrors D3D11's own
+        /// CreateWindowSizeDependentViews() making the back buffer the default target immediately
+        /// after construction. Only called when CreateSwapChainResources() actually succeeded
+        /// (swapChainAvailable_ == true).
+        void CreateWindowSizeDependentViews();
+        /// DX-116: releases every window-size-dependent resource CreateWindowSizeDependentViews()
+        /// created -- back-buffer resources/RTV handles and the depth-stencil resource/DSV handle
+        /// (RTV/DSV heap slot *indices* are not reclaimed, matching DX-103's own documented
+        /// no-free-list-yet bump-allocator simplification). Used by RecreateDeviceEXT() (DX-110)
+        /// before tearing down the whole device; window resize (D3D11's own DX-29 equivalent) is
+        /// real, scoped follow-up work this task does not attempt.
+        void ReleaseWindowSizeDependentViews();
 
         /// DX-111: lazily creates (once) an UPLOAD-heap, persistently-mapped constant buffer of
         /// exactly @p byteWidth bytes -- the standard D3D12 dynamic-CB idiom (map once at creation,
@@ -374,6 +403,22 @@ namespace CNA::Internal::Backends::D3D12
         // fail gracefully instead of throwing.
         ComPtr<IDXGISwapChain3> swapChain_;
         bool swapChainAvailable_ = false;
+        int width_ = 0;
+        int height_ = 0;
+
+        // DX-116: Present() policy state -- mirrors D3D11GraphicsBackend's own vsyncEnabled_/
+        // allowTearingRequested_/exclusiveFullscreen_ exactly (design decision 13's own
+        // capability-vs-policy split, reused unchanged for D3D12).
+        bool vsyncEnabled_ = true;
+        bool allowTearingRequested_ = true;
+        bool exclusiveFullscreen_ = false;
+
+        // DX-116: window-size-lifetime resources -- real back-buffer RTVs (one per
+        // kFramesInFlight) + a shared depth-stencil buffer, mirroring D3D11's own DX-24 group.
+        ComPtr<ID3D12Resource> backBufferResources_[kFramesInFlight];
+        D3D12_CPU_DESCRIPTOR_HANDLE backBufferRtvs_[kFramesInFlight]{};
+        ComPtr<ID3D12Resource> depthStencilResource_;
+        D3D12_CPU_DESCRIPTOR_HANDLE depthStencilViewEXT_{};
 
         // DX-106/DX-109: single shared per-resource barrier-state tracker, registered with by every
         // real D3D12 resource this backend creates (vertex/index buffers, textures -- DX-109).

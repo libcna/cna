@@ -71,6 +71,9 @@ namespace CNA::Internal::Backends::D3D12
         , virtualWidth_(args.virtualWidth)
         , virtualHeight_(args.virtualHeight)
     {
+        // DX-116: mirrors D3D11GraphicsBackend's own constructor exactly.
+        vsyncEnabled_ = args.swapInterval > 0;
+
         CreateDeviceResources();
         CreateCommandQueueResources();
         CreateDescriptorHeapResources();
@@ -83,6 +86,11 @@ namespace CNA::Internal::Backends::D3D12
         if (window_)
         {
             CreateSwapChainResources();
+            // DX-116: only when CreateSwapChainForHwnd actually succeeded -- swapChainAvailable_
+            // stays false (not thrown) on this dev loop's own documented Wine limitation, and
+            // there is nothing to acquire back-buffer views from in that case.
+            if (swapChainAvailable_)
+                CreateWindowSizeDependentViews();
         }
 
         SDL_Log("[D3D12] Device-lifetime resources created (plan_dx.md DX-102/103/104/105) -- "
@@ -279,13 +287,13 @@ namespace CNA::Internal::Backends::D3D12
             return;
         }
 
-        int width = virtualWidth_ > 0 ? virtualWidth_ : 1024;
-        int height = virtualHeight_ > 0 ? virtualHeight_ : 768;
-        SDL_GetWindowSizeInPixels(window_, &width, &height);
+        width_ = virtualWidth_ > 0 ? virtualWidth_ : 1024;
+        height_ = virtualHeight_ > 0 ? virtualHeight_ : 768;
+        SDL_GetWindowSizeInPixels(window_, &width_, &height_);
 
         DXGI_SWAP_CHAIN_DESC1 desc{};
-        desc.Width = static_cast<UINT>(width);
-        desc.Height = static_cast<UINT>(height);
+        desc.Width = static_cast<UINT>(width_);
+        desc.Height = static_cast<UINT>(height_);
         desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM; // matches D3D11's own DX-11-fmt SurfaceFormat::Color mapping
         desc.SampleDesc.Count = 1;
         desc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
@@ -321,6 +329,71 @@ namespace CNA::Internal::Backends::D3D12
         }
 
         swapChainAvailable_ = true;
+    }
+
+    void D3D12GraphicsBackend::CreateWindowSizeDependentViews()
+    {
+        for (UINT i = 0; i < static_cast<UINT>(kFramesInFlight); ++i)
+        {
+            HRESULT hr = swapChain_->GetBuffer(i, IID_PPV_ARGS(backBufferResources_[i].ReleaseAndGetAddressOf()));
+            if (FAILED(hr))
+                throw std::runtime_error("IDXGISwapChain3::GetBuffer failed, hr=" + FormatHr(hr));
+
+            backBufferRtvs_[i] = AllocateRtvDescriptorEXT();
+            device_->CreateRenderTargetView(backBufferResources_[i].Get(), nullptr, backBufferRtvs_[i]);
+
+            // Swap-chain back buffers start life in D3D12_RESOURCE_STATE_PRESENT (numerically the
+            // same value as D3D12_RESOURCE_STATE_COMMON) -- register each with the shared
+            // resource-state tracker (DX-106) now so Clear()'s/Present()'s own TransitionTo()
+            // calls emit the correct barrier instead of throwing "never registered."
+            resourceStates_.TrackResource(backBufferResources_[i].Get(), D3D12_RESOURCE_STATE_PRESENT);
+        }
+
+        D3D12_HEAP_PROPERTIES heapProps{};
+        heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
+
+        D3D12_RESOURCE_DESC depthDesc{};
+        depthDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+        depthDesc.Width = static_cast<UINT64>(width_);
+        depthDesc.Height = static_cast<UINT>(height_);
+        depthDesc.DepthOrArraySize = 1;
+        depthDesc.MipLevels = 1;
+        depthDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT; // matches D3D11's own DX-24 default (DX-11-fmt)
+        depthDesc.SampleDesc.Count = 1;
+        depthDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
+
+        D3D12_CLEAR_VALUE depthClear{};
+        depthClear.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
+        depthClear.DepthStencil.Depth = 1.0f;
+        depthClear.DepthStencil.Stencil = 0;
+
+        HRESULT hr = device_->CreateCommittedResource(
+            &heapProps, D3D12_HEAP_FLAG_NONE, &depthDesc,
+            D3D12_RESOURCE_STATE_DEPTH_WRITE, &depthClear,
+            IID_PPV_ARGS(depthStencilResource_.ReleaseAndGetAddressOf()));
+        if (FAILED(hr))
+            throw std::runtime_error("D3D12GraphicsBackend: back-buffer depth-stencil CreateCommittedResource failed, hr=" + FormatHr(hr));
+
+        depthStencilViewEXT_ = AllocateDsvDescriptorEXT();
+        D3D12_DEPTH_STENCIL_VIEW_DESC dsvDesc{};
+        dsvDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
+        dsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
+        device_->CreateDepthStencilView(depthStencilResource_.Get(), &dsvDesc, depthStencilViewEXT_);
+        resourceStates_.TrackResource(depthStencilResource_.Get(), D3D12_RESOURCE_STATE_DEPTH_WRITE);
+
+        // Bind the current back buffer as the default draw target -- mirrors D3D11's own
+        // CreateWindowSizeDependentViews() making the back buffer the default Clear()/draw target
+        // immediately after construction, before any custom render target is ever bound.
+        const UINT idx = swapChain_->GetCurrentBackBufferIndex();
+        BindOffscreenColorTargetEXT(backBufferResources_[idx].Get(), backBufferRtvs_[idx],
+                                    DXGI_FORMAT_R8G8B8A8_UNORM, width_, height_);
+    }
+
+    void D3D12GraphicsBackend::ReleaseWindowSizeDependentViews()
+    {
+        UnbindOffscreenColorTargetEXT();
+        depthStencilResource_.Reset();
+        for (auto& res : backBufferResources_) res.Reset();
     }
 
     D3D12_CPU_DESCRIPTOR_HANDLE D3D12GraphicsBackend::AllocateRtvDescriptorEXT()
@@ -428,6 +501,10 @@ namespace CNA::Internal::Backends::D3D12
 
         // Drop every ComPtr tied to the (possibly removed) device -- further calls against a
         // removed device's own objects are meaningless, and holding onto them would also leak.
+        // DX-116: window-size-dependent resources (back buffers + depth-stencil) are just as
+        // device-tied as everything else here -- ReleaseWindowSizeDependentViews() also clears
+        // the now-stale bound-color-target binding.
+        ReleaseWindowSizeDependentViews();
         swapChain_.Reset();
         swapChainAvailable_ = false;
         commandList_.Reset();
@@ -498,7 +575,12 @@ namespace CNA::Internal::Backends::D3D12
         CreateDescriptorHeapResources();
         CreateCommandListResources();
         CreateFenceResources();
-        if (window_) CreateSwapChainResources();
+        if (window_)
+        {
+            CreateSwapChainResources();
+            if (swapChainAvailable_)
+                CreateWindowSizeDependentViews();
+        }
 
         SDL_Log("[D3D12] RecreateDeviceEXT(): device-lifetime resources fully recreated after a "
                 "(real or forced) device-removed event (plan_dx.md DX-110) -- feature level 0x%04x, "
@@ -653,7 +735,65 @@ namespace CNA::Internal::Backends::D3D12
         ExecuteCommandListAndWaitEXT(cmdList);
     }
 
-    void D3D12GraphicsBackend::Present() { NotYetImplemented("Present"); }
+    void D3D12GraphicsBackend::Present()
+    {
+        if (!swapChainAvailable_)
+        {
+            NotYetImplemented("Present (no real swap chain available -- either an off-screen "
+                              "construction, or this dev loop's own documented Wine/vkd3d-proton "
+                              "swap-chain limitation, DX-100/DX-102; real windowed verification is "
+                              "scripts/run-proton-vkd3d.sh's job, DX-116)");
+        }
+
+        // DX-116: transition the current back buffer to PRESENT before calling Present() -- D3D12's
+        // own explicit-barrier requirement, unlike D3D11's implicit driver-managed transitions
+        // (DX-26 has no equivalent step). Only when the back buffer is actually the bound color
+        // target -- a game that presents with a custom off-screen render target still bound
+        // instead of unbinding it first (XNA's own SetRenderTarget(null) convention) is doing
+        // something outside this backend's own scope to guess-correct for.
+        ID3D12Resource* currentBackBuffer =
+            backBufferResources_[swapChain_->GetCurrentBackBufferIndex()].Get();
+        if (boundColorResource_ == currentBackBuffer)
+        {
+            ID3D12CommandAllocator* allocator = GetCommandAllocatorEXT(0);
+            ID3D12GraphicsCommandList* cmdList = GetCommandListEXT();
+            allocator->Reset();
+            cmdList->Reset(allocator, nullptr);
+            resourceStates_.TransitionTo(cmdList, currentBackBuffer, D3D12_RESOURCE_STATE_PRESENT);
+            HRESULT hr = cmdList->Close();
+            if (FAILED(hr))
+                throw std::runtime_error("D3D12GraphicsBackend::Present: command list Close failed, hr=" + FormatHr(hr));
+            ExecuteCommandListAndWaitEXT(cmdList);
+        }
+
+        // DX-26's own sync-interval/tearing policy, reused unchanged for D3D12.
+        const bool mayTear =
+            allowTearingSupported_ && allowTearingRequested_ && !vsyncEnabled_ && !exclusiveFullscreen_;
+        const UINT syncInterval = vsyncEnabled_ ? 1 : 0;
+        const UINT flags = mayTear ? DXGI_PRESENT_ALLOW_TEARING : 0;
+
+        HRESULT hr = swapChain_->Present(syncInterval, flags);
+        if (FAILED(hr))
+        {
+            CheckDeviceRemovedEXT(hr);
+            return; // DX-26's own convention: log, don't throw, on a Present() failure
+        }
+
+        // Re-bind the new current back buffer as the default draw target for the next frame --
+        // mirrors D3D11's own "back buffer is the default target" behavior, just re-resolved every
+        // frame since D3D12's flip-model back-buffer INDEX changes on every Present(), unlike
+        // D3D11's single always-current backBufferRTV_.
+        const UINT idx = swapChain_->GetCurrentBackBufferIndex();
+        BindOffscreenColorTargetEXT(backBufferResources_[idx].Get(), backBufferRtvs_[idx],
+                                    DXGI_FORMAT_R8G8B8A8_UNORM, width_, height_);
+    }
+
+    void D3D12GraphicsBackend::SetSwapInterval(int interval)
+    {
+        // DX-116: mirrors D3D11GraphicsBackend::SetSwapInterval exactly -- sync interval is
+        // backend state applied at the next Present(), not a direct D3D12 API call ahead of time.
+        vsyncEnabled_ = interval > 0;
+    }
 
     void D3D12GraphicsBackend::GetViewportSize(int& width, int& height)
     {

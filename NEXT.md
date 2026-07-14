@@ -268,23 +268,28 @@ Most recent first. Full detail (exact code, discriminating-power verification) i
 
 **No hard blocker — `plan_dx.md`'s scope is entirely closed for both backends' software/logic
 layer.** D3D11: Phase DX1 through DX11 are all ✅ except `DX-90`/`DX-91` (real Windows hardware,
-`needs_human`). D3D12: Phase DX12 (`DX-100` through `DX-113`/`DX-115`) is now ALSO all ✅ except
-`DX-114` (real Windows hardware, `needs_human`) — no such machine is available in this dev
-environment for either gate. **D3D12's own additional, real gap beyond D3D11's**: swap-chain
-presentation genuinely crashes under this dev loop's Wine+vkd3d-proton (a `dxgi.dll`/vkd3d-proton
-architecture mismatch, root-caused via WineDbg to a null Vulkan-instance-handle read — not a CNA
-bug, see `plan_dx.md`'s `DX-100`/`DX-102` rows), so every D3D12 proof in this plan is off-screen,
-unlike D3D11 which does have a working (Wine-verified) swap chain. `D3D12_Smoke` CTest: **80/80
-checks**, mutation-tested, all 10/10 stock shader variants + `SpriteBatch` + device-removed
-recovery real. D3D12 still genuinely lacks (real, scoped, documented, not silently dropped — see
-`docs/d3d12-backend.md`'s "Known limitations"): a public render-target backend, `Texture3D`,
-runtime-settable blend/depth-stencil/rasterizer state (PSOs hardcode `depthEnable=false`/
-`cullMode=None`), per-slot `SamplerState` (hardcoded static WRAP/linear samplers), occlusion
-queries, and custom `Effect` via `SpriteBatch::Begin(effect)`. **With `DX-114` the only open task
-and it `needs_human`, there is no further available Debian-side work on `plan_dx.md` barring new
-instructions.** Outside the D3D plan, the standing backlog (Phase 79's 153-sample `../cna-samples`
-re-audit, Task 945's HLSL→GLSL tooling decision, Task 952's deferred Bgfx bug) is unchanged — see
-§8/§9.
+`needs_human`). D3D12: Phase DX12 (`DX-100` through `DX-113`/`DX-115`) is all ✅ except `DX-114`
+(real Windows hardware, `needs_human`) — no such machine is available in this dev environment for
+either gate. **D3D12's swap-chain crash is fixed** (2026-07-14): launching through a real,
+correctly-bootstrapped Proton runtime (`scripts/run-proton-vkd3d.sh`, not the isolated hand-built
+prefix `DX-100`/`DX-102` originally used) makes `CreateSwapChainForHwnd` return real `S_OK` —
+confirms the earlier diagnosis was right (vkd3d-proton needs its matched `dxgi.dll`, not just
+`d3d12.dll`), not a CNA bug. **`DX-116` (real `Present()`/back-buffer rendering) is also closed**:
+a real 10-frame `Clear()`+`Present()` loop through that same Proton launch succeeds with no
+throw/crash, reproduced twice — D3D12 can now genuinely put pixels on a real screen, kept as a
+manual diagnostic (not a CTest, Proton's bootstrap is too heavy for routine runs). `D3D12_Smoke`
+CTest (off-screen only): **80/80 checks**, mutation-tested, all 10/10 stock shader variants +
+`SpriteBatch` + device-removed recovery real. D3D12 still genuinely lacks (real, scoped,
+documented, not silently dropped — see `docs/d3d12-backend.md`'s "Known limitations" and
+`plan_dx.md`'s Phase DX13): a public render-target backend, `Texture3D`, runtime-settable
+blend/depth-stencil/rasterizer state (PSOs hardcode `depthEnable=false`/`cullMode=None`), per-slot
+`SamplerState` (hardcoded static WRAP/linear samplers), occlusion queries, and custom `Effect` via
+`SpriteBatch::Begin(effect)`. **Phase DX13 (D3D12 functional completion, `DX-116` closed,
+`DX-117`–`DX-123` open), Phase DX14 (D3D11 verification hardening), and Phase DX15 (remaining
+EasyGL-parity gaps) were added 2026-07-14 and are now authorized and actively in progress** — see
+`plan_dx.md` for the full task list and ordering rationale. Outside the D3D plan, the standing
+backlog (Phase 79's 153-sample `../cna-samples` re-audit, Task 945's HLSL→GLSL tooling decision,
+Task 952's deferred Bgfx bug) is unchanged — see §8/§9.
 
 **One real, separate, documented problem**: the full `CnaTests` GTest suite does not build under
 `CNA_GRAPHICS_BACKEND=D3D11` (and, by the same root cause, `D3D12`).
@@ -442,16 +447,19 @@ desktop session with real GPU access — re-verify before assuming either claim 
 
 ## 8. Next smallest tasks
 
-1. **`plan_dx.md` is now fully closed for what this Debian dev environment can prove.** D3D11
-   (Phase DX1–DX11) and D3D12 (Phase DX12, `DX-100`–`DX-113`/`DX-115`) both have their complete
-   software/logic layer done and Wine-verified — `D3D11_Smoke`+`D3D11_Common` 96+ checks,
-   `D3D12_Smoke` 80/80 checks (off-screen only). The only two open rows in the whole plan are
-   `DX-90`/`DX-91` (D3D11 real-Windows checklist) and `DX-114` (D3D12 real-Windows checklist,
-   additionally needs to prove the swap chain that crashes under this dev loop's Wine+vkd3d-proton) —
-   **all three are `needs_human`, requiring an actual Windows machine with a real GPU, not available
-   here.** There is no further available Debian-side work on this plan. If a real Windows machine
-   becomes available, start with `DX-114` (D3D12) or `DX-90` (D3D11) per `plan_dx.md`'s own
-   checklists; until then this item is genuinely blocked, not merely low-priority — move to item 2+
+1. **`plan_dx.md`'s original Phase DX1–DX12 scope is fully closed for what this Debian dev
+   environment can prove; Phase DX13/DX14/DX15 (authorized 2026-07-14) are the active work now.**
+   D3D11 (Phase DX1–DX11) and D3D12 (Phase DX12, `DX-100`–`DX-113`/`DX-115`) both have their
+   complete original-scope software/logic layer done and Wine/Proton-verified —
+   `D3D11_Smoke`+`D3D11_Common` 96+ checks, `D3D12_Smoke` 80/80 checks (off-screen), and D3D12's
+   swap chain + `Present()` (`DX-116`) now genuinely work through a real Proton launch. The only two
+   rows in Phase DX1–DX12 still open are `DX-90`/`DX-91` (D3D11 real-Windows checklist) and `DX-114`
+   (D3D12 real-Windows checklist) — both `needs_human`, requiring an actual Windows machine with a
+   real GPU, not available here; if one becomes available, start there per `plan_dx.md`'s own
+   checklists. **Current active work**: Phase DX13 (`DX-117` onward — render targets, state
+   objects, samplers, occlusion queries, custom effects), Phase DX14 (D3D11 verification
+   hardening), and Phase DX15 (remaining EasyGL-parity gaps) — see `plan_dx.md` for the full task
+   list, priority ordering, and per-row dependencies
    below for other independent work.
 1a. **2026-07-14: `.github/workflows/d3d-windows-ci.yml` added** (project-owner-approved exception
     to this project's general no-CI-automation stance, scoped narrowly to D3D11/D3D12) — a

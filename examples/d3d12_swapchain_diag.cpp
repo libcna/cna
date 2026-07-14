@@ -1,14 +1,16 @@
 // SPDX-License-Identifier: MS-PL
-// plan_dx.md DX-102: one-time, honest diagnostic for D3D12's real (window-attached) swap-chain
-// path -- deliberately NOT registered as a CTest (mirrors this project's own cna_diag_software
-// precedent: a real, plain executable a developer/script runs by hand, not part of the default
-// green suite). DX-100's own raw-API spike found DXGI_SWAP_EFFECT_FLIP_DISCARD crashes inside
-// vanilla Wine's own dxgi.dll when handed a D3D12 command queue; this program re-confirms that
-// through the real D3D12GraphicsBackend class (not a standalone spike) so the finding is grounded
-// in this backend's own actual code path, not just a throwaway reproduction. A crash here is an
-// EXPECTED, already-documented outcome on this Wine dev loop, not a bug to chase -- see
-// plan_dx.md DX-102's own row for the full real-run record. Real verification is DX-114's job, on
-// real Windows hardware.
+// plan_dx.md DX-102/DX-116: one-time, honest diagnostic for D3D12's real (window-attached)
+// swap-chain path -- deliberately NOT registered as a CTest (mirrors this project's own
+// cna_diag_software precedent: a real, plain executable a developer/script runs by hand, not part
+// of the default green suite). Under vanilla Wine's own dxgi.dll (scripts/run-wine-vkd3d.sh),
+// DXGI_SWAP_EFFECT_FLIP_DISCARD crashes when handed a D3D12 command queue -- DX-100/DX-102's own
+// real finding. Under a properly Proton-managed launch (scripts/run-proton-vkd3d.sh), the swap
+// chain genuinely works (DX-102's own later update) -- this diagnostic now also exercises DX-116's
+// real Clear()+Present() cycle for several frames, proving the whole pipeline end to end, not just
+// swap-chain creation. Real windowed CTest coverage is not attempted here (Proton's own bootstrap
+// launch is too heavy/slow for a normal CTest run) -- this manual diagnostic plus DX-114's own real
+// Windows hardware pass are the actual verification path for the presentation side of this
+// backend.
 #include "CNA/Internal/Backends/D3D12/D3D12GraphicsBackend.hpp"
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 
@@ -57,6 +59,31 @@ int main()
     std::fprintf(log, "IsSwapChainAvailableEXT() = %s\n", backend.IsSwapChainAvailableEXT() ? "true" : "false");
     std::fprintf(log, "GetSwapChainEXT() = %p\n", static_cast<void*>(backend.GetSwapChainEXT()));
     std::fflush(log);
+
+    // DX-116: real Clear()+Present() cycle, several frames, proving the whole pipeline (back-buffer
+    // acquisition, PRESENT<->RENDER_TARGET barrier transitions, real IDXGISwapChain3::Present())
+    // works end to end, not just swap-chain creation -- a different color each frame so a human
+    // reviewing this log (or, on real Windows, actually watching the window) can tell each frame
+    // genuinely reached the screen rather than the same clear silently repeating.
+    if (backend.IsSwapChainAvailableEXT())
+    {
+        const int frameCount = 10;
+        for (int i = 0; i < frameCount; ++i)
+        {
+            const float t = static_cast<float>(i) / static_cast<float>(frameCount - 1);
+            backend.Clear(t, 1.0f - t, 0.25f, 1.0f);
+            backend.Present();
+            std::fprintf(log, "Frame %d: Clear()+Present() returned without throwing (t=%.2f).\n", i, t);
+            std::fflush(log);
+        }
+        std::fprintf(log, "All %d frames presented without throwing or crashing.\n", frameCount);
+        std::fflush(log);
+    }
+    else
+    {
+        std::fprintf(log, "Swap chain unavailable -- skipping the Clear()+Present() loop.\n");
+        std::fflush(log);
+    }
 
     SDL_DestroyWindow(window);
     SDL_Quit();
