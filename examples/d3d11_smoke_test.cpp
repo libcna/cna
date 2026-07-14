@@ -1088,6 +1088,43 @@ protected:
                   "D3D11GraphicsBackend::DrawPrimitivesEx(): real colored_textured3d draw multiplies "
                   "the exact vertex color through a white texture (plan_dx.md DX-62)");
 
+            // DX-137: dedicated fog on/off discriminating test for colored_textured3d -- same
+            // Z-at-FogEnd methodology as textured3d's own fog test below, reusing this block's
+            // already-proven vertex-color/white-texture fixture (base result (80,160,240)).
+            {
+                static VPCT kTriColTexFog[3];
+                kTriColTexFog[0] = { -1.0f, -1.0f, 0.5f, kVertColor, 0.0f, 1.0f };
+                kTriColTexFog[1] = {  3.0f, -1.0f, 0.5f, kVertColor, 2.0f, 1.0f };
+                kTriColTexFog[2] = { -1.0f,  3.0f, 0.5f, kVertColor, 0.0f, -1.0f };
+                auto vbColTexFog = backend.CreateVertexBuffer(3);
+                vbColTexFog->SetData(kTriColTexFog, 3, sizeof(VPCT));
+
+                const Microsoft::Xna::Framework::Rectangle colTexFogRegion(30, 30, 1, 1);
+                ctp.fogEnabled = false;
+                ctp.fogColor[0] = 0.0f; ctp.fogColor[1] = 1.0f; ctp.fogColor[2] = 0.0f;
+                ctp.fogStart = 0.0f; ctp.fogEnd = 0.5f;
+                dev.Clear(Color(10, 10, 10, 255));
+                backend.DrawPrimitivesEx(*vbColTexFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                         Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, ctp);
+                Color colTexFogOffPixel(0, 0, 0, 0);
+                dev.GetBackBufferData(&colTexFogRegion, &colTexFogOffPixel, 0, 1);
+                check(colTexFogOffPixel.getRProperty() == 80 && colTexFogOffPixel.getGProperty() == 160 &&
+                      colTexFogOffPixel.getBProperty() == 240,
+                      "D3D11GraphicsBackend::DrawPrimitivesEx(): colored_textured3d fogEnabled=false "
+                      "leaves the exact vertex*texture color unblended (plan_dx.md DX-137)");
+
+                ctp.fogEnabled = true;
+                dev.Clear(Color(10, 10, 10, 255));
+                backend.DrawPrimitivesEx(*vbColTexFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                         Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, ctp);
+                Color colTexFogOnPixel(0, 0, 0, 0);
+                dev.GetBackBufferData(&colTexFogRegion, &colTexFogOnPixel, 0, 1);
+                check(colTexFogOnPixel.getRProperty() == 0 && colTexFogOnPixel.getGProperty() == 255 &&
+                      colTexFogOnPixel.getBProperty() == 0,
+                      "D3D11GraphicsBackend::DrawPrimitivesEx(): colored_textured3d fogEnabled=true "
+                      "with Z at FogEnd genuinely blends all the way to the exact FogColor (plan_dx.md DX-137)");
+            }
+
             // DX-137: dedicated fog on/off discriminating test for textured3d -- a representative
             // variant of the 7 fog-capable non-colored3d variants (chosen for its simple, already-
             // proven fixture above; a full 7-variant x 2-backend sweep is out of this task's own
@@ -1195,6 +1232,45 @@ protected:
                   "D3D11GraphicsBackend::DrawPrimitivesEx(): real lit_textured3d lit branch genuinely "
                   "computes a different color than both the unlit result and the Clear() background "
                   "(plan_dx.md DX-63)");
+
+            // DX-137: dedicated fog on/off discriminating test for lit_textured3d -- reuses the
+            // unlit branch's own deterministic fixture (exact base color (44,55,66)) above, same
+            // Z-at-FogEnd methodology as textured3d's own fog test.
+            {
+                static const VPNT kTriLitFog[3] = {
+                    {-1.0f, -1.0f, 0.5f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f},
+                    { 3.0f, -1.0f, 0.5f, 0.0f, 0.0f, 1.0f, 2.0f, 1.0f},
+                    {-1.0f,  3.0f, 0.5f, 0.0f, 0.0f, 1.0f, 0.0f, -1.0f},
+                };
+                auto vbLitFog = backend.CreateVertexBuffer(3);
+                vbLitFog->SetData(kTriLitFog, 3, sizeof(VPNT));
+
+                GpuDrawParams litFogP = unlitP;
+                const Microsoft::Xna::Framework::Rectangle litFogRegion(30, 30, 1, 1);
+                litFogP.fogEnabled = false;
+                litFogP.fogColor[0] = 0.0f; litFogP.fogColor[1] = 1.0f; litFogP.fogColor[2] = 0.0f;
+                litFogP.fogStart = 0.0f; litFogP.fogEnd = 0.5f;
+                dev.Clear(Color(10, 10, 10, 255));
+                backend.DrawPrimitivesEx(*vbLitFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                         Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, litFogP);
+                Color litFogOffPixel(0, 0, 0, 0);
+                dev.GetBackBufferData(&litFogRegion, &litFogOffPixel, 0, 1);
+                check(litFogOffPixel.getRProperty() == 44 && litFogOffPixel.getGProperty() == 55 &&
+                      litFogOffPixel.getBProperty() == 66,
+                      "D3D11GraphicsBackend::DrawPrimitivesEx(): lit_textured3d fogEnabled=false leaves "
+                      "the exact unlit texture color unblended (plan_dx.md DX-137)");
+
+                litFogP.fogEnabled = true;
+                dev.Clear(Color(10, 10, 10, 255));
+                backend.DrawPrimitivesEx(*vbLitFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                         Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, litFogP);
+                Color litFogOnPixel(0, 0, 0, 0);
+                dev.GetBackBufferData(&litFogRegion, &litFogOnPixel, 0, 1);
+                check(litFogOnPixel.getRProperty() == 0 && litFogOnPixel.getGProperty() == 255 &&
+                      litFogOnPixel.getBProperty() == 0,
+                      "D3D11GraphicsBackend::DrawPrimitivesEx(): lit_textured3d fogEnabled=true with Z "
+                      "at FogEnd genuinely blends all the way to the exact FogColor (plan_dx.md DX-137)");
+            }
         }
 
         // Check S (DX-64): alpha_test3d. A failing alpha genuinely discards (Clear() background
@@ -1263,6 +1339,47 @@ protected:
             check(passIsExact,
                   "D3D11GraphicsBackend::DrawPrimitivesEx(): real alpha_test3d draws the exact texture "
                   "color (including its own alpha byte) when the test passes (plan_dx.md DX-64)");
+
+            // DX-137: dedicated fog on/off discriminating test for alpha_test3d -- reuses the
+            // already-PASSING fixture above (alpha=64/255 < AlphaRef=0.5, so nothing is discarded
+            // and fog is genuinely visible), same Z-at-FogEnd methodology as textured3d's own fog
+            // test. A discarding fixture would prove nothing here (no fragment ever reaches the
+            // fog blend).
+            {
+                static const VPT kTriATFog[3] = {
+                    {-1.0f, -1.0f, 0.5f, 0.0f, 1.0f},
+                    { 3.0f, -1.0f, 0.5f, 2.0f, 1.0f},
+                    {-1.0f,  3.0f, 0.5f, 0.0f, -1.0f},
+                };
+                auto vbATFog = backend.CreateVertexBuffer(3);
+                vbATFog->SetData(kTriATFog, 3, sizeof(VPT));
+
+                const Microsoft::Xna::Framework::Rectangle atFogRegion(30, 30, 1, 1);
+                atp.fogEnabled = false;
+                atp.fogColor[0] = 0.0f; atp.fogColor[1] = 1.0f; atp.fogColor[2] = 0.0f;
+                atp.fogStart = 0.0f; atp.fogEnd = 0.5f;
+                dev.Clear(Color(10, 10, 10, 255));
+                backend.DrawPrimitivesEx(*vbATFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                         Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, atp);
+                Color atFogOffPixel(0, 0, 0, 0);
+                dev.GetBackBufferData(&atFogRegion, &atFogOffPixel, 0, 1);
+                check(atFogOffPixel.getRProperty() == 200 && atFogOffPixel.getGProperty() == 100 &&
+                      atFogOffPixel.getBProperty() == 50,
+                      "D3D11GraphicsBackend::DrawPrimitivesEx(): alpha_test3d fogEnabled=false leaves "
+                      "the exact passing texture color unblended (plan_dx.md DX-137)");
+
+                atp.fogEnabled = true;
+                dev.Clear(Color(10, 10, 10, 255));
+                backend.DrawPrimitivesEx(*vbATFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                         Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, atp);
+                Color atFogOnPixel(0, 0, 0, 0);
+                dev.GetBackBufferData(&atFogRegion, &atFogOnPixel, 0, 1);
+                check(atFogOnPixel.getRProperty() == 0 && atFogOnPixel.getGProperty() == 255 &&
+                      atFogOnPixel.getBProperty() == 0,
+                      "D3D11GraphicsBackend::DrawPrimitivesEx(): alpha_test3d fogEnabled=true with Z at "
+                      "FogEnd genuinely blends all the way to the exact FogColor, and the passing "
+                      "fragment survives the alpha test to reach the fog blend at all (plan_dx.md DX-137)");
+            }
         }
 
         // Check T (DX-65): dual_texture3d. tex1.rgb *= 2.0, outColor = tex1 * tex2 * Tint. Both
@@ -1314,6 +1431,44 @@ protected:
             check(dtIsExact,
                   "D3D11GraphicsBackend::DrawPrimitivesEx(): real dual_texture3d combines both real "
                   "SRVs (tex1.rgb*2 * tex2) to the exact expected byte result (plan_dx.md DX-65)");
+
+            // DX-137: dedicated fog on/off discriminating test for dual_texture3d -- reuses this
+            // block's own deterministic fixture (exact base result (100,120,140)), same
+            // Z-at-FogEnd methodology as textured3d's own fog test.
+            {
+                static const VPT2 kTriDTFog[3] = {
+                    {-1.0f, -1.0f, 0.5f, 0.0f, 1.0f},
+                    { 3.0f, -1.0f, 0.5f, 2.0f, 1.0f},
+                    {-1.0f,  3.0f, 0.5f, 0.0f, -1.0f},
+                };
+                auto vbDTFog = backend.CreateVertexBuffer(3);
+                vbDTFog->SetData(kTriDTFog, 3, sizeof(VPT2));
+
+                const Microsoft::Xna::Framework::Rectangle dtFogRegion(30, 30, 1, 1);
+                dtp.fogEnabled = false;
+                dtp.fogColor[0] = 0.0f; dtp.fogColor[1] = 1.0f; dtp.fogColor[2] = 0.0f;
+                dtp.fogStart = 0.0f; dtp.fogEnd = 0.5f;
+                dev.Clear(Color(10, 10, 10, 255));
+                backend.DrawPrimitivesEx(*vbDTFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                         Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, dtp);
+                Color dtFogOffPixel(0, 0, 0, 0);
+                dev.GetBackBufferData(&dtFogRegion, &dtFogOffPixel, 0, 1);
+                check(dtFogOffPixel.getRProperty() == 100 && dtFogOffPixel.getGProperty() == 120 &&
+                      dtFogOffPixel.getBProperty() == 140,
+                      "D3D11GraphicsBackend::DrawPrimitivesEx(): dual_texture3d fogEnabled=false leaves "
+                      "the exact combined-texture color unblended (plan_dx.md DX-137)");
+
+                dtp.fogEnabled = true;
+                dev.Clear(Color(10, 10, 10, 255));
+                backend.DrawPrimitivesEx(*vbDTFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                         Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, dtp);
+                Color dtFogOnPixel(0, 0, 0, 0);
+                dev.GetBackBufferData(&dtFogRegion, &dtFogOnPixel, 0, 1);
+                check(dtFogOnPixel.getRProperty() == 0 && dtFogOnPixel.getGProperty() == 255 &&
+                      dtFogOnPixel.getBProperty() == 0,
+                      "D3D11GraphicsBackend::DrawPrimitivesEx(): dual_texture3d fogEnabled=true with Z "
+                      "at FogEnd genuinely blends all the way to the exact FogColor (plan_dx.md DX-137)");
+            }
         }
 
         // Check U (DX-66): env_map3d. Camera placed far down -Z from a +Z-facing surface, ambient/
@@ -1392,6 +1547,46 @@ protected:
                   "collapses the base-lerp to the pure (unlit) base color, distinctly different from "
                   "the envMapAmount=1.0 reflected-face color above -- proves the lerp is a genuine "
                   "graduated blend control, not just an on/off gate (plan_dx.md DX-134)");
+
+            // DX-137: dedicated fog on/off discriminating test for env_map3d -- reuses this block's
+            // own deterministic reflected-face fixture (exact base result (10,20,30) at
+            // envMapAmount=1.0, restored here since DX-134's check above left it at 0.0), same
+            // Z-at-FogEnd methodology as textured3d's own fog test.
+            {
+                static const VPNTE kTriEnvFog[3] = {
+                    {-1.0f, -1.0f, 0.5f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f},
+                    { 3.0f, -1.0f, 0.5f, 0.0f, 0.0f, 1.0f, 2.0f, 1.0f},
+                    {-1.0f,  3.0f, 0.5f, 0.0f, 0.0f, 1.0f, 0.0f, -1.0f},
+                };
+                auto vbEnvFog = backend.CreateVertexBuffer(3);
+                vbEnvFog->SetData(kTriEnvFog, 3, sizeof(VPNTE));
+
+                ep.envMapAmount = 1.0f;
+                const Microsoft::Xna::Framework::Rectangle envFogRegion(30, 30, 1, 1);
+                ep.fogEnabled = false;
+                ep.fogColor[0] = 0.0f; ep.fogColor[1] = 1.0f; ep.fogColor[2] = 0.0f;
+                ep.fogStart = 0.0f; ep.fogEnd = 0.5f;
+                dev.Clear(Color(10, 10, 10, 255));
+                backend.DrawPrimitivesEx(*vbEnvFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                         Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, ep);
+                Color envFogOffPixel(0, 0, 0, 0);
+                dev.GetBackBufferData(&envFogRegion, &envFogOffPixel, 0, 1);
+                check(envFogOffPixel.getRProperty() == 10 && envFogOffPixel.getGProperty() == 20 &&
+                      envFogOffPixel.getBProperty() == 30,
+                      "D3D11GraphicsBackend::DrawPrimitivesEx(): env_map3d fogEnabled=false leaves the "
+                      "exact reflected cube-face color unblended (plan_dx.md DX-137)");
+
+                ep.fogEnabled = true;
+                dev.Clear(Color(10, 10, 10, 255));
+                backend.DrawPrimitivesEx(*vbEnvFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                         Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, ep);
+                Color envFogOnPixel(0, 0, 0, 0);
+                dev.GetBackBufferData(&envFogRegion, &envFogOnPixel, 0, 1);
+                check(envFogOnPixel.getRProperty() == 0 && envFogOnPixel.getGProperty() == 255 &&
+                      envFogOnPixel.getBProperty() == 0,
+                      "D3D11GraphicsBackend::DrawPrimitivesEx(): env_map3d fogEnabled=true with Z at "
+                      "FogEnd genuinely blends all the way to the exact FogColor (plan_dx.md DX-137)");
+            }
         }
 
         // Check V (DX-67): skinned3d. A single identity bone (BoneBlock genuinely populated from
@@ -1507,6 +1702,56 @@ protected:
                   "through), distinctly different from the weightsPerVertex=1 case above with "
                   "identical vertex weight data, proving WeightsPerVertex actually gates which bones "
                   "are summed (plan_dx.md DX-135)");
+
+            // DX-137: dedicated fog on/off discriminating test for skinned3d -- a fresh copy of
+            // this block's own original single-bone identity fixture (exact base result
+            // (77,88,99); `sp`/`vbSkin` above were mutated for the WeightsPerVertex sub-test), same
+            // Z-at-FogEnd methodology as textured3d's own fog test.
+            {
+                static const VPNTS kTriSkinFog[3] = {
+                    {-1.0f, -1.0f, 0.5f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0},
+                    { 3.0f, -1.0f, 0.5f, 0.0f, 0.0f, 1.0f, 2.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0},
+                    {-1.0f,  3.0f, 0.5f, 0.0f, 0.0f, 1.0f, 0.0f, -1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0},
+                };
+                auto vbSkinFog = backend.CreateVertexBuffer(3);
+                vbSkinFog->SetData(kTriSkinFog, 3, sizeof(VPNTS));
+
+                GpuDrawParams skinFogP;
+                skinFogP.texture0 = tex.get();
+                skinFogP.textureEnabled = true;
+                skinFogP.skinned = true;
+                skinFogP.boneCount = 1;
+                skinFogP.weightsPerVertex = 1;
+                Matrix::getIdentityProperty().ToColumnMajor(skinFogP.boneTransforms);
+                skinFogP.ambientColor[0] = 1.0f; skinFogP.ambientColor[1] = 1.0f; skinFogP.ambientColor[2] = 1.0f;
+                skinFogP.specularColor[0] = 0.0f; skinFogP.specularColor[1] = 0.0f; skinFogP.specularColor[2] = 0.0f;
+                skinFogP.eyePositionWorld[0] = 0.0f; skinFogP.eyePositionWorld[1] = 0.0f; skinFogP.eyePositionWorld[2] = -10.0f;
+
+                const Microsoft::Xna::Framework::Rectangle skinFogRegion(30, 30, 1, 1);
+                skinFogP.fogEnabled = false;
+                skinFogP.fogColor[0] = 0.0f; skinFogP.fogColor[1] = 1.0f; skinFogP.fogColor[2] = 0.0f;
+                skinFogP.fogStart = 0.0f; skinFogP.fogEnd = 0.5f;
+                dev.Clear(Color(10, 10, 10, 255));
+                backend.DrawPrimitivesEx(*vbSkinFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                         Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, skinFogP);
+                Color skinFogOffPixel(0, 0, 0, 0);
+                dev.GetBackBufferData(&skinFogRegion, &skinFogOffPixel, 0, 1);
+                check(skinFogOffPixel.getRProperty() == 77 && skinFogOffPixel.getGProperty() == 88 &&
+                      skinFogOffPixel.getBProperty() == 99,
+                      "D3D11GraphicsBackend::DrawPrimitivesEx(): skinned3d fogEnabled=false leaves the "
+                      "exact single-bone-identity texture color unblended (plan_dx.md DX-137)");
+
+                skinFogP.fogEnabled = true;
+                dev.Clear(Color(10, 10, 10, 255));
+                backend.DrawPrimitivesEx(*vbSkinFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                         Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, skinFogP);
+                Color skinFogOnPixel(0, 0, 0, 0);
+                dev.GetBackBufferData(&skinFogRegion, &skinFogOnPixel, 0, 1);
+                check(skinFogOnPixel.getRProperty() == 0 && skinFogOnPixel.getGProperty() == 255 &&
+                      skinFogOnPixel.getBProperty() == 0,
+                      "D3D11GraphicsBackend::DrawPrimitivesEx(): skinned3d fogEnabled=true with Z at "
+                      "FogEnd genuinely blends all the way to the exact FogColor (plan_dx.md DX-137)");
+            }
         }
 
         // Check W (DX-68): instanced3d. DrawInstancedPrimitivesEx() with one identity-transform
@@ -2762,7 +3007,8 @@ protected:
                                 + 4 /* DX-127 SpriteFont glyph placement/spacing/newline/flip */
                                 + 1 /* DX-128 Model/ModelMesh runtime-API orchestration */
                                 + 3 /* DX-129 RenderTargetCube bind+clear+readback+unbind proof */
-                                + 8 /* DX-130 combo Clear* variants (DSV, stencil-readable, stencil x2, control, depth x2, color-untouched) */;
+                                + 8 /* DX-130 combo Clear* variants (DSV, stencil-readable, stencil x2, control, depth x2, color-untouched) */
+                                + 12 /* DX-137 fog for 6 remaining variants x 2 checks each */;
         std::printf("=== %d/%d PASS ===\n", passCount_, totalChecks);
         result_ = (passCount_ == totalChecks) ? 0 : 1;
         Exit();
