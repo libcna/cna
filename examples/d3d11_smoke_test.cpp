@@ -2032,11 +2032,76 @@ protected:
                   "not a shared/aliased single slot (plan_dx.md DX-142)");
         }
 
+        // plan_dx.md DX-147: OcclusionQuery visible-vs-occluded DISCRIMINATION for D3D11. Check M
+        // (DX-47) above only proves a query object completes and reports 0 for an empty Begin()/
+        // End() -- it never proved the count actually tracks what was rasterized. EasyGL/Vulkan
+        // both verify both directions already (Tasks 445/446/854); D3D12's own half was closed by
+        // DX-120 (Checks AA3/AA4). This closes D3D11's, using the same methodology: the SAME query
+        // object is reused around a genuinely visible draw and a genuinely invisible one, so a
+        // backend that simply returned a constant (or leaked the prior count) cannot pass both.
+        {
+            struct VPCq { float x, y, z; uint32_t color; };
+            const uint32_t kRedQ = 0xFF0000FFu;
+
+            // Fullscreen-covering triangle -> every back-buffer pixel is rasterized.
+            static const VPCq kTriVisible[3] = {
+                {-1.0f, -1.0f, 0.5f, kRedQ},
+                { 3.0f, -1.0f, 0.5f, kRedQ},
+                {-1.0f,  3.0f, 0.5f, kRedQ},
+            };
+            // The same triangle translated far off-screen -> fully clipped, rasterizes nothing.
+            static const VPCq kTriOffscreen[3] = {
+                {10.0f, 10.0f, 0.5f, kRedQ},
+                {14.0f, 10.0f, 0.5f, kRedQ},
+                {10.0f, 14.0f, 0.5f, kRedQ},
+            };
+
+            auto vbVisible = backend.CreateVertexBuffer(3);
+            vbVisible->SetData(kTriVisible, 3, sizeof(VPCq));
+            auto vbOffscreen = backend.CreateVertexBuffer(3);
+            vbOffscreen->SetData(kTriOffscreen, 3, sizeof(VPCq));
+
+            GpuDrawParams qp;
+            qp.vertexColorEnabled = true;
+
+            auto oq2 = backend.CreateOcclusionQuery();
+
+            dev.Clear(Color(10, 10, 10, 255));
+            oq2->Begin();
+            backend.DrawPrimitivesEx(*vbVisible, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                     Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, qp);
+            oq2->End();
+            context->Flush();
+            bool done1 = false;
+            for (int i = 0; i < 1000000 && !done1; ++i) done1 = oq2->IsComplete();
+            const int visibleCount = oq2->PixelCount();
+            check(done1 && visibleCount > 0,
+                  "D3D11OcclusionQueryBackend: a genuinely VISIBLE (viewport-covering) draw reports a real, "
+                  "POSITIVE PixelCount() -- the count actually tracks rasterized pixels, not a constant "
+                  "(plan_dx.md DX-147)");
+
+            // Same query object, reused -- an implementation that leaked the previous count or
+            // returned a fixed value cannot pass this after passing the check above.
+            dev.Clear(Color(10, 10, 10, 255));
+            oq2->Begin();
+            backend.DrawPrimitivesEx(*vbOffscreen, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                     Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, qp);
+            oq2->End();
+            context->Flush();
+            bool done2 = false;
+            for (int i = 0; i < 1000000 && !done2; ++i) done2 = oq2->IsComplete();
+            check(done2 && oq2->PixelCount() == 0,
+                  "D3D11OcclusionQueryBackend: the SAME query object, reused around fully off-screen "
+                  "(clipped) geometry, reports EXACTLY 0 -- a genuine visible-vs-invisible DISCRIMINATING "
+                  "result, not just 'the query completed' (plan_dx.md DX-147)");
+        }
+
         const int totalChecks = 3 + 10 + 1 + 2 + 2 + 2 + 2 + 2 + 1 + 1 + 2 + 1 + 13 + 2 + 3 + 2 + 2 + 1 + 1 + 1 + 1 + 3 + 2 + 2 + 2 + 3 + 2 + 3 /* DX-131 rotation/scale/crop */
                                 + 1 /* DX-134 envMapAmount=0 */ + 2 /* DX-135 WeightsPerVertex */ + 2 /* DX-137 textured3d fog */
                                 + 2 /* DX-140 NPOT */ + 2 /* DX-142 all-16-sampler-slots */ + 2 /* DX-143 MRT MSAA resolve */
                                 + 4 /* DX-144 RT2D+RTCube mip-chain generation */
-                                + 4 /* DX-145 DepthStencilFormat fidelity */;
+                                + 4 /* DX-145 DepthStencilFormat fidelity */
+                                + 2 /* DX-147 occlusion query visible-vs-occluded */;
         std::printf("=== %d/%d PASS ===\n", passCount_, totalChecks);
         result_ = (passCount_ == totalChecks) ? 0 : 1;
         Exit();
