@@ -67,6 +67,33 @@ export SteamGameId="${SteamGameId:-0}"
 PFX="${STEAM_COMPAT_DATA_PATH}/pfx"
 mkdir -p "${STEAM_COMPAT_DATA_PATH}"
 
+# --- Safety guard (added 2026-07-14 after a real incident, see below) -------------------------
+#
+# HARD refusal to ever operate on the developer's own default Wine prefix (~/.wine). This is not
+# theoretical: on 2026-07-14 an earlier iteration of this script's own investigation ran Proton's
+# `wine` binary WITHOUT WINEPREFIX set, so it fell back to ~/.wine -- the developer's real, personal
+# prefix (with unrelated apps installed in it). Proton ships wine-11.0 while the system wine is
+# 10.0, so that silently triggered an automatic prefix UPGRADE of ~/.wine: it rewrote system.reg/
+# user.reg/userdef.reg/dosdevices, then HUNG forever on the setupapi "found new hardware" /
+# install_mono wizard, leaving the personal prefix half-upgraded and two zombie Wine process trees
+# running for 9.5 hours (visible as "steam_proton is not responding" desktop popups). The
+# WINEPREFIX= assignments below are the actual fix for the fallback; this guard is the seatbelt in
+# case a future edit ever drops one of them again.
+case "${PFX}" in
+    "${HOME}/.wine"|"${HOME}/.wine/"*)
+        echo "error: refusing to run -- the prefix path resolves to the default ~/.wine prefix." >&2
+        echo "       That is the developer's own personal Wine prefix, not a CNA test prefix." >&2
+        echo "       Set CNA_D3D12_PROTON_COMPAT_DATA_PATH to a dedicated directory." >&2
+        exit 1
+        ;;
+esac
+
+# Scoped cleanup: kills ONLY the wineserver owning this specific prefix (WINEPREFIX-scoped, so it
+# can never touch the developer's own ~/.wine session or any other prefix's processes).
+kill_this_prefix() {
+    WINEPREFIX="${PFX}" "${PROTON_DIR}/files/bin/wineserver" -k 2>/dev/null || true
+}
+
 # First-ever run for this prefix: `proton run` itself bootstraps the prefix automatically (its own
 # main() calls make_default_prefix() unconditionally before running any target) -- no separate
 # wineboot step needed, and none should be attempted here: a hand-built `wineboot --init` hits an
@@ -76,11 +103,26 @@ mkdir -p "${STEAM_COMPAT_DATA_PATH}"
 # first (bootstraps the prefix; its result is discarded -- it runs under Proton's own *default*
 # D3D12 support, not vkd3d-proton, since the overlay hasn't been applied yet) before overlaying and
 # running for real.
+#
+# The bootstrap is wrapped in a timeout: the same setupapi/install_mono wizard that hung the
+# personal prefix above can in principle hang here too, and an unbounded hang leaves zombie Wine
+# process trees (and "not responding" desktop popups) behind for hours. On timeout, tear down this
+# prefix's own wineserver and fail loudly rather than hanging.
+BOOTSTRAP_TIMEOUT="${CNA_D3D12_PROTON_BOOTSTRAP_TIMEOUT:-300}"
 if [ ! -f "${PFX}/system.reg" ]; then
-    echo "run-proton-vkd3d.sh: bootstrapping a fresh Proton-managed prefix at ${STEAM_COMPAT_DATA_PATH} (one-time)..." >&2
-    python3 "${PROTON_DIR}/proton" run "$1" >/dev/null 2>&1 || true
+    echo "run-proton-vkd3d.sh: bootstrapping a fresh Proton-managed prefix at ${STEAM_COMPAT_DATA_PATH} (one-time, timeout ${BOOTSTRAP_TIMEOUT}s)..." >&2
+    timeout --kill-after=15 "${BOOTSTRAP_TIMEOUT}" \
+        python3 "${PROTON_DIR}/proton" run "$1" >/dev/null 2>&1
+    bootstrap_rc=$?   # captured immediately -- a later [ ] would clobber $?
+    if [ "${bootstrap_rc}" -eq 124 ] || [ "${bootstrap_rc}" -eq 137 ]; then
+        echo "error: prefix bootstrap timed out after ${BOOTSTRAP_TIMEOUT}s (the known setupapi/" >&2
+        echo "       install_mono first-run wizard hang). Killing this prefix's wineserver." >&2
+        kill_this_prefix
+        exit 1
+    fi
     if [ ! -f "${PFX}/system.reg" ]; then
         echo "error: prefix bootstrap did not produce '${PFX}/system.reg'." >&2
+        kill_this_prefix
         exit 1
     fi
 fi
@@ -92,9 +134,12 @@ cp -f "${VKD3D_PROTON_DLL_DIR}/d3d12.dll" "${PFX}/drive_c/windows/system32/d3d12
 cp -f "${VKD3D_PROTON_DLL_DIR}/d3d12core.dll" "${PFX}/drive_c/windows/system32/d3d12core.dll"
 # WINEPREFIX must be set explicitly here -- these two calls bypass `proton run` (which is what
 # normally translates STEAM_COMPAT_DATA_PATH into the real prefix path), so without it `wine`
-# falls back to its own default ~/.wine prefix (auto-initializing one from scratch, which hits an
-# unrelated first-run "found new hardware" GUI-wizard hang under a raw Proton wine binary).
-WINEPREFIX="${PFX}" "${PROTON_DIR}/files/bin/wine" reg add "HKCU\\Software\\Wine\\DllOverrides" /v d3d12 /d native /f >/dev/null 2>&1
-WINEPREFIX="${PFX}" "${PROTON_DIR}/files/bin/wine" reg add "HKCU\\Software\\Wine\\DllOverrides" /v d3d12core /d native /f >/dev/null 2>&1
+# falls back to its own default ~/.wine prefix. That is not a hypothetical: it really happened on
+# 2026-07-14 and half-upgraded the developer's personal prefix (see the guard block above for the
+# full incident). Never drop these WINEPREFIX= assignments; the guard above is the backstop.
+# Timeout-wrapped for the same reason the bootstrap is -- a hung `wine reg add` would otherwise
+# leave a zombie Wine process tree behind indefinitely.
+timeout --kill-after=5 60 env WINEPREFIX="${PFX}" "${PROTON_DIR}/files/bin/wine" reg add "HKCU\\Software\\Wine\\DllOverrides" /v d3d12 /d native /f >/dev/null 2>&1 || true
+timeout --kill-after=5 60 env WINEPREFIX="${PFX}" "${PROTON_DIR}/files/bin/wine" reg add "HKCU\\Software\\Wine\\DllOverrides" /v d3d12core /d native /f >/dev/null 2>&1 || true
 
 exec python3 "${PROTON_DIR}/proton" run "$@"
