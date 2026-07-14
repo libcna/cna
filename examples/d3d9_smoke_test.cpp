@@ -33,6 +33,12 @@
 // Check K -- GraphicsProfile::HiDef construction succeeds on this real vs_3_0/ps_3_0-capable
 //   device (D9-32's profile-floor enforcement, positive path). The rejection path cannot be
 //   exercised on real hardware that already exceeds the floor -- an honest gap, not a hidden one.
+// Check M -- the real device-lost lifecycle (D9-34), driven via the pre-existing
+//   DebugSimulateContextLoss()/DebugRestoreContext() test channel since DXVK rarely loses the
+//   device naturally: DeviceLost fires exactly once and GraphicsDeviceStatus/IsDeviceLostEXT()
+//   both report Lost; Clear() throws DeviceLostException while lost; DebugRestoreContext() fires
+//   DeviceResetting then DeviceReset (each exactly once) via a REAL Reset() call, status returns
+//   to Normal, and the device genuinely works again afterward (Clear()+readback exact).
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
@@ -43,6 +49,8 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ClearOptions.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DeviceLostException.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsDeviceStatus.hpp"
 
 #include "CNA/Internal/Backends/D3D9/D3D9GraphicsBackend.hpp"
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
@@ -255,6 +263,48 @@ protected:
                 (dev.getPresentationParametersProperty().getBackBufferWidthProperty() == 96 &&
                  dev.getPresentationParametersProperty().getBackBufferHeightProperty() == 80);
             check(ppMatches, "D9-33: PresentationParameters reflects the new 96x80 size post-resize");
+        }
+
+        // Check M (D9-34) -- the real XNA device-lost lifecycle, driven through the pre-existing
+        // GraphicsDevice-calls-into-backend test channel (DebugSimulateContextLoss()/
+        // DebugRestoreContext()) since DXVK will rarely lose the device naturally under this dev
+        // loop (design decision 2's own documented cost) -- this exercises the REAL event sequence
+        // and a REAL Reset() call, even though the "loss" itself is simulated, not driver-detected.
+        {
+            int lostCount = 0, resettingCount = 0, resetCount = 0;
+            dev.DeviceLost += [&](System::Object*, const System::EventArgs&) { ++lostCount; };
+            dev.DeviceResetting += [&](System::Object*, const System::EventArgs&) { ++resettingCount; };
+            dev.DeviceReset += [&](System::Object*, const System::EventArgs&) { ++resetCount; };
+
+            check(dev.getGraphicsDeviceStatusProperty() == GraphicsDeviceStatus::Normal,
+                  "D9-34: GraphicsDeviceStatus starts Normal");
+
+            backend.DebugSimulateContextLoss();
+            check(lostCount == 1 && resettingCount == 0 && resetCount == 0,
+                  "D9-34: DebugSimulateContextLoss() fires DeviceLost exactly once, nothing else yet");
+            check(backend.IsDeviceLostEXT() &&
+                  dev.getGraphicsDeviceStatusProperty() == GraphicsDeviceStatus::Lost,
+                  "D9-34: backend.IsDeviceLostEXT() and GraphicsDeviceStatus both report Lost");
+
+            bool threwWhileLost = false;
+            try { dev.Clear(Color(1, 2, 3, 255)); } catch (const DeviceLostException&) { threwWhileLost = true; }
+            check(threwWhileLost, "D9-34: Clear() throws DeviceLostException while the device is lost");
+
+            backend.DebugRestoreContext();
+            check(resettingCount == 1 && resetCount == 1,
+                  "D9-34: DebugRestoreContext() fires DeviceResetting then DeviceReset, each exactly once");
+            check(!backend.IsDeviceLostEXT() &&
+                  dev.getGraphicsDeviceStatusProperty() == GraphicsDeviceStatus::Normal,
+                  "D9-34: backend.IsDeviceLostEXT() and GraphicsDeviceStatus both report recovered/Normal");
+
+            dev.Clear(Color(6, 7, 8, 255));
+            const Microsoft::Xna::Framework::Rectangle postRecoveryRegion(0, 0, 2, 2);
+            std::vector<Color> postRecoveryPixels(2 * 2, Color(0, 0, 0, 0));
+            dev.GetBackBufferData(&postRecoveryRegion, postRecoveryPixels.data(), 0,
+                                   static_cast<int>(postRecoveryPixels.size()));
+            check(postRecoveryPixels[0].getRProperty() == 6 && postRecoveryPixels[0].getGProperty() == 7 &&
+                  postRecoveryPixels[0].getBProperty() == 8,
+                  "D9-34: the device genuinely works again after recovery -- Clear()+readback exact");
         }
 
         std::printf("=== %d/%d PASS (main Game checks) ===\n", passCount, totalCount);

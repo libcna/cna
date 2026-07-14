@@ -59,7 +59,7 @@ plausibly."
 
 | Build dir | Backend | Status |
 |---|---|---|
-| `cmake-build-d3d9` | D3D9 (Windows cross-compile, MinGW-w64) | **Verified clean 2026-07-14**: `cmake -DCNA_GRAPHICS_BACKEND=D3D9 -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64.cmake -DCNA_BUILD_TESTS=ON` configures; `CNA`/`cna_backend_graphics_d3d9`/`cna_test_d3d9_common`/`cna_test_d3d9_smoke` all build clean. `D3D9_Common` 28/28 + `D3D9_Smoke` 12/12 pass via `ctest --test-dir cmake-build-d3d9 -R D3D9`. A real device now creates, clears, presents, and reads back pixels through the actual public `Game`/`GraphicsDeviceManager`/`GraphicsDevice` API. |
+| `cmake-build-d3d9` | D3D9 (Windows cross-compile, MinGW-w64) | **Verified clean 2026-07-14**: `cmake -DCNA_GRAPHICS_BACKEND=D3D9 -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64.cmake -DCNA_BUILD_TESTS=ON` configures; `CNA`/`cna_backend_graphics_d3d9`/`cna_test_d3d9_common`/`cna_test_d3d9_smoke` all build clean. `D3D9_Common` 28/28 + `D3D9_Smoke` 24/24 pass via `ctest --test-dir cmake-build-d3d9 -R D3D9`. A real device now creates, clears, presents, reads back pixels, resizes, and recovers from a (simulated) device-lost event, all through the actual public `Game`/`GraphicsDeviceManager`/`GraphicsDevice` API. |
 
 ### Phase D9-0 — feasibility spikes: CLOSED 2026-07-14
 
@@ -109,7 +109,7 @@ equivalent at all — different alpha-bit position). Both verified against Micro
 D3D9→DXGI legacy-format table, not derived by name resemblance. Next up: Phase D9-3 (device, present,
 device-lost).
 
-### Phase D9-3 — device, present, device-lost: D9-30/D9-31/D9-32/D9-33 CLOSED, only D9-34 open
+### Phase D9-3 — device, present, device-lost: ALL 5 rows closed (D9-32/D9-34 honestly 🟨)
 
 | Task | Status |
 |---|---|
@@ -117,7 +117,20 @@ device-lost).
 | `D9-31` — `Clear` + all 6 `Clear*` combos + `Present` + `ReadBackbuffer`, each pixel-verified | ✅ (`D3D9_Smoke`) |
 | `D9-32` — enforce `GraphicsProfile` floor at construction | 🟨 (shader-model floor real; full Reach/HiDef table is `D9-100`'s job) |
 | `D9-33` — window resize via device `Reset()` | ✅ (mechanism + dedicated 64×64→96×80 test, Check L) |
-| `D9-34` — XNA device-lost lifecycle | ⬜ next (channel exists, `TestCooperativeLevel` loop not yet implemented) |
+| `D9-34` — XNA device-lost lifecycle | 🟨 (real mechanism + real event order proven via `DebugSimulateContextLoss`; genuine driver-triggered loss + event-payload-vs-real-XNA fidelity are `D9-A`/`D9-140`'s own jobs) |
+
+**Phase D9-3 is now fully closed** (both 🟨 rows have named, honest, out-of-this-plan's-current-reach
+gaps, not missed work). `D9-34`: `Present()` detects real `D3DERR_DEVICELOST`, fires `DeviceLost`;
+`PollDeviceLost()` polls `TestCooperativeLevel()` until `D3DERR_DEVICENOTRESET`, then
+`PerformResetRecovery()` fires `DeviceResetting`, calls a real `Reset()`, restores the viewport, fires
+`DeviceReset`. Since DXVK will rarely lose the device naturally, the full sequence was exercised
+deterministically via the pre-existing `DebugSimulateContextLoss()`/`DebugRestoreContext()` test
+channel (`D3D9_Smoke` Check M, 8 new checks) — real event counts/order, a real `Clear()` throwing the
+real XNA `DeviceLostException` while lost, a real `Reset()` call during recovery, and the device
+genuinely rendering again afterward. Also fixed a separate, pre-existing gap found along the way:
+`GraphicsDevice::getGraphicsDeviceStatusProperty()` was hardcoded `return
+GraphicsDeviceStatus::Normal;` always — now tracks the real backend-reported state. `D3D9_Smoke` is
+now 24/24 checks.
 
 `D3D9_Smoke` is now 17/17 checks (9 main + 3 no-depth-buffer + 2 HiDef-profile + 3 resize).
 
@@ -182,7 +195,8 @@ Most recent first. Full detail lives in `plan_dx9.md` — this is a short index.
 
 | Commit(s) | Summary |
 |---|---|
-| *(pending)* | **`D9-32` closed (shader-model floor) + `D9-33`'s dedicated resize test (Check L)**: `GraphicsProfile::HiDef` now checked against the real `D3DCAPS9` at construction, throwing the real XNA `NoSuitableGraphicsDeviceException` if below `vs_3_0`/`ps_3_0` (only the positive path provable on this real, already-SM3-capable GPU); a new `D3D9_Smoke` Check L resizes 64×64→96×80 via the real `GraphicsDeviceManager` path and confirms the viewport, a post-resize pixel readback at both the origin and the new far edge, and `PresentationParameters` all reflect the new size. `D3D9_Smoke` now 17/17. |
+| *(pending)* | **Phase D9-3 fully closed — `D9-34` (device-lost lifecycle)**: `Present()` detects real `D3DERR_DEVICELOST`, fires `DeviceLost`; while lost, polls `TestCooperativeLevel()` until `D3DERR_DEVICENOTRESET`, then fires `DeviceResetting`, calls a real `Reset()`, restores the viewport, fires `DeviceReset`. `Clear`/all `Clear*` combos/`ReadBackbuffer` now throw the real XNA `DeviceLostException` while lost. Exercised deterministically (DXVK rarely loses the device naturally) via the pre-existing `DebugSimulateContextLoss()`/`DebugRestoreContext()` test channel — new `D3D9_Smoke` Check M (8 checks): real event counts/order, a real `Reset()` during recovery, and the device genuinely working again afterward. Also fixed a separate pre-existing gap: `GraphicsDevice::getGraphicsDeviceStatusProperty()` was hardcoded to `Normal` always; now tracks the real backend-reported state. `D3D9_Smoke` now 24/24. Verified no regression on EasyGL/CnaTests. |
+| `70e81079` | **`D9-32` closed (shader-model floor) + `D9-33`'s dedicated resize test (Check L)**: `GraphicsProfile::HiDef` now checked against the real `D3DCAPS9` at construction, throwing the real XNA `NoSuitableGraphicsDeviceException` if below `vs_3_0`/`ps_3_0` (only the positive path provable on this real, already-SM3-capable GPU); a new `D3D9_Smoke` Check L resizes 64×64→96×80 via the real `GraphicsDeviceManager` path and confirms the viewport, a post-resize pixel readback at both the origin and the new far edge, and `PresentationParameters` all reflect the new size. `D3D9_Smoke` now 17/17. |
 | `50954798` | **`D9-30`/`D9-31` closed + `D9-33`'s resize mechanism + Phase D9-6's `D9-60`/`D9-61`/`D9-62` forced in early**: real `Direct3DCreate9`/`CreateDevice` using the game's actual requested back-buffer/depth-stencil format (the approved `GraphicsBackendCreateArgs` extension, finally consumed for real); all 6 `Clear*` combos + `Present` + `ReadBackbuffer` pixel-verified (`D3D9_Smoke` 12/12); a real `EnsureDeviceSize()` resize-via-`Reset()` mechanism (proven working, not theoretical — it's what makes the smoke test converge to the requested 64×64 size at all). Two real, unplanned findings fixed in place: DXVK genuinely rejects `SurfaceFormat::Color`'s own `D3DFMT_A8B8G8R8` as a *swap-chain* format (a real D3D9 display-format restriction, fixed with a back-buffer-specific substitution to `A8R8G8B8`); and `GraphicsDevice::Reset()` never forwarded updated presentation settings to an already-constructed backend, fixed with one more small additive `IGraphicsBackend` method (`UpdatePresentationFormatEXT`, same category as the already-approved extension). Separately, `GraphicsDevice`'s own constructor turned out to unconditionally push `BlendState`/`DepthStencilState`/`RasterizerState`/viewport defaults, forcing `D9-60`/`D9-61`/`D9-62` in immediately (real `D3DRS_*` `SetRenderState()` sequences) — no device could otherwise finish constructing. Also found 4 more silently-empty `IGraphicsBackend` virtuals `D9-11`'s own grep missed (multi-line `{}` defaults). Verified no regression on EasyGL (34 gtest+CTest checks, including 5 resize/reset-specific ones). |
 | `bf26d7d1` | **Phase D9-2 fully closed** (`D9-20`–`D9-23`): new `D3D9FormatMapping`/`D3D9StateMapping`/`D3D9VertexDeclarations` + a 28-check `D3D9_Common` CTest, mutation-verified. Two non-obvious, easy-to-get-backwards findings, both verified against Microsoft's own published D3D9→DXGI legacy-format table rather than assumed: `SurfaceFormat::Color` → `D3DFMT_A8B8G8R8` (not the superficially-obvious `A8R8G8B8`), and `Rgba1010102` → `D3DFMT_A2B10G10R10` (not `A2R10G10B10`, which has no real DXGI equivalent at all). `TextureFilter` needed a new `{min,mag,mip}` triple struct, not a single enum, since D3D9 has no composed filter value. One row (`D9-21`) is 🟨: the mapping table is done, but its own "pixel-test `D3DCULL` against the oracle" obligation is honestly deferred to `D9-84` (no draw path exists yet to test it with). |
 | `1a3ca71f` | **Phase D9-1 fully closed** (`D9-10`/`D9-11`/`D9-12`): D3D9 wired into `CMakeLists.txt` (6 of 7 `"D3D12"` sites, correcting a stale plan claim about the 7th — see `plan_dx9.md`'s `D9-10` row); new `D3D9GraphicsBackend` skeleton + shared `NotYetImplemented.hpp`; `GraphicsDevice.cpp` audited, zero changes needed. `CNA_GRAPHICS_BACKEND=D3D9` configures and builds clean; a runtime check confirms the skeleton's real bookkeeping methods work and its throwing methods actually throw. |
@@ -194,11 +208,10 @@ Most recent first. Full detail lives in `plan_dx9.md` — this is a short index.
 
 ## 4. Current blocker / main problem
 
-**No blocker.** Phases D9-0/D9-1/D9-2 are fully closed. Phase D9-3: `D9-30`/`D9-31`/`D9-33` closed,
-`D9-32` closed for its own real scope (shader-model floor; full Reach/HiDef table is `D9-100`'s job).
-Only `D9-34` (real device-lost recovery loop) remains open in Phase D9-3. Phase D9-6: `D9-60`/`D9-61`/
-`D9-62` were forced in early (real) as a side effect of D9-30's own work; `D9-63`/`D9-64` remain. Next
-smallest task: `D9-34`.
+**No blocker.** Phases D9-0/D9-1/D9-2/D9-3 are fully closed (D9-32/D9-34 honestly 🟨 — see their own
+plan rows for exactly what's deferred and why). Phase D9-6: `D9-60`/`D9-61`/`D9-62` were forced in
+early (real) as a side effect of D9-30's own work; `D9-63`/`D9-64` remain open. Next smallest task:
+Phase D9-4 (buffers: `D9-40`–`42`), or `D9-63`/`D9-64` if closing out Phase D9-6 first is preferred.
 
 ---
 
@@ -263,23 +276,21 @@ cmake -S . -B cmake-build-d3d9 \
 
 ## 8. Next smallest tasks
 
-**Phases D9-0/D9-1/D9-2 closed. Phase D9-3: `D9-30`/`D9-31`/`D9-32`/`D9-33` closed (only `D9-34`
-open). Phase D9-6: `D9-60`/`D9-61`/`D9-62` closed (forced in early).**
+**Phases D9-0/D9-1/D9-2/D9-3 are all closed** (`D9-32`/`D9-34` honestly 🟨 — see `plan_dx9.md` for
+exactly what's deferred to `D9-100`/`D9-A`/`D9-140` and why). Phase D9-6: `D9-60`/`D9-61`/`D9-62`
+closed (forced in early).
 
-1. **`D9-34`** — XNA's real device-lost lifecycle (`TestCooperativeLevel`/`D3DERR_DEVICELOST`/
-   `DeviceLost`/`DeviceResetting`/`DeviceReset`, `D3DPOOL_MANAGED` resources surviving `Reset()`
-   untouched — `D9-4` already confirmed this really works under DXVK). The notification channel
-   (`BackendDeviceEvent`/`deviceEventCallback`) already exists (`D9-30`) but is not yet wired to a
-   real `TestCooperativeLevel()` polling loop — that loop itself is this task's own remaining work.
-   Under DXVK the device is unlikely to be lost naturally; if it can't be forced deterministically
-   here, mark 🟨 and hand real verification to `D9-140` (needs real Windows hardware), per this
-   plan's own note on that row.
-2. **`D9-63`** — `ApplySamplerState` (needs `D9-50` textures to be meaningful; can also land as pure
+1. **`D9-63`** — `ApplySamplerState` (needs `D9-50` textures to be meaningful; can also land as pure
    render-state plumbing first, same pattern as `D9-60`–`62`).
-3. **`D9-64`** — reuse the backend-agnostic `easygl_blendstate_*`/`easygl_depthstencilstate_*`/
+2. **`D9-64`** — reuse the backend-agnostic `easygl_blendstate_*`/`easygl_depthstencilstate_*`/
    `easygl_rasterizerstate_*` CTest sources verbatim (needs a real draw path, `D9-82`, to mean
    anything — likely sequenced after Phase D9-8, not literally next).
-4. Then Phase D9-4 (buffers: `D9-40`–`42`).
+3. **Phase D9-4 (buffers: `D9-40`–`42`)** — `D3D9VertexBufferBackend`/`D3D9IndexBufferBackend`
+   (`Lock`/`Unlock`, `D3DLOCK_DISCARD`/`NOOVERWRITE`), both 16-bit and 32-bit index buffers
+   (`CreateIndexBuffer32()` must be explicitly overridden — D3D11's own `DX-31` caught this same
+   silent-16-bit-only-default trap), byte-exact round-trip tests. This is genuinely the next
+   sequential phase per `plan_dx9.md`'s own execution order, and nothing blocks it.
+4. Then Phase D9-5 (textures/render targets/readback: `D9-50`–`56`).
 
 See `plan_dx9.md`'s "Execution order" table for the full sequence beyond this.
 

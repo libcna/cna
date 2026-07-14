@@ -1434,12 +1434,15 @@ namespace Microsoft::Xna::Framework::Graphics
             switch (event)
             {
                 case CNA::Internal::Backends::BackendDeviceEvent::Lost:
+                    deviceStatus_ = GraphicsDeviceStatus::Lost;
                     DeviceLost.Raise(this, System::EventArgs::Empty);
                     break;
                 case CNA::Internal::Backends::BackendDeviceEvent::Resetting:
+                    deviceStatus_ = GraphicsDeviceStatus::NotReset;
                     DeviceResetting.Raise(this, System::EventArgs::Empty);
                     break;
                 case CNA::Internal::Backends::BackendDeviceEvent::Reset:
+                    deviceStatus_ = GraphicsDeviceStatus::Normal;
                     DeviceReset.Raise(this, System::EventArgs::Empty);
                     break;
             }
@@ -1607,7 +1610,11 @@ namespace Microsoft::Xna::Framework::Graphics
 
     GraphicsDeviceStatus GraphicsDevice::getGraphicsDeviceStatusProperty() const
     {
-        return GraphicsDeviceStatus::Normal;
+        // plan_dx9.md D9-34: tracks the real backend-reported status via deviceStatus_ (updated by
+        // the deviceEventCallback lambda in createBackend()). Every backend except D3D9 never calls
+        // that callback, so this stays Normal for them -- identical behavior to before this field
+        // existed.
+        return deviceStatus_;
     }
 
     DisplayMode GraphicsDevice::getDisplayModeProperty() const

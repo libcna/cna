@@ -9,6 +9,7 @@
 #include "CNA/Internal/Backends/D3D9/D3D9StateMapping.hpp"
 
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DeviceLostException.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/NoSuitableGraphicsDeviceException.hpp"
 
@@ -240,6 +241,50 @@ namespace CNA::Internal::Backends::D3D9
         presentationDirty_ = true;
     }
 
+    void D3D9GraphicsBackend::PerformResetRecovery()
+    {
+        if (deviceEventCallback_) deviceEventCallback_(BackendDeviceEvent::Resetting);
+
+        // D3DPOOL_MANAGED user resources (D9-4's own spike already confirmed these survive Reset()
+        // untouched, with no re-upload) need no action here. D3DPOOL_DEFAULT resources would need
+        // to be released before Reset() and recreated after -- none exist yet beyond the implicit
+        // swap chain/back buffer/depth-stencil surface, which Reset() itself recreates. A real
+        // D3DPOOL_DEFAULT resource type landing later (D9-4/D9-5) must hook into this method.
+        D3DPRESENT_PARAMETERS pp = BuildPresentParameters();
+        HRESULT hr = device_->Reset(&pp);
+        if (FAILED(hr))
+        {
+            // Reset() can itself fail (genuinely still lost, or a real error) -- stay in the lost
+            // state and let the next Present() try again, matching XNA's own resilience (a real
+            // game keeps running frames while the device is lost, rather than crashing).
+            return;
+        }
+
+        SetViewport(0, 0, width_, height_, 0.0f, 1.0f);
+        deviceLost_ = false;
+
+        if (deviceEventCallback_) deviceEventCallback_(BackendDeviceEvent::Reset);
+    }
+
+    void D3D9GraphicsBackend::PollDeviceLost()
+    {
+        HRESULT hr = device_->TestCooperativeLevel();
+        if (hr == D3DERR_DEVICENOTRESET)
+        {
+            PerformResetRecovery();
+        }
+        // D3DERR_DEVICELOST (still lost) or any other result: nothing more to do this frame:
+        // deviceLost_ stays true, and the next Present() will poll again.
+    }
+
+    void D3D9GraphicsBackend::ThrowIfDeviceLost() const
+    {
+        if (deviceLost_)
+        {
+            throw Microsoft::Xna::Framework::Graphics::DeviceLostException();
+        }
+    }
+
     void D3D9GraphicsBackend::GetViewportSize(int& width, int& height)
     {
         width = width_;
@@ -259,6 +304,7 @@ namespace CNA::Internal::Backends::D3D9
 
     void D3D9GraphicsBackend::Clear(float r, float g, float b, float a)
     {
+        ThrowIfDeviceLost();
         HRESULT hr = device_->Clear(0, nullptr, D3DCLEAR_TARGET,
                                      D3DCOLOR_COLORVALUE(r, g, b, a), 1.0f, 0);
         if (FAILED(hr))
@@ -267,17 +313,29 @@ namespace CNA::Internal::Backends::D3D9
 
     void D3D9GraphicsBackend::Present()
     {
+        if (deviceLost_)
+        {
+            // Real XNA resilience: keep polling: do not resize/present/throw while recovering.
+            PollDeviceLost();
+            return;
+        }
+
         EnsureDeviceSize();
 
-        // D9-34 (not yet landed) will special-case D3DERR_DEVICELOST/DEVICENOTRESET here for the
-        // real XNA device-lost lifecycle; for now, any failure is surfaced as a hard error.
         HRESULT hr = device_->Present(nullptr, nullptr, nullptr, nullptr);
+        if (hr == D3DERR_DEVICELOST)
+        {
+            deviceLost_ = true;
+            if (deviceEventCallback_) deviceEventCallback_(BackendDeviceEvent::Lost);
+            return;
+        }
         if (FAILED(hr))
             throw std::runtime_error("D3D9 Present failed, hr=" + FormatHr(hr));
     }
 
     void D3D9GraphicsBackend::ClearColorAndDepth(float r, float g, float b, float a, float depth)
     {
+        ThrowIfDeviceLost();
         DWORD flags = D3DCLEAR_TARGET;
         if (HasDepthBuffer(depthStencilFormatOrdinal_)) flags |= D3DCLEAR_ZBUFFER;
         HRESULT hr = device_->Clear(0, nullptr, flags, D3DCOLOR_COLORVALUE(r, g, b, a), depth, 0);
@@ -287,6 +345,7 @@ namespace CNA::Internal::Backends::D3D9
 
     void D3D9GraphicsBackend::ClearDepth(float depth)
     {
+        ThrowIfDeviceLost();
         if (!HasDepthBuffer(depthStencilFormatOrdinal_)) return;
         HRESULT hr = device_->Clear(0, nullptr, D3DCLEAR_ZBUFFER, 0, depth, 0);
         if (FAILED(hr))
@@ -295,6 +354,7 @@ namespace CNA::Internal::Backends::D3D9
 
     void D3D9GraphicsBackend::ClearStencil(int stencil)
     {
+        ThrowIfDeviceLost();
         if (!HasStencilBuffer(depthStencilFormatOrdinal_)) return;
         HRESULT hr = device_->Clear(0, nullptr, D3DCLEAR_STENCIL, 0, 1.0f,
                                      static_cast<DWORD>(stencil));
@@ -304,6 +364,7 @@ namespace CNA::Internal::Backends::D3D9
 
     void D3D9GraphicsBackend::ClearDepthAndStencil(float depth, int stencil)
     {
+        ThrowIfDeviceLost();
         if (!HasDepthBuffer(depthStencilFormatOrdinal_)) return;
         DWORD flags = D3DCLEAR_ZBUFFER;
         if (HasStencilBuffer(depthStencilFormatOrdinal_)) flags |= D3DCLEAR_STENCIL;
@@ -314,6 +375,7 @@ namespace CNA::Internal::Backends::D3D9
 
     void D3D9GraphicsBackend::ClearColorAndStencil(float r, float g, float b, float a, int stencil)
     {
+        ThrowIfDeviceLost();
         DWORD flags = D3DCLEAR_TARGET;
         if (HasStencilBuffer(depthStencilFormatOrdinal_)) flags |= D3DCLEAR_STENCIL;
         HRESULT hr = device_->Clear(0, nullptr, flags, D3DCOLOR_COLORVALUE(r, g, b, a), 1.0f,
@@ -325,6 +387,7 @@ namespace CNA::Internal::Backends::D3D9
     void D3D9GraphicsBackend::ClearColorDepthAndStencil(float r, float g, float b, float a,
                                                          float depth, int stencil)
     {
+        ThrowIfDeviceLost();
         DWORD flags = D3DCLEAR_TARGET;
         if (HasDepthBuffer(depthStencilFormatOrdinal_)) flags |= D3DCLEAR_ZBUFFER;
         if (HasStencilBuffer(depthStencilFormatOrdinal_)) flags |= D3DCLEAR_STENCIL;
@@ -336,6 +399,7 @@ namespace CNA::Internal::Backends::D3D9
 
     void D3D9GraphicsBackend::ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels)
     {
+        ThrowIfDeviceLost();
         if (w <= 0 || h <= 0) return;
 
         ComPtr<IDirect3DSurface9> backBuffer;
@@ -583,12 +647,24 @@ namespace CNA::Internal::Backends::D3D9
 
     void D3D9GraphicsBackend::DebugSimulateContextLoss()
     {
-        NotYetImplemented("D3D9", "DebugSimulateContextLoss (see plan_dx9.md D9-34)");
+        // D9-34: this is the pre-existing, GraphicsDevice-calls-into-backend test channel (design
+        // decision: reuse it rather than invent a new one) -- genuinely sets deviceLost_ and fires
+        // the real DeviceLost event, even though nothing actually lost the D3D9 device. Lets the
+        // full Lost->Resetting->Reset event sequence and a real Reset() call be exercised
+        // deterministically, since DXVK will rarely lose the device naturally (design decision 2's
+        // own documented cost).
+        if (deviceLost_) return;
+        deviceLost_ = true;
+        if (deviceEventCallback_) deviceEventCallback_(BackendDeviceEvent::Lost);
     }
 
     void D3D9GraphicsBackend::DebugRestoreContext()
     {
-        NotYetImplemented("D3D9", "DebugRestoreContext (see plan_dx9.md D9-34)");
+        // D9-34: the simulated counterpart of PollDeviceLost() -- skips the real
+        // TestCooperativeLevel() wait (nothing genuinely lost the device, so it would never report
+        // D3DERR_DEVICENOTRESET) and goes straight to the real Resetting->Reset()->Reset sequence.
+        if (!deviceLost_) return;
+        PerformResetRecovery();
     }
 }
 

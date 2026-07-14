@@ -139,6 +139,9 @@ namespace CNA::Internal::Backends::D3D9
         /// Exposes the real D3DCAPS9 queried at device-creation time (NOXNA, D9-32 profile
         /// enforcement and diagnostics/tests both need this without re-querying).
         [[nodiscard]] const D3DCAPS9& GetCapsEXT() const { return caps_; }
+        /// Exposes whether this backend currently considers its device lost (NOXNA, D9-34
+        /// diagnostics/tests). Mirrors GraphicsDevice::GraphicsDeviceStatus at the backend level.
+        [[nodiscard]] bool IsDeviceLostEXT() const { return deviceLost_; }
 
     private:
         void CreateDeviceResources(const GraphicsBackendCreateArgs& args);
@@ -153,6 +156,23 @@ namespace CNA::Internal::Backends::D3D9
         /// event) when the SDL window's actual pixel size no longer matches what the device was
         /// created/last reset at, OR presentationDirty_ was set.
         void EnsureDeviceSize();
+        /// D9-34: real XNA device-lost lifecycle. Called every Present() while deviceLost_ is true.
+        /// Polls TestCooperativeLevel(): D3DERR_DEVICELOST -> still lost, do nothing more this
+        /// frame; D3DERR_DEVICENOTRESET -> fire DeviceResetting, Reset(), restore the viewport,
+        /// fire DeviceReset, clear deviceLost_. D3DPOOL_DEFAULT resources would need to be released
+        /// before Reset() and recreated after -- none exist yet beyond the implicit swap chain/back
+        /// buffer/depth-stencil surface, which Reset() itself recreates; a real resource type
+        /// landing later (D9-4/D9-5) must hook into this method, not reinvent its own recovery path.
+        void PollDeviceLost();
+        /// D9-34: the actual Resetting->Reset()->Reset event sequence, shared by the real
+        /// TestCooperativeLevel()-driven path (PollDeviceLost()) and DebugRestoreContext()'s
+        /// simulated one (which skips the TestCooperativeLevel wait since nothing really lost the
+        /// device -- Reset() itself is real either way).
+        void PerformResetRecovery();
+        /// D9-34: throws Microsoft::Xna::Framework::Graphics::DeviceLostException if the device is
+        /// currently lost -- called at the top of every rendering entry point (Clear/ClearX/
+        /// ReadBackbuffer), matching real XNA's behavior of refusing to render to a lost device.
+        void ThrowIfDeviceLost() const;
 
         SDL_Window* window_ = nullptr;
         int width_ = 0;
@@ -180,6 +200,9 @@ namespace CNA::Internal::Backends::D3D9
         // XNA events. May be empty (default-constructed std::function) if the caller (a direct
         // spike/test, not GraphicsDevice) never set one -- call sites must check before invoking.
         std::function<void(BackendDeviceEvent)> deviceEventCallback_;
+        /// D9-34: true from the moment Present() (or DebugSimulateContextLoss()) first detects/
+        /// simulates a lost device, until PerformResetRecovery() completes successfully.
+        bool deviceLost_ = false;
 
         ComPtr<IDirect3D9> d3d9_;
         ComPtr<IDirect3DDevice9> device_;

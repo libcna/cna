@@ -769,6 +769,11 @@ namespace Microsoft::Xna::Framework::Graphics
         GraphicsProfile graphicsProfile_;
         PresentationParameters presentationParameters_;
         bool isDisposed_;
+        /// plan_dx9.md D9-34: tracks the real device-lifecycle state reported by a backend via
+        /// GraphicsBackendCreateArgs::deviceEventCallback (BackendDeviceEvent::Lost -> Lost,
+        /// Resetting -> NotReset, Reset -> Normal). Every backend except D3D9 never calls that
+        /// callback, so this stays Normal there, matching the pre-existing hardcoded behavior.
+        GraphicsDeviceStatus deviceStatus_ = GraphicsDeviceStatus::Normal;
 
         BlendState blendState_;
         DepthStencilState depthStencilState_;
