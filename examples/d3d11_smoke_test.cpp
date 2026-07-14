@@ -116,6 +116,15 @@
 #include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ModelBone.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ModelMeshPart.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ModelMesh.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Model.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -2473,6 +2482,59 @@ protected:
                   "bottom-half-white flipped, so a no-op flip cannot pass (plan_dx.md DX-127)");
         }
 
+        // plan_dx.md DX-128: Model/ModelMesh/ModelMeshPart/ModelBone D3D11-specific runtime-API
+        // test, mirroring D3D12's already-closed DX-148 (examples/d3d12_smoke_test.cpp Check
+        // KK6). Drives ModelMesh::Draw()'s REAL orchestration (SetVertexBuffer + setIndices +
+        // DrawIndexedPrimitives + EffectPass::Apply through a bone-transformed world matrix), not
+        // a raw VertexBuffer draw wearing a Model label -- which is exactly what this row's own
+        // text warns against and would prove nothing new.
+        {
+            const Color redM(255, 0, 0, 255);
+            const VertexPositionColor vertsM[4] = {
+                { Vector3(-1.0f,  1.0f, 0.0f), redM },
+                { Vector3(-1.0f, -1.0f, 0.0f), redM },
+                { Vector3( 1.0f, -1.0f, 0.0f), redM },
+                { Vector3( 1.0f,  1.0f, 0.0f), redM },
+            };
+            VertexBuffer vbM(dev, 4);
+            vbM.SetData(vertsM, 4);
+            const uint16_t indicesM[6] = { 0, 1, 2, 0, 2, 3 };
+            IndexBuffer ibM(dev, 6);
+            ibM.SetData(indicesM, 6);
+
+            BasicEffect fxM(dev);
+            fxM.VertexColorEnabled = true;
+
+            // A real 2-bone hierarchy: root -> child. Model::Draw multiplies the mesh's absolute
+            // bone transform into the world matrix, so this genuinely exercises the bone path.
+            ModelBone boneM0(0, "root");
+            ModelBone boneM1(1, "child");
+            boneM0.AddChild(&boneM1);
+
+            ModelMeshPart partM(&vbM, &ibM, /*numVertices=*/4, /*primitiveCount=*/2,
+                                /*startIndex=*/0, /*vertexOffset=*/0);
+            ModelMesh meshM(&dev, { &partM });
+            partM.setEffectProperty(&fxM);
+            Model modelM(&dev, { &boneM0, &boneM1 }, { &meshM });
+
+            dev.Clear(Color(0, 255, 0, 255));
+            dev.SetDepthTestEnabled(false);
+            dev.setBlendStateProperty(BlendState::Opaque);
+            dev.setRasterizerStateProperty(RasterizerState::CullNone);
+            modelM.Draw(Matrix::getIdentityProperty(), Matrix::getIdentityProperty(), Matrix::getIdentityProperty());
+
+            const Microsoft::Xna::Framework::Rectangle centerRegionM(30, 30, 1, 1);
+            Color centreM(0, 0, 0, 0);
+            dev.GetBackBufferData(&centerRegionM, &centreM, 0, 1);
+            check(centreM.getRProperty() >= 200 && centreM.getGProperty() <= 60 && centreM.getBProperty() <= 60,
+                  "Model::Draw() -> ModelMesh::Draw()'s real orchestration (bone transform + "
+                  "SetVertexBuffer + setIndices + DrawIndexedPrimitives + EffectPass::Apply) paints "
+                  "the mesh's exact red over the green clear, through the D3D11 backend (plan_dx.md DX-128)");
+
+            dev.SetDepthTestEnabled(false);
+            dev.setRasterizerStateProperty(RasterizerState::CullCounterClockwise);
+        }
+
         const int totalChecks = 2 /* SetDepthTestEnabled real, not a no-op */
                                 + 3 + 10 + 1 + 2 + 2 + 2 + 2 + 2 + 1 + 1 + 2 + 1 + 13 + 2 + 3 + 2 + 2 + 1 + 1 + 1 + 1 + 3 + 2 + 2 + 2 + 3 + 2 + 3 /* DX-131 rotation/scale/crop */
                                 + 1 /* DX-134 envMapAmount=0 */ + 2 /* DX-135 WeightsPerVertex */ + 2 /* DX-137 textured3d fog */
@@ -2483,7 +2545,8 @@ protected:
                                 + 4 /* DX-124 multi-light + EmissiveColor discrimination */
                                 + 2 /* DX-125 specular-highlight discrimination */
                                 + 3 /* DX-126 mip level > 0 upload/readback */
-                                + 4 /* DX-127 SpriteFont glyph placement/spacing/newline/flip */;
+                                + 4 /* DX-127 SpriteFont glyph placement/spacing/newline/flip */
+                                + 1 /* DX-128 Model/ModelMesh runtime-API orchestration */;
         std::printf("=== %d/%d PASS ===\n", passCount_, totalChecks);
         result_ = (passCount_ == totalChecks) ? 0 : 1;
         Exit();
