@@ -64,6 +64,10 @@
 //   support (IDirect3D9::CheckDeviceMultiSampleType()): Clear() into the multisampled surface,
 //   unbind (StretchRect-resolves into the sampleable texture), confirm the resolved texture holds
 //   the exact color.
+// Check V -- MRT (D9-54): SetRenderTargets() with 2 targets, a single Clear() writes the exact
+//   color into BOTH targets' own surfaces, unbind restores the back buffer, and requesting more
+//   targets than D3DCAPS9::NumSimultaneousRTs throws a real, named error instead of silently
+//   degrading (design decision 13).
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
@@ -94,6 +98,7 @@ using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
 using namespace CNA::Internal::Backends::D3D9;
 using CNA::Internal::Backends::ImageData;
+using CNA::Internal::Backends::IRenderTargetBackend;
 
 namespace
 {
@@ -722,6 +727,84 @@ protected:
             else
             {
                 std::printf("    (skipped: device does not report 4x MSAA support for D3DFMT_A8B8G8R8)\n");
+            }
+        }
+
+        // Check V (D9-54) -- MRT: bind 2 render targets via SetRenderTargets(), a single Clear()
+        // writes the exact color into BOTH targets' own surfaces (real D3D9 behavior -- Clear()
+        // applies to every currently-bound render target, not a per-index color), unbind restores
+        // the back buffer, and requesting more targets than D3DCAPS9::NumSimultaneousRTs throws a
+        // named error rather than silently degrading (design decision 13).
+        {
+            const int maxRTs = static_cast<int>(backend.GetCapsEXT().NumSimultaneousRTs);
+            if (maxRTs >= 2)
+            {
+                auto rt0 = backend.CreateRenderTarget2D(8, 8, static_cast<int>(DepthFormat::None));
+                auto rt1 = backend.CreateRenderTarget2D(8, 8, static_cast<int>(DepthFormat::None));
+                IRenderTargetBackend* rts[2] = {rt0.get(), rt1.get()};
+                backend.SetRenderTargets(rts, 2);
+                dev.Clear(ClearOptions::Target, Color(60, 70, 80, 255), 1.0f, 0);
+
+                auto& d3d9Rt0 = static_cast<D3D9RenderTargetBackend&>(*rt0);
+                auto& d3d9Rt1 = static_cast<D3D9RenderTargetBackend&>(*rt1);
+                const auto pixels0 = ReadRenderTargetSurfaceD3D9(backend.GetDeviceEXT(), d3d9Rt0.GetColorSurfaceEXT());
+                const auto pixels1 = ReadRenderTargetSurfaceD3D9(backend.GetDeviceEXT(), d3d9Rt1.GetColorSurfaceEXT());
+
+                auto matchesColor = [](const std::vector<uint8_t>& px, uint8_t r, uint8_t g, uint8_t b, uint8_t a)
+                {
+                    if (px.size() != static_cast<std::size_t>(8 * 8 * 4)) return false;
+                    for (std::size_t i = 0; i < px.size(); i += 4)
+                    {
+                        if (px[i + 0] != r || px[i + 1] != g || px[i + 2] != b || px[i + 3] != a) return false;
+                    }
+                    return true;
+                };
+                check(matchesColor(pixels0, 60, 70, 80, 255) && matchesColor(pixels1, 60, 70, 80, 255),
+                      "D9-54: SetRenderTargets() MRT bind -- a single Clear() writes the exact color into BOTH targets' own surfaces");
+
+                backend.SetRenderTargets(nullptr, 0);
+                dev.Clear(Color(14, 15, 16, 255));
+                const Microsoft::Xna::Framework::Rectangle backBufferRegion3(0, 0, 4, 4);
+                std::vector<Color> backBufferPixels3(4 * 4, Color(0, 0, 0, 0));
+                dev.GetBackBufferData(&backBufferRegion3, backBufferPixels3.data(), 0,
+                                      static_cast<int>(backBufferPixels3.size()));
+                bool backBufferMatch3 = true;
+                for (const Color& p : backBufferPixels3)
+                {
+                    if (p.getRProperty() != 14 || p.getGProperty() != 15 || p.getBProperty() != 16 ||
+                        p.getAProperty() != 255)
+                    {
+                        backBufferMatch3 = false;
+                        break;
+                    }
+                }
+                check(backBufferMatch3, "D9-54: SetRenderTargets(nullptr, 0) genuinely restores the back buffer");
+
+                // Over-request: build maxRTs+1 targets and confirm a real, named exception -- not a
+                // silent clamp to maxRTs (design decision 13's own point).
+                std::vector<std::unique_ptr<IRenderTargetBackend>> tooMany;
+                std::vector<IRenderTargetBackend*> tooManyPtrs;
+                for (int i = 0; i < maxRTs + 1; ++i)
+                {
+                    tooMany.push_back(backend.CreateRenderTarget2D(4, 4, static_cast<int>(DepthFormat::None)));
+                    tooManyPtrs.push_back(tooMany.back().get());
+                }
+                bool threw = false;
+                try
+                {
+                    backend.SetRenderTargets(tooManyPtrs.data(), static_cast<int>(tooManyPtrs.size()));
+                }
+                catch (const std::runtime_error&)
+                {
+                    threw = true;
+                }
+                check(threw,
+                      "D9-54: requesting more render targets than D3DCAPS9::NumSimultaneousRTs throws, does not silently degrade");
+                backend.SetRenderTargets(nullptr, 0); // clean up in case the (unexpected) non-throwing path left something bound
+            }
+            else
+            {
+                std::printf("    (skipped: device reports NumSimultaneousRTs=%d, need at least 2 for MRT)\n", maxRTs);
             }
         }
 

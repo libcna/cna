@@ -66,12 +66,26 @@ namespace CNA::Internal::Backends::D3D9
         [[nodiscard]] IDirect3DTexture9* GetTextureEXT() const { return colorTexture_.Get(); }
         /// Real level-0 IDirect3DSurface9 of GetTextureEXT() (NOXNA).
         [[nodiscard]] IDirect3DSurface9* GetColorSurfaceEXT() const { return colorSurface_.Get(); }
+        /// D9-54: the surface actually bound as the render target (the offscreen MSAA surface when
+        /// MSAA, else the same as GetColorSurfaceEXT()) -- what an MRT bind should pass to
+        /// SetRenderTarget(), same selection BindAsRenderTarget() itself already makes (NOXNA).
+        [[nodiscard]] IDirect3DSurface9* GetActiveColorSurfaceEXT() const
+        {
+            return (appliedMultiSampleCount_ > 1 ? msaaSurface_ : colorSurface_).Get();
+        }
         /// Real depth-stencil surface, or null if no depth format was requested (NOXNA).
         [[nodiscard]] IDirect3DSurface9* GetDepthStencilSurfaceEXT() const { return depthStencilSurface_.Get(); }
 
         /// D9-40/D9-53: releases the D3DPOOL_DEFAULT color texture/MSAA surface/depth-stencil
         /// surface before a device Reset(). Lazily recreated on the next BindAsRenderTarget() call.
         void ReleaseDefaultPoolResourceEXT() override;
+
+        /// D9-54: recreates the D3DPOOL_DEFAULT resources if a prior device-lost recovery released
+        /// them, without also binding this target -- an MRT bind (D3D9GraphicsBackend::
+        /// SetRenderTargets()) needs each target's surfaces ready before it builds its own
+        /// SetRenderTarget() call sequence, unlike a single-target bind which can just call
+        /// BindAsRenderTarget() directly (NOXNA).
+        void EnsureReadyEXT() { if (!colorTexture_) Recreate(); }
 
     private:
         void Recreate();

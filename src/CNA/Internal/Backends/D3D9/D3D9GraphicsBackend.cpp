@@ -645,6 +645,12 @@ namespace CNA::Internal::Backends::D3D9
         if (!rt)
         {
             currentCustomRT_ = nullptr;
+            // Unconditional, not just whatever UnbindAsRenderTarget() above already did -- an MRT
+            // bind (SetRenderTargets(), D9-54) never sets currentCustomRT_ (a single pointer can't
+            // represent N targets), so relying solely on that call would leave the device pointed
+            // at a stale MRT slot after SetRenderTargets(nullptr, 0) delegates here. Idempotent
+            // (harmless no-op) in the ordinary single-target-unbind case.
+            RestoreBackBufferRenderTargetEXT();
             return;
         }
         auto* d3d9Rt = static_cast<D3D9RenderTargetBackend*>(rt);
@@ -663,11 +669,79 @@ namespace CNA::Internal::Backends::D3D9
         if (!rt)
         {
             currentCustomCubeRT_ = nullptr;
+            // Same reasoning as SetRenderTarget2D()'s identical line -- unconditional, not just
+            // whatever UnbindAsRenderTarget() above already did.
+            RestoreBackBufferRenderTargetEXT();
             return;
         }
         auto* d3d9CubeRt = static_cast<D3D9RenderTargetCubeBackend*>(rt);
         currentCustomCubeRT_ = d3d9CubeRt;
         d3d9CubeRt->BindAsRenderTargetFace(face);
+    }
+
+    void D3D9GraphicsBackend::SetRenderTargets(IRenderTargetBackend* const* rts, int count)
+    {
+        if (!rts || count <= 0)
+        {
+            SetRenderTarget2D(nullptr);
+            return;
+        }
+
+        // design decision 13: over-request throws rather than silently degrading (see this
+        // method's own header comment) -- NumSimultaneousRTs is a genuine D3DCAPS9 hardware limit
+        // (commonly 4), not an arbitrary array-size cap.
+        if (count > static_cast<int>(caps_.NumSimultaneousRTs))
+        {
+            throw std::runtime_error(
+                "D3D9GraphicsBackend::SetRenderTargets: requested " + std::to_string(count) +
+                " render targets, this device only supports " +
+                std::to_string(caps_.NumSimultaneousRTs) + " (D3DCAPS9::NumSimultaneousRTs)");
+        }
+
+        if (currentCustomCubeRT_)
+        {
+            currentCustomCubeRT_->UnbindAsRenderTarget();
+            currentCustomCubeRT_ = nullptr;
+        }
+        if (currentCustomRT_)
+        {
+            currentCustomRT_->UnbindAsRenderTarget();
+            currentCustomRT_ = nullptr;
+        }
+
+        for (int i = 0; i < static_cast<int>(caps_.NumSimultaneousRTs); ++i)
+        {
+            if (i < count)
+            {
+                auto* d3d9Rt = static_cast<D3D9RenderTargetBackend*>(rts[i]);
+                d3d9Rt->EnsureReadyEXT();
+                device_->SetRenderTarget(static_cast<DWORD>(i), d3d9Rt->GetActiveColorSurfaceEXT());
+            }
+            else
+            {
+                // Real D3D9 requirement: unused render-target slots must be explicitly disabled,
+                // not left holding whatever surface a previous (larger) MRT bind left there.
+                device_->SetRenderTarget(static_cast<DWORD>(i), nullptr);
+            }
+        }
+
+        auto* first = static_cast<D3D9RenderTargetBackend*>(rts[0]);
+        device_->SetDepthStencilSurface(first->GetDepthStencilSurfaceEXT());
+
+        D3DVIEWPORT9 vp{};
+        vp.X = 0;
+        vp.Y = 0;
+        vp.Width = static_cast<DWORD>(first->GetWidth());
+        vp.Height = static_cast<DWORD>(first->GetHeight());
+        vp.MinZ = 0.0f;
+        vp.MaxZ = 1.0f;
+        device_->SetViewport(&vp);
+
+        // MRT binds are NOT tracked in currentCustomRT_/currentCustomCubeRT_ (a single pointer
+        // can't represent N targets, matches D3D11's own identical MRT-tracking gap) -- unbinding
+        // an MRT set must go through SetRenderTargets(nullptr, 0) or SetRenderTarget2D(nullptr)
+        // (both unconditionally restore the back buffer), not a single-target bind expecting an
+        // implicit MRT-aware unbind first.
     }
 
     std::unique_ptr<ISpriteBatchBackend> D3D9GraphicsBackend::CreateSpriteBatch()

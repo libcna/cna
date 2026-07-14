@@ -116,6 +116,16 @@ namespace CNA::Internal::Backends::D3D9
         /// via a second, cube-specific currentCustomCubeRT_ field so unbinding genuinely restores
         /// the device's default back-buffer/depth-stencil surfaces.
         void SetRenderTargetCubeFace(IRenderTargetCubeBackend* rt, int face) override;
+        /// D9-54: real MRT via SetRenderTarget(i, surface), i=0..count-1, capped and validated
+        /// against the real D3DCAPS9::NumSimultaneousRTs (design decision 13: an over-request
+        /// THROWS a named error rather than silently degrading to fewer targets -- the exact
+        /// invisible-capability trap this project's own D3D11/D3D12 precedent accepts but this
+        /// authenticity-focused backend deliberately does not). All CNA render targets are
+        /// D3DFMT_A8B8G8R8 (RGBA8-storage-only, D9-50's own simplification), so design decision
+        /// 13's "same bit depth" requirement is always trivially satisfied -- nothing to actively
+        /// enforce. No independent per-target blending exists either (ApplyBlendState() is a
+        /// single global SetRenderState() sequence) -- also trivially satisfied.
+        void SetRenderTargets(IRenderTargetBackend* const* rts, int count) override;
         /// D9-53: real MSAA-support probe backing D3D9RenderTargetBackend's own clamp -- queries
         /// IDirect3D9::CheckDeviceMultiSampleType() for `format`/`requested`, returning 0 if
         /// `requested` <= 1 or the device does not support that exact sample count (matches
