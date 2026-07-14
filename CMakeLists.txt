@@ -255,11 +255,13 @@ else()
     message(FATAL_ERROR "CNA: Unknown graphics backend: ${CNA_GRAPHICS_BACKEND}")
 endif()
 
-# --- FFmpeg (video decoding) — not available on Emscripten/Android, nor on the
-# mingw-w64 Windows cross-build (no mingw-w64 FFmpeg dev packages in this toolchain;
-# pkg-config would otherwise silently resolve to the host's native FFmpeg and poison
-# the cross-compile's include path with native glibc headers). ---
-if(MINGW OR EMSCRIPTEN OR ANDROID)
+# --- FFmpeg (video decoding) — not available on Emscripten/Android, nor on any Windows target
+# (mingw-w64 cross-build OR a native MSVC build, e.g. this project's own D3D11/D3D12 Windows CI --
+# neither has an FFmpeg pkg-config path; on the MinGW cross-build, pkg-config would otherwise
+# silently resolve to the host's native FFmpeg and poison the cross-compile's include path with
+# native glibc headers). WIN32 covers both MinGW and native MSVC uniformly; MINGW is kept for
+# clarity/documentation even though it's now redundant with WIN32. ---
+if(MINGW OR WIN32 OR EMSCRIPTEN OR ANDROID)
     set(CNA_FFMPEG_AVAILABLE OFF)
 else()
     set(CNA_FFMPEG_AVAILABLE ON)
@@ -6612,10 +6614,13 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SOFTWARE")
     cna_software_test(cna_diag_software examples/cross_backend_diagnostic_scene.cpp)
 endif()
 
-# plan_dx.md DX-80: D3D11 CTest registration. The built .exe is a Windows PE binary (this backend
-# is Windows-only/cross-compiled, design decision 2) -- CTest itself still runs on the Linux host,
-# so the test COMMAND is scripts/run-wine-dxvk.sh (DX-3) wrapping the real executable, not the
-# executable directly.
+# plan_dx.md DX-80: D3D11 CTest registration. When cross-compiled from Linux (this backend is
+# Windows-only, design decision 2), CTest itself still runs on the Linux host, so the test COMMAND
+# wraps the real .exe with scripts/run-wine-dxvk.sh (DX-3). A native MSVC configure on a real
+# Windows machine (CMAKE_CROSSCOMPILING is false there) needs no Wine wrapper at all -- runs the
+# .exe directly (see .github/workflows/d3d-windows-ci.yml, added specifically to exercise this
+# path for real; it only covers MSVC-compile/unit-test/shader-generation-check, not a substitute
+# for plan_dx.md DX-90's real swap-chain/tearing/device-lost/driver-parity items).
 if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D11")
     enable_testing()
 
@@ -6636,9 +6641,17 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D11")
         endif()
     endmacro()
 
+    macro(cna_d3d11_ctest_command out_var target_name)
+        if(CMAKE_CROSSCOMPILING)
+            set(${out_var} ${CMAKE_SOURCE_DIR}/scripts/run-wine-dxvk.sh $<TARGET_FILE:${target_name}>)
+        else()
+            set(${out_var} $<TARGET_FILE:${target_name}>)
+        endif()
+    endmacro()
+
     cna_d3d11_test(cna_test_d3d11_smoke examples/d3d11_smoke_test.cpp)
-    add_test(NAME D3D11_Smoke
-        COMMAND ${CMAKE_SOURCE_DIR}/scripts/run-wine-dxvk.sh $<TARGET_FILE:cna_test_d3d11_smoke>)
+    cna_d3d11_ctest_command(_d3d11_smoke_cmd cna_test_d3d11_smoke)
+    add_test(NAME D3D11_Smoke COMMAND ${_d3d11_smoke_cmd})
     set_tests_properties(D3D11_Smoke PROPERTIES
         TIMEOUT 60
         LABELS "D3D11")
@@ -6646,14 +6659,15 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D11")
     # Phase DX3: pure-function checks for D3DCommon's format/state/vertex-layout mapping tables --
     # no device/window/GPU needed.
     cna_d3d11_test(cna_test_d3d11_common examples/d3d11_common_test.cpp)
-    add_test(NAME D3D11_Common
-        COMMAND ${CMAKE_SOURCE_DIR}/scripts/run-wine-dxvk.sh $<TARGET_FILE:cna_test_d3d11_common>)
+    cna_d3d11_ctest_command(_d3d11_common_cmd cna_test_d3d11_common)
+    add_test(NAME D3D11_Common COMMAND ${_d3d11_common_cmd})
     set_tests_properties(D3D11_Common PROPERTIES
         TIMEOUT 30
         LABELS "D3D11"
         # DX-85: this binary never creates a D3D11 device (pure-function mapping-table checks
         # only), so it legitimately never prints a "DXVK: <version>" line -- tell the wrapper's
-        # DXVK-engagement gate not to misreport that as a WineD3D fallback.
+        # DXVK-engagement gate not to misreport that as a WineD3D fallback. Harmless no-op when
+        # CMAKE_CROSSCOMPILING is false (native MSVC run, no wrapper script involved at all).
         ENVIRONMENT "CNA_D3D11_SKIP_DXVK_GATE=1")
 
     # DX-82: state-object pixel-behaviour tests, reusing the same backend-agnostic EasyGL-authored
@@ -6661,29 +6675,30 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D11")
     # API, nothing EasyGL-specific) -- real behavioural proof through the full public draw path,
     # not just "the D3D11 state object was created/bound" (Phase DX7's own, narrower bar).
     cna_d3d11_test(cna_test_d3d11_blendstate_opaque examples/easygl_blendstate_opaque_test.cpp)
-    add_test(NAME D3D11_BlendState_Opaque
-        COMMAND ${CMAKE_SOURCE_DIR}/scripts/run-wine-dxvk.sh $<TARGET_FILE:cna_test_d3d11_blendstate_opaque>)
+    cna_d3d11_ctest_command(_d3d11_blend_opaque_cmd cna_test_d3d11_blendstate_opaque)
+    add_test(NAME D3D11_BlendState_Opaque COMMAND ${_d3d11_blend_opaque_cmd})
     set_tests_properties(D3D11_BlendState_Opaque PROPERTIES TIMEOUT 60 LABELS "D3D11")
 
     cna_d3d11_test(cna_test_d3d11_blendstate_alphablend examples/easygl_blendstate_alphablend_test.cpp)
-    add_test(NAME D3D11_BlendState_AlphaBlend
-        COMMAND ${CMAKE_SOURCE_DIR}/scripts/run-wine-dxvk.sh $<TARGET_FILE:cna_test_d3d11_blendstate_alphablend>)
+    cna_d3d11_ctest_command(_d3d11_blend_alpha_cmd cna_test_d3d11_blendstate_alphablend)
+    add_test(NAME D3D11_BlendState_AlphaBlend COMMAND ${_d3d11_blend_alpha_cmd})
     set_tests_properties(D3D11_BlendState_AlphaBlend PROPERTIES TIMEOUT 60 LABELS "D3D11")
 
     cna_d3d11_test(cna_test_d3d11_depthstencilstate_stencil_enable examples/easygl_depthstencilstate_stencil_enable_test.cpp)
-    add_test(NAME D3D11_DepthStencilState_StencilEnable
-        COMMAND ${CMAKE_SOURCE_DIR}/scripts/run-wine-dxvk.sh $<TARGET_FILE:cna_test_d3d11_depthstencilstate_stencil_enable>)
+    cna_d3d11_ctest_command(_d3d11_ds_stencil_cmd cna_test_d3d11_depthstencilstate_stencil_enable)
+    add_test(NAME D3D11_DepthStencilState_StencilEnable COMMAND ${_d3d11_ds_stencil_cmd})
     set_tests_properties(D3D11_DepthStencilState_StencilEnable PROPERTIES TIMEOUT 60 LABELS "D3D11")
 
     cna_d3d11_test(cna_test_d3d11_rasterizerstate_cullmode examples/easygl_rasterizerstate_cullmode_test.cpp)
-    add_test(NAME D3D11_RasterizerState_CullMode
-        COMMAND ${CMAKE_SOURCE_DIR}/scripts/run-wine-dxvk.sh $<TARGET_FILE:cna_test_d3d11_rasterizerstate_cullmode>)
+    cna_d3d11_ctest_command(_d3d11_rast_cullmode_cmd cna_test_d3d11_rasterizerstate_cullmode)
+    add_test(NAME D3D11_RasterizerState_CullMode COMMAND ${_d3d11_rast_cullmode_cmd})
     set_tests_properties(D3D11_RasterizerState_CullMode PROPERTIES TIMEOUT 60 LABELS "D3D11")
 endif()
 
 # plan_dx.md DX-102/103/104/105: D3D12 CTest registration, mirroring DX-80's own D3D11 macro
-# exactly. Run via scripts/run-wine-vkd3d.sh (DX-100's own Wine+vkd3d-proton dev loop, a distinct
-# Wine prefix from D3D11's DXVK one -- see that script's own comment header for why).
+# exactly, including the CMAKE_CROSSCOMPILING-aware command selection above (native MSVC runs the
+# .exe directly; a Linux-hosted cross-compile wraps it with scripts/run-wine-vkd3d.sh, DX-100's own
+# Wine+vkd3d-proton dev loop, a distinct Wine prefix from D3D11's DXVK one).
 if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D12")
     enable_testing()
 
@@ -6705,8 +6720,12 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D12")
     # never constructs a window/swap chain (see examples/d3d12_smoke_test.cpp's own header comment
     # for why), so this stays genuinely green on this Wine+vkd3d-proton dev loop.
     cna_d3d12_test(cna_test_d3d12_smoke examples/d3d12_smoke_test.cpp)
-    add_test(NAME D3D12_Smoke
-        COMMAND ${CMAKE_SOURCE_DIR}/scripts/run-wine-vkd3d.sh $<TARGET_FILE:cna_test_d3d12_smoke>)
+    if(CMAKE_CROSSCOMPILING)
+        add_test(NAME D3D12_Smoke
+            COMMAND ${CMAKE_SOURCE_DIR}/scripts/run-wine-vkd3d.sh $<TARGET_FILE:cna_test_d3d12_smoke>)
+    else()
+        add_test(NAME D3D12_Smoke COMMAND cna_test_d3d12_smoke)
+    endif()
     set_tests_properties(D3D12_Smoke PROPERTIES
         TIMEOUT 60
         LABELS "D3D12")
