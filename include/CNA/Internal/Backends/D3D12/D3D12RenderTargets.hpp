@@ -9,13 +9,18 @@
 // RTV(s)/DSV via the device's own descriptor heaps (DX-103), and registration with the shared
 // D3D12ResourceStateTracker (DX-106).
 //
-// Deliberately NOT included in this pass (honest, scoped follow-up, matching this whole session's
-// established "prioritize the core case, document the gap" discipline -- see e.g. D3D11's own
-// DX-45 for the MSAA precedent this backend doesn't yet mirror): MSAA and mip-chain generation.
-// D3D11RenderTargetBackend supports both (DX-45); D3D12 has no single-call GenerateMips()
-// equivalent (would need a manual compute/pixel-shader mip cascade, real additional work), and
-// MSAA resolve-on-unbind was left for a dedicated follow-up rather than rushed into this task's
-// first real render-target implementation. GetMultiSampleCount() always reports 0 here.
+// plan_dx.md DX-144: full mip-chain generation is now real. D3D12 has no single-call
+// GenerateMips() equivalent the way D3D11 does; rather than a manual compute/pixel-shader mip
+// cascade (real additional pipeline/shader infrastructure), this uses a synchronous CPU box-filter
+// downsample cascade -- read a level back via a READBACK-heap CopyTextureRegion, box-filter it on
+// the CPU, upload the result to the next level via an UPLOAD-heap CopyTextureRegion -- the same
+// ExecuteCommandListAndWaitEXT-synchronous discipline this backend's own D3D12Textures.cpp/
+// D3D12Buffers.cpp already establish for every other real upload/readback path. Triggered from
+// UnbindAsRenderTarget(), mirroring D3D11RenderTargetBackend's own GenerateMips()-on-unbind timing.
+//
+// MSAA is still NOT included in this pass (honest, scoped follow-up, matching this whole session's
+// established "prioritize the core case, document the gap" discipline -- see D3D11's own DX-45 for
+// the precedent this backend doesn't yet mirror). GetMultiSampleCount() always reports 0 here.
 //
 // The depth-stencil resource+DSV this class creates (when depthFormat != DepthFormat::None) is
 // real, but -- exactly like DX-116's own back-buffer depth-stencil buffer -- not yet wired into
@@ -39,7 +44,7 @@ namespace CNA::Internal::Backends::D3D12
     {
     public:
         D3D12RenderTargetBackend(D3D12GraphicsBackend* owner, ID3D12Device* device,
-                                 int w, int h, int depthFormat);
+                                 int w, int h, int depthFormat, bool mipMap = false);
 
         [[nodiscard]] int GetWidth() const override { return width_; }
         [[nodiscard]] int GetHeight() const override { return height_; }
@@ -52,6 +57,11 @@ namespace CNA::Internal::Backends::D3D12
         {
             return hasDepth_ && depthFormatWasRequested;
         }
+
+        /// Real mip-chain level count this target was allocated with (1 when `mipMap` was false) --
+        /// NOXNA, DX-144 subresource math/test introspection, mirrors D3D11RenderTargetBackend's
+        /// own GetLevelCountEXT().
+        [[nodiscard]] int GetLevelCountEXT() const { return levelCount_; }
 
         /// Real GPU-resident color resource (NOXNA -- SetRenderTargets()/tests).
         [[nodiscard]] ID3D12Resource* GetColorResourceEXT() const { return colorResource_.Get(); }
@@ -72,6 +82,10 @@ namespace CNA::Internal::Backends::D3D12
         [[nodiscard]] DXGI_FORMAT GetDsvFormatEXT() const { return dsvFormat_; }
 
     private:
+        /// DX-144: CPU box-filter downsample cascade, base level (0) -> levelCount_-1, called from
+        /// UnbindAsRenderTarget(). No-op when mipMap_ is false or levelCount_ is 1.
+        void GenerateMipsEXT();
+
         D3D12GraphicsBackend* owner_ = nullptr;
         ComPtr<ID3D12Device> device_;
 
@@ -87,6 +101,8 @@ namespace CNA::Internal::Backends::D3D12
 
         int width_ = 0;
         int height_ = 0;
+        bool mipMap_ = false;
+        int levelCount_ = 1;
     };
 
     /// Real D3D12 cube-map render-target backend (DX-117). One shared 6-slice texture array (same

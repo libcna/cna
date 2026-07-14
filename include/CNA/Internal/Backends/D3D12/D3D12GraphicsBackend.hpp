@@ -498,7 +498,10 @@ namespace CNA::Internal::Backends::D3D12
         // exhausted the original capacity for real the moment Check U's render target was allocated.
         // Still a fixed bump allocator, same honest simplification DX-103 already documents -- just
         // sized for real observed demand instead of an arbitrary guess.
-        static constexpr UINT kRtvHeapCapacity = 32;
+        // DX-144 (render-target mip-chain generation): raised again from 32 -- exhausted for real
+        // the moment this task's own new render target (the "LL" mip-chain checks) was allocated,
+        // same growing-suite-vs-no-free-list cause as the 8->32 raise above.
+        static constexpr UINT kRtvHeapCapacity = 48;
         static constexpr UINT kDsvHeapCapacity = 8;
         static constexpr UINT kCbvSrvUavHeapCapacity = 64;
         // DX-119: one sampler slot per distinct XNA SamplerState combination actually used across a
@@ -564,6 +567,12 @@ namespace CNA::Internal::Backends::D3D12
         D3D12_CPU_DESCRIPTOR_HANDLE backBufferRtvs_[kFramesInFlight]{};
         ComPtr<ID3D12Resource> depthStencilResource_;
         D3D12_CPU_DESCRIPTOR_HANDLE depthStencilViewEXT_{};
+
+        // DX-144: tracks the currently-bound custom (non-back-buffer) render target, mirroring
+        // D3D11GraphicsBackend's own currentCustomRT_ exactly -- SetRenderTarget2D(nullptr) needs
+        // to call the PREVIOUSLY bound target's own UnbindAsRenderTarget() (which is where
+        // GenerateMipsEXT() lives) before restoring the back buffer, not just blindly restore.
+        IRenderTargetBackend* currentCustomRT_ = nullptr;
 
         // DX-106/DX-109: single shared per-resource barrier-state tracker, registered with by every
         // real D3D12 resource this backend creates (vertex/index buffers, textures -- DX-109).

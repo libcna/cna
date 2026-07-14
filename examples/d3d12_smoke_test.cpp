@@ -3730,6 +3730,114 @@ int main()
         backend.SetRenderTarget2D(nullptr);
     }
 
+    // ---- plan_dx.md DX-144: RenderTarget2D mip-chain generation -- proves the real CPU
+    // box-filter downsample cascade (D3D12RenderTargetBackend::GenerateMipsEXT(), triggered from
+    // UnbindAsRenderTarget()) actually writes correct content into mip levels > 0, not
+    // zero/garbage. Mirrors D3D11's own already-closed DX-144 methodology exactly: a solid single
+    // color across the whole base mip, since box-filtering a solid color always produces the exact
+    // same solid color at every downstream mip level regardless of the filter kernel's specifics --
+    // this sidesteps needing to replicate D3D11's own GenerateMips() kernel bit-for-bit. ----
+    {
+        auto rtMip = backend.CreateRenderTarget2D(8, 8, 0 /*DepthFormat::None*/, false, true /*mipMap*/, 0);
+        auto* d3dRtMip = dynamic_cast<D3D12RenderTargetBackend*>(rtMip.get());
+        backend.SetRenderTarget2D(rtMip.get());
+        backend.Clear(200.0f / 255.0f, 90.0f / 255.0f, 10.0f / 255.0f, 1.0f);
+        backend.SetRenderTarget2D(nullptr); // UnbindAsRenderTarget() -> GenerateMipsEXT()
+
+        Check(d3dRtMip != nullptr && d3dRtMip->GetLevelCountEXT() == 4,
+              "LL0: D3D12RenderTargetBackend: an 8x8 mipMap=true render target reports the expected "
+              "4-level mip chain (8x8/4x4/2x2/1x1, plan_dx.md DX-144)");
+
+        // Direct GPU readback of a given mip subresource -- same real, direct-readback discipline
+        // DX-122/DX-123/DX-141's own readbackMip already establish, kept test-local since there is
+        // no public sampling path in this raw-backend-level smoke test.
+        auto readbackRtMip = [&](int level, int w, int h) -> std::vector<uint8_t>
+        {
+            const UINT rowPitch = (static_cast<UINT>(w) * 4 + D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1)
+                                 & ~(D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1);
+            const UINT64 bufSize = static_cast<UINT64>(rowPitch) * static_cast<UINT64>(h);
+
+            D3D12_HEAP_PROPERTIES readbackHeapProps{};
+            readbackHeapProps.Type = D3D12_HEAP_TYPE_READBACK;
+            D3D12_RESOURCE_DESC bufDesc{};
+            bufDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+            bufDesc.Width = bufSize;
+            bufDesc.Height = 1;
+            bufDesc.DepthOrArraySize = 1;
+            bufDesc.MipLevels = 1;
+            bufDesc.Format = DXGI_FORMAT_UNKNOWN;
+            bufDesc.SampleDesc.Count = 1;
+            bufDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+
+            Microsoft::WRL::ComPtr<ID3D12Resource> readback;
+            HRESULT hr = backend.GetDeviceEXT()->CreateCommittedResource(
+                &readbackHeapProps, D3D12_HEAP_FLAG_NONE, &bufDesc,
+                D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(readback.GetAddressOf()));
+            if (FAILED(hr)) return {};
+
+            D3D12_TEXTURE_COPY_LOCATION dst{};
+            dst.pResource = readback.Get();
+            dst.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+            dst.PlacedFootprint.Footprint.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+            dst.PlacedFootprint.Footprint.Width = static_cast<UINT>(w);
+            dst.PlacedFootprint.Footprint.Height = static_cast<UINT>(h);
+            dst.PlacedFootprint.Footprint.Depth = 1;
+            dst.PlacedFootprint.Footprint.RowPitch = rowPitch;
+
+            D3D12_TEXTURE_COPY_LOCATION src{};
+            src.pResource = d3dRtMip->GetColorResourceEXT();
+            src.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+            src.SubresourceIndex = static_cast<UINT>(level);
+
+            ID3D12CommandAllocator* allocator = backend.GetCommandAllocatorEXT(0);
+            ID3D12GraphicsCommandList* cmdList = backend.GetCommandListEXT();
+            allocator->Reset();
+            cmdList->Reset(allocator, nullptr);
+            auto& tracker = backend.GetResourceStateTrackerEXT();
+            const D3D12_RESOURCE_STATES priorState = tracker.GetTrackedStateEXT(d3dRtMip->GetColorResourceEXT());
+            tracker.TransitionTo(cmdList, d3dRtMip->GetColorResourceEXT(), D3D12_RESOURCE_STATE_COPY_SOURCE);
+            cmdList->CopyTextureRegion(&dst, 0, 0, 0, &src, nullptr);
+            tracker.TransitionTo(cmdList, d3dRtMip->GetColorResourceEXT(), priorState);
+            hr = cmdList->Close();
+            if (FAILED(hr)) return {};
+            backend.ExecuteCommandListAndWaitEXT(cmdList);
+
+            uint8_t* mapped = nullptr;
+            const D3D12_RANGE mapRange{0, static_cast<SIZE_T>(bufSize)};
+            if (FAILED(readback->Map(0, &mapRange, reinterpret_cast<void**>(&mapped)))) return {};
+            std::vector<uint8_t> out(static_cast<std::size_t>(w) * h * 4);
+            for (int row = 0; row < h; ++row)
+                std::memcpy(out.data() + static_cast<std::size_t>(row) * w * 4,
+                            mapped + static_cast<std::size_t>(row) * rowPitch,
+                            static_cast<std::size_t>(w) * 4);
+            const D3D12_RANGE writtenRange{0, 0};
+            readback->Unmap(0, &writtenRange);
+            return out;
+        };
+
+        auto isSolidRt = [](const std::vector<uint8_t>& buf, uint8_t r, uint8_t g, uint8_t b, uint8_t a)
+        {
+            if (buf.empty()) return false;
+            for (std::size_t i = 0; i < buf.size(); i += 4)
+                if (buf[i] != r || buf[i+1] != g || buf[i+2] != b || buf[i+3] != a) return false;
+            return true;
+        };
+
+        if (d3dRtMip != nullptr)
+        {
+            const auto mip1 = readbackRtMip(1, 4, 4);
+            Check(isSolidRt(mip1, 200, 90, 10, 255),
+                  "LL1: D3D12RenderTargetBackend: GenerateMipsEXT()-on-unbind writes the exact "
+                  "box-filtered (here: solid-color-preserving) content into mip level 1, read back "
+                  "directly from the real GPU resource, not zero/garbage (plan_dx.md DX-144)");
+
+            const auto mip2 = readbackRtMip(2, 2, 2);
+            Check(isSolidRt(mip2, 200, 90, 10, 255),
+                  "LL2: D3D12RenderTargetBackend: mip level 2 (2x2) is also exact, confirming the "
+                  "full mip chain regenerates correctly, not just level 1 (plan_dx.md DX-144)");
+        }
+    }
+
     // ================================================================================================
     // plan_dx.md DX-132 / DX-148 / DX-140: the XNA-level public API, through a REAL, WINDOWLESS
     // GraphicsDevice (PresentationParameters::HeadlessEXT).

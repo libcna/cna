@@ -167,10 +167,14 @@ scheme.
   `IGraphicsBackend`'s own silent `nullptr` default.
 - **Custom `Effect` via `SpriteBatch::Begin(effect)`** (`D3D11`'s own `DX-71`) has no D3D12
   equivalent — `D3D12SpriteBatchBackend` only draws through the stock `sprite2d` pipeline.
-- **`SpriteFont`, `Model`, mip chains beyond level 0, and multi-light/specular/`WeightsPerVertex`
-  discrimination** are all unverified against this backend, the same honest gaps `D3D11`'s own docs
-  list for the same reasons (they build on already-tested primitives but have no D3D12-specific
-  dedicated test).
+- **`SpriteFont`, `Model`, and multi-light/specular/`WeightsPerVertex` discrimination** now have
+  dedicated D3D12 tests (`DX-132`/`DX-148`/`DX-138`/`DX-139`/`DX-135`, all closed) — this bullet is
+  stale as of 2026-07-14 and kept only as a marker that the rest of this "Known limitations" section
+  predates several later-closed phases and has not been fully re-audited; treat specific claims here
+  with caution and check `plan_dx.md`'s own row statuses first. **`RenderTarget2D` mip-chain
+  generation is now real** (`DX-144`, a CPU box-filter downsample cascade, not D3D11's driver-level
+  `GenerateMips()`) — `RenderTargetCube` mip-chain generation is NOT yet implemented for D3D12,
+  still a real, honestly-scoped gap.
 - **Device-removed recovery is real but its trigger is untestable here.** `RecreateDeviceEXT()`
   (`DX-110`) genuinely tears down and rebuilds every device-lifetime resource, and is functionally
   proven (fresh GPU work round-trips through the recreated device) — but a genuine

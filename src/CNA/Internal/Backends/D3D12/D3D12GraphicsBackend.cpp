@@ -821,18 +821,33 @@ namespace CNA::Internal::Backends::D3D12
     }
 
     std::unique_ptr<IRenderTargetBackend> D3D12GraphicsBackend::CreateRenderTarget2D(
-        int w, int h, int depthFormat, bool /*preserveContents*/, bool /*mipMap*/, int /*multiSampleCount*/)
+        int w, int h, int depthFormat, bool /*preserveContents*/, bool mipMap, int /*multiSampleCount*/)
     {
-        // DX-117: MSAA and full mip-chain generation are deliberately not yet supported for D3D12
-        // render targets (honest, scoped follow-up -- see D3D12RenderTargets.hpp's own header
-        // comment) -- mipMap/multiSampleCount are accepted (matching the interface contract every
-        // other backend implements) but not yet honored.
-        return std::make_unique<D3D12RenderTargetBackend>(this, device_.Get(), w, h, depthFormat);
+        // DX-144: mipMap is now honored -- a real CPU box-filter downsample cascade on
+        // UnbindAsRenderTarget() (see D3D12RenderTargets.hpp/.cpp's own header comment). MSAA is
+        // still deliberately not yet supported (honest, scoped follow-up) -- multiSampleCount is
+        // accepted (matching the interface contract every other backend implements) but not
+        // honored.
+        return std::make_unique<D3D12RenderTargetBackend>(this, device_.Get(), w, h, depthFormat, mipMap);
     }
 
     void D3D12GraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* rt)
     {
-        if (rt) rt->BindAsRenderTarget();
+        // DX-144: unbind whatever custom target was PREVIOUSLY bound before switching -- this is
+        // where D3D12RenderTargetBackend::UnbindAsRenderTarget() (and therefore GenerateMipsEXT())
+        // actually fires. Without this, SetRenderTarget2D(nullptr) blindly restored the back buffer
+        // and mip-chain generation never ran. Mirrors D3D11GraphicsBackend::SetRenderTarget2D()'s
+        // own currentCustomRT_ handling exactly.
+        if (currentCustomRT_)
+        {
+            currentCustomRT_->UnbindAsRenderTarget();
+            currentCustomRT_ = nullptr;
+        }
+        if (rt)
+        {
+            currentCustomRT_ = rt;
+            rt->BindAsRenderTarget();
+        }
         else RestoreBackBufferRenderTargetEXT();
     }
 
@@ -844,6 +859,16 @@ namespace CNA::Internal::Backends::D3D12
 
     void D3D12GraphicsBackend::SetRenderTargets(IRenderTargetBackend* const* rts, int count)
     {
+        // DX-144: same currentCustomRT_ unbind SetRenderTarget2D() does -- a single-target mipMap
+        // render target bound via SetRenderTarget2D() and then switched straight to an MRT set
+        // here (bypassing SetRenderTarget2D(nullptr)) must still get its own UnbindAsRenderTarget()
+        // call, or its mip chain silently never regenerates. Mirrors
+        // D3D11GraphicsBackend::SetRenderTargets()'s own currentCustomRT_ handling.
+        if (currentCustomRT_)
+        {
+            currentCustomRT_->UnbindAsRenderTarget();
+            currentCustomRT_ = nullptr;
+        }
         if (count <= 0 || rts == nullptr)
         {
             SetRenderTarget2D(nullptr);
