@@ -64,6 +64,12 @@ namespace CNA::Internal::Backends::D3D12
         /// Real GPU-resident depth-stencil resource, or null if `depthFormat` was `None`/unrecognized
         /// (NOXNA -- DX-145 real DXGI-format-fidelity introspection).
         [[nodiscard]] ID3D12Resource* GetDepthResourceEXT() const { return depthResource_.Get(); }
+        /// DX-146: the real DSV/format this render target created for its own depth-stencil resource.
+        /// DX-117 created these but never passed them to BindAsRenderTarget(), so binding a render
+        /// target with a depth buffer silently gave draws NO depth buffer at all -- see this class's
+        /// own BindAsRenderTarget() for the fix.
+        [[nodiscard]] D3D12_CPU_DESCRIPTOR_HANDLE GetDsvEXT() const { return dsv_; }
+        [[nodiscard]] DXGI_FORMAT GetDsvFormatEXT() const { return dsvFormat_; }
 
     private:
         D3D12GraphicsBackend* owner_ = nullptr;
@@ -76,6 +82,7 @@ namespace CNA::Internal::Backends::D3D12
 
         ComPtr<ID3D12Resource> depthResource_;
         D3D12_CPU_DESCRIPTOR_HANDLE dsv_{};
+        DXGI_FORMAT dsvFormat_ = DXGI_FORMAT_UNKNOWN; // DX-146
         bool hasDepth_ = false;
 
         int width_ = 0;

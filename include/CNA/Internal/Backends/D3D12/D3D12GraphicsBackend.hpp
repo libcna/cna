@@ -118,6 +118,15 @@ namespace CNA::Internal::Backends::D3D12
         void ClearDepthAndStencil(float depth, int stencil) override;
         void ClearColorAndStencil(float r, float g, float b, float a, int stencil) override;
         void ClearColorDepthAndStencil(float r, float g, float b, float a, float depth, int stencil) override;
+        /// DX-146: shared implementation behind Clear()'s 5 combo variants above -- clears the bound
+        /// color target(s) (including DX-117's real MRT set) and/or the bound depth-stencil view,
+        /// clearing only what @p clearColor / @p depthStencilFlags actually ask for. Depth/stencil
+        /// is a genuine no-op (not an error) when no DSV is bound, matching XNA's own semantics and
+        /// D3D11GraphicsBackend's own `if (currentDSV_)` behavior. @p what names the calling variant
+        /// for error messages.
+        void ClearImpl(bool clearColor, float r, float g, float b, float a,
+                       D3D12_CLEAR_FLAGS depthStencilFlags, float depth, int stencil,
+                       const char* what);
 
         void SetDepthTestEnabled(bool enabled) override;
         void SetBlendEnabled(bool enabled) override;

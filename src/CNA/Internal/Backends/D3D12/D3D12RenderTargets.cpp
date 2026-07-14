@@ -88,6 +88,7 @@ namespace CNA::Internal::Backends::D3D12
             owner_->GetResourceStateTrackerEXT().TrackResource(depthResource_.Get(), D3D12_RESOURCE_STATE_DEPTH_WRITE);
 
             dsv_ = owner_->AllocateDsvDescriptorEXT();
+            dsvFormat_ = depthDxgiFormat; // DX-146: needed by BindAsRenderTarget()
             D3D12_DEPTH_STENCIL_VIEW_DESC dsvDesc{};
             dsvDesc.Format = depthDxgiFormat;
             dsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
@@ -99,8 +100,13 @@ namespace CNA::Internal::Backends::D3D12
     {
         if (owner_)
         {
+            // DX-146: pass this target's own DSV too. DX-117 created the depth resource+DSV but
+            // never bound them, so a render target with a real depth buffer silently gave every draw
+            // NO depth buffer (depth test and every ClearDepth*/ClearStencil* variant were inert
+            // against it). Found by DX-146's own depth/stencil pixel proofs.
             owner_->BindOffscreenColorTargetEXT(colorResource_.Get(), rtv_,
-                                                DXGI_FORMAT_R8G8B8A8_UNORM, width_, height_);
+                                                DXGI_FORMAT_R8G8B8A8_UNORM, width_, height_,
+                                                dsv_, dsvFormat_);
         }
     }
 

@@ -1011,12 +1011,92 @@ namespace CNA::Internal::Backends::D3D12
         return backend;
     }
 
-    void D3D12GraphicsBackend::ClearColorAndDepth(float, float, float, float, float) { NotYetImplemented("ClearColorAndDepth"); }
-    void D3D12GraphicsBackend::ClearDepth(float) { NotYetImplemented("ClearDepth"); }
-    void D3D12GraphicsBackend::ClearStencil(int) { NotYetImplemented("ClearStencil"); }
-    void D3D12GraphicsBackend::ClearDepthAndStencil(float, int) { NotYetImplemented("ClearDepthAndStencil"); }
-    void D3D12GraphicsBackend::ClearColorAndStencil(float, float, float, float, int) { NotYetImplemented("ClearColorAndStencil"); }
-    void D3D12GraphicsBackend::ClearColorDepthAndStencil(float, float, float, float, float, int) { NotYetImplemented("ClearColorDepthAndStencil"); }
+    // DX-146: the 5 combo Clear* variants, all routed through one shared implementation rather than
+    // six near-identical copies. Mirrors D3D11GraphicsBackend's own Clear*/ClearDepthStencilView
+    // family exactly at the XNA level (same clear values, same "clear only what was asked for"
+    // semantics); the D3D12-specific parts are the explicit RENDER_TARGET barrier (D3D11's driver
+    // does this implicitly) and D3D12_CLEAR_FLAG_DEPTH/_STENCIL instead of D3D11_CLEAR_DEPTH/_STENCIL.
+    //
+    // Depth/stencil is a genuine no-op (not an error) when no DSV is bound: XNA's own
+    // GraphicsDevice.Clear(ClearOptions.DepthBuffer, ...) against a depth-less render target is
+    // legal and does nothing, and D3D11's own equivalent path already behaves this way
+    // (`if (currentDSV_)`). Matching that rather than throwing keeps the two backends' observable
+    // behavior identical.
+    void D3D12GraphicsBackend::ClearImpl(bool clearColor, float r, float g, float b, float a,
+                                          D3D12_CLEAR_FLAGS depthStencilFlags, float depth, int stencil,
+                                          const char* what)
+    {
+        if (!boundColorResource_)
+        {
+            NotYetImplemented(what);
+        }
+
+        ID3D12CommandAllocator* allocator = GetCommandAllocatorEXT(0);
+        ID3D12GraphicsCommandList* cmdList = GetCommandListEXT();
+        allocator->Reset();
+        cmdList->Reset(allocator, nullptr);
+
+        if (clearColor)
+        {
+            resourceStates_.TransitionTo(cmdList, boundColorResource_, D3D12_RESOURCE_STATE_RENDER_TARGET);
+            const float rgba[4] = {r, g, b, a};
+            cmdList->ClearRenderTargetView(boundColorRtv_, rgba, 0, nullptr);
+
+            // DX-117's real MRT set: clear every additional bound target too, same as Clear() does.
+            for (int i = 0; i < extraMrtCount_; ++i)
+            {
+                resourceStates_.TransitionTo(cmdList, extraMrtResources_[i], D3D12_RESOURCE_STATE_RENDER_TARGET);
+                cmdList->ClearRenderTargetView(extraMrtRtvs_[i], rgba, 0, nullptr);
+            }
+        }
+
+        if (depthStencilFlags != static_cast<D3D12_CLEAR_FLAGS>(0) && boundDsv_.ptr != 0)
+        {
+            cmdList->ClearDepthStencilView(boundDsv_, depthStencilFlags, depth,
+                                            static_cast<UINT8>(stencil), 0, nullptr);
+        }
+
+        HRESULT hr = cmdList->Close();
+        if (FAILED(hr))
+            throw std::runtime_error(std::string("D3D12GraphicsBackend::") + what +
+                                      ": command list Close failed, hr=" + FormatHr(hr));
+        ExecuteCommandListAndWaitEXT(cmdList);
+    }
+
+    void D3D12GraphicsBackend::ClearColorAndDepth(float r, float g, float b, float a, float depth)
+    {
+        ClearImpl(true, r, g, b, a, D3D12_CLEAR_FLAG_DEPTH, depth, 0, "ClearColorAndDepth");
+    }
+
+    void D3D12GraphicsBackend::ClearDepth(float depth)
+    {
+        ClearImpl(false, 0, 0, 0, 0, D3D12_CLEAR_FLAG_DEPTH, depth, 0, "ClearDepth");
+    }
+
+    void D3D12GraphicsBackend::ClearStencil(int stencil)
+    {
+        ClearImpl(false, 0, 0, 0, 0, D3D12_CLEAR_FLAG_STENCIL, 1.0f, stencil, "ClearStencil");
+    }
+
+    void D3D12GraphicsBackend::ClearDepthAndStencil(float depth, int stencil)
+    {
+        ClearImpl(false, 0, 0, 0, 0,
+                  static_cast<D3D12_CLEAR_FLAGS>(D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL),
+                  depth, stencil, "ClearDepthAndStencil");
+    }
+
+    void D3D12GraphicsBackend::ClearColorAndStencil(float r, float g, float b, float a, int stencil)
+    {
+        ClearImpl(true, r, g, b, a, D3D12_CLEAR_FLAG_STENCIL, 1.0f, stencil, "ClearColorAndStencil");
+    }
+
+    void D3D12GraphicsBackend::ClearColorDepthAndStencil(float r, float g, float b, float a,
+                                                          float depth, int stencil)
+    {
+        ClearImpl(true, r, g, b, a,
+                  static_cast<D3D12_CLEAR_FLAGS>(D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL),
+                  depth, stencil, "ClearColorDepthAndStencil");
+    }
 
     void D3D12GraphicsBackend::SetDepthTestEnabled(bool) { NotYetImplemented("SetDepthTestEnabled"); }
     void D3D12GraphicsBackend::SetBlendEnabled(bool) { NotYetImplemented("SetBlendEnabled"); }
