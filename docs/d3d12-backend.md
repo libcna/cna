@@ -180,9 +180,13 @@ scheme.
 - **`d3dx12.h`** (Microsoft's optional D3D12 helper header, e.g. `D3D12CalcSubresource()`) is absent
   from this machine's MinGW-w64 D3D12 headers (`DX-100`'s own finding) — the whole backend uses raw
   `ID3D12*` calls directly.
-- **`CnaTests` (the gtest suite) does not build for D3D12** — same MinGW/Windows-cross-target
-  portability gap `D3D11`'s own `DX-15` already found and left out of scope (~10 test files calling
-  POSIX-only `::setenv()`).
+- **`CnaTests` (the gtest suite) now builds and links for D3D12**, same as `D3D11` — the
+  MinGW/Windows-cross-target `::setenv()` portability gap `DX-15` found and fixed applied equally to
+  both backends (the fix is in the shared `tests/` sources, not backend-specific). Confirmed running
+  under plain Wine for test groups that don't create a live `GraphicsDevice` window (7/7 passed).
+  Test groups that do create one hit this same page's own already-documented plain-Wine swap-chain
+  limitation (`DX-100`/`DX-102`) and need the Proton launch path, not plain `wine`, to run — no new
+  gap, just this pre-existing one now reachable through `CnaTests` too.
 
 See `plan_dx.md` for the full task-by-task status (`DX-100` through `DX-115`) and design rationale,
 and `docs/graphics-backend-feature-matrix.md` for a row-by-row comparison against the other

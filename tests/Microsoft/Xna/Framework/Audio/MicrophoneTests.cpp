@@ -13,6 +13,7 @@
 #include <thread>
 #include <utility>
 #include <vector>
+#include "System/Environment.hpp"
 
 using Microsoft::Xna::Framework::Audio::AudioChannels;
 using Microsoft::Xna::Framework::Audio::Microphone;
@@ -56,7 +57,7 @@ namespace
     // fixture's test happens to run first.
     const bool g_forceDummyAudioDriver = []
     {
-        ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+        System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
         return true;
     }();
 }

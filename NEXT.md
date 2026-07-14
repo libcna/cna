@@ -98,7 +98,7 @@ API-surface changes.
 | `cmake-build-bgfx` | Bgfx | Clean as of 2026-07-10 (not rebuilt this session) |
 | `cmake-build-sdl` | SDL_Renderer | Clean as of 2026-07-10 (not rebuilt this session) |
 | `cmake-build-android` | SDL_Renderer (NDK) | Blocked — Task 920 (sibling `sharp-runtime` NDK build regressions) |
-| `cmake-build-d3d11` | D3D11 (Windows cross-compile, MinGW-w64) | **Verified clean 2026-07-13**: `CNA` and `cna_backend_graphics_d3dcommon`/`cna_backend_graphics_d3d11` build clean; `cna_test_d3d11_smoke`/`cna_test_d3d11_common` build, link, and run correctly under Wine+DXVK. **`CnaTests` itself does NOT build** for this backend — genuinely blocked (see §4), not silently skipped. |
+| `cmake-build-d3d11` | D3D11 (Windows cross-compile, MinGW-w64) | **Verified clean 2026-07-13**: `CNA` and `cna_backend_graphics_d3dcommon`/`cna_backend_graphics_d3d11` build clean; `cna_test_d3d11_smoke`/`cna_test_d3d11_common` build, link, and run correctly under Wine+DXVK. **`CnaTests` itself now also builds, links, and runs** for this backend — the `::setenv` portability gap (see former §4) was fixed 2026-07-14 (`DX-15`); a filtered run (`CnaInput*`/`AlphaTestReferenceScalingTest`, 30 tests) genuinely passed through a live D3D11 device under Wine+DXVK. |
 | `cmake-build-d3d12` | D3D12 (Windows cross-compile, MinGW-w64) | **Updated 2026-07-14 (DX-113 test-suite formalization closed)**: `CNA` and both D3D12 backend targets build clean. Device-lifetime resources (DX-102-105), resource-barrier state tracking, a PSO cache, a root-signature cache (DX-106-108), real `D3D12VertexBufferBackend`/`D3D12IndexBufferBackend`/`D3D12TextureBackend`/`D3D12TextureCubeBackend` (DX-109, buffers+2D+cube textures — render targets/3D textures still honestly deferred, 🟨) plus a real, tested `RecreateDeviceEXT()` device-removed recovery path (DX-110), and `Clear()`/`DrawColoredPrimitives()`/`DrawIndexedColoredPrimitives()`/`DrawPrimitivesEx()`/`DrawIndexedPrimitivesEx()`/`DrawInstancedPrimitivesEx()` are REAL for **all 10 of 10 stock variants** (`colored3d`/`textured3d`/`colored_textured3d`/`lit_textured3d`/`alpha_test3d`/`dual_texture3d`/`env_map3d`/`sprite2d`/`skinned3d`/`instanced3d`, DX-111 ✅) via a new `BindOffscreenColorTargetEXT()` NOXNA helper standing in for the still-broken swap chain, plus a real `D3D12SpriteBatchBackend` (DX-112 ✅). DX-113 audited that coverage against D3D11's own DX-80–85 methodology, added a dedicated fog on/off test and untracked-resource-throw tests, and mutation-verified Check M's discriminating power (🟨 — real, but 2 honest gaps: no state-object cache exists yet to test against, and fence back-pressure isn't measured under real GPU load). `D3D12_Smoke` CTest: **80/80 checks pass** through Wine+vkd3d-proton (off-screen only, unchanged — the CTest harness still uses `run-wine-vkd3d.sh`'s system-Wine prefix). **UPDATE 2026-07-14: swap-chain *creation* now genuinely works**, via a properly Proton-managed launch (`scripts/run-proton-vkd3d.sh`, new) — `cna_diag_d3d12_swapchain` reports `IsSwapChainAvailableEXT() = true`, reproduced twice including from a fresh prefix (`plan_dx.md` `DX-102`'s row has the full evidence). `Present()`/back-buffer rendering are still real, separate `NotYetImplemented()` follow-up work. `DX-115` (docs) is now also closed — Phase DX12 is fully done except `DX-114`, which stays `needs_human`. **FINAL UPDATE 2026-07-14: Phase DX13 (`DX-116`–`DX-123`) is 6 of 8 rows closed, 2 partial (🟨)** — real `Present()`/back-buffer rendering, render targets/MRT, runtime-settable state objects, per-slot samplers, occlusion queries, custom `ShaderEffect`, `Texture3D`, and `TextureCube::GetData()` readback are all real now. Still partial: `DX-117` (render targets have **no MSAA and no mip-chain generation**) and `DX-121` (the `SpriteBatch::Begin(effect)` wiring is real code but not independently CTest-proven). `D3D12_Smoke` CTest: **125/125 checks** at the end of that phase (169/169 today). See `plan_dx.md`'s Phase DX13 section for full detail; Phase DX14/DX15 are the active work now. |
 
 The `cna_demo_xact` example fails to build on every backend (missing `examples/demo_xact/Content`
@@ -112,8 +112,8 @@ directory in this checkout) — cosmetic, pre-existing, not a CNA bug, do not ch
 | Vulkan | 4371/4373 pass (2 hardware skips), as of 2026-07-11 | 127/128 pass — 1 pre-existing failure (`Vulkan_DepthBias`) |
 | Bgfx | 4375/4377 pass (2 hardware skips), as of 2026-07-11 | 104/106 pass — 2 pre-existing failures (`Bgfx_RenderTarget2D_MsaaResolve`, `Bgfx_RenderTargetCube_DepthFormat`, DEFERRED — Task 952) |
 | Software | 4371/4373 pass, as of 2026-07-13 | 6 CTests, 29/29 checks |
-| D3D11 | **Does not build** (see §4) | **6/6 pass, 92 `D3D11_Smoke`/`D3D11_Common` checks + 10 more assertions across 4 new state-object tests** (`D3D11_Smoke` 69, `D3D11_Common` 23, `D3D11_BlendState_Opaque`/`AlphaBlend`, `D3D11_DepthStencilState_StencilEnable`, `D3D11_RasterizerState_CullMode`), verified 2026-07-14 via `ctest --test-dir cmake-build-d3d11 -R D3D11` |
-| D3D12 | Not applicable yet (no `CnaTests` target for this backend) | **1/1 pass, 80/80 checks** (`D3D12_Smoke`: off-screen device/queue/heaps/command-lists/fence + resource-barrier tracking (incl. untracked-resource throw, DX-113) + root-signature cache + pipeline-state-object cache + real vertex/index/texture/cube-texture round-trips + device-removed recreation + real, pixel-verified `colored3d`/`textured3d`/`colored_textured3d`/`lit_textured3d`/`alpha_test3d`/`dual_texture3d`/`env_map3d`/`skinned3d`/`instanced3d` draws via `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx`/`DrawInstancedPrimitivesEx` + fog on/off (DX-113) + a real `D3D12SpriteBatchBackend` quad-draw/flip proof — all 10/10 stock shader variants), mutation-verified (Check M), verified 2026-07-14 via `ctest --test-dir cmake-build-d3d12 -R D3D12` |
+| D3D11 | **Builds, links, and runs** (fixed 2026-07-14, `DX-15`) — full-suite pass count not yet re-measured (thousands of tests, long wall-clock under Wine); a filtered run (`CnaInput*`/`AlphaTestReferenceScalingTest`, 30 tests, through a live D3D11 device) passed 30/30 | **6/6 pass, 92 `D3D11_Smoke`/`D3D11_Common` checks + 10 more assertions across 4 new state-object tests** (`D3D11_Smoke` 69, `D3D11_Common` 23, `D3D11_BlendState_Opaque`/`AlphaBlend`, `D3D11_DepthStencilState_StencilEnable`, `D3D11_RasterizerState_CullMode`), verified 2026-07-14 via `ctest --test-dir cmake-build-d3d11 -R D3D11` |
+| D3D12 | **Builds and links** (fixed 2026-07-14, `DX-15`) — groups not creating a live `GraphicsDevice` window run and pass under plain Wine (7/7 confirmed); groups that do hit the pre-existing plain-Wine swap-chain limitation (`DX-100`/`DX-102`, needs Proton), same as any other D3D12 GPU-window path | **1/1 pass, 80/80 checks** (`D3D12_Smoke`: off-screen device/queue/heaps/command-lists/fence + resource-barrier tracking (incl. untracked-resource throw, DX-113) + root-signature cache + pipeline-state-object cache + real vertex/index/texture/cube-texture round-trips + device-removed recreation + real, pixel-verified `colored3d`/`textured3d`/`colored_textured3d`/`lit_textured3d`/`alpha_test3d`/`dual_texture3d`/`env_map3d`/`skinned3d`/`instanced3d` draws via `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx`/`DrawInstancedPrimitivesEx` + fog on/off (DX-113) + a real `D3D12SpriteBatchBackend` quad-draw/flip proof — all 10/10 stock shader variants), mutation-verified (Check M), verified 2026-07-14 via `ctest --test-dir cmake-build-d3d12 -R D3D12` |
 | Headless, WebGPU | Not re-verified this session | See `plan_headless.md`/`plan_webgpu.md` for their own last-verified status |
 
 All EasyGL/Vulkan/Bgfx/Software numbers above are carried over from the last session that actually
@@ -209,8 +209,9 @@ registered `ctest` pixel-verification examples under `examples/`. New this sessi
   `README.md` build section). Only `DX-114` (real Windows hardware) remains, `needs_human` — swap
   chain/`Present()` is D3D12's own additional real gap (genuinely crashes under this dev loop's
   Wine+vkd3d-proton, not a CNA bug), so unlike D3D11 no D3D12 proof is on-screen. See §8/§9.
-- **D3D11 + `CnaTests`**: the full pre-existing GTest suite does not build under this backend —
-  ~10 test files call POSIX-only `::setenv()` directly (see §4). Same gap applies to D3D12.
+- **D3D11 + `CnaTests`**: fixed 2026-07-14 (`DX-15`) — ~10 test files called POSIX-only `::setenv()`
+  directly, now use `System::Environment::SetEnvironmentVariable`. The full pre-existing GTest suite
+  builds, links, and runs under both D3D11 and D3D12 (same fix, shared `tests/` sources).
 - **D3D12**: all 10/10 stock shader variants (`colored3d`/`textured3d`/`colored_textured3d`/
   `lit_textured3d`/`alpha_test3d`/`dual_texture3d`/`env_map3d`/`skinned3d`/`sprite2d`/`instanced3d`)
   draw for real off-screen via `DrawColoredPrimitives`/`DrawPrimitivesEx`/`DrawIndexedPrimitivesEx`/
@@ -394,25 +395,18 @@ real `ctest` run with no regression. Outside the D3D plan, the standing backlog 
 153-sample `../cna-samples` re-audit, Task 945's HLSL→GLSL tooling decision, Task 952's deferred
 Bgfx bug) is unchanged — see §8/§9.
 
-**One real, separate, documented problem**: the full `CnaTests` GTest suite does not build under
-`CNA_GRAPHICS_BACKEND=D3D11` (and, by the same root cause, `D3D12`).
-
-- **Symptom**: `cmake --build cmake-build-d3d11 --target CnaTests` fails with
-  `error: '::setenv' has not been declared; did you mean 'getenv'?` across roughly 10 test files.
-- **Failing command**: `cmake --build cmake-build-d3d11 --target CnaTests -j4`
-- **Affected files**: mostly `tests/Microsoft/Xna/Framework/Audio/*Tests.cpp` (confirmed via
-  `grep -rl '::setenv' tests/`) — POSIX-only `::setenv()`/`::unsetenv()` calls with no Windows
-  fallback (`_putenv_s`/`SetEnvironmentVariable`).
-- **Suspected cause**: these test files were written and only ever built against
-  Linux/EasyGL/Vulkan/Bgfx; nobody has linked a MinGW cross-target beyond `SDL_RENDERER` (which has
-  much lighter test coverage needs) recently enough to catch this.
-- **What's already been tried**: nothing yet — found and explicitly left unfixed this session
-  (deliberately out of scope; see §9). `CNA` itself and standalone test executables
-  (`cna_test_d3d11_smoke`, `cna_test_d3d11_common`, `d3d12_smoke_test`) build and run fine — only the
-  full `CnaTests` target is affected.
-- **Not a blocker for continued backend development**: this project's own established pattern
-  (Software/Headless backends) is standalone example-based CTests (`examples/d3d11_*.cpp`/
-  `examples/d3d12_*.cpp`) until a backend is mature enough to run the full suite.
+**RESOLVED 2026-07-14 (`DX-15`)**: the full `CnaTests` GTest suite previously did not build under
+`CNA_GRAPHICS_BACKEND=D3D11`/`D3D12` (`error: '::setenv' has not been declared; did you mean
+'getenv'?'` across roughly 10 test files, mostly `tests/Microsoft/Xna/Framework/Audio/*Tests.cpp`,
+plus `FrameworkDispatcherTests.cpp`/`Graphics/Texture2DTests.cpp`). Fixed by replacing every
+`::setenv()` call site with `System::Environment::SetEnvironmentVariable(name, value)`
+(sharp-runtime, already cross-platform), `#include`ing `System/Environment.hpp` where missing.
+`cmake --build cmake-build-d3d11 --target CnaTests` and the same for `cmake-build-d3d12` both now
+succeed cleanly, and a filtered real run genuinely executes and passes through a live device under
+Wine (D3D11: `CnaInput*`/`AlphaTestReferenceScalingTest`, 30/30 passed; D3D12: same filter, real
+`D3D12` device init confirmed). `CNA` itself and the standalone test executables
+(`cna_test_d3d11_smoke`, `cna_test_d3d11_common`, `d3d12_smoke_test`) were already building fine —
+only the full `CnaTests` target was ever affected.
 
 ---
 
@@ -420,7 +414,6 @@ Bgfx bug) is unchanged — see §8/§9.
 
 | Status | Description | Task |
 |---|---|---|
-| Incomplete, real gap | `CnaTests` does not build under `CNA_GRAPHICS_BACKEND=D3D11` — ~10 test files call POSIX-only `::setenv()` directly. See §4. | — |
 | Incomplete, honestly unexercised | D3D11's 5 combo `Clear*` variants (`ClearColorAndDepth`/`ClearDepth`/`ClearStencil`/`ClearDepthAndStencil`/`ClearColorAndStencil`/`ClearColorDepthAndStencil`), window resize (`EnsureSwapChainSize()`), and device-lost detection (`CheckDeviceRemoved()`) are all implemented but never exercised by any test. | — |
 | Needs verification (real hardware, not Wine) | D3D11's debug-layer-missing fallback (`DXGI_ERROR_SDK_COMPONENT_MISSING` retry) and the `E_INVALIDARG`/drop-feature-level-11_1 fallback never fired on this machine (DXVK always provides what's needed) — genuinely untested code paths. Needs a real Windows machine without the D3D11 SDK debug layer installed, or a driver that rejects an explicit 11_1 request. | — |
 | **DEFERRED (2026-07-11)** — investigated 3 times, not fixed, explicitly paused by the project owner | A `Depth24Stencil8`-attached `RenderTargetCube` face produces no colour output at all on Bgfx. See `plan_graphics.md`'s Task 952 entry for the full investigation trail. **Do not resume without explicit instruction** — see §9. | 952 |
@@ -536,8 +529,10 @@ DXVK_LOG_PATH=/tmp/dxvk-logs DXVK_LOG_LEVEL=info \
   scripts/run-wine-dxvk.sh cmake-build-d3d11/cna_test_d3d11_smoke.exe
 head -5 /tmp/dxvk-logs/*.log   # should start with "DXVK: 2.6.0" and a real GPU name, not be empty
 
-# Reproduce the CnaTests-under-D3D11 build failure (see §4)
+# Build and run CnaTests under D3D11/D3D12 (fixed 2026-07-14, see §4)
 cmake --build cmake-build-d3d11 --target CnaTests -j4
+cmake --build cmake-build-d3d12 --target CnaTests -j4
+WINEPREFIX=~/.wine-cna-d3d11 wine cmake-build-d3d11/CnaTests.exe --gtest_filter="CnaInput*"
 ```
 
 **Environment note (Linux-native backends):** the last-verified convention was that this sandbox
@@ -633,9 +628,6 @@ desktop session with real GPU access — re-verify before assuming either claim 
   though the device/queue/command-list path itself is genuinely solid). Build `DX-102` onward
   around off-screen/readback proof and re-verify swap-chain support explicitly before relying on
   it, rather than inheriting D3D11's own assumption by analogy.
-- **Do not opportunistically fix the `CnaTests`-under-D3D11 `::setenv` portability gap** (§4) — a
-  real, separately-scoped, ~10-file problem, deliberately left open this session rather than
-  expanding scope.
 - **Do not resume Task 952** (Bgfx `RenderTargetCube` depth-gating bug) without explicit
   instruction — explicitly marked **DEFERRED** by the project owner after 2 full investigation
   rounds found no root cause.
