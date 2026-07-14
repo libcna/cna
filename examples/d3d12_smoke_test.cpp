@@ -518,6 +518,30 @@ int main()
         try { backend.ExecuteCommandListAndWaitEXT(cmdList); }
         catch (const std::exception&) { threw = true; }
         Check(!threw, "G7: command list recording the real transition barriers submits+executes cleanly");
+
+        // DX-113: the header's own documented contract says TransitionTo()/GetTrackedStateEXT() throw
+        // std::runtime_error for a resource that was never registered via TrackResource() -- real
+        // proof this fires, not just documented in a comment. A second, never-tracked committed
+        // buffer (distinct pointer from dummyResource, which IS tracked) is the discriminating input.
+        Microsoft::WRL::ComPtr<ID3D12Resource> untrackedResource;
+        HRESULT hrUntracked = device->CreateCommittedResource(
+            &heapProps, D3D12_HEAP_FLAG_NONE, &bufDesc,
+            D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(untrackedResource.ReleaseAndGetAddressOf()));
+        Check(SUCCEEDED(hrUntracked) && untrackedResource != nullptr,
+              "G8: a second, deliberately never-tracked committed buffer created for the throw test");
+
+        bool threwTransition = false;
+        try { tracker.TransitionTo(cmdList, untrackedResource.Get(), D3D12_RESOURCE_STATE_COPY_DEST); }
+        catch (const std::runtime_error&) { threwTransition = true; }
+        Check(threwTransition,
+              "G9: TransitionTo() on a never-tracked resource genuinely throws std::runtime_error "
+              "(plan_dx.md DX-106/DX-113), not silently emitting an ad-hoc barrier from an unknown state");
+
+        bool threwGetState = false;
+        try { (void)tracker.GetTrackedStateEXT(untrackedResource.Get()); }
+        catch (const std::runtime_error&) { threwGetState = true; }
+        Check(threwGetState,
+              "G10: GetTrackedStateEXT() on a never-tracked resource genuinely throws std::runtime_error");
     }
 
     // ---- Check H: D3D12RootSignatureCache (DX-108) ----
@@ -1626,6 +1650,101 @@ int main()
         Check(regionIs(afterU, 10, 20, 30, 255),
               "U1: DrawPrimitivesEx() real env_map3d samples the exact distinctly-colored cube face "
               "via a real D3D12TextureCubeBackend SRV (plan_dx.md DX-111, closing 10/10 stock variants)");
+
+        backend.UnbindOffscreenColorTargetEXT();
+    }
+
+    // ---- Check V (DX-113): a dedicated fog-on/fog-off pixel test, closing the same real gap ----
+    // ---- D3D11's own DX-81 audit found and fixed (d3d11_smoke_test.cpp Check AC) -- fog was wired ----
+    // ---- into every applicable variant's constant buffer (colored3d's DrawPrimitivesEx bundle ----
+    // ---- branch included) but never independently exercised by a dedicated on/off pixel test. ----
+    // ---- Same fixture as D3D11's own Check AC: colored3d.vert.hlsl's formula (fogFactor = ----
+    // ---- fogEnabled ? saturate((FogEnd-Z)/(FogEnd-FogStart)) : 1.0, then outColor.rgb = ----
+    // ---- lerp(FogColor, vertexColor, fogFactor)) is the exact same DXBC bytecode D3D11 draws ----
+    // ---- through -- a quad at object-space Z=0.5 with FogStart=0/FogEnd=0.5 lands fogFactor ----
+    // ---- exactly on 0 when fog is enabled (pure FogColor) vs 1 when it's not (pure vertex color), ----
+    // ---- an exact, unambiguous discrimination, not "some blend happened". ----
+    {
+        constexpr int kRtWidth = 64;
+        constexpr int kRtHeight = 64;
+
+        D3D12_HEAP_PROPERTIES heapProps{};
+        heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
+
+        D3D12_RESOURCE_DESC rtDesc{};
+        rtDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+        rtDesc.Width = kRtWidth;
+        rtDesc.Height = kRtHeight;
+        rtDesc.DepthOrArraySize = 1;
+        rtDesc.MipLevels = 1;
+        rtDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        rtDesc.SampleDesc.Count = 1;
+        rtDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+        rtDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+
+        Microsoft::WRL::ComPtr<ID3D12Resource> rt;
+        HRESULT hrRt = backend.GetDeviceEXT()->CreateCommittedResource(
+            &heapProps, D3D12_HEAP_FLAG_NONE, &rtDesc,
+            D3D12_RESOURCE_STATE_RENDER_TARGET, nullptr, IID_PPV_ARGS(rt.GetAddressOf()));
+        Check(SUCCEEDED(hrRt) && rt != nullptr, "V0: real off-screen RGBA8 render-target resource created");
+
+        backend.GetResourceStateTrackerEXT().TrackResource(rt.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET);
+        D3D12_CPU_DESCRIPTOR_HANDLE rtv = backend.AllocateRtvDescriptorEXT();
+        backend.GetDeviceEXT()->CreateRenderTargetView(rt.Get(), nullptr, rtv);
+        backend.BindOffscreenColorTargetEXT(rt.Get(), rtv, DXGI_FORMAT_R8G8B8A8_UNORM, kRtWidth, kRtHeight);
+
+        struct VPCz { float x, y, z; uint32_t color; };
+        const uint32_t kRed = 0xFF0000FFu; // A=255,B=0,G=0,R=255 (R8G8B8A8 byte order)
+        static const VPCz kTriFog[3] = {
+            {-1.0f, -1.0f, 0.5f, kRed},
+            { 3.0f, -1.0f, 0.5f, kRed},
+            {-1.0f,  3.0f, 0.5f, kRed},
+        };
+        D3D12VertexBufferBackend vbFog(&backend, 3);
+        vbFog.SetData(kTriFog, 3, sizeof(VPCz));
+
+        auto pixelAt = [&](const std::vector<uint8_t>& buf, int x, int y) -> std::array<uint8_t, 4>
+        {
+            const std::size_t idx = (static_cast<std::size_t>(y) * kRtWidth + static_cast<std::size_t>(x)) * 4;
+            return {buf[idx + 0], buf[idx + 1], buf[idx + 2], buf[idx + 3]};
+        };
+        auto regionIs = [&](const std::vector<uint8_t>& buf, uint8_t r, uint8_t g, uint8_t b, uint8_t a)
+        {
+            for (int y = 28; y < 32; ++y)
+                for (int x = 28; x < 32; ++x)
+                {
+                    auto p = pixelAt(buf, x, y);
+                    if (!(p[0] == r && p[1] == g && p[2] == b && p[3] == a)) return false;
+                }
+            return true;
+        };
+
+        GpuDrawParams fogOff;
+        fogOff.vertexColorEnabled = true;
+        fogOff.fogEnabled = false;
+        fogOff.fogColor[0] = 0.0f; fogOff.fogColor[1] = 1.0f; fogOff.fogColor[2] = 0.0f;
+        fogOff.fogStart = 0.0f;
+        fogOff.fogEnd = 0.5f;
+
+        backend.Clear(0.039f, 0.039f, 0.039f, 1.0f);
+        backend.DrawPrimitivesEx(vbFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                 Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, fogOff);
+        auto afterFogOff = ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight);
+        Check(regionIs(afterFogOff, 255, 0, 0, 255),
+              "V1: DrawPrimitivesEx() colored3d bundle, fogEnabled=false leaves the exact vertex "
+              "color unblended (plan_dx.md DX-69/DX-113)");
+
+        GpuDrawParams fogOn = fogOff;
+        fogOn.fogEnabled = true;
+
+        backend.Clear(0.039f, 0.039f, 0.039f, 1.0f);
+        backend.DrawPrimitivesEx(vbFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                 Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, fogOn);
+        auto afterFogOn = ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight);
+        Check(regionIs(afterFogOn, 0, 255, 0, 255),
+              "V2: DrawPrimitivesEx() colored3d bundle, fogEnabled=true with Z at FogEnd genuinely "
+              "blends all the way to the exact FogColor (fogFactor=0), distinctly different from "
+              "the fogEnabled=false case above (plan_dx.md DX-69/DX-113)");
 
         backend.UnbindOffscreenColorTargetEXT();
     }
