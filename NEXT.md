@@ -370,9 +370,28 @@ found; manually bypassing `GraphicsDevice`/`Effect::Apply()` was considered and 
 would just re-test `VertexBuffer`/`IndexBuffer` draws under a `Model`-shaped label, not a genuine
 proof of `ModelMesh::Draw()`'s own code path. Left open rather than forced. `D3D11_Smoke` still
 77/77 (untouched), `D3D12_Smoke` **135→141/141 checks**, verified via a real `ctest` run with no
-regression. Outside the D3D plan, the standing backlog (Phase 79's 153-sample `../cna-samples`
-re-audit, Task 945's HLSL→GLSL tooling decision, Task 952's deferred Bgfx bug) is unchanged — see
-§8/§9.
+regression.
+
+**Phase DX15 progress (2026-07-14, fourth chunk): `DX-141`/`DX-142` closed real, `DX-140` closed 🟨
+(NPOT done, `FromStream`/`SaveAsPng` deferred to the same real blocker `DX-132`/`DX-148` already
+found).** `DX-140` (`Texture2D.FromStream`/`SaveAsPng`/NPOT): both `FromStream()` and every real
+`Texture2D` constructor need a `GraphicsDevice&` (confirmed from source) — for D3D12 that's the
+identical windowed-`GraphicsDevice` swap-chain-crash blocker, so those two stay honestly open;
+**NPOT** (testable at the raw-backend level, no `GraphicsDevice` needed) closed for real on both
+backends — a genuine `5×3` non-power-of-two texture (20 bytes/row, doesn't divide evenly into
+`D3D12_TEXTURE_DATA_PITCH_ALIGNMENT`), solid color to isolate the upload path from unrelated
+bilinear-sampling concerns, sampled via a real `textured3d` draw with an exact-color readback.
+`DX-141` (D3D12 mip level > 0): rather than fighting the stock shaders' driver-dependent implicit-LOD
+`Sample()` selection, reads mip level 1 back directly via `CopyTextureRegion` (the same discipline
+`DX-122`/`DX-123`'s own `GetData()` already established) — proves both the level-1 upload is exact
+AND level 0 stays genuinely unaffected. `DX-142` (D3D11 all-16-sampler-slots): binds all 16 slots
+simultaneously with 16 distinct configurations, then re-verifies every slot's bound object *after*
+all 16 were applied — confirms no later slot's bind clobbered an earlier one (the specific
+off-by-one/aliasing risk this row was written to catch). All new checks passed on the first real
+run. `D3D11_Smoke` 77→**81/81 checks**, `D3D12_Smoke` 141→**147/147 checks**, both verified via a
+real `ctest` run with no regression. Outside the D3D plan, the standing backlog (Phase 79's
+153-sample `../cna-samples` re-audit, Task 945's HLSL→GLSL tooling decision, Task 952's deferred
+Bgfx bug) is unchanged — see §8/§9.
 
 **One real, separate, documented problem**: the full `CnaTests` GTest suite does not build under
 `CNA_GRAPHICS_BACKEND=D3D11` (and, by the same root cause, `D3D12`).

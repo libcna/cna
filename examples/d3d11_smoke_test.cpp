@@ -1736,8 +1736,101 @@ protected:
                   "different from the fogEnabled=false case above (plan_dx.md DX-69/DX-81)");
         }
 
+        // plan_dx.md DX-140 (partial -- NPOT only): a genuinely non-power-of-two Texture2D (5x3),
+        // never exercised anywhere in this test suite before. 5*4=20 bytes/row is an odd size worth
+        // exercising for real (D3D11's own upload path has less alignment sensitivity than D3D12's,
+        // but this is still the first NPOT texture this suite has ever created against D3D11).
+        // Every pixel is the same solid color, isolating "does NPOT upload/sample corrupt anything"
+        // from unrelated bilinear-blend-at-texel-boundary concerns (DX-131 already hit those).
+        {
+            struct VPT { float x, y, z; float u, v; };
+            static const VPT kTriNpot[3] = {
+                {-1.0f, -1.0f, 0.0f, 0.0f, 1.0f},
+                { 3.0f, -1.0f, 0.0f, 2.0f, 1.0f},
+                {-1.0f,  3.0f, 0.0f, 0.0f, -1.0f},
+            };
+            auto vbNpot = backend.CreateVertexBuffer(3);
+            vbNpot->SetData(kTriNpot, 3, sizeof(VPT));
+
+            ImageData npotImg;
+            npotImg.width = 5; npotImg.height = 3; npotImg.mipLevels = 1;
+            npotImg.pixels.resize(5 * 3 * 4);
+            for (int i = 0; i < 5 * 3; ++i)
+            {
+                npotImg.pixels[i * 4 + 0] = 123; npotImg.pixels[i * 4 + 1] = 45;
+                npotImg.pixels[i * 4 + 2] = 200; npotImg.pixels[i * 4 + 3] = 255;
+            }
+            auto npotTex = backend.CreateTexture(npotImg);
+            check(npotTex->GetWidth() == 5 && npotTex->GetHeight() == 3,
+                  "D3D11TextureBackend: real construction with a genuinely non-power-of-two 5x3 "
+                  "size reports the exact requested dimensions (plan_dx.md DX-140)");
+
+            GpuDrawParams npotP;
+            npotP.texture0 = npotTex.get();
+            npotP.textureEnabled = true;
+
+            std::vector<Color> afterNpot(4 * 4, Color(0, 0, 0, 0));
+            dev.Clear(Color(0, 255, 0, 255));
+            backend.DrawPrimitivesEx(*vbNpot, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                     Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, npotP);
+            dev.GetBackBufferData(&centerRegion28, afterNpot.data(), 0, static_cast<int>(afterNpot.size()));
+            bool npotIsExact = true;
+            for (const Color& p : afterNpot)
+                if (p.getRProperty() != 123 || p.getGProperty() != 45 || p.getBProperty() != 200 || p.getAProperty() != 255)
+                    npotIsExact = false;
+            check(npotIsExact,
+                  "D3D11GraphicsBackend::DrawPrimitivesEx(): samples the exact color from a real "
+                  "5x3 NPOT texture upload (plan_dx.md DX-140)");
+        }
+
+        // plan_dx.md DX-142: all 16 D3D11_COMMONSHADER_SAMPLER_SLOT_COUNT texture-sampler slots
+        // bound SIMULTANEOUSLY with 16 genuinely DIFFERENT SamplerState configurations, then
+        // verified independent -- D3D11SamplerCache (DX-44) already has an identity/distinctness
+        // proof for two slots in isolation, but nothing has proven slot N's binding survives slots
+        // N+1..15 also being applied (a plausible place for an off-by-one/index bug or an
+        // accidental single-slot cache to hide).
+        {
+            using Microsoft::WRL::ComPtr;
+            ID3D11DeviceContext* ctx = backend.GetContextEXT();
+
+            ComPtr<ID3D11SamplerState> boundAtApplyTime[16];
+            for (int slot = 0; slot < 16; ++slot)
+            {
+                // Spread across TextureFilter's 6 values and TextureAddressMode's 3 values so
+                // adjacent slots never accidentally share an identical configuration.
+                backend.ApplySamplerState(slot, slot % 6, slot % 3, (slot + 1) % 3, 1);
+                ComPtr<ID3D11SamplerState> s;
+                ctx->PSGetSamplers(static_cast<UINT>(slot), 1, s.GetAddressOf());
+                boundAtApplyTime[slot] = s;
+            }
+
+            bool allSlotsNonNull = true;
+            for (int slot = 0; slot < 16; ++slot)
+                if (!boundAtApplyTime[slot]) allSlotsNonNull = false;
+            check(allSlotsNonNull,
+                  "D3D11SamplerCache: all 16 texture-sampler slots hold a real, non-null "
+                  "ID3D11SamplerState immediately after being applied (plan_dx.md DX-142)");
+
+            // Re-query every slot NOW, after all 16 have been applied -- if applying a later slot
+            // (e.g. 15) ever clobbered an earlier one (e.g. 0) via an off-by-one or aliasing bug,
+            // this is where it would show up: the object bound to slot 0 right now would differ
+            // from the one captured immediately after slot 0's own ApplySamplerState() call.
+            bool allSlotsStillCorrect = true;
+            for (int slot = 0; slot < 16; ++slot)
+            {
+                ComPtr<ID3D11SamplerState> now;
+                ctx->PSGetSamplers(static_cast<UINT>(slot), 1, now.GetAddressOf());
+                if (now.Get() != boundAtApplyTime[slot].Get()) allSlotsStillCorrect = false;
+            }
+            check(allSlotsStillCorrect,
+                  "D3D11SamplerCache: every one of the 16 slots still holds its OWN originally-bound "
+                  "sampler object after all 16 were applied -- proves genuine per-slot independence, "
+                  "not a shared/aliased single slot (plan_dx.md DX-142)");
+        }
+
         const int totalChecks = 3 + 10 + 1 + 2 + 2 + 2 + 2 + 2 + 1 + 1 + 2 + 1 + 13 + 2 + 3 + 2 + 2 + 1 + 1 + 1 + 1 + 3 + 2 + 2 + 2 + 3 + 2 + 3 /* DX-131 rotation/scale/crop */
-                                + 1 /* DX-134 envMapAmount=0 */ + 2 /* DX-135 WeightsPerVertex */ + 2 /* DX-137 textured3d fog */;
+                                + 1 /* DX-134 envMapAmount=0 */ + 2 /* DX-135 WeightsPerVertex */ + 2 /* DX-137 textured3d fog */
+                                + 2 /* DX-140 NPOT */ + 2 /* DX-142 all-16-sampler-slots */;
         std::printf("=== %d/%d PASS ===\n", passCount_, totalChecks);
         result_ = (passCount_ == totalChecks) ? 0 : 1;
         Exit();

@@ -3059,6 +3059,214 @@ int main()
               "not the CPU buffer's poison value -- confirms this is a genuine live readback (plan_dx.md DX-123)");
     }
 
+    // ---- Check GG (plan_dx.md DX-140, partial -- NPOT only): a genuinely non-power-of-two
+    // Texture2D (5x3), never exercised anywhere in this test suite before. 5*4=20 bytes/row does
+    // NOT divide evenly into D3D12_TEXTURE_DATA_PITCH_ALIGNMENT (256) -- exactly the kind of odd
+    // width that could expose a row-pitch-alignment bug in the upload path. Sampled via a real
+    // textured3d draw (same pattern as Check N), not a direct GetData() (D3D12TextureBackend has no
+    // such method -- this project's own established convention verifies 2D texture content by
+    // drawing+reading back, not a direct CPU-side readback API). ----
+    {
+        constexpr int kRtWidth = 64;
+        constexpr int kRtHeight = 64;
+
+        D3D12_HEAP_PROPERTIES heapProps{};
+        heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
+        D3D12_RESOURCE_DESC rtDesc{};
+        rtDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+        rtDesc.Width = kRtWidth;
+        rtDesc.Height = kRtHeight;
+        rtDesc.DepthOrArraySize = 1;
+        rtDesc.MipLevels = 1;
+        rtDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        rtDesc.SampleDesc.Count = 1;
+        rtDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+        rtDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+
+        Microsoft::WRL::ComPtr<ID3D12Resource> rt;
+        HRESULT hrRt = backend.GetDeviceEXT()->CreateCommittedResource(
+            &heapProps, D3D12_HEAP_FLAG_NONE, &rtDesc,
+            D3D12_RESOURCE_STATE_RENDER_TARGET, nullptr, IID_PPV_ARGS(rt.GetAddressOf()));
+        Check(SUCCEEDED(hrRt) && rt != nullptr, "GG0: real off-screen RGBA8 render-target resource created");
+        backend.GetResourceStateTrackerEXT().TrackResource(rt.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET);
+        D3D12_CPU_DESCRIPTOR_HANDLE rtv = backend.AllocateRtvDescriptorEXT();
+        backend.GetDeviceEXT()->CreateRenderTargetView(rt.Get(), nullptr, rtv);
+        backend.BindOffscreenColorTargetEXT(rt.Get(), rtv, DXGI_FORMAT_R8G8B8A8_UNORM, kRtWidth, kRtHeight);
+
+        auto pixelAt = [&](const std::vector<uint8_t>& buf, int x, int y) -> std::array<uint8_t, 4>
+        {
+            const std::size_t idx = (static_cast<std::size_t>(y) * kRtWidth + static_cast<std::size_t>(x)) * 4;
+            return {buf[idx + 0], buf[idx + 1], buf[idx + 2], buf[idx + 3]};
+        };
+        auto regionIsExact = [&](const std::vector<uint8_t>& buf, uint8_t r, uint8_t g, uint8_t b, uint8_t a)
+        {
+            for (int y = 28; y < 32; ++y)
+                for (int x = 28; x < 32; ++x)
+                {
+                    const auto p = pixelAt(buf, x, y);
+                    if (p[0] != r || p[1] != g || p[2] != b || p[3] != a) return false;
+                }
+            return true;
+        };
+
+        struct VPT { float x, y, z; float u, v; };
+        static const VPT kTriGG[3] = {
+            {-1.0f, -1.0f, 0.0f, 0.0f, 1.0f},
+            { 3.0f, -1.0f, 0.0f, 2.0f, 1.0f},
+            {-1.0f,  3.0f, 0.0f, 0.0f, -1.0f},
+        };
+        D3D12VertexBufferBackend vbGG(&backend, 3);
+        vbGG.SetData(kTriGG, 3, sizeof(VPT));
+
+        // 5x3 NPOT -- every pixel the same solid color, so any UV/filter samples the identical exact
+        // value regardless of exact texel alignment (isolates "does NPOT upload/sample corrupt
+        // anything" from unrelated bilinear-blend-at-texel-boundary concerns DX-131 already hit).
+        ImageData npotImg;
+        npotImg.width = 5; npotImg.height = 3; npotImg.mipLevels = 1;
+        npotImg.pixels.resize(5 * 3 * 4);
+        for (int i = 0; i < 5 * 3; ++i)
+        {
+            npotImg.pixels[i * 4 + 0] = 123; npotImg.pixels[i * 4 + 1] = 45;
+            npotImg.pixels[i * 4 + 2] = 200; npotImg.pixels[i * 4 + 3] = 255;
+        }
+        D3D12TextureBackend npotTex(&backend, npotImg);
+        Check(npotTex.GetWidth() == 5 && npotTex.GetHeight() == 3,
+              "GG1: real D3D12TextureBackend construction with a genuinely non-power-of-two "
+              "5x3 size reports the exact requested dimensions (plan_dx.md DX-140)");
+
+        GpuDrawParams gp;
+        gp.texture0 = &npotTex;
+        gp.textureEnabled = true;
+
+        backend.Clear(0.0f, 1.0f, 0.0f, 1.0f);
+        backend.DrawPrimitivesEx(vbGG, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                 Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, gp);
+        auto ggResult = ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight);
+        Check(regionIsExact(ggResult, 123, 45, 200, 255),
+              "GG2: DrawPrimitivesEx() samples the exact color from a real 5x3 NPOT texture upload -- "
+              "20 bytes/row does not divide evenly into D3D12_TEXTURE_DATA_PITCH_ALIGNMENT (256), "
+              "genuinely exercising the row-pitch-alignment path for an odd width (plan_dx.md DX-140)");
+
+        backend.UnbindOffscreenColorTargetEXT();
+    }
+
+    // ---- Check HH (plan_dx.md DX-141): D3D12 counterpart to DX-126 (D3D11) -- mip level > 0
+    // SetData/upload dedicated test. D3D12TextureBackend::UpdatePixelsLevel() (DX-40/DX-109) already
+    // exists but had never been exercised. Rather than trying to force the GPU's automatic mip
+    // selection to pick level 1 during a shader Sample() (fragile/driver-dependent -- the stock
+    // shaders all use implicit-LOD Sample(), not an explicit SampleLevel()), this reads mip level 1
+    // back directly via CopyTextureRegion -- the same real, direct GPU-readback discipline
+    // DX-122/DX-123's own GetData() implementations already established, giving an exact,
+    // deterministic proof instead of a driver-dependent one. ----
+    {
+        ImageData mipImg;
+        mipImg.width = 4; mipImg.height = 4; mipImg.mipLevels = 2;
+        mipImg.pixels.assign(4 * 4 * 4, 0);
+        for (int i = 0; i < 4 * 4; ++i)
+        {
+            mipImg.pixels[i * 4 + 0] = 10; mipImg.pixels[i * 4 + 1] = 20;
+            mipImg.pixels[i * 4 + 2] = 30; mipImg.pixels[i * 4 + 3] = 255;
+        }
+        D3D12TextureBackend mipTex(&backend, mipImg);
+        Check(mipTex.GetMipLevelsEXT() == 2, "HH0: real D3D12TextureBackend allocated with 2 mip levels");
+
+        std::vector<uint8_t> level1Data(2 * 2 * 4);
+        for (int i = 0; i < 2 * 2; ++i)
+        {
+            level1Data[i * 4 + 0] = 210; level1Data[i * 4 + 1] = 220;
+            level1Data[i * 4 + 2] = 230; level1Data[i * 4 + 3] = 255;
+        }
+        mipTex.UpdatePixelsLevel(1, level1Data.data(), 2, 2);
+
+        // Direct GPU readback of a given mip subresource -- mirrors DX-122/DX-123's own
+        // GetData()-style CopyTextureRegion pattern, kept test-local since D3D12TextureBackend (the
+        // plain 2D backend) has no public GetData() of its own (this project's established
+        // 2D-texture-content-verification convention is draw+readback via a render target, per
+        // Check N/GG above -- this test uses a direct copy instead specifically to sidestep the
+        // shader-mip-selection problem noted above).
+        auto readbackMip = [&](int level, int w, int h) -> std::vector<uint8_t>
+        {
+            const UINT rowPitch = (static_cast<UINT>(w) * 4 + D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1)
+                                 & ~(D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1);
+            const UINT64 bufSize = static_cast<UINT64>(rowPitch) * static_cast<UINT64>(h);
+
+            D3D12_HEAP_PROPERTIES readbackHeapProps{};
+            readbackHeapProps.Type = D3D12_HEAP_TYPE_READBACK;
+            D3D12_RESOURCE_DESC bufDesc{};
+            bufDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+            bufDesc.Width = bufSize;
+            bufDesc.Height = 1;
+            bufDesc.DepthOrArraySize = 1;
+            bufDesc.MipLevels = 1;
+            bufDesc.Format = DXGI_FORMAT_UNKNOWN;
+            bufDesc.SampleDesc.Count = 1;
+            bufDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+
+            Microsoft::WRL::ComPtr<ID3D12Resource> readback;
+            HRESULT hr = backend.GetDeviceEXT()->CreateCommittedResource(
+                &readbackHeapProps, D3D12_HEAP_FLAG_NONE, &bufDesc,
+                D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(readback.GetAddressOf()));
+            if (FAILED(hr)) return {};
+
+            D3D12_TEXTURE_COPY_LOCATION dst{};
+            dst.pResource = readback.Get();
+            dst.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+            dst.PlacedFootprint.Footprint.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+            dst.PlacedFootprint.Footprint.Width = static_cast<UINT>(w);
+            dst.PlacedFootprint.Footprint.Height = static_cast<UINT>(h);
+            dst.PlacedFootprint.Footprint.Depth = 1;
+            dst.PlacedFootprint.Footprint.RowPitch = rowPitch;
+
+            D3D12_TEXTURE_COPY_LOCATION src{};
+            src.pResource = mipTex.GetResourceEXT();
+            src.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+            src.SubresourceIndex = static_cast<UINT>(level); // single-plane, ArraySize=1 -> level itself
+
+            ID3D12CommandAllocator* allocator = backend.GetCommandAllocatorEXT(0);
+            ID3D12GraphicsCommandList* cmdList = backend.GetCommandListEXT();
+            allocator->Reset();
+            cmdList->Reset(allocator, nullptr);
+            auto& tracker = backend.GetResourceStateTrackerEXT();
+            const D3D12_RESOURCE_STATES priorState = tracker.GetTrackedStateEXT(mipTex.GetResourceEXT());
+            tracker.TransitionTo(cmdList, mipTex.GetResourceEXT(), D3D12_RESOURCE_STATE_COPY_SOURCE);
+            cmdList->CopyTextureRegion(&dst, 0, 0, 0, &src, nullptr);
+            tracker.TransitionTo(cmdList, mipTex.GetResourceEXT(), priorState);
+            hr = cmdList->Close();
+            if (FAILED(hr)) return {};
+            backend.ExecuteCommandListAndWaitEXT(cmdList);
+
+            uint8_t* mapped = nullptr;
+            const D3D12_RANGE mapRange{0, static_cast<SIZE_T>(bufSize)};
+            if (FAILED(readback->Map(0, &mapRange, reinterpret_cast<void**>(&mapped)))) return {};
+            std::vector<uint8_t> out(static_cast<std::size_t>(w) * h * 4);
+            for (int row = 0; row < h; ++row)
+                std::memcpy(out.data() + static_cast<std::size_t>(row) * w * 4,
+                            mapped + static_cast<std::size_t>(row) * rowPitch,
+                            static_cast<std::size_t>(w) * 4);
+            const D3D12_RANGE writtenRange{0, 0};
+            readback->Unmap(0, &writtenRange);
+            return out;
+        };
+
+        auto isSolid = [](const std::vector<uint8_t>& buf, uint8_t r, uint8_t g, uint8_t b, uint8_t a)
+        {
+            if (buf.empty()) return false;
+            for (std::size_t i = 0; i < buf.size(); i += 4)
+                if (buf[i] != r || buf[i+1] != g || buf[i+2] != b || buf[i+3] != a) return false;
+            return true;
+        };
+
+        auto level1Readback = readbackMip(1, 2, 2);
+        Check(isSolid(level1Readback, 210, 220, 230, 255),
+              "HH1: UpdatePixelsLevel(1, ...) round-trips EXACT bytes for a real mip level 1 upload, "
+              "read back via a direct CopyTextureRegion of subresource 1 (plan_dx.md DX-141)");
+
+        auto level0Readback = readbackMip(0, 4, 4);
+        Check(isSolid(level0Readback, 10, 20, 30, 255),
+              "HH2: level 0's own content is genuinely unaffected by the level-1 upload -- proves "
+              "UpdatePixelsLevel(1, ...) targeted the correct subresource, not level 0 (plan_dx.md DX-141)");
+    }
+
     std::printf("\n%s: %d failure(s)\n", g_failures == 0 ? "RESULT: ALL PASS" : "RESULT: FAILURES", g_failures);
     return g_failures == 0 ? 0 : 1;
 }
