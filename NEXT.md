@@ -59,7 +59,7 @@ plausibly."
 
 | Build dir | Backend | Status |
 |---|---|---|
-| `cmake-build-d3d9` | D3D9 (Windows cross-compile, MinGW-w64) | Not yet created — `D9-10` (CMake wiring) has not landed. |
+| `cmake-build-d3d9` | D3D9 (Windows cross-compile, MinGW-w64) | **Verified clean 2026-07-14**: `cmake -DCNA_GRAPHICS_BACKEND=D3D9 -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64.cmake` configures; `CNA` and `cna_backend_graphics_d3d9` both build clean, zero warnings from the new code. No tests registered yet (`D9-122`). |
 
 ### Phase D9-0 — feasibility spikes: CLOSED 2026-07-14
 
@@ -75,12 +75,28 @@ plausibly."
 
 **Phase D9-0 is fully closed.** Next up: Phase D9-1 (CMake integration + backend skeleton).
 
+### Phase D9-1 — CMake integration and skeleton: CLOSED 2026-07-14
+
+| Task | Status |
+|---|---|
+| `D9-10` — `D3D9` added to all 7 `CMakeLists.txt` `"D3D12"` sites, minus one real correction | ✅ |
+| `D9-11` — `D3D9GraphicsBackend` skeleton (22 pure virtuals + 10 silently-empty ones handled) | ✅ |
+| `D9-12` — `GraphicsDevice.cpp` `#ifdef` audit | ✅ (zero changes needed) |
+
+**Phase D9-1 is fully closed.** `D9-10` found one real, worth-fixing gap in this plan's own text: it
+described CMake line 288 as "a second Windows-only-related OR chain" needing a D3D9 sibling, but that
+line is actually the `D3DCommon` shared-core conditional — adding D3D9 there would have violated
+design decision 12 ("`D3DCommon` is not expanded"). Left untouched, with an explanatory comment;
+`plan_dx9.md`'s own `D9-10` row now records the correction. Line 392 (the `CNA` circular-link `OR`
+chain) was also deliberately left out of D3D9's `OR` chain — nothing calls back into a CNA-defined
+symbol yet (that's `D9-112`, Phase D9-11, ask-first). Next up: Phase D9-2 (mapping layer).
+
 ### Does NOT work yet
 
-Everything real still remains — no `D3D9GraphicsBackend` code exists in `src/`/`include/` yet; Phase
-D9-0 only proved the dev loop (compiler, oracle, link set, device/present/readback, `D3DPOOL_MANAGED`
-behavior, the DXVK gate script) works. This section will track real gaps once Phase D9-1 (CMake
-skeleton) lands.
+Real rendering: everything (Phase D9-2 onward). The `D3D9GraphicsBackend` skeleton exists and builds,
+but every substantive method (`Clear`/`Present`/all `Clear*` combos/vertex+index buffers/draws/
+textures/`SpriteBatch`) throws `NotYetImplemented()` naming its own follow-up task — by design, per
+`D9-11`'s "loud failure, not silent no-op" rule. No device exists yet (`D9-30`).
 
 ---
 
@@ -90,7 +106,8 @@ Most recent first. Full detail lives in `plan_dx9.md` — this is a short index.
 
 | Commit(s) | Summary |
 |---|---|
-| *(pending)* | **Phase D9-0 fully closed** (`D9-2`–`D9-5`): confirmed `d3d9`-alone link set (no `dxguid`); a real Wine+DXVK D3D9 device/swap-chain/`Clear`/`Present`/`GetRenderTargetData`/`LockRect` round-trip with an exact pixel match plus a full `D3DCAPS9` dump (`vs_3_0`/`ps_3_0`, `NumSimultaneousRTs=4`, 16384 max texture size, DXVK reports unconditional NPOT support — flagged as provisional/synthetic, not an authentic XNA-era driver's caps); confirmed `D3DPOOL_MANAGED` textures are genuinely `LockRect`-readable and survive `Reset()` with no re-upload (so `Texture2D::GetData()` can be a plain `LockRect` later, `D9-52`); and a new `scripts/run-wine-dxvk9.sh` (mirrors `run-wine-dxvk.sh`'s DXVK-marker gate under new `CNA_D3D9_*` env-var names), proven both ways — passes against the real `~/.wine-cna-d3d11` DXVK prefix, and correctly fails (exit 3) against a freshly-initialized, DXVK-less prefix that silently fell back to WineD3D. |
+| *(pending)* | **Phase D9-1 fully closed** (`D9-10`/`D9-11`/`D9-12`): D3D9 wired into `CMakeLists.txt` (6 of 7 `"D3D12"` sites, correcting a stale plan claim about the 7th — see `plan_dx9.md`'s `D9-10` row); new `D3D9GraphicsBackend` skeleton + shared `NotYetImplemented.hpp`; `GraphicsDevice.cpp` audited, zero changes needed. `CNA_GRAPHICS_BACKEND=D3D9` configures and builds clean; a runtime check confirms the skeleton's real bookkeeping methods work and its throwing methods actually throw. |
+| `09121309` | **Phase D9-0 fully closed** (`D9-2`–`D9-5`): confirmed `d3d9`-alone link set (no `dxguid`); a real Wine+DXVK D3D9 device/swap-chain/`Clear`/`Present`/`GetRenderTargetData`/`LockRect` round-trip with an exact pixel match plus a full `D3DCAPS9` dump (`vs_3_0`/`ps_3_0`, `NumSimultaneousRTs=4`, 16384 max texture size, DXVK reports unconditional NPOT support — flagged as provisional/synthetic, not an authentic XNA-era driver's caps); confirmed `D3DPOOL_MANAGED` textures are genuinely `LockRect`-readable and survive `Reset()` with no re-upload (so `Texture2D::GetData()` can be a plain `LockRect` later, `D9-52`); and a new `scripts/run-wine-dxvk9.sh` (mirrors `run-wine-dxvk.sh`'s DXVK-marker gate under new `CNA_D3D9_*` env-var names), proven both ways — passes against the real `~/.wine-cna-d3d11` DXVK prefix, and correctly fails (exit 3) against a freshly-initialized, DXVK-less prefix that silently fell back to WineD3D. |
 | `59a35d4c` | Recorded the project owner's two 2026-07-14 decisions in `plan_dx9.md`: implementation authorized through Phase D9-13, and the `IGraphicsBackend` boundary problem resolved via an approved additive extension. |
 | `d1ae928f` | Added `plan_dx9.md` and the proven Phase D9-0 spike artifacts (`dx9-spike/`: shader compiler, `.fxb` bytecode oracle, real XNA 4.0 reference renderer) to the `feature/dx9` worktree. |
 
@@ -99,9 +116,8 @@ Most recent first. Full detail lives in `plan_dx9.md` — this is a short index.
 ## 4. Current blocker / main problem
 
 **No blocker.** Both of this plan's original gating questions are resolved (see the banner above and
-`plan_dx9.md`'s top banner / "The `IGraphicsBackend` boundary problem" section), and Phase D9-0 is
-now fully closed. Next work is Phase D9-1 (CMake integration across 7 sites + a
-`D3D9GraphicsBackend` skeleton).
+`plan_dx9.md`'s top banner / "The `IGraphicsBackend` boundary problem" section), and Phases D9-0 and
+D9-1 are now fully closed. Next work is Phase D9-2 (mapping layer: `D9-20`–`D9-23`).
 
 ---
 
@@ -166,21 +182,22 @@ cmake -S . -B cmake-build-d3d9 \
 
 ## 8. Next smallest tasks
 
-**Phase D9-0 is closed.** Next: Phase D9-1 (CMake integration and skeleton).
+**Phases D9-0 and D9-1 are closed.** Next: Phase D9-2 (mapping layer).
 
-1. **`D9-10`** — add `D3D9` next to `D3D12` at all 7 `CMakeLists.txt` sites (`grep -n '"D3D12"'
-   CMakeLists.txt`: cache `STRINGS`, enabled-backends list, the Windows-only `FATAL_ERROR` gate, the
-   backend-dir/target `elseif()`, a second Windows-only `OR` chain, the link-libraries `elseif()`
-   (expect just `d3d9` + `SDL3::SDL3`), a third `OR` chain). One commit, purely additive.
-2. **`D9-11`** — `D3D9GraphicsBackend` skeleton implementing `IGraphicsBackend`: override every
-   silently-empty-default virtual with a shared `NotYetImplemented()` helper (lifted out of
-   `D3D12GraphicsBackend`-private into `include/CNA/Internal/Backends/Common/NotYetImplemented.hpp`,
-   since D3D9 needs the identical helper). Match D3D11's own skeleton density (46 of 57 overridden),
-   not a stricter "override everything" reading.
-3. **`D9-12`** — audit `GraphicsDevice.cpp`'s `#ifdef CNA_BACKEND_*` sites; add `D3D9` where genuinely
-   needed.
-4. Then Phase D9-2 (mapping layer: `D9-20`/`21`/`22`/`23`) and Phase D9-3 (device/present/device-lost:
-   `D9-30`–`34`, now unblocked by the approved `IGraphicsBackend` extension).
+1. **`D9-20`** — `D3D9FormatMapping`: `SurfaceFormat`/`DepthFormat` → `D3DFORMAT`. XNA's own
+   `SurfaceFormat` enum came from D3D9, so expect near-total coverage; a gap is more likely a CNA bug
+   than a real D3D9 limitation.
+2. **`D9-21`** — `D3D9StateMapping`: `Blend`/`BlendFunction`/`CompareFunction`/`CullMode`/`FillMode`/
+   `TextureAddressMode`/`TextureFilter`/`StencilOperation` → their `D3D9` enums. **`D3DCULL` is the
+   known trap** (`plan_dx.md`'s D3D12 work burned a debugging cycle on exactly this) — pixel-test both
+   winding directions against the XNA oracle before trusting the table.
+3. **`D9-22`** — `D3D9VertexDeclarations`: stride-keyed `D3DVERTEXELEMENT9` arrays. The stride-32
+   `sprite2d`/`VertexPositionNormalTexture` collision D3D11's `DX-70` already found exists here too —
+   reuse that solution, don't rediscover it.
+4. **`D9-23`** — `D3D9_Common` CTest for all three tables, mutation-verified (pure functions, no
+   device — runs with the DXVK gate skipped, `CNA_D3D9_SKIP_DXVK_GATE=1`).
+5. Then Phase D9-3 (device/present/device-lost: `D9-30`–`34`, now unblocked by the approved
+   `IGraphicsBackend` extension) and Phase D9-4 (buffers).
 
 See `plan_dx9.md`'s "Execution order" table for the full sequence beyond this.
 

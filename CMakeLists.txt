@@ -91,8 +91,8 @@ if(EMSCRIPTEN OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
 else()
     set(_cna_default_backend "SDL_RENDERER")
 endif()
-set(CNA_GRAPHICS_BACKEND "${_cna_default_backend}" CACHE STRING "Graphics backend to use (SDL_RENDERER, EASYGL, BGFX, VULKAN, WEBGPU, HEADLESS, SOFTWARE, D3D11, or D3D12)")
-set_property(CACHE CNA_GRAPHICS_BACKEND PROPERTY STRINGS "SDL_RENDERER" "EASYGL" "BGFX" "VULKAN" "WEBGPU" "HEADLESS" "SOFTWARE" "D3D11" "D3D12")
+set(CNA_GRAPHICS_BACKEND "${_cna_default_backend}" CACHE STRING "Graphics backend to use (SDL_RENDERER, EASYGL, BGFX, VULKAN, WEBGPU, HEADLESS, SOFTWARE, D3D11, D3D12, or D3D9)")
+set_property(CACHE CNA_GRAPHICS_BACKEND PROPERTY STRINGS "SDL_RENDERER" "EASYGL" "BGFX" "VULKAN" "WEBGPU" "HEADLESS" "SOFTWARE" "D3D11" "D3D12" "D3D9")
 
 option(CNA_BACKEND_SDL_RENDERER "Enable SDL_Renderer graphics backend" OFF)
 option(CNA_BACKEND_EASY_GL "Enable easy-gl graphics backend" OFF)
@@ -103,9 +103,10 @@ option(CNA_BACKEND_HEADLESS "Enable Headless (no GPU/window) graphics backend" O
 option(CNA_BACKEND_SOFTWARE "Enable Software (CPU rasterizer) graphics backend" OFF)
 option(CNA_BACKEND_D3D11 "Enable Direct3D 11 graphics backend (Windows only)" OFF)
 option(CNA_BACKEND_D3D12 "Enable Direct3D 12 graphics backend (Windows only)" OFF)
+option(CNA_BACKEND_D3D9 "Enable Direct3D 9 graphics backend (Windows only)" OFF)
 
 set(_cna_explicit_backend_selection OFF)
-if(CNA_BACKEND_SDL_RENDERER OR CNA_BACKEND_EASY_GL OR CNA_BACKEND_BGFX OR CNA_BACKEND_VULKAN OR CNA_BACKEND_WEBGPU OR CNA_BACKEND_HEADLESS OR CNA_BACKEND_SOFTWARE OR CNA_BACKEND_D3D11 OR CNA_BACKEND_D3D12)
+if(CNA_BACKEND_SDL_RENDERER OR CNA_BACKEND_EASY_GL OR CNA_BACKEND_BGFX OR CNA_BACKEND_VULKAN OR CNA_BACKEND_WEBGPU OR CNA_BACKEND_HEADLESS OR CNA_BACKEND_SOFTWARE OR CNA_BACKEND_D3D11 OR CNA_BACKEND_D3D12 OR CNA_BACKEND_D3D9)
     set(_cna_explicit_backend_selection ON)
 endif()
 
@@ -138,6 +139,9 @@ if(_cna_explicit_backend_selection)
     if(CNA_BACKEND_D3D12)
         list(APPEND _cna_enabled_backends "D3D12")
     endif()
+    if(CNA_BACKEND_D3D9)
+        list(APPEND _cna_enabled_backends "D3D9")
+    endif()
 
     list(LENGTH _cna_enabled_backends _cna_enabled_backends_count)
     if(NOT _cna_enabled_backends_count EQUAL 1)
@@ -149,8 +153,9 @@ endif()
 
 # plan_dx.md design decision 2: D3D11/D3D12 genuinely cannot build anywhere but Windows (native or
 # MinGW/MSVC cross-compile) -- d3d11.h/d3d12.h/dxgi.h do not exist elsewhere. Unlike BGFX's soft
-# WARNING-only platform check below, this is a hard FATAL_ERROR.
-if((CNA_GRAPHICS_BACKEND STREQUAL "D3D11" OR CNA_GRAPHICS_BACKEND STREQUAL "D3D12")
+# WARNING-only platform check below, this is a hard FATAL_ERROR. plan_dx9.md design decision 1
+# extends this same gate to D3D9 (d3d9.h is equally Windows-only).
+if((CNA_GRAPHICS_BACKEND STREQUAL "D3D11" OR CNA_GRAPHICS_BACKEND STREQUAL "D3D12" OR CNA_GRAPHICS_BACKEND STREQUAL "D3D9")
         AND NOT CMAKE_SYSTEM_NAME STREQUAL "Windows")
     message(FATAL_ERROR
         "CNA: ${CNA_GRAPHICS_BACKEND} backend only builds when targeting Windows. Either build "
@@ -250,6 +255,11 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "D3D12")
     set(BACKEND_DIR "src/CNA/Internal/Backends/D3D12")
     set(BACKEND_TARGET "cna_backend_graphics_d3d12")
     add_compile_definitions(CNA_BACKEND_D3D12)
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "D3D9")
+    message(STATUS "CNA: Using D3D9 graphics backend")
+    set(BACKEND_DIR "src/CNA/Internal/Backends/D3D9")
+    set(BACKEND_TARGET "cna_backend_graphics_d3d9")
+    add_compile_definitions(CNA_BACKEND_D3D9)
 else()
 
     message(FATAL_ERROR "CNA: Unknown graphics backend: ${CNA_GRAPHICS_BACKEND}")
@@ -285,6 +295,9 @@ target_include_directories(cna_backend_graphics_common INTERFACE
 # plan_dx.md design decision 4: D3DCommon shared core, consumed by cna_backend_graphics_d3d11 (and,
 # once Phase DX12 is authorized, cna_backend_graphics_d3d12). Only built when actually needed --
 # same discipline as every other on-demand backend dependency in this file.
+# plan_dx9.md design decision 12: D3D9 deliberately does NOT join this condition. D3DFORMAT is a
+# different enum space from DXGI_FORMAT and D3D9 has no state objects at all -- D3D9 gets its own
+# D3D9FormatMapping/D3D9StateMapping/D3D9VertexDeclarations instead of expanding this shared core.
 if(CNA_GRAPHICS_BACKEND STREQUAL "D3D11" OR CNA_GRAPHICS_BACKEND STREQUAL "D3D12")
     file(GLOB D3DCOMMON_SOURCES "src/CNA/Internal/Backends/D3DCommon/*.cpp")
     add_library(cna_backend_graphics_d3dcommon STATIC ${D3DCOMMON_SOURCES})
@@ -329,6 +342,13 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "D3D12")
     # added by DX-121 (D3D12EffectBackend's runtime D3DCompile() path) -- confirmed safe to link in
     # isolation by D3D11's own DX-14-compile/DX-58 precedent.
     target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 d3d12 dxgi d3dcompiler cna_backend_graphics_d3dcommon)
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "D3D9")
+    # plan_dx9.md design decision 16 / D9-2: d3d9 alone was confirmed sufficient (no dxguid, no
+    # dxgi -- D3D9 predates DXGI) by D9-2's own spike. No cna_backend_graphics_d3dcommon (design
+    # decision 12 -- D3D9 does not share D3DCommon). d3dcompiler is deliberately NOT linked here --
+    # design decision 9/16 keep the stock pipeline dependency-free; it will only be added, later, to
+    # a custom-ShaderEffect-only target if Phase D9-11 is authorized (ask-first per its own row).
+    target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 d3d9)
 endif()
 
 file(GLOB_RECURSE CNA_SOURCES CONFIGURE_DEPENDS
@@ -389,6 +409,10 @@ target_link_libraries(CNA
 # because libCNA.a is fully scanned before libcna_backend_graphics_d3d11.a creates the need.
 # CMake's documented static-library-cycle support (see LINK_INTERFACE_MULTIPLICITY) resolves this
 # by repeating the archives on the final link line once this cycle is declared.
+# plan_dx9.md D9-10: D3D9 deliberately does NOT join this condition yet. Nothing in the D3D9
+# backend calls back into a CNA-defined symbol (e.g. Effect::Apply()) until SpriteBatch's
+# custom-Effect path lands (D9-112, Phase D9-11 -- ask-first, not yet authorized to start). Add
+# "D3D9" here when that task actually needs it, not preemptively.
 if(CNA_GRAPHICS_BACKEND STREQUAL "D3D11" OR CNA_GRAPHICS_BACKEND STREQUAL "D3D12")
     target_link_libraries(${BACKEND_TARGET} PRIVATE CNA)
 endif()
