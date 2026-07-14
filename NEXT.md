@@ -459,22 +459,25 @@ desktop session with real GPU access — re-verify before assuming either claim 
 5. Lower priority, real and open but not urgent: D3D11's own honestly-flagged residual gaps (not
    completion blockers, `plan_dx.md`/`docs/d3d11-backend.md` "Known limitations") — specular-
    highlight pixel test, multi-light (`DirectionalLight1`/`2`)/`EmissiveColor` discriminating tests,
-   the 5 combo `Clear*` variants' own dedicated pixel test, `Model`/`SpriteFont` D3D11 coverage, and
-   `cna_demo_2d`'s own separate, still-unfixed MinGW `SDL3/SDL.h` include-path gap (see below —
-   distinct from the `Effect::Apply()` link bug, which **is now fixed**).
-6. **Fixed 2026-07-14 (post-plan_dx.md session): `cna_reference_dump`'s `undefined reference to
-   Effect::Apply()` link failure.** Root cause: a genuine circular dependency between
-   `cna_backend_graphics_d3d11`/`_d3d12` (whose `SpriteBatch`'s custom-`Effect` path calls
-   `Effect::Apply()`) and `CNA` itself (which defines it) — MinGW's single-pass archive resolution
-   never revisited `libCNA.a`. Fixed in `CMakeLists.txt` by declaring the cycle explicitly
-   (`target_link_libraries(${BACKEND_TARGET} PRIVATE CNA)` for `D3D11`/`D3D12`); CMake's documented
-   static-library-cycle handling then repeats the archives on the link line. Verified: real
-   `cna_reference_dump.exe` link succeeds; full `D3D11`(6/6)/`D3D12`(1/1, 80/80 checks) CTest
-   re-verified with no regression. **`cna_demo_2d` still fails to build under D3D11/D3D12**, but for
-   an unrelated reason found while investigating this — it never links `SDL3::SDL3` directly, and
-   `CNA`'s own link to it is `PRIVATE`, so `Game1.cpp`'s `#include <SDL3/SDL.h>` can't resolve under
-   the MinGW cross-build (native Linux builds never noticed, since a system-wide SDL3 install covers
-   it there). Not yet fixed — a real, distinct, open gap.
+   the 5 combo `Clear*` variants' own dedicated pixel test, and `Model`/`SpriteFont` D3D11 coverage.
+6. **Fixed 2026-07-14 (post-plan_dx.md session): both `cna_reference_dump` and `cna_demo_2d`'s
+   D3D11/D3D12 build failures.** `cna_reference_dump`'s `undefined reference to Effect::Apply()`
+   link failure: a genuine circular dependency between `cna_backend_graphics_d3d11`/`_d3d12` (whose
+   `SpriteBatch`'s custom-`Effect` path calls `Effect::Apply()`) and `CNA` itself (which defines
+   it) — MinGW's single-pass archive resolution never revisited `libCNA.a`. Fixed in
+   `CMakeLists.txt` by declaring the cycle explicitly (`target_link_libraries(${BACKEND_TARGET}
+   PRIVATE CNA)` for `D3D11`/`D3D12`); CMake's documented static-library-cycle handling then repeats
+   the archives on the link line. `cna_demo_2d`'s separate `SDL3/SDL.h`-not-found compile failure
+   (found while investigating the above — its `Game1.cpp` called raw SDL directly for
+   minimize/restore/resize with no XNA equivalent to reach for instead, and never linked
+   `SDL3::SDL3` itself; native Linux builds never noticed since a system-wide SDL3 install covered
+   it): fixed at the root by adding two real `GameWindow` NOXNA extension methods,
+   `MinimizeEXT()`/`RestoreEXT()` (mirroring the existing `IsBorderlessEXT` pattern), and switching
+   the resize calls to the existing XNA `EndScreenDeviceChange()` API — `Game1.cpp` no longer
+   includes `<SDL3/SDL.h>` at all, so no new SDL3 link dependency was needed. 3 new `GameWindowTest`
+   cases added. Verified: real `cna_reference_dump.exe`/`cna_demo_2d.exe` links succeed under both
+   D3D11 and D3D12; full `D3D11`(6/6)/`D3D12`(1/1, 80/80 checks) CTest and the EasyGL `CnaTests`
+   `GameWindowTest.*` suite (14/14) all re-verified with no regression.
 
 ---
 

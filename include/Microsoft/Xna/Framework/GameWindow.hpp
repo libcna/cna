@@ -132,6 +132,22 @@ namespace Microsoft::Xna::Framework
         void setIsBorderlessEXTProperty(bool value);
 
         /**
+         * @brief Minimizes the window to the taskbar/dock.
+         *
+         * CNA extension — XNA has no minimize/restore API of its own. No-op if this
+         * GameWindow wraps no SDL window.
+         */
+        NOXNA void MinimizeEXT();
+
+        /**
+         * @brief Restores a minimized or maximized window to its normal state.
+         *
+         * CNA extension — XNA has no minimize/restore API of its own. No-op if this
+         * GameWindow wraps no SDL window.
+         */
+        NOXNA void RestoreEXT();
+
+        /**
          * @brief Begins a fullscreen/windowed device change.
          * @param willBeFullScreen true if the new mode is fullscreen; false for windowed.
          */

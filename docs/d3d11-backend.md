@@ -157,12 +157,16 @@ vertex-stride inference, cbuffer `static_assert` layout checks already caught at
   revisited `libCNA.a` once `libcna_backend_graphics_d3d11.a` created the need. Fixed by declaring
   the cycle explicitly in `CMakeLists.txt` (`target_link_libraries(${BACKEND_TARGET} PRIVATE CNA)`
   for `D3D11`/`D3D12`) — CMake's documented static-library-cycle support then repeats the archives
-  on the final link line automatically. Verified via a real `cna_reference_dump.exe` link + rerun
-  of the full `D3D11`/`D3D12` CTest suites (no regression). **`cna_demo_2d` still fails, but for a
-  separate, unrelated reason**: it never links `SDL3::SDL3` directly and `CNA`'s own link to it is
-  `PRIVATE`, so `Game1.cpp`'s `#include <SDL3/SDL.h>` can't resolve under the MinGW cross-build
-  (native Linux builds hit a system-wide SDL3 install and never noticed this gap) — a genuine,
-  pre-existing, distinct compile-time include-path issue, not yet fixed.
+  on the final link line automatically. `cna_demo_2d`'s separate `SDL3/SDL.h`-not-found compile
+  failure (found while verifying the fix above; `Game1.cpp` called raw SDL directly for
+  minimize/restore/resize with no XNA equivalent, and never linked `SDL3::SDL3` itself — native
+  Linux builds never noticed since a system-wide SDL3 install covered it there) **is also fixed**,
+  at the root rather than by adding a link dependency: two new `GameWindow` NOXNA methods,
+  `MinimizeEXT()`/`RestoreEXT()` (mirroring the existing `IsBorderlessEXT` pattern), plus switching
+  the resize call to the existing XNA `EndScreenDeviceChange()` API — `Game1.cpp` no longer includes
+  `<SDL3/SDL.h>` at all. Verified via real `cna_reference_dump.exe`/`cna_demo_2d.exe` links under
+  both D3D11 and D3D12, the full `D3D11`/`D3D12` CTest suites, and the EasyGL `GameWindowTest.*`
+  suite (14/14, including 3 new cases) — no regression anywhere.
 - **Direct3D 12 does not exist as a backend.** `plan_dx.md` Phase DX12 is written up in full but
   requires its own separate authorization (design decision 9) — `CNA_GRAPHICS_BACKEND=D3D12` is not
   a recognized CMake value.

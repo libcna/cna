@@ -136,6 +136,28 @@ namespace Microsoft::Xna::Framework
         }
     }
 
+    void GameWindow::MinimizeEXT()
+    {
+        if (window_ != nullptr)
+        {
+            if (!SDL_MinimizeWindow(window_))
+            {
+                throw makeSdlError("SDL_MinimizeWindow");
+            }
+        }
+    }
+
+    void GameWindow::RestoreEXT()
+    {
+        if (window_ != nullptr)
+        {
+            if (!SDL_RestoreWindow(window_))
+            {
+                throw makeSdlError("SDL_RestoreWindow");
+            }
+        }
+    }
+
     void GameWindow::BeginScreenDeviceChange(bool willBeFullScreen)
     {
         pendingFullScreen_ = willBeFullScreen;
