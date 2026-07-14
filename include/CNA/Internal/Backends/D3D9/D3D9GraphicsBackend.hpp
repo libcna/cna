@@ -216,6 +216,30 @@ namespace CNA::Internal::Backends::D3D9
         /// diagnostics/tests). Mirrors GraphicsDevice::GraphicsDeviceStatus at the backend level.
         [[nodiscard]] bool IsDeviceLostEXT() const { return deviceLost_; }
 
+        /// D9-56: true when this device requires power-of-2 texture dimensions UNCONDITIONALLY
+        /// (`D3DPTEXTURECAPS_POW2` set, `D3DPTEXTURECAPS_NONPOW2CONDITIONAL` NOT set) -- an NPOT
+        /// `CreateTexture()` call would genuinely fail on such hardware. `false` on this dev
+        /// environment's DXVK device (reports full, unconditional NPOT support). NOXNA -- feeds
+        /// Phase D9-10's Reach/HiDef capability table (XNA's `Reach` profile forbids NPOT textures
+        /// outright on hardware that reports this).
+        [[nodiscard]] bool RequiresPowerOfTwoTexturesEXT() const
+        {
+            return (caps_.TextureCaps & D3DPTEXTURECAPS_POW2) &&
+                   !(caps_.TextureCaps & D3DPTEXTURECAPS_NONPOW2CONDITIONAL);
+        }
+        /// D9-56: true when NPOT textures are supported only CONDITIONALLY (`D3DPTEXTURECAPS_POW2`
+        /// AND `D3DPTEXTURECAPS_NONPOW2CONDITIONAL` both set) -- real D3D9 semantics: such an NPOT
+        /// texture must have no mip chain and may only use `D3DTADDRESS_CLAMP` (never `WRAP`/
+        /// `MIRROR`) on both axes. `false` on this dev environment's DXVK device. NOXNA -- feeds
+        /// Phase D9-10 (this is exactly the cap XNA's `Reach` profile's own "no wrapping on NPOT"
+        /// restriction is modeling). Enforcing this against a real `SamplerState`/draw call is
+        /// `D9-10`/`D9-82`'s own job -- no draw/sampler path exists yet to enforce it against.
+        [[nodiscard]] bool NonPowerOfTwoRequiresClampAddressingEXT() const
+        {
+            return (caps_.TextureCaps & D3DPTEXTURECAPS_POW2) &&
+                   (caps_.TextureCaps & D3DPTEXTURECAPS_NONPOW2CONDITIONAL);
+        }
+
         /// D9-40: registers a live D3DPOOL_DEFAULT resource (a buffer, later a render target) so
         /// PerformResetRecovery() can release it before Reset(). Raw, non-owning -- the resource
         /// object's own lifetime is owned by its caller (VertexBuffer/IndexBuffer/...), not this

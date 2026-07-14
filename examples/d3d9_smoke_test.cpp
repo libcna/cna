@@ -72,6 +72,10 @@
 //   D3DISSUE_BEGIN/D3DISSUE_END commands, IsComplete() eventually reports true (polled), and
 //   PixelCount() reads back 0 for a query that only wraps a Clear() (no draw path exists yet,
 //   D9-82 -- a real, honest result, not a stand-in for tested geometry).
+// Check X -- NPOT capability (D9-56), surfaced from the real D3DCAPS9
+//   (RequiresPowerOfTwoTexturesEXT()/NonPowerOfTwoRequiresClampAddressingEXT()), not assumed. When
+//   the device reports full NPOT support (true here), a genuinely non-power-of-two (5x3) texture
+//   is created and round-tripped for real, proving this backend adds no artificial restriction.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
@@ -839,6 +843,68 @@ protected:
                 check(completed, "D9-55: IsComplete() eventually reports true after End() (real GetData() polling)");
                 check(query->PixelCount() == 0,
                       "D9-55: PixelCount() reads back 0 for a query wrapping only a Clear() (no occlusion-testable draw)");
+            }
+        }
+
+        // Check X (D9-56) -- NPOT capability surfaced from the real D3DCAPS9, not assumed
+        // (authenticity, not a limitation to hide -- XNA's Reach profile forbids Wrap addressing
+        // on NPOT textures specifically because real D3D9 hardware could require it). This dev
+        // environment's DXVK device reports full, unconditional NPOT support (D9-3's own original
+        // caps dump: POW2=0, NONPOW2CONDITIONAL=0) -- when that's what RequiresPowerOfTwoTexturesEXT()/
+        // NonPowerOfTwoRequiresClampAddressingEXT() report, a genuinely non-power-of-two
+        // D3D9TextureBackend must actually work, not just be assumed to: create one and round-trip
+        // exact bytes, proving this backend doesn't add an artificial POW2 restriction on top of
+        // real, more permissive hardware. Enforcing the Reach-profile "no Wrap on NPOT" restriction
+        // itself against a real SamplerState/draw call is D9-10/D9-82's own job -- no draw/sampler
+        // path exists yet to enforce it against; an honest gap, not a hidden one.
+        {
+            const bool requiresPow2 = backend.RequiresPowerOfTwoTexturesEXT();
+            const bool clampOnlyNpot = backend.NonPowerOfTwoRequiresClampAddressingEXT();
+            std::printf("    D3D9GraphicsBackend::RequiresPowerOfTwoTexturesEXT()=%d "
+                        "NonPowerOfTwoRequiresClampAddressingEXT()=%d\n",
+                        requiresPow2 ? 1 : 0, clampOnlyNpot ? 1 : 0);
+            check(!requiresPow2 && !clampOnlyNpot,
+                  "D9-56: this dev environment's DXVK device reports full, unconditional NPOT support "
+                  "(matches D9-3's own original D3DCAPS9 dump: POW2=0, NONPOW2CONDITIONAL=0)");
+
+            if (!requiresPow2)
+            {
+                ImageData npotImg;
+                npotImg.width = 5;
+                npotImg.height = 3;
+                npotImg.pixels.resize(5 * 3 * 4);
+                for (int i = 0; i < 5 * 3; ++i)
+                {
+                    npotImg.pixels[static_cast<std::size_t>(i) * 4 + 0] = static_cast<uint8_t>(i * 7);
+                    npotImg.pixels[static_cast<std::size_t>(i) * 4 + 1] = static_cast<uint8_t>(i * 11);
+                    npotImg.pixels[static_cast<std::size_t>(i) * 4 + 2] = static_cast<uint8_t>(i * 13);
+                    npotImg.pixels[static_cast<std::size_t>(i) * 4 + 3] = 255;
+                }
+                auto npotTex = backend.CreateTexture(npotImg);
+                auto& d3d9NpotTex = static_cast<D3D9TextureBackend&>(*npotTex);
+
+                D3DLOCKED_RECT locked{};
+                HRESULT hr = d3d9NpotTex.GetTextureEXT()->LockRect(0, &locked, nullptr, D3DLOCK_READONLY);
+                bool npotMatch = false;
+                if (SUCCEEDED(hr))
+                {
+                    npotMatch = true;
+                    for (int row = 0; row < 3 && npotMatch; ++row)
+                    {
+                        const auto* rowBytes = static_cast<const uint8_t*>(locked.pBits)
+                                              + static_cast<std::size_t>(row) * locked.Pitch;
+                        if (std::memcmp(rowBytes, npotImg.pixels.data() + static_cast<std::size_t>(row) * 5 * 4, 5 * 4) != 0)
+                            npotMatch = false;
+                    }
+                    d3d9NpotTex.GetTextureEXT()->UnlockRect(0);
+                }
+                check(npotTex->GetWidth() == 5 && npotTex->GetHeight() == 3 && npotMatch,
+                      "D9-56: a genuinely non-power-of-two (5x3) D3D9TextureBackend round-trips exact bytes "
+                      "(matches this device's real, unconditional NPOT support)");
+            }
+            else
+            {
+                std::printf("    (skipped NPOT round-trip proof: device requires power-of-2 textures)\n");
             }
         }
 
