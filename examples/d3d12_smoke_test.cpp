@@ -1102,6 +1102,219 @@ int main()
         backend.UnbindOffscreenColorTargetEXT();
     }
 
+    // ---- Check EE (plan_dx.md DX-138): lit_textured3d -- DirectionalLight1/DirectionalLight2/
+    // EmissiveColor each independently and exactly contribute, not just Light0 (already proven by
+    // Check O). All 3 sub-checks use a plain white 1x1-solid texture so the shader's tex-multiply
+    // doesn't scale the result, and ambientColor/light0Diffuse are zeroed so only the field under
+    // test contributes -- each sub-check gets an EXACT expected RGB, not just "differs." ----
+    {
+        constexpr int kRtWidth = 64;
+        constexpr int kRtHeight = 64;
+
+        D3D12_HEAP_PROPERTIES heapProps{};
+        heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
+        D3D12_RESOURCE_DESC rtDesc{};
+        rtDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+        rtDesc.Width = kRtWidth;
+        rtDesc.Height = kRtHeight;
+        rtDesc.DepthOrArraySize = 1;
+        rtDesc.MipLevels = 1;
+        rtDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        rtDesc.SampleDesc.Count = 1;
+        rtDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+        rtDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+
+        Microsoft::WRL::ComPtr<ID3D12Resource> rt;
+        HRESULT hrRt = backend.GetDeviceEXT()->CreateCommittedResource(
+            &heapProps, D3D12_HEAP_FLAG_NONE, &rtDesc,
+            D3D12_RESOURCE_STATE_RENDER_TARGET, nullptr, IID_PPV_ARGS(rt.GetAddressOf()));
+        backend.GetResourceStateTrackerEXT().TrackResource(rt.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET);
+        D3D12_CPU_DESCRIPTOR_HANDLE rtv = backend.AllocateRtvDescriptorEXT();
+        backend.GetDeviceEXT()->CreateRenderTargetView(rt.Get(), nullptr, rtv);
+        backend.BindOffscreenColorTargetEXT(rt.Get(), rtv, DXGI_FORMAT_R8G8B8A8_UNORM, kRtWidth, kRtHeight);
+
+        auto pixelAt = [&](const std::vector<uint8_t>& buf, int x, int y) -> std::array<uint8_t, 4>
+        {
+            const std::size_t idx = (static_cast<std::size_t>(y) * kRtWidth + static_cast<std::size_t>(x)) * 4;
+            return {buf[idx + 0], buf[idx + 1], buf[idx + 2], buf[idx + 3]};
+        };
+        auto centerIsExact = [&](const std::vector<uint8_t>& buf, uint8_t r, uint8_t g, uint8_t b)
+        {
+            const auto p = pixelAt(buf, 30, 30);
+            return p[0] == r && p[1] == g && p[2] == b;
+        };
+
+        struct VPNT { float x, y, z; float nx, ny, nz; float u, v; };
+        // Normal faces -Z (toward a camera later placed at z=-10 for Check FF); irrelevant for this
+        // diffuse/emissive-only check (EyePosition stays default (0,0,0)) but shared geometry with FF.
+        static const VPNT kTriEE[3] = {
+            {-1.0f, -1.0f, 0.0f, 0.0f, 0.0f, -1.0f, 0.0f, 1.0f},
+            { 3.0f, -1.0f, 0.0f, 0.0f, 0.0f, -1.0f, 2.0f, 1.0f},
+            {-1.0f,  3.0f, 0.0f, 0.0f, 0.0f, -1.0f, 0.0f, -1.0f},
+        };
+        D3D12VertexBufferBackend vbEE(&backend, 3);
+        vbEE.SetData(kTriEE, 3, sizeof(VPNT));
+
+        ImageData whiteImg;
+        whiteImg.width = 2; whiteImg.height = 2; whiteImg.mipLevels = 1;
+        whiteImg.pixels.assign(2 * 2 * 4, 255);
+        D3D12TextureBackend whiteTexEE(&backend, whiteImg);
+
+        GpuDrawParams baseP;
+        baseP.texture0 = &whiteTexEE;
+        baseP.textureEnabled = true;
+        baseP.lightingEnabled = true;
+        baseP.diffuseColor[0] = 1.0f; baseP.diffuseColor[1] = 1.0f; baseP.diffuseColor[2] = 1.0f; baseP.diffuseColor[3] = 1.0f;
+        baseP.ambientColor[0] = 0.0f; baseP.ambientColor[1] = 0.0f; baseP.ambientColor[2] = 0.0f;
+        baseP.light0Diffuse[0] = 0.0f; baseP.light0Diffuse[1] = 0.0f; baseP.light0Diffuse[2] = 0.0f; // Light0 off
+        baseP.specularColor[0] = 0.0f; baseP.specularColor[1] = 0.0f; baseP.specularColor[2] = 0.0f; // no specular noise
+
+        // EE1: DirectionalLight1 alone, full-facing direction, red diffuse -> exact (255,0,0).
+        GpuDrawParams p1 = baseP;
+        p1.light1Dir[0] = 0.0f; p1.light1Dir[1] = 0.0f; p1.light1Dir[2] = 1.0f; // travels +Z -> faces the -Z normal
+        p1.light1Diffuse[0] = 1.0f; p1.light1Diffuse[1] = 0.0f; p1.light1Diffuse[2] = 0.0f;
+        backend.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+        backend.DrawPrimitivesEx(vbEE, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                 Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, p1);
+        auto r1 = ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight);
+        Check(centerIsExact(r1, 255, 0, 0),
+              "EE1: DrawPrimitivesEx() real lit_textured3d -- DirectionalLight1 alone contributes the "
+              "exact expected red, independent of Light0/Light2 (plan_dx.md DX-138)");
+
+        // EE2: same geometry/light1Dir, but light1Diffuse disabled (black, matches DX-60a's own
+        // "Enabled=false zeroes Diffuse" convention) -- proves EE1 wasn't some other constant leaking in.
+        GpuDrawParams p1off = p1;
+        p1off.light1Diffuse[0] = 0.0f; p1off.light1Diffuse[1] = 0.0f; p1off.light1Diffuse[2] = 0.0f;
+        backend.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+        backend.DrawPrimitivesEx(vbEE, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                 Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, p1off);
+        auto r1off = ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight);
+        Check(centerIsExact(r1off, 0, 0, 0),
+              "EE2: disabling DirectionalLight1's diffuse (zeroed, matching Enabled=false) removes "
+              "its contribution exactly -- confirms EE1 was real, not a leaked default (plan_dx.md DX-138)");
+
+        // EE3: DirectionalLight2 alone, green diffuse -> exact (0,255,0).
+        GpuDrawParams p2 = baseP;
+        p2.light2Dir[0] = 0.0f; p2.light2Dir[1] = 0.0f; p2.light2Dir[2] = 1.0f;
+        p2.light2Diffuse[0] = 0.0f; p2.light2Diffuse[1] = 1.0f; p2.light2Diffuse[2] = 0.0f;
+        backend.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+        backend.DrawPrimitivesEx(vbEE, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                 Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, p2);
+        auto r2 = ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight);
+        Check(centerIsExact(r2, 0, 255, 0),
+              "EE3: DrawPrimitivesEx() real lit_textured3d -- DirectionalLight2 alone contributes the "
+              "exact expected green, independent of Light0/Light1 (plan_dx.md DX-138)");
+
+        // EE4: EmissiveColor alone (all lights + ambient off) -> exact (0,0,255), a constant,
+        // light-independent contribution (not scaled by any NdotL term).
+        GpuDrawParams p3 = baseP;
+        p3.emissiveColor[0] = 0.0f; p3.emissiveColor[1] = 0.0f; p3.emissiveColor[2] = 1.0f;
+        backend.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+        backend.DrawPrimitivesEx(vbEE, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                 Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, p3);
+        auto r3 = ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight);
+        Check(centerIsExact(r3, 0, 0, 255),
+              "EE4: DrawPrimitivesEx() real lit_textured3d -- EmissiveColor alone contributes the "
+              "exact expected blue with every light off, a constant additive term (plan_dx.md DX-138)");
+
+        backend.UnbindOffscreenColorTargetEXT();
+    }
+
+    // ---- Check FF (plan_dx.md DX-139): lit_textured3d -- real Blinn-Phong specular highlight,
+    // discriminating (not the zeroed-for-CPU-determinism gap DX-125's own D3D11 row documents).
+    // Geometry deliberately chosen so the half-vector H exactly equals the surface normal N: eye at
+    // (0,0,-10) looking toward +Z, surface normal (0,0,-1), light1 traveling in +Z (so the
+    // "direction to light" is (0,0,-1), same as the view direction) -> dot(H,N)=1 exactly, so
+    // pow(1,power)=1 regardless of SpecularPower, giving an EXACT expected specular color, not an
+    // approximate one. ----
+    {
+        constexpr int kRtWidth = 64;
+        constexpr int kRtHeight = 64;
+
+        D3D12_HEAP_PROPERTIES heapProps{};
+        heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
+        D3D12_RESOURCE_DESC rtDesc{};
+        rtDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+        rtDesc.Width = kRtWidth;
+        rtDesc.Height = kRtHeight;
+        rtDesc.DepthOrArraySize = 1;
+        rtDesc.MipLevels = 1;
+        rtDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        rtDesc.SampleDesc.Count = 1;
+        rtDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+        rtDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+
+        Microsoft::WRL::ComPtr<ID3D12Resource> rt;
+        HRESULT hrRt = backend.GetDeviceEXT()->CreateCommittedResource(
+            &heapProps, D3D12_HEAP_FLAG_NONE, &rtDesc,
+            D3D12_RESOURCE_STATE_RENDER_TARGET, nullptr, IID_PPV_ARGS(rt.GetAddressOf()));
+        backend.GetResourceStateTrackerEXT().TrackResource(rt.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET);
+        D3D12_CPU_DESCRIPTOR_HANDLE rtv = backend.AllocateRtvDescriptorEXT();
+        backend.GetDeviceEXT()->CreateRenderTargetView(rt.Get(), nullptr, rtv);
+        backend.BindOffscreenColorTargetEXT(rt.Get(), rtv, DXGI_FORMAT_R8G8B8A8_UNORM, kRtWidth, kRtHeight);
+
+        auto pixelAt = [&](const std::vector<uint8_t>& buf, int x, int y) -> std::array<uint8_t, 4>
+        {
+            const std::size_t idx = (static_cast<std::size_t>(y) * kRtWidth + static_cast<std::size_t>(x)) * 4;
+            return {buf[idx + 0], buf[idx + 1], buf[idx + 2], buf[idx + 3]};
+        };
+        auto centerIsExact = [&](const std::vector<uint8_t>& buf, uint8_t r, uint8_t g, uint8_t b)
+        {
+            const auto p = pixelAt(buf, 30, 30);
+            return p[0] == r && p[1] == g && p[2] == b;
+        };
+
+        struct VPNT { float x, y, z; float nx, ny, nz; float u, v; };
+        static const VPNT kTriFF[3] = {
+            {-1.0f, -1.0f, 0.0f, 0.0f, 0.0f, -1.0f, 0.0f, 1.0f},
+            { 3.0f, -1.0f, 0.0f, 0.0f, 0.0f, -1.0f, 2.0f, 1.0f},
+            {-1.0f,  3.0f, 0.0f, 0.0f, 0.0f, -1.0f, 0.0f, -1.0f},
+        };
+        D3D12VertexBufferBackend vbFF(&backend, 3);
+        vbFF.SetData(kTriFF, 3, sizeof(VPNT));
+
+        ImageData whiteImg;
+        whiteImg.width = 2; whiteImg.height = 2; whiteImg.mipLevels = 1;
+        whiteImg.pixels.assign(2 * 2 * 4, 255);
+        D3D12TextureBackend whiteTexFF(&backend, whiteImg);
+
+        GpuDrawParams sp;
+        sp.texture0 = &whiteTexFF;
+        sp.textureEnabled = true;
+        sp.lightingEnabled = true;
+        sp.diffuseColor[0] = 1.0f; sp.diffuseColor[1] = 1.0f; sp.diffuseColor[2] = 1.0f; sp.diffuseColor[3] = 1.0f;
+        sp.ambientColor[0] = 0.0f; sp.ambientColor[1] = 0.0f; sp.ambientColor[2] = 0.0f;
+        sp.light0Diffuse[0] = 0.0f; sp.light0Diffuse[1] = 0.0f; sp.light0Diffuse[2] = 0.0f; // no diffuse noise
+        sp.light1Dir[0] = 0.0f; sp.light1Dir[1] = 0.0f; sp.light1Dir[2] = 1.0f;             // travels +Z
+        sp.light1Diffuse[0] = 0.0f; sp.light1Diffuse[1] = 0.0f; sp.light1Diffuse[2] = 0.0f; // diffuse off too
+        sp.light1Specular[0] = 1.0f; sp.light1Specular[1] = 1.0f; sp.light1Specular[2] = 1.0f;
+        sp.eyePositionWorld[0] = 0.0f; sp.eyePositionWorld[1] = 0.0f; sp.eyePositionWorld[2] = -10.0f;
+        sp.specularColor[0] = 1.0f; sp.specularColor[1] = 1.0f; sp.specularColor[2] = 1.0f;
+        sp.specularPower = 16.0f;
+
+        backend.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+        backend.DrawPrimitivesEx(vbFF, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                 Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, sp);
+        auto specOn = ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight);
+        Check(centerIsExact(specOn, 255, 255, 255),
+              "FF1: DrawPrimitivesEx() real lit_textured3d -- Blinn-Phong specular at a geometry "
+              "deliberately chosen so dot(H,N)=1 exactly contributes the exact expected full-white "
+              "highlight, with diffuse/ambient/emissive all zero (plan_dx.md DX-139)");
+
+        GpuDrawParams spOff = sp;
+        spOff.specularColor[0] = 0.0f; spOff.specularColor[1] = 0.0f; spOff.specularColor[2] = 0.0f;
+        backend.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+        backend.DrawPrimitivesEx(vbFF, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                 Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, spOff);
+        auto specOff = ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight);
+        Check(centerIsExact(specOff, 0, 0, 0),
+              "FF2: the SAME geometry/light with material SpecularColor zeroed produces exact black -- "
+              "proves FF1's white came genuinely from the specular term, not diffuse/ambient/emissive "
+              "(plan_dx.md DX-139)");
+
+        backend.UnbindOffscreenColorTargetEXT();
+    }
+
     // ---- Check P (DX-111 continued): alpha_test3d ----
     {
         constexpr int kRtWidth = 64;

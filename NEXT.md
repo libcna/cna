@@ -348,9 +348,31 @@ left open rather than forced. `DX-137` (fog for non-`colored3d` variants): close
 as a representative variant (found and fixed a real test-fixture bug along the way — the fog
 fixture needs its own vertex buffer at Z=fogEnd, not the shared Z=0 one); the other 6 of 7 variants
 remain honestly open. `D3D11_Smoke` **77/77 checks**, `D3D12_Smoke` **135/135 checks**, both
-verified via a real `ctest` run with no regression. Outside the D3D plan, the standing backlog
-(Phase 79's 153-sample `../cna-samples` re-audit, Task 945's HLSL→GLSL tooling decision, Task 952's
-deferred Bgfx bug) is unchanged — see §8/§9.
+verified via a real `ctest` run with no regression.
+
+**Phase DX15 progress (2026-07-14, third chunk): `DX-138`/`DX-139` closed real, `DX-148` investigated
+and found the identical architectural blocker `DX-132` already documented.** `DX-138` (D3D12
+multi-light/`EmissiveColor`): 4 new checks (`EE1`–`EE4`), each an EXACT expected RGB derived by hand
+from `lit_textured3d.frag.hlsl`'s real math — `DirectionalLight1` alone → exact `(255,0,0)`,
+re-disabling it → exact `(0,0,0)` (proves the first result was real, not a leaked default),
+`DirectionalLight2` alone → exact `(0,255,0)`, `EmissiveColor` alone with every light off → exact
+`(0,0,255)` (a genuinely constant, light-independent term). `DX-139` (D3D12 specular): 2 new checks
+(`FF1`/`FF2`), using a real methodology that avoids `DX-125`'s own D3D11 "specular zeroed for
+CPU-determinism" gap instead of repeating it — geometry chosen so the Blinn-Phong half-vector
+exactly equals the surface normal (`dot(H,N)=1`), collapsing `pow(1,SpecularPower)=1` regardless of
+the power value, giving an exact expected white `(255,255,255)` vs. black `(0,0,0)` with
+`SpecularColor` zeroed. All 6 new checks passed on the first real Wine+vkd3d-proton run. `DX-148`
+(D3D12 `Model` test): confirmed directly from source that `ModelMesh::Draw()` needs a real
+`GraphicsDevice*` (`SetVertexBuffer`/`DrawIndexedPrimitives`/`Effect::Apply()`), and
+`GraphicsDevice.cpp`'s `createOrAttachWindow()` has no no-window special case for `D3D12` (only
+`HEADLESS`/`SOFTWARE`) — constructing one would hit the exact same swap-chain crash `DX-132` already
+found; manually bypassing `GraphicsDevice`/`Effect::Apply()` was considered and rejected since that
+would just re-test `VertexBuffer`/`IndexBuffer` draws under a `Model`-shaped label, not a genuine
+proof of `ModelMesh::Draw()`'s own code path. Left open rather than forced. `D3D11_Smoke` still
+77/77 (untouched), `D3D12_Smoke` **135→141/141 checks**, verified via a real `ctest` run with no
+regression. Outside the D3D plan, the standing backlog (Phase 79's 153-sample `../cna-samples`
+re-audit, Task 945's HLSL→GLSL tooling decision, Task 952's deferred Bgfx bug) is unchanged — see
+§8/§9.
 
 **One real, separate, documented problem**: the full `CnaTests` GTest suite does not build under
 `CNA_GRAPHICS_BACKEND=D3D11` (and, by the same root cause, `D3D12`).
