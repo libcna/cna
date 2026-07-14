@@ -146,6 +146,7 @@
 #include "System/IO/MemoryStream.hpp"
 
 #include <array>
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -529,6 +530,88 @@ int main()
         }
         Check(backend.GetFenceEXT()->GetCompletedValue() >= v2,
               "E3: the most recently signaled value (v2) eventually completes when explicitly waited on");
+    }
+
+    // ---- Check E4 (plan_dx.md DX-113 follow-up): SignalAndWaitForFrameEXT's WaitForSingleObject
+    // branch genuinely stalls the CPU thread under real pending GPU work, not just an
+    // already-satisfied fence returning near-instantly (E1-E3 above only proved the VALUE-ordering
+    // contract, not that the wait itself is a real block). Proven via a RELATIVE timing comparison,
+    // not a fragile absolute-millisecond threshold: a "control" call whose wait target is already
+    // satisfied vs. a "load" call whose wait target was deliberately positioned in the command queue
+    // right after several GB of real GPU copy traffic, so it cannot complete until the GPU actually
+    // drains that work. ----
+    {
+        // v1: control point, nothing pending on frame slot 0 yet (E1-E3 already drained it) -> fast.
+        backend.SignalAndWaitForFrameEXT(0);
+
+        constexpr UINT64 kBufSize = 64ull * 1024 * 1024;
+        D3D12_HEAP_PROPERTIES heapProps{};
+        heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
+        D3D12_RESOURCE_DESC bufDesc{};
+        bufDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+        bufDesc.Width = kBufSize;
+        bufDesc.Height = 1;
+        bufDesc.DepthOrArraySize = 1;
+        bufDesc.MipLevels = 1;
+        bufDesc.Format = DXGI_FORMAT_UNKNOWN;
+        bufDesc.SampleDesc.Count = 1;
+        bufDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+
+        Microsoft::WRL::ComPtr<ID3D12Resource> bufA, bufB;
+        HRESULT hrA = backend.GetDeviceEXT()->CreateCommittedResource(
+            &heapProps, D3D12_HEAP_FLAG_NONE, &bufDesc, D3D12_RESOURCE_STATE_COMMON, nullptr,
+            IID_PPV_ARGS(bufA.GetAddressOf()));
+        HRESULT hrB = backend.GetDeviceEXT()->CreateCommittedResource(
+            &heapProps, D3D12_HEAP_FLAG_NONE, &bufDesc, D3D12_RESOURCE_STATE_COMMON, nullptr,
+            IID_PPV_ARGS(bufB.GetAddressOf()));
+        Check(SUCCEEDED(hrA) && SUCCEEDED(hrB),
+              "E4pre: two 64MB throwaway DEFAULT-heap buffers created for a real GPU copy workload");
+
+        if (SUCCEEDED(hrA) && SUCCEEDED(hrB))
+        {
+            ID3D12CommandAllocator* allocator = backend.GetCommandAllocatorEXT(0);
+            ID3D12GraphicsCommandList* cmdList = backend.GetCommandListEXT();
+            allocator->Reset();
+            cmdList->Reset(allocator, nullptr);
+            constexpr int kCopies = 48; // ~3 GB of real DEFAULT-heap-to-DEFAULT-heap copy traffic
+            for (int i = 0; i < kCopies; ++i)
+                cmdList->CopyBufferRegion(bufB.Get(), 0, bufA.Get(), 0, kBufSize);
+            const HRESULT hrClose = cmdList->Close();
+            Check(SUCCEEDED(hrClose), "E4a: command list recording the copy workload closes cleanly");
+
+            if (SUCCEEDED(hrClose))
+            {
+                ID3D12CommandList* lists[] = { cmdList };
+                // Deliberately NOT waited on here -- queued asynchronously, same as a real frame's
+                // draws would be, so the copy work sits in the queue ahead of the next two signals.
+                backend.GetCommandQueueEXT()->ExecuteCommandLists(1, lists);
+
+                // v2: queued immediately after the copy work; its own wait target (v1, already
+                // complete) is satisfied, so this call itself stays fast -- this is the control
+                // measurement, timed on an equal footing with the load measurement below (both are
+                // one SignalAndWaitForFrameEXT call, differing only in whether their wait target sits
+                // behind the copy work in the queue).
+                const auto controlStart = std::chrono::steady_clock::now();
+                backend.SignalAndWaitForFrameEXT(0);
+                const auto controlDuration = std::chrono::steady_clock::now() - controlStart;
+
+                // v3: its wait target is v2, which was itself queued right after the copy work -- the
+                // GPU cannot signal v2 until the copy work ahead of it drains, so this call's
+                // WaitForSingleObject genuinely blocks for as long as the copy takes.
+                const auto loadStart = std::chrono::steady_clock::now();
+                backend.SignalAndWaitForFrameEXT(0);
+                const auto loadDuration = std::chrono::steady_clock::now() - loadStart;
+
+                const auto controlUs = std::chrono::duration_cast<std::chrono::microseconds>(controlDuration).count();
+                const auto loadUs = std::chrono::duration_cast<std::chrono::microseconds>(loadDuration).count();
+                std::printf("    E4: control=%lldus load=%lldus\n",
+                            static_cast<long long>(controlUs), static_cast<long long>(loadUs));
+                Check(loadDuration > controlDuration * 3 || loadDuration > std::chrono::milliseconds(2),
+                      "E4: SignalAndWaitForFrameEXT's WaitForSingleObject branch genuinely blocks the CPU "
+                      "measurably longer when its wait target sits behind real pending GPU work than the "
+                      "already-satisfied control case (plan_dx.md DX-113 follow-up)");
+            }
+        }
     }
 
     // ---- Check F: off-screen construction never touches the swap chain ----
