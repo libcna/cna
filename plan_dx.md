@@ -1231,13 +1231,26 @@ production code path) with concrete, reproducible evidence, not a guess:
 
 ## Phase DX13 — D3D12 functional completion (closing the real "doesn't work yet" gaps)
 
-**Fully closed 2026-07-14 — all 8 rows (`DX-116`–`DX-123`) done, real GPU-facing proof throughout,
-authorized and completed the same day it was written up.** D3D12 went from "off-screen shader/
-pipeline proof only, no presentation, no render targets, no state objects, no per-slot samplers, no
-occlusion queries, no custom effects, no `Texture3D`" to a real, functionally broad backend in one
-continuous pass: `D3D12_Smoke` grew from 80/80 (Phase DX12's own closing number) to **125/125
-checks**. See each row's own Notes below for the specific real proof; the top-of-file status banner
-and `docs/graphics-backend-feature-matrix.md` reflect the final state.
+**Substantially complete (2026-07-14) — 6 of 8 rows fully closed, 2 partial (🟨), real GPU-facing
+proof throughout.** D3D12 went from "off-screen shader/pipeline proof only, no presentation, no
+render targets, no state objects, no per-slot samplers, no occlusion queries, no custom effects, no
+`Texture3D`" to a real, functionally broad backend in one continuous pass: `D3D12_Smoke` grew from
+80/80 (Phase DX12's own closing number) to **125/125 checks** by the end of this phase (169/169
+today, after Phase DX15 built on it). It is enough for a real game: `../mobile-eggbert` (a 2D
+platformer) builds, runs, creates a real vkd3d-proton device and swapchain, and presents frames on
+this backend.
+
+**The two remaining partial rows, honestly:**
+- **`DX-117`** (render targets) 🟨 — `RenderTarget2D`/`RenderTargetCube`/MRT are real and
+  pixel-verified, but **MSAA and mip-chain generation are not implemented** (D3D11's own `DX-45`
+  equivalent; D3D12 has no single-call `GenerateMips()`, so it needs a real downsample pass). This
+  is also what blocks `DX-144`'s D3D12 leg in Phase DX15.
+- **`DX-121`** (custom `ShaderEffect`) 🟨 — the runtime `D3DCompile()` path and the
+  `D3D12EffectBackend` are real and CTest-proven, but the `D3D12SpriteBatchBackend` wiring for
+  `SpriteBatch::Begin(effect)` is real code that is **not independently CTest-proven**.
+
+An earlier revision of this paragraph claimed "all 8 rows done"; that was an overclaim, corrected
+here after a row-by-row audit. See each row's own Notes for the specific real proof.
 
 Ordering rationale: `DX-116` (real `Present()`) is the highest-value single task — it's what makes
 D3D12 an actually-displayable backend for the first time, now that swap-chain *creation* itself
