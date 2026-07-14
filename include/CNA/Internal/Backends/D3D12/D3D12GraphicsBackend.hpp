@@ -114,6 +114,16 @@ namespace CNA::Internal::Backends::D3D12
                                      PrimitiveType primitive, int primitiveCount,
                                      const GpuDrawParams& params) override;
 
+        /// DX-111 (finish): real instanced3d dispatch -- mirrors
+        /// D3D11GraphicsBackend::DrawInstancedPrimitivesEx's own fallback (no per-instance VB means
+        /// this isn't really an instanced draw) and hand-built dual-vertex-stream PSO/input-layout
+        /// shape (POSITION @ slot 0 per-vertex, INSTANCEWORLD0-3 @ slot 1 per-instance) -- see
+        /// GetOrCreateInstancedPsoEXT's own doc comment for why this bypasses D3D12PipelineStateCache.
+        void DrawInstancedPrimitivesEx(const IVertexBufferBackend& vb, const IIndexBufferBackend& ib,
+                                       const Matrix& world, const Matrix& view, const Matrix& projection,
+                                       PrimitiveType primitive, int primitiveCount, int instanceCount,
+                                       const GpuDrawParams& params) override;
+
         // ---- NOXNA (DX-102/DX-103/DX-104/DX-105): real device-lifetime accessors for tests and
         // for whichever Phase DX12 task lands next (DX-106 onward) to build on without duplicating
         // this backend's own device/heap/command-list/fence creation. ----
@@ -265,6 +275,24 @@ namespace CNA::Internal::Backends::D3D12
         /// DX-111 (continued): alpha_test3d's own single combined PerDraw (b0) -- see
         /// D3DAlphaTestConstants's own doc comment for why this isn't D3DPerDrawConstants.
         ID3D12Resource* GetOrCreateAlphaTestConstantBufferEXT();
+        /// DX-111 (finish): skinned3d's BoneBlock (b1, D3DBoneConstants, DX-60a) -- the 72-matrix array.
+        ID3D12Resource* GetOrCreateBoneConstantBufferEXT();
+        /// DX-111 (finish): skinned3d's own FogParams-equivalent (b2, D3DSkinnedExtraConstants) --
+        /// fog + DirectionalLight1/2 + World + EyePosition + specular (mirrors D3D11's own
+        /// GetOrCreateSkinnedExtraConstantBufferEXT, same reasoning D3DSkinnedExtraConstants's own
+        /// doc comment already gives: PerDraw's 128 bytes have no spare room for these fields).
+        ID3D12Resource* GetOrCreateSkinnedExtraConstantBufferEXT();
+
+        /// DX-111 (finish): instanced3d's own hand-built PSO -- deliberately NOT resolved via
+        /// D3D12PipelineStateCache/D3DVertexFormatHelper::InputElementsForStrideD3D12 (which only
+        /// covers a single per-vertex stream), since instanced3d needs a genuinely different
+        /// 2-input-slot layout: POSITION0 (12 bytes, per-vertex, slot 0) + INSTANCEWORLD0-3 (4 x
+        /// float4 rows, per-instance, slot 1) -- mirrors D3D11GraphicsBackend's own
+        /// GetOrCreateInstancedInputLayoutEXT() element list exactly, and D3D12SpriteBatchBackend's
+        /// own precedent for hand-building a PSO when the stride-keyed cache's assumptions don't fit
+        /// (this file's own instancedPso_ uses the (1,0,0) root-signature shape -- PerDraw@b0 only,
+        /// no texture -- matching instanced3d.frag.hlsl's own real (textureless) declaration).
+        ID3D12PipelineState* GetOrCreateInstancedPsoEXT(ID3D12RootSignature* rootSig);
 
         /// DX-111 (continued): resolves the real SRV GPU descriptor handle to bind for a
         /// GpuDrawParams texture slot -- mirrors D3D11GraphicsBackend's own GetSrvForTextureEXT,
@@ -345,6 +373,14 @@ namespace CNA::Internal::Backends::D3D12
         void* lightingConstantBufferMapped_ = nullptr;
         ComPtr<ID3D12Resource> alphaTestConstantBuffer_;
         void* alphaTestConstantBufferMapped_ = nullptr;
+        // DX-111 (finish): skinned3d's own persistent constant buffers -- same convention as above.
+        ComPtr<ID3D12Resource> boneConstantBuffer_;
+        void* boneConstantBufferMapped_ = nullptr;
+        ComPtr<ID3D12Resource> skinnedExtraConstantBuffer_;
+        void* skinnedExtraConstantBufferMapped_ = nullptr;
+        // DX-111 (finish): instanced3d's own hand-built PSO (see GetOrCreateInstancedPsoEXT's doc
+        // comment) -- created once, reused every DrawInstancedPrimitivesEx call.
+        ComPtr<ID3D12PipelineState> instancedPso_;
 
         // DX-111: the currently-bound off-screen color target (see BindOffscreenColorTargetEXT's own
         // doc comment) -- non-owning, the caller/test retains ownership of the resource itself.

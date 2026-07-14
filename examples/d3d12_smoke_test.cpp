@@ -1334,6 +1334,193 @@ int main()
         backend.UnbindOffscreenColorTargetEXT();
     }
 
+    // ---- Check S (DX-111 finish): skinned3d -- BoneBlock genuinely populated, single identity bone ----
+    {
+        constexpr int kRtWidth = 64;
+        constexpr int kRtHeight = 64;
+
+        D3D12_HEAP_PROPERTIES heapProps{};
+        heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
+
+        D3D12_RESOURCE_DESC rtDesc{};
+        rtDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+        rtDesc.Width = kRtWidth;
+        rtDesc.Height = kRtHeight;
+        rtDesc.DepthOrArraySize = 1;
+        rtDesc.MipLevels = 1;
+        rtDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        rtDesc.SampleDesc.Count = 1;
+        rtDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+        rtDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+
+        Microsoft::WRL::ComPtr<ID3D12Resource> rt;
+        HRESULT hrRt = backend.GetDeviceEXT()->CreateCommittedResource(
+            &heapProps, D3D12_HEAP_FLAG_NONE, &rtDesc,
+            D3D12_RESOURCE_STATE_RENDER_TARGET, nullptr, IID_PPV_ARGS(rt.GetAddressOf()));
+        Check(SUCCEEDED(hrRt) && rt != nullptr, "S0: real off-screen RGBA8 render-target resource created");
+        backend.GetResourceStateTrackerEXT().TrackResource(rt.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET);
+
+        D3D12_CPU_DESCRIPTOR_HANDLE rtv = backend.AllocateRtvDescriptorEXT();
+        backend.GetDeviceEXT()->CreateRenderTargetView(rt.Get(), nullptr, rtv);
+        backend.BindOffscreenColorTargetEXT(rt.Get(), rtv, DXGI_FORMAT_R8G8B8A8_UNORM, kRtWidth, kRtHeight);
+
+        auto pixelAt = [&](const std::vector<uint8_t>& buf, int x, int y) -> std::array<uint8_t, 4>
+        {
+            const std::size_t idx = (static_cast<std::size_t>(y) * kRtWidth + static_cast<std::size_t>(x)) * 4;
+            return {buf[idx + 0], buf[idx + 1], buf[idx + 2], buf[idx + 3]};
+        };
+        auto isColor = [](const std::array<uint8_t, 4>& p, uint8_t r, uint8_t g, uint8_t b, uint8_t a)
+        {
+            return p[0] == r && p[1] == g && p[2] == b && p[3] == a;
+        };
+        auto regionIs = [&](const std::vector<uint8_t>& buf, uint8_t r, uint8_t g, uint8_t b, uint8_t a)
+        {
+            for (int y = 28; y < 32; ++y)
+                for (int x = 28; x < 32; ++x)
+                    if (!isColor(pixelAt(buf, x, y), r, g, b, a)) return false;
+            return true;
+        };
+
+        // Same fixture as D3D11's own Check V (d3d11_smoke_test.cpp DX-67): a single identity bone
+        // (BoneBlock genuinely populated from GpuDrawParams::boneTransforms -- an all-zero bone
+        // matrix would degenerate the transform and fail this check) combined with ambient=white and
+        // specular=zeroed (light0's own diffuse contribution is already zero by construction: the
+        // vertex normal (0,0,1) is perpendicular to the default light0Dir (0,-1,0)) leaves outColor
+        // == the exact sampled texture color.
+        struct VPNTS { float x, y, z; float nx, ny, nz; float u, v;
+                      float bw0, bw1, bw2, bw3; uint8_t bi0, bi1, bi2, bi3; };
+        static const VPNTS kTriSkin[3] = {
+            {-1.0f, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0},
+            { 3.0f, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 2.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0},
+            {-1.0f,  3.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, -1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0},
+        };
+        D3D12VertexBufferBackend vbSkin(&backend, 3);
+        vbSkin.SetData(kTriSkin, 3, sizeof(VPNTS));
+
+        ImageData img;
+        img.width = 2; img.height = 2; img.mipLevels = 1;
+        img.pixels.resize(2 * 2 * 4);
+        for (int i = 0; i < 4; ++i)
+        {
+            img.pixels[i * 4 + 0] = 77; img.pixels[i * 4 + 1] = 88;
+            img.pixels[i * 4 + 2] = 99; img.pixels[i * 4 + 3] = 255;
+        }
+        D3D12TextureBackend tex(&backend, img);
+
+        GpuDrawParams sp;
+        sp.texture0 = &tex;
+        sp.textureEnabled = true;
+        sp.skinned = true;
+        sp.boneCount = 1;
+        sp.weightsPerVertex = 1;
+        Matrix::getIdentityProperty().ToColumnMajor(sp.boneTransforms);
+        sp.ambientColor[0] = 1.0f; sp.ambientColor[1] = 1.0f; sp.ambientColor[2] = 1.0f;
+        sp.specularColor[0] = 0.0f; sp.specularColor[1] = 0.0f; sp.specularColor[2] = 0.0f;
+        sp.eyePositionWorld[0] = 0.0f; sp.eyePositionWorld[1] = 0.0f; sp.eyePositionWorld[2] = -10.0f;
+
+        backend.Clear(0.0f, 1.0f, 0.0f, 1.0f);
+        backend.DrawPrimitivesEx(vbSkin, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                 Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, sp);
+        auto afterS = ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight);
+        Check(regionIs(afterS, 77, 88, 99, 255),
+              "S1: DrawPrimitivesEx() real skinned3d with a genuinely-populated single identity bone "
+              "(D3DBoneConstants, not left zero) samples the exact texture color (plan_dx.md DX-111)");
+
+        backend.UnbindOffscreenColorTargetEXT();
+    }
+
+    // ---- Check T (DX-111 finish): instanced3d -- real per-instance world buffer, dual vertex stream ----
+    {
+        constexpr int kRtWidth = 64;
+        constexpr int kRtHeight = 64;
+
+        D3D12_HEAP_PROPERTIES heapProps{};
+        heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
+
+        D3D12_RESOURCE_DESC rtDesc{};
+        rtDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+        rtDesc.Width = kRtWidth;
+        rtDesc.Height = kRtHeight;
+        rtDesc.DepthOrArraySize = 1;
+        rtDesc.MipLevels = 1;
+        rtDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        rtDesc.SampleDesc.Count = 1;
+        rtDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+        rtDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+
+        Microsoft::WRL::ComPtr<ID3D12Resource> rt;
+        HRESULT hrRt = backend.GetDeviceEXT()->CreateCommittedResource(
+            &heapProps, D3D12_HEAP_FLAG_NONE, &rtDesc,
+            D3D12_RESOURCE_STATE_RENDER_TARGET, nullptr, IID_PPV_ARGS(rt.GetAddressOf()));
+        Check(SUCCEEDED(hrRt) && rt != nullptr, "T0: real off-screen RGBA8 render-target resource created");
+        backend.GetResourceStateTrackerEXT().TrackResource(rt.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET);
+
+        D3D12_CPU_DESCRIPTOR_HANDLE rtv = backend.AllocateRtvDescriptorEXT();
+        backend.GetDeviceEXT()->CreateRenderTargetView(rt.Get(), nullptr, rtv);
+        backend.BindOffscreenColorTargetEXT(rt.Get(), rtv, DXGI_FORMAT_R8G8B8A8_UNORM, kRtWidth, kRtHeight);
+
+        auto pixelAt = [&](const std::vector<uint8_t>& buf, int x, int y) -> std::array<uint8_t, 4>
+        {
+            const std::size_t idx = (static_cast<std::size_t>(y) * kRtWidth + static_cast<std::size_t>(x)) * 4;
+            return {buf[idx + 0], buf[idx + 1], buf[idx + 2], buf[idx + 3]};
+        };
+        auto isColor = [](const std::array<uint8_t, 4>& p, uint8_t r, uint8_t g, uint8_t b, uint8_t a)
+        {
+            return p[0] == r && p[1] == g && p[2] == b && p[3] == a;
+        };
+        auto regionIs = [&](const std::vector<uint8_t>& buf, uint8_t r, uint8_t g, uint8_t b, uint8_t a)
+        {
+            for (int y = 28; y < 32; ++y)
+                for (int x = 28; x < 32; ++x)
+                    if (!isColor(pixelAt(buf, x, y), r, g, b, a)) return false;
+            return true;
+        };
+
+        // Same fixture as D3D11's own Check W (d3d11_smoke_test.cpp DX-68): one identity-transform
+        // instance via the per-instance INSTANCEWORLD0-3 buffer (not the per-vertex one) outputs the
+        // exact per-instance DiffuseColor -- both non-zero color components at their saturated 0/1
+        // extremes, so there is no rounding ambiguity in the final UNORM8 byte comparison.
+        struct VP3 { float x, y, z; };
+        static const VP3 kTriInst[3] = {
+            {-1.0f, -1.0f, 0.0f},
+            { 3.0f, -1.0f, 0.0f},
+            {-1.0f,  3.0f, 0.0f},
+        };
+        D3D12VertexBufferBackend vbInst(&backend, 3);
+        vbInst.SetData(kTriInst, 3, sizeof(VP3));
+
+        static const uint16_t kTriInstIdx[3] = {0, 1, 2};
+        D3D12IndexBufferBackend ibInst(&backend, 3, /*thirtyTwoBit=*/false);
+        ibInst.SetData16(kTriInstIdx, 3);
+
+        // One identity-transform instance: 4 float4 rows (INSTANCEWORLD0-3).
+        static const float kInstanceWorld[16] = {
+            1.0f, 0.0f, 0.0f, 0.0f,
+            0.0f, 1.0f, 0.0f, 0.0f,
+            0.0f, 0.0f, 1.0f, 0.0f,
+            0.0f, 0.0f, 0.0f, 1.0f,
+        };
+        D3D12VertexBufferBackend instVb(&backend, 1);
+        instVb.SetData(kInstanceWorld, 1, sizeof(kInstanceWorld));
+
+        GpuDrawParams ip;
+        ip.instanceVb = &instVb;
+        ip.diffuseColor[0] = 1.0f; ip.diffuseColor[1] = 1.0f;
+        ip.diffuseColor[2] = 0.0f; ip.diffuseColor[3] = 1.0f;
+
+        backend.Clear(0.0f, 0.0f, 1.0f, 1.0f);
+        backend.DrawInstancedPrimitivesEx(vbInst, ibInst, Matrix::getIdentityProperty(),
+                                          Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                          PrimitiveType::TriangleList, 1, 1, ip);
+        auto afterT = ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight);
+        Check(regionIs(afterT, 255, 255, 0, 255),
+              "T1: DrawInstancedPrimitivesEx() real instanced3d draw with a genuine per-instance "
+              "world buffer (dual vertex stream: slot 0 per-vertex POSITION, slot 1 per-instance "
+              "INSTANCEWORLD0-3) outputs the exact instance DiffuseColor (plan_dx.md DX-111)");
+
+        backend.UnbindOffscreenColorTargetEXT();
+    }
+
     std::printf("\n%s: %d failure(s)\n", g_failures == 0 ? "RESULT: ALL PASS" : "RESULT: FAILURES", g_failures);
     return g_failures == 0 ? 0 : 1;
 }
