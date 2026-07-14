@@ -6928,6 +6928,24 @@ if(CNA_BUILD_TESTS)
         target_link_libraries(CnaTests PRIVATE easy-gl)
     endif()
 
+    # plan_dx.md DX-15 follow-up: now that CnaTests.exe genuinely builds under the D3D11/D3D12
+    # MinGW cross-targets, gtest_discover_tests(DISCOVERY_MODE PRE_TEST) below executes it
+    # directly to enumerate tests -- and any add_test(COMMAND CnaTests ...) test (e.g.
+    # CnaInputTests, further below) does the same at run time. Both need the same Wine wrapper
+    # D3D11_Smoke/D3D12_Smoke already use, or every ctest invocation in this build tree fails
+    # outright trying to exec a Windows PE natively on the Linux host. *_SKIP_*_GATE=1 because a
+    # bare --gtest_list_tests (or most individual unit tests) never creates a real graphics
+    # device, so the DXVK/vkd3d-presence gate those wrappers normally enforce would misfire here.
+    # MUST be set before gtest_discover_tests() below -- it reads this property immediately at
+    # configure time, not lazily at generate/test time.
+    if(MINGW AND CNA_GRAPHICS_BACKEND STREQUAL "D3D11")
+        set_target_properties(CnaTests PROPERTIES
+            CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_D3D11_SKIP_DXVK_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-dxvk.sh")
+    elseif(MINGW AND CNA_GRAPHICS_BACKEND STREQUAL "D3D12")
+        set_target_properties(CnaTests PROPERTIES
+            CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_D3D12_SKIP_VKD3D_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-vkd3d.sh")
+    endif()
+
     include(GoogleTest)
     gtest_discover_tests(CnaTests DISCOVERY_MODE PRE_TEST)
 
