@@ -137,6 +137,7 @@
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteEffects.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteFont.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
@@ -4276,6 +4277,65 @@ int main()
                       "4x4 pattern EXACTLY -- a decoder that dropped, reordered or channel-swapped pixels "
                       "could not pass (plan_dx.md DX-140)");
             }
+        }
+
+        // plan_dx.md DX-121: SpriteBatch::Begin(effect) -- a custom Effect draws sprites through
+        // that effect's own shader (a deliberate RGB color inversion) instead of the stock
+        // sprite2d pipeline, mirroring D3D11's own already-closed DX-71 methodology exactly (same
+        // HLSL source, same Sprite2DVertex contract, same 128-byte constant-buffer layout --
+        // D3D12EffectBackend's own vpSize/uColor/uFloat0 slots are byte-for-byte identical to
+        // D3D11's, DX-121's own closing note already confirmed this). This was blocked when DX-121
+        // itself closed (GraphicsDevice's constructor unconditionally created a real window, which
+        // crashes for D3D12 outside a Proton-managed launch) -- PresentationParameters::HeadlessEXT
+        // (commit b3289ac6) removed that blocker, the same fix DX-132/DX-140/DX-148 already used.
+        {
+            XG::ShaderEffect invertEffect(dev,
+                "struct VSIn { float2 pos:POSITION0; float2 uv:TEXCOORD0; float4 col:COLOR0; };\n"
+                "struct VSOut { float4 pos:SV_Position; float2 uv:TEXCOORD0; float4 col:TEXCOORD1; };\n"
+                "cbuffer CB : register(b0) { float4 vpSize; float4 pad1[4]; float4 uColor; float4 uFloat0; };\n"
+                "VSOut main(VSIn input) {\n"
+                "    VSOut o;\n"
+                "    float2 ndc = (input.pos / vpSize.xy) * 2.0 - 1.0;\n"
+                "    o.pos = float4(ndc.x, -ndc.y, 0.0, 1.0);\n"
+                "    o.uv = input.uv;\n"
+                "    o.col = input.col;\n"
+                "    return o;\n"
+                "}",
+                "Texture2D texSampler : register(t0);\n"
+                "SamplerState texSamplerSampler : register(s0);\n"
+                "struct PSIn { float4 pos:SV_Position; float2 uv:TEXCOORD0; float4 col:TEXCOORD1; };\n"
+                "float4 main(PSIn input) : SV_Target {\n"
+                "    float4 texColor = texSampler.Sample(texSamplerSampler, input.uv);\n"
+                "    return float4(float3(1.0, 1.0, 1.0) - texColor.rgb, 1.0);\n"
+                "}");
+            Check(invertEffect.IsEffectValid(),
+                  "NN0: ShaderEffect (D3D12): a runtime-compiled custom HLSL pair for SpriteBatch's "
+                  "own Sprite2DVertex contract compiles successfully, through the windowless "
+                  "GraphicsDevice (plan_dx.md DX-121)");
+
+            XG::Texture2D redTex(dev, 2, 2);
+            std::vector<X::Color> redPixels(2 * 2, X::Color(255, 0, 0, 255));
+            redTex.SetData(redPixels.data(), 2 * 2);
+
+            auto pxInverted = renderToTarget(kBlack, [&] {
+                XG::SamplerState pointClamp = XG::SamplerState::PointClamp;
+                XG::SpriteBatch invertBatch(dev);
+                invertBatch.Begin(XG::SpriteSortMode::Deferred, XG::BlendState::Opaque, &pointClamp,
+                                  nullptr, nullptr, &invertEffect);
+                invertBatch.Draw(redTex, X::Rectangle(0, 0, kW, kH),
+                                 X::Rectangle(0, 0, 2, 2), X::Color::White);
+                invertBatch.End();
+            });
+            // Solid red (255,0,0) inverted -> exact cyan (0,255,255); alpha forced to 1.0 by the
+            // custom shader itself (not inverted).
+            const auto invertedPx = pixelAt(pxInverted, kW / 2, kH / 2);
+            Check(!pxInverted.empty() && invertedPx.getRProperty() == 0 &&
+                      invertedPx.getGProperty() == 255 && invertedPx.getBProperty() == 255 &&
+                      invertedPx.getAProperty() == 255,
+                  "NN1: D3D12SpriteBatchBackend + SpriteBatch::Begin(effect): sprites draw through "
+                  "the custom Effect's own shader, producing its exact expected (inverted) output "
+                  "color, not the stock sprite2d pipeline's -- through the real public XNA API, off-"
+                  "screen (plan_dx.md DX-121)");
         }
     }
 

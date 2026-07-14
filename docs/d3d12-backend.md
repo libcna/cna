@@ -55,12 +55,10 @@ diagnostic, see "Known limitations"), not just "the API call returned `S_OK`."
 - **MSAA render targets.** `D3D12RenderTargetBackend`/`D3D12RenderTargetCubeBackend` are real
   (`DX-117`) with real mip-chain generation too (`DX-144`), but MSAA is not implemented for either —
   a real, scoped follow-up, `D3D11`'s own `DX-45` equivalent.
-- **`SpriteBatch::Begin(effect)`** (`D3D11`'s own `DX-71`) has real wiring (`DX-121`) but is not
-  independently CTest-proven — the underlying runtime `D3DCompile()` custom-`ShaderEffect` path
-  itself is proven (Checks BB1–BB4).
 - **`D3D12TextureCubeBackend::GetData()`** was a no-op — now real (`DX-123`).
 - Runtime-settable blend/depth-stencil/rasterizer state objects, per-slot `SamplerState`, occlusion
-  queries, `Texture3D`, and custom `ShaderEffect` compilation are all real now (`DX-118`/`DX-119`/
+  queries, `Texture3D`, custom `ShaderEffect` compilation, and `SpriteBatch::Begin(effect)`'s own
+  integration on top of it are all real and independently CTest-proven now (`DX-118`/`DX-119`/
   `DX-120`/`DX-122`/`DX-121`) — see "Known limitations" for what's still genuinely open.
 
 ## Development environment: Wine + vkd3d-proton dev-loop
@@ -116,7 +114,7 @@ Like `D3D11`, D3D12 tests are not ordinary `Game`-subclass examples — the rout
 Proton-managed window/`Present()` path to drive one through (Proton's own bootstrap launch is too
 heavy for a normal CTest run, see "Known limitations"). All correctness tests live in
 `examples/d3d12_smoke_test.cpp` (`D3D12_Smoke` CTest, the single registered D3D12 CTest — checks
-lettered A through MM as of `DX-136`/`DX-144`, **189/189 passing**) and talk to the real
+lettered A through NN as of `DX-121`/`DX-136`/`DX-144`, **191/191 passing**) and talk to the real
 `ID3D12Device`/command queue/list fairly directly. The general off-screen pixel-readback shape:
 
 ```cpp
@@ -139,7 +137,7 @@ lettered A through MM as of `DX-136`/`DX-144`, **189/189 passing**) and talk to 
 //    painting nothing, due to an unset PSO cull-mode default.)
 ```
 
-Continue the existing check-lettering convention (currently through double letters, `AA`–`MM`)
+Continue the existing check-lettering convention (currently through double letters, `AA`–`NN`)
 rather than starting a new scheme.
 
 ## Known limitations (2026-07-14, re-audited against `plan_dx.md`'s actual `DX-100`–`DX-148` row
@@ -170,9 +168,6 @@ significantly stale; re-derived from source, not copy-edited)
   unbind, the same honest single-active-face scope `D3D11RenderTargetCubeBackend`'s own test coverage
   already has) — MSAA specifically (`D3D11`'s own `DX-45` equivalent) is the one remaining gap, a
   real, scoped follow-up.
-- **`SpriteBatch::Begin(effect)`** (`D3D11`'s own `DX-71`) has real wiring (`DX-121`) — the
-  underlying runtime `D3DCompile()` custom-`ShaderEffect` path itself is proven (Checks BB1–BB4) —
-  but the `SpriteBatch`-specific integration is not independently CTest-proven.
 - **Device-removed recovery is real but its trigger is untestable here.** `RecreateDeviceEXT()`
   (`DX-110`) genuinely tears down and rebuilds every device-lifetime resource, and is functionally
   proven (fresh GPU work round-trips through the recreated device) — but a genuine
@@ -182,6 +177,11 @@ significantly stale; re-derived from source, not copy-edited)
 - **`AlphaTestEffect.VertexColorEnabled`** now has a real dedicated shader variant
   (`alpha_test_colored3d`, stride 24) and dedicated tests (`DX-136`) — previously a real gap
   (`alpha_test3d` had no vertex-color attribute at all), now closed on both D3D11 and D3D12.
+- **`SpriteBatch::Begin(effect)`** (`D3D11`'s own `DX-71`) is now fully real and independently
+  CTest-proven (`DX-121`, Checks NN0/NN1) — the runtime `D3DCompile()` custom-`ShaderEffect` path
+  (Checks BB1–BB4) and the `SpriteBatch`-specific integration on top of it were closed separately;
+  `PresentationParameters::HeadlessEXT` removed the windowed-`GraphicsDevice` blocker that
+  originally kept the integration itself from being independently proven.
 - **The following are all real and closed now, despite earlier revisions of this section claiming
   otherwise** — re-verify against `plan_dx.md`'s own row status before trusting any *other* specific
   claim in this file, since this whole section was significantly stale before this re-audit:
