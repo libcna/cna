@@ -5,6 +5,7 @@
 // own comment in the header for the full explanation).
 #include "CNA/Internal/Backends/D3D9/D3D9GraphicsBackend.hpp"
 #include "CNA/Internal/Backends/Common/NotYetImplemented.hpp"
+#include "CNA/Internal/Backends/D3D9/D3D9Buffers.hpp"
 #include "CNA/Internal/Backends/D3D9/D3D9FormatMapping.hpp"
 #include "CNA/Internal/Backends/D3D9/D3D9StateMapping.hpp"
 
@@ -241,15 +242,30 @@ namespace CNA::Internal::Backends::D3D9
         presentationDirty_ = true;
     }
 
+    void D3D9GraphicsBackend::RegisterDefaultPoolResourceEXT(ID3D9DefaultPoolResourceEXT* resource)
+    {
+        defaultPoolResources_.push_back(resource);
+    }
+
+    void D3D9GraphicsBackend::UnregisterDefaultPoolResourceEXT(ID3D9DefaultPoolResourceEXT* resource)
+    {
+        std::erase(defaultPoolResources_, resource);
+    }
+
     void D3D9GraphicsBackend::PerformResetRecovery()
     {
         if (deviceEventCallback_) deviceEventCallback_(BackendDeviceEvent::Resetting);
 
         // D3DPOOL_MANAGED user resources (D9-4's own spike already confirmed these survive Reset()
-        // untouched, with no re-upload) need no action here. D3DPOOL_DEFAULT resources would need
-        // to be released before Reset() and recreated after -- none exist yet beyond the implicit
-        // swap chain/back buffer/depth-stencil surface, which Reset() itself recreates. A real
-        // D3DPOOL_DEFAULT resource type landing later (D9-4/D9-5) must hook into this method.
+        // untouched, with no re-upload) need no action here. D3DPOOL_DEFAULT resources (D9-40's
+        // dynamic vertex/index buffers) must be released before Reset() -- each one recreates its
+        // own object lazily the next time it is actually used (real XNA/D3D9 behavior: a DYNAMIC
+        // VertexBuffer's content does not survive DeviceReset; a game is expected to re-fill it).
+        for (ID3D9DefaultPoolResourceEXT* resource : defaultPoolResources_)
+        {
+            resource->ReleaseDefaultPoolResourceEXT();
+        }
+
         D3DPRESENT_PARAMETERS pp = BuildPresentParameters();
         HRESULT hr = device_->Reset(&pp);
         if (FAILED(hr))
@@ -493,14 +509,19 @@ namespace CNA::Internal::Backends::D3D9
         NotYetImplemented("D3D9", "SetDepthWriteEnabled (see plan_dx9.md D9-61/D9-82)");
     }
 
-    std::unique_ptr<IVertexBufferBackend> D3D9GraphicsBackend::CreateVertexBuffer(int)
+    std::unique_ptr<IVertexBufferBackend> D3D9GraphicsBackend::CreateVertexBuffer(int vertex_capacity)
     {
-        NotYetImplemented("D3D9", "CreateVertexBuffer (see plan_dx9.md D9-40)");
+        return std::make_unique<D3D9VertexBufferBackend>(*this, device_.Get(), vertex_capacity);
     }
 
-    std::unique_ptr<IIndexBufferBackend> D3D9GraphicsBackend::CreateIndexBuffer16(int)
+    std::unique_ptr<IIndexBufferBackend> D3D9GraphicsBackend::CreateIndexBuffer16(int index_capacity)
     {
-        NotYetImplemented("D3D9", "CreateIndexBuffer16 (see plan_dx9.md D9-41)");
+        return std::make_unique<D3D9IndexBufferBackend>(*this, device_.Get(), index_capacity, false);
+    }
+
+    std::unique_ptr<IIndexBufferBackend> D3D9GraphicsBackend::CreateIndexBuffer32(int index_capacity)
+    {
+        return std::make_unique<D3D9IndexBufferBackend>(*this, device_.Get(), index_capacity, true);
     }
 
     void D3D9GraphicsBackend::DrawColoredPrimitives(const IVertexBufferBackend&,

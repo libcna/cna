@@ -10,9 +10,12 @@
 // implicit swap chain (back buffer + optional depth-stencil) in the same call.
 
 #include "../Common/IGraphicsBackend.hpp"
+#include "D3D9DefaultPoolResourceEXT.hpp"
 
 #include <d3d9.h>
 #include <wrl/client.h>
+
+#include <vector>
 
 namespace CNA::Internal::Backends::D3D9
 {
@@ -25,14 +28,15 @@ namespace CNA::Internal::Backends::D3D9
      * project's stated goal of pixel-for-pixel indistinguishability from the original XNA 4.0
      * runtime, not mere feature parity.
      *
-     * Phase D9-3 (this revision): real device creation using the game's actual requested
-     * back-buffer/depth-stencil format, fullscreen flag, and swap interval (via the project
-     * owner-approved additive GraphicsBackendCreateArgs extension -- see plan_dx9.md's
-     * "IGraphicsBackend boundary problem" section) -- not D3D11's own hardcoded-format precedent,
-     * which is fine for D3D11 (parity, not authenticity) but would be a direct fidelity violation
-     * here. Clear()/all 6 Clear* combos/Present()/ReadBackbuffer() are real. Everything else
-     * (buffers, textures, draws, SpriteBatch) still throws NotYetImplemented() naming its own
-     * follow-up task.
+     * Phase D9-3 (device/present/device-lost) and D9-6 (render states) are fully closed: real
+     * device creation using the game's actual requested back-buffer/depth-stencil format,
+     * fullscreen flag, and swap interval (via the project owner-approved additive
+     * GraphicsBackendCreateArgs extension -- see plan_dx9.md's "IGraphicsBackend boundary problem"
+     * section) -- not D3D11's own hardcoded-format precedent, which is fine for D3D11 (parity, not
+     * authenticity) but would be a direct fidelity violation here. Clear()/all 6 Clear*
+     * combos/Present()/ReadBackbuffer()/resize/the real XNA device-lost lifecycle/render-state
+     * pushes are all real. Phase D9-4 (D3D9Buffers.hpp) adds real vertex/index buffers. Textures,
+     * draws, and SpriteBatch still throw NotYetImplemented() naming their own follow-up task.
      */
     class D3D9GraphicsBackend final : public IGraphicsBackend
     {
@@ -68,12 +72,18 @@ namespace CNA::Internal::Backends::D3D9
         void ClearColorDepthAndStencil(float r, float g, float b, float a, float depth, int stencil) override;
         void ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels) override;
 
+        // ---- IGraphicsBackend: real (Phase D9-4, D9-40/D9-41) ----
+        std::unique_ptr<IVertexBufferBackend> CreateVertexBuffer(int vertex_capacity) override;
+        std::unique_ptr<IIndexBufferBackend> CreateIndexBuffer16(int index_capacity) override;
+        // D9-41: explicitly overridden -- the IGraphicsBackend default silently delegates to
+        // CreateIndexBuffer16(), which would give a 32-bit index request a 16-bit buffer with no
+        // error (D3D11's own DX-31 caught this exact silent-default trap; do not repeat it here).
+        std::unique_ptr<IIndexBufferBackend> CreateIndexBuffer32(int index_capacity) override;
+
         // ---- IGraphicsBackend: pure virtual, NotYetImplemented until later D3D9 tasks land ----
         void SetDepthTestEnabled(bool enabled) override;
         void SetBlendEnabled(bool enabled) override;
         void SetDepthWriteEnabled(bool enabled) override;
-        std::unique_ptr<IVertexBufferBackend> CreateVertexBuffer(int vertex_capacity) override;
-        std::unique_ptr<IIndexBufferBackend> CreateIndexBuffer16(int index_capacity) override;
         void DrawColoredPrimitives(const IVertexBufferBackend& vb,
                                    const Matrix& world, const Matrix& view, const Matrix& projection,
                                    PrimitiveType primitive, int primitiveCount) override;
@@ -143,6 +153,14 @@ namespace CNA::Internal::Backends::D3D9
         /// diagnostics/tests). Mirrors GraphicsDevice::GraphicsDeviceStatus at the backend level.
         [[nodiscard]] bool IsDeviceLostEXT() const { return deviceLost_; }
 
+        /// D9-40: registers a live D3DPOOL_DEFAULT resource (a buffer, later a render target) so
+        /// PerformResetRecovery() can release it before Reset(). Raw, non-owning -- the resource
+        /// object's own lifetime is owned by its caller (VertexBuffer/IndexBuffer/...), not this
+        /// backend. NOXNA.
+        void RegisterDefaultPoolResourceEXT(ID3D9DefaultPoolResourceEXT* resource);
+        /// D9-40: unregisters a resource (called from its destructor). NOXNA.
+        void UnregisterDefaultPoolResourceEXT(ID3D9DefaultPoolResourceEXT* resource);
+
     private:
         void CreateDeviceResources(const GraphicsBackendCreateArgs& args);
         /// D9-33/D9-34: (re)builds currentPresentParams_ from the tracked width_/height_/format/
@@ -159,15 +177,15 @@ namespace CNA::Internal::Backends::D3D9
         /// D9-34: real XNA device-lost lifecycle. Called every Present() while deviceLost_ is true.
         /// Polls TestCooperativeLevel(): D3DERR_DEVICELOST -> still lost, do nothing more this
         /// frame; D3DERR_DEVICENOTRESET -> fire DeviceResetting, Reset(), restore the viewport,
-        /// fire DeviceReset, clear deviceLost_. D3DPOOL_DEFAULT resources would need to be released
-        /// before Reset() and recreated after -- none exist yet beyond the implicit swap chain/back
-        /// buffer/depth-stencil surface, which Reset() itself recreates; a real resource type
-        /// landing later (D9-4/D9-5) must hook into this method, not reinvent its own recovery path.
+        /// fire DeviceReset, clear deviceLost_.
         void PollDeviceLost();
-        /// D9-34: the actual Resetting->Reset()->Reset event sequence, shared by the real
+        /// D9-34/D9-40: the actual Resetting->Reset()->Reset event sequence, shared by the real
         /// TestCooperativeLevel()-driven path (PollDeviceLost()) and DebugRestoreContext()'s
         /// simulated one (which skips the TestCooperativeLevel wait since nothing really lost the
-        /// device -- Reset() itself is real either way).
+        /// device -- Reset() itself is real either way). Releases every registered
+        /// D3DPOOL_DEFAULT resource (defaultPoolResources_) before Reset() -- each one recreates
+        /// its own object lazily on next use, same real XNA/D3D9 behavior as a DYNAMIC
+        /// VertexBuffer needing its content re-filled after DeviceReset.
         void PerformResetRecovery();
         /// D9-34: throws Microsoft::Xna::Framework::Graphics::DeviceLostException if the device is
         /// currently lost -- called at the top of every rendering entry point (Clear/ClearX/
@@ -203,6 +221,9 @@ namespace CNA::Internal::Backends::D3D9
         /// D9-34: true from the moment Present() (or DebugSimulateContextLoss()) first detects/
         /// simulates a lost device, until PerformResetRecovery() completes successfully.
         bool deviceLost_ = false;
+        /// D9-40: every live D3DPOOL_DEFAULT resource (dynamic vertex/index buffers so far),
+        /// raw/non-owning -- see RegisterDefaultPoolResourceEXT()'s own doc comment.
+        std::vector<ID3D9DefaultPoolResourceEXT*> defaultPoolResources_;
 
         ComPtr<IDirect3D9> d3d9_;
         ComPtr<IDirect3DDevice9> device_;

@@ -39,6 +39,15 @@
 //   both report Lost; Clear() throws DeviceLostException while lost; DebugRestoreContext() fires
 //   DeviceResetting then DeviceReset (each exactly once) via a REAL Reset() call, status returns
 //   to Normal, and the device genuinely works again afterward (Clear()+readback exact).
+// Check N -- a real D3D9VertexBufferBackend round-trips known bytes (D9-40): SetData() through
+//   the public interface, then a direct Lock(READONLY) confirms the GPU buffer holds them exactly.
+// Check O -- same round-trip proof for a 16-bit AND a 32-bit D3D9IndexBufferBackend (D9-41),
+//   confirming CreateIndexBuffer32() creates a genuinely distinct D3DFMT_INDEX32 buffer rather
+//   than silently delegating to the 16-bit path (the trap D3D11's own DX-31 found).
+// Check P -- a device-lost/recover cycle genuinely releases and lazily recreates a registered
+//   D3DPOOL_DEFAULT vertex buffer's underlying COM object (D9-40's device-lost hook, proven for
+//   real, not just "didn't crash") -- matches real XNA/D3D9 behavior where a DYNAMIC buffer's
+//   content does not survive DeviceReset.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
@@ -53,11 +62,13 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDeviceStatus.hpp"
 
 #include "CNA/Internal/Backends/D3D9/D3D9GraphicsBackend.hpp"
+#include "CNA/Internal/Backends/D3D9/D3D9Buffers.hpp"
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 
 #include <SDL3/SDL.h>
 
 #include <cstdio>
+#include <cstring>
 #include <vector>
 
 using namespace Microsoft::Xna::Framework;
@@ -305,6 +316,105 @@ protected:
             check(postRecoveryPixels[0].getRProperty() == 6 && postRecoveryPixels[0].getGProperty() == 7 &&
                   postRecoveryPixels[0].getBProperty() == 8,
                   "D9-34: the device genuinely works again after recovery -- Clear()+readback exact");
+        }
+
+        // Check N (D9-40) -- a real D3D9VertexBufferBackend round-trips known bytes: SetData()
+        // through the public IVertexBufferBackend interface, then a direct Lock(READONLY) on the
+        // real IDirect3DVertexBuffer9 (test-only, bypassing the write-only public interface, which
+        // has no GetData()) confirms the GPU buffer holds the exact bytes -- a genuine write+
+        // readback, not just "SetData() didn't throw".
+        {
+            auto vb = backend.CreateVertexBuffer(3);
+            auto& d3d9Vb = static_cast<D3D9VertexBufferBackend&>(*vb);
+            const float knownData[9] = {1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 7.0f, 8.0f, 9.0f};
+            vb->SetData(knownData, 3, sizeof(float) * 3);
+
+            void* locked = nullptr;
+            HRESULT hr = d3d9Vb.GetBufferEXT()->Lock(0, sizeof(knownData), &locked, D3DLOCK_READONLY);
+            bool bytesMatch = false;
+            if (SUCCEEDED(hr))
+            {
+                bytesMatch = std::memcmp(locked, knownData, sizeof(knownData)) == 0;
+                d3d9Vb.GetBufferEXT()->Unlock();
+            }
+            check(vb->GetVertexCount() == 3 && bytesMatch,
+                  "D9-40: D3D9VertexBufferBackend::SetData() genuinely writes exact bytes to the GPU buffer");
+        }
+
+        // Check O (D9-41) -- same round-trip proof for both a 16-bit and a 32-bit
+        // D3D9IndexBufferBackend, via the explicitly-overridden CreateIndexBuffer32() (D3D11's own
+        // DX-31 caught the silent-16-bit-only-default trap this explicitly avoids).
+        {
+            auto ib16 = backend.CreateIndexBuffer16(4);
+            auto& d3d9Ib16 = static_cast<D3D9IndexBufferBackend&>(*ib16);
+            const uint16_t indices16[4] = {0, 1, 2, 3};
+            ib16->SetData16(indices16, 4);
+
+            void* locked16 = nullptr;
+            HRESULT hr16 = d3d9Ib16.GetBufferEXT()->Lock(0, sizeof(indices16), &locked16, D3DLOCK_READONLY);
+            bool bytes16Match = false;
+            if (SUCCEEDED(hr16))
+            {
+                bytes16Match = std::memcmp(locked16, indices16, sizeof(indices16)) == 0;
+                d3d9Ib16.GetBufferEXT()->Unlock();
+            }
+            check(!ib16->IsThirtyTwoBit() && d3d9Ib16.GetFormatEXT() == D3DFMT_INDEX16 &&
+                  ib16->GetIndexCount() == 4 && bytes16Match,
+                  "D9-41: a 16-bit D3D9IndexBufferBackend genuinely writes exact bytes (D3DFMT_INDEX16)");
+
+            auto ib32 = backend.CreateIndexBuffer32(4);
+            auto& d3d9Ib32 = static_cast<D3D9IndexBufferBackend&>(*ib32);
+            const uint32_t indices32[4] = {100, 200, 300, 400};
+            ib32->SetData32(indices32, 4);
+
+            void* locked32 = nullptr;
+            HRESULT hr32 = d3d9Ib32.GetBufferEXT()->Lock(0, sizeof(indices32), &locked32, D3DLOCK_READONLY);
+            bool bytes32Match = false;
+            if (SUCCEEDED(hr32))
+            {
+                bytes32Match = std::memcmp(locked32, indices32, sizeof(indices32)) == 0;
+                d3d9Ib32.GetBufferEXT()->Unlock();
+            }
+            check(ib32->IsThirtyTwoBit() && d3d9Ib32.GetFormatEXT() == D3DFMT_INDEX32 &&
+                  ib32->GetIndexCount() == 4 && bytes32Match,
+                  "D9-41: CreateIndexBuffer32() genuinely creates a distinct 32-bit buffer (D3DFMT_INDEX32), "
+                  "not silently delegating to the 16-bit path");
+        }
+
+        // Check P (D9-40/D9-34) -- a device-lost/recover cycle genuinely releases and recreates a
+        // registered D3DPOOL_DEFAULT vertex buffer's underlying COM object (proves
+        // RegisterDefaultPoolResourceEXT()/ReleaseDefaultPoolResourceEXT() actually work, not just
+        // "didn't crash") -- real XNA/D3D9 behavior: a DYNAMIC buffer's content does not survive
+        // DeviceReset, so the caller is expected to SetData() again afterward, which this does.
+        {
+            auto vb = backend.CreateVertexBuffer(1);
+            auto& d3d9Vb = static_cast<D3D9VertexBufferBackend&>(*vb);
+            const float before[3] = {11.0f, 22.0f, 33.0f};
+            vb->SetData(before, 1, sizeof(before));
+
+            backend.DebugSimulateContextLoss();
+            backend.DebugRestoreContext();
+
+            check(d3d9Vb.GetBufferEXT() == nullptr,
+                  "D9-40: ReleaseDefaultPoolResourceEXT() genuinely released the buffer across Reset() "
+                  "(GetBufferEXT() is null until the next SetData(), not a stale pointer)");
+
+            // NOTE: comparing the pre-/post-recovery IDirect3DVertexBuffer9* for inequality is NOT
+            // sound proof of recreation -- a freed COM object's address can legitimately be reused
+            // by the very next allocation (this project's own D9-109/D9-110-equivalent D3D12 task
+            // found the identical false-negative trap). The real, functional proof is: the pointer
+            // was genuinely null after release (checked above), and the buffer genuinely holds the
+            // NEW data afterward (checked below) -- both are actual behavior, not address bookkeeping.
+            const float after[3] = {44.0f, 55.0f, 66.0f};
+            vb->SetData(after, 1, sizeof(after));
+            check(d3d9Vb.GetBufferEXT() != nullptr,
+                  "D9-40: SetData() after recovery lazily recreates a real D3D9 buffer object");
+
+            void* locked = nullptr;
+            HRESULT hr = d3d9Vb.GetBufferEXT()->Lock(0, sizeof(after), &locked, D3DLOCK_READONLY);
+            bool matches = SUCCEEDED(hr) && std::memcmp(locked, after, sizeof(after)) == 0;
+            if (SUCCEEDED(hr)) d3d9Vb.GetBufferEXT()->Unlock();
+            check(matches, "D9-40: the recreated buffer genuinely holds the post-recovery data");
         }
 
         std::printf("=== %d/%d PASS (main Game checks) ===\n", passCount, totalCount);
