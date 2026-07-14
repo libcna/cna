@@ -21,14 +21,16 @@
 > blend/depth-stencil/rasterizer state (PSOs hardcode `depthEnable=false`/`cullMode=None`), per-slot
 > `SamplerState` (samplers are hardcoded static WRAP/linear), occlusion queries, and a custom
 > `ShaderEffect`/`SpriteBatch`-custom-effect path — all real, scoped, honestly-documented follow-up
-> work, not silently dropped. **Phase DX13 (D3D12 functional completion) and Phase DX14 (D3D11
-> verification hardening) were added 2026-07-14, recording exactly this — neither is authorized for
-> implementation yet**, pending an explicit project-owner go-ahead, same discipline every phase before
-> them used. See the dedicated milestone paragraphs below (search "also closed") for each phase's own
-> real proof, or jump straight to `docs/d3d11-backend.md`/`docs/d3d12-backend.md` for the current-state
-> summaries and `docs/graphics-backend-feature-matrix.md` for the full row-by-row comparison. **With
-> `DX-114` the only open, needs_human task from Phase DX1–DX12, and Phase DX13/DX14 both unauthorized,
-> there is no further available Debian-side work on this plan barring new instructions.** Full
+> work, not silently dropped. **Phase DX13 (D3D12 functional completion), Phase DX14 (D3D11
+> verification hardening), and Phase DX15 (remaining EasyGL-parity gaps, a full feature-matrix sweep
+> covering both backends) were added 2026-07-14, recording exactly this — none of the three is
+> authorized for implementation yet**, pending an explicit project-owner go-ahead, same discipline
+> every phase before them used. See the dedicated milestone paragraphs below (search "also closed")
+> for each phase's own real proof, or jump straight to `docs/d3d11-backend.md`/`docs/d3d12-backend.md`
+> for the current-state summaries and `docs/graphics-backend-feature-matrix.md` for the full
+> row-by-row comparison. **With `DX-114` the only open, needs_human task from Phase DX1–DX12, and
+> Phase DX13/DX14/DX15 all unauthorized, there is no further available Debian-side work on this plan
+> barring new instructions.** Full
 > phase-by-phase history follows below. `DX-100`'s own real
 > spike (2026-07-14) found the D3D12 device/queue/fence/
 > command-list path genuinely works locally via Wine+vkd3d-proton (DXR 1.1/SM 6.8 negotiated, more
@@ -1238,6 +1240,42 @@ functionality.
 | DX-128 | `Model`/`ModelMesh`/`ModelMeshPart`/`ModelBone` D3D11-specific runtime-API test — not separately exercised against this backend this session | ⬜ | |
 | DX-129 | `RenderTargetCube` dedicated pixel test — currently only construction is proven real; `RenderTarget2D` has the full bind+clear+readback+unbind-restores-backbuffer proof, `RenderTargetCube` doesn't yet | ⬜ | |
 | DX-130 | The 5 combo `Clear*` variants (`ClearColorAndDepth`/`ClearDepth`/`ClearStencil`/`ClearDepthAndStencil`/`ClearColorAndStencil`/`ClearColorDepthAndStencil`) dedicated round-trip pixel test — real `ClearDepthStencilView` calls exist and are implemented identically to the proven plain `Clear(r,g,b,a)` path, but only plain `Clear` has a dedicated pixel test (`DX-25`'s own long-standing honest gap) | ⬜ | |
+
+---
+
+## Phase DX15 — Remaining EasyGL-parity gaps (both backends, found via a full feature-matrix sweep)
+
+**Also not authorized for implementation yet, same discipline as Phases DX13/DX14.** Per the project
+owner's explicit 2026-07-14 request ("add tasks if they don't already exist — the goal is for the
+DX backends to do as much as possible like the EasyGL backend"), this phase is the result of walking
+`docs/graphics-backend-feature-matrix.md` row by row against `DX-116`–`DX-130` and recording every
+genuine EasyGL-parity gap neither phase already covers — some rows need a D3D11 leg, a D3D12 leg, or
+both, noted per row. Rows that are pre-existing gaps on EasyGL *itself* (e.g. `DualTextureEffect
+VertexColorEnabled`, Task 889; non-`Color` `SurfaceFormat` for real GPU data, `⛔` Task 732) are
+deliberately excluded — matching a backend that doesn't have the feature either isn't a parity gap.
+Several rows explicitly depend on an earlier phase landing first (noted inline) — do not attempt
+those before their prerequisite.
+
+| # | Task | Status | Notes |
+|---|---|---|---|
+| DX-131 | `SpriteBatch` full `Draw` overload set — rotation/scale/origin/crop-rect/`SpriteSortMode` — dedicated pixel test, both D3D11 and D3D12 | ⬜ | Both backends currently only pixel-verify destination-rect placement and `SpriteEffects::FlipHorizontally` (`DX-70`/`DX-112`'s own checks); the underlying quad-building formula was built to mirror `EasyGLSpriteBatchBackend`'s exact math, but rotation/scale/crop/sort-mode were never independently proven correct against either backend. |
+| DX-132 | `SpriteFont` D3D12-specific glyph placement/spacing/newline/flip test | ⬜ | D3D11's own equivalent is `DX-127`; D3D12 has no dedicated `SpriteFont` coverage at all yet. |
+| DX-133 | Wire `D3D12SpriteBatchBackend`'s `SetSamplerFilter`/`SetSamplerAddressMode` (currently stored but not behaviorally real, per `DX-112`'s own honest gap note) to `DX-119`'s real per-slot `SamplerState` system once it lands, then add the `TextureAddressMode::Wrap`/`Mirror`-via-`SpriteBatch` pixel test D3D11 already has (`DX-72`) | ⬜ | **Depends on `DX-119` landing first.** Currently every D3D12 sprite draw uses the one fixed LINEAR/`WRAP` static sampler regardless of what the game's `SamplerState` requests. |
+| DX-134 | `EnvironmentMapEffect` base-lerp alpha scaling (`FresnelFactor`/`EnvironmentMapAmount`-driven blend between the base and reflected color) — dedicated pixel test, both D3D11 and D3D12; first confirm whether the HLSL even implements this term (`env_map3d.frag.hlsl`) before assuming it's just untested | ⬜ | EasyGL/Vulkan/Bgfx all fixed a real bug here (Task 891) — neither DX backend has been checked against this specific behavior at all yet, unlike the Fresnel/reflection math itself (`DX-66`/`DX-111`, already real and tested). |
+| DX-135 | `SkinnedEffect.WeightsPerVertex` (1/2/4-weight GPU blending) discriminating per-weight-count pixel test, both D3D11 and D3D12 | ⬜ | EasyGL/Vulkan/Bgfx all fixed a real bug here (Task 895); both DX backends have the field wired (`DX-67`/`DX-111`) but no test proves each weight count actually blends correctly rather than, say, silently always behaving as if `WeightsPerVertex=4`. |
+| DX-136 | `AlphaTestEffect.VertexColorEnabled` dedicated pixel test, both D3D11 and D3D12 | ⬜ | EasyGL has this working; neither DX backend's `alpha_test3d` path (`DX-64`/`DX-111`) has been independently checked for whether vertex color correctly combines with the alpha-test discard. |
+| DX-137 | Dedicated fog on/off discriminating pixel test for the remaining fog-capable variants beyond `colored3d` (`textured3d`/`colored_textured3d`/`lit_textured3d`/`alpha_test3d`/`dual_texture3d`/`env_map3d`/`skinned3d`), both D3D11 and D3D12 | ⬜ | `DX-69`/`DX-113`'s own audits both found and closed this gap only for the `colored3d` bundle (Check AC on D3D11, Check V on D3D12) — the fog constant buffer is wired for every listed variant per `DX-69`'s row, but only one variant's wiring is independently proven correct on either backend. |
+| DX-138 | Multi-light (`DirectionalLight1`/`2`) + `EmissiveColor` discriminating pixel test for D3D12's shared `D3DLightingConstants` path (`BasicEffect`/`EnvironmentMapEffect`/`SkinnedEffect`) | ⬜ | D3D12 counterpart to `DX-124` (D3D11) — same gap, other backend. |
+| DX-139 | Specular-highlight (`SpecularColor`/`SpecularPower`) pixel test for D3D12 | ⬜ | D3D12 counterpart to `DX-125` (D3D11) — same CPU-determinism-driven zeroing gap, other backend. |
+| DX-140 | `Texture2D.FromStream`/`SaveAsPng`/NPOT (non-power-of-2) dedicated pixel test, both D3D11 and D3D12 | ⬜ | `SetData`/`GetData` are already real and byte-exact-verified (`DX-40`/`DX-109`) on both backends; these 3 related capabilities have never been separately exercised against either. |
+| DX-141 | Mip level > 0 `SetData`/sampling dedicated pixel test for D3D12 | ⬜ | D3D12 counterpart to `DX-126` (D3D11) — `D3D12TextureBackend`'s subresource-index math (`DX-109`) already generalizes to mip level > 0, but nothing has exercised that path yet. |
+| DX-142 | Per-slot `SamplerState` — all-16-slots-simultaneously dedicated test for D3D11 | ⬜ | `D3D11SamplerCache` (`DX-44`) is real and has an identity/distinctness proof, but no test has bound and exercised all 16 texture-sampler slots at once — a plausible place for an off-by-one or cache-eviction bug to hide. |
+| DX-143 | Multi-target (`N > 1`) MRT per-target MSAA-resolve/mip-regeneration-on-unbind for D3D11 | ⬜ | `DX-46`'s own honest scope note: this path is only wired for the single-target case today; a game binding 2+ MSAA render targets as MRT and then unbinding would not get the same per-target resolve/mip-regen behavior a single-target bind/unbind gets. |
+| DX-144 | `RenderTarget2D`/`RenderTargetCube` mip-chain generation/sampling dedicated pixel test, both D3D11 and D3D12 | ⬜ | **D3D12 leg depends on `DX-117` landing first** (no render-target backend exists yet). Neither backend has proven a render target's own mip chain (as opposed to a plain `Texture2D`'s, covered separately by `DX-126`/`DX-141`) actually generates/samples correctly. |
+| DX-145 | Per-instance `RenderTarget2D`/`RenderTargetCube` `DepthStencilFormat` fidelity dedicated test, both D3D11 and D3D12 | ⬜ | **D3D12 leg depends on `DX-117` landing first.** Confirms a render target actually gets the specific depth/stencil format a game requested, not just *some* working depth buffer. |
+| DX-146 | `Clear` honoring `ClearOptions::Stencil` — dedicated test for D3D12 | ⬜ | **Depends on `DX-117` landing first** (no DSV is bound in any current D3D12 off-screen test). D3D11's own equivalent is `DX-130`. |
+| DX-147 | `OcclusionQuery` both-directions (visible vs. occluded) discriminating pixel/query-correctness test, D3D11 now, D3D12 once `DX-120` lands | ⬜ | EasyGL/Vulkan both independently verify both directions (Tasks 445/446/854); D3D11's own occlusion query (`DX-47`) only has "a real completing query verified," not a confirmed visible-vs-occluded discriminating result. |
+| DX-148 | `Model`/`ModelMesh`/`ModelMeshPart`/`ModelBone` D3D12-specific runtime-API test | ⬜ | D3D12 counterpart to `DX-128` (D3D11) — same gap, other backend. |
 
 ---
 
