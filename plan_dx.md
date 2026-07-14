@@ -1087,6 +1087,99 @@ this phase without re-verifying it.
 
 ---
 
+## Current known limitations — D3D11/D3D12 vs. EasyGL parity, and why some things don't run here
+(recorded 2026-07-14, consolidating what was previously scattered across individual task Notes and
+`docs/graphics-backend-feature-matrix.md`, so it's answerable from this one file without cross-
+referencing dozens of rows)
+
+**Neither D3D11 nor D3D12 is at EasyGL parity.** D3D11 is close; D3D12 is meaningfully behind — not
+just "less tested," but missing entire subsystems. Both share one blanket caveat on top of
+everything below: **every check on both backends was run through Wine (DXVK for D3D11,
+vkd3d-proton for D3D12) on this Debian machine's real GPU, never on real Windows** — `DX-90`/`DX-91`
+(D3D11) and `DX-114` (D3D12) are the actual completion gates, both `needs_human`, and nothing below
+changes that.
+
+### D3D11 — close to EasyGL, real gaps are "implemented but not independently verified," not missing code
+
+- Core pipeline (all 10 stock shader variants), `SpriteBatch`, custom `Effect`, all 3 state-object
+  types (blend/depth-stencil/rasterizer), MRT, MSAA, occlusion query — all real, pixel-verified.
+- `DirectionalLight1`/`2`, `EmissiveColor`, and real specular highlights (`SpecularColor`/`Power`)
+  are wired into the HLSL/`D3DLightingConstants` but not independently pixel-tested (the lit-pixel
+  test zeroes specular for CPU-comparison determinism, and only proves single-light lit-vs-unlit
+  differs, not a discriminating multi-light case).
+- Mip levels > 0, `SpriteFont`, `Model`/content-pipeline loading, `RenderTargetCube` (vs. the more
+  thoroughly tested `RenderTarget2D`), and per-instance `DepthStencilFormat` fidelity are not
+  separately tested against this backend at all.
+- `DX-21` (debug-layer-missing fallback) and `DX-27` (device-removed *trigger*, as opposed to the
+  real, tested *recovery* logic) are implemented but never independently exercised — **this machine's
+  Wine+DXVK setup always satisfies the debug-layer request and never triggers a real device
+  removal**, so these specific branches are honest, environment-limited gaps, not missing code. Only
+  `DX-90` on real Windows can actually exercise them.
+
+### D3D12 — structurally narrower than D3D11, not just less-tested
+
+- All 10 stock shader variants + `SpriteBatch` are real and pixel-verified **off-screen only** (see
+  swap-chain section below).
+- **No `D3D12RenderTargetBackend` exists at all.** Off-screen draws go through a minimal,
+  test-only `BindOffscreenColorTargetEXT()` helper, not a real `IRenderTargetBackend`. The actual
+  XNA `RenderTarget2D`/`RenderTargetCube`/MRT API does not work against this backend yet.
+- **No state-object system exists.** D3D12 bakes blend/depth-stencil/rasterizer state into each PSO
+  description rather than exposing separate runtime-settable objects; every PSO in this backend
+  currently hardcodes `depthEnable=false`/`cullMode=None`. There is no `BlendState`/
+  `DepthStencilState`/`RasterizerState` → PSO-desc-key mapping — `DX-113`'s own audit confirmed this
+  is a genuinely unstarted future task, not a coverage gap in an existing one.
+- **No per-slot `SamplerState` system.** Samplers are a single hardcoded static
+  `D3D12_FILTER_MIN_MAG_MIP_LINEAR`+`WRAP` descriptor baked into the root signature
+  (`D3D12RootSignatureCache::MakeDefaultStaticSampler`) — not driven by XNA `SamplerState` at all.
+- **No occlusion query support** — `CreateOcclusionQuery()` falls through to `IGraphicsBackend`'s
+  own silent `nullptr` default; Phase DX12's task list has no `ID3D12Query`-based task at all yet.
+- **No custom `ShaderEffect`** (no D3D12 equivalent of `D3D11EffectBackend`'s runtime
+  `D3DCompile()` path) and **no custom `Effect` via `SpriteBatch::Begin(effect)`** (D3D11's own
+  `DX-71`) — `D3D12SpriteBatchBackend` only draws through the stock `sprite2d` pipeline.
+- **No `Texture3D` backend at all** (explicitly triaged out, `DX-109`); `TextureCube` has real
+  `SetData()` (needed by `env_map3d`) but `GetData()` is left at the interface's silent no-op
+  default — narrower than D3D11's real cube-texture readback.
+- Fog is dedicated-tested only for the `colored3d` bundle (Check V) — narrower than D3D11, where the
+  same gap was found and closed for `colored3d` specifically but the other 7 fog-capable variants'
+  fog-constant-buffer wiring is not independently confirmed on either backend.
+
+### Why the D3D12 swap chain doesn't run here — root cause, confirmed NOT a CNA bug
+
+Every D3D12 draw/resource/pipeline check in this plan runs **off-screen**, because
+`CreateSwapChainForHwnd` genuinely cannot be made to work on this specific machine's Wine setup.
+This was investigated twice (`DX-100`'s original spike, `DX-102`'s later attempt through the real
+production code path) with concrete, reproducible evidence, not a guess:
+
+1. `D3D12CreateDevice`, `ID3D12CommandQueue`, descriptor heaps, command lists, and fences all work
+   correctly through Wine + vkd3d-proton (v3.1.0, sourced from this machine's Steam "Proton -
+   Experimental" install, run in a dedicated `~/.wine-cna-d3d12` prefix) — real feature level 12_1,
+   DXR 1.1, and Shader Model 6.8 negotiated against the real GPU (AMD Radeon 780M/RADV). This proves
+   the *device* itself is fine; the failure is specific to presentation.
+2. `CreateSwapChainForHwnd` with `DXGI_SWAP_EFFECT_FLIP_DISCARD` crashes with a genuine page fault.
+   A live WineDbg attach produced a full, symbolized backtrace: a null-pointer read inside Wine's
+   own `dxgi.dll`, specifically `vkd3d_instance_get_vk_instance(instance=0000000000000000)`, called
+   from `d3d12_swapchain_init` (`dlls/dxgi/swapchain.c:3287`). Plain `DXGI_SWAP_EFFECT_DISCARD`
+   fails cleanly instead of crashing (`DXGI_ERROR_INVALID_CALL`), which is a useful secondary data
+   point: the failure is specific to handing a D3D12 command queue through the swap-chain path, not
+   DXGI/device creation in general.
+3. **Root cause**: this machine's *system* Wine install has vkd3d-proton's `d3d12.dll` (and
+   `d3d12core.dll`) manually dropped into a hand-built prefix — but its `dxgi.dll` is still Wine's
+   own vanilla, unmodified one. Wine's own `dxgi.dll` expects to hand off to Wine's own built-in
+   `winevkd3d` instance state when a D3D12 device is involved; vkd3d-proton's separately-overridden
+   `d3d12.dll` never populates that shared state, because a *real* Proton runtime always overrides
+   **both** `d3d12.dll` and `dxgi.dll` together as a matched pair (plus running through Proton's own
+   patched Wine fork, not the system one). This machine's setup only replicated one half of that
+   pair. **This is an environment/tooling integration gap, not a defect in CNA's own D3D12 code** —
+   the same device/queue/command-list/fence/resource code that works perfectly off-screen would very
+   plausibly also drive a real swap chain correctly on real Windows (or a properly Proton-managed
+   environment); nothing in the crash backtrace touches any CNA-authored code path.
+4. A follow-up investigation (this same day) is attempting a full, correctly-launched Proton runtime
+   (not just its `wine` binary in isolation) to test whether that closes the gap without needing real
+   Windows hardware at all — see this row's own Notes for the outcome once that lands, and update
+   this section if the result changes the picture above.
+
+---
+
 ## Boundaries (stop and ask, don't improvise)
 
 - **Do not start any task in this plan without the project owner's explicit go-ahead** — the whole
