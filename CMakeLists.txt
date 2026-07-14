@@ -325,9 +325,10 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "D3D11")
 elseif(CNA_GRAPHICS_BACKEND STREQUAL "D3D12")
     # plan_dx.md DX-100/DX-101: d3d12+dxgi alone was confirmed sufficient for device/queue/
     # command-list creation by DX-100's own spike -- start from that minimum, same discipline as
-    # DX-12/design decision 3. dxguid/d3dcompiler are deliberately NOT linked yet; add them only
-    # if a later Phase DX12 task's own real build genuinely fails to link without them.
-    target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 d3d12 dxgi cna_backend_graphics_d3dcommon)
+    # DX-12/design decision 3. dxguid is deliberately NOT linked (still unneeded). d3dcompiler was
+    # added by DX-121 (D3D12EffectBackend's runtime D3DCompile() path) -- confirmed safe to link in
+    # isolation by D3D11's own DX-14-compile/DX-58 precedent.
+    target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 d3d12 dxgi d3dcompiler cna_backend_graphics_d3dcommon)
 endif()
 
 file(GLOB_RECURSE CNA_SOURCES CONFIGURE_DEPENDS

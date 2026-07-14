@@ -302,15 +302,22 @@ geometry. **A real, non-obvious bug was found and fixed while landing this**: `B
 `EndQuery` must share one command-list submission with the draw(s) they bracket (a Vulkan/
 vkd3d-proton constraint), which this backend's own per-draw-call self-submission architecture
 didn't satisfy — fixed via a new `D3D12GraphicsBackend::SetActiveOcclusionQueryEXT()` that every
-draw-recording method now checks and brackets its own recording with. `D3D12_Smoke` CTest
-(off-screen only): **114/114 checks**, all 10/10 stock shader variants + `SpriteBatch` +
-device-removed recovery + render targets/MRT + real state objects + real per-slot samplers + real
-occlusion queries. D3D12 still genuinely lacks (real, scoped, documented, not silently dropped —
-see `docs/d3d12-backend.md`'s "Known limitations" and `plan_dx.md`'s Phase DX13): MSAA/mip-chain
-render targets, `Texture3D`, and custom `Effect` via `SpriteBatch::Begin(effect)`
+draw-recording method now checks and brackets its own recording with. **`DX-121`
+(`D3D12EffectBackend`) is also closed**: real runtime `D3DCompile()` builds a real PSO+constant
+buffer, pixel-verified with the exact expected color, plus a real broken-HLSL compile-failure
+check. `D3D12SpriteBatchBackend`'s own `SpriteBatch::Begin(effect)` wiring was implemented for
+real too (reusing the same shared root signature), but is honestly **not** independently
+CTest-proven — it needs a real `GraphicsDevice`, whose constructor unconditionally creates a real
+window for any non-Headless/Software backend, the same crash-prone path `DX-100`/`DX-102` already
+found for D3D12 outside a Proton-managed launch (confirmed by reading `GraphicsDevice.cpp`
+directly). `D3D12_Smoke` CTest (off-screen only): **119/119 checks**, all 10/10 stock shader
+variants + `SpriteBatch` + device-removed recovery + render targets/MRT + real state objects + real
+per-slot samplers + real occlusion queries + real custom `ShaderEffect`. D3D12 still genuinely lacks
+(real, scoped, documented, not silently dropped — see `docs/d3d12-backend.md`'s "Known limitations"
+and `plan_dx.md`'s Phase DX13): MSAA/mip-chain render targets and `Texture3D`
 (`D3D12SpriteBatchBackend`'s own `SetSamplerFilter`/`SetSamplerAddressMode` wiring to the new
 sampler system is `DX-133`, now unblocked). **Phase DX13 (D3D12 functional completion,
-`DX-116`–`DX-120` closed, `DX-121`–`DX-123` open), Phase DX14 (D3D11 verification hardening), and
+`DX-116`–`DX-121` closed, `DX-122`–`DX-123` open), Phase DX14 (D3D11 verification hardening), and
 Phase DX15 (remaining EasyGL-parity gaps) were added 2026-07-14 and are
 now authorized and actively in progress** — see
 `plan_dx.md` for the full task list and ordering rationale. Outside the D3D plan, the standing

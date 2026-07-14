@@ -8,6 +8,7 @@
 #include "CNA/Internal/Backends/D3D12/D3D12RenderTargets.hpp"
 #include "CNA/Internal/Backends/D3D12/D3D12SpriteBatch.hpp"
 #include "CNA/Internal/Backends/D3D12/D3D12OcclusionQuery.hpp"
+#include "CNA/Internal/Backends/D3D12/D3D12EffectBackend.hpp"
 #include "CNA/Internal/Backends/D3DCommon/D3DConstantBuffers.hpp"
 
 #include <SDL3/SDL.h>
@@ -992,6 +993,15 @@ namespace CNA::Internal::Backends::D3D12
     std::unique_ptr<IOcclusionQueryBackend> D3D12GraphicsBackend::CreateOcclusionQuery()
     {
         return std::make_unique<D3D12OcclusionQueryBackend>(this);
+    }
+
+    std::unique_ptr<IEffectBackend> D3D12GraphicsBackend::CreateEffectBackend(
+        const std::string& vertSrc, const std::string& fragSrc)
+    {
+        auto backend = std::make_unique<D3D12EffectBackend>(this);
+        if (!vertSrc.empty() && !fragSrc.empty())
+            backend->CompileProgram(vertSrc, fragSrc);
+        return backend;
     }
 
     void D3D12GraphicsBackend::ClearColorAndDepth(float, float, float, float, float) { NotYetImplemented("ClearColorAndDepth"); }

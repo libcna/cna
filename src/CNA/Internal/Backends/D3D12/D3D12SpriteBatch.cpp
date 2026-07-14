@@ -2,6 +2,7 @@
 #include "CNA/Internal/Backends/D3D12/D3D12SpriteBatch.hpp"
 #include "CNA/Internal/Backends/D3D12/D3D12GraphicsBackend.hpp"
 #include "CNA/Internal/Backends/D3D12/D3D12Textures.hpp"
+#include "CNA/Internal/Backends/D3D12/D3D12EffectBackend.hpp"
 #include "CNA/Internal/Backends/D3DCommon/D3DShaderCache.hpp"
 #include "CNA/Internal/Backends/D3DCommon/D3DConstantBuffers.hpp"
 
@@ -191,15 +192,6 @@ namespace CNA::Internal::Backends::D3D12
     {
         if (pendingVertices_.empty()) return;
 
-        if (customEffect_)
-        {
-            throw std::runtime_error(
-                "D3D12SpriteBatchBackend::FlushBatch: SpriteBatch::Begin(effect) with a custom Effect "
-                "is not yet implemented for D3D12 (plan_dx.md DX-112 follow-up -- no D3D12 equivalent "
-                "of D3D11EffectBackend/DX-58 exists yet; the stock sprite2d path is real and used "
-                "whenever no custom Effect is set)");
-        }
-
         if (!owner_->HasBoundColorTargetEXT())
         {
             throw std::runtime_error(
@@ -214,13 +206,41 @@ namespace CNA::Internal::Backends::D3D12
         auto rootSig = owner_->GetRootSignatureCacheEXT().GetOrCreate(device_.Get(), /*numCbvs=*/1, /*numSrvs=*/1, /*numSamplers=*/1);
         if (!rootSig)
             throw std::runtime_error("D3D12SpriteBatchBackend: failed to create sprite2d root signature");
-        ID3D12PipelineState* pso = GetOrCreateSprite2DPso(rootSig.Get());
 
-        D3DSprite2DConstants c{};
-        c.ViewportSize[0] = static_cast<float>(vpW);
-        c.ViewportSize[1] = static_cast<float>(vpH);
-        ID3D12Resource* cb = GetOrCreatePerDrawConstantBuffer();
-        std::memcpy(perDrawConstantBufferMapped_, &c, sizeof(c));
+        // DX-121: a valid custom Effect (SpriteBatch::Begin(effect)) draws through its own
+        // real, compiled PSO+constant-buffer instead of the stock sprite2d pipeline -- both share
+        // the exact same (1,1,1) root signature above (D3D12RootSignatureCache caches by shape),
+        // so every root-signature-relative binding below (CBV@0/SRV table@1/sampler table@2) stays
+        // correct regardless of which path supplied pso/cb.
+        D3D12EffectBackend* customBackend = nullptr;
+        if (customEffect_)
+            customBackend = dynamic_cast<D3D12EffectBackend*>(customEffect_->GetEffectBackendPtr());
+
+        ID3D12PipelineState* pso = nullptr;
+        ID3D12Resource* cb = nullptr;
+
+        if (customBackend && customBackend->IsValid())
+        {
+            // DX-121: vpSize is set here, once per flush, mirroring D3D11EffectBackend's own
+            // "set automatically by the sprite-batch runtime" convention -- the game/effect
+            // author never calls SetViewportSizeEXT() itself.
+            customBackend->SetViewportSizeEXT(static_cast<float>(vpW), static_cast<float>(vpH));
+            customEffect_->Apply();
+            customBackend->Bind();
+            pso = customBackend->GetPipelineStateEXT();
+            cb = customBackend->GetConstantBufferEXT();
+            if (!pso || !cb)
+                throw std::runtime_error("D3D12SpriteBatchBackend: custom Effect's D3D12EffectBackend is not valid");
+        }
+        else
+        {
+            pso = GetOrCreateSprite2DPso(rootSig.Get());
+            D3DSprite2DConstants c{};
+            c.ViewportSize[0] = static_cast<float>(vpW);
+            c.ViewportSize[1] = static_cast<float>(vpH);
+            cb = GetOrCreatePerDrawConstantBuffer();
+            std::memcpy(perDrawConstantBufferMapped_, &c, sizeof(c));
+        }
 
         vb_.SetData(pendingVertices_.data(), static_cast<int>(pendingVertices_.size()), sizeof(Sprite2DVertex));
         ib_.SetData16(pendingIndices_.data(), static_cast<int>(pendingIndices_.size()));

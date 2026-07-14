@@ -85,6 +85,12 @@ namespace CNA::Internal::Backends::D3D12
         std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() override;
         /// DX-120: real D3D12OcclusionQueryBackend, no longer the inherited default (-> nullptr).
         std::unique_ptr<IOcclusionQueryBackend> CreateOcclusionQuery() override;
+        /// DX-121: real D3D12EffectBackend, no longer the inherited default (-> nullptr). Mirrors
+        /// D3D11GraphicsBackend::CreateEffectBackend's own convention: if both sources are
+        /// non-empty, compiles immediately and returns the backend regardless of compile success
+        /// (the caller checks IsValid()/GetCompileError()).
+        std::unique_ptr<IEffectBackend> CreateEffectBackend(const std::string& vertSrc,
+                                                             const std::string& fragSrc) override;
 
         /// DX-117: real D3D12RenderTargetBackend, no longer the inherited default (-> nullptr).
         std::unique_ptr<IRenderTargetBackend> CreateRenderTarget2D(int w, int h, int depthFormat,

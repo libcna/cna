@@ -107,6 +107,7 @@
 #include "CNA/Internal/Backends/D3D12/D3D12Textures.hpp"
 #include "CNA/Internal/Backends/D3D12/D3D12TextureCube.hpp"
 #include "CNA/Internal/Backends/D3D12/D3D12RenderTargets.hpp"
+#include "CNA/Internal/Backends/D3D12/D3D12EffectBackend.hpp"
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "CNA/Internal/Graphics/ImageData.hpp"
 
@@ -128,6 +129,7 @@ using CNA::Internal::Backends::D3D12::D3D12TextureBackend;
 using CNA::Internal::Backends::D3D12::D3D12TextureCubeBackend;
 using CNA::Internal::Backends::D3D12::D3D12RenderTargetBackend;
 using CNA::Internal::Backends::D3D12::D3D12RenderTargetCubeBackend;
+using CNA::Internal::Backends::D3D12::D3D12EffectBackend;
 using CNA::Internal::Backends::IRenderTargetBackend;
 using CNA::Internal::Backends::D3DCommon::D3DShaderVariant;
 using CNA::Internal::Graphics::ImageData;
@@ -377,6 +379,19 @@ namespace
 //   around geometry placed entirely outside the clip volume (so nothing is rasterized at all),
 //   reports PixelCount() == 0 -- a genuine visible-vs-invisible discriminating result, not just
 //   "the query completed" (closes Phase DX15's own DX-147 D3D12 half).
+
+// plan_dx.md DX-121 adds:
+// Check BB -- D3D12EffectBackend: runtime D3DCompile() of arbitrary HLSL source (not one of
+//   DX-13-hlsl's offline-compiled stock variants) builds a real PSO+constant-buffer end to end,
+//   driven manually (SpriteBatch/GraphicsDevice can't be constructed safely in this off-screen-only
+//   suite -- GraphicsDevice's own constructor unconditionally creates a real window for any
+//   non-Headless/Software backend, which is exactly the crash-prone path DX-100/DX-102 already
+//   found for D3D12 outside a Proton-managed launch; D3D12SpriteBatchBackend's own real
+//   SetCustomEffect()/FlushBatch() wiring, added this same task, is exercised by code review and
+//   architectural reuse of this exact PSO/constant-buffer pair, not an independent CTest proof --
+//   an honest, documented scope boundary), proving the color is genuinely driven by
+//   SetUniformVec4()'s fixed-slot constant buffer, matching D3D11's own DX-58 rigor. A deliberately
+//   broken HLSL source fails CompileProgram() cleanly with a real, non-empty compiler error.
 
 int main()
 {
@@ -2375,6 +2390,135 @@ int main()
               "query completed\" (plan_dx.md DX-120, closes DX-147's D3D12 half)");
 
         backend.UnbindOffscreenColorTargetEXT();
+    }
+
+    // ---- plan_dx.md DX-121: D3D12EffectBackend -- runtime D3DCompile() of custom HLSL, driven
+    // manually (see the top-of-file comment block for why SpriteBatch/GraphicsDevice can't be used
+    // safely in this off-screen-only suite). ----
+    {
+        constexpr int kRtWidth = 64;
+        constexpr int kRtHeight = 64;
+
+        D3D12_HEAP_PROPERTIES heapProps{};
+        heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
+
+        D3D12_RESOURCE_DESC rtDesc{};
+        rtDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+        rtDesc.Width = kRtWidth;
+        rtDesc.Height = kRtHeight;
+        rtDesc.DepthOrArraySize = 1;
+        rtDesc.MipLevels = 1;
+        rtDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        rtDesc.SampleDesc.Count = 1;
+        rtDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+        rtDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+
+        Microsoft::WRL::ComPtr<ID3D12Resource> rt;
+        HRESULT hrRt = backend.GetDeviceEXT()->CreateCommittedResource(
+            &heapProps, D3D12_HEAP_FLAG_NONE, &rtDesc,
+            D3D12_RESOURCE_STATE_RENDER_TARGET, nullptr, IID_PPV_ARGS(rt.GetAddressOf()));
+        Check(SUCCEEDED(hrRt) && rt != nullptr, "BB0: real off-screen RGBA8 render-target resource created");
+        backend.GetResourceStateTrackerEXT().TrackResource(rt.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET);
+
+        D3D12_CPU_DESCRIPTOR_HANDLE rtv = backend.AllocateRtvDescriptorEXT();
+        backend.GetDeviceEXT()->CreateRenderTargetView(rt.Get(), nullptr, rtv);
+
+        auto effect = backend.CreateEffectBackend(
+            "struct VSIn { float2 pos:POSITION0; float2 uv:TEXCOORD0; float4 col:COLOR0; };\n"
+            "struct VSOut { float4 pos:SV_Position; float4 col:TEXCOORD0; };\n"
+            "cbuffer CB : register(b0) { float4 pad0[5]; float4 uColor; float4 uFloat0; };\n"
+            "VSOut main(VSIn input) { VSOut o; o.pos=float4(input.pos,0,1); o.col=input.col*uColor; return o; }",
+            "struct PSIn { float4 pos:SV_Position; float4 col:TEXCOORD0; };\n"
+            "float4 main(PSIn input):SV_Target { return input.col; }");
+        Check(effect && effect->IsValid(),
+              "BB1: D3D12GraphicsBackend::CreateEffectBackend() -- real runtime D3DCompile() of "
+              "arbitrary HLSL source builds a real PSO+constant-buffer end to end (plan_dx.md DX-121)");
+
+        bool effIsExact = false;
+        if (effect && effect->IsValid())
+        {
+            auto* d3dEffect = dynamic_cast<D3D12EffectBackend*>(effect.get());
+            Check(d3dEffect != nullptr, "BB2: CreateEffectBackend() returns a real D3D12EffectBackend");
+
+            effect->SetUniformVec4("uColor", 0.0f, 1.0f, 0.0f, 1.0f); // green -- 0/1 only, no rounding ambiguity
+            effect->Bind();
+
+            // Fixed Sprite2DVertex contract (x,y|u,v|r,g,b,a, 32 bytes) -- position IS clip-space
+            // directly in this simple vertex shader (no vpSize normalization needed), matching
+            // D3D11's own equivalent Check X convention exactly.
+            struct SpriteVtx { float x, y, u, v, r, g, b, a; };
+            static const SpriteVtx kTriFx[3] = {
+                {-1.0f, -1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f},
+                { 3.0f, -1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f},
+                {-1.0f,  3.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f},
+            };
+            D3D12VertexBufferBackend vbFx(&backend, 3);
+            vbFx.SetData(kTriFx, 3, sizeof(SpriteVtx));
+
+            // The (1,1,1) root signature this PSO was built against always declares an SRV+sampler
+            // table -- bind a real, throwaway 1x1 texture/sampler even though this particular
+            // pixel shader never samples it, matching every other real D3D12 draw's own full
+            // root-parameter binding discipline (avoids relying on undefined/unbound-table
+            // behavior).
+            ImageData dummyImg;
+            dummyImg.width = 1; dummyImg.height = 1; dummyImg.mipLevels = 1;
+            dummyImg.pixels = {255, 255, 255, 255};
+            D3D12TextureBackend dummyTex(&backend, dummyImg);
+            backend.ApplySamplerState(0, /*filter=*/1 /*Point*/, /*addressU=*/0, /*addressV=*/0, /*maxAnisotropy=*/1);
+
+            auto rootSig = backend.GetRootSignatureCacheEXT().GetOrCreate(backend.GetDeviceEXT(), 1, 1, 1);
+
+            ID3D12CommandAllocator* allocator = backend.GetCommandAllocatorEXT(0);
+            ID3D12GraphicsCommandList* cmdList = backend.GetCommandListEXT();
+            allocator->Reset();
+            cmdList->Reset(allocator, d3dEffect->GetPipelineStateEXT());
+
+            backend.GetResourceStateTrackerEXT().TransitionTo(cmdList, rt.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET);
+            const float clearColor[4] = {0.0f, 0.0f, 1.0f, 1.0f};
+            cmdList->ClearRenderTargetView(rtv, clearColor, 0, nullptr);
+            cmdList->OMSetRenderTargets(1, &rtv, FALSE, nullptr);
+
+            D3D12_VIEWPORT viewport{0.0f, 0.0f, static_cast<float>(kRtWidth), static_cast<float>(kRtHeight), 0.0f, 1.0f};
+            D3D12_RECT scissor{0, 0, kRtWidth, kRtHeight};
+            cmdList->RSSetViewports(1, &viewport);
+            cmdList->RSSetScissorRects(1, &scissor);
+
+            cmdList->SetGraphicsRootSignature(rootSig.Get());
+            cmdList->SetPipelineState(d3dEffect->GetPipelineStateEXT());
+            cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+            D3D12_VERTEX_BUFFER_VIEW vbView = vbFx.GetViewEXT();
+            cmdList->IASetVertexBuffers(0, 1, &vbView);
+            cmdList->SetGraphicsRootConstantBufferView(0, d3dEffect->GetConstantBufferEXT()->GetGPUVirtualAddress());
+
+            ID3D12DescriptorHeap* heaps[] = {backend.GetCbvSrvUavHeapEXT(), backend.GetSamplerHeapEXT()};
+            cmdList->SetDescriptorHeaps(2, heaps);
+            cmdList->SetGraphicsRootDescriptorTable(1, dummyTex.GetShaderResourceViewGpuHandleEXT());
+            cmdList->SetGraphicsRootDescriptorTable(2, backend.GetSamplerGpuHandleEXT(0));
+
+            cmdList->DrawInstanced(3, 1, 0, 0);
+
+            HRESULT hr = cmdList->Close();
+            if (SUCCEEDED(hr))
+                backend.ExecuteCommandListAndWaitEXT(cmdList);
+
+            if (SUCCEEDED(hr))
+            {
+                auto pixels = ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight);
+                const std::size_t idx = (static_cast<std::size_t>(32) * kRtWidth + 32) * 4;
+                effIsExact = pixels[idx + 0] == 0 && pixels[idx + 1] == 255 &&
+                            pixels[idx + 2] == 0 && pixels[idx + 3] == 255;
+            }
+        }
+        Check(effIsExact,
+              "BB3: D3D12EffectBackend::Bind() -- a real custom-compiled shader pair, driven by "
+              "SetUniformVec4()'s fixed-slot constant buffer, draws the exact expected color "
+              "(plan_dx.md DX-121)");
+
+        auto badEffect = backend.CreateEffectBackend("this is not valid HLSL {{{", "also not valid ]]]");
+        Check(badEffect && !badEffect->IsValid() && !badEffect->GetCompileError().empty(),
+              "BB4: D3D12GraphicsBackend::CreateEffectBackend() -- a deliberately broken HLSL source "
+              "fails CompileProgram() with a real, non-empty compiler error message (plan_dx.md DX-121)");
     }
 
     std::printf("\n%s: %d failure(s)\n", g_failures == 0 ? "RESULT: ALL PASS" : "RESULT: FAILURES", g_failures);
