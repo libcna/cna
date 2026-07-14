@@ -331,9 +331,26 @@ creates a real window for every backend except `HEADLESS`/`SOFTWARE`, and a real
 already root-caused — left open, see `plan_dx.md`'s own `DX-132` row for the real options. **Phase
 DX14 (D3D11 verification hardening) and the rest of Phase DX15** were added 2026-07-14 and are
 authorized and actively in progress — see `plan_dx.md` for the full task list and ordering
-rationale. Outside the D3D plan, the standing backlog (Phase 79's 153-sample `../cna-samples`
-re-audit, Task 945's HLSL→GLSL tooling decision, Task 952's deferred Bgfx bug) is unchanged — see
-§8/§9.
+rationale.
+
+**Phase DX15 progress (2026-07-14, second chunk): `DX-134`/`DX-135`/`DX-137` closed real, `DX-136`
+investigated and found genuinely unimplementable without cross-backend shader work.** `DX-134`
+(`EnvironmentMapEffect` base-lerp alpha): confirmed the term IS implemented in the shared HLSL,
+added an `envMapAmount=0.0` check to both backends proving the lerp is a real graduated blend, not
+an on/off gate. `DX-135` (`SkinnedEffect.WeightsPerVertex`): a real, non-obvious math property
+found empirically (not just theorized) while debugging a failed first attempt — a single active
+bone's weight always cancels out via the GPU's own homogeneous divide, so the discriminating test
+needed two genuinely-blended bones, not a single weighted one; both backends' tests now pass for
+real. `DX-136` (`AlphaTestEffect.VertexColorEnabled`): investigated and found `alpha_test3d`'s own
+vertex shader has **no color attribute at all**, inherited identically from the original Vulkan
+GLSL port — a real, shared, cross-backend gap needing new vertex-attribute/shader work, correctly
+left open rather than forced. `DX-137` (fog for non-`colored3d` variants): closed for `textured3d`
+as a representative variant (found and fixed a real test-fixture bug along the way — the fog
+fixture needs its own vertex buffer at Z=fogEnd, not the shared Z=0 one); the other 6 of 7 variants
+remain honestly open. `D3D11_Smoke` **77/77 checks**, `D3D12_Smoke` **135/135 checks**, both
+verified via a real `ctest` run with no regression. Outside the D3D plan, the standing backlog
+(Phase 79's 153-sample `../cna-samples` re-audit, Task 945's HLSL→GLSL tooling decision, Task 952's
+deferred Bgfx bug) is unchanged — see §8/§9.
 
 **One real, separate, documented problem**: the full `CnaTests` GTest suite does not build under
 `CNA_GRAPHICS_BACKEND=D3D11` (and, by the same root cause, `D3D12`).

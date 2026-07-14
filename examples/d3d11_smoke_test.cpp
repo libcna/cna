@@ -833,6 +833,47 @@ protected:
             check(afterCTIsVertColor,
                   "D3D11GraphicsBackend::DrawPrimitivesEx(): real colored_textured3d draw multiplies "
                   "the exact vertex color through a white texture (plan_dx.md DX-62)");
+
+            // DX-137: dedicated fog on/off discriminating test for textured3d -- a representative
+            // variant of the 7 fog-capable non-colored3d variants (chosen for its simple, already-
+            // proven fixture above; a full 7-variant x 2-backend sweep is out of this task's own
+            // scope, documented honestly rather than silently partial). Same Z-at-FogEnd
+            // methodology DX-69/DX-81's own colored3d fog test already established -- needs its OWN
+            // vertex buffer at Z=0.5 (fogEnd), not the shared vbTex (Z=0, which gives fogFactor=1,
+            // i.e. no blending at all -- a real fixture bug found and fixed while writing this test).
+            static const VPT kTriTexFog[3] = {
+                {-1.0f, -1.0f, 0.5f, 0.0f, 1.0f},
+                { 3.0f, -1.0f, 0.5f, 2.0f, 1.0f},
+                {-1.0f,  3.0f, 0.5f, 0.0f, -1.0f},
+            };
+            auto vbTexFog = backend.CreateVertexBuffer(3);
+            vbTexFog->SetData(kTriTexFog, 3, sizeof(VPT));
+
+            const Microsoft::Xna::Framework::Rectangle texFogRegion(30, 30, 1, 1);
+            tp.fogEnabled = false;
+            tp.fogColor[0] = 0.0f; tp.fogColor[1] = 1.0f; tp.fogColor[2] = 0.0f;
+            tp.fogStart = 0.0f; tp.fogEnd = 0.5f;
+            dev.Clear(Color(10, 10, 10, 255));
+            backend.DrawPrimitivesEx(*vbTexFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                     Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, tp);
+            Color texFogOffPixel(0, 0, 0, 0);
+            dev.GetBackBufferData(&texFogRegion, &texFogOffPixel, 0, 1);
+            check(texFogOffPixel.getRProperty() == 11 && texFogOffPixel.getGProperty() == 22 &&
+                  texFogOffPixel.getBProperty() == 33,
+                  "D3D11GraphicsBackend::DrawPrimitivesEx(): textured3d fogEnabled=false leaves the "
+                  "exact sampled texture color unblended (plan_dx.md DX-137)");
+
+            tp.fogEnabled = true;
+            dev.Clear(Color(10, 10, 10, 255));
+            backend.DrawPrimitivesEx(*vbTexFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                     Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, tp);
+            Color texFogOnPixel(0, 0, 0, 0);
+            dev.GetBackBufferData(&texFogRegion, &texFogOnPixel, 0, 1);
+            check(texFogOnPixel.getRProperty() == 0 && texFogOnPixel.getGProperty() == 255 &&
+                  texFogOnPixel.getBProperty() == 0,
+                  "D3D11GraphicsBackend::DrawPrimitivesEx(): textured3d fogEnabled=true with Z at "
+                  "FogEnd genuinely blends all the way to the exact FogColor, distinctly different "
+                  "from the fogEnabled=false case above (plan_dx.md DX-137)");
         }
 
         // Check R (DX-63): lit_textured3d (stride 32). The unlit branch is byte-exact (same bar as
@@ -1075,6 +1116,28 @@ protected:
             check(envIsExact,
                   "D3D11GraphicsBackend::DrawPrimitivesEx(): real env_map3d samples the exact "
                   "distinctly-colored cube face via the real TextureCube SRV (plan_dx.md DX-66)");
+
+            // DX-134: same fixture, envMapAmount=0.0 -> blendFactor=0 -> the lerp(baseColor,
+            // envSample*alpha, blendFactor) formula must collapse to the pure base color (lit=0
+            // since light0Dir default is perpendicular to this surface's normal, ambient/emissive
+            // both default 0), NOT the reflected cube-face color Check U above just proved --
+            // genuinely different from the amount=1.0 result, proving the blend is real and
+            // graduated, not a fixed always-on reflection.
+            ep.envMapAmount = 0.0f;
+            dev.Clear(Color(0, 0, 255, 255));
+            backend.DrawPrimitivesEx(*vbEnv, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                     Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, ep);
+            std::vector<Color> envZeroResult(4 * 4, Color(0, 0, 0, 0));
+            dev.GetBackBufferData(&centerRegion28, envZeroResult.data(), 0, static_cast<int>(envZeroResult.size()));
+            bool envZeroIsExact = true;
+            for (const Color& p : envZeroResult)
+                if (p.getRProperty() != 0 || p.getGProperty() != 0 || p.getBProperty() != 0 || p.getAProperty() != 255)
+                    envZeroIsExact = false;
+            check(envZeroIsExact,
+                  "D3D11GraphicsBackend::DrawPrimitivesEx(): real env_map3d with envMapAmount=0.0 "
+                  "collapses the base-lerp to the pure (unlit) base color, distinctly different from "
+                  "the envMapAmount=1.0 reflected-face color above -- proves the lerp is a genuine "
+                  "graduated blend control, not just an on/off gate (plan_dx.md DX-134)");
         }
 
         // Check V (DX-67): skinned3d. A single identity bone (BoneBlock genuinely populated from
@@ -1127,6 +1190,69 @@ protected:
             check(skinIsExact,
                   "D3D11GraphicsBackend::DrawPrimitivesEx(): real skinned3d with a genuinely-populated "
                   "single identity bone samples the exact texture color (plan_dx.md DX-67)");
+
+            // DX-135: WeightsPerVertex discriminating test. Real, non-obvious math property found
+            // empirically while building this: for a SINGLE active bone, the shader's
+            // `Bones[i]*weight` scalar-multiplies the WHOLE 4x4 matrix including the w=1 row/column
+            // -- the resulting homogeneous divide (skinnedPos.xyz / skinnedPos.w) exactly CANCELS
+            // any single bone's own weight magnitude, so weightsPerVertex=1 with bone0=Identity
+            // ALWAYS reproduces bone0's untransformed result regardless of weight.x's actual value
+            // (matches Check V's own already-passing single-bone precedent above). The weight only
+            // has an observable effect once TWO bones are genuinely blended together (weights
+            // summing to 1.0, giving a valid combined w=1 rigid transform) -- so the correct
+            // discriminator is: weightsPerVertex=1 (bone1 ignored) stays at bone0's Identity (full
+            // coverage, matches Check V), while weightsPerVertex=2 (bone0=Identity blended 0.5/0.5
+            // with bone1=Scale(0.1), a genuinely SHRINKING transform) gives Scale(0.5*1+0.5*0.1) =
+            // Scale(0.55) -- small enough to genuinely pull the triangle's hypotenuse (originally at
+            // object-space x+y=2, scaled to x+y=1.1) away from a probe point at NDC (0.7,0.7)
+            // (x+y=1.4, pixel ~(54,10) on this 64x64 RT), which only weightsPerVertex=2 uncovers.
+            Matrix::CreateScale(0.1f).ToColumnMajor(sp.boneTransforms + 16);
+            sp.boneCount = 2;
+            struct VPNTS2 { float x, y, z; float nx, ny, nz; float u, v;
+                           float bw0, bw1, bw2, bw3; uint8_t bi0, bi1, bi2, bi3; };
+            static const VPNTS2 kTriSkin2[3] = {
+                {-1.0f, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.5f, 0.5f, 0.0f, 0.0f, 0, 1, 0, 0},
+                { 3.0f, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 2.0f, 1.0f, 0.5f, 0.5f, 0.0f, 0.0f, 0, 1, 0, 0},
+                {-1.0f,  3.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, -1.0f, 0.5f, 0.5f, 0.0f, 0.0f, 0, 1, 0, 0},
+            };
+            auto vbSkin2 = backend.CreateVertexBuffer(3);
+            vbSkin2->SetData(kTriSkin2, 3, sizeof(VPNTS2));
+
+            const Microsoft::Xna::Framework::Rectangle offCenterPoint(54, 10, 2, 2);
+
+            sp.weightsPerVertex = 1;
+            dev.Clear(Color(1, 2, 3, 255));
+            backend.DrawPrimitivesEx(*vbSkin2, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                     Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, sp);
+            std::vector<Color> w1Result(2 * 2, Color(0, 0, 0, 0));
+            dev.GetBackBufferData(&offCenterPoint, w1Result.data(), 0, static_cast<int>(w1Result.size()));
+            bool w1IsTexture = true;
+            for (const Color& p : w1Result)
+                if (p.getRProperty() != 77 || p.getGProperty() != 88 || p.getBProperty() != 99)
+                    w1IsTexture = false;
+            check(w1IsTexture,
+                  "D3D11GraphicsBackend::DrawPrimitivesEx(): real skinned3d with weightsPerVertex=1 "
+                  "genuinely ignores bone1's contribution -- the probe point still shows bone0's "
+                  "unshrunk Identity result, matching Check V's own single-bone precedent "
+                  "(plan_dx.md DX-135)");
+
+            sp.weightsPerVertex = 2;
+            dev.Clear(Color(1, 2, 3, 255));
+            backend.DrawPrimitivesEx(*vbSkin2, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                     Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, sp);
+            std::vector<Color> w2Result(2 * 2, Color(0, 0, 0, 0));
+            dev.GetBackBufferData(&offCenterPoint, w2Result.data(), 0, static_cast<int>(w2Result.size()));
+            bool w2IsBackground = true;
+            for (const Color& p : w2Result)
+                if (p.getRProperty() != 1 || p.getGProperty() != 2 || p.getBProperty() != 3)
+                    w2IsBackground = false;
+            check(w2IsBackground,
+                  "D3D11GraphicsBackend::DrawPrimitivesEx(): real skinned3d with weightsPerVertex=2 "
+                  "genuinely includes bone1's contribution -- the blended Scale(0.55) transform "
+                  "shrinks the triangle away from this same probe point (Clear() background shows "
+                  "through), distinctly different from the weightsPerVertex=1 case above with "
+                  "identical vertex weight data, proving WeightsPerVertex actually gates which bones "
+                  "are summed (plan_dx.md DX-135)");
         }
 
         // Check W (DX-68): instanced3d. DrawInstancedPrimitivesEx() with one identity-transform
@@ -1610,7 +1736,8 @@ protected:
                   "different from the fogEnabled=false case above (plan_dx.md DX-69/DX-81)");
         }
 
-        const int totalChecks = 3 + 10 + 1 + 2 + 2 + 2 + 2 + 2 + 1 + 1 + 2 + 1 + 13 + 2 + 3 + 2 + 2 + 1 + 1 + 1 + 1 + 3 + 2 + 2 + 2 + 3 + 2 + 3 /* DX-131 rotation/scale/crop */;
+        const int totalChecks = 3 + 10 + 1 + 2 + 2 + 2 + 2 + 2 + 1 + 1 + 2 + 1 + 13 + 2 + 3 + 2 + 2 + 1 + 1 + 1 + 1 + 3 + 2 + 2 + 2 + 3 + 2 + 3 /* DX-131 rotation/scale/crop */
+                                + 1 /* DX-134 envMapAmount=0 */ + 2 /* DX-135 WeightsPerVertex */ + 2 /* DX-137 textured3d fog */;
         std::printf("=== %d/%d PASS ===\n", passCount_, totalChecks);
         result_ = (passCount_ == totalChecks) ? 0 : 1;
         Exit();
