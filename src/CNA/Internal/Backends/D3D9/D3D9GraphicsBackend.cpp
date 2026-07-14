@@ -9,6 +9,8 @@
 #include "CNA/Internal/Backends/D3D9/D3D9StateMapping.hpp"
 
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
+#include "Microsoft/Xna/Framework/Graphics/NoSuitableGraphicsDeviceException.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -71,6 +73,7 @@ namespace CNA::Internal::Backends::D3D9
         , depthStencilFormatOrdinal_(args.depthStencilFormat)
         , isFullScreen_(args.isFullScreen)
         , swapInterval_(args.swapInterval)
+        , graphicsProfileOrdinal_(args.graphicsProfile)
         , deviceEventCallback_(args.deviceEventCallback)
     {
         if (window_)
@@ -172,6 +175,28 @@ namespace CNA::Internal::Backends::D3D9
         hr = device_->GetDeviceCaps(&caps_);
         if (FAILED(hr))
             throw std::runtime_error("IDirect3DDevice9::GetDeviceCaps failed, hr=" + FormatHr(hr));
+
+        // D9-32: enforce the profile floor at construction -- a specific, named diagnostic
+        // (matching XNA's own NoSuitableGraphicsDeviceException) instead of a deferred
+        // shader-creation failure much later. This checks only the shader-model floor XNA itself
+        // documents for HiDef (vs_3_0/ps_3_0) -- the FULL Reach/HiDef capability table (texture
+        // size limits, NPOT restrictions, instancing, MRT count, render-target/back-buffer format
+        // whitelists, MSAA levels, ...) is D9-100's job (Phase D9-10, "a research task as much as
+        // a coding one"), not invented here. Reach itself has no floor to check against on this
+        // machine -- every real D3D9 device already exceeds vs_2_0/ps_2_0.
+        using Microsoft::Xna::Framework::Graphics::GraphicsProfile;
+        using Microsoft::Xna::Framework::Graphics::NoSuitableGraphicsDeviceException;
+        if (static_cast<GraphicsProfile>(graphicsProfileOrdinal_) == GraphicsProfile::HiDef)
+        {
+            if (caps_.VertexShaderVersion < static_cast<DWORD>(D3DVS_VERSION(3, 0)) ||
+                caps_.PixelShaderVersion < static_cast<DWORD>(D3DPS_VERSION(3, 0)))
+            {
+                throw NoSuitableGraphicsDeviceException(
+                    "GraphicsProfile::HiDef requires vs_3_0/ps_3_0 -- this device reports "
+                    "VertexShaderVersion=" + FormatHr(caps_.VertexShaderVersion) +
+                    " PixelShaderVersion=" + FormatHr(caps_.PixelShaderVersion));
+            }
+        }
     }
 
     void D3D9GraphicsBackend::EnsureDeviceSize()

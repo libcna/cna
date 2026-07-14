@@ -23,10 +23,16 @@
 // Check G -- ClearDepthAndStencil (no color component): same unchanged-color proof.
 // Check H -- ClearColorAndStencil: exact color readback.
 // Check I -- ClearColorDepthAndStencil: exact color readback.
+// Check L -- a real GraphicsDeviceManager resize (64x64 -> 96x80) genuinely exercises
+//   EnsureDeviceSize()'s Reset() path, and Clear()+GetBackBufferData() after the resize reads
+//   back the NEW size's data correctly (D9-33), mirroring D3D11's own DX-83 check.
 // Check J -- a device created with DepthFormat::None (no depth-stencil requested) genuinely has
 //   no depth-stencil surface (GetDepthStencilSurface() fails), and ClearDepth()/ClearStencil()
 //   silently no-op (do not throw) on it -- proving D9-31's HasDepthBuffer()/HasStencilBuffer()
 //   gating is real, not just "always calls D3D9 Clear() and hopes".
+// Check K -- GraphicsProfile::HiDef construction succeeds on this real vs_3_0/ps_3_0-capable
+//   device (D9-32's profile-floor enforcement, positive path). The rejection path cannot be
+//   exercised on real hardware that already exceeds the floor -- an honest gap, not a hidden one.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
@@ -203,6 +209,54 @@ protected:
                   "ClearColorDepthAndStencil: exact color readback");
         }
 
+        // Check L (D9-33) -- a real backbuffer resize genuinely exercises EnsureDeviceSize()'s
+        // Reset() path (previously proven only indirectly, by D9-31's own smoke test converging to
+        // its initial 64x64 size) -- resized via the same public GraphicsDeviceManager path a real
+        // game uses, mirroring D3D11's own DX-83 check. EnsureDeviceSize() only picks the new size
+        // up lazily on the next Present()/Clear() cycle, so this polls across a few frames.
+        {
+            gdm_->setPreferredBackBufferWidthProperty(96);
+            gdm_->setPreferredBackBufferHeightProperty(80);
+            gdm_->ApplyChanges();
+
+            bool resized = false;
+            for (int frame = 0; frame < 30 && !resized; ++frame)
+            {
+                dev.Clear(Color(30, 60, 90, 255));
+                dev.Present();
+                const auto& vp = dev.getViewportProperty();
+                if (vp.getWidthProperty() == 96 && vp.getHeightProperty() == 80)
+                {
+                    resized = true;
+                }
+                else
+                {
+                    SDL_Delay(20);
+                }
+            }
+            check(resized, "D9-33: GraphicsDeviceManager resize to 96x80 eventually converges "
+                            "(viewport reflects the new size within 30 frames)");
+
+            dev.Clear(Color(30, 60, 90, 255));
+            const Microsoft::Xna::Framework::Rectangle newCorner(0, 0, 1, 1);
+            const Microsoft::Xna::Framework::Rectangle nearNewEdge(90, 74, 1, 1);
+            Color cornerPixel(0, 0, 0, 0), edgePixel(0, 0, 0, 0);
+            dev.GetBackBufferData(&newCorner, &cornerPixel, 0, 1);
+            dev.GetBackBufferData(&nearNewEdge, &edgePixel, 0, 1);
+            const auto isClearColor = [](const Color& p) {
+                return p.getRProperty() == 30 && p.getGProperty() == 60 && p.getBProperty() == 90;
+            };
+            check(isClearColor(cornerPixel) && isClearColor(edgePixel),
+                  "D9-33: after resize, Clear()+GetBackBufferData() reads the exact clear color at "
+                  "the origin AND near the new (96,80) far edge -- proves the resized back buffer/"
+                  "depth-stencil/viewport are genuinely the new size, not stale/clamped/wrong");
+
+            const bool ppMatches =
+                (dev.getPresentationParametersProperty().getBackBufferWidthProperty() == 96 &&
+                 dev.getPresentationParametersProperty().getBackBufferHeightProperty() == 80);
+            check(ppMatches, "D9-33: PresentationParameters reflects the new 96x80 size post-resize");
+        }
+
         std::printf("=== %d/%d PASS (main Game checks) ===\n", passCount, totalCount);
         Exit();
     }
@@ -259,6 +313,46 @@ namespace
 
         SDL_DestroyWindow(sdlWindow);
     }
+
+    // Check K (D9-32): a device constructed with GraphicsProfile::HiDef succeeds without throwing,
+    // since this real GPU's D3DCAPS9 genuinely reports vs_3_0/ps_3_0 (verified below, not assumed).
+    // The REJECTION path (a device whose real caps fall below HiDef's floor) cannot be exercised
+    // here -- this dev loop has no way to make Wine+DXVK report a sub-SM3 device on real hardware
+    // that is SM3-capable -- same "real hardware needed" caveat as D9-105/D9-140 elsewhere in this
+    // plan; D9-32's own gating logic (a plain integer comparison against GraphicsProfile::HiDef) is
+    // simple enough that this asymmetry is an honest, acceptable gap, not a hidden one.
+    void RunHiDefProfileCheck()
+    {
+        SDL_Window* sdlWindow = SDL_CreateWindow("d9smoke_hidef", 64, 64, 0);
+        if (!sdlWindow)
+        {
+            check(false, "Check K setup: SDL_CreateWindow failed");
+            return;
+        }
+
+        CNA::Internal::Backends::GraphicsBackendCreateArgs createArgs;
+        createArgs.window = sdlWindow;
+        createArgs.virtualWidth = 64;
+        createArgs.virtualHeight = 64;
+        createArgs.graphicsProfile = 1;  // GraphicsProfile::HiDef
+
+        bool threw = false;
+        try
+        {
+            D3D9GraphicsBackend backend(createArgs);
+            check(backend.GetCapsEXT().VertexShaderVersion >= static_cast<DWORD>(D3DVS_VERSION(3, 0)) &&
+                  backend.GetCapsEXT().PixelShaderVersion >= static_cast<DWORD>(D3DPS_VERSION(3, 0)),
+                  "Check K: HiDef construction succeeds on a real vs_3_0/ps_3_0-capable device");
+        }
+        catch (const std::exception&)
+        {
+            threw = true;
+        }
+        check(!threw, "Check K: GraphicsProfile::HiDef did not throw NoSuitableGraphicsDeviceException "
+                      "(this GPU genuinely meets the floor)");
+
+        SDL_DestroyWindow(sdlWindow);
+    }
 }
 
 int main()
@@ -269,6 +363,7 @@ int main()
     }
 
     RunNoDepthBufferCheck();
+    RunHiDefProfileCheck();
 
     std::printf("=== %d/%d PASS ===\n", passCount, totalCount);
     return (passCount == totalCount) ? 0 : 1;

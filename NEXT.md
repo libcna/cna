@@ -109,15 +109,17 @@ equivalent at all — different alpha-bit position). Both verified against Micro
 D3D9→DXGI legacy-format table, not derived by name resemblance. Next up: Phase D9-3 (device, present,
 device-lost).
 
-### Phase D9-3 — device, present, device-lost: D9-30/D9-31 CLOSED, D9-33 mechanism CLOSED, D9-32/D9-34 open
+### Phase D9-3 — device, present, device-lost: D9-30/D9-31/D9-32/D9-33 CLOSED, only D9-34 open
 
 | Task | Status |
 |---|---|
 | `D9-30` — real `Direct3DCreate9`/`GetDeviceCaps`/`CreateDevice` with real presentation parameters | ✅ |
-| `D9-31` — `Clear` + all 6 `Clear*` combos + `Present` + `ReadBackbuffer`, each pixel-verified | ✅ (12/12 `D3D9_Smoke` checks) |
-| `D9-32` — enforce `GraphicsProfile` floor at construction | ⬜ next |
-| `D9-33` — window resize via device `Reset()` | 🟨 (mechanism real and proven; dedicated test still owed) |
-| `D9-34` — XNA device-lost lifecycle | ⬜ (channel exists, `TestCooperativeLevel` loop not yet implemented) |
+| `D9-31` — `Clear` + all 6 `Clear*` combos + `Present` + `ReadBackbuffer`, each pixel-verified | ✅ (`D3D9_Smoke`) |
+| `D9-32` — enforce `GraphicsProfile` floor at construction | 🟨 (shader-model floor real; full Reach/HiDef table is `D9-100`'s job) |
+| `D9-33` — window resize via device `Reset()` | ✅ (mechanism + dedicated 64×64→96×80 test, Check L) |
+| `D9-34` — XNA device-lost lifecycle | ⬜ next (channel exists, `TestCooperativeLevel` loop not yet implemented) |
+
+`D3D9_Smoke` is now 17/17 checks (9 main + 3 no-depth-buffer + 2 HiDef-profile + 3 resize).
 
 **Two real, unplanned findings surfaced while closing D9-30/D9-31, both fixed in place:**
 
@@ -180,7 +182,8 @@ Most recent first. Full detail lives in `plan_dx9.md` — this is a short index.
 
 | Commit(s) | Summary |
 |---|---|
-| *(pending)* | **`D9-30`/`D9-31` closed + `D9-33`'s resize mechanism + Phase D9-6's `D9-60`/`D9-61`/`D9-62` forced in early**: real `Direct3DCreate9`/`CreateDevice` using the game's actual requested back-buffer/depth-stencil format (the approved `GraphicsBackendCreateArgs` extension, finally consumed for real); all 6 `Clear*` combos + `Present` + `ReadBackbuffer` pixel-verified (`D3D9_Smoke` 12/12); a real `EnsureDeviceSize()` resize-via-`Reset()` mechanism (proven working, not theoretical — it's what makes the smoke test converge to the requested 64×64 size at all). Two real, unplanned findings fixed in place: DXVK genuinely rejects `SurfaceFormat::Color`'s own `D3DFMT_A8B8G8R8` as a *swap-chain* format (a real D3D9 display-format restriction, fixed with a back-buffer-specific substitution to `A8R8G8B8`); and `GraphicsDevice::Reset()` never forwarded updated presentation settings to an already-constructed backend, fixed with one more small additive `IGraphicsBackend` method (`UpdatePresentationFormatEXT`, same category as the already-approved extension). Separately, `GraphicsDevice`'s own constructor turned out to unconditionally push `BlendState`/`DepthStencilState`/`RasterizerState`/viewport defaults, forcing `D9-60`/`D9-61`/`D9-62` in immediately (real `D3DRS_*` `SetRenderState()` sequences) — no device could otherwise finish constructing. Also found 4 more silently-empty `IGraphicsBackend` virtuals `D9-11`'s own grep missed (multi-line `{}` defaults). Verified no regression on EasyGL (34 gtest+CTest checks, including 5 resize/reset-specific ones). |
+| *(pending)* | **`D9-32` closed (shader-model floor) + `D9-33`'s dedicated resize test (Check L)**: `GraphicsProfile::HiDef` now checked against the real `D3DCAPS9` at construction, throwing the real XNA `NoSuitableGraphicsDeviceException` if below `vs_3_0`/`ps_3_0` (only the positive path provable on this real, already-SM3-capable GPU); a new `D3D9_Smoke` Check L resizes 64×64→96×80 via the real `GraphicsDeviceManager` path and confirms the viewport, a post-resize pixel readback at both the origin and the new far edge, and `PresentationParameters` all reflect the new size. `D3D9_Smoke` now 17/17. |
+| `50954798` | **`D9-30`/`D9-31` closed + `D9-33`'s resize mechanism + Phase D9-6's `D9-60`/`D9-61`/`D9-62` forced in early**: real `Direct3DCreate9`/`CreateDevice` using the game's actual requested back-buffer/depth-stencil format (the approved `GraphicsBackendCreateArgs` extension, finally consumed for real); all 6 `Clear*` combos + `Present` + `ReadBackbuffer` pixel-verified (`D3D9_Smoke` 12/12); a real `EnsureDeviceSize()` resize-via-`Reset()` mechanism (proven working, not theoretical — it's what makes the smoke test converge to the requested 64×64 size at all). Two real, unplanned findings fixed in place: DXVK genuinely rejects `SurfaceFormat::Color`'s own `D3DFMT_A8B8G8R8` as a *swap-chain* format (a real D3D9 display-format restriction, fixed with a back-buffer-specific substitution to `A8R8G8B8`); and `GraphicsDevice::Reset()` never forwarded updated presentation settings to an already-constructed backend, fixed with one more small additive `IGraphicsBackend` method (`UpdatePresentationFormatEXT`, same category as the already-approved extension). Separately, `GraphicsDevice`'s own constructor turned out to unconditionally push `BlendState`/`DepthStencilState`/`RasterizerState`/viewport defaults, forcing `D9-60`/`D9-61`/`D9-62` in immediately (real `D3DRS_*` `SetRenderState()` sequences) — no device could otherwise finish constructing. Also found 4 more silently-empty `IGraphicsBackend` virtuals `D9-11`'s own grep missed (multi-line `{}` defaults). Verified no regression on EasyGL (34 gtest+CTest checks, including 5 resize/reset-specific ones). |
 | `bf26d7d1` | **Phase D9-2 fully closed** (`D9-20`–`D9-23`): new `D3D9FormatMapping`/`D3D9StateMapping`/`D3D9VertexDeclarations` + a 28-check `D3D9_Common` CTest, mutation-verified. Two non-obvious, easy-to-get-backwards findings, both verified against Microsoft's own published D3D9→DXGI legacy-format table rather than assumed: `SurfaceFormat::Color` → `D3DFMT_A8B8G8R8` (not the superficially-obvious `A8R8G8B8`), and `Rgba1010102` → `D3DFMT_A2B10G10R10` (not `A2R10G10B10`, which has no real DXGI equivalent at all). `TextureFilter` needed a new `{min,mag,mip}` triple struct, not a single enum, since D3D9 has no composed filter value. One row (`D9-21`) is 🟨: the mapping table is done, but its own "pixel-test `D3DCULL` against the oracle" obligation is honestly deferred to `D9-84` (no draw path exists yet to test it with). |
 | `1a3ca71f` | **Phase D9-1 fully closed** (`D9-10`/`D9-11`/`D9-12`): D3D9 wired into `CMakeLists.txt` (6 of 7 `"D3D12"` sites, correcting a stale plan claim about the 7th — see `plan_dx9.md`'s `D9-10` row); new `D3D9GraphicsBackend` skeleton + shared `NotYetImplemented.hpp`; `GraphicsDevice.cpp` audited, zero changes needed. `CNA_GRAPHICS_BACKEND=D3D9` configures and builds clean; a runtime check confirms the skeleton's real bookkeeping methods work and its throwing methods actually throw. |
 | `09121309` | **Phase D9-0 fully closed** (`D9-2`–`D9-5`): confirmed `d3d9`-alone link set (no `dxguid`); a real Wine+DXVK D3D9 device/swap-chain/`Clear`/`Present`/`GetRenderTargetData`/`LockRect` round-trip with an exact pixel match plus a full `D3DCAPS9` dump (`vs_3_0`/`ps_3_0`, `NumSimultaneousRTs=4`, 16384 max texture size, DXVK reports unconditional NPOT support — flagged as provisional/synthetic, not an authentic XNA-era driver's caps); confirmed `D3DPOOL_MANAGED` textures are genuinely `LockRect`-readable and survive `Reset()` with no re-upload (so `Texture2D::GetData()` can be a plain `LockRect` later, `D9-52`); and a new `scripts/run-wine-dxvk9.sh` (mirrors `run-wine-dxvk.sh`'s DXVK-marker gate under new `CNA_D3D9_*` env-var names), proven both ways — passes against the real `~/.wine-cna-d3d11` DXVK prefix, and correctly fails (exit 3) against a freshly-initialized, DXVK-less prefix that silently fell back to WineD3D. |
@@ -191,10 +194,11 @@ Most recent first. Full detail lives in `plan_dx9.md` — this is a short index.
 
 ## 4. Current blocker / main problem
 
-**No blocker.** Phases D9-0/D9-1/D9-2 are fully closed. Phase D9-3: `D9-30`/`D9-31` are closed and
-`D9-33`'s resize mechanism is real and proven; `D9-32` (profile enforcement) and `D9-34` (real
-device-lost recovery loop) remain. Phase D9-6: `D9-60`/`D9-61`/`D9-62` were forced in early (real) as
-a side effect of D9-30's own work; `D9-63`/`D9-64` remain. Next smallest task: `D9-32`.
+**No blocker.** Phases D9-0/D9-1/D9-2 are fully closed. Phase D9-3: `D9-30`/`D9-31`/`D9-33` closed,
+`D9-32` closed for its own real scope (shader-model floor; full Reach/HiDef table is `D9-100`'s job).
+Only `D9-34` (real device-lost recovery loop) remains open in Phase D9-3. Phase D9-6: `D9-60`/`D9-61`/
+`D9-62` were forced in early (real) as a side effect of D9-30's own work; `D9-63`/`D9-64` remain. Next
+smallest task: `D9-34`.
 
 ---
 
@@ -259,27 +263,23 @@ cmake -S . -B cmake-build-d3d9 \
 
 ## 8. Next smallest tasks
 
-**Phases D9-0/D9-1/D9-2 closed. Phase D9-3: `D9-30`/`D9-31` closed, `D9-33` mechanism closed. Phase
-D9-6: `D9-60`/`D9-61`/`D9-62` closed (forced in early).**
+**Phases D9-0/D9-1/D9-2 closed. Phase D9-3: `D9-30`/`D9-31`/`D9-32`/`D9-33` closed (only `D9-34`
+open). Phase D9-6: `D9-60`/`D9-61`/`D9-62` closed (forced in early).**
 
-1. **`D9-32`** — enforce the `GraphicsProfile` floor at construction: reject a device below the
-   requested profile's real `D3DCAPS9` with a specific diagnostic, not a deferred shader-creation
-   failure. `graphicsProfile` already flows into the backend via `GraphicsBackendCreateArgs`
-   (`D9-30`) — this task is purely about consuming it.
-2. **`D9-33` (remaining half)** — a dedicated resize CTest asserting post-resize backbuffer
-   dimensions/content directly (the resize *mechanism* itself, `EnsureDeviceSize()`, is already real
-   and is what made `D9-31`'s own smoke test converge to 64×64 — see `plan_dx9.md`'s `D9-33` row).
-3. **`D9-34`** — XNA's real device-lost lifecycle (`TestCooperativeLevel`/`D3DERR_DEVICELOST`/
+1. **`D9-34`** — XNA's real device-lost lifecycle (`TestCooperativeLevel`/`D3DERR_DEVICELOST`/
    `DeviceLost`/`DeviceResetting`/`DeviceReset`, `D3DPOOL_MANAGED` resources surviving `Reset()`
    untouched — `D9-4` already confirmed this really works under DXVK). The notification channel
    (`BackendDeviceEvent`/`deviceEventCallback`) already exists (`D9-30`) but is not yet wired to a
    real `TestCooperativeLevel()` polling loop — that loop itself is this task's own remaining work.
-4. **`D9-63`** — `ApplySamplerState` (needs `D9-50` textures to be meaningful; can also land as pure
+   Under DXVK the device is unlikely to be lost naturally; if it can't be forced deterministically
+   here, mark 🟨 and hand real verification to `D9-140` (needs real Windows hardware), per this
+   plan's own note on that row.
+2. **`D9-63`** — `ApplySamplerState` (needs `D9-50` textures to be meaningful; can also land as pure
    render-state plumbing first, same pattern as `D9-60`–`62`).
-5. **`D9-64`** — reuse the backend-agnostic `easygl_blendstate_*`/`easygl_depthstencilstate_*`/
+3. **`D9-64`** — reuse the backend-agnostic `easygl_blendstate_*`/`easygl_depthstencilstate_*`/
    `easygl_rasterizerstate_*` CTest sources verbatim (needs a real draw path, `D9-82`, to mean
    anything — likely sequenced after Phase D9-8, not literally next).
-6. Then Phase D9-4 (buffers: `D9-40`–`42`).
+4. Then Phase D9-4 (buffers: `D9-40`–`42`).
 
 See `plan_dx9.md`'s "Execution order" table for the full sequence beyond this.
 

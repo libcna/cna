@@ -168,6 +168,9 @@ namespace CNA::Internal::Backends::D3D9
         int depthStencilFormatOrdinal_ = 0; // Microsoft::Xna::Framework::Graphics::DepthFormat::None
         bool isFullScreen_ = false;
         int swapInterval_ = 1;
+        /// D9-32: the game's requested Microsoft::Xna::Framework::Graphics::GraphicsProfile
+        /// ordinal (Reach=0, HiDef=1), checked against the real device's D3DCAPS9 at construction.
+        int graphicsProfileOrdinal_ = 0;
         /// Set by UpdatePresentationFormatEXT() when the tracked format/fullscreen fields
         /// genuinely changed -- tells EnsureDeviceSize() to Reset() even if the window's pixel
         /// size did not also change (a format-only change would otherwise never be noticed).
