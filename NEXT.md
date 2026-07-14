@@ -310,14 +310,18 @@ real too (reusing the same shared root signature), but is honestly **not** indep
 CTest-proven — it needs a real `GraphicsDevice`, whose constructor unconditionally creates a real
 window for any non-Headless/Software backend, the same crash-prone path `DX-100`/`DX-102` already
 found for D3D12 outside a Proton-managed launch (confirmed by reading `GraphicsDevice.cpp`
-directly). `D3D12_Smoke` CTest (off-screen only): **119/119 checks**, all 10/10 stock shader
+directly). **`DX-122` (`D3D12Texture3DBackend`) is also closed**: a real byte-exact sub-volume
+upload/readback round-trip (2×2×2 sub-cube at an off-center `(1,1,0)` offset within a 4×4×2
+volume, different solid color per Z slice, genuinely exercising X/Y/Z offset math and per-slice
+pitch). `D3D12_Smoke` CTest (off-screen only): **122/122 checks**, all 10/10 stock shader
 variants + `SpriteBatch` + device-removed recovery + render targets/MRT + real state objects + real
-per-slot samplers + real occlusion queries + real custom `ShaderEffect`. D3D12 still genuinely lacks
-(real, scoped, documented, not silently dropped — see `docs/d3d12-backend.md`'s "Known limitations"
-and `plan_dx.md`'s Phase DX13): MSAA/mip-chain render targets and `Texture3D`
+per-slot samplers + real occlusion queries + real custom `ShaderEffect` + real `Texture3D`. D3D12
+still genuinely lacks (real, scoped, documented, not silently dropped — see
+`docs/d3d12-backend.md`'s "Known limitations" and `plan_dx.md`'s Phase DX13): MSAA/mip-chain render
+targets and `TextureCube::GetData()` real readback (`DX-123`)
 (`D3D12SpriteBatchBackend`'s own `SetSamplerFilter`/`SetSamplerAddressMode` wiring to the new
 sampler system is `DX-133`, now unblocked). **Phase DX13 (D3D12 functional completion,
-`DX-116`–`DX-121` closed, `DX-122`–`DX-123` open), Phase DX14 (D3D11 verification hardening), and
+`DX-116`–`DX-122` closed, `DX-123` open), Phase DX14 (D3D11 verification hardening), and
 Phase DX15 (remaining EasyGL-parity gaps) were added 2026-07-14 and are
 now authorized and actively in progress** — see
 `plan_dx.md` for the full task list and ordering rationale. Outside the D3D plan, the standing

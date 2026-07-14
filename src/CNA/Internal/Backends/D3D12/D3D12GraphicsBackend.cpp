@@ -9,6 +9,7 @@
 #include "CNA/Internal/Backends/D3D12/D3D12SpriteBatch.hpp"
 #include "CNA/Internal/Backends/D3D12/D3D12OcclusionQuery.hpp"
 #include "CNA/Internal/Backends/D3D12/D3D12EffectBackend.hpp"
+#include "CNA/Internal/Backends/D3D12/D3D12Texture3D.hpp"
 #include "CNA/Internal/Backends/D3DCommon/D3DConstantBuffers.hpp"
 
 #include <SDL3/SDL.h>
@@ -983,6 +984,12 @@ namespace CNA::Internal::Backends::D3D12
         int size, bool mipMap, int surfaceFormat)
     {
         return std::make_unique<D3D12TextureCubeBackend>(this, size, mipMap, surfaceFormat);
+    }
+
+    std::unique_ptr<ITexture3DBackend> D3D12GraphicsBackend::CreateTexture3D(
+        int w, int h, int depth, bool mipMap, int surfaceFormat)
+    {
+        return std::make_unique<D3D12Texture3DBackend>(this, w, h, depth, mipMap, surfaceFormat);
     }
 
     std::unique_ptr<ISpriteBatchBackend> D3D12GraphicsBackend::CreateSpriteBatch()

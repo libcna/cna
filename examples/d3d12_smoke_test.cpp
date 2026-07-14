@@ -108,6 +108,7 @@
 #include "CNA/Internal/Backends/D3D12/D3D12TextureCube.hpp"
 #include "CNA/Internal/Backends/D3D12/D3D12RenderTargets.hpp"
 #include "CNA/Internal/Backends/D3D12/D3D12EffectBackend.hpp"
+#include "CNA/Internal/Backends/D3D12/D3D12Texture3D.hpp"
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "CNA/Internal/Graphics/ImageData.hpp"
 
@@ -130,6 +131,7 @@ using CNA::Internal::Backends::D3D12::D3D12TextureCubeBackend;
 using CNA::Internal::Backends::D3D12::D3D12RenderTargetBackend;
 using CNA::Internal::Backends::D3D12::D3D12RenderTargetCubeBackend;
 using CNA::Internal::Backends::D3D12::D3D12EffectBackend;
+using CNA::Internal::Backends::D3D12::D3D12Texture3DBackend;
 using CNA::Internal::Backends::IRenderTargetBackend;
 using CNA::Internal::Backends::D3DCommon::D3DShaderVariant;
 using CNA::Internal::Graphics::ImageData;
@@ -2519,6 +2521,43 @@ int main()
         Check(badEffect && !badEffect->IsValid() && !badEffect->GetCompileError().empty(),
               "BB4: D3D12GraphicsBackend::CreateEffectBackend() -- a deliberately broken HLSL source "
               "fails CompileProgram() with a real, non-empty compiler error message (plan_dx.md DX-121)");
+    }
+
+    // ---- plan_dx.md DX-122: D3D12Texture3DBackend -- a genuine sub-volume (not just full-level)
+    // upload/readback round-trip, with distinct per-Z-slice colors so the Z offset itself is
+    // proven, not just X/Y. ----
+    {
+        auto tex3d = backend.CreateTexture3D(4, 4, 2, /*mipMap=*/false, /*surfaceFormat=*/0);
+        Check(tex3d != nullptr, "CC0: D3D12GraphicsBackend::CreateTexture3D() returns a real D3D12Texture3DBackend");
+
+        auto* d3dTex3d = dynamic_cast<D3D12Texture3DBackend*>(tex3d.get());
+        Check(d3dTex3d != nullptr && d3dTex3d->GetResourceEXT() != nullptr,
+              "CC1: real ID3D12Resource (TEXTURE3D dimension) created");
+
+        // A 2x2x2 sub-cube at offset (1,1,0) within the 4x4x2 volume -- offset (not just (0,0,0))
+        // genuinely exercises SetData's/GetData's x/y/z parameters, and a different solid color per
+        // Z slice (slice 0 = red, slice 1 = green) genuinely exercises the Z/depth offset and
+        // per-slice pitch math, not just X/Y.
+        std::vector<uint8_t> uploadData(2 * 2 * 2 * 4);
+        for (int slice = 0; slice < 2; ++slice)
+        {
+            for (int px = 0; px < 4; ++px)
+            {
+                const std::size_t base = (static_cast<std::size_t>(slice) * 4 + px) * 4;
+                uploadData[base + 0] = slice == 0 ? 255 : 0;
+                uploadData[base + 1] = slice == 0 ? 0 : 255;
+                uploadData[base + 2] = 0;
+                uploadData[base + 3] = 255;
+            }
+        }
+        tex3d->SetData(0, 1, 1, 0, 2, 2, 2, uploadData.data(), static_cast<int>(uploadData.size()));
+
+        std::vector<uint8_t> readback(uploadData.size(), 0);
+        tex3d->GetData(0, 1, 1, 0, 2, 2, 2, readback.data(), static_cast<int>(readback.size()));
+
+        Check(readback == uploadData,
+              "CC2: D3D12Texture3DBackend::SetData()/GetData() round-trip EXACT bytes for a real "
+              "off-center sub-volume upload, including the per-Z-slice color difference (plan_dx.md DX-122)");
     }
 
     std::printf("\n%s: %d failure(s)\n", g_failures == 0 ? "RESULT: ALL PASS" : "RESULT: FAILURES", g_failures);

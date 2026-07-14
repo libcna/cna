@@ -82,6 +82,8 @@ namespace CNA::Internal::Backends::D3D12
         /// DX-111 (closing env_map3d): real D3D12TextureCubeBackend, no longer the inherited
         /// default (IGraphicsBackend::CreateTextureCube() -> nullptr).
         std::unique_ptr<ITextureCubeBackend> CreateTextureCube(int size, bool mipMap, int surfaceFormat) override;
+        /// DX-122: real D3D12Texture3DBackend, no longer the inherited default (-> nullptr).
+        std::unique_ptr<ITexture3DBackend> CreateTexture3D(int w, int h, int depth, bool mipMap, int surfaceFormat) override;
         std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() override;
         /// DX-120: real D3D12OcclusionQueryBackend, no longer the inherited default (-> nullptr).
         std::unique_ptr<IOcclusionQueryBackend> CreateOcclusionQuery() override;
