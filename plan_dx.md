@@ -9,20 +9,27 @@
 > (real-Windows hardware, `needs_human`, same constraint as D3D11's `DX-90`). All 10 stock shader
 > variants draw real, GPU-pixel-verified triangles **off-screen** through Wine+vkd3d-proton
 > (`D3D12_Smoke` CTest, 80/80 checks), including a real `D3D12SpriteBatchBackend`, real device-removed
-> recovery, and mutation-tested discriminating power. **D3D12's own additional, headline gap beyond
-> D3D11's**: swap-chain/`Present()` genuinely crashes under this dev loop's Wine+vkd3d-proton (real
-> cause identified — a `dxgi.dll`/vkd3d-proton architecture mismatch, not a CNA bug), so unlike D3D11,
-> D3D12 has **no working local presentation path at all** — every D3D12 proof in this plan is
-> off-screen, and real swap-chain verification is `DX-114`'s job on real Windows hardware. D3D12 also
-> lacks several capabilities D3D11 has for real: a public render-target backend, `Texture3D`,
-> runtime-settable blend/depth-stencil/rasterizer state (PSOs hardcode `depthEnable=false`/
-> `cullMode=None`), per-slot `SamplerState` (samplers are hardcoded static WRAP/linear), and occlusion
-> queries — all real, scoped, honestly-documented follow-up work, not silently dropped. See the
-> dedicated milestone paragraphs below (search "also closed") for each phase's own real proof, or
-> jump straight to `docs/d3d11-backend.md`/`docs/d3d12-backend.md` for the current-state summaries and
-> `docs/graphics-backend-feature-matrix.md` for the full row-by-row comparison. **With DX-114 the only
-> open D3D12 task and it being `needs_human`, there is no further available Debian-side work on this
-> plan barring new instructions.** Full phase-by-phase history follows below. `DX-100`'s own real
+> recovery, and mutation-tested discriminating power. **Update, same day: the swap-chain crash is
+> fixed.** `CreateSwapChainForHwnd` now genuinely returns `S_OK` when launched through a real,
+> correctly-bootstrapped Proton runtime (`scripts/run-proton-vkd3d.sh`, new this session) instead of
+> the isolated hand-built prefix `DX-100`/`DX-102` originally used — confirms the earlier diagnosis
+> was right (vkd3d-proton needs its matched `dxgi.dll`, not just `d3d12.dll`) and that this was never
+> a CNA bug. **`Present()`/real back-buffer rendering are still separate, unstarted work** — swap-
+> chain *creation* working doesn't yet mean a frame can be drawn and shown; every D3D12 pixel proof
+> in this plan remains off-screen for now (`DX-116`, Phase DX13 below). D3D12 also still lacks several
+> capabilities D3D11 has for real: a public render-target backend, `Texture3D`, runtime-settable
+> blend/depth-stencil/rasterizer state (PSOs hardcode `depthEnable=false`/`cullMode=None`), per-slot
+> `SamplerState` (samplers are hardcoded static WRAP/linear), occlusion queries, and a custom
+> `ShaderEffect`/`SpriteBatch`-custom-effect path — all real, scoped, honestly-documented follow-up
+> work, not silently dropped. **Phase DX13 (D3D12 functional completion) and Phase DX14 (D3D11
+> verification hardening) were added 2026-07-14, recording exactly this — neither is authorized for
+> implementation yet**, pending an explicit project-owner go-ahead, same discipline every phase before
+> them used. See the dedicated milestone paragraphs below (search "also closed") for each phase's own
+> real proof, or jump straight to `docs/d3d11-backend.md`/`docs/d3d12-backend.md` for the current-state
+> summaries and `docs/graphics-backend-feature-matrix.md` for the full row-by-row comparison. **With
+> `DX-114` the only open, needs_human task from Phase DX1–DX12, and Phase DX13/DX14 both unauthorized,
+> there is no further available Debian-side work on this plan barring new instructions.** Full
+> phase-by-phase history follows below. `DX-100`'s own real
 > spike (2026-07-14) found the D3D12 device/queue/fence/
 > command-list path genuinely works locally via Wine+vkd3d-proton (DXR 1.1/SM 6.8 negotiated, more
 > capable than D3D11's own DXVK path), but swap-chain creation specifically crashes/fails under the
@@ -1175,10 +1182,62 @@ production code path) with concrete, reproducible evidence, not a guess:
    the same device/queue/command-list/fence/resource code that works perfectly off-screen would very
    plausibly also drive a real swap chain correctly on real Windows (or a properly Proton-managed
    environment); nothing in the crash backtrace touches any CNA-authored code path.
-4. A follow-up investigation (this same day) is attempting a full, correctly-launched Proton runtime
-   (not just its `wine` binary in isolation) to test whether that closes the gap without needing real
-   Windows hardware at all — see this row's own Notes for the outcome once that lands, and update
-   this section if the result changes the picture above.
+4. **Update, same day**: a follow-up attempt closed this — launching through Proton's actual `proton
+   run` entry point (`STEAM_COMPAT_DATA_PATH`/`STEAM_COMPAT_CLIENT_INSTALL_PATH`, a genuinely
+   Proton-bootstrapped prefix, vkd3d-proton's `d3d12.dll`/`d3d12core.dll` overlaid on top) makes
+   `CreateSwapChainForHwnd` return real `S_OK` — reproduced twice, confirmed via vkd3d-proton's own
+   log (`dxgi_vk_swap_chain_init` succeeds). Formalized as `scripts/run-proton-vkd3d.sh`. This
+   directly confirms point 3's diagnosis was correct: giving vkd3d-proton the *matched pair* it
+   expects (both DLLs, real Proton bootstrap) fixes it — further confirmation this was never a CNA
+   bug. Swap-chain *creation* is fixed; `Present()`/back-buffer rendering are separate, still-
+   unstarted work — see `DX-116` below.
+
+---
+
+## Phase DX13 — D3D12 functional completion (closing the real "doesn't work yet" gaps)
+
+**Not authorized for implementation yet — this phase only records the concrete, scoped work needed
+to close the real (not just unverified) gaps listed above, per the project owner's 2026-07-14
+request to "add new tasks that progressively implement all this."** Wait for an explicit go-ahead
+before starting any row below, same discipline `plan_dx.md` has used for every phase before it.
+
+Ordering rationale: `DX-116` (real `Present()`) is the highest-value single task — it's what makes
+D3D12 an actually-displayable backend for the first time, now that swap-chain *creation* itself
+works locally (see the update above). Every other row here is independent of `DX-116` and can be
+built and off-screen-tested in any order, matching this whole plan's established "prove it off-
+screen first, `Present()` is a separate concern" discipline — sequence chosen below is by expected
+game-code impact (a real XNA game hits `RenderTarget`/state objects/samplers far more often than
+`OcclusionQuery` or a custom `ShaderEffect`), not a hard dependency chain.
+
+| # | Task | Status | Notes |
+|---|---|---|---|
+| DX-116 | Real `Present()` + back-buffer rendering: acquire the current back-buffer RTV (`IDXGISwapChain3::GetCurrentBackBufferIndex`/`GetBuffer`), register it with `D3D12ResourceStateTracker` (`DX-106`), transition `PRESENT`↔`RENDER_TARGET` around each frame's draws (the D3D12-specific requirement D3D11's implicit driver-managed transitions never needed), wire `Clear()`/draws to target it when no offscreen target is bound, and call `swapChain_->Present(...)` for real — mirroring D3D11's own `DX-26` sync-interval/tearing-flag policy (`vsyncEnabled_`/`allowTearingRequested_`/`exclusiveFullscreen_` → `syncInterval`/`DXGI_PRESENT_ALLOW_TEARING`) | ⬜ | The single highest-value D3D12 task remaining — without this, "the swap chain works now" (this session's fix) still can't put a single pixel on screen. Real proof needs a live window; reuse `scripts/run-proton-vkd3d.sh` (this session's own new script) for a windowed, non-CTest diagnostic first (matching `DX-102`'s own `examples/d3d12_swapchain_diag.cpp` precedent), then decide whether a real windowed CTest is feasible on this dev loop or whether `Present()`'s full verification is honestly `DX-114`'s job on real hardware — don't force a claim either way before trying. |
+| DX-117 | `D3D12RenderTargetBackend`/`D3D12RenderTargetCubeBackend`: a real `IRenderTargetBackend` implementation (offscreen `ID3D12Resource` + RTV/DSV, `BindAsRenderTarget`/`UnbindAsRenderTarget`), replacing the current test-only `BindOffscreenColorTargetEXT()` helper as the real, public XNA-facing `RenderTarget2D`/`RenderTargetCube` path; `SetRenderTargets()` for real MRT (mirrors D3D11's `DX-43`/`DX-46`) | ⬜ | The most consequential functional gap after `Present()` — `RenderTarget2D` is one of the most commonly used XNA APIs (post-processing, shadow maps, render-to-texture effects); a game using it against this backend today gets no real implementation at all, not even a degraded one. |
+| DX-118 | D3D12 state-object system: `BlendState`/`DepthStencilState`/`RasterizerState` → PSO-description-key mapping, replacing the current hardcoded `depthEnable=false`/`cullMode=None` PSO defaults with real, cached PSOs keyed on the full (shader variant, stride, blend, depth, rasterizer, RTV/DSV format) tuple `DX-107` already anticipated — reuse `D3DStateMapping.hpp`'s existing XNA→`D3D11_*`/`D3D12_*` enum tables (design decision 4, already shared with D3D11) unchanged | ⬜ | `DX-113`'s own audit already confirmed this is a genuinely unstarted future task, not a coverage gap in an existing one — PSO-baked state means this is architecturally different work from D3D11's `D3D11StateObjectCache` (`DX-50`–`DX-52`), not a straight port; decide the caching/hashing strategy for the now-larger PSO key up front, matching `DX-107`'s own "PSO explosion is a real design question" warning. |
+| DX-119 | Per-slot D3D12 `SamplerState` (16 slots): real dynamic sampler descriptors (a `D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER` heap, unlike the static-sampler-in-root-signature approach used everywhere so far), replacing the current single hardcoded `D3D12_FILTER_MIN_MAG_MIP_LINEAR`+`WRAP` static sampler | ⬜ | Needed for `TextureAddressMode`/`TextureFilter` to be game-controllable at all against this backend — currently every texture sample uses the same fixed filter/wrap regardless of what the game's `SamplerState` actually requests. |
+| DX-120 | `D3D12OcclusionQueryBackend`: `ID3D12QueryHeap` (`D3D12_QUERY_HEAP_TYPE_OCCLUSION`) + a readback buffer, `Begin()`/`End()` via `ID3D12GraphicsCommandList::BeginQuery`/`EndQuery`, `IsComplete()`/`PixelCount()` via `ResolveQueryData` + a mapped readback resource — mirrors D3D11's `DX-47` | ⬜ | Lower game-code impact than `DX-116`–`DX-119` (occlusion culling is an optimization, not core rendering) — `CreateOcclusionQuery()` currently falls through to `IGraphicsBackend`'s silent `nullptr` default, so a game using it just silently gets no culling rather than a build error. |
+| DX-121 | `D3D12EffectBackend`: runtime `D3DCompile()` path for custom HLSL `ShaderEffect` sources (needs the `d3dcompiler` link dependency, confirmed safe to add per `DX-14-compile`'s/D3D11's own `DX-58` precedent) — mirrors D3D11's `DX-58`; then wire `D3D12SpriteBatchBackend::FlushBatch()`'s existing named "not yet implemented" throw for `SpriteBatch::Begin(effect)` to actually use it, mirroring D3D11's `DX-71` | ⬜ | Lower priority than the stock-effect/render-target/state-object gaps above — a game using a fully custom HLSL shader is a narrower case than `BasicEffect`/`RenderTarget2D`/state objects working correctly first, same priority reasoning `DX-58`'s own row used for D3D11. |
+| DX-122 | `D3D12Texture3DBackend`: `ID3D12Resource` with `D3D12_RESOURCE_DIMENSION_TEXTURE3D`, same explicit upload-heap-staging discipline `D3D12TextureBackend`/`D3D12TextureCubeBackend` already established — mirrors D3D11's `DX-42` | ⬜ | Explicitly triaged out of `DX-109`'s original pass ("prioritize buffers + 2D textures first, they're `DX-111`'s actual prerequisite") — real, scoped follow-up, not an oversight. `Texture3D` usage is rare in real XNA games relative to `Texture2D`/`RenderTarget2D`, hence the low priority here too. |
+| DX-123 | `D3D12TextureCubeBackend::GetData()`: real readback (staging/readback-heap copy + `Map`), replacing the current silent no-op default `ITextureCubeBackend::GetData()` inherits | ⬜ | Narrower gap than `DX-122` — `SetData()`/sampling already work for real (`env_map3d` needs them); only the CPU-readback direction is missing, unlike D3D11's `DX-41` which has real readback both ways. |
+
+## Phase DX14 — D3D11 verification hardening (implemented-but-unverified gaps)
+
+**Also not authorized for implementation yet, same discipline as Phase DX13.** Nothing in this
+phase is a known bug — every row below is real, shipped D3D11 code with no dedicated pixel test
+proving it's correct, as opposed to Phase DX13's D3D12 rows, which are missing code entirely. Lower
+priority than Phase DX13 for that reason: if forced to choose, closing a "might have a latent bug"
+gap on the more-mature D3D11 backend is less urgent than building out D3D12's actually-missing
+functionality.
+
+| # | Task | Status | Notes |
+|---|---|---|---|
+| DX-124 | Dedicated multi-light (`DirectionalLight1`/`DirectionalLight2`) + `EmissiveColor` discriminating pixel test for `BasicEffect`/`EnvironmentMapEffect`/`SkinnedEffect`'s shared `D3DLightingConstants` path — the existing lit-pixel test only proves single-light lit-vs-unlit differs, not that light 1/2/emissive each contribute correctly and independently | ⬜ | |
+| DX-125 | Dedicated specular-highlight (`SpecularColor`/`SpecularPower`) pixel test — the existing lit-pixel test deliberately zeroes specular for CPU-comparison determinism; needs a real methodology for cross-checking a GPU-computed specular term (e.g. a camera/light/normal geometry deliberately chosen so the expected specular contribution is analytically computable, not just "some highlight is visible") | ⬜ | |
+| DX-126 | Mip level > 0 `SetData`/`UpdatePixelsLevel`/sampling dedicated pixel test — texture upload/readback is currently only proven at mip level 0 | ⬜ | |
+| DX-127 | `SpriteFont` D3D11-specific glyph placement/spacing/newline/flip test, mirroring EasyGL's own already-pixel-verified suite (Tasks 424-429) — builds on already-tested `Texture2D`/`SpriteBatch`/`VertexBuffer` primitives but has no D3D11-specific coverage yet | ⬜ | |
+| DX-128 | `Model`/`ModelMesh`/`ModelMeshPart`/`ModelBone` D3D11-specific runtime-API test — not separately exercised against this backend this session | ⬜ | |
+| DX-129 | `RenderTargetCube` dedicated pixel test — currently only construction is proven real; `RenderTarget2D` has the full bind+clear+readback+unbind-restores-backbuffer proof, `RenderTargetCube` doesn't yet | ⬜ | |
+| DX-130 | The 5 combo `Clear*` variants (`ClearColorAndDepth`/`ClearDepth`/`ClearStencil`/`ClearDepthAndStencil`/`ClearColorAndStencil`/`ClearColorDepthAndStencil`) dedicated round-trip pixel test — real `ClearDepthStencilView` calls exist and are implemented identically to the proven plain `Clear(r,g,b,a)` path, but only plain `Clear` has a dedicated pixel test (`DX-25`'s own long-standing honest gap) | ⬜ | |
 
 ---
 
