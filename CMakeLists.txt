@@ -376,6 +376,20 @@ target_link_libraries(CNA
 #        SDL3_ttf::SDL3_ttf
 )
 
+# D3D11's/D3D12's SpriteBatch backend (plan_dx.md DX-70/DX-71) calls back into
+# Microsoft::Xna::Framework::Graphics::Effect::Apply() for SpriteBatch::Begin(effect)'s custom-
+# Effect path -- a genuine, honest circular dependency between the backend static library and CNA
+# itself (the backend needs a CNA-defined symbol, while CNA needs the backend to implement
+# IGraphicsBackend). Under MinGW's single-pass archive resolution, any executable linking CNA
+# (not just the D3D11/D3D12 CTest binaries, which never link the full CNA target) hit a real
+# "undefined reference to Effect::Apply()" at link time -- e.g. cna_reference_dump/cna_demo_2d --
+# because libCNA.a is fully scanned before libcna_backend_graphics_d3d11.a creates the need.
+# CMake's documented static-library-cycle support (see LINK_INTERFACE_MULTIPLICITY) resolves this
+# by repeating the archives on the final link line once this cycle is declared.
+if(CNA_GRAPHICS_BACKEND STREQUAL "D3D11" OR CNA_GRAPHICS_BACKEND STREQUAL "D3D12")
+    target_link_libraries(${BACKEND_TARGET} PRIVATE CNA)
+endif()
+
 if(ANDROID)
     # Detail::AndroidSensorBridge (Microsoft::Devices::Sensors) calls the NDK's
     # ASensorManager_*/ASensorEventQueue_*/ALooper_* API directly (no JNI) --

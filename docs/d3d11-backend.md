@@ -150,10 +150,19 @@ vertex-stride inference, cbuffer `static_assert` layout checks already caught at
 - **`Model`/`SpriteFont`** have not been separately exercised against this backend this session —
   they build on already-tested `Texture2D`/`SpriteBatch`/`VertexBuffer` primitives, but have no
   D3D11-specific test coverage yet.
-- **`cna_reference_dump`/`cna_demo_2d` fail to link under D3D11** (`undefined reference to
-  Effect::Apply()`) — found during `plan_dx.md` `DX-81`'s coverage audit, confirmed via `git stash`
-  to pre-date this session's D3D11 work entirely (fails identically on the base commit). A real,
-  pre-existing, unrelated gap — not introduced by and not fixed by the D3D11 backend work.
+- **`cna_reference_dump`'s `undefined reference to Effect::Apply()` link failure is fixed** (found
+  during `plan_dx.md` `DX-81`'s coverage audit; root cause was a genuine, honest circular
+  dependency — `D3D11SpriteBatch.cpp` (in `cna_backend_graphics_d3d11`) calls back into
+  `Effect::Apply()` (defined in `CNA` itself), and MinGW's single-pass archive resolution never
+  revisited `libCNA.a` once `libcna_backend_graphics_d3d11.a` created the need. Fixed by declaring
+  the cycle explicitly in `CMakeLists.txt` (`target_link_libraries(${BACKEND_TARGET} PRIVATE CNA)`
+  for `D3D11`/`D3D12`) — CMake's documented static-library-cycle support then repeats the archives
+  on the final link line automatically. Verified via a real `cna_reference_dump.exe` link + rerun
+  of the full `D3D11`/`D3D12` CTest suites (no regression). **`cna_demo_2d` still fails, but for a
+  separate, unrelated reason**: it never links `SDL3::SDL3` directly and `CNA`'s own link to it is
+  `PRIVATE`, so `Game1.cpp`'s `#include <SDL3/SDL.h>` can't resolve under the MinGW cross-build
+  (native Linux builds hit a system-wide SDL3 install and never noticed this gap) — a genuine,
+  pre-existing, distinct compile-time include-path issue, not yet fixed.
 - **Direct3D 12 does not exist as a backend.** `plan_dx.md` Phase DX12 is written up in full but
   requires its own separate authorization (design decision 9) — `CNA_GRAPHICS_BACKEND=D3D12` is not
   a recognized CMake value.
