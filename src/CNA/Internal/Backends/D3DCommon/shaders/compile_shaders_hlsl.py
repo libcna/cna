@@ -53,6 +53,8 @@ SHADERS = [
     ("sprite2d.frag.hlsl",           "main", "ps_5_0", "kSprite2dFragDxbc"),
     ("instanced3d.vert.hlsl",        "main", "vs_5_0", "kInstanced3dVertDxbc"),
     ("instanced3d.frag.hlsl",        "main", "ps_5_0", "kInstanced3dFragDxbc"),
+    ("alpha_test_colored3d.vert.hlsl", "main", "vs_5_0", "kAlphaTestColored3dVertDxbc"),
+    ("alpha_test_colored3d.frag.hlsl", "main", "ps_5_0", "kAlphaTestColored3dFragDxbc"),
 ]
 
 

@@ -1547,6 +1547,79 @@ int main()
               "all the way to the exact FogColor, and the passing fragment survives the alpha test "
               "to reach the fog blend at all (plan_dx.md DX-137)");
 
+        // plan_dx.md DX-136: AlphaTestEffect.VertexColorEnabled -- alpha_test3d's new stride-24
+        // sibling (alpha_test_colored3d, VertexPositionColorTexture) gives it a real vertex-color
+        // attribute. A white, fully-opaque texture isolates the vertex-color contribution: with
+        // VertexColorEnabled=true a red vertex color multiplies through exactly; with it false,
+        // the same vertex buffer's color is genuinely ignored and DiffuseColor (white) alone
+        // survives. Mirrors D3D11's own DX-136 methodology exactly.
+        struct VPCTac { float x, y, z; uint32_t color; float u, v; };
+        const uint32_t kRedVCac = 0xFF0000FFu; // A=255,B=0,G=0,R=255 (R8G8B8A8 byte order)
+        static const VPCTac kTriAlphaColor[3] = {
+            {-1.0f, -1.0f, 0.0f, kRedVCac, 0.0f, 1.0f},
+            { 3.0f, -1.0f, 0.0f, kRedVCac, 2.0f, 1.0f},
+            {-1.0f,  3.0f, 0.0f, kRedVCac, 0.0f, -1.0f},
+        };
+        D3D12VertexBufferBackend vbAlphaColor(&backend, 3);
+        vbAlphaColor.SetData(kTriAlphaColor, 3, sizeof(VPCTac));
+
+        ImageData whiteImgAC;
+        whiteImgAC.width = 2; whiteImgAC.height = 2; whiteImgAC.mipLevels = 1;
+        whiteImgAC.pixels.assign(2 * 2 * 4, 255);
+        D3D12TextureBackend whiteTexAC(&backend, whiteImgAC);
+
+        GpuDrawParams acp;
+        acp.texture0 = &whiteTexAC;
+        acp.textureEnabled = true;
+        // Default {0,0,1,1}: both AlphaPassW and AlphaFailW are non-negative, so w is never
+        // negative regardless of passTest -- genuinely always passes (never discards).
+        acp.alphaTest[0] = 0.0f;
+        acp.alphaTest[1] = 0.0f;
+        acp.alphaTest[2] = 1.0f;
+        acp.alphaTest[3] = 1.0f;
+
+        acp.vertexColorEnabled = true;
+        backend.Clear(0.0f, 0.0f, 1.0f, 1.0f);
+        backend.DrawPrimitivesEx(vbAlphaColor, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                 Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, acp);
+        auto acOn = ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight);
+        Check(isColor(pixelAt(acOn, 30, 30), 255, 0, 0, 255),
+              "P5: DrawPrimitivesEx() real alpha_test_colored3d (stride 24) with "
+              "VertexColorEnabled=true multiplies the exact vertex color (red) through a white "
+              "texture (plan_dx.md DX-136)");
+
+        acp.vertexColorEnabled = false;
+        backend.Clear(0.0f, 0.0f, 1.0f, 1.0f);
+        backend.DrawPrimitivesEx(vbAlphaColor, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                 Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, acp);
+        auto acOff = ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight);
+        Check(isColor(pixelAt(acOff, 30, 30), 255, 255, 255, 255),
+              "P6: DrawPrimitivesEx() the SAME vertex buffer with VertexColorEnabled=false "
+              "genuinely ignores its vertex color -- only DiffuseColor (white) survives, "
+              "distinctly different from the true case above (plan_dx.md DX-136)");
+
+        // Alpha test itself still genuinely discards on this new stride-24 path. AlphaTol=0
+        // (comparison mode), AlphaRef=0.5: alpha=200/255 (~0.784, NOT < 0.5) genuinely fails ->
+        // discard -> background survives.
+        acp.alphaTest[0] = 0.5f; acp.alphaTest[1] = 0.0f;
+        acp.alphaTest[2] = 1.0f; acp.alphaTest[3] = -1.0f;
+        std::vector<uint8_t> highAlphaPixels(2 * 2 * 4);
+        for (int i = 0; i < 4; ++i)
+        {
+            highAlphaPixels[i * 4 + 0] = 255; highAlphaPixels[i * 4 + 1] = 255;
+            highAlphaPixels[i * 4 + 2] = 255; highAlphaPixels[i * 4 + 3] = 200;
+        }
+        whiteTexAC.UpdatePixelsLevel(0, highAlphaPixels.data(), 2, 2);
+        acp.vertexColorEnabled = true;
+        backend.Clear(0.0f, 1.0f, 0.0f, 1.0f);
+        backend.DrawPrimitivesEx(vbAlphaColor, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                 Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, acp);
+        auto acDiscard = ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight);
+        Check(isColor(pixelAt(acDiscard, 30, 30), 0, 255, 0, 255),
+              "P7: DrawPrimitivesEx() alpha_test_colored3d's alpha-test discard logic still "
+              "genuinely works on the new stride-24/vertex-color path -- a failing alpha drops "
+              "the pixel, leaving the Clear() background untouched (plan_dx.md DX-136)");
+
         backend.UnbindOffscreenColorTargetEXT();
     }
 

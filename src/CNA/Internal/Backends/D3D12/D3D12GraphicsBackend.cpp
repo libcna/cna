@@ -1455,6 +1455,15 @@ namespace CNA::Internal::Backends::D3D12
             throw std::runtime_error(
                 "D3D12GraphicsBackend::DrawPrimitivesEx: SkinnedEffect (skinned3d) requires stride "
                 "52 (VertexPositionNormalTextureSkinned)");
+        // DX-136: alpha_test3d.vert.hlsl (stride 20, Position+UV) and its sibling
+        // alpha_test_colored3d.vert.hlsl (stride 24, Position+Color+UV -- gives
+        // AlphaTestEffect.VertexColorEnabled a real vertex-color attribute) are the only two
+        // strides this effect supports, same as D3D11's own DrawPrimitivesExImpl.
+        if (needsAlphaTest && stride != 20 && stride != 24)
+            throw std::runtime_error(
+                "D3D12GraphicsBackend::DrawPrimitivesEx: AlphaTestEffect (alpha_test3d) only "
+                "supports stride 20 (VertexPositionTexture) or 24 "
+                "(VertexPositionColorTexture, plan_dx.md DX-136)");
 
         D3DShaderVariant variant;
         bool hasTexture;
@@ -1462,7 +1471,7 @@ namespace CNA::Internal::Backends::D3D12
         int numSrvs = 0;
         if (needsAlphaTest)
         {
-            variant = D3DShaderVariant::AlphaTest3d;
+            variant = (stride == 24) ? D3DShaderVariant::AlphaTestColored3d : D3DShaderVariant::AlphaTest3d;
             hasTexture = true;
             numCbvs = 1; // alpha_test3d's own single combined PerDraw (b0) -- no separate FogParams cbuffer.
             numSrvs = 1;
