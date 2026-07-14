@@ -8,6 +8,7 @@
 // project's own stock-effect shader semantics (Phase DX8).
 
 #include <d3d11.h>
+#include <d3d12.h>
 #include <cstddef>
 
 namespace CNA::Internal::Backends::D3DCommon
@@ -26,4 +27,16 @@ namespace CNA::Internal::Backends::D3DCommon
     ///   52: POSITION0 (0), NORMAL0 (12), TEXCOORD0 (24), BLENDWEIGHT0 (R32G32B32A32_FLOAT, 32),
     ///       BLENDINDICES0 (R8G8B8A8_UINT, 48)
     const D3D11_INPUT_ELEMENT_DESC* InputElementsForStride(std::size_t strideInBytes, UINT& count);
+
+    /// plan_dx.md Phase DX12 (DX-107): D3D12 counterpart of InputElementsForStride() above, same 5
+    /// stride-keyed layouts, same byte offsets/semantic names -- D3D11_INPUT_ELEMENT_DESC and
+    /// D3D12_INPUT_ELEMENT_DESC are identical in field shape (verified: same field order/types,
+    /// only the struct/enum names carry D3D11_/D3D12_ prefixes -- D3D11_INPUT_PER_VERTEX_DATA == 0
+    /// == D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, checked against both SDK headers on this
+    /// machine, same "verify, don't assume" discipline design decision 4/DX-12-state already used).
+    /// Unlike D3D11 (DX-32's own ID3D11InputLayout cache), D3D12 has no separate input-layout COM
+    /// object at all -- this array is baked directly into a D3D12_GRAPHICS_PIPELINE_STATE_DESC's
+    /// InputLayout field at PSO-creation time (DX-107), so this function is a pure data lookup, not
+    /// a cache.
+    const D3D12_INPUT_ELEMENT_DESC* InputElementsForStrideD3D12(std::size_t strideInBytes, UINT& count);
 }

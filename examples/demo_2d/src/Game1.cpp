@@ -5,8 +5,6 @@
 #include <cstdlib>
 #include <iostream>
 
-#include <SDL3/SDL.h>
-
 #include "System/TimeSpan.hpp"
 
 Game1::Game1()
@@ -217,15 +215,15 @@ void Game1::Update(Microsoft::Xna::Framework::GameTime& gameTime)
     if (webGpu2DValidation_)
     {
         ++validationFrame_;
-        SDL_Window* const window = getWindowProperty().GetNativeSdlWindowEXT();
-        if (window != nullptr && validationFrame_ == 20)
-            SDL_SetWindowSize(window, 960, 540);
-        if (window != nullptr && validationFrame_ == 45)
-            SDL_MinimizeWindow(window);
-        if (window != nullptr && validationFrame_ == 70)
+        auto& window = getWindowProperty();
+        if (validationFrame_ == 20)
+            window.EndScreenDeviceChange(window.getScreenDeviceNameProperty(), 960, 540);
+        if (validationFrame_ == 45)
+            window.MinimizeEXT();
+        if (validationFrame_ == 70)
         {
-            SDL_RestoreWindow(window);
-            SDL_SetWindowSize(window, 800, 600);
+            window.RestoreEXT();
+            window.EndScreenDeviceChange(window.getScreenDeviceNameProperty(), 800, 600);
         }
         return;
     }

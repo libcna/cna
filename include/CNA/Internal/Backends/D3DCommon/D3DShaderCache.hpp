@@ -1,0 +1,54 @@
+#pragma once
+
+// plan_dx.md Phase DX3 (DX-15-embed): wires hlsl_shaders.hpp's checked-in, compiler-verified DXBC
+// byte arrays (DX-14-compile) into real ID3D11VertexShader/ID3D11PixelShader objects, one pair per
+// DX-13-hlsl stock shader variant. Deliberately narrow scope: this only proves/exposes the
+// DXBC -> D3D11-shader-object path. Full pipeline wiring (constant buffers, input layouts, draw
+// calls) is Phase DX8/DX-32 -- this cache is what that later phase calls into, not a replacement
+// for it.
+
+#include <d3d11.h>
+#include <wrl/client.h>
+
+#include <cstddef>
+#include <cstdint>
+
+namespace CNA::Internal::Backends::D3DCommon
+{
+    using Microsoft::WRL::ComPtr;
+
+    /// Identifies one of the 10 stock HLSL shader variants ported in DX-13-hlsl and compiled to
+    /// DXBC in DX-14-compile (hlsl_shaders.hpp). Mirrors the .hlsl source filenames.
+    enum class D3DShaderVariant
+    {
+        Colored3d,
+        Textured3d,
+        ColoredTextured3d,
+        LitTextured3d,
+        AlphaTest3d,
+        DualTexture3d,
+        EnvMap3d,
+        Skinned3d,
+        Sprite2d,
+        Instanced3d,
+    };
+
+    /// Returns the compiled DXBC bytecode (pointer + length) for a variant's vertex shader stage.
+    /// Exposed separately from CreateVertexShaderForVariant() because D3D11_CreateInputLayout also
+    /// needs the vertex shader's raw bytecode (its input signature), not just the shader object --
+    /// Phase DX5's input-layout cache will call this directly.
+    void GetVertexShaderBytecode(D3DShaderVariant variant, const uint8_t*& bytes, std::size_t& size);
+
+    /// Returns the compiled DXBC bytecode (pointer + length) for a variant's pixel shader stage.
+    void GetPixelShaderBytecode(D3DShaderVariant variant, const uint8_t*& bytes, std::size_t& size);
+
+    /// Creates the ID3D11VertexShader for the given stock variant from its checked-in DXBC bytes.
+    /// Returns a null ComPtr (does not throw) if CreateVertexShader fails -- callers check the
+    /// returned ComPtr, matching this project's existing D3D11 backend error-handling style for
+    /// resource-creation calls.
+    ComPtr<ID3D11VertexShader> CreateVertexShaderForVariant(ID3D11Device* device, D3DShaderVariant variant);
+
+    /// Creates the ID3D11PixelShader for the given stock variant from its checked-in DXBC bytes.
+    /// Returns a null ComPtr (does not throw) if CreatePixelShader fails.
+    ComPtr<ID3D11PixelShader> CreatePixelShaderForVariant(ID3D11Device* device, D3DShaderVariant variant);
+}

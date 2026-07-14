@@ -91,8 +91,8 @@ if(EMSCRIPTEN OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
 else()
     set(_cna_default_backend "SDL_RENDERER")
 endif()
-set(CNA_GRAPHICS_BACKEND "${_cna_default_backend}" CACHE STRING "Graphics backend to use (SDL_RENDERER, EASYGL, BGFX, VULKAN, WEBGPU, HEADLESS, SOFTWARE, or D3D11)")
-set_property(CACHE CNA_GRAPHICS_BACKEND PROPERTY STRINGS "SDL_RENDERER" "EASYGL" "BGFX" "VULKAN" "WEBGPU" "HEADLESS" "SOFTWARE" "D3D11")
+set(CNA_GRAPHICS_BACKEND "${_cna_default_backend}" CACHE STRING "Graphics backend to use (SDL_RENDERER, EASYGL, BGFX, VULKAN, WEBGPU, HEADLESS, SOFTWARE, D3D11, or D3D12)")
+set_property(CACHE CNA_GRAPHICS_BACKEND PROPERTY STRINGS "SDL_RENDERER" "EASYGL" "BGFX" "VULKAN" "WEBGPU" "HEADLESS" "SOFTWARE" "D3D11" "D3D12")
 
 option(CNA_BACKEND_SDL_RENDERER "Enable SDL_Renderer graphics backend" OFF)
 option(CNA_BACKEND_EASY_GL "Enable easy-gl graphics backend" OFF)
@@ -102,9 +102,10 @@ option(CNA_BACKEND_WEBGPU "Enable WebGPU graphics backend (wgpu-native)" OFF)
 option(CNA_BACKEND_HEADLESS "Enable Headless (no GPU/window) graphics backend" OFF)
 option(CNA_BACKEND_SOFTWARE "Enable Software (CPU rasterizer) graphics backend" OFF)
 option(CNA_BACKEND_D3D11 "Enable Direct3D 11 graphics backend (Windows only)" OFF)
+option(CNA_BACKEND_D3D12 "Enable Direct3D 12 graphics backend (Windows only)" OFF)
 
 set(_cna_explicit_backend_selection OFF)
-if(CNA_BACKEND_SDL_RENDERER OR CNA_BACKEND_EASY_GL OR CNA_BACKEND_BGFX OR CNA_BACKEND_VULKAN OR CNA_BACKEND_WEBGPU OR CNA_BACKEND_HEADLESS OR CNA_BACKEND_SOFTWARE OR CNA_BACKEND_D3D11)
+if(CNA_BACKEND_SDL_RENDERER OR CNA_BACKEND_EASY_GL OR CNA_BACKEND_BGFX OR CNA_BACKEND_VULKAN OR CNA_BACKEND_WEBGPU OR CNA_BACKEND_HEADLESS OR CNA_BACKEND_SOFTWARE OR CNA_BACKEND_D3D11 OR CNA_BACKEND_D3D12)
     set(_cna_explicit_backend_selection ON)
 endif()
 
@@ -134,6 +135,9 @@ if(_cna_explicit_backend_selection)
     if(CNA_BACKEND_D3D11)
         list(APPEND _cna_enabled_backends "D3D11")
     endif()
+    if(CNA_BACKEND_D3D12)
+        list(APPEND _cna_enabled_backends "D3D12")
+    endif()
 
     list(LENGTH _cna_enabled_backends _cna_enabled_backends_count)
     if(NOT _cna_enabled_backends_count EQUAL 1)
@@ -143,13 +147,14 @@ if(_cna_explicit_backend_selection)
     list(GET _cna_enabled_backends 0 CNA_GRAPHICS_BACKEND)
 endif()
 
-# plan_dx.md design decision 2: D3D11 genuinely cannot build anywhere but Windows (native or
-# MinGW/MSVC cross-compile) -- d3d11.h/dxgi.h do not exist elsewhere. Unlike BGFX's soft
+# plan_dx.md design decision 2: D3D11/D3D12 genuinely cannot build anywhere but Windows (native or
+# MinGW/MSVC cross-compile) -- d3d11.h/d3d12.h/dxgi.h do not exist elsewhere. Unlike BGFX's soft
 # WARNING-only platform check below, this is a hard FATAL_ERROR.
-if(CNA_GRAPHICS_BACKEND STREQUAL "D3D11" AND NOT CMAKE_SYSTEM_NAME STREQUAL "Windows")
+if((CNA_GRAPHICS_BACKEND STREQUAL "D3D11" OR CNA_GRAPHICS_BACKEND STREQUAL "D3D12")
+        AND NOT CMAKE_SYSTEM_NAME STREQUAL "Windows")
     message(FATAL_ERROR
-        "CNA: D3D11 backend only builds when targeting Windows. Either build natively on "
-        "Windows, or cross-compile from Linux with "
+        "CNA: ${CNA_GRAPHICS_BACKEND} backend only builds when targeting Windows. Either build "
+        "natively on Windows, or cross-compile from Linux with "
         "-DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64.cmake")
 endif()
 
@@ -240,16 +245,23 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "D3D11")
     set(BACKEND_DIR "src/CNA/Internal/Backends/D3D11")
     set(BACKEND_TARGET "cna_backend_graphics_d3d11")
     add_compile_definitions(CNA_BACKEND_D3D11)
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "D3D12")
+    message(STATUS "CNA: Using D3D12 graphics backend")
+    set(BACKEND_DIR "src/CNA/Internal/Backends/D3D12")
+    set(BACKEND_TARGET "cna_backend_graphics_d3d12")
+    add_compile_definitions(CNA_BACKEND_D3D12)
 else()
 
     message(FATAL_ERROR "CNA: Unknown graphics backend: ${CNA_GRAPHICS_BACKEND}")
 endif()
 
-# --- FFmpeg (video decoding) — not available on Emscripten/Android, nor on the
-# mingw-w64 Windows cross-build (no mingw-w64 FFmpeg dev packages in this toolchain;
-# pkg-config would otherwise silently resolve to the host's native FFmpeg and poison
-# the cross-compile's include path with native glibc headers). ---
-if(MINGW OR EMSCRIPTEN OR ANDROID)
+# --- FFmpeg (video decoding) — not available on Emscripten/Android, nor on any Windows target
+# (mingw-w64 cross-build OR a native MSVC build, e.g. this project's own D3D11/D3D12 Windows CI --
+# neither has an FFmpeg pkg-config path; on the MinGW cross-build, pkg-config would otherwise
+# silently resolve to the host's native FFmpeg and poison the cross-compile's include path with
+# native glibc headers). WIN32 covers both MinGW and native MSVC uniformly; MINGW is kept for
+# clarity/documentation even though it's now redundant with WIN32. ---
+if(MINGW OR WIN32 OR EMSCRIPTEN OR ANDROID)
     set(CNA_FFMPEG_AVAILABLE OFF)
 else()
     set(CNA_FFMPEG_AVAILABLE ON)
@@ -305,10 +317,18 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "WEBGPU")
             VERBATIM)
     endif()
 elseif(CNA_GRAPHICS_BACKEND STREQUAL "D3D11")
-    # plan_dx.md design decision 3: minimal confirmed link set only (DX-1) -- d3dcompiler is
-    # deliberately NOT linked here, it belongs only to the offline shader-compile tool / DX-58's
-    # runtime custom-effect path, never the main backend target.
-    target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 d3d11 dxgi cna_backend_graphics_d3dcommon)
+    # plan_dx.md design decision 3 (DX-1): d3d11/dxgi is the confirmed minimal link set for the
+    # stock offline-compiled shader pipeline. d3dcompiler is linked too, specifically for DX-58's
+    # runtime D3DCompile() custom-ShaderEffect path (D3D11EffectBackend) -- confirmed safe to link
+    # in isolation by DX-1/DX-14-compile's own spikes; the offline stock pipeline never calls it.
+    target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 d3d11 dxgi d3dcompiler cna_backend_graphics_d3dcommon)
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "D3D12")
+    # plan_dx.md DX-100/DX-101: d3d12+dxgi alone was confirmed sufficient for device/queue/
+    # command-list creation by DX-100's own spike -- start from that minimum, same discipline as
+    # DX-12/design decision 3. dxguid is deliberately NOT linked (still unneeded). d3dcompiler was
+    # added by DX-121 (D3D12EffectBackend's runtime D3DCompile() path) -- confirmed safe to link in
+    # isolation by D3D11's own DX-14-compile/DX-58 precedent.
+    target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 d3d12 dxgi d3dcompiler cna_backend_graphics_d3dcommon)
 endif()
 
 file(GLOB_RECURSE CNA_SOURCES CONFIGURE_DEPENDS
@@ -358,6 +378,20 @@ target_link_libraries(CNA
         SDL3_mixer::SDL3_mixer
 #        SDL3_ttf::SDL3_ttf
 )
+
+# D3D11's/D3D12's SpriteBatch backend (plan_dx.md DX-70/DX-71) calls back into
+# Microsoft::Xna::Framework::Graphics::Effect::Apply() for SpriteBatch::Begin(effect)'s custom-
+# Effect path -- a genuine, honest circular dependency between the backend static library and CNA
+# itself (the backend needs a CNA-defined symbol, while CNA needs the backend to implement
+# IGraphicsBackend). Under MinGW's single-pass archive resolution, any executable linking CNA
+# (not just the D3D11/D3D12 CTest binaries, which never link the full CNA target) hit a real
+# "undefined reference to Effect::Apply()" at link time -- e.g. cna_reference_dump/cna_demo_2d --
+# because libCNA.a is fully scanned before libcna_backend_graphics_d3d11.a creates the need.
+# CMake's documented static-library-cycle support (see LINK_INTERFACE_MULTIPLICITY) resolves this
+# by repeating the archives on the final link line once this cycle is declared.
+if(CNA_GRAPHICS_BACKEND STREQUAL "D3D11" OR CNA_GRAPHICS_BACKEND STREQUAL "D3D12")
+    target_link_libraries(${BACKEND_TARGET} PRIVATE CNA)
+endif()
 
 if(ANDROID)
     # Detail::AndroidSensorBridge (Microsoft::Devices::Sensors) calls the NDK's
@@ -6581,10 +6615,13 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SOFTWARE")
     cna_software_test(cna_diag_software examples/cross_backend_diagnostic_scene.cpp)
 endif()
 
-# plan_dx.md DX-80: D3D11 CTest registration. The built .exe is a Windows PE binary (this backend
-# is Windows-only/cross-compiled, design decision 2) -- CTest itself still runs on the Linux host,
-# so the test COMMAND is scripts/run-wine-dxvk.sh (DX-3) wrapping the real executable, not the
-# executable directly.
+# plan_dx.md DX-80: D3D11 CTest registration. When cross-compiled from Linux (this backend is
+# Windows-only, design decision 2), CTest itself still runs on the Linux host, so the test COMMAND
+# wraps the real .exe with scripts/run-wine-dxvk.sh (DX-3). A native MSVC configure on a real
+# Windows machine (CMAKE_CROSSCOMPILING is false there) needs no Wine wrapper at all -- runs the
+# .exe directly (see .github/workflows/d3d-windows-ci.yml, added specifically to exercise this
+# path for real; it only covers MSVC-compile/unit-test/shader-generation-check, not a substitute
+# for plan_dx.md DX-90's real swap-chain/tearing/device-lost/driver-parity items).
 if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D11")
     enable_testing()
 
@@ -6605,9 +6642,17 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D11")
         endif()
     endmacro()
 
+    macro(cna_d3d11_ctest_command out_var target_name)
+        if(CMAKE_CROSSCOMPILING)
+            set(${out_var} ${CMAKE_SOURCE_DIR}/scripts/run-wine-dxvk.sh $<TARGET_FILE:${target_name}>)
+        else()
+            set(${out_var} $<TARGET_FILE:${target_name}>)
+        endif()
+    endmacro()
+
     cna_d3d11_test(cna_test_d3d11_smoke examples/d3d11_smoke_test.cpp)
-    add_test(NAME D3D11_Smoke
-        COMMAND ${CMAKE_SOURCE_DIR}/scripts/run-wine-dxvk.sh $<TARGET_FILE:cna_test_d3d11_smoke>)
+    cna_d3d11_ctest_command(_d3d11_smoke_cmd cna_test_d3d11_smoke)
+    add_test(NAME D3D11_Smoke COMMAND ${_d3d11_smoke_cmd})
     set_tests_properties(D3D11_Smoke PROPERTIES
         TIMEOUT 60
         LABELS "D3D11")
@@ -6615,11 +6660,83 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D11")
     # Phase DX3: pure-function checks for D3DCommon's format/state/vertex-layout mapping tables --
     # no device/window/GPU needed.
     cna_d3d11_test(cna_test_d3d11_common examples/d3d11_common_test.cpp)
-    add_test(NAME D3D11_Common
-        COMMAND ${CMAKE_SOURCE_DIR}/scripts/run-wine-dxvk.sh $<TARGET_FILE:cna_test_d3d11_common>)
+    cna_d3d11_ctest_command(_d3d11_common_cmd cna_test_d3d11_common)
+    add_test(NAME D3D11_Common COMMAND ${_d3d11_common_cmd})
     set_tests_properties(D3D11_Common PROPERTIES
         TIMEOUT 30
-        LABELS "D3D11")
+        LABELS "D3D11"
+        # DX-85: this binary never creates a D3D11 device (pure-function mapping-table checks
+        # only), so it legitimately never prints a "DXVK: <version>" line -- tell the wrapper's
+        # DXVK-engagement gate not to misreport that as a WineD3D fallback. Harmless no-op when
+        # CMAKE_CROSSCOMPILING is false (native MSVC run, no wrapper script involved at all).
+        ENVIRONMENT "CNA_D3D11_SKIP_DXVK_GATE=1")
+
+    # DX-82: state-object pixel-behaviour tests, reusing the same backend-agnostic EasyGL-authored
+    # sources Vulkan already reuses verbatim (they only touch the public GraphicsDevice/BasicEffect
+    # API, nothing EasyGL-specific) -- real behavioural proof through the full public draw path,
+    # not just "the D3D11 state object was created/bound" (Phase DX7's own, narrower bar).
+    cna_d3d11_test(cna_test_d3d11_blendstate_opaque examples/easygl_blendstate_opaque_test.cpp)
+    cna_d3d11_ctest_command(_d3d11_blend_opaque_cmd cna_test_d3d11_blendstate_opaque)
+    add_test(NAME D3D11_BlendState_Opaque COMMAND ${_d3d11_blend_opaque_cmd})
+    set_tests_properties(D3D11_BlendState_Opaque PROPERTIES TIMEOUT 60 LABELS "D3D11")
+
+    cna_d3d11_test(cna_test_d3d11_blendstate_alphablend examples/easygl_blendstate_alphablend_test.cpp)
+    cna_d3d11_ctest_command(_d3d11_blend_alpha_cmd cna_test_d3d11_blendstate_alphablend)
+    add_test(NAME D3D11_BlendState_AlphaBlend COMMAND ${_d3d11_blend_alpha_cmd})
+    set_tests_properties(D3D11_BlendState_AlphaBlend PROPERTIES TIMEOUT 60 LABELS "D3D11")
+
+    cna_d3d11_test(cna_test_d3d11_depthstencilstate_stencil_enable examples/easygl_depthstencilstate_stencil_enable_test.cpp)
+    cna_d3d11_ctest_command(_d3d11_ds_stencil_cmd cna_test_d3d11_depthstencilstate_stencil_enable)
+    add_test(NAME D3D11_DepthStencilState_StencilEnable COMMAND ${_d3d11_ds_stencil_cmd})
+    set_tests_properties(D3D11_DepthStencilState_StencilEnable PROPERTIES TIMEOUT 60 LABELS "D3D11")
+
+    cna_d3d11_test(cna_test_d3d11_rasterizerstate_cullmode examples/easygl_rasterizerstate_cullmode_test.cpp)
+    cna_d3d11_ctest_command(_d3d11_rast_cullmode_cmd cna_test_d3d11_rasterizerstate_cullmode)
+    add_test(NAME D3D11_RasterizerState_CullMode COMMAND ${_d3d11_rast_cullmode_cmd})
+    set_tests_properties(D3D11_RasterizerState_CullMode PROPERTIES TIMEOUT 60 LABELS "D3D11")
+endif()
+
+# plan_dx.md DX-102/103/104/105: D3D12 CTest registration, mirroring DX-80's own D3D11 macro
+# exactly, including the CMAKE_CROSSCOMPILING-aware command selection above (native MSVC runs the
+# .exe directly; a Linux-hosted cross-compile wraps it with scripts/run-wine-vkd3d.sh, DX-100's own
+# Wine+vkd3d-proton dev loop, a distinct Wine prefix from D3D11's DXVK one).
+if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D12")
+    enable_testing()
+
+    macro(cna_d3d12_test target src)
+        add_executable(${target} ${src})
+        target_link_libraries(${target} PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(${target} PRIVATE SDL3::SDL3main)
+        endif()
+        if(MINGW)
+            target_link_options(${target} PRIVATE -static-libgcc -static-libstdc++)
+            target_link_options(${target} PRIVATE -Wl,--allow-multiple-definition)
+            cna_copy_mingw_runtime(${target})
+            cna_copy_sdl_runtime(${target})
+        endif()
+    endmacro()
+
+    # DX-102/103/104/105: off-screen device/queue/heap/command-list/fence proof -- deliberately
+    # never constructs a window/swap chain (see examples/d3d12_smoke_test.cpp's own header comment
+    # for why), so this stays genuinely green on this Wine+vkd3d-proton dev loop.
+    cna_d3d12_test(cna_test_d3d12_smoke examples/d3d12_smoke_test.cpp)
+    if(CMAKE_CROSSCOMPILING)
+        add_test(NAME D3D12_Smoke
+            COMMAND ${CMAKE_SOURCE_DIR}/scripts/run-wine-vkd3d.sh $<TARGET_FILE:cna_test_d3d12_smoke>)
+    else()
+        add_test(NAME D3D12_Smoke COMMAND cna_test_d3d12_smoke)
+    endif()
+    set_tests_properties(D3D12_Smoke PROPERTIES
+        TIMEOUT 60
+        LABELS "D3D12")
+
+    # plan_dx.md DX-102: real (window-attached) swap-chain diagnostic -- deliberately NOT
+    # registered as a CTest (mirrors cna_diag_software's own "real executable, not a ctest"
+    # precedent above), since DX-100's own spike already found this crashes under vanilla Wine's
+    # dxgi.dll; a permanently-registered, always-crashing CTest would just be noise. Built so a
+    # developer/script can still run it by hand for a real, up-to-date reading.
+    cna_d3d12_test(cna_diag_d3d12_swapchain examples/d3d12_swapchain_diag.cpp)
 endif()
 
 # --- Task 6.1: real two-process ENet loopback test harness ---

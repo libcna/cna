@@ -80,6 +80,34 @@ namespace Microsoft::Xna::Framework::Graphics
         void setDeviceWindowHandleProperty(IntPtr value);
 
         /**
+         * @brief Gets whether the device should be created without any real window (off-screen).
+         *
+         * CNA extension. When true, GraphicsDevice creates no SDL window and never initialises
+         * SDL's video subsystem, so it can run with no display server at all -- the same thing the
+         * Headless and Software backends do unconditionally, but as an opt-in for a backend that
+         * normally does want a window.
+         *
+         * Only backends that can genuinely operate without a swap chain support this. Today that
+         * means D3D12 (its backend already treats a null window as a real off-screen mode).
+         * Backends whose device creation is inseparable from a window/swap chain -- notably D3D11,
+         * whose constructor always creates a swap chain, and EasyGL, whose GL context is bound to a
+         * window -- will throw if this is set.
+         *
+         * Present() is not meaningful without a swap chain; an off-screen device is for rendering
+         * into render targets and reading the result back (tests, server-side rendering, thumbnail
+         * generation), not for putting frames on screen.
+         *
+         * @return true if the device should be created off-screen, with no window.
+         */
+        NOXNA [[nodiscard]] bool getHeadlessEXTProperty() const;
+
+        /**
+         * @brief Sets whether the device should be created without any real window (off-screen).
+         * @param value true to create the device off-screen, with no window. Defaults to false.
+         */
+        NOXNA void setHeadlessEXTProperty(bool value);
+
+        /**
          * @brief Gets the depth/stencil buffer format.
          * @return Current depth-stencil format.
          */
@@ -165,6 +193,7 @@ namespace Microsoft::Xna::Framework::Graphics
         SharpRuntime::intcs backBufferHeight_;
         SharpRuntime::intcs backBufferWidth_;
         IntPtr deviceWindowHandle_;
+        NOXNA bool headlessEXT_ = false; ///< Off-screen (no-window) device -- see getHeadlessEXTProperty().
         DepthFormat depthStencilFormat_;
         bool isFullScreen_;
         SharpRuntime::intcs multiSampleCount_;

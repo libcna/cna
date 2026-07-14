@@ -160,9 +160,16 @@ namespace Microsoft::Xna::Framework::Graphics
         // all, so both can run in CI containers with no display server present -- not just a
         // headless-but-present one.
 #if !defined(CNA_BACKEND_HEADLESS) && !defined(CNA_BACKEND_SOFTWARE)
-        if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
+        // PresentationParameters::HeadlessEXT is the runtime opt-in equivalent of the compile-time
+        // guard above: a backend that normally wants a window (D3D12) can be asked for a genuinely
+        // off-screen device instead. Skipping SDL_INIT_VIDEO is the point -- it is what lets such a
+        // device run with no display server at all, not merely without a visible window.
+        if (!presentationParameters_.getHeadlessEXTProperty())
         {
-            throw makeSdlError("SDL_InitSubSystem(SDL_INIT_VIDEO)");
+            if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
+            {
+                throw makeSdlError("SDL_InitSubSystem(SDL_INIT_VIDEO)");
+            }
         }
 #endif
 
@@ -1327,6 +1334,19 @@ namespace Microsoft::Xna::Framework::Graphics
         window_ = nullptr;
         ownsWindow_ = false;
 #else
+        // Runtime opt-in, same effect as the compile-time branch above. Only backends that can
+        // genuinely run without a swap chain support this (D3D12 today) -- see
+        // PresentationParameters::getHeadlessEXTProperty()'s own doc comment. A backend that cannot
+        // (D3D11's constructor always creates a swap chain; EasyGL's GL context is bound to a
+        // window) will throw from its own constructor, which is the honest outcome: it is a real
+        // "this backend cannot do that" error, not something GraphicsDevice should paper over.
+        if (presentationParameters_.getHeadlessEXTProperty())
+        {
+            window_ = nullptr;
+            ownsWindow_ = false;
+            return;
+        }
+
         const auto requestedHandle = presentationParameters_.getDeviceWindowHandleProperty();
         if (requestedHandle != 0)
         {

@@ -62,6 +62,16 @@ namespace Microsoft::Xna::Framework::Graphics
         deviceWindowHandle_ = value;
     }
 
+    bool PresentationParameters::getHeadlessEXTProperty() const
+    {
+        return headlessEXT_;
+    }
+
+    void PresentationParameters::setHeadlessEXTProperty(bool value)
+    {
+        headlessEXT_ = value;
+    }
+
     DepthFormat PresentationParameters::getDepthStencilFormatProperty() const
     {
         return depthStencilFormat_;

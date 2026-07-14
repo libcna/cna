@@ -1,0 +1,128 @@
+# plan_dx.md DX-90/DX-114: this job provides ONLY the "MSVC-compile/unit-test/shader-generation-
+# check" subset those rows explicitly call out as something a GitHub-hosted Windows CI runner CAN
+# usefully cover -- it is NOT a substitute for DX-90/DX-114 themselves, which need real swap-chain/
+# tearing/device-lost/driver-parity verification on a machine with a real display and a real GPU
+# driver (a typical CI runner doesn't reliably provide either). What this job DOES provide is
+# genuinely new, real information no amount of Wine+DXVK/vkd3d-proton testing could: the D3D11/
+# D3D12 backends have, until now, only ever been built with MinGW-w64 g++ and run through Wine's
+# translation layers. This job builds with native MSVC (a completely different compiler) and runs
+# the backend's off-screen smoke/common CTest suites directly against real Windows D3D11/D3D12
+# runtime DLLs (no Wine involved at all), plus recompiles every checked-in HLSL shader against a
+# real D3DCOMPILER_47.dll.
+#
+# Deliberately workflow_dispatch-only (manual): Windows GitHub-hosted runners are slower and more
+# expensive than this project's existing Linux CI (devices-tests.yml/input-ci.yml). This workflow
+# itself is a narrow, project-owner-approved exception to this project's general "no CI
+# automation" stance, scoped specifically to D3D11/D3D12 MSVC verification -- not a precedent for
+# broader automatic-trigger CI elsewhere in this project.
+#
+# CnaTests (the full gtest suite) is a KNOWN, pre-existing, deliberately out-of-scope gap on any
+# Windows toolchain, MSVC included -- roughly 10 test files call POSIX-only ::setenv(), which MSVC
+# also lacks (see plan_dx.md DX-15's own row; fixing this project-wide is a separate, much larger
+# task, not attempted here). This job does not build or run CnaTests -- only the D3D11/D3D12
+# backends' own self-contained smoke/common CTest executables (registered by the cna_d3d11_test()/
+# cna_d3d12_test() CMake macros), which do not depend on CnaTests at all.
+
+name: D3D Windows CI (D3D11/D3D12, MSVC)
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  msvc-build-and-test:
+    name: ${{ matrix.backend }} (native MSVC, windows-latest)
+    runs-on: windows-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        backend: [D3D11, D3D12]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      # Sibling repos (sharp-runtime, easy-gl, meta-gl) are plain sibling checkouts referenced via
+      # add_subdirectory(../x) in CMakeLists.txt, not git submodules of this repo -- same pattern
+      # devices-tests.yml/input-ci.yml already use.
+      - name: Checkout cna_graphics
+        uses: actions/checkout@v4
+        with:
+          path: cna_graphics
+          submodules: true
+
+      - name: Checkout sharp-runtime
+        uses: actions/checkout@v4
+        with:
+          repository: openeggbert/sharp-runtime
+          path: sharp-runtime
+
+      - name: Checkout easy-gl
+        uses: actions/checkout@v4
+        with:
+          repository: openeggbert/easy-gl
+          path: easy-gl
+
+      - name: Checkout meta-gl
+        uses: actions/checkout@v4
+        with:
+          repository: openeggbert/meta-gl
+          path: meta-gl
+
+      # Sets up cl.exe/link.exe/nmake (and D3DCOMPILER_47.dll's own import lib, d3dcompiler.lib)
+      # on PATH for every later step in this job, not just one -- writes to GITHUB_PATH/GITHUB_ENV.
+      - name: Set up MSVC developer environment (x64)
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Set up Ninja
+        uses: seanmiddleditch/gha-setup-ninja@v4
+
+      - name: Record SDL submodule commit (for the cache key)
+        id: sdlsha
+        run: echo "sha=$(git -C cna_graphics/third_party/SDL rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      # SDL3/SDL3_image/SDL3_mixer are built once from the vendored third_party/SDL* submodules at
+      # CMake-configure time (cmake/ThirdPartySDL.cmake's cna_configure_vendored_sdl(), a general,
+      # non-MinGW-specific mechanism keyed on CMAKE_SYSTEM_NAME/CMAKE_SYSTEM_PROCESSOR) -- cache it
+      # the same way the existing Linux workflows cache theirs, since it's a genuine multi-minute
+      # one-time build untested until now on a native-MSVC path.
+      - name: Cache vendored SDL prebuilt tree
+        uses: actions/cache@v4
+        with:
+          path: cna_graphics/.sdl-prebuilt-Windows-*
+          key: sdl-prebuilt-windows-msvc-${{ steps.sdlsha.outputs.sha }}
+
+      # CNA_BUILD_EXAMPLES=OFF / CNA_ENABLE_NET=OFF: keeps this job scoped to exactly what it's
+      # meant to verify (CNA core + the D3D11/D3D12 backend + their own CTest executables) --
+      # demos/tools (cna_reference_dump, cna_demo_2d, ...) and networking are real, separate parts
+      # of this project not relevant to a D3D11/D3D12 MSVC-verification job, and needlessly widen
+      # the surface a first-ever native-MSVC configure could fail on for unrelated reasons.
+      - name: Configure (native MSVC, ${{ matrix.backend }})
+        working-directory: cna_graphics
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCNA_GRAPHICS_BACKEND=${{ matrix.backend }} \
+            -DCNA_BUILD_TESTS=ON \
+            -DCNA_BUILD_EXAMPLES=OFF \
+            -DCNA_ENABLE_NET=OFF
+
+      - name: Build CNA + ${{ matrix.backend }} backend + CTest executables
+        working-directory: cna_graphics
+        run: cmake --build build --parallel
+
+      # CMAKE_CROSSCOMPILING is false here (native MSVC, not the MinGW cross-compile toolchain
+      # file) -- CMakeLists.txt's own cna_d3d11_ctest_command()/D3D12_Smoke test-command selection
+      # already runs the .exe directly with no Wine wrapper on this path.
+      - name: Run ${{ matrix.backend }} CTest suite (real Windows, no Wine)
+        working-directory: cna_graphics
+        run: ctest --test-dir build -L ${{ matrix.backend }} --output-on-failure
+
+      # DX-90/DX-114's own "shader-generation check" -- only needs to run once (the HLSL sources
+      # and hlsl_compiler_tool.cpp are shared D3DCommon content, not backend-specific), so gated to
+      # the D3D11 matrix leg to avoid doing it twice.
+      - name: Verify all 20 HLSL shaders against a real D3DCOMPILER_47.dll
+        if: matrix.backend == 'D3D11'
+        working-directory: cna_graphics
+        run: python scripts/verify_hlsl_shaders_native_msvc.py

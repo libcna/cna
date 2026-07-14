@@ -104,6 +104,41 @@ TEST(GameWindowTest, NullWindow_ClientSizeChangedEventFires)
     EXPECT_EQ(fired, 0);
 }
 
+TEST(GameWindowTest, NullWindow_MinimizeEXTIsSafe)
+{
+    GameWindow window;
+    EXPECT_NO_THROW(window.MinimizeEXT());
+}
+
+TEST(GameWindowTest, NullWindow_RestoreEXTIsSafe)
+{
+    GameWindow window;
+    EXPECT_NO_THROW(window.RestoreEXT());
+}
+
+TEST(GameWindowTest, MinimizeAndRestoreEXT_UsingSdlWindow)
+{
+    if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
+    {
+        GTEST_SKIP() << "SDL_InitSubSystem(SDL_INIT_VIDEO) failed: " << SDL_GetError();
+    }
+
+    SDL_Window* nativeWindow = SDL_CreateWindow("minimize-restore-test", 64, 64, SDL_WINDOW_HIDDEN);
+    if (!nativeWindow)
+    {
+        SDL_QuitSubSystem(SDL_INIT_VIDEO);
+        GTEST_SKIP() << "SDL_CreateWindow failed: " << SDL_GetError();
+    }
+
+    GameWindow window(nativeWindow);
+
+    EXPECT_NO_THROW(window.MinimizeEXT());
+    EXPECT_NO_THROW(window.RestoreEXT());
+
+    SDL_DestroyWindow(nativeWindow);
+    SDL_QuitSubSystem(SDL_INIT_VIDEO);
+}
+
 TEST(GameWindowTest, NullWindow_EndScreenDeviceChangeOneArgIsSafe)
 {
     GameWindow window;
