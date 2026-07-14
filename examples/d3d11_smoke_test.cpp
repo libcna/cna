@@ -2535,6 +2535,66 @@ protected:
             dev.setRasterizerStateProperty(RasterizerState::CullCounterClockwise);
         }
 
+        // plan_dx.md DX-129: RenderTargetCube dedicated pixel test -- until now only construction
+        // was proven real (plus DX-144's own narrower mip-chain-content check above); this mirrors
+        // RenderTarget2D's own full bind+clear+readback+unbind-restores-backbuffer proof (Check J
+        // above) for RenderTargetCube, PLUS a per-face independence check (binding face 1 to a
+        // different color must not clobber face 0's already-cleared content -- the specific
+        // aliasing risk a shared 6-slice texture array creates that a single RenderTarget2D never
+        // has to prove).
+        {
+            auto rtCube = backend.CreateRenderTargetCube(8, 0 /*DepthFormat::None*/, false /*mipMap*/);
+            auto* d3dRtCube = static_cast<D3D11RenderTargetCubeBackend*>(rtCube.get());
+
+            // (a) Bind face 0, Clear() -> exact color lands in face 0's own texture slice.
+            rtCube->BindAsRenderTargetFace(0);
+            dev.Clear(Color(11, 22, 33, 255));
+            const auto face0Pixels = ReadTexture2DMipRegion(device, context, d3dRtCube->GetColorTextureEXT(),
+                                                             0 /*subresource = mip 0 + face 0*level count*/, 0, 0, 4, 4);
+            bool face0Matches = face0Pixels.size() == 4u * 4u * 4u;
+            for (std::size_t i = 0; i < 4u * 4u && face0Matches; ++i)
+                face0Matches = face0Pixels[i * 4 + 0] == 11 && face0Pixels[i * 4 + 1] == 22 &&
+                               face0Pixels[i * 4 + 2] == 33 && face0Pixels[i * 4 + 3] == 255;
+            check(face0Matches,
+                  "D3D11RenderTargetCubeBackend: BindAsRenderTargetFace(0)+Clear() writes the exact "
+                  "color into face 0's own texture slice (plan_dx.md DX-129)");
+
+            // (b) Bind face 1 to a DIFFERENT color, then re-read face 0 -- proves the two faces are
+            // genuinely independent texture-array slices, not aliased.
+            rtCube->BindAsRenderTargetFace(1);
+            dev.Clear(Color(200, 100, 50, 255));
+            const auto face1Pixels = ReadTexture2DMipRegion(device, context, d3dRtCube->GetColorTextureEXT(),
+                                                             1 /*subresource = mip 0 + face 1*level count*/, 0, 0, 4, 4);
+            bool face1Matches = face1Pixels.size() == 4u * 4u * 4u;
+            for (std::size_t i = 0; i < 4u * 4u && face1Matches; ++i)
+                face1Matches = face1Pixels[i * 4 + 0] == 200 && face1Pixels[i * 4 + 1] == 100 &&
+                               face1Pixels[i * 4 + 2] == 50 && face1Pixels[i * 4 + 3] == 255;
+            const auto face0Again = ReadTexture2DMipRegion(device, context, d3dRtCube->GetColorTextureEXT(),
+                                                            0, 0, 0, 4, 4);
+            bool face0StillMatches = face0Again.size() == 4u * 4u * 4u;
+            for (std::size_t i = 0; i < 4u * 4u && face0StillMatches; ++i)
+                face0StillMatches = face0Again[i * 4 + 0] == 11 && face0Again[i * 4 + 1] == 22 &&
+                                    face0Again[i * 4 + 2] == 33 && face0Again[i * 4 + 3] == 255;
+            check(face1Matches && face0StillMatches,
+                  "D3D11RenderTargetCubeBackend: face 1 gets its OWN distinct color, and face 0's "
+                  "earlier content survives completely unchanged -- proves the 6 cube faces are "
+                  "genuinely independent texture-array slices, not aliased (plan_dx.md DX-129)");
+
+            // (c) UnbindAsRenderTarget() genuinely restores the back buffer as Clear()'s target.
+            rtCube->UnbindAsRenderTarget();
+            dev.Clear(Color(44, 55, 66, 255));
+            const Microsoft::Xna::Framework::Rectangle bbRegionCube(0, 0, 4, 4);
+            std::vector<Color> bbPixelsCube(4 * 4, Color(0, 0, 0, 0));
+            dev.GetBackBufferData(&bbRegionCube, bbPixelsCube.data(), 0, static_cast<int>(bbPixelsCube.size()));
+            bool bbMatchesCube = true;
+            for (const Color& p : bbPixelsCube)
+                if (p.getRProperty() != 44 || p.getGProperty() != 55 || p.getBProperty() != 66 || p.getAProperty() != 255)
+                    bbMatchesCube = false;
+            check(bbMatchesCube,
+                  "D3D11RenderTargetCubeBackend: UnbindAsRenderTarget() genuinely restores the back "
+                  "buffer as Clear()'s next target (plan_dx.md DX-129)");
+        }
+
         const int totalChecks = 2 /* SetDepthTestEnabled real, not a no-op */
                                 + 3 + 10 + 1 + 2 + 2 + 2 + 2 + 2 + 1 + 1 + 2 + 1 + 13 + 2 + 3 + 2 + 2 + 1 + 1 + 1 + 1 + 3 + 2 + 2 + 2 + 3 + 2 + 3 /* DX-131 rotation/scale/crop */
                                 + 1 /* DX-134 envMapAmount=0 */ + 2 /* DX-135 WeightsPerVertex */ + 2 /* DX-137 textured3d fog */
@@ -2546,7 +2606,8 @@ protected:
                                 + 2 /* DX-125 specular-highlight discrimination */
                                 + 3 /* DX-126 mip level > 0 upload/readback */
                                 + 4 /* DX-127 SpriteFont glyph placement/spacing/newline/flip */
-                                + 1 /* DX-128 Model/ModelMesh runtime-API orchestration */;
+                                + 1 /* DX-128 Model/ModelMesh runtime-API orchestration */
+                                + 3 /* DX-129 RenderTargetCube bind+clear+readback+unbind proof */;
         std::printf("=== %d/%d PASS ===\n", passCount_, totalChecks);
         result_ = (passCount_ == totalChecks) ? 0 : 1;
         Exit();
