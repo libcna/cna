@@ -298,13 +298,13 @@ Mutation-verified (hardcoded `RequiresPowerOfTwoTexturesEXT()` to always return 
 exactly the capability assertion went red and the NPOT round-trip proof was consistently skipped).
 `D3D9_Smoke` now 51/51.
 
-### Phase D9-7 — Microsoft's stock effects: vendor, compile, embed: D9-70/D9-71 CLOSED, D9-72/74 open
+### Phase D9-7 — Microsoft's stock effects: vendor, compile, embed: D9-70/71/72 CLOSED, D9-74 open
 
 | Task | Status |
 |---|---|
 | `D9-70` — vendor the 10 Stock Effects HLSL sources verbatim | ✅ |
 | `D9-71` — offline-compile all 66 entry points to `d3d9_shaders.hpp` | ✅ |
-| `D9-72` — transcribe register annotations into `D3D9ShaderRegisters.hpp` | ⬜ |
+| `D9-72` — transcribe register annotations into `D3D9ShaderRegisters.hpp` | ✅ |
 | `D9-73` — cross-check against Microsoft's shipped `.fxb` bytecode | 🟨 (already run in Phase D9-0: 61/66 exact; re-confirmed against the real checked-in header too; 5 `PixelLighting` variants owed to `D9-84`'s oracle proof) |
 | `D9-74` — `D3D9ShaderCache` creates all 66 through a live device | ⬜ |
 
@@ -332,6 +332,29 @@ header's own bytecode — 61/66 exact matches, the identical 5 `PixelLighting` v
 D9-0 spike already found, confirming the real pipeline reproduces the spike's result exactly.
 `dx9-spike/README.md` updated to reflect the move (only `xna-oracle/Oracle.cs` remains there).
 
+`D9-72`: **a real, empirical finding changed this row's own original approach mid-task.** The plan
+assumed a per-effect register table hand-derived from the `.fx` files' own `_vs(cN)`/`_ps(cN)`
+annotations, with register COUNT inferred from each constant's declared HLSL type
+(`float4x4`→4 registers, `float3x3`→3, etc.). **That assumption is provably wrong**: compiling
+`EnvironmentMapEffect.fx`'s `VSEnvMap` and disassembling the real output (`D3DDisassemble()`) shows
+`World` (declared `float4x4`) is allocated only **3** registers (`c16`-`c18`) by the real compiler
+for this specific entry point — its `mul(vin.Position, World)` never reads `pos_ws.w`, so the
+compiler drops the register that would compute it — while `WorldInverseTranspose` genuinely
+occupies `c19`-`c21`, an apparent overlap with a naive 4-register `World` assumption that isn't
+actually a conflict. **Register occupancy depends on what a given ENTRY POINT reads, not just a
+constant's declared type.** Redesigned scope: new `extract_shader_registers.py` compiles **and
+disassembles** each of the 66 shaders, parsing the compiler's own authoritative `// Registers:`
+comment block directly (new `disasm_tool.cpp`, a small `D3DDisassemble()`-calling companion to
+`fxc_tool.cpp`). Output: `D3D9ShaderRegisters.hpp` (627 lines, one array per shader:
+`{name, space, registerIndex, registerCount}`). Compiles clean (`-Wall -Wextra -fsyntax-only`, zero
+warnings); spot-checked against 3 independently-verified cases (`BasicEffect` `VSBasic`,
+`EnvironmentMapEffect` `VSEnvMap`'s `World`/`WorldInverseTranspose` split, `SkinnedEffect`'s 72-bone
+array at `c26` size 216 = 72×3 registers). No fixed-layout POD struct exists to `static_assert`
+against (this row's own original wording) since occupancy varies per entry point — the generated
+tables themselves are the verified ground truth. `D3DConstantBuffers.hpp` was checked and NOT
+reused — different register scheme entirely (D3D11's own cbuffer reimplementation vs. D3D9's flat
+register file), exactly as this row's own note anticipated.
+
 ### Does NOT work yet
 
 Draws, `SpriteBatch` — still throw `NotYetImplemented()` naming their own follow-up task, by design.
@@ -348,7 +371,8 @@ Most recent first. Full detail lives in `plan_dx9.md` — this is a short index.
 
 | Commit(s) | Summary |
 |---|---|
-| *(pending)* | **`D9-71` closed (compile all 66 entry points)**: new `compile_shaders_sm2.py` parses the entry-point list from the vendored `.fx` files' own `compile` statements (not hand-maintained), cross-builds the moved-in `fxc_tool.cpp` with MinGW-w64, compiles via a bare `wine` call against `~/.wine-cna-d3d9-spike`. Real run: 66/66 compiled, 0 failures, into a checked-in `d3d9_shaders.hpp` (381 KB) confirmed to compile clean as real C++ and to regenerate byte-identically on a second run. Bonus: re-ran `compare_against_fxb.py` against the real header's own bytecode — 61/66 exact matches, same 5 divergent `PixelLighting` variants the Phase D9-0 spike already found. `fxc_tool.cpp`/`compare_against_fxb.py` fully moved out of `dx9-spike/` into their real home. |
+| *(pending)* | **`D9-72` closed (transcribe register layout)**: real, empirical finding (`EnvironmentMapEffect.fx`'s `VSEnvMap` allocates `World` only 3 registers, not the naively-assumed 4, since that entry point never reads `pos_ws.w`) invalidated the plan's own original hand-derive-from-source approach. New `extract_shader_registers.py` compiles+disassembles all 66 shaders via a new `disasm_tool.cpp`, parsing the compiler's own `// Registers:` comment block for the real, per-entry-point ground truth. Output `D3D9ShaderRegisters.hpp` (627 lines), compiles clean, spot-checked against 3 independently-verified cases. |
+| `dddeecbc` | **`D9-71` closed (compile all 66 entry points)**: new `compile_shaders_sm2.py` parses the entry-point list from the vendored `.fx` files' own `compile` statements (not hand-maintained), cross-builds the moved-in `fxc_tool.cpp` with MinGW-w64, compiles via a bare `wine` call against `~/.wine-cna-d3d9-spike`. Real run: 66/66 compiled, 0 failures, into a checked-in `d3d9_shaders.hpp` (381 KB) confirmed to compile clean as real C++ and to regenerate byte-identically on a second run. Bonus: re-ran `compare_against_fxb.py` against the real header's own bytecode — 61/66 exact matches, same 5 divergent `PixelLighting` variants the Phase D9-0 spike already found. `fxc_tool.cpp`/`compare_against_fxb.py` fully moved out of `dx9-spike/` into their real home. |
 | `64de9d29` | **`D9-70` closed (vendor Stock Effects HLSL)**: all 10 files copied byte-for-byte from the FNA tree into `src/CNA/Internal/Backends/D3D9/shaders/xna/`, plus `LICENSE`, a provenance `README.md` (66 entry points, grep-verified), and a specific `THIRD_PARTY_NOTICES.md` entry. New `scripts/verify-d3d9-stock-effects-vendored.sh` mechanically diffs against the FNA tree. Mutation-verified (appended a line to the vendored `BasicEffect.fx`, confirmed the script reports `MISMATCH`/exit 1). First row of Phase D9-7. |
 | `eb373571` | **`D9-63` closed (`ApplySamplerState`) — Phase D9-6 down to just `D9-64`**: plain `SetSamplerState()` calls (design decision 11), using the `D9-21` mapping tables; slot bound-checked against real `D3DCAPS9::MaxSimultaneousTextures`, not a hardcoded 16. `D3DSAMP_SRGBTEXTURE` genuinely out of scope (interface signature carries no sRGB parameter, same category as `D9-60`'s own `D3DRS_COLORWRITEENABLE` gap). New `D3D9_Smoke` Check Y (2 checks): values read back via `GetSamplerState()` (no draw needed) confirm an exact match; out-of-range slot silently no-ops. Mutation-verified (hardcoded `D3DSAMP_ADDRESSU` to ignore the requested value, confirmed exactly that assertion went red). `D3D9_Smoke` now 53/53. |
 | `1206fc42` | **`D9-56` closed (NPOT capability) — Phase D9-5 FULLY CLOSED (all 7 rows)**: new NOXNA `RequiresPowerOfTwoTexturesEXT()`/`NonPowerOfTwoRequiresClampAddressingEXT()` surface the real `D3DCAPS9::TextureCaps` `POW2`/`NONPOW2CONDITIONAL` bits. This dev environment's DXVK device reports full, unconditional NPOT support, matching `D9-3`'s own original caps dump. New `D3D9_Smoke` Check X (2 checks): asserts the exact reported capability, then round-trips a genuinely non-power-of-two (5×3) texture for real. Enforcing the `Reach`-profile "no Wrap on NPOT" restriction itself is deferred to `D9-10`/`D9-82` (no draw/sampler path exists yet). Mutation-verified (hardcoded the POW2 helper to always return true, confirmed exactly that assertion went red). `D3D9_Smoke` now 51/51. |
@@ -373,10 +397,12 @@ Most recent first. Full detail lives in `plan_dx9.md` — this is a short index.
 **No blocker.** Phases D9-0/D9-1/D9-2/D9-3/D9-4/D9-5 are all fully closed (D9-32/D9-34 honestly 🟨 —
 see their own plan rows for exactly what's deferred and why). Phase D9-6: `D9-60`–`D9-63` are closed
 (`D9-60`/`D9-62` honestly 🟨); only `D9-64` remains, not actionable until a real draw path exists
-(`D9-82`, Phase D9-8). Phase D9-7 (Microsoft's stock effects): `D9-70`/`D9-71` closed (all 66 entry
-points now compile to a checked-in `d3d9_shaders.hpp`). Next smallest task: `D9-72` (transcribe
-Microsoft's `_vs(c#)`/`_ps(c#)` register annotations into `D3D9ShaderRegisters.hpp`, `static_assert`
-the C++ upload structs against it) — a pure transcription task, no device/compiler needed.
+(`D9-82`, Phase D9-8). Phase D9-7 (Microsoft's stock effects): `D9-70`/`D9-71`/`D9-72` closed (all 66
+entry points compile AND have a real, disassembly-verified register layout table). `D9-73` stays 🟨
+(deferred oracle proof). Next smallest task: `D9-74` (`D3D9ShaderCache` — `CreateVertexShader`/
+`CreatePixelShader` per entry point from the embedded bytecode, test creates all 66 through a live
+device) — needs a real D3D9 device+the real compiler at once; install DXVK into
+`~/.wine-cna-d3d9-spike` too (recommended in the plan's own row), or use a 4th prefix.
 
 ---
 
@@ -444,21 +470,20 @@ cmake -S . -B cmake-build-d3d9 \
 **Phases D9-0 through D9-5 are all fully closed** (`D9-32`/`D9-34` honestly 🟨 — see `plan_dx9.md`
 for exactly what's deferred to `D9-100`/`D9-A`/`D9-140` and why). Phase D9-6: `D9-60`–`D9-63` closed
 (`D9-60`/`D9-62` honestly 🟨); only `D9-64` remains open, and it isn't actionable yet. Phase D9-7:
-`D9-70`/`D9-71` closed (all 66 shaders vendored and compiled into a checked-in `d3d9_shaders.hpp`).
+`D9-70`/`D9-71`/`D9-72` closed (all 66 shaders vendored, compiled, AND have a real,
+disassembly-verified register layout table).
 
-1. **`D9-72`** — transcribe Microsoft's `_vs(c#)`/`_ps(c#)` register annotations into
-   `D3D9ShaderRegisters.hpp`; `static_assert` the C++ upload structs against it. Pure transcription,
-   no device/compiler needed.
-2. **`D9-74`** — `D3D9ShaderCache` creating all 66 shaders through a live device (needs a real
+1. **`D9-74`** — `D3D9ShaderCache` creating all 66 shaders through a live device (needs a real
    device — install DXVK into `~/.wine-cna-d3d9-spike` too, or a 4th prefix; `D9-71`'s own bytecode
    is already embedded and ready to feed `CreateVertexShader`/`CreatePixelShader`).
-3. **`D9-64`** (reuse the backend-agnostic `easygl_blendstate_*`/`easygl_depthstencilstate_*`/
+2. **`D9-64`** (reuse the backend-agnostic `easygl_blendstate_*`/`easygl_depthstencilstate_*`/
    `easygl_rasterizerstate_*` CTest sources verbatim) — needs a real draw path (`D9-82`, Phase D9-8)
    to mean anything; sequence it once that phase lands, not before.
 
 `D9-73` (cross-check against Microsoft's `.fxb`) is already 🟨 from Phase D9-0's own spike (61/66
-exact matches) — its remaining obligation (prove the 5 `PixelLighting` variants equivalent against
-the real oracle) is deferred to `D9-84`, which needs a draw path; not actionable yet either.
+exact matches, re-confirmed against the real checked-in header in `D9-71`) — its remaining
+obligation (prove the 5 `PixelLighting` variants equivalent against the real oracle) is deferred to
+`D9-84`, which needs a draw path; not actionable yet either.
 
 See `plan_dx9.md`'s "Execution order" table for the full sequence beyond this.
 
