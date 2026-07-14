@@ -387,7 +387,8 @@ namespace CNA::Internal::Backends::D3D12
         // immediately after construction, before any custom render target is ever bound.
         const UINT idx = swapChain_->GetCurrentBackBufferIndex();
         BindOffscreenColorTargetEXT(backBufferResources_[idx].Get(), backBufferRtvs_[idx],
-                                    DXGI_FORMAT_R8G8B8A8_UNORM, width_, height_);
+                                    DXGI_FORMAT_R8G8B8A8_UNORM, width_, height_,
+                                    depthStencilViewEXT_, DXGI_FORMAT_D24_UNORM_S8_UINT);
     }
 
     void D3D12GraphicsBackend::ReleaseWindowSizeDependentViews()
@@ -594,13 +595,17 @@ namespace CNA::Internal::Backends::D3D12
 
     void D3D12GraphicsBackend::BindOffscreenColorTargetEXT(ID3D12Resource* resource,
                                                             D3D12_CPU_DESCRIPTOR_HANDLE rtv,
-                                                            DXGI_FORMAT format, int width, int height)
+                                                            DXGI_FORMAT format, int width, int height,
+                                                            D3D12_CPU_DESCRIPTOR_HANDLE dsv,
+                                                            DXGI_FORMAT dsvFormat)
     {
         boundColorResource_ = resource;
         boundColorRtv_ = rtv;
         boundColorFormat_ = format;
         boundColorWidth_ = width;
         boundColorHeight_ = height;
+        boundDsv_ = dsv;
+        boundDsvFormat_ = dsvFormat;
     }
 
     void D3D12GraphicsBackend::UnbindOffscreenColorTargetEXT()
@@ -608,6 +613,8 @@ namespace CNA::Internal::Backends::D3D12
         boundColorResource_ = nullptr;
         boundColorWidth_ = 0;
         boundColorHeight_ = 0;
+        boundDsv_ = D3D12_CPU_DESCRIPTOR_HANDLE{};
+        boundDsvFormat_ = DXGI_FORMAT_UNKNOWN;
         extraMrtCount_ = 0; // DX-117: MRT extras are only ever meaningful alongside a bound primary
     }
 
@@ -637,7 +644,8 @@ namespace CNA::Internal::Backends::D3D12
         }
         const UINT idx = swapChain_->GetCurrentBackBufferIndex();
         BindOffscreenColorTargetEXT(backBufferResources_[idx].Get(), backBufferRtvs_[idx],
-                                    DXGI_FORMAT_R8G8B8A8_UNORM, width_, height_);
+                                    DXGI_FORMAT_R8G8B8A8_UNORM, width_, height_,
+                                    depthStencilViewEXT_, DXGI_FORMAT_D24_UNORM_S8_UINT);
     }
 
     void D3D12GraphicsBackend::CreateUploadConstantBuffer(UINT byteWidth, ComPtr<ID3D12Resource>& outResource,
@@ -879,7 +887,8 @@ namespace CNA::Internal::Backends::D3D12
         // D3D11's single always-current backBufferRTV_.
         const UINT idx = swapChain_->GetCurrentBackBufferIndex();
         BindOffscreenColorTargetEXT(backBufferResources_[idx].Get(), backBufferRtvs_[idx],
-                                    DXGI_FORMAT_R8G8B8A8_UNORM, width_, height_);
+                                    DXGI_FORMAT_R8G8B8A8_UNORM, width_, height_,
+                                    depthStencilViewEXT_, DXGI_FORMAT_D24_UNORM_S8_UINT);
     }
 
     void D3D12GraphicsBackend::SetSwapInterval(int interval)
@@ -930,6 +939,49 @@ namespace CNA::Internal::Backends::D3D12
     void D3D12GraphicsBackend::SetBlendEnabled(bool) { NotYetImplemented("SetBlendEnabled"); }
     void D3D12GraphicsBackend::SetDepthWriteEnabled(bool) { NotYetImplemented("SetDepthWriteEnabled"); }
 
+    void D3D12GraphicsBackend::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
+                                                int colorDstBlend, int alphaDstBlend,
+                                                int colorBlendFunc, int alphaBlendFunc)
+    {
+        currentColorSrcBlend_ = colorSrcBlend;
+        currentAlphaSrcBlend_ = alphaSrcBlend;
+        currentColorDstBlend_ = colorDstBlend;
+        currentAlphaDstBlend_ = alphaDstBlend;
+        currentColorBlendFunc_ = colorBlendFunc;
+        currentAlphaBlendFunc_ = alphaBlendFunc;
+    }
+
+    void D3D12GraphicsBackend::ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable,
+                                                        int depthFunc,
+                                                        bool /*stencilEnable*/, int /*stencilFunc*/,
+                                                        int /*stencilPass*/, int /*stencilFail*/,
+                                                        int /*stencilDepthFail*/,
+                                                        int /*stencilMask*/, int /*stencilWriteMask*/,
+                                                        int /*referenceStencil*/,
+                                                        bool /*twoSidedStencilMode*/,
+                                                        int /*ccwStencilFunc*/, int /*ccwStencilPass*/,
+                                                        int /*ccwStencilFail*/, int /*ccwStencilDepthFail*/)
+    {
+        // DX-118: stencil fields deliberately not threaded into the PSO cache key -- matches
+        // D3D12PipelineStateCache's own documented "stencil deliberately NOT part of this first
+        // key/desc" scope (DX-107). Depth-only for now; a real, honest follow-up gap.
+        currentDepthEnable_ = depthEnable;
+        currentDepthWriteEnable_ = depthWriteEnable;
+        currentDepthFunc_ = depthFunc;
+    }
+
+    void D3D12GraphicsBackend::ApplyRasterizerState(int cullMode, int fillMode,
+                                                      bool /*scissorTestEnable*/,
+                                                      float /*depthBias*/,
+                                                      float /*slopeScaleDepthBias*/)
+    {
+        // DX-118: scissorTestEnable/depthBias/slopeScaleDepthBias deliberately not threaded into
+        // the PSO yet -- same documented first-implementation-subset scope as the stencil fields
+        // above.
+        currentCullMode_ = cullMode;
+        currentFillMode_ = fillMode;
+    }
+
     std::unique_ptr<IVertexBufferBackend> D3D12GraphicsBackend::CreateVertexBuffer(int vertex_capacity)
     {
         return std::make_unique<D3D12VertexBufferBackend>(this, vertex_capacity);
@@ -975,26 +1027,28 @@ namespace CNA::Internal::Backends::D3D12
         D3D12PipelineStateDesc psoDesc;
         psoDesc.variant = D3DShaderVariant::Colored3d;
         psoDesc.strideInBytes = 16;
-        // No depth-stencil view is bound in this off-screen-only draw path (dsvFormat=UNKNOWN,
-        // OMSetRenderTargets below passes a null DSV handle) -- the PSO's DepthEnable must agree,
-        // or the draw silently produces no visible output (found via this task's own real Wine+
-        // vkd3d-proton run: the very first attempt at Check M left the default depthEnable=true and
-        // the render target stayed at the Clear() color with no triangle visible at all).
-        psoDesc.depthEnable = false;
-        // No D3D12 rasterizer-state-cache equivalent to D3D11's Phase DX7 exists yet for this
-        // backend (a real, scoped follow-up task, not attempted here) -- CullMode::None (0) is a
-        // deliberate, honest hardcoded simplification for this narrow colored3d bootstrap path,
-        // matching D3D11's own equivalent test-time convention of applying an explicit known-safe
-        // rasterizer baseline before its analogous first-triangle proof (d3d11_smoke_test.cpp's own
-        // Check P). Real finding from this task's own first attempt: leaving the PSO's default
-        // cullMode (XNA's CullCounterClockwiseFace, i.e. real back-face culling ON) silently
-        // produced an empty render target -- the test triangle's real winding, after D3D's NDC->
-        // screen-space Y-flip, was being back-face-culled with no error reported (no debug layer is
-        // available on this Wine+vkd3d-proton dev loop, DX-102's own already-documented gap) --
-        // exactly the kind of silent failure this plan's "verify, don't assume" discipline exists
-        // to catch, confirmed here empirically rather than guessed.
-        psoDesc.cullMode = 0; // XNA CullMode::None
-        auto pso = psoCache_.GetOrCreate(device_.Get(), rootSig.Get(), psoDesc, boundColorFormat_, DXGI_FORMAT_UNKNOWN);
+        // DX-118: depth/cull/blend state is now real and runtime-settable via
+        // ApplyDepthStencilState/ApplyRasterizerState/ApplyBlendState (tracked in this backend's
+        // current*_ fields), fed into the PSO key here instead of hardcoded literals. Defaults
+        // still match exactly what this bootstrap path originally hardcoded (depthEnable=false,
+        // cullMode=None, Opaque blend) -- a draw that never calls one of those 3 methods first
+        // behaves identically to before this task. Historical note (DX-111's own real finding):
+        // leaving the PSO's real XNA defaults (depthEnable=true, CullCounterClockwiseFace) silently
+        // back-face-culled this test triangle after D3D's NDC->screen-space Y-flip, with no
+        // debug-layer error available on this dev loop -- why depthEnable=false/cullMode=None
+        // became this path's safe starting default in the first place.
+        psoDesc.colorSrcBlend = currentColorSrcBlend_;
+        psoDesc.alphaSrcBlend = currentAlphaSrcBlend_;
+        psoDesc.colorDstBlend = currentColorDstBlend_;
+        psoDesc.alphaDstBlend = currentAlphaDstBlend_;
+        psoDesc.colorBlendFunc = currentColorBlendFunc_;
+        psoDesc.alphaBlendFunc = currentAlphaBlendFunc_;
+        psoDesc.depthEnable = currentDepthEnable_;
+        psoDesc.depthWriteEnable = currentDepthWriteEnable_;
+        psoDesc.depthFunc = currentDepthFunc_;
+        psoDesc.cullMode = currentCullMode_;
+        psoDesc.fillMode = currentFillMode_;
+        auto pso = psoCache_.GetOrCreate(device_.Get(), rootSig.Get(), psoDesc, boundColorFormat_, boundDsvFormat_);
         if (!pso)
             throw std::runtime_error("DrawColoredPrimitives: failed to create colored3d PSO");
 
@@ -1020,7 +1074,7 @@ namespace CNA::Internal::Backends::D3D12
         cmdList->Reset(allocator, pso.Get());
 
         resourceStates_.TransitionTo(cmdList, boundColorResource_, D3D12_RESOURCE_STATE_RENDER_TARGET);
-        cmdList->OMSetRenderTargets(1, &boundColorRtv_, FALSE, nullptr);
+        cmdList->OMSetRenderTargets(1, &boundColorRtv_, FALSE, boundDsv_.ptr != 0 ? &boundDsv_ : nullptr);
 
         D3D12_VIEWPORT viewport{0.0f, 0.0f, static_cast<float>(boundColorWidth_), static_cast<float>(boundColorHeight_), 0.0f, 1.0f};
         D3D12_RECT scissor{0, 0, boundColorWidth_, boundColorHeight_};
@@ -1075,26 +1129,20 @@ namespace CNA::Internal::Backends::D3D12
         D3D12PipelineStateDesc psoDesc;
         psoDesc.variant = D3DShaderVariant::Colored3d;
         psoDesc.strideInBytes = 16;
-        // No depth-stencil view is bound in this off-screen-only draw path (dsvFormat=UNKNOWN,
-        // OMSetRenderTargets below passes a null DSV handle) -- the PSO's DepthEnable must agree,
-        // or the draw silently produces no visible output (found via this task's own real Wine+
-        // vkd3d-proton run: the very first attempt at Check M left the default depthEnable=true and
-        // the render target stayed at the Clear() color with no triangle visible at all).
-        psoDesc.depthEnable = false;
-        // No D3D12 rasterizer-state-cache equivalent to D3D11's Phase DX7 exists yet for this
-        // backend (a real, scoped follow-up task, not attempted here) -- CullMode::None (0) is a
-        // deliberate, honest hardcoded simplification for this narrow colored3d bootstrap path,
-        // matching D3D11's own equivalent test-time convention of applying an explicit known-safe
-        // rasterizer baseline before its analogous first-triangle proof (d3d11_smoke_test.cpp's own
-        // Check P). Real finding from this task's own first attempt: leaving the PSO's default
-        // cullMode (XNA's CullCounterClockwiseFace, i.e. real back-face culling ON) silently
-        // produced an empty render target -- the test triangle's real winding, after D3D's NDC->
-        // screen-space Y-flip, was being back-face-culled with no error reported (no debug layer is
-        // available on this Wine+vkd3d-proton dev loop, DX-102's own already-documented gap) --
-        // exactly the kind of silent failure this plan's "verify, don't assume" discipline exists
-        // to catch, confirmed here empirically rather than guessed.
-        psoDesc.cullMode = 0; // XNA CullMode::None
-        auto pso = psoCache_.GetOrCreate(device_.Get(), rootSig.Get(), psoDesc, boundColorFormat_, DXGI_FORMAT_UNKNOWN);
+        // DX-118: depth/cull/blend state is now real and runtime-settable -- see
+        // DrawColoredPrimitives's own equivalent block for the full rationale/history.
+        psoDesc.colorSrcBlend = currentColorSrcBlend_;
+        psoDesc.alphaSrcBlend = currentAlphaSrcBlend_;
+        psoDesc.colorDstBlend = currentColorDstBlend_;
+        psoDesc.alphaDstBlend = currentAlphaDstBlend_;
+        psoDesc.colorBlendFunc = currentColorBlendFunc_;
+        psoDesc.alphaBlendFunc = currentAlphaBlendFunc_;
+        psoDesc.depthEnable = currentDepthEnable_;
+        psoDesc.depthWriteEnable = currentDepthWriteEnable_;
+        psoDesc.depthFunc = currentDepthFunc_;
+        psoDesc.cullMode = currentCullMode_;
+        psoDesc.fillMode = currentFillMode_;
+        auto pso = psoCache_.GetOrCreate(device_.Get(), rootSig.Get(), psoDesc, boundColorFormat_, boundDsvFormat_);
         if (!pso)
             throw std::runtime_error("DrawIndexedColoredPrimitives: failed to create colored3d PSO");
 
@@ -1118,7 +1166,7 @@ namespace CNA::Internal::Backends::D3D12
         cmdList->Reset(allocator, pso.Get());
 
         resourceStates_.TransitionTo(cmdList, boundColorResource_, D3D12_RESOURCE_STATE_RENDER_TARGET);
-        cmdList->OMSetRenderTargets(1, &boundColorRtv_, FALSE, nullptr);
+        cmdList->OMSetRenderTargets(1, &boundColorRtv_, FALSE, boundDsv_.ptr != 0 ? &boundDsv_ : nullptr);
 
         D3D12_VIEWPORT viewport{0.0f, 0.0f, static_cast<float>(boundColorWidth_), static_cast<float>(boundColorHeight_), 0.0f, 1.0f};
         D3D12_RECT scissor{0, 0, boundColorWidth_, boundColorHeight_};
@@ -1271,13 +1319,20 @@ namespace CNA::Internal::Backends::D3D12
         D3D12PipelineStateDesc psoDesc;
         psoDesc.variant = variant;
         psoDesc.strideInBytes = stride;
-        // Same honest hardcoded simplification DrawColoredPrimitives' own doc comment already
-        // explains at length -- no D3D12 rasterizer/depth-stencil-state-cache equivalent to D3D11's
-        // Phase DX7 exists yet for this backend, and no depth-stencil view is bound in this
-        // off-screen-only draw path.
-        psoDesc.depthEnable = false;
-        psoDesc.cullMode = 0; // XNA CullMode::None
-        auto pso = psoCache_.GetOrCreate(device_.Get(), rootSig.Get(), psoDesc, boundColorFormat_, DXGI_FORMAT_UNKNOWN);
+        // DX-118: depth/cull/blend state is now real and runtime-settable -- see
+        // DrawColoredPrimitives's own equivalent block for the full rationale/history.
+        psoDesc.colorSrcBlend = currentColorSrcBlend_;
+        psoDesc.alphaSrcBlend = currentAlphaSrcBlend_;
+        psoDesc.colorDstBlend = currentColorDstBlend_;
+        psoDesc.alphaDstBlend = currentAlphaDstBlend_;
+        psoDesc.colorBlendFunc = currentColorBlendFunc_;
+        psoDesc.alphaBlendFunc = currentAlphaBlendFunc_;
+        psoDesc.depthEnable = currentDepthEnable_;
+        psoDesc.depthWriteEnable = currentDepthWriteEnable_;
+        psoDesc.depthFunc = currentDepthFunc_;
+        psoDesc.cullMode = currentCullMode_;
+        psoDesc.fillMode = currentFillMode_;
+        auto pso = psoCache_.GetOrCreate(device_.Get(), rootSig.Get(), psoDesc, boundColorFormat_, boundDsvFormat_);
         if (!pso)
             throw std::runtime_error("DrawPrimitivesEx: failed to create PSO for the selected variant");
 
@@ -1626,7 +1681,7 @@ namespace CNA::Internal::Backends::D3D12
         cmdList->Reset(allocator, pso.Get());
 
         resourceStates_.TransitionTo(cmdList, boundColorResource_, D3D12_RESOURCE_STATE_RENDER_TARGET);
-        cmdList->OMSetRenderTargets(1, &boundColorRtv_, FALSE, nullptr);
+        cmdList->OMSetRenderTargets(1, &boundColorRtv_, FALSE, boundDsv_.ptr != 0 ? &boundDsv_ : nullptr);
 
         D3D12_VIEWPORT viewport{0.0f, 0.0f, static_cast<float>(boundColorWidth_), static_cast<float>(boundColorHeight_), 0.0f, 1.0f};
         D3D12_RECT scissor{0, 0, boundColorWidth_, boundColorHeight_};

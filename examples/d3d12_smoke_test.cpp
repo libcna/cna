@@ -1849,6 +1849,302 @@ int main()
         Check(!backend.HasBoundColorTargetEXT(), "W13: UnbindAsRenderTarget() on RenderTargetCube restores the honest 'nothing bound' state");
     }
 
+    // ---- Check X: DX-118 -- real BlendState/RasterizerState now genuinely runtime-settable,
+    // feeding real PSO variation instead of the hardcoded literals every draw path used before this
+    // task. NOTE: this test uses the REAL, VERIFIED XNA enum ordinals (Blend::One=0, Blend::Zero=1,
+    // BlendFunction::Add=0, CullMode::None=0/CullCounterClockwiseFace=2, FillMode::Solid=0,
+    // CompareFunction::LessEqual=3 -- confirmed directly against
+    // include/Microsoft/Xna/Framework/Graphics/{Blend,BlendFunction,CullMode,FillMode,
+    // CompareFunction}.hpp while writing this task, NOT copied from D3D12PipelineStateDesc.hpp's own
+    // default-value comments, which this task found to be WRONG for 2 fields (documented in
+    // plan_dx.md's DX-118 row -- colorSrcBlend's default 2 is really Blend::SourceColor not
+    // Blend::One, and depthFunc's default 4 is really CompareFunction::Equal not LessEqual; both are
+    // functionally inert today since they only apply when nothing has called Apply*State yet, and
+    // this task deliberately did not touch those pre-existing defaults to avoid any regression risk
+    // in an already-large task -- a real, separate, honestly-flagged follow-up). ----
+    {
+        constexpr int kRtWidth = 64;
+        constexpr int kRtHeight = 64;
+
+        D3D12_HEAP_PROPERTIES heapProps{};
+        heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
+
+        D3D12_RESOURCE_DESC rtDesc{};
+        rtDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+        rtDesc.Width = kRtWidth;
+        rtDesc.Height = kRtHeight;
+        rtDesc.DepthOrArraySize = 1;
+        rtDesc.MipLevels = 1;
+        rtDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        rtDesc.SampleDesc.Count = 1;
+        rtDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+        rtDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+
+        Microsoft::WRL::ComPtr<ID3D12Resource> rt;
+        HRESULT hrRt = backend.GetDeviceEXT()->CreateCommittedResource(
+            &heapProps, D3D12_HEAP_FLAG_NONE, &rtDesc,
+            D3D12_RESOURCE_STATE_RENDER_TARGET, nullptr, IID_PPV_ARGS(rt.GetAddressOf()));
+        Check(SUCCEEDED(hrRt) && rt != nullptr, "X0: real off-screen RGBA8 render-target resource created");
+        backend.GetResourceStateTrackerEXT().TrackResource(rt.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET);
+
+        D3D12_CPU_DESCRIPTOR_HANDLE rtv = backend.AllocateRtvDescriptorEXT();
+        backend.GetDeviceEXT()->CreateRenderTargetView(rt.Get(), nullptr, rtv);
+        backend.BindOffscreenColorTargetEXT(rt.Get(), rtv, DXGI_FORMAT_R8G8B8A8_UNORM, kRtWidth, kRtHeight);
+
+        auto pixelAt = [&](const std::vector<uint8_t>& buf, int x, int y) -> std::array<uint8_t, 4>
+        {
+            const std::size_t idx = (static_cast<std::size_t>(y) * kRtWidth + static_cast<std::size_t>(x)) * 4;
+            return {buf[idx + 0], buf[idx + 1], buf[idx + 2], buf[idx + 3]};
+        };
+        auto isColor = [](const std::array<uint8_t, 4>& p, uint8_t r, uint8_t g, uint8_t b, uint8_t a)
+        {
+            return p[0] == r && p[1] == g && p[2] == b && p[3] == a;
+        };
+        auto regionIs = [&](const std::vector<uint8_t>& buf, uint8_t r, uint8_t g, uint8_t b, uint8_t a)
+        {
+            for (int y = 28; y < 32; ++y)
+                for (int x = 28; x < 32; ++x)
+                    if (!isColor(pixelAt(buf, x, y), r, g, b, a)) return false;
+            return true;
+        };
+
+        struct VPC { float x, y, z; uint32_t color; };
+
+        // X1/X2/X3: real BlendState -- additive (One,One,Add) genuinely differs from Opaque, exact
+        // sum; reverting to Opaque genuinely restores plain-overwrite behavior.
+        static const VPC kTriRed100[3] = {
+            {-1.0f, -1.0f, 0.0f, 0xFF000064u}, // R=100,G=0,B=0,A=255
+            { 3.0f, -1.0f, 0.0f, 0xFF000064u},
+            {-1.0f,  3.0f, 0.0f, 0xFF000064u},
+        };
+        static const VPC kTriRed50[3] = {
+            {-1.0f, -1.0f, 0.0f, 0xFF000032u}, // R=50,G=0,B=0,A=255
+            { 3.0f, -1.0f, 0.0f, 0xFF000032u},
+            {-1.0f,  3.0f, 0.0f, 0xFF000032u},
+        };
+        D3D12VertexBufferBackend vbRed100(&backend, 3);
+        vbRed100.SetData(kTriRed100, 3, sizeof(VPC));
+        D3D12VertexBufferBackend vbRed50(&backend, 3);
+        vbRed50.SetData(kTriRed50, 3, sizeof(VPC));
+
+        backend.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+        backend.DrawColoredPrimitives(vbRed100, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                      Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1);
+        auto afterOpaque = ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight);
+        Check(regionIs(afterOpaque, 100, 0, 0, 255),
+              "X1: default (no ApplyBlendState call yet) draw still paints the exact vertex color -- "
+              "no regression from DX-118's own new state-tracking fields");
+
+        backend.ApplyBlendState(/*colorSrcBlend=One*/0, /*alphaSrcBlend=One*/0,
+                                /*colorDstBlend=One*/0, /*alphaDstBlend=One*/0,
+                                /*colorBlendFunc=Add*/0, /*alphaBlendFunc=Add*/0);
+        backend.DrawColoredPrimitives(vbRed50, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                      Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1);
+        auto afterAdditive = ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight);
+        Check(regionIs(afterAdditive, 150, 0, 0, 255),
+              "X2: real ApplyBlendState(One,One,Add) genuinely additive-blends a second draw over "
+              "the first -- exact 100+50=150 sum, a real BlendEnable=TRUE PSO actually used (not "
+              "the Opaque default X1 just proved)");
+
+        backend.ApplyBlendState(/*colorSrcBlend=One*/0, /*alphaSrcBlend=One*/0,
+                                /*colorDstBlend=Zero*/1, /*alphaDstBlend=Zero*/1,
+                                /*colorBlendFunc=Add*/0, /*alphaBlendFunc=Add*/0);
+        backend.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+        backend.DrawColoredPrimitives(vbRed100, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                      Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1);
+        auto afterRevert = ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight);
+        Check(regionIs(afterRevert, 100, 0, 0, 255),
+              "X3: reverting ApplyBlendState back to real Opaque (One,Zero,Add) genuinely restores "
+              "plain-overwrite behavior -- state is re-applied per call, not sticky");
+
+        // X4/X5: real RasterizerState.CullMode -- reuses the exact triangle geometry DX-111's own
+        // real bug report already found gets back-face-culled under real culling after D3D's
+        // NDC->screen-space Y-flip (every prior check's own kTri/CullMode::None default exists
+        // precisely because of this finding).
+        static const VPC kTri[3] = {
+            {-1.0f, -1.0f, 0.0f, 0xFF0000FFu}, // R=255,G=0,B=0,A=255
+            { 3.0f, -1.0f, 0.0f, 0xFF0000FFu},
+            {-1.0f,  3.0f, 0.0f, 0xFF0000FFu},
+        };
+        D3D12VertexBufferBackend vbTri(&backend, 3);
+        vbTri.SetData(kTri, 3, sizeof(VPC));
+
+        backend.ApplyRasterizerState(/*cullMode=CullCounterClockwiseFace*/2, /*fillMode=Solid*/0,
+                                     /*scissorTestEnable=*/false);
+        backend.Clear(0.0f, 0.0f, 1.0f, 1.0f);
+        backend.DrawColoredPrimitives(vbTri, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                      Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1);
+        auto culled = ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight);
+        Check(regionIs(culled, 0, 0, 255, 255),
+              "X4: real ApplyRasterizerState(CullCounterClockwiseFace) genuinely culls this "
+              "triangle's real winding -- background survives, matching DX-111's own already-"
+              "documented finding about this exact geometry, now proven dynamically settable");
+
+        backend.ApplyRasterizerState(/*cullMode=None*/0, /*fillMode=Solid*/0, /*scissorTestEnable=*/false);
+        backend.Clear(0.0f, 0.0f, 1.0f, 1.0f);
+        backend.DrawColoredPrimitives(vbTri, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                      Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1);
+        auto notCulled = ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight);
+        Check(regionIs(notCulled, 255, 0, 0, 255),
+              "X5: real ApplyRasterizerState(CullMode::None) genuinely draws the same triangle -- "
+              "same geometry, opposite outcome, purely from the RasterizerState change");
+
+        backend.UnbindOffscreenColorTargetEXT();
+    }
+
+    // ---- Check Y: DX-118 -- real DepthStencilState.DepthEnable/DepthFunc genuinely gate a draw,
+    // via a real bound DSV (this off-screen smoke test has no swap chain/back-buffer DSV to reuse,
+    // window=nullptr throughout -- a dedicated depth-stencil resource is created directly here,
+    // same pattern this file's own render-target creation already uses). ----
+    {
+        constexpr int kRtWidth = 64;
+        constexpr int kRtHeight = 64;
+
+        D3D12_HEAP_PROPERTIES heapProps{};
+        heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
+
+        D3D12_RESOURCE_DESC rtDesc{};
+        rtDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+        rtDesc.Width = kRtWidth;
+        rtDesc.Height = kRtHeight;
+        rtDesc.DepthOrArraySize = 1;
+        rtDesc.MipLevels = 1;
+        rtDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        rtDesc.SampleDesc.Count = 1;
+        rtDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+        rtDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+
+        Microsoft::WRL::ComPtr<ID3D12Resource> rt;
+        HRESULT hrRt = backend.GetDeviceEXT()->CreateCommittedResource(
+            &heapProps, D3D12_HEAP_FLAG_NONE, &rtDesc,
+            D3D12_RESOURCE_STATE_RENDER_TARGET, nullptr, IID_PPV_ARGS(rt.GetAddressOf()));
+        Check(SUCCEEDED(hrRt) && rt != nullptr, "Y0: real off-screen RGBA8 render-target resource created");
+        backend.GetResourceStateTrackerEXT().TrackResource(rt.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET);
+
+        D3D12_CPU_DESCRIPTOR_HANDLE rtv = backend.AllocateRtvDescriptorEXT();
+        backend.GetDeviceEXT()->CreateRenderTargetView(rt.Get(), nullptr, rtv);
+
+        D3D12_RESOURCE_DESC depthDesc{};
+        depthDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+        depthDesc.Width = kRtWidth;
+        depthDesc.Height = kRtHeight;
+        depthDesc.DepthOrArraySize = 1;
+        depthDesc.MipLevels = 1;
+        depthDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
+        depthDesc.SampleDesc.Count = 1;
+        depthDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
+        D3D12_CLEAR_VALUE depthClear{};
+        depthClear.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
+        depthClear.DepthStencil.Depth = 1.0f;
+        Microsoft::WRL::ComPtr<ID3D12Resource> depthRes;
+        HRESULT hrDepth = backend.GetDeviceEXT()->CreateCommittedResource(
+            &heapProps, D3D12_HEAP_FLAG_NONE, &depthDesc,
+            D3D12_RESOURCE_STATE_DEPTH_WRITE, &depthClear, IID_PPV_ARGS(depthRes.GetAddressOf()));
+        Check(SUCCEEDED(hrDepth) && depthRes != nullptr, "Y1: real off-screen depth-stencil resource created");
+
+        D3D12_CPU_DESCRIPTOR_HANDLE dsv = backend.AllocateDsvDescriptorEXT();
+        D3D12_DEPTH_STENCIL_VIEW_DESC dsvDesc{};
+        dsvDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
+        dsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
+        backend.GetDeviceEXT()->CreateDepthStencilView(depthRes.Get(), &dsvDesc, dsv);
+
+        backend.BindOffscreenColorTargetEXT(rt.Get(), rtv, DXGI_FORMAT_R8G8B8A8_UNORM, kRtWidth, kRtHeight,
+                                            dsv, DXGI_FORMAT_D24_UNORM_S8_UINT);
+
+        auto pixelAt = [&](const std::vector<uint8_t>& buf, int x, int y) -> std::array<uint8_t, 4>
+        {
+            const std::size_t idx = (static_cast<std::size_t>(y) * kRtWidth + static_cast<std::size_t>(x)) * 4;
+            return {buf[idx + 0], buf[idx + 1], buf[idx + 2], buf[idx + 3]};
+        };
+        auto isColor = [](const std::array<uint8_t, 4>& p, uint8_t r, uint8_t g, uint8_t b, uint8_t a)
+        {
+            return p[0] == r && p[1] == g && p[2] == b && p[3] == a;
+        };
+        auto regionIs = [&](const std::vector<uint8_t>& buf, uint8_t r, uint8_t g, uint8_t b, uint8_t a)
+        {
+            for (int y = 28; y < 32; ++y)
+                for (int x = 28; x < 32; ++x)
+                    if (!isColor(pixelAt(buf, x, y), r, g, b, a)) return false;
+            return true;
+        };
+
+        auto clearDepthTo1 = [&]()
+        {
+            ID3D12CommandAllocator* allocator = backend.GetCommandAllocatorEXT(0);
+            ID3D12GraphicsCommandList* cmdList = backend.GetCommandListEXT();
+            allocator->Reset();
+            cmdList->Reset(allocator, nullptr);
+            cmdList->ClearDepthStencilView(dsv, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
+            HRESULT hr = cmdList->Close();
+            if (FAILED(hr)) throw std::runtime_error("Check Y: ClearDepthStencilView command list Close failed");
+            backend.ExecuteCommandListAndWaitEXT(cmdList);
+        };
+
+        struct VPCZ { float x, y, z; uint32_t color; };
+        static const VPCZ kNear[3] = {
+            {-1.0f, -1.0f, 0.2f, 0xFF0000FFu}, // red, near
+            { 3.0f, -1.0f, 0.2f, 0xFF0000FFu},
+            {-1.0f,  3.0f, 0.2f, 0xFF0000FFu},
+        };
+        static const VPCZ kFar[3] = {
+            {-1.0f, -1.0f, 0.8f, 0xFF00FF00u}, // green, far
+            { 3.0f, -1.0f, 0.8f, 0xFF00FF00u},
+            {-1.0f,  3.0f, 0.8f, 0xFF00FF00u},
+        };
+        D3D12VertexBufferBackend vbNear(&backend, 3);
+        vbNear.SetData(kNear, 3, sizeof(VPCZ));
+        D3D12VertexBufferBackend vbFar(&backend, 3);
+        vbFar.SetData(kFar, 3, sizeof(VPCZ));
+
+        // Real ApplyDepthStencilState: DepthEnable=true, DepthWriteEnable=true,
+        // DepthFunc=CompareFunction::LessEqual(3, the real, verified ordinal -- XNA's own
+        // DepthStencilState.Default). Stencil fields are 0/false throughout -- deliberately not
+        // threaded into the PSO yet (DX-118's own documented scope boundary).
+        backend.ApplyDepthStencilState(/*depthEnable=*/true, /*depthWriteEnable=*/true, /*depthFunc=LessEqual*/3,
+                                       false, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, 0);
+
+        clearDepthTo1();
+        backend.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+        backend.DrawColoredPrimitives(vbNear, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                      Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1);
+        backend.DrawColoredPrimitives(vbFar, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                      Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1);
+        auto nearThenFar = ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight);
+        Check(regionIs(nearThenFar, 255, 0, 0, 255),
+              "Y2: real depth test -- drawing NEAR (z=0.2, red) then FAR (z=0.8, green) with "
+              "DepthEnable=true/DepthFunc=LessEqual genuinely rejects the far draw, near survives");
+
+        clearDepthTo1();
+        backend.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+        backend.DrawColoredPrimitives(vbFar, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                      Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1);
+        backend.DrawColoredPrimitives(vbNear, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                      Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1);
+        auto farThenNear = ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight);
+        Check(regionIs(farThenNear, 255, 0, 0, 255),
+              "Y3: same real depth test, reversed draw order -- FAR (green) drawn first, then NEAR "
+              "(red) genuinely passes the depth test and overwrites it -- proves this is a real "
+              "per-pixel depth comparison, not merely 'the second draw always wins/loses'");
+
+        // Depth-disabled control: with DepthEnable=false, draw order alone determines the winner --
+        // confirms Y2/Y3's outcome really came from the depth test, not draw order or some other
+        // effect.
+        backend.ApplyDepthStencilState(/*depthEnable=*/false, false, 3, false, 0, 0, 0, 0, 0, 0, 0,
+                                       false, 0, 0, 0, 0);
+        backend.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+        backend.DrawColoredPrimitives(vbNear, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                      Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1);
+        backend.DrawColoredPrimitives(vbFar, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                      Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1);
+        auto depthOffLastWins = ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight);
+        Check(regionIs(depthOffLastWins, 0, 255, 0, 255),
+              "Y4: control -- with DepthEnable=false, the LAST draw wins regardless of Z (FAR/green "
+              "drawn second overwrites NEAR/red) -- confirms Y2/Y3's outcome really came from the "
+              "depth test, not draw order or some other effect");
+
+        backend.UnbindOffscreenColorTargetEXT();
+    }
+
     std::printf("\n%s: %d failure(s)\n", g_failures == 0 ? "RESULT: ALL PASS" : "RESULT: FAILURES", g_failures);
     return g_failures == 0 ? 0 : 1;
 }

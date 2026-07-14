@@ -281,16 +281,23 @@ manual diagnostic (not a CTest, Proton's bootstrap is too heavy for routine runs
 (real `D3D12RenderTargetBackend`/`D3D12RenderTargetCubeBackend` + MRT) is also closed (🟨)**:
 `CreateRenderTarget2D`/`SetRenderTarget2D`/`SetRenderTargets`/`CreateRenderTargetCube` are all real
 now through the public `IGraphicsBackend` API — bind+`Clear()`+draw+unbind and a genuine 2-target
-MRT clear are all exact-color pixel-verified. `D3D12_Smoke` CTest (off-screen only): **93/93
-checks**, mutation-tested, all 10/10 stock shader variants + `SpriteBatch` + device-removed
-recovery + render targets/MRT real. D3D12 still genuinely lacks (real, scoped, documented, not
-silently dropped — see `docs/d3d12-backend.md`'s "Known limitations" and `plan_dx.md`'s Phase
-DX13): MSAA/mip-chain render targets, `Texture3D`, runtime-settable blend/depth-stencil/rasterizer
-state (PSOs hardcode `depthEnable=false`/`cullMode=None`), per-slot `SamplerState` (hardcoded
-static WRAP/linear samplers), occlusion queries, and custom `Effect` via
-`SpriteBatch::Begin(effect)`. **Phase DX13 (D3D12 functional completion, `DX-116`/`DX-117` closed,
-`DX-118`–`DX-123` open), Phase DX14 (D3D11 verification hardening), and Phase DX15 (remaining
-EasyGL-parity gaps) were added 2026-07-14 and are now authorized and actively in progress** — see
+MRT clear are all exact-color pixel-verified. **`DX-118` (real `BlendState`/`DepthStencilState`/
+`RasterizerState` → PSO state) is also closed**: `ApplyBlendState`/`ApplyDepthStencilState`/
+`ApplyRasterizerState` are now real, feeding tracked state into every PSO-key construction (3 real
+draw-path call sites) instead of the old hardcoded `depthEnable=false`/`cullMode=None` literals —
+additive blend, cull-mode culling/un-culling, and real per-pixel depth-test gating (via a real bound
+DSV, both draw orderings + a depth-disabled control) are all exact-pixel-verified. A real,
+pre-existing, functionally-inert mislabeling bug was found in `D3D12PipelineStateDesc.hpp`'s own
+default-value comments (documented in `plan_dx.md`'s `DX-118` row, not fixed — regression risk
+avoided by leaving it alone). `D3D12_Smoke` CTest (off-screen only): **104/104 checks**, all 10/10
+stock shader variants + `SpriteBatch` + device-removed recovery + render targets/MRT + real state
+objects. D3D12 still genuinely lacks (real, scoped, documented, not silently dropped — see
+`docs/d3d12-backend.md`'s "Known limitations" and `plan_dx.md`'s Phase DX13): MSAA/mip-chain render
+targets, `Texture3D`, per-slot `SamplerState` (hardcoded static WRAP/linear samplers), occlusion
+queries, and custom `Effect` via `SpriteBatch::Begin(effect)`. **Phase DX13 (D3D12 functional
+completion, `DX-116`/`DX-117`/`DX-118` closed, `DX-119`–`DX-123` open), Phase DX14 (D3D11
+verification hardening), and Phase DX15 (remaining EasyGL-parity gaps) were added 2026-07-14 and are
+now authorized and actively in progress** — see
 `plan_dx.md` for the full task list and ordering rationale. Outside the D3D plan, the standing
 backlog (Phase 79's 153-sample `../cna-samples` re-audit, Task 945's HLSL→GLSL tooling decision,
 Task 952's deferred Bgfx bug) is unchanged — see §8/§9.

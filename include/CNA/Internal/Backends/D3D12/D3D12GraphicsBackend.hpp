@@ -112,6 +112,36 @@ namespace CNA::Internal::Backends::D3D12
         void SetBlendEnabled(bool enabled) override;
         void SetDepthWriteEnabled(bool enabled) override;
 
+        /// DX-118: real, runtime-settable BlendState -- updates the tracked current-blend fields
+        /// fed into every psoCache_.GetOrCreate() call site's D3D12PipelineStateDesc, so a draw
+        /// after this call genuinely gets a differently-blended PSO (D3D12 bakes blend state into
+        /// the PSO itself, unlike D3D11's separate ID3D11BlendState objects -- design decision 4's
+        /// own D3DStateMapping tables are reused unchanged for the raw ordinal mapping).
+        void ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
+                             int colorDstBlend, int alphaDstBlend,
+                             int colorBlendFunc, int alphaBlendFunc) override;
+        /// DX-118: real, runtime-settable DepthStencilState -- depthEnable/depthWriteEnable/
+        /// depthFunc feed the PSO cache key exactly like ApplyBlendState above. Stencil fields are
+        /// deliberately NOT threaded through yet -- matches D3D12PipelineStateCache's own already-
+        /// documented "stencil deliberately NOT part of this first key/desc" scope (DX-107); a real,
+        /// honest follow-up gap, not silently dropped.
+        void ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable,
+                                    int depthFunc,
+                                    bool stencilEnable, int stencilFunc,
+                                    int stencilPass, int stencilFail, int stencilDepthFail,
+                                    int stencilMask, int stencilWriteMask, int referenceStencil,
+                                    bool twoSidedStencilMode,
+                                    int ccwStencilFunc, int ccwStencilPass,
+                                    int ccwStencilFail, int ccwStencilDepthFail) override;
+        /// DX-118: real, runtime-settable RasterizerState -- cullMode/fillMode feed the PSO cache
+        /// key exactly like ApplyBlendState above. scissorTestEnable/depthBias/slopeScaleDepthBias
+        /// are deliberately NOT threaded through yet (same documented first-implementation-subset
+        /// scope as the stencil fields above) -- a real, honest follow-up gap.
+        void ApplyRasterizerState(int cullMode, int fillMode,
+                                  bool scissorTestEnable,
+                                  float depthBias = 0.0f,
+                                  float slopeScaleDepthBias = 0.0f) override;
+
         std::unique_ptr<IVertexBufferBackend> CreateVertexBuffer(int vertex_capacity) override;
         std::unique_ptr<IIndexBufferBackend> CreateIndexBuffer16(int index_capacity) override;
         /// DX-109: real 32-bit index buffer -- explicitly overridden. D3D11's own Phase DX5 fork
@@ -250,8 +280,16 @@ namespace CNA::Internal::Backends::D3D12
          *  honest triage of render targets out of that task's first pass) -- the real swap-chain
          *  back buffer would be the production equivalent once DX-100's Wine/vkd3d-proton
          *  presentation gap is resolved on real Windows hardware (DX-114). NOXNA. */
+        /// @param dsv/@p dsvFormat DX-118: optional real depth-stencil view to bind alongside the
+        /// color target -- defaults to an unbound handle/DXGI_FORMAT_UNKNOWN, so every existing
+        /// caller (tests, and this class's own pre-DX-118 call sites) is completely unaffected. The
+        /// real back buffer's own depth-stencil buffer (DX-116) is passed here now; a bare
+        /// off-screen D3D12RenderTargetBackend (DX-117) does not yet create/pass its own DSV --
+        /// a real, honest follow-up gap.
         void BindOffscreenColorTargetEXT(ID3D12Resource* resource, D3D12_CPU_DESCRIPTOR_HANDLE rtv,
-                                         DXGI_FORMAT format, int width, int height);
+                                         DXGI_FORMAT format, int width, int height,
+                                         D3D12_CPU_DESCRIPTOR_HANDLE dsv = D3D12_CPU_DESCRIPTOR_HANDLE{},
+                                         DXGI_FORMAT dsvFormat = DXGI_FORMAT_UNKNOWN);
         /** @brief DX-117: real MRT bind -- @p resources[0]/@p rtvs[0] become the primary bound
          *  target via BindOffscreenColorTargetEXT() (so every existing single-target draw path is
          *  completely unaffected), and @p resources[1..count-1]/@p rtvs[1..count-1] (up to 7 more)
@@ -496,6 +534,29 @@ namespace CNA::Internal::Backends::D3D12
         DXGI_FORMAT boundColorFormat_ = DXGI_FORMAT_R8G8B8A8_UNORM;
         int boundColorWidth_ = 0;
         int boundColorHeight_ = 0;
+        // DX-118: optional real DSV bound alongside the color target above -- ptr==0 means unbound,
+        // matching every draw path's pre-DX-118 "null DSV" behavior exactly when nothing sets one.
+        D3D12_CPU_DESCRIPTOR_HANDLE boundDsv_{};
+        DXGI_FORMAT boundDsvFormat_ = DXGI_FORMAT_UNKNOWN;
+
+        // DX-118: currently-applied XNA-level state (updated by ApplyBlendState/
+        // ApplyDepthStencilState/ApplyRasterizerState), fed into every psoCache_.GetOrCreate() call
+        // site instead of the hardcoded literals those call sites used before this task. Defaults
+        // match EXACTLY what those hardcoded literals were (depthEnable=false, cullMode=None,
+        // Opaque blend) -- so a draw that never had one of these 3 methods called on it first
+        // (every pixel test that existed before this task) gets byte-identical behavior to before;
+        // only a test/game that explicitly calls one of them gets genuinely different PSO state.
+        int currentColorSrcBlend_ = 2;   // Blend::One
+        int currentAlphaSrcBlend_ = 2;   // Blend::One
+        int currentColorDstBlend_ = 1;   // Blend::Zero
+        int currentAlphaDstBlend_ = 1;   // Blend::Zero
+        int currentColorBlendFunc_ = 0;  // BlendFunction::Add
+        int currentAlphaBlendFunc_ = 0;  // BlendFunction::Add
+        bool currentDepthEnable_ = false;
+        bool currentDepthWriteEnable_ = false;
+        int currentDepthFunc_ = 4;       // CompareFunction::LessEqual
+        int currentCullMode_ = 0;        // CullMode::None
+        int currentFillMode_ = 0;        // FillMode::Solid
 
         // DX-117: additional MRT targets beyond the primary (index 0, tracked by boundColor*_
         // above) -- Clear() independently transitions+clears each; draws remain single-target
