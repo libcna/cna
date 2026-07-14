@@ -298,13 +298,35 @@ Mutation-verified (hardcoded `RequiresPowerOfTwoTexturesEXT()` to always return 
 exactly the capability assertion went red and the NPOT round-trip proof was consistently skipped).
 `D3D9_Smoke` now 51/51.
 
+### Phase D9-7 — Microsoft's stock effects: vendor, compile, embed: D9-70 CLOSED, D9-71–74 open
+
+| Task | Status |
+|---|---|
+| `D9-70` — vendor the 10 Stock Effects HLSL sources verbatim | ✅ |
+| `D9-71` — offline-compile all 66 entry points to `d3d9_shaders.hpp` | ⬜ |
+| `D9-72` — transcribe register annotations into `D3D9ShaderRegisters.hpp` | ⬜ |
+| `D9-73` — cross-check against Microsoft's shipped `.fxb` bytecode | 🟨 (already run in Phase D9-0: 61/66 exact; 5 `PixelLighting` variants owed to `D9-84`'s oracle proof) |
+| `D9-74` — `D3D9ShaderCache` creates all 66 through a live device | ⬜ |
+
+`D9-70`: all 10 files (`BasicEffect.fx`, `AlphaTestEffect.fx`, `DualTextureEffect.fx`,
+`EnvironmentMapEffect.fx`, `SkinnedEffect.fx`, `SpriteEffect.fx`, `Macros.fxh`, `Common.fxh`,
+`Lighting.fxh`, `Structures.fxh`) copied byte-for-byte from the FNA tree into
+`src/CNA/Internal/Backends/D3D9/shaders/xna/`, with `LICENSE` (Ms-PL), a provenance `README.md`
+(66 entry points, each verified via `grep`, not hand-typed — an initial draft had 4 wrong names for
+`EnvironmentMapEffect.fx`/`SkinnedEffect.fx`, caught by actually running the grep before publishing
+it), and a specific `THIRD_PARTY_NOTICES.md` entry. New `scripts/verify-d3d9-stock-effects-vendored.sh`
+mechanically diffs the vendored copies against the FNA tree; mutation-verified (appended a line to
+the vendored `BasicEffect.fx`, confirmed the script reports `MISMATCH`/exit 1, reverted). Not a
+CTest — depends on the FNA reference tree being present on the machine, same reasoning `D9-71`'s own
+row gives for its own "run by hand" pipeline.
+
 ### Does NOT work yet
 
 Draws, `SpriteBatch` — still throw `NotYetImplemented()` naming their own follow-up task, by design.
-`D9-63` (sampler state) and `D9-64` (reused state CTests) are the remaining open rows in Phase D9-6.
-The mapping tables (`D9-20`–`23`) are now consumed by the render-state push path, the buffer-creation
-path, and the
-texture/render-target-creation paths; draw consumers still come later.
+`D9-64` (reused state CTests) is the only remaining open row in Phase D9-6, and isn't actionable
+until a real draw path exists (`D9-82`, Phase D9-8). The mapping tables (`D9-20`–`23`) are now
+consumed by the render-state push path, the buffer-creation path, and the texture/render-target-creation
+paths; draw consumers still come later.
 
 ---
 
@@ -314,7 +336,8 @@ Most recent first. Full detail lives in `plan_dx9.md` — this is a short index.
 
 | Commit(s) | Summary |
 |---|---|
-| *(pending)* | **`D9-63` closed (`ApplySamplerState`) — Phase D9-6 down to just `D9-64`**: plain `SetSamplerState()` calls (design decision 11), using the `D9-21` mapping tables; slot bound-checked against real `D3DCAPS9::MaxSimultaneousTextures`, not a hardcoded 16. `D3DSAMP_SRGBTEXTURE` genuinely out of scope (interface signature carries no sRGB parameter, same category as `D9-60`'s own `D3DRS_COLORWRITEENABLE` gap). New `D3D9_Smoke` Check Y (2 checks): values read back via `GetSamplerState()` (no draw needed) confirm an exact match; out-of-range slot silently no-ops. Mutation-verified (hardcoded `D3DSAMP_ADDRESSU` to ignore the requested value, confirmed exactly that assertion went red). `D3D9_Smoke` now 53/53. |
+| *(pending)* | **`D9-70` closed (vendor Stock Effects HLSL)**: all 10 files copied byte-for-byte from the FNA tree into `src/CNA/Internal/Backends/D3D9/shaders/xna/`, plus `LICENSE`, a provenance `README.md` (66 entry points, grep-verified), and a specific `THIRD_PARTY_NOTICES.md` entry. New `scripts/verify-d3d9-stock-effects-vendored.sh` mechanically diffs against the FNA tree. Mutation-verified (appended a line to the vendored `BasicEffect.fx`, confirmed the script reports `MISMATCH`/exit 1). First row of Phase D9-7. |
+| `eb373571` | **`D9-63` closed (`ApplySamplerState`) — Phase D9-6 down to just `D9-64`**: plain `SetSamplerState()` calls (design decision 11), using the `D9-21` mapping tables; slot bound-checked against real `D3DCAPS9::MaxSimultaneousTextures`, not a hardcoded 16. `D3DSAMP_SRGBTEXTURE` genuinely out of scope (interface signature carries no sRGB parameter, same category as `D9-60`'s own `D3DRS_COLORWRITEENABLE` gap). New `D3D9_Smoke` Check Y (2 checks): values read back via `GetSamplerState()` (no draw needed) confirm an exact match; out-of-range slot silently no-ops. Mutation-verified (hardcoded `D3DSAMP_ADDRESSU` to ignore the requested value, confirmed exactly that assertion went red). `D3D9_Smoke` now 53/53. |
 | `1206fc42` | **`D9-56` closed (NPOT capability) — Phase D9-5 FULLY CLOSED (all 7 rows)**: new NOXNA `RequiresPowerOfTwoTexturesEXT()`/`NonPowerOfTwoRequiresClampAddressingEXT()` surface the real `D3DCAPS9::TextureCaps` `POW2`/`NONPOW2CONDITIONAL` bits. This dev environment's DXVK device reports full, unconditional NPOT support, matching `D9-3`'s own original caps dump. New `D3D9_Smoke` Check X (2 checks): asserts the exact reported capability, then round-trips a genuinely non-power-of-two (5×3) texture for real. Enforcing the `Reach`-profile "no Wrap on NPOT" restriction itself is deferred to `D9-10`/`D9-82` (no draw/sampler path exists yet). Mutation-verified (hardcoded the POW2 helper to always return true, confirmed exactly that assertion went red). `D3D9_Smoke` now 51/51. |
 | `f33d4fe9` | **`D9-55` closed (occlusion queries)**: new `D3D9OcclusionQueryBackend` (`IDirect3DQuery9`, `D3DQUERYTYPE_OCCLUSION`), gated on the official D3D9 support-probe idiom (`CreateQuery(type, nullptr)`). New `D3D9_Smoke` Check W (3 checks). Mutation-verified (forced `IsComplete()` to always return false, confirmed exactly that assertion went red). `D3D9_Smoke` now 49/49. `D9-56` (NPOT) is the only Phase D9-5 row left open. |
 | `9c8ccfe9` | **`D9-54` closed (MRT)**: real `D3D9GraphicsBackend::SetRenderTargets(rts, count)` (`SetRenderTarget(i, surface)` per slot, unused slots disabled, over-request throws per design decision 13, deliberately not matching D3D11/D3D12's own silent-clamp precedent). Real, unplanned finding: an MRT bind isn't representable by the single-pointer `currentCustomRT_`/`currentCustomCubeRT_` tracking, so unbinding via `SetRenderTargets(nullptr, 0)` silently failed to restore the back buffer — fixed by making `RestoreBackBufferRenderTargetEXT()` unconditional in `SetRenderTarget2D()`'s/`SetRenderTargetCubeFace()`'s own `!rt` branches. New `D3D9_Smoke` Check V (3 checks). Mutation-verified (disabled the over-request guard, exactly that assertion went red). `D3D9_Smoke` now 46/46. `D9-55`–`56` (occlusion/NPOT) remain open. |
@@ -335,11 +358,12 @@ Most recent first. Full detail lives in `plan_dx9.md` — this is a short index.
 ## 4. Current blocker / main problem
 
 **No blocker.** Phases D9-0/D9-1/D9-2/D9-3/D9-4/D9-5 are all fully closed (D9-32/D9-34 honestly 🟨 —
-see their own plan rows for exactly what's deferred and why). Phase D9-6: `D9-60`/`D9-61`/`D9-62`/`D9-63`
-are closed (`D9-60`/`D9-62` honestly 🟨); only `D9-64` remains, and it needs a real draw path (`D9-82`,
-Phase D9-8) to mean anything — not actionable yet. Next smallest task: start Phase D9-7 (Microsoft's
-stock effects: vendor, compile, embed — `D9-70`–`74`), the next phase whose own rows don't depend on
-a draw path existing first.
+see their own plan rows for exactly what's deferred and why). Phase D9-6: `D9-60`–`D9-63` are closed
+(`D9-60`/`D9-62` honestly 🟨); only `D9-64` remains, not actionable until a real draw path exists
+(`D9-82`, Phase D9-8). Phase D9-7 (Microsoft's stock effects) is now underway: `D9-70` (vendoring)
+closed. Next smallest task: `D9-71` (offline-compile all 66 entry points to a checked-in
+`d3d9_shaders.hpp`, reusing `dx9-spike/fxc_tool.cpp`'s already-proven `ID3DInclude` handler) — needs
+the real Microsoft `d3dcompiler_47.dll`, only present in `~/.wine-cna-d3d9-spike`.
 
 ---
 
@@ -406,13 +430,27 @@ cmake -S . -B cmake-build-d3d9 \
 
 **Phases D9-0 through D9-5 are all fully closed** (`D9-32`/`D9-34` honestly 🟨 — see `plan_dx9.md`
 for exactly what's deferred to `D9-100`/`D9-A`/`D9-140` and why). Phase D9-6: `D9-60`–`D9-63` closed
-(`D9-60`/`D9-62` honestly 🟨); only `D9-64` remains open, and it isn't actionable yet.
+(`D9-60`/`D9-62` honestly 🟨); only `D9-64` remains open, and it isn't actionable yet. Phase D9-7:
+`D9-70` (vendoring) closed.
 
-1. **Phase D9-7** (Microsoft's stock effects: vendor, compile, embed — `D9-70`–`74`) — the next phase
-   whose own rows don't need a draw path first.
-2. **`D9-64`** (reuse the backend-agnostic `easygl_blendstate_*`/`easygl_depthstencilstate_*`/
+1. **`D9-71`** — offline-compile all 66 vendored entry points to a checked-in `d3d9_shaders.hpp`,
+   reusing `dx9-spike/fxc_tool.cpp`'s already-proven `ID3DInclude` handler (do not rewrite it).
+   Entry-point list is parsed from the `.fx` files' own `compile [vp]s_2_0 ...` statements, not
+   hand-maintained. Locked-in compile flags: `D3DCOMPILE_OPTIMIZATION_LEVEL3`, no others (the exact
+   configuration `D9-1`/`D9-73` already proved gives 61/66 exact Microsoft matches). Run in
+   `~/.wine-cna-d3d9-spike` (the only prefix with the real `d3dcompiler_47.dll`) — bare `wine` call,
+   not through `run-wine-dxvk9.sh` (compiling never opens a device).
+2. **`D9-72`** — transcribe Microsoft's `_vs(c#)`/`_ps(c#)` register annotations into
+   `D3D9ShaderRegisters.hpp`; `static_assert` the C++ upload structs against it.
+3. **`D9-74`** — `D3D9ShaderCache` creating all 66 shaders through a live device (needs `D9-71`
+   first, and a device — install DXVK into `~/.wine-cna-d3d9-spike` too, or a 4th prefix).
+4. **`D9-64`** (reuse the backend-agnostic `easygl_blendstate_*`/`easygl_depthstencilstate_*`/
    `easygl_rasterizerstate_*` CTest sources verbatim) — needs a real draw path (`D9-82`, Phase D9-8)
    to mean anything; sequence it once that phase lands, not before.
+
+`D9-73` (cross-check against Microsoft's `.fxb`) is already 🟨 from Phase D9-0's own spike (61/66
+exact matches) — its remaining obligation (prove the 5 `PixelLighting` variants equivalent against
+the real oracle) is deferred to `D9-84`, which needs a draw path; not actionable yet either.
 
 See `plan_dx9.md`'s "Execution order" table for the full sequence beyond this.
 
