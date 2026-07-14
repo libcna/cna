@@ -5,6 +5,7 @@
 #include "CNA/Internal/Backends/D3D12/D3D12GraphicsBackend.hpp"
 #include "CNA/Internal/Backends/D3D12/D3D12Buffers.hpp"
 #include "CNA/Internal/Backends/D3D12/D3D12Textures.hpp"
+#include "CNA/Internal/Backends/D3D12/D3D12RenderTargets.hpp"
 #include "CNA/Internal/Backends/D3D12/D3D12SpriteBatch.hpp"
 #include "CNA/Internal/Backends/D3DCommon/D3DConstantBuffers.hpp"
 
@@ -607,6 +608,36 @@ namespace CNA::Internal::Backends::D3D12
         boundColorResource_ = nullptr;
         boundColorWidth_ = 0;
         boundColorHeight_ = 0;
+        extraMrtCount_ = 0; // DX-117: MRT extras are only ever meaningful alongside a bound primary
+    }
+
+    void D3D12GraphicsBackend::BindOffscreenColorTargetsEXT(ID3D12Resource* const* resources,
+                                                              const D3D12_CPU_DESCRIPTOR_HANDLE* rtvs,
+                                                              int count, DXGI_FORMAT format,
+                                                              int width, int height)
+    {
+        BindOffscreenColorTargetEXT(count > 0 ? resources[0] : nullptr,
+                                    count > 0 ? rtvs[0] : D3D12_CPU_DESCRIPTOR_HANDLE{},
+                                    format, width, height);
+
+        extraMrtCount_ = std::max(0, std::min(count - 1, kMaxExtraMrtTargets));
+        for (int i = 0; i < extraMrtCount_; ++i)
+        {
+            extraMrtResources_[i] = resources[i + 1];
+            extraMrtRtvs_[i] = rtvs[i + 1];
+        }
+    }
+
+    void D3D12GraphicsBackend::RestoreBackBufferRenderTargetEXT()
+    {
+        if (!swapChainAvailable_)
+        {
+            UnbindOffscreenColorTargetEXT();
+            return;
+        }
+        const UINT idx = swapChain_->GetCurrentBackBufferIndex();
+        BindOffscreenColorTargetEXT(backBufferResources_[idx].Get(), backBufferRtvs_[idx],
+                                    DXGI_FORMAT_R8G8B8A8_UNORM, width_, height_);
     }
 
     void D3D12GraphicsBackend::CreateUploadConstantBuffer(UINT byteWidth, ComPtr<ID3D12Resource>& outResource,
@@ -685,6 +716,10 @@ namespace CNA::Internal::Backends::D3D12
         if (tex == nullptr) return handle;
         if (const auto* t = dynamic_cast<const D3D12TextureBackend*>(tex))
             return t->GetShaderResourceViewGpuHandleEXT();
+        // DX-117: two-concrete-type resolution, mirroring D3D11GraphicsBackend::GetSrvForTextureEXT
+        // -- a render target used as a sampled texture (post-processing, render-to-texture effects).
+        if (const auto* rt = dynamic_cast<const D3D12RenderTargetBackend*>(tex))
+            return rt->GetShaderResourceViewGpuHandleEXT();
         return handle;
     }
 
@@ -708,16 +743,64 @@ namespace CNA::Internal::Backends::D3D12
         if (tex == nullptr) return handle;
         if (const auto* t = dynamic_cast<const D3D12TextureCubeBackend*>(tex))
             return t->GetShaderResourceViewGpuHandleEXT();
+        // DX-117: two-concrete-type resolution, mirroring GetSrvGpuHandleForTextureEXT above.
+        if (const auto* rt = dynamic_cast<const D3D12RenderTargetCubeBackend*>(tex))
+            return rt->GetShaderResourceViewGpuHandleEXT();
         return handle;
+    }
+
+    std::unique_ptr<IRenderTargetBackend> D3D12GraphicsBackend::CreateRenderTarget2D(
+        int w, int h, int depthFormat, bool /*preserveContents*/, bool /*mipMap*/, int /*multiSampleCount*/)
+    {
+        // DX-117: MSAA and full mip-chain generation are deliberately not yet supported for D3D12
+        // render targets (honest, scoped follow-up -- see D3D12RenderTargets.hpp's own header
+        // comment) -- mipMap/multiSampleCount are accepted (matching the interface contract every
+        // other backend implements) but not yet honored.
+        return std::make_unique<D3D12RenderTargetBackend>(this, device_.Get(), w, h, depthFormat);
+    }
+
+    void D3D12GraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* rt)
+    {
+        if (rt) rt->BindAsRenderTarget();
+        else RestoreBackBufferRenderTargetEXT();
+    }
+
+    std::unique_ptr<IRenderTargetCubeBackend> D3D12GraphicsBackend::CreateRenderTargetCube(
+        int size, int depthFormat, bool /*mipMap*/, int /*multiSampleCount*/)
+    {
+        return std::make_unique<D3D12RenderTargetCubeBackend>(this, device_.Get(), size, depthFormat);
+    }
+
+    void D3D12GraphicsBackend::SetRenderTargets(IRenderTargetBackend* const* rts, int count)
+    {
+        if (count <= 0 || rts == nullptr)
+        {
+            SetRenderTarget2D(nullptr);
+            return;
+        }
+
+        ID3D12Resource* resources[8];
+        D3D12_CPU_DESCRIPTOR_HANDLE rtvs[8];
+        const int n = std::min(count, 8);
+        for (int i = 0; i < n; ++i)
+        {
+            auto* rt = dynamic_cast<D3D12RenderTargetBackend*>(rts[i]);
+            if (!rt)
+                throw std::runtime_error("D3D12GraphicsBackend::SetRenderTargets: target is not a real D3D12RenderTargetBackend");
+            resources[i] = rt->GetColorResourceEXT();
+            rtvs[i] = rt->GetRtvEXT();
+        }
+        BindOffscreenColorTargetsEXT(resources, rtvs, n, DXGI_FORMAT_R8G8B8A8_UNORM,
+                                     rts[0]->GetWidth(), rts[0]->GetHeight());
     }
 
     void D3D12GraphicsBackend::Clear(float r, float g, float b, float a)
     {
         if (!boundColorResource_)
         {
-            NotYetImplemented("Clear (no off-screen color target bound -- BindOffscreenColorTargetEXT; "
-                              "the swap chain path is unusable under Wine per DX-100, and a full public "
-                              "D3D12RenderTargetBackend is not yet implemented, DX-109's own honest scope note)");
+            NotYetImplemented("Clear (no off-screen color target bound -- BindOffscreenColorTargetEXT/ "
+                              "CreateRenderTarget2D+SetRenderTarget2D/DX-117, or the real swap chain, "
+                              "DX-116, none of which is currently bound)");
         }
 
         ID3D12CommandAllocator* allocator = GetCommandAllocatorEXT(0);
@@ -728,6 +811,17 @@ namespace CNA::Internal::Backends::D3D12
         resourceStates_.TransitionTo(cmdList, boundColorResource_, D3D12_RESOURCE_STATE_RENDER_TARGET);
         const float clearColor[4] = {r, g, b, a};
         cmdList->ClearRenderTargetView(boundColorRtv_, clearColor, 0, nullptr);
+
+        // DX-117: real MRT -- independently transition+clear every additional bound target too
+        // (SetRenderTargets()'s own real multi-target bind), matching D3D11's own DX-46 proof
+        // shape. Draws themselves remain single-target (boundColorRtv_ only) -- no CNA shader
+        // declares more than one SV_Target output, the same honest scope boundary this project's
+        // own D3D11 MRT work already established.
+        for (int i = 0; i < extraMrtCount_; ++i)
+        {
+            resourceStates_.TransitionTo(cmdList, extraMrtResources_[i], D3D12_RESOURCE_STATE_RENDER_TARGET);
+            cmdList->ClearRenderTargetView(extraMrtRtvs_[i], clearColor, 0, nullptr);
+        }
 
         HRESULT hr = cmdList->Close();
         if (FAILED(hr))

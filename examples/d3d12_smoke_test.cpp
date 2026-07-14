@@ -106,6 +106,7 @@
 #include "CNA/Internal/Backends/D3D12/D3D12Buffers.hpp"
 #include "CNA/Internal/Backends/D3D12/D3D12Textures.hpp"
 #include "CNA/Internal/Backends/D3D12/D3D12TextureCube.hpp"
+#include "CNA/Internal/Backends/D3D12/D3D12RenderTargets.hpp"
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "CNA/Internal/Graphics/ImageData.hpp"
 
@@ -125,6 +126,9 @@ using CNA::Internal::Backends::D3D12::D3D12VertexBufferBackend;
 using CNA::Internal::Backends::D3D12::D3D12IndexBufferBackend;
 using CNA::Internal::Backends::D3D12::D3D12TextureBackend;
 using CNA::Internal::Backends::D3D12::D3D12TextureCubeBackend;
+using CNA::Internal::Backends::D3D12::D3D12RenderTargetBackend;
+using CNA::Internal::Backends::D3D12::D3D12RenderTargetCubeBackend;
+using CNA::Internal::Backends::IRenderTargetBackend;
 using CNA::Internal::Backends::D3DCommon::D3DShaderVariant;
 using CNA::Internal::Graphics::ImageData;
 using CNA::Internal::Backends::Matrix;
@@ -1747,6 +1751,102 @@ int main()
               "the fogEnabled=false case above (plan_dx.md DX-69/DX-113)");
 
         backend.UnbindOffscreenColorTargetEXT();
+    }
+
+    // ---- Check W (DX-117): real D3D12RenderTargetBackend/D3D12RenderTargetCubeBackend + MRT, ----
+    // ---- through the actual public IGraphicsBackend API (CreateRenderTarget2D/SetRenderTarget2D/ ----
+    // ---- SetRenderTargets/CreateRenderTargetCube) -- not the DX-111 test scaffolding every ----
+    // ---- earlier Check used (BindOffscreenColorTargetEXT). ----
+    {
+        constexpr int kRtWidth = 64;
+        constexpr int kRtHeight = 64;
+
+        auto rt0 = backend.CreateRenderTarget2D(kRtWidth, kRtHeight, /*depthFormat=*/0);
+        Check(rt0 != nullptr, "W1: CreateRenderTarget2D() returns a real IRenderTargetBackend");
+
+        backend.SetRenderTarget2D(rt0.get());
+        Check(backend.HasBoundColorTargetEXT(), "W2: SetRenderTarget2D() genuinely binds the target");
+
+        auto* rt0Impl = dynamic_cast<D3D12RenderTargetBackend*>(rt0.get());
+        Check(rt0Impl != nullptr, "W3: the real target is a D3D12RenderTargetBackend");
+
+        backend.Clear(0.2f, 0.4f, 0.6f, 1.0f);
+        auto rt0Readback = ReadBackRenderTargetFull(backend, rt0Impl->GetColorResourceEXT(), kRtWidth, kRtHeight);
+        const std::size_t centerIdx =
+            (static_cast<std::size_t>(kRtHeight / 2) * kRtWidth + static_cast<std::size_t>(kRtWidth / 2)) * 4;
+        Check(rt0Readback[centerIdx + 0] == 51 && rt0Readback[centerIdx + 1] == 102 &&
+              rt0Readback[centerIdx + 2] == 153 && rt0Readback[centerIdx + 3] == 255,
+              "W4: Clear() on a real bound RenderTarget2D writes the exact requested color, read back "
+              "through its own real GPU resource (plan_dx.md DX-117)");
+
+        // A real triangle drawn into the render target, same "oversized triangle" trick Check M
+        // established -- proves DrawColoredPrimitives() genuinely targets this real render target,
+        // not just Clear().
+        struct VPCw { float x, y, z; uint32_t color; };
+        static const VPCw kTriW[3] = {
+            {-1.0f, -1.0f, 0.0f, 0xFF00FF00u}, // A=255,B=0,G=255,R=0 -> exact green
+            { 3.0f, -1.0f, 0.0f, 0xFF00FF00u},
+            {-1.0f,  3.0f, 0.0f, 0xFF00FF00u},
+        };
+        D3D12VertexBufferBackend vbW(&backend, 3);
+        vbW.SetData(kTriW, 3, sizeof(VPCw));
+        backend.DrawColoredPrimitives(vbW, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                      Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1);
+        auto rt0AfterDraw = ReadBackRenderTargetFull(backend, rt0Impl->GetColorResourceEXT(), kRtWidth, kRtHeight);
+        Check(rt0AfterDraw[centerIdx + 0] == 0 && rt0AfterDraw[centerIdx + 1] == 255 &&
+              rt0AfterDraw[centerIdx + 2] == 0 && rt0AfterDraw[centerIdx + 3] == 255,
+              "W5: DrawColoredPrimitives() paints the exact vertex color into a real bound "
+              "RenderTarget2D (plan_dx.md DX-117)");
+
+        backend.SetRenderTarget2D(nullptr);
+        Check(!backend.HasBoundColorTargetEXT(),
+              "W6: SetRenderTarget2D(nullptr) on an off-screen (no swap chain) backend genuinely "
+              "restores the honest 'nothing bound' state, via RestoreBackBufferRenderTargetEXT()'s "
+              "own real fallback (plan_dx.md DX-117)");
+
+        // ---- Real MRT: 2 independently-created render targets, one SetRenderTargets() bind call, ----
+        // ---- Clear() genuinely writes both -- same proof shape D3D11's own DX-46 established. ----
+        auto rtA = backend.CreateRenderTarget2D(kRtWidth, kRtHeight, 0);
+        auto rtB = backend.CreateRenderTarget2D(kRtWidth, kRtHeight, 0);
+        IRenderTargetBackend* mrtTargets[2] = {rtA.get(), rtB.get()};
+        backend.SetRenderTargets(mrtTargets, 2);
+        Check(backend.HasBoundColorTargetEXT(), "W7: SetRenderTargets() binds the primary (index 0) target");
+
+        backend.Clear(0.8f, 0.0f, 1.0f, 1.0f); // 204/0/255/255 -- exact under any rounding mode
+        auto* rtAImpl = dynamic_cast<D3D12RenderTargetBackend*>(rtA.get());
+        auto* rtBImpl = dynamic_cast<D3D12RenderTargetBackend*>(rtB.get());
+        auto rtAReadback = ReadBackRenderTargetFull(backend, rtAImpl->GetColorResourceEXT(), kRtWidth, kRtHeight);
+        auto rtBReadback = ReadBackRenderTargetFull(backend, rtBImpl->GetColorResourceEXT(), kRtWidth, kRtHeight);
+        const bool rtAExact = rtAReadback[centerIdx + 0] == 204 && rtAReadback[centerIdx + 1] == 0 &&
+                              rtAReadback[centerIdx + 2] == 255 && rtAReadback[centerIdx + 3] == 255;
+        const bool rtBExact = rtBReadback[centerIdx + 0] == 204 && rtBReadback[centerIdx + 1] == 0 &&
+                              rtBReadback[centerIdx + 2] == 255 && rtBReadback[centerIdx + 3] == 255;
+        Check(rtAExact && rtBExact,
+              "W8: real 2-target MRT -- one Clear() call after one SetRenderTargets() bind writes "
+              "the exact color into BOTH independently-readable GPU resources (plan_dx.md DX-117)");
+
+        backend.SetRenderTarget2D(nullptr);
+
+        // ---- RenderTargetCube: real construction + face-0 bind+clear+readback. ----
+        auto rtCube = backend.CreateRenderTargetCube(kRtWidth, 0);
+        Check(rtCube != nullptr, "W9: CreateRenderTargetCube() returns a real IRenderTargetCubeBackend");
+
+        rtCube->BindAsRenderTargetFace(0);
+        Check(backend.HasBoundColorTargetEXT(), "W10: BindAsRenderTargetFace() genuinely binds face 0");
+
+        backend.Clear(1.0f, 0.6f, 0.0f, 1.0f); // 255/153/0/255 -- exact under any rounding mode
+        auto* rtCubeImpl = dynamic_cast<D3D12RenderTargetCubeBackend*>(rtCube.get());
+        Check(rtCubeImpl != nullptr, "W11: the real cube target is a D3D12RenderTargetCubeBackend");
+        auto rtCubeReadback = ReadBackRenderTargetFull(backend, rtCubeImpl->GetColorResourceEXT(), kRtWidth, kRtHeight);
+        Check(rtCubeReadback[centerIdx + 0] == 255 && rtCubeReadback[centerIdx + 1] == 153 &&
+              rtCubeReadback[centerIdx + 2] == 0 && rtCubeReadback[centerIdx + 3] == 255,
+              "W12: Clear() on a real bound RenderTargetCube face writes the exact requested color, "
+              "read back through its own real GPU resource (subresource 0 = face 0, plan_dx.md "
+              "DX-117 -- only face 0 exercised, remaining faces are the same honest-scope gap "
+              "D3D11's own RenderTargetCube coverage already has, see plan_dx.md Phase DX15 DX-129)");
+
+        rtCube->UnbindAsRenderTarget();
+        Check(!backend.HasBoundColorTargetEXT(), "W13: UnbindAsRenderTarget() on RenderTargetCube restores the honest 'nothing bound' state");
     }
 
     std::printf("\n%s: %d failure(s)\n", g_failures == 0 ? "RESULT: ALL PASS" : "RESULT: FAILURES", g_failures);

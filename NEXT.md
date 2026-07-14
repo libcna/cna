@@ -277,15 +277,19 @@ confirms the earlier diagnosis was right (vkd3d-proton needs its matched `dxgi.d
 `d3d12.dll`), not a CNA bug. **`DX-116` (real `Present()`/back-buffer rendering) is also closed**:
 a real 10-frame `Clear()`+`Present()` loop through that same Proton launch succeeds with no
 throw/crash, reproduced twice — D3D12 can now genuinely put pixels on a real screen, kept as a
-manual diagnostic (not a CTest, Proton's bootstrap is too heavy for routine runs). `D3D12_Smoke`
-CTest (off-screen only): **80/80 checks**, mutation-tested, all 10/10 stock shader variants +
-`SpriteBatch` + device-removed recovery real. D3D12 still genuinely lacks (real, scoped,
-documented, not silently dropped — see `docs/d3d12-backend.md`'s "Known limitations" and
-`plan_dx.md`'s Phase DX13): a public render-target backend, `Texture3D`, runtime-settable
-blend/depth-stencil/rasterizer state (PSOs hardcode `depthEnable=false`/`cullMode=None`), per-slot
-`SamplerState` (hardcoded static WRAP/linear samplers), occlusion queries, and custom `Effect` via
-`SpriteBatch::Begin(effect)`. **Phase DX13 (D3D12 functional completion, `DX-116` closed,
-`DX-117`–`DX-123` open), Phase DX14 (D3D11 verification hardening), and Phase DX15 (remaining
+manual diagnostic (not a CTest, Proton's bootstrap is too heavy for routine runs). **`DX-117`
+(real `D3D12RenderTargetBackend`/`D3D12RenderTargetCubeBackend` + MRT) is also closed (🟨)**:
+`CreateRenderTarget2D`/`SetRenderTarget2D`/`SetRenderTargets`/`CreateRenderTargetCube` are all real
+now through the public `IGraphicsBackend` API — bind+`Clear()`+draw+unbind and a genuine 2-target
+MRT clear are all exact-color pixel-verified. `D3D12_Smoke` CTest (off-screen only): **93/93
+checks**, mutation-tested, all 10/10 stock shader variants + `SpriteBatch` + device-removed
+recovery + render targets/MRT real. D3D12 still genuinely lacks (real, scoped, documented, not
+silently dropped — see `docs/d3d12-backend.md`'s "Known limitations" and `plan_dx.md`'s Phase
+DX13): MSAA/mip-chain render targets, `Texture3D`, runtime-settable blend/depth-stencil/rasterizer
+state (PSOs hardcode `depthEnable=false`/`cullMode=None`), per-slot `SamplerState` (hardcoded
+static WRAP/linear samplers), occlusion queries, and custom `Effect` via
+`SpriteBatch::Begin(effect)`. **Phase DX13 (D3D12 functional completion, `DX-116`/`DX-117` closed,
+`DX-118`–`DX-123` open), Phase DX14 (D3D11 verification hardening), and Phase DX15 (remaining
 EasyGL-parity gaps) were added 2026-07-14 and are now authorized and actively in progress** — see
 `plan_dx.md` for the full task list and ordering rationale. Outside the D3D plan, the standing
 backlog (Phase 79's 153-sample `../cna-samples` re-audit, Task 945's HLSL→GLSL tooling decision,

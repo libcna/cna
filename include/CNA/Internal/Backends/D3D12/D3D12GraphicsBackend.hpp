@@ -83,6 +83,24 @@ namespace CNA::Internal::Backends::D3D12
         std::unique_ptr<ITextureCubeBackend> CreateTextureCube(int size, bool mipMap, int surfaceFormat) override;
         std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() override;
 
+        /// DX-117: real D3D12RenderTargetBackend, no longer the inherited default (-> nullptr).
+        std::unique_ptr<IRenderTargetBackend> CreateRenderTarget2D(int w, int h, int depthFormat,
+                                                                    bool preserveContents = false,
+                                                                    bool mipMap = false,
+                                                                    int multiSampleCount = 0) override;
+        void SetRenderTarget2D(IRenderTargetBackend* rt) override;
+        /// DX-117: real D3D12RenderTargetCubeBackend, no longer the inherited default (-> nullptr).
+        std::unique_ptr<IRenderTargetCubeBackend> CreateRenderTargetCube(int size, int depthFormat,
+                                                                          bool mipMap = false,
+                                                                          int multiSampleCount = 0) override;
+        /// DX-117: real MRT -- binds every target's own RTV (up to 8, D3D12's own
+        /// D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT, though this project's shared GraphicsDevice
+        /// code already caps at 4, MAX_RENDERTARGET_BINDINGS). Draws themselves remain
+        /// single-target (index 0) -- no CNA shader declares more than one SV_Target output; only
+        /// Clear() genuinely clears every bound target independently, matching D3D11's own DX-46
+        /// proof shape.
+        void SetRenderTargets(IRenderTargetBackend* const* rts, int count) override;
+
         void ClearColorAndDepth(float r, float g, float b, float a, float depth) override;
         void ClearDepth(float depth) override;
         void ClearStencil(int stencil) override;
@@ -234,9 +252,26 @@ namespace CNA::Internal::Backends::D3D12
          *  presentation gap is resolved on real Windows hardware (DX-114). NOXNA. */
         void BindOffscreenColorTargetEXT(ID3D12Resource* resource, D3D12_CPU_DESCRIPTOR_HANDLE rtv,
                                          DXGI_FORMAT format, int width, int height);
+        /** @brief DX-117: real MRT bind -- @p resources[0]/@p rtvs[0] become the primary bound
+         *  target via BindOffscreenColorTargetEXT() (so every existing single-target draw path is
+         *  completely unaffected), and @p resources[1..count-1]/@p rtvs[1..count-1] (up to 7 more)
+         *  are recorded as additional targets Clear() also independently clears. Every resource
+         *  must already be registered with GetResourceStateTrackerEXT() by its owner (same
+         *  convention BindOffscreenColorTargetEXT() itself documents). NOXNA. */
+        void BindOffscreenColorTargetsEXT(ID3D12Resource* const* resources,
+                                          const D3D12_CPU_DESCRIPTOR_HANDLE* rtvs,
+                                          int count, DXGI_FORMAT format, int width, int height);
         /** @brief Clears the off-screen binding set by BindOffscreenColorTargetEXT() -- subsequent
          *  Clear()/draw calls fall back to the honest "not yet implemented" throw. NOXNA. */
         void UnbindOffscreenColorTargetEXT();
+        /** @brief DX-117: restores the real swap-chain back buffer as the bound color target (the
+         *  current back-buffer index, re-resolved every call since it changes on every Present())
+         *  if a real swap chain is available; otherwise falls back to
+         *  UnbindOffscreenColorTargetEXT()'s honest "nothing bound" state -- matches this backend's
+         *  existing off-screen-test convention exactly. Used by D3D12RenderTargetBackend's/
+         *  D3D12RenderTargetCubeBackend's own UnbindAsRenderTarget(), mirroring
+         *  D3D11GraphicsBackend::RestoreBackBufferRenderTargetEXT(). NOXNA. */
+        void RestoreBackBufferRenderTargetEXT();
         /** @brief Whether an off-screen color target is currently bound (NOXNA diagnostics/tests). */
         [[nodiscard]] bool HasBoundColorTargetEXT() const { return boundColorResource_ != nullptr; }
         /** @brief The currently bound off-screen color resource, or nullptr (NOXNA --
@@ -461,5 +496,13 @@ namespace CNA::Internal::Backends::D3D12
         DXGI_FORMAT boundColorFormat_ = DXGI_FORMAT_R8G8B8A8_UNORM;
         int boundColorWidth_ = 0;
         int boundColorHeight_ = 0;
+
+        // DX-117: additional MRT targets beyond the primary (index 0, tracked by boundColor*_
+        // above) -- Clear() independently transitions+clears each; draws remain single-target
+        // (boundColorRtv_ only), see BindOffscreenColorTargetsEXT's own doc comment for why.
+        static constexpr int kMaxExtraMrtTargets = 7; // 8 total (D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT) - 1 primary
+        ID3D12Resource* extraMrtResources_[kMaxExtraMrtTargets] = {};
+        D3D12_CPU_DESCRIPTOR_HANDLE extraMrtRtvs_[kMaxExtraMrtTargets]{};
+        int extraMrtCount_ = 0;
     };
 }
