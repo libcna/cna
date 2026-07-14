@@ -13,6 +13,7 @@
 #include "D3D12ResourceStateTracker.hpp"
 #include "D3D12PipelineStateCache.hpp"
 #include "D3D12RootSignatureCache.hpp"
+#include "D3D12TextureCube.hpp"
 
 #include <d3d12.h>
 #include <dxgi1_5.h>
@@ -69,6 +70,9 @@ namespace CNA::Internal::Backends::D3D12
         SDL_Renderer* GetRendererInternal() const override { return nullptr; }
 
         std::unique_ptr<ITextureBackend> CreateTexture(const ImageData& data) override;
+        /// DX-111 (closing env_map3d): real D3D12TextureCubeBackend, no longer the inherited
+        /// default (IGraphicsBackend::CreateTextureCube() -> nullptr).
+        std::unique_ptr<ITextureCubeBackend> CreateTextureCube(int size, bool mipMap, int surfaceFormat) override;
         std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() override;
 
         void ClearColorAndDepth(float r, float g, float b, float a, float depth) override;
@@ -282,6 +286,12 @@ namespace CNA::Internal::Backends::D3D12
         /// GetOrCreateSkinnedExtraConstantBufferEXT, same reasoning D3DSkinnedExtraConstants's own
         /// doc comment already gives: PerDraw's 128 bytes have no spare room for these fields).
         ID3D12Resource* GetOrCreateSkinnedExtraConstantBufferEXT();
+        /// DX-111 (closing env_map3d): env_map3d's own PerDraw (b0, D3DEnvMapPerDrawConstants --
+        /// Mvp+World only, a genuinely different shape from D3DPerDrawConstants).
+        ID3D12Resource* GetOrCreateEnvMapPerDrawConstantBufferEXT();
+        /// DX-111 (closing env_map3d): EnvMapParams (b2, D3DEnvMapConstants) -- material/lighting/
+        /// fog/Fresnel fields, mirrors D3D11's own GetOrCreateEnvMapConstantBufferEXT.
+        ID3D12Resource* GetOrCreateEnvMapConstantBufferEXT();
 
         /// DX-111 (finish): instanced3d's own hand-built PSO -- deliberately NOT resolved via
         /// D3D12PipelineStateCache/D3DVertexFormatHelper::InputElementsForStrideD3D12 (which only
@@ -302,6 +312,12 @@ namespace CNA::Internal::Backends::D3D12
         /// gap, just not yet a two-type resolution like D3D11's. Returns a zero-initialized handle
         /// (ptr==0) if @p tex is null or the cast fails.
         D3D12_GPU_DESCRIPTOR_HANDLE GetSrvGpuHandleForTextureEXT(const ITextureBackend* tex) const;
+
+        /// DX-111 (closing env_map3d): same convention as GetSrvGpuHandleForTextureEXT, for
+        /// env_map3d's 2nd texture slot (a TextureCube, not a Texture2D) -- mirrors D3D11's own
+        /// GetSrvForTextureCubeEXT. Returns a zero-initialized handle if @p tex is null or the
+        /// dynamic_cast to D3D12TextureCubeBackend fails.
+        D3D12_GPU_DESCRIPTOR_HANDLE GetSrvGpuHandleForTextureCubeEXT(const ITextureCubeBackend* tex) const;
 
         /// DX-111 (continued): shared implementation for DrawPrimitivesEx/DrawIndexedPrimitivesEx --
         /// @p ib may be null for the non-indexed path (mirrors D3D11GraphicsBackend's own
@@ -325,7 +341,12 @@ namespace CNA::Internal::Backends::D3D12
         // DX-103: descriptor heaps + bump allocators. Capacities are a deliberately simple first
         // implementation (plan_dx.md DX-103's own row explicitly allows this) -- no free-list
         // reuse of released descriptors yet, since nothing releases any yet (DX-109 is unstarted).
-        static constexpr UINT kRtvHeapCapacity = 8;
+        // DX-111 (closing env_map3d): raised from 8 -- the growing CTest suite (one fresh off-screen
+        // RTV per Check block, no free-list reuse yet, see this class's own DX-103 doc comment)
+        // exhausted the original capacity for real the moment Check U's render target was allocated.
+        // Still a fixed bump allocator, same honest simplification DX-103 already documents -- just
+        // sized for real observed demand instead of an arbitrary guess.
+        static constexpr UINT kRtvHeapCapacity = 32;
         static constexpr UINT kDsvHeapCapacity = 8;
         static constexpr UINT kCbvSrvUavHeapCapacity = 64;
         ComPtr<ID3D12DescriptorHeap> rtvHeap_;
@@ -378,6 +399,12 @@ namespace CNA::Internal::Backends::D3D12
         void* boneConstantBufferMapped_ = nullptr;
         ComPtr<ID3D12Resource> skinnedExtraConstantBuffer_;
         void* skinnedExtraConstantBufferMapped_ = nullptr;
+        // DX-111 (closing env_map3d): env_map3d's own persistent constant buffers -- same
+        // "map once, reused every draw" convention as above.
+        ComPtr<ID3D12Resource> envMapPerDrawConstantBuffer_;
+        void* envMapPerDrawConstantBufferMapped_ = nullptr;
+        ComPtr<ID3D12Resource> envMapConstantBuffer_;
+        void* envMapConstantBufferMapped_ = nullptr;
         // DX-111 (finish): instanced3d's own hand-built PSO (see GetOrCreateInstancedPsoEXT's doc
         // comment) -- created once, reused every DrawInstancedPrimitivesEx call.
         ComPtr<ID3D12PipelineState> instancedPso_;

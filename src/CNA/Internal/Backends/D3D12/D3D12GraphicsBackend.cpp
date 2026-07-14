@@ -457,6 +457,19 @@ namespace CNA::Internal::Backends::D3D12
         lightingConstantBufferMapped_ = nullptr;
         alphaTestConstantBuffer_.Reset();
         alphaTestConstantBufferMapped_ = nullptr;
+        // DX-111 (finish/closing): skinned3d's and env_map3d's own persistent constant buffers, and
+        // instanced3d's own hand-built PSO, are just as device-tied as every buffer above -- a real,
+        // pre-existing gap in this function (found while landing env_map3d) is fixed here rather than
+        // left for a later session to rediscover the same way.
+        boneConstantBuffer_.Reset();
+        boneConstantBufferMapped_ = nullptr;
+        skinnedExtraConstantBuffer_.Reset();
+        skinnedExtraConstantBufferMapped_ = nullptr;
+        envMapPerDrawConstantBuffer_.Reset();
+        envMapPerDrawConstantBufferMapped_ = nullptr;
+        envMapConstantBuffer_.Reset();
+        envMapConstantBufferMapped_ = nullptr;
+        instancedPso_.Reset();
         // The bound off-screen color target (if any) was owned by the caller and lived on the old
         // device -- it's gone too; the caller must recreate its render target and rebind after
         // calling RecreateDeviceEXT(), same as it must recreate any of its own DX-109 resources.
@@ -593,6 +606,29 @@ namespace CNA::Internal::Backends::D3D12
         return handle;
     }
 
+    ID3D12Resource* D3D12GraphicsBackend::GetOrCreateEnvMapPerDrawConstantBufferEXT()
+    {
+        if (!envMapPerDrawConstantBuffer_)
+            CreateUploadConstantBuffer(sizeof(D3DEnvMapPerDrawConstants), envMapPerDrawConstantBuffer_, envMapPerDrawConstantBufferMapped_);
+        return envMapPerDrawConstantBuffer_.Get();
+    }
+
+    ID3D12Resource* D3D12GraphicsBackend::GetOrCreateEnvMapConstantBufferEXT()
+    {
+        if (!envMapConstantBuffer_)
+            CreateUploadConstantBuffer(sizeof(D3DEnvMapConstants), envMapConstantBuffer_, envMapConstantBufferMapped_);
+        return envMapConstantBuffer_.Get();
+    }
+
+    D3D12_GPU_DESCRIPTOR_HANDLE D3D12GraphicsBackend::GetSrvGpuHandleForTextureCubeEXT(const ITextureCubeBackend* tex) const
+    {
+        D3D12_GPU_DESCRIPTOR_HANDLE handle{};
+        if (tex == nullptr) return handle;
+        if (const auto* t = dynamic_cast<const D3D12TextureCubeBackend*>(tex))
+            return t->GetShaderResourceViewGpuHandleEXT();
+        return handle;
+    }
+
     void D3D12GraphicsBackend::Clear(float r, float g, float b, float a)
     {
         if (!boundColorResource_)
@@ -636,6 +672,12 @@ namespace CNA::Internal::Backends::D3D12
     std::unique_ptr<ITextureBackend> D3D12GraphicsBackend::CreateTexture(const ImageData& data)
     {
         return std::make_unique<D3D12TextureBackend>(this, data);
+    }
+
+    std::unique_ptr<ITextureCubeBackend> D3D12GraphicsBackend::CreateTextureCube(
+        int size, bool mipMap, int surfaceFormat)
+    {
+        return std::make_unique<D3D12TextureCubeBackend>(this, size, mipMap, surfaceFormat);
     }
 
     std::unique_ptr<ISpriteBatchBackend> D3D12GraphicsBackend::CreateSpriteBatch()
@@ -892,9 +934,7 @@ namespace CNA::Internal::Backends::D3D12
         const std::size_t stride = d3dVb.GetStrideEXT() > 0 ? d3dVb.GetStrideEXT() : 16;
 
         const bool needsAlphaTest = (params.alphaTest[3] < 0.0f || params.alphaTest[2] < 0.0f);
-        // DX-111 (finish): dual_texture3d and skinned3d are now real (see the needsDualTex/
-        // needsSkinned branches below); env_map3d remains an explicit follow-up (needs a
-        // D3D12TextureCubeBackend, not built yet -- see the named throw below).
+        // DX-111 (closing env_map3d): dual_texture3d, skinned3d, and now env_map3d are all real.
         const bool needsDualTex = params.dualTexture && !needsAlphaTest;
         const bool needsEnvMap  = params.envMapping  && !needsAlphaTest && !needsDualTex;
         const bool needsSkinned = params.skinned     && !needsAlphaTest && !needsDualTex && !needsEnvMap;
@@ -904,13 +944,11 @@ namespace CNA::Internal::Backends::D3D12
         const bool needsLitTextured = (stride == 32) && !needsAlphaTest && !needsDualTex
                                      && !needsEnvMap && !needsSkinned;
 
-        if (needsEnvMap)
-        {
+        // env_map3d.vert.hlsl's VSInput is Position+Normal+UV (32 bytes), same as lit_textured3d.
+        if (needsEnvMap && stride != 32)
             throw std::runtime_error(
-                "D3D12GraphicsBackend::DrawPrimitivesEx: EnvironmentMapEffect (env_map3d) is not yet "
-                "implemented for D3D12 (plan_dx.md DX-111 -- needs a D3D12TextureCubeBackend, a "
-                "follow-up task)");
-        }
+                "D3D12GraphicsBackend::DrawPrimitivesEx: EnvironmentMapEffect (env_map3d) requires "
+                "stride 32 (VertexPositionNormalTexture)");
         // dual_texture3d.vert.hlsl's VSInput is Position+UV only (20 bytes), same as D3D11's own
         // DX-65 finding -- dual_texture_colored3d was never ported (DX-13-hlsl's own row notes).
         if (needsDualTex && stride != 20)
@@ -944,6 +982,18 @@ namespace CNA::Internal::Backends::D3D12
             // would use for fog. Root signature still needs 3 contiguous CBV slots (b0/b1/b2); b1
             // goes unused by this shader but is still bound to a valid (dummy) address below so no
             // root descriptor is ever left unset.
+            numCbvs = 3;
+            numSrvs = 2;
+        }
+        else if (needsEnvMap)
+        {
+            variant = D3DShaderVariant::EnvMap3d;
+            hasTexture = true;
+            // env_map3d's own PerDraw (b0, D3DEnvMapPerDrawConstants) + EnvMapParams (b2,
+            // D3DEnvMapConstants) -- b1 unused by this shader (same "3 contiguous CBV slots, b1
+            // bound to a valid-but-unread dummy address" shape dual_texture3d's own branch already
+            // established). t0 (base Texture2D) + t1 (TextureCube) -- same (3,2,2) root-signature
+            // shape dual_texture3d already created, genuinely shared/cached, not a new object.
             numCbvs = 3;
             numSrvs = 2;
         }
@@ -1003,9 +1053,11 @@ namespace CNA::Internal::Backends::D3D12
         // which struct/register each variant actually needs, field-for-field matching the real HLSL
         // cbuffer declarations (D3DConstantBuffers.hpp).
         D3D12_GPU_VIRTUAL_ADDRESS cbAddresses[3] = {0, 0, 0};
-        // params.texture0/texture1 for the (up to 2) SRVs this draw binds -- only dual_texture3d
-        // uses the 2nd slot today (env_map3d's 2nd-slot TextureCube is a separate follow-up).
+        // params.texture0/texture1 for the (up to 2) SRVs this draw binds -- dual_texture3d uses the
+        // 2nd slot for a 2nd Texture2D; env_map3d uses it for a TextureCube instead (srvCubeTexture
+        // below), which is why it isn't part of this Texture2D-only array.
         const ITextureBackend* srvTextures[2] = {params.texture0, nullptr};
+        const ITextureCubeBackend* srvCubeTexture = nullptr; // only set by the needsEnvMap branch
 
         if (needsAlphaTest)
         {
@@ -1066,6 +1118,72 @@ namespace CNA::Internal::Backends::D3D12
 
             srvTextures[0] = params.texture0;
             srvTextures[1] = params.texture1;
+        }
+        else if (needsEnvMap)
+        {
+            // Mirrors D3D11GraphicsBackend::DrawPrimitivesExImpl's own needsEnvMap branch exactly --
+            // env_map3d's own PerDraw (b0) is Mvp+World only (D3DEnvMapPerDrawConstants) -- a
+            // genuinely different shape from D3DPerDrawConstants; material/lighting/fog/Fresnel live
+            // in EnvMapParams (b2, D3DEnvMapConstants) instead, field-for-field matching
+            // env_map3d.vert.hlsl/.frag.hlsl's real cbuffer declaration.
+            D3DEnvMapPerDrawConstants perDraw{};
+            wvp.ToColumnMajor(perDraw.Mvp);
+            world.ToColumnMajor(perDraw.World);
+
+            D3DEnvMapConstants c{};
+            c.EyePosition[0] = params.eyePositionWorld[0];
+            c.EyePosition[1] = params.eyePositionWorld[1];
+            c.EyePosition[2] = params.eyePositionWorld[2];
+            c.DiffuseColor[0] = params.diffuseColor[0];
+            c.DiffuseColor[1] = params.diffuseColor[1];
+            c.DiffuseColor[2] = params.diffuseColor[2];
+            c.DiffuseColor[3] = params.diffuseColor[3];
+            c.EmissiveAmount[0] = params.emissiveColor[0];
+            c.EmissiveAmount[1] = params.emissiveColor[1];
+            c.EmissiveAmount[2] = params.emissiveColor[2];
+            c.EmissiveAmount[3] = params.envMapAmount;
+            c.Light0Dir[0] = params.light0Dir[0];
+            c.Light0Dir[1] = params.light0Dir[1];
+            c.Light0Dir[2] = params.light0Dir[2];
+            c.Light0DiffuseFresnel[0] = params.light0Diffuse[0];
+            c.Light0DiffuseFresnel[1] = params.light0Diffuse[1];
+            c.Light0DiffuseFresnel[2] = params.light0Diffuse[2];
+            c.Light0DiffuseFresnel[3] = params.fresnelEnabled ? 1.0f : 0.0f;
+            c.EnvMapSpecularFresnel[0] = params.envMapSpecular[0];
+            c.EnvMapSpecularFresnel[1] = params.envMapSpecular[1];
+            c.EnvMapSpecularFresnel[2] = params.envMapSpecular[2];
+            c.EnvMapSpecularFresnel[3] = params.fresnelFactor;
+            c.FogColorEnabled[0] = params.fogColor[0];
+            c.FogColorEnabled[1] = params.fogColor[1];
+            c.FogColorEnabled[2] = params.fogColor[2];
+            c.FogColorEnabled[3] = params.fogEnabled ? 1.0f : 0.0f;
+            c.FogStartEnd[0] = params.fogStart;
+            c.FogStartEnd[1] = params.fogEnd;
+            c.Light1Dir[0] = params.light1Dir[0];
+            c.Light1Dir[1] = params.light1Dir[1];
+            c.Light1Dir[2] = params.light1Dir[2];
+            c.Light1Diffuse[0] = params.light1Diffuse[0];
+            c.Light1Diffuse[1] = params.light1Diffuse[1];
+            c.Light1Diffuse[2] = params.light1Diffuse[2];
+            c.Light2Dir[0] = params.light2Dir[0];
+            c.Light2Dir[1] = params.light2Dir[1];
+            c.Light2Dir[2] = params.light2Dir[2];
+            c.Light2Diffuse[0] = params.light2Diffuse[0];
+            c.Light2Diffuse[1] = params.light2Diffuse[1];
+            c.Light2Diffuse[2] = params.light2Diffuse[2];
+
+            ID3D12Resource* perDrawCB = GetOrCreateEnvMapPerDrawConstantBufferEXT();
+            ID3D12Resource* envCB     = GetOrCreateEnvMapConstantBufferEXT();
+            std::memcpy(envMapPerDrawConstantBufferMapped_, &perDraw, sizeof(perDraw));
+            std::memcpy(envMapConstantBufferMapped_, &c, sizeof(c));
+            cbAddresses[0] = perDrawCB->GetGPUVirtualAddress();
+            // b1 goes unused by env_map3d's own HLSL -- same dummy-but-valid-address convention
+            // needsDualTex's own branch above already established.
+            cbAddresses[1] = perDrawCB->GetGPUVirtualAddress();
+            cbAddresses[2] = envCB->GetGPUVirtualAddress();
+
+            srvTextures[0] = params.texture0;
+            srvCubeTexture = params.envMap;
         }
         else if (needsSkinned)
         {
@@ -1259,7 +1377,14 @@ namespace CNA::Internal::Backends::D3D12
         // is needed for any variant, dual_texture3d included.
         D3D12_GPU_DESCRIPTOR_HANDLE srvHandles[2]{};
         for (int i = 0; i < numSrvs; ++i)
-            srvHandles[i] = GetSrvGpuHandleForTextureEXT(srvTextures[i]);
+        {
+            // env_map3d's 2nd slot (t1) is a TextureCube, not a Texture2D -- srvCubeTexture is only
+            // ever set by the needsEnvMap branch above, every other variant's 2nd slot (if any) is a
+            // plain Texture2D via srvTextures[1] (dual_texture3d).
+            srvHandles[i] = (i == 1 && srvCubeTexture != nullptr)
+                ? GetSrvGpuHandleForTextureCubeEXT(srvCubeTexture)
+                : GetSrvGpuHandleForTextureEXT(srvTextures[i]);
+        }
 
         ID3D12CommandAllocator* allocator = GetCommandAllocatorEXT(0);
         ID3D12GraphicsCommandList* cmdList = GetCommandListEXT();

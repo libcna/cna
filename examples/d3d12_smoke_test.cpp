@@ -90,6 +90,12 @@
 //   discards (the Clear() background survives, not the geometry's color); a passing alpha draws the
 //   exact texture color including its own non-255 alpha byte -- same two-sided proof D3D11's own
 //   Check S uses.
+// Check U -- env_map3d (closing DX-111, 10/10 stock variants real): a real D3D12TextureCubeBackend
+//   (new for this task), sampled via a geometrically-constrained reflection direction that lands
+//   deep inside one distinctly-colored cube face -- same discriminating-by-construction proof D3D11's
+//   own Check U (d3d11_smoke_test.cpp DX-66) uses, adapted to this backend's own N-separate-
+//   descriptor-tables SRV binding (t0 base Texture2D + t1 TextureCube, D3D12RootSignatureCache's own
+//   (3,2,2) shape, already created and cached by dual_texture3d's own earlier Check).
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
@@ -99,6 +105,7 @@
 #include "CNA/Internal/Backends/D3D12/D3D12PipelineStateCache.hpp"
 #include "CNA/Internal/Backends/D3D12/D3D12Buffers.hpp"
 #include "CNA/Internal/Backends/D3D12/D3D12Textures.hpp"
+#include "CNA/Internal/Backends/D3D12/D3D12TextureCube.hpp"
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "CNA/Internal/Graphics/ImageData.hpp"
 
@@ -117,6 +124,7 @@ using CNA::Internal::Backends::D3D12::D3D12PipelineStateDesc;
 using CNA::Internal::Backends::D3D12::D3D12VertexBufferBackend;
 using CNA::Internal::Backends::D3D12::D3D12IndexBufferBackend;
 using CNA::Internal::Backends::D3D12::D3D12TextureBackend;
+using CNA::Internal::Backends::D3D12::D3D12TextureCubeBackend;
 using CNA::Internal::Backends::D3DCommon::D3DShaderVariant;
 using CNA::Internal::Graphics::ImageData;
 using CNA::Internal::Backends::Matrix;
@@ -1517,6 +1525,107 @@ int main()
               "T1: DrawInstancedPrimitivesEx() real instanced3d draw with a genuine per-instance "
               "world buffer (dual vertex stream: slot 0 per-vertex POSITION, slot 1 per-instance "
               "INSTANCEWORLD0-3) outputs the exact instance DiffuseColor (plan_dx.md DX-111)");
+
+        backend.UnbindOffscreenColorTargetEXT();
+    }
+
+    // ---- Check U (DX-111 closing): env_map3d -- real D3D12TextureCubeBackend, geometrically- ----
+    // ---- constrained reflection direction lands deep inside one distinctly-colored cube face  ----
+    {
+        constexpr int kRtWidth = 64;
+        constexpr int kRtHeight = 64;
+
+        D3D12_HEAP_PROPERTIES heapProps{};
+        heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
+
+        D3D12_RESOURCE_DESC rtDesc{};
+        rtDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+        rtDesc.Width = kRtWidth;
+        rtDesc.Height = kRtHeight;
+        rtDesc.DepthOrArraySize = 1;
+        rtDesc.MipLevels = 1;
+        rtDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        rtDesc.SampleDesc.Count = 1;
+        rtDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+        rtDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+
+        Microsoft::WRL::ComPtr<ID3D12Resource> rt;
+        HRESULT hrRt = backend.GetDeviceEXT()->CreateCommittedResource(
+            &heapProps, D3D12_HEAP_FLAG_NONE, &rtDesc,
+            D3D12_RESOURCE_STATE_RENDER_TARGET, nullptr, IID_PPV_ARGS(rt.GetAddressOf()));
+        Check(SUCCEEDED(hrRt) && rt != nullptr, "U0: real off-screen RGBA8 render-target resource created");
+        backend.GetResourceStateTrackerEXT().TrackResource(rt.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET);
+
+        D3D12_CPU_DESCRIPTOR_HANDLE rtv = backend.AllocateRtvDescriptorEXT();
+        backend.GetDeviceEXT()->CreateRenderTargetView(rt.Get(), nullptr, rtv);
+        backend.BindOffscreenColorTargetEXT(rt.Get(), rtv, DXGI_FORMAT_R8G8B8A8_UNORM, kRtWidth, kRtHeight);
+
+        auto pixelAt = [&](const std::vector<uint8_t>& buf, int x, int y) -> std::array<uint8_t, 4>
+        {
+            const std::size_t idx = (static_cast<std::size_t>(y) * kRtWidth + static_cast<std::size_t>(x)) * 4;
+            return {buf[idx + 0], buf[idx + 1], buf[idx + 2], buf[idx + 3]};
+        };
+        auto isColor = [](const std::array<uint8_t, 4>& p, uint8_t r, uint8_t g, uint8_t b, uint8_t a)
+        {
+            return p[0] == r && p[1] == g && p[2] == b && p[3] == a;
+        };
+        auto regionIs = [&](const std::vector<uint8_t>& buf, uint8_t r, uint8_t g, uint8_t b, uint8_t a)
+        {
+            for (int y = 28; y < 32; ++y)
+                for (int x = 28; x < 32; ++x)
+                    if (!isColor(pixelAt(buf, x, y), r, g, b, a)) return false;
+            return true;
+        };
+
+        // Same fixture as D3D11's own Check U (d3d11_smoke_test.cpp DX-66): camera placed far down
+        // -Z from a +Z-facing surface, ambient/lighting/specular all zeroed by geometry+params so
+        // only the env-map term (envMapAmount=1, fresnel disabled) survives -- reflDir resolves to
+        // almost exactly (0,0,-1), landing deep inside the cube's -Z face (D3D12's own native slice
+        // order matches D3D11's: +X,-X,+Y,-Y,+Z,-Z -> index 5), the only face given a distinct,
+        // uniform, non-black color.
+        struct VPNTE { float x, y, z; float nx, ny, nz; float u, v; };
+        static const VPNTE kTriEnv[3] = {
+            {-1.0f, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f},
+            { 3.0f, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 2.0f, 1.0f},
+            {-1.0f,  3.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, -1.0f},
+        };
+        D3D12VertexBufferBackend vbEnv(&backend, 3);
+        vbEnv.SetData(kTriEnv, 3, sizeof(VPNTE));
+
+        ImageData whiteImg;
+        whiteImg.width = 2; whiteImg.height = 2; whiteImg.mipLevels = 1;
+        whiteImg.pixels.assign(2 * 2 * 4, 255);
+        D3D12TextureBackend whiteTex(&backend, whiteImg);
+
+        D3D12TextureCubeBackend cube(&backend, 8, false, 0);
+        std::vector<uint8_t> blackFace(8 * 8 * 4, 0);
+        std::vector<uint8_t> negZFace(8 * 8 * 4);
+        for (int i = 0; i < 8 * 8; ++i)
+        {
+            negZFace[i * 4 + 0] = 10; negZFace[i * 4 + 1] = 20;
+            negZFace[i * 4 + 2] = 30; negZFace[i * 4 + 3] = 255;
+        }
+        for (int face = 0; face < 6; ++face)
+        {
+            const auto& data = (face == 5) ? negZFace : blackFace; // face 5 = -Z
+            cube.SetData(face, 0, 0, 0, 8, 8, data.data(), static_cast<int>(data.size()));
+        }
+
+        GpuDrawParams ep;
+        ep.texture0 = &whiteTex;
+        ep.textureEnabled = true;
+        ep.envMap = &cube;
+        ep.envMapping = true;
+        ep.envMapAmount = 1.0f;
+        ep.eyePositionWorld[0] = 0.0f; ep.eyePositionWorld[1] = 0.0f; ep.eyePositionWorld[2] = -10.0f;
+
+        backend.Clear(0.0f, 0.0f, 1.0f, 1.0f);
+        backend.DrawPrimitivesEx(vbEnv, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                 Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, ep);
+        auto afterU = ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight);
+        Check(regionIs(afterU, 10, 20, 30, 255),
+              "U1: DrawPrimitivesEx() real env_map3d samples the exact distinctly-colored cube face "
+              "via a real D3D12TextureCubeBackend SRV (plan_dx.md DX-111, closing 10/10 stock variants)");
 
         backend.UnbindOffscreenColorTargetEXT();
     }

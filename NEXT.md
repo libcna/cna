@@ -121,11 +121,22 @@
 > `DrawInstancedPrimitivesEx()` override (`(1,0,0)` root-signature shape — `instanced3d.frag.hlsl`
 > is genuinely textureless). No new bugs found — both new checks (S/T) passed the first real
 > Wine+vkd3d-proton run. `D3D12_Smoke` grew 68→**72/72 checks**. D3D11 rebuilt clean throughout (no
-> shared `D3DCommon` files touched this time). **`DX-111` is now 9 of 10 stock variants real — only
-> `env_map3d` remains** (genuinely blocked behind a new `D3D12TextureCubeBackend`, not yet built).
-> **Next concrete step: `env_map3d`** (closes `DX-111` to a full ✅), or `DX-113` (test-suite
-> formalization)/`DX-115` (docs) to close out Phase DX12's currently-scoped rows (`DX-114`,
-> real-Windows checklist, stays `needs_human`).
+> shared `D3DCommon` files touched this time). **`DX-111` closed for real 2026-07-14: `env_map3d`
+> landed — 10 of 10 stock shader variants now real, across every CNA graphics backend including
+> D3D12.** Needed a new `D3D12TextureCubeBackend` (`D3D12TextureCube.hpp`/`.cpp`, real 6-face
+> `ID3D12Resource`, same upload-heap-staging discipline `D3D12TextureBackend` already established;
+> `GetData()` left at the interface default no-op, an honest scope gap). Reused `dual_texture3d`'s
+> exact `(3,2,2)` root-signature/PSO shape — no new cached object. `D3D12_Smoke` grew 72→**74/74
+> checks** (Check U), same geometrically-constrained-reflection proof D3D11's own `DX-66` used. Two
+> real, unrelated bugs found and fixed along the way: the RTV descriptor heap's fixed capacity
+> (`DX-103`, 8 slots) was genuinely exhausted by the growing CTest suite — raised to 32; and
+> `RecreateDeviceEXT()` (`DX-110`) was never resetting `boneConstantBuffer_`/
+> `skinnedExtraConstantBuffer_`/`instancedPso_` despite them being just as device-tied as every other
+> cached resource — fixed in the same pass. D3D11 rebuilt clean throughout. **`DX-101`–`DX-112` are
+> now all ✅ except `DX-109`'s own honest 🟨 (render targets/cube/3D textures beyond `DX-111`'s own
+> needs, still deliberately triaged out). Next concrete step: `DX-113` (test-suite formalization) or
+> `DX-115` (docs) to close out Phase DX12's currently-scoped rows** (`DX-114`, real-Windows
+> checklist, stays `needs_human`).
 >
 > Below is this session's own chronological history (kept for detail, not rewritten):
 >
@@ -326,7 +337,7 @@ API-surface changes.
 | `cmake-build-sdl` | SDL_Renderer | Clean as of 2026-07-10 (not rebuilt this session) |
 | `cmake-build-android` | SDL_Renderer (NDK) | Blocked — Task 920 (sibling `sharp-runtime` NDK build regressions) |
 | `cmake-build-d3d11` | D3D11 (Windows cross-compile, MinGW-w64) | **Verified clean 2026-07-13**: `CNA` and `cna_backend_graphics_d3dcommon`/`cna_backend_graphics_d3d11` build clean; `cna_test_d3d11_smoke`/`cna_test_d3d11_common` build, link, and run correctly under Wine+DXVK. **`CnaTests` itself does NOT build** for this backend — genuinely blocked (see §4), not silently skipped. |
-| `cmake-build-d3d12` | D3D12 (Windows cross-compile, MinGW-w64) | **Updated 2026-07-14 (DX-111 finished for skinned3d/instanced3d)**: `CNA` and both D3D12 backend targets build clean. Device-lifetime resources (DX-102-105), resource-barrier state tracking, a PSO cache, a root-signature cache (DX-106-108), real `D3D12VertexBufferBackend`/`D3D12IndexBufferBackend`/`D3D12TextureBackend` (DX-109, buffers+2D textures only — render targets/cube/3D textures honestly deferred) plus a real, tested `RecreateDeviceEXT()` device-removed recovery path (DX-110), and now `Clear()`/`DrawColoredPrimitives()`/`DrawIndexedColoredPrimitives()`/`DrawPrimitivesEx()`/`DrawIndexedPrimitivesEx()`/`DrawInstancedPrimitivesEx()` are REAL for 9 of 10 stock variants (`colored3d`/`textured3d`/`colored_textured3d`/`lit_textured3d`/`alpha_test3d`/`dual_texture3d`/`sprite2d`/`skinned3d`/`instanced3d`, DX-111 🟨 — only `env_map3d` still unwired, needs a new `D3D12TextureCubeBackend`) via a new `BindOffscreenColorTargetEXT()` NOXNA helper standing in for the still-broken swap chain, plus a real `D3D12SpriteBatchBackend` (DX-112 ✅). `D3D12_Smoke` CTest: **72/72 checks pass** through Wine+vkd3d-proton (off-screen only). Swap-chain creation is implemented but crashes under this Wine setup (real, evidenced, see `plan_dx.md` `DX-102`'s row) — a by-hand diagnostic exists (`cna_diag_d3d12_swapchain`, not a CTest) to reproduce it. |
+| `cmake-build-d3d12` | D3D12 (Windows cross-compile, MinGW-w64) | **Updated 2026-07-14 (DX-111 closed for real — env_map3d landed)**: `CNA` and both D3D12 backend targets build clean. Device-lifetime resources (DX-102-105), resource-barrier state tracking, a PSO cache, a root-signature cache (DX-106-108), real `D3D12VertexBufferBackend`/`D3D12IndexBufferBackend`/`D3D12TextureBackend`/`D3D12TextureCubeBackend` (DX-109, buffers+2D+cube textures — render targets/3D textures still honestly deferred, 🟨) plus a real, tested `RecreateDeviceEXT()` device-removed recovery path (DX-110), and now `Clear()`/`DrawColoredPrimitives()`/`DrawIndexedColoredPrimitives()`/`DrawPrimitivesEx()`/`DrawIndexedPrimitivesEx()`/`DrawInstancedPrimitivesEx()` are REAL for **all 10 of 10 stock variants** (`colored3d`/`textured3d`/`colored_textured3d`/`lit_textured3d`/`alpha_test3d`/`dual_texture3d`/`env_map3d`/`sprite2d`/`skinned3d`/`instanced3d`, DX-111 ✅) via a new `BindOffscreenColorTargetEXT()` NOXNA helper standing in for the still-broken swap chain, plus a real `D3D12SpriteBatchBackend` (DX-112 ✅). `D3D12_Smoke` CTest: **74/74 checks pass** through Wine+vkd3d-proton (off-screen only). Swap-chain creation is implemented but crashes under this Wine setup (real, evidenced, see `plan_dx.md` `DX-102`'s row) — a by-hand diagnostic exists (`cna_diag_d3d12_swapchain`, not a CTest) to reproduce it. |
 
 The `cna_demo_xact` example fails to build on every backend (missing `examples/demo_xact/Content`
 directory in this checkout) — cosmetic, pre-existing, not a CNA bug, do not chase it (§9).
@@ -340,7 +351,7 @@ directory in this checkout) — cosmetic, pre-existing, not a CNA bug, do not ch
 | Bgfx | 4375/4377 pass (2 hardware skips), as of 2026-07-11 | 104/106 pass — 2 pre-existing failures (`Bgfx_RenderTarget2D_MsaaResolve`, `Bgfx_RenderTargetCube_DepthFormat`, DEFERRED — Task 952) |
 | Software | 4371/4373 pass, as of 2026-07-13 | 6 CTests, 29/29 checks |
 | D3D11 | **Does not build** (see §4) | **6/6 pass, 92 `D3D11_Smoke`/`D3D11_Common` checks + 10 more assertions across 4 new state-object tests** (`D3D11_Smoke` 69, `D3D11_Common` 23, `D3D11_BlendState_Opaque`/`AlphaBlend`, `D3D11_DepthStencilState_StencilEnable`, `D3D11_RasterizerState_CullMode`), verified 2026-07-14 via `ctest --test-dir cmake-build-d3d11 -R D3D11` |
-| D3D12 | Not applicable yet (no `CnaTests` target for this backend) | **1/1 pass, 72/72 checks** (`D3D12_Smoke`: off-screen device/queue/heaps/command-lists/fence + resource-barrier tracking + root-signature cache + pipeline-state-object cache + real vertex/index/texture round-trips + device-removed recreation + real, pixel-verified `colored3d`/`textured3d`/`colored_textured3d`/`lit_textured3d`/`alpha_test3d`/`dual_texture3d`/`skinned3d`/`instanced3d` draws via `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx`/`DrawInstancedPrimitivesEx` + a real `D3D12SpriteBatchBackend` quad-draw/flip proof), verified 2026-07-14 via `ctest --test-dir cmake-build-d3d12 -R D3D12` |
+| D3D12 | Not applicable yet (no `CnaTests` target for this backend) | **1/1 pass, 74/74 checks** (`D3D12_Smoke`: off-screen device/queue/heaps/command-lists/fence + resource-barrier tracking + root-signature cache + pipeline-state-object cache + real vertex/index/texture/cube-texture round-trips + device-removed recreation + real, pixel-verified `colored3d`/`textured3d`/`colored_textured3d`/`lit_textured3d`/`alpha_test3d`/`dual_texture3d`/`env_map3d`/`skinned3d`/`instanced3d` draws via `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx`/`DrawInstancedPrimitivesEx` + a real `D3D12SpriteBatchBackend` quad-draw/flip proof — all 10/10 stock shader variants), verified 2026-07-14 via `ctest --test-dir cmake-build-d3d12 -R D3D12` |
 | Headless, WebGPU | Not re-verified this session | See `plan_headless.md`/`plan_webgpu.md` for their own last-verified status |
 
 All EasyGL/Vulkan/Bgfx/Software numbers above are carried over from the last session that actually
