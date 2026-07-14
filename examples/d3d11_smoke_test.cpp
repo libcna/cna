@@ -2304,6 +2304,62 @@ protected:
                   "genuinely from the specular term, not diffuse/ambient/emissive (plan_dx.md DX-125)");
         }
 
+        // plan_dx.md DX-126: mip level > 0 SetData/UpdatePixelsLevel/sampling dedicated pixel
+        // test -- texture upload/readback was previously only proven at mip level 0. Mirrors
+        // D3D12's own already-closed DX-141 (examples/d3d12_smoke_test.cpp Checks HH0-HH2)
+        // methodology exactly: rather than trying to force the stock shaders' implicit-LOD
+        // Sample() calls to pick mip level 1 during a draw (fragile/driver-dependent), this reads
+        // mip level 1 back directly via a staging-texture CopyResource+Map (ReadTexture2DMipRegion,
+        // already established above for DX-144's own render-target mip-chain proof) -- a real,
+        // deterministic readback, not an implicit-sampling one.
+        {
+            ImageData mipImg;
+            mipImg.width = 4; mipImg.height = 4; mipImg.mipLevels = 2;
+            mipImg.pixels.assign(4 * 4 * 4, 0);
+            for (int i = 0; i < 4 * 4; ++i)
+            {
+                mipImg.pixels[i * 4 + 0] = 10; mipImg.pixels[i * 4 + 1] = 20;
+                mipImg.pixels[i * 4 + 2] = 30; mipImg.pixels[i * 4 + 3] = 255;
+            }
+            auto mipTex = backend.CreateTexture(mipImg);
+            auto& d3dMipTex = static_cast<D3D11TextureBackend&>(*mipTex);
+            check(d3dMipTex.GetMipLevelsEXT() == 2,
+                  "D3D11TextureBackend: real construction with mipLevels=2 allocates the exact "
+                  "requested mip chain (plan_dx.md DX-126)");
+
+            std::vector<uint8_t> level1Data(2 * 2 * 4);
+            for (int i = 0; i < 2 * 2; ++i)
+            {
+                level1Data[i * 4 + 0] = 210; level1Data[i * 4 + 1] = 220;
+                level1Data[i * 4 + 2] = 230; level1Data[i * 4 + 3] = 255;
+            }
+            mipTex->UpdatePixelsLevel(1, level1Data.data(), 2, 2);
+
+            auto level1Readback = ReadTexture2DMipRegion(backend.GetDeviceEXT(), backend.GetContextEXT(),
+                                                          d3dMipTex.GetTextureEXT(), 1, 0, 0, 2, 2);
+            bool level1Exact = !level1Readback.empty();
+            for (std::size_t i = 0; i + 3 < level1Readback.size() && level1Exact; i += 4)
+                if (level1Readback[i] != 210 || level1Readback[i+1] != 220 ||
+                    level1Readback[i+2] != 230 || level1Readback[i+3] != 255)
+                    level1Exact = false;
+            check(level1Exact,
+                  "D3D11TextureBackend::UpdatePixelsLevel(1, ...) round-trips EXACT bytes for a real "
+                  "mip level 1 upload, read back via a direct staging-texture copy of subresource 1 "
+                  "(plan_dx.md DX-126)");
+
+            auto level0Readback = ReadTexture2DMipRegion(backend.GetDeviceEXT(), backend.GetContextEXT(),
+                                                          d3dMipTex.GetTextureEXT(), 0, 0, 0, 4, 4);
+            bool level0Exact = !level0Readback.empty();
+            for (std::size_t i = 0; i + 3 < level0Readback.size() && level0Exact; i += 4)
+                if (level0Readback[i] != 10 || level0Readback[i+1] != 20 ||
+                    level0Readback[i+2] != 30 || level0Readback[i+3] != 255)
+                    level0Exact = false;
+            check(level0Exact,
+                  "D3D11TextureBackend: level 0's own content is genuinely unaffected by the level-1 "
+                  "upload -- proves UpdatePixelsLevel(1, ...) targeted the correct subresource, not "
+                  "level 0 (plan_dx.md DX-126)");
+        }
+
         const int totalChecks = 2 /* SetDepthTestEnabled real, not a no-op */
                                 + 3 + 10 + 1 + 2 + 2 + 2 + 2 + 2 + 1 + 1 + 2 + 1 + 13 + 2 + 3 + 2 + 2 + 1 + 1 + 1 + 1 + 3 + 2 + 2 + 2 + 3 + 2 + 3 /* DX-131 rotation/scale/crop */
                                 + 1 /* DX-134 envMapAmount=0 */ + 2 /* DX-135 WeightsPerVertex */ + 2 /* DX-137 textured3d fog */
@@ -2312,7 +2368,8 @@ protected:
                                 + 4 /* DX-145 DepthStencilFormat fidelity */
                                 + 2 /* DX-147 occlusion query visible-vs-occluded */
                                 + 4 /* DX-124 multi-light + EmissiveColor discrimination */
-                                + 2 /* DX-125 specular-highlight discrimination */;
+                                + 2 /* DX-125 specular-highlight discrimination */
+                                + 3 /* DX-126 mip level > 0 upload/readback */;
         std::printf("=== %d/%d PASS ===\n", passCount_, totalChecks);
         result_ = (passCount_ == totalChecks) ? 0 : 1;
         Exit();
