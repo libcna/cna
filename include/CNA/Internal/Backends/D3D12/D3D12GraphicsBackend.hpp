@@ -546,15 +546,15 @@ namespace CNA::Internal::Backends::D3D12
         // Opaque blend) -- so a draw that never had one of these 3 methods called on it first
         // (every pixel test that existed before this task) gets byte-identical behavior to before;
         // only a test/game that explicitly calls one of them gets genuinely different PSO state.
-        int currentColorSrcBlend_ = 2;   // Blend::One
-        int currentAlphaSrcBlend_ = 2;   // Blend::One
+        int currentColorSrcBlend_ = 0;   // Blend::One (real XNA ordinal -- Blend.hpp: One=0)
+        int currentAlphaSrcBlend_ = 0;   // Blend::One
         int currentColorDstBlend_ = 1;   // Blend::Zero
         int currentAlphaDstBlend_ = 1;   // Blend::Zero
         int currentColorBlendFunc_ = 0;  // BlendFunction::Add
         int currentAlphaBlendFunc_ = 0;  // BlendFunction::Add
         bool currentDepthEnable_ = false;
         bool currentDepthWriteEnable_ = false;
-        int currentDepthFunc_ = 4;       // CompareFunction::LessEqual
+        int currentDepthFunc_ = 3;       // CompareFunction::LessEqual (real XNA ordinal)
         int currentCullMode_ = 0;        // CullMode::None
         int currentFillMode_ = 0;        // FillMode::Solid
 

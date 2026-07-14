@@ -49,18 +49,31 @@ namespace CNA::Internal::Backends::D3D12
         D3DShaderVariant variant = D3DShaderVariant::Colored3d;
         std::size_t strideInBytes = 16;
 
-        // Blend (D3DStateMapping::BlendToD3D11 / BlendFunctionToD3D11 ordinals).
-        int colorSrcBlend = 2;   // Blend::One
-        int alphaSrcBlend = 2;   // Blend::One
+        // Blend (D3DStateMapping::BlendToD3D11 / BlendFunctionToD3D11 ordinals -- raw
+        // Microsoft::Xna::Framework::Graphics enum ordinals, fed through D3DStateMapping's own
+        // XxxToD3D11() functions in the .cpp; NOT already-mapped D3D11_BLEND/D3D11_COMPARISON_FUNC
+        // native values, despite the numeric coincidences that made an earlier version of this
+        // comment block mislabel colorSrcBlend/alphaSrcBlend's default as `2` -- Blend::One's real
+        // XNA ordinal is 0 (Blend.hpp: One, Zero, SourceColor, ...); `2` is Blend::SourceColor.
+        // Confirmed functionally inert while it stood: DeriveBlendEnable()'s own opaque-detection
+        // check used the same (wrong but internally self-consistent) `2` literal, and BlendEnable
+        // ends up FALSE for the default/opaque case either way, which makes D3D12 ignore
+        // SrcBlend/DestBlend entirely -- but a real BlendState explicitly requesting Blend::One
+        // (ordinal 0, via GraphicsDevice::setBlendStateProperty's real (int)Blend cast) always
+        // bypassed these defaults through ApplyBlendState() correctly regardless.
+        int colorSrcBlend = 0;   // Blend::One
+        int alphaSrcBlend = 0;   // Blend::One
         int colorDstBlend = 1;   // Blend::Zero
         int alphaDstBlend = 1;   // Blend::Zero
         int colorBlendFunc = 0;  // BlendFunction::Add
         int alphaBlendFunc = 0;  // BlendFunction::Add
 
-        // Depth (D3DStateMapping::CompareFunctionToD3D11 ordinal).
+        // Depth (D3DStateMapping::CompareFunctionToD3D11 ordinal -- same raw-XNA-ordinal
+        // convention as the blend fields above). CompareFunction::LessEqual's real XNA ordinal is
+        // 3 (CompareFunction.hpp: Always, Never, Less, LessEqual, ...).
         bool depthEnable = true;
         bool depthWriteEnable = true;
-        int depthFunc = 4; // CompareFunction::LessEqual (XNA's own DepthStencilState.Default)
+        int depthFunc = 3; // CompareFunction::LessEqual (XNA's own DepthStencilState.Default)
 
         // Rasterizer (D3DStateMapping::CullModeToD3D11 / FillModeToD3D11 ordinals).
         int cullMode = 2;  // CullMode::CullCounterClockwiseFace (XNA's own RasterizerState.CullCounterClockwise default)

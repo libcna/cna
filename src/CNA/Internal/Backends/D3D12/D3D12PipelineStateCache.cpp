@@ -12,11 +12,13 @@ namespace CNA::Internal::Backends::D3D12
     {
         // Same "BlendEnable disabled only for the exact Blend::One/Blend::Zero Opaque combination"
         // heuristic D3D11BlendStateCache::GetOrCreate already established (D3D11StateObjectCache.cpp)
-        // -- kept consistent across both backends rather than re-derived.
+        // -- kept consistent across both backends rather than re-derived. XNA Blend::One's real
+        // ordinal is 0, Blend::Zero's is 1 (Blend.hpp) -- matches D3D11StateObjectCache.cpp's own
+        // `colorSrcBlend == 0` check exactly.
         bool DeriveBlendEnable(int colorSrcBlend, int colorDstBlend, int alphaSrcBlend, int alphaDstBlend)
         {
-            const bool colorOpaque = (colorSrcBlend == 2 /*One*/ && colorDstBlend == 1 /*Zero*/);
-            const bool alphaOpaque = (alphaSrcBlend == 2 /*One*/ && alphaDstBlend == 1 /*Zero*/);
+            const bool colorOpaque = (colorSrcBlend == 0 /*One*/ && colorDstBlend == 1 /*Zero*/);
+            const bool alphaOpaque = (alphaSrcBlend == 0 /*One*/ && alphaDstBlend == 1 /*Zero*/);
             return !(colorOpaque && alphaOpaque);
         }
     }
