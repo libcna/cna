@@ -7,6 +7,7 @@
 #include "CNA/Internal/Backends/D3D12/D3D12Textures.hpp"
 #include "CNA/Internal/Backends/D3D12/D3D12RenderTargets.hpp"
 #include "CNA/Internal/Backends/D3D12/D3D12SpriteBatch.hpp"
+#include "CNA/Internal/Backends/D3D12/D3D12OcclusionQuery.hpp"
 #include "CNA/Internal/Backends/D3DCommon/D3DConstantBuffers.hpp"
 
 #include <SDL3/SDL.h>
@@ -988,6 +989,11 @@ namespace CNA::Internal::Backends::D3D12
         return std::make_unique<D3D12SpriteBatchBackend>(this);
     }
 
+    std::unique_ptr<IOcclusionQueryBackend> D3D12GraphicsBackend::CreateOcclusionQuery()
+    {
+        return std::make_unique<D3D12OcclusionQueryBackend>(this);
+    }
+
     void D3D12GraphicsBackend::ClearColorAndDepth(float, float, float, float, float) { NotYetImplemented("ClearColorAndDepth"); }
     void D3D12GraphicsBackend::ClearDepth(float) { NotYetImplemented("ClearDepth"); }
     void D3D12GraphicsBackend::ClearStencil(int) { NotYetImplemented("ClearStencil"); }
@@ -1132,6 +1138,9 @@ namespace CNA::Internal::Backends::D3D12
         ID3D12GraphicsCommandList* cmdList = GetCommandListEXT();
         allocator->Reset();
         cmdList->Reset(allocator, pso.Get());
+        // DX-120: see activeOcclusionQueryHeap_'s own doc comment -- BeginQuery/EndQuery must
+        // share this exact command-list submission with the draw below.
+        if (activeOcclusionQueryHeap_) cmdList->BeginQuery(activeOcclusionQueryHeap_, D3D12_QUERY_TYPE_OCCLUSION, 0);
 
         resourceStates_.TransitionTo(cmdList, boundColorResource_, D3D12_RESOURCE_STATE_RENDER_TARGET);
         cmdList->OMSetRenderTargets(1, &boundColorRtv_, FALSE, boundDsv_.ptr != 0 ? &boundDsv_ : nullptr);
@@ -1154,6 +1163,7 @@ namespace CNA::Internal::Backends::D3D12
         const UINT vertexCount = static_cast<UINT>(VertexCountForPrimitives(primitive, primitiveCount));
         cmdList->DrawInstanced(vertexCount, 1, 0, 0);
 
+        if (activeOcclusionQueryHeap_) cmdList->EndQuery(activeOcclusionQueryHeap_, D3D12_QUERY_TYPE_OCCLUSION, 0);
         HRESULT hr = cmdList->Close();
         if (FAILED(hr))
             throw std::runtime_error("DrawColoredPrimitives: command list Close failed, hr=" + FormatHr(hr));
@@ -1224,6 +1234,9 @@ namespace CNA::Internal::Backends::D3D12
         ID3D12GraphicsCommandList* cmdList = GetCommandListEXT();
         allocator->Reset();
         cmdList->Reset(allocator, pso.Get());
+        // DX-120: see activeOcclusionQueryHeap_'s own doc comment -- BeginQuery/EndQuery must
+        // share this exact command-list submission with the draw below.
+        if (activeOcclusionQueryHeap_) cmdList->BeginQuery(activeOcclusionQueryHeap_, D3D12_QUERY_TYPE_OCCLUSION, 0);
 
         resourceStates_.TransitionTo(cmdList, boundColorResource_, D3D12_RESOURCE_STATE_RENDER_TARGET);
         cmdList->OMSetRenderTargets(1, &boundColorRtv_, FALSE, boundDsv_.ptr != 0 ? &boundDsv_ : nullptr);
@@ -1248,6 +1261,7 @@ namespace CNA::Internal::Backends::D3D12
         const UINT indexCount = static_cast<UINT>(VertexCountForPrimitives(primitive, primitiveCount));
         cmdList->DrawIndexedInstanced(indexCount, 1, 0, 0, 0);
 
+        if (activeOcclusionQueryHeap_) cmdList->EndQuery(activeOcclusionQueryHeap_, D3D12_QUERY_TYPE_OCCLUSION, 0);
         HRESULT hr = cmdList->Close();
         if (FAILED(hr))
             throw std::runtime_error("DrawIndexedColoredPrimitives: command list Close failed, hr=" + FormatHr(hr));
@@ -1740,6 +1754,9 @@ namespace CNA::Internal::Backends::D3D12
         ID3D12GraphicsCommandList* cmdList = GetCommandListEXT();
         allocator->Reset();
         cmdList->Reset(allocator, pso.Get());
+        // DX-120: see activeOcclusionQueryHeap_'s own doc comment -- BeginQuery/EndQuery must
+        // share this exact command-list submission with the draw below.
+        if (activeOcclusionQueryHeap_) cmdList->BeginQuery(activeOcclusionQueryHeap_, D3D12_QUERY_TYPE_OCCLUSION, 0);
 
         resourceStates_.TransitionTo(cmdList, boundColorResource_, D3D12_RESOURCE_STATE_RENDER_TARGET);
         cmdList->OMSetRenderTargets(1, &boundColorRtv_, FALSE, boundDsv_.ptr != 0 ? &boundDsv_ : nullptr);
@@ -1794,6 +1811,7 @@ namespace CNA::Internal::Backends::D3D12
             cmdList->DrawInstanced(vertexCount, 1, 0, 0);
         }
 
+        if (activeOcclusionQueryHeap_) cmdList->EndQuery(activeOcclusionQueryHeap_, D3D12_QUERY_TYPE_OCCLUSION, 0);
         HRESULT hr = cmdList->Close();
         if (FAILED(hr))
             throw std::runtime_error("DrawPrimitivesEx: command list Close failed, hr=" + FormatHr(hr));
@@ -1925,6 +1943,9 @@ namespace CNA::Internal::Backends::D3D12
         ID3D12GraphicsCommandList* cmdList = GetCommandListEXT();
         allocator->Reset();
         cmdList->Reset(allocator, pso);
+        // DX-120: see activeOcclusionQueryHeap_'s own doc comment -- BeginQuery/EndQuery must
+        // share this exact command-list submission with the draw below.
+        if (activeOcclusionQueryHeap_) cmdList->BeginQuery(activeOcclusionQueryHeap_, D3D12_QUERY_TYPE_OCCLUSION, 0);
 
         resourceStates_.TransitionTo(cmdList, boundColorResource_, D3D12_RESOURCE_STATE_RENDER_TARGET);
         cmdList->OMSetRenderTargets(1, &boundColorRtv_, FALSE, nullptr);
@@ -1949,6 +1970,7 @@ namespace CNA::Internal::Backends::D3D12
         const UINT instCount = static_cast<UINT>(std::max(1, instanceCount));
         cmdList->DrawIndexedInstanced(indexCount, instCount, 0, 0, 0);
 
+        if (activeOcclusionQueryHeap_) cmdList->EndQuery(activeOcclusionQueryHeap_, D3D12_QUERY_TYPE_OCCLUSION, 0);
         HRESULT hr = cmdList->Close();
         if (FAILED(hr))
             throw std::runtime_error("DrawInstancedPrimitivesEx: command list Close failed, hr=" + FormatHr(hr));

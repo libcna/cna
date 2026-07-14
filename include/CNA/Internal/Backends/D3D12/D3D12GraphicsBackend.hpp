@@ -83,6 +83,8 @@ namespace CNA::Internal::Backends::D3D12
         /// default (IGraphicsBackend::CreateTextureCube() -> nullptr).
         std::unique_ptr<ITextureCubeBackend> CreateTextureCube(int size, bool mipMap, int surfaceFormat) override;
         std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() override;
+        /// DX-120: real D3D12OcclusionQueryBackend, no longer the inherited default (-> nullptr).
+        std::unique_ptr<IOcclusionQueryBackend> CreateOcclusionQuery() override;
 
         /// DX-117: real D3D12RenderTargetBackend, no longer the inherited default (-> nullptr).
         std::unique_ptr<IRenderTargetBackend> CreateRenderTarget2D(int w, int h, int depthFormat,
@@ -352,6 +354,15 @@ namespace CNA::Internal::Backends::D3D12
          *  needs: 1 CBV @ b0, 1 SRV @ t0, 1 static sampler @ s0). */
         [[nodiscard]] D3D12RootSignatureCache& GetRootSignatureCacheEXT() { return rootSigCache_; }
 
+        /** @brief DX-120 NOXNA: sets/clears the currently-active occlusion query heap (slot 0)
+         *  that every draw-recording method (DrawColoredPrimitives/DrawIndexedColoredPrimitives/
+         *  DrawPrimitivesExImpl/DrawInstancedPrimitivesEx) brackets its own single command-list
+         *  recording with (BeginQuery right after Reset(), EndQuery right before Close()) -- a
+         *  real Vulkan/vkd3d-proton constraint that BeginQuery/EndQuery must share one command-list
+         *  submission with the draw(s) they bracket, which this backend's own per-draw-call
+         *  self-submission architecture doesn't naturally satisfy otherwise. Pass nullptr to clear. */
+        void SetActiveOcclusionQueryEXT(ID3D12QueryHeap* heap) { activeOcclusionQueryHeap_ = heap; }
+
     private:
         [[noreturn]] static void NotYetImplemented(const char* what);
 
@@ -609,5 +620,18 @@ namespace CNA::Internal::Backends::D3D12
         ID3D12Resource* extraMrtResources_[kMaxExtraMrtTargets] = {};
         D3D12_CPU_DESCRIPTOR_HANDLE extraMrtRtvs_[kMaxExtraMrtTargets]{};
         int extraMrtCount_ = 0;
+
+        // DX-120: the currently-active occlusion query heap (non-owning, nullptr when no query is
+        // active), always slot 0. Real, non-obvious constraint discovered while landing DX-120:
+        // BeginQuery()/EndQuery() must be recorded within the SAME command-list submission as the
+        // draw(s) they bracket (a Vulkan/vkd3d-proton requirement this backend's own per-draw-call
+        // self-submission architecture doesn't naturally satisfy) -- so every draw-recording method
+        // (DrawColoredPrimitives/DrawIndexedColoredPrimitives/DrawPrimitivesExImpl/
+        // DrawInstancedPrimitivesEx) checks this field and, when set, wraps its own single
+        // command-list recording with BeginQuery right after Reset() and EndQuery right before
+        // Close() -- correct for exactly one draw call between Begin()/End() (this design's own
+        // honest scope boundary; see D3D12OcclusionQueryBackend's own header doc comment for the
+        // multi-draw-accumulation gap this does not attempt to solve).
+        ID3D12QueryHeap* activeOcclusionQueryHeap_ = nullptr;
     };
 }

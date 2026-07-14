@@ -294,16 +294,24 @@ per-slot `SamplerState`) is also closed**: a real `D3D12_DESCRIPTOR_HEAP_TYPE_SA
 `D3D12SamplerCache` + dynamic per-texture-slot sampler descriptor tables (replacing the old
 hardcoded static LINEAR/WRAP sampler), proven with a genuine `TextureAddressMode::Wrap`-vs-`Clamp`
 discriminating pixel probe (same geometry/UVs, opposite sampled color, purely from the
-`SamplerState` change) plus cache identity/distinctness proof. `D3D12_Smoke` CTest (off-screen
-only): **109/109 checks**, all 10/10 stock shader variants + `SpriteBatch` + device-removed
-recovery + render targets/MRT + real state objects + real per-slot samplers. D3D12 still genuinely
-lacks (real, scoped, documented, not silently dropped — see `docs/d3d12-backend.md`'s "Known
-limitations" and `plan_dx.md`'s Phase DX13): MSAA/mip-chain render targets, `Texture3D`, occlusion
-queries, and custom `Effect` via `SpriteBatch::Begin(effect)` (`D3D12SpriteBatchBackend`'s own
-`SetSamplerFilter`/`SetSamplerAddressMode` wiring to the new sampler system is `DX-133`, now
-unblocked). **Phase DX13 (D3D12 functional completion, `DX-116`–`DX-119` closed, `DX-120`–`DX-123`
-open), Phase DX14 (D3D11 verification hardening), and Phase DX15 (remaining EasyGL-parity gaps)
-were added 2026-07-14 and are
+`SamplerState` change) plus cache identity/distinctness proof. **`DX-120`
+(`D3D12OcclusionQueryBackend`) is also closed**, closing Phase DX15's own `DX-147` D3D12 half too:
+a real `ID3D12QueryHeap`+readback buffer, proven with an exact `PixelCount()=4096` for a
+full-viewport visible triangle and exactly `0` for the same query reused around off-screen (clipped)
+geometry. **A real, non-obvious bug was found and fixed while landing this**: `BeginQuery`/
+`EndQuery` must share one command-list submission with the draw(s) they bracket (a Vulkan/
+vkd3d-proton constraint), which this backend's own per-draw-call self-submission architecture
+didn't satisfy — fixed via a new `D3D12GraphicsBackend::SetActiveOcclusionQueryEXT()` that every
+draw-recording method now checks and brackets its own recording with. `D3D12_Smoke` CTest
+(off-screen only): **114/114 checks**, all 10/10 stock shader variants + `SpriteBatch` +
+device-removed recovery + render targets/MRT + real state objects + real per-slot samplers + real
+occlusion queries. D3D12 still genuinely lacks (real, scoped, documented, not silently dropped —
+see `docs/d3d12-backend.md`'s "Known limitations" and `plan_dx.md`'s Phase DX13): MSAA/mip-chain
+render targets, `Texture3D`, and custom `Effect` via `SpriteBatch::Begin(effect)`
+(`D3D12SpriteBatchBackend`'s own `SetSamplerFilter`/`SetSamplerAddressMode` wiring to the new
+sampler system is `DX-133`, now unblocked). **Phase DX13 (D3D12 functional completion,
+`DX-116`–`DX-120` closed, `DX-121`–`DX-123` open), Phase DX14 (D3D11 verification hardening), and
+Phase DX15 (remaining EasyGL-parity gaps) were added 2026-07-14 and are
 now authorized and actively in progress** — see
 `plan_dx.md` for the full task list and ordering rationale. Outside the D3D plan, the standing
 backlog (Phase 79's 153-sample `../cna-samples` re-audit, Task 945's HLSL→GLSL tooling decision,

@@ -369,6 +369,15 @@ namespace
     }
 }
 
+// plan_dx.md DX-120 adds:
+// Check AA -- D3D12OcclusionQueryBackend: a real ID3D12QueryHeap(D3D12_QUERY_TYPE_OCCLUSION) +
+//   D3D12_HEAP_TYPE_READBACK buffer, Begin()/EndQuery()/ResolveQueryData() all genuinely recorded
+//   and executed through Wine+vkd3d-proton on the real GPU. A visible full-viewport triangle
+//   reports a real, positive PixelCount(); the SAME query object, reused for a second Begin()/End()
+//   around geometry placed entirely outside the clip volume (so nothing is rasterized at all),
+//   reports PixelCount() == 0 -- a genuine visible-vs-invisible discriminating result, not just
+//   "the query completed" (closes Phase DX15's own DX-147 D3D12 half).
+
 int main()
 {
     GraphicsBackendCreateArgs args;
@@ -2282,6 +2291,88 @@ int main()
         Check(clampHandle.ptr != wrapHandle1.ptr,
               "Z4: a genuinely different SamplerState (Point/Clamp) resolves to a DIFFERENT cached "
               "sampler descriptor handle");
+
+        backend.UnbindOffscreenColorTargetEXT();
+    }
+
+    // ---- plan_dx.md DX-120: D3D12OcclusionQueryBackend -- a real visible-vs-invisible
+    // discriminating occlusion query, closing Phase DX15's own DX-147 D3D12 half too. ----
+    {
+        constexpr int kRtWidth = 64;
+        constexpr int kRtHeight = 64;
+
+        D3D12_HEAP_PROPERTIES heapProps{};
+        heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
+
+        D3D12_RESOURCE_DESC rtDesc{};
+        rtDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+        rtDesc.Width = kRtWidth;
+        rtDesc.Height = kRtHeight;
+        rtDesc.DepthOrArraySize = 1;
+        rtDesc.MipLevels = 1;
+        rtDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        rtDesc.SampleDesc.Count = 1;
+        rtDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+        rtDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+
+        Microsoft::WRL::ComPtr<ID3D12Resource> rt;
+        HRESULT hrRt = backend.GetDeviceEXT()->CreateCommittedResource(
+            &heapProps, D3D12_HEAP_FLAG_NONE, &rtDesc,
+            D3D12_RESOURCE_STATE_RENDER_TARGET, nullptr, IID_PPV_ARGS(rt.GetAddressOf()));
+        Check(SUCCEEDED(hrRt) && rt != nullptr, "AA0: real off-screen RGBA8 render-target resource created");
+        backend.GetResourceStateTrackerEXT().TrackResource(rt.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET);
+
+        D3D12_CPU_DESCRIPTOR_HANDLE rtv = backend.AllocateRtvDescriptorEXT();
+        backend.GetDeviceEXT()->CreateRenderTargetView(rt.Get(), nullptr, rtv);
+        backend.BindOffscreenColorTargetEXT(rt.Get(), rtv, DXGI_FORMAT_R8G8B8A8_UNORM, kRtWidth, kRtHeight);
+        backend.ApplyDepthStencilState(false, false, 3, false, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, 0);
+        backend.ApplyRasterizerState(/*cullMode=*/0 /*CullMode::None*/, /*fillMode=*/0, /*scissor=*/false);
+
+        auto occlusionQuery = backend.CreateOcclusionQuery();
+        Check(occlusionQuery != nullptr, "AA1: CreateOcclusionQuery() returns a real D3D12OcclusionQueryBackend");
+
+        // Same oversized-triangle-covering-the-full-NDC-square trick Check M established --
+        // world=view=projection=Identity, so these Position values ARE clip-space coordinates.
+        struct VPC { float x, y, z; uint32_t color; };
+        static const VPC kVisibleTri[3] = {
+            {-1.0f, -1.0f, 0.0f, 0xFF0000FFu},
+            { 3.0f, -1.0f, 0.0f, 0xFF0000FFu},
+            {-1.0f,  3.0f, 0.0f, 0xFF0000FFu},
+        };
+        D3D12VertexBufferBackend vbVisible(&backend, 3);
+        vbVisible.SetData(kVisibleTri, 3, sizeof(VPC));
+
+        backend.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+        occlusionQuery->Begin();
+        backend.DrawColoredPrimitives(vbVisible, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                      Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1);
+        occlusionQuery->End();
+        Check(occlusionQuery->IsComplete(), "AA2: occlusion query IsComplete() genuinely true after a real End()");
+        const int visibleCount = occlusionQuery->PixelCount();
+        Check(visibleCount > 0,
+              ("AA3: a full-viewport visible triangle reports a real, positive PixelCount() "
+               "(got " + std::to_string(visibleCount) + ")").c_str());
+
+        // Same query object, reused for a second Begin()/End() -- geometry placed entirely outside
+        // the [-1,1] NDC clip volume rasterizes NOTHING, so a real occlusion query over it must
+        // report exactly 0 samples passed.
+        static const VPC kInvisibleTri[3] = {
+            { 5.0f,  5.0f, 0.0f, 0xFF00FF00u},
+            { 9.0f,  5.0f, 0.0f, 0xFF00FF00u},
+            { 5.0f,  9.0f, 0.0f, 0xFF00FF00u},
+        };
+        D3D12VertexBufferBackend vbInvisible(&backend, 3);
+        vbInvisible.SetData(kInvisibleTri, 3, sizeof(VPC));
+
+        occlusionQuery->Begin();
+        backend.DrawColoredPrimitives(vbInvisible, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                      Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1);
+        occlusionQuery->End();
+        const int invisibleCount = occlusionQuery->PixelCount();
+        Check(invisibleCount == 0,
+              "AA4: the SAME query object, reused around off-screen (clipped) geometry, reports "
+              "EXACTLY 0 -- a genuine visible-vs-invisible discriminating result, not just \"the "
+              "query completed\" (plan_dx.md DX-120, closes DX-147's D3D12 half)");
 
         backend.UnbindOffscreenColorTargetEXT();
     }
