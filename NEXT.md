@@ -447,6 +447,24 @@ desktop session with real GPU access — re-verify before assuming either claim 
    becomes available, start with `DX-114` (D3D12) or `DX-90` (D3D11) per `plan_dx.md`'s own
    checklists; until then this item is genuinely blocked, not merely low-priority — move to item 2+
    below for other independent work.
+1a. **2026-07-14: `.github/workflows/d3d-windows-ci.yml` added** (project-owner-approved exception
+    to this project's general no-CI-automation stance, scoped narrowly to D3D11/D3D12) — a
+    `workflow_dispatch` job that builds `CNA`+backend with native MSVC on `windows-latest` (this
+    project's first-ever native-MSVC configure), runs the smoke/common CTests for real (no Wine),
+    and recompiles all 20 HLSL shaders against a real `D3DCOMPILER_47.dll`. Two `CMakeLists.txt`
+    fixes were needed to make native MSVC configure at all (FFmpeg's `CNA_FFMPEG_AVAILABLE` gate
+    only excluded `MINGW`, not native-Windows `WIN32` generally; the D3D11/D3D12 CTest `COMMAND`s
+    were hardcoded to the Wine wrapper scripts, now `CMAKE_CROSSCOMPILING`-gated) — both verified
+    not to regress the existing MinGW `cmake-build-d3d11`/`cmake-build-d3d12` builds/CTest suites.
+    **This does NOT close `DX-90`/`DX-114`** — it only covers the "MSVC-compile/unit-test/shader-
+    generation-check" subset those rows' own text already anticipated CI could provide, not the
+    real swap-chain/tearing/device-lost/driver-parity items. **Honestly unvalidated**: this
+    environment has no `gh` CLI authentication (no token available, `gh auth status` confirms not
+    logged in, no way to obtain one here), so the workflow could not actually be triggered/iterated
+    against a real GitHub Actions run before pushing — it's a careful, locally-reasoned first
+    attempt, not a proven-green result. **Next step**: project owner runs `gh workflow run
+    d3d-windows-ci.yml` (or triggers via the GitHub UI) and shares the log if it fails, so the next
+    session can iterate with real failure data.
 2. **Decide Task 945** (manual HLSL→GLSL port vs. `dxc`+`SPIRV-Cross` tooling for Phase 78, the
    *unrelated* `../cna-samples` shader-conversion track) — Task 946's data point is in (manual
    porting scaled fine for BloomSample's 3 shaders). Needs project-owner input, do not decide
