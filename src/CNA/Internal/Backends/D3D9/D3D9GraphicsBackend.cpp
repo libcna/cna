@@ -8,6 +8,7 @@
 #include "CNA/Internal/Backends/D3D9/D3D9Buffers.hpp"
 #include "CNA/Internal/Backends/D3D9/D3D9FormatMapping.hpp"
 #include "CNA/Internal/Backends/D3D9/D3D9StateMapping.hpp"
+#include "CNA/Internal/Backends/D3D9/D3D9Textures.hpp"
 
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DeviceLostException.hpp"
@@ -538,9 +539,21 @@ namespace CNA::Internal::Backends::D3D9
         NotYetImplemented("D3D9", "DrawIndexedColoredPrimitives (see plan_dx9.md D9-82)");
     }
 
-    std::unique_ptr<ITextureBackend> D3D9GraphicsBackend::CreateTexture(const ImageData&)
+    std::unique_ptr<ITextureBackend> D3D9GraphicsBackend::CreateTexture(const ImageData& data)
     {
-        NotYetImplemented("D3D9", "CreateTexture (see plan_dx9.md D9-50)");
+        return std::make_unique<D3D9TextureBackend>(device_.Get(), data);
+    }
+
+    std::unique_ptr<ITextureCubeBackend> D3D9GraphicsBackend::CreateTextureCube(int size, bool mipMap, int surfaceFormat)
+    {
+        if (!(caps_.TextureCaps & D3DPTEXTURECAPS_CUBEMAP)) return nullptr;
+        return std::make_unique<D3D9TextureCubeBackend>(device_.Get(), size, mipMap, surfaceFormat);
+    }
+
+    std::unique_ptr<ITexture3DBackend> D3D9GraphicsBackend::CreateTexture3D(int w, int h, int depth, bool mipMap, int surfaceFormat)
+    {
+        if (caps_.MaxVolumeExtent == 0) return nullptr;
+        return std::make_unique<D3D9Texture3DBackend>(device_.Get(), w, h, depth, mipMap, surfaceFormat);
     }
 
     std::unique_ptr<ISpriteBatchBackend> D3D9GraphicsBackend::CreateSpriteBatch()

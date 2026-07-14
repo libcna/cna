@@ -48,6 +48,12 @@
 //   D3DPOOL_DEFAULT vertex buffer's underlying COM object (D9-40's device-lost hook, proven for
 //   real, not just "didn't crash") -- matches real XNA/D3D9 behavior where a DYNAMIC buffer's
 //   content does not survive DeviceReset.
+// Check Q -- a real D3D9TextureBackend round-trips exact RGBA8 bytes (D9-50): constructor upload
+//   and a later UpdatePixelsLevel() replacement are both confirmed via a direct LockRect(READONLY)
+//   on the D3DPOOL_MANAGED texture (no staging-texture dance needed, D9-4's own confirmed payoff).
+// Check R -- D3D9TextureCubeBackend/D3D9Texture3DBackend SetData()+GetData() round-trip exact
+//   bytes for a sub-region/sub-volume (D9-51), gated on the real D3DCAPS9 the device reports
+//   (D3DPTEXTURECAPS_CUBEMAP / MaxVolumeExtent) rather than assumed universal.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
@@ -63,7 +69,9 @@
 
 #include "CNA/Internal/Backends/D3D9/D3D9GraphicsBackend.hpp"
 #include "CNA/Internal/Backends/D3D9/D3D9Buffers.hpp"
+#include "CNA/Internal/Backends/D3D9/D3D9Textures.hpp"
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Graphics/ImageData.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -74,6 +82,7 @@
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
 using namespace CNA::Internal::Backends::D3D9;
+using CNA::Internal::Backends::ImageData;
 
 namespace
 {
@@ -415,6 +424,113 @@ protected:
             bool matches = SUCCEEDED(hr) && std::memcmp(locked, after, sizeof(after)) == 0;
             if (SUCCEEDED(hr)) d3d9Vb.GetBufferEXT()->Unlock();
             check(matches, "D9-40: the recreated buffer genuinely holds the post-recovery data");
+        }
+
+        // Check Q (D9-50) -- D3D9TextureBackend round-trips exact RGBA8 bytes, both at
+        // construction (level 0 from ImageData) and via a later UpdatePixelsLevel() replacement.
+        // Since this is D3DPOOL_MANAGED (not DEFAULT), the constructed texture is directly
+        // LockRect(READONLY)-able for verification -- no staging-texture dance needed, unlike
+        // D3D11's own equivalent check (D9-4's own confirmed payoff of design decision 2).
+        {
+            ImageData img;
+            img.width = 4;
+            img.height = 4;
+            img.pixels.resize(4 * 4 * 4);
+            for (int i = 0; i < 4 * 4; ++i)
+            {
+                img.pixels[static_cast<std::size_t>(i) * 4 + 0] = static_cast<uint8_t>(i * 10);
+                img.pixels[static_cast<std::size_t>(i) * 4 + 1] = static_cast<uint8_t>(i * 20);
+                img.pixels[static_cast<std::size_t>(i) * 4 + 2] = static_cast<uint8_t>(i * 30);
+                img.pixels[static_cast<std::size_t>(i) * 4 + 3] = 255;
+            }
+            auto tex = backend.CreateTexture(img);
+            auto& d3d9Tex = static_cast<D3D9TextureBackend&>(*tex);
+
+            auto lockAndCompare = [&](const std::vector<uint8_t>& expected)
+            {
+                D3DLOCKED_RECT locked{};
+                HRESULT hr = d3d9Tex.GetTextureEXT()->LockRect(0, &locked, nullptr, D3DLOCK_READONLY);
+                if (FAILED(hr)) return false;
+                bool match = true;
+                for (int row = 0; row < 4 && match; ++row)
+                {
+                    const auto* rowBytes = static_cast<const uint8_t*>(locked.pBits)
+                                          + static_cast<std::size_t>(row) * locked.Pitch;
+                    if (std::memcmp(rowBytes, expected.data() + static_cast<std::size_t>(row) * 4 * 4, 4 * 4) != 0)
+                        match = false;
+                }
+                d3d9Tex.GetTextureEXT()->UnlockRect(0);
+                return match;
+            };
+
+            check(tex->GetWidth() == 4 && tex->GetHeight() == 4 && lockAndCompare(img.pixels),
+                  "D9-50: D3D9TextureBackend constructor upload round-trips exact RGBA8 bytes");
+
+            std::vector<uint8_t> replacement(4 * 4 * 4, 77);
+            tex->UpdatePixelsLevel(0, replacement.data(), 4, 4);
+            check(lockAndCompare(replacement),
+                  "D9-50: D3D9TextureBackend::UpdatePixelsLevel() round-trips exact replacement bytes");
+        }
+
+        // Check R (D9-51) -- cube-map and volume texture SetData()/GetData() round-trip exact
+        // bytes for a sub-region, gated on the real D3DCAPS9 the device reports (D9-51's own plan
+        // note: volume-texture support is a genuine capability, not assumed universal).
+        {
+            if (backend.GetCapsEXT().TextureCaps & D3DPTEXTURECAPS_CUBEMAP)
+            {
+                auto cube = backend.CreateTextureCube(8, false, 0);
+                check(cube != nullptr,
+                      "D9-51: D3D9TextureCubeBackend created (device reports D3DPTEXTURECAPS_CUBEMAP)");
+                if (cube)
+                {
+                    uint8_t known[2 * 2 * 4];
+                    for (int i = 0; i < 2 * 2; ++i)
+                    {
+                        known[i * 4 + 0] = static_cast<uint8_t>(i * 40 + 1);
+                        known[i * 4 + 1] = static_cast<uint8_t>(i * 40 + 2);
+                        known[i * 4 + 2] = static_cast<uint8_t>(i * 40 + 3);
+                        known[i * 4 + 3] = 200;
+                    }
+                    cube->SetData(2 /* +Z face */, 0, 1, 1, 2, 2, known, sizeof(known));
+                    uint8_t readBack[2 * 2 * 4] = {};
+                    cube->GetData(2, 0, 1, 1, 2, 2, readBack, sizeof(readBack));
+                    check(std::memcmp(known, readBack, sizeof(known)) == 0,
+                          "D9-51: D3D9TextureCubeBackend::SetData()/GetData() round-trip exact bytes "
+                          "for one face's sub-region");
+                }
+            }
+            else
+            {
+                std::printf("    (skipped: device does not report D3DPTEXTURECAPS_CUBEMAP)\n");
+            }
+
+            if (backend.GetCapsEXT().MaxVolumeExtent > 0)
+            {
+                auto vol = backend.CreateTexture3D(4, 4, 4, false, 0);
+                check(vol != nullptr,
+                      "D9-51: D3D9Texture3DBackend created (device reports MaxVolumeExtent > 0)");
+                if (vol)
+                {
+                    uint8_t known[2 * 2 * 2 * 4];
+                    for (int i = 0; i < 2 * 2 * 2; ++i)
+                    {
+                        known[i * 4 + 0] = static_cast<uint8_t>(i * 15 + 1);
+                        known[i * 4 + 1] = static_cast<uint8_t>(i * 15 + 2);
+                        known[i * 4 + 2] = static_cast<uint8_t>(i * 15 + 3);
+                        known[i * 4 + 3] = 210;
+                    }
+                    vol->SetData(0, 1, 1, 1, 2, 2, 2, known, sizeof(known));
+                    uint8_t readBack[2 * 2 * 2 * 4] = {};
+                    vol->GetData(0, 1, 1, 1, 2, 2, 2, readBack, sizeof(readBack));
+                    check(std::memcmp(known, readBack, sizeof(known)) == 0,
+                          "D9-51: D3D9Texture3DBackend::SetData()/GetData() round-trip exact bytes "
+                          "for a sub-volume");
+                }
+            }
+            else
+            {
+                std::printf("    (skipped: device does not report volume-texture support, MaxVolumeExtent=0)\n");
+            }
         }
 
         std::printf("=== %d/%d PASS (main Game checks) ===\n", passCount, totalCount);

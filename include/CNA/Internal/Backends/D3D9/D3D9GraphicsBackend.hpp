@@ -80,6 +80,17 @@ namespace CNA::Internal::Backends::D3D9
         // error (D3D11's own DX-31 caught this exact silent-default trap; do not repeat it here).
         std::unique_ptr<IIndexBufferBackend> CreateIndexBuffer32(int index_capacity) override;
 
+        // ---- IGraphicsBackend: real (Phase D9-5, D9-50/D9-51) ----
+        std::unique_ptr<ITextureBackend> CreateTexture(const ImageData& data) override;
+        /// D9-51: CubeMap creation is gated on the real D3DCAPS9 (D3DPTEXTURECAPS_CUBEMAP) queried
+        /// at device-creation time -- returns nullptr (IGraphicsBackend's own "unsupported"
+        /// convention) rather than assuming support, unlike CreateTexture() above.
+        std::unique_ptr<ITextureCubeBackend> CreateTextureCube(int size, bool mipMap, int surfaceFormat) override;
+        /// D9-51: Volume-texture creation is gated on D3DCAPS9::MaxVolumeExtent (see this same
+        /// plan note on D3D9Texture3DBackend's own class doc comment) -- returns nullptr when the
+        /// device reports no volume-texture support.
+        std::unique_ptr<ITexture3DBackend> CreateTexture3D(int w, int h, int depth, bool mipMap, int surfaceFormat) override;
+
         // ---- IGraphicsBackend: pure virtual, NotYetImplemented until later D3D9 tasks land ----
         void SetDepthTestEnabled(bool enabled) override;
         void SetBlendEnabled(bool enabled) override;
@@ -90,7 +101,6 @@ namespace CNA::Internal::Backends::D3D9
         void DrawIndexedColoredPrimitives(const IVertexBufferBackend& vb, const IIndexBufferBackend& ib,
                                           const Matrix& world, const Matrix& view, const Matrix& projection,
                                           PrimitiveType primitive, int primitiveCount) override;
-        std::unique_ptr<ITextureBackend> CreateTexture(const ImageData& data) override;
         std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() override;
 
         // ---- IGraphicsBackend: real (D9-30/D9-6 -- GraphicsDevice's own constructor unconditionally
