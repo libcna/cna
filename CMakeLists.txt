@@ -6763,6 +6763,49 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D12")
     cna_d3d12_test(cna_diag_d3d12_swapchain examples/d3d12_swapchain_diag.cpp)
 endif()
 
+# plan_dx9.md D9-23: D3D9 CTest registration, mirroring D3D11's/D3D12's own cna_d3d11_test/
+# cna_d3d12_test macros (design decision: mirror the shape, don't invent a new pattern). Uses the
+# new scripts/run-wine-dxvk9.sh (D9-5), not the shared run-wine-dxvk.sh (cold-start Sec.4).
+if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D9")
+    enable_testing()
+
+    macro(cna_d3d9_test target src)
+        add_executable(${target} ${src})
+        target_link_libraries(${target} PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(${target} PRIVATE SDL3::SDL3main)
+        endif()
+        if(MINGW)
+            target_link_options(${target} PRIVATE -static-libgcc -static-libstdc++)
+            target_link_options(${target} PRIVATE -Wl,--allow-multiple-definition)
+            cna_copy_mingw_runtime(${target})
+            cna_copy_sdl_runtime(${target})
+        endif()
+    endmacro()
+
+    macro(cna_d3d9_ctest_command out_var target_name)
+        if(CMAKE_CROSSCOMPILING)
+            set(${out_var} ${CMAKE_SOURCE_DIR}/scripts/run-wine-dxvk9.sh $<TARGET_FILE:${target_name}>)
+        else()
+            set(${out_var} $<TARGET_FILE:${target_name}>)
+        endif()
+    endmacro()
+
+    # D9-20/D9-21/D9-22: pure-function checks for D3D9's own format/state/vertex-layout mapping
+    # tables -- no device/window/GPU needed.
+    cna_d3d9_test(cna_test_d3d9_common examples/d3d9_common_test.cpp)
+    cna_d3d9_ctest_command(_d3d9_common_cmd cna_test_d3d9_common)
+    add_test(NAME D3D9_Common COMMAND ${_d3d9_common_cmd})
+    set_tests_properties(D3D9_Common PROPERTIES
+        TIMEOUT 30
+        LABELS "D3D9"
+        # This binary never creates a D3D9 device (pure-function mapping-table checks only), so it
+        # legitimately never prints a "DXVK: <version>" line -- tell the wrapper's DXVK-engagement
+        # gate not to misreport that as a WineD3D fallback (mirrors D3D11_Common's own
+        # CNA_D3D11_SKIP_DXVK_GATE usage). Harmless no-op when CMAKE_CROSSCOMPILING is false.
+        ENVIRONMENT "CNA_D3D9_SKIP_DXVK_GATE=1")
+endif()
+
 # --- Task 6.1: real two-process ENet loopback test harness ---
 # A tiny standalone (non-GTest) executable playing "host" or "client", spawned twice as
 # independent OS processes by tests/CNA/Internal/Net/TwoProcessLoopbackTest.cpp. See NEXT.md /

@@ -89,14 +89,35 @@ line is actually the `D3DCommon` shared-core conditional — adding D3D9 there w
 design decision 12 ("`D3DCommon` is not expanded"). Left untouched, with an explanatory comment;
 `plan_dx9.md`'s own `D9-10` row now records the correction. Line 392 (the `CNA` circular-link `OR`
 chain) was also deliberately left out of D3D9's `OR` chain — nothing calls back into a CNA-defined
-symbol yet (that's `D9-112`, Phase D9-11, ask-first). Next up: Phase D9-2 (mapping layer).
+symbol yet (that's `D9-112`, Phase D9-11, ask-first).
+
+### Phase D9-2 — mapping layer: CLOSED 2026-07-14 (one row 🟨)
+
+| Task | Status |
+|---|---|
+| `D9-20` — `D3D9FormatMapping` (`SurfaceFormat`/`DepthFormat` → `D3DFORMAT`) | ✅ |
+| `D9-21` — `D3D9StateMapping` (7 state enums → D3D9 equivalents) | 🟨 (table done; `D3DCULL` pixel-proof against the oracle owed to `D9-84`) |
+| `D9-22` — `D3D9VertexDeclarations` (stride-keyed `D3DVERTEXELEMENT9` arrays) | ✅ |
+| `D9-23` — `D3D9_Common` CTest, mutation-verified | ✅ (28/28 checks) |
+
+**Phase D9-2 is closed** (one honestly-flagged partial, not a blocker). Two non-obvious findings
+worth knowing before touching this code: **`SurfaceFormat::Color` → `D3DFMT_A8B8G8R8`, NOT
+`D3DFMT_A8R8G8B8`** (D3D9's channel-order naming reads MSB→LSB, opposite DXGI's convention — get this
+backwards and every Color-format texture samples with R/B swapped); and **`Rgba1010102` →
+`D3DFMT_A2B10G10R10`, NOT the superficially-similar `D3DFMT_A2R10G10B10`** (that one has no DXGI
+equivalent at all — different alpha-bit position). Both verified against Microsoft's own published
+D3D9→DXGI legacy-format table, not derived by name resemblance. Next up: Phase D9-3 (device, present,
+device-lost).
 
 ### Does NOT work yet
 
-Real rendering: everything (Phase D9-2 onward). The `D3D9GraphicsBackend` skeleton exists and builds,
+Real rendering: everything (Phase D9-3 onward). The `D3D9GraphicsBackend` skeleton exists and builds,
 but every substantive method (`Clear`/`Present`/all `Clear*` combos/vertex+index buffers/draws/
 textures/`SpriteBatch`) throws `NotYetImplemented()` naming its own follow-up task — by design, per
-`D9-11`'s "loud failure, not silent no-op" rule. No device exists yet (`D9-30`).
+`D9-11`'s "loud failure, not silent no-op" rule. No device exists yet (`D9-30`). The mapping tables
+(D9-20–23) exist and are unit-tested but are not wired into the backend's own draw/resource-creation
+code yet — that wiring happens as each consuming task (`D9-40` buffers, `D9-50` textures, `D9-60`
+render states, ...) lands.
 
 ---
 
@@ -106,7 +127,8 @@ Most recent first. Full detail lives in `plan_dx9.md` — this is a short index.
 
 | Commit(s) | Summary |
 |---|---|
-| *(pending)* | **Phase D9-1 fully closed** (`D9-10`/`D9-11`/`D9-12`): D3D9 wired into `CMakeLists.txt` (6 of 7 `"D3D12"` sites, correcting a stale plan claim about the 7th — see `plan_dx9.md`'s `D9-10` row); new `D3D9GraphicsBackend` skeleton + shared `NotYetImplemented.hpp`; `GraphicsDevice.cpp` audited, zero changes needed. `CNA_GRAPHICS_BACKEND=D3D9` configures and builds clean; a runtime check confirms the skeleton's real bookkeeping methods work and its throwing methods actually throw. |
+| *(pending)* | **Phase D9-2 fully closed** (`D9-20`–`D9-23`): new `D3D9FormatMapping`/`D3D9StateMapping`/`D3D9VertexDeclarations` + a 28-check `D3D9_Common` CTest, mutation-verified. Two non-obvious, easy-to-get-backwards findings, both verified against Microsoft's own published D3D9→DXGI legacy-format table rather than assumed: `SurfaceFormat::Color` → `D3DFMT_A8B8G8R8` (not the superficially-obvious `A8R8G8B8`), and `Rgba1010102` → `D3DFMT_A2B10G10R10` (not `A2R10G10B10`, which has no real DXGI equivalent at all). `TextureFilter` needed a new `{min,mag,mip}` triple struct, not a single enum, since D3D9 has no composed filter value. One row (`D9-21`) is 🟨: the mapping table is done, but its own "pixel-test `D3DCULL` against the oracle" obligation is honestly deferred to `D9-84` (no draw path exists yet to test it with). |
+| `1a3ca71f` | **Phase D9-1 fully closed** (`D9-10`/`D9-11`/`D9-12`): D3D9 wired into `CMakeLists.txt` (6 of 7 `"D3D12"` sites, correcting a stale plan claim about the 7th — see `plan_dx9.md`'s `D9-10` row); new `D3D9GraphicsBackend` skeleton + shared `NotYetImplemented.hpp`; `GraphicsDevice.cpp` audited, zero changes needed. `CNA_GRAPHICS_BACKEND=D3D9` configures and builds clean; a runtime check confirms the skeleton's real bookkeeping methods work and its throwing methods actually throw. |
 | `09121309` | **Phase D9-0 fully closed** (`D9-2`–`D9-5`): confirmed `d3d9`-alone link set (no `dxguid`); a real Wine+DXVK D3D9 device/swap-chain/`Clear`/`Present`/`GetRenderTargetData`/`LockRect` round-trip with an exact pixel match plus a full `D3DCAPS9` dump (`vs_3_0`/`ps_3_0`, `NumSimultaneousRTs=4`, 16384 max texture size, DXVK reports unconditional NPOT support — flagged as provisional/synthetic, not an authentic XNA-era driver's caps); confirmed `D3DPOOL_MANAGED` textures are genuinely `LockRect`-readable and survive `Reset()` with no re-upload (so `Texture2D::GetData()` can be a plain `LockRect` later, `D9-52`); and a new `scripts/run-wine-dxvk9.sh` (mirrors `run-wine-dxvk.sh`'s DXVK-marker gate under new `CNA_D3D9_*` env-var names), proven both ways — passes against the real `~/.wine-cna-d3d11` DXVK prefix, and correctly fails (exit 3) against a freshly-initialized, DXVK-less prefix that silently fell back to WineD3D. |
 | `59a35d4c` | Recorded the project owner's two 2026-07-14 decisions in `plan_dx9.md`: implementation authorized through Phase D9-13, and the `IGraphicsBackend` boundary problem resolved via an approved additive extension. |
 | `d1ae928f` | Added `plan_dx9.md` and the proven Phase D9-0 spike artifacts (`dx9-spike/`: shader compiler, `.fxb` bytecode oracle, real XNA 4.0 reference renderer) to the `feature/dx9` worktree. |
@@ -116,8 +138,9 @@ Most recent first. Full detail lives in `plan_dx9.md` — this is a short index.
 ## 4. Current blocker / main problem
 
 **No blocker.** Both of this plan's original gating questions are resolved (see the banner above and
-`plan_dx9.md`'s top banner / "The `IGraphicsBackend` boundary problem" section), and Phases D9-0 and
-D9-1 are now fully closed. Next work is Phase D9-2 (mapping layer: `D9-20`–`D9-23`).
+`plan_dx9.md`'s top banner / "The `IGraphicsBackend` boundary problem" section), and Phases D9-0,
+D9-1, and D9-2 are now fully closed. Next work is Phase D9-3 (device, present, device-lost:
+`D9-30`–`D9-34`).
 
 ---
 
@@ -182,22 +205,23 @@ cmake -S . -B cmake-build-d3d9 \
 
 ## 8. Next smallest tasks
 
-**Phases D9-0 and D9-1 are closed.** Next: Phase D9-2 (mapping layer).
+**Phases D9-0, D9-1, and D9-2 are closed.** Next: Phase D9-3 (device, present, device-lost).
 
-1. **`D9-20`** — `D3D9FormatMapping`: `SurfaceFormat`/`DepthFormat` → `D3DFORMAT`. XNA's own
-   `SurfaceFormat` enum came from D3D9, so expect near-total coverage; a gap is more likely a CNA bug
-   than a real D3D9 limitation.
-2. **`D9-21`** — `D3D9StateMapping`: `Blend`/`BlendFunction`/`CompareFunction`/`CullMode`/`FillMode`/
-   `TextureAddressMode`/`TextureFilter`/`StencilOperation` → their `D3D9` enums. **`D3DCULL` is the
-   known trap** (`plan_dx.md`'s D3D12 work burned a debugging cycle on exactly this) — pixel-test both
-   winding directions against the XNA oracle before trusting the table.
-3. **`D9-22`** — `D3D9VertexDeclarations`: stride-keyed `D3DVERTEXELEMENT9` arrays. The stride-32
-   `sprite2d`/`VertexPositionNormalTexture` collision D3D11's `DX-70` already found exists here too —
-   reuse that solution, don't rediscover it.
-4. **`D9-23`** — `D3D9_Common` CTest for all three tables, mutation-verified (pure functions, no
-   device — runs with the DXVK gate skipped, `CNA_D3D9_SKIP_DXVK_GATE=1`).
-5. Then Phase D9-3 (device/present/device-lost: `D9-30`–`34`, now unblocked by the approved
-   `IGraphicsBackend` extension) and Phase D9-4 (buffers).
+1. **`D9-30`** — `Direct3DCreate9`/`GetDeviceCaps`/`CreateDevice` with a real `D3DPRESENT_PARAMETERS`,
+   using the now-approved additive `GraphicsBackendCreateArgs` fields (back-buffer/depth format,
+   fullscreen, `GraphicsProfile`) instead of D3D11's own hardcoding precedent.
+2. **`D9-31`** — `Clear()` + all 6 combo `Clear*` variants + `Present()` + `ReadBackbuffer()`. Each of
+   the 6 `Clear*` variants needs its own passing `D3D9_Smoke` check before this is "done" — D3D11
+   shipped these implemented-but-never-exercised; don't repeat that gap here.
+3. **`D9-32`** — enforce the profile floor at construction (needs `D9-30`'s `GraphicsProfile` plumbing).
+4. **`D9-33`** — window resize — D3D9 has no `ResizeBuffers`; resize **is** a device `Reset()`, same
+   code path as device-lost recovery (design once, use twice).
+5. **`D9-34`** — XNA's real device-lost lifecycle (`TestCooperativeLevel`/`D3DERR_DEVICELOST`/
+   `DeviceLost`/`DeviceResetting`/`DeviceReset`, `D3DPOOL_MANAGED` resources surviving `Reset()`
+   untouched — `D9-4` already confirmed this really works under DXVK). Now unblocked by the approved
+   `IGraphicsBackend` device-event channel — the channel itself still needs to be added as part of
+   this task, not assumed to already exist.
+6. Then Phase D9-4 (buffers: `D9-40`–`42`).
 
 See `plan_dx9.md`'s "Execution order" table for the full sequence beyond this.
 
