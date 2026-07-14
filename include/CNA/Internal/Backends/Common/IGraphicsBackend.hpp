@@ -9,6 +9,7 @@
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include <cstddef>
+#include <functional>
 #include <stdexcept>
 #include <string>
 #include <memory>
@@ -428,6 +429,22 @@ namespace CNA::Internal::Backends
         /// count applied (0 = no MSAA). Default: unsupported -- backends that cannot change this
         /// post-construction report back whatever GetMultiSampleCount() already is.
         virtual int ApplyMultiSampleCount(int /*requestedMultiSampleCount*/) { return GetMultiSampleCount(); }
+        /// NOXNA (plan_dx9.md D9-30/D9-33, found empirically). Reconfigures the backend's tracked
+        /// back-buffer format/depth-stencil format/fullscreen state in place, called from
+        /// GraphicsDevice::Reset() alongside SetVirtualResolution()/ApplyMultiSampleCount() above --
+        /// same "actually reach the backend instead of being silently ignored after construction"
+        /// rationale as ApplyMultiSampleCount, for the GraphicsBackendCreateArgs::backBufferFormat/
+        /// depthStencilFormat/isFullScreen fields specifically. Without this, a GraphicsDeviceManager
+        /// that sets PreferredDepthStencilFormat AFTER the backend's initial construction (the
+        /// common case: Game lazily constructs a GraphicsDevice with default PresentationParameters
+        /// before GraphicsDeviceManager.ApplyChanges() ever runs) would silently keep the backend on
+        /// its original construction-time format forever. Default: no-op -- every existing backend
+        /// (parity, not authenticity, goals) may continue to ignore this exactly as before it
+        /// existed; only a backend that honors real requested formats (D3D9) needs to act on it, and
+        /// even then only needs to actually apply it on its own next natural resize/reset point
+        /// (immediately reconstructing a device from inside this call is not required).
+        virtual void UpdatePresentationFormatEXT(int /*backBufferFormat*/, int /*depthStencilFormat*/,
+                                                  bool /*isFullScreen*/) {}
         /// Returns the backbuffer's actual (device-clamped) MSAA sample count; 0 if none/unsupported.
         [[nodiscard]] virtual int GetMultiSampleCount() const { return 0; }
         /// Converts a point from physical window coordinates to logical (virtual)
@@ -810,6 +827,32 @@ namespace CNA::Internal::Backends
     };
 
     /**
+     * @brief NOXNA (plan_dx9.md D9-34). Real, driver-triggered device lifecycle events a backend
+     * can report back to GraphicsDevice via GraphicsBackendCreateArgs::deviceEventCallback.
+     *
+     * Distinct from the pre-existing IGraphicsBackend::SetContextRecoveryEnabled()/
+     * DebugSimulateContextLoss()/DebugRestoreContext() channel, which is one-directional and
+     * test-only (GraphicsDevice commands a backend to simulate loss). This is the opposite
+     * direction -- backend reports a real, async, driver-detected event up to GraphicsDevice --
+     * and it is what actually fires GraphicsDevice::DeviceLost/DeviceResetting/DeviceReset for a
+     * genuine device loss (as opposed to GraphicsDevice::Reset()'s own direct Raise() calls for an
+     * app-initiated reset with new PresentationParameters -- a different, pre-existing path that
+     * this enum does not replace).
+     */
+    enum class BackendDeviceEvent
+    {
+        /// The device has been lost (e.g. D3D9's D3DERR_DEVICELOST) and cannot be used until it
+        /// is reset. Fires GraphicsDevice::DeviceLost.
+        Lost,
+        /// About to release all pool-default-equivalent resources and reset the device. Fires
+        /// GraphicsDevice::DeviceResetting.
+        Resetting,
+        /// The device was successfully reset and resources recreated. Fires
+        /// GraphicsDevice::DeviceReset.
+        Reset
+    };
+
+    /**
      * @brief Arguments for creating a graphics backend.
      * Currently minimal, but allows for easier extension.
      */
@@ -843,6 +886,35 @@ namespace CNA::Internal::Backends
         ///   2 = wait for 2 vertical retraces (half refresh rate)
         /// Corresponds to PresentInterval: Default/One→1, Two→2, Immediate→0.
         int swapInterval = 1;
+        /// NOXNA (plan_dx9.md D9-30). Requested back-buffer pixel format -- raw ordinal of
+        /// Microsoft::Xna::Framework::Graphics::SurfaceFormat, avoiding coupling this
+        /// backend-agnostic header to the XNA namespace (mirrors CreateTexture3D's own
+        /// surfaceFormat int convention). Backends that don't need real format fidelity (every
+        /// existing backend except D3D9, whose goal is XNA authenticity rather than parity) may
+        /// ignore this and keep hardcoding their own default, exactly as before this field existed.
+        int backBufferFormat = 0;  // SurfaceFormat::Color
+        /// NOXNA (plan_dx9.md D9-30). Requested depth/stencil format -- raw ordinal of
+        /// Microsoft::Xna::Framework::Graphics::DepthFormat. See backBufferFormat's own doc for
+        /// the int-ordinal convention and the same "existing backends may ignore this" note.
+        int depthStencilFormat = 0;  // DepthFormat::None
+        /// NOXNA (plan_dx9.md D9-30). Whether the game requested exclusive fullscreen. Existing
+        /// backends that already have their own fullscreen handling via the SDL window itself may
+        /// continue to ignore this field exactly as before it existed.
+        bool isFullScreen = false;
+        /// NOXNA (plan_dx9.md D9-30/D9-32). Requested Microsoft::Xna::Framework::Graphics::
+        /// GraphicsProfile ordinal (Reach=0, HiDef=1). Only D3D9 can honestly enforce this today
+        /// (a real D3DCAPS9 to consult) -- see plan_dx9.md's "CNA's divergences from XNA 4.0",
+        /// Divergence 3. Every other backend's GraphicsAdapter::IsProfileSupported() keeps its
+        /// existing, honest `return true;` and may ignore this field.
+        int graphicsProfile = 0;  // GraphicsProfile::Reach
+        /// NOXNA (plan_dx9.md D9-34). Callback a backend may invoke to report a REAL,
+        /// driver-triggered device lifecycle event back to GraphicsDevice (which raises the
+        /// corresponding DeviceLost/DeviceResetting/DeviceReset XNA event). Null by default; nine
+        /// of the ten backends never call it -- only a backend that can genuinely lose its device
+        /// the way XNA's own D3D9-based runtime could (i.e. D3D9) has any reason to. A backend
+        /// must never invoke this synchronously from within its own constructor (the
+        /// GraphicsDevice that would receive it has not finished constructing yet).
+        std::function<void(BackendDeviceEvent)> deviceEventCallback;
     };
 
     // Factory function to be implemented by each backend

@@ -6804,6 +6804,16 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D9")
         # gate not to misreport that as a WineD3D fallback (mirrors D3D11_Common's own
         # CNA_D3D11_SKIP_DXVK_GATE usage). Harmless no-op when CMAKE_CROSSCOMPILING is false.
         ENVIRONMENT "CNA_D3D9_SKIP_DXVK_GATE=1")
+
+    # D9-30/D9-31: real device/Clear/Present/readback smoke test -- this backend's first genuine
+    # pixel-correctness proof, through the real public Game/GraphicsDeviceManager/GraphicsDevice
+    # API (not the raw backend interface).
+    cna_d3d9_test(cna_test_d3d9_smoke examples/d3d9_smoke_test.cpp)
+    cna_d3d9_ctest_command(_d3d9_smoke_cmd cna_test_d3d9_smoke)
+    add_test(NAME D3D9_Smoke COMMAND ${_d3d9_smoke_cmd})
+    set_tests_properties(D3D9_Smoke PROPERTIES
+        TIMEOUT 60
+        LABELS "D3D9")
 endif()
 
 # --- Task 6.1: real two-process ENet loopback test harness ---

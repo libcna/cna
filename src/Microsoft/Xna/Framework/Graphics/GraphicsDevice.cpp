@@ -404,6 +404,15 @@ namespace Microsoft::Xna::Framework::Graphics
             const int appliedMultiSampleCount = backend_->ApplyMultiSampleCount(
                 presentationParameters_.getMultiSampleCountProperty());
             presentationParameters_.setMultiSampleCountProperty(appliedMultiSampleCount);
+
+            // plan_dx9.md D9-30/D9-33: same "actually reach the backend" rationale as
+            // ApplyMultiSampleCount above, for back-buffer/depth-stencil format and fullscreen --
+            // needed because Game commonly constructs this GraphicsDevice (and its backend) with
+            // default PresentationParameters before GraphicsDeviceManager.ApplyChanges() ever runs.
+            backend_->UpdatePresentationFormatEXT(
+                static_cast<int>(presentationParameters_.getBackBufferFormatProperty()),
+                static_cast<int>(presentationParameters_.getDepthStencilFormatProperty()),
+                presentationParameters_.getIsFullScreenProperty());
         }
 
         UpdateViewportFromWindow();
@@ -1412,6 +1421,29 @@ namespace Microsoft::Xna::Framework::Graphics
         args.contextRecoveryEnabled = contextRecoveryEnabled_;
         args.multiSampleCount = presentationParameters_.getMultiSampleCountProperty();
         args.swapInterval = toSwapInterval(presentationParameters_.getPresentationIntervalProperty());
+        // plan_dx9.md D9-30: real presentation-parameter fidelity for backends that need it (D3D9);
+        // every other backend continues to ignore these exactly as before the fields existed.
+        args.backBufferFormat = static_cast<int>(presentationParameters_.getBackBufferFormatProperty());
+        args.depthStencilFormat = static_cast<int>(presentationParameters_.getDepthStencilFormatProperty());
+        args.isFullScreen = presentationParameters_.getIsFullScreenProperty();
+        args.graphicsProfile = static_cast<int>(graphicsProfile_);
+        // plan_dx9.md D9-34: forward a REAL, backend-detected device-lost/reset event to this
+        // GraphicsDevice's own public XNA events. Nine of the ten backends never call this.
+        args.deviceEventCallback = [this](CNA::Internal::Backends::BackendDeviceEvent event)
+        {
+            switch (event)
+            {
+                case CNA::Internal::Backends::BackendDeviceEvent::Lost:
+                    DeviceLost.Raise(this, System::EventArgs::Empty);
+                    break;
+                case CNA::Internal::Backends::BackendDeviceEvent::Resetting:
+                    DeviceResetting.Raise(this, System::EventArgs::Empty);
+                    break;
+                case CNA::Internal::Backends::BackendDeviceEvent::Reset:
+                    DeviceReset.Raise(this, System::EventArgs::Empty);
+                    break;
+            }
+        };
 
         backend_ = CreateGraphicsBackend(args);
 
