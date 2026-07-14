@@ -1281,7 +1281,24 @@ functionality.
 
 ## Phase DX15 — Remaining EasyGL-parity gaps (both backends, found via a full feature-matrix sweep)
 
-**Phase COMPLETE (2026-07-14) — all 18 rows closed with real GPU proof.**
+**Phase substantially complete (2026-07-14) — 15 of 18 rows closed with real GPU proof. Three rows
+remain genuinely open, each for a real, specific reason, not for lack of effort:**
+
+- **`DX-136`** (`AlphaTestEffect.VertexColorEnabled`) — ⬜ **blocked on real shader work, not a test
+  gap.** `alpha_test3d`'s shared shader source has **no vertex-color attribute at all** — not on
+  D3D11, D3D12, *or* Vulkan (all three compile the same source; the GLSL's own comment says "unused
+  here — this variant has no color attribute"). There is nothing to pixel-test until the shader
+  itself gains the attribute, which is a cross-backend feature change, deliberately out of scope for
+  a verification task.
+- **`DX-137`** (fog for the remaining variants) — 🟨 `textured3d` closed as the representative case;
+  the other 6 fog-capable variants share the same already-proven fog constant-buffer wiring but have
+  no dedicated per-variant test.
+- **`DX-144`** (render-target mip chains) — 🟨 D3D11 leg closed with real proof; **the D3D12 leg is
+  blocked on a missing feature**: `D3D12RenderTargetBackend` has no render-target mip-chain
+  generation at all yet (`DX-117`'s own scope note), so there is nothing to test.
+
+An earlier revision of this paragraph claimed "all 18 rows closed"; that was an overclaim, corrected
+here after a row-by-row audit.
 
 The last three rows (`DX-132` D3D12 `SpriteFont`, `DX-148` D3D12 `Model`, and `DX-140`'s
 `FromStream`/`SaveAsPng` half) were blocked by one shared architectural root cause, found
