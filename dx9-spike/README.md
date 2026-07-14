@@ -1,0 +1,118 @@
+# `dx9-spike` — proven artifacts from `plan_dx9.md` Phase D9-0
+
+Everything here **has actually been run and has actually worked** on this machine
+(2026-07-14). None of it is a sketch. It exists because the Phase D9-0 spikes were executed
+in a session scratchpad that does not survive, and rewriting working, proven code from a
+plan's prose is a waste.
+
+When the D3D9 backend gets a real home in the repo, these move into it:
+
+| File | Belongs in |
+|------|-----------|
+| `fxc_tool.cpp` | `src/CNA/Internal/Backends/D3D9/shaders/` (alongside a `compile_shaders_sm2.py` driver, mirroring `D3DCommon/shaders/hlsl_compiler_tool.cpp`) |
+| `compare_against_fxb.py` | same directory — it is `D9-73`'s verification oracle, and design decision 4 makes it a **standing obligation**, not a one-off |
+| `xna-oracle/Oracle.cs` | the seed of Phase D9-A's reference app (`tests/` or `tools/`, to be decided) |
+
+---
+
+## `fxc_tool.cpp` — the shader compiler (`D9-1` ✅)
+
+Compiles one entry point of a Microsoft XNA Stock Effect `.fx` to real D3D9 bytecode.
+Cross-built with MinGW-w64, run under Wine. Adds the one thing
+`D3DCommon/shaders/hlsl_compiler_tool.cpp` lacks and the `.fx` files require: an
+`ID3DInclude` handler that resolves `Macros.fxh` / `Common.fxh` / `Lighting.fxh` /
+`Structures.fxh` relative to the `.fx` file's own directory.
+
+```bash
+x86_64-w64-mingw32-g++ -std=c++23 fxc_tool.cpp -o fxc_tool.exe \
+    -ld3dcompiler -static-libgcc -static-libstdc++
+
+export WINEPREFIX=$HOME/.wine-cna-d3d9-spike        # <- MUST be this one, see below
+wine ./fxc_tool.exe <path>/BasicEffect.fx VSBasic vs_2_0 out.bin
+```
+
+**Result: 66/66 entry points across all 6 stock effects compiled, 0 failures**, from
+Microsoft's **unmodified** sources.
+
+Two findings that save the next person a day:
+
+- **No source preprocessing is needed.** The real fxc silently ignores the Effect-framework
+  tail (`VertexShader VSArray[]`, `int VSIndices[]`, `Technique`) when invoked with
+  `/T vs_2_0`. The `--strip` flag in this tool exists only because an earlier hypothesis
+  said it would be necessary; **it is not, and the vendored `.fx` files must stay
+  byte-identical to Microsoft's** (plan design decision 3). Do not use `--strip`.
+- The entry-point list must be **parsed from the `.fx` files' own `compile vs_2_0 …` /
+  `compile ps_2_0 …` statements**, never hand-maintained:
+  ```bash
+  grep -o "compile [vp]s_2_0 [A-Za-z0-9_]*" *.fx | sort -u
+  ```
+
+## `compare_against_fxb.py` — the bytecode oracle (`D9-73`)
+
+Compares our compiled output against the bytecode Microsoft actually shipped, inside FNA's
+original `.fxb` files. **61 of 66 matched exactly.**
+
+The 5 that did not are all `PixelLighting` vertex variants
+(`VSBasicPixelLighting`, `VSBasicPixelLightingTx`,
+`VSSkinnedPixelLighting{One,Two,Four}Bones`). The cause is a **compiler-version** difference
+(we have `d3dcompiler_47`; Microsoft built these with the XNA-era `D3DCompiler_43`), **not a
+compile flag** — `OPTIMIZATION_LEVEL0/1/2/3`, `SKIP_OPTIMIZATION` and `AVOID_FLOW_CONTROL`
+were all tried, none matched.
+
+The project owner decided (2026-07-14) that **CNA compiles the shaders itself** and the
+`.fxb` is a verification oracle only. That decision carries an obligation: **those 5 shaders
+must be proven equivalent against the Phase D9-A oracle.** Keep this script in CI-adjacent
+reach; it is how you notice if a future compiler bump silently changes the answer.
+
+## `xna-oracle/Oracle.cs` — real XNA 4.0, rendering (`D9-A1`/`D9-A2` ✅)
+
+A ~50-line XNA 4.0 reference renderer with **no content pipeline**, which is what makes the
+whole oracle tractable: it needs no Visual Studio 2010, no XNA Game Studio, and no Windows
+machine. `RenderTarget2D` → `Clear(CornflowerBlue)` → a `BasicEffect` `VertexPositionColor`
+triangle → `SaveAsPng`.
+
+```bash
+export WINEPREFIX=$HOME/.wine-cna-xna40 WINEARCH=win32
+GAC=$WINEPREFIX/drive_c/windows/Microsoft.NET/assembly
+CSC=$WINEPREFIX/drive_c/windows/Microsoft.NET/Framework/v4.0.30319/csc.exe
+
+wine "$CSC" /nologo /target:exe /platform:x86 /out:Oracle.exe \
+  /r:"$(winepath -w $(find $GAC -name Microsoft.Xna.Framework.dll          | head -1))" \
+  /r:"$(winepath -w $(find $GAC -name Microsoft.Xna.Framework.Game.dll     | head -1))" \
+  /r:"$(winepath -w $(find $GAC -name Microsoft.Xna.Framework.Graphics.dll | head -1))" \
+  Oracle.cs
+
+DISPLAY=:0 wine Oracle.exe        # -> xna_out.png
+```
+
+Verified output: `XNA-ORACLE-OK profile=HiDef adapter=ATI Radeon HD 5600 Series`, and a
+256×256 PNG whose background is **exactly `Color.CornflowerBlue` (100,149,237)**, with a
+genuinely Gouraud-interpolated triangle.
+
+> **The adapter string is Wine's spoof, and it matters.** This prefix has no DXVK, so real
+> XNA ran on **WineD3D**, not on the actual AMD Radeon 780M. CNA/D3D9 would run on **DXVK**.
+> Diffing those two would measure `CNA+DXVK` against `XNA+WineD3D` and blame CNA for the
+> driver's differences. **Install DXVK into this prefix too** (`dxvk-setup install`, same as
+> `plan_dx.md` `DX-2`) before any pixel diff is trusted. See `plan_dx9.md` `D9-A4`.
+
+---
+
+## Wine prefixes (these DO survive; they live in `$HOME`)
+
+`programs.md` in the repo documents the D3D11 prefix but knows nothing about these two.
+That gap should be closed when this work lands.
+
+| Prefix | Arch | Contains | Do not confuse with |
+|--------|------|----------|---------------------|
+| `~/.wine-cna-d3d9-spike` | win64 | **The real Microsoft `d3dcompiler_47.dll`** (4,346,120 bytes, `winetricks -q d3dcompiler_47`, native override) | — |
+| `~/.wine-cna-xna40` | **win32** | .NET Framework 4.0 + XNA 4.0 Redistributable (`winetricks -q dotnet40 xna40`); all ten `Microsoft.Xna.Framework.*` assemblies in the GAC; an in-prefix `csc.exe` | — |
+| `~/.wine-cna-d3d11` | win64 | **Wine's builtin `d3dcompiler_47.dll`** (1,093,743 bytes) + DXVK | **Leave it alone.** It is what the existing D3D11/D3D12 CTests run against. Wine's builtin compiler **cannot** compile SM2/SM3 — that is exactly why `~/.wine-cna-d3d9-spike` exists as a separate prefix. |
+
+The critical, non-obvious fact: **Wine's builtin `d3dcompiler_47.dll` is backed by
+vkd3d-shader, whose SM1/2/3 code generator is incomplete.** It fails outright on an ordinary
+alpha-test ternary (`E5017: Aborting due to not yet implemented feature: SM1 non-float
+expression`), and where it does succeed it emits garbage — a 72-bone skinning shader came out
+at **1.4 MB**, fully unrolled, because it cannot do relative addressing. The real Microsoft
+DLL compiles the same shader to **2,160 bytes**. Any D3D9 shader work done in a prefix with
+the builtin compiler is worthless, and it fails in ways that look like your bug, not the
+compiler's.
