@@ -2154,13 +2154,100 @@ protected:
             backend.SetDepthWriteEnabled(false);
         }
 
+        // plan_dx.md DX-124: multi-light (DirectionalLight1/DirectionalLight2) + EmissiveColor
+        // discriminating pixel test for the shared D3DLightingConstants path (lit_textured3d).
+        // Check R (DX-63) above only proves lit-vs-unlit differs; this proves each of Light1/
+        // Light2/EmissiveColor independently contributes the EXACT expected color, mirroring
+        // D3D12's own already-closed DX-138 (examples/d3d12_smoke_test.cpp Checks EE1-EE4)
+        // methodology exactly, just against the real back buffer instead of an offscreen target.
+        {
+            struct VPNT { float x, y, z; float nx, ny, nz; float u, v; };
+            static const VPNT kTriEE[3] = {
+                {-1.0f, -1.0f, 0.0f, 0.0f, 0.0f, -1.0f, 0.0f, 1.0f},
+                { 3.0f, -1.0f, 0.0f, 0.0f, 0.0f, -1.0f, 2.0f, 1.0f},
+                {-1.0f,  3.0f, 0.0f, 0.0f, 0.0f, -1.0f, 0.0f, -1.0f},
+            };
+            auto vbEE = backend.CreateVertexBuffer(3);
+            vbEE->SetData(kTriEE, 3, sizeof(VPNT));
+
+            ImageData whiteImg;
+            whiteImg.width = 2; whiteImg.height = 2; whiteImg.mipLevels = 1;
+            whiteImg.pixels.assign(2 * 2 * 4, 255);
+            auto whiteTexEE = backend.CreateTexture(whiteImg);
+
+            GpuDrawParams baseP;
+            baseP.texture0 = whiteTexEE.get();
+            baseP.textureEnabled = true;
+            baseP.lightingEnabled = true;
+            baseP.diffuseColor[0] = 1.0f; baseP.diffuseColor[1] = 1.0f; baseP.diffuseColor[2] = 1.0f; baseP.diffuseColor[3] = 1.0f;
+            baseP.ambientColor[0] = 0.0f; baseP.ambientColor[1] = 0.0f; baseP.ambientColor[2] = 0.0f;
+            baseP.light0Diffuse[0] = 0.0f; baseP.light0Diffuse[1] = 0.0f; baseP.light0Diffuse[2] = 0.0f; // Light0 off
+            baseP.specularColor[0] = 0.0f; baseP.specularColor[1] = 0.0f; baseP.specularColor[2] = 0.0f; // no specular noise
+
+            const Microsoft::Xna::Framework::Rectangle centerRegionEE(30, 30, 1, 1);
+
+            // EE1: DirectionalLight1 alone, full-facing direction, red diffuse -> exact (255,0,0).
+            GpuDrawParams p1 = baseP;
+            p1.light1Dir[0] = 0.0f; p1.light1Dir[1] = 0.0f; p1.light1Dir[2] = 1.0f;
+            p1.light1Diffuse[0] = 1.0f; p1.light1Diffuse[1] = 0.0f; p1.light1Diffuse[2] = 0.0f;
+            dev.Clear(Color(0, 0, 0, 255));
+            backend.DrawPrimitivesEx(*vbEE, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                     Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, p1);
+            Color r1(0, 0, 0, 0);
+            dev.GetBackBufferData(&centerRegionEE, &r1, 0, 1);
+            check(r1.getRProperty() == 255 && r1.getGProperty() == 0 && r1.getBProperty() == 0,
+                  "D3D11GraphicsBackend::DrawPrimitivesEx(): real lit_textured3d -- DirectionalLight1 "
+                  "alone contributes the exact expected red, independent of Light0/Light2 (plan_dx.md DX-124)");
+
+            // EE2: same geometry/light1Dir, but light1Diffuse disabled -> confirms EE1 wasn't a leak.
+            GpuDrawParams p1off = p1;
+            p1off.light1Diffuse[0] = 0.0f; p1off.light1Diffuse[1] = 0.0f; p1off.light1Diffuse[2] = 0.0f;
+            dev.Clear(Color(0, 0, 0, 255));
+            backend.DrawPrimitivesEx(*vbEE, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                     Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, p1off);
+            Color r1off(0, 0, 0, 0);
+            dev.GetBackBufferData(&centerRegionEE, &r1off, 0, 1);
+            check(r1off.getRProperty() == 0 && r1off.getGProperty() == 0 && r1off.getBProperty() == 0,
+                  "D3D11GraphicsBackend::DrawPrimitivesEx(): disabling DirectionalLight1's diffuse "
+                  "(zeroed) removes its contribution exactly -- confirms the prior check was real, not "
+                  "a leaked default (plan_dx.md DX-124)");
+
+            // EE3: DirectionalLight2 alone, green diffuse -> exact (0,255,0).
+            GpuDrawParams p2 = baseP;
+            p2.light2Dir[0] = 0.0f; p2.light2Dir[1] = 0.0f; p2.light2Dir[2] = 1.0f;
+            p2.light2Diffuse[0] = 0.0f; p2.light2Diffuse[1] = 1.0f; p2.light2Diffuse[2] = 0.0f;
+            dev.Clear(Color(0, 0, 0, 255));
+            backend.DrawPrimitivesEx(*vbEE, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                     Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, p2);
+            Color r2(0, 0, 0, 0);
+            dev.GetBackBufferData(&centerRegionEE, &r2, 0, 1);
+            check(r2.getRProperty() == 0 && r2.getGProperty() == 255 && r2.getBProperty() == 0,
+                  "D3D11GraphicsBackend::DrawPrimitivesEx(): real lit_textured3d -- DirectionalLight2 "
+                  "alone contributes the exact expected green, independent of Light0/Light1 (plan_dx.md DX-124)");
+
+            // EE4: EmissiveColor alone (all lights + ambient off) -> exact (0,0,255), a constant,
+            // light-independent additive term.
+            GpuDrawParams p3 = baseP;
+            p3.emissiveColor[0] = 0.0f; p3.emissiveColor[1] = 0.0f; p3.emissiveColor[2] = 1.0f;
+            dev.Clear(Color(0, 0, 0, 255));
+            backend.DrawPrimitivesEx(*vbEE, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                     Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, p3);
+            Color r3(0, 0, 0, 0);
+            dev.GetBackBufferData(&centerRegionEE, &r3, 0, 1);
+            check(r3.getRProperty() == 0 && r3.getGProperty() == 0 && r3.getBProperty() == 255,
+                  "D3D11GraphicsBackend::DrawPrimitivesEx(): real lit_textured3d -- EmissiveColor alone "
+                  "contributes the exact expected blue with every light off, a constant additive term "
+                  "(plan_dx.md DX-124)");
+        }
+
         const int totalChecks = 2 /* SetDepthTestEnabled real, not a no-op */
                                 + 3 + 10 + 1 + 2 + 2 + 2 + 2 + 2 + 1 + 1 + 2 + 1 + 13 + 2 + 3 + 2 + 2 + 1 + 1 + 1 + 1 + 3 + 2 + 2 + 2 + 3 + 2 + 3 /* DX-131 rotation/scale/crop */
                                 + 1 /* DX-134 envMapAmount=0 */ + 2 /* DX-135 WeightsPerVertex */ + 2 /* DX-137 textured3d fog */
                                 + 2 /* DX-140 NPOT */ + 2 /* DX-142 all-16-sampler-slots */ + 2 /* DX-143 MRT MSAA resolve */
                                 + 4 /* DX-144 RT2D+RTCube mip-chain generation */
                                 + 4 /* DX-145 DepthStencilFormat fidelity */
-                                + 2 /* DX-147 occlusion query visible-vs-occluded */;
+                                + 2 /* DX-147 occlusion query visible-vs-occluded */
+                                + 4 /* DX-124 multi-light + EmissiveColor discrimination */;
         std::printf("=== %d/%d PASS ===\n", passCount_, totalChecks);
         result_ = (passCount_ == totalChecks) ? 0 : 1;
         Exit();
