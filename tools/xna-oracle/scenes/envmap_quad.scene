@@ -1,0 +1,41 @@
+# plan_dx9.md D9-A5 scene corpus: envmap_quad
+# The third Stock Effect in the corpus: EnvironmentMapEffect (non-fresnel/non-specular bucket --
+# specularEnabled is always false on this backend, D9-82e's own structurally-unreachable finding,
+# so this deliberately does not set environmentmapspecular/fresnelfactor). Reuses the existing
+# PositionNormalTexture vertex shape (VSInputNmTx, matches the existing stride-32 layout exactly,
+# D9-82e's own "no new vertex declaration needed" finding).
+#
+# Real formula (D9-82e's own D3D9_DrawEx check, verified live): result = lerp(texture*diffuseSum,
+# environmentMap, environmentMapAmount). A 1x1 white base texture and a 1x1 environment (cube) map
+# -- every face deliberately the SAME color, sidestepping any need to hand-compute reflect()
+# geometry, the same trick D9-82e's own CTest already used -- lit by one dim directional light
+# (diffuse=0.5, matching lit_textured_quad.scene's own convention) and blended half-and-half with
+# the environment map (environmentmapamount=0.5).
+width=256
+height=256
+profile=HiDef
+clearcolor=100,149,237,255
+effect=EnvironmentMapEffect
+vertexformat=PositionNormalTexture
+lighting=true
+ambientcolor=0,0,0
+light0enabled=true
+light0diffuse=0.5,0.5,0.5
+light0direction=0,0,-1
+texture=true
+texturewidth=1
+textureheight=1
+texturefilter=Point
+environmentmap=true
+environmentmapsize=1
+environmentmapamount=0.5
+primitive=TriangleList
+texturepixel=255,255,255,255
+environmentmappixel=200,100,50,255
+# x,y,z,nx,ny,nz,u,v -- every vertex faces the camera (+Z normal), matching lit_textured_quad.scene.
+vertex=-0.6,0.6,0,0,0,1,0,0
+vertex=0.6,0.6,0,0,0,1,1,0
+vertex=-0.6,-0.6,0,0,0,1,0,1
+vertex=0.6,0.6,0,0,0,1,1,0
+vertex=0.6,-0.6,0,0,0,1,1,1
+vertex=-0.6,-0.6,0,0,0,1,0,1

@@ -27,20 +27,31 @@ fully-commented examples.
 | `width`, `height` | back buffer size |
 | `profile` | `HiDef` or `Reach` |
 | `clearcolor` | `r,g,b,a` (0-255) |
-| `effect` | `BasicEffect` (default), `AlphaTestEffect`, or `DualTextureEffect` — which Stock Effect both sides construct |
+| `effect` | `BasicEffect` (default), `AlphaTestEffect`, `DualTextureEffect`, or `EnvironmentMapEffect` — which Stock Effect both sides construct |
 | `vertexformat` | `PositionColor` (default), `PositionTexture`, `PositionNormalTexture`, or `PositionDualTexture` — selects which `vertex=` shape below, and which vertex struct both sides draw. `PositionDualTexture` has no XNA-built-in equivalent (real XNA has no dual-UV vertex type either) — both sides define their own custom `IVertexType`/`VertexDeclaration`, exactly as a real game using `DualTextureEffect` would have to |
-| `vertexcolor`, `lighting`, `texture` | `VertexColorEnabled`/`LightingEnabled` (`BasicEffect` only)/`TextureEnabled` (`BasicEffect`) or texture-non-null (`AlphaTestEffect`/`DualTextureEffect`) (`true`/`false`) |
+| `vertexcolor`, `lighting`, `texture` | `VertexColorEnabled`/`LightingEnabled` (`BasicEffect` only — see `EnvironmentMapEffect`'s own carve-out below)/`TextureEnabled` (`BasicEffect`) or texture-non-null (`AlphaTestEffect`/`DualTextureEffect`/`EnvironmentMapEffect`) (`true`/`false`) |
 | `texturewidth`, `textureheight` | size of an inline procedural texture (no content-pipeline asset file — matches `D9-A2`'s own "no content pipeline" constraint) |
 | `texturefilter` | `Point` or `Linear` — `SamplerState.PointClamp`/`LinearClamp` on slot 0 |
 | `texturepixel` | `r,g,b,a` — repeats `texturewidth*textureheight` times, row-major, only when `texture=true` |
 | `texture2`, `texture2width`, `texture2height`, `texture2pixel` | same shape as `texture`/`texturewidth`/`textureheight`/`texturepixel`, for `DualTextureEffect.Texture2` (the second sampler), only when `effect=DualTextureEffect` |
 | `diffusecolor` | `r,g,b` (0-1 floats) — `DualTextureEffect.DiffuseColor`, only when `effect=DualTextureEffect` |
-| `ambientcolor` | `r,g,b` (0-1 floats) — `BasicEffect.AmbientLightColor`, only when `lighting=true` |
-| `light0enabled`, `light0diffuse`, `light0direction` | `BasicEffect.DirectionalLight0.Enabled`/`DiffuseColor`/`Direction`, only when `lighting=true` |
+| `environmentmap`, `environmentmapsize`, `environmentmappixel` | a `TextureCube.EnvironmentMap`, only when `effect=EnvironmentMapEffect` — a single `environmentmappixel=` sets ALL 6 faces to the same color (sidesteps needing to hand-compute `reflect()` geometry, same trick `D9-82e`'s own CTest used) |
+| `environmentmapamount` | `0`-`1` float — `EnvironmentMapEffect.EnvironmentMapAmount`, only when `effect=EnvironmentMapEffect` |
+| `ambientcolor` | `r,g,b` (0-1 floats) — `AmbientLightColor`, only when `lighting=true` (`BasicEffect`/`EnvironmentMapEffect`) |
+| `light0enabled`, `light0diffuse`, `light0direction` | `DirectionalLight0.Enabled`/`DiffuseColor`/`Direction`, only when `lighting=true` (`BasicEffect`/`EnvironmentMapEffect`) |
 | `alphafunction` | `Always`/`Never`/`Less`/`LessEqual`/`Equal`/`GreaterEqual`/`Greater`/`NotEqual` — `AlphaTestEffect.AlphaFunction`, only when `effect=AlphaTestEffect` |
 | `referencealpha` | `0`-`255` int — `AlphaTestEffect.ReferenceAlpha`, only when `effect=AlphaTestEffect` |
 | `primitive` | `TriangleList`, `TriangleStrip`, `LineList`, or `LineStrip` |
 | `vertex` | `x,y,z,r,g,b,a` (`PositionColor`), `x,y,z,u,v` (`PositionTexture`), `x,y,z,nx,ny,nz,u,v` (`PositionNormalTexture`), or `x,y,z,u0,v0,u1,v1` (`PositionDualTexture`) — repeats once per vertex, `World`/`View`/`Projection` are always `Matrix.Identity` |
+
+**`EnvironmentMapEffect`'s own `lighting`/`ambientcolor`/`light0*` carve-out**: real XNA/FNA's
+`EnvironmentMapEffect` implements `IEffectLights.LightingEnabled` via **explicit interface
+implementation** — not a public member of the concrete class (confirmed live: a plain
+`emfx.LightingEnabled = ...` is a real `CS1061` compile error against the real `csc.exe`), and its
+setter throws if given `false` anyway (lighting is always on for this effect). Neither side calls
+it for `EnvironmentMapEffect`; `ambientcolor`/`light0*` are still applied (unconditionally, once
+`lighting=true`), since `AmbientLightColor`/`DirectionalLight0` genuinely are ordinary public
+members on this effect.
 
 ## Build and run — XNA side (the oracle)
 
@@ -105,7 +116,7 @@ Requires Pillow (`pip install pillow`) — not previously a dependency of this p
 
 ## Status
 
-Five scenes so far, **all pixel-perfect**:
+Six scenes so far, **all pixel-perfect**:
 
 - `colored3d` (`D9-A2`'s own original spike scene: a `BasicEffect` `VertexColorEnabled=true`/
   `LightingEnabled=false` triangle over a `CornflowerBlue` clear) — `0/65536` pixels differ,
@@ -140,6 +151,19 @@ Five scenes so far, **all pixel-perfect**:
   `0/65536` pixels differ. `DualTextureEffect` was added as a THIRD `std::unique_ptr` alongside
   `alphaFx`/`basicFx` (see "Build and run — CNA side" above for why that pattern exists), correctly
   avoiding a repeat of the dangling-pointer bug `AlphaTestEffect` found — no new bug this time.
+- `envmap_quad` — the third non-`BasicEffect` Stock Effect (`EnvironmentMapEffect`), reusing the
+  existing `PositionNormalTexture` shape (`VSInputNmTx`, `D9-82e`'s own "no new vertex declaration
+  needed" finding). A 1×1 white base texture, a 1×1 environment (cube) map (all 6 faces the same
+  color — the same trick `D9-82e`'s own CTest used to sidestep hand-computing `reflect()`
+  geometry), one dim `DirectionalLight0`, `EnvironmentMapAmount=0.5` — real formula
+  (`lerp(texture*diffuseSum, environmentMap, environmentMapAmount)`) — `0/65536` pixels differ,
+  exact `(164,114,89,255)` on both sides. **Real, genuine API-surface finding, not a bug**: real
+  XNA/FNA's `EnvironmentMapEffect` implements `IEffectLights.LightingEnabled` via *explicit
+  interface implementation*, invisible on the concrete class (`emfx.LightingEnabled = ...` is a
+  real `CS1061` against the real `csc.exe`) — lighting is always on for this effect, and the
+  setter throws given `false` anyway. CNA's own equivalent is directly callable (C++ has no
+  explicit-interface-implementation hiding) but was deliberately left unset here, matching what a
+  real game using this effect actually can (and cannot) do.
 
 `scripts/xna-diff.py` itself is mutation-verified: a deliberately 1-off-mutated copy of a passing
 CNA PNG is correctly reported as `FAIL: 1/65536 pixels differ ... max per-channel delta=1` at the

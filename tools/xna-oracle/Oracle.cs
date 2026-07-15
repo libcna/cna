@@ -14,7 +14,7 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 
 public enum SceneVertexFormat { PositionColor, PositionTexture, PositionNormalTexture, PositionDualTexture }
-public enum SceneEffectType { BasicEffect, AlphaTestEffect, DualTextureEffect }
+public enum SceneEffectType { BasicEffect, AlphaTestEffect, DualTextureEffect, EnvironmentMapEffect }
 
 public class SceneLight
 {
@@ -63,6 +63,10 @@ public class Scene
     public bool Texture2Enabled;
     public int Texture2Width;
     public int Texture2Height;
+    public bool EnvironmentMapEnabled;
+    public int EnvironmentMapSize;
+    public float EnvironmentMapAmount = 1.0f;
+    public Color EnvironmentMapPixel = Color.Black;
     public Vector3 DiffuseColor = Vector3.One;
     public Vector3 AmbientColor = Vector3.Zero;
     public SceneLight Light0 = new SceneLight();
@@ -101,8 +105,13 @@ public class Scene
                 case "effect":
                     if (value == "AlphaTestEffect") scene.EffectType = SceneEffectType.AlphaTestEffect;
                     else if (value == "DualTextureEffect") scene.EffectType = SceneEffectType.DualTextureEffect;
+                    else if (value == "EnvironmentMapEffect") scene.EffectType = SceneEffectType.EnvironmentMapEffect;
                     else scene.EffectType = SceneEffectType.BasicEffect;
                     break;
+                case "environmentmap": scene.EnvironmentMapEnabled = ParseBool(value); break;
+                case "environmentmapsize": scene.EnvironmentMapSize = int.Parse(value, CultureInfo.InvariantCulture); break;
+                case "environmentmapamount": scene.EnvironmentMapAmount = float.Parse(value, CultureInfo.InvariantCulture); break;
+                case "environmentmappixel": scene.EnvironmentMapPixel = ParseColor(value); break;
                 case "alphafunction": scene.AlphaFunction = ParseCompareFunction(value); break;
                 case "referencealpha": scene.ReferenceAlpha = int.Parse(value, CultureInfo.InvariantCulture); break;
                 case "vertexformat":
@@ -311,6 +320,15 @@ public class Oracle : Game
             texture2 = new Texture2D(dev, scene.Texture2Width, scene.Texture2Height);
             texture2.SetData(scene.Texture2Pixels.ToArray());
         }
+        TextureCube environmentMap = null;
+        if (scene.EnvironmentMapEnabled)
+        {
+            environmentMap = new TextureCube(dev, scene.EnvironmentMapSize, false, SurfaceFormat.Color);
+            var faceData = new Color[scene.EnvironmentMapSize * scene.EnvironmentMapSize];
+            for (int i = 0; i < faceData.Length; i++) faceData[i] = scene.EnvironmentMapPixel;
+            foreach (CubeMapFace face in Enum.GetValues(typeof(CubeMapFace)))
+                environmentMap.SetData(face, faceData);
+        }
 
         Effect fx;
         if (scene.EffectType == SceneEffectType.AlphaTestEffect)
@@ -336,6 +354,29 @@ public class Oracle : Game
             dtfx.View = Matrix.Identity;
             dtfx.Projection = Matrix.Identity;
             fx = dtfx;
+        }
+        else if (scene.EffectType == SceneEffectType.EnvironmentMapEffect)
+        {
+            var emfx = new EnvironmentMapEffect(dev);
+            emfx.Texture = texture;
+            emfx.EnvironmentMap = environmentMap;
+            emfx.EnvironmentMapAmount = scene.EnvironmentMapAmount;
+            emfx.World = Matrix.Identity;
+            emfx.View = Matrix.Identity;
+            emfx.Projection = Matrix.Identity;
+            // EnvironmentMapEffect implements IEffectLights.LightingEnabled via EXPLICIT interface
+            // implementation in real XNA/FNA -- it is not a public member of the concrete class (a
+            // real CS1061 compile error found live), and the setter throws if given false anyway
+            // (lighting is always on for this effect, matching FNA's own NotSupportedException).
+            // Do not set it here; a real game using this effect cannot either.
+            if (scene.LightingEnabled)
+            {
+                emfx.AmbientLightColor = scene.AmbientColor;
+                emfx.DirectionalLight0.Enabled = scene.Light0.Enabled;
+                emfx.DirectionalLight0.DiffuseColor = scene.Light0.Diffuse;
+                emfx.DirectionalLight0.Direction = scene.Light0.Direction;
+            }
+            fx = emfx;
         }
         else
         {

@@ -22,14 +22,18 @@
 #include "Microsoft/Xna/Framework/Graphics/AlphaTestEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CompareFunction.hpp"
+#include "Microsoft/Xna/Framework/Graphics/CubeMapFace.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DirectionalLight.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DualTextureEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EnvironmentMapEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerStateCollection.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
@@ -70,7 +74,7 @@ namespace
     }
 
     enum class SceneVertexFormat { PositionColor, PositionTexture, PositionNormalTexture, PositionDualTexture };
-    enum class SceneEffectType { BasicEffect, AlphaTestEffect, DualTextureEffect };
+    enum class SceneEffectType { BasicEffect, AlphaTestEffect, DualTextureEffect, EnvironmentMapEffect };
 
     // Real XNA has no built-in dual-UV vertex struct -- mirrors Oracle.cs's own
     // VertexPositionDualTexture (same 28-byte layout: Position+TexCoord0+TexCoord1).
@@ -114,6 +118,10 @@ namespace
         bool texture2Enabled = false;
         int texture2Width = 0;
         int texture2Height = 0;
+        bool environmentMapEnabled = false;
+        int environmentMapSize = 0;
+        float environmentMapAmount = 1.0f;
+        Color environmentMapPixel = Color::Black;
         Vector3 diffuseColor{1, 1, 1};
         Vector3 ambientColor{0, 0, 0};
         SceneLight light0;
@@ -255,8 +263,13 @@ namespace
             {
                 if (value == "AlphaTestEffect") scene.effectType = SceneEffectType::AlphaTestEffect;
                 else if (value == "DualTextureEffect") scene.effectType = SceneEffectType::DualTextureEffect;
+                else if (value == "EnvironmentMapEffect") scene.effectType = SceneEffectType::EnvironmentMapEffect;
                 else scene.effectType = SceneEffectType::BasicEffect;
             }
+            else if (key == "environmentmap") scene.environmentMapEnabled = ParseBool(value);
+            else if (key == "environmentmapsize") scene.environmentMapSize = std::stoi(value);
+            else if (key == "environmentmapamount") scene.environmentMapAmount = std::stof(value);
+            else if (key == "environmentmappixel") scene.environmentMapPixel = ParseColor(value);
             else if (key == "alphafunction") scene.alphaFunction = ParseCompareFunction(value);
             else if (key == "referencealpha") scene.referenceAlpha = std::stoi(value);
             else if (key == "vertexformat")
@@ -332,6 +345,21 @@ protected:
             texture2 = std::make_unique<Texture2D>(dev, scene_.texture2Width, scene_.texture2Height);
             texture2->SetData(scene_.texture2Pixels.data(), static_cast<int>(scene_.texture2Pixels.size()));
         }
+        std::unique_ptr<TextureCube> environmentMap;
+        if (scene_.environmentMapEnabled)
+        {
+            environmentMap = std::make_unique<TextureCube>(dev, scene_.environmentMapSize, false, SurfaceFormat::Color);
+            const std::vector<Color> faceData(
+                static_cast<std::size_t>(scene_.environmentMapSize) * scene_.environmentMapSize,
+                scene_.environmentMapPixel);
+            static constexpr CubeMapFace kFaces[] = {
+                CubeMapFace::PositiveX, CubeMapFace::NegativeX,
+                CubeMapFace::PositiveY, CubeMapFace::NegativeY,
+                CubeMapFace::PositiveZ, CubeMapFace::NegativeZ,
+            };
+            for (CubeMapFace face : kFaces)
+                environmentMap->SetData(face, faceData.data(), static_cast<int>(faceData.size()));
+        }
 
         // The chosen Effect must outlive this scope: GraphicsDevice::DrawUserPrimitives() below
         // reads GpuDrawParams from currentEffect_, a RAW pointer Effect::Apply() sets -- an Effect
@@ -340,6 +368,7 @@ protected:
         // vertexColor/texture flags -- stale stack memory, not the values actually just set).
         std::unique_ptr<AlphaTestEffect> alphaFx;
         std::unique_ptr<DualTextureEffect> dualFx;
+        std::unique_ptr<EnvironmentMapEffect> envMapFx;
         std::unique_ptr<BasicEffect> basicFx;
 
         if (scene_.effectType == SceneEffectType::AlphaTestEffect)
@@ -365,6 +394,30 @@ protected:
             dualFx->setViewProperty(Matrix::getIdentityProperty());
             dualFx->setProjectionProperty(Matrix::getIdentityProperty());
             dualFx->Apply();
+        }
+        else if (scene_.effectType == SceneEffectType::EnvironmentMapEffect)
+        {
+            envMapFx = std::make_unique<EnvironmentMapEffect>(dev);
+            envMapFx->setTextureProperty(texture.get());
+            envMapFx->setEnvironmentMapProperty(environmentMap.get());
+            envMapFx->setEnvironmentMapAmountProperty(scene_.environmentMapAmount);
+            envMapFx->setWorldProperty(Matrix::getIdentityProperty());
+            envMapFx->setViewProperty(Matrix::getIdentityProperty());
+            envMapFx->setProjectionProperty(Matrix::getIdentityProperty());
+            // Real XNA/FNA's EnvironmentMapEffect implements IEffectLights.LightingEnabled via
+            // EXPLICIT interface implementation, hidden from the concrete type's public C# surface
+            // (a real CS1061 found live on the Oracle.cs side) -- lighting is always on for this
+            // effect there, and the setter throws given false anyway. CNA's own equivalent
+            // (setLightingEnabledProperty) is directly callable since C++ has no explicit-interface-
+            // implementation hiding, but skipped here to match what a real game can actually do.
+            if (scene_.lightingEnabled)
+            {
+                envMapFx->setAmbientLightColorProperty(scene_.ambientColor);
+                envMapFx->DirectionalLight0.setEnabledProperty(scene_.light0.enabled);
+                envMapFx->DirectionalLight0.setDiffuseColorProperty(scene_.light0.diffuse);
+                envMapFx->DirectionalLight0.setDirectionProperty(scene_.light0.direction);
+            }
+            envMapFx->Apply();
         }
         else
         {
