@@ -31,6 +31,10 @@ namespace CNA::Internal::Backends::Canvas
         void GetViewportSize(int& width, int& height) override;
         void SetVirtualResolution(int width, int height) override;
         void SetPresentationMode(int mode) override;
+        bool TransformWindowToLogical(float windowX, float windowY,
+                                      float& logX, float& logY) const override;
+        bool TransformLogicalToWindow(float logX, float logY,
+                                      float& windowX, float& windowY) const override;
 
         SDL_Window* GetWindowInternal() const override { return window_; }
         SDL_Renderer* GetRendererInternal() const override { return nullptr; }
@@ -58,6 +62,14 @@ namespace CNA::Internal::Backends::Canvas
                                           PrimitiveType primitive, int primitiveCount) override;
 
     private:
+        // Derives the logical (virtual) viewport size from the real canvas/window's physical
+        // pixel size and virtualWidth_/virtualHeight_/presentationMode_ -- same FixedHeightDynamicWidth
+        // math EasyGLGraphicsBackend::getLogicalSize() uses (plan_canvas.md CANVAS-13: this math is
+        // backend-agnostic, only the underlying physical-size query is backend-specific, and here
+        // that query is just SDL_GetWindowSize() since SDL3 already keeps the DOM <canvas> element's
+        // width/height attributes in sync with the SDL_Window it backs on Emscripten).
+        void getLogicalSize(int& width, int& height) const;
+
         SDL_Window* window_ = nullptr;
         int virtualWidth_ = 0;
         int virtualHeight_ = 0;

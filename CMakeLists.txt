@@ -6764,6 +6764,18 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D12")
     cna_d3d12_test(cna_diag_d3d12_swapchain examples/d3d12_swapchain_diag.cpp)
 endif()
 
+# plan_canvas.md CANVAS-15: structural smoke-test build for the CANVAS (HTML Canvas 2D) backend.
+# Deliberately NOT registered as a CTest (mirrors cna_diag_software's/d3d12_swapchain_diag's own
+# "real executable, not a ctest" precedent above): SDL_Init(SDL_INIT_VIDEO) itself throws under
+# `node CnaTests.js` (no real browser DOM -- confirmed empirically, "window is not defined"),
+# before any Canvas-specific code even runs. This target only proves the smoke test configures and
+# links here; it needs a real browser (e.g. `emrun`) against a page with a real <canvas> element to
+# actually produce a PASS/FAIL (Design decision 9).
+if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "CANVAS")
+    add_executable(cna_test_canvas_smoke examples/canvas_smoke_test.cpp)
+    target_link_libraries(cna_test_canvas_smoke PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+endif()
+
 # --- Task 6.1: real two-process ENet loopback test harness ---
 # A tiny standalone (non-GTest) executable playing "host" or "client", spawned twice as
 # independent OS processes by tests/CNA/Internal/Net/TwoProcessLoopbackTest.cpp. See NEXT.md /
