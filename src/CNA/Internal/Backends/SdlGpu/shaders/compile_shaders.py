@@ -157,6 +157,9 @@ def main():
         ("dual_texture3d.frag.glsl", FRAGMENT_SHADER, "kDualTexture3dFragSpv"),
         ("env_map3d.vert.glsl", VERTEX_SHADER,   "kEnvMap3dVertSpv"),
         ("env_map3d.frag.glsl", FRAGMENT_SHADER, "kEnvMap3dFragSpv"),
+        ("skinned3d.vert.glsl", VERTEX_SHADER,   "kSkinned3dVertSpv"),
+        # skinned3d's fragment stage reuses lit_textured3d.frag.glsl unchanged (byte-identical
+        # varying interface and UBO layout) -- no separate skinned3d.frag.glsl needed.
     ]
 
     output_path = Path(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[1] == "--output" else \

@@ -200,6 +200,30 @@ namespace CNA::Internal::Backends::SdlGpu
             out[40] = p.light2Diffuse[0]; out[41] = p.light2Diffuse[1]; out[42] = p.light2Diffuse[2]; out[43] = 0.0f;
             out[44] = p.envMapSpecular[0]; out[45] = p.envMapSpecular[1]; out[46] = p.envMapSpecular[2]; out[47] = 0.0f;
         }
+
+        // skinned3d.vert.glsl's SkinnedLightParams block -- byte-identical layout to
+        // FillLitLightUniforms()'s LitLightParams, with WeightsPerVertex packed into the
+        // eyePos_weightsPerVertex.w slot FillLitLightUniforms leaves as pad (mirrors
+        // VulkanGraphicsBackend's own skinned3d.vert.glsl packing convention). This identical
+        // layout is exactly why skinned3d's fragment stage can reuse lit_textured3d's fragment
+        // shader unchanged.
+        void FillSkinnedLightUniforms(std::array<float, 56>& out, const GpuDrawParams& p)
+        {
+            FillLitLightUniforms(out, p);
+            out[39] = static_cast<float>(p.weightsPerVertex);
+        }
+
+        // skinned3d.vert.glsl's BoneBlock: 72 mat4 = 1152 floats (4608 bytes), column-major,
+        // straight from GpuDrawParams::boneTransforms (already column-major per
+        // SkinnedEffect::FillGpuDrawParams()).
+        void FillSkinnedBoneUniforms(std::array<float, 72 * 16>& out, const GpuDrawParams& p)
+        {
+            const int count = std::min(p.boneCount, 72);
+            for (int i = 0; i < count * 16; ++i)
+                out[i] = p.boneTransforms[i];
+            for (int i = count * 16; i < 72 * 16; ++i)
+                out[i] = 0.0f;
+        }
     }
 
     SdlGpuGraphicsBackend::SdlGpuGraphicsBackend(SDL_Window* window, int virtualWidth, int virtualHeight,
@@ -236,6 +260,7 @@ namespace CNA::Internal::Backends::SdlGpu
         CreateAlphaTestResources();
         CreateDualTextureResources();
         CreateEnvMapResources();
+        CreateSkinnedResources();
 
         int w = 0;
         int h = 0;
@@ -250,6 +275,7 @@ namespace CNA::Internal::Backends::SdlGpu
     {
         IGraphicsBackend::UnregisterForWindow(window_);
         ReleaseSceneDrawBuffers();
+        DestroySkinnedResources();
         DestroyEnvMapResources();
         DestroyDualTextureResources();
         DestroyAlphaTestResources();
@@ -412,6 +438,7 @@ namespace CNA::Internal::Backends::SdlGpu
         RenderAlphaTestDraws(pass, cmd, swapchainTarget, swapchainFormat);
         RenderDualTextureDraws(pass, cmd, swapchainTarget, swapchainFormat);
         RenderEnvMapDraws(pass, cmd, swapchainTarget, swapchainFormat);
+        RenderSkinnedDraws(pass, cmd, swapchainTarget, swapchainFormat);
         RenderSprites(pass, cmd, swapchainTarget, swapchainFormat);
         SDL_EndGPURenderPass(pass);
 
@@ -490,6 +517,7 @@ namespace CNA::Internal::Backends::SdlGpu
         RenderAlphaTestDraws(pass, cmd, dt, kRenderTargetFormat);
         RenderDualTextureDraws(pass, cmd, dt, kRenderTargetFormat);
         RenderEnvMapDraws(pass, cmd, dt, kRenderTargetFormat);
+        RenderSkinnedDraws(pass, cmd, dt, kRenderTargetFormat);
         RenderSprites(pass, cmd, dt, kRenderTargetFormat);
         SDL_EndGPURenderPass(pass);
 
@@ -544,6 +572,7 @@ namespace CNA::Internal::Backends::SdlGpu
         RenderAlphaTestDraws(pass, cmd, dt, kRenderTargetFormat);
         RenderDualTextureDraws(pass, cmd, dt, kRenderTargetFormat);
         RenderEnvMapDraws(pass, cmd, dt, kRenderTargetFormat);
+        RenderSkinnedDraws(pass, cmd, dt, kRenderTargetFormat);
         RenderSprites(pass, cmd, dt, kRenderTargetFormat);
         SDL_EndGPURenderPass(pass);
     }
@@ -2052,6 +2081,85 @@ namespace CNA::Internal::Backends::SdlGpu
         return pipeline;
     }
 
+    void SdlGpuGraphicsBackend::CreateSkinnedResources()
+    {
+        if (skinnedVertexShader_ != nullptr)
+            return;
+
+        SDL_GPUShaderCreateInfo vsInfo{};
+        vsInfo.code = reinterpret_cast<const Uint8*>(Shaders::kSkinned3dVertSpv);
+        vsInfo.code_size = Shaders::kSkinned3dVertSpv_size;
+        vsInfo.entrypoint = "main";
+        vsInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
+        vsInfo.stage = SDL_GPU_SHADERSTAGE_VERTEX;
+        vsInfo.num_uniform_buffers = 2;  // PC, SkinnedLightParams
+        vsInfo.num_storage_buffers = 1;  // BoneBlock (4608 bytes) -- see SkinnedDrawCommand's doc comment
+        skinnedVertexShader_ = SDL_CreateGPUShader(device_, &vsInfo);
+        if (skinnedVertexShader_ == nullptr)
+            throw std::runtime_error(std::string("CNA SDL_GPU: failed to create skinned3d vertex shader: ") + SDL_GetError());
+    }
+
+    void SdlGpuGraphicsBackend::DestroySkinnedResources()
+    {
+        for (auto& [key, pipeline] : skinnedPipelines_)
+            if (pipeline != nullptr) SDL_ReleaseGPUGraphicsPipeline(device_, pipeline);
+        skinnedPipelines_.clear();
+        if (skinnedVertexShader_ != nullptr) { SDL_ReleaseGPUShader(device_, skinnedVertexShader_); skinnedVertexShader_ = nullptr; }
+    }
+
+    SDL_GPUGraphicsPipeline* SdlGpuGraphicsBackend::GetOrCreatePipelineSkinned3D(
+        SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
+        SDL_GPUTextureFormat colorFormat)
+    {
+        const int key = PipelineCacheKey(topology, depthTest, depthWrite, depthFunc, colorFormat);
+        const auto it = skinnedPipelines_.find(key);
+        if (it != skinnedPipelines_.end())
+            return it->second;
+
+        // Stride 52: VertexPositionNormalTextureSkinned -- pos(12) + normal(12) + uv(8) +
+        // blendWeight(16) + blendIndices(4, UBYTE4, non-normalized -> uvec4 in the shader).
+        SDL_GPUVertexBufferDescription vbDesc{};
+        vbDesc.slot = 0;
+        vbDesc.pitch = 52;
+        vbDesc.input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
+
+        SDL_GPUVertexAttribute attrs[5]{};
+        attrs[0].location = 0; attrs[0].buffer_slot = 0; attrs[0].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3; attrs[0].offset = 0;
+        attrs[1].location = 1; attrs[1].buffer_slot = 0; attrs[1].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3; attrs[1].offset = 12;
+        attrs[2].location = 2; attrs[2].buffer_slot = 0; attrs[2].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2; attrs[2].offset = 24;
+        attrs[3].location = 3; attrs[3].buffer_slot = 0; attrs[3].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4; attrs[3].offset = 32;
+        attrs[4].location = 4; attrs[4].buffer_slot = 0; attrs[4].format = SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4; attrs[4].offset = 48;
+
+        SDL_GPUColorTargetDescription colorTarget{};
+        colorTarget.format = colorFormat;
+
+        SDL_GPUGraphicsPipelineCreateInfo pipelineInfo{};
+        pipelineInfo.vertex_shader = skinnedVertexShader_;
+        pipelineInfo.fragment_shader = litTexturedFragmentShader_;  // reused unchanged, see SkinnedDrawCommand's doc comment
+        pipelineInfo.vertex_input_state.vertex_buffer_descriptions = &vbDesc;
+        pipelineInfo.vertex_input_state.num_vertex_buffers = 1;
+        pipelineInfo.vertex_input_state.vertex_attributes = attrs;
+        pipelineInfo.vertex_input_state.num_vertex_attributes = 5;
+        pipelineInfo.primitive_type = topology;
+        pipelineInfo.rasterizer_state.fill_mode = SDL_GPU_FILLMODE_FILL;
+        pipelineInfo.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_NONE;
+        pipelineInfo.rasterizer_state.front_face = SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE;
+        pipelineInfo.multisample_state.sample_count = SDL_GPU_SAMPLECOUNT_1;
+        pipelineInfo.depth_stencil_state.enable_depth_test = depthTest;
+        pipelineInfo.depth_stencil_state.enable_depth_write = depthWrite;
+        pipelineInfo.depth_stencil_state.compare_op = ToCompareOp(depthFunc);
+        pipelineInfo.target_info.color_target_descriptions = &colorTarget;
+        pipelineInfo.target_info.num_color_targets = 1;
+        pipelineInfo.target_info.has_depth_stencil_target = (depthStencilFormat_ != SDL_GPU_TEXTUREFORMAT_INVALID);
+        pipelineInfo.target_info.depth_stencil_format = depthStencilFormat_;
+
+        SDL_GPUGraphicsPipeline* pipeline = SDL_CreateGPUGraphicsPipeline(device_, &pipelineInfo);
+        if (pipeline == nullptr)
+            throw std::runtime_error(std::string("CNA SDL_GPU: failed to create skinned3d pipeline: ") + SDL_GetError());
+        skinnedPipelines_[key] = pipeline;
+        return pipeline;
+    }
+
     void SdlGpuGraphicsBackend::QueueAlphaTestDraw(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
                                                     const Matrix& world, const Matrix& view, const Matrix& projection,
                                                     PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
@@ -2202,6 +2310,53 @@ namespace CNA::Internal::Backends::SdlGpu
         framePending_ = true;
     }
 
+    void SdlGpuGraphicsBackend::QueueSkinnedDraw(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
+                                                 const Matrix& world, const Matrix& view, const Matrix& projection,
+                                                 PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
+    {
+        const auto& sdlGpuVb = static_cast<const SdlGpuVertexBufferBackend&>(vb);
+        if (sdlGpuVb.Stride() != 52)
+            throw std::invalid_argument("CNA SDL_GPU: skinned3d requires a stride-52 "
+                                        "(VertexPositionNormalTextureSkinned) vertex buffer");
+
+        SkinnedDrawCommand command;
+        const int vertexStart = params.vertexStart;
+        const auto& shadow = sdlGpuVb.ShadowData();
+        const std::size_t byteOffset = static_cast<std::size_t>(vertexStart) * 52u;
+        if (byteOffset <= shadow.size())
+            command.vertexData.assign(shadow.begin() + static_cast<std::ptrdiff_t>(byteOffset), shadow.end());
+        command.topology = ToTopology(primitive);
+        command.depthTest = depthTestEnabled_;
+        command.depthFunc = depthCompareFunction_;
+        command.depthWrite = depthWriteEnabled_;
+        const Matrix wvp = world * view * projection;
+        FillExtUniforms(command.uniforms, wvp, params);
+        FillSkinnedBoneUniforms(command.boneUniforms, params);
+        FillSkinnedLightUniforms(command.lightUniforms, params);
+        command.texture = static_cast<const SdlGpuTextureBackend*>(params.texture0);
+        command.textureFilter = 0;
+        command.addressU = 1;
+        command.addressV = 1;
+
+        if (ib != nullptr)
+        {
+            const auto& sdlGpuIb = static_cast<const SdlGpuIndexBufferBackend&>(*ib);
+            command.indexed = true;
+            command.index32 = sdlGpuIb.IsThirtyTwoBit();
+            command.indexData = sdlGpuIb.ShadowData();
+            command.indexCount = static_cast<Uint32>(PrimitiveIndexCount(primitive, primitiveCount));
+            command.vertexCount = static_cast<Uint32>(sdlGpuVb.GetVertexCount()) - static_cast<Uint32>(vertexStart);
+        }
+        else
+        {
+            command.vertexCount = static_cast<Uint32>(PrimitiveVertexCount(primitive, primitiveCount));
+        }
+
+        command.target = CurrentDrawTarget();
+        skinnedDrawCommands_.push_back(std::move(command));
+        framePending_ = true;
+    }
+
     void SdlGpuGraphicsBackend::RenderAlphaTestDraws(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
                                                      const DrawTarget& target, SDL_GPUTextureFormat colorFormat)
     {
@@ -2327,10 +2482,57 @@ namespace CNA::Internal::Backends::SdlGpu
         }
     }
 
+    void SdlGpuGraphicsBackend::RenderSkinnedDraws(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
+                                                   const DrawTarget& target, SDL_GPUTextureFormat colorFormat)
+    {
+        for (const SkinnedDrawCommand& command : skinnedDrawCommands_)
+        {
+            if (command.uploadedVertexBuffer == nullptr || command.uploadedBoneBuffer == nullptr
+                || command.texture == nullptr || command.target != target)
+                continue;
+
+            SDL_GPUGraphicsPipeline* pipeline = GetOrCreatePipelineSkinned3D(
+                command.topology, command.depthTest, command.depthWrite, command.depthFunc, colorFormat);
+            SDL_BindGPUGraphicsPipeline(pass, pipeline);
+            SDL_PushGPUVertexUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
+            SDL_PushGPUVertexUniformData(cmd, 1, command.lightUniforms.data(), sizeof(command.lightUniforms));
+            // litTexturedFragmentShader_ (reused unchanged) expects PC at slot 0 and
+            // LitLightParams-shaped data at slot 1 -- SkinnedLightParams is byte-identical.
+            SDL_PushGPUFragmentUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
+            SDL_PushGPUFragmentUniformData(cmd, 1, command.lightUniforms.data(), sizeof(command.lightUniforms));
+
+            SDL_GPUBufferBinding vbBinding{};
+            vbBinding.buffer = command.uploadedVertexBuffer;
+            SDL_BindGPUVertexBuffers(pass, 0, &vbBinding, 1);
+            // The 72-bone palette -- a real storage buffer, not a uniform push (see
+            // SkinnedDrawCommand's own doc comment for why).
+            SDL_BindGPUVertexStorageBuffers(pass, 0, &command.uploadedBoneBuffer, 1);
+
+            SDL_GPUTextureSamplerBinding samplerBinding{};
+            samplerBinding.texture = command.texture->Texture();
+            samplerBinding.sampler = GetOrCreateSampler(command.textureFilter, command.addressU, command.addressV);
+            SDL_BindGPUFragmentSamplers(pass, 0, &samplerBinding, 1);
+
+            if (command.indexed && command.uploadedIndexBuffer != nullptr)
+            {
+                SDL_GPUBufferBinding ibBinding{};
+                ibBinding.buffer = command.uploadedIndexBuffer;
+                SDL_BindGPUIndexBuffer(pass, &ibBinding,
+                                       command.index32 ? SDL_GPU_INDEXELEMENTSIZE_32BIT : SDL_GPU_INDEXELEMENTSIZE_16BIT);
+                SDL_DrawGPUIndexedPrimitives(pass, command.indexCount, 1, 0, 0, 0);
+            }
+            else
+            {
+                SDL_DrawGPUPrimitives(pass, command.vertexCount, 1, 0, 0);
+            }
+        }
+    }
+
     void SdlGpuGraphicsBackend::UploadSceneDrawData(SDL_GPUCommandBuffer* cmd)
     {
         if (coloredDrawCommands_.empty() && texturedDrawCommands_.empty() && litTexturedDrawCommands_.empty() &&
-            alphaTestDrawCommands_.empty() && dualTextureDrawCommands_.empty() && envMapDrawCommands_.empty())
+            alphaTestDrawCommands_.empty() && dualTextureDrawCommands_.empty() && envMapDrawCommands_.empty() &&
+            skinnedDrawCommands_.empty())
             return;
 
         SDL_GPUCopyPass* copyPass = SDL_BeginGPUCopyPass(cmd);
@@ -2423,6 +2625,19 @@ namespace CNA::Internal::Backends::SdlGpu
             command.uploadedVertexBuffer = uploadOne(command.vertexData, SDL_GPU_BUFFERUSAGE_VERTEX);
             if (command.indexed && !command.indexData.empty())
                 command.uploadedIndexBuffer = uploadOne(command.indexData, SDL_GPU_BUFFERUSAGE_INDEX);
+        }
+        for (SkinnedDrawCommand& command : skinnedDrawCommands_)
+        {
+            if (command.vertexCount == 0 || command.vertexData.empty())
+                continue;
+            command.uploadedVertexBuffer = uploadOne(command.vertexData, SDL_GPU_BUFFERUSAGE_VERTEX);
+            if (command.indexed && !command.indexData.empty())
+                command.uploadedIndexBuffer = uploadOne(command.indexData, SDL_GPU_BUFFERUSAGE_INDEX);
+            // Uploaded as a storage buffer, not pushed via SDL_PushGPUVertexUniformData -- see
+            // SkinnedDrawCommand's own doc comment for why.
+            const auto* boneBytes = reinterpret_cast<const std::uint8_t*>(command.boneUniforms.data());
+            const std::vector<std::uint8_t> boneData(boneBytes, boneBytes + sizeof(command.boneUniforms));
+            command.uploadedBoneBuffer = uploadOne(boneData, SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ);
         }
 
         SDL_EndGPUCopyPass(copyPass);
@@ -2577,6 +2792,13 @@ namespace CNA::Internal::Backends::SdlGpu
             if (command.uploadedIndexBuffer != nullptr) SDL_ReleaseGPUBuffer(device_, command.uploadedIndexBuffer);
         }
         envMapDrawCommands_.clear();
+        for (SkinnedDrawCommand& command : skinnedDrawCommands_)
+        {
+            if (command.uploadedVertexBuffer != nullptr) SDL_ReleaseGPUBuffer(device_, command.uploadedVertexBuffer);
+            if (command.uploadedIndexBuffer != nullptr) SDL_ReleaseGPUBuffer(device_, command.uploadedIndexBuffer);
+            if (command.uploadedBoneBuffer != nullptr) SDL_ReleaseGPUBuffer(device_, command.uploadedBoneBuffer);
+        }
+        skinnedDrawCommands_.clear();
     }
 
     void SdlGpuGraphicsBackend::DrawColoredPrimitives(const IVertexBufferBackend& vb,
@@ -2602,13 +2824,13 @@ namespace CNA::Internal::Backends::SdlGpu
         const auto& sdlGpuVb = static_cast<const SdlGpuVertexBufferBackend&>(vb);
         const std::size_t stride = sdlGpuVb.Stride();
         // Matches VulkanGraphicsBackend/WebGPUGraphicsBackend's own dispatch precedence: alpha
-        // test wins over dual-texture and env-map (an AlphaTestEffect draw on a
-        // DualTextureEffect/EnvironmentMapEffect-shaped buffer never reaches those shaders);
-        // env-map wins over plain lit_textured3d (both use stride 32). SkinnedEffect is not
-        // implemented yet (plan_sdlgpu.md Phase SDLGPU-10) and falls through to plain BasicEffect.
+        // test wins over dual-texture/env-map/skinned (an AlphaTestEffect draw on any of those
+        // shapes never reaches those shaders); env-map/skinned win over plain lit_textured3d
+        // (env-map shares stride 32, skinned has its own stride 52).
         const bool needsAlphaTest = params.alphaTest[2] < 0.0f || params.alphaTest[3] < 0.0f;
         const bool needsDualTexture = !needsAlphaTest && params.dualTexture;
         const bool needsEnvMap = !needsAlphaTest && !needsDualTexture && params.envMapping;
+        const bool needsSkinned = !needsAlphaTest && !needsDualTexture && !needsEnvMap && params.skinned;
         if (needsAlphaTest && (stride == 20 || stride == 24 || stride == 32) && params.texture0 != nullptr)
         {
             QueueAlphaTestDraw(vb, nullptr, world, view, projection, primitive, primitiveCount, params);
@@ -2622,6 +2844,11 @@ namespace CNA::Internal::Backends::SdlGpu
         if (needsEnvMap && stride == 32 && params.texture0 != nullptr && params.envMap != nullptr)
         {
             QueueEnvMapDraw(vb, nullptr, world, view, projection, primitive, primitiveCount, params);
+            return;
+        }
+        if (needsSkinned && stride == 52 && params.texture0 != nullptr)
+        {
+            QueueSkinnedDraw(vb, nullptr, world, view, projection, primitive, primitiveCount, params);
             return;
         }
         if (stride == 16)
@@ -2652,6 +2879,7 @@ namespace CNA::Internal::Backends::SdlGpu
         const bool needsAlphaTest = params.alphaTest[2] < 0.0f || params.alphaTest[3] < 0.0f;
         const bool needsDualTexture = !needsAlphaTest && params.dualTexture;
         const bool needsEnvMap = !needsAlphaTest && !needsDualTexture && params.envMapping;
+        const bool needsSkinned = !needsAlphaTest && !needsDualTexture && !needsEnvMap && params.skinned;
         if (needsAlphaTest && (stride == 20 || stride == 24 || stride == 32) && params.texture0 != nullptr)
         {
             QueueAlphaTestDraw(vb, &ib, world, view, projection, primitive, primitiveCount, params);
@@ -2665,6 +2893,11 @@ namespace CNA::Internal::Backends::SdlGpu
         if (needsEnvMap && stride == 32 && params.texture0 != nullptr && params.envMap != nullptr)
         {
             QueueEnvMapDraw(vb, &ib, world, view, projection, primitive, primitiveCount, params);
+            return;
+        }
+        if (needsSkinned && stride == 52 && params.texture0 != nullptr)
+        {
+            QueueSkinnedDraw(vb, &ib, world, view, projection, primitive, primitiveCount, params);
             return;
         }
         if (stride == 16)

@@ -598,6 +598,39 @@ namespace CNA::Internal::Backends::SdlGpu
             SDL_GPUBuffer* uploadedIndexBuffer = nullptr;
         };
 
+        // SkinnedEffect (Phase SDLGPU-7, SDLGPU-34) -- stride 52 (VertexPositionNormalTextureSkinned).
+        // The fragment stage reuses litTexturedFragmentShader_ unchanged (byte-identical varying
+        // interface and UBO layout to lit_textured3d's own fragment shader) -- no separate
+        // skinned fragment shader exists. The 72-bone palette (4608 bytes) is uploaded as a real
+        // SDL_GPUBuffer (GRAPHICS_STORAGE_READ) and bound via SDL_BindGPUVertexStorageBuffers,
+        // NOT pushed via SDL_PushGPUVertexUniformData -- empirically found (SdlGpu_Skinned) that
+        // this backend's push-uniform-data mechanism has a real ~4096-byte cap per slot on this
+        // Vulkan-backed environment, well under the full 4608-byte palette.
+        struct SkinnedDrawCommand
+        {
+            std::vector<std::uint8_t> vertexData;
+            std::vector<std::uint8_t> indexData;
+            bool indexed = false;
+            bool index32 = false;
+            Uint32 vertexCount = 0;
+            Uint32 indexCount = 0;
+            SDL_GPUPrimitiveType topology = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
+            std::array<float, 32> uniforms{};        ///< PC: same 32-float layout FillExtUniforms already fills
+            std::array<float, 72 * 16> boneUniforms{}; ///< BoneBlock: 72 mat4 = 1152 floats (4608 bytes), uploaded as a storage buffer
+            std::array<float, 56> lightUniforms{};   ///< SkinnedLightParams: byte-identical to LitLightParams
+            bool depthTest = false;
+            bool depthWrite = false;
+            int depthFunc = 3;
+            const SdlGpuTextureBackend* texture = nullptr;
+            int textureFilter = 0;
+            int addressU = 1;
+            int addressV = 1;
+            DrawTarget target;  ///< default = swapchain
+            SDL_GPUBuffer* uploadedVertexBuffer = nullptr;
+            SDL_GPUBuffer* uploadedIndexBuffer = nullptr;
+            SDL_GPUBuffer* uploadedBoneBuffer = nullptr;
+        };
+
         /**
          * @brief Constructs the backend against an already-created SDL window.
          *
@@ -848,6 +881,18 @@ namespace CNA::Internal::Backends::SdlGpu
         void RenderEnvMapDraws(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
                                const DrawTarget& target, SDL_GPUTextureFormat colorFormat);
 
+        // Phase SDLGPU-7: SkinnedEffect (SDLGPU-34).
+        void CreateSkinnedResources();
+        void DestroySkinnedResources();
+        [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipelineSkinned3D(
+            SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
+            SDL_GPUTextureFormat colorFormat);
+        void QueueSkinnedDraw(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
+                              const Matrix& world, const Matrix& view, const Matrix& projection,
+                              PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
+        void RenderSkinnedDraws(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
+                                const DrawTarget& target, SDL_GPUTextureFormat colorFormat);
+
         // Uploads every queued 3D draw command's shadow-copied vertex/index data into a fresh
         // transient SDL_GPUBuffer per command (mirrors WebGPUGraphicsBackend's own per-draw
         // transient-buffer approach) -- must run in the same copy pass as UploadSpriteVertexData,
@@ -940,6 +985,12 @@ namespace CNA::Internal::Backends::SdlGpu
         SDL_GPUShader* envMapFragmentShader_ = nullptr;
         std::unordered_map<int, SDL_GPUGraphicsPipeline*> envMapPipelines_;
         std::vector<EnvMapDrawCommand> envMapDrawCommands_;
+
+        // No dedicated fragment shader -- reuses litTexturedFragmentShader_ (see SkinnedDrawCommand's
+        // own doc comment).
+        SDL_GPUShader* skinnedVertexShader_ = nullptr;
+        std::unordered_map<int, SDL_GPUGraphicsPipeline*> skinnedPipelines_;
+        std::vector<SkinnedDrawCommand> skinnedDrawCommands_;
 
         int depthCompareFunction_ = 3;  ///< XNA CompareFunction ordinal; 3 = LessEqual (DepthStencilState.Default)
 
