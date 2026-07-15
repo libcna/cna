@@ -699,18 +699,11 @@ namespace CNA::Internal::Backends::SdlGpu
         // relative to Vulkan's own true per-draw dynamic vkCmdSetScissor (real XNA games rarely
         // change ScissorRectangle multiple times within a single frame between different draws).
         ApplyScissorForPass(pass, physicalWidth_, physicalHeight_);
-        // 3D draws first, 2D SpriteBatch/UI on top -- matches typical XNA game draw order
-        // (World.Draw() then a HUD SpriteBatch pass), both collapsed into this one deferred pass.
+        // Real chronological draw order (adversarial-review finding #4) -- see drawOrder_'s own
+        // doc comment; replaces the old fixed "all 3D families, then all sprites" sequence.
         const DrawTarget swapchainTarget{};
         // The swapchain surface is never MSAA in this backend -- SDL_GPU_SAMPLECOUNT_1 always.
-        RenderColoredDraws(pass, cmd, swapchainTarget, swapchainFormat, SDL_GPU_SAMPLECOUNT_1);
-        RenderTexturedDraws(pass, cmd, swapchainTarget, swapchainFormat, SDL_GPU_SAMPLECOUNT_1);
-        RenderLitTexturedDraws(pass, cmd, swapchainTarget, swapchainFormat, SDL_GPU_SAMPLECOUNT_1);
-        RenderAlphaTestDraws(pass, cmd, swapchainTarget, swapchainFormat, SDL_GPU_SAMPLECOUNT_1);
-        RenderDualTextureDraws(pass, cmd, swapchainTarget, swapchainFormat, SDL_GPU_SAMPLECOUNT_1);
-        RenderEnvMapDraws(pass, cmd, swapchainTarget, swapchainFormat, SDL_GPU_SAMPLECOUNT_1);
-        RenderSkinnedDraws(pass, cmd, swapchainTarget, swapchainFormat, SDL_GPU_SAMPLECOUNT_1);
-        RenderSprites(pass, cmd, swapchainTarget, swapchainFormat, SDL_GPU_SAMPLECOUNT_1);
+        RenderQueuedDraws(pass, cmd, swapchainTarget, swapchainFormat, SDL_GPU_SAMPLECOUNT_1);
         SDL_EndGPURenderPass(pass);
 
         // Cube mip regen is real GPU work -- must happen on this command buffer BEFORE submission
@@ -744,6 +737,7 @@ namespace CNA::Internal::Backends::SdlGpu
         ReleaseSceneDrawBuffers();
 
         spriteCommands_.clear();
+        drawOrder_.clear();
         clearColorPending_ = false;
         clearDepthPending_ = false;
         clearStencilPending_ = false;
@@ -818,14 +812,7 @@ namespace CNA::Internal::Backends::SdlGpu
                                                           hasDepth ? &depthStencilTarget : nullptr);
         ApplyScissorForPass(pass, target->width, target->height);
         const DrawTarget dt{target.get(), nullptr, -1};
-        RenderColoredDraws(pass, cmd, dt, kRenderTargetFormat, target->sampleCount);
-        RenderTexturedDraws(pass, cmd, dt, kRenderTargetFormat, target->sampleCount);
-        RenderLitTexturedDraws(pass, cmd, dt, kRenderTargetFormat, target->sampleCount);
-        RenderAlphaTestDraws(pass, cmd, dt, kRenderTargetFormat, target->sampleCount);
-        RenderDualTextureDraws(pass, cmd, dt, kRenderTargetFormat, target->sampleCount);
-        RenderEnvMapDraws(pass, cmd, dt, kRenderTargetFormat, target->sampleCount);
-        RenderSkinnedDraws(pass, cmd, dt, kRenderTargetFormat, target->sampleCount);
-        RenderSprites(pass, cmd, dt, kRenderTargetFormat, target->sampleCount, colorTargetCount);
+        RenderQueuedDraws(pass, cmd, dt, kRenderTargetFormat, target->sampleCount, colorTargetCount);
         SDL_EndGPURenderPass(pass);
 
         // Per SDL_gpu.h: SDL_GenerateMipmapsForGPUTexture must not be called inside any pass --
@@ -877,14 +864,7 @@ namespace CNA::Internal::Backends::SdlGpu
         SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(cmd, &colorTarget, 1, hasDepth ? &depthStencilTarget : nullptr);
         ApplyScissorForPass(pass, cube->size, cube->size);
         const DrawTarget dt{nullptr, cube.get(), face};
-        RenderColoredDraws(pass, cmd, dt, kRenderTargetFormat, cube->sampleCount);
-        RenderTexturedDraws(pass, cmd, dt, kRenderTargetFormat, cube->sampleCount);
-        RenderLitTexturedDraws(pass, cmd, dt, kRenderTargetFormat, cube->sampleCount);
-        RenderAlphaTestDraws(pass, cmd, dt, kRenderTargetFormat, cube->sampleCount);
-        RenderDualTextureDraws(pass, cmd, dt, kRenderTargetFormat, cube->sampleCount);
-        RenderEnvMapDraws(pass, cmd, dt, kRenderTargetFormat, cube->sampleCount);
-        RenderSkinnedDraws(pass, cmd, dt, kRenderTargetFormat, cube->sampleCount);
-        RenderSprites(pass, cmd, dt, kRenderTargetFormat, cube->sampleCount);
+        RenderQueuedDraws(pass, cmd, dt, kRenderTargetFormat, cube->sampleCount);
         SDL_EndGPURenderPass(pass);
     }
 
@@ -1501,78 +1481,62 @@ namespace CNA::Internal::Backends::SdlGpu
         SDL_ReleaseGPUTransferBuffer(device_, transferBuffer);
     }
 
-    void SdlGpuGraphicsBackend::RenderSprites(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
-                                              const DrawTarget& target, SDL_GPUTextureFormat colorFormat,
-                                              SDL_GPUSampleCount sampleCount, int colorTargetCount)
+    // Adversarial-review finding #4 (draw ordering): the body of the old whole-vector RenderSprites
+    // loop, now issuing exactly ONE sprite so RenderQueuedDraws() can interleave it with any other
+    // kind in real chronological order. boundPipeline is passed by reference from the caller's own
+    // single running variable, so this still skips a redundant rebind across consecutive
+    // same-pipeline sprites (SDLGPU-42/43's own rationale, now also true across kind switches).
+    void SdlGpuGraphicsBackend::IssueSpriteDraw(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
+                                                const SpriteCommand& command, std::size_t index,
+                                                const float* viewportSize, SDL_GPUTextureFormat colorFormat,
+                                                SDL_GPUSampleCount sampleCount, int colorTargetCount,
+                                                SDL_GPUGraphicsPipeline*& boundPipeline)
     {
-        if (spriteCommands_.empty())
-            return;
-
-        const float viewportSize[2] = {
-            static_cast<float>(target.rt != nullptr ? target.rt->width
-                              : target.cube != nullptr ? target.cube->size : physicalWidth_),
-            static_cast<float>(target.rt != nullptr ? target.rt->height
-                              : target.cube != nullptr ? target.cube->size : physicalHeight_)};
-
-        // SDLGPU-42/43: a custom-effect sprite may be interleaved with stock ones within the same
-        // render pass (e.g. two Begin/End cycles, one with a custom effect, one without) -- always
-        // (re-)bind the pipeline and push this sprite's own uniforms, rather than hoisting the
-        // stock path's push outside the loop like before this feature existed. Slightly more work
-        // per sprite, but avoids a stale/wrong-sized uniform push from a previous sprite's pipeline
-        // leaking into this one's draw.
-        SDL_GPUGraphicsPipeline* boundPipeline = nullptr;
-        for (std::size_t i = 0; i < spriteCommands_.size(); ++i)
+        if (command.customEffect != nullptr)
         {
-            const SpriteCommand& command = spriteCommands_[i];
-            if (command.target != target)
-                continue;
-
-            if (command.customEffect != nullptr)
+            SDL_GPUGraphicsPipeline* pipeline = command.customEffect->GetOrCreatePipeline(colorFormat, sampleCount, colorTargetCount);
+            if (pipeline == nullptr)
+                return;  // compile/pipeline-creation failure -- skip, matches IsValid()-gated sibling backends
+            if (pipeline != boundPipeline)
             {
-                SDL_GPUGraphicsPipeline* pipeline = command.customEffect->GetOrCreatePipeline(colorFormat, sampleCount, colorTargetCount);
-                if (pipeline == nullptr)
-                    continue;  // compile/pipeline-creation failure -- skip, matches IsValid()-gated sibling backends
-                if (pipeline != boundPipeline)
-                {
-                    SDL_BindGPUGraphicsPipeline(pass, pipeline);
-                    boundPipeline = pipeline;
-                }
-                // vpSize is a render-time fact (this render pass's target size), not a Draw()-time
-                // one, so it's stamped into the snapshot here rather than at QueueSprite time.
-                std::array<float, 32> uniforms = command.customUniforms;
-                uniforms[0] = viewportSize[0];
-                uniforms[1] = viewportSize[1];
-                SDL_PushGPUVertexUniformData(cmd, 0, uniforms.data(), sizeof(uniforms));
-                SDL_PushGPUFragmentUniformData(cmd, 0, uniforms.data(), sizeof(uniforms));
+                SDL_BindGPUGraphicsPipeline(pass, pipeline);
+                boundPipeline = pipeline;
             }
-            else
-            {
-                SDL_GPUGraphicsPipeline* pipeline = GetOrCreateSpritePipeline(
-                    colorFormat, sampleCount, command.depthTest, command.depthWrite, command.depthFunc, command.renderState);
-                if (pipeline != boundPipeline)
-                {
-                    SDL_BindGPUGraphicsPipeline(pass, pipeline);
-                    boundPipeline = pipeline;
-                }
-                // A genuine per-draw dynamic value (not pipeline-baked) -- set every sprite
-                // regardless of whether the pipeline itself changed (two sprites can share a
-                // pipeline yet want different stencil references).
-                SDL_SetGPUStencilReference(pass, static_cast<Uint8>(command.renderState.stencilReference));
-                SDL_PushGPUVertexUniformData(cmd, 0, viewportSize, sizeof(viewportSize));
-            }
-
-            SDL_GPUBufferBinding vbBinding{};
-            vbBinding.buffer = spriteVertexBuffer_;
-            vbBinding.offset = static_cast<Uint32>(i * sizeof(SpriteVertex) * 6);
-            SDL_BindGPUVertexBuffers(pass, 0, &vbBinding, 1);
-
-            SDL_GPUTextureSamplerBinding samplerBinding{};
-            samplerBinding.texture = command.texture;
-            samplerBinding.sampler = GetOrCreateSampler(command.textureFilter, command.addressU, command.addressV);
-            SDL_BindGPUFragmentSamplers(pass, 0, &samplerBinding, 1);
-
-            SDL_DrawGPUPrimitives(pass, 6, 1, 0, 0);
+            // vpSize is a render-time fact (this render pass's target size), not a Draw()-time
+            // one, so it's stamped into the snapshot here rather than at QueueSprite time.
+            std::array<float, 32> uniforms = command.customUniforms;
+            uniforms[0] = viewportSize[0];
+            uniforms[1] = viewportSize[1];
+            SDL_PushGPUVertexUniformData(cmd, 0, uniforms.data(), sizeof(uniforms));
+            SDL_PushGPUFragmentUniformData(cmd, 0, uniforms.data(), sizeof(uniforms));
         }
+        else
+        {
+            SDL_GPUGraphicsPipeline* pipeline = GetOrCreateSpritePipeline(
+                colorFormat, sampleCount, command.depthTest, command.depthWrite, command.depthFunc, command.renderState);
+            if (pipeline != boundPipeline)
+            {
+                SDL_BindGPUGraphicsPipeline(pass, pipeline);
+                boundPipeline = pipeline;
+            }
+            // A genuine per-draw dynamic value (not pipeline-baked) -- set every sprite
+            // regardless of whether the pipeline itself changed (two sprites can share a
+            // pipeline yet want different stencil references).
+            SDL_SetGPUStencilReference(pass, static_cast<Uint8>(command.renderState.stencilReference));
+            SDL_PushGPUVertexUniformData(cmd, 0, viewportSize, 2 * sizeof(float));
+        }
+
+        SDL_GPUBufferBinding vbBinding{};
+        vbBinding.buffer = spriteVertexBuffer_;
+        vbBinding.offset = static_cast<Uint32>(index * sizeof(SpriteVertex) * 6);
+        SDL_BindGPUVertexBuffers(pass, 0, &vbBinding, 1);
+
+        SDL_GPUTextureSamplerBinding samplerBinding{};
+        samplerBinding.texture = command.texture;
+        samplerBinding.sampler = GetOrCreateSampler(command.textureFilter, command.addressU, command.addressV);
+        SDL_BindGPUFragmentSamplers(pass, 0, &samplerBinding, 1);
+
+        SDL_DrawGPUPrimitives(pass, 6, 1, 0, 0);
     }
 
     void SdlGpuGraphicsBackend::QueueSprite(const ITextureBackend& texture, SDL_GPUTexture* nativeTexture,
@@ -1677,6 +1641,7 @@ namespace CNA::Internal::Backends::SdlGpu
             vertex.a = rgba[3];
         }
         spriteCommands_.push_back(command);
+        drawOrder_.push_back({DrawKind::Sprite, spriteCommands_.size() - 1});
         framePending_ = true;
     }
 
@@ -2087,6 +2052,7 @@ namespace CNA::Internal::Backends::SdlGpu
 
         command.target = CurrentDrawTarget();
         coloredDrawCommands_.push_back(std::move(command));
+        drawOrder_.push_back({DrawKind::Colored, coloredDrawCommands_.size() - 1});
         framePending_ = true;
     }
 
@@ -2133,6 +2099,7 @@ namespace CNA::Internal::Backends::SdlGpu
 
         command.target = CurrentDrawTarget();
         texturedDrawCommands_.push_back(std::move(command));
+        drawOrder_.push_back({DrawKind::Textured, texturedDrawCommands_.size() - 1});
         framePending_ = true;
     }
 
@@ -2180,6 +2147,7 @@ namespace CNA::Internal::Backends::SdlGpu
 
         command.target = CurrentDrawTarget();
         litTexturedDrawCommands_.push_back(std::move(command));
+        drawOrder_.push_back({DrawKind::LitTextured, litTexturedDrawCommands_.size() - 1});
         framePending_ = true;
     }
 
@@ -2666,6 +2634,7 @@ namespace CNA::Internal::Backends::SdlGpu
 
         command.target = CurrentDrawTarget();
         alphaTestDrawCommands_.push_back(std::move(command));
+        drawOrder_.push_back({DrawKind::AlphaTest, alphaTestDrawCommands_.size() - 1});
         framePending_ = true;
     }
 
@@ -2717,6 +2686,7 @@ namespace CNA::Internal::Backends::SdlGpu
 
         command.target = CurrentDrawTarget();
         dualTextureDrawCommands_.push_back(std::move(command));
+        drawOrder_.push_back({DrawKind::DualTexture, dualTextureDrawCommands_.size() - 1});
         framePending_ = true;
     }
 
@@ -2781,6 +2751,7 @@ namespace CNA::Internal::Backends::SdlGpu
 
         command.target = CurrentDrawTarget();
         envMapDrawCommands_.push_back(std::move(command));
+        drawOrder_.push_back({DrawKind::EnvMap, envMapDrawCommands_.size() - 1});
         framePending_ = true;
     }
 
@@ -2829,182 +2800,160 @@ namespace CNA::Internal::Backends::SdlGpu
 
         command.target = CurrentDrawTarget();
         skinnedDrawCommands_.push_back(std::move(command));
+        drawOrder_.push_back({DrawKind::Skinned, skinnedDrawCommands_.size() - 1});
         framePending_ = true;
     }
 
-    void SdlGpuGraphicsBackend::RenderAlphaTestDraws(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
-                                                     const DrawTarget& target, SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount)
+    void SdlGpuGraphicsBackend::IssueAlphaTestDraw(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
+                                                   const AlphaTestDrawCommand& command, SDL_GPUTextureFormat colorFormat,
+                                                   SDL_GPUSampleCount sampleCount, SDL_GPUGraphicsPipeline*& boundPipeline)
     {
-        for (const AlphaTestDrawCommand& command : alphaTestDrawCommands_)
+        SDL_GPUGraphicsPipeline* pipeline = GetOrCreatePipelineAlphaTest3D(
+            command.stride, command.topology, command.depthTest, command.depthWrite, command.depthFunc, colorFormat, sampleCount, command.renderState);
+        if (pipeline != boundPipeline) { SDL_BindGPUGraphicsPipeline(pass, pipeline); boundPipeline = pipeline; }
+        SDL_SetGPUStencilReference(pass, static_cast<Uint8>(command.renderState.stencilReference));
+        SDL_PushGPUVertexUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
+        SDL_PushGPUFragmentUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
+
+        SDL_GPUBufferBinding vbBinding{};
+        vbBinding.buffer = command.uploadedVertexBuffer;
+        SDL_BindGPUVertexBuffers(pass, 0, &vbBinding, 1);
+
+        SDL_GPUTextureSamplerBinding samplerBinding{};
+        samplerBinding.texture = command.texture->Texture();
+        samplerBinding.sampler = GetOrCreateSampler(command.textureFilter, command.addressU, command.addressV);
+        SDL_BindGPUFragmentSamplers(pass, 0, &samplerBinding, 1);
+
+        if (command.indexed && command.uploadedIndexBuffer != nullptr)
         {
-            if (command.uploadedVertexBuffer == nullptr || command.texture == nullptr || command.target != target)
-                continue;
-
-            SDL_GPUGraphicsPipeline* pipeline = GetOrCreatePipelineAlphaTest3D(
-                command.stride, command.topology, command.depthTest, command.depthWrite, command.depthFunc, colorFormat, sampleCount, command.renderState);
-            SDL_BindGPUGraphicsPipeline(pass, pipeline);
-            SDL_SetGPUStencilReference(pass, static_cast<Uint8>(command.renderState.stencilReference));
-            SDL_PushGPUVertexUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
-            SDL_PushGPUFragmentUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
-
-            SDL_GPUBufferBinding vbBinding{};
-            vbBinding.buffer = command.uploadedVertexBuffer;
-            SDL_BindGPUVertexBuffers(pass, 0, &vbBinding, 1);
-
-            SDL_GPUTextureSamplerBinding samplerBinding{};
-            samplerBinding.texture = command.texture->Texture();
-            samplerBinding.sampler = GetOrCreateSampler(command.textureFilter, command.addressU, command.addressV);
-            SDL_BindGPUFragmentSamplers(pass, 0, &samplerBinding, 1);
-
-            if (command.indexed && command.uploadedIndexBuffer != nullptr)
-            {
-                SDL_GPUBufferBinding ibBinding{};
-                ibBinding.buffer = command.uploadedIndexBuffer;
-                SDL_BindGPUIndexBuffer(pass, &ibBinding,
-                                       command.index32 ? SDL_GPU_INDEXELEMENTSIZE_32BIT : SDL_GPU_INDEXELEMENTSIZE_16BIT);
-                SDL_DrawGPUIndexedPrimitives(pass, command.indexCount, 1, 0, 0, 0);
-            }
-            else
-            {
-                SDL_DrawGPUPrimitives(pass, command.vertexCount, 1, 0, 0);
-            }
+            SDL_GPUBufferBinding ibBinding{};
+            ibBinding.buffer = command.uploadedIndexBuffer;
+            SDL_BindGPUIndexBuffer(pass, &ibBinding,
+                                   command.index32 ? SDL_GPU_INDEXELEMENTSIZE_32BIT : SDL_GPU_INDEXELEMENTSIZE_16BIT);
+            SDL_DrawGPUIndexedPrimitives(pass, command.indexCount, 1, 0, 0, 0);
+        }
+        else
+        {
+            SDL_DrawGPUPrimitives(pass, command.vertexCount, 1, 0, 0);
         }
     }
 
-    void SdlGpuGraphicsBackend::RenderDualTextureDraws(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
-                                                       const DrawTarget& target, SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount)
+    void SdlGpuGraphicsBackend::IssueDualTextureDraw(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
+                                                     const DualTextureDrawCommand& command, SDL_GPUTextureFormat colorFormat,
+                                                     SDL_GPUSampleCount sampleCount, SDL_GPUGraphicsPipeline*& boundPipeline)
     {
-        for (const DualTextureDrawCommand& command : dualTextureDrawCommands_)
+        SDL_GPUGraphicsPipeline* pipeline = GetOrCreatePipelineDualTexture3D(
+            command.hasVertexColor ? 24 : 20, command.topology, command.depthTest, command.depthWrite, command.depthFunc, colorFormat, sampleCount, command.renderState);
+        if (pipeline != boundPipeline) { SDL_BindGPUGraphicsPipeline(pass, pipeline); boundPipeline = pipeline; }
+        SDL_SetGPUStencilReference(pass, static_cast<Uint8>(command.renderState.stencilReference));
+        SDL_PushGPUVertexUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
+
+        SDL_GPUBufferBinding vbBinding{};
+        vbBinding.buffer = command.uploadedVertexBuffer;
+        SDL_BindGPUVertexBuffers(pass, 0, &vbBinding, 1);
+
+        // SDLGPU-21: texture0/texture1 are independent GraphicsDevice.SamplerStates[0]/[1]
+        // slots in real XNA -- each gets its own sampler object, not a shared one.
+        SDL_GPUTextureSamplerBinding samplerBindings[2]{};
+        samplerBindings[0].texture = command.texture0->Texture();
+        samplerBindings[0].sampler = GetOrCreateSampler(command.texture0Filter, command.texture0AddressU, command.texture0AddressV);
+        samplerBindings[1].texture = command.texture1->Texture();
+        samplerBindings[1].sampler = GetOrCreateSampler(command.texture1Filter, command.texture1AddressU, command.texture1AddressV);
+        SDL_BindGPUFragmentSamplers(pass, 0, samplerBindings, 2);
+
+        if (command.indexed && command.uploadedIndexBuffer != nullptr)
         {
-            if (command.uploadedVertexBuffer == nullptr || command.texture0 == nullptr || command.texture1 == nullptr
-                || command.target != target)
-                continue;
-
-            SDL_GPUGraphicsPipeline* pipeline = GetOrCreatePipelineDualTexture3D(
-                command.hasVertexColor ? 24 : 20, command.topology, command.depthTest, command.depthWrite, command.depthFunc, colorFormat, sampleCount, command.renderState);
-            SDL_BindGPUGraphicsPipeline(pass, pipeline);
-            SDL_SetGPUStencilReference(pass, static_cast<Uint8>(command.renderState.stencilReference));
-            SDL_PushGPUVertexUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
-
-            SDL_GPUBufferBinding vbBinding{};
-            vbBinding.buffer = command.uploadedVertexBuffer;
-            SDL_BindGPUVertexBuffers(pass, 0, &vbBinding, 1);
-
-            // SDLGPU-21: texture0/texture1 are independent GraphicsDevice.SamplerStates[0]/[1]
-            // slots in real XNA -- each gets its own sampler object, not a shared one.
-            SDL_GPUTextureSamplerBinding samplerBindings[2]{};
-            samplerBindings[0].texture = command.texture0->Texture();
-            samplerBindings[0].sampler = GetOrCreateSampler(command.texture0Filter, command.texture0AddressU, command.texture0AddressV);
-            samplerBindings[1].texture = command.texture1->Texture();
-            samplerBindings[1].sampler = GetOrCreateSampler(command.texture1Filter, command.texture1AddressU, command.texture1AddressV);
-            SDL_BindGPUFragmentSamplers(pass, 0, samplerBindings, 2);
-
-            if (command.indexed && command.uploadedIndexBuffer != nullptr)
-            {
-                SDL_GPUBufferBinding ibBinding{};
-                ibBinding.buffer = command.uploadedIndexBuffer;
-                SDL_BindGPUIndexBuffer(pass, &ibBinding,
-                                       command.index32 ? SDL_GPU_INDEXELEMENTSIZE_32BIT : SDL_GPU_INDEXELEMENTSIZE_16BIT);
-                SDL_DrawGPUIndexedPrimitives(pass, command.indexCount, 1, 0, 0, 0);
-            }
-            else
-            {
-                SDL_DrawGPUPrimitives(pass, command.vertexCount, 1, 0, 0);
-            }
+            SDL_GPUBufferBinding ibBinding{};
+            ibBinding.buffer = command.uploadedIndexBuffer;
+            SDL_BindGPUIndexBuffer(pass, &ibBinding,
+                                   command.index32 ? SDL_GPU_INDEXELEMENTSIZE_32BIT : SDL_GPU_INDEXELEMENTSIZE_16BIT);
+            SDL_DrawGPUIndexedPrimitives(pass, command.indexCount, 1, 0, 0, 0);
+        }
+        else
+        {
+            SDL_DrawGPUPrimitives(pass, command.vertexCount, 1, 0, 0);
         }
     }
 
-    void SdlGpuGraphicsBackend::RenderEnvMapDraws(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
-                                                  const DrawTarget& target, SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount)
+    void SdlGpuGraphicsBackend::IssueEnvMapDraw(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
+                                                const EnvMapDrawCommand& command, SDL_GPUTextureFormat colorFormat,
+                                                SDL_GPUSampleCount sampleCount, SDL_GPUGraphicsPipeline*& boundPipeline)
     {
-        for (const EnvMapDrawCommand& command : envMapDrawCommands_)
+        SDL_GPUGraphicsPipeline* pipeline = GetOrCreatePipelineEnvMap3D(
+            command.topology, command.depthTest, command.depthWrite, command.depthFunc, colorFormat, sampleCount, command.renderState);
+        if (pipeline != boundPipeline) { SDL_BindGPUGraphicsPipeline(pass, pipeline); boundPipeline = pipeline; }
+        SDL_SetGPUStencilReference(pass, static_cast<Uint8>(command.renderState.stencilReference));
+        SDL_PushGPUVertexUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
+        SDL_PushGPUVertexUniformData(cmd, 1, command.envMapUniforms.data(), sizeof(command.envMapUniforms));
+        SDL_PushGPUFragmentUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
+        SDL_PushGPUFragmentUniformData(cmd, 1, command.envMapUniforms.data(), sizeof(command.envMapUniforms));
+
+        SDL_GPUBufferBinding vbBinding{};
+        vbBinding.buffer = command.uploadedVertexBuffer;
+        SDL_BindGPUVertexBuffers(pass, 0, &vbBinding, 1);
+
+        // The env map is always sampled Linear+Clamp regardless of texture0's own filter/
+        // address settings -- matches this project's other backends' fixed reflection-map
+        // sampling convention (address mode is largely moot for a direction-addressed cube map).
+        SDL_GPUTextureSamplerBinding samplerBindings[2]{};
+        samplerBindings[0].texture = command.texture->Texture();
+        samplerBindings[0].sampler = GetOrCreateSampler(command.textureFilter, command.addressU, command.addressV);
+        samplerBindings[1].texture = command.envMapTexture;
+        samplerBindings[1].sampler = GetOrCreateSampler(0, 1, 1);
+        SDL_BindGPUFragmentSamplers(pass, 0, samplerBindings, 2);
+
+        if (command.indexed && command.uploadedIndexBuffer != nullptr)
         {
-            if (command.uploadedVertexBuffer == nullptr || command.texture == nullptr
-                || command.envMapTexture == nullptr || command.target != target)
-                continue;
-
-            SDL_GPUGraphicsPipeline* pipeline = GetOrCreatePipelineEnvMap3D(
-                command.topology, command.depthTest, command.depthWrite, command.depthFunc, colorFormat, sampleCount, command.renderState);
-            SDL_BindGPUGraphicsPipeline(pass, pipeline);
-            SDL_SetGPUStencilReference(pass, static_cast<Uint8>(command.renderState.stencilReference));
-            SDL_PushGPUVertexUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
-            SDL_PushGPUVertexUniformData(cmd, 1, command.envMapUniforms.data(), sizeof(command.envMapUniforms));
-            SDL_PushGPUFragmentUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
-            SDL_PushGPUFragmentUniformData(cmd, 1, command.envMapUniforms.data(), sizeof(command.envMapUniforms));
-
-            SDL_GPUBufferBinding vbBinding{};
-            vbBinding.buffer = command.uploadedVertexBuffer;
-            SDL_BindGPUVertexBuffers(pass, 0, &vbBinding, 1);
-
-            // The env map is always sampled Linear+Clamp regardless of texture0's own filter/
-            // address settings -- matches this project's other backends' fixed reflection-map
-            // sampling convention (address mode is largely moot for a direction-addressed cube map).
-            SDL_GPUTextureSamplerBinding samplerBindings[2]{};
-            samplerBindings[0].texture = command.texture->Texture();
-            samplerBindings[0].sampler = GetOrCreateSampler(command.textureFilter, command.addressU, command.addressV);
-            samplerBindings[1].texture = command.envMapTexture;
-            samplerBindings[1].sampler = GetOrCreateSampler(0, 1, 1);
-            SDL_BindGPUFragmentSamplers(pass, 0, samplerBindings, 2);
-
-            if (command.indexed && command.uploadedIndexBuffer != nullptr)
-            {
-                SDL_GPUBufferBinding ibBinding{};
-                ibBinding.buffer = command.uploadedIndexBuffer;
-                SDL_BindGPUIndexBuffer(pass, &ibBinding,
-                                       command.index32 ? SDL_GPU_INDEXELEMENTSIZE_32BIT : SDL_GPU_INDEXELEMENTSIZE_16BIT);
-                SDL_DrawGPUIndexedPrimitives(pass, command.indexCount, 1, 0, 0, 0);
-            }
-            else
-            {
-                SDL_DrawGPUPrimitives(pass, command.vertexCount, 1, 0, 0);
-            }
+            SDL_GPUBufferBinding ibBinding{};
+            ibBinding.buffer = command.uploadedIndexBuffer;
+            SDL_BindGPUIndexBuffer(pass, &ibBinding,
+                                   command.index32 ? SDL_GPU_INDEXELEMENTSIZE_32BIT : SDL_GPU_INDEXELEMENTSIZE_16BIT);
+            SDL_DrawGPUIndexedPrimitives(pass, command.indexCount, 1, 0, 0, 0);
+        }
+        else
+        {
+            SDL_DrawGPUPrimitives(pass, command.vertexCount, 1, 0, 0);
         }
     }
 
-    void SdlGpuGraphicsBackend::RenderSkinnedDraws(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
-                                                   const DrawTarget& target, SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount)
+    void SdlGpuGraphicsBackend::IssueSkinnedDraw(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
+                                                 const SkinnedDrawCommand& command, SDL_GPUTextureFormat colorFormat,
+                                                 SDL_GPUSampleCount sampleCount, SDL_GPUGraphicsPipeline*& boundPipeline)
     {
-        for (const SkinnedDrawCommand& command : skinnedDrawCommands_)
+        SDL_GPUGraphicsPipeline* pipeline = GetOrCreatePipelineSkinned3D(
+            command.topology, command.depthTest, command.depthWrite, command.depthFunc, colorFormat, sampleCount, command.renderState);
+        if (pipeline != boundPipeline) { SDL_BindGPUGraphicsPipeline(pass, pipeline); boundPipeline = pipeline; }
+        SDL_SetGPUStencilReference(pass, static_cast<Uint8>(command.renderState.stencilReference));
+        SDL_PushGPUVertexUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
+        SDL_PushGPUVertexUniformData(cmd, 1, command.lightUniforms.data(), sizeof(command.lightUniforms));
+        // litTexturedFragmentShader_ (reused unchanged) expects PC at slot 0 and
+        // LitLightParams-shaped data at slot 1 -- SkinnedLightParams is byte-identical.
+        SDL_PushGPUFragmentUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
+        SDL_PushGPUFragmentUniformData(cmd, 1, command.lightUniforms.data(), sizeof(command.lightUniforms));
+
+        SDL_GPUBufferBinding vbBinding{};
+        vbBinding.buffer = command.uploadedVertexBuffer;
+        SDL_BindGPUVertexBuffers(pass, 0, &vbBinding, 1);
+        // The 72-bone palette -- a real storage buffer, not a uniform push (see
+        // SkinnedDrawCommand's own doc comment for why).
+        SDL_BindGPUVertexStorageBuffers(pass, 0, &command.uploadedBoneBuffer, 1);
+
+        SDL_GPUTextureSamplerBinding samplerBinding{};
+        samplerBinding.texture = command.texture->Texture();
+        samplerBinding.sampler = GetOrCreateSampler(command.textureFilter, command.addressU, command.addressV);
+        SDL_BindGPUFragmentSamplers(pass, 0, &samplerBinding, 1);
+
+        if (command.indexed && command.uploadedIndexBuffer != nullptr)
         {
-            if (command.uploadedVertexBuffer == nullptr || command.uploadedBoneBuffer == nullptr
-                || command.texture == nullptr || command.target != target)
-                continue;
-
-            SDL_GPUGraphicsPipeline* pipeline = GetOrCreatePipelineSkinned3D(
-                command.topology, command.depthTest, command.depthWrite, command.depthFunc, colorFormat, sampleCount, command.renderState);
-            SDL_BindGPUGraphicsPipeline(pass, pipeline);
-            SDL_SetGPUStencilReference(pass, static_cast<Uint8>(command.renderState.stencilReference));
-            SDL_PushGPUVertexUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
-            SDL_PushGPUVertexUniformData(cmd, 1, command.lightUniforms.data(), sizeof(command.lightUniforms));
-            // litTexturedFragmentShader_ (reused unchanged) expects PC at slot 0 and
-            // LitLightParams-shaped data at slot 1 -- SkinnedLightParams is byte-identical.
-            SDL_PushGPUFragmentUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
-            SDL_PushGPUFragmentUniformData(cmd, 1, command.lightUniforms.data(), sizeof(command.lightUniforms));
-
-            SDL_GPUBufferBinding vbBinding{};
-            vbBinding.buffer = command.uploadedVertexBuffer;
-            SDL_BindGPUVertexBuffers(pass, 0, &vbBinding, 1);
-            // The 72-bone palette -- a real storage buffer, not a uniform push (see
-            // SkinnedDrawCommand's own doc comment for why).
-            SDL_BindGPUVertexStorageBuffers(pass, 0, &command.uploadedBoneBuffer, 1);
-
-            SDL_GPUTextureSamplerBinding samplerBinding{};
-            samplerBinding.texture = command.texture->Texture();
-            samplerBinding.sampler = GetOrCreateSampler(command.textureFilter, command.addressU, command.addressV);
-            SDL_BindGPUFragmentSamplers(pass, 0, &samplerBinding, 1);
-
-            if (command.indexed && command.uploadedIndexBuffer != nullptr)
-            {
-                SDL_GPUBufferBinding ibBinding{};
-                ibBinding.buffer = command.uploadedIndexBuffer;
-                SDL_BindGPUIndexBuffer(pass, &ibBinding,
-                                       command.index32 ? SDL_GPU_INDEXELEMENTSIZE_32BIT : SDL_GPU_INDEXELEMENTSIZE_16BIT);
-                SDL_DrawGPUIndexedPrimitives(pass, command.indexCount, 1, 0, 0, 0);
-            }
-            else
-            {
-                SDL_DrawGPUPrimitives(pass, command.vertexCount, 1, 0, 0);
-            }
+            SDL_GPUBufferBinding ibBinding{};
+            ibBinding.buffer = command.uploadedIndexBuffer;
+            SDL_BindGPUIndexBuffer(pass, &ibBinding,
+                                   command.index32 ? SDL_GPU_INDEXELEMENTSIZE_32BIT : SDL_GPU_INDEXELEMENTSIZE_16BIT);
+            SDL_DrawGPUIndexedPrimitives(pass, command.indexCount, 1, 0, 0, 0);
+        }
+        else
+        {
+            SDL_DrawGPUPrimitives(pass, command.vertexCount, 1, 0, 0);
         }
     }
 
@@ -3123,117 +3072,183 @@ namespace CNA::Internal::Backends::SdlGpu
         SDL_EndGPUCopyPass(copyPass);
     }
 
-    void SdlGpuGraphicsBackend::RenderColoredDraws(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
-                                                   const DrawTarget& target, SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount)
+    void SdlGpuGraphicsBackend::IssueColoredDraw(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
+                                                 const ColoredDrawCommand& command, SDL_GPUTextureFormat colorFormat,
+                                                 SDL_GPUSampleCount sampleCount, SDL_GPUGraphicsPipeline*& boundPipeline)
     {
-        for (const ColoredDrawCommand& command : coloredDrawCommands_)
+        SDL_GPUGraphicsPipeline* pipeline = GetOrCreatePipelineColored3D(command.topology, command.depthTest,
+                                                                          command.depthWrite, command.depthFunc, colorFormat,
+                                                                          sampleCount, command.renderState);
+        if (pipeline != boundPipeline) { SDL_BindGPUGraphicsPipeline(pass, pipeline); boundPipeline = pipeline; }
+        SDL_SetGPUStencilReference(pass, static_cast<Uint8>(command.renderState.stencilReference));
+        SDL_PushGPUVertexUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
+
+        SDL_GPUBufferBinding vbBinding{};
+        vbBinding.buffer = command.uploadedVertexBuffer;
+        SDL_BindGPUVertexBuffers(pass, 0, &vbBinding, 1);
+
+        if (command.indexed && command.uploadedIndexBuffer != nullptr)
         {
-            if (command.uploadedVertexBuffer == nullptr || command.target != target)
-                continue;
-
-            SDL_GPUGraphicsPipeline* pipeline = GetOrCreatePipelineColored3D(command.topology, command.depthTest,
-                                                                              command.depthWrite, command.depthFunc, colorFormat,
-                                                                              sampleCount, command.renderState);
-            SDL_BindGPUGraphicsPipeline(pass, pipeline);
-            SDL_SetGPUStencilReference(pass, static_cast<Uint8>(command.renderState.stencilReference));
-            SDL_PushGPUVertexUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
-
-            SDL_GPUBufferBinding vbBinding{};
-            vbBinding.buffer = command.uploadedVertexBuffer;
-            SDL_BindGPUVertexBuffers(pass, 0, &vbBinding, 1);
-
-            if (command.indexed && command.uploadedIndexBuffer != nullptr)
-            {
-                SDL_GPUBufferBinding ibBinding{};
-                ibBinding.buffer = command.uploadedIndexBuffer;
-                SDL_BindGPUIndexBuffer(pass, &ibBinding,
-                                       command.index32 ? SDL_GPU_INDEXELEMENTSIZE_32BIT : SDL_GPU_INDEXELEMENTSIZE_16BIT);
-                SDL_DrawGPUIndexedPrimitives(pass, command.indexCount, 1, 0, 0, 0);
-            }
-            else
-            {
-                SDL_DrawGPUPrimitives(pass, command.vertexCount, 1, 0, 0);
-            }
+            SDL_GPUBufferBinding ibBinding{};
+            ibBinding.buffer = command.uploadedIndexBuffer;
+            SDL_BindGPUIndexBuffer(pass, &ibBinding,
+                                   command.index32 ? SDL_GPU_INDEXELEMENTSIZE_32BIT : SDL_GPU_INDEXELEMENTSIZE_16BIT);
+            SDL_DrawGPUIndexedPrimitives(pass, command.indexCount, 1, 0, 0, 0);
+        }
+        else
+        {
+            SDL_DrawGPUPrimitives(pass, command.vertexCount, 1, 0, 0);
         }
     }
 
-    void SdlGpuGraphicsBackend::RenderTexturedDraws(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
-                                                    const DrawTarget& target, SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount)
+    void SdlGpuGraphicsBackend::IssueTexturedDraw(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
+                                                  const TexturedDrawCommand& command, SDL_GPUTextureFormat colorFormat,
+                                                  SDL_GPUSampleCount sampleCount, SDL_GPUGraphicsPipeline*& boundPipeline)
     {
-        for (const TexturedDrawCommand& command : texturedDrawCommands_)
+        SDL_GPUGraphicsPipeline* pipeline = command.hasVertexColor
+            ? GetOrCreatePipelineColoredTextured3D(command.topology, command.depthTest, command.depthWrite, command.depthFunc, colorFormat, sampleCount, command.renderState)
+            : GetOrCreatePipelineTextured3D(command.topology, command.depthTest, command.depthWrite, command.depthFunc, colorFormat, sampleCount, command.renderState);
+        if (pipeline != boundPipeline) { SDL_BindGPUGraphicsPipeline(pass, pipeline); boundPipeline = pipeline; }
+        SDL_SetGPUStencilReference(pass, static_cast<Uint8>(command.renderState.stencilReference));
+        SDL_PushGPUVertexUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
+        SDL_PushGPUFragmentUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
+
+        SDL_GPUBufferBinding vbBinding{};
+        vbBinding.buffer = command.uploadedVertexBuffer;
+        SDL_BindGPUVertexBuffers(pass, 0, &vbBinding, 1);
+
+        SDL_GPUTextureSamplerBinding samplerBinding{};
+        samplerBinding.texture = command.texture->Texture();
+        samplerBinding.sampler = GetOrCreateSampler(command.textureFilter, command.addressU, command.addressV);
+        SDL_BindGPUFragmentSamplers(pass, 0, &samplerBinding, 1);
+
+        if (command.indexed && command.uploadedIndexBuffer != nullptr)
         {
-            if (command.uploadedVertexBuffer == nullptr || command.texture == nullptr || command.target != target)
-                continue;
-
-            SDL_GPUGraphicsPipeline* pipeline = command.hasVertexColor
-                ? GetOrCreatePipelineColoredTextured3D(command.topology, command.depthTest, command.depthWrite, command.depthFunc, colorFormat, sampleCount, command.renderState)
-                : GetOrCreatePipelineTextured3D(command.topology, command.depthTest, command.depthWrite, command.depthFunc, colorFormat, sampleCount, command.renderState);
-            SDL_BindGPUGraphicsPipeline(pass, pipeline);
-            SDL_SetGPUStencilReference(pass, static_cast<Uint8>(command.renderState.stencilReference));
-            SDL_PushGPUVertexUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
-            SDL_PushGPUFragmentUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
-
-            SDL_GPUBufferBinding vbBinding{};
-            vbBinding.buffer = command.uploadedVertexBuffer;
-            SDL_BindGPUVertexBuffers(pass, 0, &vbBinding, 1);
-
-            SDL_GPUTextureSamplerBinding samplerBinding{};
-            samplerBinding.texture = command.texture->Texture();
-            samplerBinding.sampler = GetOrCreateSampler(command.textureFilter, command.addressU, command.addressV);
-            SDL_BindGPUFragmentSamplers(pass, 0, &samplerBinding, 1);
-
-            if (command.indexed && command.uploadedIndexBuffer != nullptr)
-            {
-                SDL_GPUBufferBinding ibBinding{};
-                ibBinding.buffer = command.uploadedIndexBuffer;
-                SDL_BindGPUIndexBuffer(pass, &ibBinding,
-                                       command.index32 ? SDL_GPU_INDEXELEMENTSIZE_32BIT : SDL_GPU_INDEXELEMENTSIZE_16BIT);
-                SDL_DrawGPUIndexedPrimitives(pass, command.indexCount, 1, 0, 0, 0);
-            }
-            else
-            {
-                SDL_DrawGPUPrimitives(pass, command.vertexCount, 1, 0, 0);
-            }
+            SDL_GPUBufferBinding ibBinding{};
+            ibBinding.buffer = command.uploadedIndexBuffer;
+            SDL_BindGPUIndexBuffer(pass, &ibBinding,
+                                   command.index32 ? SDL_GPU_INDEXELEMENTSIZE_32BIT : SDL_GPU_INDEXELEMENTSIZE_16BIT);
+            SDL_DrawGPUIndexedPrimitives(pass, command.indexCount, 1, 0, 0, 0);
+        }
+        else
+        {
+            SDL_DrawGPUPrimitives(pass, command.vertexCount, 1, 0, 0);
         }
     }
 
-    void SdlGpuGraphicsBackend::RenderLitTexturedDraws(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
-                                                       const DrawTarget& target, SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount)
+    void SdlGpuGraphicsBackend::IssueLitTexturedDraw(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
+                                                     const LitTexturedDrawCommand& command, SDL_GPUTextureFormat colorFormat,
+                                                     SDL_GPUSampleCount sampleCount, SDL_GPUGraphicsPipeline*& boundPipeline)
     {
-        for (const LitTexturedDrawCommand& command : litTexturedDrawCommands_)
+        SDL_GPUGraphicsPipeline* pipeline = GetOrCreatePipelineLitTextured3D(
+            command.topology, command.depthTest, command.depthWrite, command.depthFunc, colorFormat, sampleCount, command.renderState);
+        if (pipeline != boundPipeline) { SDL_BindGPUGraphicsPipeline(pass, pipeline); boundPipeline = pipeline; }
+        SDL_SetGPUStencilReference(pass, static_cast<Uint8>(command.renderState.stencilReference));
+        SDL_PushGPUVertexUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
+        SDL_PushGPUVertexUniformData(cmd, 1, command.lightUniforms.data(), sizeof(command.lightUniforms));
+        SDL_PushGPUFragmentUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
+        SDL_PushGPUFragmentUniformData(cmd, 1, command.lightUniforms.data(), sizeof(command.lightUniforms));
+
+        SDL_GPUBufferBinding vbBinding{};
+        vbBinding.buffer = command.uploadedVertexBuffer;
+        SDL_BindGPUVertexBuffers(pass, 0, &vbBinding, 1);
+
+        SDL_GPUTextureSamplerBinding samplerBinding{};
+        samplerBinding.texture = command.texture->Texture();
+        samplerBinding.sampler = GetOrCreateSampler(command.textureFilter, command.addressU, command.addressV);
+        SDL_BindGPUFragmentSamplers(pass, 0, &samplerBinding, 1);
+
+        if (command.indexed && command.uploadedIndexBuffer != nullptr)
         {
-            if (command.uploadedVertexBuffer == nullptr || command.texture == nullptr || command.target != target)
-                continue;
+            SDL_GPUBufferBinding ibBinding{};
+            ibBinding.buffer = command.uploadedIndexBuffer;
+            SDL_BindGPUIndexBuffer(pass, &ibBinding,
+                                   command.index32 ? SDL_GPU_INDEXELEMENTSIZE_32BIT : SDL_GPU_INDEXELEMENTSIZE_16BIT);
+            SDL_DrawGPUIndexedPrimitives(pass, command.indexCount, 1, 0, 0, 0);
+        }
+        else
+        {
+            SDL_DrawGPUPrimitives(pass, command.vertexCount, 1, 0, 0);
+        }
+    }
 
-            SDL_GPUGraphicsPipeline* pipeline = GetOrCreatePipelineLitTextured3D(
-                command.topology, command.depthTest, command.depthWrite, command.depthFunc, colorFormat, sampleCount, command.renderState);
-            SDL_BindGPUGraphicsPipeline(pass, pipeline);
-            SDL_SetGPUStencilReference(pass, static_cast<Uint8>(command.renderState.stencilReference));
-            SDL_PushGPUVertexUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
-            SDL_PushGPUVertexUniformData(cmd, 1, command.lightUniforms.data(), sizeof(command.lightUniforms));
-            SDL_PushGPUFragmentUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
-            SDL_PushGPUFragmentUniformData(cmd, 1, command.lightUniforms.data(), sizeof(command.lightUniforms));
+    // Adversarial-review finding #4 (draw ordering): replaces the old fixed
+    // "RenderColoredDraws(); RenderTexturedDraws(); ... RenderSprites();" sequence -- drawOrder_ is
+    // already in real chronological Queue*Draw()/QueueSprite() issue order (see that field's own
+    // doc comment), so a single pass over it, dispatching each ref to its own Issue*Draw()
+    // function, is all real interleaving needs. Each case's own readiness/target filter mirrors
+    // exactly what the old per-family loop used to skip -- only the ORDER changed.
+    void SdlGpuGraphicsBackend::RenderQueuedDraws(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
+                                                  const DrawTarget& target, SDL_GPUTextureFormat colorFormat,
+                                                  SDL_GPUSampleCount sampleCount, int colorTargetCount)
+    {
+        const float viewportSize[2] = {
+            static_cast<float>(target.rt != nullptr ? target.rt->width
+                              : target.cube != nullptr ? target.cube->size : physicalWidth_),
+            static_cast<float>(target.rt != nullptr ? target.rt->height
+                              : target.cube != nullptr ? target.cube->size : physicalHeight_)};
 
-            SDL_GPUBufferBinding vbBinding{};
-            vbBinding.buffer = command.uploadedVertexBuffer;
-            SDL_BindGPUVertexBuffers(pass, 0, &vbBinding, 1);
-
-            SDL_GPUTextureSamplerBinding samplerBinding{};
-            samplerBinding.texture = command.texture->Texture();
-            samplerBinding.sampler = GetOrCreateSampler(command.textureFilter, command.addressU, command.addressV);
-            SDL_BindGPUFragmentSamplers(pass, 0, &samplerBinding, 1);
-
-            if (command.indexed && command.uploadedIndexBuffer != nullptr)
+        SDL_GPUGraphicsPipeline* boundPipeline = nullptr;
+        for (const QueuedDrawRef& ref : drawOrder_)
+        {
+            switch (ref.kind)
             {
-                SDL_GPUBufferBinding ibBinding{};
-                ibBinding.buffer = command.uploadedIndexBuffer;
-                SDL_BindGPUIndexBuffer(pass, &ibBinding,
-                                       command.index32 ? SDL_GPU_INDEXELEMENTSIZE_32BIT : SDL_GPU_INDEXELEMENTSIZE_16BIT);
-                SDL_DrawGPUIndexedPrimitives(pass, command.indexCount, 1, 0, 0, 0);
-            }
-            else
-            {
-                SDL_DrawGPUPrimitives(pass, command.vertexCount, 1, 0, 0);
+                case DrawKind::Colored:
+                {
+                    const ColoredDrawCommand& c = coloredDrawCommands_[ref.index];
+                    if (c.uploadedVertexBuffer != nullptr && c.target == target)
+                        IssueColoredDraw(pass, cmd, c, colorFormat, sampleCount, boundPipeline);
+                    break;
+                }
+                case DrawKind::Textured:
+                {
+                    const TexturedDrawCommand& c = texturedDrawCommands_[ref.index];
+                    if (c.uploadedVertexBuffer != nullptr && c.texture != nullptr && c.target == target)
+                        IssueTexturedDraw(pass, cmd, c, colorFormat, sampleCount, boundPipeline);
+                    break;
+                }
+                case DrawKind::LitTextured:
+                {
+                    const LitTexturedDrawCommand& c = litTexturedDrawCommands_[ref.index];
+                    if (c.uploadedVertexBuffer != nullptr && c.texture != nullptr && c.target == target)
+                        IssueLitTexturedDraw(pass, cmd, c, colorFormat, sampleCount, boundPipeline);
+                    break;
+                }
+                case DrawKind::AlphaTest:
+                {
+                    const AlphaTestDrawCommand& c = alphaTestDrawCommands_[ref.index];
+                    if (c.uploadedVertexBuffer != nullptr && c.texture != nullptr && c.target == target)
+                        IssueAlphaTestDraw(pass, cmd, c, colorFormat, sampleCount, boundPipeline);
+                    break;
+                }
+                case DrawKind::DualTexture:
+                {
+                    const DualTextureDrawCommand& c = dualTextureDrawCommands_[ref.index];
+                    if (c.uploadedVertexBuffer != nullptr && c.texture0 != nullptr && c.texture1 != nullptr && c.target == target)
+                        IssueDualTextureDraw(pass, cmd, c, colorFormat, sampleCount, boundPipeline);
+                    break;
+                }
+                case DrawKind::EnvMap:
+                {
+                    const EnvMapDrawCommand& c = envMapDrawCommands_[ref.index];
+                    if (c.uploadedVertexBuffer != nullptr && c.texture != nullptr && c.envMapTexture != nullptr && c.target == target)
+                        IssueEnvMapDraw(pass, cmd, c, colorFormat, sampleCount, boundPipeline);
+                    break;
+                }
+                case DrawKind::Skinned:
+                {
+                    const SkinnedDrawCommand& c = skinnedDrawCommands_[ref.index];
+                    if (c.uploadedVertexBuffer != nullptr && c.uploadedBoneBuffer != nullptr && c.texture != nullptr && c.target == target)
+                        IssueSkinnedDraw(pass, cmd, c, colorFormat, sampleCount, boundPipeline);
+                    break;
+                }
+                case DrawKind::Sprite:
+                {
+                    const SpriteCommand& c = spriteCommands_[ref.index];
+                    if (c.target == target)
+                        IssueSpriteDraw(pass, cmd, c, ref.index, viewportSize, colorFormat, sampleCount, colorTargetCount, boundPipeline);
+                    break;
+                }
             }
         }
     }

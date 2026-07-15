@@ -569,6 +569,20 @@ namespace CNA::Internal::Backends::SdlGpu
             bool operator!=(const DrawTarget& other) const { return !(*this == other); }
         };
 
+        // Adversarial-review finding #4: which per-family queue a QueuedDrawRef points into.
+        enum class DrawKind : Uint8
+        {
+            Colored, Textured, LitTextured, AlphaTest, DualTexture, EnvMap, Skinned, Sprite
+        };
+
+        // A single entry in drawOrder_ (see that field's own doc comment) -- identifies one queued
+        // draw command by which family vector it lives in and its index there.
+        struct QueuedDrawRef
+        {
+            DrawKind kind;
+            std::size_t index;
+        };
+
         // SDLGPU-18: raw XNA Blend/BlendFunction ordinals, captured at Queue*Draw time so the
         // exact requested blend equation (not just enabled/disabled) is baked into the pipeline
         // that command actually renders with. Defaults mirror BlendState.Opaque (One/Zero/Add).
@@ -1138,16 +1152,18 @@ namespace CNA::Internal::Backends::SdlGpu
         // Uploads all queued sprite vertex data (copy pass) -- must run BEFORE
         // BeginGPURenderPass; SDL_gpu forbids a copy pass nested inside a render pass.
         void UploadSpriteVertexData(SDL_GPUCommandBuffer* cmd);
-        // Issues the actual bind+draw calls for each queued sprite targeting @p target (nullptr =
-        // swapchain) -- must run INSIDE the render pass, after UploadSpriteVertexData's copy pass
-        // has already been submitted-queued on the same command buffer.
+        // Issues the actual bind+draw calls for ONE queued sprite -- called from
+        // RenderQueuedDraws() in real chronological (drawOrder_) order, not grouped with every
+        // other sprite (adversarial-review finding #4: draw ordering). @p index is this sprite's
+        // own position in spriteCommands_, needed for its vertex-buffer offset.
         // colorTargetCount > 1 (real MRT, SDLGPU-37) is forwarded to a customEffect's own
         // GetOrCreatePipeline() so a real multi-output fragment shader can build a pipeline
         // matching this pass's actual attachment count -- stock (single-output) sprites are
         // unaffected, since GetOrCreateSpritePipeline() always builds exactly 1 color target.
-        void RenderSprites(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
-                           const DrawTarget& target, SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
-                           int colorTargetCount = 1);
+        void IssueSpriteDraw(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd, const SpriteCommand& command,
+                             std::size_t index, const float* viewportSize, SDL_GPUTextureFormat colorFormat,
+                             SDL_GPUSampleCount sampleCount, int colorTargetCount,
+                             SDL_GPUGraphicsPipeline*& boundPipeline);
 
         // Phase SDLGPU-6: colored3d/textured3d/colored_textured3d/lit_textured3d.
         void CreateColoredResources();
@@ -1198,10 +1214,12 @@ namespace CNA::Internal::Backends::SdlGpu
         void QueueDualTextureDraw(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
                                   const Matrix& world, const Matrix& view, const Matrix& projection,
                                   PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
-        void RenderAlphaTestDraws(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
-                                  const DrawTarget& target, SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount);
-        void RenderDualTextureDraws(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
-                                   const DrawTarget& target, SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount);
+        void IssueAlphaTestDraw(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd, const AlphaTestDrawCommand& command,
+                               SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
+                               SDL_GPUGraphicsPipeline*& boundPipeline);
+        void IssueDualTextureDraw(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd, const DualTextureDrawCommand& command,
+                                 SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
+                                 SDL_GPUGraphicsPipeline*& boundPipeline);
 
         // Phase SDLGPU-9: EnvironmentMapEffect (SDLGPU-33).
         void CreateEnvMapResources();
@@ -1212,8 +1230,9 @@ namespace CNA::Internal::Backends::SdlGpu
         void QueueEnvMapDraw(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
                              const Matrix& world, const Matrix& view, const Matrix& projection,
                              PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
-        void RenderEnvMapDraws(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
-                               const DrawTarget& target, SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount);
+        void IssueEnvMapDraw(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd, const EnvMapDrawCommand& command,
+                            SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
+                            SDL_GPUGraphicsPipeline*& boundPipeline);
 
         // Phase SDLGPU-7: SkinnedEffect (SDLGPU-34).
         void CreateSkinnedResources();
@@ -1224,20 +1243,34 @@ namespace CNA::Internal::Backends::SdlGpu
         void QueueSkinnedDraw(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
                               const Matrix& world, const Matrix& view, const Matrix& projection,
                               PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
-        void RenderSkinnedDraws(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
-                                const DrawTarget& target, SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount);
+        void IssueSkinnedDraw(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd, const SkinnedDrawCommand& command,
+                             SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
+                             SDL_GPUGraphicsPipeline*& boundPipeline);
 
         // Uploads every queued 3D draw command's shadow-copied vertex/index data into a fresh
         // transient SDL_GPUBuffer per command (mirrors WebGPUGraphicsBackend's own per-draw
         // transient-buffer approach) -- must run in the same copy pass as UploadSpriteVertexData,
         // BEFORE BeginGPURenderPass.
         void UploadSceneDrawData(SDL_GPUCommandBuffer* cmd);
-        void RenderColoredDraws(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
-                               const DrawTarget& target, SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount);
-        void RenderTexturedDraws(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
-                                 const DrawTarget& target, SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount);
-        void RenderLitTexturedDraws(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
-                                    const DrawTarget& target, SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount);
+        void IssueColoredDraw(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd, const ColoredDrawCommand& command,
+                             SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
+                             SDL_GPUGraphicsPipeline*& boundPipeline);
+        void IssueTexturedDraw(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd, const TexturedDrawCommand& command,
+                              SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
+                              SDL_GPUGraphicsPipeline*& boundPipeline);
+        void IssueLitTexturedDraw(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd, const LitTexturedDrawCommand& command,
+                                 SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
+                                 SDL_GPUGraphicsPipeline*& boundPipeline);
+        // Adversarial-review finding #4 (draw ordering): replaces the old fixed
+        // "all Colored3D, then all Textured3D, ... then all Sprites" sequence with a single pass
+        // over drawOrder_ (real chronological Queue*Draw()/QueueSprite() issue order), dispatching
+        // each ref to its own Issue*Draw() function. A target/kind that isn't ready yet (no
+        // uploaded vertex buffer, missing texture, etc.) is skipped exactly like the old per-family
+        // loops used to skip it -- only the ORDER changed, not the readiness rules. boundPipeline
+        // is now tracked globally across every kind, not just within one family, so consecutive
+        // same-pipeline draws of DIFFERENT kinds also skip a redundant rebind.
+        void RenderQueuedDraws(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd, const DrawTarget& target,
+                              SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount, int colorTargetCount = 1);
         // Releases every transient buffer UploadSceneDrawData created, and clears all 3 queues --
         // safe to call immediately after SDL_SubmitGPUCommandBuffer (SDL_gpu defers the actual
         // free until the GPU is done, per SDL_ReleaseGPUBuffer's own documented contract).
@@ -1287,6 +1320,15 @@ namespace CNA::Internal::Backends::SdlGpu
         std::vector<SpriteCommand> spriteCommands_;
         Uint32 depthStencilWidth_ = 0;
         Uint32 depthStencilHeight_ = 0;
+
+        // Adversarial-review finding #4 (draw ordering): one entry per Queue*Draw()/QueueSprite()
+        // call, in REAL chronological issue order -- no sort needed, since append-at-call-time
+        // already is that order. RenderQueuedDraws() replays this once per render pass instead of
+        // the old fixed "all Colored3D, then all Textured3D, ... then all Sprites" sequence, so a
+        // game that interleaves 3D and SpriteBatch draws within one frame gets correct alpha-blend
+        // layering between them. Cleared alongside the 7 family vectors + spriteCommands_ each
+        // frame (ReleaseSceneDrawBuffers()/EnsureFrameRendered()).
+        std::vector<QueuedDrawRef> drawOrder_;
 
         // Phase SDLGPU-6 pipeline caches, keyed by topology*4+depthTest*2+depthWrite (depthFunc
         // is folded in as topology*4*8+depthFunc*4+... -- see the .cpp's PipelineCacheKey() for
