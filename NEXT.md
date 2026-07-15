@@ -1,5 +1,27 @@
 # NEXT.md — CNA Project Handoff
 
+> **2026-07-15: new `CANVAS` (HTML Canvas 2D) backend — all 8 phases (`plan_canvas.md` C1-C8)
+> implemented and pushed to `feature/canvas` (worktree `../cnacanvas`, branched from `develop`).**
+> Emscripten-only, 2D-only (like `SDL_RENDERER`) — `SpriteBatch` (rotation/origin/flip/tint/
+> transform), textures/render targets, `BlendState`/`SamplerState` mapping, and `SpriteFont` are all
+> implemented and structurally reviewed. **Real milestone**: this required a genuine
+> `emcmake`/`emcc` 6.0.2 configure+build — the first one ever successfully completed in this
+> project's history (confirmed via `$HOME/emsdk/emsdk_env.sh`); `CnaTests` links and a
+> backend-agnostic GTest suite genuinely passes under `node CnaTests.js`. Along the way, fixed a
+> real, pre-existing `sharp-runtime` bug blocking *any* Emscripten build (`FileSystemWatcher.hpp`
+> declared 3 inotify fields unconditionally but only used them under `__linux__`, which `emcc`
+> doesn't define) — owner-approved, committed in `sharp-runtime` (not pushed), and a real,
+> pre-existing `GraphicsBackendCompileDefinitionTests.cpp` gap this configure exposed
+> (`CNA_BACKEND_CANVAS` missing from its backend-count `#ifdef` chain, now fixed). **Not yet
+> pixel-verified**: this dev loop has no real browser DOM at all (`SDL_Init(SDL_INIT_VIDEO)` itself
+> throws under Emscripten/`node`) — see `docs/canvas-backend.md`'s "Known findings that revise the
+> original DRAFT plan" (two judgment calls flagged for owner review: `AlphaBlend`/`NonPremultiplied`
+> needing no premultiply conversion on this backend, and `Wrap`/`Mirror` addressing being
+> implemented but unverified) and its 10-item manual browser verification checklist. Full
+> task-by-task detail lives in `plan_canvas.md`, not duplicated here. Open question for the project
+> owner: what to do next with `feature/canvas` (PR, merge to `develop`, or something else) — not yet
+> answered as of this update.
+>
 > **Both `plan_dx.md` backends' full software/logic layer are done and Wine-verified as of
 > 2026-07-14.** **D3D11**: Phase DX1 through DX11 are ALL closed — every task except `DX-90`/`DX-91`
 > (real-Windows hardware, `needs_human`, no such machine available here). 6 CTest binaries, 96+
