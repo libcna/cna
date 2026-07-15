@@ -9,7 +9,14 @@
 >
 > **Status legend** (matches `../cna`'s own convention): ✅ implemented *and verified against its
 > stated acceptance criteria*; 🟨 code or documentation exists but has not met those criteria;
-> ⬜ not implemented. Every task below is ⬜ — nothing has been built yet.
+> ⬜ not implemented.
+>
+> **2026-07-15: all 8 phases (C1-C8) implemented and pushed to `feature/canvas`.** Every task is ✅
+> or 🟨 — see `docs/canvas-backend.md` for the consolidated completeness status, its "Known findings
+> that revise the original DRAFT plan" section (CANVAS-41, CANVAS-44), and its manual browser
+> verification checklist (CANVAS-82) for what still needs a human + real browser. Nothing here has
+> been pixel-verified (Design decision 9 — this dev loop has no real DOM/`CanvasRenderingContext2D`
+> at all).
 
 ---
 
@@ -283,10 +290,10 @@ task ✅ without both — but do not claim pixel-level ✅ verification that Des
 
 | # | Task | Status | Notes |
 |---|---|---|---|
-| CANVAS-80 | Structural GTest coverage for everything that doesn't need a real `CanvasRenderingContext2D`: `ThrowNo3D` coverage, blend-mode→`globalCompositeOperation` string mapping as a pure function, pivot/flip/scale transform math as pure math, CMake configure/build check | ⬜ | Runs under `node CnaTests.js` per Design decision 9. |
-| CANVAS-81 | `docs/canvas-backend.md`: mirror `docs/sdl-renderer-2d-completeness.md`'s table/status-legend structure, one section per feature area (`SpriteBatch`, `Texture2D`, `SpriteFont`, `BlendState`, `SamplerState`, `RenderTarget2D`, `Viewport`/`PresentationParameters`) | ⬜ | Write as capabilities land, not all at the end. |
-| CANVAS-82 | Manual browser verification checklist (`needs_human`): a short, repeatable list of things a human should visually/pixel-check in a real browser (basic sprite draw, rotation/origin pivot, flip, blend modes, render-target round-trip, `SpriteFont` text, wrap/mirror addressing) — the closest honest equivalent to `docs/sdl-renderer-2d-completeness.md`'s table, but explicitly marked as not automatable in this dev environment | ⬜ | Design decision 9. |
-| CANVAS-83 | Update `../cna/plan.md`/`README.md`/`CMakeLists.txt`'s help text (`CNA_GRAPHICS_BACKEND` STRINGS docstring) to list `CANVAS` alongside the other 9 backends | ⬜ | |
+| CANVAS-80 | Structural GTest coverage for everything that doesn't need a real `CanvasRenderingContext2D`: `ThrowNo3D` coverage, blend-mode→`globalCompositeOperation` string mapping as a pure function, pivot/flip/scale transform math as pure math, CMake configure/build check | 🟨 | `tests/CNA/Internal/Backends/Canvas/CanvasGraphicsBackendTests.cpp`: 11 tests, all passing under `node CnaTests.js` (`ThrowNo3D` coverage via a fake-but-never-dereferenced `SDL_Window*` sentinel; `BlendStateToCompositeOp` extracted as a standalone pure function specifically so it's unit-testable). Also fixed a real, pre-existing `GraphicsBackendCompileDefinitionTests.cpp` failure this configure exposed (`CNA_BACKEND_CANVAS` was missing from its backend-count `#ifdef` chain). **Not fully ✅**: "pivot/flip/scale transform math as pure math" has no C++-side equivalent to unit test — this backend's rotation/flip/scale composition is expressed entirely as Canvas2D transform-stack calls (`ctx.translate`/`rotate`/`scale`) executed in JS, not standalone C++ arithmetic the way `SDL_RENDERER`'s `sdlCenterX`/`sdlCenterY` was; relies on CANVAS-82's manual checklist instead. |
+| CANVAS-81 | `docs/canvas-backend.md`: mirror `docs/sdl-renderer-2d-completeness.md`'s table/status-legend structure, one section per feature area (`SpriteBatch`, `Texture2D`, `SpriteFont`, `BlendState`, `SamplerState`, `RenderTarget2D`, `Viewport`/`PresentationParameters`) | ✅ | Written; includes a "Known findings that revise the original DRAFT plan" section covering CANVAS-41/44. |
+| CANVAS-82 | Manual browser verification checklist (`needs_human`): a short, repeatable list of things a human should visually/pixel-check in a real browser (basic sprite draw, rotation/origin pivot, flip, blend modes, render-target round-trip, `SpriteFont` text, wrap/mirror addressing) — the closest honest equivalent to `docs/sdl-renderer-2d-completeness.md`'s table, but explicitly marked as not automatable in this dev environment | ✅ | 10-item checklist in `docs/canvas-backend.md`; none of it checked off yet (needs a human + real browser). |
+| CANVAS-83 | Update `../cna/plan.md`/`README.md`/`CMakeLists.txt`'s help text (`CNA_GRAPHICS_BACKEND` STRINGS docstring) to list `CANVAS` alongside the other 9 backends | ✅ | `CMakeLists.txt` done in Phase C1 already. `README.md`: added a `CANVAS` bullet to Project Status (matching `D3D11`/`D3D12`'s style) and completed the previously-stale simple backend list (only had 4 of 9 pre-existing backends; now lists all 10). `docs/README.md`: added `canvas-backend.md` to both the "Start here" and "Platform / backend limitations" sections. `plan.md` (repo root): no backend list exists there at all — nothing to update. Also added a small, scoped correction note to `docs/web-emscripten-graphics-limitations.md` (its "no Emscripten build has ever succeeded" claim is now out of date because of this work, though only for the tooling premise — its own EasyGL/WebGL2-specific claims are untouched). |
 
 ---
 

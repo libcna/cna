@@ -241,22 +241,21 @@ namespace CNA::Internal::Backends::Canvas
 #endif
     }
 
-    void CanvasGraphicsBackend::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
-                                                 int colorDstBlend, int alphaDstBlend,
-                                                 int colorBlendFunc, int alphaBlendFunc)
+    CanvasCompositeOp BlendStateToCompositeOp(int colorSrcBlend, int alphaSrcBlend,
+                                              int colorDstBlend, int alphaDstBlend,
+                                              int colorBlendFunc, int alphaBlendFunc)
     {
         // Raw Blend/BlendFunction enum values, same table SdlGraphicsBackend::ToSdlBlendFactor/
         // ToSdlBlendOperation use: One=0, Zero=1, SourceAlpha=4, InverseSourceAlpha=5; Add=0.
         const bool isAdd = colorBlendFunc == 0 && alphaBlendFunc == 0;
         const bool symmetric = colorSrcBlend == alphaSrcBlend && colorDstBlend == alphaDstBlend;
 
-        int opCode;
         if (isAdd && symmetric && colorSrcBlend == 0 && colorDstBlend == 1)
         {
-            opCode = 0; // Opaque -> 'copy'
+            return CanvasCompositeOp::Copy; // Opaque -> 'copy'
         }
-        else if (isAdd && symmetric && ((colorSrcBlend == 0 && colorDstBlend == 5) ||
-                                        (colorSrcBlend == 4 && colorDstBlend == 5)))
+        if (isAdd && symmetric && ((colorSrcBlend == 0 && colorDstBlend == 5) ||
+                                   (colorSrcBlend == 4 && colorDstBlend == 5)))
         {
             // AlphaBlend (srcBlend=One, assumes premultiplied input) and NonPremultiplied
             // (srcBlend=SourceAlpha, assumes straight input) both map to plain 'source-over' on
@@ -270,21 +269,28 @@ namespace CNA::Internal::Backends::Canvas
             // requires, because the browser's own internal premultiply-before-composite step for
             // 'source-over' does precisely that conversion. This is a deliberate finding, not a
             // shortcut -- see plan_canvas.md CANVAS-41's notes.
-            opCode = 1;
+            return CanvasCompositeOp::SourceOver;
         }
-        else if (isAdd && symmetric && colorSrcBlend == 4 && colorDstBlend == 0)
+        if (isAdd && symmetric && colorSrcBlend == 4 && colorDstBlend == 0)
         {
-            opCode = 2; // Additive -> 'lighter'
+            return CanvasCompositeOp::Lighter; // Additive -> 'lighter'
         }
-        else
-        {
-            throw std::runtime_error(
-                "Canvas (HTML Canvas 2D) only supports the 4 standard BlendState presets "
-                "(Opaque/AlphaBlend/NonPremultiplied/Additive): globalCompositeOperation has no "
-                "generic blend-factor/equation model to express an arbitrary custom BlendState.");
-        }
+        throw std::runtime_error(
+            "Canvas (HTML Canvas 2D) only supports the 4 standard BlendState presets "
+            "(Opaque/AlphaBlend/NonPremultiplied/Additive): globalCompositeOperation has no "
+            "generic blend-factor/equation model to express an arbitrary custom BlendState.");
+    }
+
+    void CanvasGraphicsBackend::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
+                                                 int colorDstBlend, int alphaDstBlend,
+                                                 int colorBlendFunc, int alphaBlendFunc)
+    {
+        const CanvasCompositeOp op = BlendStateToCompositeOp(
+            colorSrcBlend, alphaSrcBlend, colorDstBlend, alphaDstBlend, colorBlendFunc, alphaBlendFunc);
 #if defined(__EMSCRIPTEN__)
-        CNA_Canvas2D_SetCompositeOp(opCode);
+        CNA_Canvas2D_SetCompositeOp(static_cast<int>(op));
+#else
+        (void)op;
 #endif
     }
 

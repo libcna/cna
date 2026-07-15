@@ -8,6 +8,18 @@
 
 namespace CNA::Internal::Backends::Canvas
 {
+    /// Composite-op codes CNA_Canvas2D_SetCompositeOp (CanvasGraphicsBackend.cpp) understands.
+    enum class CanvasCompositeOp { Copy = 0, SourceOver = 1, Lighter = 2 };
+
+    /// Pure mapping from raw BlendState factors/BlendFunction (see IGraphicsBackend::ApplyBlendState's
+    /// own parameter doc) to a CanvasCompositeOp; throws std::runtime_error for any Blend/BlendFunction
+    /// combination that isn't one of the 4 standard presets (Design decision 5). Contains no EM_JS/JS
+    /// calls -- exposed standalone so plan_canvas.md CANVAS-80's structural GTest coverage can unit
+    /// test this mapping directly, without needing a real CanvasRenderingContext2D.
+    CanvasCompositeOp BlendStateToCompositeOp(int colorSrcBlend, int alphaSrcBlend,
+                                              int colorDstBlend, int alphaDstBlend,
+                                              int colorBlendFunc, int alphaBlendFunc);
+
     /**
      * @brief HTML Canvas 2D graphics backend (Emscripten-only).
      *
