@@ -141,6 +141,14 @@ def main():
     shaders = [
         ("sprite2d.vert.glsl", VERTEX_SHADER,   "kSprite2dVertSpv"),
         ("sprite2d.frag.glsl", FRAGMENT_SHADER, "kSprite2dFragSpv"),
+        ("colored3d.vert.glsl", VERTEX_SHADER,   "kColored3dVertSpv"),
+        ("colored3d.frag.glsl", FRAGMENT_SHADER, "kColored3dFragSpv"),
+        ("textured3d.vert.glsl", VERTEX_SHADER,   "kTextured3dVertSpv"),
+        ("textured3d.frag.glsl", FRAGMENT_SHADER, "kTextured3dFragSpv"),
+        ("colored_textured3d.vert.glsl", VERTEX_SHADER, "kColoredTextured3dVertSpv"),
+        # colored_textured3d shares textured3d's fragment shader (functionally identical).
+        ("lit_textured3d.vert.glsl", VERTEX_SHADER,   "kLitTextured3dVertSpv"),
+        ("lit_textured3d.frag.glsl", FRAGMENT_SHADER, "kLitTextured3dFragSpv"),
     ]
 
     output_path = Path(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[1] == "--output" else \

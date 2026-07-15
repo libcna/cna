@@ -6790,6 +6790,14 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SDL_GPU")
 
     # Ad-hoc manual diagnostic (not a CTest) -- see the file's own header comment.
     cna_sdlgpu_test(cna_diag_sdlgpu_single_sprite examples/sdlgpu_diag_single_sprite.cpp)
+
+    # plan_sdlgpu.md SDLGPU-26..30: core 3D vertex formats and BasicEffect.
+    cna_sdlgpu_test(cna_test_sdlgpu_3d examples/sdlgpu_3d_test.cpp)
+    add_test(NAME SdlGpu_3D COMMAND cna_test_sdlgpu_3d)
+    set_tests_properties(SdlGpu_3D PROPERTIES
+        TIMEOUT 60
+        LABELS "SdlGpu"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()
 
 # --- Task 6.1: real two-process ENet loopback test harness ---

@@ -1,17 +1,22 @@
 # SDL GPU Graphics Backend — Implementation Plan
 
-> **Status (2026-07-15): Phases SDLGPU-1/SDLGPU-2/SDLGPU-3 (infrastructure, device/window/
-> swapchain lifecycle, and the 2D vertical slice) are implemented and verified.**
-> `CNA_GRAPHICS_BACKEND=SDL_GPU` configures, builds (`cna_backend_graphics_sdl_gpu`, zero new
-> third-party dependencies as predicted), and a real window + real `SDL_GPUDevice` (Vulkan driver)
-> clears color+depth+stencil, uploads a real `Texture2D`, and draws a real `SpriteBatch` scene
-> (tint, alpha, rotation, both flips, Point/Linear + Wrap/Clamp sampling) — verified by
-> `SdlGpu_Smoke` (6/6 checks) and `SdlGpu_2D` (3/3 checks, `ctest -R SdlGpu`), both on real GPU via
-> Vulkan on this Linux dev machine, plus a real screenshot (not just "didn't throw"). That
-> screenshot caught and led to fixing a real bug — see `SDLGPU-14`'s row below.
-> `GraphicsBackendCompileDefinitionTests.cpp`'s `ExactlyOneGraphicsBackendIsSelected` was updated
-> for the new backend and the full `CnaTests` suite (118 tests) still passes. All 3D draw paths
-> (Phase SDLGPU-6 onward) are still ⬜ and throw `std::runtime_error`.
+> **Status (2026-07-15): Phases SDLGPU-1 through SDLGPU-6 (infrastructure, device/window/
+> swapchain lifecycle, the 2D vertical slice, and the core 3D vertex formats/`BasicEffect`) are
+> implemented and verified.** `CNA_GRAPHICS_BACKEND=SDL_GPU` configures, builds
+> (`cna_backend_graphics_sdl_gpu`, zero new third-party dependencies as predicted), and a real
+> window + real `SDL_GPUDevice` (Vulkan driver) clears color+depth+stencil, uploads a real
+> `Texture2D`, draws a real `SpriteBatch` scene (tint, alpha, rotation, both flips, Point/Linear +
+> Wrap/Clamp sampling), and draws real `colored3d`/`textured3d`/`colored_textured3d`/
+> `lit_textured3d` 3D geometry (via the public `BasicEffect`/`VertexBuffer`/
+> `GraphicsDevice.DrawPrimitives` API, with a real depth-test occlusion proof) — verified by
+> `SdlGpu_Smoke` (6/6), `SdlGpu_2D` (3/3), and `SdlGpu_3D` (6/6 checks, `ctest -R SdlGpu`), all on
+> real GPU via Vulkan on this Linux dev machine, each backed by a real screenshot, not just "didn't
+> throw". Those screenshots caught and led to fixing a real bug — see `SDLGPU-14`'s row below — and
+> then, for the 3D path, *confirmed the fix's own theory* (3D shaders using a real XNA projection
+> matrix need no Y-flip, unlike the hand-computed 2D sprite NDC math). `GraphicsBackendCompileDefinitionTests.cpp`'s
+> `ExactlyOneGraphicsBackendIsSelected` was updated for the new backend and the full `CnaTests`
+> suite (118 tests) still passes. `AlphaTestEffect`/`DualTextureEffect`/`EnvironmentMapEffect`/
+> `SkinnedEffect` and all render-target/readback paths (Phase SDLGPU-7 onward) are still ⬜.
 >
 > **Known partial gaps in what's landed so far:** `SDL_CreateGPUDevice`'s `debug_mode` is
 > hardcoded `false`, not yet wired to a CNA-side debug/validation toggle (minor, deferred).
@@ -126,11 +131,19 @@ extends.
    (BlendState/DepthStencilState/RasterizerState/ApplySamplerState dynamic mapping, streaming
    hints, a genuine multi-key pipeline cache) that are real 3D-draw-path or polish work, not
    blockers for the 2D milestone itself.
-3. Next: Phase `SDLGPU-6` (core 3D vertex formats and `BasicEffect` — `colored3d`/`textured3d`/
-   `colored_textured3d`/`lit_textured3d`, `SDLGPU-26`–`30`). This is the first 3D work — build the
-   pipeline-cache generality (`SDLGPU-17`) and the `BlendState`/`DepthStencilState`/
-   `RasterizerState` mapping (`SDLGPU-18`–`20`) out for real as part of it, rather than as
-   separate upfront tasks, since 3D draws are what actually needs them to vary.
+3. ~~`SDLGPU-26`~~ – ~~`SDLGPU-30`~~ — Phase `SDLGPU-6` (`colored3d`/`textured3d`/
+   `colored_textured3d`/`lit_textured3d`, i.e. `BasicEffect`, plus real `DrawPrimitivesEx`/
+   `DrawIndexedPrimitivesEx` stride dispatch and a real depth-test occlusion proof) done and
+   verified 2026-07-15, all ✅. The pipeline-cache/state-mapping generality this phase actually
+   needed (`SDLGPU-17`'s `GetOrCreate*` pattern extended to 4 shader families keyed by
+   topology+depthTest+depthWrite+depthFunc) landed as part of it; `SDLGPU-18`–`21`'s full
+   `BlendState`/`DepthStencilState`/`RasterizerState`/`ApplySamplerState` *dynamic* mapping did
+   not (every 3D pipeline is still hardcoded opaque/no-cull/Linear+Clamp) — see those rows' own
+   Notes for what's real vs. still open.
+4. Next: Phase `SDLGPU-7` (`AlphaTestEffect`/`DualTextureEffect`/`EnvironmentMapEffect`/
+   `SkinnedEffect`, `SDLGPU-31`–`34`) or Phase `SDLGPU-8` (render targets, `SDLGPU-35`–`39`) in
+   either order — both build on the pipeline-cache/draw-command-queue pattern Phase `SDLGPU-6`
+   already established, so neither blocks the other.
 
 ---
 
@@ -198,11 +211,11 @@ extends.
 
 | # | Task | Status | Notes |
 | --- | --- | --- | --- |
-| SDLGPU-26 | `colored3d` pipeline + shader + `DrawColoredPrimitives`/`DrawIndexedColoredPrimitives` dispatch (stride 16), with real depth-test verification. | ⬜ | |
-| SDLGPU-27 | `textured3d` (stride 20) — real `Texture2D` sampling, `DiffuseColor` genuinely multiplying it. | ⬜ | |
-| SDLGPU-28 | `colored_textured3d` (stride 24) — vertex-color mixing combined with texture sampling. | ⬜ | |
-| SDLGPU-29 | `lit_textured3d` (stride 32, `VertexPositionNormalTexture`) — FNA's `Lighting.fxh` `ComputeLights()` (3 directional lights, ambient, Blinn-Phong specular, emissive). | ⬜ | Reuse the *algorithm* from `VulkanGraphicsBackend`'s `lit_textured3d.{vert,frag}.glsl` (already ported once from FNA) — re-author the binding layout, do not assume the compiled SPIR-V drops in unchanged. Reuse the same safe-normalize guard the WebGPU port needed for a zero-direction disabled light (`WEBGPU-22`/`33` note). |
-| SDLGPU-30 | `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` `GpuDrawParams` dispatch by vertex stride, matching the dispatch-by-stride convention every other 3D-capable backend in this codebase already uses. | ⬜ | |
+| SDLGPU-26 | `colored3d` pipeline + shader + `DrawColoredPrimitives`/`DrawIndexedColoredPrimitives` dispatch (stride 16), with real depth-test verification. | ✅ | Done and runtime-verified 2026-07-15 (`SdlGpu_3D` CTest + screenshot). **Confirmed empirically that, unlike `sprite2d.vert.glsl`, this shader needs NO Y-flip**: `gl_Position = pc.mvp * vec4(inPos,1)` with no negation renders a red/green/blue triangle in the exact expected orientation — SDL_gpu's Vulkan-driver Y-flip only affected the hand-computed pixel-space NDC math in the sprite shader, not a real XNA projection matrix (which already encodes the correct convention). Real depth test verified via a genuine occlusion proof (see SDLGPU-30's note), not just "didn't throw". |
+| SDLGPU-27 | `textured3d` (stride 20) — real `Texture2D` sampling, `DiffuseColor` genuinely multiplying it. | ✅ | Done and runtime-verified 2026-07-15 — screenshot confirms the exact quadrant-texture colors/orientation. Fragment shader receives `pc` via its own `SDL_PushGPUFragmentUniformData` push (set 3, binding 0) — a full second push of the same 128 bytes already pushed to the vertex stage (set 1, binding 0), simpler than threading a `textureEnabled` varying through, at the cost of one extra push call per draw. |
+| SDLGPU-28 | `colored_textured3d` (stride 24) — vertex-color mixing combined with texture sampling. | ✅ | Done and runtime-verified 2026-07-15 — shares `textured3d`'s fragment shader (`Shaders::kTextured3dFragSpv`) unchanged, only the vertex shader/vertex-input-state differ. The screenshot's green-tinted quad looked unexpectedly dark at first glance — turned out to be **correct**: XNA's `Color::Green` is `(0,128,0)`, not lime `(0,255,0)` (the same real behavioral fact this project's Software backend caught independently, 2026-07-13), so a green-tinted quadrant texture multiplies red/blue channels to black — exactly what rendered. |
+| SDLGPU-29 | `lit_textured3d` (stride 32, `VertexPositionNormalTexture`) — FNA's `Lighting.fxh` `ComputeLights()` (3 directional lights, ambient, Blinn-Phong specular, emissive). | ✅ | Done and runtime-verified 2026-07-15 via `BasicEffect.EnableDefaultLighting()`'s real 3-light rig — screenshot shows a visibly different (lit/washed) appearance vs. the plain `textured3d` quad, proving the lighting math genuinely runs. Ported the algorithm from `VulkanGraphicsBackend`'s `lit_textured3d.{vert,frag}.glsl` with the safe-normalize guard from the WebGPU port's own `WEBGPU-22`/`33` finding (a disabled light's zero direction vector). **Did not need WebGPU's CPU-precomputed-normal-matrix workaround** — GLSL has a built-in `inverse()` (unlike WGSL), so the vertex shader computes `transpose(inverse(mat3(world)))` directly, matching `VulkanGraphicsBackend` exactly; the second UBO (`LitLightParams`, vertex+fragment slot 1) is 224 bytes/56 floats here, not WebGPU's 272/68 (no normal-matrix slots needed). |
+| SDLGPU-30 | `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` `GpuDrawParams` dispatch by vertex stride, matching the dispatch-by-stride convention every other 3D-capable backend in this codebase already uses. | ✅ | Done and runtime-verified 2026-07-15. Simpler than `WebGPUGraphicsBackend`'s own dispatch: `AlphaTestEffect`/`DualTextureEffect`/`EnvironmentMapEffect`/`SkinnedEffect`-specific `GpuDrawParams` fields are not yet checked (later phases), so dispatch is purely stride+`texture0`-based. **Real depth-test proof**: a nearer (blue) and farther (red) quad, same size/position, drawn in that order with `SetDepthTestEnabled(true)`; the screenshot shows solid, unmixed blue with zero red bleed-through — the farther quad's fragments were genuinely rejected by the depth buffer, not just silently painted-over (which would show red instead, since it drew second). |
 
 ---
 
