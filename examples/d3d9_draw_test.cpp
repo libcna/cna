@@ -25,6 +25,18 @@
 //   "didn't crash". Independently confirmed pixel-for-pixel identical to real XNA 4.0 via
 //   tools/xna-oracle/scenes/colored_trianglestrip_quad.scene (D9-A5), which additionally proves
 //   the four-corner Gouraud interpolation across BOTH triangles matches exactly.
+// Check E -- PrimitiveType.LineList: two SEPARATE 2-vertex line segments at different Y rows,
+//   proving they draw independently (both colors present) with nothing connecting them (the row
+//   between them stays background) -- a broken conversion that treated this as one connected
+//   polyline (LineStrip's own semantics) would paint a connecting line straight through that row.
+//   Confirmed pixel-for-pixel identical to real XNA 4.0 via
+//   tools/xna-oracle/scenes/colored_linelist_quad.scene.
+// Check F -- PrimitiveType.LineStrip: a 3-vertex axis-aligned "L" polyline (horizontal leg then
+//   vertical leg, sharing the corner vertex) -- the SAME vertex count is malformed under
+//   LineList (odd), so this is LineStrip's own genuine discriminator. Sampling BOTH legs proves
+//   the vertex-count<->primitiveCount conversion resolved to 2 connected segments (n-1), not a
+//   degenerate single segment. Confirmed pixel-for-pixel identical to real XNA 4.0 via
+//   tools/xna-oracle/scenes/colored_linestrip_quad.scene.
 //
 // Real finding (verified empirically, not assumed -- see plan_dx9.md D9-82's own closure note):
 // D9-22's original D3D9VertexDeclarations.hpp chose D3DDECLTYPE_D3DCOLOR for the COLOR0 element,
@@ -95,6 +107,23 @@ namespace
         { 2.0f,  2.0f, 0.0f, 0xFF0000FFu}, // TR
         {-2.0f, -2.0f, 0.0f, 0xFF0000FFu}, // BL
         { 2.0f, -2.0f, 0.0f, 0xFF0000FFu}, // BR
+    };
+
+    // Check E: two SEPARATE horizontal line segments (axis-aligned, no diagonal-AA ambiguity on
+    // this small 64x64 canvas) at different Y rows -- LineList draws each independently.
+    const VPC kLineList[4] = {
+        {-0.8f,  0.5f, 0.0f, 0xFF0000FFu}, {0.8f,  0.5f, 0.0f, 0xFF0000FFu}, // segment 0, red
+        {-0.8f, -0.5f, 0.0f, 0xFF00FF00u}, {0.8f, -0.5f, 0.0f, 0xFF00FF00u}, // segment 1, green
+    };
+
+    // Check F: an axis-aligned "L" polyline (V0->V1 horizontal, V1->V2 vertical, sharing V1) --
+    // LineStrip's own genuine discriminator from LineList: the SAME 3 vertices under LineList
+    // would be malformed (3 is odd, LineList needs pairs); under LineStrip they draw 2 CONNECTED
+    // segments through the shared middle vertex V1.
+    const VPC kLineStrip[3] = {
+        {-0.6f,  0.4f, 0.0f, 0xFF0000FFu}, // V0
+        { 0.6f,  0.4f, 0.0f, 0xFF0000FFu}, // V1 (shared corner)
+        { 0.6f, -0.4f, 0.0f, 0xFF0000FFu}, // V2
     };
 }
 
@@ -230,6 +259,77 @@ protected:
                   "alone) AND the bottom-right corner (covered ONLY by triangle 1) are both the vertex color, "
                   "proving the vertex-count<->primitiveCount conversion for TriangleStrip is correct, not just "
                   "that triangle 0 rendered while primitiveCount silently stayed at 1");
+        }
+
+        // Lines are only 1px wide, so (unlike Check A-D's solid triangle fills) a small search
+        // region + "does ANY pixel in it match" is the right robustness margin here -- exact
+        // single-pixel line coverage can shift by a pixel depending on GPU/API rounding rules,
+        // and that's not what Checks E/F are trying to prove (the oracle's own 256x256
+        // colored_linelist_quad.scene/colored_linestrip_quad.scene are the pixel-exact proof;
+        // this offline CTest's job is just "did the right color paint roughly the right place").
+        auto regionContains = [&](int x, int y, int w, int h, const Color& expected) -> bool
+        {
+            const Microsoft::Xna::Framework::Rectangle region(x, y, w, h);
+            std::vector<Color> px(static_cast<std::size_t>(w * h), Color(0, 0, 0, 0));
+            dev.GetBackBufferData(&region, px.data(), 0, w * h);
+            for (const Color& p : px)
+                if (p.getRProperty() == expected.getRProperty() && p.getGProperty() == expected.getGProperty() &&
+                    p.getBProperty() == expected.getBProperty() && p.getAProperty() == expected.getAProperty())
+                    return true;
+            return false;
+        };
+
+        // Check E: PrimitiveType.LineList -- two SEPARATE horizontal segments at different Y
+        // rows. Confirms both draw independently (RED near y=16, GREEN near y=48) AND that
+        // nothing connects them (the row exactly between, y=32, stays the Clear() background --
+        // a broken conversion that mistreated this as a single connected polyline, i.e.
+        // LineStrip's own semantics, would paint a connecting line straight through this row).
+        {
+            auto vb = backend.CreateVertexBuffer(4);
+            vb->SetData(kLineList, 4, sizeof(VPC));
+
+            dev.Clear(Color(0, 0, 255, 255));
+            backend.DrawColoredPrimitives(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                          Matrix::getIdentityProperty(), PrimitiveType::LineList, 2);
+
+            const bool redFound = regionContains(28, 14, 8, 4, Color(255, 0, 0, 255));
+            const bool greenFound = regionContains(28, 46, 8, 4, Color(0, 255, 0, 255));
+            const Microsoft::Xna::Framework::Rectangle betweenRegion(28, 30, 8, 4);
+            std::vector<Color> between(8 * 4, Color(0, 0, 0, 0));
+            dev.GetBackBufferData(&betweenRegion, between.data(), 0, static_cast<int>(between.size()));
+            bool betweenIsBackground = true;
+            for (const Color& p : between)
+                if (p.getRProperty() != 0 || p.getGProperty() != 0 || p.getBProperty() != 255 || p.getAProperty() != 255)
+                    betweenIsBackground = false;
+
+            check(redFound && greenFound && betweenIsBackground,
+                  "D3D9GraphicsBackend::DrawColoredPrimitives(..., PrimitiveType.LineList, primitiveCount=2): "
+                  "two independent line segments each paint their own color, with nothing connecting them -- "
+                  "confirmed pixel-for-pixel identical to real XNA 4.0 via "
+                  "tools/xna-oracle/scenes/colored_linelist_quad.scene");
+        }
+
+        // Check F: PrimitiveType.LineStrip -- an axis-aligned "L" polyline (V0->V1 horizontal,
+        // V1->V2 vertical, sharing V1). The SAME 3 vertices are malformed under LineList (odd
+        // count); under LineStrip they draw 2 CONNECTED segments through the shared corner.
+        // Sampling BOTH segments proves the vertex-count<->primitiveCount conversion resolved to
+        // primitiveCount=2 (n-1), not a degenerate single segment or a silent drop.
+        {
+            auto vb = backend.CreateVertexBuffer(3);
+            vb->SetData(kLineStrip, 3, sizeof(VPC));
+
+            dev.Clear(Color(0, 0, 255, 255));
+            backend.DrawColoredPrimitives(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                          Matrix::getIdentityProperty(), PrimitiveType::LineStrip, 2);
+
+            const bool horizontalFound = regionContains(28, 17, 8, 4, Color(255, 0, 0, 255));
+            const bool verticalFound = regionContains(48, 30, 4, 8, Color(255, 0, 0, 255));
+
+            check(horizontalFound && verticalFound,
+                  "D3D9GraphicsBackend::DrawColoredPrimitives(..., PrimitiveType.LineStrip, primitiveCount=2): "
+                  "a 3-vertex strip genuinely paints BOTH connected segments (the horizontal V0->V1 leg AND the "
+                  "vertical V1->V2 leg sharing the corner vertex), confirmed pixel-for-pixel identical to real "
+                  "XNA 4.0 via tools/xna-oracle/scenes/colored_linestrip_quad.scene");
         }
 
         std::printf("=== %d/%d PASS ===\n", passCount, totalCount);

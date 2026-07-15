@@ -140,7 +140,7 @@ Requires Pillow (`pip install pillow`) — not previously a dependency of this p
 
 ## Status
 
-Twenty-nine scenes so far, **all pixel-perfect**, and every one of XNA's 5 Stock Effects plus
+Thirty-one scenes so far, **all pixel-perfect**, and every one of XNA's 5 Stock Effects plus
 `IEffectFog`, ALL 8 `AlphaTestEffect.AlphaFunction` values (`AlphaTestEffect` compare-function
 coverage is COMPLETE), `EnvironmentMapEffect.FresnelFactor`, ALL 3
 `SkinnedEffect.WeightsPerVertex` values (`SkinnedEffect` weighting coverage is COMPLETE),
@@ -149,9 +149,9 @@ multi-texture `FlushBatch()`-on-texture-change batching (basic draw, rotation/or
 `SpriteEffects` flip, `Wrap`/`Mirror`, `Deferred`/`BackToFront`/`FrontToBack`, interleaved
 multi-texture sprites — `D9-90`/`D9-91`/`D9-92`/`D9-93` all COMPLETE, including `D9-90`'s own
 explicitly-named multi-texture-batching gap; `SpriteSortMode.Immediate`/`.Texture` explicitly
-scoped out of `D9-93`, see that task's own `plan_dx9.md` closure note), PLUS
-`PrimitiveType.TriangleStrip` (every earlier scene only ever used `TriangleList`) is now
-represented in the corpus:
+scoped out of `D9-93`, see that task's own `plan_dx9.md` closure note), PLUS **ALL 4**
+`PrimitiveType` values (`TriangleList`/`TriangleStrip`/`LineList`/`LineStrip` — `PrimitiveType`
+coverage is now COMPLETE) is now represented in the corpus:
 
 - `colored3d` (`D9-A2`'s own original spike scene: a `BasicEffect` `VertexColorEnabled=true`/
   `LightingEnabled=false` triangle over a `CornflowerBlue` clear) — `0/65536` pixels differ,
@@ -461,6 +461,33 @@ represented in the corpus:
   triangle's own corner and the second triangle's own corner separately) — mutation-verified
   (hardcoding `primitiveCount=1` instead of `2` made exactly that check go red, confirming it's
   genuinely sensitive to the conversion being wrong, then restored).
+- `colored_linelist_quad` — the second never-before-exercised `PrimitiveType`
+  (`primitive=LineList`), zero code changes needed. Two SEPARATE, non-touching horizontal line
+  segments at clean, exactly-pixel-centered Y rows (avoids the diagonal-AA boundary ambiguity
+  D9-91 already taught this corpus to watch for): RED at screen y=64, GREEN at y=192, same X
+  range. Confirmed on real XNA: both midpoints read pure RED/GREEN, and the row exactly between
+  them (y=128) stays the `CornflowerBlue` background — proving `LineList` draws two INDEPENDENT
+  segments, not a single connected polyline (which is what the SAME vertex data would produce
+  under `LineStrip` instead). `0/65536` pixels differ, pixel-perfect on the first attempt.
+- `colored_linestrip_quad` — the third and final never-before-exercised `PrimitiveType`
+  (`primitive=LineStrip`), COMPLETING ALL 4 REAL XNA `PrimitiveType` VALUES IN THE CORPUS. Three
+  vertices forming an open "V" polyline (top-left → bottom → top-right) — the same vertex count
+  that would be malformed under `LineList` (odd), so this is `LineStrip`'s own genuine
+  discriminator: 2 CONNECTED segments sharing the middle vertex. Confirmed on real XNA: 307
+  non-background pixels spanning the full `x=[26,230]`/`y=[52,205]` extent of the "V", with both
+  the left segment's own midpoint and the right segment's own midpoint independently reading pure
+  RED. `0/65536` pixels differ, pixel-perfect on the first attempt.
+
+Both `LineList`/`LineStrip` scenes also got dedicated offline `D3D9_Draw` Checks E/F (axis-aligned
+segments on the CTest's own small 64×64 canvas, to avoid diagonal-line rasterization-rounding risk
+that the already-oracle-proven 256×256 scenes don't have to worry about). **Real bug found and
+fixed in the CTest's OWN color-packing, not CNA**: `Check E`'s green vertex color was written as
+`0x00FF00FFu` — decoding byte order R,G,B,A ascending (this file's own established convention) as
+`R=255,G=0,B=255,A=0`, i.e. magenta at fully-transparent alpha, not opaque green — so the "green"
+segment never painted anything visible. Caught immediately via a full-frame debug scan (RED
+rendered exactly as predicted; zero GREEN pixels anywhere), fixed to `0xFF00FF00u`, re-verified
+6/6 green. Both new checks mutation-verified (hardcoded `primitiveCount=1` for each, confirmed
+exactly that check went red, restored).
 
 **Real, non-obvious finding surfaced while mutation-testing the half-pixel offset (not caught by
 the oracle diffs alone)**: `sprite_basic_quad.scene`'s own 1×1 texture is structurally incapable
@@ -490,14 +517,15 @@ sampler address modes, 3 of 5 `SpriteSortMode` values, AND multi-texture
 `FlushBatch()`-on-texture-change batching (basic draw, rotation/origin, `SpriteEffects` flip,
 `Wrap`/`Mirror`, `Deferred`/`BackToFront`/`FrontToBack`, interleaved multi-texture sprites —
 `D9-90`–`D9-93` all now COMPLETE, including `D9-90`'s own explicitly-named multi-texture-batching
-gap, Phase D9-9 has no open rows left), PLUS `PrimitiveType.TriangleStrip` are now represented in
-the corpus, at least once, and every single comparison so far is pixel-perfect.** `D9-A5` keeps
-growing "with the plan" — each subsequent effect/feature combination this project verifies against
-the oracle adds its own scene(s) here, incrementally, rather than attempting the full corpus
-(render targets — currently a documented blocker, not a simple next scene, see `NEXT.md` §4 —
-every shared `SurfaceFormat`, `PrimitiveType.LineList`/`.LineStrip`) in one sitting.
-`SpriteSortMode.Texture` is confirmed NOT viable as an oracle scene at all — real FNA's own
-`TextureComparer` sorts by `Texture`'s default `Object.GetHashCode()`, an implementation-defined
-identity hash with no predictable ordering, so no deterministic expected-pixel scene can exist for
-it (see `NEXT.md` §8 for the source-level confirmation). `D9-84` (every draw path validated
-against the oracle) is the task that consumes the finished corpus.
+gap, Phase D9-9 has no open rows left), PLUS **ALL 4** `PrimitiveType` values
+(`TriangleList`/`TriangleStrip`/`LineList`/`LineStrip` — `PrimitiveType` coverage is now COMPLETE)
+are now represented in the corpus, at least once, and every single comparison so far is
+pixel-perfect.** The cheap, no-new-API "reuse existing infrastructure" scene candidates are now
+exhausted — every remaining gap (render targets, every shared `SurfaceFormat`,
+`EnvironmentMapEffect` specular / `PreferPerPixelLighting`) needs real, scoped new CNA work first,
+not just a new scene file; see `NEXT.md` §8 for the current breakdown. `SpriteSortMode.Texture` is
+confirmed NOT viable as an oracle scene at all — real FNA's own `TextureComparer` sorts by
+`Texture`'s default `Object.GetHashCode()`, an implementation-defined identity hash with no
+predictable ordering, so no deterministic expected-pixel scene can exist for it (see `NEXT.md` §8
+for the source-level confirmation). `D9-84` (every draw path validated against the oracle) is the
+task that consumes the finished corpus.

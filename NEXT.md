@@ -75,7 +75,7 @@ plausibly."
 
 **Phase D9-0 is fully closed.** Next up: Phase D9-1 (CMake integration + backend skeleton).
 
-### Phase D9-A — the XNA 4.0 oracle: D9-A1–A4 closed, D9-A5 started (29 scenes, all 5 Stock Effects + fog + all 8 AlphaTestEffect.AlphaFunction values (COMPLETE) + EnvironmentMapEffect fresnel + SkinnedEffect all 3 WeightsPerVertex values (COMPLETE) + SpriteBatch core draw path + address modes + 3 of 5 SpriteSortMode values + multi-texture batching + TriangleStrip topology), D9-A6 open
+### Phase D9-A — the XNA 4.0 oracle: D9-A1–A4 closed, D9-A5 started (31 scenes, all 5 Stock Effects + fog + all 8 AlphaTestEffect.AlphaFunction values (COMPLETE) + EnvironmentMapEffect fresnel + SkinnedEffect all 3 WeightsPerVertex values (COMPLETE) + SpriteBatch core draw path + address modes + 3 of 5 SpriteSortMode values + multi-texture batching + ALL 4 PrimitiveType values (COMPLETE)), D9-A6 open
 
 | Task | Status |
 |---|---|
@@ -83,7 +83,7 @@ plausibly."
 | `D9-A2` — minimal XNA 4.0 reference app, no content pipeline | ✅ |
 | `D9-A3` — byte-for-byte equivalent CNA app, shared declarative scene format | ✅ |
 | `D9-A4` — `scripts/xna-diff.py`, DXVK-into-XNA-prefix prerequisite | ✅ |
-| `D9-A5` — growing scene corpus | 🟨 (29 scenes, all 5 XNA Stock Effects + `IEffectFog` + ALL 8 `AlphaTestEffect.AlphaFunction` values (`Less`/`LessEqual`/`GreaterEqual`/`Greater`/`Never`/`Always` on `PSAlphaTestLtGt`, `Equal`/`NotEqual` on `PSAlphaTestEqNe` — `AlphaTestEffect` compare-function coverage COMPLETE) + `EnvironmentMapEffect.FresnelFactor` + `SkinnedEffect` ALL 3 `WeightsPerVertex` values (`1`/`2`/`4` — `SkinnedEffect` weighting coverage COMPLETE) + `SpriteBatch` core draw path, address modes, 3 of 5 `SpriteSortMode` values, and multi-texture `FlushBatch()`-on-texture-change batching (`D9-90`/`D9-91`/`D9-92`/`D9-93` all CLOSED; `D9-93` covers `Deferred`/`BackToFront`/`FrontToBack`, `Immediate`/`Texture` explicitly scoped out — see `plan_dx9.md` D9-93's own closure note) + `PrimitiveType.TriangleStrip` (every earlier scene only ever used `TriangleList`) represented: `colored3d`, `textured_quad`, `lit_textured_quad`, `alphatest_quad`, `alphatest_less_quad`, `alphatest_equal_quad`, `alphatest_notequal_quad`, `alphatest_greaterequal_quad`, `alphatest_lessequal_quad`, `alphatest_never_quad`, `alphatest_always_quad`, `dualtexture_quad`, `envmap_quad`, `envmap_fresnel_quad`, `skinned_quad`, `skinned_twobone_quad`, `skinned_fourbone_quad`, `multilight_textured_quad`, `fog_gradient_quad`, `sprite_basic_quad`, `sprite_rotated_quad`, `sprite_flipped_quad`, `sprite_wrap_quad`, `sprite_mirror_quad`, `sprite_sortmode_deferred_quad`, `sprite_sortmode_backtofront_quad`, `sprite_sortmode_fronttoback_quad`, `sprite_multitexture_quad`, `colored_trianglestrip_quad`, all pixel-perfect) |
+| `D9-A5` — growing scene corpus | 🟨 (31 scenes, all 5 XNA Stock Effects + `IEffectFog` + ALL 8 `AlphaTestEffect.AlphaFunction` values (`Less`/`LessEqual`/`GreaterEqual`/`Greater`/`Never`/`Always` on `PSAlphaTestLtGt`, `Equal`/`NotEqual` on `PSAlphaTestEqNe` — `AlphaTestEffect` compare-function coverage COMPLETE) + `EnvironmentMapEffect.FresnelFactor` + `SkinnedEffect` ALL 3 `WeightsPerVertex` values (`1`/`2`/`4` — `SkinnedEffect` weighting coverage COMPLETE) + `SpriteBatch` core draw path, address modes, 3 of 5 `SpriteSortMode` values, and multi-texture `FlushBatch()`-on-texture-change batching (`D9-90`/`D9-91`/`D9-92`/`D9-93` all CLOSED; `D9-93` covers `Deferred`/`BackToFront`/`FrontToBack`, `Immediate`/`Texture` explicitly scoped out — see `plan_dx9.md` D9-93's own closure note) + ALL 4 `PrimitiveType` values (`TriangleList`/`TriangleStrip`/`LineList`/`LineStrip` — `PrimitiveType` coverage COMPLETE) represented: `colored3d`, `textured_quad`, `lit_textured_quad`, `alphatest_quad`, `alphatest_less_quad`, `alphatest_equal_quad`, `alphatest_notequal_quad`, `alphatest_greaterequal_quad`, `alphatest_lessequal_quad`, `alphatest_never_quad`, `alphatest_always_quad`, `dualtexture_quad`, `envmap_quad`, `envmap_fresnel_quad`, `skinned_quad`, `skinned_twobone_quad`, `skinned_fourbone_quad`, `multilight_textured_quad`, `fog_gradient_quad`, `sprite_basic_quad`, `sprite_rotated_quad`, `sprite_flipped_quad`, `sprite_wrap_quad`, `sprite_mirror_quad`, `sprite_sortmode_deferred_quad`, `sprite_sortmode_backtofront_quad`, `sprite_sortmode_fronttoback_quad`, `sprite_multitexture_quad`, `colored_trianglestrip_quad`, `colored_linelist_quad`, `colored_linestrip_quad`, all pixel-perfect) |
 | `D9-A6` — run the corpus against CNA's other backends too | ⬜ |
 
 Closed 2026-07-15 (`D9-A3`/`D9-A4`): built the shared declarative scene format `D9-A3`'s own text
@@ -1074,7 +1074,8 @@ Most recent first. Full detail lives in `plan_dx9.md` — this is a short index.
 
 | Commit(s) | Summary |
 |---|---|
-| *(pending)* | **`D9-A5` grown to 29 scenes (`colored_trianglestrip_quad`) — first scene to ever use `PrimitiveType.TriangleStrip`, PIXEL-PERFECT (0/65536 differ) on the first attempt**. Every earlier scene (and every existing `D3D9_Draw`/`D3D9_DrawEx` check) only ever used `TriangleList`, even though `GraphicsDevice::PrimitiveVerts()`/`ToD3D9Topology()` already handled all 4 `PrimitiveType` values unconditionally -- a real, previously-untested code path, not a new feature (no code changes needed). A 4-vertex colored quad in the canonical "Z" strip order (TL/TR/BL/BR), 4 distinct corner colors so a broken vertex-count<->primitiveCount conversion would show a missing quadrant or wrong Gouraud gradient. New `D3D9_Draw` Check D (now 4/4): an oversized strip quad sampled at the first triangle's own corner AND the second triangle's own corner (only covered if `primitiveCount` genuinely resolved to 2, not 1). Mutation-verified (hardcoded `primitiveCount=1`, confirmed exactly Check D went red, restored, reconfirmed green). All 29 corpus scenes re-verified pixel-perfect; full D3D9 CTest suite 12/12 green. |
+| *(pending)* | **`D9-A5` grown to 31 scenes (`colored_linelist_quad`/`colored_linestrip_quad`) — completes ALL 4 real `PrimitiveType` values, both PIXEL-PERFECT (0/65536 differ) on the first attempt**. `LineList`: two SEPARATE horizontal segments at different Y rows, proving independent segments with nothing connecting them (confirmed on real XNA: RED/GREEN midpoints exact, the row between stays background). `LineStrip`: a 3-vertex "V" polyline, proving 2 CONNECTED segments share the middle vertex (confirmed on real XNA: 307 non-background pixels spanning the full expected extent, both leg midpoints exact RED). New `D3D9_Draw` Check E/F (now 6/6) — real bug found and fixed in the CTest's OWN color-packing, not CNA: `0x00FF00FFu` decodes (byte order R,G,B,A ascending, little-endian literal) to `R=255,G=0,B=255,A=0` — magenta at zero alpha, invisible — not green; fixed to `0xFF00FF00u`. Caught immediately via a full-frame debug scan showing the RED segment rendered exactly as predicted but no GREEN pixels anywhere. Mutation-verified after the fix (hardcoded both `primitiveCount`s to 1, confirmed exactly Check E/F went red, restored). All 31 corpus scenes re-verified pixel-perfect; full D3D9 CTest suite 12/12 green. |
+| `426d8af7` | **`D9-A5` grown to 29 scenes (`colored_trianglestrip_quad`) — first scene to ever use `PrimitiveType.TriangleStrip`, PIXEL-PERFECT (0/65536 differ) on the first attempt**. Every earlier scene (and every existing `D3D9_Draw`/`D3D9_DrawEx` check) only ever used `TriangleList`, even though `GraphicsDevice::PrimitiveVerts()`/`ToD3D9Topology()` already handled all 4 `PrimitiveType` values unconditionally -- a real, previously-untested code path, not a new feature (no code changes needed). A 4-vertex colored quad in the canonical "Z" strip order (TL/TR/BL/BR), 4 distinct corner colors so a broken vertex-count<->primitiveCount conversion would show a missing quadrant or wrong Gouraud gradient. New `D3D9_Draw` Check D (now 4/4): an oversized strip quad sampled at the first triangle's own corner AND the second triangle's own corner (only covered if `primitiveCount` genuinely resolved to 2, not 1). Mutation-verified (hardcoded `primitiveCount=1`, confirmed exactly Check D went red, restored, reconfirmed green). All 29 corpus scenes re-verified pixel-perfect; full D3D9 CTest suite 12/12 green. |
 | `b557c2bf` | **`D9-A5` grown to 28 scenes (`sprite_multitexture_quad`) — closes D9-90's own explicitly-named multi-texture-batching gap, PIXEL-PERFECT (0/65536 differ) on the first attempt**. 3 non-overlapping sprites, interleaved RED-texture/BLUE-texture/RED-texture (not RED-RED-BLUE, so the second red draw genuinely forces a SECOND rebind after the blue draw's own flush) -- new optional trailing `textureIndex` column on `spritedraw=` lines, reusing the scene format's existing `texture2*` keys rather than inventing new ones. Mutation-verified (disabled the texture-change flush trigger in `D3D9SpriteBatchBackend::Draw()`, confirmed the middle sprite's BLUE leaked into the third position -- `1600/65536` pixels wrong -- then restored and reconfirmed green). New `D3D9_SpriteBatch` Check I (now 10/10). All 28 corpus scenes re-verified pixel-perfect; full D3D9 CTest suite 12/12 green. |
 | `df682701` | **Phase D9-9 `D9-93` CLOSED (3 of 5 `SpriteSortMode` values) — found and fixed a real D3D9 backend bug (`BuildMatrixTransformEXT`'s Z-row clipped any nonzero `layerDepth` sprite)**. 3 new `D9-A5` scenes (`sprite_sortmode_deferred_quad`/`sprite_sortmode_backtofront_quad`/`sprite_sortmode_fronttoback_quad`) using 2 overlapping `NonPremultiplied`-blended RED/GREEN sprites at different `layerDepth`s. First scene in the whole corpus to draw with `layerDepth != 0` — surfaced that `CreateOrthographicOffCenter(0,W,H,0,0, zFarPlane=1)` gives `Z'=-layerDepth`, outside D3D9's valid `[0,1]` clip-space Z range, silently clipping the second sprite away entirely regardless of sort mode (root-caused via the real XNA oracle producing correct output while CNA didn't). Fixed with `zFarPlane=-1` (identity Z-row, `Z'=layerDepth`) — only the Z row changes, D9-91's own X/Y half-pixel math is unaffected. All 3 new scenes pixel-perfect against real XNA 4.0 after the fix; 3 new checks added to `D3D9_SpriteBatch` (now 9/9), mutation-verified (reverted the fix, confirmed the sort-mode checks failed, restored, reconfirmed green). `SpriteSortMode.Immediate`/`.Texture` explicitly scoped out (not pixel-observable / needs multi-texture design, respectively) — see `plan_dx9.md` D9-93's own closure note. All 27 corpus scenes re-verified pixel-perfect; full D3D9 CTest suite 12/12 green. |
 | `8de8e5b9` | **Phase D9-9 `D9-92` CLOSED — real `TextureAddressMode.Wrap`/`Mirror` for `SpriteBatch`, both oracle-verified with discriminating patterns**. `SetSamplerFilter()`/`SetSamplerAddressMode()` already plumbed through to the real `D9-63` `ApplySamplerState()` path -- the missing piece was purely test coverage, since `Begin()` with no args only exercises `LinearClamp`. New `spritesourcerect`/`spritesampler` scene keys + `Begin(sortMode, blendState, samplerState, null, null)` wiring. 2 new `D9-A5` scenes: `sprite_wrap_quad` (`PointWrap`, sourceRect double the texture width -- tiles RED/GREEN/RED/GREEN across 4 bands) and `sprite_mirror_quad` (manually-constructed Point/Mirror sampler, same geometry -- folds symmetrically to RED/GREEN/GREEN/RED instead, genuinely distinguishable from Wrap). Both patterns predicted before running either side, then confirmed pixel-for-pixel identical. 2 new checks added to `D3D9_SpriteBatch` (now 6/6). All 24 corpus scenes re-verified pixel-perfect; full D3D9 CTest suite 12/12 green. |
@@ -1145,21 +1146,22 @@ results landed so far are pixel-perfect** (`colored3d`, `textured_quad`, `lit_te
 `skinned_twobone_quad`, `skinned_fourbone_quad`, `multilight_textured_quad`, `fog_gradient_quad`,
 `sprite_basic_quad`, `sprite_rotated_quad`, `sprite_flipped_quad`, `sprite_wrap_quad`,
 `sprite_mirror_quad`, `sprite_sortmode_deferred_quad`, `sprite_sortmode_backtofront_quad`,
-`sprite_sortmode_fronttoback_quad`, `sprite_multitexture_quad`, `colored_trianglestrip_quad` —
-`0/65536` pixels differ from real XNA 4.0 each, see Phase D9-A's own section above). `D9-A5` (the
-scene corpus) has 29 entries and now represents **all 5 XNA Stock Effects** (`BasicEffect`,
-`AlphaTestEffect`, `DualTextureEffect`, `EnvironmentMapEffect`, `SkinnedEffect`) including
-`BasicEffect`'s own multi-light summation bucket, `IEffectFog` (shared by all 5 effects),
-**ALL 8** `AlphaTestEffect.AlphaFunction` values covering both real pixel shader buckets
-(`Less`/`LessEqual`/`GreaterEqual`/`Greater`/`Never`/`Always` on `PSAlphaTestLtGt`,
-`Equal`/`NotEqual` on `PSAlphaTestEqNe` — `AlphaTestEffect` compare-function coverage is now
-COMPLETE), `EnvironmentMapEffect.FresnelFactor` with a genuine per-vertex gradient, **ALL 3**
-`SkinnedEffect.WeightsPerVertex` values (`1`/`2`/`4` — `SkinnedEffect` weighting coverage is now
-COMPLETE), `SpriteBatch`'s core draw path, sampler address modes, 3 of 5 `SpriteSortMode`
-values, and multi-texture `FlushBatch()`-on-texture-change batching (`D9-90`/`D9-91`/`D9-92`/
-`D9-93` all now CLOSED), and `PrimitiveType.TriangleStrip` (every earlier scene only ever used
-`TriangleList`), every comparison pixel-perfect; `D9-84` (every draw path validated against the
-oracle) can now genuinely continue, one scene at a time.
+`sprite_sortmode_fronttoback_quad`, `sprite_multitexture_quad`, `colored_trianglestrip_quad`,
+`colored_linelist_quad`, `colored_linestrip_quad` — `0/65536` pixels differ from real XNA 4.0
+each, see Phase D9-A's own section above). `D9-A5` (the scene corpus) has 31 entries and now
+represents **all 5 XNA Stock Effects** (`BasicEffect`, `AlphaTestEffect`, `DualTextureEffect`,
+`EnvironmentMapEffect`, `SkinnedEffect`) including `BasicEffect`'s own multi-light summation
+bucket, `IEffectFog` (shared by all 5 effects), **ALL 8** `AlphaTestEffect.AlphaFunction` values
+covering both real pixel shader buckets (`Less`/`LessEqual`/`GreaterEqual`/`Greater`/`Never`/
+`Always` on `PSAlphaTestLtGt`, `Equal`/`NotEqual` on `PSAlphaTestEqNe` — `AlphaTestEffect`
+compare-function coverage is now COMPLETE), `EnvironmentMapEffect.FresnelFactor` with a genuine
+per-vertex gradient, **ALL 3** `SkinnedEffect.WeightsPerVertex` values (`1`/`2`/`4` —
+`SkinnedEffect` weighting coverage is now COMPLETE), `SpriteBatch`'s core draw path, sampler
+address modes, 3 of 5 `SpriteSortMode` values, and multi-texture `FlushBatch()`-on-texture-change
+batching (`D9-90`/`D9-91`/`D9-92`/`D9-93` all now CLOSED), and **ALL 4** `PrimitiveType` values
+(`TriangleList`/`TriangleStrip`/`LineList`/`LineStrip` — `PrimitiveType` coverage is now
+COMPLETE), every comparison pixel-perfect; `D9-84` (every draw path validated against the oracle)
+can now genuinely continue, one scene at a time.
 
 **Phase D9-9: `D9-90`–`D9-93` all closed 2026-07-15 — `D3D9SpriteBatchBackend` is real, the
 half-pixel offset is both oracle- and mutation-verified, `Wrap`/`Mirror` addressing are both
@@ -1341,37 +1343,39 @@ instancing work (`D9-80`–`D9-83`) is now fully closed too** — real, verified
 Stock Effects plus hardware instancing. **Phase D9-9 (`SpriteBatch`, `D9-90`–`D9-93`) is now fully
 closed too**, including `D9-90`'s own explicitly-named multi-texture-batching gap, closed
 2026-07-15 as a `D9-A5` scene addition. **Phase D9-A's diff harness (`D9-A1`–`D9-A4`) is now fully
-closed too**, and 29 scenes covering all 5 XNA Stock Effects plus `IEffectFog`, ALL 8
+closed too**, and 31 scenes covering all 5 XNA Stock Effects plus `IEffectFog`, ALL 8
 `AlphaTestEffect.AlphaFunction` values across both real shader buckets (`AlphaTestEffect`
 compare-function coverage COMPLETE), `EnvironmentMapEffect.FresnelFactor`, ALL 3
 `SkinnedEffect.WeightsPerVertex` values (`SkinnedEffect` weighting coverage COMPLETE),
-`SpriteBatch`'s core draw path, sampler address modes, 3 of 5 `SpriteSortMode` values, and
-multi-texture `FlushBatch()`-on-texture-change batching (`D9-90`–`D9-93`, all COMPLETE), and
-`PrimitiveType.TriangleStrip` (`D3D9_Draw` Check D, new) are pixel-perfect. Only `D9-A5`
-(incrementally: grow the scene corpus) and `D9-84` (validate against it) remain anywhere in the
-plan up to this point — and they are, by design, the same ongoing effort: add a scene, validate
-it, move to the next effect.
+`SpriteBatch`'s core draw path, sampler address modes, 3 of 5 `SpriteSortMode` values, multi-
+texture `FlushBatch()`-on-texture-change batching (`D9-90`–`D9-93`, all COMPLETE), and **ALL 4**
+`PrimitiveType` values (`TriangleList`/`TriangleStrip`/`LineList`/`LineStrip`, `D3D9_Draw` Checks
+D/E/F, all new) are pixel-perfect. Only `D9-A5` (incrementally: grow the scene corpus) and `D9-84`
+(validate against it) remain anywhere in the plan up to this point — and they are, by design, the
+same ongoing effort: add a scene, validate it, move to the next effect.
 
-1. **`D9-A5`/`D9-84`** — add the next scene(s) to `tools/xna-oracle/scenes/`. `SpriteBatch` is no
-   longer an open candidate (Phase D9-9 fully closed, including the multi-texture-batching gap).
-   `PrimitiveType.TriangleStrip` is now closed too; `LineList`/`LineStrip` remain untested (same
-   "reuse existing infrastructure, no code changes" shape `TriangleStrip` had — the scene format
-   and `GraphicsDevice::PrimitiveVerts()`/`ToD3D9Topology()` already handle both). `SpriteSortMode.
-   Texture` is confirmed NOT a viable oracle scene, not just deferred: read FNA's own
-   `SpriteBatch.cs` (`TextureComparer.Compare` sorts by `texture.GetHashCode()`, i.e. `Texture`'s
-   inherited default `Object.GetHashCode()` — an implementation-defined identity hash with no
-   documented, predictable ordering) — any 2-distinct-texture test's "which group ends up on top"
-   result is genuinely non-deterministic from a black-box test-authoring perspective, not merely
-   hard to predict. **Do NOT re-attempt a render-target oracle scene** until the crash documented
-   in §4's own "New blocker found 2026-07-15" is root-caused. A genuine `SurfaceFormat` sweep needs
-   new CNA `Texture2D` API surface first (a generic `SetData<T>`, since the current C++ API is
-   `Color`-only) — not a simple "add a scene" task either. Validate new scenes via
-   `scripts/xna-diff.py` against the real XNA oracle — the last two open rows in Phase D9-8/D9-A,
-   and where `D9-21`'s `D3DCULL` proof and `D9-62`'s rasterizer-state proof both finally close out
-   too. See `tools/xna-oracle/README.md` for the current build/run commands.
+1. **`D9-A5`/`D9-84` — the cheap, no-new-API "reuse existing infrastructure" scene candidates are
+   now exhausted.** `SpriteBatch` (Phase D9-9), `PrimitiveType` (all 4 values), and every
+   currently-drawable Stock Effect bucket are all closed. `SpriteSortMode.Texture` is confirmed
+   NOT a viable oracle scene at all, not just deferred: real FNA's own `SpriteBatch.cs`
+   (`TextureComparer.Compare` sorts by `texture.GetHashCode()`, i.e. `Texture`'s inherited default
+   `Object.GetHashCode()` — an implementation-defined identity hash with no documented,
+   predictable ordering) makes "which texture group ends up on top" genuinely non-deterministic
+   from a black-box test-authoring perspective. Every other remaining candidate needs real,
+   scoped NEW work first, not just a new scene file:
+   - **Render targets**: blocked on the documented crash (§4's own "New blocker found
+     2026-07-15") — do NOT re-attempt until root-caused.
+   - **`SurfaceFormat` sweep**: needs new CNA `Texture2D` API surface (a generic `SetData<T>`
+     matching real XNA's own, since the current C++ API is `Color`-only).
+   - **`EnvironmentMapEffect` specular variants / `PreferPerPixelLighting` (`BasicEffect`/
+     `EnvironmentMapEffect`/`SkinnedEffect`)**: blocked on `D9-81`'s still-open `GpuDrawParams`
+     gaps (the cross-cutting dispatch-layer blocker, not a D3D9-specific one).
+   Picking any of these is a real scope decision, not a "grow the corpus" continuation — see
+   `tools/xna-oracle/README.md` for the current build/run commands if one is picked.
 2. **Phase D9-10 (`GraphicsProfile` made real)** — this backend is the only CNA backend that can
    natively answer `GraphicsAdapter::IsProfileSupported()` for real via `D3DCAPS9`; a real, scoped,
-   not-yet-started phase, surveyed but not begun this session.
+   not-yet-started phase, surveyed but not begun this session. Does not depend on any of the
+   above blockers — a clean next phase if none of the D9-A5 candidates above are picked.
 
 See `plan_dx9.md`'s "Execution order" table for the full sequence beyond this.
 
