@@ -1,6 +1,7 @@
 #include "CNA/Internal/Backends/Canvas/CanvasGraphicsBackend.hpp"
 #include "CNA/Internal/Backends/Canvas/CanvasTextureBackend.hpp"
 #include "CNA/Internal/Backends/Canvas/CanvasRenderTargetBackend.hpp"
+#include "CNA/Internal/Backends/Canvas/CanvasSpriteBatchBackend.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -38,6 +39,12 @@ EM_JS(void, CNA_Canvas2D_Clear, (double r, double g, double b, double a), {
     CNA_Canvas2D_EnsureMainContext();
     const ctx = Module['cnaCurrentCtx'];
     if (!ctx) return;
+    // Defensive: fillRect/clearRect below assume an untransformed context. A SpriteBatch's
+    // SetTransformMatrix() resets this itself on End() (belt and suspenders -- see
+    // CanvasSpriteBatchBackend::End()), but Clear() doesn't otherwise know whether a batch is
+    // currently open when it's called (matches real XNA/FNA, where Clear() can legally be called
+    // between a Begin()/End() pair too).
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     const w = ctx.canvas.width, h = ctx.canvas.height;
     if (a <= 0) { ctx.clearRect(0, 0, w, h); return; }
     const ri = Math.round(r * 255), gi = Math.round(g * 255), bi = Math.round(b * 255);
@@ -68,15 +75,10 @@ namespace CNA::Internal::Backends::Canvas
 {
     namespace
     {
-        // Phase C1 placeholder for methods a later phase makes real (Clear/Present in C2,
-        // textures/render targets in C3, SpriteBatch in C4). Distinct from ThrowNo3D, which
-        // Phase C7 wires up permanently for the inherently-3D-only surface.
-        [[noreturn]] void NotYetImplemented(const char* methodName)
-        {
-            throw std::runtime_error(
-                std::string("CanvasGraphicsBackend::") + methodName + " not yet implemented (see plan_canvas.md)");
-        }
-
+        // Phase C1's NotYetImplemented() placeholder (Clear/Present/CreateTexture/CreateSpriteBatch)
+        // has no remaining callers -- Phases C2-C4 replaced all of them with real implementations.
+        // Only the inherently-3D-only surface still throws, via ThrowNo3D() below (permanent, not a
+        // placeholder -- Phase C7 just formalizes/audits this same wiring).
         [[noreturn]] void ThrowNo3D(const char* methodName)
         {
             throw std::runtime_error(
@@ -183,7 +185,7 @@ namespace CNA::Internal::Backends::Canvas
 
     std::unique_ptr<ISpriteBatchBackend> CanvasGraphicsBackend::CreateSpriteBatch()
     {
-        NotYetImplemented("CreateSpriteBatch");
+        return std::make_unique<CanvasSpriteBatchBackend>();
     }
 
     std::unique_ptr<IRenderTargetBackend> CanvasGraphicsBackend::CreateRenderTarget2D(

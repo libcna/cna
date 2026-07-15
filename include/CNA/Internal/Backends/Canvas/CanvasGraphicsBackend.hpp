@@ -11,13 +11,12 @@ namespace CNA::Internal::Backends::Canvas
     /**
      * @brief HTML Canvas 2D graphics backend (Emscripten-only).
      *
-     * See plan_canvas.md for the full task breakdown and design rationale. Phase C1 wires up
-     * construction/teardown and viewport bookkeeping only -- every method that will eventually
-     * touch a real `CanvasRenderingContext2D` throws via NotYetImplemented() until the phase that
-     * implements it lands (Clear/Present in C2, textures/render targets in C3, SpriteBatch in C4).
-     * The inherently-3D-only pure virtuals (ClearColorAndDepth and friends, vertex/index buffers,
-     * DrawColoredPrimitives) get their permanent ThrowNo3D() wiring in Phase C7 -- Phase C1's
-     * throwing stubs for those are a placeholder, not the final behavior.
+     * See plan_canvas.md for the full task breakdown and design rationale. Window/viewport
+     * bookkeeping (C1), Clear/Present (C2), textures/render targets (C3), and SpriteBatch (C4) are
+     * all real. Blend/sampler state mapping (C5) and SpriteFont (C6, expected to need no new code)
+     * are still open. The inherently-3D-only pure virtuals (ClearColorAndDepth and friends,
+     * vertex/index buffers, DrawColoredPrimitives) throw via ThrowNo3D() -- permanent behavior, not
+     * a placeholder; Phase C7 just audits/formalizes this same wiring across the full 3D surface.
      */
     class CanvasGraphicsBackend final : public IGraphicsBackend
     {

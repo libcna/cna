@@ -1,6 +1,6 @@
 // plan_canvas.md CANVAS-15: structural smoke test for the CANVAS (HTML Canvas 2D) graphics
-// backend. Constructs a real Game (GraphicsDeviceManager, Clear(), a SpriteBatch draw once Phase
-// C4 lands) and runs a couple of frames.
+// backend. Constructs a real Game (GraphicsDeviceManager, Clear(), a Texture2D + SpriteBatch draw
+// with rotation/origin/tint) and runs a couple of frames.
 //
 // Design decision 9 / this file's own empirical finding: this backend is Emscripten-only, and
 // SDL_Init(SDL_INIT_VIDEO) itself throws under this repo's `node CnaTests.js` runner (no real
@@ -16,10 +16,13 @@
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 
 #include "CNA/Internal/Backends/Canvas/CanvasGraphicsBackend.hpp"
 
 #include <cstdio>
+#include <vector>
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -28,6 +31,8 @@ using namespace CNA::Internal::Backends::Canvas;
 class CanvasSmokeTest : public Game
 {
     std::unique_ptr<GraphicsDeviceManager> gdm_;
+    std::unique_ptr<SpriteBatch> spriteBatch_;
+    std::unique_ptr<Texture2D> texture_;
     int frame_ = 0;
     int passCount_ = 0;
     int result_ = 1;
@@ -39,6 +44,17 @@ class CanvasSmokeTest : public Game
     }
 
 protected:
+    void LoadContent() override
+    {
+        spriteBatch_ = std::make_unique<SpriteBatch>(getGraphicsDeviceProperty());
+        // 2x2 RGBA8, one distinct color per pixel -- enough to exercise a real putImageData().
+        texture_ = std::make_unique<Texture2D>(
+            Texture2D::CreateFromPixels(getGraphicsDeviceProperty(), 2, 2, std::vector<std::uint8_t>{
+                255, 0, 0, 255,   0, 255, 0, 255,
+                0, 0, 255, 255,   255, 255, 0, 255,
+            }));
+    }
+
     void Draw(const GameTime&) override
     {
         ++frame_;
@@ -57,8 +73,11 @@ protected:
 
         dev.Clear(Color::CornflowerBlue);
 
-        // Real SpriteBatch/Texture2D coverage lands once Phase C3/C4 replace CreateTexture()/
-        // CreateSpriteBatch()'s current NotYetImplemented stubs.
+        spriteBatch_->Begin();
+        spriteBatch_->Draw(*texture_, Vector2(8, 8), Color::White);
+        spriteBatch_->Draw(*texture_, Rectangle(20, 8, 16, 16), Rectangle(0, 0, 2, 2), Color(128, 128, 255, 200),
+                           0.5f, Vector2(1, 1), SpriteEffects::FlipHorizontally, 0.0f);
+        spriteBatch_->End();
 
         if (frame_ == 2)
         {
