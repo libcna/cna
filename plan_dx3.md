@@ -15,7 +15,7 @@
 >
 > **Status legend** (matches `../cna`'s own convention): ✅ implemented *and verified against its
 > stated acceptance criteria*; 🟨 code or documentation exists but has not met those criteria;
-> ⬜ not implemented. Phases X1/X2 are ✅ (see their own tables below); X3 onward are ⬜.
+> ⬜ not implemented. Phases X1/X2/X3 are ✅ (see their own tables below); X4 onward are ⬜.
 >
 > **Real, confirmed finding not anticipated by this plan's original design decisions**: `free-direct`'s
 > `IDirectDrawSurface::Lock()` never exposes a writable pointer for the *primary* surface (confirmed
@@ -236,15 +236,15 @@ For every task: build the affected target(s) (`-DCNA_GRAPHICS_BACKEND=DX3`), run
 
 | # | Task | Status | Notes |
 |---|---|---|---|
-| DX3-20 | `Dx3TextureBackend : ITextureBackend` — owns a private offscreen `IDirectDrawSurface*` (`DDSCAPS_OFFSCREENPLAIN`, 32bpp) sized to the texture; `UpdatePixels` writes via `Lock()`/`memcpy`/`Unlock()` | ⬜ | |
-| DX3-21 | `SetData`/`GetData` full round-trip via `Lock`/`Unlock` — genuinely synchronous, no async concerns at all (an advantage over `CANVAS`'s Design decision 3 workaround, since COM calls are already synchronous by nature) | ⬜ | |
-| DX3-22 | Mip levels (`level>0` `SetData`): decide the same way `SDL_RENDERER` (Task 681) and `CANVAS` (CANVAS-21) did — no native mip chain in `DirectDrawSurface` either; likely throws for `level>0`, `level=0` unaffected | ⬜ | |
-| DX3-23 | `Dx3RenderTargetBackend : IRenderTargetBackend` — same offscreen-surface mechanism; `BindAsRenderTarget()`/`UnbindAsRenderTarget()` switch which surface subsequent `Clear`/compositor writes/`Blt` calls target | ⬜ | |
-| DX3-24 | `HasRealDepthBuffer()` → always `false` (no depth buffer concept in `DirectDrawSurface` at all) | ⬜ | |
-| DX3-25 | `RenderTargetUsage::DiscardContents` vs `PreserveContents` — same observable contract `SDL_RENDERER` Task 706/`CANVAS`-24 already established | ⬜ | |
-| DX3-26 | `ReadBackbuffer()`/`GetBackBufferData()`: real `Lock()` + `memcpy` from the currently-bound surface | ⬜ | |
-| DX3-27 | `SetRenderTargets` with 2+ bindings (MRT): throw — single-surface-target reality, same conclusion `SDL_RENDERER` Task 709/`CANVAS`-26 already reached | ⬜ | |
-| DX3-28 | 4096×4096 dimension cap: `free-direct`'s own `CreateSurface` already enforces this (`docs/directdraw-limitations.md`) — confirm CNA's texture-size validation doesn't contradict it (e.g. surface up to XNA's own larger limits silently truncating instead of throwing) | ⬜ | |
+| DX3-20 | `Dx3TextureBackend : ITextureBackend` — owns a private offscreen `IDirectDrawSurface*` (`DDSCAPS_OFFSCREENPLAIN`, 32bpp) sized to the texture; `UpdatePixels` writes via `Lock()`/`memcpy`/`Unlock()` | ✅ | Defined entirely inside `Dx3GraphicsBackend.cpp` (never named in the header) — no external code needs to name it, and this keeps `<ddraw.h>` fully contained (design decision 9) without a pimpl. Shares `CreateOffscreenSurface`/`WriteSurfacePixels`/`ReadSurfacePixels` helpers with `Dx3RenderTargetBackend`. |
+| DX3-21 | `SetData`/`GetData` full round-trip via `Lock`/`Unlock` — genuinely synchronous, no async concerns at all (an advantage over `CANVAS`'s Design decision 3 workaround, since COM calls are already synchronous by nature) | ✅ | `Texture2D::GetData` reads from CPU-side `cpuPixels_`, never the backend (confirmed in `Texture2D.cpp`), so the meaningful round-trip proof is via `RenderTarget2D` bind+`Clear`+`GetBackBufferData` (`Dx3_TextureRenderTarget` CTest, Checks D/E) rather than `Texture2D::GetData` itself. |
+| DX3-22 | Mip levels (`level>0` `SetData`): decide the same way `SDL_RENDERER` (Task 681) and `CANVAS` (CANVAS-21) did — no native mip chain in `DirectDrawSurface` either; likely throws for `level>0`, `level=0` unaffected | ✅ | Throws (matches `SDL_RENDERER` Task 681's message style); `level=0` always routes through `UpdatePixels`, confirmed in `Texture2D::SetData`. |
+| DX3-23 | `Dx3RenderTargetBackend : IRenderTargetBackend` — same offscreen-surface mechanism; `BindAsRenderTarget()`/`UnbindAsRenderTarget()` switch which surface subsequent `Clear`/compositor writes/`Blt` calls target | ✅ | `BindAsRenderTarget`/`UnbindAsRenderTarget` write/clear a `LPDIRECTDRAWSURFACE*` slot living in `Dx3GraphicsBackend::Impl` (`currentTargetSurface`), passed in at construction — `Dx3RenderTargetBackend` never needs to name the private `Impl` type itself. |
+| DX3-24 | `HasRealDepthBuffer()` → always `false` (no depth buffer concept in `DirectDrawSurface` at all) | ✅ | |
+| DX3-25 | `RenderTargetUsage::DiscardContents` vs `PreserveContents` — same observable contract `SDL_RENDERER` Task 706/`CANVAS`-24 already established | ✅ | Confirmed: this is entirely shared `GraphicsDevice.cpp` logic (Task 704's gating), not backend-specific — came for free once `SetRenderTarget2D`+`Clear()` were wired correctly. `Dx3_TextureRenderTarget` CTest Check F confirms `DiscardContents` really auto-clears to black on rebind. |
+| DX3-26 | `ReadBackbuffer()`/`GetBackBufferData()`: real `Lock()` + `memcpy` from the currently-bound surface | ✅ | Added `Impl::ActiveSurface()` (`currentTargetSurface ? currentTargetSurface : backBuffer`); `Clear()`/`ReadBackbuffer()` both go through it. `Present()` deliberately does not — it always Blt()s the real shadow backbuffer, matching FNA's own backbuffer/render-target separation. |
+| DX3-27 | `SetRenderTargets` with 2+ bindings (MRT): throw — single-surface-target reality, same conclusion `SDL_RENDERER` Task 709/`CANVAS`-26 already reached | ✅ | |
+| DX3-28 | 4096×4096 dimension cap: `free-direct`'s own `CreateSurface` already enforces this (`docs/directdraw-limitations.md`) — confirm CNA's texture-size validation doesn't contradict it (e.g. surface up to XNA's own larger limits silently truncating instead of throwing) | ✅ | Confirmed empirically (`Dx3_TextureRenderTarget` CTest Check H): `Texture2D(5000, 5000)` throws (free-direct's `CreateSurface` returns `DDERR_INVALIDPARAMS`, propagated via `ThrowHr`); CNA's own `Texture2D` constructor performs no silent width/height clamping (confirmed by reading `Texture2D.cpp`). |
 
 ## Phase X4 — CPU compositor / `SpriteBatch` draw path
 

@@ -6676,6 +6676,14 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
         LABELS "DX3")
+
+    # plan_dx3.md Phase X3 (DX3-20..DX3-28): texture/render-target backend CTest.
+    cna_dx3_test(cna_test_dx3_texture_rendertarget examples/dx3_texture_rendertarget_test.cpp)
+    add_test(NAME Dx3_TextureRenderTarget COMMAND cna_test_dx3_texture_rendertarget)
+    set_tests_properties(Dx3_TextureRenderTarget PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
+        LABELS "DX3")
 endif()
 
 # plan_dx.md DX-80: D3D11 CTest registration. When cross-compiled from Linux (this backend is

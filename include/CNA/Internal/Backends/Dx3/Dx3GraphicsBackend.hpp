@@ -31,8 +31,11 @@ namespace CNA::Internal::Backends::Dx3
      * dirty-Blt behavior (Flip() is never called -- it would only disable that auto-present path
      * for no benefit, since Flip() itself does not copy from anywhere else).
      *
-     * Textures/render targets (Phase X3) and the SpriteBatch CPU compositor (Phase X4/X5) are not
-     * yet implemented as of Phase X2 -- CreateTexture()/CreateSpriteBatch() throw honestly.
+     * Textures and render targets (Phase X3) are real: both are private offscreen
+     * DDSCAPS_OFFSCREENPLAIN surfaces (Dx3TextureBackend/Dx3RenderTargetBackend, defined entirely
+     * in Dx3GraphicsBackend.cpp -- neither is ever named outside it), and SetRenderTarget2D()
+     * redirects Clear()/ReadBackbuffer() to whichever surface is currently bound. The SpriteBatch
+     * CPU compositor (Phase X4/X5) is not yet implemented -- CreateSpriteBatch() throws honestly.
      */
     class Dx3GraphicsBackend final : public IGraphicsBackend
     {
@@ -57,8 +60,23 @@ namespace CNA::Internal::Backends::Dx3
         // same as every other non-SDL_Renderer-based backend.
         SDL_Renderer* GetRendererInternal() const override { return nullptr; }
 
-        // ---- IGraphicsBackend: not yet implemented (Phase X3/X4) ----
+        // ---- IGraphicsBackend: real (Phase X3) ----
+        // Both CreateTexture() and CreateRenderTarget2D() own a private offscreen
+        // DDSCAPS_OFFSCREENPLAIN surface (32bpp, Design decision 4) sized to the request;
+        // SetRenderTarget2D()/SetRenderTargets() redirect Clear()/ReadBackbuffer() (and, from
+        // Phase X4, the SpriteBatch compositor) to whichever surface is currently bound, via
+        // Impl's currentTargetSurface slot -- Present() always targets the real shadow backbuffer
+        // regardless of binding, matching FNA's own backbuffer-vs-render-target separation.
         std::unique_ptr<ITextureBackend> CreateTexture(const ImageData& data) override;
+        std::unique_ptr<IRenderTargetBackend> CreateRenderTarget2D(int w, int h, int depthFormat,
+                                                                    bool preserveContents, bool mipMap,
+                                                                    int multiSampleCount) override;
+        void SetRenderTarget2D(IRenderTargetBackend* rt) override;
+        // DX3-27: DirectDraw has no multi-render-target concept -- throws for count > 1, same
+        // conclusion SDL_RENDERER (Task 709) and CANVAS (CANVAS-26) already reached.
+        void SetRenderTargets(IRenderTargetBackend* const* rts, int count) override;
+
+        // ---- IGraphicsBackend: not yet implemented (Phase X4) ----
         std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() override;
 
         // ---- 3D pipeline: NOT supported by DX3 (DirectDraw is 2D-only). ----
