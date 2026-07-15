@@ -41,6 +41,15 @@ namespace CNA::Internal::Backends::Canvas
 
         std::unique_ptr<ITextureBackend> CreateTexture(const ImageData& data) override;
         std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() override;
+        std::unique_ptr<IRenderTargetBackend> CreateRenderTarget2D(int w, int h, int depthFormat,
+                                                                    bool preserveContents = false,
+                                                                    bool mipMap = false,
+                                                                    int multiSampleCount = 0) override;
+        void SetRenderTarget2D(IRenderTargetBackend* rt) override;
+        // plan_canvas.md CANVAS-26: a Canvas2D context is inherently single-target (same
+        // conclusion SDL_RENDERER's Task 709 reached) -- throws for count > 1.
+        void SetRenderTargets(IRenderTargetBackend* const* rts, int count) override;
+        void ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels) override;
 
         void ClearColorAndDepth(float r, float g, float b, float a, float depth) override;
         void ClearDepth(float depth) override;

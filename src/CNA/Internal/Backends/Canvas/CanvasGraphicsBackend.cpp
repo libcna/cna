@@ -1,4 +1,6 @@
 #include "CNA/Internal/Backends/Canvas/CanvasGraphicsBackend.hpp"
+#include "CNA/Internal/Backends/Canvas/CanvasTextureBackend.hpp"
+#include "CNA/Internal/Backends/Canvas/CanvasRenderTargetBackend.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -10,31 +12,55 @@
 // plan_canvas.md CANVAS-10/Design decision 2: shared JS-side helper that locates the existing DOM
 // <canvas> element (Module['canvas'] || document.querySelector('canvas'), the same lookup
 // EasyGLGraphicsBackend.cpp already uses for its own GL context) and caches its '2d' context on
-// Module['cnaCtx2d']. Every other Canvas2D EM_JS function below calls this first, then reads
-// Module['cnaCtx2d'] -- EM_JS-declared functions are ordinary top-level JS functions in the
-// generated glue code, so they can call each other directly by name.
-EM_JS(void, CNA_Canvas2D_EnsureContext, (), {
-    if (Module['cnaCtx2d']) return;
+// Module['cnaMainCtx']. Module['cnaCurrentCtx'] is "whichever context Clear()/Draw() currently
+// target" -- the main canvas by default, or a bound CanvasRenderTargetBackend's own off-screen
+// context (see CanvasRenderTargetBackend.cpp's Bind/UnbindAsRenderTarget, Phase C3), mirroring
+// SDL_Renderer's SetRenderTarget2D model of "operate on whatever's currently bound". EM_JS-declared
+// functions are ordinary top-level JS functions in the generated glue code, so every Canvas2D EM_JS
+// function in this backend (across every .cpp -- textures/render targets included) can call this
+// one directly by name.
+EM_JS(void, CNA_Canvas2D_EnsureMainContext, (), {
+    if (Module['cnaMainCtx']) return;
     const canvas = Module['canvas'] || document.querySelector('canvas');
     if (!canvas) { console.error('[CNA] Canvas2D: no <canvas> element found'); return; }
     const ctx = canvas.getContext('2d');
     if (!ctx) { console.error('[CNA] Canvas2D: getContext(\'2d\') failed'); return; }
-    Module['cnaCtx2d'] = ctx;
+    Module['cnaMainCtx'] = ctx;
+    if (!Module['cnaCurrentCtx']) Module['cnaCurrentCtx'] = ctx;
 });
 
-// plan_canvas.md CANVAS-11: real Clear() against the main canvas's cached 2D context. alpha<=0 uses
-// clearRect (transparent), matching FNA's Clear() semantics for a fully-transparent clear color;
-// otherwise an opaque fillRect (Canvas2D has no separate "clear to this exact RGBA" primitive when
-// alpha>0 -- a solid fillStyle + fillRect is the correct equivalent).
+// plan_canvas.md CANVAS-11: real Clear() against whichever context is currently bound (main canvas
+// or a bound render target -- see CANVAS-22). alpha<=0 uses clearRect (transparent), matching
+// FNA's Clear() semantics for a fully-transparent clear color; otherwise an opaque fillRect
+// (Canvas2D has no separate "clear to this exact RGBA" primitive when alpha>0 -- a solid fillStyle
+// + fillRect is the correct equivalent).
 EM_JS(void, CNA_Canvas2D_Clear, (double r, double g, double b, double a), {
-    CNA_Canvas2D_EnsureContext();
-    const ctx = Module['cnaCtx2d'];
+    CNA_Canvas2D_EnsureMainContext();
+    const ctx = Module['cnaCurrentCtx'];
     if (!ctx) return;
     const w = ctx.canvas.width, h = ctx.canvas.height;
     if (a <= 0) { ctx.clearRect(0, 0, w, h); return; }
     const ri = Math.round(r * 255), gi = Math.round(g * 255), bi = Math.round(b * 255);
     ctx.fillStyle = 'rgba(' + ri + ',' + gi + ',' + bi + ',' + a + ')';
     ctx.fillRect(0, 0, w, h);
+});
+
+// plan_canvas.md CANVAS-25: real, synchronous ctx.getImageData() readback against whichever
+// context is currently bound -- Canvas2D's getImageData is genuinely synchronous (Design
+// decision 3), no faking/async round-trip needed. Writes w*h*4 RGBA8 bytes to outPixels.
+EM_JS(void, CNA_Canvas2D_ReadCurrentPixels, (int x, int y, int w, int h, uint8_t* outPixels), {
+    CNA_Canvas2D_EnsureMainContext();
+    const ctx = Module['cnaCurrentCtx'];
+    if (!ctx) return;
+    const imageData = ctx.getImageData(x, y, w, h);
+    Module.HEAPU8.set(imageData.data, outPixels);
+});
+
+// plan_canvas.md CANVAS-22: restores the main canvas as the current draw/clear/read target --
+// the counterpart of CanvasRenderTargetBackend.cpp's CNA_Canvas2D_BindRenderTarget(id).
+EM_JS(void, CNA_Canvas2D_UnbindRenderTarget, (), {
+    CNA_Canvas2D_EnsureMainContext();
+    Module['cnaCurrentCtx'] = Module['cnaMainCtx'];
 });
 #endif
 
@@ -150,14 +176,56 @@ namespace CNA::Internal::Backends::Canvas
         return true;
     }
 
-    std::unique_ptr<ITextureBackend> CanvasGraphicsBackend::CreateTexture(const ImageData&)
+    std::unique_ptr<ITextureBackend> CanvasGraphicsBackend::CreateTexture(const ImageData& data)
     {
-        NotYetImplemented("CreateTexture");
+        return std::make_unique<CanvasTextureBackend>(data);
     }
 
     std::unique_ptr<ISpriteBatchBackend> CanvasGraphicsBackend::CreateSpriteBatch()
     {
         NotYetImplemented("CreateSpriteBatch");
+    }
+
+    std::unique_ptr<IRenderTargetBackend> CanvasGraphicsBackend::CreateRenderTarget2D(
+        int w, int h, int /*depthFormat*/, bool /*preserveContents*/, bool /*mipMap*/, int /*multiSampleCount*/)
+    {
+        // depthFormat/mipMap/multiSampleCount are all ignored, same as SDL_RENDERER's own
+        // CreateRenderTarget2D: Canvas2D has no depth buffer (CANVAS-23), no native mip chain
+        // (CANVAS-21), and no MSAA control on its 2D blit pipeline.
+        return std::make_unique<CanvasRenderTargetBackend>(w, h);
+    }
+
+    void CanvasGraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* rt)
+    {
+        if (rt)
+        {
+            rt->BindAsRenderTarget();
+        }
+        else
+        {
+#if defined(__EMSCRIPTEN__)
+            CNA_Canvas2D_UnbindRenderTarget();
+#endif
+        }
+    }
+
+    void CanvasGraphicsBackend::SetRenderTargets(IRenderTargetBackend* const* rts, int count)
+    {
+        if (count > 1)
+            throw std::runtime_error(
+                "Canvas (HTML Canvas 2D) does not support multiple simultaneous render targets "
+                "(MRT): requested " + std::to_string(count) + ", but a CanvasRenderingContext2D "
+                "is inherently single-target.");
+        SetRenderTarget2D(count > 0 ? rts[0] : nullptr);
+    }
+
+    void CanvasGraphicsBackend::ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels)
+    {
+#if defined(__EMSCRIPTEN__)
+        CNA_Canvas2D_ReadCurrentPixels(x, y, w, h, pixels);
+#else
+        (void)x; (void)y; (void)w; (void)h; (void)pixels;
+#endif
     }
 
     void CanvasGraphicsBackend::ClearColorAndDepth(float, float, float, float, float) { ThrowNo3D("ClearColorAndDepth"); }
