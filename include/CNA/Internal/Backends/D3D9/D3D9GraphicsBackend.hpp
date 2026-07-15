@@ -162,10 +162,10 @@ namespace CNA::Internal::Backends::D3D9
         void DrawIndexedColoredPrimitives(const IVertexBufferBackend& vb, const IIndexBufferBackend& ib,
                                           const Matrix& world, const Matrix& view, const Matrix& projection,
                                           PrimitiveType primitive, int primitiveCount) override;
-        /// D9-82b: real effect-aware dispatch, `BasicEffect` only so far (`AlphaTestEffect`/
-        /// `DualTextureEffect`/`EnvironmentMapEffect`/`SkinnedEffect` throw a named
-        /// not-yet-implemented naming their own follow-up row -- `D9-82c`/`d`/`e`/`f`). See
-        /// `D3D9EffectDraw.cpp`'s own header comment for the full `BasicEffect` coverage/gaps.
+        /// D9-82b-f: real effect-aware dispatch for all 5 XNA Stock Effects (`BasicEffect`/
+        /// `AlphaTestEffect`/`DualTextureEffect`/`EnvironmentMapEffect`/`SkinnedEffect`). See
+        /// `D3D9EffectDraw.cpp`'s own header comment for the exact per-effect `ShaderIndex`
+        /// coverage/gaps.
         void DrawPrimitivesEx(const IVertexBufferBackend& vb,
                               const Matrix& world, const Matrix& view, const Matrix& projection,
                               PrimitiveType primitive, int primitiveCount,
@@ -175,6 +175,17 @@ namespace CNA::Internal::Backends::D3D9
                                      const Matrix& world, const Matrix& view, const Matrix& projection,
                                      PrimitiveType primitive, int primitiveCount,
                                      const GpuDrawParams& params) override;
+        /// D9-83: real hardware instancing via `SetStreamSourceFreq` (`D3DSTREAMSOURCE_INDEXEDDATA`/
+        /// `INSTANCEDATA`), indexed-only (matches this method's own base-class signature). Uses
+        /// CNA's own NOXNA `Instanced3D` shader (`shaders/cna/Instanced3D.hlsl`) -- real XNA has no
+        /// per-instance-aware Stock Effect vertex shader at all, so this is not effect-aware and
+        /// does not dispatch through `DrawPrimitivesExImpl()`. Falls back to
+        /// `DrawIndexedPrimitivesEx()` when `params.instanceVb` is null (matches
+        /// `D3D11GraphicsBackend`'s own identical fallback). Defined in `D3D9InstancedDraw.cpp`.
+        void DrawInstancedPrimitivesEx(const IVertexBufferBackend& vb, const IIndexBufferBackend& ib,
+                                       const Matrix& world, const Matrix& view, const Matrix& projection,
+                                       PrimitiveType primitive, int primitiveCount, int instanceCount,
+                                       const GpuDrawParams& params) override;
         std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() override;
 
         // ---- IGraphicsBackend: real (D9-30/D9-6 -- GraphicsDevice's own constructor unconditionally
@@ -321,6 +332,13 @@ namespace CNA::Internal::Backends::D3D9
         /// layouts. Not a D3DPOOL_DEFAULT resource -- vertex declarations survive Reset() unaffected
         /// (real D3D9 semantics), so this cache is never invalidated/re-registered.
         IDirect3DVertexDeclaration9* GetOrCreateVertexDeclarationEXT(std::size_t strideInBytes);
+        /// D9-83: returns (creating on first request) the real 2-stream
+        /// IDirect3DVertexDeclaration9 for CNA's own NOXNA Instanced3D shader -- stream 0
+        /// (per-vertex, step rate 1): POSITION0 (FLOAT3, offset 0); stream 1 (per-instance, step
+        /// rate 1): TEXCOORD1..4 (FLOAT4 each, offsets 0/16/32/48). Not one of
+        /// D3D9VertexDeclarations.hpp's single-stream stride-keyed layouts, so this is a separate,
+        /// dedicated declaration (mirrors D3D11GraphicsBackend::GetOrCreateInstancedInputLayoutEXT()).
+        IDirect3DVertexDeclaration9* GetOrCreateInstancedVertexDeclarationEXT();
 
         /// D9-82b: shared entry point for `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` -- `ib` is
         /// null for the non-indexed call. Selects which Stock Effect `params` indicates (mirrors
@@ -440,5 +458,11 @@ namespace CNA::Internal::Backends::D3D9
         /// (mirrors D3D11GraphicsBackend::inputLayoutCache_'s shape). See
         /// GetOrCreateVertexDeclarationEXT().
         std::unordered_map<std::size_t, ComPtr<IDirect3DVertexDeclaration9>> vertexDeclCache_;
+        /// D9-83: CNA's own NOXNA Instanced3D shader pair + 2-stream vertex declaration, lazily
+        /// created on first DrawInstancedPrimitivesEx() call. Not D3DPOOL_DEFAULT resources --
+        /// survive Reset() unaffected, same as shaderCache_/vertexDeclCache_ above.
+        ComPtr<IDirect3DVertexShader9> instancedVS_;
+        ComPtr<IDirect3DPixelShader9> instancedPS_;
+        ComPtr<IDirect3DVertexDeclaration9> instancedVertexDecl_;
     };
 }
