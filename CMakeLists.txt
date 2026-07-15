@@ -6906,10 +6906,22 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D9")
     set_tests_properties(D3D9_RasterizerState_CullMode PROPERTIES TIMEOUT 60 LABELS "D3D9")
 
     # D9-A3: scene-driven CNA-side renderer for the XNA-oracle diff harness -- a comparison TOOL,
-    # not a CTest (it has no pass/fail assertion of its own; D9-A4's xna-diff.py is what judges
-    # its output against tools/xna-oracle/Oracle.cs's own). Reuses the cna_d3d9_test() macro purely
-    # for its build/link setup, deliberately without registering it via add_test().
+    # not a CTest itself (has no pass/fail assertion of its own; D9-A4's xna-diff.py is what
+    # judges its output against tools/xna-oracle/Oracle.cs's own, or -- D9-120, below -- against
+    # the checked-in reference images). Reuses the cna_d3d9_test() macro purely for its build/link
+    # setup, deliberately without registering IT DIRECTLY via add_test().
     cna_d3d9_test(cna_oracle_render tools/xna-oracle/CnaOracleRender.cpp)
+
+    # D9-120: promotes the D9-A oracle corpus into a REAL CTest, running every checked-in scene
+    # through cna_oracle_render.exe (above) and diffing against the checked-in real XNA 4.0
+    # reference PNG (tools/xna-oracle/reference/*.png, D9-A4's own tolerance=0) -- deliberately
+    # does NOT need the XNA Wine prefix at all, only the D3D9 one every other test here already
+    # needs. See scripts/run-oracle-corpus-diff.sh's own header comment for the full contract.
+    add_test(NAME D3D9_XNA_Diff
+        COMMAND ${CMAKE_SOURCE_DIR}/scripts/run-oracle-corpus-diff.sh $<TARGET_FILE:cna_oracle_render>)
+    set_tests_properties(D3D9_XNA_Diff PROPERTIES
+        TIMEOUT 300
+        LABELS "D3D9")
 endif()
 
 # --- Task 6.1: real two-process ENet loopback test harness ---
