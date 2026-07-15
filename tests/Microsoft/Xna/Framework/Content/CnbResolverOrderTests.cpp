@@ -1,13 +1,17 @@
 // SPDX-License-Identifier: MS-PL
 //
 // plan_cnb.md CNB-6: proves ContentManager::ResolveAssetPath tries ".cnb" before any
-// reader-declared native extension (CNB-4), without needing any reader to understand .cnb
-// content yet -- Texture2D's underlying decoder sniffs real image bytes regardless of the
-// file's extension, so writing a real PNG's bytes to a "*.cnb" path is enough to prove which
-// candidate path the resolver actually picked, using pixel color as the observable signal.
+// reader-declared native extension (CNB-4), using pixel color as the observable signal for which
+// candidate path actually got picked. Originally written before Phase 2 (CNB-7/CNB-8) existed, by
+// writing raw PNG bytes straight into a "*.cnb" path and relying on Texture2D's decoder sniffing
+// real image bytes regardless of extension -- that trick stopped working once
+// Texture2DTypeReader started actually parsing ".cnb" as a JSON envelope (CNB-8), so the two
+// tests that write a ".cnb" file now use a real envelope + "sourceFile" instead. Only
+// OnlyNativeFileStillResolvesUnchanged remains a pure resolver-only probe (no .cnb involved).
 
 #include <cstdint>
 #include <filesystem>
+#include <fstream>
 #include <gtest/gtest.h>
 #include <vector>
 
@@ -57,6 +61,12 @@ namespace
         tex.SetData(pixels.data(), 4);
         tex.SaveAsPng(path.string());
     }
+
+    void WriteFile(const std::filesystem::path& path, const std::string& text)
+    {
+        std::ofstream f(path, std::ios::binary);
+        f << text;
+    }
 }
 
 class CnbResolverOrderTest : public ::testing::Test
@@ -83,7 +93,12 @@ TEST_F(CnbResolverOrderTest, OnlyNativeFileStillResolvesUnchanged)
 TEST_F(CnbResolverOrderTest, OnlyCnbFileResolvesViaExtension)
 {
     ScratchContentRoot root;
-    WriteSolidColorPng(gd, root.path() / "foo.cnb", Color(255, 0, 0, 255));
+    WriteSolidColorPng(gd, root.path() / "foo_src.png", Color(255, 0, 0, 255));
+    WriteFile(root.path() / "foo.cnb", R"({
+        "cnbVersion": 1,
+        "type": "Texture2D",
+        "sourceFile": "foo_src.png"
+    })");
 
     ContentManager cm(nullptr, root.path().string());
     cm.setGraphicsDevice(gd);
@@ -99,7 +114,12 @@ TEST_F(CnbResolverOrderTest, CnbTakesPriorityOverNativeFileOfSameName)
 {
     ScratchContentRoot root;
     WriteSolidColorPng(gd, root.path() / "foo.png", Color(0, 0, 255, 255));
-    WriteSolidColorPng(gd, root.path() / "foo.cnb", Color(255, 0, 0, 255));
+    WriteSolidColorPng(gd, root.path() / "foo_src.png", Color(255, 0, 0, 255));
+    WriteFile(root.path() / "foo.cnb", R"({
+        "cnbVersion": 1,
+        "type": "Texture2D",
+        "sourceFile": "foo_src.png"
+    })");
 
     ContentManager cm(nullptr, root.path().string());
     cm.setGraphicsDevice(gd);

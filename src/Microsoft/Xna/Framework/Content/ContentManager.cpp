@@ -2,6 +2,7 @@
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "System/IServiceProvider.hpp"
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/CnbEnvelope.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/AnimationPlayer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
@@ -152,6 +153,84 @@ namespace Microsoft::Xna::Framework::Content
 
     namespace
     {
+        // Forward declaration -- defined below, alongside the other minimal JSON helpers used by
+        // .cnb/.font.json-style readers. Texture2DTypeReader needs it for the .cnb sidecar path
+        // (plan_cnb.md CNB-8), ahead of where it's textually defined.
+        std::string ReadTextFile(const std::string& path);
+
+        // Minimal "colorKey": [r, g, b] extractor for a Texture2D .cnb sidecar (CNB-8). Kept
+        // local/self-contained rather than reusing JsonIntArray4 (a 4-element parser) below, since
+        // colorKey is always exactly 3 components and duplicating this ~10-line scan is cheaper and
+        // safer than coaxing a 4-element parser into stopping after 3.
+        bool TryParseColorKeyRGB(const std::string& json, std::array<int, 3>& outRgb)
+        {
+            const std::string needle = "\"colorKey\"";
+            auto pos = json.find(needle);
+            if (pos == std::string::npos) return false;
+            pos = json.find('[', pos + needle.size());
+            if (pos == std::string::npos) return false;
+
+            ++pos;
+            for (int i = 0; i < 3; ++i)
+            {
+                while (pos < json.size() &&
+                       !std::isdigit(static_cast<unsigned char>(json[pos])) && json[pos] != '-') ++pos;
+                if (pos >= json.size()) return false;
+                outRgb[static_cast<std::size_t>(i)] = std::stoi(json.substr(pos));
+                while (pos < json.size() && json[pos] != ',' && json[pos] != ']') ++pos;
+                if (pos < json.size() && json[pos] == ',') ++pos;
+            }
+            return true;
+        }
+
+        void ApplyColorKey(Graphics::Texture2D& texture, const std::array<int, 3>& colorKey)
+        {
+            const int width = texture.getWidthProperty();
+            const int height = texture.getHeightProperty();
+            const int count = width * height;
+            if (count <= 0) return;
+
+            std::vector<Color> pixels(static_cast<std::size_t>(count), Color(0, 0, 0, 0));
+            texture.GetData(pixels.data(), count);
+
+            const auto keyR = static_cast<SharpRuntime::bytecs>(colorKey[0]);
+            const auto keyG = static_cast<SharpRuntime::bytecs>(colorKey[1]);
+            const auto keyB = static_cast<SharpRuntime::bytecs>(colorKey[2]);
+
+            for (auto& pixel : pixels)
+            {
+                if (pixel.getRProperty() == keyR && pixel.getGProperty() == keyG &&
+                    pixel.getBProperty() == keyB)
+                {
+                    pixel = Color(keyR, keyG, keyB, static_cast<SharpRuntime::bytecs>(0));
+                }
+            }
+
+            texture.SetData(pixels.data(), count);
+        }
+
+        // Resolves a .cnb "sourceFile" field (a path relative to the .cnb's own directory) into
+        // the logical asset name ContentManager::Load<T>() expects (relative to the content root),
+        // by stripping the content root prefix back off the .cnb's already-resolved filesystem
+        // directory. Shared shape for any type reader that adopts "sourceFile" (CNB-7).
+        std::string ResolveSourceFileLogicalName(const std::string& cnbPath, ContentManager& cm,
+                                                  const std::string& sourceFile)
+        {
+            namespace fs = std::filesystem;
+            const fs::path resolvedDir = fs::path(cnbPath).parent_path();
+            const std::string root = cm.getRootDirectoryProperty();
+
+            fs::path relDir = resolvedDir;
+            if (!root.empty())
+            {
+                std::error_code ec;
+                fs::path candidate = fs::relative(resolvedDir, root, ec);
+                if (!ec) relDir = candidate;
+            }
+
+            return (relDir / sourceFile).lexically_normal().string();
+        }
+
         class Texture2DTypeReader : public ContentTypeReader<Graphics::Texture2D>
         {
         public:
@@ -163,7 +242,40 @@ namespace Microsoft::Xna::Framework::Content
             Graphics::Texture2D Read(const std::string& path, ContentManager& cm) override
             {
                 Graphics::GraphicsDevice& gd = cm.getGraphicsDeviceInternal();
+
+                if (std::filesystem::path(path).extension() == ".cnb")
+                {
+                    return ReadCnb(path, cm);
+                }
+
                 return Graphics::Texture2D(path, gd);
+            }
+
+        private:
+            static Graphics::Texture2D ReadCnb(const std::string& path, ContentManager& cm)
+            {
+                const std::string json = ReadTextFile(path);
+                const CNA::Internal::CnbEnvelope envelope = CNA::Internal::ParseCnbEnvelope(json);
+                CNA::Internal::ValidateCnbEnvelope(envelope, "Texture2D", path);
+
+                if (!envelope.hasSourceFile)
+                {
+                    throw ContentLoadException(
+                        "ContentManager: Texture2D .cnb '" + path + "' has no 'sourceFile' field "
+                        "(a self-contained, non-sourceFile Texture2D .cnb is not supported).");
+                }
+
+                const std::string sourceLogicalName =
+                    ResolveSourceFileLogicalName(path, cm, envelope.sourceFile);
+                Graphics::Texture2D result = cm.Load<Graphics::Texture2D>(sourceLogicalName);
+
+                std::array<int, 3> colorKey{};
+                if (TryParseColorKeyRGB(json, colorKey))
+                {
+                    ApplyColorKey(result, colorKey);
+                }
+
+                return result;
             }
         };
 
