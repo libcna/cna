@@ -1221,6 +1221,25 @@ regression-checking Phase D9-10's own `GraphicsDeviceManager` fix —
 — the same wall `D3D11` already hits (`plan_dx9.md`'s own `D9-123` row text already predicted
 this).
 
+### Phase D9-13 — docs: `D9-130` CLOSED, `D9-140` still open (`needs_human`)
+
+New `docs/d3d9-backend.md` — leads with what this backend is *for* (XNA pixel authenticity, not
+feature parity), the fact that it runs Microsoft's own vendored Stock Effects HLSL bytecode, and
+the 0/31-divergence oracle result, before any "known limitations" list. A full `D3D9` column was
+added across all 7 tables in `docs/graphics-backend-feature-matrix.md` (2D SpriteBatch/SpriteFont,
+Stock Effects, RenderTarget/MSAA/mip/depth, Texture2D/3D/Cube, GraphicsDevice state objects,
+OcclusionQuery, Model) plus a new "Remaining genuine D3D9 limitations" section, matching the
+existing Vulkan/Bgfx precedent. Every cell was grounded by actually reading
+`tools/xna-oracle/scenes/*.scene` rather than recalled from memory (e.g. confirmed exactly which
+`SpriteSortMode`/`AlphaTestEffect.AlphaFunction`/`WeightsPerVertex` values have a dedicated scene,
+and that `EnvironmentMapEffect.specularEnabled` is structurally unreachable on this backend's
+current dispatch, `D9-82e`) — cells that couldn't be grounded this way are honestly `⬜`/`🟨`, not
+assumed `✅`. `README.md` gained a `D3D9` Project-Status bullet, a "Build (Windows
+cross-compilation — D3D9 backend)" section mirroring D3D11/D3D12's, and a Tested-Compilers row.
+`programs.md` §9 gained the D3D9-specific three-Wine-prefix subsection this document's own
+`plan_dx9.md` line 103 had flagged as a gap (`programs.md` previously documented only the D3D11
+prefix). `D9-140` (real Windows hardware) remains open, `needs_human`, unchanged.
+
 ### Does NOT work yet
 
 `BasicEffect`'s `PreferPerPixelLighting` variants, `EnvironmentMapEffect`'s specular variants, and
@@ -1245,7 +1264,9 @@ Most recent first. Full detail lives in `plan_dx9.md` — this is a short index.
 
 | Commit(s) | Summary |
 |---|---|
-| *(pending)* | **Phase D9-12 `D9-120`/`D9-121` CLOSED — the D9-A oracle corpus is now a real, checked-in CTest, plus a written divergence report**. All 31 real-XNA-4.0 reference PNGs regenerated fresh and confirmed byte-identical to earlier cached renders before committing (`tools/xna-oracle/reference/*.png`, 132 KB). New `scripts/run-oracle-corpus-diff.sh` + `D3D9_XNA_Diff` CTest -- diffs every scene against its checked-in reference at `tolerance=0`, needs only the D3D9 Wine prefix (never the XNA one) to run. Mutation-verified (corrupted one reference pixel, confirmed exactly that scene failed with the real delta, restored). New `docs/d3d9-divergence-report.md`: headline **0/31 scenes diverge from real XNA 4.0**, with an explicit "not yet covered" table and an honest status re-read of all 6 project-wide CNA-vs-XNA divergences (3 now closed on D3D9, 4 now measured-correct on D3D9, 1/5/6 still open). Full D3D9 CTest suite now 14/14. |
+| *(pending)* | **`D9-130` CLOSED (Phase D9-13 docs) — new `docs/d3d9-backend.md`, a full `D3D9` column across all 7 tables in `docs/graphics-backend-feature-matrix.md`, and a `README.md`/`programs.md` build-doc update**. `docs/d3d9-backend.md` leads with XNA pixel-authenticity (not a feature checklist), the real-Microsoft-shader fact, and the 0/31-divergence oracle result, following `docs/d3d11-backend.md`'s own structure. Every feature-matrix cell was grounded by reading `tools/xna-oracle/scenes/*.scene` directly (confirmed exact `SpriteSortMode`/`AlphaFunction`/`WeightsPerVertex` coverage, and that `EnvironmentMapEffect.specularEnabled` is structurally unreachable, `D9-82e`) rather than recalled from memory; ungrounded cells marked honestly `⬜`/`🟨`. New matrix section "Remaining genuine D3D9 limitations", matching the Vulkan/Bgfx precedent sections. `README.md`: new `D3D9` Project-Status bullet, a "Build (Windows cross-compilation — D3D9 backend)" section, a Tested-Compilers row. `programs.md` §9: new D3D9-specific three-Wine-prefix subsection, closing the gap `plan_dx9.md`'s own line 103 flagged. |
+| `2a0f1576` | **Phase D9-12 `D9-122` CLOSED — systematic mutation-verification of `D3D9_Smoke`/`D3D9_Common` + the 4 reused state tests**. Classified every check as CONFIRMED (explicit prior mutation evidence) or GAP, then ran 6 new mutation cycles against the highest-priority GAPs (`ApplyBlendState`'s `D3DRS_DESTBLEND`, `PerformResetRecovery`'s `deviceLost_` flag — which also surfaced that a broken recovery crashes the whole test binary via an uncaught `DeviceLostException`, not just failing one check — `SetRenderTargets`' per-slot MRT bind, `BindAsRenderTarget`, `D3D9VertexBufferBackend::Upload`, `D3D9TextureCubeBackend::SetData`), each confirmed to fail exactly the predicted check(s) and nothing else, then reverted clean. Full D3D9 CTest suite reconfirmed 14/14 independently (not just the closing agent's own self-report). Full detail in `plan_dx9.md`'s own `D9-122` row and §2's Phase D9-12 section above. |
+| `65ba7ce8` | **Phase D9-12 `D9-120`/`D9-121` CLOSED — the D9-A oracle corpus is now a real, checked-in CTest, plus a written divergence report**. All 31 real-XNA-4.0 reference PNGs regenerated fresh and confirmed byte-identical to earlier cached renders before committing (`tools/xna-oracle/reference/*.png`, 132 KB). New `scripts/run-oracle-corpus-diff.sh` + `D3D9_XNA_Diff` CTest -- diffs every scene against its checked-in reference at `tolerance=0`, needs only the D3D9 Wine prefix (never the XNA one) to run. Mutation-verified (corrupted one reference pixel, confirmed exactly that scene failed with the real delta, restored). New `docs/d3d9-divergence-report.md`: headline **0/31 scenes diverge from real XNA 4.0**, with an explicit "not yet covered" table and an honest status re-read of all 6 project-wide CNA-vs-XNA divergences (3 now closed on D3D9, 4 now measured-correct on D3D9, 1/5/6 still open). Full D3D9 CTest suite now 14/14. |
 | `389470fb` | **Phase D9-10 follow-up CLOSED — `TextureCube`/`Texture3D` profile size ceilings + `MaxRenderTargets` enforcement**. Reuses `D3D9ProfileCapabilities`' own already-written helpers (no new capability logic, just wiring): `TextureCube` throws past 512 (Reach)/4096 (HiDef); `Texture3D` throws UNCONDITIONALLY under Reach (volume textures unsupported entirely) and past 256 under HiDef; `GraphicsDevice::SetRenderTargets()` throws past 1 target under Reach (4 under HiDef) -- separate from `MAX_RENDERTARGET_BINDINGS` (XNA's general cap) and `D9-54`'s own hardware-cap enforcement. 8 new checks (`D3D9_GraphicsProfile` now 19/19), mutation-verified (disabled all 3 new profile functions at once, confirmed exactly the 6 tied checks failed, restored) -- also found and fixed a real bug in the CTest's OWN cleanup logic (only unbinding render targets on the throw path left them bound and crashed `Present()` when a mutation made the call NOT throw). Regression-checked again on EasyGL (150 relevant `CnaTests` cases, all green). Full D3D9 CTest suite 13/13 green. Only NPOT-wrap-on-`Reach` and hardware-instancing's HiDef-only gate remain open in Phase D9-10. |
 | `9c3210df` | **Phase D9-10 CLOSED (`D9-100`–`D9-105`) — `GraphicsProfile.Reach`/`HiDef` made real on D3D9, plus a real cross-backend `GraphicsProfile`-propagation bug found and fixed**. New `D3D9ProfileCapabilities.{hpp,cpp}` (`D3DCAPS9` probed via `IDirect3D9::GetDeviceCaps`/`CheckDeviceFormat`/`CheckDeviceType`/`CheckDeviceMultiSampleType`, all pre-device-creation, backend-local under `#ifdef CNA_BACKEND_D3D9`). `IsProfileSupported()`/`QueryRenderTargetFormat()`/`QueryBackBufferFormat()` real; `Texture2D` throws `System::NotSupportedException` past its own profile's size ceiling (2048 Reach/4096 HiDef). Real bug found in SHARED code: `Game`'s `GraphicsDevice_` member is eagerly default-constructed (hardcoded Reach) before `GraphicsDeviceManager` exists, and `applyToExistingBackend()` never wrote a changed profile back onto the live device -- `graphics.GraphicsProfile = HiDef; graphics.ApplyChanges();` had NO path to the real device at all. Fixed with new `GraphicsDevice::SetGraphicsProfileEXT()`. EasyGL's own `CnaTests` (70 cases) regression-checked, all green. New `D3D9_GraphicsProfile` CTest, 10/10, mutation-verified. Full D3D9 CTest suite 13/13 green. |
 | `47ca4a15` | **`D9-A5` grown to 31 scenes (`colored_linelist_quad`/`colored_linestrip_quad`) — completes ALL 4 real `PrimitiveType` values, both PIXEL-PERFECT (0/65536 differ) on the first attempt**. `LineList`: two SEPARATE horizontal segments at different Y rows, proving independent segments with nothing connecting them (confirmed on real XNA: RED/GREEN midpoints exact, the row between stays background). `LineStrip`: a 3-vertex "V" polyline, proving 2 CONNECTED segments share the middle vertex (confirmed on real XNA: 307 non-background pixels spanning the full expected extent, both leg midpoints exact RED). New `D3D9_Draw` Check E/F (now 6/6) — real bug found and fixed in the CTest's OWN color-packing, not CNA: `0x00FF00FFu` decodes (byte order R,G,B,A ascending, little-endian literal) to `R=255,G=0,B=255,A=0` — magenta at zero alpha, invisible — not green; fixed to `0xFF00FF00u`. Caught immediately via a full-frame debug scan showing the RED segment rendered exactly as predicted but no GREEN pixels anywhere. Mutation-verified after the fix (hardcoded both `primitiveCount`s to 1, confirmed exactly Check E/F went red, restored). All 31 corpus scenes re-verified pixel-perfect; full D3D9 CTest suite 12/12 green. |
@@ -1513,40 +1534,33 @@ cmake -S . -B cmake-build-d3d9 \
 
 **Phases D9-0 through D9-10 are all fully closed** (`D9-32`/`D9-34`/`D9-60`/`D9-62`/`D9-73`
 honestly 🟨 — see their own plan rows for exactly what's deferred and why). **Phase D9-A's diff
-harness (`D9-A1`–`D9-A4`) is fully closed**, 31 scenes deep, all pixel-perfect. **Phase D9-12
-(`D9-120`/`D9-121`) is now closed too** — the corpus is a real, checked-in CTest
-(`D3D9_XNA_Diff`), and `docs/d3d9-divergence-report.md` states the measured result (0/31
-divergences) and its honest boundary. `D9-122`/`D9-123` remain open in that same phase (`D9-123`
-is a known, already-documented blocker — `CnaTests` doesn't build under D3D9 at all today, same
-POSIX `::setenv()` wall D3D11 already hits).
+harness (`D9-A1`–`D9-A4`) is fully closed**, 31 scenes deep, all pixel-perfect. **Phase D9-12 is
+now fully closed except `D9-123`**: `D9-120`/`D9-121`/`D9-122` all ✅ (see §2's own Phase D9-12
+section for the full `D9-122` mutation-cycle detail). **`D9-130` (Phase D9-13 docs) is now closed
+too** — `docs/d3d9-backend.md`, a full `D3D9` column across all 7 tables in
+`docs/graphics-backend-feature-matrix.md`, a `D3D9` build section + Tested-Compilers row in
+`README.md`, and the `programs.md` §9 Wine-prefix gap it flagged are all done.
 
-1. **`D9-122`** — mutation-verify `D3D9_Smoke`/`D3D9_Common` + the 4 reused state tests
-   systematically. Each already has SOME mutation-testing history from when it was first closed,
-   but no dedicated, complete re-pass has been done. Low-risk, real remaining work.
-2. **`D9-A5`/`D9-84` — the cheap, no-new-API "reuse existing infrastructure" scene candidates
-   remain exhausted** (unchanged from before Phase D9-12): `SpriteBatch`, `PrimitiveType` (all 4
-   values), `GraphicsProfile`, and every currently-drawable Stock Effect bucket are all closed.
-   `SpriteSortMode.Texture` is confirmed NOT a viable oracle scene at all (real FNA's own
-   `TextureComparer` sorts by `Texture`'s default `Object.GetHashCode()`, an implementation-
-   defined identity hash with no predictable ordering). Every other remaining candidate needs
-   real, scoped NEW work first, not just a new scene file:
-   - **Render targets**: blocked on the documented crash (§4's own "New blocker found
-     2026-07-15") — do NOT re-attempt until root-caused.
-   - **`SurfaceFormat` sweep**: needs new CNA `Texture2D` API surface (a generic `SetData<T>`
-     matching real XNA's own, since the current C++ API is `Color`-only).
-   - **`EnvironmentMapEffect` specular variants / `PreferPerPixelLighting` (`BasicEffect`/
-     `EnvironmentMapEffect`/`SkinnedEffect`)**: blocked on `D9-81`'s still-open `GpuDrawParams`
-     gaps — this document's own §9 forbids fixing it from inside this branch; measure/report/
-     propose to the project owner instead.
-   - **Hardware-instancing's own HiDef-only gate, NPOT-wrap-on-`Reach`**: Phase D9-10's own last
-     2 explicitly-named follow-ups.
-   Picking any of these is a real scope decision, not a "grow the corpus" continuation — see
-   `tools/xna-oracle/README.md` for the current build/run commands if one is picked.
-3. **Phase D9-11 (custom `ShaderEffect`)** — explicitly flagged ask-first in `plan_dx9.md`'s own
+Only 3 things remain in this plan, all either blocked or requiring the project owner's go-ahead
+first — there is no more cheap, unblocked, unilaterally-startable work left:
+
+1. **`D9-123`** — `CnaTests` under `CNA_GRAPHICS_BACKEND=D3D9`. Known-blocked: ~10 test files call
+   POSIX-only `::setenv()`, the same wall `D3D11` already hits. Fixing it once would help D3D11/
+   D3D12 too — this is a cross-cutting proposal, not something to just fix unilaterally from this
+   branch (touches shared `tests/` files outside this plan's own territory).
+2. **Phase D9-11 (custom `ShaderEffect`)** — explicitly flagged ask-first in `plan_dx9.md`'s own
    execution order; do not start without the project owner's go-ahead.
-4. **`D9-130`** (Phase D9-13, docs) — `docs/d3d9-backend.md` + a `D3D9` column in
-   `docs/graphics-backend-feature-matrix.md`. Not yet started; `docs/d3d9-divergence-report.md`
-   (this session) is real input for it but is not itself that document.
+3. **`D9-140`** (real Windows hardware verification) — `needs_human`, out of scope for this dev
+   environment entirely.
+
+The `D9-A5`/`D9-84` scene-corpus-growth candidates remain exhausted for the same reasons recorded
+earlier this session: `SpriteBatch`, all 4 `PrimitiveType` values, `GraphicsProfile`, and every
+currently-drawable Stock Effect bucket are closed; render targets are blocked on the documented
+crash (§4); a `SurfaceFormat` sweep needs new CNA `Texture2D` API surface; `EnvironmentMapEffect`
+specular/`PreferPerPixelLighting` are blocked on `D9-81`'s cross-cutting `GpuDrawParams` gaps
+(§9 forbids fixing this from inside this branch — measure/report/propose only); hardware-
+instancing's HiDef gate and NPOT-wrap-on-`Reach` are Phase D9-10's own last named follow-ups, both
+needing real reference behavior this project has no way to verify (FNA implements neither).
 
 See `plan_dx9.md`'s "Execution order" table for the full sequence beyond this.
 

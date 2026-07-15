@@ -1,11 +1,12 @@
-# Established graphics backend feature matrix — SDL_Renderer, EasyGL, Vulkan, Bgfx, D3D11, D3D12
+# Established graphics backend feature matrix — SDL_Renderer, EasyGL, Vulkan, Bgfx, D3D9, D3D11, D3D12
 
 Master, up-to-date cross-backend feature matrix for CNA's established backends, written for
 Task 451 (Phase 51), extended 2026-07-14 with a `D3D11` column (`../plan_dx.md`, Phase DX11
-`DX-96`), then a `D3D12` column (Phase DX12 `DX-115`) the same day, once each backend's feature set
-was broad enough for a meaningful row-by-row comparison. The experimental WebGPU backend is
-intentionally tracked separately in [`webgpu-backend.md`](webgpu-backend.md) and
-`../plan_webgpu.md` until its feature surface is broad enough for meaningful parity columns.
+`DX-96`), then a `D3D12` column (Phase DX12 `DX-115`) the same day, then a `D3D9` column
+(`../plan_dx9.md`, `D9-130`) 2026-07-15, once each backend's feature set was broad enough for a
+meaningful row-by-row comparison. The experimental WebGPU backend is intentionally tracked
+separately in [`webgpu-backend.md`](webgpu-backend.md) and `../plan_webgpu.md` until its feature
+surface is broad enough for meaningful parity columns.
 
 **A `D3D11`/`D3D12` cell means "verified through Wine+DXVK/vkd3d-proton on this dev machine's real
 GPU," not "verified on real Windows hardware"** — see `docs/d3d11-backend.md`/`docs/d3d12-backend.md`'s
@@ -17,6 +18,15 @@ cell is only marked ✅ if a real, GPU-facing pixel/behavior check actually exer
 implemented but not independently pixel-tested is marked 🟨, and anything not attempted/not built at
 all is marked ⬜ (distinct from this doc's own ❌, which means "tested and found to genuinely not
 work").
+
+**The `D3D9` column measures something narrower and stricter than the other columns: pixel-for-pixel
+indistinguishability from the real XNA 4.0 runtime**, not just "feature works." A `D3D9` ✅ means the
+feature is exercised by `tools/xna-oracle/`'s checked-in scene corpus (`D9-120`, `D3D9_XNA_Diff`
+CTest) and its render is byte-identical (`--tolerance 0`) to the real XNA 4.0 runtime's own render of
+the same scene — a strictly stronger bar than any other column's ✅. Like `D3D11`/`D3D12`, this is
+"verified through Wine+DXVK on this dev machine's real GPU," not real Windows hardware (`D9-140`,
+open). See `docs/d3d9-backend.md` and `docs/d3d9-divergence-report.md` for the full detail this
+column's cells summarize.
 
 The **Headless** backend (`CNA_GRAPHICS_BACKEND=HEADLESS`, tracked in `../plan_headless.md`) is deliberately
 **not** a column in this matrix: it never renders a single pixel, so none of the below
@@ -43,38 +53,39 @@ GamerServices); this doc is Graphics-only and current.
 
 Status legend: ✅ correct and verified · ⚠️ partial/emulated/environment-limited · ❌ known gap, not
 fixed · ⛔ BLOCKED, needs a project-owner architecture decision · 🟨 implemented but not
-independently verified (D3D11 column only, see above) · ⬜ not attempted this session (D3D11 column
-only).
+independently verified (D3D9/D3D11/D3D12 columns only, see above) · ⬜ not attempted this session
+(D3D9/D3D11/D3D12 columns only).
 
 ## 2D SpriteBatch / SpriteFont
 
-| Feature | EasyGL | Vulkan | Bgfx | SDL_Renderer | D3D11 | D3D12 |
-|---|---|---|---|---|---|---|
-| All `Draw` overloads, sort modes, rotation/flip/scale/crop | ✅ | not separately re-audited (Task 861) | not separately re-audited | ✅ (2 real bugs fixed: rotation pivot, `transformMatrix`) | 🟨 destination-rect placement + `SpriteEffects::FlipHorizontally` pixel-verified (`plan_dx.md` `DX-70`); rotation/scale/crop/sort-mode not separately pixel-tested | 🟨 same 2 aspects pixel-verified off-screen (`DX-112`, Checks R2/R3); rotation/scale/crop/sort-mode not separately tested |
-| Custom `Effect` via `Begin(effect)` | ✅ | ✅ | ✅ | ❌ throws by design (no shader stage, 2D-only backend) | ✅ real color-inversion custom-HLSL pixel test (`DX-71`) | ⬜ not built — `D3D12SpriteBatchBackend` only draws through the stock `sprite2d` pipeline, no `DX-71` equivalent |
-| SpriteFont — glyph placement/spacing/newline/fallback/flip | ✅ pixel-verified (Tasks 424-429) | not separately re-audited (Task 861) | not separately re-audited | ✅ (1 real cross-backend bug found and fixed, Task 694) | ⬜ not attempted — builds on already-tested `Texture2D`/`SpriteBatch` but no D3D11-specific test yet | ⬜ not attempted, same reason |
-| `TextureAddressMode::Wrap`/`Mirror` via SpriteBatch | ✅ | ✅ | ✅ | ⛔ **BLOCKED** (Tasks 686/687) | ✅ real `D3D11SamplerCache`-backed Wrap/Mirror with discriminating probe pixels (`DX-72`) | ⬜ not built — samplers are hardcoded static `WRAP`/linear in `D3D12RootSignatureCache`, not driven by XNA `SamplerState` at all yet; no D3D12 equivalent of `D3D11SamplerCache` exists |
+| Feature | EasyGL | Vulkan | Bgfx | SDL_Renderer | D3D9 | D3D11 | D3D12 |
+|---|---|---|---|---|---|---|---|
+| All `Draw` overloads, sort modes, rotation/flip/scale/crop | ✅ | not separately re-audited (Task 861) | not separately re-audited | ✅ (2 real bugs fixed: rotation pivot, `transformMatrix`) | ✅ real Microsoft `SpriteEffect.fx`, oracle-verified 0-divergence for rotation (`sprite_rotated_quad`), flip (`sprite_flipped_quad`), multi-texture batching (`sprite_multitexture_quad`), and 3 of 5 `SpriteSortMode` values (`Deferred`/`BackToFront`/`FrontToBack`, `D9-93`); `.Immediate`/`.Texture` confirmed not oracle-viable, not a coverage gap — see `docs/d3d9-backend.md` | 🟨 destination-rect placement + `SpriteEffects::FlipHorizontally` pixel-verified (`plan_dx.md` `DX-70`); rotation/scale/crop/sort-mode not separately pixel-tested | 🟨 same 2 aspects pixel-verified off-screen (`DX-112`, Checks R2/R3); rotation/scale/crop/sort-mode not separately tested |
+| Custom `Effect` via `Begin(effect)` | ✅ | ✅ | ✅ | ❌ throws by design (no shader stage, 2D-only backend) | ⬜ not attempted — `D9-11` (custom `ShaderEffect`) is explicitly ask-first in `plan_dx9.md`'s execution order, not started | ✅ real color-inversion custom-HLSL pixel test (`DX-71`) | ⬜ not built — `D3D12SpriteBatchBackend` only draws through the stock `sprite2d` pipeline, no `DX-71` equivalent |
+| SpriteFont — glyph placement/spacing/newline/fallback/flip | ✅ pixel-verified (Tasks 424-429) | not separately re-audited (Task 861) | not separately re-audited | ✅ (1 real cross-backend bug found and fixed, Task 694) | ⬜ not attempted this backend | ⬜ not attempted — builds on already-tested `Texture2D`/`SpriteBatch` but no D3D11-specific test yet | ⬜ not attempted, same reason |
+| `TextureAddressMode::Wrap`/`Mirror` via SpriteBatch | ✅ | ✅ | ✅ | ⛔ **BLOCKED** (Tasks 686/687) | ✅ real `D3DSAMP_ADDRESSU`/`V`, oracle-verified: distinct 4-band tiling (Wrap) vs. symmetric mirroring pattern (Mirror), proven genuinely different from each other, not just "some non-Clamp behavior" (`D9-92`, `sprite_wrap_quad`/`sprite_mirror_quad`) | ✅ real `D3D11SamplerCache`-backed Wrap/Mirror with discriminating probe pixels (`DX-72`) | ⬜ not built — samplers are hardcoded static `WRAP`/linear in `D3D12RootSignatureCache`, not driven by XNA `SamplerState` at all yet; no D3D12 equivalent of `D3D11SamplerCache` exists |
 
 ## Stock Effects
 
-| Feature | EasyGL | Vulkan | Bgfx | D3D11 | D3D12 |
-|---|---|---|---|---|---|
-| BasicEffect core (MVP, lighting, texture, vertex color) | ✅ | ✅ | ✅ | ✅ `colored3d`/`textured3d`/`colored_textured3d` all real, pixel-verified (`DX-61`/`DX-62`) | ✅ all 3 real, pixel-verified off-screen, same DXBC as D3D11 (`DX-111`, Checks M/N) |
-| BasicEffect `DirectionalLight1`/`2` + `EmissiveColor` | ✅ | ✅ | ✅ | 🟨 fields present in `D3DLightingConstants`/HLSL, single-light lit-vs-unlit difference pixel-verified (`DX-63`); no dedicated multi-light/emissive discriminating test | 🟨 same single-light lit-vs-unlit proof (Check O2); no dedicated multi-light/emissive test |
-| BasicEffect real specular highlights (`SpecularColor`/`Power`) | ✅ | ✅ | ✅ | 🟨 implemented in HLSL; the lit pixel test deliberately zeroes specular for CPU-comparison determinism, so specular itself is unverified | 🟨 same gap — same HLSL/DXBC, same determinism-driven zeroing |
-| AlphaTestEffect core + fog | ✅ | ✅ | ✅ | ✅ real `clip()` discard + pass-case exact color incl. alpha byte, both pixel-verified (`DX-64`); fog wired (`DX-69`) | 🟨 real `clip()` discard + pass-case pixel-verified off-screen (Checks P1/P2); fog constant buffer not confirmed wired for this specific variant, only `colored3d`'s bundle has a dedicated fog test (Check V, `DX-113`) |
-| AlphaTestEffect `VertexColorEnabled` | ✅ | ❌ (Task 887) | ❌ (Task 887) | ⬜ not separately tested | ⬜ not separately tested |
-| DualTextureEffect core + fog | ✅ | ✅ | ✅ | ✅ two real SRVs/samplers pixel-verified (`DX-65`); fog wired (`DX-69`) | 🟨 two-texture combine pixel-verified off-screen (`DX-111`, Check Q1/Q2, incl. a real descriptor-table binding bug found and fixed along the way); fog not dedicated-tested for this variant |
-| DualTextureEffect `VertexColorEnabled` | ❌ (Task 889) | ❌ | ❌ | ⬜ not separately tested | ⬜ not separately tested |
-| EnvironmentMapEffect core/Fresnel/reflection | ✅ | ✅ | ✅ | ✅ real `TextureCube` SRV, reflection geometrically constrained into a known cube face, pixel-verified (`DX-66`) | ✅ same geometrically-constrained-reflection methodology, real `D3D12TextureCubeBackend` (new for this backend), pixel-verified off-screen (`DX-111`, Check U1) |
-| EnvironmentMapEffect `DirectionalLight1`/`2` | ✅ fixed (Task 890, 2026-07-11) | ✅ fixed (Task 890) | ✅ fixed (Task 890) | 🟨 shares `D3DLightingConstants` wiring with BasicEffect; no dedicated test | 🟨 same — no dedicated test |
-| EnvironmentMapEffect base-lerp alpha scaling | ✅ fixed (Task 891) | ✅ fixed (Task 891) | ✅ fixed (Task 891) | ⬜ not separately tested | ⬜ not separately tested |
-| SkinnedEffect core (72-bone GPU skinning) | ✅ | ✅ | ✅ | ✅ real `D3DBoneConstants` populated from `GpuDrawParams::boneTransforms`, traced against `SkinnedEffect::SetBoneTransforms()` to rule out a transpose bug (`DX-67`) | ✅ real `D3DBoneConstants` populated the same way (direct, unmodified port of D3D11's own field population), single-identity-bone pixel-verified off-screen (`DX-111`, Check S1) |
-| SkinnedEffect `DirectionalLight1`/`2` | ✅ fixed (Task 893, 2026-07-11) | ✅ fixed (Task 893) | ✅ fixed (Task 893) | 🟨 no dedicated test | 🟨 no dedicated test |
-| SkinnedEffect `SpecularColor`/`SpecularPower` | ✅ fixed (Task 894, 2026-07-11) | ✅ fixed (Task 894) | ✅ fixed (Task 894) | 🟨 same specular-determinism gap as BasicEffect | 🟨 same gap |
-| SkinnedEffect `WeightsPerVertex` GPU enforcement | ✅ fixed (Task 895, 2026-07-11) | ✅ fixed (Task 895) | ✅ fixed (Task 895) | 🟨 implemented, not independently pixel-tested per weight count | 🟨 same — implemented, not independently tested per weight count |
-| Fog, all applicable effects/pipelines | ✅ | ✅ | ✅ | 🟨 wired for all 8 fog-capable variants (`DX-69`); dedicated fog-on/off discriminating pixel test only exists for `colored3d` (Check AC, `DX-81`) | 🟨 narrower than D3D11 — dedicated fog-on/off pixel test only exists for the `colored3d` bundle (Check V, `DX-113`); fog-constant-buffer wiring not confirmed/tested for the other 7 fog-capable variants |
-| ShaderEffect (custom shader source) | ✅ (GLSL) | ✅ (SPIR-V) | ❌ `CreateEffectBackend` returns `nullptr` | ✅ (HLSL, runtime `D3DCompile()` via `D3D11EffectBackend`, `DX-58`, incl. a broken-shader failure-path check) | ⬜ not built — no D3D12 equivalent of `D3D11EffectBackend`/runtime `D3DCompile()` path exists |
+| Feature | EasyGL | Vulkan | Bgfx | D3D9 | D3D11 | D3D12 |
+|---|---|---|---|---|---|---|
+| BasicEffect core (MVP, lighting, texture, vertex color) | ✅ | ✅ | ✅ | ✅ real Microsoft-compiled `BasicEffect.fx` bytecode, oracle-verified 0-divergence across 8 scenes (`colored3d`, `textured_quad`, `lit_textured_quad`, `multilight_textured_quad`, `fog_gradient_quad`, 3 primitive-type scenes) | ✅ `colored3d`/`textured3d`/`colored_textured3d` all real, pixel-verified (`DX-61`/`DX-62`) | ✅ all 3 real, pixel-verified off-screen, same DXBC as D3D11 (`DX-111`, Checks M/N) |
+| BasicEffect `DirectionalLight1`/`2` + `EmissiveColor` | ✅ | ✅ | ✅ | ✅ real 2-light summation + a disabled 3rd light proven to contribute exactly zero, oracle-verified (`multilight_textured_quad`); `EmissiveColor` not separately tested | 🟨 fields present in `D3DLightingConstants`/HLSL, single-light lit-vs-unlit difference pixel-verified (`DX-63`); no dedicated multi-light/emissive discriminating test | 🟨 same single-light lit-vs-unlit proof (Check O2); no dedicated multi-light/emissive test |
+| BasicEffect real specular highlights (`SpecularColor`/`Power`) | ✅ | ✅ | ✅ | ⬜ not oracle-tested — no specular-discriminating scene in the current corpus | 🟨 implemented in HLSL; the lit pixel test deliberately zeroes specular for CPU-comparison determinism, so specular itself is unverified | 🟨 same gap — same HLSL/DXBC, same determinism-driven zeroing |
+| AlphaTestEffect core + fog | ✅ | ✅ | ✅ | ✅ real Microsoft `clip()` discard, all 8 `CompareFunction` values oracle-verified 0-divergence (`alphatest_*_quad`, one scene per enum value); fog not tested for this specific effect variant (only BasicEffect's fog scene exists) | ✅ real `clip()` discard + pass-case exact color incl. alpha byte, both pixel-verified (`DX-64`); fog wired (`DX-69`) | 🟨 real `clip()` discard + pass-case pixel-verified off-screen (Checks P1/P2); fog constant buffer not confirmed wired for this specific variant, only `colored3d`'s bundle has a dedicated fog test (Check V, `DX-113`) |
+| AlphaTestEffect `VertexColorEnabled` | ✅ | ❌ (Task 887) | ❌ (Task 887) | ⬜ not separately tested | ⬜ not separately tested | ⬜ not separately tested |
+| DualTextureEffect core + fog | ✅ | ✅ | ✅ | 🟨 real two-texture combine, oracle-verified 0-divergence (`dualtexture_quad`); fog not tested for this variant | ✅ two real SRVs/samplers pixel-verified (`DX-65`); fog wired (`DX-69`) | 🟨 two-texture combine pixel-verified off-screen (`DX-111`, Check Q1/Q2, incl. a real descriptor-table binding bug found and fixed along the way); fog not dedicated-tested for this variant |
+| DualTextureEffect `VertexColorEnabled` | ❌ (Task 889) | ❌ | ❌ | ⬜ not separately tested | ⬜ not separately tested | ⬜ not separately tested |
+| EnvironmentMapEffect core/Fresnel/reflection | ✅ | ✅ | ✅ | ✅ real `TextureCube` sampling, both the non-Fresnel and Fresnel buckets oracle-verified 0-divergence (`envmap_quad`, `envmap_fresnel_quad`) | ✅ real `TextureCube` SRV, reflection geometrically constrained into a known cube face, pixel-verified (`DX-66`) | ✅ same geometrically-constrained-reflection methodology, real `D3D12TextureCubeBackend` (new for this backend), pixel-verified off-screen (`DX-111`, Check U1) |
+| EnvironmentMapEffect `DirectionalLight1`/`2` | ✅ fixed (Task 890, 2026-07-11) | ✅ fixed (Task 890) | ✅ fixed (Task 890) | ⬜ not separately tested — no `envmap` scene enables multi-light | 🟨 shares `D3DLightingConstants` wiring with BasicEffect; no dedicated test | 🟨 same — no dedicated test |
+| EnvironmentMapEffect base-lerp alpha scaling | ✅ fixed (Task 891) | ✅ fixed (Task 891) | ✅ fixed (Task 891) | ⬜ not separately tested | ⬜ not separately tested | ⬜ not separately tested |
+| EnvironmentMapEffect real specular (`specularEnabled`) | ✅ | ✅ | ✅ | ⬜ **structurally unreachable on this backend** — `D9-82e`'s own finding: `specularEnabled` is always false in the current dispatch, confirmed at the scene-authoring stage (`envmap_quad.scene`'s own header note); same divergence family as `PreferPerPixelLighting` (Divergence 1) — see `docs/d3d9-backend.md` | ⬜ not separately tested | ⬜ not separately tested |
+| SkinnedEffect core (72-bone GPU skinning) | ✅ | ✅ | ✅ | ✅ real bone-matrix constants, oracle-verified 0-divergence across 3 scenes spanning distinct `WeightsPerVertex` counts (`skinned_quad`/`skinned_twobone_quad`/`skinned_fourbone_quad`) | ✅ real `D3DBoneConstants` populated from `GpuDrawParams::boneTransforms`, traced against `SkinnedEffect::SetBoneTransforms()` to rule out a transpose bug (`DX-67`) | ✅ real `D3DBoneConstants` populated the same way (direct, unmodified port of D3D11's own field population), single-identity-bone pixel-verified off-screen (`DX-111`, Check S1) |
+| SkinnedEffect `DirectionalLight1`/`2` | ✅ fixed (Task 893, 2026-07-11) | ✅ fixed (Task 893) | ✅ fixed (Task 893) | ⬜ not separately tested | 🟨 no dedicated test | 🟨 no dedicated test |
+| SkinnedEffect `SpecularColor`/`SpecularPower` | ✅ fixed (Task 894, 2026-07-11) | ✅ fixed (Task 894) | ✅ fixed (Task 894) | ⬜ not separately tested | 🟨 same specular-determinism gap as BasicEffect | 🟨 same gap |
+| SkinnedEffect `WeightsPerVertex` GPU enforcement | ✅ fixed (Task 895, 2026-07-11) | ✅ fixed (Task 895) | ✅ fixed (Task 895) | ✅ 3 distinct weight counts (1/2/4-bone) each their own oracle-verified 0-divergence scene, matching the skinning-core row above | 🟨 implemented, not independently pixel-tested per weight count | 🟨 same — implemented, not independently tested per weight count |
+| Fog, all applicable effects/pipelines | ✅ | ✅ | ✅ | 🟨 real per-pixel Gouraud-interpolated fog (not a uniform-tint false-positive — verified genuinely varies per-pixel across the primitive), oracle-verified 0-divergence for BasicEffect only (`fog_gradient_quad`); not tested for the other 4 fog-capable effects | 🟨 wired for all 8 fog-capable variants (`DX-69`); dedicated fog-on/off discriminating pixel test only exists for `colored3d` (Check AC, `DX-81`) | 🟨 narrower than D3D11 — dedicated fog-on/off pixel test only exists for the `colored3d` bundle (Check V, `DX-113`); fog-constant-buffer wiring not confirmed/tested for the other 7 fog-capable variants |
+| ShaderEffect (custom shader source) | ✅ (GLSL) | ✅ (SPIR-V) | ❌ `CreateEffectBackend` returns `nullptr` | ⬜ not built — `D9-11` explicitly ask-first in `plan_dx9.md`'s execution order, not started | ✅ (HLSL, runtime `D3DCompile()` via `D3D11EffectBackend`, `DX-58`, incl. a broken-shader failure-path check) | ⬜ not built — no D3D12 equivalent of `D3D11EffectBackend`/runtime `D3DCompile()` path exists |
 
 Note: several per-effect `docs/*-support.md` files (e.g. `basiceffect-support.md`) predate Tasks
 885-900's fog/lighting/specular fixes on Vulkan/Bgfx and still show some of these rows as gaps —
@@ -83,12 +94,12 @@ not rewritten here (out of this task's own scope).
 
 ## RenderTarget / MSAA / mip / depth
 
-| Feature | EasyGL | Vulkan | Bgfx | SDL_Renderer | D3D11 | D3D12 |
-|---|---|---|---|---|---|---|
-| `RenderTarget2D`/`RenderTargetCube`/MRT construction | ✅ | ✅ | ✅ | ✅ (MRT count > 1 throws by design, Task 709) | 🟨 `RenderTarget2D` bind+clear+readback+unbind-restores-backbuffer pixel-verified; real 2-target MRT bind+independent-clear verified via one `OMSetRenderTargets` call (`plan_dx.md` `DX-43`/`DX-46`); `RenderTargetCube` construction real but not independently pixel-tested; per-target MSAA-resolve/mip-regen-on-unbind only wired for the single-target path | ⬜ **no public `D3D12RenderTargetBackend` exists at all** — off-screen draws use a minimal, test-only `BindOffscreenColorTargetEXT()` helper, not a real `IRenderTargetBackend` implementation; the real XNA `RenderTarget2D`/`RenderTargetCube`/MRT API does not work against this backend yet (`DX-109`'s own honest triage) |
-| MSAA (both RT types) | ✅ | ✅ | ✅ (`Bgfx_RenderTarget2D_MsaaResolve` fails only under this session's Xvfb/no-DRI3 sandbox, not a code bug) | N/A (2D-only, no AA needed) | 🟨 `RenderTarget2D` 4x MSAA clear+resolve pixel-verified, device-queried via `CheckMultisampleQualityLevels` (`DX-45`); `RenderTargetCube` MSAA not separately tested | ⬜ not built — no render-target backend to attach MSAA to yet |
-| Mip chains (both RT types) | ✅ | ✅ | ✅ | N/A | ⬜ not attempted — texture upload/readback tested at mip level 0 only | ⬜ not attempted, same reason |
-| Per-instance `DepthStencilFormat` fidelity | ✅ | ✅ (Task 911) | ✅ | ⚠️ emulated (echoes the requested format back, no real backing storage) | ⬜ not separately tested | ⬜ not separately tested — no render-target backend exists to carry a `DepthStencilFormat` yet |
+| Feature | EasyGL | Vulkan | Bgfx | SDL_Renderer | D3D9 | D3D11 | D3D12 |
+|---|---|---|---|---|---|---|---|
+| `RenderTarget2D`/`RenderTargetCube`/MRT construction | ✅ | ✅ | ✅ | ✅ (MRT count > 1 throws by design, Task 709) | ⚠️ `MaxRenderTargets` `GraphicsProfile` ceiling (Reach=1/HiDef=4) real and mutation-verified (`D9-103`); full construction/bind/clear blocked by a reproducible, uncaught DXVK crash (`dxvk::DxvkError`, likely an async shader-compiler thread) the moment a render-target-flagged texture exists alongside any subsequent draw — see `docs/d3d9-backend.md` "What's not (yet)" | 🟨 `RenderTarget2D` bind+clear+readback+unbind-restores-backbuffer pixel-verified; real 2-target MRT bind+independent-clear verified via one `OMSetRenderTargets` call (`plan_dx.md` `DX-43`/`DX-46`); `RenderTargetCube` construction real but not independently pixel-tested; per-target MSAA-resolve/mip-regen-on-unbind only wired for the single-target path | ⬜ **no public `D3D12RenderTargetBackend` exists at all** — off-screen draws use a minimal, test-only `BindOffscreenColorTargetEXT()` helper, not a real `IRenderTargetBackend` implementation; the real XNA `RenderTarget2D`/`RenderTargetCube`/MRT API does not work against this backend yet (`DX-109`'s own honest triage) |
+| MSAA (both RT types) | ✅ | ✅ | ✅ (`Bgfx_RenderTarget2D_MsaaResolve` fails only under this session's Xvfb/no-DRI3 sandbox, not a code bug) | N/A (2D-only, no AA needed) | ⬜ not attempted — blocked by the same render-target crash above | 🟨 `RenderTarget2D` 4x MSAA clear+resolve pixel-verified, device-queried via `CheckMultisampleQualityLevels` (`DX-45`); `RenderTargetCube` MSAA not separately tested | ⬜ not built — no render-target backend to attach MSAA to yet |
+| Mip chains (both RT types) | ✅ | ✅ | ✅ | N/A | ⬜ not attempted — blocked by the same render-target crash above | ⬜ not attempted — texture upload/readback tested at mip level 0 only | ⬜ not attempted, same reason |
+| Per-instance `DepthStencilFormat` fidelity | ✅ | ✅ (Task 911) | ✅ | ⚠️ emulated (echoes the requested format back, no real backing storage) | ⬜ not attempted — blocked by the same render-target crash above | ⬜ not separately tested | ⬜ not separately tested — no render-target backend exists to carry a `DepthStencilFormat` yet |
 
 ### Bgfx MRT attachment limits (Task 775)
 
@@ -107,24 +118,24 @@ so it has never been the binding constraint in this project.
 
 ## Texture2D / Texture3D / TextureCube
 
-| Feature | EasyGL | Vulkan | Bgfx | SDL_Renderer | D3D11 | D3D12 |
-|---|---|---|---|---|---|---|
-| Texture2D `SetData`/`GetData`/`FromStream`/`SaveAsPng`/NPOT | ✅ | ✅ | ✅ | ✅ (4 real bugs found and fixed) | 🟨 `SetData`/`GetData` byte-exact GPU round-trip verified (`DX-40`); `FromStream`/`SaveAsPng`/NPOT not separately tested | 🟨 `SetData`/`GetData`/`UpdatePixels` byte-exact round-trip verified via explicit upload-heap staging (`DX-109`, Check K); `FromStream`/`SaveAsPng`/NPOT not separately tested |
-| Texture2D mip-level `SetData` (level > 0) | ✅ | ❌ silent no-op (Task 867) | ❌ silent no-op (Task 867) | ❌ throws by design (Task 681) | 🟨 `UpdatePixelsLevel` implemented (`DX-40`), not independently pixel-tested | ⬜ not separately tested — texture upload/readback tested at mip level 0 only |
-| Texture3D/TextureCube `SetData`/`GetData`, incl. mip | ✅ | ✅ | ✅ (needed a new `GetData` readback path, Task 914) | ⛔ **BLOCKED** — construction succeeds silently with a null backend, 94-test blast radius (Task 725) | ✅ byte-exact GPU round-trip verified for both types at mip 0 (`DX-41`/`DX-42`) | 🟨/⬜ split: `TextureCube` `SetData` real (`DX-111`, needed by `env_map3d`), but `GetData()` is a no-op (interface default) — narrower than D3D11's real readback; **`Texture3D` has no D3D12 backend at all**, explicitly triaged out (`DX-109`) |
-| Texture3D/TextureCube sampled in shaders | ❌ don't inherit `Texture` (Task 863, architectural) | ❌ | ❌ | N/A | 🟨 `TextureCube` sampled and pixel-verified via `env_map3d` (`DX-66`); `Texture3D` has no consuming shader variant, unverified in a shader | 🟨 `TextureCube` sampled and pixel-verified via `env_map3d` (`DX-111`, Check U1); `Texture3D` has no D3D12 backend or consuming shader variant at all |
-| Non-`Color` `SurfaceFormat` for real GPU texture data | ⛔ **BLOCKED** (Task 732) | same shared-code limitation | same | same | same shared-code limitation | same shared-code limitation |
+| Feature | EasyGL | Vulkan | Bgfx | SDL_Renderer | D3D9 | D3D11 | D3D12 |
+|---|---|---|---|---|---|---|---|
+| Texture2D `SetData`/`GetData`/`FromStream`/`SaveAsPng`/NPOT | ✅ | ✅ | ✅ | ✅ (4 real bugs found and fixed) | ✅ real `D3DPOOL_MANAGED` upload, exercised (and oracle-verified byte-exact) by every textured scene in the corpus (`texturepixel=` used 64×); `FromStream`/`SaveAsPng`/NPOT-on-`Reach` not separately tested | 🟨 `SetData`/`GetData` byte-exact GPU round-trip verified (`DX-40`); `FromStream`/`SaveAsPng`/NPOT not separately tested | 🟨 `SetData`/`GetData`/`UpdatePixels` byte-exact round-trip verified via explicit upload-heap staging (`DX-109`, Check K); `FromStream`/`SaveAsPng`/NPOT not separately tested |
+| Texture2D mip-level `SetData` (level > 0) | ✅ | ❌ silent no-op (Task 867) | ❌ silent no-op (Task 867) | ❌ throws by design (Task 681) | ⬜ not attempted — no oracle scene exercises mip level > 0 | 🟨 `UpdatePixelsLevel` implemented (`DX-40`), not independently pixel-tested | ⬜ not separately tested — texture upload/readback tested at mip level 0 only |
+| Texture3D/TextureCube `SetData`/`GetData`, incl. mip | ✅ | ✅ | ✅ (needed a new `GetData` readback path, Task 914) | ⛔ **BLOCKED** — construction succeeds silently with a null backend, 94-test blast radius (Task 725) | 🟨 split: `TextureCube` `SetData` real, oracle-verified byte-exact via `envmap_quad`/`envmap_fresnel_quad`; `Texture3D` has only its `GraphicsProfile` size-ceiling mutation-verified (`D9-103`) — no oracle scene or GPU round-trip test exists for `Texture3D` at all | ✅ byte-exact GPU round-trip verified for both types at mip 0 (`DX-41`/`DX-42`) | 🟨/⬜ split: `TextureCube` `SetData` real (`DX-111`, needed by `env_map3d`), but `GetData()` is a no-op (interface default) — narrower than D3D11's real readback; **`Texture3D` has no D3D12 backend at all**, explicitly triaged out (`DX-109`) |
+| Texture3D/TextureCube sampled in shaders | ❌ don't inherit `Texture` (Task 863, architectural) | ❌ | ❌ | N/A | 🟨 `TextureCube` sampled and oracle-verified byte-exact via `EnvironmentMapEffect` (`envmap_quad`/`envmap_fresnel_quad`); `Texture3D` has no consuming shader variant tested | 🟨 `TextureCube` sampled and pixel-verified via `env_map3d` (`DX-66`); `Texture3D` has no consuming shader variant, unverified in a shader | 🟨 `TextureCube` sampled and pixel-verified via `env_map3d` (`DX-111`, Check U1); `Texture3D` has no D3D12 backend or consuming shader variant at all |
+| Non-`Color` `SurfaceFormat` for real GPU texture data | ⛔ **BLOCKED** (Task 732) | same shared-code limitation | same | same | same shared-code limitation | same shared-code limitation | same shared-code limitation |
 
 ## GraphicsDevice state objects
 
-| Feature | EasyGL | Vulkan | Bgfx | SDL_Renderer | D3D11 | D3D12 |
-|---|---|---|---|---|---|---|
-| `BlendState` (all presets + custom factors/equations) | ✅ | ✅ **FIXED (Task 868, 2026-07-09)** — real per-`Blend`/`BlendFunction` mapping across all 9 3D pipeline-creation sites; was "almost entirely fake" (hardcoded one blend equation regardless of request, confirmed 5× via pixel tests) before this fix | ✅ | ✅ (2 real bugs fixed) | ✅ real cached `ID3D11BlendState`, `Opaque`/`AlphaBlend` pixel-behavior-verified (`DX-50`/`DX-82`) | ⬜ **not applicable yet** — D3D12 bakes blend state directly into each PSO description; no runtime-settable blend-state object or `BlendState`→PSO-desc-key mapping exists (`DX-113`'s own audit confirmed this genuinely waits on a future task, not a coverage gap) |
-| `DepthStencilState` (compare func + full stencil ops) | ✅ | ✅ (Task 870 — real per-pipeline compare-op + stencil) | not separately re-confirmed this pass | ✅ never throws (deliberate no-op, matches FNA's backend-agnostic-until-drawn model) | ✅ real cached `ID3D11DepthStencilState`, stencil-enable gating pixel-verified (`DX-51`/`DX-82`) | ⬜ not applicable yet — same PSO-baked-state gap as `BlendState`; every PSO hardcodes `depthEnable=false` |
-| `RasterizerState` | ✅ | not separately re-confirmed this pass | not separately re-confirmed this pass | ✅ never throws | ✅ real cached `ID3D11RasterizerState`, `CullMode` winding-order pixel-verified (`DX-52`/`DX-82`); depth-bias unit convention (float→rounded `INT`) documented, not itself pixel-tested | ⬜ not applicable yet — same PSO-baked-state gap; every PSO hardcodes `cullMode=None` |
-| Per-slot `SamplerState` (16 slots) | ✅ | ✅ | ✅ | ✅ (1 real bug fixed) | 🟨 real cache with identity/distinctness proof + Wrap/Mirror pixel-verified via SpriteBatch (`DX-44`/`DX-72`); not tested across all 16 slots simultaneously | ⬜ not built — samplers are hardcoded static `D3D12_FILTER_MIN_MAG_MIP_LINEAR`+`WRAP` descriptors baked into the root signature (`D3D12RootSignatureCache::MakeDefaultStaticSampler`), not driven by XNA `SamplerState` at all |
-| `GraphicsDevice.ReferenceStencil` | ❌ **no backend connection** (Task 872, open) | ✅ **FIXED** — connected via `vkCmdSetStencilReference`, an undocumented side effect of Task 870 (corrected 2026-07-09) | ❌ **no backend connection** (Task 872, open) | N/A | ✅ real `OMSetDepthStencilState` re-bind on `SetReferenceStencil()`, verified (`DX-52`) | ⬜ not applicable — no depth-stencil-state object exists to carry a reference value |
-| `Clear` honors `ClearOptions::Stencil` | ❌ **ignored, all 3** (Task 871, open) | ❌ | ❌ | ⚠️ emulated | 🟨 real `ClearDepthStencilView` calls implemented for all 5 combo variants (`DX-25`); only plain `Clear(r,g,b,a)` has a dedicated round-trip pixel test | ⬜ not attempted — no DSV is bound in any current off-screen test (`depthEnable=false` throughout), so depth/stencil `Clear` combos have no target to exercise against yet |
+| Feature | EasyGL | Vulkan | Bgfx | SDL_Renderer | D3D9 | D3D11 | D3D12 |
+|---|---|---|---|---|---|---|---|
+| `BlendState` (all presets + custom factors/equations) | ✅ | ✅ **FIXED (Task 868, 2026-07-09)** — real per-`Blend`/`BlendFunction` mapping across all 9 3D pipeline-creation sites; was "almost entirely fake" (hardcoded one blend equation regardless of request, confirmed 5× via pixel tests) before this fix | ✅ | ✅ (2 real bugs fixed) | ✅ real `D3DRS_SRCBLEND`/`DESTBLEND` per-preset dispatch, `Opaque`/`AlphaBlend` pixel-behavior-verified (`D3D9_BlendState_Opaque`/`_AlphaBlend`) and separately mutation-verified (src/dst swap caught, `D9-122`) | ✅ real cached `ID3D11BlendState`, `Opaque`/`AlphaBlend` pixel-behavior-verified (`DX-50`/`DX-82`) | ⬜ **not applicable yet** — D3D12 bakes blend state directly into each PSO description; no runtime-settable blend-state object or `BlendState`→PSO-desc-key mapping exists (`DX-113`'s own audit confirmed this genuinely waits on a future task, not a coverage gap) |
+| `DepthStencilState` (compare func + full stencil ops) | ✅ | ✅ (Task 870 — real per-pipeline compare-op + stencil) | not separately re-confirmed this pass | ✅ never throws (deliberate no-op, matches FNA's backend-agnostic-until-drawn model) | ✅ real `D3DRS_STENCILENABLE`/compare-func dispatch, pixel-verified (`D3D9_DepthStencilState_StencilEnable`) and mutation-verified (forced-false caught, `D9-122`) | ✅ real cached `ID3D11DepthStencilState`, stencil-enable gating pixel-verified (`DX-51`/`DX-82`) | ⬜ not applicable yet — same PSO-baked-state gap as `BlendState`; every PSO hardcodes `depthEnable=false` |
+| `RasterizerState` | ✅ | not separately re-confirmed this pass | not separately re-confirmed this pass | ✅ never throws | ✅ real `D3DRS_CULLMODE` winding-order dispatch, pixel-verified (`D3D9_RasterizerState_CullMode`) and mutation-verified (forced-none caught, `D9-122`); depth-bias not separately tested | ✅ real cached `ID3D11RasterizerState`, `CullMode` winding-order pixel-verified (`DX-52`/`DX-82`); depth-bias unit convention (float→rounded `INT`) documented, not itself pixel-tested | ⬜ not applicable yet — same PSO-baked-state gap; every PSO hardcodes `cullMode=None` |
+| Per-slot `SamplerState` (16 slots) | ✅ | ✅ | ✅ | ✅ (1 real bug fixed) | 🟨 real `D3DSAMP_ADDRESSU`/`V`/`MAGFILTER`/`MINFILTER` wiring, Wrap/Mirror pixel-behavior oracle-verified via SpriteBatch (`D9-92`); not tested across all 16 slots simultaneously | 🟨 real cache with identity/distinctness proof + Wrap/Mirror pixel-verified via SpriteBatch (`DX-44`/`DX-72`); not tested across all 16 slots simultaneously | ⬜ not built — samplers are hardcoded static `D3D12_FILTER_MIN_MAG_MIP_LINEAR`+`WRAP` descriptors baked into the root signature (`D3D12RootSignatureCache::MakeDefaultStaticSampler`), not driven by XNA `SamplerState` at all |
+| `GraphicsDevice.ReferenceStencil` | ❌ **no backend connection** (Task 872, open) | ✅ **FIXED** — connected via `vkCmdSetStencilReference`, an undocumented side effect of Task 870 (corrected 2026-07-09) | ❌ **no backend connection** (Task 872, open) | N/A | ⬜ not attempted — no D3D9 test exercises `SetReferenceStencil()` | ✅ real `OMSetDepthStencilState` re-bind on `SetReferenceStencil()`, verified (`DX-52`) | ⬜ not applicable — no depth-stencil-state object exists to carry a reference value |
+| `Clear` honors `ClearOptions::Stencil` | ❌ **ignored, all 3** (Task 871, open) | ❌ | ❌ | ⚠️ emulated | ⬜ not attempted — `D3D9_Smoke` covers plain `Clear(r,g,b,a)` only, not the `ClearOptions` combo variants | 🟨 real `ClearDepthStencilView` calls implemented for all 5 combo variants (`DX-25`); only plain `Clear(r,g,b,a)` has a dedicated round-trip pixel test | ⬜ not attempted — no DSV is bound in any current off-screen test (`depthEnable=false` throughout), so depth/stencil `Clear` combos have no target to exercise against yet |
 
 ### Vulkan optional device-feature gating (Task 454)
 
@@ -149,18 +160,18 @@ falls back," which is the idiomatic Vulkan pattern for optional features, not a 
 
 ## OcclusionQuery (Phase 50, closed this session — see `docs/occlusionquery-support.md` for full detail)
 
-| Feature | EasyGL | Vulkan | Bgfx | SDL_Renderer | D3D11 | D3D12 |
-|---|---|---|---|---|---|---|
-| Wired to real GPU work (`Begin`/`End`) | ✅ | ✅ **FIXED (Task 447, 2026-07-10)** — real per-draw-call query correlation via `Pending3DDraw::occlusionQuery` tagging + `vkCmdBeginQuery`/`vkCmdEndQuery` recording in `RecordCommandBuffer()` | ✅ (Task 448) | N/A — throws at construction (Task 727) | ✅ real `ID3D11Query(D3D11_QUERY_OCCLUSION)`, `Begin`/`End`/`GetData` wired (`DX-47`) | ⬜ **not built at all** — Phase DX12's task list has no `ID3D12Query`-based occlusion-query task; `CreateOcclusionQuery()` falls through to `IGraphicsBackend`'s own silent `nullptr` default |
-| Pixel/query correctness (visible vs. occluded) | ✅ verified both directions (Tasks 445/446) | ✅ verified both directions, plus a multi-draw-span check (Task 854) — this sandbox's software Vulkan driver (Mesa Lavapipe) reports fully accurate, discriminating pixel counts (4096 visible / 0 occluded on a 64×64 quad) | ⚠️ can't verify in this sandbox's software GL2.1 driver; dedicated-view architecture gap open (Task 917) | N/A | 🟨 a real completing query verified; not confirmed both-directions (visible vs. occluded) discriminating like EasyGL/Vulkan | N/A — no query support exists |
+| Feature | EasyGL | Vulkan | Bgfx | SDL_Renderer | D3D9 | D3D11 | D3D12 |
+|---|---|---|---|---|---|---|---|
+| Wired to real GPU work (`Begin`/`End`) | ✅ | ✅ **FIXED (Task 447, 2026-07-10)** — real per-draw-call query correlation via `Pending3DDraw::occlusionQuery` tagging + `vkCmdBeginQuery`/`vkCmdEndQuery` recording in `RecordCommandBuffer()` | ✅ (Task 448) | N/A — throws at construction (Task 727) | ⬜ **not built at all** — `plan_dx9.md`'s task list has no `IDirect3DQuery9`-based occlusion-query task; `CreateOcclusionQuery()` falls through to `IGraphicsBackend`'s own silent `nullptr` default, same gap as D3D12 | ✅ real `ID3D11Query(D3D11_QUERY_OCCLUSION)`, `Begin`/`End`/`GetData` wired (`DX-47`) | ⬜ **not built at all** — Phase DX12's task list has no `ID3D12Query`-based occlusion-query task; `CreateOcclusionQuery()` falls through to `IGraphicsBackend`'s own silent `nullptr` default |
+| Pixel/query correctness (visible vs. occluded) | ✅ verified both directions (Tasks 445/446) | ✅ verified both directions, plus a multi-draw-span check (Task 854) — this sandbox's software Vulkan driver (Mesa Lavapipe) reports fully accurate, discriminating pixel counts (4096 visible / 0 occluded on a 64×64 quad) | ⚠️ can't verify in this sandbox's software GL2.1 driver; dedicated-view architecture gap open (Task 917) | N/A | N/A — no query support exists | 🟨 a real completing query verified; not confirmed both-directions (visible vs. occluded) discriminating like EasyGL/Vulkan | N/A — no query support exists |
 
 ## Model (Phase 49, closed this session — see `docs/model-content-pipeline-support.md` for full detail)
 
-| Feature | Status | D3D11 | D3D12 |
-|---|---|---|---|
-| Runtime API (`Model`/`ModelMesh`/`ModelMeshPart`/`ModelBone`) | ✅ fully audited/FNA-faithful, several real bugs found and fixed (Tasks 431-439) | ⬜ not separately tested against this backend | ⬜ not separately tested against this backend |
-| Content-pipeline loading (`ModelTypeReader`) | ⚠️ real gaps — no bone hierarchy, no `ParentBone` wiring, no `BoundingSphere`/`Tag`, custom `.model.json` format is not `.xnb`-compatible (Task 440); zero test coverage of the loader itself | ⬜ not separately tested against this backend | ⬜ not separately tested against this backend |
-| `Model` constructor root-bone-index flexibility | ✅ fixed (Task 916, 2026-07-09) | ⬜ not separately tested against this backend | ⬜ not separately tested against this backend |
+| Feature | Status | D3D9 | D3D11 | D3D12 |
+|---|---|---|---|---|
+| Runtime API (`Model`/`ModelMesh`/`ModelMeshPart`/`ModelBone`) | ✅ fully audited/FNA-faithful, several real bugs found and fixed (Tasks 431-439) | ⬜ not separately tested against this backend | ⬜ not separately tested against this backend | ⬜ not separately tested against this backend |
+| Content-pipeline loading (`ModelTypeReader`) | ⚠️ real gaps — no bone hierarchy, no `ParentBone` wiring, no `BoundingSphere`/`Tag`, custom `.model.json` format is not `.xnb`-compatible (Task 440); zero test coverage of the loader itself | ⬜ not separately tested against this backend | ⬜ not separately tested against this backend | ⬜ not separately tested against this backend |
+| `Model` constructor root-bone-index flexibility | ✅ fixed (Task 916, 2026-07-09) | ⬜ not separately tested against this backend | ⬜ not separately tested against this backend | ⬜ not separately tested against this backend |
 
 Note: `cna_reference_dump`/`cna_demo_2d` (both `Model`-adjacent example binaries) fail to *link*
 under `D3D11` (`undefined reference to Effect::Apply()`) — found during `plan_dx.md` `DX-81`'s
@@ -329,6 +340,29 @@ backend code work.
   instead of using bgfx's own dedicated-measurement-view pattern; needed for true scene-depth
   query correctness (deferred, not blocked, can't be verified in this sandbox anyway).
 
+## Remaining genuine D3D9 limitations (`D9-130`, 2026-07-15)
+
+Unlike the other 6 columns, `D3D9`'s ✅ cells above are not "implemented and plausible" — they are
+each backed by a byte-identical (`--tolerance 0`) match against the real XNA 4.0 runtime for a
+checked-in oracle scene (`D9-120`, `D3D9_XNA_Diff`). The corpus currently has 0/31 scenes diverge.
+The genuine, currently-open gaps are:
+
+- **Render targets cannot be sampled as textures at all** — a reproducible, uncaught DXVK crash,
+  not a CNA logic bug; see the `RenderTarget2D`/MSAA/mip rows above and `docs/d3d9-backend.md`.
+- **`PreferPerPixelLighting` and real specular highlights are structurally unreachable** on this
+  backend's current shader dispatch (`D9-82e`) — the same project-wide Divergence 1 every CNA
+  backend shares, not something D3D9 specifically regressed.
+- **`Texture3D` has no GPU round-trip or oracle coverage at all** — only its `GraphicsProfile`
+  size-ceiling is tested; no scene in the corpus samples a `Texture3D` in a shader.
+- **`OcclusionQuery` is not built** for this backend (same gap as D3D12).
+- **`CnaTests` does not build under D3D9** (`D9-123`) — the same POSIX `::setenv()` wall `D3D11`
+  already documents.
+- **Not verified on real Windows hardware** (`D9-140`) — every result here is Wine+DXVK-on-this-
+  machine, same caveat as `D3D11`/`D3D12`.
+
+See `docs/d3d9-backend.md` for the full writeup and `docs/d3d9-divergence-report.md` for the raw
+measurement this section summarizes.
+
 ## See also
 
 - `docs/coverage.md` — non-Graphics namespace estimates (Audio/Media/Content/Net/GamerServices),
@@ -336,6 +370,8 @@ backend code work.
 - `docs/sdl-renderer-2d-completeness.md` — SDL_Renderer's own full Phase 70 audit in verbose detail.
 - `docs/model-content-pipeline-support.md`, `docs/occlusionquery-support.md` — full detail for
   those 2 systems, summarized above.
+- `docs/d3d9-backend.md`, `docs/d3d9-divergence-report.md` — the `D3D9` column's full detail: what
+  it proves, the oracle harness, and the honest DXVK-authenticity caveat every result inherits.
 - Per-effect docs (`docs/basiceffect-support.md` etc.) — largely predate Tasks 885-900's
   fog/lighting/specular fixes on Vulkan/Bgfx; this matrix reflects the current state, those
   individual docs have not been refreshed (out of this task's own scope).
