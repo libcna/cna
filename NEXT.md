@@ -75,6 +75,40 @@ plausibly."
 
 **Phase D9-0 is fully closed.** Next up: Phase D9-1 (CMake integration + backend skeleton).
 
+### Phase D9-A — the XNA 4.0 oracle: D9-A1–A4 closed, D9-A5 started (1 scene), D9-A6 open
+
+| Task | Status |
+|---|---|
+| `D9-A1` — stand up real XNA 4.0 under Wine | ✅ |
+| `D9-A2` — minimal XNA 4.0 reference app, no content pipeline | ✅ |
+| `D9-A3` — byte-for-byte equivalent CNA app, shared declarative scene format | ✅ |
+| `D9-A4` — `scripts/xna-diff.py`, DXVK-into-XNA-prefix prerequisite | ✅ |
+| `D9-A5` — growing scene corpus | 🟨 (1 scene: `colored3d`, pixel-perfect) |
+| `D9-A6` — run the corpus against CNA's other backends too | ⬜ |
+
+Closed 2026-07-15 (`D9-A3`/`D9-A4`): built the shared declarative scene format `D9-A3`'s own text
+demanded (`tools/xna-oracle/scenes/*.scene`, minimal `key=value` text, no JSON library needed
+since the XNA-side build environment is GAC-only .NET 4.0 with no NuGet), parsed identically by
+both a rewritten, scene-driven `tools/xna-oracle/Oracle.cs` (moved from `dx9-spike/xna-oracle/`)
+and a new `tools/xna-oracle/CnaOracleRender.cpp` (built via CNA's real public `Game`/
+`GraphicsDeviceManager`/`GraphicsDevice`/`BasicEffect` API, `cna_oracle_render` CMake target, not
+a CTest — no pass/fail of its own). Installed DXVK into the XNA oracle's own Wine prefix
+(`~/.wine-cna-xna40`, `dxvk-setup install`, 32-bit `dxvk-wine32`) — `D9-A4`'s own critical
+prerequisite, confirmed by the adapter string flipping from WineD3D's spoofed `ATI Radeon HD 5600
+Series` to the real `AMD Radeon 780M (RADV PHOENIX)`, so both sides now execute through the same
+DXVK D3D9→Vulkan path. New `scripts/xna-diff.py` (needs Pillow), `--tolerance` defaults to `0`,
+mutation-verified (a 1-off-mutated PNG correctly fails at tolerance 0, correctly passes at
+tolerance 1).
+
+**Result: the first real oracle comparison is pixel-perfect.** The `colored3d` scene (`D9-A2`'s
+own original triangle) renders **byte-identical** on both sides — `0/65536` pixels differ, max
+per-channel delta `0`, confirmed by a full sweep not just spot checks. This is the first real,
+decisive evidence this backend's `BasicEffect` vertex-color dispatch (`D9-82`) is genuinely
+indistinguishable from real XNA 4.0. `D9-A5`'s corpus has exactly one scene so far, by design
+("growing with the plan," not attempted all at once) — see `tools/xna-oracle/README.md`. Next:
+add more scenes as `D9-84` exercises each already-dispatched effect (textured/lit `BasicEffect`
+variants, `AlphaTestEffect`, `DualTextureEffect`, `EnvironmentMapEffect`, `SkinnedEffect`).
+
 ### Phase D9-1 — CMake integration and skeleton: CLOSED 2026-07-14
 
 | Task | Status |
@@ -627,7 +661,8 @@ Most recent first. Full detail lives in `plan_dx9.md` — this is a short index.
 
 | Commit(s) | Summary |
 |---|---|
-| *(pending)* | **`D9-64` closed (reuse backend-agnostic state CTests) — Phase D9-6 now FULLY CLOSED (all 5 rows)**. Reused D3D11's own 4-test subset (`easygl_blendstate_opaque_test.cpp`/`easygl_blendstate_alphablend_test.cpp`/`easygl_depthstencilstate_stencil_enable_test.cpp`/`easygl_rasterizerstate_cullmode_test.cpp`, verbatim) as new `D3D9_BlendState_Opaque`/`D3D9_BlendState_AlphaBlend`/`D3D9_DepthStencilState_StencilEnable`/`D3D9_RasterizerState_CullMode` CTests. Found and fixed 2 real, pre-existing backend bugs: (1) `SetDepthTestEnabled`/`SetDepthWriteEnabled` were silent-throw stubs since `D9-11`, never wired up -- same class of bug as D3D11's own 2026-07-14 fix (`191c28f1`), now direct `SetRenderState(D3DRS_ZENABLE/ZWRITEENABLE)` calls (`SetBlendEnabled` -> deliberate no-op, matching D3D11/D3D12); (2) `UpdatePresentationFormatEXT()` deferred a changed `DepthStencilFormat` until the next `Present()`, causing `Clear()` to fail `D3DERR_INVALIDCALL` on any test drawing depth/stencil content on the literal first frame -- fixed by applying eagerly inside `UpdatePresentationFormatEXT()` itself (within the interface's own documented allowance, no `IGraphicsBackend.hpp` change). New `D3D9_Smoke` Check Z (2 checks, ported from D3D11's own near/far depth-test proof) confirms fix 1 for real. Both mutation-verified. Full D3D9 CTest suite: 11/11 binaries green (`D3D9_Smoke` now 55/55). |
+| *(pending)* | **`D9-A3`/`D9-A4` closed (XNA oracle diff harness) — first real oracle comparison is PIXEL-PERFECT (0/65536 differ)**. New shared `.scene` text format (`tools/xna-oracle/scenes/*.scene`), a rewritten scene-driven `tools/xna-oracle/Oracle.cs` (moved from `dx9-spike/`), a new `tools/xna-oracle/CnaOracleRender.cpp` (real public `Game`/`GraphicsDeviceManager`/`BasicEffect` API, `cna_oracle_render` CMake target), and `scripts/xna-diff.py` (needs Pillow, `--tolerance` defaults to 0, mutation-verified). Installed DXVK into the XNA oracle's own Wine prefix (`~/.wine-cna-xna40`) -- `D9-A4`'s own critical prerequisite -- confirmed via the adapter string flipping from WineD3D's spoofed string to the real GPU. `colored3d` scene (`D9-A2`'s own original triangle) matches real XNA 4.0 byte-for-byte across all 65536 pixels. `D9-A5`'s corpus now has its first scene, growing incrementally from here. |
+| `6fd21fa3` | **`D9-64` closed (reuse backend-agnostic state CTests) — Phase D9-6 now FULLY CLOSED (all 5 rows)**. Reused D3D11's own 4-test subset (`easygl_blendstate_opaque_test.cpp`/`easygl_blendstate_alphablend_test.cpp`/`easygl_depthstencilstate_stencil_enable_test.cpp`/`easygl_rasterizerstate_cullmode_test.cpp`, verbatim) as new `D3D9_BlendState_Opaque`/`D3D9_BlendState_AlphaBlend`/`D3D9_DepthStencilState_StencilEnable`/`D3D9_RasterizerState_CullMode` CTests. Found and fixed 2 real, pre-existing backend bugs: (1) `SetDepthTestEnabled`/`SetDepthWriteEnabled` were silent-throw stubs since `D9-11`, never wired up -- same class of bug as D3D11's own 2026-07-14 fix (`191c28f1`), now direct `SetRenderState(D3DRS_ZENABLE/ZWRITEENABLE)` calls (`SetBlendEnabled` -> deliberate no-op, matching D3D11/D3D12); (2) `UpdatePresentationFormatEXT()` deferred a changed `DepthStencilFormat` until the next `Present()`, causing `Clear()` to fail `D3DERR_INVALIDCALL` on any test drawing depth/stencil content on the literal first frame -- fixed by applying eagerly inside `UpdatePresentationFormatEXT()` itself (within the interface's own documented allowance, no `IGraphicsBackend.hpp` change). New `D3D9_Smoke` Check Z (2 checks, ported from D3D11's own near/far depth-test proof) confirms fix 1 for real. Both mutation-verified. Full D3D9 CTest suite: 11/11 binaries green (`D3D9_Smoke` now 55/55). |
 | `90f59e7c` | **`D9-83` closed (`DrawInstancedPrimitivesEx` via `SetStreamSourceFreq`) — Phase D9-8's dispatch+instancing work is now COMPLETE**, only `D9-84` remains. New `D3D9InstancedDraw.cpp`, a fresh NOXNA `vs_2_0`/`ps_2_0` shader (`shaders/cna/Instanced3D.hlsl`, real XNA has no per-instance-aware Stock Effect shader) compiled+disassembly-verified, new stride-64 2-stream vertex declaration. `SetStreamSourceFreq(0/1, INDEXEDDATA\|count / INSTANCEDATA\|1)` per MSDN, reset to 1 before returning. Real bug found and fixed during development was in the new CTest's own pixel-sample coordinates (sat exactly on the test triangle's diagonal hypotenuse), not the instancing logic -- every D3D9 API call returned `S_OK` throughout. New `D3D9_Instanced` CTest, 4/4 (two distinct instances in one draw call, null-instanceVb fallback, stream-frequency reset regression check). Mutation-verified (hardcoded the instance-count frequency to 1; exactly the 2nd-instance check went red). Full 7-CTest D3D9 suite passes. |
 | `d945ec59` | **`D9-82f` closed (`SkinnedEffect` dispatch) — Phase D9-8's dispatch work is now COMPLETE for all 5 XNA Stock Effects**. This row's own "12 unblocked" estimate was exactly right, same as `D9-82e`'s. New `DrawSkinnedEffectEXT()` + `UploadBonesVS()`. `VSInputNmTxWeights` matches the existing stride-52 layout byte-for-byte. `preferPerPixelLighting` always `false` makes the pixel-lighting `ShaderIndex` bucket structurally unreachable. `Bones[72]` (216 registers, 3/bone) reuses the exact same "first 3 columns of the transposed matrix" packing `UploadMatrixConstantVS` already established for `World`/`WorldInverseTranspose`. `D3D9_DrawEx` extended to 17/17 (2 new real checks, Identity-bone skinning-as-no-op design so the expected math reuses the established lit-textured formulas while still exercising the full `Bones[72]` upload path). Mutation-verified (commented out the entire `UploadBonesVS()` call; both new checks went red -- a zero skinning matrix degenerates the triangle to a point -- everything else stayed green). Full 6-CTest D3D9 suite passes. |
 | `da8504c6` | **`D9-82e` closed (`EnvironmentMapEffect` dispatch)** — this row's own "8 unblocked" estimate was exactly right this time. New `DrawEnvironmentMapEffectEXT()`; `specularEnabled` always `false` makes the 8 specular `ShaderIndex` values structurally unreachable (no separate throw branch needed). `VSInputNmTx` matches the existing stride-32 layout exactly -- no new vertex declaration needed (unlike `D9-82d`). Factored `oneLight` derivation out of `DrawBasicEffectEXT()` into a shared `ComputeOneLightEXT()`. `EmissiveColor` needs no reconstruction here (`FillGpuDrawParams()` already pre-folds it). `D3D9_DrawEx` extended to 15/15 (2 new real checks mirroring `BasicEffect`'s own Check C/D bucket-selection discipline, non-fresnel only for exactness). Mutation-verified (forced the shared `ComputeOneLightEXT()` to always `true`; BOTH `BasicEffect`'s AND `EnvironmentMapEffect`'s own 2-light checks went red simultaneously, confirming the shared helper is genuinely shared). Full 6-CTest D3D9 suite passes. |
@@ -667,6 +702,11 @@ surfaced two real, pre-existing D3D9 bugs along the way (`SetDepthTestEnabled`/
 `SetDepthWriteEnabled` silent-throw stubs; `UpdatePresentationFormatEXT()`'s deferred-format-apply
 timing) — both fixed and mutation-verified, see Phase D9-6's own section above.
 
+**Phase D9-A: `D9-A3`/`D9-A4` closed 2026-07-15 — the XNA oracle diff harness is real and its
+first result is pixel-perfect** (`colored3d` scene, `0/65536` pixels differ from real XNA 4.0, see
+Phase D9-A's own section above). `D9-A5` (the scene corpus) has grown its first entry; `D9-84`
+(every draw path validated against the oracle) can now genuinely start, one scene at a time.
+
 **Phase D9-8: `D9-80`–`D9-83` ALL CLOSED — real, verified dispatch for all 5 XNA Stock Effects plus
 hardware instancing on this backend.** The shader-dispatch tables/formulas are transcribed and
 tested, the `GpuDrawParams` audit is independently re-verified (2 of its 4 gaps turned out resolvable
@@ -682,7 +722,9 @@ real hardware-instanced geometry (`DrawInstancedPrimitivesEx` via `SetStreamSour
 NOXNA instancing shader since real XNA has no per-instance-aware Stock Effect shader). `D9-64` (reuse the backend-agnostic state CTest sources) is also now closed, finding and fixing 2
 real, pre-existing D3D9 bugs along the way (`SetDepthTestEnabled`/`SetDepthWriteEnabled` silent-
 throw stubs; `UpdatePresentationFormatEXT()`'s deferred-format-apply timing) — Phase D9-6 is now
-fully closed too. Next smallest task: `D9-84` (oracle validation, the last row in Phase D9-8).
+fully closed too. Next smallest task: keep growing `D9-A5`'s scene corpus and validating each
+scene against the oracle (`D9-84`, the last row in Phase D9-8) — the harness itself (`D9-A3`/
+`D9-A4`) is done and its first result (`colored3d`) is pixel-perfect.
 `PreferPerPixelLighting` variants (`BasicEffect`/
 `SkinnedEffect`) and `EnvironmentMapEffect`'s specular variants stay blocked on a project-owner-level
 `GpuDrawParams` decision (`D9-81`'s still-open findings). The `D3DCULL` winding trap (`D9-21`) did NOT
@@ -745,7 +787,7 @@ targets stay `vs_2_0`/`ps_2_0` for stock effects (never "upgraded" to SM3); no D
 Authoritative behavioral reference for this backend is **not** FNA (FNA has no D3D9 driver) — it is
 XNA itself, in two forms: Microsoft's Stock Effects HLSL sources
 (`/rv/data/library/github.com/FNA-XNA/FNA/src/Graphics/Effect/StockEffects/`) for the shaders, and the
-real XNA 4.0 runtime under Wine (`~/.wine-cna-xna40`, `dx9-spike/xna-oracle/`) for behavior.
+real XNA 4.0 runtime under Wine (`~/.wine-cna-xna40`, `tools/xna-oracle/`) for behavior.
 
 ---
 
@@ -777,11 +819,17 @@ cmake -S . -B cmake-build-d3d9 \
 **Phases D9-0 through D9-7 are all fully closed** (`D9-32`/`D9-34`/`D9-60`/`D9-62`/`D9-73` honestly
 🟨 — see their own plan rows for exactly what's deferred and why). **Phase D9-8's dispatch AND
 instancing work (`D9-80`–`D9-83`) is now fully closed too** — real, verified dispatch for all 5 XNA
-Stock Effects plus hardware instancing. Only `D9-84` remains anywhere in the plan up to this point.
+Stock Effects plus hardware instancing. **Phase D9-A's diff harness (`D9-A1`–`D9-A4`) is now fully
+closed too**, and its first real comparison (`colored3d`) is pixel-perfect. Only `D9-A5`
+(incrementally: grow the scene corpus) and `D9-84` (validate against it) remain anywhere in the
+plan up to this point — and they are, by design, the same ongoing effort: add a scene, validate
+it, move to the next effect.
 
-1. **`D9-84`** — every draw path validated against the real XNA oracle (the last row in Phase D9-8,
-   and where `D9-21`'s `D3DCULL` proof and `D9-62`'s rasterizer-state proof both finally close out
-   too).
+1. **`D9-A5`/`D9-84`** — add the next scene(s) to `tools/xna-oracle/scenes/` (natural next
+   candidates: a textured `BasicEffect` quad, then a lit `BasicEffect` variant with 1/3 lights) and
+   validate them via `scripts/xna-diff.py` against the real XNA oracle — the last two open rows in
+   Phase D9-8/D9-A, and where `D9-21`'s `D3DCULL` proof and `D9-62`'s rasterizer-state proof both
+   finally close out too. See `tools/xna-oracle/README.md` for the current build/run commands.
 
 See `plan_dx9.md`'s "Execution order" table for the full sequence beyond this.
 
@@ -831,7 +879,7 @@ Make one small, verified improvement:
 2. Implement the smallest correct thing per plan_dx9.md's design decisions -- do not improvise past
    what the plan already decided.
 3. Where the task is a rendering/behavior claim, verify it against the real XNA 4.0 oracle
-   (dx9-spike/xna-oracle/, ~/.wine-cna-xna40), not just "looks right" -- that is this plan's whole
+   (tools/xna-oracle/, ~/.wine-cna-xna40), not just "looks right" -- that is this plan's whole
    point.
 4. Update plan_dx9.md's own task table (status + notes) with the real result.
 5. Update this NEXT.md: Sec.2/Sec.3/Sec.8, following the same short-index style as the rest of the

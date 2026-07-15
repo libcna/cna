@@ -7,12 +7,14 @@ plan's prose is a waste.
 
 **`fxc_tool.cpp` and `compare_against_fxb.py` have moved** (Phase D9-7, `D9-71`) to their real home:
 `src/CNA/Internal/Backends/D3D9/shaders/` (alongside the new `compile_shaders_sm2.py` driver and
-the checked-in, auto-generated `d3d9_shaders.hpp`). This directory keeps only what has not moved
-yet:
+the checked-in, auto-generated `d3d9_shaders.hpp`).
 
-| File | Belongs in |
-|------|-----------|
-| `xna-oracle/Oracle.cs` | the seed of Phase D9-A's reference app (`tests/` or `tools/`, to be decided) |
+**`xna-oracle/Oracle.cs` has also moved** (Phase D9-A, `D9-A3`) to `tools/xna-oracle/Oracle.cs` —
+rewritten there to be scene-driven (reads `tools/xna-oracle/scenes/*.scene`, the same declarative
+format `tools/xna-oracle/CnaOracleRender.cpp` reads) rather than hardcoding one triangle. See
+`tools/xna-oracle/README.md` for the current build/run commands for both sides of the diff
+harness. This directory (`dx9-spike/`) now keeps only what has not moved yet — nothing, as of
+`D9-A3` (2026-07-15); it stays checked in as this Phase D9-0/D9-A history's own record.
 
 ---
 
@@ -65,36 +67,14 @@ The project owner decided (2026-07-14) that **CNA compiles the shaders itself** 
 must be proven equivalent against the Phase D9-A oracle.** Keep this script in CI-adjacent
 reach; it is how you notice if a future compiler bump silently changes the answer.
 
-## `xna-oracle/Oracle.cs` — real XNA 4.0, rendering (`D9-A1`/`D9-A2` ✅)
+## `xna-oracle/Oracle.cs` — real XNA 4.0, rendering (`D9-A1`/`D9-A2` ✅, moved `D9-A3`)
 
-A ~50-line XNA 4.0 reference renderer with **no content pipeline**, which is what makes the
-whole oracle tractable: it needs no Visual Studio 2010, no XNA Game Studio, and no Windows
-machine. `RenderTarget2D` → `Clear(CornflowerBlue)` → a `BasicEffect` `VertexPositionColor`
-triangle → `SaveAsPng`.
-
-```bash
-export WINEPREFIX=$HOME/.wine-cna-xna40 WINEARCH=win32
-GAC=$WINEPREFIX/drive_c/windows/Microsoft.NET/assembly
-CSC=$WINEPREFIX/drive_c/windows/Microsoft.NET/Framework/v4.0.30319/csc.exe
-
-wine "$CSC" /nologo /target:exe /platform:x86 /out:Oracle.exe \
-  /r:"$(winepath -w $(find $GAC -name Microsoft.Xna.Framework.dll          | head -1))" \
-  /r:"$(winepath -w $(find $GAC -name Microsoft.Xna.Framework.Game.dll     | head -1))" \
-  /r:"$(winepath -w $(find $GAC -name Microsoft.Xna.Framework.Graphics.dll | head -1))" \
-  Oracle.cs
-
-DISPLAY=:0 wine Oracle.exe        # -> xna_out.png
-```
-
-Verified output: `XNA-ORACLE-OK profile=HiDef adapter=ATI Radeon HD 5600 Series`, and a
-256×256 PNG whose background is **exactly `Color.CornflowerBlue` (100,149,237)**, with a
-genuinely Gouraud-interpolated triangle.
-
-> **The adapter string is Wine's spoof, and it matters.** This prefix has no DXVK, so real
-> XNA ran on **WineD3D**, not on the actual AMD Radeon 780M. CNA/D3D9 would run on **DXVK**.
-> Diffing those two would measure `CNA+DXVK` against `XNA+WineD3D` and blame CNA for the
-> driver's differences. **Install DXVK into this prefix too** (`dxvk-setup install`, same as
-> `plan_dx.md` `DX-2`) before any pixel diff is trusted. See `plan_dx9.md` `D9-A4`.
+**Moved to `tools/xna-oracle/Oracle.cs`, 2026-07-15** — rewritten to be scene-driven (see that
+file's own header comment and `tools/xna-oracle/README.md` for current build/run commands). The
+DXVK-into-this-prefix fix this section used to flag as still-needed is **done**: `dxvk-setup
+install` was run against `~/.wine-cna-xna40` as part of `D9-A3`'s own verification (adapter string
+now correctly reports the real `AMD Radeon 780M (RADV PHOENIX)`, not WineD3D's spoofed `ATI
+Radeon HD 5600 Series`) — see `plan_dx9.md` `D9-A4`'s own closure note.
 
 ---
 
@@ -106,7 +86,7 @@ That gap should be closed when this work lands.
 | Prefix | Arch | Contains | Do not confuse with |
 |--------|------|----------|---------------------|
 | `~/.wine-cna-d3d9-spike` | win64 | **The real Microsoft `d3dcompiler_47.dll`** (4,346,120 bytes, `winetricks -q d3dcompiler_47`, native override) **+ DXVK** (added `D9-74`, `dxvk-setup install` — same command as `~/.wine-cna-d3d11`'s own DX-2 install). Now has both the real compiler AND a live D3D9 device in one prefix, per `D9-74`'s own row recommendation (option (a): install DXVK here rather than stand up a 4th prefix, since by this point the compiled bytecode is already embedded in a checked-in header and the compiler DLL no longer needs to coexist with the runtime device in the same *step*, only the same *machine*). | — |
-| `~/.wine-cna-xna40` | **win32** | .NET Framework 4.0 + XNA 4.0 Redistributable (`winetricks -q dotnet40 xna40`); all ten `Microsoft.Xna.Framework.*` assemblies in the GAC; an in-prefix `csc.exe` | — |
+| `~/.wine-cna-xna40` | **win32** | .NET Framework 4.0 + XNA 4.0 Redistributable (`winetricks -q dotnet40 xna40`); all ten `Microsoft.Xna.Framework.*` assemblies in the GAC; an in-prefix `csc.exe` **+ DXVK** (added `D9-A3`, `dxvk-setup install`, 32-bit `wine32` build — real XNA now runs through the same DXVK D3D9 path CNA/D3D9 does, not WineD3D) | — |
 | `~/.wine-cna-d3d11` | win64 | **Wine's builtin `d3dcompiler_47.dll`** (1,093,743 bytes) + DXVK | **Leave it alone.** It is what the existing D3D11/D3D12 CTests run against. Wine's builtin compiler **cannot** compile SM2/SM3 — that is exactly why `~/.wine-cna-d3d9-spike` exists as a separate prefix. |
 
 The critical, non-obvious fact: **Wine's builtin `d3dcompiler_47.dll` is backed by

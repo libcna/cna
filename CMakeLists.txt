@@ -6885,6 +6885,12 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D9")
     cna_d3d9_ctest_command(_d3d9_rast_cullmode_cmd cna_test_d3d9_rasterizerstate_cullmode)
     add_test(NAME D3D9_RasterizerState_CullMode COMMAND ${_d3d9_rast_cullmode_cmd})
     set_tests_properties(D3D9_RasterizerState_CullMode PROPERTIES TIMEOUT 60 LABELS "D3D9")
+
+    # D9-A3: scene-driven CNA-side renderer for the XNA-oracle diff harness -- a comparison TOOL,
+    # not a CTest (it has no pass/fail assertion of its own; D9-A4's xna-diff.py is what judges
+    # its output against tools/xna-oracle/Oracle.cs's own). Reuses the cna_d3d9_test() macro purely
+    # for its build/link setup, deliberately without registering it via add_test().
+    cna_d3d9_test(cna_oracle_render tools/xna-oracle/CnaOracleRender.cpp)
 endif()
 
 # --- Task 6.1: real two-process ENet loopback test harness ---
