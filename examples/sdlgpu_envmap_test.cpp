@@ -149,14 +149,20 @@ protected:
         auto whiteCube = MakeSolidCube(dev, kWhiteCube);
         auto grayCube  = MakeSolidCube(dev, kGrayCube);
 
+        // CW winding (TL,BR,BL / TL,TR,BR) -- with the identity view/projection this test uses (no
+        // camera-induced winding flip), a CW-wound triangle is what stays visible under this
+        // project's own default RasterizerState.CullCounterClockwise now that SDLGPU-18/19/20
+        // wired up real dynamic culling (previously CullMode was hardcoded to None, so this test's
+        // original CCW winding went unnoticed -- same pitfall documented in
+        // sdlgpu_renderstate_test.cpp's own note on this exact convention).
         const Vector3 n(0.0f, 0.0f, 1.0f);
         const VertexPositionNormalTexture quad[6] = {
             { Vector3(-1.0f,  1.0f, 0.0f), n, Vector2(0.0f, 1.0f) },
+            { Vector3( 1.0f, -1.0f, 0.0f), n, Vector2(1.0f, 0.0f) },
             { Vector3(-1.0f, -1.0f, 0.0f), n, Vector2(0.0f, 0.0f) },
-            { Vector3( 1.0f, -1.0f, 0.0f), n, Vector2(1.0f, 0.0f) },
             { Vector3(-1.0f,  1.0f, 0.0f), n, Vector2(0.0f, 1.0f) },
-            { Vector3( 1.0f, -1.0f, 0.0f), n, Vector2(1.0f, 0.0f) },
             { Vector3( 1.0f,  1.0f, 0.0f), n, Vector2(1.0f, 1.0f) },
+            { Vector3( 1.0f, -1.0f, 0.0f), n, Vector2(1.0f, 0.0f) },
         };
 
         Color a = RenderWith(dev, tex, *whiteCube, 1.0f, quad);

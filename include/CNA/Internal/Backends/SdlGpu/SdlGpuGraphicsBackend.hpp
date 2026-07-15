@@ -8,6 +8,7 @@
 
 #include <array>
 #include <cstdint>
+#include <memory>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -78,6 +79,39 @@ namespace CNA::Internal::Backends::SdlGpu
         bool mipMap_ = false;
     };
 
+    // Real architectural fix for a render-target-destroyed-before-flush use-after-free: this
+    // backend batches all draws/clears and only actually renders them once, at Present() time
+    // (EnsureFrameRendered). A RenderTarget2D destroyed as a short-lived local variable -- inside
+    // one Draw() call, before Present() ever runs -- must still have ITS OWN pending Clear()/draws
+    // execute correctly (e.g. if something else, like a SpriteBatch draw queued the same frame,
+    // samples its contents). Since usedRenderTargetsThisFrame_/a queued DrawTarget may still need
+    // to reference this target's GPU state well after the SdlGpuRenderTargetBackend wrapper itself
+    // has been destroyed, the actual GPU texture handles + clear-pending state live here, in a
+    // separate, shared_ptr-owned struct -- NOT directly on the wrapper. usedRenderTargetsThisFrame_
+    // and every queued DrawTarget hold (or are kept alive by something that holds) a shared_ptr to
+    // this struct, so it survives exactly as long as anything still needs it, regardless of the
+    // wrapper's own C++ lifetime. This struct's own destructor defers the actual GPU release via
+    // QueueTextureRelease (see that method's own doc comment for why release itself must also be
+    // deferred, not just the C++ object holding the handles).
+    struct SdlGpuRenderTarget2DState
+    {
+        SdlGpuGraphicsBackend* owner = nullptr;
+        int width = 0;
+        int height = 0;
+        bool mipMap = false;
+        SDL_GPUTexture* colorTexture = nullptr;
+        SDL_GPUTexture* msaaTexture = nullptr;
+        SDL_GPUTexture* depthTexture = nullptr;
+        bool clearColorPending = true;
+        bool clearDepthPending = true;
+        bool clearStencilPending = false;
+        SDL_FColor clearColor{0.0f, 0.0f, 0.0f, 1.0f};
+        float clearDepth = 1.0f;
+        Uint8 clearStencil = 0;
+
+        ~SdlGpuRenderTarget2DState();
+    };
+
     /**
      * @brief `SDL_gpu`-backed `RenderTarget2D` (Phase `SDLGPU-8`, `SDLGPU-35`/`SDLGPU-38`).
      *
@@ -87,7 +121,8 @@ namespace CNA::Internal::Backends::SdlGpu
      * the frame can safely be sampled by a later swapchain-targeted draw within the same frame.
      * MSAA (`SDLGPU-38`) resolves automatically via `SDL_GPUColorTargetInfo.resolve_texture` at
      * render-pass end -- no manual resolve step needed, same mechanism as
-     * `SdlGpuRenderTargetCubeBackend`'s own MSAA support.
+     * `SdlGpuRenderTargetCubeBackend`'s own MSAA support. The actual GPU state lives in a separate,
+     * shared_ptr-owned `SdlGpuRenderTarget2DState` (see that struct's own doc comment for why).
      */
     class SdlGpuRenderTargetBackend final : public IRenderTargetBackend
     {
@@ -99,8 +134,8 @@ namespace CNA::Internal::Backends::SdlGpu
         SdlGpuRenderTargetBackend(const SdlGpuRenderTargetBackend&) = delete;
         SdlGpuRenderTargetBackend& operator=(const SdlGpuRenderTargetBackend&) = delete;
 
-        [[nodiscard]] int GetWidth() const override { return width_; }
-        [[nodiscard]] int GetHeight() const override { return height_; }
+        [[nodiscard]] int GetWidth() const override { return state_->width; }
+        [[nodiscard]] int GetHeight() const override { return state_->height; }
         [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
 
         void BindAsRenderTarget() override;
@@ -108,20 +143,26 @@ namespace CNA::Internal::Backends::SdlGpu
         [[nodiscard]] int GetMultiSampleCount() const override { return multiSampleCount_; }
         [[nodiscard]] bool HasRealDepthBuffer(bool depthFormatWasRequested) const override
         {
-            return depthFormatWasRequested && depthTexture_ != nullptr;
+            return depthFormatWasRequested && state_->depthTexture != nullptr;
         }
 
         /** @brief Returns the sampleable (single-sample, resolved-into-if-MSAA) color texture. NOXNA. */
-        NOXNA [[nodiscard]] SDL_GPUTexture* ColorTexture() const { return colorTexture_; }
+        NOXNA [[nodiscard]] SDL_GPUTexture* ColorTexture() const { return state_->colorTexture; }
         /** @brief Returns the multisampled render texture, or null when not multisampled. NOXNA. */
-        NOXNA [[nodiscard]] SDL_GPUTexture* MsaaTexture() const { return msaaTexture_; }
+        NOXNA [[nodiscard]] SDL_GPUTexture* MsaaTexture() const { return state_->msaaTexture; }
         /** @brief Returns the depth/stencil texture, or null when `DepthFormat::None` was requested. NOXNA. */
-        NOXNA [[nodiscard]] SDL_GPUTexture* DepthTexture() const { return depthTexture_; }
+        NOXNA [[nodiscard]] SDL_GPUTexture* DepthTexture() const { return state_->depthTexture; }
         /** @brief Whether a mip chain should be regenerated after this target's pass each frame. NOXNA. */
-        NOXNA [[nodiscard]] bool WantsMipMap() const { return mipMap_; }
+        NOXNA [[nodiscard]] bool WantsMipMap() const { return state_->mipMap; }
+        /**
+         * @brief Returns the shared, backend-internal GPU state this target's actual rendering
+         * operates on -- kept alive independent of this wrapper's own lifetime (see
+         * `SdlGpuRenderTarget2DState`'s own doc comment for why). NOXNA.
+         */
+        NOXNA [[nodiscard]] const std::shared_ptr<SdlGpuRenderTarget2DState>& State() const { return state_; }
         /**
          * @brief Real GPU readback of this target's pixels (`SDLGPU-39`) -- reads from the
-         * always-single-sample, sampleable `colorTexture_` (already resolved-into if this target
+         * always-single-sample, sampleable color texture (already resolved-into if this target
          * is MSAA), a texture this backend fully owns, unlike the swapchain -- so it does not hit
          * the swapchain-download segfault documented in `plan_sdlgpu.md`'s `SDLGPU-39` row.
          * Flushes any pending frame first so the read reflects this frame's draws.
@@ -129,19 +170,11 @@ namespace CNA::Internal::Backends::SdlGpu
         void GetData(int level, int x, int y, int w, int h, void* data, int dataLength) const override;
 
         /** @brief Queues a color-only clear, consumed on this target's next render pass. NOXNA. */
-        NOXNA void QueueClear(SDL_FColor color) { clearColor_ = color; clearColorPending_ = true; }
+        NOXNA void QueueClear(SDL_FColor color) { state_->clearColor = color; state_->clearColorPending = true; }
         /** @brief Queues a depth clear, consumed on this target's next render pass. NOXNA. */
-        NOXNA void QueueClearDepth(float depth) { clearDepth_ = depth; clearDepthPending_ = true; }
+        NOXNA void QueueClearDepth(float depth) { state_->clearDepth = depth; state_->clearDepthPending = true; }
         /** @brief Queues a stencil clear, consumed on this target's next render pass. NOXNA. */
-        NOXNA void QueueClearStencil(Uint8 stencil) { clearStencil_ = stencil; clearStencilPending_ = true; }
-        NOXNA [[nodiscard]] bool ClearColorPending() const { return clearColorPending_; }
-        NOXNA [[nodiscard]] bool ClearDepthPending() const { return clearDepthPending_; }
-        NOXNA [[nodiscard]] bool ClearStencilPending() const { return clearStencilPending_; }
-        NOXNA [[nodiscard]] SDL_FColor ClearColorValue() const { return clearColor_; }
-        NOXNA [[nodiscard]] float ClearDepthValue() const { return clearDepth_; }
-        NOXNA [[nodiscard]] Uint8 ClearStencilValue() const { return clearStencil_; }
-        /** @brief Resets pending-clear flags after this target's pass has rendered this frame. NOXNA. */
-        NOXNA void ResetPendingClears() { clearColorPending_ = false; clearDepthPending_ = false; clearStencilPending_ = false; }
+        NOXNA void QueueClearStencil(Uint8 stencil) { state_->clearStencil = stencil; state_->clearStencilPending = true; }
         /**
          * @brief Registers this target for its own pass this frame without making it the current
          * draw target (SDLGPU-37: an "extra" MRT target — bound and clearable, but draws still go
@@ -151,19 +184,30 @@ namespace CNA::Internal::Backends::SdlGpu
 
     private:
         SdlGpuGraphicsBackend* owner_ = nullptr;
-        int width_ = 0;
-        int height_ = 0;
         bool mipMap_ = false;
         int multiSampleCount_ = 0;
-        SDL_GPUTexture* colorTexture_ = nullptr;
-        SDL_GPUTexture* msaaTexture_ = nullptr;
-        SDL_GPUTexture* depthTexture_ = nullptr;
-        bool clearColorPending_ = true;
-        bool clearDepthPending_ = true;
-        bool clearStencilPending_ = false;
-        SDL_FColor clearColor_{0.0f, 0.0f, 0.0f, 1.0f};
-        float clearDepth_ = 1.0f;
-        Uint8 clearStencil_ = 0;
+        // The actual GPU texture handles + clear-pending state live in this shared_ptr-owned
+        // struct, NOT directly here -- see SdlGpuRenderTarget2DState's own doc comment for why.
+        std::shared_ptr<SdlGpuRenderTarget2DState> state_;
+    };
+
+    // Same rationale as SdlGpuRenderTarget2DState -- see that struct's own doc comment.
+    struct SdlGpuRenderTargetCubeState
+    {
+        SdlGpuGraphicsBackend* owner = nullptr;
+        int size = 0;
+        bool mipMap = false;
+        SDL_GPUTexture* cubeTexture = nullptr;
+        SDL_GPUTexture* msaaTexture = nullptr;
+        SDL_GPUTexture* depthTexture = nullptr;
+        std::array<bool, 6> clearColorPending{true, true, true, true, true, true};
+        std::array<bool, 6> clearDepthPending{true, true, true, true, true, true};
+        std::array<bool, 6> clearStencilPending{};
+        std::array<SDL_FColor, 6> clearColor{};
+        std::array<float, 6> clearDepth{1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f};
+        std::array<Uint8, 6> clearStencil{};
+
+        ~SdlGpuRenderTargetCubeState();
     };
 
     /**
@@ -178,7 +222,9 @@ namespace CNA::Internal::Backends::SdlGpu
      * the actual multisampled render target is a separate `2D_ARRAY` texture, since
      * `SDL_GPU_TEXTURETYPE_CUBE` has no multisampled variant. Mip regeneration
      * (`SDL_GenerateMipmapsForGPUTexture`) has no per-layer control, so it regenerates the whole
-     * cube's chain (all 6 faces) whenever any face that requested mips was used in a frame.
+     * cube's chain (all 6 faces) whenever any face that requested mips was used in a frame. The
+     * actual GPU state lives in a separate, shared_ptr-owned `SdlGpuRenderTargetCubeState` (see
+     * that struct's own doc comment, and `SdlGpuRenderTarget2DState`'s, for why).
      */
     class SdlGpuRenderTargetCubeBackend final : public IRenderTargetCubeBackend
     {
@@ -190,7 +236,7 @@ namespace CNA::Internal::Backends::SdlGpu
         SdlGpuRenderTargetCubeBackend(const SdlGpuRenderTargetCubeBackend&) = delete;
         SdlGpuRenderTargetCubeBackend& operator=(const SdlGpuRenderTargetCubeBackend&) = delete;
 
-        [[nodiscard]] int GetSize() const override { return size_; }
+        [[nodiscard]] int GetSize() const override { return state_->size; }
         void BindAsRenderTargetFace(int face) override;
         void UnbindAsRenderTarget() override;
         [[nodiscard]] int GetMultiSampleCount() const override { return multiSampleCount_; }
@@ -204,48 +250,29 @@ namespace CNA::Internal::Backends::SdlGpu
                     void* data, int dataLength) const override;
 
         /** @brief Returns the single-sample, sampleable cube texture. NOXNA — internal use only. */
-        NOXNA [[nodiscard]] SDL_GPUTexture* CubeTexture() const { return cubeTexture_; }
+        NOXNA [[nodiscard]] SDL_GPUTexture* CubeTexture() const { return state_->cubeTexture; }
         /** @brief Returns the multisampled 2D-array render texture, or null when not multisampled. NOXNA. */
-        NOXNA [[nodiscard]] SDL_GPUTexture* MsaaTexture() const { return msaaTexture_; }
+        NOXNA [[nodiscard]] SDL_GPUTexture* MsaaTexture() const { return state_->msaaTexture; }
         /** @brief Returns the shared depth/stencil texture, or null when `DepthFormat::None` was requested. NOXNA. */
-        NOXNA [[nodiscard]] SDL_GPUTexture* DepthTexture() const { return depthTexture_; }
+        NOXNA [[nodiscard]] SDL_GPUTexture* DepthTexture() const { return state_->depthTexture; }
         /** @brief Whether the mip chain should be regenerated after this cube's faces render each frame. NOXNA. */
-        NOXNA [[nodiscard]] bool WantsMipMap() const { return mipMap_; }
+        NOXNA [[nodiscard]] bool WantsMipMap() const { return state_->mipMap; }
+        /** @brief Returns the shared, backend-internal GPU state this cube's rendering operates
+         * on -- kept alive independent of this wrapper's own lifetime. NOXNA. */
+        NOXNA [[nodiscard]] const std::shared_ptr<SdlGpuRenderTargetCubeState>& State() const { return state_; }
 
         /** @brief Queues a color-only clear for @p face, consumed on that face's next render pass. NOXNA. */
-        NOXNA void QueueClear(int face, SDL_FColor color) { clearColor_[face] = color; clearColorPending_[face] = true; }
+        NOXNA void QueueClear(int face, SDL_FColor color) { state_->clearColor[face] = color; state_->clearColorPending[face] = true; }
         /** @brief Queues a depth clear for @p face, consumed on that face's next render pass. NOXNA. */
-        NOXNA void QueueClearDepth(int face, float depth) { clearDepth_[face] = depth; clearDepthPending_[face] = true; }
+        NOXNA void QueueClearDepth(int face, float depth) { state_->clearDepth[face] = depth; state_->clearDepthPending[face] = true; }
         /** @brief Queues a stencil clear for @p face, consumed on that face's next render pass. NOXNA. */
-        NOXNA void QueueClearStencil(int face, Uint8 stencil) { clearStencil_[face] = stencil; clearStencilPending_[face] = true; }
-        NOXNA [[nodiscard]] bool ClearColorPending(int face) const { return clearColorPending_[face]; }
-        NOXNA [[nodiscard]] bool ClearDepthPending(int face) const { return clearDepthPending_[face]; }
-        NOXNA [[nodiscard]] bool ClearStencilPending(int face) const { return clearStencilPending_[face]; }
-        NOXNA [[nodiscard]] SDL_FColor ClearColorValue(int face) const { return clearColor_[face]; }
-        NOXNA [[nodiscard]] float ClearDepthValue(int face) const { return clearDepth_[face]; }
-        NOXNA [[nodiscard]] Uint8 ClearStencilValue(int face) const { return clearStencil_[face]; }
-        /** @brief Resets pending-clear flags for @p face after its pass has rendered this frame. NOXNA. */
-        NOXNA void ResetPendingClears(int face)
-        {
-            clearColorPending_[face] = false;
-            clearDepthPending_[face] = false;
-            clearStencilPending_[face] = false;
-        }
+        NOXNA void QueueClearStencil(int face, Uint8 stencil) { state_->clearStencil[face] = stencil; state_->clearStencilPending[face] = true; }
 
     private:
         SdlGpuGraphicsBackend* owner_ = nullptr;
-        int size_ = 0;
         bool mipMap_ = false;
         int multiSampleCount_ = 0;
-        SDL_GPUTexture* cubeTexture_ = nullptr;
-        SDL_GPUTexture* msaaTexture_ = nullptr;
-        SDL_GPUTexture* depthTexture_ = nullptr;
-        std::array<bool, 6> clearColorPending_{true, true, true, true, true, true};
-        std::array<bool, 6> clearDepthPending_{true, true, true, true, true, true};
-        std::array<bool, 6> clearStencilPending_{};
-        std::array<SDL_FColor, 6> clearColor_{};
-        std::array<float, 6> clearDepth_{1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f};
-        std::array<Uint8, 6> clearStencil_{};
+        std::shared_ptr<SdlGpuRenderTargetCubeState> state_;
     };
 
     /**
@@ -479,6 +506,8 @@ namespace CNA::Internal::Backends::SdlGpu
     {
         friend class SdlGpuRenderTargetBackend;
         friend class SdlGpuRenderTargetCubeBackend;
+        friend struct SdlGpuRenderTarget2DState;
+        friend struct SdlGpuRenderTargetCubeState;
         friend class SdlGpuEffectBackend;
     public:
         /** @brief Vertex layout for the `sprite2d` pipeline: position, UV, RGBA color (32 bytes). */
@@ -493,10 +522,16 @@ namespace CNA::Internal::Backends::SdlGpu
         // face -1), a RenderTarget2D (rt set), or one face of a RenderTargetCube (cube + face
         // set). At most one of rt/cube is ever set, matching this backend's single-current-target
         // semantics (SetRenderTarget2D/SetRenderTargetCubeFace are mutually exclusive).
+        // Points at the shared GPU-state struct, NOT the SdlGpuRenderTargetBackend/
+        // SdlGpuRenderTargetCubeBackend wrapper -- a DrawCommand carrying this must remain valid
+        // to compare/render even if the wrapper is destroyed before Present() (see
+        // SdlGpuRenderTarget2DState's own doc comment). Safe as a raw (non-owning) pointer here
+        // because usedRenderTargetsThisFrame_/usedRenderTargetCubeFacesThisFrame_ hold the actual
+        // owning shared_ptr for the entire duration of one EnsureFrameRendered() call.
         struct DrawTarget
         {
-            const SdlGpuRenderTargetBackend* rt = nullptr;
-            const SdlGpuRenderTargetCubeBackend* cube = nullptr;
+            const SdlGpuRenderTarget2DState* rt = nullptr;
+            const SdlGpuRenderTargetCubeState* cube = nullptr;
             int face = -1;
 
             bool operator==(const DrawTarget& other) const
@@ -1039,6 +1074,24 @@ namespace CNA::Internal::Backends::SdlGpu
         // Queries the best available combined depth+stencil format once, at construction time.
         void QueryDepthStencilFormat();
 
+        // Real architectural fix for a render-target-destroyed-before-flush use-after-free: a
+        // RenderTarget2D/RenderTargetCube's destructor already purges itself from
+        // usedRenderTargetsThisFrame_/usedRenderTargetCubeFacesThisFrame_ (so EnsureFrameRendered
+        // never dereferences a dangling C++ object), but its OWN GPU texture handles must NOT be
+        // released immediately -- some OTHER still-pending (not yet submitted) draw command may
+        // sample this texture as an INPUT (SpriteBatch drawing this render target's contents
+        // elsewhere, or EnvironmentMapEffect sampling it as a cube map) via a raw SDL_GPUTexture*
+        // captured at Queue*Draw() time, independent of usedRenderTargetsThisFrame_ entirely.
+        // SDL_ReleaseGPUTexture() itself already defers the underlying GPU memory free until safe
+        // (per SDL_gpu.h's own doc comment) -- but the HANDLE becomes invalid for any FURTHER API
+        // call the instant it's released, so it must not be released while anything might still
+        // reference it in a not-yet-submitted recording. Called from
+        // SdlGpuRenderTargetBackend/SdlGpuRenderTargetCubeBackend's destructors (both are friends);
+        // flushed in EnsureFrameRendered() right after a successful SDL_SubmitGPUCommandBuffer
+        // (whatever was pending has now been handed to the GPU, so it's safe), and one final time
+        // in ~SdlGpuGraphicsBackend() in case no further frame ever renders.
+        void QueueTextureRelease(SDL_GPUTexture* texture);
+
         // sprite2d pipeline: shader modules, one pipeline (alpha-blended, no depth test/write --
         // compatible with a render pass that has a depth attachment, just doesn't use it), and a
         // sampler cache keyed by (filter, addressU, addressV), mirroring
@@ -1159,10 +1212,10 @@ namespace CNA::Internal::Backends::SdlGpu
         // queued against it, across every shader family) and regenerates its mip chain afterward
         // if requested -- called once per distinct target used this frame, before the swapchain
         // pass itself (see EnsureFrameRendered's per-target grouping).
-        void RenderToTarget(SDL_GPUCommandBuffer* cmd, SdlGpuRenderTargetBackend* target);
+        void RenderToTarget(SDL_GPUCommandBuffer* cmd, const std::shared_ptr<SdlGpuRenderTarget2DState>& target);
         // Phase SDLGPU-8 (SDLGPU-36): renders one RenderTargetCube face's own pass -- called once
         // per distinct (cube, face) pair used this frame, before the swapchain pass.
-        void RenderToTargetCubeFace(SDL_GPUCommandBuffer* cmd, SdlGpuRenderTargetCubeBackend* cube, int face);
+        void RenderToTargetCubeFace(SDL_GPUCommandBuffer* cmd, const std::shared_ptr<SdlGpuRenderTargetCubeState>& cube, int face);
         // Returns the DrawTarget matching whichever target (swapchain/2D RT/cube face) is
         // currently bound -- 2D and cube binding are mutually exclusive (see
         // SdlGpuRenderTargetBackend::BindAsRenderTarget/SdlGpuRenderTargetCubeBackend::BindAsRenderTargetFace).
@@ -1254,7 +1307,14 @@ namespace CNA::Internal::Backends::SdlGpu
         // call recorded against the same target within one frame is accumulated into that target's
         // single pass, regardless of how many times SetRenderTarget2D re-selected it meanwhile.
         SdlGpuRenderTargetBackend* currentRenderTarget_ = nullptr;
-        std::vector<SdlGpuRenderTargetBackend*> usedRenderTargetsThisFrame_;
+        // Holds the actual owning shared_ptr -- keeps a target's GPU state alive for its own
+        // pending Clear()/draws even if the SdlGpuRenderTargetBackend wrapper is destroyed before
+        // Present() (see SdlGpuRenderTarget2DState's own doc comment).
+        std::vector<std::shared_ptr<SdlGpuRenderTarget2DState>> usedRenderTargetsThisFrame_;
+
+        // See QueueTextureRelease's own doc comment -- GPU texture handles from a destroyed
+        // render target, deferred until the next successful command-buffer submit.
+        std::vector<SDL_GPUTexture*> pendingTextureReleases_;
 
         // SDLGPU-36: mirrors currentRenderTarget_/usedRenderTargetsThisFrame_ for RenderTargetCube
         // faces -- currentRenderTarget_ and currentRenderTargetCube_ are mutually exclusive (binding
@@ -1262,7 +1322,8 @@ namespace CNA::Internal::Backends::SdlGpu
         // single-current-target semantics).
         SdlGpuRenderTargetCubeBackend* currentRenderTargetCube_ = nullptr;
         int currentActiveCubeFace_ = -1;
-        std::vector<std::pair<SdlGpuRenderTargetCubeBackend*, int>> usedRenderTargetCubeFacesThisFrame_;
+        // Same rationale as usedRenderTargetsThisFrame_ above.
+        std::vector<std::pair<std::shared_ptr<SdlGpuRenderTargetCubeState>, int>> usedRenderTargetCubeFacesThisFrame_;
 
         // SDLGPU-37: "extra" MRT targets (rts[1..count-1] of the most recent SetRenderTargets()
         // call) -- bound (via MarkUsedThisFrame(), so they get their own pass) and independently
