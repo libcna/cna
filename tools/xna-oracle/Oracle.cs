@@ -112,6 +112,8 @@ public class Scene
     public Vector3 DiffuseColor = Vector3.One;
     public Vector3 AmbientColor = Vector3.Zero;
     public SceneLight Light0 = new SceneLight();
+    public SceneLight Light1 = new SceneLight();
+    public SceneLight Light2 = new SceneLight();
     public SceneEffectType EffectType = SceneEffectType.BasicEffect;
     public CompareFunction AlphaFunction = CompareFunction.Always;
     public int ReferenceAlpha;
@@ -181,6 +183,12 @@ public class Scene
                 case "light0enabled": scene.Light0.Enabled = ParseBool(value); break;
                 case "light0diffuse": scene.Light0.Diffuse = ParseVector3(value); break;
                 case "light0direction": scene.Light0.Direction = ParseVector3(value); break;
+                case "light1enabled": scene.Light1.Enabled = ParseBool(value); break;
+                case "light1diffuse": scene.Light1.Diffuse = ParseVector3(value); break;
+                case "light1direction": scene.Light1.Direction = ParseVector3(value); break;
+                case "light2enabled": scene.Light2.Enabled = ParseBool(value); break;
+                case "light2diffuse": scene.Light2.Diffuse = ParseVector3(value); break;
+                case "light2direction": scene.Light2.Direction = ParseVector3(value); break;
                 case "primitive": scene.Primitive = ParsePrimitive(value); break;
                 case "vertex":
                     if (scene.VertexFormat == SceneVertexFormat.PositionNormalTextureWeights)
@@ -442,6 +450,12 @@ public class Oracle : Game
                 emfx.DirectionalLight0.Enabled = scene.Light0.Enabled;
                 emfx.DirectionalLight0.DiffuseColor = scene.Light0.Diffuse;
                 emfx.DirectionalLight0.Direction = scene.Light0.Direction;
+                emfx.DirectionalLight1.Enabled = scene.Light1.Enabled;
+                emfx.DirectionalLight1.DiffuseColor = scene.Light1.Diffuse;
+                emfx.DirectionalLight1.Direction = scene.Light1.Direction;
+                emfx.DirectionalLight2.Enabled = scene.Light2.Enabled;
+                emfx.DirectionalLight2.DiffuseColor = scene.Light2.Diffuse;
+                emfx.DirectionalLight2.Direction = scene.Light2.Direction;
             }
             fx = emfx;
         }
@@ -466,6 +480,12 @@ public class Oracle : Game
                 skfx.DirectionalLight0.Enabled = scene.Light0.Enabled;
                 skfx.DirectionalLight0.DiffuseColor = scene.Light0.Diffuse;
                 skfx.DirectionalLight0.Direction = scene.Light0.Direction;
+                skfx.DirectionalLight1.Enabled = scene.Light1.Enabled;
+                skfx.DirectionalLight1.DiffuseColor = scene.Light1.Diffuse;
+                skfx.DirectionalLight1.Direction = scene.Light1.Direction;
+                skfx.DirectionalLight2.Enabled = scene.Light2.Enabled;
+                skfx.DirectionalLight2.DiffuseColor = scene.Light2.Diffuse;
+                skfx.DirectionalLight2.Direction = scene.Light2.Direction;
             }
             fx = skfx;
         }
@@ -484,6 +504,12 @@ public class Oracle : Game
                 bfx.DirectionalLight0.Enabled = scene.Light0.Enabled;
                 bfx.DirectionalLight0.DiffuseColor = scene.Light0.Diffuse;
                 bfx.DirectionalLight0.Direction = scene.Light0.Direction;
+                bfx.DirectionalLight1.Enabled = scene.Light1.Enabled;
+                bfx.DirectionalLight1.DiffuseColor = scene.Light1.Diffuse;
+                bfx.DirectionalLight1.Direction = scene.Light1.Direction;
+                bfx.DirectionalLight2.Enabled = scene.Light2.Enabled;
+                bfx.DirectionalLight2.DiffuseColor = scene.Light2.Diffuse;
+                bfx.DirectionalLight2.Direction = scene.Light2.Direction;
             }
             if (scene.TextureEnabled) bfx.Texture = texture;
             fx = bfx;

@@ -39,7 +39,7 @@ fully-commented examples.
 | `environmentmap`, `environmentmapsize`, `environmentmappixel` | a `TextureCube.EnvironmentMap`, only when `effect=EnvironmentMapEffect` — a single `environmentmappixel=` sets ALL 6 faces to the same color (sidesteps needing to hand-compute `reflect()` geometry, same trick `D9-82e`'s own CTest used) |
 | `environmentmapamount` | `0`-`1` float — `EnvironmentMapEffect.EnvironmentMapAmount`, only when `effect=EnvironmentMapEffect` |
 | `ambientcolor` | `r,g,b` (0-1 floats) — `AmbientLightColor`, only when `lighting=true` (`BasicEffect`/`EnvironmentMapEffect`/`SkinnedEffect`) |
-| `light0enabled`, `light0diffuse`, `light0direction` | `DirectionalLight0.Enabled`/`DiffuseColor`/`Direction`, only when `lighting=true` (`BasicEffect`/`EnvironmentMapEffect`/`SkinnedEffect`) |
+| `light0enabled`/`light1enabled`/`light2enabled`, `light0diffuse`/`light1diffuse`/`light2diffuse`, `light0direction`/`light1direction`/`light2direction` | `DirectionalLight0`/`DirectionalLight1`/`DirectionalLight2`'s own `.Enabled`/`.DiffuseColor`/`.Direction`, only when `lighting=true` (`BasicEffect`/`EnvironmentMapEffect`/`SkinnedEffect`) — all three lights are always applied once `lighting=true` (a scene that only cares about `Light0` simply never sets `light1*`/`light2*`, which default to disabled/zero) |
 | `alphafunction` | `Always`/`Never`/`Less`/`LessEqual`/`Equal`/`GreaterEqual`/`Greater`/`NotEqual` — `AlphaTestEffect.AlphaFunction`, only when `effect=AlphaTestEffect` |
 | `referencealpha` | `0`-`255` int — `AlphaTestEffect.ReferenceAlpha`, only when `effect=AlphaTestEffect` |
 | `primitive` | `TriangleList`, `TriangleStrip`, `LineList`, or `LineStrip` |
@@ -124,7 +124,7 @@ Requires Pillow (`pip install pillow`) — not previously a dependency of this p
 
 ## Status
 
-Seven scenes so far, **all pixel-perfect**, and every one of XNA's 5 Stock Effects is now
+Eight scenes so far, **all pixel-perfect**, and every one of XNA's 5 Stock Effects is now
 represented in the corpus:
 
 - `colored3d` (`D9-A2`'s own original spike scene: a `BasicEffect` `VertexColorEnabled=true`/
@@ -182,6 +182,18 @@ represented in the corpus:
   `lit_textured_quad.scene` uses — exact `(128,128,128,255)` on both sides, `0/65536` pixels
   differ. Same `LightingEnabled` explicit-interface-implementation carve-out as
   `EnvironmentMapEffect` (confirmed against FNA's own `SkinnedEffect.cs` source too).
+- `multilight_textured_quad` — the first scene to genuinely exercise `BasicEffect`'s **multi-light
+  summation** formula (`D9-82b`'s own "2-light-sum" `ShaderIndex` bucket, a structurally different
+  dispatch path from the "`OneLight`" bucket every earlier lit scene exercises). Two active lights
+  (`DirectionalLight0` diffuse `0.3`, `DirectionalLight1` diffuse `0.2`, same direction) sum to the
+  exact same total dimming `lit_textured_quad.scene`'s own single `0.5` light already produces —
+  exact `(128,128,128,255)` on both sides, matching that scene's own result byte-for-byte, proving
+  the two lights are genuinely summed rather than one silently overwriting the other's constant
+  register. `DirectionalLight2` is explicitly present but **disabled**, with a deliberately large
+  nonzero diffuse color (`0.9`) that must NOT contribute — confirmed it doesn't (the result would
+  be far brighter than `128` if it leaked in). Extended `light1*`/`light2*` scene keys and applied
+  them to all three lit effects (`BasicEffect`/`EnvironmentMapEffect`/`SkinnedEffect`) uniformly,
+  even though only this scene currently sets them — `0/65536` pixels differ.
 
 `scripts/xna-diff.py` itself is mutation-verified: a deliberately 1-off-mutated copy of a passing
 CNA PNG is correctly reported as `FAIL: 1/65536 pixels differ ... max per-channel delta=1` at the

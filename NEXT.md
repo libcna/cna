@@ -75,7 +75,7 @@ plausibly."
 
 **Phase D9-0 is fully closed.** Next up: Phase D9-1 (CMake integration + backend skeleton).
 
-### Phase D9-A — the XNA 4.0 oracle: D9-A1–A4 closed, D9-A5 started (7 scenes, all 5 Stock Effects), D9-A6 open
+### Phase D9-A — the XNA 4.0 oracle: D9-A1–A4 closed, D9-A5 started (8 scenes, all 5 Stock Effects), D9-A6 open
 
 | Task | Status |
 |---|---|
@@ -83,7 +83,7 @@ plausibly."
 | `D9-A2` — minimal XNA 4.0 reference app, no content pipeline | ✅ |
 | `D9-A3` — byte-for-byte equivalent CNA app, shared declarative scene format | ✅ |
 | `D9-A4` — `scripts/xna-diff.py`, DXVK-into-XNA-prefix prerequisite | ✅ |
-| `D9-A5` — growing scene corpus | 🟨 (7 scenes, all 5 XNA Stock Effects represented: `colored3d`, `textured_quad`, `lit_textured_quad`, `alphatest_quad`, `dualtexture_quad`, `envmap_quad`, `skinned_quad`, all pixel-perfect) |
+| `D9-A5` — growing scene corpus | 🟨 (8 scenes, all 5 XNA Stock Effects represented: `colored3d`, `textured_quad`, `lit_textured_quad`, `alphatest_quad`, `dualtexture_quad`, `envmap_quad`, `skinned_quad`, `multilight_textured_quad`, all pixel-perfect) |
 | `D9-A6` — run the corpus against CNA's other backends too | ⬜ |
 
 Closed 2026-07-15 (`D9-A3`/`D9-A4`): built the shared declarative scene format `D9-A3`'s own text
@@ -205,9 +205,22 @@ relying on this working out in practice (all-`Vector2`/`Vector3` fields); the ne
 float+byte struct was a genuinely higher-risk case to leave unpinned. All 7 scenes re-verified
 pixel-perfect afterward, not just the new one.
 
-Next: add more scenes as `D9-84` exercises each combination (multi-light/fog `BasicEffect`
-variants, remaining `AlphaTestEffect` compare functions, `EnvironmentMapEffect` fresnel,
-`SkinnedEffect` 2/4-bone weighting, `SpriteBatch`, render targets, `SurfaceFormat` sweep).
+**8th scene, `multilight_textured_quad` (2026-07-15) — also pixel-perfect, first scene to
+genuinely exercise `BasicEffect`'s multi-light SUMMATION formula.** `D9-82b`'s own "2-light-sum"
+`ShaderIndex` bucket is a structurally different dispatch path from the "`OneLight`" bucket every
+earlier lit scene exercises — two active lights (`DirectionalLight0` diffuse `0.3`,
+`DirectionalLight1` diffuse `0.2`, same direction) sum to the exact same total dimming
+`lit_textured_quad.scene`'s own single `0.5` light already produces, matching that scene's own
+`(128,128,128,255)` byte-for-byte — proving the two lights are genuinely summed, not one silently
+overwriting the other's constant register. `DirectionalLight2` is present but explicitly disabled
+with a large nonzero diffuse (`0.9`) that must NOT contribute — confirmed it doesn't. Extended
+`light1*`/`light2*` scene keys, applied uniformly to all three lit effects
+(`BasicEffect`/`EnvironmentMapEffect`/`SkinnedEffect`). All 8 scenes re-verified pixel-perfect
+afterward.
+
+Next: add more scenes as `D9-84` exercises each combination (fog `BasicEffect` variants, remaining
+`AlphaTestEffect` compare functions, `EnvironmentMapEffect` fresnel, `SkinnedEffect` 2/4-bone
+weighting, `SpriteBatch`, render targets, `SurfaceFormat` sweep).
 
 ### Phase D9-1 — CMake integration and skeleton: CLOSED 2026-07-14
 
@@ -761,7 +774,8 @@ Most recent first. Full detail lives in `plan_dx9.md` — this is a short index.
 
 | Commit(s) | Summary |
 |---|---|
-| *(pending)* | **`D9-A5` grown to 7 scenes (`skinned_quad`) — also PIXEL-PERFECT (0/65536 differ). MILESTONE: all 5 XNA Stock Effects now represented in the corpus, all pixel-perfect.** Added `effect=SkinnedEffect` plus a fourth custom vertex shape (`PositionNormalTextureWeights`, stride 52, `VSInputNmTxWeights`, matches existing layout byte-for-byte). Single Identity bone at 100% weight (skinning is a no-op, matching `D9-82f`'s own CTest simplification) reduces expected math to `lit_textured_quad`'s own formula: exact `(128,128,128,255)` both sides. Same `LightingEnabled` explicit-interface-implementation carve-out found for `SkinnedEffect` too (confirmed against FNA source) -- same quirk as `EnvironmentMapEffect`, not a new bug. Also proactively added `[StructLayout(LayoutKind.Sequential)]` to both the new struct and (retroactively) `VertexPositionDualTexture` on the C# side -- C#'s default "auto" layout doesn't formally guarantee field order, which `DrawUserPrimitives<T>`'s raw-byte marshalling silently depends on. |
+| *(pending)* | **`D9-A5` grown to 8 scenes (`multilight_textured_quad`) — also PIXEL-PERFECT (0/65536 differ)**. First scene to genuinely exercise `BasicEffect`'s multi-light SUMMATION formula (`D9-82b`'s own "2-light-sum" `ShaderIndex` bucket, structurally different from the "OneLight" bucket every earlier lit scene uses). Two active lights (diffuse 0.3+0.2, same direction) sum to the exact same dimming `lit_textured_quad`'s own single 0.5 light produces -- exact `(128,128,128,255)`, matching byte-for-byte, proving genuine summation not overwrite. A third light present but disabled (large nonzero diffuse) confirmed NOT to contribute. Extended `light1*`/`light2*` keys, applied uniformly to all 3 lit effects. All 8 scenes re-verified pixel-perfect. |
+| `e0afe3a0` | **`D9-A5` grown to 7 scenes (`skinned_quad`) — also PIXEL-PERFECT (0/65536 differ). MILESTONE: all 5 XNA Stock Effects now represented in the corpus, all pixel-perfect.** Added `effect=SkinnedEffect` plus a fourth custom vertex shape (`PositionNormalTextureWeights`, stride 52, `VSInputNmTxWeights`, matches existing layout byte-for-byte). Single Identity bone at 100% weight (skinning is a no-op, matching `D9-82f`'s own CTest simplification) reduces expected math to `lit_textured_quad`'s own formula: exact `(128,128,128,255)` both sides. Same `LightingEnabled` explicit-interface-implementation carve-out found for `SkinnedEffect` too (confirmed against FNA source) -- same quirk as `EnvironmentMapEffect`, not a new bug. Also proactively added `[StructLayout(LayoutKind.Sequential)]` to both the new struct and (retroactively) `VertexPositionDualTexture` on the C# side -- C#'s default "auto" layout doesn't formally guarantee field order, which `DrawUserPrimitives<T>`'s raw-byte marshalling silently depends on. |
 | `bf2f467c` | **`D9-A5` grown to 6 scenes (`envmap_quad`) — also PIXEL-PERFECT (0/65536 differ), 3rd non-BasicEffect Stock Effect**. Added `effect=EnvironmentMapEffect` plus `environmentmap*` keys, reusing the existing `PositionNormalTexture` shape. 1x1 base texture + 1x1 all-same-color `TextureCube` + dim light + `EnvironmentMapAmount=0.5`: real `lerp(texture*diffuseSum, environmentMap, environmentMapAmount)` produced exact `(164,114,89,255)` both sides. Real finding (not a bug): real XNA/FNA's `EnvironmentMapEffect` implements `IEffectLights.LightingEnabled` via explicit interface implementation, invisible on the concrete class (confirmed live: `emfx.LightingEnabled=...` is a genuine `CS1061`) -- lighting is always on, no game can disable it. CNA's own `setLightingEnabledProperty` already matches the exact same behavior (getter always true, setter throws given false); only the C++ vs C# visibility differs. Neither side calls it for this effect now. |
 | `88dee0c2` | **`D9-A5` grown to 5 scenes (`dualtexture_quad`) — also PIXEL-PERFECT (0/65536 differ), 2nd non-BasicEffect Stock Effect, first scene needing a vertex shape neither side had a built-in type for**. Added `effect=DualTextureEffect` plus `texture2*`/`diffusecolor` keys and a new `vertexformat=PositionDualTexture` (stride 28, `VSInputTx2`) -- real XNA has no dual-UV vertex struct either, so both sides define their own custom `IVertexType`/`VertexDeclaration`. Two 1x1 solid-color textures + `DiffuseColor=(0.5,0.5,0.5)`: the doubling-blend formula's `*2*0.5` cancels out, expected result `(100,60,20,255)` hand-derived before running either side (matching `D9-82d`'s own proven check value), then confirmed pixel-for-pixel. Added as a third `std::unique_ptr` alongside `alphaFx`/`basicFx`, correctly avoiding a repeat of `alphatest_quad`'s own dangling-pointer bug -- no new bug this time. |
 | `b0272385` | **`D9-A5` grown to 4 scenes (`alphatest_quad`) — also PIXEL-PERFECT (0/65536 differ), first non-BasicEffect Stock Effect in the corpus**. Added `effect=BasicEffect`/`AlphaTestEffect` plus `alphafunction`/`referencealpha` keys. A 2x2 texture straddling `ReferenceAlpha=128` exercises `clip()`'s real discard end to end. Real bug found and fixed live in `CnaOracleRender.cpp`: a dangling-pointer bug (not a backend bug) -- the newly-constructed Effect object was scoped inside an `if`/`else` block and destroyed before the shared `DrawUserPrimitives()` call read `GraphicsDevice::currentEffect_` (a raw pointer `Effect::Apply()` sets), causing `textured_quad`/`lit_textured_quad` to spuriously fail with garbage flags; `colored3d` passed only by allocation-timing luck. Fixed via `std::unique_ptr` at `Draw()`'s own top level; re-verified all 4 scenes pixel-perfect afterward. |
@@ -810,12 +824,12 @@ timing) — both fixed and mutation-verified, see Phase D9-6's own section above
 
 **Phase D9-A: `D9-A3`/`D9-A4` closed 2026-07-15 — the XNA oracle diff harness is real and all
 results landed so far are pixel-perfect** (`colored3d`, `textured_quad`, `lit_textured_quad`,
-`alphatest_quad`, `dualtexture_quad`, `envmap_quad`, `skinned_quad` — `0/65536` pixels differ from
-real XNA 4.0 each, see Phase D9-A's own section above). `D9-A5` (the scene corpus) has 7 entries
-and now represents **all 5 XNA Stock Effects** (`BasicEffect`, `AlphaTestEffect`,
-`DualTextureEffect`, `EnvironmentMapEffect`, `SkinnedEffect`), every comparison pixel-perfect;
-`D9-84` (every draw path validated against the oracle) can now genuinely continue, one scene at a
-time.
+`alphatest_quad`, `dualtexture_quad`, `envmap_quad`, `skinned_quad`, `multilight_textured_quad` —
+`0/65536` pixels differ from real XNA 4.0 each, see Phase D9-A's own section above). `D9-A5` (the
+scene corpus) has 8 entries and now represents **all 5 XNA Stock Effects** (`BasicEffect`,
+`AlphaTestEffect`, `DualTextureEffect`, `EnvironmentMapEffect`, `SkinnedEffect`) including
+`BasicEffect`'s own multi-light summation bucket, every comparison pixel-perfect; `D9-84` (every
+draw path validated against the oracle) can now genuinely continue, one scene at a time.
 
 **Phase D9-8: `D9-80`–`D9-83` ALL CLOSED — real, verified dispatch for all 5 XNA Stock Effects plus
 hardware instancing on this backend.** The shader-dispatch tables/formulas are transcribed and

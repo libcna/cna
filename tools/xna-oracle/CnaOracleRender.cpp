@@ -152,6 +152,8 @@ namespace
         Vector3 diffuseColor{1, 1, 1};
         Vector3 ambientColor{0, 0, 0};
         SceneLight light0;
+        SceneLight light1;
+        SceneLight light2;
         SceneEffectType effectType = SceneEffectType::BasicEffect;
         CompareFunction alphaFunction = CompareFunction::Always;
         int referenceAlpha = 0;
@@ -342,6 +344,12 @@ namespace
             else if (key == "light0enabled") scene.light0.enabled = ParseBool(value);
             else if (key == "light0diffuse") scene.light0.diffuse = ParseVector3(value);
             else if (key == "light0direction") scene.light0.direction = ParseVector3(value);
+            else if (key == "light1enabled") scene.light1.enabled = ParseBool(value);
+            else if (key == "light1diffuse") scene.light1.diffuse = ParseVector3(value);
+            else if (key == "light1direction") scene.light1.direction = ParseVector3(value);
+            else if (key == "light2enabled") scene.light2.enabled = ParseBool(value);
+            else if (key == "light2diffuse") scene.light2.diffuse = ParseVector3(value);
+            else if (key == "light2direction") scene.light2.direction = ParseVector3(value);
             else if (key == "primitive") scene.primitive = ParsePrimitive(value);
             else if (key == "vertex")
             {
@@ -466,6 +474,12 @@ protected:
                 envMapFx->DirectionalLight0.setEnabledProperty(scene_.light0.enabled);
                 envMapFx->DirectionalLight0.setDiffuseColorProperty(scene_.light0.diffuse);
                 envMapFx->DirectionalLight0.setDirectionProperty(scene_.light0.direction);
+                envMapFx->DirectionalLight1.setEnabledProperty(scene_.light1.enabled);
+                envMapFx->DirectionalLight1.setDiffuseColorProperty(scene_.light1.diffuse);
+                envMapFx->DirectionalLight1.setDirectionProperty(scene_.light1.direction);
+                envMapFx->DirectionalLight2.setEnabledProperty(scene_.light2.enabled);
+                envMapFx->DirectionalLight2.setDiffuseColorProperty(scene_.light2.diffuse);
+                envMapFx->DirectionalLight2.setDirectionProperty(scene_.light2.direction);
             }
             envMapFx->Apply();
         }
@@ -489,6 +503,12 @@ protected:
                 skinnedFx->DirectionalLight0.setEnabledProperty(scene_.light0.enabled);
                 skinnedFx->DirectionalLight0.setDiffuseColorProperty(scene_.light0.diffuse);
                 skinnedFx->DirectionalLight0.setDirectionProperty(scene_.light0.direction);
+                skinnedFx->DirectionalLight1.setEnabledProperty(scene_.light1.enabled);
+                skinnedFx->DirectionalLight1.setDiffuseColorProperty(scene_.light1.diffuse);
+                skinnedFx->DirectionalLight1.setDirectionProperty(scene_.light1.direction);
+                skinnedFx->DirectionalLight2.setEnabledProperty(scene_.light2.enabled);
+                skinnedFx->DirectionalLight2.setDiffuseColorProperty(scene_.light2.diffuse);
+                skinnedFx->DirectionalLight2.setDirectionProperty(scene_.light2.direction);
             }
             skinnedFx->Apply();
         }
@@ -507,6 +527,12 @@ protected:
                 basicFx->DirectionalLight0.setEnabledProperty(scene_.light0.enabled);
                 basicFx->DirectionalLight0.setDiffuseColorProperty(scene_.light0.diffuse);
                 basicFx->DirectionalLight0.setDirectionProperty(scene_.light0.direction);
+                basicFx->DirectionalLight1.setEnabledProperty(scene_.light1.enabled);
+                basicFx->DirectionalLight1.setDiffuseColorProperty(scene_.light1.diffuse);
+                basicFx->DirectionalLight1.setDirectionProperty(scene_.light1.direction);
+                basicFx->DirectionalLight2.setEnabledProperty(scene_.light2.enabled);
+                basicFx->DirectionalLight2.setDiffuseColorProperty(scene_.light2.diffuse);
+                basicFx->DirectionalLight2.setDirectionProperty(scene_.light2.direction);
             }
             if (scene_.textureEnabled) basicFx->setTextureProperty(texture.get());
             basicFx->Apply();
