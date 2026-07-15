@@ -508,9 +508,15 @@ namespace CNA::Internal::Backends::SdlGpu
     void SdlGpuGraphicsBackend::Clear(float r, float g, float b, float a)
     {
         if (currentRenderTargetCube_ != nullptr)
+        {
             currentRenderTargetCube_->QueueClear(currentActiveCubeFace_, SDL_FColor{r, g, b, a});
+        }
         else if (currentRenderTarget_ != nullptr)
+        {
             currentRenderTarget_->QueueClear(SDL_FColor{r, g, b, a});
+            for (SdlGpuRenderTargetBackend* extra : currentExtraMrtTargets_)
+                extra->QueueClear(SDL_FColor{r, g, b, a});
+        }
         else
         {
             clearColor_ = SDL_FColor{r, g, b, a};
@@ -528,9 +534,15 @@ namespace CNA::Internal::Backends::SdlGpu
     void SdlGpuGraphicsBackend::ClearDepth(float depth)
     {
         if (currentRenderTargetCube_ != nullptr)
+        {
             currentRenderTargetCube_->QueueClearDepth(currentActiveCubeFace_, depth);
+        }
         else if (currentRenderTarget_ != nullptr)
+        {
             currentRenderTarget_->QueueClearDepth(depth);
+            for (SdlGpuRenderTargetBackend* extra : currentExtraMrtTargets_)
+                extra->QueueClearDepth(depth);
+        }
         else
         {
             clearDepth_ = depth;
@@ -542,9 +554,15 @@ namespace CNA::Internal::Backends::SdlGpu
     void SdlGpuGraphicsBackend::ClearStencil(int stencil)
     {
         if (currentRenderTargetCube_ != nullptr)
+        {
             currentRenderTargetCube_->QueueClearStencil(currentActiveCubeFace_, static_cast<Uint8>(stencil));
+        }
         else if (currentRenderTarget_ != nullptr)
+        {
             currentRenderTarget_->QueueClearStencil(static_cast<Uint8>(stencil));
+            for (SdlGpuRenderTargetBackend* extra : currentExtraMrtTargets_)
+                extra->QueueClearStencil(static_cast<Uint8>(stencil));
+        }
         else
         {
             clearStencil_ = static_cast<Uint8>(stencil);
@@ -742,6 +760,29 @@ namespace CNA::Internal::Backends::SdlGpu
         int size, int depthFormat, bool mipMap, int multiSampleCount)
     {
         return std::make_unique<SdlGpuRenderTargetCubeBackend>(*this, size, depthFormat, mipMap, multiSampleCount);
+    }
+
+    void SdlGpuGraphicsBackend::SetRenderTargets(IRenderTargetBackend* const* rts, int count)
+    {
+        currentExtraMrtTargets_.clear();
+        if (count <= 0 || rts == nullptr)
+        {
+            SetRenderTarget2D(nullptr);
+            return;
+        }
+
+        // Draws remain single-target (rts[0] only) -- no shader in this codebase declares more
+        // than one fragment output, the same honest scope boundary this project's D3D11/D3D12 MRT
+        // support already established. Extra targets are bound (get their own real pass this
+        // frame) and independently cleared (see Clear()/ClearDepth()/ClearStencil()) but never
+        // become currentRenderTarget_.
+        SetRenderTarget2D(rts[0]);
+        for (int i = 1; i < count; ++i)
+        {
+            auto* extra = static_cast<SdlGpuRenderTargetBackend*>(rts[i]);
+            extra->MarkUsedThisFrame();
+            currentExtraMrtTargets_.push_back(extra);
+        }
     }
 
     void SdlGpuGraphicsBackend::CreateSpriteResources()
@@ -2523,6 +2564,11 @@ namespace CNA::Internal::Backends::SdlGpu
             owner_->currentRenderTargetCube_ = nullptr;
             owner_->currentActiveCubeFace_ = -1;
         }
+        MarkUsedThisFrame();
+    }
+
+    void SdlGpuRenderTargetBackend::MarkUsedThisFrame()
+    {
         auto& used = owner_->usedRenderTargetsThisFrame_;
         if (std::find(used.begin(), used.end(), this) == used.end())
             used.push_back(this);

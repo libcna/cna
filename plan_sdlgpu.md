@@ -19,11 +19,23 @@
 > need no Y-flip, unlike the hand-computed 2D sprite NDC math). `GraphicsBackendCompileDefinitionTests.cpp`'s
 > `ExactlyOneGraphicsBackendIsSelected` was updated for the new backend and the full `CnaTests`
 > suite (118 tests) still passes. `EnvironmentMapEffect`/`SkinnedEffect` are still ⬜. Phase
-> `SDLGPU-8` (render targets) started 2026-07-15: `SDLGPU-35` (`RenderTarget2D`) and `SDLGPU-36`
-> (`RenderTargetCube`, real MSAA + mip regen) are done and verified — see their own rows for the
-> real multi-pass `EnsureFrameRendered` refactor and `DrawTarget` generalization this required.
-> `SDLGPU-37`/`38` (MRT/2D-MSAA) are still ⬜; `SDLGPU-39` (readback) is 🟨 (RenderTargetCube's leg
-> done, swapchain's leg blocked — see that row).
+> `SDLGPU-8` (render targets) started 2026-07-15: `SDLGPU-35` (`RenderTarget2D`), `SDLGPU-36`
+> (`RenderTargetCube`, real MSAA + mip regen), and `SDLGPU-37` (MRT) are done and verified — see
+> their own rows for the real multi-pass `EnsureFrameRendered` refactor and `DrawTarget`
+> generalization this required. `SDLGPU-38` (2D MSAA) is still ⬜; `SDLGPU-39` (readback) is 🟨
+> (RenderTargetCube's leg done, swapchain's leg blocked — see that row).
+>
+> **Real architectural gotcha found while writing `SDLGPU-37`'s test (applies to any code using
+> this backend, not just tests):** a `RenderTarget2D`/`RenderTargetCube` destroyed before this
+> backend's deferred `Present()`-time render pass actually executes is a genuine use-after-free —
+> the destructor releases the real `SDL_GPUTexture*` immediately, but any sprite/draw command
+> already queued against it (not yet rendered, since rendering is batched until `Present()`) still
+> holds that now-freed handle. Confirmed via a real segfault when `sdlgpu_mrt_test.cpp`'s first
+> draft used `Draw()`-local `RenderTarget2D` instances. Keep every render target alive at least
+> until the next `Present()`/frame boundary (e.g. as a member field, matching every test in this
+> plan) — never as a short-lived local inside a single `Draw()` call. Not fixed at the architecture
+> level (would need an eager-flush-on-destruction policy or a deferred-release queue) — see
+> `SDLGPU-37`'s own row for the full analysis.
 >
 > **Full `CnaTests` suite is NOT currently stable end-to-end under `CNA_GRAPHICS_BACKEND=SDL_GPU`
 > in this sandboxed dev environment** (found 2026-07-15 while trying to verify `SDLGPU-35`
@@ -33,8 +45,9 @@
 > consistent with real-window/GPU-device resource churn across thousands of tests in this sandbox,
 > not a deterministic logic bug in one test). This is a pre-existing condition, not something
 > `SDLGPU-35` introduced or fixed. This backend's own dedicated CTest suite
-> (`SdlGpu_Smoke`/`SdlGpu_2D`/`SdlGpu_3D`/`SdlGpu_Effects`/`SdlGpu_RenderTarget2D`, `ctest -R
-> SdlGpu`) is the actual validated methodology for real-window backends in this project (mirrors
+> (`SdlGpu_Smoke`/`SdlGpu_2D`/`SdlGpu_3D`/`SdlGpu_Effects`/`SdlGpu_RenderTarget2D`/
+> `SdlGpu_RenderTargetCube`/`SdlGpu_MRT`, `ctest -R SdlGpu`) is the actual validated methodology
+> for real-window backends in this project (mirrors
 > how Vulkan/D3D11/D3D12 are validated) — don't treat a full unfiltered `CnaTests` run under this
 > backend as a meaningful signal without first re-reading this note.
 >
@@ -165,18 +178,20 @@ extends.
    (`EnvironmentMapEffect`) and `SDLGPU-34` (`SkinnedEffect`) remain ⬜, deliberately deferred —
    see their own rows for the specific blockers (no `TextureCube` foundation yet; an unresolved
    72-bone-palette push-size question plus a new stride-52 vertex format).
-5. Phase `SDLGPU-8` (render targets) started 2026-07-15: `SDLGPU-35` (`RenderTarget2D`) and
-   `SDLGPU-36` (`RenderTargetCube`, including real MSAA + mip regen) done and verified, all ✅ —
-   see their own rows for the real multi-pass `EnsureFrameRendered` refactor and the
-   `DrawTarget{rt,cube,face}` generalization this required. `SDLGPU-39` (readback) is now 🟨: the
-   `RenderTargetCube` leg is done for real (pulled forward, see its row); the swapchain/
+5. Phase `SDLGPU-8` (render targets) started 2026-07-15: `SDLGPU-35` (`RenderTarget2D`),
+   `SDLGPU-36` (`RenderTargetCube`, including real MSAA + mip regen), and `SDLGPU-37` (MRT) done
+   and verified, all ✅ — see their own rows for the real multi-pass `EnsureFrameRendered` refactor,
+   the `DrawTarget{rt,cube,face}` generalization, and the `currentExtraMrtTargets_` MRT mechanism
+   this required, plus `SDLGPU-37`'s own row for a real cross-cutting resource-lifetime gotcha
+   found while testing it (see the status banner's own callout). `SDLGPU-39` (readback) is now 🟨:
+   the `RenderTargetCube` leg is done for real (pulled forward, see its row); the swapchain/
    `RenderTarget2D`/`Texture2D`/`TextureCube` legs hit a real, unresolved segfault specific to the
    swapchain texture as a download/copy source (see that row) — do not re-attempt without reading
-   it first. Next: `SDLGPU-37` (MRT), `SDLGPU-38` (MSAA for `RenderTarget2D` specifically — cube
-   MSAA is already done as part of `SDLGPU-36`). `SDLGPU-33` (`EnvironmentMapEffect`) is now
-   partially unblocked (a real `ITextureCubeBackend` exists via `RenderTargetCube`) but still
-   deferred pending `SDLGPU-40` (plain uploaded `TextureCube`, Phase `SDLGPU-9`) so both cube
-   sources work. `SDLGPU-34` (`SkinnedEffect`) remains blocked on its own bone-palette push-size
+   it first. Next: `SDLGPU-38` (MSAA for `RenderTarget2D` specifically — cube MSAA is already done
+   as part of `SDLGPU-36`). `SDLGPU-33` (`EnvironmentMapEffect`) is now partially unblocked (a real
+   `ITextureCubeBackend` exists via `RenderTargetCube`) but still deferred pending `SDLGPU-40`
+   (plain uploaded `TextureCube`, Phase `SDLGPU-9`) so both cube sources work. `SDLGPU-34`
+   (`SkinnedEffect`) remains blocked on its own bone-palette push-size
    question, independent of this phase.
 
 ---
@@ -270,7 +285,7 @@ extends.
 | --- | --- | --- | --- |
 | SDLGPU-35 | `RenderTarget2D` — a `SDL_GPU_TEXTUREUSAGE_COLOR_TARGET \| SDL_GPU_TEXTUREUSAGE_SAMPLER` texture, bound as `SDL_GPUColorTargetInfo.texture` in one pass, sampled in a later pass. | ✅ | 2026-07-15. Required a real architectural refactor, not just a new class: every pipeline cache (`GetOrCreatePipelineColored3D`/`Textured3D`/`ColoredTextured3D`/`LitTextured3D`/`AlphaTest3D`/`DualTexture3D`/sprite) now takes a `colorFormat` param folded into its cache key (previously hardcoded `SDL_GetGPUSwapchainTextureFormat`), and `EnsureFrameRendered()` is now genuinely multi-pass: every distinct `SdlGpuRenderTargetBackend` used this frame gets its own render pass (in first-bind order, via `RenderToTarget()`), all before the swapchain's own pass — this is what makes "bound in one pass, sampled in a later pass" real rather than aspirational. Render targets standardize on `SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM` regardless of the swapchain's native format (XNA's `CreateRenderTarget2D` interface has no format parameter anyway). `Clear()`/`ClearDepth()`/`ClearStencil()` now route to whichever `SdlGpuRenderTargetBackend` is currently bound (each RT owns its own pending-clear state) instead of unconditionally hitting the swapchain's. `SpriteBatch::Draw()` had to learn to resolve either `SdlGpuTextureBackend` (plain `Texture2D`) or `SdlGpuRenderTargetBackend` (`RenderTarget2D`) to a raw `SDL_GPUTexture*`, since the two are unrelated concrete classes. `mipMap` is supported for real (`SDL_GenerateMipmapsForGPUTexture` after that target's pass ends); `multiSampleCount > 0` throws (`SDLGPU-38`, not yet implemented — a real deferred-scaffolding boundary, not silent misbehavior). Verified via `SdlGpu_RenderTarget2D` (4/4 checks: Clear-only fill, a real colored3d triangle, a depth-tested pair of overlapping quads each with this target's own dedicated depth texture, and the MSAA-throws boundary) plus a real screenshot (see below) — not just "didn't throw". |
 | SDLGPU-36 | `RenderTargetCube` — 6-face color-target texture, including MSAA and mip levels beyond face 0. | ✅ | 2026-07-15. `SdlGpuRenderTargetCubeBackend` owns one `SDL_GPU_TEXTURETYPE_CUBE` texture (6 layers); only one face is ever the active target at a time (shared depth texture across faces, matching D3D11/D3D12's own convention), with per-face clear state. MSAA needed no manual resolve step at all (unlike D3D11/D3D12's `ResolveSubresource`) — `SDL_gpu` has no multisampled cube type, so the real render target is a plain 6-layer `2D_ARRAY` MSAA texture, and `SDL_GPUColorTargetInfo.resolve_texture`/`resolve_layer` resolves it directly into the cube texture's active face automatically at render-pass end. `SDL_GenerateMipmapsForGPUTexture` has no per-layer control (unlike D3D12's manual per-face blit), so it regenerates all 6 faces' chains whenever any face of a mip-enabled cube was used in a frame — harmless for untouched faces (same source data, same result). `multiSampleCount` is clamped via a new `SDL_GPUTextureSupportsSampleCount`-based `ClampSampleCount` helper (mirrors `D3D12RenderTargetCubeBackend::ClampMultiSampleCount`), unlike `RenderTarget2D` which still throws for any nonzero request. Required generalizing every queued draw command's `target` field from a single `RenderTarget2D` pointer to a small `DrawTarget{rt, cube, face}` struct, since a draw can now target the swapchain, a 2D RT, or one cube face. **Verified with real per-face GPU readback** (`SdlGpuRenderTargetCubeBackend::GetData`, pulled forward from `SDLGPU-39` — see that row) rather than `EnvironmentMapEffect` reflection sampling (not implemented in this backend, and Vulkan's own equivalent test documents that technique as unable to discriminate between individual faces anyway): `SdlGpu_RenderTargetCube`, 7/7 checks — all 6 faces filled with distinct colors and read back individually, a real colored3d triangle, real per-face depth-test occlusion, `MultiSampleCount` property fidelity + a genuine MSAA fill/resolve/readback round-trip, and mip level 1 of a uniform-color fill reading back correctly. |
-| SDLGPU-37 | Multiple Render Targets (MRT) — `SDL_GPUGraphicsPipelineTargetInfo.color_target_descriptions` array + several `SDL_GPUColorTargetInfo` entries in one render pass. | ⬜ | |
+| SDLGPU-37 | Multiple Render Targets (MRT) — `SDL_GPUGraphicsPipelineTargetInfo.color_target_descriptions` array + several `SDL_GPUColorTargetInfo` entries in one render pass. | ✅ | 2026-07-15. `SetRenderTargets(rts, count)` binds `rts[0]` exactly like `SetRenderTarget2D(rts[0])` (the real, single draw target); `rts[1..count-1]` are registered via a new `SdlGpuRenderTargetBackend::MarkUsedThisFrame()` (so each still gets its own real pass this frame) and tracked in a new `currentExtraMrtTargets_` list, but never become `currentRenderTarget_` — **draws remain single-target**, matching the exact same honest scope boundary this project's D3D11/D3D12 MRT support already established (no shader in this codebase declares more than one fragment output). `Clear()`/`ClearDepth()`/`ClearStencil()` propagate to every target in `currentExtraMrtTargets_` too, so a single `Clear()` call while MRT is bound really does clear all of them simultaneously, not just the primary. Verified via `SdlGpu_MRT` (3/3 checks: simultaneous MRT clear, a colored3d draw while MRT is bound, `ClearColorAndDepth`+`SetRenderTargets(nullptr,0)` restore, all with no exception) plus a real screenshot confirming both halves of the scope boundary at once — the primary target turned green (the draw succeeded) while the two secondary targets stayed exactly magenta (the shared `Clear()` reached them, and the draw did not). **Real, non-test-specific finding from writing this test:** a `RenderTarget2D`/`RenderTargetCube` that goes out of scope (destructor runs) before this backend's deferred `Present()`-time render pass actually executes is a real use-after-free — the destructor releases the real `SDL_GPUTexture*` immediately, but any sprite/draw commands already queued against it (not yet rendered) still hold that now-freed handle. Caught via a genuine segfault when this test's first draft used `Draw()`-local `RenderTarget2D` instances instead of members; `SdlGpu_RenderTargetCube`'s own test happened to avoid this by forcing an eager flush inside `GetData()` itself. **Not fixed here** (would need either an eager-flush-on-destruction policy or a deferred-release queue mirroring `SDL_ReleaseGPUBuffer`'s own "frees as soon as safe" contract — a real architectural question, not this task's scope) — documented so any future test, and any real game code targeting this backend, keeps render targets alive at least until the next `Present()`/frame boundary, not as short-lived locals. |
 | SDLGPU-38 | MSAA — `SDL_GPUSampleCount` texture creation + `SDL_GPUColorTargetInfo.resolve_texture` automatic resolve-on-render-pass-end. | ⬜ | |
 | SDLGPU-39 | `GetData()` readback — `SDL_DownloadFromGPUTexture` via a transfer buffer + fence wait (`SDL_SubmitGPUCommandBufferAndAcquireFence`/`SDL_WaitForGPUFences`), for `Texture2D`/`TextureCube`/`RenderTarget2D`/`RenderTargetCube`. | 🟨 | **`RenderTargetCube::GetData()` done for real, 2026-07-15** (pulled forward as part of `SDLGPU-36` to enable rigorous per-face verification without `EnvironmentMapEffect`): `SdlGpuRenderTargetCubeBackend::GetData()` downloads directly from the (self-owned, fully-controlled) cube texture — the exact transfer-buffer+fence pattern this row describes — and is exercised by all 7 `SdlGpu_RenderTargetCube` checks. **Real blocker found 2026-07-15, still unresolved, for the swapchain/`RenderTarget2D`/`Texture2D`/`TextureCube` legs:** an attempt to pull swapchain readback forward (needed for pixel-precise `RenderTarget2D` test assertions) segfaulted inside *both* `SDL_DownloadFromGPUTexture` (source = the raw swapchain texture) *and* `SDL_CopyGPUTextureToTexture` (copying the swapchain texture into a plain `SAMPLER`-usage staging texture first) — crashes deep inside the vendored SDL3/Vulkan driver on this environment, not a graceful SDL error return. Confirmed the crash is specifically about the swapchain texture as a copy/download *source*: neither `SDL_gpu.h` doc comment mentions a usage-flag requirement for either function, so this may be a genuine driver/environment limitation (swapchain images not created with a transfer-src-equivalent usage bit) rather than a CNA bug — the `RenderTargetCube` success above confirms the transfer-buffer/fence mechanism itself is sound, so the blocker is specific to the swapchain texture, not the general technique. Needs investigation on real (non-virtual-display) hardware, or via `SDL_BlitGPUTexture` as an alternative, before assuming any swapchain-sourced approach works. `RenderTarget2D::GetData()`/`ReadBackbuffer`/plain `TextureCube::GetData()` (no `TextureCube` backend exists yet, `SDLGPU-40`) remain ⬜ — `RenderTarget2D` verification was worked around by reverting to this backend's own established convention (real draws with no exception across many frames + a manual screenshot) rather than pixel-readback assertions — do not re-attempt swapchain download without first re-reading this note. |
 

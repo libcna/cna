@@ -95,6 +95,12 @@ namespace CNA::Internal::Backends::SdlGpu
         NOXNA [[nodiscard]] Uint8 ClearStencilValue() const { return clearStencil_; }
         /** @brief Resets pending-clear flags after this target's pass has rendered this frame. NOXNA. */
         NOXNA void ResetPendingClears() { clearColorPending_ = false; clearDepthPending_ = false; clearStencilPending_ = false; }
+        /**
+         * @brief Registers this target for its own pass this frame without making it the current
+         * draw target (SDLGPU-37: an "extra" MRT target — bound and clearable, but draws still go
+         * only to the primary target). NOXNA — internal use only.
+         */
+        NOXNA void MarkUsedThisFrame();
 
     private:
         SdlGpuGraphicsBackend* owner_ = nullptr;
@@ -560,6 +566,16 @@ namespace CNA::Internal::Backends::SdlGpu
                                                                           bool mipMap = false,
                                                                           int multiSampleCount = 0) override;
 
+        /**
+         * @brief Activates multiple render targets for MRT (Phase `SDLGPU-8`, `SDLGPU-37`).
+         *
+         * `rts[0]` becomes the real draw target (identical to `SetRenderTarget2D(rts[0])`);
+         * `rts[1..count-1]` are bound and independently cleared but do not receive draws -- no
+         * shader in this codebase declares more than one fragment output, the same honest scope
+         * boundary this project's D3D11/D3D12 MRT support already established.
+         */
+        void SetRenderTargets(IRenderTargetBackend* const* rts, int count) override;
+
         /** @brief Draws stride-16 (VertexPositionColor) primitives with a hardcoded white/vertex-color-enabled BasicEffect. */
         void DrawColoredPrimitives(const IVertexBufferBackend& vb,
                                    const Matrix& world, const Matrix& view, const Matrix& projection,
@@ -803,6 +819,12 @@ namespace CNA::Internal::Backends::SdlGpu
         SdlGpuRenderTargetCubeBackend* currentRenderTargetCube_ = nullptr;
         int currentActiveCubeFace_ = -1;
         std::vector<std::pair<SdlGpuRenderTargetCubeBackend*, int>> usedRenderTargetCubeFacesThisFrame_;
+
+        // SDLGPU-37: "extra" MRT targets (rts[1..count-1] of the most recent SetRenderTargets()
+        // call) -- bound (via MarkUsedThisFrame(), so they get their own pass) and independently
+        // cleared (Clear()/ClearXxx() propagate here too), but currentRenderTarget_ always stays
+        // rts[0] since draws remain single-target (see SetRenderTargets's own doc comment).
+        std::vector<SdlGpuRenderTargetBackend*> currentExtraMrtTargets_;
 
         int physicalWidth_ = 0;
         int physicalHeight_ = 0;
