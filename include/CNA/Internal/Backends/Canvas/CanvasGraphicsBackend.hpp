@@ -12,11 +12,15 @@ namespace CNA::Internal::Backends::Canvas
      * @brief HTML Canvas 2D graphics backend (Emscripten-only).
      *
      * See plan_canvas.md for the full task breakdown and design rationale. Window/viewport
-     * bookkeeping (C1), Clear/Present (C2), textures/render targets (C3), and SpriteBatch (C4) are
-     * all real. Blend/sampler state mapping (C5) and SpriteFont (C6, expected to need no new code)
-     * are still open. The inherently-3D-only pure virtuals (ClearColorAndDepth and friends,
-     * vertex/index buffers, DrawColoredPrimitives) throw via ThrowNo3D() -- permanent behavior, not
-     * a placeholder; Phase C7 just audits/formalizes this same wiring across the full 3D surface.
+     * bookkeeping (C1), Clear/Present (C2), textures/render targets (C3), SpriteBatch incl.
+     * SpriteFont (C4/C6), and blend/sampler state mapping (C5) are all real. The inherently-3D-only
+     * pure virtuals (ClearColorAndDepth and friends, vertex/index buffers, DrawColoredPrimitives)
+     * throw via ThrowNo3D(); the rest of the 3D-only surface (Draw*Ex/DrawInstancedPrimitivesEx,
+     * CreateIndexBuffer32, Create{Texture3D,TextureCube,RenderTargetCube,OcclusionQuery,
+     * EffectBackend}) is intentionally left on IGraphicsBackend's own shared defaults, which already
+     * do the right thing here (throw-by-delegation or return nullptr) without needing a Canvas-local
+     * override -- confirmed against SDL_RENDERER's own precedent of not overriding these either
+     * (Phase C7).
      */
     class CanvasGraphicsBackend final : public IGraphicsBackend
     {
@@ -56,6 +60,11 @@ namespace CNA::Internal::Backends::Canvas
         void ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
                              int colorDstBlend, int alphaDstBlend,
                              int colorBlendFunc, int alphaBlendFunc) override;
+
+        // plan_canvas.md CANVAS-65: no Canvas2D target -- main canvas or off-screen -- ever has a
+        // real depth/stencil buffer (same reasoning as IRenderTargetBackend::HasRealDepthBuffer's
+        // override, CANVAS-23), same as SDL_RENDERER's own override for the same reason.
+        [[nodiscard]] bool SupportsDepthStencil() const override { return false; }
 
         void ClearColorAndDepth(float r, float g, float b, float a, float depth) override;
         void ClearDepth(float depth) override;
