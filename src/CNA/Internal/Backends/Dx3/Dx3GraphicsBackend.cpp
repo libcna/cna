@@ -6,7 +6,12 @@
 // too (the fopen -> free_api_fopen macro leak risk).
 #include <ddraw.h>
 
+#include "Microsoft/Xna/Framework/Vector3.hpp"
+
+#include <algorithm>
+#include <cmath>
 #include <cstring>
+#include <functional>
 #include <stdexcept>
 #include <string>
 
@@ -101,7 +106,141 @@ namespace CNA::Internal::Backends::Dx3
                 std::to_string(level) + "): IDirectDrawSurface has no native mip chain or "
                 "per-level LOD sampling. Use Texture2D::SetData(level=0, ...) only.");
         }
+
+        // ---- Phase X4: CPU 2D compositor (design decision 5) ----
+
+        // Signed area of triangle (a, b, c) -- also the raw (un-normalized) edge function used by
+        // BarycentricWeights below. Positive/negative depending on winding; consistent use of the
+        // same sign in both `area` and each per-vertex edge value below makes the inside-test
+        // winding-agnostic (correct for both CW and CCW quads, which rotation can produce either
+        // of in screen space).
+        float EdgeFunction(const Vector2& a, const Vector2& b, const Vector2& c)
+        {
+            return (c.X - a.X) * (b.Y - a.Y) - (c.Y - a.Y) * (b.X - a.X);
+        }
+
+        // Computes barycentric weights of point (px, py) w.r.t. triangle (a, b, c); returns false
+        // if (px, py) is outside the triangle or the triangle is degenerate.
+        bool BarycentricWeights(const Vector2& a, const Vector2& b, const Vector2& c,
+                                float px, float py, float& w0, float& w1, float& w2)
+        {
+            const Vector2 p(px, py);
+            const float area = EdgeFunction(a, b, c);
+            if (area == 0.0f) return false;
+            w0 = EdgeFunction(b, c, p) / area;
+            w1 = EdgeFunction(c, a, p) / area;
+            w2 = EdgeFunction(a, b, p) / area;
+            return w0 >= 0.0f && w1 >= 0.0f && w2 >= 0.0f;
+        }
+
+        // Composites a textured, tinted quad (corners[0..3]/uvs[0..3], same winding order: TL, TR,
+        // BR, BL) as two triangles (0,1,2) and (2,3,0) into `dstSurface`, sampling `srcSurface`
+        // nearest-neighbor (Design decision 7's bilinear/wrap/mirror sampling upgrades are Phase
+        // X5). `blendEnabled` selects a straight-alpha "over" formula as a v1 baseline; Phase X5
+        // (DX3-40..44) replaces this with the real, distinct Opaque/AlphaBlend/NonPremultiplied/
+        // Additive formulas keyed off the actual BlendState factors, mirroring the same
+        // "correctness over performance, get a working baseline first" shape plan_software.md's
+        // design decision 1 already used for its own rasterizer.
+        void CompositeQuad(LPDIRECTDRAWSURFACE dstSurface, int dstW, int dstH,
+                           LPDIRECTDRAWSURFACE srcSurface, int srcW, int srcH,
+                           const Vector2 corners[4], const Vector2 uvs[4],
+                           float tintR, float tintG, float tintB, float tintA,
+                           bool blendEnabled)
+        {
+            DDSURFACEDESC dstDesc{};
+            dstDesc.dwSize = sizeof(DDSURFACEDESC);
+            HRESULT hr = dstSurface->Lock(nullptr, &dstDesc, 0, nullptr);
+            if (FAILED(hr)) ThrowHr("IDirectDrawSurface::Lock(compositor dst)", hr);
+
+            DDSURFACEDESC srcDesc{};
+            srcDesc.dwSize = sizeof(DDSURFACEDESC);
+            hr = srcSurface->Lock(nullptr, &srcDesc, 0, nullptr);
+            if (FAILED(hr))
+            {
+                dstSurface->Unlock(dstDesc.lpSurface);
+                ThrowHr("IDirectDrawSurface::Lock(compositor src)", hr);
+            }
+
+            auto* dstBase = static_cast<uint8_t*>(dstDesc.lpSurface);
+            const auto* srcBase = static_cast<const uint8_t*>(srcDesc.lpSurface);
+
+            float minX = corners[0].X, maxX = corners[0].X, minY = corners[0].Y, maxY = corners[0].Y;
+            for (int i = 1; i < 4; ++i)
+            {
+                minX = std::min(minX, corners[i].X); maxX = std::max(maxX, corners[i].X);
+                minY = std::min(minY, corners[i].Y); maxY = std::max(maxY, corners[i].Y);
+            }
+            const int x0 = std::clamp(static_cast<int>(std::floor(minX)), 0, dstW);
+            const int x1 = std::clamp(static_cast<int>(std::ceil(maxX)), 0, dstW);
+            const int y0 = std::clamp(static_cast<int>(std::floor(minY)), 0, dstH);
+            const int y1 = std::clamp(static_cast<int>(std::ceil(maxY)), 0, dstH);
+
+            static constexpr int kTriangles[2][3] = {{0, 1, 2}, {2, 3, 0}};
+
+            for (int y = y0; y < y1; ++y)
+            {
+                for (int x = x0; x < x1; ++x)
+                {
+                    const float px = static_cast<float>(x) + 0.5f;
+                    const float py = static_cast<float>(y) + 0.5f;
+
+                    for (const auto& tri : kTriangles)
+                    {
+                        float w0, w1, w2;
+                        if (!BarycentricWeights(corners[tri[0]], corners[tri[1]], corners[tri[2]], px, py, w0, w1, w2))
+                            continue;
+
+                        const float u = w0 * uvs[tri[0]].X + w1 * uvs[tri[1]].X + w2 * uvs[tri[2]].X;
+                        const float v = w0 * uvs[tri[0]].Y + w1 * uvs[tri[1]].Y + w2 * uvs[tri[2]].Y;
+                        const int sx = std::clamp(static_cast<int>(u * static_cast<float>(srcW)), 0, srcW - 1);
+                        const int sy = std::clamp(static_cast<int>(v * static_cast<float>(srcH)), 0, srcH - 1);
+
+                        const uint8_t* sp = srcBase + static_cast<std::size_t>(sy) * static_cast<std::size_t>(srcDesc.lPitch) +
+                                            static_cast<std::size_t>(sx) * 4u;
+                        const float srcR = static_cast<float>(sp[0]) / 255.0f * tintR;
+                        const float srcG = static_cast<float>(sp[1]) / 255.0f * tintG;
+                        const float srcB = static_cast<float>(sp[2]) / 255.0f * tintB;
+                        const float srcA = static_cast<float>(sp[3]) / 255.0f * tintA;
+
+                        uint8_t* dp = dstBase + static_cast<std::size_t>(y) * static_cast<std::size_t>(dstDesc.lPitch) +
+                                     static_cast<std::size_t>(x) * 4u;
+                        if (blendEnabled)
+                        {
+                            // Straight-alpha "over": out = srcColor*srcAlpha + dstColor*(1-srcAlpha)
+                            // (the same v1-baseline formula SOFTWARE's own rasterizer uses).
+                            const float invA = 1.0f - srcA;
+                            dp[0] = static_cast<uint8_t>(std::clamp((srcR * 255.0f) * srcA + static_cast<float>(dp[0]) * invA, 0.0f, 255.0f));
+                            dp[1] = static_cast<uint8_t>(std::clamp((srcG * 255.0f) * srcA + static_cast<float>(dp[1]) * invA, 0.0f, 255.0f));
+                            dp[2] = static_cast<uint8_t>(std::clamp((srcB * 255.0f) * srcA + static_cast<float>(dp[2]) * invA, 0.0f, 255.0f));
+                            dp[3] = static_cast<uint8_t>(std::clamp((srcA * 255.0f) + static_cast<float>(dp[3]) * invA, 0.0f, 255.0f));
+                        }
+                        else
+                        {
+                            dp[0] = static_cast<uint8_t>(std::clamp(srcR * 255.0f, 0.0f, 255.0f));
+                            dp[1] = static_cast<uint8_t>(std::clamp(srcG * 255.0f, 0.0f, 255.0f));
+                            dp[2] = static_cast<uint8_t>(std::clamp(srcB * 255.0f, 0.0f, 255.0f));
+                            dp[3] = static_cast<uint8_t>(std::clamp(srcA * 255.0f, 0.0f, 255.0f));
+                        }
+                        break;
+                    }
+                }
+            }
+
+            srcSurface->Unlock(srcDesc.lpSurface);
+            dstSurface->Unlock(dstDesc.lpSurface);
+        }
     }
+
+    // Common accessor so Dx3SpriteBatchBackend can reach the underlying IDirectDrawSurface* of
+    // either concrete backend it might be asked to sample from (a plain texture, or a former
+    // render target now being sampled as one) without needing to know which. Never named outside
+    // this .cpp, same reasoning as Dx3TextureBackend/Dx3RenderTargetBackend themselves.
+    class Dx3SurfaceOwner
+    {
+    public:
+        virtual ~Dx3SurfaceOwner() = default;
+        [[nodiscard]] virtual LPDIRECTDRAWSURFACE Surface() const = 0;
+    };
 
     struct Dx3GraphicsBackend::Impl
     {
@@ -126,10 +265,23 @@ namespace CNA::Internal::Backends::Dx3
         // rather than a Dx3RenderTargetBackend* so Dx3RenderTargetBackend never needs to name this
         // private Impl type (it is defined later in this file, after Impl).
         LPDIRECTDRAWSURFACE currentTargetSurface = nullptr;
+        // Width/height of currentTargetSurface, kept alongside it (Phase X4: the SpriteBatch
+        // compositor needs the active destination's own bounds, which can differ from
+        // logicalWidth/logicalHeight when a custom-sized render target is bound).
+        int currentTargetWidth = 0;
+        int currentTargetHeight = 0;
 
         int logicalWidth = 0;
         int logicalHeight = 0;
         CnaPresentationMode presentationMode = CnaPresentationMode::Overscan;
+
+        // Phase X4/X5 (design decision 6): true only for the exact Opaque preset (src=One,
+        // dst=Zero for both color and alpha) -- same detection formula SOFTWARE's own
+        // ApplyBlendState already uses. Gates the SpriteBatch identity fast path (design decision
+        // 5) and CompositeQuad's baseline blend-vs-overwrite choice. Phase X5 (DX3-40..44)
+        // replaces this single boolean with real per-formula Opaque/AlphaBlend/NonPremultiplied/
+        // Additive math.
+        bool isOpaqueBlend = false;
 
         // Resolves to whichever surface Clear()/ReadBackbuffer() should currently target: the
         // bound render target's surface if one is bound, else the shadow backbuffer. Present()
@@ -139,6 +291,14 @@ namespace CNA::Internal::Backends::Dx3
         [[nodiscard]] LPDIRECTDRAWSURFACE ActiveSurface() const
         {
             return currentTargetSurface ? currentTargetSurface : backBuffer;
+        }
+
+        // Phase X4: the active destination's own bounds -- the bound render target's size if one
+        // is bound, else the device's logical size.
+        void ActiveSurfaceSize(int& w, int& h) const
+        {
+            if (currentTargetSurface) { w = currentTargetWidth; h = currentTargetHeight; }
+            else { w = logicalWidth; h = logicalHeight; }
         }
 
         ~Impl()
@@ -286,7 +446,7 @@ namespace CNA::Internal::Backends::Dx3
     // <ddraw.h> stays fully contained here -- see this file's own Dx3TextureBackend/
     // Dx3RenderTargetBackend definitions for the shared surface-creation helpers they use.
 
-    class Dx3TextureBackend : public ITextureBackend
+    class Dx3TextureBackend : public ITextureBackend, public Dx3SurfaceOwner
     {
     public:
         Dx3TextureBackend(LPDIRECTDRAW dd, int width, int height)
@@ -322,7 +482,7 @@ namespace CNA::Internal::Backends::Dx3
             ThrowMipLevelUnsupported(level);
         }
 
-        [[nodiscard]] LPDIRECTDRAWSURFACE Surface() const { return surface_; }
+        [[nodiscard]] LPDIRECTDRAWSURFACE Surface() const override { return surface_; }
 
     protected:
         int width_ = 0;
@@ -330,19 +490,21 @@ namespace CNA::Internal::Backends::Dx3
         LPDIRECTDRAWSURFACE surface_ = nullptr;
     };
 
-    class Dx3RenderTargetBackend final : public IRenderTargetBackend
+    class Dx3RenderTargetBackend final : public IRenderTargetBackend, public Dx3SurfaceOwner
     {
     public:
-        Dx3RenderTargetBackend(LPDIRECTDRAWSURFACE* currentTargetSlot, LPDIRECTDRAW dd,
+        Dx3RenderTargetBackend(LPDIRECTDRAWSURFACE* currentTargetSlot, int* currentTargetWidthSlot,
+                               int* currentTargetHeightSlot, LPDIRECTDRAW dd,
                                int width, int height, int multiSampleCount)
-            : currentTargetSlot_(currentTargetSlot), width_(width), height_(height),
+            : currentTargetSlot_(currentTargetSlot), currentTargetWidthSlot_(currentTargetWidthSlot),
+              currentTargetHeightSlot_(currentTargetHeightSlot), width_(width), height_(height),
               multiSampleCount_(multiSampleCount), surface_(CreateOffscreenSurface(dd, width, height))
         {
         }
 
         ~Dx3RenderTargetBackend() override
         {
-            if (*currentTargetSlot_ == surface_) *currentTargetSlot_ = nullptr;
+            UnbindAsRenderTarget();
             if (surface_) surface_->Release();
         }
 
@@ -363,10 +525,21 @@ namespace CNA::Internal::Backends::Dx3
             ThrowMipLevelUnsupported(level);
         }
 
-        void BindAsRenderTarget() override { *currentTargetSlot_ = surface_; }
+        void BindAsRenderTarget() override
+        {
+            *currentTargetSlot_ = surface_;
+            *currentTargetWidthSlot_ = width_;
+            *currentTargetHeightSlot_ = height_;
+        }
+
         void UnbindAsRenderTarget() override
         {
-            if (*currentTargetSlot_ == surface_) *currentTargetSlot_ = nullptr;
+            if (*currentTargetSlot_ == surface_)
+            {
+                *currentTargetSlot_ = nullptr;
+                *currentTargetWidthSlot_ = 0;
+                *currentTargetHeightSlot_ = 0;
+            }
         }
 
         [[nodiscard]] int GetMultiSampleCount() const override { return multiSampleCount_; }
@@ -378,8 +551,12 @@ namespace CNA::Internal::Backends::Dx3
             return false;
         }
 
+        [[nodiscard]] LPDIRECTDRAWSURFACE Surface() const override { return surface_; }
+
     private:
         LPDIRECTDRAWSURFACE* currentTargetSlot_;
+        int* currentTargetWidthSlot_;
+        int* currentTargetHeightSlot_;
         int width_ = 0;
         int height_ = 0;
         int multiSampleCount_ = 0;
@@ -394,8 +571,9 @@ namespace CNA::Internal::Backends::Dx3
     std::unique_ptr<IRenderTargetBackend> Dx3GraphicsBackend::CreateRenderTarget2D(
         int w, int h, int /*depthFormat*/, bool /*preserveContents*/, bool /*mipMap*/, int multiSampleCount)
     {
-        return std::make_unique<Dx3RenderTargetBackend>(&impl_->currentTargetSurface, impl_->dd,
-                                                         w, h, multiSampleCount);
+        return std::make_unique<Dx3RenderTargetBackend>(&impl_->currentTargetSurface,
+                                                         &impl_->currentTargetWidth, &impl_->currentTargetHeight,
+                                                         impl_->dd, w, h, multiSampleCount);
     }
 
     void Dx3GraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* rt)
@@ -403,7 +581,11 @@ namespace CNA::Internal::Backends::Dx3
         if (rt)
             rt->BindAsRenderTarget();
         else
+        {
             impl_->currentTargetSurface = nullptr;
+            impl_->currentTargetWidth = 0;
+            impl_->currentTargetHeight = 0;
+        }
     }
 
     void Dx3GraphicsBackend::SetRenderTargets(IRenderTargetBackend* const* rts, int count)
@@ -417,9 +599,181 @@ namespace CNA::Internal::Backends::Dx3
         SetRenderTarget2D(count > 0 ? rts[0] : nullptr);
     }
 
+    // ---- Phase X4: the CPU compositor / SpriteBatch draw path (design decision 5) ----
+    // Never named outside this .cpp, same reasoning as Dx3TextureBackend/Dx3RenderTargetBackend.
+
+    class Dx3SpriteBatchBackend final : public ISpriteBatchBackend
+    {
+    public:
+        Dx3SpriteBatchBackend(std::function<LPDIRECTDRAWSURFACE()> getActiveSurface,
+                              std::function<void(int&, int&)> getActiveSurfaceSize,
+                              std::function<bool()> isOpaqueBlend)
+            : getActiveSurface_(std::move(getActiveSurface)),
+              getActiveSurfaceSize_(std::move(getActiveSurfaceSize)),
+              isOpaqueBlend_(std::move(isOpaqueBlend))
+        {
+        }
+
+        void Begin() override
+        {
+            if (begun_)
+                throw std::runtime_error("Dx3SpriteBatchBackend::Begin: Begin() called without a matching End()");
+            begun_ = true;
+        }
+
+        void End() override
+        {
+            if (!begun_)
+                throw std::runtime_error("Dx3SpriteBatchBackend::End: End() called without a matching Begin()");
+            begun_ = false;
+        }
+
+        // DX3-36: applied as a point transform (z=0) directly on the already-screen-space quad
+        // corners, same convention SOFTWARE's own SetTransformMatrix uses.
+        void SetTransformMatrix(const Matrix& m) override { transformMatrix_ = m; }
+
+        // DX3-38: no programmable shader stage exists on this backend.
+        void SetCustomEffect(Effect* effect) override
+        {
+            if (effect != nullptr)
+                throw std::runtime_error(
+                    "DX3 (DirectDraw) does not support custom SpriteBatch Effects: no programmable "
+                    "shader stage exists on this backend.");
+        }
+
+        void Draw(const ITextureBackend& texture, float x, float y) override
+        {
+            Draw(texture,
+                 Rectangle(static_cast<int>(x), static_cast<int>(y), texture.GetWidth(), texture.GetHeight()),
+                 Rectangle(0, 0, texture.GetWidth(), texture.GetHeight()), Color(255, 255, 255, 255),
+                 0.0f, Vector2(0.0f, 0.0f), SpriteEffects::None, 0.0f);
+        }
+
+        void Draw(const ITextureBackend& texture, const Rectangle& destinationRectangle,
+                 const Rectangle& sourceRectangle, const Color& color) override
+        {
+            Draw(texture, destinationRectangle, sourceRectangle, color, 0.0f, Vector2(0.0f, 0.0f),
+                 SpriteEffects::None, 0.0f);
+        }
+
+        void Draw(const ITextureBackend& texture, const Rectangle& destinationRectangle,
+                 const Rectangle& sourceRectangle, const Color& color, float rotation,
+                 const Vector2& origin, SpriteEffects effects, float /*layerDepth*/) override
+        {
+            if (!begun_)
+                throw std::runtime_error("Dx3SpriteBatchBackend::Draw: Draw() called before Begin()");
+
+            const auto* owner = dynamic_cast<const Dx3SurfaceOwner*>(&texture);
+            if (!owner)
+                throw std::runtime_error(
+                    "Dx3SpriteBatchBackend::Draw: texture backend is not a DX3 surface (created by "
+                    "a different graphics backend?)");
+            LPDIRECTDRAWSURFACE srcSurface = owner->Surface();
+            LPDIRECTDRAWSURFACE dstSurface = getActiveSurface_();
+            int dstW = 0, dstH = 0;
+            getActiveSurfaceSize_(dstW, dstH);
+
+            const int texW = std::max(1, texture.GetWidth());
+            const int texH = std::max(1, texture.GetHeight());
+            float u1 = static_cast<float>(sourceRectangle.X) / static_cast<float>(texW);
+            float v1 = static_cast<float>(sourceRectangle.Y) / static_cast<float>(texH);
+            float u2 = static_cast<float>(sourceRectangle.X + sourceRectangle.Width) / static_cast<float>(texW);
+            float v2 = static_cast<float>(sourceRectangle.Y + sourceRectangle.Height) / static_cast<float>(texH);
+            // DX3-34.
+            if ((static_cast<int>(effects) & static_cast<int>(SpriteEffects::FlipHorizontally)) != 0) std::swap(u1, u2);
+            if ((static_cast<int>(effects) & static_cast<int>(SpriteEffects::FlipVertically)) != 0) std::swap(v1, v2);
+
+            const float dw = static_cast<float>(destinationRectangle.Width);
+            const float dh = static_cast<float>(destinationRectangle.Height);
+            const float sw = static_cast<float>(std::max(1, sourceRectangle.Width));
+            const float sh = static_cast<float>(std::max(1, sourceRectangle.Height));
+            const float scaleX = dw / sw;   // DX3-35.
+            const float scaleY = dh / sh;
+
+            // DX3-31: identity fast path -- a real BltFast straight copy, no CPU compositing at
+            // all. Only when every parameter would be a visual no-op relative to a plain copy:
+            // 1:1 scale, no rotation, no origin offset, no flip, opaque white tint, no custom
+            // transform, and the currently-applied blend state really is Opaque (design decision 5).
+            const bool isIdentityGeometry =
+                rotation == 0.0f && scaleX == 1.0f && scaleY == 1.0f &&
+                origin.X == 0.0f && origin.Y == 0.0f && effects == SpriteEffects::None &&
+                transformMatrix_ == Matrix::getIdentityProperty();
+            const bool isWhiteTint =
+                color.getRProperty() == 255 && color.getGProperty() == 255 &&
+                color.getBProperty() == 255 && color.getAProperty() == 255;
+            if (isIdentityGeometry && isWhiteTint && isOpaqueBlend_())
+            {
+                RECT srcRect{};
+                srcRect.left = sourceRectangle.X;
+                srcRect.top = sourceRectangle.Y;
+                srcRect.right = sourceRectangle.X + sourceRectangle.Width;
+                srcRect.bottom = sourceRectangle.Y + sourceRectangle.Height;
+                const HRESULT hr = dstSurface->BltFast(static_cast<DWORD>(destinationRectangle.X),
+                                                       static_cast<DWORD>(destinationRectangle.Y),
+                                                       srcSurface, &srcRect, DDBLTFAST_NOCOLORKEY);
+                if (FAILED(hr)) ThrowHr("IDirectDrawSurface::BltFast(identity)", hr);
+                return;
+            }
+
+            // DX3-32/33/39: general path -- per-pixel CPU compositing. Quad-corner placement
+            // (rotation about origin, then scale) reuses the exact formula
+            // SoftwareSpriteBatchBackend::Draw() already uses (design decision 5: consume
+            // SpriteBatch's already-computed position/rotation/flip, don't re-derive the pivot math).
+            const float dx = static_cast<float>(destinationRectangle.X);
+            const float dy = static_cast<float>(destinationRectangle.Y);
+            const float ox = origin.X, oy = origin.Y;
+
+            const float p0x = (0.0f - ox) * scaleX, p0y = (0.0f - oy) * scaleY;
+            const float p1x = (sw - ox) * scaleX,   p1y = (0.0f - oy) * scaleY;
+            const float p2x = (sw - ox) * scaleX,   p2y = (sh - oy) * scaleY;
+            const float p3x = (0.0f - ox) * scaleX, p3y = (sh - oy) * scaleY;
+
+            const float cosR = std::cos(rotation);
+            const float sinR = std::sin(rotation);
+
+            const auto placeCorner = [&](float px, float py) -> Vector2
+            {
+                const float rx = dx + px * cosR - py * sinR;
+                const float ry = dy + px * sinR + py * cosR;
+                const Vector3 transformed = Vector3::Transform(Vector3(rx, ry, 0.0f), transformMatrix_);
+                return Vector2(transformed.X, transformed.Y);
+            };
+
+            const Vector2 corners[4] = { placeCorner(p0x, p0y), placeCorner(p1x, p1y),
+                                        placeCorner(p2x, p2y), placeCorner(p3x, p3y) };
+            const Vector2 uvs[4] = { Vector2(u1, v1), Vector2(u2, v1), Vector2(u2, v2), Vector2(u1, v2) };
+
+            CompositeQuad(dstSurface, dstW, dstH, srcSurface, texW, texH, corners, uvs,
+                         static_cast<float>(color.getRProperty()) / 255.0f,
+                         static_cast<float>(color.getGProperty()) / 255.0f,
+                         static_cast<float>(color.getBProperty()) / 255.0f,
+                         static_cast<float>(color.getAProperty()) / 255.0f,
+                         !isOpaqueBlend_());
+        }
+
+    private:
+        std::function<LPDIRECTDRAWSURFACE()> getActiveSurface_;
+        std::function<void(int&, int&)> getActiveSurfaceSize_;
+        std::function<bool()> isOpaqueBlend_;
+        bool begun_ = false;
+        Matrix transformMatrix_ = Matrix::getIdentityProperty();
+    };
+
     std::unique_ptr<ISpriteBatchBackend> Dx3GraphicsBackend::CreateSpriteBatch()
     {
-        throw std::runtime_error("Dx3GraphicsBackend::CreateSpriteBatch: not yet implemented (plan_dx3.md Phase X4).");
+        Impl* impl = impl_.get();
+        return std::make_unique<Dx3SpriteBatchBackend>(
+            [impl]() { return impl->ActiveSurface(); },
+            [impl](int& w, int& h) { impl->ActiveSurfaceSize(w, h); },
+            [impl]() { return impl->isOpaqueBlend; });
+    }
+
+    void Dx3GraphicsBackend::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
+                                             int colorDstBlend, int alphaDstBlend,
+                                             int /*colorBlendFunc*/, int /*alphaBlendFunc*/)
+    {
+        impl_->isOpaqueBlend = (colorSrcBlend == 0 && colorDstBlend == 1 &&
+                                alphaSrcBlend == 0 && alphaDstBlend == 1);
     }
 
     void Dx3GraphicsBackend::ClearColorAndDepth(float, float, float, float, float) { ThrowNo3D("ClearColorAndDepth"); }

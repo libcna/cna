@@ -6684,6 +6684,14 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
         LABELS "DX3")
+
+    # plan_dx3.md Phase X4 (DX3-30..DX3-39): CPU compositor / SpriteBatch draw path CTest.
+    cna_dx3_test(cna_test_dx3_spritebatch examples/dx3_spritebatch_test.cpp)
+    add_test(NAME Dx3_SpriteBatch COMMAND cna_test_dx3_spritebatch)
+    set_tests_properties(Dx3_SpriteBatch PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
+        LABELS "DX3")
 endif()
 
 # plan_dx.md DX-80: D3D11 CTest registration. When cross-compiled from Linux (this backend is

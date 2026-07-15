@@ -15,7 +15,25 @@
 >
 > **Status legend** (matches `../cna`'s own convention): ✅ implemented *and verified against its
 > stated acceptance criteria*; 🟨 code or documentation exists but has not met those criteria;
-> ⬜ not implemented. Phases X1/X2/X3 are ✅ (see their own tables below); X4 onward are ⬜.
+> ⬜ not implemented. Phases X1/X2/X3/X4 are ✅ (see their own tables below); X5 onward are ⬜.
+>
+> **Correction (2026-07-15, Phase X4 closure): the Phase X3 commit's "full `CnaTests` suite has no
+> new failures (one pre-existing, unrelated failure...)" claim was incomplete.** It was based on
+> `tail`-truncated `gtest` output rather than a full `grep` for `FAILED`. A full check at Phase X4
+> closure found **12** pre-existing failures, not 1 -- all in `EffectApplyTest`/
+> `SkinnedModelEXTPartTest`/`ContentManagerSkinnedModelTest`, all because a plain
+> `GraphicsDevice gd;` fixture with no backend gate constructs a `VertexBuffer`/`IndexBuffer` (or
+> loads content that does), which throws under `DX3` -- a real, structural consequence of `DX3`
+> being genuinely 2D-only (design decision 9's `ThrowNo3D` wiring was already in place since Phase
+> X1/X2, so these were already failing right after `c15cdf3d`, not introduced by Phase X3/X4).
+> Fixing them means auditing/gating a broad, unrelated slice of the 3D test suite for
+> backend-agnosticism -- out of scope for this plan. One additional failure
+> (`GraphicsDeviceValidationTest.SetRenderTargets_FourTargets_DoesNotThrow`) genuinely was
+> introduced by Phase X3's own `SetRenderTargets` MRT-throw change and has been fixed here (the
+> test's backend gate didn't know about `DX3`). Only `GraphicsBackendCompileDefinitionsTest`
+> remains as the one failure that predates `D3D11`/`D3D12`/`DX3` entirely (noted at Phase X3
+> closure). Total as of Phase X4 closure: 12 pre-existing/structural + 1 pre-existing/unrelated = 13
+> known failures, all understood and none caused by this plan beyond the one already fixed.
 >
 > **Real, confirmed finding not anticipated by this plan's original design decisions**: `free-direct`'s
 > `IDirectDrawSurface::Lock()` never exposes a writable pointer for the *primary* surface (confirmed
@@ -243,23 +261,25 @@ For every task: build the affected target(s) (`-DCNA_GRAPHICS_BACKEND=DX3`), run
 | DX3-24 | `HasRealDepthBuffer()` → always `false` (no depth buffer concept in `DirectDrawSurface` at all) | ✅ | |
 | DX3-25 | `RenderTargetUsage::DiscardContents` vs `PreserveContents` — same observable contract `SDL_RENDERER` Task 706/`CANVAS`-24 already established | ✅ | Confirmed: this is entirely shared `GraphicsDevice.cpp` logic (Task 704's gating), not backend-specific — came for free once `SetRenderTarget2D`+`Clear()` were wired correctly. `Dx3_TextureRenderTarget` CTest Check F confirms `DiscardContents` really auto-clears to black on rebind. |
 | DX3-26 | `ReadBackbuffer()`/`GetBackBufferData()`: real `Lock()` + `memcpy` from the currently-bound surface | ✅ | Added `Impl::ActiveSurface()` (`currentTargetSurface ? currentTargetSurface : backBuffer`); `Clear()`/`ReadBackbuffer()` both go through it. `Present()` deliberately does not — it always Blt()s the real shadow backbuffer, matching FNA's own backbuffer/render-target separation. |
-| DX3-27 | `SetRenderTargets` with 2+ bindings (MRT): throw — single-surface-target reality, same conclusion `SDL_RENDERER` Task 709/`CANVAS`-26 already reached | ✅ | |
+| DX3-27 | `SetRenderTargets` with 2+ bindings (MRT): throw — single-surface-target reality, same conclusion `SDL_RENDERER` Task 709/`CANVAS`-26 already reached | ✅ | `GraphicsDeviceValidationTest.SetRenderTargets_FourTargets_DoesNotThrow`'s backend gate didn't know about `DX3` (only `SDL_RENDERER`) — fixed at Phase X4 closure, see the correction note above. |
 | DX3-28 | 4096×4096 dimension cap: `free-direct`'s own `CreateSurface` already enforces this (`docs/directdraw-limitations.md`) — confirm CNA's texture-size validation doesn't contradict it (e.g. surface up to XNA's own larger limits silently truncating instead of throwing) | ✅ | Confirmed empirically (`Dx3_TextureRenderTarget` CTest Check H): `Texture2D(5000, 5000)` throws (free-direct's `CreateSurface` returns `DDERR_INVALIDPARAMS`, propagated via `ThrowHr`); CNA's own `Texture2D` constructor performs no silent width/height clamping (confirmed by reading `Texture2D.cpp`). |
 
 ## Phase X4 — CPU compositor / `SpriteBatch` draw path
 
 | # | Task | Status | Notes |
 |---|---|---|---|
-| DX3-30 | `Dx3SpriteBatchBackend : ISpriteBatchBackend` skeleton; `Begin()`/`End()` — no explicit flush needed (each `Draw()` can composite immediately, same reasoning `CANVAS`-30 used) | ⬜ | |
-| DX3-31 | Identity fast path: destination position only, `scale=1`, `tint=White`, `blend=Opaque`, no rotation/flip → real `BltFast`/`Blt` straight copy, no CPU compositing needed | ⬜ | Design decision 5's "cheap case". |
-| DX3-32 | General path: `Lock()` source texture surface + destination surface, composite the quad pixel-by-pixel (position, scale, rotation about `origin`, tint multiply, `SpriteEffects` flip), `Unlock()` both | ⬜ | Reuse existing known-correct pivot/flip formulas (Design decision 5) — do not re-derive. |
-| DX3-33 | Rotation around `origin` — verify against the same known-correct formula `SDL_RENDERER` Task 671 fixed | ⬜ | |
-| DX3-34 | `SpriteEffects::FlipHorizontally`/`FlipVertically` | ⬜ | |
-| DX3-35 | Scalar / `Vector2` scale overloads | ⬜ | |
-| DX3-36 | `SetTransformMatrix()` (`Begin(transformMatrix)`): apply the full affine matrix per-source-pixel in the compositor (straightforward once per-pixel sampling already exists for the general path) | ⬜ | |
-| DX3-37 | `SpriteSortMode` handling: confirm fully covered by shared, backend-agnostic `SpriteBatch` code — expect no backend-specific code needed (same finding as `SDL_RENDERER` Task 677/`CANVAS`-37) | ⬜ | |
-| DX3-38 | Custom `Effect` via `Begin(effect)`: throws for non-null custom effects (no shader stage exists here either) | ⬜ | |
-| DX3-39 | Source-rectangle cropping | ⬜ | |
+| DX3-30 | `Dx3SpriteBatchBackend : ISpriteBatchBackend` skeleton; `Begin()`/`End()` — no explicit flush needed (each `Draw()` can composite immediately, same reasoning `CANVAS`-30 used) | ✅ | Defined entirely inside `Dx3GraphicsBackend.cpp` (never named outside it), same containment reasoning as `Dx3TextureBackend`/`Dx3RenderTargetBackend`. `Begin()`/`End()` throw on mismatched calls (`Dx3_SpriteBatch` CTest Check A). |
+| DX3-31 | Identity fast path: destination position only, `scale=1`, `tint=White`, `blend=Opaque`, no rotation/flip → real `BltFast`/`Blt` straight copy, no CPU compositing needed | ✅ | Gate also checks `SetTransformMatrix()` is identity (a non-identity transform forces the general path even if otherwise identity-shaped) and `ApplyBlendState`'s new Opaque-preset detection (see Phase X5 note below). Verified exact-pixel via `Dx3_SpriteBatch` Check B. |
+| DX3-32 | General path: `Lock()` source texture surface + destination surface, composite the quad pixel-by-pixel (position, scale, rotation about `origin`, tint multiply, `SpriteEffects` flip), `Unlock()` both | ✅ | `CompositeQuad` (2-triangle edge-function rasterizer, winding-agnostic). Verified via `Dx3_SpriteBatch` Checks C/D (full-opacity and zero-alpha edge cases under `AlphaBlend`, chosen to be exact-float-safe rather than asserting a partial-alpha blended byte value). A real bug was caught and fixed before any test ran: the initial straight-alpha "over" formula multiplied the destination term by `(1-srcAlpha)` but forgot to multiply the source term by `srcAlpha` — fixed to `out = src*srcAlpha + dst*(1-srcAlpha)`. |
+| DX3-33 | Rotation around `origin` — verify against the same known-correct formula `SDL_RENDERER` Task 671 fixed | ✅ | Quad-corner placement math ported verbatim from `SoftwareSpriteBatchBackend::Draw()` (design decision 5). Verified via `Dx3_SpriteBatch` Check G (pi rotation swaps opposite quadrants) — first test run caught a *test* bug (wrong expected sample coordinates, not a rasterizer bug): a rotated quad centered on `origin` is centered ON the destination position, not offset from it. |
+| DX3-34 | `SpriteEffects::FlipHorizontally`/`FlipVertically` | ✅ | Verified via `Dx3_SpriteBatch` Check E. |
+| DX3-35 | Scalar / `Vector2` scale overloads | ✅ | Both resolve to the same `destinationRectangle`-vs-`sourceRectangle` ratio at the `ISpriteBatchBackend::Draw` boundary (shared `SpriteBatch.cpp` converts scalar/`Vector2` scale to a `destinationRectangle` before calling the backend) — no backend-specific overload needed. Verified via `Dx3_SpriteBatch` Check F. |
+| DX3-36 | `SetTransformMatrix()` (`Begin(transformMatrix)`): apply the full affine matrix per-source-pixel in the compositor (straightforward once per-pixel sampling already exists for the general path) | ✅ | Applied as a point transform (z=0) on the already-screen-space quad corners, same convention `SOFTWARE`'s own `SetTransformMatrix` uses. Verified via `Dx3_SpriteBatch` Check H (translation). |
+| DX3-37 | `SpriteSortMode` handling: confirm fully covered by shared, backend-agnostic `SpriteBatch` code — expect no backend-specific code needed (same finding as `SDL_RENDERER` Task 677/`CANVAS`-37) | ✅ | Confirmed by reading `SpriteBatch.cpp`: `sortMode_`/sorting are resolved entirely there before `backend_->Draw(...)` is ever called. Verified via `Dx3_SpriteBatch` Check I (`BackToFront` draws without throwing). |
+| DX3-38 | Custom `Effect` via `Begin(effect)`: throws for non-null custom effects (no shader stage exists here either) | ✅ | Verified via `Dx3_SpriteBatch` Check J. |
+| DX3-39 | Source-rectangle cropping | ✅ | Exercised implicitly by every `Draw()` call in `Dx3_SpriteBatch` (all use an explicit `sourceRectangle`). |
+
+**Phase X4/X5 blend-state note**: `Dx3GraphicsBackend::ApplyBlendState()` was added in this phase, but only as a boolean Opaque-vs-"blend" gate (`isOpaqueBlend`, mirroring `SOFTWARE`'s own exact Opaque-preset detection formula) — sufficient to pick the identity fast path and `CompositeQuad`'s straight-alpha-over baseline. It does **not** yet distinguish `AlphaBlend`/`NonPremultiplied`/`Additive`; that real per-formula math is still Phase X5 (DX3-40..44), unchanged from the original plan.
 
 ## Phase X5 — Blend-mode compositing math
 

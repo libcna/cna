@@ -35,7 +35,12 @@ namespace CNA::Internal::Backends::Dx3
      * DDSCAPS_OFFSCREENPLAIN surfaces (Dx3TextureBackend/Dx3RenderTargetBackend, defined entirely
      * in Dx3GraphicsBackend.cpp -- neither is ever named outside it), and SetRenderTarget2D()
      * redirects Clear()/ReadBackbuffer() to whichever surface is currently bound. The SpriteBatch
-     * CPU compositor (Phase X4/X5) is not yet implemented -- CreateSpriteBatch() throws honestly.
+     * CPU compositor (Phase X4, Dx3SpriteBatchBackend, also defined entirely in the .cpp) is real:
+     * an identity-transform draw is a genuine BltFast straight copy (design decision 5's cheap
+     * case); every other draw (rotation/scale/tint/flip/custom transform) is composited manually,
+     * pixel by pixel, through Lock()/Unlock() on both the source and destination surfaces. Phase X5
+     * still owes the real per-formula Opaque/AlphaBlend/NonPremultiplied/Additive blend math --
+     * Phase X4 only distinguishes Opaque from "blend" as a baseline (see ApplyBlendState()).
      */
     class Dx3GraphicsBackend final : public IGraphicsBackend
     {
@@ -76,8 +81,15 @@ namespace CNA::Internal::Backends::Dx3
         // conclusion SDL_RENDERER (Task 709) and CANVAS (CANVAS-26) already reached.
         void SetRenderTargets(IRenderTargetBackend* const* rts, int count) override;
 
-        // ---- IGraphicsBackend: not yet implemented (Phase X4) ----
+        // ---- IGraphicsBackend: real (Phase X4) ----
         std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() override;
+        // Phase X4/X5 (design decision 6): a baseline, Opaque-vs-"blend" boolean gate for now
+        // (mirrors SOFTWARE's own exact Opaque-preset detection formula) -- gates the SpriteBatch
+        // identity fast path and CompositeQuad's straight-alpha "over" baseline. Phase X5
+        // (DX3-40..44) replaces this with real per-formula blend math.
+        void ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
+                             int colorDstBlend, int alphaDstBlend,
+                             int colorBlendFunc, int alphaBlendFunc) override;
 
         // ---- 3D pipeline: NOT supported by DX3 (DirectDraw is 2D-only). ----
         // @note Status: STUB. Every entry point throws std::runtime_error (Phase X7).
