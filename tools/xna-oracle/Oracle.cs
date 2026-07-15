@@ -117,6 +117,8 @@ public class Scene
     public float SpriteRotation;
     public Vector2 SpriteOrigin;
     public SpriteEffects SpriteEffects = SpriteEffects.None;
+    public Rectangle? SpriteSourceRect;
+    public string SpriteSampler = "LinearClamp";
     public SceneVertexFormat VertexFormat = SceneVertexFormat.PositionColor;
     public bool VertexColorEnabled;
     public bool LightingEnabled;
@@ -194,6 +196,8 @@ public class Scene
                     else if (value == "FlipVertically") scene.SpriteEffects = SpriteEffects.FlipVertically;
                     else scene.SpriteEffects = SpriteEffects.None;
                     break;
+                case "spritesourcerect": scene.SpriteSourceRect = ParseRectangle(value); break;
+                case "spritesampler": scene.SpriteSampler = value; break;
                 case "effect":
                     if (value == "AlphaTestEffect") scene.EffectType = SceneEffectType.AlphaTestEffect;
                     else if (value == "DualTextureEffect") scene.EffectType = SceneEffectType.DualTextureEffect;
@@ -473,9 +477,21 @@ public class Oracle : Game
             var spriteTexture = new Texture2D(dev, scene.TextureWidth, scene.TextureHeight);
             spriteTexture.SetData(scene.TexturePixels.ToArray());
 
+            SamplerState sampler = SamplerState.LinearClamp;
+            if (scene.SpriteSampler == "PointClamp") sampler = SamplerState.PointClamp;
+            else if (scene.SpriteSampler == "PointWrap") sampler = SamplerState.PointWrap;
+            else if (scene.SpriteSampler == "LinearWrap") sampler = SamplerState.LinearWrap;
+            else if (scene.SpriteSampler == "PointMirror")
+            {
+                sampler = new SamplerState();
+                sampler.Filter = TextureFilter.Point;
+                sampler.AddressU = TextureAddressMode.Mirror;
+                sampler.AddressV = TextureAddressMode.Mirror;
+            }
+
             var spriteBatch = new SpriteBatch(dev);
-            spriteBatch.Begin();
-            spriteBatch.Draw(spriteTexture, scene.SpriteDestRect, null, scene.SpriteColor,
+            spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, sampler, null, null);
+            spriteBatch.Draw(spriteTexture, scene.SpriteDestRect, scene.SpriteSourceRect, scene.SpriteColor,
                              scene.SpriteRotation, scene.SpriteOrigin, scene.SpriteEffects, 0.0f);
             spriteBatch.End();
 

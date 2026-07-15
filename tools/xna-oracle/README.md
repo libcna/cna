@@ -34,6 +34,8 @@ fully-commented examples.
 | `spriterotation` | float radians, only when `spritebatchmode=true`. Defaults to `0` |
 | `spriteorigin` | `x,y` in source-texture pixel space, only when `spritebatchmode=true`. Defaults to `(0,0)` |
 | `spriteeffects` | `None` (default), `FlipHorizontally`, or `FlipVertically`, only when `spritebatchmode=true` |
+| `spritesourcerect` | `x,y,w,h`, only when `spritebatchmode=true`. Optional — omitted means the whole texture (real XNA's own `sourceRectangle=null` semantics) |
+| `spritesampler` | `LinearClamp` (default, matches `SpriteBatch.Begin()`'s own real default), `PointClamp`, `PointWrap`, `LinearWrap`, or `PointMirror` (manually constructed — real XNA has no named `PointMirror` preset), only when `spritebatchmode=true` |
 | `effect` | `BasicEffect` (default), `AlphaTestEffect`, `DualTextureEffect`, `EnvironmentMapEffect`, or `SkinnedEffect` — which Stock Effect both sides construct (all 5 real XNA Stock Effects), only meaningful when `spritebatchmode` is unset/`false` |
 | `vertexformat` | `PositionColor` (default), `PositionTexture`, `PositionNormalTexture`, `PositionDualTexture`, or `PositionNormalTextureWeights` — selects which `vertex=` shape below, and which vertex struct both sides draw. `PositionDualTexture`/`PositionNormalTextureWeights` have no XNA-built-in equivalent (real XNA has no dual-UV or skinned vertex type either) — both sides define their own custom `IVertexType`/`VertexDeclaration`, exactly as a real game using `DualTextureEffect`/`SkinnedEffect` would have to |
 | `vertexcolor`, `lighting`, `texture` | `VertexColorEnabled`/`LightingEnabled` (`BasicEffect` only — see the `LightingEnabled` carve-out below)/`TextureEnabled` (`BasicEffect`) or texture-non-null (`AlphaTestEffect`/`DualTextureEffect`/`EnvironmentMapEffect`/`SkinnedEffect`) (`true`/`false`) |
@@ -136,12 +138,13 @@ Requires Pillow (`pip install pillow`) — not previously a dependency of this p
 
 ## Status
 
-Twenty-two scenes so far, **all pixel-perfect**, and every one of XNA's 5 Stock Effects plus
+Twenty-four scenes so far, **all pixel-perfect**, and every one of XNA's 5 Stock Effects plus
 `IEffectFog`, ALL 8 `AlphaTestEffect.AlphaFunction` values (`AlphaTestEffect` compare-function
 coverage is COMPLETE), `EnvironmentMapEffect.FresnelFactor`, ALL 3
 `SkinnedEffect.WeightsPerVertex` values (`SkinnedEffect` weighting coverage is COMPLETE), and
-`SpriteBatch`'s core draw path (basic draw, rotation/origin, `SpriteEffects` flip) is now
-represented in the corpus:
+`SpriteBatch`'s core draw path AND sampler address modes (basic draw, rotation/origin,
+`SpriteEffects` flip, `Wrap`/`Mirror` — `D9-90`/`D9-91`/`D9-92` all COMPLETE) is now represented
+in the corpus:
 
 - `colored3d` (`D9-A2`'s own original spike scene: a `BasicEffect` `VertexColorEnabled=true`/
   `LightingEnabled=false` triangle over a `CornflowerBlue` clear) — `0/65536` pixels differ,
@@ -371,6 +374,20 @@ represented in the corpus:
   `sprite_rotated_quad.scene`'s exact four-color texture with no rotation instead: the horizontal
   texel order swaps (TL↔TR, BL↔BR) while top/bottom stays put, confirmed pixel-for-pixel exactly
   as predicted before running either side.
+- `sprite_wrap_quad` — the first scene to exercise `D9-92`: `SpriteBatch.Begin()` with an
+  explicit `SamplerState.PointWrap` (every earlier scene used `Begin()`'s own default
+  `LinearClamp`). A 2×1 RED/GREEN texture sampled with a `sourceRectangle` DOUBLE the texture's
+  own width tiles the pattern across the destination: `RED,GREEN,RED,GREEN` in 4 clean bands.
+  Predicted before running either side, then confirmed pixel-for-pixel identical.
+- `sprite_mirror_quad` — the second `D9-92` scene, proving `TextureAddressMode.Mirror` is
+  genuinely DIFFERENT from `Wrap`, not just "some non-Clamp behavior". Identical texture,
+  `sourceRectangle`, and destination geometry as `sprite_wrap_quad.scene`, only the sampler
+  changes to a manually-constructed Point/Mirror `SamplerState` (real XNA has no named
+  `PointMirror` preset — only `PointClamp`/`PointWrap`/`LinearClamp`/`LinearWrap`/
+  `AnisotropicClamp`/`AnisotropicWrap`). Standard GPU mirror addressing folds U outside `[0,1]`
+  as a triangle wave (`u_effective = 2-u` for `u` in `[1,2]`), giving a SYMMETRIC pattern around
+  the `U=1` boundary instead of `Wrap`'s repeating one: `RED,GREEN,GREEN,RED`. Confirmed
+  pixel-for-pixel identical to the independently-predicted pattern.
 
 **Real, non-obvious finding surfaced while mutation-testing the half-pixel offset (not caught by
 the oracle diffs alone)**: `sprite_basic_quad.scene`'s own 1×1 texture is structurally incapable
@@ -396,11 +413,11 @@ values (`Less`/`LessEqual`/`GreaterEqual`/`Greater`/`Never`/`Always` on the `PSA
 bucket, `Equal`/`NotEqual` on the separate `PSAlphaTestEqNe` bucket — compare-function coverage is
 now COMPLETE), `EnvironmentMapEffect.FresnelFactor`, ALL 3 `SkinnedEffect.WeightsPerVertex`
 values (`SkinnedEffect` weighting coverage is now COMPLETE), and `SpriteBatch`'s core draw path
-(basic draw, rotation/origin, `SpriteEffects` flip — `D9-90`/`D9-91`) are now represented in the
-corpus, at least once, and every single comparison so far is pixel-perfect.** `D9-A5` keeps
-growing "with the plan" — each subsequent effect/feature combination this project verifies
-against the oracle adds its own scene(s) here, incrementally, rather than attempting the full
-corpus (`SpriteBatch` sampler `Wrap`/`Mirror` address modes and multi-sprite `SpriteSortMode`
-sweep — `D9-92`/`D9-93`, both explicitly not yet closed — render targets, every shared
-`SurfaceFormat`) in one sitting. `D9-84` (every draw path validated against the oracle) is the
-task that consumes the finished corpus.
+AND sampler address modes (basic draw, rotation/origin, `SpriteEffects` flip, `Wrap`/`Mirror` —
+`D9-90`/`D9-91`/`D9-92`, all now COMPLETE) are now represented in the corpus, at least once, and
+every single comparison so far is pixel-perfect.** `D9-A5` keeps growing "with the plan" — each
+subsequent effect/feature combination this project verifies against the oracle adds its own
+scene(s) here, incrementally, rather than attempting the full corpus (multi-sprite
+`SpriteSortMode` sweep — `D9-93`, the only remaining open row in Phase D9-9 — render targets,
+every shared `SurfaceFormat`) in one sitting. `D9-84` (every draw path validated against the
+oracle) is the task that consumes the finished corpus.

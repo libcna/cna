@@ -1,0 +1,32 @@
+# plan_dx9.md D9-A5 scene corpus: sprite_wrap_quad
+# The first scene to exercise D9-92: SpriteBatch with a REAL, discriminating TextureAddressMode
+# (PointWrap), proving Wrap addressing genuinely tiles the source texture rather than clamping to
+# its edge texel. Extends the shared scene format with two new SpriteBatch-mode keys:
+# spritesourcerect (an explicit sourceRectangle, as opposed to every earlier SpriteBatch scene's
+# implicit "whole texture") and spritesampler (a named SamplerState preset passed to
+# SpriteBatch.Begin(), as opposed to every earlier scene's implicit LinearClamp default).
+#
+# Texture: 2x1, texel0=RED, texel1=GREEN. sourceRectangle=(0,0,4,1) -- DOUBLE the texture's own
+# width (2 texels) -- under Point-filtered Wrap addressing, UV coordinates beyond [0,1] tile the
+# pattern rather than clamping: U in [0,0.5)=texel0(RED), [0.5,1)=texel1(GREEN), [1,1.5)=texel0
+# AGAIN (wrapped, RED), [1.5,2)=texel1 AGAIN (wrapped, GREEN) -- a genuine RED,GREEN,RED,GREEN
+# 4-band pattern across the destination, not a 2-band RED,GREEN pattern stretched/clamped to fill
+# the space (which is what Clamp addressing, or a backend that silently ignores the address mode
+# entirely, would produce instead).
+#
+# destinationRectangle=(64,108,128,40) maps this 4-band UV range linearly onto screen X: each
+# 32px-wide band corresponds to exactly one texel-or-wrapped-repeat, landing at clean, easily
+# sampled x boundaries (64,96,128,160,192).
+width=256
+height=256
+profile=HiDef
+clearcolor=100,149,237,255
+spritebatchmode=true
+texturewidth=2
+textureheight=1
+texturepixel=255,0,0,255
+texturepixel=0,255,0,255
+spritedestrect=64,108,128,40
+spritesourcerect=0,0,4,1
+spritesampler=PointWrap
+spritecolor=255,255,255,255

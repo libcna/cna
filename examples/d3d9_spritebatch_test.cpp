@@ -22,6 +22,12 @@
 // Check C -- rotation + origin: a 90-degree rotation around the texture's exact center on a
 //   SQUARE destination (so the bounding box doesn't change) permutes which corner shows which
 //   color in the exact pattern a clockwise 90-degree rotation predicts.
+// Check D/E -- D9-92: TextureAddressMode.Wrap/Mirror, a 2x1 RED/GREEN texture sampled with a
+//   sourceRectangle DOUBLE the texture's own width. Wrap tiles the pattern (RED,GREEN,RED,GREEN);
+//   Mirror folds it symmetrically around the U=1 boundary (RED,GREEN,GREEN,RED) -- genuinely
+//   different, discriminating patterns from the identical source data and geometry, confirmed
+//   pixel-for-pixel against real XNA 4.0 via tools/xna-oracle/scenes/sprite_wrap_quad.scene /
+//   sprite_mirror_quad.scene.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
@@ -34,10 +40,16 @@
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteEffects.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureAddressMode.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureFilter.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 
 #include <cmath>
 #include <cstdio>
+#include <optional>
 #include <optional>
 #include <vector>
 
@@ -207,6 +219,79 @@ protected:
                   "untouched) -- exact per-quadrant color placement confirmed pixel-for-pixel "
                   "against real XNA 4.0 via tools/xna-oracle/scenes/sprite_rotated_quad.scene, "
                   "not re-verified byte-for-byte in this offline CTest");
+        }
+
+        // Check D/E: D9-92 sampler address modes. A 2x1 RED/GREEN texture, sourceRectangle
+        // DOUBLE the texture's own width (0,0,4,1) -- UVs beyond [0,1] must be resolved by the
+        // real TextureAddressMode, not silently clamped/ignored. Wrap tiles the pattern
+        // (RED,GREEN,RED,GREEN across 4 bands); Mirror folds it symmetrically around the U=1
+        // boundary (RED,GREEN,GREEN,RED) -- genuinely different, discriminating patterns from
+        // the identical source data and geometry (a backend that silently treated every address
+        // mode as Clamp, or ignored the mode entirely, would fail both in a DIFFERENT way,
+        // proving these checks are not redundant with each other).
+        {
+            Texture2D tex(dev, 2, 1);
+            const Color kRedC(255, 0, 0, 255), kGreenC(0, 255, 0, 255);
+            const Color pixels[2] = {kRedC, kGreenC};
+            tex.SetData(pixels, 2);
+
+            const Rectangle destRect(64, 108, 128, 40);
+            const Rectangle sourceRect(0, 0, 4, 1);
+            const Rectangle b1(80, 128, 1, 1), b2(112, 128, 1, 1), b3(144, 128, 1, 1), b4(176, 128, 1, 1);
+
+            // Check D: Wrap.
+            {
+                SamplerState pointWrap = SamplerState::PointWrap;
+                dev.Clear(kClear);
+                SpriteBatch sb(dev);
+                sb.Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend, &pointWrap, nullptr, nullptr);
+                sb.Draw(tex, destRect, sourceRect, Color::White);
+                sb.End();
+
+                std::vector<Color> p1(1, Color(0,0,0,0)), p2(1, Color(0,0,0,0)),
+                                   p3(1, Color(0,0,0,0)), p4(1, Color(0,0,0,0));
+                dev.GetBackBufferData(&b1, p1.data(), 0, 1);
+                dev.GetBackBufferData(&b2, p2.data(), 0, 1);
+                dev.GetBackBufferData(&b3, p3.data(), 0, 1);
+                dev.GetBackBufferData(&b4, p4.data(), 0, 1);
+
+                check(SamePixel(p1[0], kRedC) && SamePixel(p2[0], kGreenC) &&
+                      SamePixel(p3[0], kRedC) && SamePixel(p4[0], kGreenC),
+                      "SpriteBatch::Begin(..., SamplerState.PointWrap, ...): a sourceRectangle "
+                      "wider than the texture genuinely TILES the pattern (RED,GREEN,RED,GREEN), "
+                      "confirmed pixel-for-pixel identical to real XNA 4.0 via "
+                      "tools/xna-oracle/scenes/sprite_wrap_quad.scene");
+            }
+
+            // Check E: Mirror (constructed manually -- real XNA has no named "PointMirror"
+            // preset).
+            {
+                SamplerState pointMirror;
+                pointMirror.setFilterProperty(TextureFilter::Point);
+                pointMirror.setAddressUProperty(TextureAddressMode::Mirror);
+                pointMirror.setAddressVProperty(TextureAddressMode::Mirror);
+
+                dev.Clear(kClear);
+                SpriteBatch sb(dev);
+                sb.Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend, &pointMirror, nullptr, nullptr);
+                sb.Draw(tex, destRect, sourceRect, Color::White);
+                sb.End();
+
+                std::vector<Color> p1(1, Color(0,0,0,0)), p2(1, Color(0,0,0,0)),
+                                   p3(1, Color(0,0,0,0)), p4(1, Color(0,0,0,0));
+                dev.GetBackBufferData(&b1, p1.data(), 0, 1);
+                dev.GetBackBufferData(&b2, p2.data(), 0, 1);
+                dev.GetBackBufferData(&b3, p3.data(), 0, 1);
+                dev.GetBackBufferData(&b4, p4.data(), 0, 1);
+
+                check(SamePixel(p1[0], kRedC) && SamePixel(p2[0], kGreenC) &&
+                      SamePixel(p3[0], kGreenC) && SamePixel(p4[0], kRedC),
+                      "SpriteBatch::Begin(..., custom Mirror SamplerState, ...): the same "
+                      "sourceRectangle genuinely FOLDS symmetrically (RED,GREEN,GREEN,RED), "
+                      "distinguishably different from Wrap's tiled pattern above, confirmed "
+                      "pixel-for-pixel identical to real XNA 4.0 via "
+                      "tools/xna-oracle/scenes/sprite_mirror_quad.scene");
+            }
         }
 
         std::printf("=== %d/%d PASS ===\n", passCount, totalCount);

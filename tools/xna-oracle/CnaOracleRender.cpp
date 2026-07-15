@@ -34,6 +34,8 @@
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerStateCollection.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureAddressMode.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureFilter.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
@@ -151,6 +153,12 @@ namespace
         float spriteRotation = 0.0f;
         Vector2 spriteOrigin{0, 0};
         SpriteEffects spriteEffects = SpriteEffects::None;
+        bool spriteSourceRectSet = false;
+        Rectangle spriteSourceRect{0, 0, 0, 0};
+        // D9-92: which named SamplerState preset SpriteBatch::Begin() is given -- defaults to
+        // real XNA's own default (LinearClamp, used when Begin() is called with no samplerState
+        // argument), only meaningful when spriteBatchMode=true.
+        std::string spriteSampler = "LinearClamp";
         SceneVertexFormat vertexFormat = SceneVertexFormat::PositionColor;
         bool vertexColorEnabled = false;
         bool lightingEnabled = false;
@@ -371,6 +379,12 @@ namespace
                 else if (value == "FlipVertically") scene.spriteEffects = SpriteEffects::FlipVertically;
                 else scene.spriteEffects = SpriteEffects::None;
             }
+            else if (key == "spritesourcerect")
+            {
+                scene.spriteSourceRectSet = true;
+                scene.spriteSourceRect = ParseRectangle(value);
+            }
+            else if (key == "spritesampler") scene.spriteSampler = value;
             else if (key == "effect")
             {
                 if (value == "AlphaTestEffect") scene.effectType = SceneEffectType::AlphaTestEffect;
@@ -469,9 +483,24 @@ protected:
             Texture2D spriteTexture(dev, scene_.textureWidth, scene_.textureHeight);
             spriteTexture.SetData(scene_.texturePixels.data(), static_cast<int>(scene_.texturePixels.size()));
 
+            SamplerState sampler = SamplerState::LinearClamp;
+            if (scene_.spriteSampler == "PointClamp") sampler = SamplerState::PointClamp;
+            else if (scene_.spriteSampler == "PointWrap") sampler = SamplerState::PointWrap;
+            else if (scene_.spriteSampler == "LinearWrap") sampler = SamplerState::LinearWrap;
+            else if (scene_.spriteSampler == "PointMirror")
+            {
+                sampler = SamplerState();
+                sampler.setFilterProperty(TextureFilter::Point);
+                sampler.setAddressUProperty(TextureAddressMode::Mirror);
+                sampler.setAddressVProperty(TextureAddressMode::Mirror);
+            }
+
+            std::optional<Rectangle> sourceRect = std::nullopt;
+            if (scene_.spriteSourceRectSet) sourceRect = scene_.spriteSourceRect;
+
             SpriteBatch spriteBatch(dev);
-            spriteBatch.Begin();
-            spriteBatch.Draw(spriteTexture, scene_.spriteDestRect, std::nullopt, scene_.spriteColor,
+            spriteBatch.Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend, &sampler, nullptr, nullptr);
+            spriteBatch.Draw(spriteTexture, scene_.spriteDestRect, sourceRect, scene_.spriteColor,
                              scene_.spriteRotation, scene_.spriteOrigin, scene_.spriteEffects, 0.0f);
             spriteBatch.End();
 
