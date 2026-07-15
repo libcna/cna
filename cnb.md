@@ -8,11 +8,20 @@
 > migrated once, offline, to either a directly-loadable native format (PNG/JPEG/WAV, loaded by
 > extension) or a `.cnb` JSON file next to the original asset.
 >
-> **Nothing in this document is implemented yet.** This is a design/planning document only, in the
-> same spirit as `xnb.md` — it exists so the two strategies (full binary XNB support vs. this
-> lightweight `.cnb` approach) can be compared and a decision made before any code is written. See
-> the "Relationship to `xnb.md`/`plan_xnb.md`" section at the end for how the two documents/plans
-> are meant to coexist.
+> **Status: the strategy is already reality, the file convention isn't unified yet.** CNA's
+> `ContentManager` (`src/Microsoft/Xna/Framework/Content/ContentManager.cpp`) already implements
+> exactly this "no binary XNB, native-by-extension or JSON-sidecar" strategy today — `Texture2D`/
+> `TextureCube`/`SoundEffect`/`Song`/`Video` load natively by extension, and `SpriteFont`/`Model`/
+> `Effect`/`SkinnedModelEXT` already load from hand-written JSON descriptors with binary sidecars
+> for large data (`.model.json` + `.verts.bin`/`.idx.bin`, `.skinnedmodel.json` +
+> `.skeleton.bin`/`.clip.bin`). What's *not* yet true is the single-shared-`.cnb`-extension part —
+> each of those four JSON types currently has its own bespoke extension (`.font.json`, `.model.json`,
+> `.shader.json`, `.skinnedmodel.json`) instead of one `.cnb` extension with an internal `"type"`
+> field. See "Relationship to CNA's existing per-type JSON conventions" below for what unifying them
+> would actually require. This document is a **target design**, not a green-field proposal — the
+> open question is whether/when to migrate the four existing formats onto it, not whether the
+> underlying strategy is sound (it's already shipping). See also the "Relationship to
+> `xnb.md`/`plan_xnb.md`" section at the end for how the two binary-vs-JSON strategies compare.
 
 ## Why this alternative exists
 
@@ -43,47 +52,78 @@ actually requires" below for how large that cost really is in practice.
 
 ## The core rule
 
-For any asset CNA is asked to load by logical name (e.g. `"Textures/player"`), resolve it as follows:
+For any asset CNA is asked to load by logical name (e.g. `"Textures/player"`), resolve it as
+follows — **`.cnb` is checked first, native extensions are the fallback**:
 
 ```text
-1. If a file with that name AND a recognized native extension exists
-   (e.g. "player.png", "player.jpg", "player.wav"), load it directly with the
-   reader selected by that extension. No .cnb file is involved at all.
+1. If "<name>.cnb" exists, load it as a .cnb JSON document. The "type" field
+   inside the JSON is cross-checked against the requested C++ type T, then
+   either:
+     a. the document is self-contained (all data inline or via type-specific
+        fields, e.g. SpriteFont/Model/Effect today) -- built from that, or
+     b. the document has a "sourceFile" field -- that referenced file is
+        loaded through step 2 below (recursively, through the same
+        ContentManager), and the .cnb's own fields are applied on top as
+        metadata/overrides (see "`.cnb` as metadata for a native sibling
+        file" below).
 
-2. Otherwise, if "<name>.cnb" exists, load it as a .cnb JSON document. The
-   "type" field inside the JSON selects which CNA loader/deserializer handles
-   the rest of the document (see "Per-type .cnb conventions" below).
+2. Otherwise, if a file with that name AND a recognized native extension
+   exists (e.g. "player.png", "player.jpg", "player.wav"), load it directly
+   with the reader selected by that extension. No .cnb file is involved.
 
 3. Otherwise: asset not found -- same failure behavior as today's
    ContentManager for a missing file.
 ```
 
-Restated even more simply, per the issue description: **the file extension picks the reader, unless
-the file is itself a `.cnb`, in which case the `"type"` field inside the JSON picks the reader.**
-This is a strict two-level dispatch, not a fallback chain with many rungs — it deliberately mirrors
-how `ContentManager.Load<T>()` already resolves a logical asset name to a file today, just with one
-extra rule (`.cnb` sidecar) bolted on.
+This order (`.cnb` first) matters for one reason: it lets `.cnb` act as an *optional enrichment
+layer* over an otherwise-ordinary native file, not just as a mutually-exclusive alternative to one.
+`Content/Textures/ahoj.png` can exist entirely on its own (loads exactly as it does today, zero
+`.cnb` involved, zero behavior change) — or it can be joined by `Content/Textures/ahoj.cnb` that adds
+metadata the PNG format itself can't carry (color-key transparency, a sprite-sheet sub-rect, a hint
+that the "real" pixel data is actually in some other, non-self-describing file). Checking native
+extensions first would make that impossible: whichever native file exists would always win, and a
+sibling `.cnb` could never be consulted for an asset a native loader already claims. Checking `.cnb`
+first costs one extra failed file-exists check per load when no `.cnb` is present — negligible.
+
+Restated: **`.cnb`, when present, always has final say over how an asset name resolves; failing
+that, the file extension picks the reader.** This still mirrors how `ContentManager.Load<T>()`
+resolves a logical asset name to a file today (`ResolveAssetPath` already tries a list of candidate
+paths in order) — it just means `.cnb` needs to be the *first* candidate tried for every registered
+type, not appended after that type's own native extensions.
 
 ```cpp
 // Sketch only -- illustrates the dispatch rule, not a proposed final API.
 std::shared_ptr<void> ContentManager::Load(const std::string& assetName)
 {
-    if (auto nativePath = ResolveNativeExtension(assetName))
-    {
-        return LoadByExtension(*nativePath);   // .png/.jpg/.wav/... reader
-    }
-
     const auto cnbPath = assetName + ".cnb";
     if (FileExists(cnbPath))
     {
-        return LoadCnb(cnbPath);                // JSON "type" field dispatch
+        return LoadCnb(cnbPath);               // JSON "type" field dispatch,
+                                                 // possibly delegating to a
+                                                 // "sourceFile" below.
+    }
+
+    if (auto nativePath = ResolveNativeExtension(assetName))
+    {
+        return LoadByExtension(*nativePath);   // .png/.jpg/.wav/... reader
     }
 
     throw ContentLoadException("Asset not found: " + assetName);
 }
 ```
 
-### Natively-loadable extensions (no `.cnb` involved)
+Note on dispatch: CNA's real `ContentManager::Load<T>()` already requires the caller to name `T` at
+the call site (`cm.Load<SpriteFont>("Fonts/Consolas")`), exactly like original XNA's own generic
+`ContentManager.Load<T>(string assetName)`. So `"type"` inside a `.cnb` file is not the primary
+dispatch mechanism — `T` is, same as today, and it's how `ResolveAssetPath` already picks which
+reader's candidate list to try (now with `.cnb` prepended ahead of that reader's own native
+extensions, per the reordering above). `"type"` exists for the same reason the real `.xnb` format's
+own reader-name table exists despite C# callers already knowing `T` at compile time: an integrity
+check (catch "asset says Model, caller asked for SpriteFont" with a clear error instead of a
+confusing field-parsing failure) and a hook for tooling that doesn't have a compile-time `T` (asset
+validators, migration scripts, an editor's "what is this file" inspector).
+
+### Native extensions (the `.cnb`-absent fallback)
 
 | Extension | CNA type | Notes |
 |-----------|----------|-------|
@@ -93,9 +133,12 @@ std::shared_ptr<void> ContentManager::Load(const std::string& assetName)
 | `.ogg`, `.mp3` | `SoundEffect`/`Song` | If/where CNA's audio backend already supports these container formats; otherwise deferred, same as any other format gap — not a `.cnb`-specific concern. |
 | (future) any format with an existing native CNA loader | whatever that loader produces | The extension-dispatch rule is intentionally generic — adding a new native format later is just adding one more row here, no `.cnb` schema change needed. |
 
-None of the above need any design work from this document — they are either already implemented or
-are ordinary "add a loader for format X" tasks independent of the `.cnb` idea. The interesting new
-design surface is entirely in `.cnb` itself.
+None of the above need any design work from this document when no `.cnb` sidecar is present — they
+are either already implemented or are ordinary "add a loader for format X" tasks independent of the
+`.cnb` idea, and they keep working exactly as they do today with zero `.cnb` files anywhere in a
+project. What *is* new design surface: any of these native types can now optionally gain a same-named
+`.cnb` sidecar (see next section) purely for extra metadata, without giving up native decoding for
+the actual pixel/audio bytes.
 
 ## `.cnb` file shape
 
@@ -113,21 +156,33 @@ A `.cnb` file is always a single JSON object with (at least) these top-level fie
   envelope shape changes (e.g. if a `"assetName"`/`"sourceTool"` provenance field is added later).
   Per-type schema evolution is handled by each type's own fields/versioning, not this field.
 - `type` — a stable string key (e.g. `"SpriteFont"`, `"Model"`, `"Effect"`, `"AnimationClip"`, or a
-  game-specific type name for migrated custom data) that a registry maps to a C++
-  deserializer/factory, structurally analogous to how `plan_xnb.md`'s reader registry maps an XNA
-  reader name to a `ContentTypeReader`, but over a JSON key instead of a binary
-  assembly-qualified name — so no generic-name parsing (`plan_xnb.md`'s XNB-13/13A problem) exists
-  in this format at all.
+  game-specific type name for migrated custom data) identifying what the document is. As covered in
+  "Note on dispatch" above, the primary dispatch key in CNA is still the requested C++ type `T` at
+  the `Load<T>()` call site — `type` is a cross-check against that, structurally analogous to how
+  `plan_xnb.md`'s reader-name table lets `.xnb` verify what it's reading, but as a plain JSON string
+  instead of a binary assembly-qualified name — so no generic-name parsing (`plan_xnb.md`'s
+  XNB-13/13A problem) exists in this format at all. For tooling with no compile-time `T` (asset
+  validators, migration scripts), `type` doubles as the actual dispatch key into a small
+  string-to-handler table.
+- `sourceFile` — **optional**. When present, this `.cnb` is a *metadata sidecar* for another file
+  (usually a same-named native file, e.g. `ahoj.cnb` with `"sourceFile": "ahoj.png"`), not a
+  self-contained descriptor. See "`.cnb` as metadata for a native sibling file" below. When absent,
+  the `.cnb` document is expected to be fully self-contained (as `SpriteFont`/`Model`/`Effect` are
+  today).
 - Everything else is defined per-type (see below). There is no shared binary primitive layer, no
   7-bit encoded integers, no shared-resource object graph — ordinary JSON object/array/number/string
-  nesting *is* the object graph, resolved by whatever JSON library CNA already uses/adopts.
+  nesting *is* the object graph. CNA's existing four JSON readers parse fields with small hand-rolled
+  helpers (`ExtractJsonStringField`/`JsonInt`/`JsonFloat`/... in `ContentManager.cpp`), not a general
+  JSON library — a `.cnb` migration should either keep using/extending those helpers or adopt a real
+  JSON library at that point, since a shared envelope makes a common parse-then-dispatch entry point
+  worth having either way.
 
 ### Referencing other files from within a `.cnb`
 
 A `.cnb` document may reference other assets by logical name/relative path (e.g. a `SpriteFont`
 referencing its glyph atlas texture, or a `Model` referencing per-mesh textures). Those references
-are just strings resolved through the same two-level dispatch rule above (native extension first,
-then `.cnb`), recursively, through the owning `ContentManager` — this gives asset caching and
+are just strings resolved through the same two-level dispatch rule above (`.cnb` first, then native
+extension), recursively, through the owning `ContentManager` — this gives asset caching and
 `Unload()` semantics "for free" reusing the identical mechanism already used for the top-level
 asset. There is no separate "external reference" object model needed (contrast with `plan_xnb.md`'s
 `ContentReader::ReadExternalReference<T>()`, which exists only because raw `.xnb` has no such
@@ -142,10 +197,77 @@ built-in path-resolution convention).
   "spacing": 0.0,
   "defaultCharacter": "?",
   "glyphs": [
-    { "character": "A", "sourceRect": [0, 0, 16, 24], "cropping": [0, 0, 16, 24], "kerning": [1, 14, 1] }
+    { "char": 65, "source": [0, 0, 16, 24], "crop": [0, 0, 16, 24], "kerning": [1, 14, 1] }
   ]
 }
 ```
+
+Field names (`char`/`source`/`crop`, integer char code rather than a one-char string) intentionally
+match CNA's already-shipping `.font.json` convention (`SpriteFontTypeReader::Read` in
+`ContentManager.cpp`) instead of inventing new ones — a future migration to `.cnb` then only needs to
+add the envelope (`cnbVersion`/`type`) and rename the extension, not rename every field too.
+
+### `.cnb` as metadata for a native sibling file (the `sourceFile` field)
+
+A `.cnb` document doesn't have to be self-contained. If it has a `"sourceFile"` field, CNA loads that
+referenced file the normal way (native extension, recursively through the same `ContentManager` —
+same caching/`Unload()` mechanism as any other reference) and treats the rest of the `.cnb`'s fields
+as *metadata about* that file rather than as the data itself:
+
+```json
+{
+  "cnbVersion": 1,
+  "type": "Texture2D",
+  "sourceFile": "ahoj.png",
+  "colorKey": [255, 0, 255],
+  "premultipliedAlpha": true
+}
+```
+
+This is genuinely new capability, not a rename of something that already exists: today `Texture2D`/
+`SoundEffect`/etc. only ever load a self-describing native file as-is — there is no way to attach
+CNA-specific import metadata (color-key transparency, a sprite-sheet sub-rect, premultiplied-alpha
+hints, mip generation, ...) without baking it into the pixel data itself or inventing a whole new
+file format. `sourceFile` gives every asset type that same "metadata + payload" split `Model`
+(`.model.json` + `.verts.bin`/`.idx.bin`) and `SkinnedModelEXT` (`.skinnedmodel.json` +
+`.skeleton.bin`/`.clip.bin`) already have, generalized to *any* payload — including a normal, already
+fully-supported native format the `.cnb` is simply enriching, or a raw/proprietary blob (arbitrary
+extension, or none at all) that isn't self-describing and needs the `.cnb`'s fields (width, height,
+pixel format, compression, ...) to be interpreted at all. `sourceFile` is resolved through the exact
+same two-step rule as the top-level asset (`.cnb` first, then native extension) — it just can't
+itself point at another `.cnb` with its own `sourceFile` (no chained/recursive sidecars; one `.cnb`
+per physical payload, matching how `Model`'s sidecars are never themselves JSON).
+
+Authoring note: `.cnb`'s presence always wins (see "The core rule" above) — a `Content/ahoj.png` with
+an unrelated, coincidentally-same-named `Content/ahoj.cnb` sitting next to it (self-contained, no
+`sourceFile`, describing something else entirely) will shadow the PNG, not merge with it. This isn't
+a resolver bug, it's the same "one name, `.cnb` wins" rule applied consistently — but it's worth
+calling out explicitly as a content-authoring footgun, since nothing on disk visually distinguishes
+"enrichment sidecar" from "unrelated same-named asset" other than opening the file and checking for
+`sourceFile`.
+
+### Why one shared extension is not a new risk
+
+A natural objection: doesn't collapsing every JSON type onto one `.cnb` extension mean two
+differently-typed assets that happen to share a logical name (e.g. a `SpriteFont` and an
+`AnimationClip` both called `"Cursor"`) collide on the same physical file, `Cursor.cnb`?
+
+Yes — but this is exactly how original XNA's real `.xnb` pipeline already behaved, for the same
+reason: the content build step always produces one `<name>.xnb` per logical asset name, regardless
+of source type, and the *type* is resolved from inside the file (the reader-name table), not from
+the extension. A real XNA content project could never contain both an image and a sound that both
+built to `hello.xnb` — that was already a build-time conflict in the original tooling, not something
+`.cnb` invents. CNA's own current `.font.json`/`.model.json`/`.shader.json`/`.skinnedmodel.json`
+split is the actual deviation from original XNA behavior here (a convenience CNA added because it
+was easy, not because XNA worked that way). Adopting one shared `.cnb` extension is not a new risk
+relative to XNA — it is CNA becoming *more* faithful to how the real `ContentManager` always worked:
+one physical asset per logical name, type resolved from content, not filename.
+
+The real, if more modest, cost is opacity: unlike `.font.json` vs. `.model.json`, a person or tool
+browsing a `Content/` folder full of `.cnb` files can no longer tell a font from a model without
+opening one — same as original `.xnb`, where every asset file also looked identical from outside a
+file browser. Tooling (an asset validator, an editor "inspect this file" command) needs to open and
+read `"type"` to know what something is, exactly like a `.xnb`-aware tool would.
 
 ## Per-type `.cnb` conventions
 
@@ -169,6 +291,75 @@ essentially the same hard/impossible boundary here. `.cnb` does not make the gen
 problem solvable, and does not make large per-vertex arrays pleasant in JSON — it only removes the
 *binary protocol and reader-registry* complexity around the parts that were never protocol-hard to
 begin with (primitives, math structs, simple metadata, font/model metadata).
+
+## Custom loaders (game-registered, selected by `.cnb` `"type"`)
+
+CNA already has `ContentManager::RegisterTypeReader<T>()` (`ContentManager.hpp`) — a game can
+register its own reader for a whole C++ type `T`. But that registry is keyed by `std::type_index`,
+one reader per `T`, fixed by whatever `Load<T>()` call sites use. It has no way for two `.cnb` files
+that both request the same `T` to be parsed by two different, independently-registered pieces of
+game code chosen at runtime by the `.cnb` itself — e.g. a game with both `"EnemyDefinition"` and
+`"LootTable"` `.cnb` `type`s that happen to deserialize into the same generic `T` needs two different
+parsing functions, not one.
+
+A second registry closes that gap: keyed by the `.cnb` `"type"` string instead of `std::type_index`.
+
+```cpp
+// Sketch only.
+template <typename T>
+using CnbLoaderFn = std::function<T(const JsonValue& cnbDocument, ContentManager& cm)>;
+
+template <typename T>
+void ContentManager::RegisterCnbLoader(const std::string& typeName, CnbLoaderFn<T> factory);
+```
+
+When a `.cnb`'s `"type"` doesn't match one of CNA's own built-in per-type conventions (`"SpriteFont"`,
+`"Model"`, ...) for the requested `T`, `LoadCnb` falls through to this table, looks up `typeName`, and
+invokes the registered factory with the parsed JSON document and the owning `ContentManager` (so the
+factory can recursively `Load<...>()` any files it references, same as a built-in reader would). No
+`ContentTypeReader<T>` subclass or CNA core change is needed per game-specific `.cnb` `type` — same
+"don't grow CNA core for one game's data" principle already used for the plain game-specific-`type`
+row in the table above, just now with the dispatch key coming from the `.cnb` file itself instead of
+requiring the caller to already know which of several shapes it's asking for.
+
+This is the closest practical C++ analog of how real XNA's `.xnb` format let a reader be identified
+purely by an assembly-qualified name embedded in the file, decoupled from whatever the calling code
+asked for — except as a plain string key into an explicitly pre-registered table instead of runtime
+reflection over a loaded .NET assembly, so none of the dynamic type-loading/reflection machinery
+`plan_xnb.md` already argues against needs to exist for this either.
+
+## Relationship to CNA's existing per-type JSON conventions
+
+This document's `.cnb` envelope (`cnbVersion`/`type` wrapper, single shared extension) is not
+implemented today; CNA's four existing JSON content readers predate it and use their own bespoke
+extensions instead:
+
+| Existing extension | Reader class | Real field names (for reference) |
+|---|---|---|
+| `.font.json` | `SpriteFontTypeReader` | `texture`, `lineSpacing`, `spacing`, `defaultCharacter`, `glyphs[].char`/`source`/`crop`/`kerning` |
+| `.model.json` | `ModelTypeReader` | `bones`, `meshes[].vertices`/`indices`/`vertexStride`/`texture` (binary sidecars for vertex/index data) |
+| `.shader.json` | `EffectTypeReader` | see `EffectTypeReader::Read` in `ContentManager.cpp` |
+| `.skinnedmodel.json` | `SkinnedModelTypeReader` (NOXNA, Avatar-only) | `skeleton`, `parts[].vertices`/`indices`/`vertexStride`/`texture`, `animations[].name`/`clip` |
+
+If this `.cnb` design is adopted as the long-term target, unifying these four is a **migration of
+already-working, already-tested code**, not a green-field build: each reader's `GetExtensions()`
+changes from its own extension to `{".cnb"}`, each reader gains a `"cnbVersion"`/`"type"` envelope
+check, and every existing `.font.json`/`.model.json`/`.shader.json`/`.skinnedmodel.json` file in the
+repo (examples, tests, and any real game content authored against the current convention) needs
+renaming plus the two new envelope fields added. None of the four readers' actual field parsing needs
+to change otherwise — preserving today's field names as-is (as the `SpriteFont` example above does)
+keeps that diff small and low-risk.
+
+Two things introduced above are *not* just a rename, though, and are net-new scope beyond migrating
+the four existing readers: the `.cnb`-first resolution order (letting `.cnb` act as an optional
+metadata sidecar for `Texture2D`/`SoundEffect`/etc., which have never had any sidecar mechanism at
+all) and the `RegisterCnbLoader<T>` custom-loader registry (nothing today provides an equivalent).
+Both extend the four-reader migration; neither depends on it being done first.
+
+This is separate from (and much smaller than) the XNA→CNA *content migration* effort described below
+in "What migration actually requires" (which is about converting original `.fbx`/`.png`/`.wav`/
+`.spritefont` XNA source assets into CNA's format at all, whichever format CNA settles on —
+orthogonal to whether CNA's own JSON conventions are unified under one extension or four).
 
 ## What migration actually requires
 
@@ -229,10 +420,33 @@ problem, or the FBX/model-importer cost on the writer side) apply identically he
 ## Suggested next step (not started)
 
 If this direction is confirmed, the natural follow-up is a `plan_cnb.md` numbered task list
-(`CNB-1`, `CNB-2`, ...), mirroring how `plan_xnb.md` turned `xnb.md` into concrete tasks — covering:
-the extension/`.cnb` resolver in `ContentManager`, the JSON envelope + registry, the first two or
-three per-type schemas (`SpriteFont` and stock-effect parameters are the cheapest, highest-value
-targets, matching this session's sample survey showing `SpriteFont`/texture/audio as the dominant
-asset types), and only afterward `Model`/animation data and the export-tool design. No such task
-list has been created yet — this document is analysis/design only, per the request that scoped it
-to a plan document, not implementation.
+(`CNB-1`, `CNB-2`, ...), mirroring how `plan_xnb.md` turned `xnb.md` into concrete tasks. Unlike a
+green-field build, most of the work is now a **migration of four already-working, already-tested
+readers** (see "Relationship to CNA's existing per-type JSON conventions" above), not new design:
+
+1. Add the `"cnbVersion"`/`"type"` envelope convention + a small shared validation helper (reject a
+   `.cnb` whose `"type"` doesn't match the reader that opened it).
+2. Change `ResolveAssetPath` to try `.cnb` before a reader's own declared extensions, for *every*
+   registered type (not just the four JSON ones) — this is what lets `Texture2D`/`SoundEffect`/etc.
+   gain optional `.cnb` sidecars later without another resolver change.
+3. Add `"sourceFile"` support to the envelope helper (load the referenced file via the same
+   `ResolveAssetPath`, apply the `.cnb`'s remaining fields as overrides) and wire it into
+   `Texture2DTypeReader` first, as the smallest useful end-to-end proof (e.g. `colorKey` support via
+   a `.cnb` sidecar — something the native PNG path has no way to express today).
+4. Migrate `SpriteFontTypeReader` (`.font.json` → `.cnb`, cheapest of the four, smallest blast
+   radius) — update its `GetExtensions()`, its field parsing to expect the envelope, and every
+   example/test `.font.json` file in the repo.
+5. Migrate `EffectTypeReader` (`.shader.json` → `.cnb`) the same way.
+6. Migrate `ModelTypeReader` (`.model.json` → `.cnb`) — larger blast radius (`docs/model-content-
+   pipeline-support.md` already documents several open gaps in this reader; worth fixing those in the
+   same pass or explicitly deferring, not silently carrying them into the new format).
+7. Decide whether `SkinnedModelTypeReader` (`.skinnedmodel.json`, NOXNA/Avatar-only) migrates too, or
+   stays deliberately separate since it's already a distinct, non-`Model`-shaped system (see
+   `docs/avatar-real-rendering-ext.md`).
+8. Add `RegisterCnbLoader<T>` (see "Custom loaders" above) once the envelope/dispatch plumbing from
+   steps 1-3 exists to hang it off of.
+9. Only afterward: genuinely new `.cnb` types that don't have an existing reader today (e.g.
+   `AnimationClip` for plain `Model`, game-specific custom data).
+
+No such task list has been created yet — this document is analysis/design only, per the request that
+scoped it to a plan document, not implementation.
