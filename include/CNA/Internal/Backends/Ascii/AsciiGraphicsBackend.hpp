@@ -2,6 +2,7 @@
 
 #include "../Common/IGraphicsBackend.hpp"
 #include "../SdlRenderer/SdlGraphicsBackend.hpp"
+#include "AsciiFontAtlas.hpp"
 #include "AsciiQuantizer.hpp"
 #include <memory>
 
@@ -39,6 +40,19 @@ namespace CNA::Internal::Backends::Ascii
         void SetMode(AsciiQuantizeMode mode) { mode_ = mode; }
         [[nodiscard]] AsciiQuantizeMode GetMode() const { return mode_; }
 
+        /// Sets the source-pixel block size (design decision 6) that Present() hands to
+        /// QuantizeFrameToGrid() every frame -- how many gameTarget_ pixels are averaged into one
+        /// glyph cell, which in turn determines the grid's column/row count for a given logical
+        /// resolution. Independent of the font atlas' own fixed 8x8 glyph texture size: the grid
+        /// cell's on-screen quad is always stretched to fill realWidth/columns x
+        /// realHeight/rows, whatever that resolves to, so a coarser/finer cell size here just
+        /// changes how many cells there are, not how the atlas is sampled. Callable at any time,
+        /// including before Game::Run(), same as SetMode(). Defaults to
+        /// kAsciiGlyphWidth x kAsciiGlyphHeight (8x8).
+        void SetCellSize(int width, int height);
+        /// Retrieves the current source-pixel block size set by SetCellSize().
+        void GetCellSize(int& width, int& height) const;
+
         /// Does everything Present() does EXCEPT the real double-buffer swap and the gameTarget_
         /// rebind -- exposed only for testing (Ascii_Present ctest). A real swap can genuinely
         /// invalidate immediate readback of what was just drawn (confirmed empirically: SDL's
@@ -46,6 +60,12 @@ namespace CNA::Internal::Backends::Ascii
         /// drawn pixel content must read them before any swap happens. Real game code must always
         /// call Present() instead -- never this.
         void DrawQuantizedGridForTesting();
+
+        /// Reports the glyph grid's column/row count as of the most recent Present()/
+        /// DrawQuantizedGridForTesting() call -- exposed only for testing (Ascii_Present ctest),
+        /// so a test can confirm SetCellSize() actually changed what Present() draws, not just
+        /// that the setter/getter round-trip.
+        void GetLastGridDimensionsForTesting(int& columns, int& rows) const;
 
         /// Reads the REAL backbuffer (not gameTarget_) -- exposed only for testing
         /// (Ascii_Present ctest), normally called right after DrawQuantizedGridForTesting().
@@ -124,6 +144,14 @@ namespace CNA::Internal::Backends::Ascii
         /// Quantization mode, parsed from CNA_ASCII_MODE at construction (design decision 5),
         /// overridable at any time via SetMode().
         AsciiQuantizeMode mode_ = AsciiQuantizeMode::Color;
+        /// Source-pixel block size Present() quantizes with (design decision 6), overridable at
+        /// any time via SetCellSize(). Defaults to the font atlas' own glyph size.
+        int cellWidth_ = kAsciiGlyphWidth;
+        int cellHeight_ = kAsciiGlyphHeight;
+        /// Grid dimensions from the most recent DrawQuantizedGridOntoRealBackbuffer() call --
+        /// exposed via GetLastGridDimensionsForTesting() only.
+        int lastGridColumns_ = 0;
+        int lastGridRows_ = 0;
 
         /// (Re)creates gameTarget_ at the given size and binds it as the current target.
         void RecreateGameTarget(int width, int height);

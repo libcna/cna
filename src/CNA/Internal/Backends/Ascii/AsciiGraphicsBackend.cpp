@@ -3,6 +3,7 @@
 #include "Microsoft/Xna/Framework/Graphics/Blend.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendFunction.hpp"
 
+#include <stdexcept>
 #include <vector>
 
 namespace CNA::Internal::Backends::Ascii
@@ -33,6 +34,22 @@ namespace CNA::Internal::Backends::Ascii
 
     void AsciiGraphicsBackend::Clear(float r, float g, float b, float a) { inner_->Clear(r, g, b, a); }
 
+    void AsciiGraphicsBackend::SetCellSize(int width, int height)
+    {
+        if (width <= 0 || height <= 0)
+        {
+            throw std::invalid_argument("CNA Ascii: cell size must be positive");
+        }
+        cellWidth_ = width;
+        cellHeight_ = height;
+    }
+
+    void AsciiGraphicsBackend::GetCellSize(int& width, int& height) const
+    {
+        width = cellWidth_;
+        height = cellHeight_;
+    }
+
     // Shared by Present() and DrawQuantizedGridForTesting(): reads gameTarget_ back while it's
     // still bound (ReadBackbuffer reads whatever's current), quantizes that into a glyph/color
     // grid, switches to the real backbuffer, and draws the grid there -- one tinted textured
@@ -47,7 +64,9 @@ namespace CNA::Internal::Backends::Ascii
         inner_->ReadBackbuffer(0, 0, virtualWidth_, virtualHeight_, pixels.data());
 
         const AsciiGrid grid = QuantizeFrameToGrid(pixels.data(), virtualWidth_, virtualHeight_,
-                                                   kAsciiGlyphWidth, kAsciiGlyphHeight, mode_);
+                                                   cellWidth_, cellHeight_, mode_);
+        lastGridColumns_ = grid.columns;
+        lastGridRows_ = grid.rows;
 
         inner_->SetRenderTarget2D(nullptr);
 
@@ -114,6 +133,12 @@ namespace CNA::Internal::Backends::Ascii
     void AsciiGraphicsBackend::DrawQuantizedGridForTesting()
     {
         DrawQuantizedGridOntoRealBackbuffer();
+    }
+
+    void AsciiGraphicsBackend::GetLastGridDimensionsForTesting(int& columns, int& rows) const
+    {
+        columns = lastGridColumns_;
+        rows = lastGridRows_;
     }
 
     void AsciiGraphicsBackend::ReadRealBackbufferForTesting(int x, int y, int w, int h, uint8_t* pixels)

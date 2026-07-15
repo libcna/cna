@@ -15,6 +15,10 @@
 // Check B -- sampling the CENTER of a cell (row 3-4, columns 1-6 of '+' are on) must read the
 //   exact foreground color.
 // Check C -- Present() does not throw.
+// Check D (ASCII-30) -- SetCellSize()/GetCellSize() round-trip, an invalid size throws
+//   std::invalid_argument, and -- the actual functional claim, not just the accessors --
+//   changing the cell size measurably changes the grid Present() draws: the default 8x8 cell on
+//   a 64x64 view produces an 8x8 grid, while a 16x16 cell on that same view produces a 4x4 grid.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
@@ -27,6 +31,7 @@
 
 #include <cstdio>
 #include <memory>
+#include <stdexcept>
 #include <vector>
 
 using namespace Microsoft::Xna::Framework;
@@ -96,8 +101,34 @@ protected:
         check(PixelEquals(pixels, realWidth, 4, 4, 140, 140, 140),
               "Cell (0,0) center (glyph row4 col4, on for '+') reads the exact foreground color (140,140,140)");
 
-        std::printf("=== %d/%d PASS ===\n", passCount_, 4);
-        result_ = (passCount_ == 4) ? 0 : 1;
+        // Check D (ASCII-30): the grid's cell pixel size is genuinely runtime-configurable, not
+        // just a fixed 8x8 baked into Present() -- SetCellSize()/GetCellSize() round-trip,
+        // reject an invalid size, and actually change the grid Present() draws.
+        int defaultCellW = 0, defaultCellH = 0;
+        backend.GetCellSize(defaultCellW, defaultCellH);
+        check(defaultCellW == 8 && defaultCellH == 8, "GetCellSize() defaults to 8x8 (kAsciiGlyphWidth x kAsciiGlyphHeight)");
+
+        int gridCols = 0, gridRows = 0;
+        backend.GetLastGridDimensionsForTesting(gridCols, gridRows);
+        check(gridCols == 8 && gridRows == 8, "Default 8x8 cell size on a 64x64 view produces an 8x8 grid");
+
+        bool threwInvalid = false;
+        try { backend.SetCellSize(0, 8); }
+        catch (const std::invalid_argument&) { threwInvalid = true; }
+        check(threwInvalid, "SetCellSize(0, 8) throws std::invalid_argument");
+
+        backend.SetCellSize(16, 16);
+        int newCellW = 0, newCellH = 0;
+        backend.GetCellSize(newCellW, newCellH);
+        check(newCellW == 16 && newCellH == 16, "SetCellSize(16, 16) / GetCellSize() round-trip");
+
+        backend.DrawQuantizedGridForTesting();
+        backend.GetLastGridDimensionsForTesting(gridCols, gridRows);
+        check(gridCols == 4 && gridRows == 4,
+              "SetCellSize(16, 16) on a 64x64 view produces a 4x4 grid -- Present() actually honors it, not just the accessor");
+
+        std::printf("=== %d/%d PASS ===\n", passCount_, 9);
+        result_ = (passCount_ == 9) ? 0 : 1;
         Exit();
     }
 

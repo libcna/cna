@@ -63,6 +63,7 @@ creates itself is bound exactly as `SDL_RENDERER` already does, unaffected.
 | `Color` mode (default) | ✅ | Foreground = the cell's own exact averaged color; background = that color at quarter brightness. A real, if simple, implementation of an "optional" background fill, not skipped. |
 | `CNA_ASCII_MODE` env-var selection | ✅ | `BLACKWHITE`/`COLOR`, case-insensitive, defaults to `COLOR` on unset/unrecognized — mirrors `HEADLESS`'s own `ParseHeadlessModeFromEnvironment()` pattern exactly. `AsciiGraphicsBackend::SetMode()`/`GetMode()` also available programmatically. |
 | Non-exact-multiple source sizes | ✅ | Grid rounds up (`ceil`); edge cells only average the real remaining pixels, never out-of-bounds memory. Verified with a 20px-wide image against 8px cells (`Ascii_Quantizer` ctest). |
+| Cell pixel size | ✅ (runtime-configurable) | `AsciiGraphicsBackend::SetCellSize(int, int)`/`GetCellSize(int&, int&)` control how many `gameTarget_` pixels `Present()` averages per glyph cell (default 8×8, the font atlas' own glyph size); throws `std::invalid_argument` for non-positive sizes. Independent of the atlas' fixed 8×8 glyph texture and of the on-screen cell size, which is always `realWidth/columns`×`realHeight/rows` regardless. `Ascii_Present` ctest: `SetCellSize(16, 16)` on a 64×64 view measurably produces a 4×4 grid instead of 8×8. |
 | Dirty-cell diffing (perf optimization) | ⬜ not implemented | Optional, perf-only (`ASCII-42`) — every frame fully re-reads, re-quantizes, and redraws the whole grid. Left for later if performance ever demands it; not a correctness gap. |
 
 ## 4. The font atlas (`AsciiFontAtlas`)
@@ -70,8 +71,17 @@ creates itself is bound exactly as `SDL_RENDERER` already does, unaffected.
 | Feature | Status | Rationale |
 |---|---|---|
 | Glyph coverage | ✅ (10 characters, by design) | Hand-authored 8×8 pixel data for exactly the 10 characters in `kAsciiGlyphRamp` — not a vendored CP437/font file, avoiding a new asset/license dependency entirely (`plan_ascii.md` design decision 4). The quantizer only ever indexes by ramp position, never by arbitrary character, so a fuller font would be unused scope. Extending to more glyphs (or 8×16) later is a data-only change, no architecture change. |
-| `BuildAsciiFontAtlas(GraphicsDevice&)` | ✅ | Real `SpriteFont` wrapper for application/diagnostic code that already has a `GraphicsDevice` (e.g. `DrawString` demos) — uses the same "app builds the atlas itself" constructor path every CNA `SpriteFont` test already uses; no XNB pipeline needed. |
+| `BuildAsciiFontAtlas(GraphicsDevice&)` | ✅ | Real `SpriteFont` wrapper for application/diagnostic code that already has a `GraphicsDevice` (e.g. `DrawString` demos) — uses the same "app builds the atlas itself" constructor path every CNA `SpriteFont` test already uses; no XNB pipeline needed. **Not used by `Present()` itself** — see below. |
 | `BuildAsciiFontAtlasImageData()` | ✅ | The lower-level, `GraphicsDevice`-free raw pixel version `Present()` itself uses internally (no XNA-level object available inside the backend). Includes one extra solid-white slot (`kAsciiSolidGlyphIndex`) used only for background fills, never exposed as a `SpriteFont` character. |
+
+**Why `Present()` doesn't call the real `SpriteFont`**: `AsciiGraphicsBackend` is a backend
+(`IGraphicsBackend` implementation), and per this project's own layering rule backends stay below
+and hidden from the XNA public API — `SpriteFont`/`SpriteBatch` are built *on top of* backends,
+constructed from a `GraphicsDevice&` that itself wraps a backend instance. `Present()` calling into
+`SpriteFont::DrawString` would invert that dependency direction. Design decision 4's "same shape as
+an ordinary `DrawString`" is satisfied in effect — one textured, tinted quad per glyph, same atlas,
+same per-draw tint model — via the internal `ISpriteBatchBackend`/`ITextureBackend` pair instead,
+which is the layer a backend is actually supposed to operate in.
 
 ## 5. `Present()` — drawing the grid for real
 
