@@ -110,6 +110,22 @@ namespace CNA::Internal::Backends::SdlGpu
             out[48] = p.light2Specular[0]; out[49] = p.light2Specular[1]; out[50] = p.light2Specular[2]; out[51] = 0.0f;
             out[52] = p.specularColor[0]; out[53] = p.specularColor[1]; out[54] = p.specularColor[2]; out[55] = p.specularPower;
         }
+
+        // Mirrors VulkanGraphicsBackend::FillAlphaTestPushConst()/WebGPUGraphicsBackend::
+        // FillAlphaTestUniforms() field-for-field (minus fog): [20..23]=alphaTest params
+        // (refVal, tolerance, passWeight, failWeight), [24]=vertexColorEnabled -- the
+        // ambient/light0/textureEnabled slots FillExtUniforms uses are repurposed since
+        // AlphaTestEffect has no lighting.
+        void FillAlphaTestUniforms(std::array<float, 32>& out, const Matrix& wvp, const GpuDrawParams& p)
+        {
+            wvp.ToColumnMajor(out.data());
+            out[16] = p.diffuseColor[0]; out[17] = p.diffuseColor[1];
+            out[18] = p.diffuseColor[2]; out[19] = p.diffuseColor[3];
+            out[20] = p.alphaTest[0]; out[21] = p.alphaTest[1];
+            out[22] = p.alphaTest[2]; out[23] = p.alphaTest[3];
+            out[24] = p.vertexColorEnabled ? 1.0f : 0.0f;
+            for (int i = 25; i < 32; ++i) out[i] = 0.0f;
+        }
     }
 
     SdlGpuGraphicsBackend::SdlGpuGraphicsBackend(SDL_Window* window, int virtualWidth, int virtualHeight,
@@ -143,6 +159,8 @@ namespace CNA::Internal::Backends::SdlGpu
         CreateColoredResources();
         CreateTexturedResources();
         CreateLitTexturedResources();
+        CreateAlphaTestResources();
+        CreateDualTextureResources();
 
         int w = 0;
         int h = 0;
@@ -157,6 +175,8 @@ namespace CNA::Internal::Backends::SdlGpu
     {
         IGraphicsBackend::UnregisterForWindow(window_);
         ReleaseSceneDrawBuffers();
+        DestroyDualTextureResources();
+        DestroyAlphaTestResources();
         DestroyLitTexturedResources();
         DestroyTexturedResources();
         DestroyColoredResources();
@@ -301,6 +321,8 @@ namespace CNA::Internal::Backends::SdlGpu
         RenderColoredDraws(pass, cmd);
         RenderTexturedDraws(pass, cmd);
         RenderLitTexturedDraws(pass, cmd);
+        RenderAlphaTestDraws(pass, cmd);
+        RenderDualTextureDraws(pass, cmd);
         RenderSprites(pass, cmd);
         SDL_EndGPURenderPass(pass);
 
@@ -1302,9 +1324,455 @@ namespace CNA::Internal::Backends::SdlGpu
         framePending_ = true;
     }
 
+    void SdlGpuGraphicsBackend::CreateAlphaTestResources()
+    {
+        if (alphaTestVertexShader_ != nullptr)
+            return;
+
+        SDL_GPUShaderCreateInfo vsInfo{};
+        vsInfo.code = reinterpret_cast<const Uint8*>(Shaders::kAlphaTest3dVertSpv);
+        vsInfo.code_size = Shaders::kAlphaTest3dVertSpv_size;
+        vsInfo.entrypoint = "main";
+        vsInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
+        vsInfo.stage = SDL_GPU_SHADERSTAGE_VERTEX;
+        vsInfo.num_uniform_buffers = 1;
+        alphaTestVertexShader_ = SDL_CreateGPUShader(device_, &vsInfo);
+        if (alphaTestVertexShader_ == nullptr)
+            throw std::runtime_error(std::string("CNA SDL_GPU: failed to create alpha_test3d vertex shader: ") + SDL_GetError());
+
+        SDL_GPUShaderCreateInfo cvsInfo{};
+        cvsInfo.code = reinterpret_cast<const Uint8*>(Shaders::kAlphaTestColored3dVertSpv);
+        cvsInfo.code_size = Shaders::kAlphaTestColored3dVertSpv_size;
+        cvsInfo.entrypoint = "main";
+        cvsInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
+        cvsInfo.stage = SDL_GPU_SHADERSTAGE_VERTEX;
+        cvsInfo.num_uniform_buffers = 1;
+        alphaTestColoredVertexShader_ = SDL_CreateGPUShader(device_, &cvsInfo);
+        if (alphaTestColoredVertexShader_ == nullptr)
+        {
+            SDL_ReleaseGPUShader(device_, alphaTestVertexShader_);
+            alphaTestVertexShader_ = nullptr;
+            throw std::runtime_error(std::string("CNA SDL_GPU: failed to create alpha_test_colored3d vertex shader: ") + SDL_GetError());
+        }
+
+        SDL_GPUShaderCreateInfo fsInfo{};
+        fsInfo.code = reinterpret_cast<const Uint8*>(Shaders::kAlphaTest3dFragSpv);
+        fsInfo.code_size = Shaders::kAlphaTest3dFragSpv_size;
+        fsInfo.entrypoint = "main";
+        fsInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
+        fsInfo.stage = SDL_GPU_SHADERSTAGE_FRAGMENT;
+        fsInfo.num_samplers = 1;
+        fsInfo.num_uniform_buffers = 1;
+        alphaTestFragmentShader_ = SDL_CreateGPUShader(device_, &fsInfo);
+        if (alphaTestFragmentShader_ == nullptr)
+        {
+            SDL_ReleaseGPUShader(device_, alphaTestColoredVertexShader_);
+            alphaTestColoredVertexShader_ = nullptr;
+            SDL_ReleaseGPUShader(device_, alphaTestVertexShader_);
+            alphaTestVertexShader_ = nullptr;
+            throw std::runtime_error(std::string("CNA SDL_GPU: failed to create alpha_test3d fragment shader: ") + SDL_GetError());
+        }
+    }
+
+    void SdlGpuGraphicsBackend::DestroyAlphaTestResources()
+    {
+        for (auto& [key, pipeline] : alphaTestPipelines_)
+            if (pipeline != nullptr) SDL_ReleaseGPUGraphicsPipeline(device_, pipeline);
+        alphaTestPipelines_.clear();
+        for (auto& [key, pipeline] : alphaTestColoredPipelines_)
+            if (pipeline != nullptr) SDL_ReleaseGPUGraphicsPipeline(device_, pipeline);
+        alphaTestColoredPipelines_.clear();
+        if (alphaTestFragmentShader_ != nullptr) { SDL_ReleaseGPUShader(device_, alphaTestFragmentShader_); alphaTestFragmentShader_ = nullptr; }
+        if (alphaTestColoredVertexShader_ != nullptr) { SDL_ReleaseGPUShader(device_, alphaTestColoredVertexShader_); alphaTestColoredVertexShader_ = nullptr; }
+        if (alphaTestVertexShader_ != nullptr) { SDL_ReleaseGPUShader(device_, alphaTestVertexShader_); alphaTestVertexShader_ = nullptr; }
+    }
+
+    SDL_GPUGraphicsPipeline* SdlGpuGraphicsBackend::GetOrCreatePipelineAlphaTest3D(
+        std::size_t stride, SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc)
+    {
+        // stride 24 (vertex colour) uses its own dedicated map, keyed the same way every other
+        // stride-specific map here is. strides 20/32 share alphaTestVertexShader_ but need
+        // DIFFERENT vertex_input_state (different attribute offsets), so that map's key folds in
+        // the stride explicitly.
+        if (stride == 24)
+        {
+            const int key = PipelineCacheKey(topology, depthTest, depthWrite, depthFunc);
+            const auto it = alphaTestColoredPipelines_.find(key);
+            if (it != alphaTestColoredPipelines_.end())
+                return it->second;
+
+            SDL_GPUVertexBufferDescription vbDesc{};
+            vbDesc.slot = 0;
+            vbDesc.pitch = 24;
+            vbDesc.input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
+            SDL_GPUVertexAttribute attrs[3]{};
+            attrs[0].location = 0; attrs[0].buffer_slot = 0; attrs[0].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3; attrs[0].offset = 0;
+            attrs[1].location = 1; attrs[1].buffer_slot = 0; attrs[1].format = SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4_NORM; attrs[1].offset = 12;
+            attrs[2].location = 2; attrs[2].buffer_slot = 0; attrs[2].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2; attrs[2].offset = 16;
+
+            SDL_GPUColorTargetDescription colorTarget{};
+            colorTarget.format = SDL_GetGPUSwapchainTextureFormat(device_, window_);
+
+            SDL_GPUGraphicsPipelineCreateInfo pipelineInfo{};
+            pipelineInfo.vertex_shader = alphaTestColoredVertexShader_;
+            pipelineInfo.fragment_shader = alphaTestFragmentShader_;
+            pipelineInfo.vertex_input_state.vertex_buffer_descriptions = &vbDesc;
+            pipelineInfo.vertex_input_state.num_vertex_buffers = 1;
+            pipelineInfo.vertex_input_state.vertex_attributes = attrs;
+            pipelineInfo.vertex_input_state.num_vertex_attributes = 3;
+            pipelineInfo.primitive_type = topology;
+            pipelineInfo.rasterizer_state.fill_mode = SDL_GPU_FILLMODE_FILL;
+            pipelineInfo.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_NONE;
+            pipelineInfo.rasterizer_state.front_face = SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE;
+            pipelineInfo.multisample_state.sample_count = SDL_GPU_SAMPLECOUNT_1;
+            pipelineInfo.depth_stencil_state.enable_depth_test = depthTest;
+            pipelineInfo.depth_stencil_state.enable_depth_write = depthWrite;
+            pipelineInfo.depth_stencil_state.compare_op = ToCompareOp(depthFunc);
+            pipelineInfo.target_info.color_target_descriptions = &colorTarget;
+            pipelineInfo.target_info.num_color_targets = 1;
+            pipelineInfo.target_info.has_depth_stencil_target = (depthStencilFormat_ != SDL_GPU_TEXTUREFORMAT_INVALID);
+            pipelineInfo.target_info.depth_stencil_format = depthStencilFormat_;
+
+            SDL_GPUGraphicsPipeline* pipeline = SDL_CreateGPUGraphicsPipeline(device_, &pipelineInfo);
+            if (pipeline == nullptr)
+                throw std::runtime_error(std::string("CNA SDL_GPU: failed to create alpha_test_colored3d pipeline: ") + SDL_GetError());
+            alphaTestColoredPipelines_[key] = pipeline;
+            return pipeline;
+        }
+
+        const int key = static_cast<int>(stride) * 10000 + PipelineCacheKey(topology, depthTest, depthWrite, depthFunc);
+        const auto it = alphaTestPipelines_.find(key);
+        if (it != alphaTestPipelines_.end())
+            return it->second;
+
+        SDL_GPUVertexBufferDescription vbDesc{};
+        vbDesc.slot = 0;
+        vbDesc.pitch = static_cast<Uint32>(stride);
+        vbDesc.input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
+        SDL_GPUVertexAttribute attrs[2]{};
+        attrs[0].location = 0; attrs[0].buffer_slot = 0; attrs[0].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3; attrs[0].offset = 0;
+        attrs[1].location = 1; attrs[1].buffer_slot = 0; attrs[1].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2;
+        attrs[1].offset = (stride == 32) ? 24 : 12;  // stride 32: UV past the 3-float normal; stride 20: UV right after position
+
+        SDL_GPUColorTargetDescription colorTarget{};
+        colorTarget.format = SDL_GetGPUSwapchainTextureFormat(device_, window_);
+
+        SDL_GPUGraphicsPipelineCreateInfo pipelineInfo{};
+        pipelineInfo.vertex_shader = alphaTestVertexShader_;
+        pipelineInfo.fragment_shader = alphaTestFragmentShader_;
+        pipelineInfo.vertex_input_state.vertex_buffer_descriptions = &vbDesc;
+        pipelineInfo.vertex_input_state.num_vertex_buffers = 1;
+        pipelineInfo.vertex_input_state.vertex_attributes = attrs;
+        pipelineInfo.vertex_input_state.num_vertex_attributes = 2;
+        pipelineInfo.primitive_type = topology;
+        pipelineInfo.rasterizer_state.fill_mode = SDL_GPU_FILLMODE_FILL;
+        pipelineInfo.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_NONE;
+        pipelineInfo.rasterizer_state.front_face = SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE;
+        pipelineInfo.multisample_state.sample_count = SDL_GPU_SAMPLECOUNT_1;
+        pipelineInfo.depth_stencil_state.enable_depth_test = depthTest;
+        pipelineInfo.depth_stencil_state.enable_depth_write = depthWrite;
+        pipelineInfo.depth_stencil_state.compare_op = ToCompareOp(depthFunc);
+        pipelineInfo.target_info.color_target_descriptions = &colorTarget;
+        pipelineInfo.target_info.num_color_targets = 1;
+        pipelineInfo.target_info.has_depth_stencil_target = (depthStencilFormat_ != SDL_GPU_TEXTUREFORMAT_INVALID);
+        pipelineInfo.target_info.depth_stencil_format = depthStencilFormat_;
+
+        SDL_GPUGraphicsPipeline* pipeline = SDL_CreateGPUGraphicsPipeline(device_, &pipelineInfo);
+        if (pipeline == nullptr)
+            throw std::runtime_error(std::string("CNA SDL_GPU: failed to create alpha_test3d pipeline: ") + SDL_GetError());
+        alphaTestPipelines_[key] = pipeline;
+        return pipeline;
+    }
+
+    void SdlGpuGraphicsBackend::CreateDualTextureResources()
+    {
+        if (dualTextureVertexShader_ != nullptr)
+            return;
+
+        SDL_GPUShaderCreateInfo vsInfo{};
+        vsInfo.code = reinterpret_cast<const Uint8*>(Shaders::kDualTexture3dVertSpv);
+        vsInfo.code_size = Shaders::kDualTexture3dVertSpv_size;
+        vsInfo.entrypoint = "main";
+        vsInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
+        vsInfo.stage = SDL_GPU_SHADERSTAGE_VERTEX;
+        vsInfo.num_uniform_buffers = 1;
+        dualTextureVertexShader_ = SDL_CreateGPUShader(device_, &vsInfo);
+        if (dualTextureVertexShader_ == nullptr)
+            throw std::runtime_error(std::string("CNA SDL_GPU: failed to create dual_texture3d vertex shader: ") + SDL_GetError());
+
+        SDL_GPUShaderCreateInfo cvsInfo{};
+        cvsInfo.code = reinterpret_cast<const Uint8*>(Shaders::kDualTextureColored3dVertSpv);
+        cvsInfo.code_size = Shaders::kDualTextureColored3dVertSpv_size;
+        cvsInfo.entrypoint = "main";
+        cvsInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
+        cvsInfo.stage = SDL_GPU_SHADERSTAGE_VERTEX;
+        cvsInfo.num_uniform_buffers = 1;
+        dualTextureColoredVertexShader_ = SDL_CreateGPUShader(device_, &cvsInfo);
+        if (dualTextureColoredVertexShader_ == nullptr)
+        {
+            SDL_ReleaseGPUShader(device_, dualTextureVertexShader_);
+            dualTextureVertexShader_ = nullptr;
+            throw std::runtime_error(std::string("CNA SDL_GPU: failed to create dual_texture_colored3d vertex shader: ") + SDL_GetError());
+        }
+
+        SDL_GPUShaderCreateInfo fsInfo{};
+        fsInfo.code = reinterpret_cast<const Uint8*>(Shaders::kDualTexture3dFragSpv);
+        fsInfo.code_size = Shaders::kDualTexture3dFragSpv_size;
+        fsInfo.entrypoint = "main";
+        fsInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
+        fsInfo.stage = SDL_GPU_SHADERSTAGE_FRAGMENT;
+        fsInfo.num_samplers = 2;
+        dualTextureFragmentShader_ = SDL_CreateGPUShader(device_, &fsInfo);
+        if (dualTextureFragmentShader_ == nullptr)
+        {
+            SDL_ReleaseGPUShader(device_, dualTextureColoredVertexShader_);
+            dualTextureColoredVertexShader_ = nullptr;
+            SDL_ReleaseGPUShader(device_, dualTextureVertexShader_);
+            dualTextureVertexShader_ = nullptr;
+            throw std::runtime_error(std::string("CNA SDL_GPU: failed to create dual_texture3d fragment shader: ") + SDL_GetError());
+        }
+    }
+
+    void SdlGpuGraphicsBackend::DestroyDualTextureResources()
+    {
+        for (auto& [key, pipeline] : dualTexturePipelines_)
+            if (pipeline != nullptr) SDL_ReleaseGPUGraphicsPipeline(device_, pipeline);
+        dualTexturePipelines_.clear();
+        for (auto& [key, pipeline] : dualTextureColoredPipelines_)
+            if (pipeline != nullptr) SDL_ReleaseGPUGraphicsPipeline(device_, pipeline);
+        dualTextureColoredPipelines_.clear();
+        if (dualTextureFragmentShader_ != nullptr) { SDL_ReleaseGPUShader(device_, dualTextureFragmentShader_); dualTextureFragmentShader_ = nullptr; }
+        if (dualTextureColoredVertexShader_ != nullptr) { SDL_ReleaseGPUShader(device_, dualTextureColoredVertexShader_); dualTextureColoredVertexShader_ = nullptr; }
+        if (dualTextureVertexShader_ != nullptr) { SDL_ReleaseGPUShader(device_, dualTextureVertexShader_); dualTextureVertexShader_ = nullptr; }
+    }
+
+    SDL_GPUGraphicsPipeline* SdlGpuGraphicsBackend::GetOrCreatePipelineDualTexture3D(
+        std::size_t stride, SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc)
+    {
+        auto& cache = (stride == 24) ? dualTextureColoredPipelines_ : dualTexturePipelines_;
+        const int key = PipelineCacheKey(topology, depthTest, depthWrite, depthFunc);
+        const auto it = cache.find(key);
+        if (it != cache.end())
+            return it->second;
+
+        SDL_GPUVertexBufferDescription vbDesc{};
+        vbDesc.slot = 0;
+        vbDesc.pitch = static_cast<Uint32>(stride);
+        vbDesc.input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
+
+        SDL_GPUVertexAttribute attrs[3]{};
+        Uint32 numAttrs;
+        if (stride == 24)
+        {
+            attrs[0].location = 0; attrs[0].buffer_slot = 0; attrs[0].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3; attrs[0].offset = 0;
+            attrs[1].location = 1; attrs[1].buffer_slot = 0; attrs[1].format = SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4_NORM; attrs[1].offset = 12;
+            attrs[2].location = 2; attrs[2].buffer_slot = 0; attrs[2].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2; attrs[2].offset = 16;
+            numAttrs = 3;
+        }
+        else
+        {
+            attrs[0].location = 0; attrs[0].buffer_slot = 0; attrs[0].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3; attrs[0].offset = 0;
+            attrs[1].location = 1; attrs[1].buffer_slot = 0; attrs[1].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2; attrs[1].offset = 12;
+            numAttrs = 2;
+        }
+
+        SDL_GPUColorTargetDescription colorTarget{};
+        colorTarget.format = SDL_GetGPUSwapchainTextureFormat(device_, window_);
+
+        SDL_GPUGraphicsPipelineCreateInfo pipelineInfo{};
+        pipelineInfo.vertex_shader = (stride == 24) ? dualTextureColoredVertexShader_ : dualTextureVertexShader_;
+        pipelineInfo.fragment_shader = dualTextureFragmentShader_;
+        pipelineInfo.vertex_input_state.vertex_buffer_descriptions = &vbDesc;
+        pipelineInfo.vertex_input_state.num_vertex_buffers = 1;
+        pipelineInfo.vertex_input_state.vertex_attributes = attrs;
+        pipelineInfo.vertex_input_state.num_vertex_attributes = numAttrs;
+        pipelineInfo.primitive_type = topology;
+        pipelineInfo.rasterizer_state.fill_mode = SDL_GPU_FILLMODE_FILL;
+        pipelineInfo.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_NONE;
+        pipelineInfo.rasterizer_state.front_face = SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE;
+        pipelineInfo.multisample_state.sample_count = SDL_GPU_SAMPLECOUNT_1;
+        pipelineInfo.depth_stencil_state.enable_depth_test = depthTest;
+        pipelineInfo.depth_stencil_state.enable_depth_write = depthWrite;
+        pipelineInfo.depth_stencil_state.compare_op = ToCompareOp(depthFunc);
+        pipelineInfo.target_info.color_target_descriptions = &colorTarget;
+        pipelineInfo.target_info.num_color_targets = 1;
+        pipelineInfo.target_info.has_depth_stencil_target = (depthStencilFormat_ != SDL_GPU_TEXTUREFORMAT_INVALID);
+        pipelineInfo.target_info.depth_stencil_format = depthStencilFormat_;
+
+        SDL_GPUGraphicsPipeline* pipeline = SDL_CreateGPUGraphicsPipeline(device_, &pipelineInfo);
+        if (pipeline == nullptr)
+            throw std::runtime_error(std::string("CNA SDL_GPU: failed to create dual_texture3d pipeline: ") + SDL_GetError());
+        cache[key] = pipeline;
+        return pipeline;
+    }
+
+    void SdlGpuGraphicsBackend::QueueAlphaTestDraw(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
+                                                    const Matrix& world, const Matrix& view, const Matrix& projection,
+                                                    PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
+    {
+        const auto& sdlGpuVb = static_cast<const SdlGpuVertexBufferBackend&>(vb);
+        const std::size_t stride = sdlGpuVb.Stride();
+
+        AlphaTestDrawCommand command;
+        command.stride = stride;
+        const int vertexStart = params.vertexStart;
+        const auto& shadow = sdlGpuVb.ShadowData();
+        const std::size_t byteOffset = static_cast<std::size_t>(vertexStart) * stride;
+        if (byteOffset <= shadow.size())
+            command.vertexData.assign(shadow.begin() + static_cast<std::ptrdiff_t>(byteOffset), shadow.end());
+        command.topology = ToTopology(primitive);
+        command.depthTest = depthTestEnabled_;
+        command.depthFunc = depthCompareFunction_;
+        command.depthWrite = depthWriteEnabled_;
+        const Matrix wvp = world * view * projection;
+        FillAlphaTestUniforms(command.uniforms, wvp, params);
+        command.texture = static_cast<const SdlGpuTextureBackend*>(params.texture0);
+        command.textureFilter = 0;
+        command.addressU = 1;
+        command.addressV = 1;
+
+        if (ib != nullptr)
+        {
+            const auto& sdlGpuIb = static_cast<const SdlGpuIndexBufferBackend&>(*ib);
+            command.indexed = true;
+            command.index32 = sdlGpuIb.IsThirtyTwoBit();
+            command.indexData = sdlGpuIb.ShadowData();
+            command.indexCount = static_cast<Uint32>(PrimitiveIndexCount(primitive, primitiveCount));
+            command.vertexCount = static_cast<Uint32>(sdlGpuVb.GetVertexCount()) - static_cast<Uint32>(vertexStart);
+        }
+        else
+        {
+            command.vertexCount = static_cast<Uint32>(PrimitiveVertexCount(primitive, primitiveCount));
+        }
+
+        alphaTestDrawCommands_.push_back(std::move(command));
+        framePending_ = true;
+    }
+
+    void SdlGpuGraphicsBackend::QueueDualTextureDraw(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
+                                                      const Matrix& world, const Matrix& view, const Matrix& projection,
+                                                      PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
+    {
+        const auto& sdlGpuVb = static_cast<const SdlGpuVertexBufferBackend&>(vb);
+        const std::size_t stride = sdlGpuVb.Stride();
+
+        DualTextureDrawCommand command;
+        command.hasVertexColor = (stride == 24);
+        const int vertexStart = params.vertexStart;
+        const auto& shadow = sdlGpuVb.ShadowData();
+        const std::size_t byteOffset = static_cast<std::size_t>(vertexStart) * stride;
+        if (byteOffset <= shadow.size())
+            command.vertexData.assign(shadow.begin() + static_cast<std::ptrdiff_t>(byteOffset), shadow.end());
+        command.topology = ToTopology(primitive);
+        command.depthTest = depthTestEnabled_;
+        command.depthFunc = depthCompareFunction_;
+        command.depthWrite = depthWriteEnabled_;
+        const Matrix wvp = world * view * projection;
+        FillExtUniforms(command.uniforms, wvp, params);
+        command.texture0 = static_cast<const SdlGpuTextureBackend*>(params.texture0);
+        command.texture1 = static_cast<const SdlGpuTextureBackend*>(params.texture1);
+        command.textureFilter = 0;
+        command.addressU = 1;
+        command.addressV = 1;
+
+        if (ib != nullptr)
+        {
+            const auto& sdlGpuIb = static_cast<const SdlGpuIndexBufferBackend&>(*ib);
+            command.indexed = true;
+            command.index32 = sdlGpuIb.IsThirtyTwoBit();
+            command.indexData = sdlGpuIb.ShadowData();
+            command.indexCount = static_cast<Uint32>(PrimitiveIndexCount(primitive, primitiveCount));
+            command.vertexCount = static_cast<Uint32>(sdlGpuVb.GetVertexCount()) - static_cast<Uint32>(vertexStart);
+        }
+        else
+        {
+            command.vertexCount = static_cast<Uint32>(PrimitiveVertexCount(primitive, primitiveCount));
+        }
+
+        dualTextureDrawCommands_.push_back(std::move(command));
+        framePending_ = true;
+    }
+
+    void SdlGpuGraphicsBackend::RenderAlphaTestDraws(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd)
+    {
+        for (const AlphaTestDrawCommand& command : alphaTestDrawCommands_)
+        {
+            if (command.uploadedVertexBuffer == nullptr || command.texture == nullptr)
+                continue;
+
+            SDL_GPUGraphicsPipeline* pipeline = GetOrCreatePipelineAlphaTest3D(
+                command.stride, command.topology, command.depthTest, command.depthWrite, command.depthFunc);
+            SDL_BindGPUGraphicsPipeline(pass, pipeline);
+            SDL_PushGPUVertexUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
+            SDL_PushGPUFragmentUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
+
+            SDL_GPUBufferBinding vbBinding{};
+            vbBinding.buffer = command.uploadedVertexBuffer;
+            SDL_BindGPUVertexBuffers(pass, 0, &vbBinding, 1);
+
+            SDL_GPUTextureSamplerBinding samplerBinding{};
+            samplerBinding.texture = command.texture->Texture();
+            samplerBinding.sampler = GetOrCreateSampler(command.textureFilter, command.addressU, command.addressV);
+            SDL_BindGPUFragmentSamplers(pass, 0, &samplerBinding, 1);
+
+            if (command.indexed && command.uploadedIndexBuffer != nullptr)
+            {
+                SDL_GPUBufferBinding ibBinding{};
+                ibBinding.buffer = command.uploadedIndexBuffer;
+                SDL_BindGPUIndexBuffer(pass, &ibBinding,
+                                       command.index32 ? SDL_GPU_INDEXELEMENTSIZE_32BIT : SDL_GPU_INDEXELEMENTSIZE_16BIT);
+                SDL_DrawGPUIndexedPrimitives(pass, command.indexCount, 1, 0, 0, 0);
+            }
+            else
+            {
+                SDL_DrawGPUPrimitives(pass, command.vertexCount, 1, 0, 0);
+            }
+        }
+    }
+
+    void SdlGpuGraphicsBackend::RenderDualTextureDraws(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd)
+    {
+        for (const DualTextureDrawCommand& command : dualTextureDrawCommands_)
+        {
+            if (command.uploadedVertexBuffer == nullptr || command.texture0 == nullptr || command.texture1 == nullptr)
+                continue;
+
+            SDL_GPUGraphicsPipeline* pipeline = GetOrCreatePipelineDualTexture3D(
+                command.hasVertexColor ? 24 : 20, command.topology, command.depthTest, command.depthWrite, command.depthFunc);
+            SDL_BindGPUGraphicsPipeline(pass, pipeline);
+            SDL_PushGPUVertexUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
+
+            SDL_GPUBufferBinding vbBinding{};
+            vbBinding.buffer = command.uploadedVertexBuffer;
+            SDL_BindGPUVertexBuffers(pass, 0, &vbBinding, 1);
+
+            SDL_GPUSampler* sampler = GetOrCreateSampler(command.textureFilter, command.addressU, command.addressV);
+            SDL_GPUTextureSamplerBinding samplerBindings[2]{};
+            samplerBindings[0].texture = command.texture0->Texture();
+            samplerBindings[0].sampler = sampler;
+            samplerBindings[1].texture = command.texture1->Texture();
+            samplerBindings[1].sampler = sampler;
+            SDL_BindGPUFragmentSamplers(pass, 0, samplerBindings, 2);
+
+            if (command.indexed && command.uploadedIndexBuffer != nullptr)
+            {
+                SDL_GPUBufferBinding ibBinding{};
+                ibBinding.buffer = command.uploadedIndexBuffer;
+                SDL_BindGPUIndexBuffer(pass, &ibBinding,
+                                       command.index32 ? SDL_GPU_INDEXELEMENTSIZE_32BIT : SDL_GPU_INDEXELEMENTSIZE_16BIT);
+                SDL_DrawGPUIndexedPrimitives(pass, command.indexCount, 1, 0, 0, 0);
+            }
+            else
+            {
+                SDL_DrawGPUPrimitives(pass, command.vertexCount, 1, 0, 0);
+            }
+        }
+    }
+
     void SdlGpuGraphicsBackend::UploadSceneDrawData(SDL_GPUCommandBuffer* cmd)
     {
-        if (coloredDrawCommands_.empty() && texturedDrawCommands_.empty() && litTexturedDrawCommands_.empty())
+        if (coloredDrawCommands_.empty() && texturedDrawCommands_.empty() && litTexturedDrawCommands_.empty() &&
+            alphaTestDrawCommands_.empty() && dualTextureDrawCommands_.empty())
             return;
 
         SDL_GPUCopyPass* copyPass = SDL_BeginGPUCopyPass(cmd);
@@ -1367,6 +1835,22 @@ namespace CNA::Internal::Backends::SdlGpu
                 command.uploadedIndexBuffer = uploadOne(command.indexData, SDL_GPU_BUFFERUSAGE_INDEX);
         }
         for (LitTexturedDrawCommand& command : litTexturedDrawCommands_)
+        {
+            if (command.vertexCount == 0 || command.vertexData.empty())
+                continue;
+            command.uploadedVertexBuffer = uploadOne(command.vertexData, SDL_GPU_BUFFERUSAGE_VERTEX);
+            if (command.indexed && !command.indexData.empty())
+                command.uploadedIndexBuffer = uploadOne(command.indexData, SDL_GPU_BUFFERUSAGE_INDEX);
+        }
+        for (AlphaTestDrawCommand& command : alphaTestDrawCommands_)
+        {
+            if (command.vertexCount == 0 || command.vertexData.empty())
+                continue;
+            command.uploadedVertexBuffer = uploadOne(command.vertexData, SDL_GPU_BUFFERUSAGE_VERTEX);
+            if (command.indexed && !command.indexData.empty())
+                command.uploadedIndexBuffer = uploadOne(command.indexData, SDL_GPU_BUFFERUSAGE_INDEX);
+        }
+        for (DualTextureDrawCommand& command : dualTextureDrawCommands_)
         {
             if (command.vertexCount == 0 || command.vertexData.empty())
                 continue;
@@ -1506,6 +1990,18 @@ namespace CNA::Internal::Backends::SdlGpu
             if (command.uploadedIndexBuffer != nullptr) SDL_ReleaseGPUBuffer(device_, command.uploadedIndexBuffer);
         }
         litTexturedDrawCommands_.clear();
+        for (AlphaTestDrawCommand& command : alphaTestDrawCommands_)
+        {
+            if (command.uploadedVertexBuffer != nullptr) SDL_ReleaseGPUBuffer(device_, command.uploadedVertexBuffer);
+            if (command.uploadedIndexBuffer != nullptr) SDL_ReleaseGPUBuffer(device_, command.uploadedIndexBuffer);
+        }
+        alphaTestDrawCommands_.clear();
+        for (DualTextureDrawCommand& command : dualTextureDrawCommands_)
+        {
+            if (command.uploadedVertexBuffer != nullptr) SDL_ReleaseGPUBuffer(device_, command.uploadedVertexBuffer);
+            if (command.uploadedIndexBuffer != nullptr) SDL_ReleaseGPUBuffer(device_, command.uploadedIndexBuffer);
+        }
+        dualTextureDrawCommands_.clear();
     }
 
     void SdlGpuGraphicsBackend::DrawColoredPrimitives(const IVertexBufferBackend& vb,
@@ -1530,6 +2026,22 @@ namespace CNA::Internal::Backends::SdlGpu
     {
         const auto& sdlGpuVb = static_cast<const SdlGpuVertexBufferBackend&>(vb);
         const std::size_t stride = sdlGpuVb.Stride();
+        // Matches VulkanGraphicsBackend/WebGPUGraphicsBackend's own dispatch precedence: alpha
+        // test wins over dual-texture (an AlphaTestEffect draw on a DualTextureEffect-shaped
+        // buffer never reaches dual_texture3d); EnvironmentMapEffect/SkinnedEffect are not
+        // implemented yet (plan_sdlgpu.md Phase SDLGPU-9/10) and fall through to plain BasicEffect.
+        const bool needsAlphaTest = params.alphaTest[2] < 0.0f || params.alphaTest[3] < 0.0f;
+        const bool needsDualTexture = !needsAlphaTest && params.dualTexture;
+        if (needsAlphaTest && (stride == 20 || stride == 24 || stride == 32) && params.texture0 != nullptr)
+        {
+            QueueAlphaTestDraw(vb, nullptr, world, view, projection, primitive, primitiveCount, params);
+            return;
+        }
+        if (needsDualTexture && (stride == 20 || stride == 24) && params.texture0 != nullptr && params.texture1 != nullptr)
+        {
+            QueueDualTextureDraw(vb, nullptr, world, view, projection, primitive, primitiveCount, params);
+            return;
+        }
         if (stride == 16)
         {
             QueueColoredDraw(vb, nullptr, world, view, projection, primitive, primitiveCount, &params);
@@ -1555,6 +2067,18 @@ namespace CNA::Internal::Backends::SdlGpu
     {
         const auto& sdlGpuVb = static_cast<const SdlGpuVertexBufferBackend&>(vb);
         const std::size_t stride = sdlGpuVb.Stride();
+        const bool needsAlphaTest = params.alphaTest[2] < 0.0f || params.alphaTest[3] < 0.0f;
+        const bool needsDualTexture = !needsAlphaTest && params.dualTexture;
+        if (needsAlphaTest && (stride == 20 || stride == 24 || stride == 32) && params.texture0 != nullptr)
+        {
+            QueueAlphaTestDraw(vb, &ib, world, view, projection, primitive, primitiveCount, params);
+            return;
+        }
+        if (needsDualTexture && (stride == 20 || stride == 24) && params.texture0 != nullptr && params.texture1 != nullptr)
+        {
+            QueueDualTextureDraw(vb, &ib, world, view, projection, primitive, primitiveCount, params);
+            return;
+        }
         if (stride == 16)
         {
             QueueColoredDraw(vb, &ib, world, view, projection, primitive, primitiveCount, &params);

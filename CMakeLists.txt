@@ -6798,6 +6798,14 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SDL_GPU")
         TIMEOUT 60
         LABELS "SdlGpu"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_sdlgpu.md SDLGPU-31/32: AlphaTestEffect and DualTextureEffect.
+    cna_sdlgpu_test(cna_test_sdlgpu_effects examples/sdlgpu_effects_test.cpp)
+    add_test(NAME SdlGpu_Effects COMMAND cna_test_sdlgpu_effects)
+    set_tests_properties(SdlGpu_Effects PROPERTIES
+        TIMEOUT 60
+        LABELS "SdlGpu"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()
 
 # --- Task 6.1: real two-process ENet loopback test harness ---

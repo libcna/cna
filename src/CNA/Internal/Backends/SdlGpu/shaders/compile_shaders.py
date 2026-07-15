@@ -149,6 +149,12 @@ def main():
         # colored_textured3d shares textured3d's fragment shader (functionally identical).
         ("lit_textured3d.vert.glsl", VERTEX_SHADER,   "kLitTextured3dVertSpv"),
         ("lit_textured3d.frag.glsl", FRAGMENT_SHADER, "kLitTextured3dFragSpv"),
+        ("alpha_test3d.vert.glsl", VERTEX_SHADER,   "kAlphaTest3dVertSpv"),
+        ("alpha_test_colored3d.vert.glsl", VERTEX_SHADER, "kAlphaTestColored3dVertSpv"),
+        ("alpha_test3d.frag.glsl", FRAGMENT_SHADER, "kAlphaTest3dFragSpv"),
+        ("dual_texture3d.vert.glsl", VERTEX_SHADER,   "kDualTexture3dVertSpv"),
+        ("dual_texture_colored3d.vert.glsl", VERTEX_SHADER, "kDualTextureColored3dVertSpv"),
+        ("dual_texture3d.frag.glsl", FRAGMENT_SHADER, "kDualTexture3dFragSpv"),
     ]
 
     output_path = Path(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[1] == "--output" else \

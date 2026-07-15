@@ -240,6 +240,60 @@ namespace CNA::Internal::Backends::SdlGpu
             SDL_GPUBuffer* uploadedIndexBuffer = nullptr;
         };
 
+        // AlphaTestEffect (Phase SDLGPU-7) -- strides 20 (VertexPositionTexture)/32
+        // (VertexPositionNormalTexture, normal unread) share one shader (alphaTestVertexShader_);
+        // stride 24 (VertexPositionColorTexture, vertex-color tint) uses
+        // alphaTestColoredVertexShader_. `stride` selects which at render time.
+        struct AlphaTestDrawCommand
+        {
+            std::vector<std::uint8_t> vertexData;
+            std::vector<std::uint8_t> indexData;
+            bool indexed = false;
+            bool index32 = false;
+            Uint32 vertexCount = 0;
+            Uint32 indexCount = 0;
+            SDL_GPUPrimitiveType topology = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
+            std::array<float, 32> uniforms{};  ///< [20..23]=alphaTest params, [24]=vertexColorEnabled (no lighting/ambient slots needed)
+            bool depthTest = false;
+            bool depthWrite = false;
+            int depthFunc = 3;
+            const SdlGpuTextureBackend* texture = nullptr;
+            int textureFilter = 0;
+            int addressU = 1;
+            int addressV = 1;
+            std::size_t stride = 20;  ///< 20, 24, or 32 -- selects vertex layout + shader
+            SDL_GPUBuffer* uploadedVertexBuffer = nullptr;
+            SDL_GPUBuffer* uploadedIndexBuffer = nullptr;
+        };
+
+        // DualTextureEffect (Phase SDLGPU-7) -- two texture units sampled at the same UV
+        // (`tex1.rgb*=2; result=tex1*tex2*tint`). Strides 20/24 use dedicated vertex shaders
+        // (dualTextureVertexShader_/dualTextureColoredVertexShader_); the fragment shader is
+        // shared and does not need the primary PC block at all (fragTint is already resolved by
+        // the vertex stage).
+        struct DualTextureDrawCommand
+        {
+            std::vector<std::uint8_t> vertexData;
+            std::vector<std::uint8_t> indexData;
+            bool indexed = false;
+            bool index32 = false;
+            Uint32 vertexCount = 0;
+            Uint32 indexCount = 0;
+            SDL_GPUPrimitiveType topology = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
+            std::array<float, 32> uniforms{};
+            bool depthTest = false;
+            bool depthWrite = false;
+            int depthFunc = 3;
+            const SdlGpuTextureBackend* texture0 = nullptr;
+            const SdlGpuTextureBackend* texture1 = nullptr;
+            int textureFilter = 0;
+            int addressU = 1;
+            int addressV = 1;
+            bool hasVertexColor = false;  ///< stride 24 vs stride 20
+            SDL_GPUBuffer* uploadedVertexBuffer = nullptr;
+            SDL_GPUBuffer* uploadedIndexBuffer = nullptr;
+        };
+
         /**
          * @brief Constructs the backend against an already-created SDL window.
          *
@@ -408,6 +462,25 @@ namespace CNA::Internal::Backends::SdlGpu
         void QueueLitTexturedDraw(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
                                   const Matrix& world, const Matrix& view, const Matrix& projection,
                                   PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
+
+        // Phase SDLGPU-7: AlphaTestEffect / DualTextureEffect.
+        void CreateAlphaTestResources();
+        void DestroyAlphaTestResources();
+        void CreateDualTextureResources();
+        void DestroyDualTextureResources();
+        [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipelineAlphaTest3D(
+            std::size_t stride, SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc);
+        [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipelineDualTexture3D(
+            std::size_t stride, SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc);
+        void QueueAlphaTestDraw(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
+                                const Matrix& world, const Matrix& view, const Matrix& projection,
+                                PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
+        void QueueDualTextureDraw(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
+                                  const Matrix& world, const Matrix& view, const Matrix& projection,
+                                  PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
+        void RenderAlphaTestDraws(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd);
+        void RenderDualTextureDraws(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd);
+
         // Uploads every queued 3D draw command's shadow-copied vertex/index data into a fresh
         // transient SDL_GPUBuffer per command (mirrors WebGPUGraphicsBackend's own per-draw
         // transient-buffer approach) -- must run in the same copy pass as UploadSpriteVertexData,
@@ -458,6 +531,24 @@ namespace CNA::Internal::Backends::SdlGpu
         SDL_GPUShader* litTexturedFragmentShader_ = nullptr;
         std::unordered_map<int, SDL_GPUGraphicsPipeline*> litTexturedPipelines_;
         std::vector<LitTexturedDrawCommand> litTexturedDrawCommands_;
+
+        // Phase SDLGPU-7. alphaTestPipelines_ holds BOTH stride-20 and stride-32 pipelines
+        // (shared shader, different vertex_input_state) -- its cache key folds in the stride
+        // (see GetOrCreatePipelineAlphaTest3D's own key computation), unlike every other
+        // pipeline map here which is already stride-specific by construction.
+        SDL_GPUShader* alphaTestVertexShader_ = nullptr;         ///< strides 20/32 (no vertex colour)
+        SDL_GPUShader* alphaTestColoredVertexShader_ = nullptr;  ///< stride 24 (vertex colour tint)
+        SDL_GPUShader* alphaTestFragmentShader_ = nullptr;
+        std::unordered_map<int, SDL_GPUGraphicsPipeline*> alphaTestPipelines_;
+        std::unordered_map<int, SDL_GPUGraphicsPipeline*> alphaTestColoredPipelines_;
+        std::vector<AlphaTestDrawCommand> alphaTestDrawCommands_;
+
+        SDL_GPUShader* dualTextureVertexShader_ = nullptr;         ///< stride 20
+        SDL_GPUShader* dualTextureColoredVertexShader_ = nullptr;  ///< stride 24
+        SDL_GPUShader* dualTextureFragmentShader_ = nullptr;
+        std::unordered_map<int, SDL_GPUGraphicsPipeline*> dualTexturePipelines_;
+        std::unordered_map<int, SDL_GPUGraphicsPipeline*> dualTextureColoredPipelines_;
+        std::vector<DualTextureDrawCommand> dualTextureDrawCommands_;
 
         int depthCompareFunction_ = 3;  ///< XNA CompareFunction ordinal; 3 = LessEqual (DepthStencilState.Default)
 

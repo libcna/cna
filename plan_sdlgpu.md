@@ -1,22 +1,25 @@
 # SDL GPU Graphics Backend — Implementation Plan
 
-> **Status (2026-07-15): Phases SDLGPU-1 through SDLGPU-6 (infrastructure, device/window/
-> swapchain lifecycle, the 2D vertical slice, and the core 3D vertex formats/`BasicEffect`) are
-> implemented and verified.** `CNA_GRAPHICS_BACKEND=SDL_GPU` configures, builds
-> (`cna_backend_graphics_sdl_gpu`, zero new third-party dependencies as predicted), and a real
-> window + real `SDL_GPUDevice` (Vulkan driver) clears color+depth+stencil, uploads a real
-> `Texture2D`, draws a real `SpriteBatch` scene (tint, alpha, rotation, both flips, Point/Linear +
-> Wrap/Clamp sampling), and draws real `colored3d`/`textured3d`/`colored_textured3d`/
-> `lit_textured3d` 3D geometry (via the public `BasicEffect`/`VertexBuffer`/
-> `GraphicsDevice.DrawPrimitives` API, with a real depth-test occlusion proof) — verified by
-> `SdlGpu_Smoke` (6/6), `SdlGpu_2D` (3/3), and `SdlGpu_3D` (6/6 checks, `ctest -R SdlGpu`), all on
-> real GPU via Vulkan on this Linux dev machine, each backed by a real screenshot, not just "didn't
-> throw". Those screenshots caught and led to fixing a real bug — see `SDLGPU-14`'s row below — and
-> then, for the 3D path, *confirmed the fix's own theory* (3D shaders using a real XNA projection
-> matrix need no Y-flip, unlike the hand-computed 2D sprite NDC math). `GraphicsBackendCompileDefinitionTests.cpp`'s
+> **Status (2026-07-15): Phases SDLGPU-1 through SDLGPU-6 are fully implemented and verified;
+> Phase SDLGPU-7 is half done** — `AlphaTestEffect`/`DualTextureEffect` are real and verified,
+> `EnvironmentMapEffect`/`SkinnedEffect` are deliberately deferred (see their own rows for why).
+> `CNA_GRAPHICS_BACKEND=SDL_GPU` configures, builds (`cna_backend_graphics_sdl_gpu`, zero new
+> third-party dependencies as predicted), and a real window + real `SDL_GPUDevice` (Vulkan driver)
+> clears color+depth+stencil, uploads a real `Texture2D`, draws a real `SpriteBatch` scene (tint,
+> alpha, rotation, both flips, Point/Linear + Wrap/Clamp sampling), draws real
+> `colored3d`/`textured3d`/`colored_textured3d`/`lit_textured3d` 3D geometry (with a real
+> depth-test occlusion proof), and draws real `AlphaTestEffect`/`DualTextureEffect` geometry (real
+> per-pixel discard; a real two-sampler multiply with a colour-shift result that could only come
+> from two textures actually being sampled) — all via the public `BasicEffect`-family/
+> `VertexBuffer`/`GraphicsDevice.DrawPrimitives` API. Verified by `SdlGpu_Smoke` (6/6), `SdlGpu_2D`
+> (3/3), `SdlGpu_3D` (6/6), and `SdlGpu_Effects` (3/3 checks, `ctest -R SdlGpu`), all on real GPU
+> via Vulkan on this Linux dev machine, each backed by a real screenshot, not just "didn't throw".
+> Those screenshots caught and led to fixing a real bug — see `SDLGPU-14`'s row below — and then,
+> for the 3D path, *confirmed the fix's own theory* (3D shaders using a real XNA projection matrix
+> need no Y-flip, unlike the hand-computed 2D sprite NDC math). `GraphicsBackendCompileDefinitionTests.cpp`'s
 > `ExactlyOneGraphicsBackendIsSelected` was updated for the new backend and the full `CnaTests`
-> suite (118 tests) still passes. `AlphaTestEffect`/`DualTextureEffect`/`EnvironmentMapEffect`/
-> `SkinnedEffect` and all render-target/readback paths (Phase SDLGPU-7 onward) are still ⬜.
+> suite (118 tests) still passes. `EnvironmentMapEffect`/`SkinnedEffect` and all render-target/
+> readback paths (Phase SDLGPU-8 onward) are still ⬜.
 >
 > **Known partial gaps in what's landed so far:** `SDL_CreateGPUDevice`'s `debug_mode` is
 > hardcoded `false`, not yet wired to a CNA-side debug/validation toggle (minor, deferred).
@@ -140,10 +143,15 @@ extends.
    `BlendState`/`DepthStencilState`/`RasterizerState`/`ApplySamplerState` *dynamic* mapping did
    not (every 3D pipeline is still hardcoded opaque/no-cull/Linear+Clamp) — see those rows' own
    Notes for what's real vs. still open.
-4. Next: Phase `SDLGPU-7` (`AlphaTestEffect`/`DualTextureEffect`/`EnvironmentMapEffect`/
-   `SkinnedEffect`, `SDLGPU-31`–`34`) or Phase `SDLGPU-8` (render targets, `SDLGPU-35`–`39`) in
-   either order — both build on the pipeline-cache/draw-command-queue pattern Phase `SDLGPU-6`
-   already established, so neither blocks the other.
+4. ~~`SDLGPU-31`~~/~~`SDLGPU-32`~~ — `AlphaTestEffect`/`DualTextureEffect` done and verified
+   2026-07-15, all ✅ (real per-pixel discard proof; real two-sampler-multiply proof). `SDLGPU-33`
+   (`EnvironmentMapEffect`) and `SDLGPU-34` (`SkinnedEffect`) remain ⬜, deliberately deferred —
+   see their own rows for the specific blockers (no `TextureCube` foundation yet; an unresolved
+   72-bone-palette push-size question plus a new stride-52 vertex format).
+5. Next: Phase `SDLGPU-8` (render targets, `SDLGPU-35`–`39`) — doesn't depend on either deferred
+   Phase `SDLGPU-7` item. `SDLGPU-33`/`34` can be picked up whenever their own blockers are
+   resolved (cube-texture foundation for the former; a bone-palette push-size spike for the
+   latter), in either order relative to Phase `SDLGPU-8`.
 
 ---
 
@@ -223,10 +231,10 @@ extends.
 
 | # | Task | Status | Notes |
 | --- | --- | --- | --- |
-| SDLGPU-31 | `AlphaTestEffect` (per-pixel discard) — strides 20/24/32. | ⬜ | |
-| SDLGPU-32 | `DualTextureEffect` (two-sampler multiply, `tex1.rgb*=2.0; result=tex1*tex2*tint`) — strides 20/24. | ⬜ | |
-| SDLGPU-33 | `EnvironmentMapEffect` (cubemap reflection) — needs `SDL_GPU_TEXTURETYPE_CUBE` texture creation + `SDL_GPUCubeMapFace`-indexed per-face upload. | ⬜ | |
-| SDLGPU-34 | `SkinnedEffect` (bone-matrix palette). | ⬜ | Verify the real per-driver push-uniform size limit before committing to `SDL_PushGPUVertexUniformData` for full bone palettes — if the limit is too small, a genuine uniform/storage buffer bound via `SDL_BindGPUVertexStorageBuffers` may be required instead, mirroring the second-UBO approach WebGPU needed for `lit_textured3d` (`WEBGPU-22`/`33`). |
+| SDLGPU-31 | `AlphaTestEffect` (per-pixel discard) — strides 20/24/32. | ✅ | Done and runtime-verified 2026-07-15 (`SdlGpu_Effects` CTest + screenshot: `AlphaFunction=Greater`/`ReferenceAlpha=128` on a texture with an opaque top half and a fully-transparent bottom half genuinely discards the bottom half — the `CornflowerBlue` background shows through with a hard edge, not a translucent blend, proving real `discard`, not alpha blending). Strides 20/32 share `alpha_test3d.vert.glsl`/one shader but need distinct pipelines (different vertex-input-state) — the pipeline cache key folds in the stride explicitly for this one shader family, unlike every other family here which is already stride-specific by construction. |
+| SDLGPU-32 | `DualTextureEffect` (two-sampler multiply, `tex1.rgb*=2.0; result=tex1*tex2*tint`) — strides 20/24. | ✅ | Done and runtime-verified 2026-07-15 — screenshot shows the exact predicted result of multiplying a red/green/blue/white quadrant texture by a uniform yellow second texture: red/green pass through unchanged, blue becomes black (yellow has no blue channel), white becomes yellow. An unambiguous proof the real two-sampler multiply runs, not just one texture being shown. |
+| SDLGPU-33 | `EnvironmentMapEffect` (cubemap reflection) — needs `SDL_GPU_TEXTURETYPE_CUBE` texture creation + `SDL_GPUCubeMapFace`-indexed per-face upload. | ⬜ | **Deliberately deferred, not attempted this session.** Blocked on a foundational gap: this backend has no `TextureCube`/`ITextureCubeBackend` implementation at all yet (`CreateTextureCube()` is not overridden, uses `IGraphicsBackend`'s default returning `nullptr`) — that's `SDLGPU-40`'s own job (Phase `SDLGPU-9`). Pick this up only after cube-texture creation/upload/sampling exists as a standalone capability; do not try to build it inline as part of the effect. |
+| SDLGPU-34 | `SkinnedEffect` (bone-matrix palette). | ⬜ | **Deliberately deferred, not attempted this session** — two real risks, not yet resolved: (1) a 72-bone palette is 4608 bytes, far larger than every push so far (max 224 bytes/`lit_textured3d`'s `LitLightParams`); `SDL_gpu.h` still does not document a hard per-driver push-uniform size limit, so this needs an empirical spike (a real 72-matrix push, or fall back to `SDL_BindGPUVertexStorageBuffers` if it fails) before committing to an approach. (2) needs a new stride-52 `VertexPositionNormalTextureSkinned` vertex format (bone weights `vec4` + bone indices as 4 small integers) not yet used by any pipeline here — check `SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4`/`UINT4`-equivalent support for the index attribute before assuming the layout ports directly from `VulkanGraphicsBackend`'s `uvec4 aBoneIndices`. |
 
 ---
 
