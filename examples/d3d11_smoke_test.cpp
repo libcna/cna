@@ -3118,6 +3118,75 @@ protected:
             dev.setRasterizerStateProperty(RasterizerState::CullCounterClockwise);
         }
 
+        // plan_dx.md DX-155: Model root-bone-index flexibility (Task 916's own `rootBoneIndex`
+        // constructor parameter) against the real D3D11 backend. Honest scope, confirmed by
+        // reading Model::Draw()/CopyAbsoluteBoneTransformsTo() first: neither actually consults
+        // `root_`/`rootBoneIndex` -- Draw() picks each mesh's world transform via
+        // `mesh->getParentBoneProperty()` (the `meshParentBones` constructor argument), and
+        // CopyAbsoluteBoneTransformsTo() walks each bone's OWN parent chain, independent of which
+        // bone is `Root`. So `rootBoneIndex`'s only currently-consumed effect anywhere is
+        // `getRootProperty()` returning it -- this test proves that (not a silently-defaulted-to-0
+        // value) AND exercises the full 5-argument constructor (meshParentBones + rootBoneIndex
+        // together, never used by DX-128's own 3-argument-constructor fixture) end to end through a
+        // real draw, including meshParentBones correctly targeting a NON-zero-indexed bone.
+        {
+            const Color redR(255, 0, 0, 255);
+            const VertexPositionColor vertsR[4] = {
+                { Vector3(-1.0f,  1.0f, 0.0f), redR },
+                { Vector3(-1.0f, -1.0f, 0.0f), redR },
+                { Vector3( 1.0f, -1.0f, 0.0f), redR },
+                { Vector3( 1.0f,  1.0f, 0.0f), redR },
+            };
+            VertexBuffer vbR(dev, 4);
+            vbR.SetData(vertsR, 4);
+            const uint16_t indicesR[6] = { 0, 1, 2, 0, 2, 3 };
+            IndexBuffer ibR(dev, 6);
+            ibR.SetData(indicesR, 6);
+
+            BasicEffect fxR(dev);
+            fxR.VertexColorEnabled = true;
+
+            // Two INDEPENDENT top-level bones (no parent/child relationship -- that hierarchy-
+            // chaining path is already covered by DX-128's own fixture). boneR0 (array index 0) is
+            // a large translation that would move the mesh off-screen if it were ever picked by
+            // mistake; boneR1 (array index 1, a NON-zero index) is Identity and is the bone the
+            // mesh is actually parented to AND the requested root.
+            ModelBone boneR0(0, "decoy");
+            boneR0.setTransformProperty(Matrix::CreateTranslation(100.0f, 100.0f, 0.0f));
+            ModelBone boneR1(1, "actual_root");
+            boneR1.setTransformProperty(Matrix::getIdentityProperty());
+
+            ModelMeshPart partR(&vbR, &ibR, /*numVertices=*/4, /*primitiveCount=*/2,
+                                /*startIndex=*/0, /*vertexOffset=*/0);
+            ModelMesh meshR(&dev, { &partR });
+            partR.setEffectProperty(&fxR);
+            Model modelR(&dev, { &boneR0, &boneR1 }, { &meshR }, { &boneR1 }, /*rootBoneIndex=*/1);
+
+            check(modelR.getRootProperty() == &boneR1,
+                  "Model: the 5-argument constructor's rootBoneIndex=1 genuinely sets Root to the "
+                  "bone at that NON-zero index, not silently defaulting to bones[0] (plan_dx.md "
+                  "DX-155)");
+
+            dev.Clear(Color(0, 255, 0, 255));
+            dev.SetDepthTestEnabled(false);
+            dev.setBlendStateProperty(BlendState::Opaque);
+            dev.setRasterizerStateProperty(RasterizerState::CullNone);
+            modelR.Draw(Matrix::getIdentityProperty(), Matrix::getIdentityProperty(), Matrix::getIdentityProperty());
+
+            const Microsoft::Xna::Framework::Rectangle centerRegionR(30, 30, 1, 1);
+            Color centreR(0, 0, 0, 0);
+            dev.GetBackBufferData(&centerRegionR, &centreR, 0, 1);
+            check(centreR.getRProperty() >= 200 && centreR.getGProperty() <= 60 && centreR.getBProperty() <= 60,
+                  "Model::Draw() with a real 5-argument-constructor Model (meshParentBones targeting "
+                  "the NON-zero-indexed boneR1, rootBoneIndex=1) genuinely draws the mesh's exact red "
+                  "over the green clear -- proves meshParentBones correctly selected boneR1's own "
+                  "Identity transform, not boneR0's off-screen-translating one, through the real D3D11 "
+                  "backend (plan_dx.md DX-155)");
+
+            dev.SetDepthTestEnabled(false);
+            dev.setRasterizerStateProperty(RasterizerState::CullCounterClockwise);
+        }
+
         // plan_dx.md DX-129: RenderTargetCube dedicated pixel test -- until now only construction
         // was proven real (plus DX-144's own narrower mip-chain-content check above); this mirrors
         // RenderTarget2D's own full bind+clear+readback+unbind-restores-backbuffer proof (Check J
@@ -3338,7 +3407,8 @@ protected:
                                 + 3 /* DX-150 skinned3d DirectionalLight1/2 discrimination */
                                 + 2 /* DX-151 skinned3d specular discrimination */
                                 + 1 /* DX-152 RenderTargetCube MSAA */
-                                + 1 /* DX-153 RenderTargetCube mip non-face-0 */;
+                                + 1 /* DX-153 RenderTargetCube mip non-face-0 */
+                                + 2 /* DX-155 Model root-bone-index flexibility */;
         std::printf("=== %d/%d PASS ===\n", passCount_, totalChecks);
         result_ = (passCount_ == totalChecks) ? 0 : 1;
         Exit();

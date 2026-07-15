@@ -4833,6 +4833,74 @@ int main()
                   "mesh's exact red over the green clear, through the D3D12 backend (plan_dx.md DX-148)");
         }
 
+        // ---- DX-155: Model root-bone-index flexibility (Task 916's own rootBoneIndex constructor
+        // parameter) against the real D3D12 backend. Honest scope, mirrors D3D11's own DX-155:
+        // neither Model::Draw() nor CopyAbsoluteBoneTransformsTo() actually consult root_ (confirmed
+        // by reading Model.cpp) -- Draw() picks each mesh's world transform via
+        // mesh->getParentBoneProperty() (the meshParentBones constructor argument), so
+        // rootBoneIndex's only currently-consumed effect anywhere is getRootProperty() returning
+        // it. This proves that (not silently defaulting to bones[0]) AND exercises the full
+        // 5-argument constructor (meshParentBones + rootBoneIndex together, never used by KK6's own
+        // 3-argument-constructor fixture) end to end through a real draw, including meshParentBones
+        // correctly targeting a NON-zero-indexed bone. ----
+        {
+            const X::Color redR(255, 0, 0, 255);
+            const XG::VertexPositionColor vertsR[4] = {
+                { X::Vector3(-1.0f,  1.0f, 0.0f), redR },
+                { X::Vector3(-1.0f, -1.0f, 0.0f), redR },
+                { X::Vector3( 1.0f, -1.0f, 0.0f), redR },
+                { X::Vector3( 1.0f,  1.0f, 0.0f), redR },
+            };
+            XG::VertexBuffer vbR(dev, 4);
+            vbR.SetData(vertsR, 4);
+            const uint16_t indicesR[6] = { 0, 1, 2, 0, 2, 3 };
+            XG::IndexBuffer ibR(dev, 6);
+            ibR.SetData(indicesR, 6);
+
+            XG::BasicEffect fxR(dev);
+            fxR.VertexColorEnabled = true;
+
+            // Two INDEPENDENT top-level bones (no parent/child relationship -- that hierarchy-
+            // chaining path is already covered by KK6's own fixture). bone0R (array index 0) is a
+            // large translation that would move the mesh off-screen if it were ever picked by
+            // mistake; bone1R (array index 1, a NON-zero index) is Identity and is the bone the
+            // mesh is actually parented to AND the requested root.
+            XG::ModelBone bone0R(0, "decoy");
+            bone0R.setTransformProperty(X::Matrix::CreateTranslation(100.0f, 100.0f, 0.0f));
+            XG::ModelBone bone1R(1, "actual_root");
+            bone1R.setTransformProperty(X::Matrix::getIdentityProperty());
+
+            XG::ModelMeshPart partR(&vbR, &ibR, /*numVertices=*/4, /*primitiveCount=*/2,
+                                    /*startIndex=*/0, /*vertexOffset=*/0);
+            XG::ModelMesh meshR(&dev, { &partR });
+            partR.setEffectProperty(&fxR);
+            XG::Model modelR(&dev, { &bone0R, &bone1R }, { &meshR }, { &bone1R }, /*rootBoneIndex=*/1);
+
+            Check(modelR.getRootProperty() == &bone1R,
+                  "VV0: Model: the 5-argument constructor's rootBoneIndex=1 genuinely sets Root to "
+                  "the bone at that NON-zero index, not silently defaulting to bones[0] (plan_dx.md "
+                  "DX-155)");
+
+            auto pxModelR = renderToTarget(X::Color(0, 255, 0, 255), [&] {
+                dev.SetDepthTestEnabled(false);
+                dev.setBlendStateProperty(XG::BlendState::Opaque);
+                dev.setRasterizerStateProperty(XG::RasterizerState::CullNone);
+                modelR.Draw(X::Matrix::getIdentityProperty(),
+                           X::Matrix::getIdentityProperty(),
+                           X::Matrix::getIdentityProperty());
+            });
+            const X::Color centreR = pixelAt(pxModelR, kW / 2, kH / 2);
+            Check(!pxModelR.empty()
+                      && centreR.getRProperty() >= 200
+                      && centreR.getGProperty() <= 60
+                      && centreR.getBProperty() <= 60,
+                  "VV1: Model::Draw() with a real 5-argument-constructor Model (meshParentBones "
+                  "targeting the NON-zero-indexed bone1R, rootBoneIndex=1) genuinely draws the mesh's "
+                  "exact red over the green clear -- proves meshParentBones correctly selected "
+                  "bone1R's own Identity transform, not bone0R's off-screen-translating one, through "
+                  "the real D3D12 backend (plan_dx.md DX-155)");
+        }
+
         // ---- DX-140 (remaining half): Texture2D::SaveAsPng() / FromStream() round-trip. ----
         // NPOT is already closed; this is the encode/decode path, which needs a GraphicsDevice.
         {
