@@ -106,6 +106,29 @@ TEST_F(CnbCustomLoaderTest, UnregisteredTypeNameThrowsContentLoadException)
     EXPECT_THROW(cm.Load<GameData>("mystery"), ContentLoadException);
 }
 
+TEST_F(CnbCustomLoaderTest, MissingCnbVersionThrowsEvenWithRegisteredType)
+{
+    // GenericCnbTypeReader must enforce the same "cnbVersion" requirement CNB-2's
+    // ValidateCnbEnvelope enforces for every other reader -- a .cnb with a recognized "type"
+    // but no "cnbVersion" must still be rejected, not silently dispatched to the factory.
+    ScratchContentRoot root;
+    WriteFile(root.path() / "noversion.cnb", R"({"type": "EnemyDefinition"})");
+
+    ContentManager cm(nullptr, root.path().string());
+    bool factoryInvoked = false;
+    cm.RegisterCnbLoader<GameData>("EnemyDefinition",
+        [&factoryInvoked](const std::string&, ContentManager&)
+        {
+            factoryInvoked = true;
+            GameData d;
+            d.kind = "Enemy";
+            return d;
+        });
+
+    EXPECT_THROW(cm.Load<GameData>("noversion"), ContentLoadException);
+    EXPECT_FALSE(factoryInvoked);
+}
+
 TEST_F(CnbCustomLoaderTest, FactoryCanRecursivelyLoadReferencedTexture)
 {
     ScratchContentRoot root;

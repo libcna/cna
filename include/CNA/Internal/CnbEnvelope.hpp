@@ -41,21 +41,65 @@ namespace CNA::Internal
 
     namespace Detail
     {
-        inline bool JsonFindKeyColon(const std::string& json, const std::string& key, std::size_t& colonPos)
+        // Finds the colon following "key" when "key" appears as an OBJECT KEY at the JSON
+        // document's own root level (depth 1) -- not merely the first textual occurrence of the
+        // substring anywhere in the file. Tracks string-literal state (so structural characters
+        // inside quoted values/keys are ignored) and nesting depth via {/[/}/], so a document
+        // that omits its own top-level "type"/"cnbVersion" but happens to contain a same-named
+        // field nested inside e.g. "meshes"/"glyphs" is correctly treated as not having one,
+        // rather than accidentally matching the nested field.
+        inline bool JsonFindTopLevelKeyColon(const std::string& json, const std::string& key, std::size_t& colonPos)
         {
             const std::string needle = "\"" + key + "\"";
-            auto pos = json.find(needle);
-            if (pos == std::string::npos) return false;
-            pos = json.find(':', pos + needle.size());
-            if (pos == std::string::npos) return false;
-            colonPos = pos;
-            return true;
+            int depth = 0;
+            bool inString = false;
+
+            for (std::size_t i = 0; i < json.size(); ++i)
+            {
+                const char c = json[i];
+
+                if (inString)
+                {
+                    if (c == '\\') { ++i; continue; }
+                    if (c == '"') inString = false;
+                    continue;
+                }
+
+                if (c == '"')
+                {
+                    if (depth == 1 && json.compare(i, needle.size(), needle) == 0)
+                    {
+                        const std::size_t afterKey = i + needle.size();
+                        const std::size_t colon = json.find(':', afterKey);
+                        bool onlyWhitespaceBeforeColon = colon != std::string::npos;
+                        for (std::size_t j = afterKey; onlyWhitespaceBeforeColon && j < colon; ++j)
+                        {
+                            if (!std::isspace(static_cast<unsigned char>(json[j])))
+                            {
+                                onlyWhitespaceBeforeColon = false;
+                            }
+                        }
+                        if (onlyWhitespaceBeforeColon)
+                        {
+                            colonPos = colon;
+                            return true;
+                        }
+                    }
+                    inString = true;
+                    continue;
+                }
+
+                if (c == '{' || c == '[') { ++depth; continue; }
+                if (c == '}' || c == ']') { --depth; continue; }
+            }
+
+            return false;
         }
 
         inline bool JsonExtractString(const std::string& json, const std::string& key, std::string& out)
         {
             std::size_t colon;
-            if (!JsonFindKeyColon(json, key, colon)) return false;
+            if (!JsonFindTopLevelKeyColon(json, key, colon)) return false;
             auto pos = json.find('"', colon + 1);
             if (pos == std::string::npos) return false;
             auto end = json.find('"', pos + 1);
@@ -67,7 +111,7 @@ namespace CNA::Internal
         inline bool JsonExtractInt(const std::string& json, const std::string& key, int& out)
         {
             std::size_t colon;
-            if (!JsonFindKeyColon(json, key, colon)) return false;
+            if (!JsonFindTopLevelKeyColon(json, key, colon)) return false;
             std::size_t pos = colon + 1;
             while (pos < json.size() && std::isspace(static_cast<unsigned char>(json[pos]))) ++pos;
             if (pos >= json.size()) return false;

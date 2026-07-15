@@ -89,6 +89,57 @@ TEST(ParseCnbEnvelopeTest, UnrelatedFieldsAreIgnoredNotErrors)
     EXPECT_EQ(env.type, "Model");
 }
 
+TEST(ParseCnbEnvelopeTest, NestedTypeFieldIsNotMistakenForTopLevelType)
+{
+    // No top-level "type" -- only a same-named field nested inside "meshes". A naive
+    // first-occurrence-anywhere scan would wrongly report hasType == true here.
+    const std::string json = R"({
+        "cnbVersion": 1,
+        "meshes": [
+            { "type": "NestedDecoy", "name": "part0" }
+        ]
+    })";
+
+    const CnbEnvelope env = ParseCnbEnvelope(json);
+
+    EXPECT_TRUE(env.hasCnbVersion);
+    EXPECT_FALSE(env.hasType);
+}
+
+TEST(ParseCnbEnvelopeTest, NestedCnbVersionFieldIsNotMistakenForTopLevelCnbVersion)
+{
+    const std::string json = R"({
+        "type": "Model",
+        "meshes": [
+            { "cnbVersion": 999, "name": "part0" }
+        ]
+    })";
+
+    const CnbEnvelope env = ParseCnbEnvelope(json);
+
+    EXPECT_FALSE(env.hasCnbVersion);
+    EXPECT_TRUE(env.hasType);
+    EXPECT_EQ(env.type, "Model");
+}
+
+TEST(ParseCnbEnvelopeTest, RealTopLevelFieldFoundEvenWhenNestedDecoyPrecedesItTextually)
+{
+    // The genuine top-level "type" appears AFTER a nested decoy with the same key name -- a
+    // naive first-occurrence-anywhere scan would return "NestedDecoy" instead of "Model".
+    const std::string json = R"({
+        "meshes": [
+            { "type": "NestedDecoy" }
+        ],
+        "type": "Model",
+        "cnbVersion": 1
+    })";
+
+    const CnbEnvelope env = ParseCnbEnvelope(json);
+
+    EXPECT_TRUE(env.hasType);
+    EXPECT_EQ(env.type, "Model");
+}
+
 TEST(ValidateCnbEnvelopeTest, MatchingTypeDoesNotThrow)
 {
     const CnbEnvelope env = ParseCnbEnvelope(R"({"cnbVersion": 1, "type": "SpriteFont"})");

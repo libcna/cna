@@ -11,6 +11,19 @@
 > `xnb.md`/`plan_xnb.md` are frozen as "researched, not adopted" (`CNB-30`). Not yet merged to
 > `develop` — awaiting the project owner's decision on next steps (PR, merge, etc.).
 >
+> **Post-completion review found and fixed 2 real bugs, same day.** (1) `GenericCnbTypeReader<T>`
+> (the `RegisterCnbLoader<T>` dispatch path, `CNB-25`) checked only `"type"`, not `"cnbVersion"` —
+> a `.cnb` missing `cnbVersion` entirely could still dispatch to a registered factory, bypassing
+> `CNB-2`'s validation contract that every other reader enforces. Fixed: it now checks both, like
+> `ValidateCnbEnvelope` does. (2) `CnbEnvelope.hpp`'s field scanner (`CNB-1`) matched the first
+> textual occurrence of `"type"`/`"cnbVersion"` anywhere in the document, not just at the JSON
+> root — a document with no genuine top-level field but a same-named field nested inside e.g.
+> `"meshes"` could be misparsed. Fixed with a proper depth- and string-literal-aware top-level-only
+> scanner. Both bugs confirmed real by reverting each fix in isolation and observing the new
+> regression tests fail with the exact predicted symptom, not just passing after the fix. 4 new
+> tests added (3 for the scoping bug, 1 for the missing-`cnbVersion` bypass); full-suite regression
+> after both fixes: 4408 tests, 4406 passed, same 2 pre-existing skips, 0 failures.
+>
 > Turns [`cnb.md`](cnb.md)'s design into a phased, numbered task list (`CNB-1`, `CNB-2`, ...),
 > mirroring how [`plan_xnb.md`](plan_xnb.md) turned [`xnb.md`](xnb.md) into concrete tasks. Read
 > `cnb.md` first — this file assumes its design decisions (resolution order, envelope shape,
