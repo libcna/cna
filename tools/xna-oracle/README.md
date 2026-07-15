@@ -47,9 +47,9 @@ fully-commented examples.
 | `fogcolor` | `r,g,b` (0-1 floats) — `IEffectFog.FogColor`, only meaningful when `fogenabled=true` |
 | `fogstart`, `fogend` | floats — `IEffectFog.FogStart`/`FogEnd`. **Not simple world-space distances**: with `World`/`View` both `Identity` (this corpus's own convention), the fog factor is `saturate(z*scale + fogStart*scale)` where `scale=1/(fogStart-fogEnd)` — see `fog_gradient_quad.scene`'s own extensive comment for the two false starts this produced (a saturated-to-zero uniform result, then a near-plane-clipped empty result) before landing on `FogStart=0`/`FogEnd=-1` (negative) to get a genuine `z=0`→unfogged, `z=1`→fogged gradient without leaving the safe `[0,1]` clip-space z range |
 | `primitive` | `TriangleList`, `TriangleStrip`, `LineList`, or `LineStrip` |
-| `vertex` | `x,y,z,r,g,b,a` (`PositionColor`), `x,y,z,u,v` (`PositionTexture`), `x,y,z,nx,ny,nz,u,v` (`PositionNormalTexture`), `x,y,z,u0,v0,u1,v1` (`PositionDualTexture`), or `x,y,z,nx,ny,nz,u,v,boneindex0,boneweight0[,boneindex1,boneweight1]` (`PositionNormalTextureWeights` — the second `boneindex,boneweight` pair is optional, defaults to `index=0/weight=0` when omitted) — repeats once per vertex, `World`/`View`/`Projection` are always `Matrix.Identity` |
+| `vertex` | `x,y,z,r,g,b,a` (`PositionColor`), `x,y,z,u,v` (`PositionTexture`), `x,y,z,nx,ny,nz,u,v` (`PositionNormalTexture`), `x,y,z,u0,v0,u1,v1` (`PositionDualTexture`), or `x,y,z,nx,ny,nz,u,v,boneindex0,boneweight0[,boneindex1,boneweight1[,boneindex2,boneweight2,boneindex3,boneweight3]]` (`PositionNormalTextureWeights` — the 2nd pair is optional (defaults to `index=0/weight=0`); the 3rd/4th pair are also optional but must appear together (16 columns total) when present) — repeats once per vertex, `World`/`View`/`Projection` are always `Matrix.Identity` |
 | `weightspervertex` | `1`, `2`, or `4` — `SkinnedEffect.WeightsPerVertex`, only when `effect=SkinnedEffect`. Real XNA defaults this to `4` (confirmed in FNA's own `SkinnedEffect.cs`) — a scene that wants the `OneBone` bucket must set `weightspervertex=1` explicitly, it is not the implicit default of leaving the key unset (`skinned_quad.scene` got this wrong once — see its own comment) |
-| `bone1translate` | `x,y,z` float — a pure-translation second bone (`Bones[1]`), only when `effect=SkinnedEffect`. `Bones[0]` is always `Matrix.Identity`; defaults to `(0,0,0)` (also Identity) when unset |
+| `bone1translate`, `bone2translate`, `bone3translate` | `x,y,z` float — pure-translation bones (`Bones[1]`/`Bones[2]`/`Bones[3]`), only when `effect=SkinnedEffect`. `Bones[0]` is always `Matrix.Identity`; each defaults to `(0,0,0)` (also Identity) when unset |
 
 **`LightingEnabled` carve-out for `EnvironmentMapEffect`/`SkinnedEffect`**: real XNA/FNA's
 `EnvironmentMapEffect` **and** `SkinnedEffect` both implement `IEffectLights.LightingEnabled` via
@@ -130,10 +130,10 @@ Requires Pillow (`pip install pillow`) — not previously a dependency of this p
 
 ## Status
 
-Eighteen scenes so far, **all pixel-perfect**, and every one of XNA's 5 Stock Effects plus
+Nineteen scenes so far, **all pixel-perfect**, and every one of XNA's 5 Stock Effects plus
 `IEffectFog`, ALL 8 `AlphaTestEffect.AlphaFunction` values (`AlphaTestEffect` compare-function
-coverage is COMPLETE), `EnvironmentMapEffect.FresnelFactor`, and a genuine `SkinnedEffect` 2-bone
-blend is now
+coverage is COMPLETE), `EnvironmentMapEffect.FresnelFactor`, and ALL 3
+`SkinnedEffect.WeightsPerVertex` values (`SkinnedEffect` weighting coverage is COMPLETE) is now
 represented in the corpus:
 
 - `colored3d` (`D9-A2`'s own original spike scene: a `BasicEffect` `VertexColorEnabled=true`/
@@ -238,6 +238,20 @@ represented in the corpus:
   boundaries: the original left edge correctly shows clear color, the lit `(128,128,128,255)`
   color begins exactly at the shifted position, and clear color resumes exactly past the shifted
   right edge — confirmed identical on both real XNA and CNA, `0/65536` pixels differ.
+- `skinned_fourbone_quad` — the first scene to exercise a REAL, non-degenerate 4-bone skinning
+  blend (`WeightsPerVertex=4`, all four bones bound with distinct nonzero weights), completing
+  coverage of all 3 real `WeightsPerVertex` values (`1`: `skinned_quad.scene`, `2`:
+  `skinned_twobone_quad.scene`, `4`: this scene). Extends the vertex line format again, from the
+  12-column pair to an optional 16 (a THIRD and FOURTH `boneindex,boneweight` pair) — backward
+  compatible. New `bone2translate`/`bone3translate` scene keys extend `bone1translate`'s pattern
+  to bones 2 and 3. All four bones are pure translations (same Identity rotation/scale trick, so
+  the normal/lighting stay unaffected): `Bone 0=Identity` (weight `0.4`), `Bone
+  1=Translate(0.4,0,0)` (weight `0.3`), `Bone 2=Translate(0,0.2,0)` (weight `0.2`), `Bone
+  3=Translate(0,-0.1,0)` (weight `0.1`). Hand-derived blend:
+  `0.4*(0,0,0)+0.3*(0.4,0,0)+0.2*(0,0.2,0)+0.1*(0,-0.1,0) = (0.12,0.03,0)` exactly — a genuine
+  TWO-AXIS shift (unlike the 2-bone scene's pure-X shift), proving all four weighted terms are
+  summed correctly, not just the first two. Sampled at the predicted shifted boundaries in both X
+  and Y, confirmed identical on both real XNA and CNA, `0/65536` pixels differ.
 - `multilight_textured_quad` — the first scene to genuinely exercise `BasicEffect`'s **multi-light
   summation** formula (`D9-82b`'s own "2-light-sum" `ShaderIndex` bucket, a structurally different
   dispatch path from the "`OneLight`" bucket every earlier lit scene exercises). Two active lights
@@ -343,10 +357,10 @@ genuinely discriminates, not just "always reports PASS".
 `EnvironmentMapEffect`, `SkinnedEffect`) plus `IEffectFog`, ALL 8 `AlphaTestEffect.AlphaFunction`
 values (`Less`/`LessEqual`/`GreaterEqual`/`Greater`/`Never`/`Always` on the `PSAlphaTestLtGt`
 bucket, `Equal`/`NotEqual` on the separate `PSAlphaTestEqNe` bucket — compare-function coverage is
-now COMPLETE), `EnvironmentMapEffect.FresnelFactor`, and a genuine `SkinnedEffect` 2-bone blend
-are now represented in the corpus, at least once, and every single comparison so far is
-pixel-perfect.** `D9-A5` keeps growing "with the plan" — each subsequent effect/feature
-combination this project verifies against the oracle adds its own scene(s) here, incrementally,
-rather than attempting the full corpus (`SkinnedEffect` 4-bone weighting, `SpriteBatch`, render
-targets, every shared `SurfaceFormat`) in one sitting. `D9-84` (every draw path validated against
-the oracle) is the task that consumes the finished corpus.
+now COMPLETE), `EnvironmentMapEffect.FresnelFactor`, and ALL 3 `SkinnedEffect.WeightsPerVertex`
+values (`SkinnedEffect` weighting coverage is now COMPLETE) are now represented in the corpus, at
+least once, and every single comparison so far is pixel-perfect.** `D9-A5` keeps growing "with
+the plan" — each subsequent effect/feature combination this project verifies against the oracle
+adds its own scene(s) here, incrementally, rather than attempting the full corpus (`SpriteBatch`,
+render targets, every shared `SurfaceFormat`) in one sitting. `D9-84` (every draw path validated
+against the oracle) is the task that consumes the finished corpus.

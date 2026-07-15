@@ -75,7 +75,7 @@ plausibly."
 
 **Phase D9-0 is fully closed.** Next up: Phase D9-1 (CMake integration + backend skeleton).
 
-### Phase D9-A — the XNA 4.0 oracle: D9-A1–A4 closed, D9-A5 started (18 scenes, all 5 Stock Effects + fog + all 8 AlphaTestEffect.AlphaFunction values (both buckets, COMPLETE) + EnvironmentMapEffect fresnel + SkinnedEffect 2-bone blend), D9-A6 open
+### Phase D9-A — the XNA 4.0 oracle: D9-A1–A4 closed, D9-A5 started (19 scenes, all 5 Stock Effects + fog + all 8 AlphaTestEffect.AlphaFunction values (COMPLETE) + EnvironmentMapEffect fresnel + SkinnedEffect all 3 WeightsPerVertex values (COMPLETE)), D9-A6 open
 
 | Task | Status |
 |---|---|
@@ -83,7 +83,7 @@ plausibly."
 | `D9-A2` — minimal XNA 4.0 reference app, no content pipeline | ✅ |
 | `D9-A3` — byte-for-byte equivalent CNA app, shared declarative scene format | ✅ |
 | `D9-A4` — `scripts/xna-diff.py`, DXVK-into-XNA-prefix prerequisite | ✅ |
-| `D9-A5` — growing scene corpus | 🟨 (18 scenes, all 5 XNA Stock Effects + `IEffectFog` + ALL 8 `AlphaTestEffect.AlphaFunction` values (`Less`/`LessEqual`/`GreaterEqual`/`Greater`/`Never`/`Always` on `PSAlphaTestLtGt`, `Equal`/`NotEqual` on `PSAlphaTestEqNe` — `AlphaTestEffect` compare-function coverage COMPLETE) + `EnvironmentMapEffect.FresnelFactor` + `SkinnedEffect` genuine 2-bone blend represented: `colored3d`, `textured_quad`, `lit_textured_quad`, `alphatest_quad`, `alphatest_less_quad`, `alphatest_equal_quad`, `alphatest_notequal_quad`, `alphatest_greaterequal_quad`, `alphatest_lessequal_quad`, `alphatest_never_quad`, `alphatest_always_quad`, `dualtexture_quad`, `envmap_quad`, `envmap_fresnel_quad`, `skinned_quad`, `skinned_twobone_quad`, `multilight_textured_quad`, `fog_gradient_quad`, all pixel-perfect) |
+| `D9-A5` — growing scene corpus | 🟨 (19 scenes, all 5 XNA Stock Effects + `IEffectFog` + ALL 8 `AlphaTestEffect.AlphaFunction` values (`Less`/`LessEqual`/`GreaterEqual`/`Greater`/`Never`/`Always` on `PSAlphaTestLtGt`, `Equal`/`NotEqual` on `PSAlphaTestEqNe` — `AlphaTestEffect` compare-function coverage COMPLETE) + `EnvironmentMapEffect.FresnelFactor` + `SkinnedEffect` ALL 3 `WeightsPerVertex` values (`1`/`2`/`4` — `SkinnedEffect` weighting coverage COMPLETE) represented: `colored3d`, `textured_quad`, `lit_textured_quad`, `alphatest_quad`, `alphatest_less_quad`, `alphatest_equal_quad`, `alphatest_notequal_quad`, `alphatest_greaterequal_quad`, `alphatest_lessequal_quad`, `alphatest_never_quad`, `alphatest_always_quad`, `dualtexture_quad`, `envmap_quad`, `envmap_fresnel_quad`, `skinned_quad`, `skinned_twobone_quad`, `skinned_fourbone_quad`, `multilight_textured_quad`, `fog_gradient_quad`, all pixel-perfect) |
 | `D9-A6` — run the corpus against CNA's other backends too | ⬜ |
 
 Closed 2026-07-15 (`D9-A3`/`D9-A4`): built the shared declarative scene format `D9-A3`'s own text
@@ -379,8 +379,21 @@ compare-function surface**: `Less`/`LessEqual`/`GreaterEqual`/`Greater`/`Never`/
 values now independently verified against the real reference implementation. All 18 scenes
 re-verified pixel-perfect afterward; full `D3D9` CTest suite re-run, 11/11 still green.
 
-Next: add more scenes as `D9-84` exercises each combination (`SkinnedEffect` 4-bone weighting,
-`SpriteBatch`, render targets, `SurfaceFormat` sweep).
+**19th scene, `skinned_fourbone_quad` (2026-07-15) — also pixel-perfect, first scene to exercise
+a REAL, non-degenerate 4-bone skinning blend, completing coverage of all 3 real
+`WeightsPerVertex` values.** Extended the vertex line format to an optional 16 columns (a 3rd/4th
+`boneindex,boneweight` pair), backward compatible. New `bone2translate`/`bone3translate` scene
+keys. All four bones are pure translations (same Identity rotation/scale trick
+`skinned_twobone_quad.scene` used): `Bone 0=Identity` (weight `0.4`), `Bone 1=Translate(0.4,0,0)`
+(weight `0.3`), `Bone 2=Translate(0,0.2,0)` (weight `0.2`), `Bone 3=Translate(0,-0.1,0)` (weight
+`0.1`). Hand-derived blend: `0.4*(0,0,0)+0.3*(0.4,0,0)+0.2*(0,0.2,0)+0.1*(0,-0.1,0) =
+(0.12,0.03,0)` exactly — a genuine TWO-AXIS shift (unlike the 2-bone scene's pure-X shift),
+proving all four weighted terms are summed correctly. Sampled at the predicted shifted
+boundaries in both X and Y, confirmed identical on both real XNA and CNA. All 19 scenes
+re-verified pixel-perfect afterward; full `D3D9` CTest suite re-run, 11/11 still green.
+
+Next: add more scenes as `D9-84` exercises each combination (`SpriteBatch`, render targets,
+`SurfaceFormat` sweep).
 
 ### Phase D9-1 — CMake integration and skeleton: CLOSED 2026-07-14
 
@@ -934,7 +947,8 @@ Most recent first. Full detail lives in `plan_dx9.md` — this is a short index.
 
 | Commit(s) | Summary |
 |---|---|
-| *(pending)* | **`D9-A5` grown to 18 scenes (`alphatest_never_quad`/`alphatest_always_quad`) — also PIXEL-PERFECT (0/65536 differ each), COMPLETE ALL 8 REAL XNA `AlphaTestEffect.AlphaFunction` VALUES IN THE CORPUS**. `Never` sets both branch targets negative (`clip(-1)` unconditionally, discards everything regardless of alpha); `Always` sets both positive (`clip(1)` unconditionally, discards nothing). Both reuse `alphatest_quad.scene`'s exact texture; `Never` renders pure clear color everywhere (even the alpha=255 texels that would normally pass `Greater`), `Always` renders every texel including the alpha=1/64 ones that would normally fail. No code changes needed. `AlphaTestEffect`'s entire compare-function surface is now independently verified: `Less`/`LessEqual`/`GreaterEqual`/`Greater`/`Never`/`Always` on `PSAlphaTestLtGt`, `Equal`/`NotEqual` on `PSAlphaTestEqNe`. All 18 scenes re-verified pixel-perfect; full D3D9 CTest suite 11/11 green. |
+| *(pending)* | **`D9-A5` grown to 19 scenes (`skinned_fourbone_quad`) — also PIXEL-PERFECT (0/65536 differ), first scene to exercise a REAL 4-bone skinning blend, completing all 3 real `WeightsPerVertex` values**. Extended vertex line format to an optional 16 columns (3rd/4th boneindex/boneweight pair); new `bone2translate`/`bone3translate` scene keys. Four pure-translation bones weighted 0.4/0.3/0.2/0.1 blend to an exact hand-derived `Translate(0.12,0.03,0)` -- a genuine two-axis shift proving all four weighted terms sum correctly. Confirmed at predicted shifted boundaries in both X and Y on both sides. All 19 scenes re-verified pixel-perfect; full D3D9 CTest suite 11/11 green. |
+| `83e2edf2` | **`D9-A5` grown to 18 scenes (`alphatest_never_quad`/`alphatest_always_quad`) — also PIXEL-PERFECT (0/65536 differ each), COMPLETE ALL 8 REAL XNA `AlphaTestEffect.AlphaFunction` VALUES IN THE CORPUS**. `Never` sets both branch targets negative (`clip(-1)` unconditionally, discards everything regardless of alpha); `Always` sets both positive (`clip(1)` unconditionally, discards nothing). Both reuse `alphatest_quad.scene`'s exact texture; `Never` renders pure clear color everywhere (even the alpha=255 texels that would normally pass `Greater`), `Always` renders every texel including the alpha=1/64 ones that would normally fail. No code changes needed. `AlphaTestEffect`'s entire compare-function surface is now independently verified: `Less`/`LessEqual`/`GreaterEqual`/`Greater`/`Never`/`Always` on `PSAlphaTestLtGt`, `Equal`/`NotEqual` on `PSAlphaTestEqNe`. All 18 scenes re-verified pixel-perfect; full D3D9 CTest suite 11/11 green. |
 | `dab209af` | **`D9-A5` grown to 16 scenes (`alphatest_greaterequal_quad`/`alphatest_lessequal_quad`) — also PIXEL-PERFECT (0/65536 differ each), exercise `GreaterEqual`/`LessEqual`, sharing `PSAlphaTestLtGt` with `Greater`/`Less` but differing at the EXACT boundary value**. Confirmed against FNA's own `AlphaTestEffect.cs`: `GreaterEqual` sets `X=reference-threshold` (vs `Greater`'s `+threshold`); `LessEqual` sets `X=reference+threshold` (vs `Less`'s `-threshold`) -- a texel exactly at `ReferenceAlpha` passes under the `-Equal` variant, fails under the plain variant. Both reuse `alphatest_equal_quad.scene`'s own texture (which already has an exact-128 texel; `alphatest_quad.scene`'s texture never lands on 128). Predicted patterns confirmed exactly right, then pixel-for-pixel identical. No code changes needed. Completes all 4 alpha-value-dependent `PSAlphaTestLtGt` values. All 16 scenes re-verified pixel-perfect; full D3D9 CTest suite 11/11 green. |
 | `ac7f39cd` | **`D9-A5` grown to 14 scenes (`alphatest_notequal_quad`) — also PIXEL-PERFECT (0/65536 differ), first scene to exercise `AlphaFunction=NotEqual`, completing coverage of both real pixel shader buckets' compare-function directions**. Confirmed against FNA's own `AlphaTestEffect.cs` source: `NotEqual` uses the identical `abs(a-x)<y` comparison as `Equal`, only the pass/fail branch targets swap. Reuses `alphatest_equal_quad.scene`'s exact texture/threshold, flips every texel's pass/fail. No code changes needed (`NotEqual` already supported). All 14 scenes re-verified pixel-perfect; full D3D9 CTest suite 11/11 green. |
 | `5bf410fc` | **`D9-A5` grown to 13 scenes (`skinned_twobone_quad`) — also PIXEL-PERFECT (0/65536 differ), first scene to exercise a REAL, non-degenerate 2-bone skinning blend**. New `weightspervertex`/`bone1translate` scene keys; vertex line format extended to an optional 12 columns (2nd boneindex/boneweight pair), backward compatible. Real finding: `skinned_quad.scene`'s own comment claimed `WeightsPerVertex=1` but never actually set it -- real XNA defaults to 4, so that scene had actually been running the FourBones bucket, harmless only because its single weight pair leaves the rest 0. Fixed with explicit `weightspervertex=1`. New scene blends Bone0=Identity + Bone1=Translate(0.4,0,0) at 50/50, giving an exact hand-derived Translate(0.2,0,0) -- the whole quad shifts right by 0.2 NDC units, confirmed at the predicted shifted screen boundaries on both sides. All 13 scenes re-verified pixel-perfect; full D3D9 CTest suite 11/11 green. |
@@ -995,17 +1009,18 @@ results landed so far are pixel-perfect** (`colored3d`, `textured_quad`, `lit_te
 `alphatest_quad`, `alphatest_less_quad`, `alphatest_equal_quad`, `alphatest_notequal_quad`,
 `alphatest_greaterequal_quad`, `alphatest_lessequal_quad`, `alphatest_never_quad`,
 `alphatest_always_quad`, `dualtexture_quad`, `envmap_quad`, `envmap_fresnel_quad`, `skinned_quad`,
-`skinned_twobone_quad`, `multilight_textured_quad`, `fog_gradient_quad` — `0/65536` pixels differ
-from real XNA 4.0 each, see Phase D9-A's own section above). `D9-A5` (the scene corpus) has 18
-entries and now represents **all 5 XNA Stock Effects** (`BasicEffect`, `AlphaTestEffect`,
-`DualTextureEffect`, `EnvironmentMapEffect`, `SkinnedEffect`) including `BasicEffect`'s own
-multi-light summation bucket, `IEffectFog` (shared by all 5 effects), **ALL 8**
+`skinned_twobone_quad`, `skinned_fourbone_quad`, `multilight_textured_quad`, `fog_gradient_quad` —
+`0/65536` pixels differ from real XNA 4.0 each, see Phase D9-A's own section above). `D9-A5` (the
+scene corpus) has 19 entries and now represents **all 5 XNA Stock Effects** (`BasicEffect`,
+`AlphaTestEffect`, `DualTextureEffect`, `EnvironmentMapEffect`, `SkinnedEffect`) including
+`BasicEffect`'s own multi-light summation bucket, `IEffectFog` (shared by all 5 effects), **ALL 8**
 `AlphaTestEffect.AlphaFunction` values covering both real pixel shader buckets (`Less`/
 `LessEqual`/`GreaterEqual`/`Greater`/`Never`/`Always` on `PSAlphaTestLtGt`, `Equal`/`NotEqual` on
 `PSAlphaTestEqNe` — `AlphaTestEffect` compare-function coverage is now COMPLETE),
-`EnvironmentMapEffect.FresnelFactor` with a genuine per-vertex gradient, and `SkinnedEffect`'s
-genuine 2-bone blend, every comparison pixel-perfect; `D9-84` (every draw path validated against
-the oracle) can now genuinely continue, one scene at a
+`EnvironmentMapEffect.FresnelFactor` with a genuine per-vertex gradient, and **ALL 3**
+`SkinnedEffect.WeightsPerVertex` values (`1`/`2`/`4` — `SkinnedEffect` weighting coverage is now
+COMPLETE), every comparison pixel-perfect; `D9-84` (every draw path validated against the oracle)
+can now genuinely continue, one scene at a
 time.
 
 **Phase D9-8: `D9-80`–`D9-83` ALL CLOSED — real, verified dispatch for all 5 XNA Stock Effects plus
@@ -1121,17 +1136,19 @@ cmake -S . -B cmake-build-d3d9 \
 🟨 — see their own plan rows for exactly what's deferred and why). **Phase D9-8's dispatch AND
 instancing work (`D9-80`–`D9-83`) is now fully closed too** — real, verified dispatch for all 5 XNA
 Stock Effects plus hardware instancing. **Phase D9-A's diff harness (`D9-A1`–`D9-A4`) is now fully
-closed too**, and 18 scenes covering all 5 XNA Stock Effects plus `IEffectFog`, ALL 8
+closed too**, and 19 scenes covering all 5 XNA Stock Effects plus `IEffectFog`, ALL 8
 `AlphaTestEffect.AlphaFunction` values across both real shader buckets (`AlphaTestEffect`
-compare-function coverage COMPLETE), `EnvironmentMapEffect.FresnelFactor`, and `SkinnedEffect`'s
-genuine 2-bone blend are pixel-perfect. Only `D9-A5` (incrementally: grow the scene corpus) and
-`D9-84` (validate against it) remain anywhere in the plan up to this point — and they are, by
-design, the same ongoing effort: add a scene, validate it, move to the next effect.
+compare-function coverage COMPLETE), `EnvironmentMapEffect.FresnelFactor`, and ALL 3
+`SkinnedEffect.WeightsPerVertex` values (`SkinnedEffect` weighting coverage COMPLETE) are
+pixel-perfect. Only `D9-A5` (incrementally: grow the scene corpus) and `D9-84` (validate against
+it) remain anywhere in the plan up to this point — and they are, by design, the same ongoing
+effort: add a scene, validate it, move to the next effect.
 
 1. **`D9-A5`/`D9-84`** — add the next scene(s) to `tools/xna-oracle/scenes/` (natural next
-   candidates: `SkinnedEffect` 4-bone weighting, `SpriteBatch`, render targets, `SurfaceFormat`
-   sweep — `AlphaTestEffect`'s own compare-function surface is now fully covered) and validate
-   them via `scripts/xna-diff.py` against the real XNA oracle — the last two open rows in
+   candidates: `SpriteBatch` (rotation, scale, source rect, origin, `SpriteEffects`,
+   `SpriteSortMode`s), render targets, `SurfaceFormat` sweep — both `AlphaTestEffect`'s
+   compare-function surface AND `SkinnedEffect`'s weighting surface are now fully covered) and
+   validate them via `scripts/xna-diff.py` against the real XNA oracle — the last two open rows in
    Phase D9-8/D9-A, and where `D9-21`'s `D3DCULL` proof and `D9-62`'s rasterizer-state proof both
    finally close out too. See `tools/xna-oracle/README.md` for the current build/run commands.
 

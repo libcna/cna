@@ -1,0 +1,61 @@
+# plan_dx9.md D9-A5 scene corpus: skinned_fourbone_quad
+# The first scene to exercise a REAL, non-degenerate 4-bone skinning blend (`WeightsPerVertex=4`,
+# all four bones bound with distinct nonzero weights), completing coverage of all 3 real
+# WeightsPerVertex values (1: skinned_quad.scene, 2: skinned_twobone_quad.scene, 4: this scene).
+# Extends the shared vertex line format again, from the 12-column pair introduced by
+# skinned_twobone_quad.scene to an optional 16 (a THIRD and FOURTH `boneindex,boneweight` pair)
+# -- backward compatible, existing 10/12-column lines default the extra pairs to
+# `index=0/weight=0`. New `bone2translate`/`bone3translate` scene keys extend
+# skinned_twobone_quad.scene's own `bone1translate` pattern to bones 2 and 3 (`Bones[0]` is
+# always Identity).
+#
+# Real formula, confirmed against FNA's own SkinnedEffect.fx (`Skin()`, unchanged from
+# skinned_twobone_quad.scene's own citation): `skinning = Sum over i<4 of
+# Bones[Indices[i]] * Weights[i]`, a literal weighted SUM of the raw bone matrices. All four
+# bones are pure translations (Identity rotation/scale), the same trick
+# skinned_twobone_quad.scene used to keep the blend cleanly hand-derivable: since every bone
+# shares the same Identity rotation/scale part, the blended rotation/scale is also exactly
+# Identity (the normal, and therefore lighting, stays completely unaffected), and only the
+# translations blend linearly:
+#   Bone 0 = Identity            (translate 0,0,0),    weight 0.4
+#   Bone 1 = Translate(0.4,0,0), weight 0.3
+#   Bone 2 = Translate(0,0.2,0), weight 0.2
+#   Bone 3 = Translate(0,-0.1,0), weight 0.1
+# Blended translation = 0.4*(0,0,0) + 0.3*(0.4,0,0) + 0.2*(0,0.2,0) + 0.1*(0,-0.1,0)
+#                      = (0,0,0) + (0.12,0,0) + (0,0.04,0) + (0,-0.01,0)
+#                      = (0.12, 0.03, 0) exactly -- a genuine 2-AXIS shift (unlike
+# skinned_twobone_quad.scene's own pure-X shift), proving all four weighted terms are summed
+# correctly, not just the first two. The whole quad shifts from x=[-0.6,0.6]/y=[-0.6,0.6] to
+# x=[-0.48,0.72]/y=[-0.57,0.63] -- still safely within the unclipped [-1,1] NDC range on every
+# edge. Same dim light + white texture as skinned_quad.scene/skinned_twobone_quad.scene ->
+# expected lit color remains exactly (128,128,128,255), just at the shifted position.
+width=256
+height=256
+profile=HiDef
+clearcolor=100,149,237,255
+effect=SkinnedEffect
+vertexformat=PositionNormalTextureWeights
+lighting=true
+ambientcolor=0,0,0
+light0enabled=true
+light0diffuse=0.5,0.5,0.5
+light0direction=0,0,-1
+texture=true
+texturewidth=1
+textureheight=1
+texturefilter=Point
+weightspervertex=4
+bone1translate=0.4,0,0
+bone2translate=0,0.2,0
+bone3translate=0,-0.1,0
+primitive=TriangleList
+texturepixel=255,255,255,255
+# x,y,z,nx,ny,nz,u,v,boneindex0,boneweight0,boneindex1,boneweight1,boneindex2,boneweight2,
+# boneindex3,boneweight3 -- every vertex faces the camera (+Z normal), bound to all 4 bones with
+# weights 0.4/0.3/0.2/0.1 (sum=1.0), blending to an exact Translate(0.12,0.03,0).
+vertex=-0.6,0.6,0,0,0,1,0,0,0,0.4,1,0.3,2,0.2,3,0.1
+vertex=0.6,0.6,0,0,0,1,1,0,0,0.4,1,0.3,2,0.2,3,0.1
+vertex=-0.6,-0.6,0,0,0,1,0,1,0,0.4,1,0.3,2,0.2,3,0.1
+vertex=0.6,0.6,0,0,0,1,1,0,0,0.4,1,0.3,2,0.2,3,0.1
+vertex=0.6,-0.6,0,0,0,1,1,1,0,0.4,1,0.3,2,0.2,3,0.1
+vertex=-0.6,-0.6,0,0,0,1,0,1,0,0.4,1,0.3,2,0.2,3,0.1

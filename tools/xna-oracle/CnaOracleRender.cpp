@@ -164,6 +164,8 @@ namespace
         float fogEnd = 1.0f;
         int weightsPerVertex = 4;
         Vector3 bone1Translate{0, 0, 0};
+        Vector3 bone2Translate{0, 0, 0};
+        Vector3 bone3Translate{0, 0, 0};
         PrimitiveType primitive = PrimitiveType::TriangleList;
         std::vector<VertexPositionColor> colorVertices;
         std::vector<VertexPositionTexture> textureVertices;
@@ -285,21 +287,29 @@ namespace
         v.Normal = Vector3(std::stof(p[3]), std::stof(p[4]), std::stof(p[5]));
         v.TextureCoordinate = Vector2(std::stof(p[6]), std::stof(p[7]));
         v.BlendIndex0 = static_cast<std::uint8_t>(std::stoi(p[8]));
-        v.BlendIndex2 = 0;
-        v.BlendIndex3 = 0;
         float weight0 = std::stof(p[9]);
-        // A second (boneindex,boneweight) pair is optional -- present only for scenes that
-        // genuinely exercise WeightsPerVertex=2/4 blending (e.g. skinned_twobone_quad.scene);
-        // single-bone scenes (e.g. skinned_quad.scene) keep the original 10-column format.
-        std::uint8_t index1 = 0;
-        float weight1 = 0.0f;
+        // A 2nd/3rd/4th (boneindex,boneweight) pair is optional -- present only for scenes that
+        // genuinely exercise WeightsPerVertex=2/4 blending (e.g. skinned_twobone_quad.scene,
+        // skinned_fourbone_quad.scene); single-bone scenes (e.g. skinned_quad.scene) keep the
+        // original 10-column format.
+        std::uint8_t index1 = 0, index2 = 0, index3 = 0;
+        float weight1 = 0.0f, weight2 = 0.0f, weight3 = 0.0f;
         if (p.size() >= 12)
         {
             index1 = static_cast<std::uint8_t>(std::stoi(p[10]));
             weight1 = std::stof(p[11]);
         }
+        if (p.size() >= 16)
+        {
+            index2 = static_cast<std::uint8_t>(std::stoi(p[12]));
+            weight2 = std::stof(p[13]);
+            index3 = static_cast<std::uint8_t>(std::stoi(p[14]));
+            weight3 = std::stof(p[15]);
+        }
         v.BlendIndex1 = index1;
-        v.BlendWeight = Vector4(weight0, weight1, 0.0f, 0.0f);
+        v.BlendIndex2 = index2;
+        v.BlendIndex3 = index3;
+        v.BlendWeight = Vector4(weight0, weight1, weight2, weight3);
         return v;
     }
 
@@ -345,6 +355,8 @@ namespace
             else if (key == "fogend") scene.fogEnd = std::stof(value);
             else if (key == "weightspervertex") scene.weightsPerVertex = std::stoi(value);
             else if (key == "bone1translate") scene.bone1Translate = ParseVector3(value);
+            else if (key == "bone2translate") scene.bone2Translate = ParseVector3(value);
+            else if (key == "bone3translate") scene.bone3Translate = ParseVector3(value);
             else if (key == "vertexformat")
             {
                 if (value == "PositionTexture") scene.vertexFormat = SceneVertexFormat::PositionTexture;
@@ -528,17 +540,20 @@ protected:
             skinnedFx->setWorldProperty(Matrix::getIdentityProperty());
             skinnedFx->setViewProperty(Matrix::getIdentityProperty());
             skinnedFx->setProjectionProperty(Matrix::getIdentityProperty());
-            // Bone 0 is always Identity; Bone 1 is an optional pure-translation bone, scene-
-            // configurable via bone1translate= (defaults to (0,0,0), i.e. also Identity, so
-            // single-bone scenes like skinned_quad.scene are unaffected). WeightsPerVertex
-            // defaults to 4, matching real XNA's own SkinnedEffect default -- skinned_quad.scene's
-            // own "single Identity bone at 100% weight" no-op already relies on this default
-            // (weights[1..3]=0 makes the extra bones structurally inert regardless of which
-            // ShaderIndex bucket -- OneBone/TwoBones/FourBones -- is actually selected).
+            // Bone 0 is always Identity; Bones 1-3 are optional pure-translation bones, scene-
+            // configurable via bone1translate=/bone2translate=/bone3translate= (each defaults to
+            // (0,0,0), i.e. also Identity, so single-bone scenes like skinned_quad.scene are
+            // unaffected). WeightsPerVertex defaults to 4, matching real XNA's own SkinnedEffect
+            // default -- skinned_quad.scene's own "single Identity bone at 100% weight" no-op
+            // already relies on this default (weights[1..3]=0 makes the extra bones structurally
+            // inert regardless of which ShaderIndex bucket -- OneBone/TwoBones/FourBones -- is
+            // actually selected).
             skinnedFx->setWeightsPerVertexProperty(scene_.weightsPerVertex);
             skinnedFx->SetBoneTransforms(std::vector<Matrix>{
                 Matrix::getIdentityProperty(),
-                Matrix::CreateTranslation(scene_.bone1Translate)});
+                Matrix::CreateTranslation(scene_.bone1Translate),
+                Matrix::CreateTranslation(scene_.bone2Translate),
+                Matrix::CreateTranslation(scene_.bone3Translate)});
             // Same explicit-interface-implementation LightingEnabled carve-out as
             // EnvironmentMapEffect above (confirmed against FNA's own SkinnedEffect.cs source too).
             if (scene_.lightingEnabled)
