@@ -1,9 +1,14 @@
 # `.cnb` content format — implementation plan for CNA
 
-> **Status: ✅ COMPLETE 2026-07-15 — all 8 phases (`CNB-1`–`CNB-31`) closed** on `feature/cnb`.
-> Full `CnaTests` regression: 4404 tests, 4402 passed, 2 pre-existing unrelated hardware skips
+> **Status: 🚧 Core implementation complete; Phase 9 hardening planned.** Phases 0–8
+> (`CNB-1`–`CNB-31`) were completed on 2026-07-15 on `feature/cnb`. A subsequent review found
+> the core design sound, but identified important hardening, cache-isolation, capability-contract,
+> and headless-verification work that must land before `.cnb` should be treated as a broadly
+> extensible, production-ready content substrate. That follow-up is Phase 9 (`CNB-32`–`CNB-39`)
+> below; it does not reopen or invalidate the completed migration tasks.
+> Full `CnaTests` regression after the post-completion fixes: 4408 tests, 4406 passed, 2 pre-existing unrelated hardware skips
 > (`Accelerometer`/`Gyroscope`), 0 failures — a clean baseline both before this plan started and
-> after every phase landed. Dedicated `.cnb`-specific coverage: 27/27 passing across 8 gtest
+> after every phase landed. Dedicated `.cnb`-specific coverage: 31/31 passing across 8 gtest
 > suites (`ParseCnbEnvelopeTest`, `ValidateCnbEnvelopeTest`, `CnbResolverOrderTest`,
 > `CnbSourceFileTest`, `CnbSpriteFontTest`, `CnbEffectTest`, `CnbModelTest`,
 > `CnbCustomLoaderTest`). `SkinnedModelTypeReader`/`.skinnedmodel.json` was deliberately kept
@@ -56,12 +61,13 @@
 | M2 — `sourceFile` proven | CNB-10 | A real `Content/x.png` + `Content/x.cnb` (`sourceFile` + `colorKey`) pair loads end-to-end through `Texture2D`, with passing tests. |
 | M3 — four readers migrated | CNB-27 | `SpriteFontTypeReader`, `EffectTypeReader`, `ModelTypeReader` load via `.cnb`; `SkinnedModelTypeReader`'s fate (migrate or stay separate) is decided and recorded; every existing `.font.json`/`.model.json`/`.shader.json`/`.skinnedmodel.json` fixture in the repo is either migrated or explicitly kept per that decision. |
 | M4 — custom loaders | CNB-31 | `RegisterCnbLoader<T>` implemented, tested, and documented with a worked example. |
+| M5 — sidecar hardening | CNB-39 | `sourceFile` cannot escape the content root, chain into `.cnb`, recurse forever, or mutate the separately-loadable native asset; the documented capability matrix, cache semantics, strict envelope policy, custom-loader registration behavior, and headless test lane are all verified. |
 
 ## Scope
 
 **In scope**: the content-format/resolver plumbing `cnb.md` describes — the `.cnb` envelope, the
 `.cnb`-first resolution order, `sourceFile` sidecar support, migrating the four existing JSON readers
-onto `.cnb`, and `RegisterCnbLoader<T>`.
+onto `.cnb`, `RegisterCnbLoader<T>`, and Phase 9's hardening of those mechanisms.
 
 **Out of scope for this plan**:
 - The actual XNA→CNA *content* migration/export tooling (`cnb.md`'s "What migration actually
@@ -217,6 +223,30 @@ onto `.cnb`, and `RegisterCnbLoader<T>`.
 | CNB-29 | Full `CnaTests` regression run + a dedicated `.cnb`-specific ctest tally, recorded in this file's status header | ✅ | Final confirmation run (no code changes since Phase 7's own regression): 4404 tests, 4402 passed, same 2 pre-existing hardware skips, 0 failures. Dedicated `--gtest_filter="*Cnb*"` tally: 27/27 passing across 8 suites |
 | CNB-30 | Decide the fate of `xnb.md`/`plan_xnb.md` per `cnb.md`'s own "Relationship to `xnb.md`/`plan_xnb.md`" section (freeze as "researched, not adopted" vs. leave open) and record the decision in both files | ✅ | **Decision: froze both, per `cnb.md`'s own pre-existing recommendation.** Added a "🧊 FROZEN — researched, not adopted" status banner to the top of both `xnb.md` and `plan_xnb.md`, pointing at `cnb.md`/`plan_cnb.md` as the adopted strategy. Neither file's content was deleted — both remain as reference material, exactly as `cnb.md` itself already recommended before this plan started |
 | CNB-31 | Final compliance sweep: every task above closed, every new/changed public method has Doxygen (per `CLAUDE.md`) and test coverage, no `.font.json`/`.model.json`/`.shader.json`/`.skinnedmodel.json` fixture left un-migrated except by the explicit CNB-22 decision | ✅ | Swept: zero `.font.json`/`.model.json`/`.shader.json` files remain anywhere in the repo (`find` + `GetExtensions()` grep both clean); `.skinnedmodel.json` files remain only per the CNB-22 decision. `CnbEnvelope.hpp`'s public struct/functions and `ContentManager.hpp`'s new `CnbLoaderFn`/`RegisterCnbLoader<T>` all have full Doxygen blocks. Every phase (0–7) closed with a passing regression run. All 31 tasks `✅` |
+
+---
+
+## Phase 9 — Hardening before broader `.cnb` adoption
+
+> **Why this is a new phase, not a retroactive change to Phases 0–8:** the completed work proved the
+> envelope, resolver order, three reader migrations, and custom-loader API. Post-completion review
+> also established that `.cnb` is now important enough to need stronger guarantees at its boundaries:
+> safe sidecar resolution, immutable source-asset semantics, a truthful per-reader capability
+> contract, strict envelope/version handling, type-safe caching, registration validation, and a test
+> path that does not depend on an interactive display. Implement these tasks in order. Each task is
+> one commit, includes its tests, and runs the relevant focused tests plus the full available
+> regression suite before the next task begins.
+
+| # | Task | Status | Acceptance criteria / implementation notes |
+|---|---|---|---|
+| CNB-32 | Make `sourceFile` resolution safe and non-recursive | ✅ | New `CNA::Internal::ResolveCnbSourceFileSafely()` (`include/CNA/Internal/CnbSourceFile.hpp`) replaces the old unchecked `ResolveSourceFileLogicalName()`. Rejects: absolute `sourceFile`; a canonical target outside `RootDirectory` (`fs::weakly_canonical` + prefix check, catches both `..` traversal and symlink escapes); a target whose resolved extension is `.cnb` (explicit chain); a target with no `.cnb` extension but a sibling `<name>.cnb` that the normal resolver would pick first (closes the disguised self-cycle case too — the old code had no path-safety logic at all, every one of these was previously unguarded). 6 new tests in `tests/Microsoft/Xna/Framework/Content/CnbSourceFileSafetyTests.cpp`: in-root sibling, in-root nested payload, `../` escape, absolute path, `.cnb` chain, self-cycle via extensionless name. Full-suite regression: 4414 tests, 4412 passed, same 2 pre-existing hardware skips, 0 failures |
+| CNB-33 | Isolate metadata-transformed textures from their native source cache entry | ⬜ | Today `Texture2D` values share a backend/CPU pixels through the weak cache. Loading `ahoj.cnb` first recursively caches `ahoj.png`, then `ApplyColorKey()` mutates that same shared texture; an explicit later `Load<Texture2D>("ahoj.png")` can therefore return the color-keyed image rather than the original native asset. Make the `.cnb` result an independently owned texture before applying metadata, while retaining ordinary caching for the unmodified source. Tests must load sidecar then native and native then sidecar in the same `ContentManager`; in both orders the sidecar has transformed pixels and the explicit native name has its original pixels. |
+| CNB-34 | Define and enforce the `.cnb`/`sourceFile` capability matrix for every built-in reader | ⬜ | The resolver deliberately tries `.cnb` for every registered type, but only `Texture2D` currently understands a metadata sidecar. Implement and document explicit behavior instead of letting a native decoder attempt to consume JSON: `Texture2D` supports `sourceFile` + `colorKey`; `SoundEffect` and `TextureCube` support a `sourceFile` delegation with no metadata fields yet; `SpriteFont`, `Effect`, and `Model` reject `sourceFile` clearly because their `.cnb` documents are self-contained descriptors; game-specific `RegisterCnbLoader<T>` factories remain responsible for any source-file convention they define. Update `cnb.md` so it no longer claims universal metadata support before it exists. Add a test for each branch, including a clear `ContentLoadException` for an unsupported sidecar, not an incidental native-decoder error. |
+| CNB-35 | Make envelope parsing and version policy strict | ⬜ | Define version 1 as the only supported envelope version for now. Reject missing, zero, negative, future, decimal, and trailing-garbage `cnbVersion` values with `ContentLoadException` that names the file and actual/supported value. Require a valid top-level JSON object and correctly decode JSON string escapes in `type` and `sourceFile`. Do not grow another ad-hoc, partially-validating scanner: adopt an existing approved JSON parser if one is already available, otherwise add one deliberately as a small documented dependency or a single shared, fully tested parser. Add malformed-document, escaped-string, non-object-root, and unsupported-version tests for built-in and custom-loader paths. |
+| CNB-36 | Make the general asset cache type-safe | ⬜ | `loadedAssets_` is currently keyed only by normalized logical name. If one non-texture `T` is loaded first and a different `T` is later requested for the same logical `.cnb` name, `std::any_cast` can throw `std::bad_any_cast` before the envelope mismatch check runs. Key the general cache by both `std::type_index` and normalized logical name (or an equivalent collision-free key), preserve `Unload()` behavior, and ensure a second request of a different type reaches normal `.cnb` validation and produces `ContentLoadException` naming expected and actual types. Add a regression test. |
+| CNB-37 | Make custom-loader registration deterministic and fail-fast | ⬜ | Reject an empty `typeName`, an empty factory, and duplicate registration of the same `(T, typeName)` with a clear `std::invalid_argument`/`std::logic_error`; do not silently replace a game factory. Retain the existing rejection of registering against an already-owned built-in/normal reader. Document this API contract in Doxygen and `cnb.md`, with tests for all three new guards and for two distinct names still coexisting for one `T`. |
+| CNB-38 | Make `.cnb` verification runnable without a display and suitable for CI | ⬜ | Remove unnecessary `GraphicsDevice` fixtures from envelope and custom-loader cases that do not use graphics; keep graphics only in the tests that genuinely create/load textures, effects, or models. Add a documented headless test preset/job using `CNA_GRAPHICS_BACKEND=HEADLESS` (or the project's canonical equivalent) that runs all graphics-independent `.cnb` coverage with no `DISPLAY`, Wayland, or OpenGL context. Preserve the existing real-backend coverage for pixel/asset integration tests. Record the exact focused command and result in this plan. |
+| CNB-39 | Update documentation and perform final Phase 9 compliance sweep | ⬜ | Update `cnb.md`, this status header, and worked examples to reflect the enforced version policy, sidecar restrictions, capability matrix, cache semantics, and registration contract. Confirm all CNB-32–CNB-38 public API changes have Doxygen and same-commit tests. Run the full available `CnaTests` suite plus the real-backend and headless `.cnb` focused suites; record totals, known skips, and environment-independent commands here. Milestone M5 is reached only with zero `.cnb` failures. |
 
 ---
 

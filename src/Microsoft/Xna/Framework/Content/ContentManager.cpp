@@ -3,6 +3,7 @@
 #include "System/IServiceProvider.hpp"
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "CNA/Internal/CnbEnvelope.hpp"
+#include "CNA/Internal/CnbSourceFile.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/AnimationPlayer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
@@ -209,28 +210,6 @@ namespace Microsoft::Xna::Framework::Content
             texture.SetData(pixels.data(), count);
         }
 
-        // Resolves a .cnb "sourceFile" field (a path relative to the .cnb's own directory) into
-        // the logical asset name ContentManager::Load<T>() expects (relative to the content root),
-        // by stripping the content root prefix back off the .cnb's already-resolved filesystem
-        // directory. Shared shape for any type reader that adopts "sourceFile" (CNB-7).
-        std::string ResolveSourceFileLogicalName(const std::string& cnbPath, ContentManager& cm,
-                                                  const std::string& sourceFile)
-        {
-            namespace fs = std::filesystem;
-            const fs::path resolvedDir = fs::path(cnbPath).parent_path();
-            const std::string root = cm.getRootDirectoryProperty();
-
-            fs::path relDir = resolvedDir;
-            if (!root.empty())
-            {
-                std::error_code ec;
-                fs::path candidate = fs::relative(resolvedDir, root, ec);
-                if (!ec) relDir = candidate;
-            }
-
-            return (relDir / sourceFile).lexically_normal().string();
-        }
-
         class Texture2DTypeReader : public ContentTypeReader<Graphics::Texture2D>
         {
         public:
@@ -265,9 +244,10 @@ namespace Microsoft::Xna::Framework::Content
                         "(a self-contained, non-sourceFile Texture2D .cnb is not supported).");
                 }
 
-                const std::string sourceLogicalName =
-                    ResolveSourceFileLogicalName(path, cm, envelope.sourceFile);
-                Graphics::Texture2D result = cm.Load<Graphics::Texture2D>(sourceLogicalName);
+                const CNA::Internal::CnbSourceFileResult resolved =
+                    CNA::Internal::ResolveCnbSourceFileSafely(
+                        path, cm.getRootDirectoryProperty(), envelope.sourceFile);
+                Graphics::Texture2D result = cm.Load<Graphics::Texture2D>(resolved.logicalName);
 
                 std::array<int, 3> colorKey{};
                 if (TryParseColorKeyRGB(json, colorKey))
