@@ -258,11 +258,11 @@ task ✅ without both — but do not claim pixel-level ✅ verification that Des
 
 | # | Task | Status | Notes |
 |---|---|---|---|
-| CANVAS-50 | Single glyph at a known position/size — confirm this needs no backend-specific code beyond Phase C4's `Draw()` path (a glyph is just a textured-quad draw against a bitmap-font atlas texture) | ⬜ | |
-| CANVAS-51 | Multiple glyphs with spacing/kerning | ⬜ | Shared/backend-agnostic math per `SDL_RENDERER` Task 691's own finding — expect ✅ with no new code. |
-| CANVAS-52 | `\n` newline advance | ⬜ | |
-| CANVAS-53 | Unknown-character fallback (`defaultCharacter`) | ⬜ | |
-| CANVAS-54 | `SpriteEffects` flip + rotation/origin/scale with `DrawString` | ⬜ | The shared `SpriteBatch.cpp` fix from `SDL_RENDERER` Task 694 (mirrored glyph order for a flipped string) is backend-agnostic and already applies here — confirm, don't re-fix. |
+| CANVAS-50 | Single glyph at a known position/size — confirm this needs no backend-specific code beyond Phase C4's `Draw()` path (a glyph is just a textured-quad draw against a bitmap-font atlas texture) | ✅ | Confirmed by reading `SpriteBatch::DrawString`/`pushSprite`: every glyph funnels through the exact same `Texture2D`+`Rectangle`+`Color`+rotation/origin/effects queueing path a plain `SpriteBatch::Draw()` call uses, which flushes through the same backend `Draw()` overload Phase C4 already implements. Zero Canvas-specific code needed. |
+| CANVAS-51 | Multiple glyphs with spacing/kerning | ✅ | `curOffset`/kerning-table math lives entirely in shared `SpriteBatch.cpp` (`spriteFont.spacing_`/`kerning_[index]`), same finding `SDL_RENDERER` Task 691 reached. |
+| CANVAS-52 | `\n` newline advance | ✅ | Handled in shared `SpriteBatch.cpp` (`curOffset.Y += lineSpacing_`) before any backend call. |
+| CANVAS-53 | Unknown-character fallback (`defaultCharacter`) | ✅ | Handled in shared `SpriteBatch.cpp` (falls back to `characterIndexMap_[defaultCharacter_]`, throws if unset) before any backend call. |
+| CANVAS-54 | `SpriteEffects` flip + rotation/origin/scale with `DrawString` | ✅ | The `axisDirX`/`axisDirY`/`axisIsMirroredX`/`axisIsMirroredY` glyph-order-mirroring fix (`SDL_RENDERER` Task 694) lives entirely in shared `SpriteBatch.cpp` — confirmed already active for every backend, no re-fix needed; per-glyph flip/rotation/origin reaches this backend through the identical `Draw()` overload Phase C4's rotation/flip math already handles correctly. |
 
 ## Phase C7 — `ThrowNo3D` wiring and remaining defaults
 
