@@ -350,6 +350,15 @@ namespace CNA::Internal::Backends::D3D9
                                     std::size_t stride, const Matrix& world, const Matrix& view,
                                     const Matrix& projection, PrimitiveType primitive, int primitiveCount,
                                     const GpuDrawParams& params);
+        /// D9-82d: real `DualTextureEffect` dispatch -- two-sampler draw (`texture0`/`texture1` ->
+        /// `Texture`/`Texture2`). Uses a new, D3D9-only stride-28 vertex layout
+        /// (`D3D9VertexDeclarations.hpp`) since `DualTextureEffect.fx`'s real `VSInputTx2` needs two
+        /// distinct texture-coordinate sets, unlike D3D11's own simplified single-UV
+        /// reimplementation. Defined in `D3D9EffectDraw.cpp`.
+        void DrawDualTextureEffectEXT(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
+                                      std::size_t stride, const Matrix& world, const Matrix& view,
+                                      const Matrix& projection, PrimitiveType primitive, int primitiveCount,
+                                      const GpuDrawParams& params);
 
         SDL_Window* window_ = nullptr;
         int width_ = 0;

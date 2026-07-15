@@ -42,6 +42,17 @@ namespace CNA::Internal::Backends::D3D9
             D3DDECL_END()
         };
 
+        // D9-82d: D3D9-only, not shared with D3D11/D3D12 -- see this file's own header comment for
+        // why (DualTextureEffect.fx's real VSInputTx2 genuinely needs two distinct UV sets).
+        // Position+TexCoord0+TexCoord1 (stride 28): POSITION0 (FLOAT3, 0), TEXCOORD0 (FLOAT2, 12),
+        // TEXCOORD1 (FLOAT2, 20).
+        constexpr D3DVERTEXELEMENT9 kStride28[] = {
+            {0, 0,  D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_POSITION, 0},
+            {0, 12, D3DDECLTYPE_FLOAT2, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_TEXCOORD, 0},
+            {0, 20, D3DDECLTYPE_FLOAT2, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_TEXCOORD, 1},
+            D3DDECL_END()
+        };
+
         // VertexPositionNormalTexture (stride 32): POSITION0 (FLOAT3, 0), NORMAL0 (FLOAT3, 12),
         // TEXCOORD0 (FLOAT2, 24).
         constexpr D3DVERTEXELEMENT9 kStride32[] = {
@@ -70,6 +81,7 @@ namespace CNA::Internal::Backends::D3D9
             case 16: count = 2; return kStride16;
             case 20: count = 2; return kStride20;
             case 24: count = 3; return kStride24;
+            case 28: count = 3; return kStride28;
             case 32: count = 3; return kStride32;
             case 52: count = 5; return kStride52;
             default: count = 0; return nullptr;

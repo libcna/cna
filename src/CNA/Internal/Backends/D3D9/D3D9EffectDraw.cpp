@@ -1,7 +1,7 @@
-// plan_dx9.md Phase D9-8 (D9-82b/D9-82c): real effect-aware DrawPrimitivesEx/DrawIndexedPrimitivesEx
-// dispatch. This file covers BasicEffect (D9-82b) and AlphaTestEffect (D9-82c) --
-// DualTextureEffect/EnvironmentMapEffect/SkinnedEffect each throw a named not-yet-implemented
-// naming their own follow-up row (D9-82d/e/f), matching the priority-cascade shape
+// plan_dx9.md Phase D9-8 (D9-82b/c/d): real effect-aware DrawPrimitivesEx/DrawIndexedPrimitivesEx
+// dispatch. This file covers BasicEffect (D9-82b), AlphaTestEffect (D9-82c), and DualTextureEffect
+// (D9-82d) -- EnvironmentMapEffect/SkinnedEffect each throw a named not-yet-implemented naming
+// their own follow-up row (D9-82e/f), matching the priority-cascade shape
 // D3D11GraphicsBackend::DrawPrimitivesExImpl already established (flag-driven effect selection,
 // GpuDrawParams as the only per-draw input).
 //
@@ -229,6 +229,35 @@ namespace CNA::Internal::Backends::D3D9
                     " out of range [0, 8)");
             }
         }
+
+        struct DualTextureEffectRegisterTables
+        {
+            const Shaders::D3D9ShaderConstantSlot* vs; int vsCount;
+            const Shaders::D3D9ShaderConstantSlot* ps; int psCount;
+        };
+
+        /// D9-82d: only ShaderIndex 0/1 (no vertex color) are drawable -- the vertex-color variants
+        /// (VSInputTx2Vc, 32 bytes) collide with the existing Position+Normal+TexCoord 32-byte
+        /// layout, same category as BasicEffect's own D9-82b gaps. See DrawDualTextureEffectEXT's
+        /// own combo check, which throws before this function would ever see ShaderIndex 2/3.
+        DualTextureEffectRegisterTables GetDualTextureEffectRegisterTablesEXT(int shaderIndex)
+        {
+            using namespace Shaders;
+            switch (shaderIndex)
+            {
+            case 0: return {kDualTextureEffect_VSDualTexture_Registers,
+                            static_cast<int>(std::size(kDualTextureEffect_VSDualTexture_Registers)),
+                            kDualTextureEffect_PSDualTexture_Registers,
+                            static_cast<int>(std::size(kDualTextureEffect_PSDualTexture_Registers))};
+            case 1: return {kDualTextureEffect_VSDualTextureNoFog_Registers,
+                            static_cast<int>(std::size(kDualTextureEffect_VSDualTextureNoFog_Registers)),
+                            nullptr, 0};
+            default:
+                throw std::out_of_range(
+                    "GetDualTextureEffectRegisterTablesEXT: ShaderIndex " + std::to_string(shaderIndex) +
+                    " has no matching CNA vertex layout (plan_dx9.md D9-82d)");
+            }
+        }
     }
 
     void D3D9GraphicsBackend::DrawPrimitivesExImpl(
@@ -245,10 +274,6 @@ namespace CNA::Internal::Backends::D3D9
         const bool needsEnvMap    = params.envMapping  && !needsAlphaTest && !needsDualTex;
         const bool needsSkinned   = params.skinned     && !needsAlphaTest && !needsDualTex && !needsEnvMap;
 
-        if (needsDualTex)
-            throw std::runtime_error(
-                "D3D9GraphicsBackend::DrawPrimitivesEx: DualTextureEffect dispatch not yet "
-                "implemented (plan_dx9.md D9-82d)");
         if (needsEnvMap)
             throw std::runtime_error(
                 "D3D9GraphicsBackend::DrawPrimitivesEx: EnvironmentMapEffect dispatch not yet "
@@ -264,6 +289,11 @@ namespace CNA::Internal::Backends::D3D9
         if (needsAlphaTest)
         {
             DrawAlphaTestEffectEXT(vb, ib, stride, world, view, projection, primitive, primitiveCount, params);
+            return;
+        }
+        if (needsDualTex)
+        {
+            DrawDualTextureEffectEXT(vb, ib, stride, world, view, projection, primitive, primitiveCount, params);
             return;
         }
         DrawBasicEffectEXT(vb, ib, stride, world, view, projection, primitive, primitiveCount, params);
@@ -483,6 +513,71 @@ namespace CNA::Internal::Backends::D3D9
 
         const auto* tex = static_cast<const D3D9TextureBackend*>(params.texture0);
         device_->SetTexture(0, tex->GetTextureEXT());
+
+        device_->SetVertexDeclaration(GetOrCreateVertexDeclarationEXT(stride));
+        const auto& d3dVb = static_cast<const D3D9VertexBufferBackend&>(vb);
+        device_->SetStreamSource(0, d3dVb.GetBufferEXT(), 0, static_cast<UINT>(stride));
+
+        if (ib)
+        {
+            const auto& d3dIb = static_cast<const D3D9IndexBufferBackend&>(*ib);
+            device_->SetIndices(d3dIb.GetBufferEXT());
+            device_->DrawIndexedPrimitive(ToD3D9Topology(primitive), 0, 0,
+                                          static_cast<UINT>(d3dVb.GetVertexCount()),
+                                          0, static_cast<UINT>(primitiveCount));
+        }
+        else
+        {
+            device_->DrawPrimitive(ToD3D9Topology(primitive), 0, static_cast<UINT>(primitiveCount));
+        }
+    }
+
+    void D3D9GraphicsBackend::DrawDualTextureEffectEXT(
+        const IVertexBufferBackend& vb, const IIndexBufferBackend* ib, std::size_t stride,
+        const Matrix& world, const Matrix& view, const Matrix& projection,
+        PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
+    {
+        if (!params.texture0 || !params.texture1)
+            throw std::runtime_error(
+                "D3D9GraphicsBackend::DrawPrimitivesEx (DualTextureEffect): requires non-null "
+                "texture0 AND texture1 (plan_dx9.md D9-82d)");
+
+        // Only the no-vertex-color combination is drawable: VSInputTx2Vc (32 bytes) collides with
+        // the existing Position+Normal+TexCoord layout, same category as BasicEffect's own D9-82b
+        // gaps -- see D3D9VertexDeclarations.hpp's own header comment.
+        if (stride != 28 || params.vertexColorEnabled)
+            throw std::runtime_error(
+                "D3D9GraphicsBackend::DrawPrimitivesEx (DualTextureEffect): stride " + std::to_string(stride) +
+                " with vertexColor=" + (params.vertexColorEnabled ? "true" : "false") +
+                " has no matching CNA vertex layout (plan_dx9.md D9-82d)");
+
+        const int shaderIndex = ComputeDualTextureEffectShaderIndex(params.fogEnabled, params.vertexColorEnabled);
+        const DualTextureEffectRegisterTables regs = GetDualTextureEffectRegisterTablesEXT(shaderIndex);
+
+        if (!shaderCache_) shaderCache_ = std::make_unique<D3D9ShaderCache>(device_.Get());
+        IDirect3DVertexShader9* vs = shaderCache_->GetVertexShader(GetDualTextureEffectVertexShaderNameEXT(shaderIndex));
+        IDirect3DPixelShader9* ps = shaderCache_->GetPixelShader(GetDualTextureEffectPixelShaderNameEXT(shaderIndex));
+        device_->SetVertexShader(vs);
+        device_->SetPixelShader(ps);
+
+        UploadMatrixConstantVS(device_.Get(), regs.vs, regs.vsCount, "WorldViewProj", world * view * projection);
+
+        // DiffuseColor: DualTextureEffect::FillGpuDrawParams() computes diffuseColor*alpha, alpha --
+        // same pattern as AlphaTestEffect, no adjustment needed (no lighting/emissive concept here).
+        TryUploadVertexShaderConstantEXT(device_.Get(), regs.vs, regs.vsCount, "DiffuseColor", params.diffuseColor);
+
+        const Vec4Pad fogVector = ComputeFogVectorEXT(world, view, params.fogEnabled, params.fogStart, params.fogEnd);
+        TryUploadVertexShaderConstantEXT(device_.Get(), regs.vs, regs.vsCount, "FogVector", fogVector.v);
+        TryUploadPixelShaderConstantEXT(device_.Get(), regs.ps, regs.psCount, "FogColor", Pad3(params.fogColor).v);
+
+        // PSDualTexture's real formula (DualTextureEffect.fx): color = SampleTex(Texture,uv0);
+        // color.rgb *= 2; color *= SampleTex(Texture2,uv1) * pin.Diffuse -- the classic XNA
+        // lightmap-doubling blend. No CPU-side computation needed here; it's entirely in the real
+        // compiled pixel shader.
+        const auto* tex0 = static_cast<const D3D9TextureBackend*>(params.texture0);
+        const auto* tex1 = static_cast<const D3D9TextureBackend*>(params.texture1);
+        device_->SetTexture(0, tex0->GetTextureEXT());
+        device_->SetTexture(1, tex1->GetTextureEXT());
 
         device_->SetVertexDeclaration(GetOrCreateVertexDeclarationEXT(stride));
         const auto& d3dVb = static_cast<const D3D9VertexBufferBackend&>(vb);

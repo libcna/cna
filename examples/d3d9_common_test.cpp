@@ -116,6 +116,17 @@ int main()
               "stride 24 -> POSITION0+COLOR0(UBYTE4N)+TEXCOORD0, matching VertexPositionColorTexture's own layout");
     }
     {
+        // D9-82d: the D3D9-only stride-28 layout (Position+TexCoord0+TexCoord1) added for
+        // DualTextureEffect's real VSInputTx2, which genuinely needs two distinct UV sets.
+        UINT count = 0;
+        const D3DVERTEXELEMENT9* elems = VertexElementsForStrideD3D9(28, count);
+        check(elems != nullptr && count == 3 &&
+              elems[0].Usage == D3DDECLUSAGE_POSITION && elems[0].Offset == 0 &&
+              elems[1].Usage == D3DDECLUSAGE_TEXCOORD && elems[1].UsageIndex == 0 && elems[1].Offset == 12 &&
+              elems[2].Usage == D3DDECLUSAGE_TEXCOORD && elems[2].UsageIndex == 1 && elems[2].Offset == 20,
+              "stride 28 -> POSITION0+TEXCOORD0+TEXCOORD1 (D3D9-only), matching DualTextureEffect's VSInputTx2");
+    }
+    {
         UINT count = 0;
         const D3DVERTEXELEMENT9* elems = VertexElementsForStrideD3D9(52, count);
         check(elems != nullptr && count == 5 &&

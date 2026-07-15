@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MS-PL
-// plan_dx9.md Phase D9-8 (D9-82b/D9-82c): real effect-aware DrawPrimitivesEx/
-// DrawIndexedPrimitivesEx dispatch -- BasicEffect (D9-82b) and AlphaTestEffect (D9-82c).
-// DualTextureEffect/EnvironmentMapEffect/SkinnedEffect are D9-82d/e/f, not yet implemented; Check F
-// confirms each throws a named, row-specific not-yet-implemented rather than silently drawing the
-// wrong thing.
+// plan_dx9.md Phase D9-8 (D9-82b/c/d): real effect-aware DrawPrimitivesEx/DrawIndexedPrimitivesEx
+// dispatch -- BasicEffect (D9-82b), AlphaTestEffect (D9-82c), DualTextureEffect (D9-82d).
+// EnvironmentMapEffect/SkinnedEffect are D9-82e/f, not yet implemented; Check F confirms each
+// throws a named, row-specific not-yet-implemented rather than silently drawing the wrong thing.
 //
 // Every expected pixel value below is HAND-COMPUTED directly from BasicEffect.fx's/
-// AlphaTestEffect.fx's/Lighting.fxh's own real HLSL formulas (SampleTexture*Diffuse,
-// ComputeLights' mul(diffuse,lightDiffuse)*DiffuseColor.rgb+EmissiveColor, ApplyFog's lerp,
-// AlphaTestEffect's clip((cmp) ? AlphaTest.z : AlphaTest.w)), not just "close enough" --
+// AlphaTestEffect.fx's/DualTextureEffect.fx's/Lighting.fxh's own real HLSL formulas
+// (SampleTexture*Diffuse, ComputeLights' mul(diffuse,lightDiffuse)*DiffuseColor.rgb+EmissiveColor,
+// ApplyFog's lerp, AlphaTestEffect's clip((cmp) ? AlphaTest.z : AlphaTest.w),
+// DualTextureEffect's color.rgb*=2; color*=overlay*Diffuse), not just "close enough" --
 // SpecularColor is deliberately zeroed in every BasicEffect check so AddSpecular() never
 // contributes (sidesteps needing to also hand-compute a half-vector-dependent specular term;
 // SpecularColor=0 makes that term exactly zero regardless of light direction/geometry, an exact
@@ -26,16 +26,19 @@
 // Check E -- fog: same unlit+textured setup as Check A, but with fog forced to its fully-fogged
 //   (fogFactor=1) case via a specific fogStart/fogEnd/geometry-Z combination -- exact FogColor
 //   readback (ApplyFog's lerp(color,FogColor*alpha,1) == FogColor*alpha).
-// Check F -- an unsupported BasicEffect flag/stride combination (no matching CNA vertex layout)
-//   throws a named error rather than silently drawing with the wrong stride; and each of
-//   DualTextureEffect/EnvironmentMapEffect/SkinnedEffect throws its own row-specific
-//   not-yet-implemented (D9-82d/e/f).
+// Check F -- an unsupported BasicEffect flag/stride combination and an unsupported
+//   DualTextureEffect flag combination (no matching CNA vertex layout) each throw a named error
+//   rather than silently drawing wrong; EnvironmentMapEffect/SkinnedEffect each throw their own
+//   row-specific not-yet-implemented (D9-82e/f).
 // Check G -- AlphaTestEffect, Less compare, PASSES (LtGt bucket, stride 20): exact
 //   texture*DiffuseColor readback, proving DiffuseColor + the clip()-passes path both work.
 // Check H -- AlphaTestEffect, Less compare, FAILS (discarded): the background is left genuinely
 //   UNPAINTED -- proves clip() actually discards rather than always drawing.
 // Check I -- AlphaTestEffect, Equal compare, PASSES, vertex-color bucket (stride 24, EqNe PS):
 //   exact texture readback, proving the EqNe pixel shader and the Vc vertex shader both work.
+// Check J -- DualTextureEffect, no fog/vertex color (stride 28, the new D3D9-only layout): exact
+//   2*texture0*texture1*DiffuseColor readback, proving the doubling-blend formula, the two-sampler
+//   bind (texture0/texture1), and the new stride-28 vertex declaration all work together.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
@@ -94,6 +97,12 @@ namespace
         {-1.0f, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f},
         { 3.0f, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f},
         {-1.0f,  3.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f},
+    };
+    struct VPT2 { float x, y, z, u0, v0, u1, v1; }; // D3D9-only stride 28: Position+TexCoord0+TexCoord1
+    const VPT2 kTriDualTx[3] = {
+        {-1.0f, -1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f},
+        { 3.0f, -1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f},
+        {-1.0f,  3.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f},
     };
 
     std::unique_ptr<CNA::Internal::Backends::ITextureBackend> Make1x1Texture(
@@ -343,6 +352,35 @@ protected:
                   "exact texture readback (200,120,40,128)");
         }
 
+        // Check J: DualTextureEffect, no fog, no vertex color (stride 28, D3D9-only layout).
+        {
+            auto vb = backend.CreateVertexBuffer(3);
+            vb->SetData(kTriDualTx, 3, sizeof(VPT2));
+            auto texWhite = Make1x1Texture(backend, 255, 255, 255, 255);
+            auto texOverlay = Make1x1Texture(backend, 100, 60, 20, 255);
+
+            GpuDrawParams params;
+            params.dualTexture = true;
+            params.textureEnabled = true;
+            params.vertexColorEnabled = false;
+            params.texture0 = texWhite.get();
+            params.texture1 = texOverlay.get();
+            params.diffuseColor[0] = params.diffuseColor[1] = params.diffuseColor[2] = 0.5f;
+            params.diffuseColor[3] = 1.0f;
+
+            dev.Clear(Color(0, 0, 255, 255));
+            backend.DrawPrimitivesEx(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                     Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, params);
+            Color px(0, 0, 0, 0);
+            ReadCenterPixel(dev, px);
+            // PSDualTexture: color = tex0; color.rgb *= 2; color *= tex1 * Diffuse.
+            // = (1,1,1,1)*2 * (100/255,60/255,20/255,1) * (0.5,0.5,0.5,1)
+            // = (100/255,60/255,20/255,1) exactly -> (100,60,20,255).
+            check(px.getRProperty() == 100 && px.getGProperty() == 60 && px.getBProperty() == 20 && px.getAProperty() == 255,
+                  "DrawPrimitivesEx (DualTextureEffect, no fog/vertexColor): exact "
+                  "2*texture0*texture1*DiffuseColor readback (100,60,20,255)");
+        }
+
         // Check F: honest-gap / not-yet-implemented reporting.
         {
             auto vb = backend.CreateVertexBuffer(3);
@@ -360,13 +398,18 @@ protected:
             check(threw, "DrawPrimitivesEx: an unsupported BasicEffect flag/stride combination throws "
                          "(no matching CNA vertex layout) rather than silently drawing wrong");
 
-            GpuDrawParams dualTexParams;
-            dualTexParams.dualTexture = true;
+            // No matching CNA vertex layout: DualTextureEffect with vertexColorEnabled=true (needs
+            // VSInputTx2Vc, 32 bytes, which collides with the existing Position+Normal+TexCoord
+            // layout -- D9-82d's own honest gap).
+            GpuDrawParams dualTexBadCombo;
+            dualTexBadCombo.dualTexture = true;
+            dualTexBadCombo.vertexColorEnabled = true;
             threw = false;
             try { backend.DrawPrimitivesEx(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
-                                           Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, dualTexParams); }
+                                           Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, dualTexBadCombo); }
             catch (const std::exception&) { threw = true; }
-            check(threw, "DrawPrimitivesEx: DualTextureEffect dispatch throws a named not-yet-implemented (D9-82d)");
+            check(threw, "DrawPrimitivesEx: an unsupported DualTextureEffect flag combination throws "
+                         "(no matching CNA vertex layout)");
 
             GpuDrawParams envMapParams;
             envMapParams.envMapping = true;
