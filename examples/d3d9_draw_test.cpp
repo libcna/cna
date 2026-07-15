@@ -14,6 +14,17 @@
 //   ([-1,1]) leaves the background genuinely UNCHANGED -- proves the constant upload is real and
 //   actually affects the transform, not a hardcoded/ignored no-op that would paint the same
 //   full-screen triangle regardless of World.
+// Check D -- PrimitiveType.TriangleStrip: every scene in the D9-A5 oracle corpus (and every check
+//   in this file until now) only ever used TriangleList, even though PrimitiveType has 3 other
+//   real values and GraphicsDevice::PrimitiveVerts()/ToD3D9Topology() already handle all of them
+//   unconditionally. A 4-vertex strip covering the full NDC square (2 triangles, primitiveCount=2)
+//   -- sampling near the FIRST triangle's own corner (always covered, even if primitiveCount was
+//   wrongly computed as 1) and near the SECOND triangle's own corner (covered ONLY if
+//   primitiveCount genuinely resolved to 2, not 1) is a real, discriminating proof that the
+//   vertex-count<->primitive-count conversion for TriangleStrip is correct end to end, not just
+//   "didn't crash". Independently confirmed pixel-for-pixel identical to real XNA 4.0 via
+//   tools/xna-oracle/scenes/colored_trianglestrip_quad.scene (D9-A5), which additionally proves
+//   the four-corner Gouraud interpolation across BOTH triangles matches exactly.
 //
 // Real finding (verified empirically, not assumed -- see plan_dx9.md D9-82's own closure note):
 // D9-22's original D3D9VertexDeclarations.hpp chose D3DDECLTYPE_D3DCOLOR for the COLOR0 element,
@@ -72,6 +83,19 @@ namespace
         {-1.0f,  3.0f, 0.0f, 0xFF0000FFu},
     };
     const uint16_t kTriIdx[3] = {0, 1, 2};
+
+    // Check D: a deliberately oversized quad in the canonical "Z" TriangleStrip order
+    // (TL,TR,BL,BR), extending past the [-1,1] NDC cube on all sides so both resulting triangles
+    // fully cover the viewport with no boundary ambiguity. Triangle 0 (TL,TR,BL) covers
+    // everything except the far bottom-right corner; triangle 1 (TR,BL,BR) is the only one that
+    // covers that corner -- so sampling there is a real, discriminating proof that
+    // primitiveCount genuinely resolved to 2 (not 1) for TriangleStrip.
+    const VPC kStrip[4] = {
+        {-2.0f,  2.0f, 0.0f, 0xFF0000FFu}, // TL
+        { 2.0f,  2.0f, 0.0f, 0xFF0000FFu}, // TR
+        {-2.0f, -2.0f, 0.0f, 0xFF0000FFu}, // BL
+        { 2.0f, -2.0f, 0.0f, 0xFF0000FFu}, // BR
+    };
 }
 
 class D3D9DrawTest : public Game
@@ -176,6 +200,36 @@ protected:
             check(stillBlue,
                   "D3D9GraphicsBackend::DrawColoredPrimitives(): WorldViewProj constant upload is real -- "
                   "translating World far outside the NDC cube genuinely leaves the background unpainted");
+        }
+
+        // Check D: PrimitiveType.TriangleStrip -- see this file's own header comment.
+        {
+            auto vb = backend.CreateVertexBuffer(4);
+            vb->SetData(kStrip, 4, sizeof(VPC));
+
+            dev.Clear(Color(0, 0, 255, 255));
+            backend.DrawColoredPrimitives(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                          Matrix::getIdentityProperty(), PrimitiveType::TriangleStrip, 2);
+
+            const Microsoft::Xna::Framework::Rectangle topLeftRegion(4, 4, 4, 4);
+            const Microsoft::Xna::Framework::Rectangle bottomRightRegion(56, 56, 4, 4);
+            std::vector<Color> tl(4 * 4, Color(0, 0, 0, 0)), br(4 * 4, Color(0, 0, 0, 0));
+            dev.GetBackBufferData(&topLeftRegion, tl.data(), 0, static_cast<int>(tl.size()));
+            dev.GetBackBufferData(&bottomRightRegion, br.data(), 0, static_cast<int>(br.size()));
+
+            bool tlIsRed = true, brIsRed = true;
+            for (const Color& p : tl)
+                if (p.getRProperty() != 255 || p.getGProperty() != 0 || p.getBProperty() != 0 || p.getAProperty() != 255)
+                    tlIsRed = false;
+            for (const Color& p : br)
+                if (p.getRProperty() != 255 || p.getGProperty() != 0 || p.getBProperty() != 0 || p.getAProperty() != 255)
+                    brIsRed = false;
+            check(tlIsRed && brIsRed,
+                  "D3D9GraphicsBackend::DrawColoredPrimitives(..., PrimitiveType.TriangleStrip, primitiveCount=2): "
+                  "a 4-vertex strip genuinely paints BOTH triangles -- the top-left corner (covered by triangle 0 "
+                  "alone) AND the bottom-right corner (covered ONLY by triangle 1) are both the vertex color, "
+                  "proving the vertex-count<->primitiveCount conversion for TriangleStrip is correct, not just "
+                  "that triangle 0 rendered while primitiveCount silently stayed at 1");
         }
 
         std::printf("=== %d/%d PASS ===\n", passCount, totalCount);

@@ -140,17 +140,18 @@ Requires Pillow (`pip install pillow`) — not previously a dependency of this p
 
 ## Status
 
-Twenty-eight scenes so far, **all pixel-perfect**, and every one of XNA's 5 Stock Effects plus
+Twenty-nine scenes so far, **all pixel-perfect**, and every one of XNA's 5 Stock Effects plus
 `IEffectFog`, ALL 8 `AlphaTestEffect.AlphaFunction` values (`AlphaTestEffect` compare-function
 coverage is COMPLETE), `EnvironmentMapEffect.FresnelFactor`, ALL 3
-`SkinnedEffect.WeightsPerVertex` values (`SkinnedEffect` weighting coverage is COMPLETE), and
+`SkinnedEffect.WeightsPerVertex` values (`SkinnedEffect` weighting coverage is COMPLETE),
 `SpriteBatch`'s core draw path, sampler address modes, 3 of 5 `SpriteSortMode` values, AND
 multi-texture `FlushBatch()`-on-texture-change batching (basic draw, rotation/origin,
 `SpriteEffects` flip, `Wrap`/`Mirror`, `Deferred`/`BackToFront`/`FrontToBack`, interleaved
 multi-texture sprites — `D9-90`/`D9-91`/`D9-92`/`D9-93` all COMPLETE, including `D9-90`'s own
 explicitly-named multi-texture-batching gap; `SpriteSortMode.Immediate`/`.Texture` explicitly
-scoped out of `D9-93`, see that task's own `plan_dx9.md` closure note) is now represented in the
-corpus:
+scoped out of `D9-93`, see that task's own `plan_dx9.md` closure note), PLUS
+`PrimitiveType.TriangleStrip` (every earlier scene only ever used `TriangleList`) is now
+represented in the corpus:
 
 - `colored3d` (`D9-A2`'s own original spike scene: a `BasicEffect` `VertexColorEnabled=true`/
   `LightingEnabled=false` triangle over a `CornflowerBlue` clear) — `0/65536` pixels differ,
@@ -444,6 +445,22 @@ corpus:
   color leak into the third position (`1600/65536` pixels wrong, exactly that sprite's own area),
   confirmed the scene is genuinely sensitive to this bug class, then restored and reconfirmed
   green.
+- `colored_trianglestrip_quad` — the first scene to ever use `primitive=TriangleStrip` (every
+  earlier scene, and every existing `D3D9_Draw`/`D3D9_DrawEx` CTest check, only ever used
+  `TriangleList`) — a genuinely previously-untested code path, not a new feature: the scene
+  format has supported all 4 `PrimitiveType` values since `D9-A3`'s own original design, and
+  CNA's `GraphicsDevice::PrimitiveVerts()`/`ToD3D9Topology()` already handle them unconditionally,
+  so this scene needed ZERO code changes on either side. A 4-vertex colored quad in the canonical
+  "Z" strip order (TL/TR/BL/BR, the standard pattern that keeps both resulting triangles
+  consistently front-facing under a strip's automatic alternating-winding rule, avoiding XNA's
+  default back-face culling), with 4 DIFFERENT corner colors specifically so a broken
+  vertex-count↔primitiveCount conversion (off-by-one, a dropped second triangle, or a degenerate
+  single-triangle misread) would show up as a missing quadrant or wrong Gouraud gradient, not
+  merely "did it crash". `0/65536` pixels differ, pixel-perfect on the first attempt. Also added a
+  dedicated offline `D3D9_Draw` Check D (an oversized full-viewport strip quad, sampling the first
+  triangle's own corner and the second triangle's own corner separately) — mutation-verified
+  (hardcoding `primitiveCount=1` instead of `2` made exactly that check go red, confirming it's
+  genuinely sensitive to the conversion being wrong, then restored).
 
 **Real, non-obvious finding surfaced while mutation-testing the half-pixel offset (not caught by
 the oracle diffs alone)**: `sprite_basic_quad.scene`'s own 1×1 texture is structurally incapable
@@ -468,15 +485,19 @@ genuinely discriminates, not just "always reports PASS".
 values (`Less`/`LessEqual`/`GreaterEqual`/`Greater`/`Never`/`Always` on the `PSAlphaTestLtGt`
 bucket, `Equal`/`NotEqual` on the separate `PSAlphaTestEqNe` bucket — compare-function coverage is
 now COMPLETE), `EnvironmentMapEffect.FresnelFactor`, ALL 3 `SkinnedEffect.WeightsPerVertex`
-values (`SkinnedEffect` weighting coverage is now COMPLETE), and `SpriteBatch`'s core draw path,
+values (`SkinnedEffect` weighting coverage is now COMPLETE), `SpriteBatch`'s core draw path,
 sampler address modes, 3 of 5 `SpriteSortMode` values, AND multi-texture
 `FlushBatch()`-on-texture-change batching (basic draw, rotation/origin, `SpriteEffects` flip,
 `Wrap`/`Mirror`, `Deferred`/`BackToFront`/`FrontToBack`, interleaved multi-texture sprites —
 `D9-90`–`D9-93` all now COMPLETE, including `D9-90`'s own explicitly-named multi-texture-batching
-gap, Phase D9-9 has no open rows left) are now represented in the corpus, at least once, and every
-single comparison so far is pixel-perfect.** `D9-A5` keeps growing "with the plan" — each
-subsequent effect/feature combination this project verifies against the oracle adds its own
-scene(s) here, incrementally, rather than attempting the full corpus (render targets — currently a
-documented blocker, not a simple next scene, see `NEXT.md` §4 — every shared `SurfaceFormat`,
-`SpriteSortMode.Texture`) in one sitting. `D9-84` (every draw path validated against the oracle) is
-the task that consumes the finished corpus.
+gap, Phase D9-9 has no open rows left), PLUS `PrimitiveType.TriangleStrip` are now represented in
+the corpus, at least once, and every single comparison so far is pixel-perfect.** `D9-A5` keeps
+growing "with the plan" — each subsequent effect/feature combination this project verifies against
+the oracle adds its own scene(s) here, incrementally, rather than attempting the full corpus
+(render targets — currently a documented blocker, not a simple next scene, see `NEXT.md` §4 —
+every shared `SurfaceFormat`, `PrimitiveType.LineList`/`.LineStrip`) in one sitting.
+`SpriteSortMode.Texture` is confirmed NOT viable as an oracle scene at all — real FNA's own
+`TextureComparer` sorts by `Texture`'s default `Object.GetHashCode()`, an implementation-defined
+identity hash with no predictable ordering, so no deterministic expected-pixel scene can exist for
+it (see `NEXT.md` §8 for the source-level confirmation). `D9-84` (every draw path validated
+against the oracle) is the task that consumes the finished corpus.
