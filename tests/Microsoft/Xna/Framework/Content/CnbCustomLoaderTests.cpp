@@ -191,3 +191,62 @@ TEST_F(CnbCustomLoaderTest, RegisteringForAlreadyOwnedTypeThrowsLogicError)
             [](const std::string&, ContentManager&) -> Texture2D { throw std::runtime_error("unreachable"); }),
         std::logic_error);
 }
+
+// plan_cnb.md CNB-37: deterministic, fail-fast registration guards.
+
+TEST_F(CnbCustomLoaderTest, EmptyTypeNameThrowsInvalidArgument)
+{
+    ContentManager cm(nullptr);
+
+    EXPECT_THROW(
+        cm.RegisterCnbLoader<GameData>(
+            "", [](const std::string&, ContentManager&) { return GameData{}; }),
+        std::invalid_argument);
+}
+
+TEST_F(CnbCustomLoaderTest, EmptyFactoryThrowsInvalidArgument)
+{
+    ContentManager cm(nullptr);
+
+    ContentManager::CnbLoaderFn<GameData> emptyFactory;
+    EXPECT_FALSE(static_cast<bool>(emptyFactory));
+
+    EXPECT_THROW(cm.RegisterCnbLoader<GameData>("Empty", emptyFactory), std::invalid_argument);
+}
+
+TEST_F(CnbCustomLoaderTest, DuplicateTypeNameForSameTThrowsLogicErrorNotSilentReplace)
+{
+    ScratchContentRoot root;
+    WriteFile(root.path() / "goblin.cnb", R"({"cnbVersion": 1, "type": "EnemyDefinition"})");
+
+    ContentManager cm(nullptr, root.path().string());
+
+    bool firstInvoked = false;
+    bool secondInvoked = false;
+
+    cm.RegisterCnbLoader<GameData>("EnemyDefinition",
+        [&firstInvoked](const std::string&, ContentManager&)
+        {
+            firstInvoked = true;
+            GameData d;
+            d.kind = "First";
+            return d;
+        });
+
+    EXPECT_THROW(
+        cm.RegisterCnbLoader<GameData>("EnemyDefinition",
+            [&secondInvoked](const std::string&, ContentManager&)
+            {
+                secondInvoked = true;
+                GameData d;
+                d.kind = "Second";
+                return d;
+            }),
+        std::logic_error);
+
+    // The first factory must still be the one actually registered -- not silently replaced.
+    GameData loaded = cm.Load<GameData>("goblin");
+    EXPECT_EQ(loaded.kind, "First");
+    EXPECT_TRUE(firstInvoked);
+    EXPECT_FALSE(secondInvoked);
+}

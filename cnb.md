@@ -382,6 +382,14 @@ asked for — except as a plain string key into an explicitly pre-registered tab
 reflection over a loaded .NET assembly, so none of the dynamic type-loading/reflection machinery
 `plan_xnb.md` already argues against needs to exist for this either.
 
+**Registration contract (`plan_cnb.md` CNB-37):** `RegisterCnbLoader<T>` is deterministic and
+fails fast rather than silently accepting bad input — an empty `typeName` or an empty `factory`
+throws `std::invalid_argument` immediately, and re-registering an already-used `(T, typeName)`
+pair throws `std::logic_error` rather than quietly replacing the earlier factory (the same
+`std::logic_error` the "type already owned by another reader" case throws — see below). Two
+*different* `typeName`s for the same `T` remain fully supported, as shown above — only an exact
+repeat of both `T` and `typeName` is rejected.
+
 ## Relationship to CNA's existing per-type JSON conventions
 
 Before this document was implemented, CNA's JSON content readers predated the `.cnb` envelope and

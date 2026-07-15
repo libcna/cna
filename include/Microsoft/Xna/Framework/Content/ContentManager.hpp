@@ -180,14 +180,35 @@ namespace Microsoft::Xna::Framework::Content
          * existing reader already registered (built-in or via RegisterTypeReader<T>()); throws
          * immediately if one already exists, since it would never be consulted by that reader.
          *
+         * Registration is deterministic and fails fast (plan_cnb.md CNB-37): an empty
+         * @p typeName or an empty @p factory is rejected immediately, and re-registering an
+         * already-used `(T, typeName)` pair throws rather than silently replacing the earlier
+         * factory -- two *different* `typeName`s for the same `T` remain fully supported (that
+         * is the feature's whole point); only an exact repeat is rejected.
+         *
          * @tparam T       Asset type the factory produces.
-         * @param typeName The .cnb document's "type" string this factory handles.
+         * @param typeName The .cnb document's "type" string this factory handles. Must not be
+         *                 empty.
          * @param factory  Callback invoked with the raw .cnb JSON text and this ContentManager.
-         * @throws std::logic_error if a reader is already registered for T.
+         *                 Must not be empty.
+         * @throws std::invalid_argument if @p typeName or @p factory is empty.
+         * @throws std::logic_error if a reader is already registered for T, or if @p typeName is
+         *         already registered for T.
          */
         template <typename T>
         NOXNA void RegisterCnbLoader(const std::string& typeName, CnbLoaderFn<T> factory)
         {
+            if (typeName.empty())
+            {
+                throw std::invalid_argument(
+                    "ContentManager::RegisterCnbLoader<T>(): typeName must not be empty.");
+            }
+            if (!factory)
+            {
+                throw std::invalid_argument(
+                    "ContentManager::RegisterCnbLoader<T>(): factory must not be empty.");
+            }
+
             const auto ti = std::type_index(typeid(T));
             const bool alreadyOwnedByAnotherReader =
                 typeReaders_.find(ti) != typeReaders_.end() &&
@@ -201,6 +222,14 @@ namespace Microsoft::Xna::Framework::Content
             }
 
             auto& innerMap = cnbNamedLoaders_[ti];
+            if (innerMap.find(typeName) != innerMap.end())
+            {
+                throw std::logic_error(
+                    "ContentManager::RegisterCnbLoader<T>(): '" + typeName + "' is already "
+                    "registered for this type; RegisterCnbLoader never silently replaces an "
+                    "existing factory.");
+            }
+
             const bool firstForThisType = innerMap.empty();
             innerMap[typeName] = std::move(factory);
 
