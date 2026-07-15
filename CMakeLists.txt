@@ -6779,6 +6779,17 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SDL_GPU")
         TIMEOUT 60
         LABELS "SdlGpu"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_sdlgpu.md SDLGPU-22..25: 2D vertical slice -- real Texture2D + SpriteBatch.
+    cna_sdlgpu_test(cna_test_sdlgpu_2d examples/sdlgpu_2d_test.cpp)
+    add_test(NAME SdlGpu_2D COMMAND cna_test_sdlgpu_2d)
+    set_tests_properties(SdlGpu_2D PROPERTIES
+        TIMEOUT 60
+        LABELS "SdlGpu"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Ad-hoc manual diagnostic (not a CTest) -- see the file's own header comment.
+    cna_sdlgpu_test(cna_diag_sdlgpu_single_sprite examples/sdlgpu_diag_single_sprite.cpp)
 endif()
 
 # --- Task 6.1: real two-process ENet loopback test harness ---

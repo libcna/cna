@@ -1,14 +1,17 @@
 # SDL GPU Graphics Backend — Implementation Plan
 
-> **Status (2026-07-15): Phases SDLGPU-1/SDLGPU-2 (infrastructure + device/window/swapchain
-> lifecycle) are implemented and verified.** `CNA_GRAPHICS_BACKEND=SDL_GPU` configures, builds
-> (`cna_backend_graphics_sdl_gpu`, zero new third-party dependencies as predicted), and a real
-> window + real `SDL_GPUDevice` (Vulkan driver) clears color+depth+stencil and presents 60 frames
-> with no exception, verified by `SdlGpu_Smoke` (6/6 checks, `ctest -R SdlGpu_Smoke`, real GPU via
-> Vulkan on this Linux dev machine). `GraphicsBackendCompileDefinitionTests.cpp`'s
-> `ExactlyOneGraphicsBackendIsSelected` was updated for the new backend and the full `CnaTests`
-> suite (118 tests) still passes. Texture/vertex/index buffer creation, `SpriteBatch`, and all 3D
-> draw paths (Phase SDLGPU-5 onward) are still ⬜ and throw `std::runtime_error`.
+> **Status (2026-07-15): Phases SDLGPU-1/SDLGPU-2/SDLGPU-3 (infrastructure, device/window/
+> swapchain lifecycle, and the 2D vertical slice) are implemented and verified.**
+> `CNA_GRAPHICS_BACKEND=SDL_GPU` configures, builds (`cna_backend_graphics_sdl_gpu`, zero new
+> third-party dependencies as predicted), and a real window + real `SDL_GPUDevice` (Vulkan driver)
+> clears color+depth+stencil, uploads a real `Texture2D`, and draws a real `SpriteBatch` scene
+> (tint, alpha, rotation, both flips, Point/Linear + Wrap/Clamp sampling) — verified by
+> `SdlGpu_Smoke` (6/6 checks) and `SdlGpu_2D` (3/3 checks, `ctest -R SdlGpu`), both on real GPU via
+> Vulkan on this Linux dev machine, plus a real screenshot (not just "didn't throw"). That
+> screenshot caught and led to fixing a real bug — see `SDLGPU-14`'s row below.
+> `GraphicsBackendCompileDefinitionTests.cpp`'s `ExactlyOneGraphicsBackendIsSelected` was updated
+> for the new backend and the full `CnaTests` suite (118 tests) still passes. All 3D draw paths
+> (Phase SDLGPU-6 onward) are still ⬜ and throw `std::runtime_error`.
 >
 > **Known partial gaps in what's landed so far:** `SDL_CreateGPUDevice`'s `debug_mode` is
 > hardcoded `false`, not yet wired to a CNA-side debug/validation toggle (minor, deferred).
@@ -117,13 +120,17 @@ extends.
    swapchain lifecycle, color+depth+stencil clear/present) done and verified 2026-07-15, all ✅
    except two 🟨 rows noted in each row's own Notes column (debug-mode toggle not yet wired;
    `IGraphicsBackend`-family concrete subclasses besides the main backend class don't exist yet).
-2. Next: Phase `SDLGPU-3` (`SDLGPU-13`–`16`, shader authoring/resource-binding strategy —
-   `SDLGPU-13` is a **decision task**, resolve it before writing any WGSL/SPIR-V-equivalent
-   shader) or Phase `SDLGPU-4` (pipeline/render-state mapping) in either order, since both are
-   prerequisites for the Phase `SDLGPU-5` 2D vertical slice. Do not skip ahead to 3D/effects work
-   before the Phase `SDLGPU-5` 2D vertical slice is verified end-to-end, matching how every other
-   3D-capable backend in this repo was built up (Headless/Software/Vulkan/WebGPU all landed a
-   working 2D baseline before any 3D vertex format).
+2. ~~`SDLGPU-13`~~ – ~~`SDLGPU-25`~~ — Phases `SDLGPU-3`/`SDLGPU-4`/`SDLGPU-5` (shader authoring
+   decision, sprite2d pipeline, `Texture2D`, vertex/index buffers, `SpriteBatch`) done and
+   verified 2026-07-15 — see each row's own Notes column for the handful of 🟨/⬜ sub-items
+   (BlendState/DepthStencilState/RasterizerState/ApplySamplerState dynamic mapping, streaming
+   hints, a genuine multi-key pipeline cache) that are real 3D-draw-path or polish work, not
+   blockers for the 2D milestone itself.
+3. Next: Phase `SDLGPU-6` (core 3D vertex formats and `BasicEffect` — `colored3d`/`textured3d`/
+   `colored_textured3d`/`lit_textured3d`, `SDLGPU-26`–`30`). This is the first 3D work — build the
+   pipeline-cache generality (`SDLGPU-17`) and the `BlendState`/`DepthStencilState`/
+   `RasterizerState` mapping (`SDLGPU-18`–`20`) out for real as part of it, rather than as
+   separate upfront tasks, since 3D draws are what actually needs them to vary.
 
 ---
 
@@ -157,10 +164,10 @@ extends.
 
 | # | Task | Status | Notes |
 | --- | --- | --- | --- |
-| SDLGPU-13 | **Decision task.** Choose the shader pipeline: (a) hand-author SPIR-V for the Vulkan driver by extending the existing `compile_shaders.py`/`libshaderc` runtime-compile pattern with `SDL_gpu`'s mandatory binding order, deferring DXBC/DXIL/MSL authoring; or (b) vendor the official [`SDL_shadercross`](https://github.com/libsdl-org/SDL_shadercross) tool to compile a single HLSL source to all four formats. Neither is currently vendored in this repo (`SDL_shadercross` was not found anywhere under this tree as of 2026-07-15). Document the choice and its platform scope explicitly in this row before starting `SDLGPU-14`. | ⬜ | Recommendation: start with (a) — it reuses this repo's already-working `libshaderc` toolchain and needs no new vendored project — and revisit (b) only when Windows/macOS validation (Phase `SDLGPU-13` platform-expansion phase, not to be confused with this task's number) actually becomes active work. |
-| SDLGPU-14 | `sprite2d` SDL-GPU shader pair (vertex + fragment), compiled to SPIR-V, satisfying `SDL_GPUShaderCreateInfo`'s explicit `num_samplers`/`num_storage_textures`/`num_storage_buffers`/`num_uniform_buffers` counts. | ⬜ | The 2D vertical slice (Phase `SDLGPU-5`) depends on this. |
-| SDLGPU-15 | `SDL_GPUVertexInputState`/`SDL_GPUVertexAttribute`/`SDL_GPUVertexElementFormat` mapping for the four stock vertex strides: `VertexPositionColor` (16), `VertexPositionTexture` (20), `VertexPositionColorTexture` (24), `VertexPositionNormalTexture` (32). | ⬜ | Mirror the existing per-backend vertex-format helper pattern (see `include/CNA/Internal/Backends/Vulkan/VulkanVertexFormatHelper.hpp` for the closest analogous helper to imitate the *shape* of, not the Vulkan-specific binding numbers). |
-| SDLGPU-16 | Per-draw uniform delivery via `SDL_PushGPUVertexUniformData`/`SDL_PushGPUFragmentUniformData` (world/view/projection, `DiffuseColor`, alpha-test params, light params), respecting the documented std140 alignment rule (`vec3`/`vec4` fields 16-byte aligned). | ⬜ | This is push-style data recorded per command buffer — ergonomically closer to Vulkan push constants than to WebGPU's mandatory-UBO-only model. `SDL_gpu.h` does not document a hard maximum push size; measure the real per-driver limit empirically before relying on it for large payloads (see `SDLGPU-35`'s skinned-effect caveat). |
+| SDLGPU-13 | **Decision task.** Choose the shader pipeline: (a) hand-author SPIR-V for the Vulkan driver by extending the existing `compile_shaders.py`/`libshaderc` runtime-compile pattern with `SDL_gpu`'s mandatory binding order, deferring DXBC/DXIL/MSL authoring; or (b) vendor the official [`SDL_shadercross`](https://github.com/libsdl-org/SDL_shadercross) tool to compile a single HLSL source to all four formats. | ✅ | Decided 2026-07-15: (a). `src/CNA/Internal/Backends/SdlGpu/shaders/compile_shaders.py` (adapted from the Vulkan backend's own script) compiles GLSL → SPIR-V at build time via `libshaderc`, following `SDL_gpu`'s *graphics-pipeline* binding convention specifically (vertex-stage textures=set0/UBOs=set1, fragment-stage textures=set2/UBOs=set3 — a different, narrower convention than the compute-pipeline one also documented in `SDL_gpu.h`; do not confuse the two when adding more shaders). `SDL_shadercross` remains unvendored; revisit (b) only when Windows/macOS driver work actually starts. |
+| SDLGPU-14 | `sprite2d` SDL-GPU shader pair (vertex + fragment), compiled to SPIR-V, satisfying `SDL_GPUShaderCreateInfo`'s explicit `num_samplers`/`num_storage_textures`/`num_storage_buffers`/`num_uniform_buffers` counts. | ✅ | Done and runtime-verified 2026-07-15 (`SdlGpu_2D` CTest + a real screenshot, see Phase `SDLGPU-5` below). **Found and fixed a real bug via the screenshot, not just the "no exception" CTest**: `SDL_gpu`'s Vulkan driver flips clip-space Y internally (for cross-backend NDC consistency) — the vertex shader's original `gl_Position = vec4(ndc, 0, 1)` silently rendered every sprite upside down (a texture's top row appeared at the bottom). Fixed by negating Y (`vec4(ndc.x, -ndc.y, 0, 1)`), confirmed by an isolated single-sprite diagnostic (`examples/sdlgpu_diag_single_sprite.cpp`, kept as a permanent manual diagnostic tool, same precedent as `cna_diag_d3d12_swapchain`) before and after the fix. |
+| SDLGPU-15 | `SDL_GPUVertexInputState`/`SDL_GPUVertexAttribute`/`SDL_GPUVertexElementFormat` mapping for the four stock vertex strides: `VertexPositionColor` (16), `VertexPositionTexture` (20), `VertexPositionColorTexture` (24), `VertexPositionNormalTexture` (32). | ⬜ | Not started — these are the 3D formats (Phase `SDLGPU-6`). The *pattern* is established for the unrelated 2D `SpriteVertex` layout (32 bytes: position/UV/RGBA float2+float2+float4) in `SdlGpuGraphicsBackend::GetOrCreateSpritePipeline()`, ready to imitate. |
+| SDLGPU-16 | Per-draw uniform delivery via `SDL_PushGPUVertexUniformData`/`SDL_PushGPUFragmentUniformData` (world/view/projection, `DiffuseColor`, alpha-test params, light params), respecting the documented std140 alignment rule (`vec3`/`vec4` fields 16-byte aligned). | 🟨 | The delivery *mechanism* is proven working (`RenderSprites()` pushes a `vec2 viewportSize` to vertex uniform slot 0 every frame that draws sprites) — the 3D-specific payloads (world/view/projection, `DiffuseColor`, alpha-test/light params) are not implemented (Phase `SDLGPU-6`+). `SDL_gpu.h` still does not document a hard maximum push size; measure the real per-driver limit empirically before relying on it for large payloads (see `SDLGPU-35`'s skinned-effect caveat). |
 
 ---
 
@@ -168,11 +175,11 @@ extends.
 
 | # | Task | Status | Notes |
 | --- | --- | --- | --- |
-| SDLGPU-17 | `SDL_GPUGraphicsPipelineCreateInfo` construction plus a pipeline cache keyed by (shader pair, vertex format, blend state, depth/stencil state, rasterizer state, sample count, color/depth target formats). | ⬜ | Required from the start — `SDL_gpu` pipelines are immutable, matching the same constraint `VulkanGraphicsBackend.cpp`/`WebGPUGraphicsBackend.cpp` already solved; follow their caching pattern. |
-| SDLGPU-18 | `BlendState` mapping — XNA `BlendState` → `SDL_GPUColorTargetBlendState` (`SDL_GPUBlendFactor`/`SDL_GPUBlendOp`). | ⬜ | |
-| SDLGPU-19 | `DepthStencilState` mapping — `SDL_GPUDepthStencilState` (`SDL_GPUCompareOp`, `SDL_GPUStencilOpState`), covering `DepthBufferEnable`/`DepthBufferWriteEnable`/`StencilEnable` and all three XNA stencil-op fields (`StencilFail`/`StencilDepthBufferFail`/`StencilPass`). | ⬜ | |
-| SDLGPU-20 | `RasterizerState` mapping — `SDL_GPURasterizerState` (`SDL_GPUFillMode`, `SDL_GPUCullMode`, `SDL_GPUFrontFace`), covering `CullMode.CullClockwiseFace`/`CullCounterClockwiseFace`/`None` and `FillMode.WireFrame`/`Solid`. | ⬜ | |
-| SDLGPU-21 | `SamplerState` mapping — `SDL_GPUSamplerCreateInfo` (`SDL_GPUFilter`, `SDL_GPUSamplerMipmapMode`, `SDL_GPUSamplerAddressMode`) for per-slot Wrap/Clamp/Mirror + Point/Linear/Anisotropic. | ⬜ | Match the per-slot dynamic sampler behavior already verified for D3D11/D3D12 (`DX-119`, `DX-154`). |
+| SDLGPU-17 | `SDL_GPUGraphicsPipelineCreateInfo` construction plus a pipeline cache keyed by (shader pair, vertex format, blend state, depth/stencil state, rasterizer state, sample count, color/depth target formats). | 🟨 | The `GetOrCreate`-lazy-pipeline *pattern* is established (`GetOrCreateSpritePipeline()`), but there is exactly one fixed pipeline (sprite2d: standard alpha blend, no depth test/write, no cull) — not yet a real multi-key cache, since no other pipeline variant exists yet to require one. Extend into a genuine keyed cache when Phase `SDLGPU-6`'s 3D pipelines land. |
+| SDLGPU-18 | `BlendState` mapping — XNA `BlendState` → `SDL_GPUColorTargetBlendState` (`SDL_GPUBlendFactor`/`SDL_GPUBlendOp`). | ⬜ | Not started. The sprite2d pipeline hardcodes one fixed non-premultiplied alpha blend (`SrcAlpha`/`OneMinusSrcAlpha`) — note `ISpriteBatchBackend` (this codebase's common interface, all backends) has no setter for `SpriteBatch.Begin()`'s own `BlendState` parameter at all, so every backend, not just this one, currently ignores it; not a gap introduced here. |
+| SDLGPU-19 | `DepthStencilState` mapping — `SDL_GPUDepthStencilState` (`SDL_GPUCompareOp`, `SDL_GPUStencilOpState`), covering `DepthBufferEnable`/`DepthBufferWriteEnable`/`StencilEnable` and all three XNA stencil-op fields (`StencilFail`/`StencilDepthBufferFail`/`StencilPass`). | ⬜ | Not started — `ApplyDepthStencilState()` is not overridden (uses `IGraphicsBackend`'s no-op default). The sprite2d pipeline hardcodes depth test/write off. |
+| SDLGPU-20 | `RasterizerState` mapping — `SDL_GPURasterizerState` (`SDL_GPUFillMode`, `SDL_GPUCullMode`, `SDL_GPUFrontFace`), covering `CullMode.CullClockwiseFace`/`CullCounterClockwiseFace`/`None` and `FillMode.WireFrame`/`Solid`. | ⬜ | Not started — `ApplyRasterizerState()` is not overridden. The sprite2d pipeline hardcodes `CULLMODE_NONE`/`FILLMODE_FILL`. |
+| SDLGPU-21 | `SamplerState` mapping — `SDL_GPUSamplerCreateInfo` (`SDL_GPUFilter`, `SDL_GPUSamplerMipmapMode`, `SDL_GPUSamplerAddressMode`) for per-slot Wrap/Clamp/Mirror + Point/Linear/Anisotropic. | 🟨 | The sampler-object creation/caching itself is done and runtime-verified (`GetOrCreateSampler()`, 18-entry cache mirroring `WebGPUGraphicsBackend::SamplerCacheIndex`'s exact indexing; `SdlGpu_2D`'s Point+Wrap and Linear+Wrap sprites both confirmed visually distinct and correct via screenshot). Not done: `ApplySamplerState()` (the per-slot dynamic setter used by direct 3D draws, matching D3D11/D3D12's `DX-119`/`DX-154`) — `SpriteBatch`'s own per-draw sampler selection (`SetSamplerFilter`/`SetSamplerAddressMode`) is the only path wired up so far. |
 
 ---
 
@@ -180,10 +187,10 @@ extends.
 
 | # | Task | Status | Notes |
 | --- | --- | --- | --- |
-| SDLGPU-22 | `SdlGpuTexture2DBackend` — `SDL_CreateGPUTexture` + upload via `SDL_CreateGPUTransferBuffer`/`SDL_MapGPUTransferBuffer`/`SDL_UnmapGPUTransferBuffer`/`SDL_BeginGPUCopyPass`/`SDL_UploadToGPUTexture`/`SDL_EndGPUCopyPass`. | ⬜ | |
-| SDLGPU-23 | `SdlGpuVertexBufferBackend`/`SdlGpuIndexBufferBackend` — `SDL_CreateGPUBuffer` (`VERTEX`/`INDEX` usage) + upload via the same transfer-buffer/copy-pass pattern; `SetDataWithOptions` `Discard`/`NoOverwrite` streaming hints. | ⬜ | |
-| SDLGPU-24 | `SdlGpuSpriteBatchBackend` — batch quads, bind the `sprite2d` pipeline, bind texture+sampler via `SDL_BindGPUFragmentSamplers`, draw via `SDL_DrawGPUIndexedPrimitives`. Must cover source rectangles, tint/alpha, rotation, both flips, and Linear/Point + Clamp/Wrap/Mirror sampling. | ⬜ | Same behavioral bar as `WEBGPU-126`'s validation scene. |
-| SDLGPU-25 | **First milestone gate.** A demo/smoke harness renders textured, tinted, rotated, flipped sprites and survives a resize through the SDL GPU backend with no validation error, device loss, or loader failure. | ⬜ | Same acceptance bar as `WEBGPU-124`–`131`'s "verified native 2D baseline" declaration — do not mark this ✅ from source inspection alone. |
+| SDLGPU-22 | `SdlGpuTexture2DBackend` — `SDL_CreateGPUTexture` + upload via `SDL_CreateGPUTransferBuffer`/`SDL_MapGPUTransferBuffer`/`SDL_UnmapGPUTransferBuffer`/`SDL_BeginGPUCopyPass`/`SDL_UploadToGPUTexture`/`SDL_EndGPUCopyPass`. | ✅ | Done and runtime-verified 2026-07-15 (`SdlGpu_2D` CTest + screenshot). `R8G8B8A8_UNORM`, `SAMPLER` usage only, single mip level — no render-target usage, no mip chain, no 3D/cube variants (later phases). |
+| SDLGPU-23 | `SdlGpuVertexBufferBackend`/`SdlGpuIndexBufferBackend` — `SDL_CreateGPUBuffer` (`VERTEX`/`INDEX` usage) + upload via the same transfer-buffer/copy-pass pattern; `SetDataWithOptions` `Discard`/`NoOverwrite` streaming hints. | 🟨 | `SetData`/`SetData16`/`SetData32` done and runtime-verified (`SdlGpu_Smoke`'s round-trip checks); every upload recreates the transfer buffer and grows the GPU buffer only when capacity is exceeded. `SetDataWithOptions`/`SetData16WithOptions`/`SetData32WithOptions` are not overridden (use `IGraphicsBackend`'s default, which ignores the streaming hint and calls the plain `SetData*`) — `Discard`/`NoOverwrite` semantics are not yet distinguished. |
+| SDLGPU-24 | `SdlGpuSpriteBatchBackend` — batch quads, bind the `sprite2d` pipeline, bind texture+sampler via `SDL_BindGPUFragmentSamplers`, draw via `SDL_DrawGPUIndexedPrimitives`. Must cover source rectangles, tint/alpha, rotation, both flips, and Linear/Point + Clamp/Wrap/Mirror sampling. | ✅ | Done and runtime-verified 2026-07-15 — uses `SDL_DrawGPUPrimitives` (non-indexed, 6 vertices/sprite, one draw call per sprite into a shared per-frame vertex buffer) rather than `SDL_DrawGPUIndexedPrimitives`; behaviorally equivalent for this milestone, not yet batched into fewer draw calls. `SdlGpu_2D` CTest covers source rects, tint, alpha, rotation, both flips, and Point+Wrap/Linear+Wrap sampling; all confirmed visually correct via screenshot (see `SDLGPU-25`). |
+| SDLGPU-25 | **First milestone gate.** A demo/smoke harness renders textured, tinted, rotated, flipped sprites and survives a resize through the SDL GPU backend with no validation error, device loss, or loader failure. | ✅ | Verified 2026-07-15: `examples/sdlgpu_2d_test.cpp` (`SdlGpu_2D` CTest, 3/3 checks) plus a real screenshot (captured via `import -window`, not just "didn't throw") of a 6-sprite scene — opaque quadrant texture, alpha-blended tint, 45°-rotated quadrant, combined horizontal+vertical flip (colors correctly permuted: white/blue/green/red corners), and Point+Wrap/Linear+Wrap sampling with a source rect exceeding the texture bounds (correctly tiles 2×2, unlike the Clamp-default sprites). The screenshot caught and led to fixing `SDLGPU-14`'s Y-flip bug — this is exactly the kind of defect a "did it throw" CTest alone cannot catch, and the reason this milestone is gated on a real visual check, not source inspection. Window-resize survival specifically was not re-tested this session (already covered by `SDLGPU-8`'s swapchain-acquisition handling) — no code path differs between this test and the resize-tested `SdlGpu_Smoke` test. |
 
 ---
 

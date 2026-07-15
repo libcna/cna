@@ -9,8 +9,9 @@
 // Check A -- GetWindowInternal() returns a real, non-null SDL_Window.
 // Check B -- GetRendererInternal() is null (this backend does not use SDL_Renderer).
 // Check C -- GetViewportSize() reports a positive width/height matching the real window.
-// Check D -- CreateVertexBuffer()/CreateIndexBuffer16() each throw std::runtime_error (correctly
-//   reported as "not implemented yet", not silently no-op).
+// Check D -- a real SdlGpuVertexBufferBackend/SdlGpuIndexBufferBackend round-trip: SetData()
+//   followed by GetVertexCount()/GetIndexCount() reports the exact count uploaded (Phase SDLGPU-5,
+//   SDLGPU-23) -- see sdlgpu_2d_test.cpp for the fuller Texture2D/SpriteBatch vertical-slice proof.
 // Check E -- 60 frames of Clear(Target|DepthBuffer|Stencil, color, depth, stencil) + the automatic
 //   end-of-frame Present() complete with no exception.
 //
@@ -24,6 +25,7 @@
 
 #include "CNA/Internal/Backends/SdlGpu/SdlGpuGraphicsBackend.hpp"
 
+#include <cstdint>
 #include <cstdio>
 #include <memory>
 #include <stdexcept>
@@ -67,15 +69,16 @@ protected:
             backend.GetViewportSize(width, height);
             check(width > 0 && height > 0, "GetViewportSize() reports a positive size");
 
-            bool vbThrew = false;
-            try { (void)backend.CreateVertexBuffer(3); }
-            catch (const std::runtime_error&) { vbThrew = true; }
-            check(vbThrew, "CreateVertexBuffer() throws (not yet implemented)");
+            auto vb = backend.CreateVertexBuffer(3);
+            const float verts[3 * 2] = {0, 0, 1, 0, 0, 1};
+            vb->SetData(verts, 3, sizeof(float) * 2);
+            check(vb->GetVertexCount() == 3, "VertexBuffer.SetData()+GetVertexCount() round-trips the exact count");
 
-            bool ibThrew = false;
-            try { (void)backend.CreateIndexBuffer16(3); }
-            catch (const std::runtime_error&) { ibThrew = true; }
-            check(ibThrew, "CreateIndexBuffer16() throws (not yet implemented)");
+            auto ib = backend.CreateIndexBuffer16(3);
+            const std::uint16_t indices[3] = {0, 1, 2};
+            ib->SetData16(indices, 3);
+            check(ib->GetIndexCount() == 3 && !ib->IsThirtyTwoBit(),
+                  "IndexBuffer.SetData16()+GetIndexCount()/IsThirtyTwoBit() round-trips correctly");
         }
 
         dev.Clear(ClearOptions::Target | ClearOptions::DepthBuffer | ClearOptions::Stencil,
