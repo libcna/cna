@@ -2806,6 +2806,69 @@ protected:
                   "genuinely from the specular term, not diffuse/ambient/emissive (plan_dx.md DX-125)");
         }
 
+        // plan_dx.md DX-151: skinned3d -- real Blinn-Phong specular highlight, discriminating.
+        // Applies DX-125's own half-vector-equals-normal trick to skinned3d.frag.hlsl's specular
+        // formula, byte-for-byte the same shape as lit_textured3d's (confirmed by reading both
+        // before writing this test), combined with the single-identity-bone fixture (DX-67/DX-135)
+        // so bone math doesn't complicate the specular isolation. Mirrors D3D12's own already-closed
+        // DX-151 (examples/d3d12_smoke_test.cpp Checks RR1/RR2) exactly.
+        {
+            struct VPNTSR { float x, y, z; float nx, ny, nz; float u, v;
+                           float bw0, bw1, bw2, bw3; uint8_t bi0, bi1, bi2, bi3; };
+            static const VPNTSR kTriRR[3] = {
+                {-1.0f, -1.0f, 0.0f, 0.0f, 0.0f, -1.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0},
+                { 3.0f, -1.0f, 0.0f, 0.0f, 0.0f, -1.0f, 2.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0},
+                {-1.0f,  3.0f, 0.0f, 0.0f, 0.0f, -1.0f, 0.0f, -1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0},
+            };
+            auto vbRR = backend.CreateVertexBuffer(3);
+            vbRR->SetData(kTriRR, 3, sizeof(VPNTSR));
+
+            ImageData whiteImgRR;
+            whiteImgRR.width = 2; whiteImgRR.height = 2; whiteImgRR.mipLevels = 1;
+            whiteImgRR.pixels.assign(2 * 2 * 4, 255);
+            auto whiteTexRR = backend.CreateTexture(whiteImgRR);
+
+            GpuDrawParams rp;
+            rp.texture0 = whiteTexRR.get();
+            rp.textureEnabled = true;
+            rp.skinned = true;
+            rp.boneCount = 1;
+            rp.weightsPerVertex = 1;
+            Matrix::getIdentityProperty().ToColumnMajor(rp.boneTransforms);
+            rp.ambientColor[0] = 0.0f; rp.ambientColor[1] = 0.0f; rp.ambientColor[2] = 0.0f;
+            rp.light0Diffuse[0] = 0.0f; rp.light0Diffuse[1] = 0.0f; rp.light0Diffuse[2] = 0.0f; // no diffuse noise
+            rp.light1Dir[0] = 0.0f; rp.light1Dir[1] = 0.0f; rp.light1Dir[2] = 1.0f;             // travels +Z
+            rp.light1Diffuse[0] = 0.0f; rp.light1Diffuse[1] = 0.0f; rp.light1Diffuse[2] = 0.0f; // diffuse off too
+            rp.light1Specular[0] = 1.0f; rp.light1Specular[1] = 1.0f; rp.light1Specular[2] = 1.0f;
+            rp.eyePositionWorld[0] = 0.0f; rp.eyePositionWorld[1] = 0.0f; rp.eyePositionWorld[2] = -10.0f;
+            rp.specularColor[0] = 1.0f; rp.specularColor[1] = 1.0f; rp.specularColor[2] = 1.0f;
+            rp.specularPower = 16.0f;
+
+            const Microsoft::Xna::Framework::Rectangle rrRegion(30, 30, 1, 1);
+
+            dev.Clear(Color(0, 0, 0, 255));
+            backend.DrawPrimitivesEx(*vbRR, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                     Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, rp);
+            Color specOnRR(0, 0, 0, 0);
+            dev.GetBackBufferData(&rrRegion, &specOnRR, 0, 1);
+            check(specOnRR.getRProperty() == 255 && specOnRR.getGProperty() == 255 && specOnRR.getBProperty() == 255,
+                  "D3D11GraphicsBackend::DrawPrimitivesEx(): real skinned3d -- Blinn-Phong specular at "
+                  "a geometry deliberately chosen so dot(H,N)=1 exactly contributes the exact expected "
+                  "full-white highlight, with diffuse/ambient all zero (plan_dx.md DX-151)");
+
+            GpuDrawParams rpOff = rp;
+            rpOff.specularColor[0] = 0.0f; rpOff.specularColor[1] = 0.0f; rpOff.specularColor[2] = 0.0f;
+            dev.Clear(Color(0, 0, 0, 255));
+            backend.DrawPrimitivesEx(*vbRR, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                     Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, rpOff);
+            Color specOffRR(0, 0, 0, 0);
+            dev.GetBackBufferData(&rrRegion, &specOffRR, 0, 1);
+            check(specOffRR.getRProperty() == 0 && specOffRR.getGProperty() == 0 && specOffRR.getBProperty() == 0,
+                  "D3D11GraphicsBackend::DrawPrimitivesEx(): the SAME geometry/light with material "
+                  "SpecularColor zeroed produces exact black -- proves the prior check's white came "
+                  "genuinely from the specular term, not diffuse/ambient (plan_dx.md DX-151)");
+        }
+
         // plan_dx.md DX-126: mip level > 0 SetData/UpdatePixelsLevel/sampling dedicated pixel
         // test -- texture upload/readback was previously only proven at mip level 0. Mirrors
         // D3D12's own already-closed DX-141 (examples/d3d12_smoke_test.cpp Checks HH0-HH2)
@@ -3218,7 +3281,8 @@ protected:
                                 + 12 /* DX-137 fog for 6 remaining variants x 2 checks each */
                                 + 3 /* DX-136 alpha_test_colored3d VertexColorEnabled on/off + discard-still-works */
                                 + 3 /* DX-149 env_map3d DirectionalLight1/2 discrimination */
-                                + 3 /* DX-150 skinned3d DirectionalLight1/2 discrimination */;
+                                + 3 /* DX-150 skinned3d DirectionalLight1/2 discrimination */
+                                + 2 /* DX-151 skinned3d specular discrimination */;
         std::printf("=== %d/%d PASS ===\n", passCount_, totalChecks);
         result_ = (passCount_ == totalChecks) ? 0 : 1;
         Exit();

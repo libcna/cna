@@ -2399,6 +2399,104 @@ int main()
         backend.UnbindOffscreenColorTargetEXT();
     }
 
+    // ---- Check RR (plan_dx.md DX-151): skinned3d -- real Blinn-Phong specular highlight,
+    // discriminating. Applies DX-139's own half-vector-equals-normal trick (eye at (0,0,-10),
+    // surface normal (0,0,-1), light1 traveling +Z -> dot(H,N)=1 exactly, an EXACT expected
+    // specular color regardless of SpecularPower) to skinned3d.frag.hlsl's own specular formula,
+    // which is byte-for-byte the same shape as lit_textured3d's (confirmed by reading both before
+    // writing this test) -- combined with the single-identity-bone fixture (DX-67/DX-111/DX-135)
+    // so bone math doesn't complicate the specular isolation. ----
+    {
+        constexpr int kRtWidth = 64;
+        constexpr int kRtHeight = 64;
+
+        D3D12_HEAP_PROPERTIES heapProps{};
+        heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
+        D3D12_RESOURCE_DESC rtDesc{};
+        rtDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+        rtDesc.Width = kRtWidth;
+        rtDesc.Height = kRtHeight;
+        rtDesc.DepthOrArraySize = 1;
+        rtDesc.MipLevels = 1;
+        rtDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        rtDesc.SampleDesc.Count = 1;
+        rtDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+        rtDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+
+        Microsoft::WRL::ComPtr<ID3D12Resource> rtRR;
+        HRESULT hrRtRR = backend.GetDeviceEXT()->CreateCommittedResource(
+            &heapProps, D3D12_HEAP_FLAG_NONE, &rtDesc,
+            D3D12_RESOURCE_STATE_RENDER_TARGET, nullptr, IID_PPV_ARGS(rtRR.GetAddressOf()));
+        backend.GetResourceStateTrackerEXT().TrackResource(rtRR.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET);
+        D3D12_CPU_DESCRIPTOR_HANDLE rtvRR = backend.AllocateRtvDescriptorEXT();
+        backend.GetDeviceEXT()->CreateRenderTargetView(rtRR.Get(), nullptr, rtvRR);
+        backend.BindOffscreenColorTargetEXT(rtRR.Get(), rtvRR, DXGI_FORMAT_R8G8B8A8_UNORM, kRtWidth, kRtHeight);
+
+        auto pixelAtRR = [&](const std::vector<uint8_t>& buf, int x, int y) -> std::array<uint8_t, 4>
+        {
+            const std::size_t idx = (static_cast<std::size_t>(y) * kRtWidth + static_cast<std::size_t>(x)) * 4;
+            return {buf[idx + 0], buf[idx + 1], buf[idx + 2], buf[idx + 3]};
+        };
+        auto centerIsExactRR = [&](const std::vector<uint8_t>& buf, uint8_t r, uint8_t g, uint8_t b)
+        {
+            const auto p = pixelAtRR(buf, 30, 30);
+            return p[0] == r && p[1] == g && p[2] == b;
+        };
+
+        struct VPNTSR { float x, y, z; float nx, ny, nz; float u, v;
+                       float bw0, bw1, bw2, bw3; uint8_t bi0, bi1, bi2, bi3; };
+        static const VPNTSR kTriRR[3] = {
+            {-1.0f, -1.0f, 0.0f, 0.0f, 0.0f, -1.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0},
+            { 3.0f, -1.0f, 0.0f, 0.0f, 0.0f, -1.0f, 2.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0},
+            {-1.0f,  3.0f, 0.0f, 0.0f, 0.0f, -1.0f, 0.0f, -1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0},
+        };
+        D3D12VertexBufferBackend vbRR(&backend, 3);
+        vbRR.SetData(kTriRR, 3, sizeof(VPNTSR));
+
+        ImageData whiteImgRR;
+        whiteImgRR.width = 2; whiteImgRR.height = 2; whiteImgRR.mipLevels = 1;
+        whiteImgRR.pixels.assign(2 * 2 * 4, 255);
+        D3D12TextureBackend whiteTexRR(&backend, whiteImgRR);
+
+        GpuDrawParams rp;
+        rp.texture0 = &whiteTexRR;
+        rp.textureEnabled = true;
+        rp.skinned = true;
+        rp.boneCount = 1;
+        rp.weightsPerVertex = 1;
+        Matrix::getIdentityProperty().ToColumnMajor(rp.boneTransforms);
+        rp.ambientColor[0] = 0.0f; rp.ambientColor[1] = 0.0f; rp.ambientColor[2] = 0.0f;
+        rp.light0Diffuse[0] = 0.0f; rp.light0Diffuse[1] = 0.0f; rp.light0Diffuse[2] = 0.0f; // no diffuse noise
+        rp.light1Dir[0] = 0.0f; rp.light1Dir[1] = 0.0f; rp.light1Dir[2] = 1.0f;             // travels +Z
+        rp.light1Diffuse[0] = 0.0f; rp.light1Diffuse[1] = 0.0f; rp.light1Diffuse[2] = 0.0f; // diffuse off too
+        rp.light1Specular[0] = 1.0f; rp.light1Specular[1] = 1.0f; rp.light1Specular[2] = 1.0f;
+        rp.eyePositionWorld[0] = 0.0f; rp.eyePositionWorld[1] = 0.0f; rp.eyePositionWorld[2] = -10.0f;
+        rp.specularColor[0] = 1.0f; rp.specularColor[1] = 1.0f; rp.specularColor[2] = 1.0f;
+        rp.specularPower = 16.0f;
+
+        backend.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+        backend.DrawPrimitivesEx(vbRR, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                 Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, rp);
+        auto specOnRR = ReadBackRenderTargetFull(backend, rtRR.Get(), kRtWidth, kRtHeight);
+        Check(centerIsExactRR(specOnRR, 255, 255, 255),
+              "RR1: DrawPrimitivesEx() real skinned3d -- Blinn-Phong specular at a geometry "
+              "deliberately chosen so dot(H,N)=1 exactly contributes the exact expected full-white "
+              "highlight, with diffuse/ambient all zero (plan_dx.md DX-151)");
+
+        GpuDrawParams rpOff = rp;
+        rpOff.specularColor[0] = 0.0f; rpOff.specularColor[1] = 0.0f; rpOff.specularColor[2] = 0.0f;
+        backend.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+        backend.DrawPrimitivesEx(vbRR, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                 Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, rpOff);
+        auto specOffRR = ReadBackRenderTargetFull(backend, rtRR.Get(), kRtWidth, kRtHeight);
+        Check(centerIsExactRR(specOffRR, 0, 0, 0),
+              "RR2: the SAME geometry/light with material SpecularColor zeroed produces exact black -- "
+              "proves RR1's white came genuinely from the specular term, not diffuse/ambient "
+              "(plan_dx.md DX-151)");
+
+        backend.UnbindOffscreenColorTargetEXT();
+    }
+
     // ---- Check T (DX-111 finish): instanced3d -- real per-instance world buffer, dual vertex stream ----
     {
         constexpr int kRtWidth = 64;
