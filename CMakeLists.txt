@@ -6922,6 +6922,33 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D9")
     set_tests_properties(D3D9_XNA_Diff PROPERTIES
         TIMEOUT 300
         LABELS "D3D9")
+
+    # D9-110 (Phase D9-11, ask-first, authorized 2026-07-15): validates the CTAB constant-table
+    # parser (D3D9ConstantTable.cpp, already part of CNA via BACKEND_SOURCES) against real
+    # D3DCompile()/D3DDisassemble() output. This TEST BINARY links d3dcompiler directly for its own
+    # fixture (compiling a known shader + running the disassembler as a cross-check oracle) --
+    # design decision 16 only forbids linking d3dcompiler into the shipped BACKEND_TARGET, which
+    # this test does not touch; same category as fxc_tool/disasm_tool's own standalone
+    # -ld3dcompiler linkage. Still needs Wine to run at all under cross-compilation (D3DCompile()
+    # only exists inside a Windows/Wine d3dcompiler_47.dll), so this reuses
+    # cna_d3d9_ctest_command() like every other D3D9 test here -- it is NOT a device-free binary
+    # that can skip the wrapper. Critically, it must run against ~/.wine-cna-d3d9-spike
+    # specifically: the default CNA_D3D9_WINEPREFIX (~/.wine-cna-d3d11) only has Wine's OWN builtin
+    # d3dcompiler_47.dll, which cannot compile SM2/SM3 shaders at all (docs/d3d9-backend.md) -- the
+    # real Microsoft compiler this test's whole premise depends on only lives in the spike prefix.
+    cna_d3d9_test(cna_test_d3d9_constanttable examples/d3d9_constanttable_test.cpp)
+    target_link_libraries(cna_test_d3d9_constanttable PRIVATE d3dcompiler)
+    cna_d3d9_ctest_command(_d3d9_constanttable_cmd cna_test_d3d9_constanttable)
+    add_test(NAME D3D9_ConstantTable COMMAND ${_d3d9_constanttable_cmd})
+    set_tests_properties(D3D9_ConstantTable PROPERTIES
+        TIMEOUT 30
+        LABELS "D3D9"
+        # Never creates a D3D9 device (D3DCompile()/D3DDisassemble() are pure compiler-library
+        # calls), so it legitimately never prints a "DXVK: <version>" line -- same reasoning as
+        # D3D9_Common's own ENVIRONMENT override. CNA_D3D9_WINEPREFIX pins this specific test to
+        # the real-compiler prefix regardless of whatever prefix the ambient shell/CI environment
+        # might otherwise have set for the rest of the D3D9 suite.
+        ENVIRONMENT "CNA_D3D9_SKIP_DXVK_GATE=1;CNA_D3D9_WINEPREFIX=$ENV{HOME}/.wine-cna-d3d9-spike")
 endif()
 
 # --- Task 6.1: real two-process ENet loopback test harness ---
