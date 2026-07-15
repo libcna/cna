@@ -26,6 +26,7 @@
 #include "CNA/Internal/Audio/AudioMixer.hpp"
 
 #include <SDL3_mixer/SDL_mixer.h>
+#include "System/Environment.hpp"
 
 using Microsoft::Xna::Framework::Audio::AudioChannels;
 using Microsoft::Xna::Framework::Audio::AudioEmitter;
@@ -43,7 +44,7 @@ class SoundEffectInstanceTest : public ::testing::Test
 protected:
     void SetUp() override
     {
-        ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+        System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
         try
         {
             std::vector<unsigned char> pcm(4 * 2048, 0); // 2048 stereo S16 frames

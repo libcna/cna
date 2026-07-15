@@ -30,6 +30,7 @@
 #include <vector>
 
 #include <SDL3_mixer/SDL_mixer.h>
+#include "System/Environment.hpp"
 
 using Microsoft::Xna::Framework::Audio::AudioEmitter;
 using Microsoft::Xna::Framework::Audio::AudioEngine;
@@ -507,7 +508,7 @@ TEST(SoundBankTest, PlayCueThreeArgAfterDisposeThrowsObjectDisposed)
 // real WaveBank-backed fixture instead and reads back the actual SDL_mixer track gain.
 TEST(SoundBankTest, PlayCueThreeArgAppliesRealAttenuationToActiveInstance)
 {
-    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
 
     try
     {
@@ -644,7 +645,7 @@ TEST(SoundBankTest, DisposeForceStopsCueObtainedViaGetCue)
 // IsPaused directly; it doesn't require the entry to have been swept from fireAndForget_ yet).
 TEST(SoundBankTest, IsInUseFalseSoonAfterFireAndForgetCueNaturallyFinishes)
 {
-    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
 
     try
     {

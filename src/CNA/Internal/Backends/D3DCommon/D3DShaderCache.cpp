@@ -28,6 +28,7 @@ namespace CNA::Internal::Backends::D3DCommon
                 case D3DShaderVariant::Skinned3d:         return {kSkinned3dVertDxbc, kSkinned3dVertDxbc_size};
                 case D3DShaderVariant::Sprite2d:          return {kSprite2dVertDxbc, kSprite2dVertDxbc_size};
                 case D3DShaderVariant::Instanced3d:       return {kInstanced3dVertDxbc, kInstanced3dVertDxbc_size};
+                case D3DShaderVariant::AlphaTestColored3d: return {kAlphaTestColored3dVertDxbc, kAlphaTestColored3dVertDxbc_size};
             }
             return {nullptr, 0};
         }
@@ -47,6 +48,7 @@ namespace CNA::Internal::Backends::D3DCommon
                 case D3DShaderVariant::Skinned3d:         return {kSkinned3dFragDxbc, kSkinned3dFragDxbc_size};
                 case D3DShaderVariant::Sprite2d:          return {kSprite2dFragDxbc, kSprite2dFragDxbc_size};
                 case D3DShaderVariant::Instanced3d:       return {kInstanced3dFragDxbc, kInstanced3dFragDxbc_size};
+                case D3DShaderVariant::AlphaTestColored3d: return {kAlphaTestColored3dFragDxbc, kAlphaTestColored3dFragDxbc_size};
             }
             return {nullptr, 0};
         }

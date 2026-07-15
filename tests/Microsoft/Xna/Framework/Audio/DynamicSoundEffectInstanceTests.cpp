@@ -13,6 +13,7 @@
 #include "System/ObjectDisposedException.hpp"
 #include "System/EventArgs.hpp"
 #include "System/TimeSpan.hpp"
+#include "System/Environment.hpp"
 
 using Microsoft::Xna::Framework::Audio::AudioChannels;
 using Microsoft::Xna::Framework::Audio::DynamicSoundEffectInstance;
@@ -26,7 +27,7 @@ namespace
     // non-Stopped state; otherwise the caller should skip the assertion.
     bool tryStartHeadless(DynamicSoundEffectInstance& d)
     {
-        ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+        System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
         std::vector<unsigned char> pcm(4 * 256, 0); // 256 stereo S16 frames of silence
         d.SubmitBuffer(pcm);
         try
@@ -323,7 +324,7 @@ TEST(DynamicSoundEffectInstanceTest, ResumeAfterDisposeThrowsObjectDisposed)
 TEST(DynamicSoundEffectInstanceTest, ResumeOnNeverPlayedInstanceStartsPlayback)
 {
     DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
-    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
     std::vector<unsigned char> pcm(4 * 256, 0); // 256 stereo S16 frames of silence
     d.SubmitBuffer(pcm);
 

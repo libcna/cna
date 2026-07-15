@@ -112,9 +112,19 @@
 #include "CNA/Internal/Graphics/ImageData.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteFont.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ModelBone.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ModelMeshPart.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ModelMesh.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Model.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -196,6 +206,46 @@ namespace
                                 + static_cast<std::size_t>(x) * 4;
             std::memcpy(result.data() + static_cast<std::size_t>(row) * static_cast<std::size_t>(w) * 4,
                        src, static_cast<std::size_t>(w) * 4);
+        }
+        context->Unmap(staging.Get(), 0);
+        return result;
+    }
+
+    /// Reads the STENCIL byte of every pixel in a w*h region of a DXGI_FORMAT_D24_UNORM_S8_UINT
+    /// depth-stencil ID3D11Texture2D, via the same staging-texture CopyResource+Map(READ)
+    /// technique as ReadTexture2DRegion() above. D3D11 has no separate depth/stencil "plane"
+    /// subresource index like D3D12 -- a D24_UNORM_S8_UINT resource is one packed 32-bit-per-pixel
+    /// value (little-endian: byte 3 = the S8 stencil byte, bytes 0-2 = the 24-bit depth value), so
+    /// this reads the raw bytes directly rather than needing a plane-slice copy (NOXNA, test-only,
+    /// plan_dx.md DX-130).
+    std::vector<uint8_t> ReadDepthStencilPlane(ID3D11Device* device, ID3D11DeviceContext* context,
+                                               ID3D11Texture2D* dsTexture, int w, int h)
+    {
+        D3D11_TEXTURE2D_DESC desc{};
+        dsTexture->GetDesc(&desc);
+        D3D11_TEXTURE2D_DESC stagingDesc = desc;
+        stagingDesc.Usage = D3D11_USAGE_STAGING;
+        stagingDesc.BindFlags = 0;
+        stagingDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+        stagingDesc.MiscFlags = 0;
+
+        Microsoft::WRL::ComPtr<ID3D11Texture2D> staging;
+        if (FAILED(device->CreateTexture2D(&stagingDesc, nullptr, staging.GetAddressOf())))
+            return {};
+        context->CopyResource(staging.Get(), dsTexture);
+
+        D3D11_MAPPED_SUBRESOURCE mapped{};
+        if (FAILED(context->Map(staging.Get(), 0, D3D11_MAP_READ, 0, &mapped)))
+            return {};
+
+        std::vector<uint8_t> result(static_cast<std::size_t>(w) * static_cast<std::size_t>(h));
+        for (int row = 0; row < h; ++row)
+        {
+            const uint8_t* src = static_cast<const uint8_t*>(mapped.pData)
+                                + static_cast<std::size_t>(row) * mapped.RowPitch;
+            for (int col = 0; col < w; ++col)
+                result[static_cast<std::size_t>(row) * static_cast<std::size_t>(w) + static_cast<std::size_t>(col)]
+                    = src[static_cast<std::size_t>(col) * 4 + 3];
         }
         context->Unmap(staging.Get(), 0);
         return result;
@@ -703,6 +753,34 @@ protected:
                   "leg stays open, a real follow-up feature, not a test gap)");
         }
 
+        // plan_dx.md DX-153: RenderTargetCube mip-chain generation for a NON-zero face -- DX-144's
+        // own test above only ever proved face 0. D3D11's own mechanism (UnbindAsRenderTarget()'s
+        // single, whole-resource ID3D11DeviceContext::GenerateMips(srv_.Get()) call, no face
+        // argument at all) is architecturally different from face-scoped regeneration -- it
+        // regenerates every face's own chain from whatever is currently in that face's own level-0
+        // content, so this proves face 2's chain regenerates correctly when face 2 (not face 0) was
+        // the one just drawn to, and that a DIFFERENT, previously-untouched face's own base level
+        // survives the call.
+        {
+            auto rtCubeMip2 = backend.CreateRenderTargetCube(8, 0 /*DepthFormat::None*/, true /*mipMap*/);
+            auto* d3dRtCubeMip2 = static_cast<D3D11RenderTargetCubeBackend*>(rtCubeMip2.get());
+            rtCubeMip2->BindAsRenderTargetFace(2);
+            dev.Clear(Color(60, 120, 180, 255));
+            rtCubeMip2->UnbindAsRenderTarget(); // GenerateMips() on the cube's shared SRV
+
+            // Subresource = mip + face * levelCount -- face 2, mip 1.
+            const auto cubeFace2Mip1 = ReadTexture2DMipRegion(
+                device, context, d3dRtCubeMip2->GetColorTextureEXT(),
+                1 + 2 * d3dRtCubeMip2->GetLevelCountEXT(), 0, 0, 4, 4);
+            bool cubeFace2Mip1Exact = cubeFace2Mip1.size() == 4u * 4u * 4u;
+            for (std::size_t i = 0; i < 4u * 4u && cubeFace2Mip1Exact; ++i)
+                cubeFace2Mip1Exact = cubeFace2Mip1[i * 4 + 0] == 60 && cubeFace2Mip1[i * 4 + 1] == 120 &&
+                                     cubeFace2Mip1[i * 4 + 2] == 180 && cubeFace2Mip1[i * 4 + 3] == 255;
+            check(cubeFace2Mip1Exact,
+                  "D3D11RenderTargetCubeBackend: GenerateMips()-on-unbind regenerates a NON-zero "
+                  "face's (face 2) own mip chain correctly, not just face 0's (plan_dx.md DX-153)");
+        }
+
         // plan_dx.md DX-145: RenderTarget2D DepthStencilFormat fidelity -- confirms a render target
         // actually gets the SPECIFIC depth/stencil DXGI format the game requested
         // (D3DFormatMapping.cpp's DepthFormatToDxgi()), not just *some* working depth buffer:
@@ -1038,6 +1116,43 @@ protected:
                   "D3D11GraphicsBackend::DrawPrimitivesEx(): real colored_textured3d draw multiplies "
                   "the exact vertex color through a white texture (plan_dx.md DX-62)");
 
+            // DX-137: dedicated fog on/off discriminating test for colored_textured3d -- same
+            // Z-at-FogEnd methodology as textured3d's own fog test below, reusing this block's
+            // already-proven vertex-color/white-texture fixture (base result (80,160,240)).
+            {
+                static VPCT kTriColTexFog[3];
+                kTriColTexFog[0] = { -1.0f, -1.0f, 0.5f, kVertColor, 0.0f, 1.0f };
+                kTriColTexFog[1] = {  3.0f, -1.0f, 0.5f, kVertColor, 2.0f, 1.0f };
+                kTriColTexFog[2] = { -1.0f,  3.0f, 0.5f, kVertColor, 0.0f, -1.0f };
+                auto vbColTexFog = backend.CreateVertexBuffer(3);
+                vbColTexFog->SetData(kTriColTexFog, 3, sizeof(VPCT));
+
+                const Microsoft::Xna::Framework::Rectangle colTexFogRegion(30, 30, 1, 1);
+                ctp.fogEnabled = false;
+                ctp.fogColor[0] = 0.0f; ctp.fogColor[1] = 1.0f; ctp.fogColor[2] = 0.0f;
+                ctp.fogStart = 0.0f; ctp.fogEnd = 0.5f;
+                dev.Clear(Color(10, 10, 10, 255));
+                backend.DrawPrimitivesEx(*vbColTexFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                         Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, ctp);
+                Color colTexFogOffPixel(0, 0, 0, 0);
+                dev.GetBackBufferData(&colTexFogRegion, &colTexFogOffPixel, 0, 1);
+                check(colTexFogOffPixel.getRProperty() == 80 && colTexFogOffPixel.getGProperty() == 160 &&
+                      colTexFogOffPixel.getBProperty() == 240,
+                      "D3D11GraphicsBackend::DrawPrimitivesEx(): colored_textured3d fogEnabled=false "
+                      "leaves the exact vertex*texture color unblended (plan_dx.md DX-137)");
+
+                ctp.fogEnabled = true;
+                dev.Clear(Color(10, 10, 10, 255));
+                backend.DrawPrimitivesEx(*vbColTexFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                         Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, ctp);
+                Color colTexFogOnPixel(0, 0, 0, 0);
+                dev.GetBackBufferData(&colTexFogRegion, &colTexFogOnPixel, 0, 1);
+                check(colTexFogOnPixel.getRProperty() == 0 && colTexFogOnPixel.getGProperty() == 255 &&
+                      colTexFogOnPixel.getBProperty() == 0,
+                      "D3D11GraphicsBackend::DrawPrimitivesEx(): colored_textured3d fogEnabled=true "
+                      "with Z at FogEnd genuinely blends all the way to the exact FogColor (plan_dx.md DX-137)");
+            }
+
             // DX-137: dedicated fog on/off discriminating test for textured3d -- a representative
             // variant of the 7 fog-capable non-colored3d variants (chosen for its simple, already-
             // proven fixture above; a full 7-variant x 2-backend sweep is out of this task's own
@@ -1145,6 +1260,45 @@ protected:
                   "D3D11GraphicsBackend::DrawPrimitivesEx(): real lit_textured3d lit branch genuinely "
                   "computes a different color than both the unlit result and the Clear() background "
                   "(plan_dx.md DX-63)");
+
+            // DX-137: dedicated fog on/off discriminating test for lit_textured3d -- reuses the
+            // unlit branch's own deterministic fixture (exact base color (44,55,66)) above, same
+            // Z-at-FogEnd methodology as textured3d's own fog test.
+            {
+                static const VPNT kTriLitFog[3] = {
+                    {-1.0f, -1.0f, 0.5f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f},
+                    { 3.0f, -1.0f, 0.5f, 0.0f, 0.0f, 1.0f, 2.0f, 1.0f},
+                    {-1.0f,  3.0f, 0.5f, 0.0f, 0.0f, 1.0f, 0.0f, -1.0f},
+                };
+                auto vbLitFog = backend.CreateVertexBuffer(3);
+                vbLitFog->SetData(kTriLitFog, 3, sizeof(VPNT));
+
+                GpuDrawParams litFogP = unlitP;
+                const Microsoft::Xna::Framework::Rectangle litFogRegion(30, 30, 1, 1);
+                litFogP.fogEnabled = false;
+                litFogP.fogColor[0] = 0.0f; litFogP.fogColor[1] = 1.0f; litFogP.fogColor[2] = 0.0f;
+                litFogP.fogStart = 0.0f; litFogP.fogEnd = 0.5f;
+                dev.Clear(Color(10, 10, 10, 255));
+                backend.DrawPrimitivesEx(*vbLitFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                         Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, litFogP);
+                Color litFogOffPixel(0, 0, 0, 0);
+                dev.GetBackBufferData(&litFogRegion, &litFogOffPixel, 0, 1);
+                check(litFogOffPixel.getRProperty() == 44 && litFogOffPixel.getGProperty() == 55 &&
+                      litFogOffPixel.getBProperty() == 66,
+                      "D3D11GraphicsBackend::DrawPrimitivesEx(): lit_textured3d fogEnabled=false leaves "
+                      "the exact unlit texture color unblended (plan_dx.md DX-137)");
+
+                litFogP.fogEnabled = true;
+                dev.Clear(Color(10, 10, 10, 255));
+                backend.DrawPrimitivesEx(*vbLitFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                         Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, litFogP);
+                Color litFogOnPixel(0, 0, 0, 0);
+                dev.GetBackBufferData(&litFogRegion, &litFogOnPixel, 0, 1);
+                check(litFogOnPixel.getRProperty() == 0 && litFogOnPixel.getGProperty() == 255 &&
+                      litFogOnPixel.getBProperty() == 0,
+                      "D3D11GraphicsBackend::DrawPrimitivesEx(): lit_textured3d fogEnabled=true with Z "
+                      "at FogEnd genuinely blends all the way to the exact FogColor (plan_dx.md DX-137)");
+            }
         }
 
         // Check S (DX-64): alpha_test3d. A failing alpha genuinely discards (Clear() background
@@ -1213,6 +1367,142 @@ protected:
             check(passIsExact,
                   "D3D11GraphicsBackend::DrawPrimitivesEx(): real alpha_test3d draws the exact texture "
                   "color (including its own alpha byte) when the test passes (plan_dx.md DX-64)");
+
+            // DX-137: dedicated fog on/off discriminating test for alpha_test3d -- reuses the
+            // already-PASSING fixture above (alpha=64/255 < AlphaRef=0.5, so nothing is discarded
+            // and fog is genuinely visible), same Z-at-FogEnd methodology as textured3d's own fog
+            // test. A discarding fixture would prove nothing here (no fragment ever reaches the
+            // fog blend).
+            {
+                static const VPT kTriATFog[3] = {
+                    {-1.0f, -1.0f, 0.5f, 0.0f, 1.0f},
+                    { 3.0f, -1.0f, 0.5f, 2.0f, 1.0f},
+                    {-1.0f,  3.0f, 0.5f, 0.0f, -1.0f},
+                };
+                auto vbATFog = backend.CreateVertexBuffer(3);
+                vbATFog->SetData(kTriATFog, 3, sizeof(VPT));
+
+                const Microsoft::Xna::Framework::Rectangle atFogRegion(30, 30, 1, 1);
+                atp.fogEnabled = false;
+                atp.fogColor[0] = 0.0f; atp.fogColor[1] = 1.0f; atp.fogColor[2] = 0.0f;
+                atp.fogStart = 0.0f; atp.fogEnd = 0.5f;
+                dev.Clear(Color(10, 10, 10, 255));
+                backend.DrawPrimitivesEx(*vbATFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                         Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, atp);
+                Color atFogOffPixel(0, 0, 0, 0);
+                dev.GetBackBufferData(&atFogRegion, &atFogOffPixel, 0, 1);
+                check(atFogOffPixel.getRProperty() == 200 && atFogOffPixel.getGProperty() == 100 &&
+                      atFogOffPixel.getBProperty() == 50,
+                      "D3D11GraphicsBackend::DrawPrimitivesEx(): alpha_test3d fogEnabled=false leaves "
+                      "the exact passing texture color unblended (plan_dx.md DX-137)");
+
+                atp.fogEnabled = true;
+                dev.Clear(Color(10, 10, 10, 255));
+                backend.DrawPrimitivesEx(*vbATFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                         Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, atp);
+                Color atFogOnPixel(0, 0, 0, 0);
+                dev.GetBackBufferData(&atFogRegion, &atFogOnPixel, 0, 1);
+                check(atFogOnPixel.getRProperty() == 0 && atFogOnPixel.getGProperty() == 255 &&
+                      atFogOnPixel.getBProperty() == 0,
+                      "D3D11GraphicsBackend::DrawPrimitivesEx(): alpha_test3d fogEnabled=true with Z at "
+                      "FogEnd genuinely blends all the way to the exact FogColor, and the passing "
+                      "fragment survives the alpha test to reach the fog blend at all (plan_dx.md DX-137)");
+            }
+
+            // plan_dx.md DX-136: AlphaTestEffect.VertexColorEnabled -- alpha_test3d's new stride-24
+            // sibling (alpha_test_colored3d, VertexPositionColorTexture) gives it a real
+            // vertex-color attribute. A white, fully-opaque texture isolates the vertex-color
+            // contribution: with VertexColorEnabled=true a red vertex color multiplies through
+            // exactly; with it false, the same vertex buffer's color is genuinely ignored and
+            // DiffuseColor (white) alone survives -- proving this is a real per-draw toggle, not a
+            // fixed behavior.
+            {
+                struct VPCT { float x, y, z; uint32_t color; float u, v; };
+                const uint32_t kRedVC = 0xFF0000FFu; // A=255,B=0,G=0,R=255 (R8G8B8A8 byte order)
+                static const VPCT kTriAlphaColor[3] = {
+                    {-1.0f, -1.0f, 0.0f, kRedVC, 0.0f, 1.0f},
+                    { 3.0f, -1.0f, 0.0f, kRedVC, 2.0f, 1.0f},
+                    {-1.0f,  3.0f, 0.0f, kRedVC, 0.0f, -1.0f},
+                };
+                auto vbAlphaColor = backend.CreateVertexBuffer(3);
+                vbAlphaColor->SetData(kTriAlphaColor, 3, sizeof(VPCT));
+
+                ImageData whiteImgAC;
+                whiteImgAC.width = 2; whiteImgAC.height = 2; whiteImgAC.mipLevels = 1;
+                whiteImgAC.pixels.assign(2 * 2 * 4, 255);
+                auto whiteTexAC = backend.CreateTexture(whiteImgAC);
+
+                GpuDrawParams acp;
+                acp.texture0 = whiteTexAC.get();
+                acp.textureEnabled = true;
+                // Default {0,0,1,1}: both AlphaPassW and AlphaFailW are non-negative, so w is never
+                // negative regardless of passTest -- genuinely always passes (never discards),
+                // matching alpha_test3d.frag.hlsl's own documented default exactly.
+                acp.alphaTest[0] = 0.0f;
+                acp.alphaTest[1] = 0.0f;
+                acp.alphaTest[2] = 1.0f;
+                acp.alphaTest[3] = 1.0f;
+
+                acp.vertexColorEnabled = true;
+                dev.Clear(Color(0, 0, 255, 255));
+                backend.DrawPrimitivesEx(*vbAlphaColor, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                         Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, acp);
+                std::vector<Color> acOnResult(4 * 4, Color(0, 0, 0, 0));
+                dev.GetBackBufferData(&centerRegion28, acOnResult.data(), 0, static_cast<int>(acOnResult.size()));
+                bool acOnIsRed = true;
+                for (const Color& p : acOnResult)
+                    if (p.getRProperty() != 255 || p.getGProperty() != 0 || p.getBProperty() != 0)
+                        acOnIsRed = false;
+                check(acOnIsRed,
+                      "D3D11GraphicsBackend::DrawPrimitivesEx(): real alpha_test_colored3d (stride 24) "
+                      "with VertexColorEnabled=true multiplies the exact vertex color (red) through a "
+                      "white texture (plan_dx.md DX-136)");
+
+                acp.vertexColorEnabled = false;
+                dev.Clear(Color(0, 0, 255, 255));
+                backend.DrawPrimitivesEx(*vbAlphaColor, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                         Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, acp);
+                std::vector<Color> acOffResult(4 * 4, Color(0, 0, 0, 0));
+                dev.GetBackBufferData(&centerRegion28, acOffResult.data(), 0, static_cast<int>(acOffResult.size()));
+                bool acOffIsWhite = true;
+                for (const Color& p : acOffResult)
+                    if (p.getRProperty() != 255 || p.getGProperty() != 255 || p.getBProperty() != 255)
+                        acOffIsWhite = false;
+                check(acOffIsWhite,
+                      "D3D11GraphicsBackend::DrawPrimitivesEx(): the SAME vertex buffer with "
+                      "VertexColorEnabled=false genuinely ignores its vertex color -- only "
+                      "DiffuseColor (white) survives, distinctly different from the true case above "
+                      "(plan_dx.md DX-136)");
+
+                // Alpha test itself still genuinely discards on this new stride-24 path -- not just
+                // the vertex-color multiply, the whole alpha_test_colored3d shader's discard logic.
+                // AlphaTol=0 (comparison mode), AlphaRef=0.5: alpha=200/255 (~0.784, NOT < 0.5)
+                // genuinely fails -> discard -> background survives.
+                acp.alphaTest[0] = 0.5f; acp.alphaTest[1] = 0.0f;
+                acp.alphaTest[2] = 1.0f; acp.alphaTest[3] = -1.0f;
+                std::vector<uint8_t> highAlphaPixels(2 * 2 * 4);
+                for (int i = 0; i < 4; ++i)
+                {
+                    highAlphaPixels[i * 4 + 0] = 255; highAlphaPixels[i * 4 + 1] = 255;
+                    highAlphaPixels[i * 4 + 2] = 255; highAlphaPixels[i * 4 + 3] = 200;
+                }
+                whiteTexAC->UpdatePixelsLevel(0, highAlphaPixels.data(), 2, 2);
+                acp.vertexColorEnabled = true;
+                dev.Clear(Color(0, 255, 0, 255));
+                backend.DrawPrimitivesEx(*vbAlphaColor, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                         Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, acp);
+                std::vector<Color> acDiscardResult(4 * 4, Color(0, 0, 0, 0));
+                dev.GetBackBufferData(&centerRegion28, acDiscardResult.data(), 0, static_cast<int>(acDiscardResult.size()));
+                bool acDiscardIsGreen = true;
+                for (const Color& p : acDiscardResult)
+                    if (p.getRProperty() != 0 || p.getGProperty() != 255 || p.getBProperty() != 0)
+                        acDiscardIsGreen = false;
+                check(acDiscardIsGreen,
+                      "D3D11GraphicsBackend::DrawPrimitivesEx(): alpha_test_colored3d's alpha-test "
+                      "discard logic still genuinely works on the new stride-24/vertex-color path -- "
+                      "a failing alpha drops the pixel, leaving the Clear() background untouched "
+                      "(plan_dx.md DX-136)");
+            }
         }
 
         // Check T (DX-65): dual_texture3d. tex1.rgb *= 2.0, outColor = tex1 * tex2 * Tint. Both
@@ -1264,6 +1554,44 @@ protected:
             check(dtIsExact,
                   "D3D11GraphicsBackend::DrawPrimitivesEx(): real dual_texture3d combines both real "
                   "SRVs (tex1.rgb*2 * tex2) to the exact expected byte result (plan_dx.md DX-65)");
+
+            // DX-137: dedicated fog on/off discriminating test for dual_texture3d -- reuses this
+            // block's own deterministic fixture (exact base result (100,120,140)), same
+            // Z-at-FogEnd methodology as textured3d's own fog test.
+            {
+                static const VPT2 kTriDTFog[3] = {
+                    {-1.0f, -1.0f, 0.5f, 0.0f, 1.0f},
+                    { 3.0f, -1.0f, 0.5f, 2.0f, 1.0f},
+                    {-1.0f,  3.0f, 0.5f, 0.0f, -1.0f},
+                };
+                auto vbDTFog = backend.CreateVertexBuffer(3);
+                vbDTFog->SetData(kTriDTFog, 3, sizeof(VPT2));
+
+                const Microsoft::Xna::Framework::Rectangle dtFogRegion(30, 30, 1, 1);
+                dtp.fogEnabled = false;
+                dtp.fogColor[0] = 0.0f; dtp.fogColor[1] = 1.0f; dtp.fogColor[2] = 0.0f;
+                dtp.fogStart = 0.0f; dtp.fogEnd = 0.5f;
+                dev.Clear(Color(10, 10, 10, 255));
+                backend.DrawPrimitivesEx(*vbDTFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                         Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, dtp);
+                Color dtFogOffPixel(0, 0, 0, 0);
+                dev.GetBackBufferData(&dtFogRegion, &dtFogOffPixel, 0, 1);
+                check(dtFogOffPixel.getRProperty() == 100 && dtFogOffPixel.getGProperty() == 120 &&
+                      dtFogOffPixel.getBProperty() == 140,
+                      "D3D11GraphicsBackend::DrawPrimitivesEx(): dual_texture3d fogEnabled=false leaves "
+                      "the exact combined-texture color unblended (plan_dx.md DX-137)");
+
+                dtp.fogEnabled = true;
+                dev.Clear(Color(10, 10, 10, 255));
+                backend.DrawPrimitivesEx(*vbDTFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                         Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, dtp);
+                Color dtFogOnPixel(0, 0, 0, 0);
+                dev.GetBackBufferData(&dtFogRegion, &dtFogOnPixel, 0, 1);
+                check(dtFogOnPixel.getRProperty() == 0 && dtFogOnPixel.getGProperty() == 255 &&
+                      dtFogOnPixel.getBProperty() == 0,
+                      "D3D11GraphicsBackend::DrawPrimitivesEx(): dual_texture3d fogEnabled=true with Z "
+                      "at FogEnd genuinely blends all the way to the exact FogColor (plan_dx.md DX-137)");
+            }
         }
 
         // Check U (DX-66): env_map3d. Camera placed far down -Z from a +Z-facing surface, ambient/
@@ -1342,6 +1670,94 @@ protected:
                   "collapses the base-lerp to the pure (unlit) base color, distinctly different from "
                   "the envMapAmount=1.0 reflected-face color above -- proves the lerp is a genuine "
                   "graduated blend control, not just an on/off gate (plan_dx.md DX-134)");
+
+            // DX-137: dedicated fog on/off discriminating test for env_map3d -- reuses this block's
+            // own deterministic reflected-face fixture (exact base result (10,20,30) at
+            // envMapAmount=1.0, restored here since DX-134's check above left it at 0.0), same
+            // Z-at-FogEnd methodology as textured3d's own fog test.
+            {
+                static const VPNTE kTriEnvFog[3] = {
+                    {-1.0f, -1.0f, 0.5f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f},
+                    { 3.0f, -1.0f, 0.5f, 0.0f, 0.0f, 1.0f, 2.0f, 1.0f},
+                    {-1.0f,  3.0f, 0.5f, 0.0f, 0.0f, 1.0f, 0.0f, -1.0f},
+                };
+                auto vbEnvFog = backend.CreateVertexBuffer(3);
+                vbEnvFog->SetData(kTriEnvFog, 3, sizeof(VPNTE));
+
+                ep.envMapAmount = 1.0f;
+                const Microsoft::Xna::Framework::Rectangle envFogRegion(30, 30, 1, 1);
+                ep.fogEnabled = false;
+                ep.fogColor[0] = 0.0f; ep.fogColor[1] = 1.0f; ep.fogColor[2] = 0.0f;
+                ep.fogStart = 0.0f; ep.fogEnd = 0.5f;
+                dev.Clear(Color(10, 10, 10, 255));
+                backend.DrawPrimitivesEx(*vbEnvFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                         Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, ep);
+                Color envFogOffPixel(0, 0, 0, 0);
+                dev.GetBackBufferData(&envFogRegion, &envFogOffPixel, 0, 1);
+                check(envFogOffPixel.getRProperty() == 10 && envFogOffPixel.getGProperty() == 20 &&
+                      envFogOffPixel.getBProperty() == 30,
+                      "D3D11GraphicsBackend::DrawPrimitivesEx(): env_map3d fogEnabled=false leaves the "
+                      "exact reflected cube-face color unblended (plan_dx.md DX-137)");
+
+                ep.fogEnabled = true;
+                dev.Clear(Color(10, 10, 10, 255));
+                backend.DrawPrimitivesEx(*vbEnvFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                         Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, ep);
+                Color envFogOnPixel(0, 0, 0, 0);
+                dev.GetBackBufferData(&envFogRegion, &envFogOnPixel, 0, 1);
+                check(envFogOnPixel.getRProperty() == 0 && envFogOnPixel.getGProperty() == 255 &&
+                      envFogOnPixel.getBProperty() == 0,
+                      "D3D11GraphicsBackend::DrawPrimitivesEx(): env_map3d fogEnabled=true with Z at "
+                      "FogEnd genuinely blends all the way to the exact FogColor (plan_dx.md DX-137)");
+            }
+
+            // plan_dx.md DX-149: env_map3d -- DirectionalLight1/DirectionalLight2 each independently
+            // and exactly contribute, not just Light0. Reuses this block's own fixture (normal +Z,
+            // white 2x2 texture, the same cube -- irrelevant content since envMapAmount=0.0 collapses
+            // the base-lerp to the pure lit*texColor path per DX-134's own already-proven formula, so
+            // the env-map sample still executes but its result never reaches the output) and DX-124's
+            // own exact-color-per-term isolation methodology.
+            {
+                ep.envMapAmount = 0.0f;
+                ep.light0Diffuse[0] = 0.0f; ep.light0Diffuse[1] = 0.0f; ep.light0Diffuse[2] = 0.0f; // Light0 off
+                const Microsoft::Xna::Framework::Rectangle ppRegion(30, 30, 1, 1);
+
+                // PP1: DirectionalLight1 alone, full-facing direction, red diffuse -> exact (255,0,0).
+                ep.light1Dir[0] = 0.0f; ep.light1Dir[1] = 0.0f; ep.light1Dir[2] = -1.0f; // travels -Z -> faces the +Z normal
+                ep.light1Diffuse[0] = 1.0f; ep.light1Diffuse[1] = 0.0f; ep.light1Diffuse[2] = 0.0f;
+                dev.Clear(Color(0, 0, 0, 255));
+                backend.DrawPrimitivesEx(*vbEnv, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                         Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, ep);
+                Color pp1(0, 0, 0, 0);
+                dev.GetBackBufferData(&ppRegion, &pp1, 0, 1);
+                check(pp1.getRProperty() == 255 && pp1.getGProperty() == 0 && pp1.getBProperty() == 0,
+                      "D3D11GraphicsBackend::DrawPrimitivesEx(): real env_map3d -- DirectionalLight1 "
+                      "alone contributes the exact expected red, independent of Light0/Light2 (plan_dx.md DX-149)");
+
+                // PP2: same geometry/light1Dir, but light1Diffuse disabled -> confirms PP1 wasn't a leak.
+                ep.light1Diffuse[0] = 0.0f; ep.light1Diffuse[1] = 0.0f; ep.light1Diffuse[2] = 0.0f;
+                dev.Clear(Color(0, 0, 0, 255));
+                backend.DrawPrimitivesEx(*vbEnv, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                         Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, ep);
+                Color pp1off(0, 0, 0, 0);
+                dev.GetBackBufferData(&ppRegion, &pp1off, 0, 1);
+                check(pp1off.getRProperty() == 0 && pp1off.getGProperty() == 0 && pp1off.getBProperty() == 0,
+                      "D3D11GraphicsBackend::DrawPrimitivesEx(): disabling env_map3d DirectionalLight1's "
+                      "diffuse (zeroed) removes its contribution exactly -- confirms the prior check was "
+                      "real, not a leaked default (plan_dx.md DX-149)");
+
+                // PP3: DirectionalLight2 alone, green diffuse -> exact (0,255,0).
+                ep.light2Dir[0] = 0.0f; ep.light2Dir[1] = 0.0f; ep.light2Dir[2] = -1.0f;
+                ep.light2Diffuse[0] = 0.0f; ep.light2Diffuse[1] = 1.0f; ep.light2Diffuse[2] = 0.0f;
+                dev.Clear(Color(0, 0, 0, 255));
+                backend.DrawPrimitivesEx(*vbEnv, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                         Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, ep);
+                Color pp2(0, 0, 0, 0);
+                dev.GetBackBufferData(&ppRegion, &pp2, 0, 1);
+                check(pp2.getRProperty() == 0 && pp2.getGProperty() == 255 && pp2.getBProperty() == 0,
+                      "D3D11GraphicsBackend::DrawPrimitivesEx(): real env_map3d -- DirectionalLight2 "
+                      "alone contributes the exact expected green, independent of Light0/Light1 (plan_dx.md DX-149)");
+            }
         }
 
         // Check V (DX-67): skinned3d. A single identity bone (BoneBlock genuinely populated from
@@ -1457,6 +1873,120 @@ protected:
                   "through), distinctly different from the weightsPerVertex=1 case above with "
                   "identical vertex weight data, proving WeightsPerVertex actually gates which bones "
                   "are summed (plan_dx.md DX-135)");
+
+            // DX-137: dedicated fog on/off discriminating test for skinned3d -- a fresh copy of
+            // this block's own original single-bone identity fixture (exact base result
+            // (77,88,99); `sp`/`vbSkin` above were mutated for the WeightsPerVertex sub-test), same
+            // Z-at-FogEnd methodology as textured3d's own fog test.
+            {
+                static const VPNTS kTriSkinFog[3] = {
+                    {-1.0f, -1.0f, 0.5f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0},
+                    { 3.0f, -1.0f, 0.5f, 0.0f, 0.0f, 1.0f, 2.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0},
+                    {-1.0f,  3.0f, 0.5f, 0.0f, 0.0f, 1.0f, 0.0f, -1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0},
+                };
+                auto vbSkinFog = backend.CreateVertexBuffer(3);
+                vbSkinFog->SetData(kTriSkinFog, 3, sizeof(VPNTS));
+
+                GpuDrawParams skinFogP;
+                skinFogP.texture0 = tex.get();
+                skinFogP.textureEnabled = true;
+                skinFogP.skinned = true;
+                skinFogP.boneCount = 1;
+                skinFogP.weightsPerVertex = 1;
+                Matrix::getIdentityProperty().ToColumnMajor(skinFogP.boneTransforms);
+                skinFogP.ambientColor[0] = 1.0f; skinFogP.ambientColor[1] = 1.0f; skinFogP.ambientColor[2] = 1.0f;
+                skinFogP.specularColor[0] = 0.0f; skinFogP.specularColor[1] = 0.0f; skinFogP.specularColor[2] = 0.0f;
+                skinFogP.eyePositionWorld[0] = 0.0f; skinFogP.eyePositionWorld[1] = 0.0f; skinFogP.eyePositionWorld[2] = -10.0f;
+
+                const Microsoft::Xna::Framework::Rectangle skinFogRegion(30, 30, 1, 1);
+                skinFogP.fogEnabled = false;
+                skinFogP.fogColor[0] = 0.0f; skinFogP.fogColor[1] = 1.0f; skinFogP.fogColor[2] = 0.0f;
+                skinFogP.fogStart = 0.0f; skinFogP.fogEnd = 0.5f;
+                dev.Clear(Color(10, 10, 10, 255));
+                backend.DrawPrimitivesEx(*vbSkinFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                         Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, skinFogP);
+                Color skinFogOffPixel(0, 0, 0, 0);
+                dev.GetBackBufferData(&skinFogRegion, &skinFogOffPixel, 0, 1);
+                check(skinFogOffPixel.getRProperty() == 77 && skinFogOffPixel.getGProperty() == 88 &&
+                      skinFogOffPixel.getBProperty() == 99,
+                      "D3D11GraphicsBackend::DrawPrimitivesEx(): skinned3d fogEnabled=false leaves the "
+                      "exact single-bone-identity texture color unblended (plan_dx.md DX-137)");
+
+                skinFogP.fogEnabled = true;
+                dev.Clear(Color(10, 10, 10, 255));
+                backend.DrawPrimitivesEx(*vbSkinFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                         Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, skinFogP);
+                Color skinFogOnPixel(0, 0, 0, 0);
+                dev.GetBackBufferData(&skinFogRegion, &skinFogOnPixel, 0, 1);
+                check(skinFogOnPixel.getRProperty() == 0 && skinFogOnPixel.getGProperty() == 255 &&
+                      skinFogOnPixel.getBProperty() == 0,
+                      "D3D11GraphicsBackend::DrawPrimitivesEx(): skinned3d fogEnabled=true with Z at "
+                      "FogEnd genuinely blends all the way to the exact FogColor (plan_dx.md DX-137)");
+            }
+
+            // plan_dx.md DX-150: skinned3d -- DirectionalLight1/DirectionalLight2 each independently
+            // and exactly contribute. Reuses this block's own single-identity-bone fixture
+            // (boneCount=1/weightsPerVertex=1) with a fresh white texture and DX-124's own
+            // exact-color-per-term isolation methodology (ambient/light0/specular all zeroed).
+            {
+                ImageData whiteImgQQ;
+                whiteImgQQ.width = 2; whiteImgQQ.height = 2; whiteImgQQ.mipLevels = 1;
+                whiteImgQQ.pixels.assign(2 * 2 * 4, 255);
+                auto whiteTexQQ = backend.CreateTexture(whiteImgQQ);
+
+                GpuDrawParams baseQP;
+                baseQP.texture0 = whiteTexQQ.get();
+                baseQP.textureEnabled = true;
+                baseQP.skinned = true;
+                baseQP.boneCount = 1;
+                baseQP.weightsPerVertex = 1;
+                Matrix::getIdentityProperty().ToColumnMajor(baseQP.boneTransforms);
+                baseQP.ambientColor[0] = 0.0f; baseQP.ambientColor[1] = 0.0f; baseQP.ambientColor[2] = 0.0f;
+                baseQP.light0Diffuse[0] = 0.0f; baseQP.light0Diffuse[1] = 0.0f; baseQP.light0Diffuse[2] = 0.0f; // Light0 off
+                baseQP.specularColor[0] = 0.0f; baseQP.specularColor[1] = 0.0f; baseQP.specularColor[2] = 0.0f; // no specular noise
+                baseQP.eyePositionWorld[0] = 0.0f; baseQP.eyePositionWorld[1] = 0.0f; baseQP.eyePositionWorld[2] = -10.0f;
+
+                const Microsoft::Xna::Framework::Rectangle qqRegion(30, 30, 1, 1);
+
+                // QQ1: DirectionalLight1 alone, full-facing direction, red diffuse -> exact (255,0,0).
+                GpuDrawParams qp1 = baseQP;
+                qp1.light1Dir[0] = 0.0f; qp1.light1Dir[1] = 0.0f; qp1.light1Dir[2] = -1.0f; // travels -Z -> faces the +Z normal
+                qp1.light1Diffuse[0] = 1.0f; qp1.light1Diffuse[1] = 0.0f; qp1.light1Diffuse[2] = 0.0f;
+                dev.Clear(Color(0, 0, 0, 255));
+                backend.DrawPrimitivesEx(*vbSkin, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                         Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, qp1);
+                Color qq1(0, 0, 0, 0);
+                dev.GetBackBufferData(&qqRegion, &qq1, 0, 1);
+                check(qq1.getRProperty() == 255 && qq1.getGProperty() == 0 && qq1.getBProperty() == 0,
+                      "D3D11GraphicsBackend::DrawPrimitivesEx(): real skinned3d -- DirectionalLight1 "
+                      "alone contributes the exact expected red, independent of Light0/Light2 (plan_dx.md DX-150)");
+
+                // QQ2: same geometry/light1Dir, but light1Diffuse disabled -> confirms QQ1 wasn't a leak.
+                GpuDrawParams qp1off = qp1;
+                qp1off.light1Diffuse[0] = 0.0f; qp1off.light1Diffuse[1] = 0.0f; qp1off.light1Diffuse[2] = 0.0f;
+                dev.Clear(Color(0, 0, 0, 255));
+                backend.DrawPrimitivesEx(*vbSkin, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                         Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, qp1off);
+                Color qq1off(0, 0, 0, 0);
+                dev.GetBackBufferData(&qqRegion, &qq1off, 0, 1);
+                check(qq1off.getRProperty() == 0 && qq1off.getGProperty() == 0 && qq1off.getBProperty() == 0,
+                      "D3D11GraphicsBackend::DrawPrimitivesEx(): disabling skinned3d DirectionalLight1's "
+                      "diffuse (zeroed) removes its contribution exactly -- confirms the prior check was "
+                      "real, not a leaked default (plan_dx.md DX-150)");
+
+                // QQ3: DirectionalLight2 alone, green diffuse -> exact (0,255,0).
+                GpuDrawParams qp2 = baseQP;
+                qp2.light2Dir[0] = 0.0f; qp2.light2Dir[1] = 0.0f; qp2.light2Dir[2] = -1.0f;
+                qp2.light2Diffuse[0] = 0.0f; qp2.light2Diffuse[1] = 1.0f; qp2.light2Diffuse[2] = 0.0f;
+                dev.Clear(Color(0, 0, 0, 255));
+                backend.DrawPrimitivesEx(*vbSkin, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                         Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, qp2);
+                Color qq2(0, 0, 0, 0);
+                dev.GetBackBufferData(&qqRegion, &qq2, 0, 1);
+                check(qq2.getRProperty() == 0 && qq2.getGProperty() == 255 && qq2.getBProperty() == 0,
+                      "D3D11GraphicsBackend::DrawPrimitivesEx(): real skinned3d -- DirectionalLight2 "
+                      "alone contributes the exact expected green, independent of Light0/Light1 (plan_dx.md DX-150)");
+            }
         }
 
         // Check W (DX-68): instanced3d. DrawInstancedPrimitivesEx() with one identity-transform
@@ -2154,13 +2684,731 @@ protected:
             backend.SetDepthWriteEnabled(false);
         }
 
+        // plan_dx.md DX-124: multi-light (DirectionalLight1/DirectionalLight2) + EmissiveColor
+        // discriminating pixel test for the shared D3DLightingConstants path (lit_textured3d).
+        // Check R (DX-63) above only proves lit-vs-unlit differs; this proves each of Light1/
+        // Light2/EmissiveColor independently contributes the EXACT expected color, mirroring
+        // D3D12's own already-closed DX-138 (examples/d3d12_smoke_test.cpp Checks EE1-EE4)
+        // methodology exactly, just against the real back buffer instead of an offscreen target.
+        {
+            struct VPNT { float x, y, z; float nx, ny, nz; float u, v; };
+            static const VPNT kTriEE[3] = {
+                {-1.0f, -1.0f, 0.0f, 0.0f, 0.0f, -1.0f, 0.0f, 1.0f},
+                { 3.0f, -1.0f, 0.0f, 0.0f, 0.0f, -1.0f, 2.0f, 1.0f},
+                {-1.0f,  3.0f, 0.0f, 0.0f, 0.0f, -1.0f, 0.0f, -1.0f},
+            };
+            auto vbEE = backend.CreateVertexBuffer(3);
+            vbEE->SetData(kTriEE, 3, sizeof(VPNT));
+
+            ImageData whiteImg;
+            whiteImg.width = 2; whiteImg.height = 2; whiteImg.mipLevels = 1;
+            whiteImg.pixels.assign(2 * 2 * 4, 255);
+            auto whiteTexEE = backend.CreateTexture(whiteImg);
+
+            GpuDrawParams baseP;
+            baseP.texture0 = whiteTexEE.get();
+            baseP.textureEnabled = true;
+            baseP.lightingEnabled = true;
+            baseP.diffuseColor[0] = 1.0f; baseP.diffuseColor[1] = 1.0f; baseP.diffuseColor[2] = 1.0f; baseP.diffuseColor[3] = 1.0f;
+            baseP.ambientColor[0] = 0.0f; baseP.ambientColor[1] = 0.0f; baseP.ambientColor[2] = 0.0f;
+            baseP.light0Diffuse[0] = 0.0f; baseP.light0Diffuse[1] = 0.0f; baseP.light0Diffuse[2] = 0.0f; // Light0 off
+            baseP.specularColor[0] = 0.0f; baseP.specularColor[1] = 0.0f; baseP.specularColor[2] = 0.0f; // no specular noise
+
+            const Microsoft::Xna::Framework::Rectangle centerRegionEE(30, 30, 1, 1);
+
+            // EE1: DirectionalLight1 alone, full-facing direction, red diffuse -> exact (255,0,0).
+            GpuDrawParams p1 = baseP;
+            p1.light1Dir[0] = 0.0f; p1.light1Dir[1] = 0.0f; p1.light1Dir[2] = 1.0f;
+            p1.light1Diffuse[0] = 1.0f; p1.light1Diffuse[1] = 0.0f; p1.light1Diffuse[2] = 0.0f;
+            dev.Clear(Color(0, 0, 0, 255));
+            backend.DrawPrimitivesEx(*vbEE, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                     Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, p1);
+            Color r1(0, 0, 0, 0);
+            dev.GetBackBufferData(&centerRegionEE, &r1, 0, 1);
+            check(r1.getRProperty() == 255 && r1.getGProperty() == 0 && r1.getBProperty() == 0,
+                  "D3D11GraphicsBackend::DrawPrimitivesEx(): real lit_textured3d -- DirectionalLight1 "
+                  "alone contributes the exact expected red, independent of Light0/Light2 (plan_dx.md DX-124)");
+
+            // EE2: same geometry/light1Dir, but light1Diffuse disabled -> confirms EE1 wasn't a leak.
+            GpuDrawParams p1off = p1;
+            p1off.light1Diffuse[0] = 0.0f; p1off.light1Diffuse[1] = 0.0f; p1off.light1Diffuse[2] = 0.0f;
+            dev.Clear(Color(0, 0, 0, 255));
+            backend.DrawPrimitivesEx(*vbEE, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                     Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, p1off);
+            Color r1off(0, 0, 0, 0);
+            dev.GetBackBufferData(&centerRegionEE, &r1off, 0, 1);
+            check(r1off.getRProperty() == 0 && r1off.getGProperty() == 0 && r1off.getBProperty() == 0,
+                  "D3D11GraphicsBackend::DrawPrimitivesEx(): disabling DirectionalLight1's diffuse "
+                  "(zeroed) removes its contribution exactly -- confirms the prior check was real, not "
+                  "a leaked default (plan_dx.md DX-124)");
+
+            // EE3: DirectionalLight2 alone, green diffuse -> exact (0,255,0).
+            GpuDrawParams p2 = baseP;
+            p2.light2Dir[0] = 0.0f; p2.light2Dir[1] = 0.0f; p2.light2Dir[2] = 1.0f;
+            p2.light2Diffuse[0] = 0.0f; p2.light2Diffuse[1] = 1.0f; p2.light2Diffuse[2] = 0.0f;
+            dev.Clear(Color(0, 0, 0, 255));
+            backend.DrawPrimitivesEx(*vbEE, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                     Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, p2);
+            Color r2(0, 0, 0, 0);
+            dev.GetBackBufferData(&centerRegionEE, &r2, 0, 1);
+            check(r2.getRProperty() == 0 && r2.getGProperty() == 255 && r2.getBProperty() == 0,
+                  "D3D11GraphicsBackend::DrawPrimitivesEx(): real lit_textured3d -- DirectionalLight2 "
+                  "alone contributes the exact expected green, independent of Light0/Light1 (plan_dx.md DX-124)");
+
+            // EE4: EmissiveColor alone (all lights + ambient off) -> exact (0,0,255), a constant,
+            // light-independent additive term.
+            GpuDrawParams p3 = baseP;
+            p3.emissiveColor[0] = 0.0f; p3.emissiveColor[1] = 0.0f; p3.emissiveColor[2] = 1.0f;
+            dev.Clear(Color(0, 0, 0, 255));
+            backend.DrawPrimitivesEx(*vbEE, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                     Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, p3);
+            Color r3(0, 0, 0, 0);
+            dev.GetBackBufferData(&centerRegionEE, &r3, 0, 1);
+            check(r3.getRProperty() == 0 && r3.getGProperty() == 0 && r3.getBProperty() == 255,
+                  "D3D11GraphicsBackend::DrawPrimitivesEx(): real lit_textured3d -- EmissiveColor alone "
+                  "contributes the exact expected blue with every light off, a constant additive term "
+                  "(plan_dx.md DX-124)");
+        }
+
+        // plan_dx.md DX-125: specular-highlight (SpecularColor/SpecularPower) pixel test. A real
+        // methodology that avoids the byte-exact-CPU-replication problem this row's own text
+        // originally documented -- rather than reproducing the view-angle-dependent Blinn-Phong
+        // math for a byte-exact comparison, this picks geometry where the math collapses to an
+        // exact, hand-derivable value: eye at (0,0,-10), surface normal (0,0,-1), light1
+        // traveling (0,0,1) (so "direction to light" = (0,0,-1), identical to the view direction)
+        // -- the half-vector H = normalize(view+toLight) then equals N exactly, so dot(H,N)=1 and
+        // pow(1,SpecularPower)=1 regardless of the actual power value. Mirrors D3D12's own
+        // already-closed DX-139 (examples/d3d12_smoke_test.cpp Checks FF1/FF2) exactly.
+        {
+            struct VPNT { float x, y, z; float nx, ny, nz; float u, v; };
+            static const VPNT kTriFF[3] = {
+                {-1.0f, -1.0f, 0.0f, 0.0f, 0.0f, -1.0f, 0.0f, 1.0f},
+                { 3.0f, -1.0f, 0.0f, 0.0f, 0.0f, -1.0f, 2.0f, 1.0f},
+                {-1.0f,  3.0f, 0.0f, 0.0f, 0.0f, -1.0f, 0.0f, -1.0f},
+            };
+            auto vbFF = backend.CreateVertexBuffer(3);
+            vbFF->SetData(kTriFF, 3, sizeof(VPNT));
+
+            ImageData whiteImg;
+            whiteImg.width = 2; whiteImg.height = 2; whiteImg.mipLevels = 1;
+            whiteImg.pixels.assign(2 * 2 * 4, 255);
+            auto whiteTexFF = backend.CreateTexture(whiteImg);
+
+            GpuDrawParams sp;
+            sp.texture0 = whiteTexFF.get();
+            sp.textureEnabled = true;
+            sp.lightingEnabled = true;
+            sp.diffuseColor[0] = 1.0f; sp.diffuseColor[1] = 1.0f; sp.diffuseColor[2] = 1.0f; sp.diffuseColor[3] = 1.0f;
+            sp.ambientColor[0] = 0.0f; sp.ambientColor[1] = 0.0f; sp.ambientColor[2] = 0.0f;
+            sp.light0Diffuse[0] = 0.0f; sp.light0Diffuse[1] = 0.0f; sp.light0Diffuse[2] = 0.0f; // no diffuse noise
+            sp.light1Dir[0] = 0.0f; sp.light1Dir[1] = 0.0f; sp.light1Dir[2] = 1.0f;             // travels +Z
+            sp.light1Diffuse[0] = 0.0f; sp.light1Diffuse[1] = 0.0f; sp.light1Diffuse[2] = 0.0f; // diffuse off too
+            sp.light1Specular[0] = 1.0f; sp.light1Specular[1] = 1.0f; sp.light1Specular[2] = 1.0f;
+            sp.eyePositionWorld[0] = 0.0f; sp.eyePositionWorld[1] = 0.0f; sp.eyePositionWorld[2] = -10.0f;
+            sp.specularColor[0] = 1.0f; sp.specularColor[1] = 1.0f; sp.specularColor[2] = 1.0f;
+            sp.specularPower = 16.0f;
+
+            const Microsoft::Xna::Framework::Rectangle centerRegionFF(30, 30, 1, 1);
+
+            dev.Clear(Color(0, 0, 0, 255));
+            backend.DrawPrimitivesEx(*vbFF, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                     Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, sp);
+            Color specOn(0, 0, 0, 0);
+            dev.GetBackBufferData(&centerRegionFF, &specOn, 0, 1);
+            check(specOn.getRProperty() == 255 && specOn.getGProperty() == 255 && specOn.getBProperty() == 255,
+                  "D3D11GraphicsBackend::DrawPrimitivesEx(): real lit_textured3d -- Blinn-Phong "
+                  "specular at a geometry deliberately chosen so dot(H,N)=1 exactly contributes the "
+                  "exact expected full-white highlight, with diffuse/ambient/emissive all zero "
+                  "(plan_dx.md DX-125)");
+
+            GpuDrawParams spOff = sp;
+            spOff.specularColor[0] = 0.0f; spOff.specularColor[1] = 0.0f; spOff.specularColor[2] = 0.0f;
+            dev.Clear(Color(0, 0, 0, 255));
+            backend.DrawPrimitivesEx(*vbFF, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                     Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, spOff);
+            Color specOff(0, 0, 0, 0);
+            dev.GetBackBufferData(&centerRegionFF, &specOff, 0, 1);
+            check(specOff.getRProperty() == 0 && specOff.getGProperty() == 0 && specOff.getBProperty() == 0,
+                  "D3D11GraphicsBackend::DrawPrimitivesEx(): the SAME geometry/light with material "
+                  "SpecularColor zeroed produces exact black -- proves the prior check's white came "
+                  "genuinely from the specular term, not diffuse/ambient/emissive (plan_dx.md DX-125)");
+        }
+
+        // plan_dx.md DX-151: skinned3d -- real Blinn-Phong specular highlight, discriminating.
+        // Applies DX-125's own half-vector-equals-normal trick to skinned3d.frag.hlsl's specular
+        // formula, byte-for-byte the same shape as lit_textured3d's (confirmed by reading both
+        // before writing this test), combined with the single-identity-bone fixture (DX-67/DX-135)
+        // so bone math doesn't complicate the specular isolation. Mirrors D3D12's own already-closed
+        // DX-151 (examples/d3d12_smoke_test.cpp Checks RR1/RR2) exactly.
+        {
+            struct VPNTSR { float x, y, z; float nx, ny, nz; float u, v;
+                           float bw0, bw1, bw2, bw3; uint8_t bi0, bi1, bi2, bi3; };
+            static const VPNTSR kTriRR[3] = {
+                {-1.0f, -1.0f, 0.0f, 0.0f, 0.0f, -1.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0},
+                { 3.0f, -1.0f, 0.0f, 0.0f, 0.0f, -1.0f, 2.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0},
+                {-1.0f,  3.0f, 0.0f, 0.0f, 0.0f, -1.0f, 0.0f, -1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0},
+            };
+            auto vbRR = backend.CreateVertexBuffer(3);
+            vbRR->SetData(kTriRR, 3, sizeof(VPNTSR));
+
+            ImageData whiteImgRR;
+            whiteImgRR.width = 2; whiteImgRR.height = 2; whiteImgRR.mipLevels = 1;
+            whiteImgRR.pixels.assign(2 * 2 * 4, 255);
+            auto whiteTexRR = backend.CreateTexture(whiteImgRR);
+
+            GpuDrawParams rp;
+            rp.texture0 = whiteTexRR.get();
+            rp.textureEnabled = true;
+            rp.skinned = true;
+            rp.boneCount = 1;
+            rp.weightsPerVertex = 1;
+            Matrix::getIdentityProperty().ToColumnMajor(rp.boneTransforms);
+            rp.ambientColor[0] = 0.0f; rp.ambientColor[1] = 0.0f; rp.ambientColor[2] = 0.0f;
+            rp.light0Diffuse[0] = 0.0f; rp.light0Diffuse[1] = 0.0f; rp.light0Diffuse[2] = 0.0f; // no diffuse noise
+            rp.light1Dir[0] = 0.0f; rp.light1Dir[1] = 0.0f; rp.light1Dir[2] = 1.0f;             // travels +Z
+            rp.light1Diffuse[0] = 0.0f; rp.light1Diffuse[1] = 0.0f; rp.light1Diffuse[2] = 0.0f; // diffuse off too
+            rp.light1Specular[0] = 1.0f; rp.light1Specular[1] = 1.0f; rp.light1Specular[2] = 1.0f;
+            rp.eyePositionWorld[0] = 0.0f; rp.eyePositionWorld[1] = 0.0f; rp.eyePositionWorld[2] = -10.0f;
+            rp.specularColor[0] = 1.0f; rp.specularColor[1] = 1.0f; rp.specularColor[2] = 1.0f;
+            rp.specularPower = 16.0f;
+
+            const Microsoft::Xna::Framework::Rectangle rrRegion(30, 30, 1, 1);
+
+            dev.Clear(Color(0, 0, 0, 255));
+            backend.DrawPrimitivesEx(*vbRR, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                     Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, rp);
+            Color specOnRR(0, 0, 0, 0);
+            dev.GetBackBufferData(&rrRegion, &specOnRR, 0, 1);
+            check(specOnRR.getRProperty() == 255 && specOnRR.getGProperty() == 255 && specOnRR.getBProperty() == 255,
+                  "D3D11GraphicsBackend::DrawPrimitivesEx(): real skinned3d -- Blinn-Phong specular at "
+                  "a geometry deliberately chosen so dot(H,N)=1 exactly contributes the exact expected "
+                  "full-white highlight, with diffuse/ambient all zero (plan_dx.md DX-151)");
+
+            GpuDrawParams rpOff = rp;
+            rpOff.specularColor[0] = 0.0f; rpOff.specularColor[1] = 0.0f; rpOff.specularColor[2] = 0.0f;
+            dev.Clear(Color(0, 0, 0, 255));
+            backend.DrawPrimitivesEx(*vbRR, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                     Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, rpOff);
+            Color specOffRR(0, 0, 0, 0);
+            dev.GetBackBufferData(&rrRegion, &specOffRR, 0, 1);
+            check(specOffRR.getRProperty() == 0 && specOffRR.getGProperty() == 0 && specOffRR.getBProperty() == 0,
+                  "D3D11GraphicsBackend::DrawPrimitivesEx(): the SAME geometry/light with material "
+                  "SpecularColor zeroed produces exact black -- proves the prior check's white came "
+                  "genuinely from the specular term, not diffuse/ambient (plan_dx.md DX-151)");
+        }
+
+        // plan_dx.md DX-126: mip level > 0 SetData/UpdatePixelsLevel/sampling dedicated pixel
+        // test -- texture upload/readback was previously only proven at mip level 0. Mirrors
+        // D3D12's own already-closed DX-141 (examples/d3d12_smoke_test.cpp Checks HH0-HH2)
+        // methodology exactly: rather than trying to force the stock shaders' implicit-LOD
+        // Sample() calls to pick mip level 1 during a draw (fragile/driver-dependent), this reads
+        // mip level 1 back directly via a staging-texture CopyResource+Map (ReadTexture2DMipRegion,
+        // already established above for DX-144's own render-target mip-chain proof) -- a real,
+        // deterministic readback, not an implicit-sampling one.
+        {
+            ImageData mipImg;
+            mipImg.width = 4; mipImg.height = 4; mipImg.mipLevels = 2;
+            mipImg.pixels.assign(4 * 4 * 4, 0);
+            for (int i = 0; i < 4 * 4; ++i)
+            {
+                mipImg.pixels[i * 4 + 0] = 10; mipImg.pixels[i * 4 + 1] = 20;
+                mipImg.pixels[i * 4 + 2] = 30; mipImg.pixels[i * 4 + 3] = 255;
+            }
+            auto mipTex = backend.CreateTexture(mipImg);
+            auto& d3dMipTex = static_cast<D3D11TextureBackend&>(*mipTex);
+            check(d3dMipTex.GetMipLevelsEXT() == 2,
+                  "D3D11TextureBackend: real construction with mipLevels=2 allocates the exact "
+                  "requested mip chain (plan_dx.md DX-126)");
+
+            std::vector<uint8_t> level1Data(2 * 2 * 4);
+            for (int i = 0; i < 2 * 2; ++i)
+            {
+                level1Data[i * 4 + 0] = 210; level1Data[i * 4 + 1] = 220;
+                level1Data[i * 4 + 2] = 230; level1Data[i * 4 + 3] = 255;
+            }
+            mipTex->UpdatePixelsLevel(1, level1Data.data(), 2, 2);
+
+            auto level1Readback = ReadTexture2DMipRegion(backend.GetDeviceEXT(), backend.GetContextEXT(),
+                                                          d3dMipTex.GetTextureEXT(), 1, 0, 0, 2, 2);
+            bool level1Exact = !level1Readback.empty();
+            for (std::size_t i = 0; i + 3 < level1Readback.size() && level1Exact; i += 4)
+                if (level1Readback[i] != 210 || level1Readback[i+1] != 220 ||
+                    level1Readback[i+2] != 230 || level1Readback[i+3] != 255)
+                    level1Exact = false;
+            check(level1Exact,
+                  "D3D11TextureBackend::UpdatePixelsLevel(1, ...) round-trips EXACT bytes for a real "
+                  "mip level 1 upload, read back via a direct staging-texture copy of subresource 1 "
+                  "(plan_dx.md DX-126)");
+
+            auto level0Readback = ReadTexture2DMipRegion(backend.GetDeviceEXT(), backend.GetContextEXT(),
+                                                          d3dMipTex.GetTextureEXT(), 0, 0, 0, 4, 4);
+            bool level0Exact = !level0Readback.empty();
+            for (std::size_t i = 0; i + 3 < level0Readback.size() && level0Exact; i += 4)
+                if (level0Readback[i] != 10 || level0Readback[i+1] != 20 ||
+                    level0Readback[i+2] != 30 || level0Readback[i+3] != 255)
+                    level0Exact = false;
+            check(level0Exact,
+                  "D3D11TextureBackend: level 0's own content is genuinely unaffected by the level-1 "
+                  "upload -- proves UpdatePixelsLevel(1, ...) targeted the correct subresource, not "
+                  "level 0 (plan_dx.md DX-126)");
+        }
+
+        // plan_dx.md DX-127: SpriteFont D3D11-specific glyph placement/spacing/newline/flip test,
+        // mirroring D3D12's already-closed DX-132 (examples/d3d12_smoke_test.cpp Checks KK2-KK5)
+        // and EasyGL's own established fixture (Tasks 424-429): an 8x8 solid-white atlas per
+        // glyph, zero cropping offset, zero left/right kerning bearing, so a glyph's destination
+        // rect maps exactly and any placement error is a hard pixel difference. Unlike D3D12,
+        // D3D11's real swap chain works directly under plain Wine, so this draws straight to the
+        // back buffer (this file's own established style) instead of needing an offscreen
+        // RenderTarget2D/PresentationParameters::HeadlessEXT detour.
+        {
+            Texture2D atlas(dev, 16, 8); // two 8x8 glyph cells side by side
+            std::vector<Color> atlasPx(16 * 8, Color(255, 255, 255, 255));
+            atlas.SetData(atlasPx.data(), 16 * 8);
+
+            std::vector<Microsoft::Xna::Framework::Rectangle> glyphBounds = {
+                Microsoft::Xna::Framework::Rectangle(0, 0, 8, 8), Microsoft::Xna::Framework::Rectangle(8, 0, 8, 8) };
+            std::vector<Microsoft::Xna::Framework::Rectangle> cropping = {
+                Microsoft::Xna::Framework::Rectangle(0, 0, 8, 8), Microsoft::Xna::Framework::Rectangle(0, 0, 8, 8) };
+            std::vector<SharpRuntime::charcs> chars = { u'A', u'B' };
+            std::vector<Vector3> kerning = { Vector3(0.0f, 8.0f, 0.0f), Vector3(0.0f, 8.0f, 0.0f) };
+            SpriteFont font(atlas, glyphBounds, cropping, chars,
+                            /*lineSpacing=*/8, /*spacing=*/0.0f, kerning,
+                            std::optional<SharpRuntime::charcs>(std::nullopt));
+
+            SpriteBatch fontBatch(dev);
+
+            auto readPixelF = [&](int x, int y) -> Color {
+                const Microsoft::Xna::Framework::Rectangle region(x, y, 1, 1);
+                Color px(0, 0, 0, 0);
+                dev.GetBackBufferData(&region, &px, 0, 1);
+                return px;
+            };
+            auto isWhiteF = [](const Color& c) {
+                return c.getRProperty() > 200 && c.getGProperty() > 200 && c.getBProperty() > 200;
+            };
+            auto isBlackF = [](const Color& c) {
+                return c.getRProperty() < 60 && c.getGProperty() < 60 && c.getBProperty() < 60;
+            };
+
+            // (a) Single glyph at (4,4) -> occupies exactly [4,12) x [4,12).
+            dev.Clear(Color(0, 0, 0, 255));
+            fontBatch.Begin();
+            fontBatch.DrawString(font, "A", Vector2(4.0f, 4.0f), Color::White);
+            fontBatch.End();
+            const bool glyphPlaced = isWhiteF(readPixelF(8, 8))    // inside
+                && isBlackF(readPixelF(3, 8))    // just left of the left edge
+                && isBlackF(readPixelF(12, 8))   // just right of the right edge
+                && isBlackF(readPixelF(8, 3))    // just above the top edge
+                && isBlackF(readPixelF(8, 12));  // just below the bottom edge
+            check(glyphPlaced,
+                  "SpriteBatch::DrawString(): places a single glyph at EXACTLY its destination rect "
+                  "(4,4,8,8) -- checked inside plus all four edge midpoints, so an X-only or Y-only "
+                  "misplacement cannot pass (plan_dx.md DX-127)");
+
+            // (b) Two glyphs -> the second must advance by exactly one glyph width (8px).
+            dev.Clear(Color(0, 0, 0, 255));
+            fontBatch.Begin();
+            fontBatch.DrawString(font, "AB", Vector2(0.0f, 0.0f), Color::White);
+            fontBatch.End();
+            const bool spacingOk = isWhiteF(readPixelF(4, 4))    // glyph 'A' cell [0,8)
+                && isWhiteF(readPixelF(12, 4))   // glyph 'B' cell [8,16) -- advanced by 8
+                && isBlackF(readPixelF(20, 4));  // nothing beyond the second glyph
+            check(spacingOk,
+                  "SpriteBatch::DrawString(\"AB\"): advances the SECOND glyph by exactly one glyph "
+                  "width -- both cells are drawn and nothing spills past them (plan_dx.md DX-127)");
+
+            // (c) Newline -> the second line must drop by exactly lineSpacing (8px), back to x=0.
+            dev.Clear(Color(0, 0, 0, 255));
+            fontBatch.Begin();
+            fontBatch.DrawString(font, "A\nA", Vector2(0.0f, 0.0f), Color::White);
+            fontBatch.End();
+            const bool newlineOk = isWhiteF(readPixelF(4, 4))    // line 1, y in [0,8)
+                && isWhiteF(readPixelF(4, 12))   // line 2, y in [8,16) -- dropped by lineSpacing
+                && isBlackF(readPixelF(12, 4));  // line 1 has ONE glyph -- x reset, not advanced
+            check(newlineOk,
+                  "SpriteBatch::DrawString(\"A\\nA\"): drops the second line by exactly lineSpacing "
+                  "AND resets x to the start -- a newline that only did one of the two cannot pass "
+                  "(plan_dx.md DX-127)");
+
+            // (d) SpriteEffects::FlipVertically -- an ASYMMETRIC glyph is required, otherwise a flip
+            // of a solid block is indistinguishable from no flip at all. Atlas glyph 'A' is white
+            // only in its TOP half; flipped, the white must land in the BOTTOM half.
+            std::vector<Color> halfPx(16 * 8, Color(0, 0, 0, 255));
+            for (int y = 0; y < 4; ++y)
+                for (int x = 0; x < 8; ++x)
+                    halfPx[static_cast<std::size_t>(y) * 16 + x] = Color(255, 255, 255, 255);
+            Texture2D atlasHalf(dev, 16, 8);
+            atlasHalf.SetData(halfPx.data(), 16 * 8);
+            SpriteFont fontHalf(atlasHalf, glyphBounds, cropping, chars,
+                                8, 0.0f, kerning, std::optional<SharpRuntime::charcs>(std::nullopt));
+
+            dev.Clear(Color(0, 0, 0, 255));
+            fontBatch.Begin();
+            fontBatch.DrawString(fontHalf, "A", Vector2(0.0f, 0.0f), Color::White,
+                                 0.0f, Vector2(0.0f, 0.0f), 1.0f, SpriteEffects::None, 0.0f);
+            fontBatch.End();
+            const bool noFlipOk = isWhiteF(readPixelF(4, 2))   // top half white
+                && isBlackF(readPixelF(4, 6));  // bottom half black
+
+            dev.Clear(Color(0, 0, 0, 255));
+            fontBatch.Begin();
+            fontBatch.DrawString(fontHalf, "A", Vector2(0.0f, 0.0f), Color::White,
+                                 0.0f, Vector2(0.0f, 0.0f), 1.0f, SpriteEffects::FlipVertically, 0.0f);
+            fontBatch.End();
+            const bool flipOk = isBlackF(readPixelF(4, 2))     // top half now black
+                && isWhiteF(readPixelF(4, 6));    // bottom half now white -- genuinely flipped
+
+            check(noFlipOk && flipOk,
+                  "SpriteBatch::DrawString(): SpriteEffects::FlipVertically genuinely flips a glyph -- "
+                  "an asymmetric (top-half-white) glyph lands top-half-white unflipped and "
+                  "bottom-half-white flipped, so a no-op flip cannot pass (plan_dx.md DX-127)");
+        }
+
+        // plan_dx.md DX-128: Model/ModelMesh/ModelMeshPart/ModelBone D3D11-specific runtime-API
+        // test, mirroring D3D12's already-closed DX-148 (examples/d3d12_smoke_test.cpp Check
+        // KK6). Drives ModelMesh::Draw()'s REAL orchestration (SetVertexBuffer + setIndices +
+        // DrawIndexedPrimitives + EffectPass::Apply through a bone-transformed world matrix), not
+        // a raw VertexBuffer draw wearing a Model label -- which is exactly what this row's own
+        // text warns against and would prove nothing new.
+        {
+            const Color redM(255, 0, 0, 255);
+            const VertexPositionColor vertsM[4] = {
+                { Vector3(-1.0f,  1.0f, 0.0f), redM },
+                { Vector3(-1.0f, -1.0f, 0.0f), redM },
+                { Vector3( 1.0f, -1.0f, 0.0f), redM },
+                { Vector3( 1.0f,  1.0f, 0.0f), redM },
+            };
+            VertexBuffer vbM(dev, 4);
+            vbM.SetData(vertsM, 4);
+            const uint16_t indicesM[6] = { 0, 1, 2, 0, 2, 3 };
+            IndexBuffer ibM(dev, 6);
+            ibM.SetData(indicesM, 6);
+
+            BasicEffect fxM(dev);
+            fxM.VertexColorEnabled = true;
+
+            // A real 2-bone hierarchy: root -> child. Model::Draw multiplies the mesh's absolute
+            // bone transform into the world matrix, so this genuinely exercises the bone path.
+            ModelBone boneM0(0, "root");
+            ModelBone boneM1(1, "child");
+            boneM0.AddChild(&boneM1);
+
+            ModelMeshPart partM(&vbM, &ibM, /*numVertices=*/4, /*primitiveCount=*/2,
+                                /*startIndex=*/0, /*vertexOffset=*/0);
+            ModelMesh meshM(&dev, { &partM });
+            partM.setEffectProperty(&fxM);
+            Model modelM(&dev, { &boneM0, &boneM1 }, { &meshM });
+
+            dev.Clear(Color(0, 255, 0, 255));
+            dev.SetDepthTestEnabled(false);
+            dev.setBlendStateProperty(BlendState::Opaque);
+            dev.setRasterizerStateProperty(RasterizerState::CullNone);
+            modelM.Draw(Matrix::getIdentityProperty(), Matrix::getIdentityProperty(), Matrix::getIdentityProperty());
+
+            const Microsoft::Xna::Framework::Rectangle centerRegionM(30, 30, 1, 1);
+            Color centreM(0, 0, 0, 0);
+            dev.GetBackBufferData(&centerRegionM, &centreM, 0, 1);
+            check(centreM.getRProperty() >= 200 && centreM.getGProperty() <= 60 && centreM.getBProperty() <= 60,
+                  "Model::Draw() -> ModelMesh::Draw()'s real orchestration (bone transform + "
+                  "SetVertexBuffer + setIndices + DrawIndexedPrimitives + EffectPass::Apply) paints "
+                  "the mesh's exact red over the green clear, through the D3D11 backend (plan_dx.md DX-128)");
+
+            dev.SetDepthTestEnabled(false);
+            dev.setRasterizerStateProperty(RasterizerState::CullCounterClockwise);
+        }
+
+        // plan_dx.md DX-155: Model root-bone-index flexibility (Task 916's own `rootBoneIndex`
+        // constructor parameter) against the real D3D11 backend. Honest scope, confirmed by
+        // reading Model::Draw()/CopyAbsoluteBoneTransformsTo() first: neither actually consults
+        // `root_`/`rootBoneIndex` -- Draw() picks each mesh's world transform via
+        // `mesh->getParentBoneProperty()` (the `meshParentBones` constructor argument), and
+        // CopyAbsoluteBoneTransformsTo() walks each bone's OWN parent chain, independent of which
+        // bone is `Root`. So `rootBoneIndex`'s only currently-consumed effect anywhere is
+        // `getRootProperty()` returning it -- this test proves that (not a silently-defaulted-to-0
+        // value) AND exercises the full 5-argument constructor (meshParentBones + rootBoneIndex
+        // together, never used by DX-128's own 3-argument-constructor fixture) end to end through a
+        // real draw, including meshParentBones correctly targeting a NON-zero-indexed bone.
+        {
+            const Color redR(255, 0, 0, 255);
+            const VertexPositionColor vertsR[4] = {
+                { Vector3(-1.0f,  1.0f, 0.0f), redR },
+                { Vector3(-1.0f, -1.0f, 0.0f), redR },
+                { Vector3( 1.0f, -1.0f, 0.0f), redR },
+                { Vector3( 1.0f,  1.0f, 0.0f), redR },
+            };
+            VertexBuffer vbR(dev, 4);
+            vbR.SetData(vertsR, 4);
+            const uint16_t indicesR[6] = { 0, 1, 2, 0, 2, 3 };
+            IndexBuffer ibR(dev, 6);
+            ibR.SetData(indicesR, 6);
+
+            BasicEffect fxR(dev);
+            fxR.VertexColorEnabled = true;
+
+            // Two INDEPENDENT top-level bones (no parent/child relationship -- that hierarchy-
+            // chaining path is already covered by DX-128's own fixture). boneR0 (array index 0) is
+            // a large translation that would move the mesh off-screen if it were ever picked by
+            // mistake; boneR1 (array index 1, a NON-zero index) is Identity and is the bone the
+            // mesh is actually parented to AND the requested root.
+            ModelBone boneR0(0, "decoy");
+            boneR0.setTransformProperty(Matrix::CreateTranslation(100.0f, 100.0f, 0.0f));
+            ModelBone boneR1(1, "actual_root");
+            boneR1.setTransformProperty(Matrix::getIdentityProperty());
+
+            ModelMeshPart partR(&vbR, &ibR, /*numVertices=*/4, /*primitiveCount=*/2,
+                                /*startIndex=*/0, /*vertexOffset=*/0);
+            ModelMesh meshR(&dev, { &partR });
+            partR.setEffectProperty(&fxR);
+            Model modelR(&dev, { &boneR0, &boneR1 }, { &meshR }, { &boneR1 }, /*rootBoneIndex=*/1);
+
+            check(modelR.getRootProperty() == &boneR1,
+                  "Model: the 5-argument constructor's rootBoneIndex=1 genuinely sets Root to the "
+                  "bone at that NON-zero index, not silently defaulting to bones[0] (plan_dx.md "
+                  "DX-155)");
+
+            dev.Clear(Color(0, 255, 0, 255));
+            dev.SetDepthTestEnabled(false);
+            dev.setBlendStateProperty(BlendState::Opaque);
+            dev.setRasterizerStateProperty(RasterizerState::CullNone);
+            modelR.Draw(Matrix::getIdentityProperty(), Matrix::getIdentityProperty(), Matrix::getIdentityProperty());
+
+            const Microsoft::Xna::Framework::Rectangle centerRegionR(30, 30, 1, 1);
+            Color centreR(0, 0, 0, 0);
+            dev.GetBackBufferData(&centerRegionR, &centreR, 0, 1);
+            check(centreR.getRProperty() >= 200 && centreR.getGProperty() <= 60 && centreR.getBProperty() <= 60,
+                  "Model::Draw() with a real 5-argument-constructor Model (meshParentBones targeting "
+                  "the NON-zero-indexed boneR1, rootBoneIndex=1) genuinely draws the mesh's exact red "
+                  "over the green clear -- proves meshParentBones correctly selected boneR1's own "
+                  "Identity transform, not boneR0's off-screen-translating one, through the real D3D11 "
+                  "backend (plan_dx.md DX-155)");
+
+            dev.SetDepthTestEnabled(false);
+            dev.setRasterizerStateProperty(RasterizerState::CullCounterClockwise);
+        }
+
+        // plan_dx.md DX-129: RenderTargetCube dedicated pixel test -- until now only construction
+        // was proven real (plus DX-144's own narrower mip-chain-content check above); this mirrors
+        // RenderTarget2D's own full bind+clear+readback+unbind-restores-backbuffer proof (Check J
+        // above) for RenderTargetCube, PLUS a per-face independence check (binding face 1 to a
+        // different color must not clobber face 0's already-cleared content -- the specific
+        // aliasing risk a shared 6-slice texture array creates that a single RenderTarget2D never
+        // has to prove).
+        {
+            auto rtCube = backend.CreateRenderTargetCube(8, 0 /*DepthFormat::None*/, false /*mipMap*/);
+            auto* d3dRtCube = static_cast<D3D11RenderTargetCubeBackend*>(rtCube.get());
+
+            // (a) Bind face 0, Clear() -> exact color lands in face 0's own texture slice.
+            rtCube->BindAsRenderTargetFace(0);
+            dev.Clear(Color(11, 22, 33, 255));
+            const auto face0Pixels = ReadTexture2DMipRegion(device, context, d3dRtCube->GetColorTextureEXT(),
+                                                             0 /*subresource = mip 0 + face 0*level count*/, 0, 0, 4, 4);
+            bool face0Matches = face0Pixels.size() == 4u * 4u * 4u;
+            for (std::size_t i = 0; i < 4u * 4u && face0Matches; ++i)
+                face0Matches = face0Pixels[i * 4 + 0] == 11 && face0Pixels[i * 4 + 1] == 22 &&
+                               face0Pixels[i * 4 + 2] == 33 && face0Pixels[i * 4 + 3] == 255;
+            check(face0Matches,
+                  "D3D11RenderTargetCubeBackend: BindAsRenderTargetFace(0)+Clear() writes the exact "
+                  "color into face 0's own texture slice (plan_dx.md DX-129)");
+
+            // (b) Bind face 1 to a DIFFERENT color, then re-read face 0 -- proves the two faces are
+            // genuinely independent texture-array slices, not aliased.
+            rtCube->BindAsRenderTargetFace(1);
+            dev.Clear(Color(200, 100, 50, 255));
+            const auto face1Pixels = ReadTexture2DMipRegion(device, context, d3dRtCube->GetColorTextureEXT(),
+                                                             1 /*subresource = mip 0 + face 1*level count*/, 0, 0, 4, 4);
+            bool face1Matches = face1Pixels.size() == 4u * 4u * 4u;
+            for (std::size_t i = 0; i < 4u * 4u && face1Matches; ++i)
+                face1Matches = face1Pixels[i * 4 + 0] == 200 && face1Pixels[i * 4 + 1] == 100 &&
+                               face1Pixels[i * 4 + 2] == 50 && face1Pixels[i * 4 + 3] == 255;
+            const auto face0Again = ReadTexture2DMipRegion(device, context, d3dRtCube->GetColorTextureEXT(),
+                                                            0, 0, 0, 4, 4);
+            bool face0StillMatches = face0Again.size() == 4u * 4u * 4u;
+            for (std::size_t i = 0; i < 4u * 4u && face0StillMatches; ++i)
+                face0StillMatches = face0Again[i * 4 + 0] == 11 && face0Again[i * 4 + 1] == 22 &&
+                                    face0Again[i * 4 + 2] == 33 && face0Again[i * 4 + 3] == 255;
+            check(face1Matches && face0StillMatches,
+                  "D3D11RenderTargetCubeBackend: face 1 gets its OWN distinct color, and face 0's "
+                  "earlier content survives completely unchanged -- proves the 6 cube faces are "
+                  "genuinely independent texture-array slices, not aliased (plan_dx.md DX-129)");
+
+            // (c) UnbindAsRenderTarget() genuinely restores the back buffer as Clear()'s target.
+            rtCube->UnbindAsRenderTarget();
+            dev.Clear(Color(44, 55, 66, 255));
+            const Microsoft::Xna::Framework::Rectangle bbRegionCube(0, 0, 4, 4);
+            std::vector<Color> bbPixelsCube(4 * 4, Color(0, 0, 0, 0));
+            dev.GetBackBufferData(&bbRegionCube, bbPixelsCube.data(), 0, static_cast<int>(bbPixelsCube.size()));
+            bool bbMatchesCube = true;
+            for (const Color& p : bbPixelsCube)
+                if (p.getRProperty() != 44 || p.getGProperty() != 55 || p.getBProperty() != 66 || p.getAProperty() != 255)
+                    bbMatchesCube = false;
+            check(bbMatchesCube,
+                  "D3D11RenderTargetCubeBackend: UnbindAsRenderTarget() genuinely restores the back "
+                  "buffer as Clear()'s next target (plan_dx.md DX-129)");
+        }
+
+        // plan_dx.md DX-152: RenderTargetCube MSAA -- a real feature (previously deliberately out
+        // of scope, D3D11RenderTargetCubeBackend's own header comment) landing now, not just a
+        // test. Same real, device-queried methodology as Check K's own RenderTarget2D MSAA proof
+        // (DX-45): pass/fail is purely about pixel correctness of the resolve; whether the device
+        // actually granted real multi-sampling is printed as diagnostics, not gated on, since
+        // that's real hardware/driver capability.
+        {
+            auto rtCubeMsaa = backend.CreateRenderTargetCube(8, 0 /*DepthFormat::None*/, false /*mipMap*/, 4);
+            auto* d3dRtCubeMsaa = static_cast<D3D11RenderTargetCubeBackend*>(rtCubeMsaa.get());
+            rtCubeMsaa->BindAsRenderTargetFace(0);
+            dev.Clear(Color(77, 88, 99, 255));
+            rtCubeMsaa->UnbindAsRenderTarget(); // ResolveMsaaEXT() for face 0
+
+            const auto resolvedCube = ReadTexture2DMipRegion(
+                device, context, d3dRtCubeMsaa->GetSampleableTextureEXT(), 0 /*face 0, mip 0*/, 0, 0, 4, 4);
+            bool msaaCubeMatches = resolvedCube.size() == 4u * 4u * 4u;
+            for (std::size_t i = 0; i < 4u * 4u && msaaCubeMatches; ++i)
+                msaaCubeMatches = resolvedCube[i * 4 + 0] == 77 && resolvedCube[i * 4 + 1] == 88 &&
+                                  resolvedCube[i * 4 + 2] == 99 && resolvedCube[i * 4 + 3] == 255;
+            check(msaaCubeMatches,
+                  "D3D11RenderTargetCubeBackend (MSAA): Clear()+resolve-on-unbind produces the exact "
+                  "color in the resolved texture, face 0 (plan_dx.md DX-152)");
+            std::printf("    RenderTargetCube MSAA: requested 4x, device-applied %dx\n",
+                        d3dRtCubeMsaa->GetMultiSampleCount());
+        }
+
+        // plan_dx.md DX-130: the 5 combo Clear* variants dedicated round-trip pixel test --
+        // ClearDepthStencilView() calls already exist and are implemented identically to the
+        // proven plain Clear(r,g,b,a) path, but only plain Clear had a dedicated pixel test until
+        // now. Mirrors D3D12's own already-closed DX-146 methodology exactly: stencil is proven by
+        // a direct GPU readback of the depth-stencil resource's real bytes (D3D11 packs
+        // DXGI_FORMAT_D24_UNORM_S8_UINT as one 32-bit value per pixel -- byte 3 is the stencil
+        // byte, no separate plane-slice copy needed, unlike D3D12); depth is proven by its real
+        // effect on rasterization (the same triangle at the same Z drawn twice, differing ONLY in
+        // the depth value a prior ClearDepth() wrote).
+        {
+            constexpr int kRtW = 32, kRtH = 32;
+            auto rtCl = backend.CreateRenderTarget2D(kRtW, kRtH, /*depthFormat=*/3 /*Depth24Stencil8*/, false, false, 0);
+            auto* d3dRtCl = static_cast<D3D11RenderTargetBackend*>(rtCl.get());
+            check(d3dRtCl->GetDSVEXT() != nullptr,
+                  "D3D11RenderTargetBackend: Depth24Stencil8 render target with a real depth-stencil "
+                  "view created (plan_dx.md DX-130)");
+
+            Microsoft::WRL::ComPtr<ID3D11Resource> dsResource;
+            d3dRtCl->GetDSVEXT()->GetResource(dsResource.GetAddressOf());
+            Microsoft::WRL::ComPtr<ID3D11Texture2D> dsTexture;
+            dsResource.As(&dsTexture);
+
+            backend.SetRenderTarget2D(rtCl.get());
+
+            // --- ClearColorDepthAndStencil: all three at once. ---
+            backend.ClearColorDepthAndStencil(0.0f, 0.0f, 1.0f, 1.0f, /*depth=*/0.75f, /*stencil=*/0x5A);
+            auto stencilAfterAll = ReadDepthStencilPlane(device, context, dsTexture.Get(), kRtW, kRtH);
+            const bool stencilPlaneReadable = !stencilAfterAll.empty();
+            check(stencilPlaneReadable,
+                  "D3D11RenderTargetBackend: the depth-stencil resource's real bytes are readable "
+                  "back from the GPU -- the mechanism the stencil proofs below rely on");
+
+            if (stencilPlaneReadable)
+            {
+                bool allAre5A = true;
+                for (uint8_t v : stencilAfterAll) if (v != 0x5A) { allAre5A = false; break; }
+                check(allAre5A,
+                      "D3D11GraphicsBackend::ClearColorDepthAndStencil(): genuinely wrote 0x5A into "
+                      "EVERY pixel of the real stencil plane, read straight back off the GPU (plan_dx.md DX-130)");
+
+                // --- ClearStencil alone: must change the stencil (depth verified separately below). ---
+                backend.ClearStencil(0x3C);
+                auto stencilAfterStencilOnly = ReadDepthStencilPlane(device, context, dsTexture.Get(), kRtW, kRtH);
+                bool allAre3C = !stencilAfterStencilOnly.empty();
+                for (uint8_t v : stencilAfterStencilOnly) if (v != 0x3C) { allAre3C = false; break; }
+                check(allAre3C,
+                      "D3D11GraphicsBackend::ClearStencil(0x3C): alone genuinely overwrites the "
+                      "stencil plane to 0x3C -- a real, different value than the prior 0x5A, so this "
+                      "is a real clear, not a silent no-op (plan_dx.md DX-130)");
+            }
+
+            // --- Depth: proven by its real effect on the depth test. ---
+            struct VtxZCl { float x, y, z; uint32_t color; };
+            const VtxZCl triZCl[3] = {
+                {-0.9f,  0.9f, 0.5f, 0xFF0000FFu}, // ABGR-packed red
+                { 0.9f,  0.9f, 0.5f, 0xFF0000FFu},
+                { 0.0f, -0.9f, 0.5f, 0xFF0000FFu},
+            };
+            auto vbZCl = backend.CreateVertexBuffer(3);
+            vbZCl->SetData(triZCl, /*vertex_count=*/3, /*stride_in_bytes=*/sizeof(VtxZCl));
+
+            backend.ApplyRasterizerState(/*cullMode=*/0 /*None*/, /*fillMode=*/0 /*Solid*/, false, 0.0f, 0.0f);
+
+            auto drawTriAndSampleCenterCl = [&]() -> Color {
+                backend.DrawColoredPrimitives(*vbZCl, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                              Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1);
+                const auto px = ReadTexture2DRegion(device, context, d3dRtCl->GetSampleableTextureEXT(),
+                                                    kRtW / 2, kRtH / 2, 1, 1);
+                return px.size() >= 4 ? Color(px[0], px[1], px[2], px[3]) : Color(0, 0, 0, 0);
+            };
+
+            // Control: with the depth test OFF, this exact triangle must draw -- isolates "the draw
+            // itself works" from "the depth test rejected it".
+            backend.ApplyDepthStencilState(false, false, 2, false, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, 0);
+            backend.ClearColorAndDepth(0.0f, 0.0f, 1.0f, 1.0f, 0.9f);
+            const Color ctrlPxCl = drawTriAndSampleCenterCl();
+            check(ctrlPxCl.getRProperty() == 255 && ctrlPxCl.getGProperty() == 0,
+                  "D3D11GraphicsBackend: control -- with depth testing OFF, this exact triangle "
+                  "genuinely draws its red, so a following failure can only mean the depth test "
+                  "rejected it, not that the draw is broken");
+            backend.ApplyDepthStencilState(/*depthEnable=*/true, /*depthWriteEnable=*/true,
+                                           /*depthFunc=*/2 /*Less*/, false, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, 0);
+
+            // Depth cleared FAR (0.9): the z=0.5 triangle is nearer -> Less passes -> red is drawn.
+            backend.ClearColorAndDepth(0.0f, 0.0f, 1.0f, 1.0f, /*depth=*/0.9f);
+            const Color passPxCl = drawTriAndSampleCenterCl();
+            check(passPxCl.getRProperty() == 255 && passPxCl.getGProperty() == 0,
+                  "D3D11GraphicsBackend::ClearColorAndDepth(depth=0.9): the z=0.5 triangle passes "
+                  "depthFunc=Less and draws its exact red, proving the cleared DEPTH value is real "
+                  "(plan_dx.md DX-130)");
+
+            // Depth cleared NEAR (0.1): the same z=0.5 triangle is farther -> Less fails -> blue survives.
+            backend.ClearColorAndDepth(0.0f, 0.0f, 1.0f, 1.0f, /*depth=*/0.1f);
+            const Color failPxCl = drawTriAndSampleCenterCl();
+            check(failPxCl.getBProperty() == 255 && failPxCl.getRProperty() == 0,
+                  "D3D11GraphicsBackend::ClearColorAndDepth(depth=0.1): the SAME triangle at the SAME "
+                  "z=0.5 is now correctly REJECTED by the depth test (background survives) -- only "
+                  "the cleared depth value differs, so each Clear* variant genuinely writes the "
+                  "depth it was given, not a fixed default (plan_dx.md DX-130)");
+
+            // --- ClearDepth alone must NOT touch the color target. ---
+            backend.ClearColorAndDepth(0.0f, 1.0f, 0.0f, 1.0f, /*depth=*/0.9f); // green, far depth
+            backend.ClearDepth(0.1f);                                            // depth only
+            const auto afterDepthOnlyCl = ReadTexture2DRegion(device, context, d3dRtCl->GetSampleableTextureEXT(),
+                                                              kRtW / 2, kRtH / 2, 1, 1);
+            check(afterDepthOnlyCl.size() >= 4 && afterDepthOnlyCl[1] == 255 && afterDepthOnlyCl[0] == 0,
+                  "D3D11GraphicsBackend::ClearDepth(): alone leaves the COLOR target untouched (the "
+                  "prior green survives) -- proves each variant clears only what it was asked for "
+                  "(plan_dx.md DX-130)");
+
+            backend.ApplyDepthStencilState(false, false, 2, false, 0, 0, 0, 0, 0, 0, 0, false, 0, 0, 0, 0);
+            backend.SetRenderTarget2D(nullptr);
+        }
+
         const int totalChecks = 2 /* SetDepthTestEnabled real, not a no-op */
                                 + 3 + 10 + 1 + 2 + 2 + 2 + 2 + 2 + 1 + 1 + 2 + 1 + 13 + 2 + 3 + 2 + 2 + 1 + 1 + 1 + 1 + 3 + 2 + 2 + 2 + 3 + 2 + 3 /* DX-131 rotation/scale/crop */
                                 + 1 /* DX-134 envMapAmount=0 */ + 2 /* DX-135 WeightsPerVertex */ + 2 /* DX-137 textured3d fog */
                                 + 2 /* DX-140 NPOT */ + 2 /* DX-142 all-16-sampler-slots */ + 2 /* DX-143 MRT MSAA resolve */
                                 + 4 /* DX-144 RT2D+RTCube mip-chain generation */
                                 + 4 /* DX-145 DepthStencilFormat fidelity */
-                                + 2 /* DX-147 occlusion query visible-vs-occluded */;
+                                + 2 /* DX-147 occlusion query visible-vs-occluded */
+                                + 4 /* DX-124 multi-light + EmissiveColor discrimination */
+                                + 2 /* DX-125 specular-highlight discrimination */
+                                + 3 /* DX-126 mip level > 0 upload/readback */
+                                + 4 /* DX-127 SpriteFont glyph placement/spacing/newline/flip */
+                                + 1 /* DX-128 Model/ModelMesh runtime-API orchestration */
+                                + 3 /* DX-129 RenderTargetCube bind+clear+readback+unbind proof */
+                                + 8 /* DX-130 combo Clear* variants (DSV, stencil-readable, stencil x2, control, depth x2, color-untouched) */
+                                + 12 /* DX-137 fog for 6 remaining variants x 2 checks each */
+                                + 3 /* DX-136 alpha_test_colored3d VertexColorEnabled on/off + discard-still-works */
+                                + 3 /* DX-149 env_map3d DirectionalLight1/2 discrimination */
+                                + 3 /* DX-150 skinned3d DirectionalLight1/2 discrimination */
+                                + 2 /* DX-151 skinned3d specular discrimination */
+                                + 1 /* DX-152 RenderTargetCube MSAA */
+                                + 1 /* DX-153 RenderTargetCube mip non-face-0 */
+                                + 2 /* DX-155 Model root-bone-index flexibility */;
         std::printf("=== %d/%d PASS ===\n", passCount_, totalChecks);
         result_ = (passCount_ == totalChecks) ? 0 : 1;
         Exit();

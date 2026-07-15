@@ -1,36 +1,46 @@
 # NEXT.md — CNA Project Handoff
 
-> **Both `plan_dx.md` backends' full software/logic layer are done and Wine-verified as of
-> 2026-07-14.** **D3D11**: Phase DX1 through DX11 are ALL closed — every task except `DX-90`/`DX-91`
-> (real-Windows hardware, `needs_human`, no such machine available here). 6 CTest binaries, 96+
-> checks, all passing through Wine+DXVK on a real GPU, including a working (Wine-verified) swap
-> chain/`Present()`. **D3D12**: Phase DX12 (`DX-100` through `DX-113` and `DX-115`) is now ALSO fully
-> closed — every task except `DX-114` (real-Windows hardware, `needs_human`, same constraint as
-> D3D11's `DX-90`). `D3D12_Smoke` CTest: 80/80 checks, all 10 stock shader variants (same DXBC as
-> D3D11) + a real `SpriteBatch` + device-removed recovery, all pixel-verified **off-screen**.
-> **UPDATE 2026-07-14 (later same day): D3D12's swap-chain crash is fixed locally.** A properly
-> Proton-managed launch (`scripts/run-proton-vkd3d.sh`, new — drives this machine's local Steam
-> "Proton - Experimental" through its own `proton run` entry point + a dedicated Proton-managed
-> prefix, instead of overlaying vkd3d-proton's DLLs onto a foreign system-Wine prefix) makes
-> `CreateSwapChainForHwnd` genuinely succeed (`IsSwapChainAvailableEXT() = true`, reproduced twice
-> including from a fresh prefix — see `plan_dx.md`'s `DX-102` row for the full evidence and the two
-> dead ends that didn't work). `Present()`/back-buffer binding are still real, separate,
-> `NotYetImplemented()` follow-up work — this only closes swap-chain *creation*, not presentation
-> end-to-end, and does not substitute for `DX-114`'s real-hardware tearing/present-mode/device-lost
-> verification. D3D12 also still lacks a public render-target backend,
-> `Texture3D`, runtime-settable blend/depth-stencil/rasterizer state (PSOs hardcode
-> `depthEnable=false`/`cullMode=None`), per-slot `SamplerState` (hardcoded static WRAP/linear
-> samplers), and occlusion queries — real, scoped, honestly-documented follow-up work.
+> **Both `plan_dx.md` backends are now closed through Phase DX16 (2026-07-15) — every row except
+> the 5 genuinely `needs_human` hardware-gated ones.** `D3D11_Smoke` **147/147 checks** (6/6 CTests
+> total), `D3D12_Smoke` **212/212 checks** (1/1 CTest, off-screen only — see below), both through
+> Wine+DXVK/vkd3d-proton on a real GPU, verified after every single task landed this session, not
+> just at the end.
 >
-> Full task-by-task detail and this session's complete chronological history live in `plan_dx.md`
-> (`DX-1`–`DX-115`) — not duplicated here. Current-state summaries: `docs/d3d11-backend.md`,
-> `docs/d3d12-backend.md`, and `docs/graphics-backend-feature-matrix.md` (full row-by-row
-> `D3D11`/`D3D12` comparison against every established backend).
+> **This session's work (2026-07-15), continuing from the 2026-07-14 state this banner used to
+> describe:**
+> - **Phase DX13's last 2 partial rows closed for real**: `DX-117` follow-up — real, device-queried
+>   MSAA for `D3D12RenderTargetBackend` (2D) *and* `D3D12RenderTargetCubeBackend` (the latter closed
+>   later, see Phase DX16 below); `DX-121` — `SpriteBatch::Begin(effect)` now has its own dedicated
+>   CTest proof through the real public XNA API. **Phase DX13 is now 8 of 8 rows closed.**
+> - **3 stale `plan_dx.md`/`graphics-backend-feature-matrix.md` rows found and fixed** — a recurring
+>   pattern this session: a LATER task's own row explicitly says it closed an EARLIER row's gap, but
+>   the earlier row's own status badge was never updated to reflect it. Found and fixed for `DX-29`
+>   (D3D11 window resize — already closed by `DX-83`), `DX-102` (D3D12 device/queue/swap-chain —
+>   already closed by its own later update + `DX-116`), and `DX-113` (D3D12 tests — one gap already
+>   closed by `DX-118`, the other closed for real this session with a genuine GPU-load timing proof,
+>   Checks `E4`/`E4pre`/`E4a`). **Before trusting a plan row's ⬜/🟨 status, check whether a later
+>   row's own closing note claims to have already closed it.**
+> - **Phase DX16 (new, `DX-149`–`DX-155`) opened and fully closed** — found by computing a real
+>   percentage of "how much of what EasyGL does can D3D11/D3D12 also do" (34 comparable
+>   feature-matrix rows; both backends started at ~79% fully verified / ~97% functionally
+>   implemented). All 7 gaps closed: `EnvironmentMapEffect`/`SkinnedEffect` `DirectionalLight1`/`2` +
+>   specular tests (both backends), **real new `RenderTargetCube` MSAA support on both D3D11 and
+>   D3D12** (`DX-152` — reopened a previously-deliberate scope exclusion, not a silent oversight),
+>   `RenderTargetCube` mip-chain regen for a non-zero face, D3D12's own 16-simultaneous-sampler-slot
+>   test, and `Model` root-bone-index flexibility (found and corrected a wrong premise in this row's
+>   own original text — see `plan_dx.md`'s `DX-155` row for detail: `rootBoneIndex` doesn't actually
+>   drive `Model::Draw()`, only `getRootProperty()` reflects it).
 >
-> **With `DX-114` the only open item and it `needs_human` (real Windows hardware), there is no
-> further available Debian-side work on `plan_dx.md` barring new instructions.** This is a
-> brand-new architectural front for the project — read `plan_dx.md`'s own status banner before
-> touching it. The pre-existing EasyGL/Vulkan/Bgfx/SDL_Renderer/Headless/Software/WebGPU work
+> **Result: with Phase DX16 also closed, `plan_dx.md` has NOTHING left to do on this Debian machine.**
+> Every remaining open row (`DX-27`, `DX-90`, `DX-91`, `DX-110`, `DX-114`) is genuinely
+> `needs_human` — either real-Windows-hardware verification, or a real `DXGI_ERROR_DEVICE_REMOVED`
+> trigger that cannot be induced under Wine. Full task-by-task detail and this session's complete
+> chronological history live in `plan_dx.md` — not duplicated here. Current-state summaries:
+> `docs/d3d11-backend.md`, `docs/d3d12-backend.md`, and `docs/graphics-backend-feature-matrix.md`
+> (full row-by-row `D3D11`/`D3D12` comparison against every established backend).
+>
+> This is a brand-new architectural front for the project — read `plan_dx.md`'s own status banner
+> before touching it. The pre-existing EasyGL/Vulkan/Bgfx/SDL_Renderer/Headless/Software/WebGPU work
 > summarized below is unchanged by this; full history for that lives in `plan_graphics.md`/
 > `plan_webgpu.md`/`plan_software.md` and `git log`, not duplicated here.
 
@@ -47,15 +57,18 @@ API-surface changes.
 - **Current phase:** the established Linux/desktop backends (EasyGL/Vulkan/Bgfx/SDL_Renderer) and
   the CI-oriented ones (Headless/Software) are mature — Phase 55 already declared a qualified
   **~90% XNA/FNA compatibility milestone** for `Microsoft::Xna::Framework::Graphics`. WebGPU has a
-  working native 2D+partial-3D baseline (`plan_webgpu.md`). **Both Direct3D backends
-  (`plan_dx.md`) now have their full software/logic layer complete and Wine-verified, as of
-  2026-07-14.** Direct3D 11 (Phase DX1–DX11) is fully closed — a Windows-only backend, cross-compiled
-  from this Debian machine via MinGW-w64 and verified locally through Wine+DXVK, including a working
-  swap chain/`Present()`; only `DX-90`/`DX-91` (real-Windows hardware) remain `needs_human`. Direct3D
-  12 (Phase DX12, `DX-100`–`DX-113`/`DX-115`) is also fully closed — same dev-loop approach but via
-  Wine+vkd3d-proton, **off-screen only**: its swap chain genuinely crashes under this dev loop (a
-  real `dxgi.dll`/vkd3d-proton mismatch, not a CNA bug), so only `DX-114` (real-Windows hardware)
-  remains `needs_human` there too. With `DX-114` `needs_human`, there is no further available
+  working native 2D+partial-3D baseline (`plan_webgpu.md`). **Both Direct3D backends (`plan_dx.md`)
+  are now closed through Phase DX16, as of 2026-07-15 — nothing left to do on this Debian machine.**
+  Direct3D 11 (Phase DX1–DX11) is fully closed — a Windows-only backend, cross-compiled from this
+  Debian machine via MinGW-w64 and verified locally through Wine+DXVK, including a working swap
+  chain/`Present()`; only `DX-27`/`DX-90`/`DX-91` (real-Windows hardware / a real device-removed
+  trigger) remain `needs_human`. Direct3D 12 (Phase DX12–DX16) is also fully closed — same dev-loop
+  approach but via Wine+vkd3d-proton, with its own routine CTest suite still off-screen only (real
+  swap-chain creation and `Present()` work too, but only through a separate manual Proton-managed
+  diagnostic, not the routine CTest — Proton's own bootstrap is too heavy for a normal CTest run
+  here); only `DX-110`/`DX-114` (real-Windows hardware / a real device-removed trigger) remain
+  `needs_human`. `D3D11_Smoke` **147/147**, `D3D12_Smoke` **212/212** checks, both real GPU-facing
+  proof. With every remaining open row genuinely `needs_human`, there is no further available
   Debian-side work on `plan_dx.md` barring new instructions. Everything else
   (Phase 79's 153-sample `../cna-samples` re-audit, Task 945's HLSL→GLSL tooling decision, Task
   952's deferred Bgfx bug) is unchanged standing backlog — see §5/§8/§9.
@@ -98,8 +111,8 @@ API-surface changes.
 | `cmake-build-bgfx` | Bgfx | Clean as of 2026-07-10 (not rebuilt this session) |
 | `cmake-build-sdl` | SDL_Renderer | Clean as of 2026-07-10 (not rebuilt this session) |
 | `cmake-build-android` | SDL_Renderer (NDK) | Blocked — Task 920 (sibling `sharp-runtime` NDK build regressions) |
-| `cmake-build-d3d11` | D3D11 (Windows cross-compile, MinGW-w64) | **Verified clean 2026-07-13**: `CNA` and `cna_backend_graphics_d3dcommon`/`cna_backend_graphics_d3d11` build clean; `cna_test_d3d11_smoke`/`cna_test_d3d11_common` build, link, and run correctly under Wine+DXVK. **`CnaTests` itself does NOT build** for this backend — genuinely blocked (see §4), not silently skipped. |
-| `cmake-build-d3d12` | D3D12 (Windows cross-compile, MinGW-w64) | **Updated 2026-07-14 (DX-113 test-suite formalization closed)**: `CNA` and both D3D12 backend targets build clean. Device-lifetime resources (DX-102-105), resource-barrier state tracking, a PSO cache, a root-signature cache (DX-106-108), real `D3D12VertexBufferBackend`/`D3D12IndexBufferBackend`/`D3D12TextureBackend`/`D3D12TextureCubeBackend` (DX-109, buffers+2D+cube textures — render targets/3D textures still honestly deferred, 🟨) plus a real, tested `RecreateDeviceEXT()` device-removed recovery path (DX-110), and `Clear()`/`DrawColoredPrimitives()`/`DrawIndexedColoredPrimitives()`/`DrawPrimitivesEx()`/`DrawIndexedPrimitivesEx()`/`DrawInstancedPrimitivesEx()` are REAL for **all 10 of 10 stock variants** (`colored3d`/`textured3d`/`colored_textured3d`/`lit_textured3d`/`alpha_test3d`/`dual_texture3d`/`env_map3d`/`sprite2d`/`skinned3d`/`instanced3d`, DX-111 ✅) via a new `BindOffscreenColorTargetEXT()` NOXNA helper standing in for the still-broken swap chain, plus a real `D3D12SpriteBatchBackend` (DX-112 ✅). DX-113 audited that coverage against D3D11's own DX-80–85 methodology, added a dedicated fog on/off test and untracked-resource-throw tests, and mutation-verified Check M's discriminating power (🟨 — real, but 2 honest gaps: no state-object cache exists yet to test against, and fence back-pressure isn't measured under real GPU load). `D3D12_Smoke` CTest: **80/80 checks pass** through Wine+vkd3d-proton (off-screen only, unchanged — the CTest harness still uses `run-wine-vkd3d.sh`'s system-Wine prefix). **UPDATE 2026-07-14: swap-chain *creation* now genuinely works**, via a properly Proton-managed launch (`scripts/run-proton-vkd3d.sh`, new) — `cna_diag_d3d12_swapchain` reports `IsSwapChainAvailableEXT() = true`, reproduced twice including from a fresh prefix (`plan_dx.md` `DX-102`'s row has the full evidence). `Present()`/back-buffer rendering are still real, separate `NotYetImplemented()` follow-up work. `DX-115` (docs) is now also closed — Phase DX12 is fully done except `DX-114`, which stays `needs_human`. **FINAL UPDATE 2026-07-14: Phase DX13 (`DX-116`–`DX-123`) is 6 of 8 rows closed, 2 partial (🟨)** — real `Present()`/back-buffer rendering, render targets/MRT, runtime-settable state objects, per-slot samplers, occlusion queries, custom `ShaderEffect`, `Texture3D`, and `TextureCube::GetData()` readback are all real now. Still partial: `DX-117` (render targets have **no MSAA and no mip-chain generation**) and `DX-121` (the `SpriteBatch::Begin(effect)` wiring is real code but not independently CTest-proven). `D3D12_Smoke` CTest: **125/125 checks** at the end of that phase (169/169 today). See `plan_dx.md`'s Phase DX13 section for full detail; Phase DX14/DX15 are the active work now. |
+| `cmake-build-d3d11` | D3D11 (Windows cross-compile, MinGW-w64) | **Verified clean 2026-07-15**: `CNA` and `cna_backend_graphics_d3dcommon`/`cna_backend_graphics_d3d11` build clean. 6 CTests all pass through Wine+DXVK: `D3D11_Smoke` **147/147 checks** (real `RenderTargetCube` MSAA landed this session, `DX-152`), `D3D11_Common` 23/23, plus 4 state-object CTests. `plan_dx.md` Phases DX1–DX16 all closed on this backend — only `DX-27`/`DX-90`/`DX-91` (real Windows hardware / a real device-removed trigger) remain, `needs_human`. |
+| `cmake-build-d3d12` | D3D12 (Windows cross-compile, MinGW-w64) | **Verified clean 2026-07-15**: `CNA` and both D3D12 backend targets build clean. `D3D12_Smoke` CTest (off-screen only — routine CTest harness still uses `run-wine-vkd3d.sh`'s plain-Wine prefix, real swap-chain/`Present()` verified separately via `scripts/run-proton-vkd3d.sh`'s manual diagnostic, not the routine CTest): **212/212 checks**, checks lettered A through VV. All 10/10 stock shader variants, real render targets/MRT with real MSAA (both `RenderTarget2D` — `DX-117` follow-up — and `RenderTargetCube` — `DX-152`, new this session), real mip-chain generation (both RT types, including a non-zero cube face — `DX-153`), runtime-settable blend/depth-stencil/rasterizer state, per-slot `SamplerState` (now proven across all 16 slots simultaneously — `DX-154`), real occlusion queries, custom `ShaderEffect` (including a dedicated `SpriteBatch::Begin(effect)` CTest proof — `DX-121`), `Texture3D`, `TextureCube::GetData()`, `SpriteFont`/`Model` (including root-bone-index flexibility — `DX-155`) through a windowless `GraphicsDevice`, and a real, GPU-load-timed fence back-pressure proof (`DX-113` follow-up). `plan_dx.md` Phases DX12–DX16 all closed on this backend — only `DX-110`/`DX-114` (real Windows hardware / a real device-removed trigger) remain, `needs_human`. |
 
 The `cna_demo_xact` example fails to build on every backend (missing `examples/demo_xact/Content`
 directory in this checkout) — cosmetic, pre-existing, not a CNA bug, do not chase it (§9).
@@ -112,17 +125,32 @@ directory in this checkout) — cosmetic, pre-existing, not a CNA bug, do not ch
 | Vulkan | 4371/4373 pass (2 hardware skips), as of 2026-07-11 | 127/128 pass — 1 pre-existing failure (`Vulkan_DepthBias`) |
 | Bgfx | 4375/4377 pass (2 hardware skips), as of 2026-07-11 | 104/106 pass — 2 pre-existing failures (`Bgfx_RenderTarget2D_MsaaResolve`, `Bgfx_RenderTargetCube_DepthFormat`, DEFERRED — Task 952) |
 | Software | 4371/4373 pass, as of 2026-07-13 | 6 CTests, 29/29 checks |
-| D3D11 | **Does not build** (see §4) | **6/6 pass, 92 `D3D11_Smoke`/`D3D11_Common` checks + 10 more assertions across 4 new state-object tests** (`D3D11_Smoke` 69, `D3D11_Common` 23, `D3D11_BlendState_Opaque`/`AlphaBlend`, `D3D11_DepthStencilState_StencilEnable`, `D3D11_RasterizerState_CullMode`), verified 2026-07-14 via `ctest --test-dir cmake-build-d3d11 -R D3D11` |
-| D3D12 | Not applicable yet (no `CnaTests` target for this backend) | **1/1 pass, 80/80 checks** (`D3D12_Smoke`: off-screen device/queue/heaps/command-lists/fence + resource-barrier tracking (incl. untracked-resource throw, DX-113) + root-signature cache + pipeline-state-object cache + real vertex/index/texture/cube-texture round-trips + device-removed recreation + real, pixel-verified `colored3d`/`textured3d`/`colored_textured3d`/`lit_textured3d`/`alpha_test3d`/`dual_texture3d`/`env_map3d`/`skinned3d`/`instanced3d` draws via `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx`/`DrawInstancedPrimitivesEx` + fog on/off (DX-113) + a real `D3D12SpriteBatchBackend` quad-draw/flip proof — all 10/10 stock shader variants), mutation-verified (Check M), verified 2026-07-14 via `ctest --test-dir cmake-build-d3d12 -R D3D12` |
+| D3D11 | **Builds, links, and runs** (fixed 2026-07-14, `DX-15`) — full-suite pass count not yet re-measured (thousands of tests, long wall-clock under Wine); a filtered run (`CnaInput*`/`AlphaTestReferenceScalingTest`, 30 tests, through a live D3D11 device) passed 30/30 | **6/6 pass, `D3D11_Smoke` 147/147 + `D3D11_Common` 23/23 + 4 state-object CTests**, verified 2026-07-15 via `ctest --test-dir cmake-build-d3d11 -R D3D11` |
+| D3D12 | **Builds and links** (fixed 2026-07-14, `DX-15`) — groups not creating a live `GraphicsDevice` window run and pass under plain Wine (confirmed); groups that need a real window use `scripts/run-proton-vkd3d.sh`'s separate manual diagnostic instead | **1/1 pass, 212/212 checks** (`D3D12_Smoke`, off-screen: all 10/10 stock shader variants, real render targets/MRT/MSAA (both 2D and cube) with mip-chain generation, real state objects, per-slot samplers (all 16 simultaneously), real occlusion queries, custom `ShaderEffect` incl. `SpriteBatch::Begin(effect)`, `Texture3D`, `TextureCube::GetData()`, `SpriteFont`/`Model` incl. root-bone-index flexibility through a windowless `GraphicsDevice`, and a real GPU-load-timed fence back-pressure proof), verified 2026-07-15 via `ctest --test-dir cmake-build-d3d12 -R D3D12` |
 | Headless, WebGPU | Not re-verified this session | See `plan_headless.md`/`plan_webgpu.md` for their own last-verified status |
 
 All EasyGL/Vulkan/Bgfx/Software numbers above are carried over from the last session that actually
-touched those backends (2026-07-10/11/13) — **not re-verified in this session**, which worked
-exclusively on D3D11/D3D12. The D3D11 numbers are unchanged from earlier this session; the D3D12
-numbers are fresh, verified just now.
+touched those backends (2026-07-10/11/13) — **not re-verified this session**, which worked
+exclusively on D3D11/D3D12 again. Both D3D11 and D3D12 numbers are fresh, verified 2026-07-15.
 
 ### Recently implemented
 
+- **`plan_dx.md` Phase DX13 completion + new Phase DX16** (2026-07-15, this session): closed
+  Phase DX13's last 2 partial rows — `DX-117` follow-up (real, device-queried `RenderTarget2D` MSAA
+  for D3D12, mirroring D3D11's own `DX-45`) and `DX-121` (`SpriteBatch::Begin(effect)` dedicated
+  CTest proof). Fixed 3 stale plan rows found via cross-referencing (`DX-29`/`DX-102`/`DX-113`) —
+  each was a case where a LATER task's own row said it closed an EARLIER row's gap, but the earlier
+  row's status badge was never updated. Opened and closed a brand-new **Phase DX16** (`DX-149`–
+  `DX-155`) from a real percentage audit ("how much of what EasyGL does can D3D11/D3D12 also do" —
+  34 comparable feature-matrix rows, both backends started at ~79%/~97%): `EnvironmentMapEffect`/
+  `SkinnedEffect` `DirectionalLight1`/`2` + specular tests, **real new `RenderTargetCube` MSAA on
+  both backends** (`DX-152`, a genuine new feature reopening a prior deliberate scope exclusion),
+  `RenderTargetCube` mip-chain regen for a non-zero face, D3D12's 16-simultaneous-sampler-slot test,
+  and `Model` root-bone-index flexibility (corrected this row's own wrong premise about what
+  `rootBoneIndex` actually drives, by reading `Model.cpp` first). `D3D11_Smoke` grew 135→**147/147**,
+  `D3D12_Smoke` grew 191→**212/212** — every task individually verified via a real `ctest` run and
+  committed/pushed separately. **`plan_dx.md` now has nothing left except `needs_human` rows.** See
+  §3 for the itemized commit list.
 - **D3D11 graphics backend** (2026-07-13, this session, `plan_dx.md`): real device/swap-chain/
   back-buffer/`Clear()`/`Present()`/`ReadBackbuffer()`, a shared `D3DCommon` format/state/vertex-
   layout mapping core, all 10 stock shader variants ported to HLSL and compiler-verified to real
@@ -168,59 +196,21 @@ registered `ctest` pixel-verification examples under `examples/`. New this sessi
 
 ### Does NOT work yet
 
-- **D3D11**: **Every stock 3D shader variant now has a real, pixel-verified draw pipeline**
-  (`colored3d`/`textured3d`/`colored_textured3d`/`lit_textured3d`/`alpha_test3d`/`dual_texture3d`/
-  `env_map3d`/`skinned3d`/`instanced3d` — Phase DX8, `DX-60`–`DX-69`, fully closed 2026-07-13),
-  reachable via real `DrawPrimitivesEx()`/`DrawIndexedPrimitivesEx()`/`DrawInstancedPrimitivesEx()`
-  overrides driven by actual `GpuDrawParams` (textures/vertex-color/lighting/alpha-test/fog/
-  two-texture/cube-map/bone-skinning/per-instance-world all wired) — `colored3d` via the legacy
-  `DrawColoredPrimitives()` path still carries no `GpuDrawParams` (hardcoded white/no-fog, Task 364
-  parity with every other backend's identical legacy path). **`SpriteBatch` is now real too**
-  (`D3D11SpriteBatchBackend`, Phase DX9, `DX-70`/`DX-71`/`DX-72`, closed 2026-07-13) — quad
-  batching through the stock `sprite2d` pipeline, `SpriteEffects` flip, a genuinely-working
-  `SetTransformMatrix()` (unlike Vulkan's own silent no-op), real `TextureAddressMode::Wrap`/
-  `Mirror`, and custom `Effect`-via-`SpriteBatch::Begin(effect)` reusing `D3D11EffectBackend`
-  (`DX-58`) — all GPU-proven through the actual public `SpriteBatch`/`Texture2D` API. Vertex/index
-  buffers and cached input layouts are real (`DX-30`/`DX-31`/`DX-32`, Phase DX5 closed); textures,
-  cube/3D textures, 2D/cube render targets (incl. real MSAA), MRT, sampler cache, and occlusion
-  queries are real (`DX-40`–`DX-47`, Phase DX6 closed); blend/depth-stencil/rasterizer state
-  objects + viewport/scissor are real (`DX-50`–`DX-53`, Phase DX7 closed). `DX-69` fog wiring is
-  real for all 8 fog-capable variants (`sprite2d`/`instanced3d` genuinely have no fog cbuffer to
-  wire) and is now exercised by a dedicated fog-on/off pixel test (Check AC, Phase DX10). **Phase
-  DX10 (`DX-81`–`DX-85`) closed 2026-07-14**: 4 new state-object CTest entries (blend/depth-stencil/
-  rasterizer, reusing the same backend-agnostic sources Vulkan reuses), a real backbuffer-resize
-  test (`DX-83`, closes `DX-29`'s long-flagged never-exercised gap), a mutation-tested proof of
-  discriminating power for the first landed pixel test (`DX-84`), and an automated DXVK-engagement
-  gate now built into `scripts/run-wine-dxvk.sh` itself (`DX-85`) so a silent WineD3D fallback can
-  never again pass as a green D3D11 CTest run. MRT's per-target MSAA-resolve/mip-regen-on-unbind is
-  still only wired for the single-target case (`DX-43`), not yet for N>1 (`DX-46`'s own honest
-  scope note, unchanged this session). The 5 combo `Clear*` variants and device-lost recovery are
-  implemented but still not yet exercised by any test (fullscreen toggle likewise, per `DX-83`'s
-  own scope note — real fullscreen-transition behavior needs `DX-90`). **Phase DX11 (docs) also
-  closed 2026-07-14** — `docs/d3d11-backend.md`, a `D3D11` column in
-  `docs/graphics-backend-feature-matrix.md`, and a `README.md` build section all now exist. **D3D11
-  is complete per `plan_dx.md`'s own scope** — only `DX-90`/`DX-91` (real Windows hardware) remain
-  open, both `needs_human`. **D3D12 (Phase DX12) is now ALSO fully closed** (`DX-100` through
-  `DX-113` and `DX-115`) — real device/queue/heaps/command-lists/fence, resource-barrier tracking, a
-  root-signature cache, a pipeline-state-object cache, real vertex/index buffers + 2D/cube textures,
-  a real tested device-removed recreation path, all 10/10 stock shader variants drawing for real
-  off-screen, a real `D3D12SpriteBatchBackend`, an audited+mutation-tested test suite, and full docs
-  (`docs/d3d12-backend.md`, a `D3D12` column in `docs/graphics-backend-feature-matrix.md`, a
-  `README.md` build section). Only `DX-114` (real Windows hardware) remains, `needs_human` — swap
-  chain/`Present()` is D3D12's own additional real gap (genuinely crashes under this dev loop's
-  Wine+vkd3d-proton, not a CNA bug), so unlike D3D11 no D3D12 proof is on-screen. See §8/§9.
-- **D3D11 + `CnaTests`**: the full pre-existing GTest suite does not build under this backend —
-  ~10 test files call POSIX-only `::setenv()` directly (see §4). Same gap applies to D3D12.
-- **D3D12**: all 10/10 stock shader variants (`colored3d`/`textured3d`/`colored_textured3d`/
-  `lit_textured3d`/`alpha_test3d`/`dual_texture3d`/`env_map3d`/`skinned3d`/`sprite2d`/`instanced3d`)
-  draw for real off-screen via `DrawColoredPrimitives`/`DrawPrimitivesEx`/`DrawIndexedPrimitivesEx`/
-  `DrawInstancedPrimitivesEx`, plus a real `D3D12SpriteBatchBackend`; `D3D12_Smoke` 80/80 checks,
-  mutation-verified. Still genuinely missing (not silently dropped, see `docs/d3d12-backend.md`): a
-  public render-target backend, `Texture3D`, runtime-settable blend/depth-stencil/rasterizer state
-  (PSOs hardcode `depthEnable=false`/`cullMode=None`), per-slot `SamplerState` (hardcoded static
-  WRAP/linear samplers), occlusion queries, and custom `Effect` via `SpriteBatch::Begin(effect)`.
-  `Present()`/swap-chain presentation still honestly throw/crash — real verification is `DX-114`'s
-  job on real Windows hardware.
+- **D3D11 and D3D12 are both complete per `plan_dx.md`'s own scope as of 2026-07-15 (Phase
+  DX1–DX16, both backends).** Every stock 3D shader variant, `SpriteBatch` (incl. custom
+  `Effect`/`Begin(effect)`), vertex/index buffers, textures (2D/cube/3D), render targets (2D/cube,
+  both now with real MSAA and mip-chain generation), MRT, blend/depth-stencil/rasterizer state,
+  per-slot `SamplerState` (D3D11: proven across all 16 slots; D3D12: same, `DX-154`), occlusion
+  queries, `Model`/`SpriteFont` (D3D12 via a windowless `GraphicsDevice`), and device-removed
+  recovery are all real and pixel-verified on both backends. `D3D11_Smoke` **147/147**,
+  `D3D12_Smoke` **212/212**. D3D12's own routine CTest suite is still off-screen only — real
+  swap-chain creation and `Present()` work too, but only through `scripts/run-proton-vkd3d.sh`'s
+  separate manual Proton-managed diagnostic (Proton's own bootstrap is too heavy for a normal
+  CTest run on this dev loop), not the routine `D3D12_Smoke` CTest. **Only genuinely `needs_human`
+  rows remain open anywhere in `plan_dx.md`**: `DX-27`/`DX-90`/`DX-91` (D3D11) and `DX-110`/`DX-114`
+  (D3D12) — real Windows hardware, or a real `DXGI_ERROR_DEVICE_REMOVED` trigger neither backend
+  can induce under Wine. See `plan_dx.md`, `docs/d3d11-backend.md`, `docs/d3d12-backend.md` for
+  full detail — not duplicated here.
 - XNA compiled `.fx` bytecode (`Effect` constructor throws `NotImplementedException`) — Phase 74.
 - `Texture3D`/`TextureCube` cannot be bound as a shader sampler through the generic `EffectParameter`
   path — Task 863, needs an architecture decision (see §5).
@@ -235,6 +225,7 @@ Most recent first. Full detail (exact code, discriminating-power verification) i
 
 | Commit(s) | Summary |
 |---|---|
+| `9fb9cd09`…`35a656ba` (2026-07-15) | **Phase DX13 completed + new Phase DX16 opened and fully closed — `plan_dx.md` now has nothing left except `needs_human` rows.** `DX-117` follow-up (`9fb9cd09`): real, device-queried `RenderTarget2D` MSAA for D3D12 (`ClampMultiSampleCount`/`ResolveMsaaEXT`, mirroring D3D11's `DX-45`), `D3D12_Smoke` 191→193/193. `DX-29` doc fix (`28d74b90`): D3D11 window resize was already closed by `DX-83`, only the row badge was stale. `DX-113` follow-up (`d7aa55c3`): closed its 2 remaining honest gaps — the state-object pixel-proof gap was already closed by `DX-118` (just needed the cross-reference fixed), and a new real GPU-load-timed fence back-pressure proof (Checks `E4`/`E4pre`/`E4a`, ~90ms load vs ~1µs control across 4 runs) plus a `DX-102` doc fix, `D3D12_Smoke` 193→196/196. **New Phase DX16** (`0e66133e`…`35a656ba`, `DX-149`–`DX-155`): opened from a real percentage audit (34 comparable EasyGL/D3D11/D3D12 feature-matrix rows, both backends started ~79%/~97%) — `EnvironmentMapEffect`/`SkinnedEffect` `DirectionalLight1`/`2` + specular tests (both backends, reusing `DX-124`/`DX-138`/`DX-125`/`DX-139`'s own methodologies), **real new `RenderTargetCube` MSAA on both D3D11 and D3D12** (`DX-152`, `fe8f3555` — reopened a previously-deliberate scope exclusion; neither backend's `TextureCube` SRV can ever be multisampled, so the MSAA resource is RTV-only with a separate resolve resource, same pattern as `DX-117`'s own 2D leg), `RenderTargetCube` mip-chain regen for a non-zero face (`DX-153`, confirming D3D11's whole-resource `GenerateMips()` and D3D12's `activeFace_`-scoped cascade are architecturally different mechanisms that both work), D3D12's 16-simultaneous-sampler-slot test (`DX-154`, porting D3D11's own `DX-142`), and `Model` root-bone-index flexibility (`DX-155`, `35a656ba` — corrected this row's own wrong premise: `rootBoneIndex` doesn't drive `Model::Draw()`, only `getRootProperty()` reflects it, found by reading `Model.cpp` before writing the test). `D3D11_Smoke` 135→**147/147**; `D3D12_Smoke` 191→**212/212**. Every task individually built, tested via real `ctest`, and committed/pushed separately (one task = one commit, per this project's own convention). |
 | `b3289ac6` + this commit | **Phase DX15: 15 of 18 rows closed** (`DX-136`/`DX-137`/`DX-144` remain open for real reasons — see `plan_dx.md`'s Phase DX15 intro; `DX-136` in particular is blocked on a cross-backend shader gap, `alpha_test3d` has no vertex-color attribute at all). The last 3 rows (`DX-132` D3D12 `SpriteFont`, `DX-148` D3D12 `Model`, `DX-140`'s `FromStream`/`SaveAsPng` half) shared one blocker: they need a real `GraphicsDevice`, which forced a real window → a real swap chain → this dev loop's D3D12 crash path. Fixed by **`PresentationParameters::HeadlessEXT`** (NOXNA): a runtime opt-in for a genuinely windowless device that skips SDL video init entirely (so it needs no display server, and works in CI). Defaults false → production behavior byte-identical. All 3 rows then landed in the **routine plain-Wine** D3D12 CTest. **Real crash bug found**: `SetDepthTestEnabled`/`SetDepthWriteEnabled`/`SetBlendEnabled` were still `NotYetImplemented()` **throws** on D3D12, so any game calling `GraphicsDevice::SetDepthTestEnabled()` crashed — caught by `DX-148`'s Model test, the first thing to ever drive the shared `GraphicsDevice` path against D3D12. `D3D12_Smoke` 159→**169/169**. |
 | `18a70bba`+ (DX-115) | **Phase DX12 fully closed — `DX-115` (docs)**: new `docs/d3d12-backend.md`, a `D3D12` column across all 7 applicable `docs/graphics-backend-feature-matrix.md` tables, and a `README.md` build section, mirroring D3D11's own `DX-95`–`DX-97`. Confirmed exact current numbers via a live run: `D3D12_Smoke` 80/80 checks. Only `DX-114` (real Windows hardware) remains open in `plan_dx.md`, `needs_human`. |
 | `724b95f6` | **`DX-113` (test-suite formalization) closed** — audited the 74 checks `DX-102`–`111` already built, closed 2 real gaps (dedicated fog on/off test, `D3D12ResourceStateTracker`'s untracked-resource throw contract), mutation-tested Check M (`VertexColorEnabled` flip → exactly M1 failed, M2 untouched, reverted+reconfirmed). `D3D12_Smoke` 80/80 checks. Two gaps left honestly open (state-object testing not yet applicable; fence stall not independently measured under real GPU load). |
@@ -267,11 +258,14 @@ Most recent first. Full detail (exact code, discriminating-power verification) i
 
 ## 4. Current blocker / main problem
 
-**No hard blocker — `plan_dx.md`'s scope is entirely closed for both backends' software/logic
-layer.** D3D11: Phase DX1 through DX11 are all ✅ except `DX-90`/`DX-91` (real Windows hardware,
-`needs_human`). D3D12: Phase DX12 (`DX-100` through `DX-113`/`DX-115`) is all ✅ except `DX-114`
-(real Windows hardware, `needs_human`) — no such machine is available in this dev environment for
-either gate. **D3D12's swap-chain crash is fixed** (2026-07-14): launching through a real,
+**No hard blocker — `plan_dx.md`'s scope is entirely closed for both backends, through Phase DX16
+(2026-07-15).** D3D11: every phase is ✅ except `DX-27`/`DX-90`/`DX-91` (real Windows hardware, or a
+real device-removed trigger, both `needs_human`). D3D12: every phase is ✅ except `DX-110`/`DX-114`
+(same two `needs_human` constraints) — no such machine is available in this dev environment for
+any of the 5 remaining gates. The historical narrative below (through `DX-142`) documents how Phase
+DX12/DX13 closed on 2026-07-14; **Phase DX13's own last 2 partial rows (`DX-117` MSAA follow-up,
+`DX-121` SpriteBatch-effect CTest proof) and the entirely new Phase DX16 (`DX-149`–`DX-155`) closed
+2026-07-15** — see §3's own top row for that detail, not repeated here. **D3D12's swap-chain crash is fixed** (2026-07-14): launching through a real,
 correctly-bootstrapped Proton runtime (`scripts/run-proton-vkd3d.sh`, not the isolated hand-built
 prefix `DX-100`/`DX-102` originally used) makes `CreateSwapChainForHwnd` return real `S_OK` —
 confirms the earlier diagnosis was right (vkd3d-proton needs its matched `dxgi.dll`, not just
@@ -394,25 +388,18 @@ real `ctest` run with no regression. Outside the D3D plan, the standing backlog 
 153-sample `../cna-samples` re-audit, Task 945's HLSL→GLSL tooling decision, Task 952's deferred
 Bgfx bug) is unchanged — see §8/§9.
 
-**One real, separate, documented problem**: the full `CnaTests` GTest suite does not build under
-`CNA_GRAPHICS_BACKEND=D3D11` (and, by the same root cause, `D3D12`).
-
-- **Symptom**: `cmake --build cmake-build-d3d11 --target CnaTests` fails with
-  `error: '::setenv' has not been declared; did you mean 'getenv'?` across roughly 10 test files.
-- **Failing command**: `cmake --build cmake-build-d3d11 --target CnaTests -j4`
-- **Affected files**: mostly `tests/Microsoft/Xna/Framework/Audio/*Tests.cpp` (confirmed via
-  `grep -rl '::setenv' tests/`) — POSIX-only `::setenv()`/`::unsetenv()` calls with no Windows
-  fallback (`_putenv_s`/`SetEnvironmentVariable`).
-- **Suspected cause**: these test files were written and only ever built against
-  Linux/EasyGL/Vulkan/Bgfx; nobody has linked a MinGW cross-target beyond `SDL_RENDERER` (which has
-  much lighter test coverage needs) recently enough to catch this.
-- **What's already been tried**: nothing yet — found and explicitly left unfixed this session
-  (deliberately out of scope; see §9). `CNA` itself and standalone test executables
-  (`cna_test_d3d11_smoke`, `cna_test_d3d11_common`, `d3d12_smoke_test`) build and run fine — only the
-  full `CnaTests` target is affected.
-- **Not a blocker for continued backend development**: this project's own established pattern
-  (Software/Headless backends) is standalone example-based CTests (`examples/d3d11_*.cpp`/
-  `examples/d3d12_*.cpp`) until a backend is mature enough to run the full suite.
+**RESOLVED 2026-07-14 (`DX-15`)**: the full `CnaTests` GTest suite previously did not build under
+`CNA_GRAPHICS_BACKEND=D3D11`/`D3D12` (`error: '::setenv' has not been declared; did you mean
+'getenv'?'` across roughly 10 test files, mostly `tests/Microsoft/Xna/Framework/Audio/*Tests.cpp`,
+plus `FrameworkDispatcherTests.cpp`/`Graphics/Texture2DTests.cpp`). Fixed by replacing every
+`::setenv()` call site with `System::Environment::SetEnvironmentVariable(name, value)`
+(sharp-runtime, already cross-platform), `#include`ing `System/Environment.hpp` where missing.
+`cmake --build cmake-build-d3d11 --target CnaTests` and the same for `cmake-build-d3d12` both now
+succeed cleanly, and a filtered real run genuinely executes and passes through a live device under
+Wine (D3D11: `CnaInput*`/`AlphaTestReferenceScalingTest`, 30/30 passed; D3D12: same filter, real
+`D3D12` device init confirmed). `CNA` itself and the standalone test executables
+(`cna_test_d3d11_smoke`, `cna_test_d3d11_common`, `d3d12_smoke_test`) were already building fine —
+only the full `CnaTests` target was ever affected.
 
 ---
 
@@ -420,8 +407,7 @@ Bgfx bug) is unchanged — see §8/§9.
 
 | Status | Description | Task |
 |---|---|---|
-| Incomplete, real gap | `CnaTests` does not build under `CNA_GRAPHICS_BACKEND=D3D11` — ~10 test files call POSIX-only `::setenv()` directly. See §4. | — |
-| Incomplete, honestly unexercised | D3D11's 5 combo `Clear*` variants (`ClearColorAndDepth`/`ClearDepth`/`ClearStencil`/`ClearDepthAndStencil`/`ClearColorAndStencil`/`ClearColorDepthAndStencil`), window resize (`EnsureSwapChainSize()`), and device-lost detection (`CheckDeviceRemoved()`) are all implemented but never exercised by any test. | — |
+| Genuinely `needs_human` | D3D11's device-lost detection (`CheckDeviceRemoved()`) is implemented but its real trigger (`DXGI_ERROR_DEVICE_REMOVED`) cannot be induced under Wine — same constraint as D3D12's `DX-110`. The 5 combo `Clear*` variants (`DX-130`, Phase DX14) and window resize (`DX-83`) are now both real, pixel-verified tests, not open gaps. | 27 |
 | Needs verification (real hardware, not Wine) | D3D11's debug-layer-missing fallback (`DXGI_ERROR_SDK_COMPONENT_MISSING` retry) and the `E_INVALIDARG`/drop-feature-level-11_1 fallback never fired on this machine (DXVK always provides what's needed) — genuinely untested code paths. Needs a real Windows machine without the D3D11 SDK debug layer installed, or a driver that rejects an explicit 11_1 request. | — |
 | **DEFERRED (2026-07-11)** — investigated 3 times, not fixed, explicitly paused by the project owner | A `Depth24Stencil8`-attached `RenderTargetCube` face produces no colour output at all on Bgfx. See `plan_graphics.md`'s Task 952 entry for the full investigation trail. **Do not resume without explicit instruction** — see §9. | 952 |
 | Confirmed bug, environment limitation | `Bgfx_RenderTarget2D_MsaaResolve`: this sandbox's bgfx OpenGL path negotiates only a legacy GL 2.1 context under which MSAA-flagged framebuffer textures don't sub-pixel resolve. | — |
@@ -536,8 +522,10 @@ DXVK_LOG_PATH=/tmp/dxvk-logs DXVK_LOG_LEVEL=info \
   scripts/run-wine-dxvk.sh cmake-build-d3d11/cna_test_d3d11_smoke.exe
 head -5 /tmp/dxvk-logs/*.log   # should start with "DXVK: 2.6.0" and a real GPU name, not be empty
 
-# Reproduce the CnaTests-under-D3D11 build failure (see §4)
+# Build and run CnaTests under D3D11/D3D12 (fixed 2026-07-14, see §4)
 cmake --build cmake-build-d3d11 --target CnaTests -j4
+cmake --build cmake-build-d3d12 --target CnaTests -j4
+WINEPREFIX=~/.wine-cna-d3d11 wine cmake-build-d3d11/CnaTests.exe --gtest_filter="CnaInput*"
 ```
 
 **Environment note (Linux-native backends):** the last-verified convention was that this sandbox
@@ -550,18 +538,16 @@ desktop session with real GPU access — re-verify before assuming either claim 
 
 ## 8. Next smallest tasks
 
-1. **`plan_dx.md` Phases DX1–DX13 AND DX15 are all fully closed. Phase DX14 (D3D11 verification
-   hardening) is the only remaining Debian-side work.**
-   `D3D11_Smoke` **93/93** + `D3D11_Common` 23/23; `D3D12_Smoke` **169/169** — both fully green.
-   Phase DX15 closed all 18 EasyGL-parity rows, including the three that needed a real
-   `GraphicsDevice` (D3D12 `SpriteFont`/`Model`/`Texture2D::FromStream`), unblocked by the new
-   `PresentationParameters::HeadlessEXT` windowless-device mode. The only rows still open anywhere
-   in the plan are `DX-90`/`DX-91` (D3D11 real-Windows checklist) and `DX-114` (D3D12 real-Windows
-   checklist) — both `needs_human`, requiring an actual Windows machine with a real GPU, not
-   available here. **Next available work: Phase DX14** (`DX-124`–`DX-130`: D3D11 multi-light,
-   specular, mip>0, SpriteFont, Model, RenderTargetCube, combo `Clear*` verification tests) — see
-   `plan_dx.md`. Note several of these now have a proven D3D12 counterpart to copy the methodology
-   from, since Phase DX15 already closed the D3D12 legs.
+1. **`plan_dx.md` is fully closed for BOTH backends — Phases DX1 through DX16, no exceptions except
+   `needs_human` rows. There is NO further available Debian-side work on `plan_dx.md`.**
+   `D3D11_Smoke` **147/147** + `D3D11_Common` 23/23; `D3D12_Smoke` **212/212** — both fully green,
+   verified 2026-07-15. The only rows still open anywhere in the plan are `DX-27`/`DX-90`/`DX-91`
+   (D3D11) and `DX-110`/`DX-114` (D3D12) — all `needs_human`, requiring either an actual Windows
+   machine with a real GPU, or a real `DXGI_ERROR_DEVICE_REMOVED` trigger neither backend can induce
+   under Wine. **Do not look for "next smallest tasks" inside `plan_dx.md` — there aren't any.** If
+   the project owner wants more D3D work, it needs a new instruction (a new phase, or access to real
+   Windows hardware for the `needs_human` rows). The actual next-smallest-tasks are items 2–4 below,
+   all pre-existing, unrelated backlog outside `plan_dx.md`.
 1a. **2026-07-14: `.github/workflows/d3d-windows-ci.yml` added** (project-owner-approved exception
     to this project's general no-CI-automation stance, scoped narrowly to D3D11/D3D12) — a
     `workflow_dispatch` job that builds `CNA`+backend with native MSVC on `windows-latest` (this
@@ -589,39 +575,24 @@ desktop session with real GPU access — re-verify before assuming either claim 
    do not touch `⛔` rows (structural/permanent, no CNA action possible).
 4. Task 952 (`RenderTargetCube` depth-gating bug on Bgfx) remains **DEFERRED**, not a next task —
    see §9.
-5. Lower priority, real and open but not urgent: D3D11's own honestly-flagged residual gaps (not
-   completion blockers, `plan_dx.md`/`docs/d3d11-backend.md` "Known limitations") — specular-
-   highlight pixel test, multi-light (`DirectionalLight1`/`2`)/`EmissiveColor` discriminating tests,
-   the 5 combo `Clear*` variants' own dedicated pixel test, and `Model`/`SpriteFont` D3D11 coverage.
-6. **Fixed 2026-07-14 (post-plan_dx.md session): both `cna_reference_dump` and `cna_demo_2d`'s
-   D3D11/D3D12 build failures.** `cna_reference_dump`'s `undefined reference to Effect::Apply()`
-   link failure: a genuine circular dependency between `cna_backend_graphics_d3d11`/`_d3d12` (whose
-   `SpriteBatch`'s custom-`Effect` path calls `Effect::Apply()`) and `CNA` itself (which defines
-   it) — MinGW's single-pass archive resolution never revisited `libCNA.a`. Fixed in
-   `CMakeLists.txt` by declaring the cycle explicitly (`target_link_libraries(${BACKEND_TARGET}
-   PRIVATE CNA)` for `D3D11`/`D3D12`); CMake's documented static-library-cycle handling then repeats
-   the archives on the link line. `cna_demo_2d`'s separate `SDL3/SDL.h`-not-found compile failure
-   (found while investigating the above — its `Game1.cpp` called raw SDL directly for
-   minimize/restore/resize with no XNA equivalent to reach for instead, and never linked
-   `SDL3::SDL3` itself; native Linux builds never noticed since a system-wide SDL3 install covered
-   it): fixed at the root by adding two real `GameWindow` NOXNA extension methods,
-   `MinimizeEXT()`/`RestoreEXT()` (mirroring the existing `IsBorderlessEXT` pattern), and switching
-   the resize calls to the existing XNA `EndScreenDeviceChange()` API — `Game1.cpp` no longer
-   includes `<SDL3/SDL.h>` at all, so no new SDL3 link dependency was needed. 3 new `GameWindowTest`
-   cases added. Verified: real `cna_reference_dump.exe`/`cna_demo_2d.exe` links succeed under both
-   D3D11 and D3D12; full `D3D11`(6/6)/`D3D12`(1/1, 80/80 checks) CTest and the EasyGL `CnaTests`
-   `GameWindowTest.*` suite (14/14) all re-verified with no regression.
+5. ~~D3D11's own honestly-flagged residual gaps (specular, multi-light, combo `Clear*`, `Model`/
+   `SpriteFont` coverage)~~ — **all closed**, Phase DX14 (`DX-124`–`DX-130`, 2026-07-14) then Phase
+   DX16 (`DX-149`–`DX-151`, 2026-07-15). Nothing left here.
+6. ~~`cna_reference_dump`/`cna_demo_2d` D3D11/D3D12 build failures~~ — **fixed 2026-07-14**
+   (circular-dependency link fix + `GameWindow` `MinimizeEXT()`/`RestoreEXT()`), historical, not a
+   next task.
 
 ---
 
 ## 9. Do not do yet
 
-- **`plan_dx.md` is entirely closed for both D3D11 (Phase DX1–DX11) and D3D12 (Phase DX12,
-  `DX-100`–`DX-113`/`DX-115`)** (2026-07-14) — nothing left to authorize or implement there on this
-  Debian machine. Only `DX-90`/`DX-91` (D3D11) and `DX-114` (D3D12) remain, all `needs_human` —
-  a real Windows machine with a real GPU. `plan_dx.md`'s own design-decision-9 boilerplate text
-  ("D3D11 finishing does not implicitly authorize D3D12") is now moot — the project owner already
-  authorized and this session already completed D3D12's own software/logic layer in full.
+- **`plan_dx.md` is entirely closed for both D3D11 and D3D12, through Phase DX16** (2026-07-15) —
+  nothing left to authorize or implement there on this Debian machine. Only `DX-27`/`DX-90`/`DX-91`
+  (D3D11) and `DX-110`/`DX-114` (D3D12) remain, all `needs_human` — a real Windows machine with a
+  real GPU, or a real device-removed trigger neither backend can induce under Wine. **Do not open a
+  "Phase DX17" or similar speculatively** — if the project owner wants more D3D work, they'll say so
+  (e.g. the same way Phase DX16 itself started from an explicit percentage-audit request). Don't
+  invent new gaps to close just because the plan file is open-ended in principle.
 - **When working Phase DX12, do not merge D3D11 and D3D12 into one shared device/backend class**
   "for less duplication" — `plan_dx.md` design decision 4 already scoped what's genuinely shared
   (`D3DCommon`); forcing the actual device/command/resource logic to share code across two
@@ -633,9 +604,6 @@ desktop session with real GPU access — re-verify before assuming either claim 
   though the device/queue/command-list path itself is genuinely solid). Build `DX-102` onward
   around off-screen/readback proof and re-verify swap-chain support explicitly before relying on
   it, rather than inheriting D3D11's own assumption by analogy.
-- **Do not opportunistically fix the `CnaTests`-under-D3D11 `::setenv` portability gap** (§4) — a
-  real, separately-scoped, ~10-file problem, deliberately left open this session rather than
-  expanding scope.
 - **Do not resume Task 952** (Bgfx `RenderTargetCube` depth-gating bug) without explicit
   instruction — explicitly marked **DEFERRED** by the project owner after 2 full investigation
   rounds found no root cause.
@@ -666,19 +634,21 @@ desktop session with real GPU access — re-verify before assuming either claim 
 ```
 Read NEXT.md first, in full, before touching any code.
 
-Pick exactly one task from §8 "Next smallest tasks" (default to the first one unless told
-otherwise). Inspect only the files that task names -- do not go exploring unrelated modules, and do
-not refactor anything you find along the way that isn't directly required for this task.
+plan_dx.md (D3D11 + D3D12 backends) is now FULLY closed for everything this Debian dev environment
+can prove: every phase (DX1 through DX16) is closed on both backends (2026-07-15) -- do not re-do
+this work, and do not go looking inside plan_dx.md for "one more gap" to close. The only open rows
+in the whole plan are DX-27/DX-90/DX-91 (D3D11) and DX-110/DX-114 (D3D12) -- all needs_human,
+requiring either a real Windows machine with a real GPU, or a real DXGI_ERROR_DEVICE_REMOVED
+trigger neither backend can induce under Wine. Do not attempt them; if such a machine becomes
+available, start with DX-90/DX-114 per plan_dx.md's own checklists. Do not open a speculative new
+D3D phase on your own initiative -- Phase DX16 itself only happened because the project owner asked
+a specific question (a real EasyGL-parity percentage) that produced a concrete task list; don't
+invent an equivalent prompt yourself.
 
-plan_dx.md (D3D11 + D3D12 backends) is now fully closed for everything this Debian dev environment
-can prove: Phase DX1 through DX11 (D3D11) and Phase DX12 DX-100 through DX-113/DX-115 (D3D12) are
-ALL closed (2026-07-14) -- do not re-do this work. The only open rows in the whole plan are
-DX-90/DX-91 (D3D11 real-Windows checklist) and DX-114 (D3D12 real-Windows checklist, which
-additionally needs to verify the swap chain -- known to crash under this dev loop's
-Wine+vkd3d-proton, root-caused, not a CNA bug) -- all three are needs_human and require an actual
-Windows machine with a real GPU, not available here. Do not attempt them; if such a machine becomes
-available, start with DX-114 or DX-90 per plan_dx.md's own checklists. See §9 for what stays
-off-limits generally (no merging D3D11/D3D12 into one class, etc.).
+Pick exactly one task from §8 "Next smallest tasks" (default to the first non-D3D item, since item 1
+is now just a "nothing left here" notice -- see items 2-4). Inspect only the files that task names --
+do not go exploring unrelated modules, and do not refactor anything you find along the way that
+isn't directly required for this task. See §9 for what stays off-limits generally.
 
 Make one small, verified improvement:
 1. Investigate/reproduce the issue first (run the exact failing command from §4/§8).

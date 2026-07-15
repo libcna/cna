@@ -30,6 +30,7 @@
 #include <vector>
 
 #include <SDL3_mixer/SDL_mixer.h>
+#include "System/Environment.hpp"
 
 using Microsoft::Xna::Framework::Audio::AudioEmitter;
 using Microsoft::Xna::Framework::Audio::AudioEngine;
@@ -2464,7 +2465,7 @@ TEST(CueTest, IsStoppingIsFalseAfterImmediateStopWithNoTailToRelease)
 // explicit Stop() call, and the finished instance must be dropped from Cue::active_.
 TEST(CueTest, PlayingCueNaturallyTransitionsToStoppedAfterPlaybackFinishes)
 {
-    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
 
     try
     {
@@ -2494,7 +2495,7 @@ TEST(CueTest, PlayingCueNaturallyTransitionsToStoppedAfterPlaybackFinishes)
 // Pause() call (mirrors FACTCue_Pause rejecting STOPPING/STOPPED cues in FACT.c).
 TEST(CueTest, PauseAfterNaturalCompletionIsANoOp)
 {
-    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
 
     try
     {
@@ -2527,7 +2528,7 @@ TEST(CueTest, PauseAfterNaturalCompletionIsANoOp)
 // SoundEffectInstance for the same wave reference.
 TEST(CueTest, PlayCalledTwiceWhileAlreadyPlayingIsANoOpAndDoesNotDuplicateInstances)
 {
-    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
 
     try
     {
@@ -2605,7 +2606,7 @@ TEST(CueTest, Apply3DAfterDisposeThrowsObjectDisposed)
 // not just "didn't throw".
 TEST(CueTest, Apply3DAttenuatesActiveInstanceTrackGainWithDistance)
 {
-    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
 
     try
     {
@@ -2653,7 +2654,7 @@ TEST(CueTest, Apply3DAttenuatesActiveInstanceTrackGainWithDistance)
 // StopAsAuthoredOnCueWithNoAuthoredFadeIsImmediate for the no-fade-authored case.
 TEST(CueTest, StopAsAuthoredLeavesTrackPlayingButStopImmediateHardStopsRightAway)
 {
-    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
 
     try
     {
@@ -2716,7 +2717,7 @@ TEST(CueTest, StopAsAuthoredLeavesTrackPlayingButStopImmediateHardStopsRightAway
 // StopAsAuthoredOnCueWithNoAuthoredFadeIsImmediate below).
 TEST(CueTest, StopAsAuthoredTransitionsFromStoppingToStoppedOnceFadeTimerElapses)
 {
-    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
 
     try
     {
@@ -2754,7 +2755,7 @@ TEST(CueTest, StopAsAuthoredTransitionsFromStoppingToStoppedOnceFadeTimerElapses
 // for it), so AsAuthored must behave exactly like Stop(Immediate) for one.
 TEST(CueTest, StopAsAuthoredOnCueWithNoAuthoredFadeIsImmediate)
 {
-    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
 
     try
     {
@@ -2791,7 +2792,7 @@ TEST(CueTest, StopAsAuthoredOnCueWithNoAuthoredFadeIsImmediate)
 // to ~0.8, comfortably observable, with 60ms of margin against the 300ms deadline.
 TEST(CueTest, StopAsAuthoredRampsVolumeDownOverAuthoredFadeDuration)
 {
-    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
 
     try
     {
@@ -4312,7 +4313,7 @@ TEST(CueTest, PlayWithOutOfRangeWaveIndexSpawnsNoInstance)
 // FACTCue_Stop(cue, IMMEDIATE) on the *new* cue when maxInstanceBehavior is FAIL.
 TEST(CueTest, CueInstanceLimitFailRejectsSecondInstanceOfSameCueDefinition)
 {
-    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
 
     try
     {
@@ -4360,7 +4361,7 @@ TEST(CueTest, CueInstanceLimitFailRejectsSecondInstanceOfSameCueDefinition)
 // via TriggerCue's own fadeInMS.
 TEST(CueTest, CueInstanceLimitReplaceOldestEvictsOldestBankWideCueNotSameDefinitionSibling)
 {
-    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
 
     try
     {

@@ -93,29 +93,58 @@ namespace CNA::Internal::Backends::D3D11
     /// (D3D11_RTV_DIMENSION_TEXTURE2DARRAY, FirstArraySlice=face) and a single shared depth-
     /// stencil buffer reused across faces (only one face is ever the active draw target at a
     /// time, matching EasyGLRenderTargetCubeBackend's identical one-depth-buffer-per-cube
-    /// convention). MSAA is deliberately NOT supported here (unlike the 2D variant, DX-45) --
-    /// combining a texture-cube array with MSAA is a narrower, rarer case than 2D MSAA render
-    /// targets and was out of this task's scope; GetMultiSampleCount() always reports 0.
+    /// convention).
+    ///
+    /// DX-152: real, device-queried MSAA is now supported, mirroring D3D11RenderTargetBackend's
+    /// own DX-45 design -- never assumes a requested sample count is supported
+    /// (ID3D11Device::CheckMultisampleQualityLevels), MSAA and a full mip chain are mutually
+    /// exclusive on the same attachment (same rationale DX-45 already established). D3D11 cannot
+    /// combine D3D11_RESOURCE_MISC_TEXTURECUBE with SampleDesc.Count > 1 on one resource (a
+    /// TextureCube SRV can never be multisampled), so when MSAA is active, `texture_` becomes a
+    /// PLAIN (non-cube) 6-slice Texture2DMSArray used ONLY as an RTV target -- never sampled
+    /// directly, same "MSAA resource is render-target-only" rule DX-45 already established -- and
+    /// a separate `resolveTexture_` (real D3D11_RESOURCE_MISC_TEXTURECUBE, single-sample) is
+    /// ResolveSubresource()'d from it on UnbindAsRenderTarget(), only for the currently-active
+    /// face (matching this class's own existing "only one face is ever active" mip-regen
+    /// convention).
     class D3D11RenderTargetCubeBackend final : public IRenderTargetCubeBackend
     {
     public:
         D3D11RenderTargetCubeBackend(D3D11GraphicsBackend* owner, ID3D11Device* device, ID3D11DeviceContext* context,
-                                     int size, int depthFormat, bool mipMap);
+                                     int size, int depthFormat, bool mipMap, int multiSampleCount = 0);
 
         [[nodiscard]] int GetSize() const override { return size_; }
         void BindAsRenderTargetFace(int face) override;
         void UnbindAsRenderTarget() override;
-        [[nodiscard]] int GetMultiSampleCount() const override { return 0; }
+        [[nodiscard]] int GetMultiSampleCount() const override { return appliedMultiSampleCount_; }
 
         [[nodiscard]] ID3D11ShaderResourceView* GetShaderResourceViewEXT() const { return srv_.Get(); }
-        /// The underlying 6-slice texture-array resource (NOXNA, test/diagnostics mip readback --
-        /// DX-144 -- face `f`'s mip level `m` is subresource `m + f * GetLevelCountEXT()`, the
-        /// standard D3D11 texture-array/mip subresource-index convention).
+        /// The underlying 6-slice texture-array resource actually bound for rendering (NOXNA --
+        /// test/diagnostics) -- the MSAA array itself when `GetMultiSampleCount() > 0` (matches
+        /// what the RTV binding points at); use `GetSampleableTextureEXT()` instead for
+        /// readback/sampling/mip-subresource math, which is always the resolved single-sample
+        /// resource. DX-144 subresource convention (when non-MSAA): face `f`'s mip level `m` is
+        /// subresource `m + f * GetLevelCountEXT()`.
         [[nodiscard]] ID3D11Texture2D* GetColorTextureEXT() const { return texture_.Get(); }
+        /// The resource tests/shaders should actually read from -- `resolveTexture_` when MSAA
+        /// (post-`ResolveSubresource()`, only valid for the active face after
+        /// `UnbindAsRenderTarget()` has run at least once), else the same object
+        /// `GetColorTextureEXT()` already returns (NOXNA, mirrors D3D11RenderTargetBackend's own
+        /// `GetSampleableTextureEXT()` naming/behavior exactly).
+        [[nodiscard]] ID3D11Texture2D* GetSampleableTextureEXT() const
+        {
+            return isMsaa_ ? resolveTexture_.Get() : texture_.Get();
+        }
+        [[nodiscard]] bool IsMsaaEXT() const { return isMsaa_; }
         /// Real mip-chain level count (1 when `mipMap` was false) -- NOXNA, DX-144 subresource math.
         [[nodiscard]] int GetLevelCountEXT() const { return levelCount_; }
 
     private:
+        /// DX-152: ResolveSubresource() the active face from the MSAA color array into
+        /// `resolveTexture_`, called from UnbindAsRenderTarget() before mip regeneration. No-op
+        /// when `isMsaa_` is false or no face is currently active.
+        void ResolveMsaaEXT();
+
         D3D11GraphicsBackend* owner_ = nullptr;
         ComPtr<ID3D11Device> device_;
         ComPtr<ID3D11DeviceContext> context_;
@@ -123,6 +152,9 @@ namespace CNA::Internal::Backends::D3D11
         ComPtr<ID3D11Texture2D> texture_;
         ComPtr<ID3D11RenderTargetView> rtv_[6];
         ComPtr<ID3D11ShaderResourceView> srv_;
+        /// DX-152: the separate, single-sample, real D3D11_RESOURCE_MISC_TEXTURECUBE resource
+        /// ResolveSubresource() writes into on unbind. Only allocated/valid when `isMsaa_`.
+        ComPtr<ID3D11Texture2D> resolveTexture_;
         ComPtr<ID3D11Texture2D> depthTexture_;
         ComPtr<ID3D11DepthStencilView> dsv_;
 
@@ -130,5 +162,7 @@ namespace CNA::Internal::Backends::D3D11
         bool mipMap_ = false;
         int levelCount_ = 1;
         int activeFace_ = -1;
+        bool isMsaa_ = false;
+        int appliedMultiSampleCount_ = 0;
     };
 }

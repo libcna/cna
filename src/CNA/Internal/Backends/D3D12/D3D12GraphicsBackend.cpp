@@ -821,29 +821,59 @@ namespace CNA::Internal::Backends::D3D12
     }
 
     std::unique_ptr<IRenderTargetBackend> D3D12GraphicsBackend::CreateRenderTarget2D(
-        int w, int h, int depthFormat, bool /*preserveContents*/, bool /*mipMap*/, int /*multiSampleCount*/)
+        int w, int h, int depthFormat, bool /*preserveContents*/, bool mipMap, int multiSampleCount)
     {
-        // DX-117: MSAA and full mip-chain generation are deliberately not yet supported for D3D12
-        // render targets (honest, scoped follow-up -- see D3D12RenderTargets.hpp's own header
-        // comment) -- mipMap/multiSampleCount are accepted (matching the interface contract every
-        // other backend implements) but not yet honored.
-        return std::make_unique<D3D12RenderTargetBackend>(this, device_.Get(), w, h, depthFormat);
+        // DX-144: mipMap is now honored -- a real CPU box-filter downsample cascade on
+        // UnbindAsRenderTarget() (see D3D12RenderTargets.hpp/.cpp's own header comment). DX-117
+        // MSAA follow-up: multiSampleCount is now honored too -- device-queried and clamped to 0
+        // (off) by D3D12RenderTargetBackend's own ClampMultiSampleCount() when unsupported.
+        return std::make_unique<D3D12RenderTargetBackend>(this, device_.Get(), w, h, depthFormat, mipMap,
+                                                           multiSampleCount);
     }
 
     void D3D12GraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* rt)
     {
-        if (rt) rt->BindAsRenderTarget();
+        // DX-144: unbind whatever custom target was PREVIOUSLY bound before switching -- this is
+        // where D3D12RenderTargetBackend::UnbindAsRenderTarget() (and therefore GenerateMipsEXT())
+        // actually fires. Without this, SetRenderTarget2D(nullptr) blindly restored the back buffer
+        // and mip-chain generation never ran. Mirrors D3D11GraphicsBackend::SetRenderTarget2D()'s
+        // own currentCustomRT_ handling exactly.
+        if (currentCustomRT_)
+        {
+            currentCustomRT_->UnbindAsRenderTarget();
+            currentCustomRT_ = nullptr;
+        }
+        if (rt)
+        {
+            currentCustomRT_ = rt;
+            rt->BindAsRenderTarget();
+        }
         else RestoreBackBufferRenderTargetEXT();
     }
 
     std::unique_ptr<IRenderTargetCubeBackend> D3D12GraphicsBackend::CreateRenderTargetCube(
-        int size, int depthFormat, bool /*mipMap*/, int /*multiSampleCount*/)
+        int size, int depthFormat, bool mipMap, int multiSampleCount)
     {
-        return std::make_unique<D3D12RenderTargetCubeBackend>(this, device_.Get(), size, depthFormat);
+        // DX-144 follow-up: mipMap now honored, same real CPU box-filter downsample cascade
+        // D3D12RenderTargetBackend's own 2D leg uses (see D3D12RenderTargets.hpp/.cpp). DX-152:
+        // multiSampleCount is now honored too -- device-queried and clamped to 0 (off) by
+        // D3D12RenderTargetCubeBackend's own ClampMultiSampleCount() when unsupported.
+        return std::make_unique<D3D12RenderTargetCubeBackend>(this, device_.Get(), size, depthFormat, mipMap,
+                                                               multiSampleCount);
     }
 
     void D3D12GraphicsBackend::SetRenderTargets(IRenderTargetBackend* const* rts, int count)
     {
+        // DX-144: same currentCustomRT_ unbind SetRenderTarget2D() does -- a single-target mipMap
+        // render target bound via SetRenderTarget2D() and then switched straight to an MRT set
+        // here (bypassing SetRenderTarget2D(nullptr)) must still get its own UnbindAsRenderTarget()
+        // call, or its mip chain silently never regenerates. Mirrors
+        // D3D11GraphicsBackend::SetRenderTargets()'s own currentCustomRT_ handling.
+        if (currentCustomRT_)
+        {
+            currentCustomRT_->UnbindAsRenderTarget();
+            currentCustomRT_ = nullptr;
+        }
         if (count <= 0 || rts == nullptr)
         {
             SetRenderTarget2D(nullptr);
@@ -1427,6 +1457,15 @@ namespace CNA::Internal::Backends::D3D12
             throw std::runtime_error(
                 "D3D12GraphicsBackend::DrawPrimitivesEx: SkinnedEffect (skinned3d) requires stride "
                 "52 (VertexPositionNormalTextureSkinned)");
+        // DX-136: alpha_test3d.vert.hlsl (stride 20, Position+UV) and its sibling
+        // alpha_test_colored3d.vert.hlsl (stride 24, Position+Color+UV -- gives
+        // AlphaTestEffect.VertexColorEnabled a real vertex-color attribute) are the only two
+        // strides this effect supports, same as D3D11's own DrawPrimitivesExImpl.
+        if (needsAlphaTest && stride != 20 && stride != 24)
+            throw std::runtime_error(
+                "D3D12GraphicsBackend::DrawPrimitivesEx: AlphaTestEffect (alpha_test3d) only "
+                "supports stride 20 (VertexPositionTexture) or 24 "
+                "(VertexPositionColorTexture, plan_dx.md DX-136)");
 
         D3DShaderVariant variant;
         bool hasTexture;
@@ -1434,7 +1473,7 @@ namespace CNA::Internal::Backends::D3D12
         int numSrvs = 0;
         if (needsAlphaTest)
         {
-            variant = D3DShaderVariant::AlphaTest3d;
+            variant = (stride == 24) ? D3DShaderVariant::AlphaTestColored3d : D3DShaderVariant::AlphaTest3d;
             hasTexture = true;
             numCbvs = 1; // alpha_test3d's own single combined PerDraw (b0) -- no separate FogParams cbuffer.
             numSrvs = 1;

@@ -555,12 +555,10 @@ namespace CNA::Internal::Backends::D3D11
     std::unique_ptr<IRenderTargetCubeBackend> D3D11GraphicsBackend::CreateRenderTargetCube(
         int size, int depthFormat, bool mipMap, int multiSampleCount)
     {
-        (void)multiSampleCount; // D3D11RenderTargetCubeBackend deliberately doesn't support MSAA
-                                 // (see its own header comment) -- silently ignored, same as every
-                                 // other backend's undocumented-parameter-combination behavior
-                                 // rather than throwing on a combination a game is unlikely to hit.
+        // DX-152: multiSampleCount is now honored -- device-queried and clamped to 0 (off) by
+        // D3D11RenderTargetCubeBackend's own ClampMultiSampleCount() when unsupported.
         return std::make_unique<D3D11::D3D11RenderTargetCubeBackend>(
-            this, device_.Get(), context_.Get(), size, depthFormat, mipMap);
+            this, device_.Get(), context_.Get(), size, depthFormat, mipMap, multiSampleCount);
     }
 
     void D3D11GraphicsBackend::SetRenderTargets(IRenderTargetBackend* const* rts, int count)
@@ -1118,6 +1116,15 @@ namespace CNA::Internal::Backends::D3D11
         const bool needsLitTextured = (stride == 32) && !needsAlphaTest && !needsDualTex
                                      && !needsEnvMap && !needsSkinned;
 
+        // DX-136: alpha_test3d.vert.hlsl (stride 20, Position+UV) and its sibling
+        // alpha_test_colored3d.vert.hlsl (stride 24, Position+Color+UV -- gives
+        // AlphaTestEffect.VertexColorEnabled a real vertex-color attribute) are the only two
+        // strides this effect supports.
+        if (needsAlphaTest && stride != 20 && stride != 24)
+            throw std::runtime_error(
+                "D3D11GraphicsBackend::DrawPrimitivesEx: AlphaTestEffect (alpha_test3d) only "
+                "supports stride 20 (VertexPositionTexture) or 24 "
+                "(VertexPositionColorTexture, plan_dx.md DX-136)");
         // DX-65: dual_texture3d.vert.hlsl's VSInput is Position+UV only (20 bytes) -- the 24-byte
         // dual_texture_colored3d variant was deliberately not ported (DX-13-hlsl's own row notes).
         if (needsDualTex && stride != 20)
@@ -1138,7 +1145,8 @@ namespace CNA::Internal::Backends::D3D11
 
         D3DCommon::D3DShaderVariant variant;
         if (needsAlphaTest)
-            variant = D3DCommon::D3DShaderVariant::AlphaTest3d;
+            variant = (stride == 24) ? D3DCommon::D3DShaderVariant::AlphaTestColored3d
+                                      : D3DCommon::D3DShaderVariant::AlphaTest3d;
         else if (needsDualTex)
             variant = D3DCommon::D3DShaderVariant::DualTexture3d;
         else if (needsEnvMap)

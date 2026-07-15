@@ -252,3 +252,17 @@ in an approved batch. Ordered roughly by value-for-effort, cheapest/highest-valu
 - If Phase S4's rasterizer core turns out to need real polygon near-plane clipping sooner than
   expected (visible artifacts in even simple test scenes), treat that as a legitimate scope
   addition to flag and discuss, not something to silently skip or silently half-implement.
+- **`TriangleList` only in v1** (already called out in the top status banner, restated here since
+  this is the section meant to be the durable reference): `TriangleStrip`/`LineList`/`LineStrip`/
+  `PointListEXT` all throw a clear "only TriangleList is supported in v1" error instead of silently
+  misrendering. Not tracked as its own `SOFTWARE-NN` row because it was never implemented in the
+  first place (Phase S4's rasterizer core was scoped to triangles from the start) — see
+  `docs/software-backend.md`'s Known Limitations for the exact error text.
+- **Bilinear texture sampling (`SOFTWARE-80`) is always on, regardless of `SamplerState.Filter`**,
+  and there is no real texture address-mode support — `Wrap`/`Mirror` are not implemented, UVs are
+  simply clamped to `[0,1]` at the texture bounds regardless of what `SamplerState.AddressU/V`
+  requests. This was a deliberate v1 simplification recorded in `SOFTWARE-80`'s own row (arguably
+  *more* faithful than the nearest-neighbor sampling it replaced, since real XNA's default
+  `SamplerState.LinearWrap` already implies linear filtering almost everywhere) but wasn't restated
+  here in Boundaries until now — see `docs/software-backend.md`'s Known Limitations for the same
+  point in the user-facing doc.

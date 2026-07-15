@@ -137,6 +137,7 @@
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteEffects.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteFont.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
@@ -145,6 +146,7 @@
 #include "System/IO/MemoryStream.hpp"
 
 #include <array>
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -528,6 +530,88 @@ int main()
         }
         Check(backend.GetFenceEXT()->GetCompletedValue() >= v2,
               "E3: the most recently signaled value (v2) eventually completes when explicitly waited on");
+    }
+
+    // ---- Check E4 (plan_dx.md DX-113 follow-up): SignalAndWaitForFrameEXT's WaitForSingleObject
+    // branch genuinely stalls the CPU thread under real pending GPU work, not just an
+    // already-satisfied fence returning near-instantly (E1-E3 above only proved the VALUE-ordering
+    // contract, not that the wait itself is a real block). Proven via a RELATIVE timing comparison,
+    // not a fragile absolute-millisecond threshold: a "control" call whose wait target is already
+    // satisfied vs. a "load" call whose wait target was deliberately positioned in the command queue
+    // right after several GB of real GPU copy traffic, so it cannot complete until the GPU actually
+    // drains that work. ----
+    {
+        // v1: control point, nothing pending on frame slot 0 yet (E1-E3 already drained it) -> fast.
+        backend.SignalAndWaitForFrameEXT(0);
+
+        constexpr UINT64 kBufSize = 64ull * 1024 * 1024;
+        D3D12_HEAP_PROPERTIES heapProps{};
+        heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
+        D3D12_RESOURCE_DESC bufDesc{};
+        bufDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+        bufDesc.Width = kBufSize;
+        bufDesc.Height = 1;
+        bufDesc.DepthOrArraySize = 1;
+        bufDesc.MipLevels = 1;
+        bufDesc.Format = DXGI_FORMAT_UNKNOWN;
+        bufDesc.SampleDesc.Count = 1;
+        bufDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+
+        Microsoft::WRL::ComPtr<ID3D12Resource> bufA, bufB;
+        HRESULT hrA = backend.GetDeviceEXT()->CreateCommittedResource(
+            &heapProps, D3D12_HEAP_FLAG_NONE, &bufDesc, D3D12_RESOURCE_STATE_COMMON, nullptr,
+            IID_PPV_ARGS(bufA.GetAddressOf()));
+        HRESULT hrB = backend.GetDeviceEXT()->CreateCommittedResource(
+            &heapProps, D3D12_HEAP_FLAG_NONE, &bufDesc, D3D12_RESOURCE_STATE_COMMON, nullptr,
+            IID_PPV_ARGS(bufB.GetAddressOf()));
+        Check(SUCCEEDED(hrA) && SUCCEEDED(hrB),
+              "E4pre: two 64MB throwaway DEFAULT-heap buffers created for a real GPU copy workload");
+
+        if (SUCCEEDED(hrA) && SUCCEEDED(hrB))
+        {
+            ID3D12CommandAllocator* allocator = backend.GetCommandAllocatorEXT(0);
+            ID3D12GraphicsCommandList* cmdList = backend.GetCommandListEXT();
+            allocator->Reset();
+            cmdList->Reset(allocator, nullptr);
+            constexpr int kCopies = 48; // ~3 GB of real DEFAULT-heap-to-DEFAULT-heap copy traffic
+            for (int i = 0; i < kCopies; ++i)
+                cmdList->CopyBufferRegion(bufB.Get(), 0, bufA.Get(), 0, kBufSize);
+            const HRESULT hrClose = cmdList->Close();
+            Check(SUCCEEDED(hrClose), "E4a: command list recording the copy workload closes cleanly");
+
+            if (SUCCEEDED(hrClose))
+            {
+                ID3D12CommandList* lists[] = { cmdList };
+                // Deliberately NOT waited on here -- queued asynchronously, same as a real frame's
+                // draws would be, so the copy work sits in the queue ahead of the next two signals.
+                backend.GetCommandQueueEXT()->ExecuteCommandLists(1, lists);
+
+                // v2: queued immediately after the copy work; its own wait target (v1, already
+                // complete) is satisfied, so this call itself stays fast -- this is the control
+                // measurement, timed on an equal footing with the load measurement below (both are
+                // one SignalAndWaitForFrameEXT call, differing only in whether their wait target sits
+                // behind the copy work in the queue).
+                const auto controlStart = std::chrono::steady_clock::now();
+                backend.SignalAndWaitForFrameEXT(0);
+                const auto controlDuration = std::chrono::steady_clock::now() - controlStart;
+
+                // v3: its wait target is v2, which was itself queued right after the copy work -- the
+                // GPU cannot signal v2 until the copy work ahead of it drains, so this call's
+                // WaitForSingleObject genuinely blocks for as long as the copy takes.
+                const auto loadStart = std::chrono::steady_clock::now();
+                backend.SignalAndWaitForFrameEXT(0);
+                const auto loadDuration = std::chrono::steady_clock::now() - loadStart;
+
+                const auto controlUs = std::chrono::duration_cast<std::chrono::microseconds>(controlDuration).count();
+                const auto loadUs = std::chrono::duration_cast<std::chrono::microseconds>(loadDuration).count();
+                std::printf("    E4: control=%lldus load=%lldus\n",
+                            static_cast<long long>(controlUs), static_cast<long long>(loadUs));
+                Check(loadDuration > controlDuration * 3 || loadDuration > std::chrono::milliseconds(2),
+                      "E4: SignalAndWaitForFrameEXT's WaitForSingleObject branch genuinely blocks the CPU "
+                      "measurably longer when its wait target sits behind real pending GPU work than the "
+                      "already-satisfied control case (plan_dx.md DX-113 follow-up)");
+            }
+        }
     }
 
     // ---- Check F: off-screen construction never touches the swap chain ----
@@ -992,6 +1076,36 @@ int main()
               "N3: DrawPrimitivesEx() real colored_textured3d draw multiplies the exact vertex color "
               "through a white texture (plan_dx.md DX-111)");
 
+        // DX-137: dedicated fog on/off discriminating test for colored_textured3d -- same
+        // Z-at-FogEnd methodology as textured3d's own fog test below, reusing this block's
+        // already-proven vertex-color/white-texture fixture (base result (80,160,240)).
+        static VPCT kTriColTexFog[3];
+        kTriColTexFog[0] = { -1.0f, -1.0f, 0.5f, kVertColor, 0.0f, 1.0f };
+        kTriColTexFog[1] = {  3.0f, -1.0f, 0.5f, kVertColor, 2.0f, 1.0f };
+        kTriColTexFog[2] = { -1.0f,  3.0f, 0.5f, kVertColor, 0.0f, -1.0f };
+        D3D12VertexBufferBackend vbColTexFog(&backend, 3);
+        vbColTexFog.SetData(kTriColTexFog, 3, sizeof(VPCT));
+
+        ctp.fogEnabled = false;
+        ctp.fogColor[0] = 0.0f; ctp.fogColor[1] = 1.0f; ctp.fogColor[2] = 0.0f;
+        ctp.fogStart = 0.0f; ctp.fogEnd = 0.5f;
+        backend.Clear(10.0f / 255.0f, 10.0f / 255.0f, 10.0f / 255.0f, 1.0f);
+        backend.DrawPrimitivesEx(vbColTexFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                 Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, ctp);
+        auto colTexFogOff = ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight);
+        Check(isColor(pixelAt(colTexFogOff, 30, 30), 80, 160, 240, 255),
+              "N3b: DrawPrimitivesEx() colored_textured3d fogEnabled=false leaves the exact "
+              "vertex*texture color unblended (plan_dx.md DX-137)");
+
+        ctp.fogEnabled = true;
+        backend.Clear(10.0f / 255.0f, 10.0f / 255.0f, 10.0f / 255.0f, 1.0f);
+        backend.DrawPrimitivesEx(vbColTexFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                 Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, ctp);
+        auto colTexFogOn = ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight);
+        Check(isColor(pixelAt(colTexFogOn, 30, 30), 0, 255, 0, 255),
+              "N3c: DrawPrimitivesEx() colored_textured3d fogEnabled=true with Z at FogEnd genuinely "
+              "blends all the way to the exact FogColor (plan_dx.md DX-137)");
+
         // DX-137: dedicated fog on/off discriminating test for textured3d -- a representative
         // variant of the 7 fog-capable non-colored3d variants (chosen for its simple, already-
         // proven fixture above; a full 7-variant x 2-backend sweep is out of this task's own scope,
@@ -1133,6 +1247,38 @@ int main()
         Check(litDiffersFromUnlitAndBackground,
               "O2: DrawPrimitivesEx() real lit_textured3d lit branch genuinely computes a different "
               "color than both the unlit result and the Clear() background (plan_dx.md DX-111)");
+
+        // DX-137: dedicated fog on/off discriminating test for lit_textured3d -- reuses the unlit
+        // branch's own deterministic fixture (exact base color (44,55,66)) above, same
+        // Z-at-FogEnd methodology as textured3d's own fog test.
+        static const VPNT kTriLitFog[3] = {
+            {-1.0f, -1.0f, 0.5f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f},
+            { 3.0f, -1.0f, 0.5f, 0.0f, 0.0f, 1.0f, 2.0f, 1.0f},
+            {-1.0f,  3.0f, 0.5f, 0.0f, 0.0f, 1.0f, 0.0f, -1.0f},
+        };
+        D3D12VertexBufferBackend vbLitFog(&backend, 3);
+        vbLitFog.SetData(kTriLitFog, 3, sizeof(VPNT));
+
+        GpuDrawParams litFogP = unlitP;
+        litFogP.fogEnabled = false;
+        litFogP.fogColor[0] = 0.0f; litFogP.fogColor[1] = 1.0f; litFogP.fogColor[2] = 0.0f;
+        litFogP.fogStart = 0.0f; litFogP.fogEnd = 0.5f;
+        backend.Clear(10.0f / 255.0f, 10.0f / 255.0f, 10.0f / 255.0f, 1.0f);
+        backend.DrawPrimitivesEx(vbLitFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                 Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, litFogP);
+        auto litFogOff = ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight);
+        Check(isColor(pixelAt(litFogOff, 30, 30), 44, 55, 66, 255),
+              "O3: DrawPrimitivesEx() lit_textured3d fogEnabled=false leaves the exact unlit texture "
+              "color unblended (plan_dx.md DX-137)");
+
+        litFogP.fogEnabled = true;
+        backend.Clear(10.0f / 255.0f, 10.0f / 255.0f, 10.0f / 255.0f, 1.0f);
+        backend.DrawPrimitivesEx(vbLitFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                 Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, litFogP);
+        auto litFogOn = ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight);
+        Check(isColor(pixelAt(litFogOn, 30, 30), 0, 255, 0, 255),
+              "O4: DrawPrimitivesEx() lit_textured3d fogEnabled=true with Z at FogEnd genuinely "
+              "blends all the way to the exact FogColor (plan_dx.md DX-137)");
 
         backend.UnbindOffscreenColorTargetEXT();
     }
@@ -1451,6 +1597,113 @@ int main()
               "P2: DrawPrimitivesEx() real alpha_test3d draws the exact texture color (including its "
               "own alpha byte) when the test passes (plan_dx.md DX-111)");
 
+        // DX-137: dedicated fog on/off discriminating test for alpha_test3d -- reuses the
+        // already-PASSING fixture above (alpha=64/255 < AlphaRef=0.5, so nothing is discarded and
+        // fog is genuinely visible), same Z-at-FogEnd methodology as textured3d's own fog test. A
+        // discarding fixture would prove nothing here (no fragment ever reaches the fog blend).
+        static const VPT kTriATFog[3] = {
+            {-1.0f, -1.0f, 0.5f, 0.0f, 1.0f},
+            { 3.0f, -1.0f, 0.5f, 2.0f, 1.0f},
+            {-1.0f,  3.0f, 0.5f, 0.0f, -1.0f},
+        };
+        D3D12VertexBufferBackend vbATFog(&backend, 3);
+        vbATFog.SetData(kTriATFog, 3, sizeof(VPT));
+
+        atp.fogEnabled = false;
+        atp.fogColor[0] = 0.0f; atp.fogColor[1] = 1.0f; atp.fogColor[2] = 0.0f;
+        atp.fogStart = 0.0f; atp.fogEnd = 0.5f;
+        backend.Clear(10.0f / 255.0f, 10.0f / 255.0f, 10.0f / 255.0f, 1.0f);
+        backend.DrawPrimitivesEx(vbATFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                 Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, atp);
+        auto atFogOff = ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight);
+        Check(isColor(pixelAt(atFogOff, 30, 30), 200, 100, 50, 64),
+              "P3: DrawPrimitivesEx() alpha_test3d fogEnabled=false leaves the exact passing texture "
+              "color unblended (plan_dx.md DX-137)");
+
+        atp.fogEnabled = true;
+        backend.Clear(10.0f / 255.0f, 10.0f / 255.0f, 10.0f / 255.0f, 1.0f);
+        backend.DrawPrimitivesEx(vbATFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                 Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, atp);
+        auto atFogOn = ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight);
+        Check(atFogOn.size() >= 4 && pixelAt(atFogOn, 30, 30)[0] == 0 && pixelAt(atFogOn, 30, 30)[1] == 255 &&
+              pixelAt(atFogOn, 30, 30)[2] == 0,
+              "P4: DrawPrimitivesEx() alpha_test3d fogEnabled=true with Z at FogEnd genuinely blends "
+              "all the way to the exact FogColor, and the passing fragment survives the alpha test "
+              "to reach the fog blend at all (plan_dx.md DX-137)");
+
+        // plan_dx.md DX-136: AlphaTestEffect.VertexColorEnabled -- alpha_test3d's new stride-24
+        // sibling (alpha_test_colored3d, VertexPositionColorTexture) gives it a real vertex-color
+        // attribute. A white, fully-opaque texture isolates the vertex-color contribution: with
+        // VertexColorEnabled=true a red vertex color multiplies through exactly; with it false,
+        // the same vertex buffer's color is genuinely ignored and DiffuseColor (white) alone
+        // survives. Mirrors D3D11's own DX-136 methodology exactly.
+        struct VPCTac { float x, y, z; uint32_t color; float u, v; };
+        const uint32_t kRedVCac = 0xFF0000FFu; // A=255,B=0,G=0,R=255 (R8G8B8A8 byte order)
+        static const VPCTac kTriAlphaColor[3] = {
+            {-1.0f, -1.0f, 0.0f, kRedVCac, 0.0f, 1.0f},
+            { 3.0f, -1.0f, 0.0f, kRedVCac, 2.0f, 1.0f},
+            {-1.0f,  3.0f, 0.0f, kRedVCac, 0.0f, -1.0f},
+        };
+        D3D12VertexBufferBackend vbAlphaColor(&backend, 3);
+        vbAlphaColor.SetData(kTriAlphaColor, 3, sizeof(VPCTac));
+
+        ImageData whiteImgAC;
+        whiteImgAC.width = 2; whiteImgAC.height = 2; whiteImgAC.mipLevels = 1;
+        whiteImgAC.pixels.assign(2 * 2 * 4, 255);
+        D3D12TextureBackend whiteTexAC(&backend, whiteImgAC);
+
+        GpuDrawParams acp;
+        acp.texture0 = &whiteTexAC;
+        acp.textureEnabled = true;
+        // Default {0,0,1,1}: both AlphaPassW and AlphaFailW are non-negative, so w is never
+        // negative regardless of passTest -- genuinely always passes (never discards).
+        acp.alphaTest[0] = 0.0f;
+        acp.alphaTest[1] = 0.0f;
+        acp.alphaTest[2] = 1.0f;
+        acp.alphaTest[3] = 1.0f;
+
+        acp.vertexColorEnabled = true;
+        backend.Clear(0.0f, 0.0f, 1.0f, 1.0f);
+        backend.DrawPrimitivesEx(vbAlphaColor, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                 Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, acp);
+        auto acOn = ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight);
+        Check(isColor(pixelAt(acOn, 30, 30), 255, 0, 0, 255),
+              "P5: DrawPrimitivesEx() real alpha_test_colored3d (stride 24) with "
+              "VertexColorEnabled=true multiplies the exact vertex color (red) through a white "
+              "texture (plan_dx.md DX-136)");
+
+        acp.vertexColorEnabled = false;
+        backend.Clear(0.0f, 0.0f, 1.0f, 1.0f);
+        backend.DrawPrimitivesEx(vbAlphaColor, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                 Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, acp);
+        auto acOff = ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight);
+        Check(isColor(pixelAt(acOff, 30, 30), 255, 255, 255, 255),
+              "P6: DrawPrimitivesEx() the SAME vertex buffer with VertexColorEnabled=false "
+              "genuinely ignores its vertex color -- only DiffuseColor (white) survives, "
+              "distinctly different from the true case above (plan_dx.md DX-136)");
+
+        // Alpha test itself still genuinely discards on this new stride-24 path. AlphaTol=0
+        // (comparison mode), AlphaRef=0.5: alpha=200/255 (~0.784, NOT < 0.5) genuinely fails ->
+        // discard -> background survives.
+        acp.alphaTest[0] = 0.5f; acp.alphaTest[1] = 0.0f;
+        acp.alphaTest[2] = 1.0f; acp.alphaTest[3] = -1.0f;
+        std::vector<uint8_t> highAlphaPixels(2 * 2 * 4);
+        for (int i = 0; i < 4; ++i)
+        {
+            highAlphaPixels[i * 4 + 0] = 255; highAlphaPixels[i * 4 + 1] = 255;
+            highAlphaPixels[i * 4 + 2] = 255; highAlphaPixels[i * 4 + 3] = 200;
+        }
+        whiteTexAC.UpdatePixelsLevel(0, highAlphaPixels.data(), 2, 2);
+        acp.vertexColorEnabled = true;
+        backend.Clear(0.0f, 1.0f, 0.0f, 1.0f);
+        backend.DrawPrimitivesEx(vbAlphaColor, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                 Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, acp);
+        auto acDiscard = ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight);
+        Check(isColor(pixelAt(acDiscard, 30, 30), 0, 255, 0, 255),
+              "P7: DrawPrimitivesEx() alpha_test_colored3d's alpha-test discard logic still "
+              "genuinely works on the new stride-24/vertex-color path -- a failing alpha drops "
+              "the pixel, leaving the Clear() background untouched (plan_dx.md DX-136)");
+
         backend.UnbindOffscreenColorTargetEXT();
     }
 
@@ -1557,6 +1810,37 @@ int main()
         Check(regionIs(afterQIdx, 120, 160, 200, 255),
               "Q2: DrawIndexedPrimitivesEx() indexed dual_texture3d draw shares the same real "
               "2-texture pipeline and produces the same exact result");
+
+        // DX-137: dedicated fog on/off discriminating test for dual_texture3d -- reuses this
+        // block's own deterministic fixture (exact base result (120,160,200)), same Z-at-FogEnd
+        // methodology as textured3d's own fog test.
+        static const VPT kTriDualFog[3] = {
+            {-1.0f, -1.0f, 0.5f, 0.0f, 1.0f},
+            { 3.0f, -1.0f, 0.5f, 2.0f, 1.0f},
+            {-1.0f,  3.0f, 0.5f, 0.0f, -1.0f},
+        };
+        D3D12VertexBufferBackend vbDualFog(&backend, 3);
+        vbDualFog.SetData(kTriDualFog, 3, sizeof(VPT));
+
+        dp.fogEnabled = false;
+        dp.fogColor[0] = 0.0f; dp.fogColor[1] = 1.0f; dp.fogColor[2] = 0.0f;
+        dp.fogStart = 0.0f; dp.fogEnd = 0.5f;
+        backend.Clear(10.0f / 255.0f, 10.0f / 255.0f, 10.0f / 255.0f, 1.0f);
+        backend.DrawPrimitivesEx(vbDualFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                 Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, dp);
+        auto dtFogOff = ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight);
+        Check(isColor(pixelAt(dtFogOff, 30, 30), 120, 160, 200, 255),
+              "Q3: DrawPrimitivesEx() dual_texture3d fogEnabled=false leaves the exact "
+              "combined-texture color unblended (plan_dx.md DX-137)");
+
+        dp.fogEnabled = true;
+        backend.Clear(10.0f / 255.0f, 10.0f / 255.0f, 10.0f / 255.0f, 1.0f);
+        backend.DrawPrimitivesEx(vbDualFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                 Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, dp);
+        auto dtFogOn = ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight);
+        Check(isColor(pixelAt(dtFogOn, 30, 30), 0, 255, 0, 255),
+              "Q4: DrawPrimitivesEx() dual_texture3d fogEnabled=true with Z at FogEnd genuinely "
+              "blends all the way to the exact FogColor (plan_dx.md DX-137)");
 
         backend.UnbindOffscreenColorTargetEXT();
     }
@@ -1960,6 +2244,256 @@ int main()
               "from the weightsPerVertex=1 case above with identical vertex weight data "
               "(plan_dx.md DX-135)");
 
+        // DX-137: dedicated fog on/off discriminating test for skinned3d -- a fresh copy of this
+        // block's own original single-bone identity fixture (exact base result (77,88,99); `sp`/
+        // `vbSkin` above were mutated for the WeightsPerVertex sub-test), same Z-at-FogEnd
+        // methodology as textured3d's own fog test.
+        static const VPNTS kTriSkinFog[3] = {
+            {-1.0f, -1.0f, 0.5f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0},
+            { 3.0f, -1.0f, 0.5f, 0.0f, 0.0f, 1.0f, 2.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0},
+            {-1.0f,  3.0f, 0.5f, 0.0f, 0.0f, 1.0f, 0.0f, -1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0},
+        };
+        D3D12VertexBufferBackend vbSkinFog(&backend, 3);
+        vbSkinFog.SetData(kTriSkinFog, 3, sizeof(VPNTS));
+
+        GpuDrawParams skinFogP;
+        skinFogP.texture0 = &tex;
+        skinFogP.textureEnabled = true;
+        skinFogP.skinned = true;
+        skinFogP.boneCount = 1;
+        skinFogP.weightsPerVertex = 1;
+        Matrix::getIdentityProperty().ToColumnMajor(skinFogP.boneTransforms);
+        skinFogP.ambientColor[0] = 1.0f; skinFogP.ambientColor[1] = 1.0f; skinFogP.ambientColor[2] = 1.0f;
+        skinFogP.specularColor[0] = 0.0f; skinFogP.specularColor[1] = 0.0f; skinFogP.specularColor[2] = 0.0f;
+        skinFogP.eyePositionWorld[0] = 0.0f; skinFogP.eyePositionWorld[1] = 0.0f; skinFogP.eyePositionWorld[2] = -10.0f;
+
+        skinFogP.fogEnabled = false;
+        skinFogP.fogColor[0] = 0.0f; skinFogP.fogColor[1] = 1.0f; skinFogP.fogColor[2] = 0.0f;
+        skinFogP.fogStart = 0.0f; skinFogP.fogEnd = 0.5f;
+        backend.Clear(10.0f / 255.0f, 10.0f / 255.0f, 10.0f / 255.0f, 1.0f);
+        backend.DrawPrimitivesEx(vbSkinFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                 Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, skinFogP);
+        auto skinFogOff = ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight);
+        Check(isColor(pixelAt(skinFogOff, 30, 30), 77, 88, 99, 255),
+              "S4: DrawPrimitivesEx() skinned3d fogEnabled=false leaves the exact "
+              "single-bone-identity texture color unblended (plan_dx.md DX-137)");
+
+        skinFogP.fogEnabled = true;
+        backend.Clear(10.0f / 255.0f, 10.0f / 255.0f, 10.0f / 255.0f, 1.0f);
+        backend.DrawPrimitivesEx(vbSkinFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                 Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, skinFogP);
+        auto skinFogOn = ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight);
+        Check(isColor(pixelAt(skinFogOn, 30, 30), 0, 255, 0, 255),
+              "S5: DrawPrimitivesEx() skinned3d fogEnabled=true with Z at FogEnd genuinely blends "
+              "all the way to the exact FogColor (plan_dx.md DX-137)");
+
+        backend.UnbindOffscreenColorTargetEXT();
+    }
+
+    // ---- Check QQ (plan_dx.md DX-150): skinned3d -- DirectionalLight1/DirectionalLight2 each
+    // independently and exactly contribute. Reuses this file's own single-identity-bone
+    // skinned3d fixture (DX-67/DX-111/DX-135, boneCount=1/weightsPerVertex=1 so bone math doesn't
+    // complicate the lighting isolation) combined with DX-124/DX-138's own exact-color-per-term
+    // methodology (ambient/light0/specular all zeroed, white texture, each sub-check gets an
+    // EXACT expected RGB). ----
+    {
+        constexpr int kRtWidth = 64;
+        constexpr int kRtHeight = 64;
+
+        D3D12_HEAP_PROPERTIES heapProps{};
+        heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
+        D3D12_RESOURCE_DESC rtDesc{};
+        rtDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+        rtDesc.Width = kRtWidth;
+        rtDesc.Height = kRtHeight;
+        rtDesc.DepthOrArraySize = 1;
+        rtDesc.MipLevels = 1;
+        rtDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        rtDesc.SampleDesc.Count = 1;
+        rtDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+        rtDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+
+        Microsoft::WRL::ComPtr<ID3D12Resource> rtQQ;
+        HRESULT hrRtQQ = backend.GetDeviceEXT()->CreateCommittedResource(
+            &heapProps, D3D12_HEAP_FLAG_NONE, &rtDesc,
+            D3D12_RESOURCE_STATE_RENDER_TARGET, nullptr, IID_PPV_ARGS(rtQQ.GetAddressOf()));
+        backend.GetResourceStateTrackerEXT().TrackResource(rtQQ.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET);
+        D3D12_CPU_DESCRIPTOR_HANDLE rtvQQ = backend.AllocateRtvDescriptorEXT();
+        backend.GetDeviceEXT()->CreateRenderTargetView(rtQQ.Get(), nullptr, rtvQQ);
+        backend.BindOffscreenColorTargetEXT(rtQQ.Get(), rtvQQ, DXGI_FORMAT_R8G8B8A8_UNORM, kRtWidth, kRtHeight);
+
+        auto pixelAtQQ = [&](const std::vector<uint8_t>& buf, int x, int y) -> std::array<uint8_t, 4>
+        {
+            const std::size_t idx = (static_cast<std::size_t>(y) * kRtWidth + static_cast<std::size_t>(x)) * 4;
+            return {buf[idx + 0], buf[idx + 1], buf[idx + 2], buf[idx + 3]};
+        };
+        auto centerIsExactQQ = [&](const std::vector<uint8_t>& buf, uint8_t r, uint8_t g, uint8_t b)
+        {
+            const auto p = pixelAtQQ(buf, 30, 30);
+            return p[0] == r && p[1] == g && p[2] == b;
+        };
+
+        struct VPNTSQ { float x, y, z; float nx, ny, nz; float u, v;
+                       float bw0, bw1, bw2, bw3; uint8_t bi0, bi1, bi2, bi3; };
+        static const VPNTSQ kTriQQ[3] = {
+            {-1.0f, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0},
+            { 3.0f, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 2.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0},
+            {-1.0f,  3.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, -1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0},
+        };
+        D3D12VertexBufferBackend vbQQ(&backend, 3);
+        vbQQ.SetData(kTriQQ, 3, sizeof(VPNTSQ));
+
+        ImageData whiteImgQQ;
+        whiteImgQQ.width = 2; whiteImgQQ.height = 2; whiteImgQQ.mipLevels = 1;
+        whiteImgQQ.pixels.assign(2 * 2 * 4, 255);
+        D3D12TextureBackend whiteTexQQ(&backend, whiteImgQQ);
+
+        GpuDrawParams baseQP;
+        baseQP.texture0 = &whiteTexQQ;
+        baseQP.textureEnabled = true;
+        baseQP.skinned = true;
+        baseQP.boneCount = 1;
+        baseQP.weightsPerVertex = 1;
+        Matrix::getIdentityProperty().ToColumnMajor(baseQP.boneTransforms);
+        baseQP.ambientColor[0] = 0.0f; baseQP.ambientColor[1] = 0.0f; baseQP.ambientColor[2] = 0.0f;
+        baseQP.light0Diffuse[0] = 0.0f; baseQP.light0Diffuse[1] = 0.0f; baseQP.light0Diffuse[2] = 0.0f; // Light0 off
+        baseQP.specularColor[0] = 0.0f; baseQP.specularColor[1] = 0.0f; baseQP.specularColor[2] = 0.0f; // no specular noise
+        baseQP.eyePositionWorld[0] = 0.0f; baseQP.eyePositionWorld[1] = 0.0f; baseQP.eyePositionWorld[2] = -10.0f;
+
+        // QQ1: DirectionalLight1 alone, full-facing direction, red diffuse -> exact (255,0,0).
+        GpuDrawParams qp1 = baseQP;
+        qp1.light1Dir[0] = 0.0f; qp1.light1Dir[1] = 0.0f; qp1.light1Dir[2] = -1.0f; // travels -Z -> faces the +Z normal
+        qp1.light1Diffuse[0] = 1.0f; qp1.light1Diffuse[1] = 0.0f; qp1.light1Diffuse[2] = 0.0f;
+        backend.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+        backend.DrawPrimitivesEx(vbQQ, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                 Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, qp1);
+        auto rQQ1 = ReadBackRenderTargetFull(backend, rtQQ.Get(), kRtWidth, kRtHeight);
+        Check(centerIsExactQQ(rQQ1, 255, 0, 0),
+              "QQ1: DrawPrimitivesEx() real skinned3d -- DirectionalLight1 alone contributes the "
+              "exact expected red, independent of Light0/Light2 (plan_dx.md DX-150)");
+
+        // QQ2: same geometry/light1Dir, but light1Diffuse disabled (black) -- proves QQ1 wasn't
+        // some other constant leaking in.
+        GpuDrawParams qp1off = qp1;
+        qp1off.light1Diffuse[0] = 0.0f; qp1off.light1Diffuse[1] = 0.0f; qp1off.light1Diffuse[2] = 0.0f;
+        backend.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+        backend.DrawPrimitivesEx(vbQQ, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                 Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, qp1off);
+        auto rQQ1off = ReadBackRenderTargetFull(backend, rtQQ.Get(), kRtWidth, kRtHeight);
+        Check(centerIsExactQQ(rQQ1off, 0, 0, 0),
+              "QQ2: disabling DirectionalLight1's diffuse (zeroed) removes its contribution "
+              "exactly -- confirms QQ1 was real, not a leaked default (plan_dx.md DX-150)");
+
+        // QQ3: DirectionalLight2 alone, green diffuse -> exact (0,255,0).
+        GpuDrawParams qp2 = baseQP;
+        qp2.light2Dir[0] = 0.0f; qp2.light2Dir[1] = 0.0f; qp2.light2Dir[2] = -1.0f;
+        qp2.light2Diffuse[0] = 0.0f; qp2.light2Diffuse[1] = 1.0f; qp2.light2Diffuse[2] = 0.0f;
+        backend.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+        backend.DrawPrimitivesEx(vbQQ, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                 Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, qp2);
+        auto rQQ2 = ReadBackRenderTargetFull(backend, rtQQ.Get(), kRtWidth, kRtHeight);
+        Check(centerIsExactQQ(rQQ2, 0, 255, 0),
+              "QQ3: DrawPrimitivesEx() real skinned3d -- DirectionalLight2 alone contributes the "
+              "exact expected green, independent of Light0/Light1 (plan_dx.md DX-150)");
+
+        backend.UnbindOffscreenColorTargetEXT();
+    }
+
+    // ---- Check RR (plan_dx.md DX-151): skinned3d -- real Blinn-Phong specular highlight,
+    // discriminating. Applies DX-139's own half-vector-equals-normal trick (eye at (0,0,-10),
+    // surface normal (0,0,-1), light1 traveling +Z -> dot(H,N)=1 exactly, an EXACT expected
+    // specular color regardless of SpecularPower) to skinned3d.frag.hlsl's own specular formula,
+    // which is byte-for-byte the same shape as lit_textured3d's (confirmed by reading both before
+    // writing this test) -- combined with the single-identity-bone fixture (DX-67/DX-111/DX-135)
+    // so bone math doesn't complicate the specular isolation. ----
+    {
+        constexpr int kRtWidth = 64;
+        constexpr int kRtHeight = 64;
+
+        D3D12_HEAP_PROPERTIES heapProps{};
+        heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
+        D3D12_RESOURCE_DESC rtDesc{};
+        rtDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+        rtDesc.Width = kRtWidth;
+        rtDesc.Height = kRtHeight;
+        rtDesc.DepthOrArraySize = 1;
+        rtDesc.MipLevels = 1;
+        rtDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        rtDesc.SampleDesc.Count = 1;
+        rtDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+        rtDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+
+        Microsoft::WRL::ComPtr<ID3D12Resource> rtRR;
+        HRESULT hrRtRR = backend.GetDeviceEXT()->CreateCommittedResource(
+            &heapProps, D3D12_HEAP_FLAG_NONE, &rtDesc,
+            D3D12_RESOURCE_STATE_RENDER_TARGET, nullptr, IID_PPV_ARGS(rtRR.GetAddressOf()));
+        backend.GetResourceStateTrackerEXT().TrackResource(rtRR.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET);
+        D3D12_CPU_DESCRIPTOR_HANDLE rtvRR = backend.AllocateRtvDescriptorEXT();
+        backend.GetDeviceEXT()->CreateRenderTargetView(rtRR.Get(), nullptr, rtvRR);
+        backend.BindOffscreenColorTargetEXT(rtRR.Get(), rtvRR, DXGI_FORMAT_R8G8B8A8_UNORM, kRtWidth, kRtHeight);
+
+        auto pixelAtRR = [&](const std::vector<uint8_t>& buf, int x, int y) -> std::array<uint8_t, 4>
+        {
+            const std::size_t idx = (static_cast<std::size_t>(y) * kRtWidth + static_cast<std::size_t>(x)) * 4;
+            return {buf[idx + 0], buf[idx + 1], buf[idx + 2], buf[idx + 3]};
+        };
+        auto centerIsExactRR = [&](const std::vector<uint8_t>& buf, uint8_t r, uint8_t g, uint8_t b)
+        {
+            const auto p = pixelAtRR(buf, 30, 30);
+            return p[0] == r && p[1] == g && p[2] == b;
+        };
+
+        struct VPNTSR { float x, y, z; float nx, ny, nz; float u, v;
+                       float bw0, bw1, bw2, bw3; uint8_t bi0, bi1, bi2, bi3; };
+        static const VPNTSR kTriRR[3] = {
+            {-1.0f, -1.0f, 0.0f, 0.0f, 0.0f, -1.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0},
+            { 3.0f, -1.0f, 0.0f, 0.0f, 0.0f, -1.0f, 2.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0},
+            {-1.0f,  3.0f, 0.0f, 0.0f, 0.0f, -1.0f, 0.0f, -1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0},
+        };
+        D3D12VertexBufferBackend vbRR(&backend, 3);
+        vbRR.SetData(kTriRR, 3, sizeof(VPNTSR));
+
+        ImageData whiteImgRR;
+        whiteImgRR.width = 2; whiteImgRR.height = 2; whiteImgRR.mipLevels = 1;
+        whiteImgRR.pixels.assign(2 * 2 * 4, 255);
+        D3D12TextureBackend whiteTexRR(&backend, whiteImgRR);
+
+        GpuDrawParams rp;
+        rp.texture0 = &whiteTexRR;
+        rp.textureEnabled = true;
+        rp.skinned = true;
+        rp.boneCount = 1;
+        rp.weightsPerVertex = 1;
+        Matrix::getIdentityProperty().ToColumnMajor(rp.boneTransforms);
+        rp.ambientColor[0] = 0.0f; rp.ambientColor[1] = 0.0f; rp.ambientColor[2] = 0.0f;
+        rp.light0Diffuse[0] = 0.0f; rp.light0Diffuse[1] = 0.0f; rp.light0Diffuse[2] = 0.0f; // no diffuse noise
+        rp.light1Dir[0] = 0.0f; rp.light1Dir[1] = 0.0f; rp.light1Dir[2] = 1.0f;             // travels +Z
+        rp.light1Diffuse[0] = 0.0f; rp.light1Diffuse[1] = 0.0f; rp.light1Diffuse[2] = 0.0f; // diffuse off too
+        rp.light1Specular[0] = 1.0f; rp.light1Specular[1] = 1.0f; rp.light1Specular[2] = 1.0f;
+        rp.eyePositionWorld[0] = 0.0f; rp.eyePositionWorld[1] = 0.0f; rp.eyePositionWorld[2] = -10.0f;
+        rp.specularColor[0] = 1.0f; rp.specularColor[1] = 1.0f; rp.specularColor[2] = 1.0f;
+        rp.specularPower = 16.0f;
+
+        backend.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+        backend.DrawPrimitivesEx(vbRR, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                 Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, rp);
+        auto specOnRR = ReadBackRenderTargetFull(backend, rtRR.Get(), kRtWidth, kRtHeight);
+        Check(centerIsExactRR(specOnRR, 255, 255, 255),
+              "RR1: DrawPrimitivesEx() real skinned3d -- Blinn-Phong specular at a geometry "
+              "deliberately chosen so dot(H,N)=1 exactly contributes the exact expected full-white "
+              "highlight, with diffuse/ambient all zero (plan_dx.md DX-151)");
+
+        GpuDrawParams rpOff = rp;
+        rpOff.specularColor[0] = 0.0f; rpOff.specularColor[1] = 0.0f; rpOff.specularColor[2] = 0.0f;
+        backend.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+        backend.DrawPrimitivesEx(vbRR, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                 Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, rpOff);
+        auto specOffRR = ReadBackRenderTargetFull(backend, rtRR.Get(), kRtWidth, kRtHeight);
+        Check(centerIsExactRR(specOffRR, 0, 0, 0),
+              "RR2: the SAME geometry/light with material SpecularColor zeroed produces exact black -- "
+              "proves RR1's white came genuinely from the specular term, not diffuse/ambient "
+              "(plan_dx.md DX-151)");
+
         backend.UnbindOffscreenColorTargetEXT();
     }
 
@@ -2169,6 +2703,149 @@ int main()
               "to the pure (unlit) base color, distinctly different from the envMapAmount=1.0 "
               "reflected-face color above -- proves the lerp is a genuine graduated blend control, "
               "not just an on/off gate (plan_dx.md DX-134)");
+
+        // DX-137: dedicated fog on/off discriminating test for env_map3d -- reuses this block's
+        // own deterministic reflected-face fixture (exact base result (10,20,30) at
+        // envMapAmount=1.0, restored here since U2 above left it at 0.0), same Z-at-FogEnd
+        // methodology as textured3d's own fog test.
+        static const VPNTE kTriEnvFog[3] = {
+            {-1.0f, -1.0f, 0.5f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f},
+            { 3.0f, -1.0f, 0.5f, 0.0f, 0.0f, 1.0f, 2.0f, 1.0f},
+            {-1.0f,  3.0f, 0.5f, 0.0f, 0.0f, 1.0f, 0.0f, -1.0f},
+        };
+        D3D12VertexBufferBackend vbEnvFog(&backend, 3);
+        vbEnvFog.SetData(kTriEnvFog, 3, sizeof(VPNTE));
+
+        ep.envMapAmount = 1.0f;
+        ep.fogEnabled = false;
+        ep.fogColor[0] = 0.0f; ep.fogColor[1] = 1.0f; ep.fogColor[2] = 0.0f;
+        ep.fogStart = 0.0f; ep.fogEnd = 0.5f;
+        backend.Clear(10.0f / 255.0f, 10.0f / 255.0f, 10.0f / 255.0f, 1.0f);
+        backend.DrawPrimitivesEx(vbEnvFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                 Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, ep);
+        auto envFogOff = ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight);
+        Check(isColor(pixelAt(envFogOff, 30, 30), 10, 20, 30, 255),
+              "U3: DrawPrimitivesEx() env_map3d fogEnabled=false leaves the exact reflected "
+              "cube-face color unblended (plan_dx.md DX-137)");
+
+        ep.fogEnabled = true;
+        backend.Clear(10.0f / 255.0f, 10.0f / 255.0f, 10.0f / 255.0f, 1.0f);
+        backend.DrawPrimitivesEx(vbEnvFog, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                 Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, ep);
+        auto envFogOn = ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight);
+        Check(isColor(pixelAt(envFogOn, 30, 30), 0, 255, 0, 255),
+              "U4: DrawPrimitivesEx() env_map3d fogEnabled=true with Z at FogEnd genuinely blends "
+              "all the way to the exact FogColor (plan_dx.md DX-137)");
+
+        backend.UnbindOffscreenColorTargetEXT();
+    }
+
+    // ---- Check PP (plan_dx.md DX-149): env_map3d -- DirectionalLight1/DirectionalLight2 each
+    // independently and exactly contribute, not just Light0. Reuses Check U's own fixture
+    // (normal +Z, white 2x2 texture, a dummy cube -- irrelevant content since envMapAmount=0.0
+    // collapses the base-lerp to the pure lit*texColor path per DX-134's own already-proven
+    // formula, so the env-map SAMPLE call still executes but its result never reaches the output)
+    // and DX-138's own exact-color-per-term isolation methodology (light0Diffuse zeroed so only
+    // the field under test contributes; each sub-check gets an EXACT expected RGB). ----
+    {
+        constexpr int kRtWidth = 64;
+        constexpr int kRtHeight = 64;
+
+        D3D12_HEAP_PROPERTIES heapProps{};
+        heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
+        D3D12_RESOURCE_DESC rtDesc{};
+        rtDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+        rtDesc.Width = kRtWidth;
+        rtDesc.Height = kRtHeight;
+        rtDesc.DepthOrArraySize = 1;
+        rtDesc.MipLevels = 1;
+        rtDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        rtDesc.SampleDesc.Count = 1;
+        rtDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+        rtDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+
+        Microsoft::WRL::ComPtr<ID3D12Resource> rtPP;
+        HRESULT hrRtPP = backend.GetDeviceEXT()->CreateCommittedResource(
+            &heapProps, D3D12_HEAP_FLAG_NONE, &rtDesc,
+            D3D12_RESOURCE_STATE_RENDER_TARGET, nullptr, IID_PPV_ARGS(rtPP.GetAddressOf()));
+        backend.GetResourceStateTrackerEXT().TrackResource(rtPP.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET);
+        D3D12_CPU_DESCRIPTOR_HANDLE rtvPP = backend.AllocateRtvDescriptorEXT();
+        backend.GetDeviceEXT()->CreateRenderTargetView(rtPP.Get(), nullptr, rtvPP);
+        backend.BindOffscreenColorTargetEXT(rtPP.Get(), rtvPP, DXGI_FORMAT_R8G8B8A8_UNORM, kRtWidth, kRtHeight);
+
+        auto pixelAtPP = [&](const std::vector<uint8_t>& buf, int x, int y) -> std::array<uint8_t, 4>
+        {
+            const std::size_t idx = (static_cast<std::size_t>(y) * kRtWidth + static_cast<std::size_t>(x)) * 4;
+            return {buf[idx + 0], buf[idx + 1], buf[idx + 2], buf[idx + 3]};
+        };
+        auto centerIsExactPP = [&](const std::vector<uint8_t>& buf, uint8_t r, uint8_t g, uint8_t b)
+        {
+            const auto p = pixelAtPP(buf, 30, 30);
+            return p[0] == r && p[1] == g && p[2] == b;
+        };
+
+        struct VPNTEP { float x, y, z; float nx, ny, nz; float u, v; };
+        static const VPNTEP kTriPP[3] = {
+            {-1.0f, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f},
+            { 3.0f, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 2.0f, 1.0f},
+            {-1.0f,  3.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, -1.0f},
+        };
+        D3D12VertexBufferBackend vbPP(&backend, 3);
+        vbPP.SetData(kTriPP, 3, sizeof(VPNTEP));
+
+        ImageData whiteImgPP;
+        whiteImgPP.width = 2; whiteImgPP.height = 2; whiteImgPP.mipLevels = 1;
+        whiteImgPP.pixels.assign(2 * 2 * 4, 255);
+        D3D12TextureBackend whiteTexPP(&backend, whiteImgPP);
+
+        D3D12TextureCubeBackend cubePP(&backend, 8, false, 0);
+        std::vector<uint8_t> dummyFace(8 * 8 * 4, 0);
+        for (int face = 0; face < 6; ++face)
+            cubePP.SetData(face, 0, 0, 0, 8, 8, dummyFace.data(), static_cast<int>(dummyFace.size()));
+
+        GpuDrawParams baseEP;
+        baseEP.texture0 = &whiteTexPP;
+        baseEP.textureEnabled = true;
+        baseEP.envMap = &cubePP;
+        baseEP.envMapping = true;
+        baseEP.envMapAmount = 0.0f; // DX-134: collapses base-lerp to pure lit*texColor, no reflection interference
+        baseEP.light0Diffuse[0] = 0.0f; baseEP.light0Diffuse[1] = 0.0f; baseEP.light0Diffuse[2] = 0.0f; // Light0 off
+
+        // PP1: DirectionalLight1 alone, full-facing direction, red diffuse -> exact (255,0,0).
+        GpuDrawParams pp1 = baseEP;
+        pp1.light1Dir[0] = 0.0f; pp1.light1Dir[1] = 0.0f; pp1.light1Dir[2] = -1.0f; // travels -Z -> faces the +Z normal
+        pp1.light1Diffuse[0] = 1.0f; pp1.light1Diffuse[1] = 0.0f; pp1.light1Diffuse[2] = 0.0f;
+        backend.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+        backend.DrawPrimitivesEx(vbPP, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                 Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, pp1);
+        auto rPP1 = ReadBackRenderTargetFull(backend, rtPP.Get(), kRtWidth, kRtHeight);
+        Check(centerIsExactPP(rPP1, 255, 0, 0),
+              "PP1: DrawPrimitivesEx() real env_map3d -- DirectionalLight1 alone contributes the "
+              "exact expected red, independent of Light0/Light2 (plan_dx.md DX-149)");
+
+        // PP2: same geometry/light1Dir, but light1Diffuse disabled (black) -- proves PP1 wasn't
+        // some other constant leaking in.
+        GpuDrawParams pp1off = pp1;
+        pp1off.light1Diffuse[0] = 0.0f; pp1off.light1Diffuse[1] = 0.0f; pp1off.light1Diffuse[2] = 0.0f;
+        backend.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+        backend.DrawPrimitivesEx(vbPP, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                 Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, pp1off);
+        auto rPP1off = ReadBackRenderTargetFull(backend, rtPP.Get(), kRtWidth, kRtHeight);
+        Check(centerIsExactPP(rPP1off, 0, 0, 0),
+              "PP2: disabling DirectionalLight1's diffuse (zeroed) removes its contribution "
+              "exactly -- confirms PP1 was real, not a leaked default (plan_dx.md DX-149)");
+
+        // PP3: DirectionalLight2 alone, green diffuse -> exact (0,255,0).
+        GpuDrawParams pp2 = baseEP;
+        pp2.light2Dir[0] = 0.0f; pp2.light2Dir[1] = 0.0f; pp2.light2Dir[2] = -1.0f;
+        pp2.light2Diffuse[0] = 0.0f; pp2.light2Diffuse[1] = 1.0f; pp2.light2Diffuse[2] = 0.0f;
+        backend.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+        backend.DrawPrimitivesEx(vbPP, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                 Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, pp2);
+        auto rPP2 = ReadBackRenderTargetFull(backend, rtPP.Get(), kRtWidth, kRtHeight);
+        Check(centerIsExactPP(rPP2, 0, 255, 0),
+              "PP3: DrawPrimitivesEx() real env_map3d -- DirectionalLight2 alone contributes the "
+              "exact expected green, independent of Light0/Light1 (plan_dx.md DX-149)");
 
         backend.UnbindOffscreenColorTargetEXT();
     }
@@ -2799,6 +3476,46 @@ int main()
               "sampler descriptor handle");
 
         backend.UnbindOffscreenColorTargetEXT();
+    }
+
+    // ---- plan_dx.md DX-154: per-slot SamplerState, all 16 slots bound SIMULTANEOUSLY with 16
+    // genuinely DIFFERENT SamplerState configurations, then verified independent -- ports D3D11's
+    // own DX-142 methodology to D3D12SamplerCache. Check Z above already proved cache
+    // identity/distinctness for a single slot in isolation, but nothing has proven slot N's
+    // binding survives slots N+1..15 also being applied (a plausible place for an off-by-one/index
+    // bug or an accidental single-slot cache to hide). ----
+    {
+        D3D12_GPU_DESCRIPTOR_HANDLE boundAtApplyTime[16]{};
+        for (int slot = 0; slot < 16; ++slot)
+        {
+            // Spread across TextureFilter's 6 values and TextureAddressMode's 3 values so adjacent
+            // slots never accidentally share an identical configuration -- same spread D3D11's own
+            // DX-142 uses.
+            backend.ApplySamplerState(slot, slot % 6, slot % 3, (slot + 1) % 3, 1);
+            boundAtApplyTime[slot] = backend.GetSamplerGpuHandleEXT(slot);
+        }
+
+        bool allSlotsNonNull = true;
+        for (int slot = 0; slot < 16; ++slot)
+            if (boundAtApplyTime[slot].ptr == 0) allSlotsNonNull = false;
+        Check(allSlotsNonNull,
+              "UU0: D3D12SamplerCache: all 16 sampler slots hold a real, non-null descriptor handle "
+              "immediately after being applied (plan_dx.md DX-154)");
+
+        // Re-query every slot NOW, after all 16 have been applied -- if applying a later slot (e.g.
+        // 15) ever clobbered an earlier one (e.g. 0) via an off-by-one or aliasing bug, this is
+        // where it would show up: the handle bound to slot 0 right now would differ from the one
+        // captured immediately after slot 0's own ApplySamplerState() call.
+        bool allSlotsStillCorrect = true;
+        for (int slot = 0; slot < 16; ++slot)
+        {
+            const D3D12_GPU_DESCRIPTOR_HANDLE now = backend.GetSamplerGpuHandleEXT(slot);
+            if (now.ptr != boundAtApplyTime[slot].ptr) allSlotsStillCorrect = false;
+        }
+        Check(allSlotsStillCorrect,
+              "UU1: D3D12SamplerCache: every one of the 16 slots still holds its OWN originally-bound "
+              "sampler descriptor handle after all 16 were applied -- proves genuine per-slot "
+              "independence, not a shared/aliased single slot (plan_dx.md DX-154)");
     }
 
     // ---- plan_dx.md DX-120: D3D12OcclusionQueryBackend -- a real visible-vs-invisible
@@ -3527,6 +4244,369 @@ int main()
         backend.SetRenderTarget2D(nullptr);
     }
 
+    // ---- plan_dx.md DX-144: RenderTarget2D mip-chain generation -- proves the real CPU
+    // box-filter downsample cascade (D3D12RenderTargetBackend::GenerateMipsEXT(), triggered from
+    // UnbindAsRenderTarget()) actually writes correct content into mip levels > 0, not
+    // zero/garbage. Mirrors D3D11's own already-closed DX-144 methodology exactly: a solid single
+    // color across the whole base mip, since box-filtering a solid color always produces the exact
+    // same solid color at every downstream mip level regardless of the filter kernel's specifics --
+    // this sidesteps needing to replicate D3D11's own GenerateMips() kernel bit-for-bit. ----
+    {
+        auto rtMip = backend.CreateRenderTarget2D(8, 8, 0 /*DepthFormat::None*/, false, true /*mipMap*/, 0);
+        auto* d3dRtMip = dynamic_cast<D3D12RenderTargetBackend*>(rtMip.get());
+        backend.SetRenderTarget2D(rtMip.get());
+        backend.Clear(200.0f / 255.0f, 90.0f / 255.0f, 10.0f / 255.0f, 1.0f);
+        backend.SetRenderTarget2D(nullptr); // UnbindAsRenderTarget() -> GenerateMipsEXT()
+
+        Check(d3dRtMip != nullptr && d3dRtMip->GetLevelCountEXT() == 4,
+              "LL0: D3D12RenderTargetBackend: an 8x8 mipMap=true render target reports the expected "
+              "4-level mip chain (8x8/4x4/2x2/1x1, plan_dx.md DX-144)");
+
+        // Direct GPU readback of a given mip subresource -- same real, direct-readback discipline
+        // DX-122/DX-123/DX-141's own readbackMip already establish, kept test-local since there is
+        // no public sampling path in this raw-backend-level smoke test.
+        auto readbackRtMip = [&](int level, int w, int h) -> std::vector<uint8_t>
+        {
+            const UINT rowPitch = (static_cast<UINT>(w) * 4 + D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1)
+                                 & ~(D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1);
+            const UINT64 bufSize = static_cast<UINT64>(rowPitch) * static_cast<UINT64>(h);
+
+            D3D12_HEAP_PROPERTIES readbackHeapProps{};
+            readbackHeapProps.Type = D3D12_HEAP_TYPE_READBACK;
+            D3D12_RESOURCE_DESC bufDesc{};
+            bufDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+            bufDesc.Width = bufSize;
+            bufDesc.Height = 1;
+            bufDesc.DepthOrArraySize = 1;
+            bufDesc.MipLevels = 1;
+            bufDesc.Format = DXGI_FORMAT_UNKNOWN;
+            bufDesc.SampleDesc.Count = 1;
+            bufDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+
+            Microsoft::WRL::ComPtr<ID3D12Resource> readback;
+            HRESULT hr = backend.GetDeviceEXT()->CreateCommittedResource(
+                &readbackHeapProps, D3D12_HEAP_FLAG_NONE, &bufDesc,
+                D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(readback.GetAddressOf()));
+            if (FAILED(hr)) return {};
+
+            D3D12_TEXTURE_COPY_LOCATION dst{};
+            dst.pResource = readback.Get();
+            dst.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+            dst.PlacedFootprint.Footprint.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+            dst.PlacedFootprint.Footprint.Width = static_cast<UINT>(w);
+            dst.PlacedFootprint.Footprint.Height = static_cast<UINT>(h);
+            dst.PlacedFootprint.Footprint.Depth = 1;
+            dst.PlacedFootprint.Footprint.RowPitch = rowPitch;
+
+            D3D12_TEXTURE_COPY_LOCATION src{};
+            src.pResource = d3dRtMip->GetColorResourceEXT();
+            src.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+            src.SubresourceIndex = static_cast<UINT>(level);
+
+            ID3D12CommandAllocator* allocator = backend.GetCommandAllocatorEXT(0);
+            ID3D12GraphicsCommandList* cmdList = backend.GetCommandListEXT();
+            allocator->Reset();
+            cmdList->Reset(allocator, nullptr);
+            auto& tracker = backend.GetResourceStateTrackerEXT();
+            const D3D12_RESOURCE_STATES priorState = tracker.GetTrackedStateEXT(d3dRtMip->GetColorResourceEXT());
+            tracker.TransitionTo(cmdList, d3dRtMip->GetColorResourceEXT(), D3D12_RESOURCE_STATE_COPY_SOURCE);
+            cmdList->CopyTextureRegion(&dst, 0, 0, 0, &src, nullptr);
+            tracker.TransitionTo(cmdList, d3dRtMip->GetColorResourceEXT(), priorState);
+            hr = cmdList->Close();
+            if (FAILED(hr)) return {};
+            backend.ExecuteCommandListAndWaitEXT(cmdList);
+
+            uint8_t* mapped = nullptr;
+            const D3D12_RANGE mapRange{0, static_cast<SIZE_T>(bufSize)};
+            if (FAILED(readback->Map(0, &mapRange, reinterpret_cast<void**>(&mapped)))) return {};
+            std::vector<uint8_t> out(static_cast<std::size_t>(w) * h * 4);
+            for (int row = 0; row < h; ++row)
+                std::memcpy(out.data() + static_cast<std::size_t>(row) * w * 4,
+                            mapped + static_cast<std::size_t>(row) * rowPitch,
+                            static_cast<std::size_t>(w) * 4);
+            const D3D12_RANGE writtenRange{0, 0};
+            readback->Unmap(0, &writtenRange);
+            return out;
+        };
+
+        auto isSolidRt = [](const std::vector<uint8_t>& buf, uint8_t r, uint8_t g, uint8_t b, uint8_t a)
+        {
+            if (buf.empty()) return false;
+            for (std::size_t i = 0; i < buf.size(); i += 4)
+                if (buf[i] != r || buf[i+1] != g || buf[i+2] != b || buf[i+3] != a) return false;
+            return true;
+        };
+
+        if (d3dRtMip != nullptr)
+        {
+            const auto mip1 = readbackRtMip(1, 4, 4);
+            Check(isSolidRt(mip1, 200, 90, 10, 255),
+                  "LL1: D3D12RenderTargetBackend: GenerateMipsEXT()-on-unbind writes the exact "
+                  "box-filtered (here: solid-color-preserving) content into mip level 1, read back "
+                  "directly from the real GPU resource, not zero/garbage (plan_dx.md DX-144)");
+
+            const auto mip2 = readbackRtMip(2, 2, 2);
+            Check(isSolidRt(mip2, 200, 90, 10, 255),
+                  "LL2: D3D12RenderTargetBackend: mip level 2 (2x2) is also exact, confirming the "
+                  "full mip chain regenerates correctly, not just level 1 (plan_dx.md DX-144)");
+        }
+    }
+
+    // ---- plan_dx.md DX-144 follow-up: RenderTargetCube mip-chain generation -- same real CPU
+    // box-filter downsample cascade as D3D12RenderTargetBackend's own 2D leg above, extended to
+    // D3D12RenderTargetCubeBackend. Only the active face's chain regenerates on unbind, mirroring
+    // D3D11RenderTargetCubeBackend's own face-0-only test precedent (a real, honest scope match,
+    // not an oversight -- only one face is ever the active draw target at a time). ----
+    {
+        auto rtCubeMip = backend.CreateRenderTargetCube(8, 0 /*DepthFormat::None*/, true /*mipMap*/);
+        auto* d3dRtCubeMip = dynamic_cast<D3D12RenderTargetCubeBackend*>(rtCubeMip.get());
+        Check(d3dRtCubeMip != nullptr && d3dRtCubeMip->GetLevelCountEXT() == 4,
+              "MM0: D3D12RenderTargetCubeBackend: an 8x8 mipMap=true cube render target reports "
+              "the expected 4-level mip chain (8x8/4x4/2x2/1x1, plan_dx.md DX-144)");
+
+        if (d3dRtCubeMip != nullptr)
+        {
+            rtCubeMip->BindAsRenderTargetFace(0);
+            backend.Clear(50.0f / 255.0f, 150.0f / 255.0f, 250.0f / 255.0f, 1.0f);
+            rtCubeMip->UnbindAsRenderTarget(); // GenerateMipsEXT() on face 0
+
+            // Subresource = mip + face*levelCount (standard D3D12 texture-array/mip indexing) --
+            // face 0, mip 1. Reuses the same readback technique as readbackRtMip above, just against
+            // the cube's own color resource and a face-aware subresource index.
+            auto readbackCubeMip = [&](int level, int face, int w, int h) -> std::vector<uint8_t>
+            {
+                const UINT rowPitch = (static_cast<UINT>(w) * 4 + D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1)
+                                     & ~(D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1);
+                const UINT64 bufSize = static_cast<UINT64>(rowPitch) * static_cast<UINT64>(h);
+
+                D3D12_HEAP_PROPERTIES readbackHeapProps{};
+                readbackHeapProps.Type = D3D12_HEAP_TYPE_READBACK;
+                D3D12_RESOURCE_DESC bufDesc{};
+                bufDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+                bufDesc.Width = bufSize;
+                bufDesc.Height = 1;
+                bufDesc.DepthOrArraySize = 1;
+                bufDesc.MipLevels = 1;
+                bufDesc.Format = DXGI_FORMAT_UNKNOWN;
+                bufDesc.SampleDesc.Count = 1;
+                bufDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+
+                Microsoft::WRL::ComPtr<ID3D12Resource> readback;
+                HRESULT hr = backend.GetDeviceEXT()->CreateCommittedResource(
+                    &readbackHeapProps, D3D12_HEAP_FLAG_NONE, &bufDesc,
+                    D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(readback.GetAddressOf()));
+                if (FAILED(hr)) return {};
+
+                D3D12_TEXTURE_COPY_LOCATION dst{};
+                dst.pResource = readback.Get();
+                dst.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+                dst.PlacedFootprint.Footprint.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+                dst.PlacedFootprint.Footprint.Width = static_cast<UINT>(w);
+                dst.PlacedFootprint.Footprint.Height = static_cast<UINT>(h);
+                dst.PlacedFootprint.Footprint.Depth = 1;
+                dst.PlacedFootprint.Footprint.RowPitch = rowPitch;
+
+                D3D12_TEXTURE_COPY_LOCATION src{};
+                src.pResource = d3dRtCubeMip->GetColorResourceEXT();
+                src.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+                src.SubresourceIndex = static_cast<UINT>(level) + static_cast<UINT>(face) * static_cast<UINT>(d3dRtCubeMip->GetLevelCountEXT());
+
+                ID3D12CommandAllocator* allocator = backend.GetCommandAllocatorEXT(0);
+                ID3D12GraphicsCommandList* cmdList = backend.GetCommandListEXT();
+                allocator->Reset();
+                cmdList->Reset(allocator, nullptr);
+                auto& tracker = backend.GetResourceStateTrackerEXT();
+                const D3D12_RESOURCE_STATES priorState = tracker.GetTrackedStateEXT(d3dRtCubeMip->GetColorResourceEXT());
+                tracker.TransitionTo(cmdList, d3dRtCubeMip->GetColorResourceEXT(), D3D12_RESOURCE_STATE_COPY_SOURCE);
+                cmdList->CopyTextureRegion(&dst, 0, 0, 0, &src, nullptr);
+                tracker.TransitionTo(cmdList, d3dRtCubeMip->GetColorResourceEXT(), priorState);
+                hr = cmdList->Close();
+                if (FAILED(hr)) return {};
+                backend.ExecuteCommandListAndWaitEXT(cmdList);
+
+                uint8_t* mapped = nullptr;
+                const D3D12_RANGE mapRange{0, static_cast<SIZE_T>(bufSize)};
+                if (FAILED(readback->Map(0, &mapRange, reinterpret_cast<void**>(&mapped)))) return {};
+                std::vector<uint8_t> out(static_cast<std::size_t>(w) * h * 4);
+                for (int row = 0; row < h; ++row)
+                    std::memcpy(out.data() + static_cast<std::size_t>(row) * w * 4,
+                                mapped + static_cast<std::size_t>(row) * rowPitch,
+                                static_cast<std::size_t>(w) * 4);
+                const D3D12_RANGE writtenRange{0, 0};
+                readback->Unmap(0, &writtenRange);
+                return out;
+            };
+
+            const auto cubeMip1 = readbackCubeMip(1, 0, 4, 4);
+            bool cubeMip1Exact = cubeMip1.size() == 4u * 4u * 4u;
+            for (std::size_t i = 0; i < 4u * 4u && cubeMip1Exact; ++i)
+                cubeMip1Exact = cubeMip1[i * 4 + 0] == 50 && cubeMip1[i * 4 + 1] == 150 &&
+                               cubeMip1[i * 4 + 2] == 250 && cubeMip1[i * 4 + 3] == 255;
+            Check(cubeMip1Exact,
+                  "MM1: D3D12RenderTargetCubeBackend: GenerateMipsEXT()-on-unbind regenerates face "
+                  "0's own mip chain correctly, read back directly from the real GPU resource "
+                  "(plan_dx.md DX-144)");
+        }
+    }
+
+    // ---- plan_dx.md DX-153: RenderTargetCube mip-chain generation for a NON-zero face -- MM1
+    // above only ever proved face 0. D3D12's own GenerateMipsEXT() is explicitly activeFace_-scoped
+    // (confirmed by reading the code, not assumed), so this mainly confirms the
+    // mip + face*levelCount subresource math generalizes correctly past face 0. ----
+    {
+        auto rtCubeMip2 = backend.CreateRenderTargetCube(8, 0 /*DepthFormat::None*/, true /*mipMap*/);
+        auto* d3dRtCubeMip2 = dynamic_cast<D3D12RenderTargetCubeBackend*>(rtCubeMip2.get());
+        Check(d3dRtCubeMip2 != nullptr, "TT0: D3D12RenderTargetCubeBackend: a second 8x8 mipMap=true "
+              "cube render target constructs cleanly (plan_dx.md DX-153)");
+
+        if (d3dRtCubeMip2 != nullptr)
+        {
+            rtCubeMip2->BindAsRenderTargetFace(2);
+            backend.Clear(60.0f / 255.0f, 120.0f / 255.0f, 180.0f / 255.0f, 1.0f);
+            rtCubeMip2->UnbindAsRenderTarget(); // GenerateMipsEXT() on face 2
+
+            auto readbackCubeFace2Mip = [&](int level, int w, int h) -> std::vector<uint8_t>
+            {
+                const UINT rowPitch = (static_cast<UINT>(w) * 4 + D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1)
+                                     & ~(D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1);
+                const UINT64 bufSize = static_cast<UINT64>(rowPitch) * static_cast<UINT64>(h);
+
+                D3D12_HEAP_PROPERTIES readbackHeapProps{};
+                readbackHeapProps.Type = D3D12_HEAP_TYPE_READBACK;
+                D3D12_RESOURCE_DESC bufDesc{};
+                bufDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+                bufDesc.Width = bufSize;
+                bufDesc.Height = 1;
+                bufDesc.DepthOrArraySize = 1;
+                bufDesc.MipLevels = 1;
+                bufDesc.Format = DXGI_FORMAT_UNKNOWN;
+                bufDesc.SampleDesc.Count = 1;
+                bufDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+
+                Microsoft::WRL::ComPtr<ID3D12Resource> readback;
+                HRESULT hr = backend.GetDeviceEXT()->CreateCommittedResource(
+                    &readbackHeapProps, D3D12_HEAP_FLAG_NONE, &bufDesc,
+                    D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(readback.GetAddressOf()));
+                if (FAILED(hr)) return {};
+
+                D3D12_TEXTURE_COPY_LOCATION dst{};
+                dst.pResource = readback.Get();
+                dst.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+                dst.PlacedFootprint.Footprint.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+                dst.PlacedFootprint.Footprint.Width = static_cast<UINT>(w);
+                dst.PlacedFootprint.Footprint.Height = static_cast<UINT>(h);
+                dst.PlacedFootprint.Footprint.Depth = 1;
+                dst.PlacedFootprint.Footprint.RowPitch = rowPitch;
+
+                D3D12_TEXTURE_COPY_LOCATION src{};
+                src.pResource = d3dRtCubeMip2->GetColorResourceEXT();
+                src.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+                src.SubresourceIndex = static_cast<UINT>(level) + 2u * static_cast<UINT>(d3dRtCubeMip2->GetLevelCountEXT());
+
+                ID3D12CommandAllocator* allocator = backend.GetCommandAllocatorEXT(0);
+                ID3D12GraphicsCommandList* cmdList = backend.GetCommandListEXT();
+                allocator->Reset();
+                cmdList->Reset(allocator, nullptr);
+                auto& tracker = backend.GetResourceStateTrackerEXT();
+                const D3D12_RESOURCE_STATES priorState = tracker.GetTrackedStateEXT(d3dRtCubeMip2->GetColorResourceEXT());
+                tracker.TransitionTo(cmdList, d3dRtCubeMip2->GetColorResourceEXT(), D3D12_RESOURCE_STATE_COPY_SOURCE);
+                cmdList->CopyTextureRegion(&dst, 0, 0, 0, &src, nullptr);
+                tracker.TransitionTo(cmdList, d3dRtCubeMip2->GetColorResourceEXT(), priorState);
+                hr = cmdList->Close();
+                if (FAILED(hr)) return {};
+                backend.ExecuteCommandListAndWaitEXT(cmdList);
+
+                uint8_t* mapped = nullptr;
+                const D3D12_RANGE mapRange{0, static_cast<SIZE_T>(bufSize)};
+                if (FAILED(readback->Map(0, &mapRange, reinterpret_cast<void**>(&mapped)))) return {};
+                std::vector<uint8_t> out(static_cast<std::size_t>(w) * h * 4);
+                for (int row = 0; row < h; ++row)
+                    std::memcpy(out.data() + static_cast<std::size_t>(row) * w * 4,
+                                mapped + static_cast<std::size_t>(row) * rowPitch,
+                                static_cast<std::size_t>(w) * 4);
+                const D3D12_RANGE writtenRange{0, 0};
+                readback->Unmap(0, &writtenRange);
+                return out;
+            };
+
+            const auto face2Mip1 = readbackCubeFace2Mip(1, 4, 4);
+            bool face2Mip1Exact = face2Mip1.size() == 4u * 4u * 4u;
+            for (std::size_t i = 0; i < 4u * 4u && face2Mip1Exact; ++i)
+                face2Mip1Exact = face2Mip1[i * 4 + 0] == 60 && face2Mip1[i * 4 + 1] == 120 &&
+                                 face2Mip1[i * 4 + 2] == 180 && face2Mip1[i * 4 + 3] == 255;
+            Check(face2Mip1Exact,
+                  "TT1: D3D12RenderTargetCubeBackend: GenerateMipsEXT()-on-unbind regenerates a "
+                  "NON-zero face's (face 2) own mip chain correctly, not just face 0's, read back "
+                  "directly from the real GPU resource (plan_dx.md DX-153)");
+        }
+    }
+
+    // ---- plan_dx.md DX-152: RenderTargetCube MSAA -- a real feature (previously deliberately out
+    // of scope, this class's own prior header comment) landing now, not just a test. Mirrors
+    // DX-117's own RenderTarget2D MSAA follow-up methodology exactly: an 8x8 cube face requested
+    // at 4x MSAA, cleared, read back through GetSampleableColorResourceEXT() (the resolved,
+    // single-sample resource ResolveMsaaEXT() writes on unbind, face-scoped) via
+    // ReadBackRenderTargetFull() -- proves the real ResolveSubresource()-on-unbind round-trip
+    // produces the exact clear color for face 0, not that the device granted a specific sample
+    // count (printed as diagnostics only, same honest framing DX-45/DX-117 already established). ----
+    {
+        auto rtCubeMsaa = backend.CreateRenderTargetCube(8, 0 /*DepthFormat::None*/, false /*mipMap*/, 4);
+        auto* d3dRtCubeMsaa = dynamic_cast<D3D12RenderTargetCubeBackend*>(rtCubeMsaa.get());
+        Check(d3dRtCubeMsaa != nullptr, "SS0: D3D12RenderTargetCubeBackend: CreateRenderTargetCube(multiSampleCount=4) "
+              "returns a real backend object (plan_dx.md DX-152)");
+
+        if (d3dRtCubeMsaa != nullptr)
+        {
+            rtCubeMsaa->BindAsRenderTargetFace(0);
+            backend.Clear(77.0f / 255.0f, 88.0f / 255.0f, 99.0f / 255.0f, 1.0f);
+            rtCubeMsaa->UnbindAsRenderTarget(); // ResolveMsaaEXT() for face 0
+
+            const auto resolvedCube = ReadBackRenderTargetFull(backend, d3dRtCubeMsaa->GetSampleableColorResourceEXT(), 8, 8);
+            bool msaaCubeMatches = resolvedCube.size() == 8u * 8u * 4u;
+            for (std::size_t i = 0; i < 8u * 8u && msaaCubeMatches; ++i)
+                msaaCubeMatches = resolvedCube[i * 4 + 0] == 77 && resolvedCube[i * 4 + 1] == 88 &&
+                                 resolvedCube[i * 4 + 2] == 99 && resolvedCube[i * 4 + 3] == 255;
+            Check(msaaCubeMatches,
+                  "SS1: D3D12RenderTargetCubeBackend (MSAA): Clear()+ResolveSubresource()-on-unbind "
+                  "produces the exact color in the resolved, sampleable resource for face 0, read back "
+                  "directly from the real GPU resource (plan_dx.md DX-152)");
+            std::printf("    RenderTargetCube MSAA: requested 4x, device-applied %dx\n", d3dRtCubeMsaa->GetMultiSampleCount());
+        }
+    }
+
+    // ---- plan_dx.md DX-117 MSAA follow-up: RenderTarget2D MSAA support -- mirrors D3D11's own
+    // already-closed DX-45 methodology exactly: an 8x8 render target requested at 4x MSAA, cleared,
+    // then read back through GetSampleableColorResourceEXT() (the resolved, single-sample resource
+    // ResolveMsaaEXT() writes on unbind) via the same ReadBackRenderTargetFull() helper every other
+    // non-MSAA render-target check above already uses -- proves the real
+    // ResolveSubresource()-on-unbind round-trip produces the exact clear color, not that the device
+    // granted a specific sample count (that's real hardware/driver capability, printed as
+    // diagnostics only, same honest framing DX-45 already established). ----
+    {
+        auto rtMsaa = backend.CreateRenderTarget2D(8, 8, 0 /*DepthFormat::None*/, false, false, 4);
+        auto* d3dRtMsaa = dynamic_cast<D3D12RenderTargetBackend*>(rtMsaa.get());
+        Check(d3dRtMsaa != nullptr, "OO0: D3D12RenderTargetBackend: CreateRenderTarget2D(multiSampleCount=4) "
+              "returns a real backend object (plan_dx.md DX-117)");
+
+        if (d3dRtMsaa != nullptr)
+        {
+            backend.SetRenderTarget2D(rtMsaa.get());
+            backend.Clear(77.0f / 255.0f, 88.0f / 255.0f, 99.0f / 255.0f, 1.0f);
+            backend.SetRenderTarget2D(nullptr); // UnbindAsRenderTarget() -> ResolveMsaaEXT()
+
+            const auto resolved = ReadBackRenderTargetFull(backend, d3dRtMsaa->GetSampleableColorResourceEXT(), 8, 8);
+            bool msaaMatches = resolved.size() == 8u * 8u * 4u;
+            for (std::size_t i = 0; i < 8u * 8u && msaaMatches; ++i)
+                msaaMatches = resolved[i * 4 + 0] == 77 && resolved[i * 4 + 1] == 88 &&
+                             resolved[i * 4 + 2] == 99 && resolved[i * 4 + 3] == 255;
+            Check(msaaMatches,
+                  "OO1: D3D12RenderTargetBackend (MSAA): Clear()+ResolveSubresource()-on-unbind produces "
+                  "the exact color in the resolved, sampleable resource, read back directly from the "
+                  "real GPU resource (plan_dx.md DX-117)");
+            std::printf("    MSAA: requested 4x, device-applied %dx\n", d3dRtMsaa->GetMultiSampleCount());
+        }
+    }
+
     // ================================================================================================
     // plan_dx.md DX-132 / DX-148 / DX-140: the XNA-level public API, through a REAL, WINDOWLESS
     // GraphicsDevice (PresentationParameters::HeadlessEXT).
@@ -3753,6 +4833,74 @@ int main()
                   "mesh's exact red over the green clear, through the D3D12 backend (plan_dx.md DX-148)");
         }
 
+        // ---- DX-155: Model root-bone-index flexibility (Task 916's own rootBoneIndex constructor
+        // parameter) against the real D3D12 backend. Honest scope, mirrors D3D11's own DX-155:
+        // neither Model::Draw() nor CopyAbsoluteBoneTransformsTo() actually consult root_ (confirmed
+        // by reading Model.cpp) -- Draw() picks each mesh's world transform via
+        // mesh->getParentBoneProperty() (the meshParentBones constructor argument), so
+        // rootBoneIndex's only currently-consumed effect anywhere is getRootProperty() returning
+        // it. This proves that (not silently defaulting to bones[0]) AND exercises the full
+        // 5-argument constructor (meshParentBones + rootBoneIndex together, never used by KK6's own
+        // 3-argument-constructor fixture) end to end through a real draw, including meshParentBones
+        // correctly targeting a NON-zero-indexed bone. ----
+        {
+            const X::Color redR(255, 0, 0, 255);
+            const XG::VertexPositionColor vertsR[4] = {
+                { X::Vector3(-1.0f,  1.0f, 0.0f), redR },
+                { X::Vector3(-1.0f, -1.0f, 0.0f), redR },
+                { X::Vector3( 1.0f, -1.0f, 0.0f), redR },
+                { X::Vector3( 1.0f,  1.0f, 0.0f), redR },
+            };
+            XG::VertexBuffer vbR(dev, 4);
+            vbR.SetData(vertsR, 4);
+            const uint16_t indicesR[6] = { 0, 1, 2, 0, 2, 3 };
+            XG::IndexBuffer ibR(dev, 6);
+            ibR.SetData(indicesR, 6);
+
+            XG::BasicEffect fxR(dev);
+            fxR.VertexColorEnabled = true;
+
+            // Two INDEPENDENT top-level bones (no parent/child relationship -- that hierarchy-
+            // chaining path is already covered by KK6's own fixture). bone0R (array index 0) is a
+            // large translation that would move the mesh off-screen if it were ever picked by
+            // mistake; bone1R (array index 1, a NON-zero index) is Identity and is the bone the
+            // mesh is actually parented to AND the requested root.
+            XG::ModelBone bone0R(0, "decoy");
+            bone0R.setTransformProperty(X::Matrix::CreateTranslation(100.0f, 100.0f, 0.0f));
+            XG::ModelBone bone1R(1, "actual_root");
+            bone1R.setTransformProperty(X::Matrix::getIdentityProperty());
+
+            XG::ModelMeshPart partR(&vbR, &ibR, /*numVertices=*/4, /*primitiveCount=*/2,
+                                    /*startIndex=*/0, /*vertexOffset=*/0);
+            XG::ModelMesh meshR(&dev, { &partR });
+            partR.setEffectProperty(&fxR);
+            XG::Model modelR(&dev, { &bone0R, &bone1R }, { &meshR }, { &bone1R }, /*rootBoneIndex=*/1);
+
+            Check(modelR.getRootProperty() == &bone1R,
+                  "VV0: Model: the 5-argument constructor's rootBoneIndex=1 genuinely sets Root to "
+                  "the bone at that NON-zero index, not silently defaulting to bones[0] (plan_dx.md "
+                  "DX-155)");
+
+            auto pxModelR = renderToTarget(X::Color(0, 255, 0, 255), [&] {
+                dev.SetDepthTestEnabled(false);
+                dev.setBlendStateProperty(XG::BlendState::Opaque);
+                dev.setRasterizerStateProperty(XG::RasterizerState::CullNone);
+                modelR.Draw(X::Matrix::getIdentityProperty(),
+                           X::Matrix::getIdentityProperty(),
+                           X::Matrix::getIdentityProperty());
+            });
+            const X::Color centreR = pixelAt(pxModelR, kW / 2, kH / 2);
+            Check(!pxModelR.empty()
+                      && centreR.getRProperty() >= 200
+                      && centreR.getGProperty() <= 60
+                      && centreR.getBProperty() <= 60,
+                  "VV1: Model::Draw() with a real 5-argument-constructor Model (meshParentBones "
+                  "targeting the NON-zero-indexed bone1R, rootBoneIndex=1) genuinely draws the mesh's "
+                  "exact red over the green clear -- proves meshParentBones correctly selected "
+                  "bone1R's own Identity transform, not bone0R's off-screen-translating one, through "
+                  "the real D3D12 backend (plan_dx.md DX-155)");
+        }
+
         // ---- DX-140 (remaining half): Texture2D::SaveAsPng() / FromStream() round-trip. ----
         // NPOT is already closed; this is the encode/decode path, which needs a GraphicsDevice.
         {
@@ -3795,6 +4943,65 @@ int main()
                       "4x4 pattern EXACTLY -- a decoder that dropped, reordered or channel-swapped pixels "
                       "could not pass (plan_dx.md DX-140)");
             }
+        }
+
+        // plan_dx.md DX-121: SpriteBatch::Begin(effect) -- a custom Effect draws sprites through
+        // that effect's own shader (a deliberate RGB color inversion) instead of the stock
+        // sprite2d pipeline, mirroring D3D11's own already-closed DX-71 methodology exactly (same
+        // HLSL source, same Sprite2DVertex contract, same 128-byte constant-buffer layout --
+        // D3D12EffectBackend's own vpSize/uColor/uFloat0 slots are byte-for-byte identical to
+        // D3D11's, DX-121's own closing note already confirmed this). This was blocked when DX-121
+        // itself closed (GraphicsDevice's constructor unconditionally created a real window, which
+        // crashes for D3D12 outside a Proton-managed launch) -- PresentationParameters::HeadlessEXT
+        // (commit b3289ac6) removed that blocker, the same fix DX-132/DX-140/DX-148 already used.
+        {
+            XG::ShaderEffect invertEffect(dev,
+                "struct VSIn { float2 pos:POSITION0; float2 uv:TEXCOORD0; float4 col:COLOR0; };\n"
+                "struct VSOut { float4 pos:SV_Position; float2 uv:TEXCOORD0; float4 col:TEXCOORD1; };\n"
+                "cbuffer CB : register(b0) { float4 vpSize; float4 pad1[4]; float4 uColor; float4 uFloat0; };\n"
+                "VSOut main(VSIn input) {\n"
+                "    VSOut o;\n"
+                "    float2 ndc = (input.pos / vpSize.xy) * 2.0 - 1.0;\n"
+                "    o.pos = float4(ndc.x, -ndc.y, 0.0, 1.0);\n"
+                "    o.uv = input.uv;\n"
+                "    o.col = input.col;\n"
+                "    return o;\n"
+                "}",
+                "Texture2D texSampler : register(t0);\n"
+                "SamplerState texSamplerSampler : register(s0);\n"
+                "struct PSIn { float4 pos:SV_Position; float2 uv:TEXCOORD0; float4 col:TEXCOORD1; };\n"
+                "float4 main(PSIn input) : SV_Target {\n"
+                "    float4 texColor = texSampler.Sample(texSamplerSampler, input.uv);\n"
+                "    return float4(float3(1.0, 1.0, 1.0) - texColor.rgb, 1.0);\n"
+                "}");
+            Check(invertEffect.IsEffectValid(),
+                  "NN0: ShaderEffect (D3D12): a runtime-compiled custom HLSL pair for SpriteBatch's "
+                  "own Sprite2DVertex contract compiles successfully, through the windowless "
+                  "GraphicsDevice (plan_dx.md DX-121)");
+
+            XG::Texture2D redTex(dev, 2, 2);
+            std::vector<X::Color> redPixels(2 * 2, X::Color(255, 0, 0, 255));
+            redTex.SetData(redPixels.data(), 2 * 2);
+
+            auto pxInverted = renderToTarget(kBlack, [&] {
+                XG::SamplerState pointClamp = XG::SamplerState::PointClamp;
+                XG::SpriteBatch invertBatch(dev);
+                invertBatch.Begin(XG::SpriteSortMode::Deferred, XG::BlendState::Opaque, &pointClamp,
+                                  nullptr, nullptr, &invertEffect);
+                invertBatch.Draw(redTex, X::Rectangle(0, 0, kW, kH),
+                                 X::Rectangle(0, 0, 2, 2), X::Color::White);
+                invertBatch.End();
+            });
+            // Solid red (255,0,0) inverted -> exact cyan (0,255,255); alpha forced to 1.0 by the
+            // custom shader itself (not inverted).
+            const auto invertedPx = pixelAt(pxInverted, kW / 2, kH / 2);
+            Check(!pxInverted.empty() && invertedPx.getRProperty() == 0 &&
+                      invertedPx.getGProperty() == 255 && invertedPx.getBProperty() == 255 &&
+                      invertedPx.getAProperty() == 255,
+                  "NN1: D3D12SpriteBatchBackend + SpriteBatch::Begin(effect): sprites draw through "
+                  "the custom Effect's own shader, producing its exact expected (inverted) output "
+                  "color, not the stock sprite2d pipeline's -- through the real public XNA API, off-"
+                  "screen (plan_dx.md DX-121)");
         }
     }
 

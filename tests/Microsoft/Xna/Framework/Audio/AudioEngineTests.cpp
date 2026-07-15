@@ -28,6 +28,7 @@
 #include <string>
 #include <thread>
 #include <vector>
+#include "System/Environment.hpp"
 
 using Microsoft::Xna::Framework::Audio::AudioCategory;
 using Microsoft::Xna::Framework::Audio::AudioEngine;
@@ -911,7 +912,7 @@ TEST(AudioEngineTest, UpdateAfterDisposeDoesNotThrow)
 // trigger the sweep (see SoundBank::PlayCueInternal's own, separate sweep-on-next-play path).
 TEST(AudioEngineTest, UpdateSweepsFinishedFireAndForgetCueWithoutNeedingAnotherPlayCue)
 {
-    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
 
     try
     {
@@ -976,7 +977,7 @@ TEST(AudioEngineTest, RepeatedCategoryOperationsDoNotDuplicateActiveCueRegistryE
 // leave the cue registered until it's actually immediate-stopped or disposed.
 TEST(AudioEngineTest, StopAsAuthoredDoesNotUnregisterFromAudioEngineWhileTailStillPlaying)
 {
-    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
 
     try
     {
@@ -1019,7 +1020,7 @@ TEST(AudioEngineTest, StopAsAuthoredDoesNotUnregisterFromAudioEngineWhileTailSti
 // every frame to keep every active fade progressing.
 TEST(AudioEngineTest, UpdateProgressesInProgressAuthoredFadeWithoutAnyOtherCueQuery)
 {
-    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
 
     try
     {

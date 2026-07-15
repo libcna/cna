@@ -17,8 +17,9 @@ namespace CNA::Internal::Backends::D3DCommon
 {
     using Microsoft::WRL::ComPtr;
 
-    /// Identifies one of the 10 stock HLSL shader variants ported in DX-13-hlsl and compiled to
-    /// DXBC in DX-14-compile (hlsl_shaders.hpp). Mirrors the .hlsl source filenames.
+    /// Identifies one of the stock HLSL shader variants ported in DX-13-hlsl and compiled to DXBC
+    /// in DX-14-compile (hlsl_shaders.hpp) -- originally 10, plus AlphaTestColored3d (DX-136).
+    /// Mirrors the .hlsl source filenames.
     enum class D3DShaderVariant
     {
         Colored3d,
@@ -31,6 +32,10 @@ namespace CNA::Internal::Backends::D3DCommon
         Skinned3d,
         Sprite2d,
         Instanced3d,
+        /// plan_dx.md DX-136: alpha_test3d's stride-24 (VertexPositionColorTexture) sibling --
+        /// gives AlphaTestEffect.VertexColorEnabled a real vertex-color attribute to multiply
+        /// against, which plain AlphaTest3d (stride 20, Position+UV only) never carries.
+        AlphaTestColored3d,
     };
 
     /// Returns the compiled DXBC bytecode (pointer + length) for a variant's vertex shader stage.

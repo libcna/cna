@@ -12,6 +12,7 @@
 #include <future>
 #include <thread>
 #include <vector>
+#include "System/Environment.hpp"
 
 using Microsoft::Xna::Framework::FrameworkDispatcher;
 using Microsoft::Xna::Framework::Audio::AudioChannels;
@@ -40,7 +41,7 @@ TEST(FrameworkDispatcherTest, InitialStateIsEmpty)
 // than a bare call, since a regression here would hang forever, not throw or assert.
 TEST(FrameworkDispatcherTest, UpdateDoesNotDeadlockWhenBufferNeededDisposesTheInstance)
 {
-    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
     FrameworkDispatcher::Streams.clear();
 
     auto instance = std::make_unique<DynamicSoundEffectInstance>(44100, AudioChannels::Stereo);

@@ -15,6 +15,7 @@
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "System/IO/MemoryStream.hpp"
+#include "System/Environment.hpp"
 
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Rectangle;
@@ -1063,7 +1064,7 @@ TEST_F(SaveAsJpegTest, QualityEnvVarIsHonoredWithoutThrowing)
 {
     // FNA_GRAPHICS_JPEG_SAVE_QUALITY: verify the env-var path (Task 264 fix for the Task 261
     // audit finding that quality was hardcoded to 100) parses and applies without throwing.
-    setenv("FNA_GRAPHICS_JPEG_SAVE_QUALITY", "50", 1);
+    System::Environment::SetEnvironmentVariable("FNA_GRAPHICS_JPEG_SAVE_QUALITY", "50");
 
     Texture2D src(gd, 2, 2);
     std::vector<Color> red(4, Color(255, 0, 0, 255));
@@ -1073,7 +1074,7 @@ TEST_F(SaveAsJpegTest, QualityEnvVarIsHonoredWithoutThrowing)
     EXPECT_NO_THROW(src.SaveAsJpeg(&writeStream, 2, 2));
     auto bytes = writeStream.GetBuffer();
 
-    unsetenv("FNA_GRAPHICS_JPEG_SAVE_QUALITY");
+    System::Environment::SetEnvironmentVariable("FNA_GRAPHICS_JPEG_SAVE_QUALITY", ""); // empty value deletes it
 
     ASSERT_FALSE(bytes.empty());
     MemoryStream readStream(bytes.data(), static_cast<System::IO::intcs>(bytes.size()));

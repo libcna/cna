@@ -19,6 +19,7 @@
 #include <string>
 #include <thread>
 #include <vector>
+#include "System/Environment.hpp"
 
 using Microsoft::Xna::Framework::Audio::AudioCategory;
 using Microsoft::Xna::Framework::Audio::AudioEngine;
@@ -1133,7 +1134,7 @@ TEST(AudioCategoryTest, PauseResumeStopRouteToRealActiveCueInCategory)
 // flaky empirically with the short fixture: ~30-40% failure rate over repeated full-suite runs).
 TEST(AudioCategoryTest, StopAsAuthoredOnCategoryLeavesRealActiveCueStoppingNotStopped)
 {
-    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
 
     try
     {
@@ -1228,7 +1229,7 @@ TEST(AudioCategoryTest, PauseAndResumeAffectAllActiveCuesInCategory)
 // it), so it's a separate fixture/test from PauseResumeStopRouteToRealActiveCueInCategory above.
 TEST(AudioCategoryTest, SetVolumeReappliesToAlreadyPlayingCueInstance)
 {
-    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
 
     try
     {
@@ -1281,7 +1282,7 @@ TEST(AudioCategoryTest, SetVolumeReappliesToAlreadyPlayingCueInstance)
 // pre-P9-CATEGORY-001 code either -- a completeness test, not a bug reproduction.
 TEST(AudioCategoryTest, SetVolumeAppliesToAllActivePlayingCueInstancesInCategory)
 {
-    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
 
     try
     {
@@ -1380,7 +1381,7 @@ TEST(AudioCategoryTest, InequalityOperatorMatchesNegatedEquals)
 // completely unaffected.
 TEST(AudioCategoryTest, InstanceLimitFailRejectsNewCueOnceLimitReached)
 {
-    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
 
     try
     {
@@ -1425,7 +1426,7 @@ TEST(AudioCategoryTest, InstanceLimitFailRejectsNewCueOnceLimitReached)
 // regression lock, not a new fix.
 TEST(AudioCategoryTest, InstanceLimitStillCountsAPausedCue)
 {
-    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
 
     try
     {
@@ -1472,7 +1473,7 @@ TEST(AudioCategoryTest, InstanceLimitStillCountsAPausedCue)
 // play_sound()'s SOUND_STATE_FADE_IN using category->fadeInMS (FACT_internal.c).
 TEST(AudioCategoryTest, InstanceLimitReplaceOldestFadesOutVictimAndFadesInNewCue)
 {
-    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
 
     try
     {
@@ -1530,7 +1531,7 @@ TEST(AudioCategoryTest, InstanceLimitReplaceOldestFadesOutVictimAndFadesInNewCue
 // immediate stop (Cue::ForceFadeOutForInstanceLimit's fadeOutMS==0 branch).
 TEST(AudioCategoryTest, InstanceLimitReplaceLowestPriorityEvictsLowestPriorityRegardlessOfPlayOrder)
 {
-    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
 
     try
     {
@@ -1580,7 +1581,7 @@ TEST(AudioCategoryTest, InstanceLimitReplaceLowestPriorityEvictsLowestPriorityRe
 
 TEST(AudioCategoryTest, PauseOnParentCategoryPausesCueInChildCategory)
 {
-    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
 
     try
     {
@@ -1614,7 +1615,7 @@ TEST(AudioCategoryTest, PauseOnParentCategoryPausesCueInChildCategory)
 
 TEST(AudioCategoryTest, StopOnParentCategoryStopsCueInChildCategory)
 {
-    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
 
     try
     {
@@ -1654,7 +1655,7 @@ TEST(AudioCategoryTest, StopOnParentCategoryStopsCueInChildCategory)
 // getter (matches real XNA -- Volume is a command-only property in FNA's own AudioCategory.cs).
 TEST(AudioCategoryTest, SetVolumeOnParentCategoryCascadesToChildCategory)
 {
-    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
 
     AudioEngine& engine = CategoryHierarchyEngine();
     // "HierChild" is authored as category index 1 in BuildCategoryHierarchyXgsFixtureBytes above
