@@ -67,10 +67,10 @@ onto `.cnb`, and `RegisterCnbLoader<T>`.
   metadata field (`colorKey`) is included *because* it only needs `Texture2D`'s existing
   `GetData`/`SetData(Color*)` API — anything requiring a genuinely new `Texture2D`/`SoundEffect`
   capability (premultiplied-alpha conversion, atlas sub-rects, mip generation, ...) is explicitly
-  deferred (see CNB-11).
+  deferred (see CNB-10).
 - Fixing `ModelTypeReader`'s pre-existing behavioral gaps versus FNA (bone hierarchy, `ParentBone`,
   `BoundingSphere`, `Tag` — see `docs/model-content-pipeline-support.md`) is **not required** by this
-  plan, but CNB-25 requires an explicit decision (fix now vs. deliberately deferred with a note), not
+  plan, but CNB-21 requires an explicit decision (fix now vs. deliberately deferred with a note), not
   silent carry-forward.
 
 ## Legend
@@ -178,10 +178,10 @@ onto `.cnb`, and `RegisterCnbLoader<T>`.
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| CNB-24 | Implement `ContentManager::RegisterCnbLoader<T>(const std::string& typeName, CnbLoaderFn<T> factory)` per `cnb.md`'s "Custom loaders" section — a second registry keyed by the `.cnb` `"type"` string, separate from the existing `std::type_index`-keyed `RegisterTypeReader<T>()` | ⬜ | Not part of the XNA 4.0 API surface — mark `NOXNA` per `CLAUDE.md` |
-| CNB-25 | Wire the fallback into the `.cnb` dispatch path: built-in per-type `type` values (`"SpriteFont"`, `"Model"`, ...) checked first, then this registry, then a clear "unknown `.cnb` type" `ContentLoadException` naming the unrecognized `type` string | ⬜ | |
-| CNB-26 | Tests: two distinct `.cnb` `type` names registered via two different factories, both producing the same `T`, both load correctly; an unregistered `type` throws the CNB-25 error; a registered factory can recursively `Load<...>()` a file it references | ⬜ | |
-| CNB-27 | Worked example (in `docs/` or `examples/`) showing a game registering a custom `.cnb` type end-to-end, matching `cnb.md`'s `"EnemyDefinition"`/`"LootTable"` illustration | ⬜ | Milestone M4 |
+| CNB-24 | Implement `ContentManager::RegisterCnbLoader<T>(const std::string& typeName, CnbLoaderFn<T> factory)` per `cnb.md`'s "Custom loaders" section — a second registry keyed by the `.cnb` `"type"` string, separate from the existing `std::type_index`-keyed `RegisterTypeReader<T>()` | ✅ | `ContentManager.hpp` (must live in the header, unlike CNB-1..23 — it's a template). Storage: `cnbNamedLoaders_` nests `std::type_index` → (`.cnb` type string → `std::any`-erased `CnbLoaderFn<T>`). `CnbLoaderFn<T>`'s first parameter is the raw JSON `std::string`, not a `JsonValue` (CNA has no JSON object type) — `cnb.md` updated to match. Marked `NOXNA` per `CLAUDE.md` |
+| CNB-25 | Wire the fallback into the `.cnb` dispatch path: built-in per-type `type` values (`"SpriteFont"`, `"Model"`, ...) checked first, then this registry, then a clear "unknown `.cnb` type" `ContentLoadException` naming the unrecognized `type` string | ✅ | Implemented as a private nested `GenericCnbTypeReader<T>`, lazily auto-registered (via the existing `RegisterTypeReader<T>()`) the first time `RegisterCnbLoader<T>()` is called for a `T` with no reader yet. `RegisterCnbLoader<T>` throws `std::logic_error` immediately if a reader already exists for `T`, since that reader would never consult this table — no silent dead registration |
+| CNB-26 | Tests: two distinct `.cnb` `type` names registered via two different factories, both producing the same `T`, both load correctly; an unregistered `type` throws the CNB-25 error; a registered factory can recursively `Load<...>()` a file it references | ✅ | `tests/Microsoft/Xna/Framework/Content/CnbCustomLoaderTests.cpp` (4 cases) — also covers the CNB-25 "already owned" guard (not originally listed here, added since it's real, easily-hit-by-mistake behavior) |
+| CNB-27 | Worked example (in `docs/` or `examples/`) showing a game registering a custom `.cnb` type end-to-end, matching `cnb.md`'s `"EnemyDefinition"`/`"LootTable"` illustration | ✅ | Added directly to `cnb.md`'s "Custom loaders" section (matches how that section already carried the design, now updated with the real signature + a runnable-equivalent snippet). Full-suite regression: 4404 tests, 4402 passed, same 2 pre-existing hardware skips, 0 failures. Milestone M4 reached |
 
 ---
 

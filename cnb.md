@@ -303,24 +303,50 @@ game code chosen at runtime by the `.cnb` itself — e.g. a game with both `"Ene
 parsing functions, not one.
 
 A second registry closes that gap: keyed by the `.cnb` `"type"` string instead of `std::type_index`.
+**Implemented** (`plan_cnb.md` CNB-24/25, `ContentManager.hpp`):
 
 ```cpp
-// Sketch only.
 template <typename T>
-using CnbLoaderFn = std::function<T(const JsonValue& cnbDocument, ContentManager& cm)>;
+using CnbLoaderFn = std::function<T(const std::string& cnbJson, ContentManager& cm)>;
 
 template <typename T>
 void ContentManager::RegisterCnbLoader(const std::string& typeName, CnbLoaderFn<T> factory);
 ```
 
-When a `.cnb`'s `"type"` doesn't match one of CNA's own built-in per-type conventions (`"SpriteFont"`,
-`"Model"`, ...) for the requested `T`, `LoadCnb` falls through to this table, looks up `typeName`, and
-invokes the registered factory with the parsed JSON document and the owning `ContentManager` (so the
-factory can recursively `Load<...>()` any files it references, same as a built-in reader would). No
-`ContentTypeReader<T>` subclass or CNA core change is needed per game-specific `.cnb` `type` — same
-"don't grow CNA core for one game's data" principle already used for the plain game-specific-`type`
-row in the table above, just now with the dispatch key coming from the `.cnb` file itself instead of
-requiring the caller to already know which of several shapes it's asking for.
+One deviation from the original sketch: `CnbLoaderFn`'s first parameter is the raw `.cnb` JSON
+text (`const std::string&`), not a `JsonValue` — CNA has no JSON *object* type, only the
+hand-rolled string-scanning helpers `.cnb` readers already use throughout this document, so the
+factory does its own field extraction the same way `SpriteFontTypeReader`/`ModelTypeReader`/etc.
+do.
+
+The first time `RegisterCnbLoader<T>()` is called for a given `T`, it lazily registers a small
+built-in `GenericCnbTypeReader<T>` for that `T` (via the existing `RegisterTypeReader<T>()`) — so
+no change to `Load<T>()`'s own dispatch was needed. That generic reader parses the envelope, looks
+up the `.cnb`'s `"type"` in the table, and invokes whichever factory matches. This only applies to
+a `T` with **no existing reader already registered** (built-in or otherwise) — `RegisterCnbLoader`
+throws immediately if one already exists for `T`, since that reader would never consult this table.
+No `ContentTypeReader<T>` subclass or CNA core change is needed per game-specific `.cnb` `type` —
+same "don't grow CNA core for one game's data" principle already used for the plain
+game-specific-`type` row in the table above, just now with the dispatch key coming from the `.cnb`
+file itself instead of requiring the caller to already know which of several shapes it's asking
+for.
+
+Worked example, matching the `"EnemyDefinition"`/`"LootTable"` case described above (see
+`tests/Microsoft/Xna/Framework/Content/CnbCustomLoaderTests.cpp` for the full, passing test):
+
+```cpp
+struct GameData { std::string kind; };
+
+cm.RegisterCnbLoader<GameData>("EnemyDefinition",
+    [](const std::string& json, ContentManager&) { GameData d; d.kind = "Enemy"; return d; });
+cm.RegisterCnbLoader<GameData>("LootTable",
+    [](const std::string& json, ContentManager&) { GameData d; d.kind = "Loot"; return d; });
+
+// goblin.cnb: {"cnbVersion": 1, "type": "EnemyDefinition"}
+// chest.cnb:  {"cnbVersion": 1, "type": "LootTable"}
+GameData enemy = cm.Load<GameData>("goblin"); // kind == "Enemy"
+GameData loot  = cm.Load<GameData>("chest");  // kind == "Loot"
+```
 
 This is the closest practical C++ analog of how real XNA's `.xnb` format let a reader be identified
 purely by an assembly-qualified name embedded in the file, decoupled from whatever the calling code
