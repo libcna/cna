@@ -32,6 +32,9 @@ TEST(GraphicsBackendCompileDefinitionsTest, ExactlyOneGraphicsBackendIsSelected)
 #ifdef CNA_BACKEND_SOFTWARE
     ++enabled;
 #endif
+#ifdef CNA_BACKEND_CANVAS
+    ++enabled;
+#endif
 
     EXPECT_EQ(enabled, 1);
 }

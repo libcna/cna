@@ -16,6 +16,9 @@ on it) rather than assuming either way.
   (SDL_Renderer/EasyGL/Vulkan/Bgfx). Start here for "does backend X support feature Y."
 - **[`webgpu-backend.md`](webgpu-backend.md)** — current status, build instructions and explicit
   limitations for the experimental fifth backend; detailed remaining work is in `../plan_webgpu.md`.
+- **[`canvas-backend.md`](canvas-backend.md)** — current status for the Emscripten-only HTML Canvas
+  2D backend, incl. a manual browser verification checklist (this dev loop has no real browser DOM
+  to pixel-verify against); detailed task breakdown is in `../plan_canvas.md`.
 - **`xna-4-api-coverage.md`** — current per-class Graphics coverage table plus the overall
   per-namespace XNA 4.0 API-surface numbers (227/245 = 92.7%, computed 2026-07-11).
 - **[`migration-guide.md`](migration-guide.md)** — practical guide for porting an existing XNA/FNA
@@ -72,6 +75,9 @@ Kept for their investigation methodology and root-cause detail, not as current s
 - `android-graphics-limitations.md`, `web-emscripten-graphics-limitations.md` — per-platform
   Graphics constraints (Emscripten, Android NDK).
 - `sdl-renderer-2d-completeness.md` — SDL_Renderer's own full Phase 70 2D audit.
+- `canvas-backend.md` — the CANVAS (HTML Canvas 2D) backend's own completeness status; unlike the
+  others here, its ✅ marks mean "implemented and structurally reviewed," not "pixel-verified" — see
+  the doc's own caveat.
 - `fna-reference-harness.md` — the differential-testing infra (`tools/fna-reference/`) mentioned
   in `../README.md`'s verification-methodology bullet.
 

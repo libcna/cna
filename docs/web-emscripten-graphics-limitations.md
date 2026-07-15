@@ -11,6 +11,18 @@ activated the native `wgpu-native` backend on 2026-07-12, but browser/Emscripten
 separate unimplemented workstream tracked in `plan_webgpu.md`. Nothing below should be read as a
 status report for the native WebGPU backend.
 
+> **2026-07-15 update, scoped to the new `CANVAS` backend (`plan_canvas.md`), not EasyGL**: this
+> document's own "no `.sdl-prebuilt-emscripten` directory... no `cmake-build-*emscripten*` directory
+> has ever existed" claim below is now out of date in one narrow respect — bringing up `CANVAS` on
+> `feature/canvas` required a real `emcmake`/`emcc` 6.0.2 configure+build, which succeeded and
+> produced exactly such a directory (`cmake-build-canvas`) for the first time in this project's
+> history, confirming `emsdk` is genuinely available in this dev environment. `CnaTests` links and a
+> real, backend-agnostic GTest suite genuinely passes under `node CnaTests.js` for `CANVAS`. This
+> does **not** extend to `EasyGL`/WebGL2 specifically — nothing below about that path has been
+> re-verified — but the *tooling* premise ("no one has ever actually run `emcc` here") no longer
+> holds project-wide. See `docs/canvas-backend.md` and `plan_canvas.md` for what was actually
+> verified.
+
 ## Status headline: real build scaffolding, zero verified execution
 
 The CMake/link-flag infrastructure below is real, non-trivial engineering — not a stub. However:

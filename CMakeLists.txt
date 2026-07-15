@@ -91,8 +91,8 @@ if(EMSCRIPTEN OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
 else()
     set(_cna_default_backend "SDL_RENDERER")
 endif()
-set(CNA_GRAPHICS_BACKEND "${_cna_default_backend}" CACHE STRING "Graphics backend to use (SDL_RENDERER, EASYGL, BGFX, VULKAN, WEBGPU, HEADLESS, SOFTWARE, D3D11, or D3D12)")
-set_property(CACHE CNA_GRAPHICS_BACKEND PROPERTY STRINGS "SDL_RENDERER" "EASYGL" "BGFX" "VULKAN" "WEBGPU" "HEADLESS" "SOFTWARE" "D3D11" "D3D12")
+set(CNA_GRAPHICS_BACKEND "${_cna_default_backend}" CACHE STRING "Graphics backend to use (SDL_RENDERER, EASYGL, BGFX, VULKAN, WEBGPU, HEADLESS, SOFTWARE, D3D11, D3D12, or CANVAS)")
+set_property(CACHE CNA_GRAPHICS_BACKEND PROPERTY STRINGS "SDL_RENDERER" "EASYGL" "BGFX" "VULKAN" "WEBGPU" "HEADLESS" "SOFTWARE" "D3D11" "D3D12" "CANVAS")
 
 option(CNA_BACKEND_SDL_RENDERER "Enable SDL_Renderer graphics backend" OFF)
 option(CNA_BACKEND_EASY_GL "Enable easy-gl graphics backend" OFF)
@@ -103,9 +103,12 @@ option(CNA_BACKEND_HEADLESS "Enable Headless (no GPU/window) graphics backend" O
 option(CNA_BACKEND_SOFTWARE "Enable Software (CPU rasterizer) graphics backend" OFF)
 option(CNA_BACKEND_D3D11 "Enable Direct3D 11 graphics backend (Windows only)" OFF)
 option(CNA_BACKEND_D3D12 "Enable Direct3D 12 graphics backend (Windows only)" OFF)
+# plan_canvas.md: HTML Canvas 2D backend -- Emscripten-only (design decision 1), a browser-native,
+# GPU-free 2D-only backend using canvas.getContext('2d') instead of EASYGL's WebGL2 context.
+option(CNA_BACKEND_CANVAS "Enable HTML Canvas 2D graphics backend (Emscripten only)" OFF)
 
 set(_cna_explicit_backend_selection OFF)
-if(CNA_BACKEND_SDL_RENDERER OR CNA_BACKEND_EASY_GL OR CNA_BACKEND_BGFX OR CNA_BACKEND_VULKAN OR CNA_BACKEND_WEBGPU OR CNA_BACKEND_HEADLESS OR CNA_BACKEND_SOFTWARE OR CNA_BACKEND_D3D11 OR CNA_BACKEND_D3D12)
+if(CNA_BACKEND_SDL_RENDERER OR CNA_BACKEND_EASY_GL OR CNA_BACKEND_BGFX OR CNA_BACKEND_VULKAN OR CNA_BACKEND_WEBGPU OR CNA_BACKEND_HEADLESS OR CNA_BACKEND_SOFTWARE OR CNA_BACKEND_D3D11 OR CNA_BACKEND_D3D12 OR CNA_BACKEND_CANVAS)
     set(_cna_explicit_backend_selection ON)
 endif()
 
@@ -138,6 +141,9 @@ if(_cna_explicit_backend_selection)
     if(CNA_BACKEND_D3D12)
         list(APPEND _cna_enabled_backends "D3D12")
     endif()
+    if(CNA_BACKEND_CANVAS)
+        list(APPEND _cna_enabled_backends "CANVAS")
+    endif()
 
     list(LENGTH _cna_enabled_backends _cna_enabled_backends_count)
     if(NOT _cna_enabled_backends_count EQUAL 1)
@@ -156,6 +162,16 @@ if((CNA_GRAPHICS_BACKEND STREQUAL "D3D11" OR CNA_GRAPHICS_BACKEND STREQUAL "D3D1
         "CNA: ${CNA_GRAPHICS_BACKEND} backend only builds when targeting Windows. Either build "
         "natively on Windows, or cross-compile from Linux with "
         "-DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64.cmake")
+endif()
+
+# plan_canvas.md design decision 1: HTML Canvas 2D is a browser DOM API and cannot exist outside
+# an Emscripten/WebAssembly build -- same hard-gate shape as the D3D11/D3D12 Windows-only check
+# just above, new condition.
+if(CNA_GRAPHICS_BACKEND STREQUAL "CANVAS" AND NOT EMSCRIPTEN)
+    message(FATAL_ERROR
+        "CNA: CANVAS backend only builds when targeting Emscripten (HTML Canvas is a browser DOM "
+        "API). Configure with -DCMAKE_TOOLCHAIN_FILE=\$EMSDK/upstream/emscripten/cmake/Modules/"
+        "Platform/Emscripten.cmake (or use emcmake).")
 endif()
 
 if(CNA_GRAPHICS_BACKEND STREQUAL "EASYGL")
@@ -250,6 +266,11 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "D3D12")
     set(BACKEND_DIR "src/CNA/Internal/Backends/D3D12")
     set(BACKEND_TARGET "cna_backend_graphics_d3d12")
     add_compile_definitions(CNA_BACKEND_D3D12)
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "CANVAS")
+    message(STATUS "CNA: Using CANVAS (HTML Canvas 2D) graphics backend")
+    set(BACKEND_DIR "src/CNA/Internal/Backends/Canvas")
+    set(BACKEND_TARGET "cna_backend_graphics_canvas")
+    add_compile_definitions(CNA_BACKEND_CANVAS)
 else()
 
     message(FATAL_ERROR "CNA: Unknown graphics backend: ${CNA_GRAPHICS_BACKEND}")
@@ -329,6 +350,10 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "D3D12")
     # added by DX-121 (D3D12EffectBackend's runtime D3DCompile() path) -- confirmed safe to link in
     # isolation by D3D11's own DX-14-compile/DX-58 precedent.
     target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 d3d12 dxgi d3dcompiler cna_backend_graphics_d3dcommon)
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "CANVAS")
+    # plan_canvas.md design decision 2: reuses the existing SDL-created window/canvas element,
+    # so still links SDL3 even though actual rendering goes through EM_JS/Canvas2D, not SDL_Renderer.
+    target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3)
 endif()
 
 file(GLOB_RECURSE CNA_SOURCES CONFIGURE_DEPENDS
@@ -6747,6 +6772,18 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D12")
     # dxgi.dll; a permanently-registered, always-crashing CTest would just be noise. Built so a
     # developer/script can still run it by hand for a real, up-to-date reading.
     cna_d3d12_test(cna_diag_d3d12_swapchain examples/d3d12_swapchain_diag.cpp)
+endif()
+
+# plan_canvas.md CANVAS-15: structural smoke-test build for the CANVAS (HTML Canvas 2D) backend.
+# Deliberately NOT registered as a CTest (mirrors cna_diag_software's/d3d12_swapchain_diag's own
+# "real executable, not a ctest" precedent above): SDL_Init(SDL_INIT_VIDEO) itself throws under
+# `node CnaTests.js` (no real browser DOM -- confirmed empirically, "window is not defined"),
+# before any Canvas-specific code even runs. This target only proves the smoke test configures and
+# links here; it needs a real browser (e.g. `emrun`) against a page with a real <canvas> element to
+# actually produce a PASS/FAIL (Design decision 9).
+if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "CANVAS")
+    add_executable(cna_test_canvas_smoke examples/canvas_smoke_test.cpp)
+    target_link_libraries(cna_test_canvas_smoke PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
 endif()
 
 # --- Task 6.1: real two-process ENet loopback test harness ---
