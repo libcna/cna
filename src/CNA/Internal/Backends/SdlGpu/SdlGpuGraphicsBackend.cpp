@@ -1106,6 +1106,16 @@ namespace CNA::Internal::Backends::SdlGpu
         scissorH_ = h;
     }
 
+    void SdlGpuGraphicsBackend::ApplySamplerState(int slot, int filter, int addressU, int addressV, int maxAnisotropy)
+    {
+        if (slot < 0 || slot >= static_cast<int>(samplerSlots_.size()))
+            return;
+        samplerSlots_[slot].filter = filter;
+        samplerSlots_[slot].addressU = addressU;
+        samplerSlots_[slot].addressV = addressV;
+        samplerSlots_[slot].maxAnisotropy = maxAnisotropy;
+    }
+
     void SdlGpuGraphicsBackend::ApplyScissorForPass(SDL_GPURenderPass* pass, int targetWidth, int targetHeight) const
     {
         SDL_Rect rect{};
@@ -2021,11 +2031,10 @@ namespace CNA::Internal::Backends::SdlGpu
         const Matrix wvp = world * view * projection;
         FillExtUniforms(command.uniforms, wvp, params);
         command.texture = static_cast<const SdlGpuTextureBackend*>(params.texture0);
-        // plan_sdlgpu.md SDLGPU-21: ApplySamplerState() (per-slot dynamic sampler state for 3D
-        // draws) is not implemented yet -- always samples Linear+Clamp for now.
-        command.textureFilter = 0;
-        command.addressU = 1;
-        command.addressV = 1;
+        // SDLGPU-21: real per-slot dynamic sampler state (GraphicsDevice.SamplerStates[0]).
+        command.textureFilter = samplerSlots_[0].filter;
+        command.addressU = samplerSlots_[0].addressU;
+        command.addressV = samplerSlots_[0].addressV;
 
         if (ib != nullptr)
         {
@@ -2070,9 +2079,9 @@ namespace CNA::Internal::Backends::SdlGpu
         FillExtUniforms(command.uniforms, wvp, params);
         FillLitLightUniforms(command.lightUniforms, params);
         command.texture = static_cast<const SdlGpuTextureBackend*>(params.texture0);
-        command.textureFilter = 0;
-        command.addressU = 1;
-        command.addressV = 1;
+        command.textureFilter = samplerSlots_[0].filter;
+        command.addressU = samplerSlots_[0].addressU;
+        command.addressV = samplerSlots_[0].addressV;
 
         if (ib != nullptr)
         {
@@ -2556,9 +2565,9 @@ namespace CNA::Internal::Backends::SdlGpu
         const Matrix wvp = world * view * projection;
         FillAlphaTestUniforms(command.uniforms, wvp, params);
         command.texture = static_cast<const SdlGpuTextureBackend*>(params.texture0);
-        command.textureFilter = 0;
-        command.addressU = 1;
-        command.addressV = 1;
+        command.textureFilter = samplerSlots_[0].filter;
+        command.addressU = samplerSlots_[0].addressU;
+        command.addressV = samplerSlots_[0].addressV;
 
         if (ib != nullptr)
         {
@@ -2602,9 +2611,14 @@ namespace CNA::Internal::Backends::SdlGpu
         FillExtUniforms(command.uniforms, wvp, params);
         command.texture0 = static_cast<const SdlGpuTextureBackend*>(params.texture0);
         command.texture1 = static_cast<const SdlGpuTextureBackend*>(params.texture1);
-        command.textureFilter = 0;
-        command.addressU = 1;
-        command.addressV = 1;
+        // SDLGPU-21: texture0/texture1 are independent slots (GraphicsDevice.SamplerStates[0]/[1]
+        // -- real XNA lets DualTextureEffect's two textures sample differently).
+        command.texture0Filter = samplerSlots_[0].filter;
+        command.texture0AddressU = samplerSlots_[0].addressU;
+        command.texture0AddressV = samplerSlots_[0].addressV;
+        command.texture1Filter = samplerSlots_[1].filter;
+        command.texture1AddressU = samplerSlots_[1].addressU;
+        command.texture1AddressV = samplerSlots_[1].addressV;
 
         if (ib != nullptr)
         {
@@ -2664,9 +2678,11 @@ namespace CNA::Internal::Backends::SdlGpu
         FillEnvMapParams(command.envMapUniforms, params);
         command.texture = static_cast<const SdlGpuTextureBackend*>(params.texture0);
         command.envMapTexture = envMapTexture;
-        command.textureFilter = 0;
-        command.addressU = 1;
-        command.addressV = 1;
+        // SDLGPU-21: diffuse texture0 gets real per-slot dynamic sampler state; the env map
+        // itself stays fixed Linear+Clamp regardless (see RenderEnvMapDraws' own comment).
+        command.textureFilter = samplerSlots_[0].filter;
+        command.addressU = samplerSlots_[0].addressU;
+        command.addressV = samplerSlots_[0].addressV;
 
         if (ib != nullptr)
         {
@@ -2712,9 +2728,9 @@ namespace CNA::Internal::Backends::SdlGpu
         FillSkinnedBoneUniforms(command.boneUniforms, params);
         FillSkinnedLightUniforms(command.lightUniforms, params);
         command.texture = static_cast<const SdlGpuTextureBackend*>(params.texture0);
-        command.textureFilter = 0;
-        command.addressU = 1;
-        command.addressV = 1;
+        command.textureFilter = samplerSlots_[0].filter;
+        command.addressU = samplerSlots_[0].addressU;
+        command.addressV = samplerSlots_[0].addressV;
 
         if (ib != nullptr)
         {
@@ -2793,12 +2809,13 @@ namespace CNA::Internal::Backends::SdlGpu
             vbBinding.buffer = command.uploadedVertexBuffer;
             SDL_BindGPUVertexBuffers(pass, 0, &vbBinding, 1);
 
-            SDL_GPUSampler* sampler = GetOrCreateSampler(command.textureFilter, command.addressU, command.addressV);
+            // SDLGPU-21: texture0/texture1 are independent GraphicsDevice.SamplerStates[0]/[1]
+            // slots in real XNA -- each gets its own sampler object, not a shared one.
             SDL_GPUTextureSamplerBinding samplerBindings[2]{};
             samplerBindings[0].texture = command.texture0->Texture();
-            samplerBindings[0].sampler = sampler;
+            samplerBindings[0].sampler = GetOrCreateSampler(command.texture0Filter, command.texture0AddressU, command.texture0AddressV);
             samplerBindings[1].texture = command.texture1->Texture();
-            samplerBindings[1].sampler = sampler;
+            samplerBindings[1].sampler = GetOrCreateSampler(command.texture1Filter, command.texture1AddressU, command.texture1AddressV);
             SDL_BindGPUFragmentSamplers(pass, 0, samplerBindings, 2);
 
             if (command.indexed && command.uploadedIndexBuffer != nullptr)

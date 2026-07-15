@@ -547,6 +547,20 @@ namespace CNA::Internal::Backends::SdlGpu
             int stencilReference = 0;
         };
 
+        // SDLGPU-21: one XNA GraphicsDevice.SamplerStates[slot] snapshot, stored per-slot by
+        // ApplySamplerState() and read directly (not via RenderStateSnapshot) into each
+        // DrawCommand's own pre-existing textureFilter/addressU/addressV fields at Queue*Draw
+        // time. Defaults mirror SamplerState.LinearWrap, the real XNA GraphicsDevice default
+        // (SpriteCommand's own defaults deliberately differ -- SpriteBatch's real XNA default is
+        // SamplerState.LinearClamp, a distinct, correct behavioral difference, not an inconsistency).
+        struct SamplerSlotState
+        {
+            int filter = 0;
+            int addressU = 0;
+            int addressV = 0;
+            int maxAnisotropy = 4;
+        };
+
         struct SpriteCommand
         {
             // Raw native handle rather than a concrete backend pointer -- SpriteBatch can draw
@@ -621,8 +635,8 @@ namespace CNA::Internal::Backends::SdlGpu
             RenderStateSnapshot renderState;  ///< SDLGPU-18/19/20
             const SdlGpuTextureBackend* texture = nullptr;
             int textureFilter = 0;
-            int addressU = 1;
-            int addressV = 1;
+            int addressU = 0;
+            int addressV = 0;
             bool hasVertexColor = false;  ///< stride 24 vs stride 20
             DrawTarget target;  ///< default = swapchain
             SDL_GPUBuffer* uploadedVertexBuffer = nullptr;
@@ -647,8 +661,8 @@ namespace CNA::Internal::Backends::SdlGpu
             RenderStateSnapshot renderState;  ///< SDLGPU-18/19/20
             const SdlGpuTextureBackend* texture = nullptr;
             int textureFilter = 0;
-            int addressU = 1;
-            int addressV = 1;
+            int addressU = 0;
+            int addressV = 0;
             DrawTarget target;  ///< default = swapchain
             SDL_GPUBuffer* uploadedVertexBuffer = nullptr;
             SDL_GPUBuffer* uploadedIndexBuffer = nullptr;
@@ -674,8 +688,8 @@ namespace CNA::Internal::Backends::SdlGpu
             RenderStateSnapshot renderState;  ///< SDLGPU-18/19/20
             const SdlGpuTextureBackend* texture = nullptr;
             int textureFilter = 0;
-            int addressU = 1;
-            int addressV = 1;
+            int addressU = 0;
+            int addressV = 0;
             std::size_t stride = 20;  ///< 20, 24, or 32 -- selects vertex layout + shader
             DrawTarget target;  ///< default = swapchain
             SDL_GPUBuffer* uploadedVertexBuffer = nullptr;
@@ -703,9 +717,14 @@ namespace CNA::Internal::Backends::SdlGpu
             RenderStateSnapshot renderState;  ///< SDLGPU-18/19/20
             const SdlGpuTextureBackend* texture0 = nullptr;
             const SdlGpuTextureBackend* texture1 = nullptr;
-            int textureFilter = 0;
-            int addressU = 1;
-            int addressV = 1;
+            ///@{ SDLGPU-21: independent per-slot sampler state (GraphicsDevice.SamplerStates[0]/[1]).
+            int texture0Filter = 0;
+            int texture0AddressU = 0;
+            int texture0AddressV = 0;
+            int texture1Filter = 0;
+            int texture1AddressU = 0;
+            int texture1AddressV = 0;
+            ///@}
             bool hasVertexColor = false;  ///< stride 24 vs stride 20
             DrawTarget target;  ///< default = swapchain
             SDL_GPUBuffer* uploadedVertexBuffer = nullptr;
@@ -735,8 +754,8 @@ namespace CNA::Internal::Backends::SdlGpu
             const SdlGpuTextureBackend* texture = nullptr;
             SDL_GPUTexture* envMapTexture = nullptr;
             int textureFilter = 0;
-            int addressU = 1;
-            int addressV = 1;
+            int addressU = 0;
+            int addressV = 0;
             DrawTarget target;  ///< default = swapchain
             SDL_GPUBuffer* uploadedVertexBuffer = nullptr;
             SDL_GPUBuffer* uploadedIndexBuffer = nullptr;
@@ -768,8 +787,8 @@ namespace CNA::Internal::Backends::SdlGpu
             RenderStateSnapshot renderState;  ///< SDLGPU-18/19/20
             const SdlGpuTextureBackend* texture = nullptr;
             int textureFilter = 0;
-            int addressU = 1;
-            int addressV = 1;
+            int addressU = 0;
+            int addressV = 0;
             DrawTarget target;  ///< default = swapchain
             SDL_GPUBuffer* uploadedVertexBuffer = nullptr;
             SDL_GPUBuffer* uploadedIndexBuffer = nullptr;
@@ -890,6 +909,18 @@ namespace CNA::Internal::Backends::SdlGpu
          * `ApplyRasterizerState`'s own `scissorTestEnable` flag (a disabled scissor test uses the
          * full render-target extents instead of this rect, matching "no clipping"). */
         void SetScissorRect(int x, int y, int w, int h) override;
+        /**
+         * @brief Real per-slot `SamplerState` mapping (`SDLGPU-21`) for direct 3D draws --
+         * `SpriteBatch`'s own per-draw sampler selection (`SetSamplerFilter`/`SetSamplerAddressMode`)
+         * already had its own separate path before this. Stores into `samplerSlots_[slot]`, read
+         * directly into each `DrawCommand`'s own `textureFilter`/`addressU`/`addressV` fields at
+         * the next `Queue*Draw()` call (slot 0 for every single-texture family; slots 0 and 1
+         * independently for `DualTextureEffect`'s two texture units). `maxAnisotropy` is stored but
+         * not applied -- `GetOrCreateSampler()`'s own cache has no anisotropic-filtering dimension
+         * yet, a pre-existing limitation shared with `SpriteBatch`'s own sampler path, not
+         * introduced here.
+         */
+        void ApplySamplerState(int slot, int filter, int addressU, int addressV, int maxAnisotropy) override;
 
         std::unique_ptr<IVertexBufferBackend> CreateVertexBuffer(int vertex_capacity) override;
         std::unique_ptr<IIndexBufferBackend> CreateIndexBuffer16(int index_capacity) override;
@@ -1278,5 +1309,10 @@ namespace CNA::Internal::Backends::SdlGpu
         // Stored but deliberately not yet applied -- see ApplyRasterizerState's own doc comment.
         float depthBias_ = 0.0f;
         float slopeScaleDepthBias_ = 0.0f;
+
+        // SDLGPU-21: one entry per GraphicsDevice.SamplerStates[slot] (16, matching
+        // SamplerStateCollection::MaxSamplers), set by ApplySamplerState() and read directly into
+        // each DrawCommand's own textureFilter/addressU/addressV fields at Queue*Draw() time.
+        std::array<SamplerSlotState, 16> samplerSlots_;
     };
 }
