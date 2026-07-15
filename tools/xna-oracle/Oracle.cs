@@ -24,6 +24,16 @@ public class SceneLight
     public Vector3 Direction = new Vector3(0, 0, -1);
 }
 
+// D9-93: one entry per repeated spritedraw= line -- a genuinely different sprite (own
+// destination rect, color, depth) within the SAME Begin()/End() block, used to actually
+// exercise SpriteSortMode ordering (a single sprite has no observable sort behavior at all).
+public class SpriteDrawEntry
+{
+    public Rectangle DestRect;
+    public Color Color = Color.White;
+    public float Depth;
+}
+
 // Real XNA has no built-in dual-UV vertex struct -- a game using DualTextureEffect defines its
 // own IVertexType, exactly like this, matching CnaOracleRender.cpp's own explicit
 // VertexDeclaration for the same stride-28 layout (Position+TexCoord0+TexCoord1).
@@ -119,6 +129,8 @@ public class Scene
     public SpriteEffects SpriteEffects = SpriteEffects.None;
     public Rectangle? SpriteSourceRect;
     public string SpriteSampler = "LinearClamp";
+    public List<SpriteDrawEntry> SpriteDraws = new List<SpriteDrawEntry>();
+    public SpriteSortMode SpriteSortMode = SpriteSortMode.Deferred;
     public SceneVertexFormat VertexFormat = SceneVertexFormat.PositionColor;
     public bool VertexColorEnabled;
     public bool LightingEnabled;
@@ -198,6 +210,30 @@ public class Scene
                     break;
                 case "spritesourcerect": scene.SpriteSourceRect = ParseRectangle(value); break;
                 case "spritesampler": scene.SpriteSampler = value; break;
+                case "spritesortmode":
+                    if (value == "Immediate") scene.SpriteSortMode = SpriteSortMode.Immediate;
+                    else if (value == "Texture") scene.SpriteSortMode = SpriteSortMode.Texture;
+                    else if (value == "BackToFront") scene.SpriteSortMode = SpriteSortMode.BackToFront;
+                    else if (value == "FrontToBack") scene.SpriteSortMode = SpriteSortMode.FrontToBack;
+                    else scene.SpriteSortMode = SpriteSortMode.Deferred;
+                    break;
+                case "spritedraw":
+                {
+                    // x,y,w,h,r,g,b,a,depth
+                    var p = value.Split(',');
+                    var entry = new SpriteDrawEntry();
+                    entry.DestRect = new Rectangle(int.Parse(p[0], CultureInfo.InvariantCulture),
+                                                    int.Parse(p[1], CultureInfo.InvariantCulture),
+                                                    int.Parse(p[2], CultureInfo.InvariantCulture),
+                                                    int.Parse(p[3], CultureInfo.InvariantCulture));
+                    entry.Color = new Color(int.Parse(p[4], CultureInfo.InvariantCulture),
+                                             int.Parse(p[5], CultureInfo.InvariantCulture),
+                                             int.Parse(p[6], CultureInfo.InvariantCulture),
+                                             int.Parse(p[7], CultureInfo.InvariantCulture));
+                    entry.Depth = float.Parse(p[8], CultureInfo.InvariantCulture);
+                    scene.SpriteDraws.Add(entry);
+                    break;
+                }
                 case "effect":
                     if (value == "AlphaTestEffect") scene.EffectType = SceneEffectType.AlphaTestEffect;
                     else if (value == "DualTextureEffect") scene.EffectType = SceneEffectType.DualTextureEffect;
@@ -490,9 +526,24 @@ public class Oracle : Game
             }
 
             var spriteBatch = new SpriteBatch(dev);
-            spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, sampler, null, null);
-            spriteBatch.Draw(spriteTexture, scene.SpriteDestRect, scene.SpriteSourceRect, scene.SpriteColor,
-                             scene.SpriteRotation, scene.SpriteOrigin, scene.SpriteEffects, 0.0f);
+            if (scene.SpriteDraws.Count > 0)
+            {
+                // D9-93: BlendState.AlphaBlend expects premultiplied colors (SourceBlend=One) --
+                // the raw non-premultiplied tint colors used to exercise SpriteSortMode need
+                // NonPremultiplied instead, or the blend math would be wrong regardless of order.
+                spriteBatch.Begin(scene.SpriteSortMode, BlendState.NonPremultiplied, sampler, null, null);
+                foreach (var entry in scene.SpriteDraws)
+                {
+                    spriteBatch.Draw(spriteTexture, entry.DestRect, null, entry.Color,
+                                     0.0f, Vector2.Zero, SpriteEffects.None, entry.Depth);
+                }
+            }
+            else
+            {
+                spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, sampler, null, null);
+                spriteBatch.Draw(spriteTexture, scene.SpriteDestRect, scene.SpriteSourceRect, scene.SpriteColor,
+                                 scene.SpriteRotation, scene.SpriteOrigin, scene.SpriteEffects, 0.0f);
+            }
             spriteBatch.End();
 
             dev.SetRenderTarget(null);

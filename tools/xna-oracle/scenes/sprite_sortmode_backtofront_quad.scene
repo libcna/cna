@@ -1,0 +1,20 @@
+# plan_dx9.md D9-A5 scene corpus: sprite_sortmode_backtofront_quad
+# D9-93: the BackToFront counterpart of sprite_sortmode_deferred_quad.scene -- see that scene's
+# own header comment for the full design rationale. Identical geometry, colors, depths and API
+# insertion order (RED depth=0.0 drawn first, GREEN depth=1.0 drawn second), the ONLY difference
+# is spritesortmode=BackToFront below. SpriteSortMode.BackToFront reorders the batch by depth
+# (far-to-near) before drawing, so GREEN (depth=1.0, far) actually draws FIRST and RED (depth=0.0,
+# near) draws SECOND/on top -- the opposite final layering from the Deferred scene, so the
+# resulting blend is red-dominant instead of green-dominant even though every spritedraw= line is
+# byte-for-byte identical between the two scene files.
+width=256
+height=256
+profile=HiDef
+clearcolor=0,0,0,255
+spritebatchmode=true
+texturewidth=1
+textureheight=1
+texturepixel=255,255,255,255
+spritesortmode=BackToFront
+spritedraw=88,88,80,80,255,0,0,128,0.0
+spritedraw=88,88,80,80,0,255,0,128,1.0

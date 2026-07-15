@@ -1,0 +1,32 @@
+# plan_dx9.md D9-A5 scene corpus: sprite_sortmode_deferred_quad
+# D9-93: SpriteSortMode only has an observable effect with 2+ overlapping, alpha-blended sprites
+# whose insertion order differs from their depth-sort order -- a single sprite (every other
+# spritebatchmode scene in this corpus) has no sort behavior to exercise at all. Two repeated
+# spritedraw= lines switch CnaOracleRender.cpp/Oracle.cs into their own multi-sprite draw path
+# (see each file's own spriteBatchMode branch), which also switches BlendState from AlphaBlend to
+# NonPremultiplied -- AlphaBlend expects premultiplied colors (SourceBlend=One), and these raw
+# alpha=128 tint colors are not premultiplied, so AlphaBlend would give the wrong math regardless
+# of draw order.
+#
+# Both sprites cover the SAME destination rectangle over a black background: RED (255,0,0,128) at
+# depth=0.0 (near), GREEN (0,255,0,128) at depth=1.0 (far), drawn in API insertion order
+# A-then-B (RED first, GREEN second). Under SpriteSortMode.Deferred, sprites draw in insertion
+# order regardless of depth -- so GREEN (drawn second) ends up on top, and the final blend is
+# green-dominant. Compare against sprite_sortmode_backtofront_quad.scene, which uses the SAME two
+# spritedraw= lines but SpriteSortMode.BackToFront, which reorders by depth (far-to-near) before
+# drawing -- there, RED (near, drawn second after reordering) ends up on top instead, and the
+# final blend is red-dominant. The CTest check for this asserts the qualitative property (G>R for
+# this scene, R>G for the BackToFront one) rather than exact pixel values, since the precise blend
+# math rounds to a fraction of a channel step and could go either way by a single unit depending
+# on GPU/driver float rounding.
+width=256
+height=256
+profile=HiDef
+clearcolor=0,0,0,255
+spritebatchmode=true
+texturewidth=1
+textureheight=1
+texturepixel=255,255,255,255
+spritesortmode=Deferred
+spritedraw=88,88,80,80,255,0,0,128,0.0
+spritedraw=88,88,80,80,0,255,0,128,1.0

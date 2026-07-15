@@ -28,6 +28,35 @@
 //   different, discriminating patterns from the identical source data and geometry, confirmed
 //   pixel-for-pixel against real XNA 4.0 via tools/xna-oracle/scenes/sprite_wrap_quad.scene /
 //   sprite_mirror_quad.scene.
+// Check F/G/H -- D9-93: SpriteSortMode only has an observable effect with 2+ overlapping,
+//   alpha-blended sprites whose insertion order differs from their depth-sort order. Two
+//   identical-geometry sprites (RED tint (255,0,0,128) at layerDepth=0.0, GREEN tint
+//   (0,255,0,128) at layerDepth=1.0, same destination rectangle) drawn with
+//   BlendState.NonPremultiplied (AlphaBlend expects premultiplied colors -- these raw alpha=128
+//   tints are not premultiplied, so AlphaBlend would give the wrong math regardless of draw
+//   order). Check F (Deferred, insertion order RED-then-GREEN): sprites draw in insertion order
+//   regardless of depth, so GREEN (drawn second) ends up on top -- green-dominant blend. Check G
+//   (BackToFront, SAME insertion order as F): the batch is reordered far-to-near before drawing,
+//   so RED (depth=0.0, near) ends up on top instead -- red-dominant blend, from the identical two
+//   Draw() calls in the identical order as Check F. Check H (FrontToBack, insertion order
+//   REVERSED to GREEN-then-RED): ascending (near-to-far) reordering puts RED first and GREEN
+//   second again, so GREEN ends up on top -- matches Check F's green-dominant value despite the
+//   opposite insertion order, proving the reorder is genuinely by layerDepth. Every check asserts
+//   the EXACT blended pixel value (consistent with every other check in this file), independently
+//   hand-derived from the NonPremultiplied blend equation BEFORE running, then confirmed
+//   pixel-for-pixel identical to real XNA 4.0 via tools/xna-oracle/scenes/
+//   sprite_sortmode_deferred_quad.scene / sprite_sortmode_backtofront_quad.scene /
+//   sprite_sortmode_fronttoback_quad.scene. SpriteSortMode.Immediate and .Texture are NOT covered
+//   here: Immediate's only real behavioral difference from Deferred (per-Draw() GPU submission
+//   instead of batching until End()) is not pixel-observable by this oracle methodology, and
+//   Texture requires a genuinely different multi-texture scene design -- both explicitly scoped
+//   out, not silently assumed passing (see plan_dx9.md D9-93's own closure note). This IS the
+//   check that caught a real D3D9 backend bug: D3D9SpriteBatchBackend::BuildMatrixTransformEXT's
+//   projection previously used zFarPlane=1, which maps any layerDepth > 0 to an invalid
+//   (negative) Direct3D 9 clip-space Z and gets the sprite silently clipped away entirely --
+//   undetected until this was the first scene in the whole D9-A5 corpus to ever draw with a
+//   nonzero layerDepth. Fixed by using zFarPlane=-1 instead (see that function's own comment for
+//   the derivation).
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
@@ -291,6 +320,88 @@ protected:
                       "distinguishably different from Wrap's tiled pattern above, confirmed "
                       "pixel-for-pixel identical to real XNA 4.0 via "
                       "tools/xna-oracle/scenes/sprite_mirror_quad.scene");
+            }
+        }
+
+        // Check F/G: D9-93 SpriteSortMode. See this file's own header comment for the full
+        // design rationale -- two overlapping semi-transparent sprites, same geometry, same
+        // insertion order, only SpriteSortMode differs between the two sub-checks.
+        {
+            Texture2D tex(dev, 1, 1);
+            const Color kWhite(255, 255, 255, 255);
+            const Color whitePixel[1] = {kWhite};
+            tex.SetData(whitePixel, 1);
+
+            const Rectangle destRect(88, 88, 80, 80);
+            const Color kRedTint(255, 0, 0, 128), kGreenTint(0, 255, 0, 128);
+            const Rectangle centerPx(128, 128, 1, 1);
+
+            // Check F: Deferred -- insertion order wins, GREEN (drawn second) ends up on top.
+            {
+                dev.Clear(Color(0, 0, 0, 255));
+                SpriteBatch sb(dev);
+                sb.Begin(SpriteSortMode::Deferred, BlendState::NonPremultiplied, nullptr, nullptr, nullptr);
+                sb.Draw(tex, destRect, std::nullopt, kRedTint, 0.0f, Vector2(0, 0), SpriteEffects::None, 0.0f);
+                sb.Draw(tex, destRect, std::nullopt, kGreenTint, 0.0f, Vector2(0, 0), SpriteEffects::None, 1.0f);
+                sb.End();
+
+                std::vector<Color> center(1, Color(0, 0, 0, 0));
+                dev.GetBackBufferData(&centerPx, center.data(), 0, 1);
+
+                check(SamePixel(center[0], Color(64, 128, 0, 159)),
+                      "SpriteBatch::Begin(SpriteSortMode.Deferred, ...): two overlapping "
+                      "NonPremultiplied sprites draw in insertion order regardless of "
+                      "layerDepth -- GREEN (drawn second) ends up on top, green-dominant blend, "
+                      "confirmed pixel-for-pixel identical to real XNA 4.0 via "
+                      "tools/xna-oracle/scenes/sprite_sortmode_deferred_quad.scene");
+            }
+
+            // Check G: BackToFront -- reordered far-to-near, RED (depth=0.0, near) ends up on
+            // top instead, from the SAME two Draw() calls in the SAME insertion order as Check F.
+            {
+                dev.Clear(Color(0, 0, 0, 255));
+                SpriteBatch sb(dev);
+                sb.Begin(SpriteSortMode::BackToFront, BlendState::NonPremultiplied, nullptr, nullptr, nullptr);
+                sb.Draw(tex, destRect, std::nullopt, kRedTint, 0.0f, Vector2(0, 0), SpriteEffects::None, 0.0f);
+                sb.Draw(tex, destRect, std::nullopt, kGreenTint, 0.0f, Vector2(0, 0), SpriteEffects::None, 1.0f);
+                sb.End();
+
+                std::vector<Color> center(1, Color(0, 0, 0, 0));
+                dev.GetBackBufferData(&centerPx, center.data(), 0, 1);
+
+                check(SamePixel(center[0], Color(128, 64, 0, 159)),
+                      "SpriteBatch::Begin(SpriteSortMode.BackToFront, ...): the SAME two Draw() "
+                      "calls in the SAME insertion order now blend RED-dominant instead -- "
+                      "BackToFront genuinely reorders by layerDepth before drawing, confirmed "
+                      "pixel-for-pixel identical to real XNA 4.0 via "
+                      "tools/xna-oracle/scenes/sprite_sortmode_backtofront_quad.scene");
+            }
+
+            // Check H: FrontToBack -- deliberately the OPPOSITE insertion order from Check F/G
+            // (GREEN depth=1.0 drawn FIRST, RED depth=0.0 drawn SECOND), so ascending
+            // (near-to-far) reordering is genuinely discriminating: if FrontToBack correctly
+            // reorders to RED-then-GREEN, GREEN ends up on top again -- the SAME final blend as
+            // Check F despite the reversed insertion order and a different sort mode. A
+            // broken/no-op FrontToBack would instead leave RED on top (matching Check G's value),
+            // distinguishably wrong.
+            {
+                dev.Clear(Color(0, 0, 0, 255));
+                SpriteBatch sb(dev);
+                sb.Begin(SpriteSortMode::FrontToBack, BlendState::NonPremultiplied, nullptr, nullptr, nullptr);
+                sb.Draw(tex, destRect, std::nullopt, kGreenTint, 0.0f, Vector2(0, 0), SpriteEffects::None, 1.0f);
+                sb.Draw(tex, destRect, std::nullopt, kRedTint, 0.0f, Vector2(0, 0), SpriteEffects::None, 0.0f);
+                sb.End();
+
+                std::vector<Color> center(1, Color(0, 0, 0, 0));
+                dev.GetBackBufferData(&centerPx, center.data(), 0, 1);
+
+                check(SamePixel(center[0], Color(64, 128, 0, 159)),
+                      "SpriteBatch::Begin(SpriteSortMode.FrontToBack, ...): GREEN drawn FIRST, "
+                      "RED drawn SECOND (reversed from Check F/G) -- FrontToBack's ascending "
+                      "reorder still puts GREEN on top (matching Check F's green-dominant value, "
+                      "not Check G's red-dominant one), proving the reorder is by layerDepth and "
+                      "not merely insertion order, confirmed pixel-for-pixel identical to real "
+                      "XNA 4.0 via tools/xna-oracle/scenes/sprite_sortmode_fronttoback_quad.scene");
             }
         }
 

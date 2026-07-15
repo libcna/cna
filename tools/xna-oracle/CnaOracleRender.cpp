@@ -128,6 +128,16 @@ namespace
         return decl;
     }
 
+    // D9-93: one entry per repeated spritedraw= line -- a genuinely different sprite (own
+    // destination rect, color, depth) within the SAME Begin()/End() block, used to actually
+    // exercise SpriteSortMode ordering (a single sprite has no observable sort behavior at all).
+    struct SpriteDrawEntry
+    {
+        Rectangle destRect{0, 0, 0, 0};
+        Color color = Color::White;
+        float depth = 0.0f;
+    };
+
     struct SceneLight
     {
         bool enabled = false;
@@ -159,6 +169,12 @@ namespace
         // real XNA's own default (LinearClamp, used when Begin() is called with no samplerState
         // argument), only meaningful when spriteBatchMode=true.
         std::string spriteSampler = "LinearClamp";
+        // D9-93: one or more spritedraw= lines switch to a genuinely different multi-sprite draw
+        // path (see the Draw() function's own spriteBatchMode branch) -- when empty, the single
+        // sprite* fields above are used instead (backward compatible with every earlier
+        // spriteBatchMode scene).
+        std::vector<SpriteDrawEntry> spriteDraws;
+        SpriteSortMode spriteSortMode = SpriteSortMode::Deferred;
         SceneVertexFormat vertexFormat = SceneVertexFormat::PositionColor;
         bool vertexColorEnabled = false;
         bool lightingEnabled = false;
@@ -385,6 +401,25 @@ namespace
                 scene.spriteSourceRect = ParseRectangle(value);
             }
             else if (key == "spritesampler") scene.spriteSampler = value;
+            else if (key == "spritesortmode")
+            {
+                if (value == "Immediate") scene.spriteSortMode = SpriteSortMode::Immediate;
+                else if (value == "Texture") scene.spriteSortMode = SpriteSortMode::Texture;
+                else if (value == "BackToFront") scene.spriteSortMode = SpriteSortMode::BackToFront;
+                else if (value == "FrontToBack") scene.spriteSortMode = SpriteSortMode::FrontToBack;
+                else scene.spriteSortMode = SpriteSortMode::Deferred;
+            }
+            else if (key == "spritedraw")
+            {
+                // x,y,w,h,r,g,b,a,depth
+                const auto p = Split(value, ',');
+                SpriteDrawEntry entry;
+                entry.destRect = Rectangle(std::stoi(p[0]), std::stoi(p[1]), std::stoi(p[2]), std::stoi(p[3]));
+                entry.color = Color(static_cast<std::uint8_t>(std::stoi(p[4])), static_cast<std::uint8_t>(std::stoi(p[5])),
+                                     static_cast<std::uint8_t>(std::stoi(p[6])), static_cast<std::uint8_t>(std::stoi(p[7])));
+                entry.depth = std::stof(p[8]);
+                scene.spriteDraws.push_back(entry);
+            }
             else if (key == "effect")
             {
                 if (value == "AlphaTestEffect") scene.effectType = SceneEffectType::AlphaTestEffect;
@@ -499,9 +534,24 @@ protected:
             if (scene_.spriteSourceRectSet) sourceRect = scene_.spriteSourceRect;
 
             SpriteBatch spriteBatch(dev);
-            spriteBatch.Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend, &sampler, nullptr, nullptr);
-            spriteBatch.Draw(spriteTexture, scene_.spriteDestRect, sourceRect, scene_.spriteColor,
-                             scene_.spriteRotation, scene_.spriteOrigin, scene_.spriteEffects, 0.0f);
+            if (!scene_.spriteDraws.empty())
+            {
+                // D9-93: BlendState::AlphaBlend expects premultiplied colors (SourceBlend=One) --
+                // the raw non-premultiplied tint colors used to exercise SpriteSortMode need
+                // NonPremultiplied instead, or the blend math would be wrong regardless of order.
+                spriteBatch.Begin(scene_.spriteSortMode, BlendState::NonPremultiplied, &sampler, nullptr, nullptr);
+                for (const SpriteDrawEntry& entry : scene_.spriteDraws)
+                {
+                    spriteBatch.Draw(spriteTexture, entry.destRect, std::nullopt, entry.color,
+                                     0.0f, Vector2(0, 0), SpriteEffects::None, entry.depth);
+                }
+            }
+            else
+            {
+                spriteBatch.Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend, &sampler, nullptr, nullptr);
+                spriteBatch.Draw(spriteTexture, scene_.spriteDestRect, sourceRect, scene_.spriteColor,
+                                 scene_.spriteRotation, scene_.spriteOrigin, scene_.spriteEffects, 0.0f);
+            }
             spriteBatch.End();
 
             const int pixelCount = scene_.width * scene_.height;

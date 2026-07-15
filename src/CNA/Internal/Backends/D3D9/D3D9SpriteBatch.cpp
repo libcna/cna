@@ -127,8 +127,23 @@ namespace CNA::Internal::Backends::D3D9
         // (half of one full-texel step, which CreateOrthographicOffCenter's own M11/M22 already
         // encode as "NDC units per pixel") -- NOT reasoned out from first principles and assumed
         // correct; see D9-91's own plan_dx9.md row for the verification record.
+        //
+        // D9-93 finding: zFarPlane=1 (as originally written above and used by every D9-90/91/92
+        // scene, all of which only ever pass layerDepth=0.0f) makes CreateOrthographicOffCenter's
+        // own Z row M33=1/(zNear-zFar)=-1, M43=zNear/(zNear-zFar)=0 -- i.e. Z' = -layerDepth. Any
+        // sprite drawn with layerDepth > 0 then lands outside Direct3D 9's valid [0,1] clip-space
+        // Z range and gets hardware-clipped away entirely (reproduced: a second sprite drawn at
+        // layerDepth=0.5 or 1.0 over the first silently vanished, confirmed NOT a depth-test
+        // artifact since DepthStencilState.None -- ZENABLE=FALSE -- is already in effect; clip-
+        // space culling is a separate, unconditional rasterizer stage). zFarPlane=-1 instead makes
+        // M33=1/(0-(-1))=1, M43=0/(0-(-1))=0, i.e. an IDENTITY Z row (Z'=layerDepth, unclipped for
+        // any layerDepth in XNA's documented [0,1] range) -- verified pixel-perfect against real
+        // XNA 4.0 for both SpriteSortMode.Deferred and SpriteSortMode.BackToFront
+        // (sprite_sortmode_deferred_quad.scene / sprite_sortmode_backtofront_quad.scene, D9-93).
+        // Only the Z row changes; M41/M42's half-pixel shift below depends solely on M11/M22 (X/Y),
+        // so every already-verified D9-90/91/92 scene is unaffected.
         Matrix projection = Matrix::CreateOrthographicOffCenter(
-            0.0f, viewportWidth, viewportHeight, 0.0f, 0.0f, 1.0f);
+            0.0f, viewportWidth, viewportHeight, 0.0f, 0.0f, -1.0f);
         projection.M41 += -0.5f * projection.M11;
         projection.M42 += -0.5f * projection.M22;
 
