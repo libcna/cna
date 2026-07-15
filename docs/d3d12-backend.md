@@ -112,8 +112,8 @@ Like `D3D11`, D3D12 tests are not ordinary `Game`-subclass examples — the rout
 Proton-managed window/`Present()` path to drive one through (Proton's own bootstrap launch is too
 heavy for a normal CTest run, see "Known limitations"). All correctness tests live in
 `examples/d3d12_smoke_test.cpp` (`D3D12_Smoke` CTest, the single registered D3D12 CTest — checks
-lettered A through TT as of `DX-113`/`DX-117`/`DX-121`/`DX-136`/`DX-144`/`DX-149`/`DX-150`/`DX-151`/`DX-152`/`DX-153`,
-**208/208 passing**) and talk to the real
+lettered A through UU as of `DX-113`/`DX-117`/`DX-121`/`DX-136`/`DX-144`/`DX-149`–`DX-154`,
+**210/210 passing**) and talk to the real
 `ID3D12Device`/command queue/list fairly directly. The general off-screen pixel-readback shape:
 
 ```cpp

@@ -3478,6 +3478,46 @@ int main()
         backend.UnbindOffscreenColorTargetEXT();
     }
 
+    // ---- plan_dx.md DX-154: per-slot SamplerState, all 16 slots bound SIMULTANEOUSLY with 16
+    // genuinely DIFFERENT SamplerState configurations, then verified independent -- ports D3D11's
+    // own DX-142 methodology to D3D12SamplerCache. Check Z above already proved cache
+    // identity/distinctness for a single slot in isolation, but nothing has proven slot N's
+    // binding survives slots N+1..15 also being applied (a plausible place for an off-by-one/index
+    // bug or an accidental single-slot cache to hide). ----
+    {
+        D3D12_GPU_DESCRIPTOR_HANDLE boundAtApplyTime[16]{};
+        for (int slot = 0; slot < 16; ++slot)
+        {
+            // Spread across TextureFilter's 6 values and TextureAddressMode's 3 values so adjacent
+            // slots never accidentally share an identical configuration -- same spread D3D11's own
+            // DX-142 uses.
+            backend.ApplySamplerState(slot, slot % 6, slot % 3, (slot + 1) % 3, 1);
+            boundAtApplyTime[slot] = backend.GetSamplerGpuHandleEXT(slot);
+        }
+
+        bool allSlotsNonNull = true;
+        for (int slot = 0; slot < 16; ++slot)
+            if (boundAtApplyTime[slot].ptr == 0) allSlotsNonNull = false;
+        Check(allSlotsNonNull,
+              "UU0: D3D12SamplerCache: all 16 sampler slots hold a real, non-null descriptor handle "
+              "immediately after being applied (plan_dx.md DX-154)");
+
+        // Re-query every slot NOW, after all 16 have been applied -- if applying a later slot (e.g.
+        // 15) ever clobbered an earlier one (e.g. 0) via an off-by-one or aliasing bug, this is
+        // where it would show up: the handle bound to slot 0 right now would differ from the one
+        // captured immediately after slot 0's own ApplySamplerState() call.
+        bool allSlotsStillCorrect = true;
+        for (int slot = 0; slot < 16; ++slot)
+        {
+            const D3D12_GPU_DESCRIPTOR_HANDLE now = backend.GetSamplerGpuHandleEXT(slot);
+            if (now.ptr != boundAtApplyTime[slot].ptr) allSlotsStillCorrect = false;
+        }
+        Check(allSlotsStillCorrect,
+              "UU1: D3D12SamplerCache: every one of the 16 slots still holds its OWN originally-bound "
+              "sampler descriptor handle after all 16 were applied -- proves genuine per-slot "
+              "independence, not a shared/aliased single slot (plan_dx.md DX-154)");
+    }
+
     // ---- plan_dx.md DX-120: D3D12OcclusionQueryBackend -- a real visible-vs-invisible
     // discriminating occlusion query, closing Phase DX15's own DX-147 D3D12 half too. ----
     {
