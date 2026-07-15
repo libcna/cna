@@ -1,0 +1,32 @@
+# plan_dx9.md D9-A5 scene corpus: sprite_multitexture_quad
+# Closes D9-90's own explicitly-named "known, explicitly-scoped-out gap": multi-texture
+# SpriteBatch batching, i.e. a genuine FlushBatch()-on-texture-change mid-batch. Every earlier
+# spritebatchmode scene either draws exactly one sprite, or (D9-93's sortmode scenes) 2+ sprites
+# sharing the SAME texture object -- none has ever forced D3D9SpriteBatchBackend::Draw() to see
+# `currentTexture_ != nullptr && currentTexture_ != &texture` and actually flush+rebind mid-batch.
+#
+# Three NON-overlapping sprites at three separate positions, deliberately interleaved
+# texture-A/texture-B/texture-A (not A-A-B or A-B-B, so the SECOND texture-A draw genuinely forces
+# a SECOND texture rebind after the flush B triggered -- proving the rebind isn't a one-shot
+# fluke). Since the sprites don't overlap, SpriteSortMode/blend order are irrelevant here (this
+# scene deliberately does NOT use spritedraw='s sort-order machinery) -- the only thing under
+# test is whether each destination rectangle shows the texture that was ACTUALLY bound for its
+# own draw call, not a stale one left over from an earlier flush. texture (RED, 1x1) and texture2
+# (BLUE, 1x1) are solid, maximally distinct colors specifically so a stale-binding bug is
+# impossible to miss: a broken rebind would show BLUE (leaked from the middle draw) at the THIRD
+# position instead of the expected RED.
+width=256
+height=256
+profile=HiDef
+clearcolor=0,0,0,255
+spritebatchmode=true
+texturewidth=1
+textureheight=1
+texturepixel=255,0,0,255
+texture2=true
+texture2width=1
+texture2height=1
+texture2pixel=0,0,255,255
+spritedraw=20,108,40,40,255,255,255,255,0.0,0
+spritedraw=108,108,40,40,255,255,255,255,0.0,1
+spritedraw=196,108,40,40,255,255,255,255,0.0,0

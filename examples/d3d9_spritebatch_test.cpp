@@ -57,6 +57,13 @@
 //   undetected until this was the first scene in the whole D9-A5 corpus to ever draw with a
 //   nonzero layerDepth. Fixed by using zFarPlane=-1 instead (see that function's own comment for
 //   the derivation).
+// Check I -- multi-texture batching: D9-90's own explicitly-named "known, explicitly-scoped-out
+//   gap" (no earlier scene/check ever forced D3D9SpriteBatchBackend::Draw() to see a genuine
+//   texture-identity change mid-batch). Three non-overlapping sprites, interleaved RED-texture/
+//   BLUE-texture/RED-texture, proves FlushBatch()-on-texture-change rebinds correctly on a SECOND
+//   flush, not just a one-shot first one -- a stale-binding bug would show BLUE leaking into the
+//   third position. Confirmed pixel-for-pixel identical to real XNA 4.0 via
+//   tools/xna-oracle/scenes/sprite_multitexture_quad.scene.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
@@ -403,6 +410,53 @@ protected:
                       "not merely insertion order, confirmed pixel-for-pixel identical to real "
                       "XNA 4.0 via tools/xna-oracle/scenes/sprite_sortmode_fronttoback_quad.scene");
             }
+        }
+
+        // Check I: multi-texture batching -- D9-90's own explicitly-named "known,
+        // explicitly-scoped-out gap". Three NON-overlapping sprites at three separate positions,
+        // deliberately interleaved RED-texture/BLUE-texture/RED-texture (not RED-RED-BLUE), so the
+        // SECOND red draw genuinely forces a SECOND texture rebind after the blue draw's flush --
+        // proving the rebind isn't a one-shot fluke. Since the sprites don't overlap, blend/sort
+        // order is irrelevant here; the only thing under test is whether each destination
+        // rectangle shows the texture actually bound for its OWN draw call, not a stale one left
+        // over from an earlier flush -- a broken FlushBatch()-on-texture-change would show BLUE
+        // (leaked from the middle draw) at the third position instead of RED. Confirmed
+        // pixel-for-pixel identical to real XNA 4.0 via
+        // tools/xna-oracle/scenes/sprite_multitexture_quad.scene, and mutation-verified: forcing
+        // the texture-change flush trigger to never fire made exactly this check's third sample
+        // point turn BLUE (1600/65536 pixels wrong, the second sprite's own area), confirming the
+        // scene/check is genuinely sensitive to this bug class, not a false-positive trap.
+        {
+            Texture2D texA(dev, 1, 1);
+            const Color kRedC(255, 0, 0, 255);
+            const Color redPixel[1] = {kRedC};
+            texA.SetData(redPixel, 1);
+
+            Texture2D texB(dev, 1, 1);
+            const Color kBlueC(0, 0, 255, 255);
+            const Color bluePixel[1] = {kBlueC};
+            texB.SetData(bluePixel, 1);
+
+            dev.Clear(Color(0, 0, 0, 255));
+            SpriteBatch sb(dev);
+            sb.Begin();
+            sb.Draw(texA, Rectangle(20, 108, 40, 40), Color::White);
+            sb.Draw(texB, Rectangle(108, 108, 40, 40), Color::White);
+            sb.Draw(texA, Rectangle(196, 108, 40, 40), Color::White);
+            sb.End();
+
+            const Rectangle pos1(40, 128, 1, 1), pos2(128, 128, 1, 1), pos3(216, 128, 1, 1);
+            std::vector<Color> p1(1, Color(0, 0, 0, 0)), p2(1, Color(0, 0, 0, 0)), p3(1, Color(0, 0, 0, 0));
+            dev.GetBackBufferData(&pos1, p1.data(), 0, 1);
+            dev.GetBackBufferData(&pos2, p2.data(), 0, 1);
+            dev.GetBackBufferData(&pos3, p3.data(), 0, 1);
+
+            check(SamePixel(p1[0], kRedC) && SamePixel(p2[0], kBlueC) && SamePixel(p3[0], kRedC),
+                  "SpriteBatch::Draw(...): interleaved RED/BLUE/RED texture objects across 3 "
+                  "non-overlapping sprites in one Begin()/End() block genuinely rebind on every "
+                  "texture change (FlushBatch()-on-texture-change proven for a SECOND rebind, not "
+                  "just a one-shot first flush), confirmed pixel-for-pixel identical to real XNA "
+                  "4.0 via tools/xna-oracle/scenes/sprite_multitexture_quad.scene");
         }
 
         std::printf("=== %d/%d PASS ===\n", passCount, totalCount);

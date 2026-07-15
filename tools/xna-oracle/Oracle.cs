@@ -25,13 +25,17 @@ public class SceneLight
 }
 
 // D9-93: one entry per repeated spritedraw= line -- a genuinely different sprite (own
-// destination rect, color, depth) within the SAME Begin()/End() block, used to actually
-// exercise SpriteSortMode ordering (a single sprite has no observable sort behavior at all).
+// destination rect, color, depth, optionally its own texture) within the SAME Begin()/End()
+// block. Used to exercise SpriteSortMode ordering (D9-93 proper) and, via TextureIndex,
+// multi-texture batching / FlushBatch()-on-texture-change (D9-90's own explicitly-named
+// "known, explicitly-scoped-out gap"). TextureIndex selects Texture (0, default) or Texture2
+// (1), reusing the scene format's existing DualTextureEffect texture2* keys.
 public class SpriteDrawEntry
 {
     public Rectangle DestRect;
     public Color Color = Color.White;
     public float Depth;
+    public int TextureIndex;
 }
 
 // Real XNA has no built-in dual-UV vertex struct -- a game using DualTextureEffect defines its
@@ -219,7 +223,7 @@ public class Scene
                     break;
                 case "spritedraw":
                 {
-                    // x,y,w,h,r,g,b,a,depth
+                    // x,y,w,h,r,g,b,a,depth[,textureIndex]
                     var p = value.Split(',');
                     var entry = new SpriteDrawEntry();
                     entry.DestRect = new Rectangle(int.Parse(p[0], CultureInfo.InvariantCulture),
@@ -231,6 +235,7 @@ public class Scene
                                              int.Parse(p[6], CultureInfo.InvariantCulture),
                                              int.Parse(p[7], CultureInfo.InvariantCulture));
                     entry.Depth = float.Parse(p[8], CultureInfo.InvariantCulture);
+                    entry.TextureIndex = p.Length > 9 ? int.Parse(p[9], CultureInfo.InvariantCulture) : 0;
                     scene.SpriteDraws.Add(entry);
                     break;
                 }
@@ -513,6 +518,16 @@ public class Oracle : Game
             var spriteTexture = new Texture2D(dev, scene.TextureWidth, scene.TextureHeight);
             spriteTexture.SetData(scene.TexturePixels.ToArray());
 
+            // D9-90's own "known, explicitly-scoped-out gap" (multi-texture batching / a genuine
+            // FlushBatch()-on-texture-change mid-batch): a second, genuinely distinct Texture2D
+            // object, reusing the scene format's existing DualTextureEffect texture2* keys.
+            Texture2D spriteTexture2 = null;
+            if (scene.Texture2Enabled)
+            {
+                spriteTexture2 = new Texture2D(dev, scene.Texture2Width, scene.Texture2Height);
+                spriteTexture2.SetData(scene.Texture2Pixels.ToArray());
+            }
+
             SamplerState sampler = SamplerState.LinearClamp;
             if (scene.SpriteSampler == "PointClamp") sampler = SamplerState.PointClamp;
             else if (scene.SpriteSampler == "PointWrap") sampler = SamplerState.PointWrap;
@@ -534,7 +549,8 @@ public class Oracle : Game
                 spriteBatch.Begin(scene.SpriteSortMode, BlendState.NonPremultiplied, sampler, null, null);
                 foreach (var entry in scene.SpriteDraws)
                 {
-                    spriteBatch.Draw(spriteTexture, entry.DestRect, null, entry.Color,
+                    var tex = (entry.TextureIndex == 1 && spriteTexture2 != null) ? spriteTexture2 : spriteTexture;
+                    spriteBatch.Draw(tex, entry.DestRect, null, entry.Color,
                                      0.0f, Vector2.Zero, SpriteEffects.None, entry.Depth);
                 }
             }

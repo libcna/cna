@@ -37,7 +37,7 @@ fully-commented examples.
 | `spritesourcerect` | `x,y,w,h`, only when `spritebatchmode=true`. Optional — omitted means the whole texture (real XNA's own `sourceRectangle=null` semantics) |
 | `spritesampler` | `LinearClamp` (default, matches `SpriteBatch.Begin()`'s own real default), `PointClamp`, `PointWrap`, `LinearWrap`, or `PointMirror` (manually constructed — real XNA has no named `PointMirror` preset), only when `spritebatchmode=true` |
 | `spritesortmode` | `Deferred` (default), `Immediate`, `Texture`, `BackToFront`, or `FrontToBack` — `SpriteBatch.Begin()`'s own `sortMode` argument, only meaningful when one or more `spritedraw=` lines are present (see below) |
-| `spritedraw` | `x,y,w,h,r,g,b,a,depth` — repeats once per sprite. One or more `spritedraw=` lines switch `spritebatchmode=true` into a DIFFERENT multi-sprite draw path than `spritedestrect`/`spritecolor`/etc above: each line becomes its own `SpriteBatch.Draw(texture, destRect, null, color, 0, (0,0), None, depth)` call, all against the SAME source texture, drawn with `BlendState.NonPremultiplied` (not `AlphaBlend`, which expects premultiplied colors and would give the wrong math for raw non-premultiplied tint colors regardless of draw order) — this is what makes `spritesortmode` actually observable, since a single sprite has no draw-order effect to exercise at all. When no `spritedraw=` line is present, the single-sprite `spritedestrect`/... path above is used instead (unchanged, backward compatible) |
+| `spritedraw` | `x,y,w,h,r,g,b,a,depth[,textureIndex]` — repeats once per sprite. One or more `spritedraw=` lines switch `spritebatchmode=true` into a DIFFERENT multi-sprite draw path than `spritedestrect`/`spritecolor`/etc above: each line becomes its own `SpriteBatch.Draw(texture, destRect, null, color, 0, (0,0), None, depth)` call, drawn with `BlendState.NonPremultiplied` (not `AlphaBlend`, which expects premultiplied colors and would give the wrong math for raw non-premultiplied tint colors regardless of draw order) — this is what makes `spritesortmode` actually observable, since a single sprite has no draw-order effect to exercise at all. The optional trailing `textureIndex` (default `0`) selects `texture` (0) or `texture2` (1, only when `texture2=true` — reuses `DualTextureEffect`'s own `texture2*` keys rather than inventing new ones), letting a scene force a genuine `FlushBatch()`-on-texture-change mid-batch. When no `spritedraw=` line is present, the single-sprite `spritedestrect`/... path above is used instead (unchanged, backward compatible) |
 | `effect` | `BasicEffect` (default), `AlphaTestEffect`, `DualTextureEffect`, `EnvironmentMapEffect`, or `SkinnedEffect` — which Stock Effect both sides construct (all 5 real XNA Stock Effects), only meaningful when `spritebatchmode` is unset/`false` |
 | `vertexformat` | `PositionColor` (default), `PositionTexture`, `PositionNormalTexture`, `PositionDualTexture`, or `PositionNormalTextureWeights` — selects which `vertex=` shape below, and which vertex struct both sides draw. `PositionDualTexture`/`PositionNormalTextureWeights` have no XNA-built-in equivalent (real XNA has no dual-UV or skinned vertex type either) — both sides define their own custom `IVertexType`/`VertexDeclaration`, exactly as a real game using `DualTextureEffect`/`SkinnedEffect` would have to |
 | `vertexcolor`, `lighting`, `texture` | `VertexColorEnabled`/`LightingEnabled` (`BasicEffect` only — see the `LightingEnabled` carve-out below)/`TextureEnabled` (`BasicEffect`) or texture-non-null (`AlphaTestEffect`/`DualTextureEffect`/`EnvironmentMapEffect`/`SkinnedEffect`) (`true`/`false`) |
@@ -140,13 +140,15 @@ Requires Pillow (`pip install pillow`) — not previously a dependency of this p
 
 ## Status
 
-Twenty-seven scenes so far, **all pixel-perfect**, and every one of XNA's 5 Stock Effects plus
+Twenty-eight scenes so far, **all pixel-perfect**, and every one of XNA's 5 Stock Effects plus
 `IEffectFog`, ALL 8 `AlphaTestEffect.AlphaFunction` values (`AlphaTestEffect` compare-function
 coverage is COMPLETE), `EnvironmentMapEffect.FresnelFactor`, ALL 3
 `SkinnedEffect.WeightsPerVertex` values (`SkinnedEffect` weighting coverage is COMPLETE), and
-`SpriteBatch`'s core draw path, sampler address modes, AND 3 of 5 `SpriteSortMode` values (basic
-draw, rotation/origin, `SpriteEffects` flip, `Wrap`/`Mirror`, `Deferred`/`BackToFront`/
-`FrontToBack` — `D9-90`/`D9-91`/`D9-92`/`D9-93` all COMPLETE; `Immediate`/`Texture` explicitly
+`SpriteBatch`'s core draw path, sampler address modes, 3 of 5 `SpriteSortMode` values, AND
+multi-texture `FlushBatch()`-on-texture-change batching (basic draw, rotation/origin,
+`SpriteEffects` flip, `Wrap`/`Mirror`, `Deferred`/`BackToFront`/`FrontToBack`, interleaved
+multi-texture sprites — `D9-90`/`D9-91`/`D9-92`/`D9-93` all COMPLETE, including `D9-90`'s own
+explicitly-named multi-texture-batching gap; `SpriteSortMode.Immediate`/`.Texture` explicitly
 scoped out of `D9-93`, see that task's own `plan_dx9.md` closure note) is now represented in the
 corpus:
 
@@ -427,6 +429,21 @@ corpus:
   `Deferred` (per-`Draw()` GPU submission instead of batching until `End()`) is not
   pixel-observable by this oracle methodology, and `Texture` needs a genuinely different
   multi-texture scene design — both real, honest follow-ups, not silently assumed passing.
+- `sprite_multitexture_quad` — closes `D9-90`'s own explicitly-named "known,
+  explicitly-scoped-out gap": multi-texture `SpriteBatch` batching, i.e. a genuine
+  `FlushBatch()`-on-texture-change mid-batch. Three NON-overlapping sprites at three separate
+  positions, deliberately interleaved RED-texture/BLUE-texture/RED-texture (not RED-RED-BLUE, so
+  the SECOND red draw genuinely forces a SECOND texture rebind after the blue draw's own flush,
+  proving the rebind isn't a one-shot fluke). Reuses the scene format's existing
+  `DualTextureEffect` `texture2*` keys plus a new optional trailing `textureIndex` column on
+  `spritedraw=` lines. Since the sprites don't overlap, `SpriteSortMode`/blend order are
+  irrelevant here — the only thing under test is whether each destination rectangle shows the
+  texture actually bound for its OWN draw call, not a stale one left over from an earlier flush.
+  `0/65536` pixels differ, pixel-perfect on the first attempt. Mutation-verified: disabling the
+  texture-change flush trigger in `D3D9SpriteBatchBackend::Draw()` made the middle (BLUE) sprite's
+  color leak into the third position (`1600/65536` pixels wrong, exactly that sprite's own area),
+  confirmed the scene is genuinely sensitive to this bug class, then restored and reconfirmed
+  green.
 
 **Real, non-obvious finding surfaced while mutation-testing the half-pixel offset (not caught by
 the oracle diffs alone)**: `sprite_basic_quad.scene`'s own 1×1 texture is structurally incapable
@@ -452,11 +469,13 @@ values (`Less`/`LessEqual`/`GreaterEqual`/`Greater`/`Never`/`Always` on the `PSA
 bucket, `Equal`/`NotEqual` on the separate `PSAlphaTestEqNe` bucket — compare-function coverage is
 now COMPLETE), `EnvironmentMapEffect.FresnelFactor`, ALL 3 `SkinnedEffect.WeightsPerVertex`
 values (`SkinnedEffect` weighting coverage is now COMPLETE), and `SpriteBatch`'s core draw path,
-sampler address modes, AND 3 of 5 `SpriteSortMode` values (basic draw, rotation/origin,
-`SpriteEffects` flip, `Wrap`/`Mirror`, `Deferred`/`BackToFront`/`FrontToBack` — `D9-90`–`D9-93`
-all now COMPLETE, Phase D9-9 has no open rows left) are now represented in the corpus, at least
-once, and every single comparison so far is pixel-perfect.** `D9-A5` keeps growing "with the plan"
-— each subsequent effect/feature combination this project verifies against the oracle adds its own
+sampler address modes, 3 of 5 `SpriteSortMode` values, AND multi-texture
+`FlushBatch()`-on-texture-change batching (basic draw, rotation/origin, `SpriteEffects` flip,
+`Wrap`/`Mirror`, `Deferred`/`BackToFront`/`FrontToBack`, interleaved multi-texture sprites —
+`D9-90`–`D9-93` all now COMPLETE, including `D9-90`'s own explicitly-named multi-texture-batching
+gap, Phase D9-9 has no open rows left) are now represented in the corpus, at least once, and every
+single comparison so far is pixel-perfect.** `D9-A5` keeps growing "with the plan" — each
+subsequent effect/feature combination this project verifies against the oracle adds its own
 scene(s) here, incrementally, rather than attempting the full corpus (render targets — currently a
 documented blocker, not a simple next scene, see `NEXT.md` §4 — every shared `SurfaceFormat`,
 `SpriteSortMode.Texture`) in one sitting. `D9-84` (every draw path validated against the oracle) is

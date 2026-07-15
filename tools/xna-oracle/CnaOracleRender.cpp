@@ -129,13 +129,19 @@ namespace
     }
 
     // D9-93: one entry per repeated spritedraw= line -- a genuinely different sprite (own
-    // destination rect, color, depth) within the SAME Begin()/End() block, used to actually
-    // exercise SpriteSortMode ordering (a single sprite has no observable sort behavior at all).
+    // destination rect, color, depth, optionally its own texture) within the SAME Begin()/End()
+    // block. Used to exercise SpriteSortMode ordering (D9-93 proper -- a single sprite has no
+    // observable sort behavior at all) and, via textureIndex, multi-texture batching /
+    // FlushBatch()-on-texture-change -- D9-90's own explicitly-named "known, explicitly-scoped-out
+    // gap" (no D9-A5 scene had yet exercised 2+ sprites with a genuine texture swap mid-batch).
+    // textureIndex selects `texture` (0, default) or `texture2` (1), reusing the scene format's
+    // existing DualTextureEffect texture2* keys rather than inventing new ones.
     struct SpriteDrawEntry
     {
         Rectangle destRect{0, 0, 0, 0};
         Color color = Color::White;
         float depth = 0.0f;
+        int textureIndex = 0;
     };
 
     struct SceneLight
@@ -411,13 +417,14 @@ namespace
             }
             else if (key == "spritedraw")
             {
-                // x,y,w,h,r,g,b,a,depth
+                // x,y,w,h,r,g,b,a,depth[,textureIndex]
                 const auto p = Split(value, ',');
                 SpriteDrawEntry entry;
                 entry.destRect = Rectangle(std::stoi(p[0]), std::stoi(p[1]), std::stoi(p[2]), std::stoi(p[3]));
                 entry.color = Color(static_cast<std::uint8_t>(std::stoi(p[4])), static_cast<std::uint8_t>(std::stoi(p[5])),
                                      static_cast<std::uint8_t>(std::stoi(p[6])), static_cast<std::uint8_t>(std::stoi(p[7])));
                 entry.depth = std::stof(p[8]);
+                entry.textureIndex = p.size() > 9 ? std::stoi(p[9]) : 0;
                 scene.spriteDraws.push_back(entry);
             }
             else if (key == "effect")
@@ -518,6 +525,19 @@ protected:
             Texture2D spriteTexture(dev, scene_.textureWidth, scene_.textureHeight);
             spriteTexture.SetData(scene_.texturePixels.data(), static_cast<int>(scene_.texturePixels.size()));
 
+            // D9-90's own "known, explicitly-scoped-out gap" (multi-texture batching / a genuine
+            // FlushBatch()-on-texture-change mid-batch): a second, genuinely distinct Texture2D
+            // object, reusing the scene format's existing DualTextureEffect texture2* keys.
+            // spritedraw='s own optional trailing textureIndex=1 selects this instead of
+            // spriteTexture -- a real GPU texture-object identity change, not just a different
+            // tint color, so a stale-binding bug after FlushBatch() would be visibly wrong.
+            std::unique_ptr<Texture2D> spriteTexture2;
+            if (scene_.texture2Enabled)
+            {
+                spriteTexture2 = std::make_unique<Texture2D>(dev, scene_.texture2Width, scene_.texture2Height);
+                spriteTexture2->SetData(scene_.texture2Pixels.data(), static_cast<int>(scene_.texture2Pixels.size()));
+            }
+
             SamplerState sampler = SamplerState::LinearClamp;
             if (scene_.spriteSampler == "PointClamp") sampler = SamplerState::PointClamp;
             else if (scene_.spriteSampler == "PointWrap") sampler = SamplerState::PointWrap;
@@ -542,7 +562,9 @@ protected:
                 spriteBatch.Begin(scene_.spriteSortMode, BlendState::NonPremultiplied, &sampler, nullptr, nullptr);
                 for (const SpriteDrawEntry& entry : scene_.spriteDraws)
                 {
-                    spriteBatch.Draw(spriteTexture, entry.destRect, std::nullopt, entry.color,
+                    const Texture2D& tex = (entry.textureIndex == 1 && spriteTexture2)
+                        ? *spriteTexture2 : spriteTexture;
+                    spriteBatch.Draw(tex, entry.destRect, std::nullopt, entry.color,
                                      0.0f, Vector2(0, 0), SpriteEffects::None, entry.depth);
                 }
             }
