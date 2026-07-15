@@ -170,6 +170,36 @@ namespace CNA::Internal::Backends::SdlGpu
             out[24] = p.vertexColorEnabled ? 1.0f : 0.0f;
             for (int i = 25; i < 32; ++i) out[i] = 0.0f;
         }
+
+        // env_map3d.glsl's primary PC block: mvp(16) + diffuseColor(4) + emissiveAmount(4) = 24
+        // floats. EnvironmentMapEffect::FillGpuDrawParams() already pre-sums emissive+ambient*diffuse
+        // and pre-multiplies diffuseColor/emissiveColor by Alpha, so no extra alpha handling needed.
+        void FillEnvMapUniforms(std::array<float, 24>& out, const Matrix& wvp, const GpuDrawParams& p)
+        {
+            wvp.ToColumnMajor(out.data());
+            out[16] = p.diffuseColor[0]; out[17] = p.diffuseColor[1];
+            out[18] = p.diffuseColor[2]; out[19] = p.diffuseColor[3];
+            out[20] = p.emissiveColor[0]; out[21] = p.emissiveColor[1];
+            out[22] = p.emissiveColor[2]; out[23] = p.envMapAmount;
+        }
+
+        // env_map3d.glsl's secondary EnvMapParams block: world(16) + 8 vec4 (32) = 48 floats.
+        // Mirrors VulkanGraphicsBackend::env_map3d's EnvMapParams field-for-field (minus fog,
+        // deliberately deferred here like lit_textured3d.glsl already defers it for this backend).
+        void FillEnvMapParams(std::array<float, 48>& out, const GpuDrawParams& p)
+        {
+            for (int wi = 0; wi < 16; ++wi) out[wi] = p.worldColMajor[wi];
+            out[16] = p.eyePositionWorld[0]; out[17] = p.eyePositionWorld[1];
+            out[18] = p.eyePositionWorld[2]; out[19] = p.fresnelEnabled ? 1.0f : 0.0f;
+            out[20] = p.light0Dir[0]; out[21] = p.light0Dir[1];
+            out[22] = p.light0Dir[2]; out[23] = p.fresnelFactor;
+            out[24] = p.light0Diffuse[0]; out[25] = p.light0Diffuse[1]; out[26] = p.light0Diffuse[2]; out[27] = 0.0f;
+            out[28] = p.light1Dir[0]; out[29] = p.light1Dir[1]; out[30] = p.light1Dir[2]; out[31] = 0.0f;
+            out[32] = p.light1Diffuse[0]; out[33] = p.light1Diffuse[1]; out[34] = p.light1Diffuse[2]; out[35] = 0.0f;
+            out[36] = p.light2Dir[0]; out[37] = p.light2Dir[1]; out[38] = p.light2Dir[2]; out[39] = 0.0f;
+            out[40] = p.light2Diffuse[0]; out[41] = p.light2Diffuse[1]; out[42] = p.light2Diffuse[2]; out[43] = 0.0f;
+            out[44] = p.envMapSpecular[0]; out[45] = p.envMapSpecular[1]; out[46] = p.envMapSpecular[2]; out[47] = 0.0f;
+        }
     }
 
     SdlGpuGraphicsBackend::SdlGpuGraphicsBackend(SDL_Window* window, int virtualWidth, int virtualHeight,
@@ -205,6 +235,7 @@ namespace CNA::Internal::Backends::SdlGpu
         CreateLitTexturedResources();
         CreateAlphaTestResources();
         CreateDualTextureResources();
+        CreateEnvMapResources();
 
         int w = 0;
         int h = 0;
@@ -219,6 +250,7 @@ namespace CNA::Internal::Backends::SdlGpu
     {
         IGraphicsBackend::UnregisterForWindow(window_);
         ReleaseSceneDrawBuffers();
+        DestroyEnvMapResources();
         DestroyDualTextureResources();
         DestroyAlphaTestResources();
         DestroyLitTexturedResources();
@@ -379,6 +411,7 @@ namespace CNA::Internal::Backends::SdlGpu
         RenderLitTexturedDraws(pass, cmd, swapchainTarget, swapchainFormat);
         RenderAlphaTestDraws(pass, cmd, swapchainTarget, swapchainFormat);
         RenderDualTextureDraws(pass, cmd, swapchainTarget, swapchainFormat);
+        RenderEnvMapDraws(pass, cmd, swapchainTarget, swapchainFormat);
         RenderSprites(pass, cmd, swapchainTarget, swapchainFormat);
         SDL_EndGPURenderPass(pass);
 
@@ -456,6 +489,7 @@ namespace CNA::Internal::Backends::SdlGpu
         RenderLitTexturedDraws(pass, cmd, dt, kRenderTargetFormat);
         RenderAlphaTestDraws(pass, cmd, dt, kRenderTargetFormat);
         RenderDualTextureDraws(pass, cmd, dt, kRenderTargetFormat);
+        RenderEnvMapDraws(pass, cmd, dt, kRenderTargetFormat);
         RenderSprites(pass, cmd, dt, kRenderTargetFormat);
         SDL_EndGPURenderPass(pass);
 
@@ -509,6 +543,7 @@ namespace CNA::Internal::Backends::SdlGpu
         RenderLitTexturedDraws(pass, cmd, dt, kRenderTargetFormat);
         RenderAlphaTestDraws(pass, cmd, dt, kRenderTargetFormat);
         RenderDualTextureDraws(pass, cmd, dt, kRenderTargetFormat);
+        RenderEnvMapDraws(pass, cmd, dt, kRenderTargetFormat);
         RenderSprites(pass, cmd, dt, kRenderTargetFormat);
         SDL_EndGPURenderPass(pass);
     }
@@ -1925,6 +1960,98 @@ namespace CNA::Internal::Backends::SdlGpu
         return pipeline;
     }
 
+    void SdlGpuGraphicsBackend::CreateEnvMapResources()
+    {
+        if (envMapVertexShader_ != nullptr)
+            return;
+
+        SDL_GPUShaderCreateInfo vsInfo{};
+        vsInfo.code = reinterpret_cast<const Uint8*>(Shaders::kEnvMap3dVertSpv);
+        vsInfo.code_size = Shaders::kEnvMap3dVertSpv_size;
+        vsInfo.entrypoint = "main";
+        vsInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
+        vsInfo.stage = SDL_GPU_SHADERSTAGE_VERTEX;
+        vsInfo.num_uniform_buffers = 2;
+        envMapVertexShader_ = SDL_CreateGPUShader(device_, &vsInfo);
+        if (envMapVertexShader_ == nullptr)
+            throw std::runtime_error(std::string("CNA SDL_GPU: failed to create env_map3d vertex shader: ") + SDL_GetError());
+
+        SDL_GPUShaderCreateInfo fsInfo{};
+        fsInfo.code = reinterpret_cast<const Uint8*>(Shaders::kEnvMap3dFragSpv);
+        fsInfo.code_size = Shaders::kEnvMap3dFragSpv_size;
+        fsInfo.entrypoint = "main";
+        fsInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
+        fsInfo.stage = SDL_GPU_SHADERSTAGE_FRAGMENT;
+        fsInfo.num_samplers = 2;  // uTexture (2D) + uEnvMap (cube)
+        fsInfo.num_uniform_buffers = 2;
+        envMapFragmentShader_ = SDL_CreateGPUShader(device_, &fsInfo);
+        if (envMapFragmentShader_ == nullptr)
+        {
+            SDL_ReleaseGPUShader(device_, envMapVertexShader_);
+            envMapVertexShader_ = nullptr;
+            throw std::runtime_error(std::string("CNA SDL_GPU: failed to create env_map3d fragment shader: ") + SDL_GetError());
+        }
+    }
+
+    void SdlGpuGraphicsBackend::DestroyEnvMapResources()
+    {
+        for (auto& [key, pipeline] : envMapPipelines_)
+            if (pipeline != nullptr) SDL_ReleaseGPUGraphicsPipeline(device_, pipeline);
+        envMapPipelines_.clear();
+        if (envMapFragmentShader_ != nullptr) { SDL_ReleaseGPUShader(device_, envMapFragmentShader_); envMapFragmentShader_ = nullptr; }
+        if (envMapVertexShader_ != nullptr) { SDL_ReleaseGPUShader(device_, envMapVertexShader_); envMapVertexShader_ = nullptr; }
+    }
+
+    SDL_GPUGraphicsPipeline* SdlGpuGraphicsBackend::GetOrCreatePipelineEnvMap3D(
+        SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
+        SDL_GPUTextureFormat colorFormat)
+    {
+        const int key = PipelineCacheKey(topology, depthTest, depthWrite, depthFunc, colorFormat);
+        const auto it = envMapPipelines_.find(key);
+        if (it != envMapPipelines_.end())
+            return it->second;
+
+        // Stride 32: VertexPositionNormalTexture -- identical vertex layout to lit_textured3d.
+        SDL_GPUVertexBufferDescription vbDesc{};
+        vbDesc.slot = 0;
+        vbDesc.pitch = 32;
+        vbDesc.input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
+
+        SDL_GPUVertexAttribute attrs[3]{};
+        attrs[0].location = 0; attrs[0].buffer_slot = 0; attrs[0].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3; attrs[0].offset = 0;
+        attrs[1].location = 1; attrs[1].buffer_slot = 0; attrs[1].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3; attrs[1].offset = 12;
+        attrs[2].location = 2; attrs[2].buffer_slot = 0; attrs[2].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2; attrs[2].offset = 24;
+
+        SDL_GPUColorTargetDescription colorTarget{};
+        colorTarget.format = colorFormat;
+
+        SDL_GPUGraphicsPipelineCreateInfo pipelineInfo{};
+        pipelineInfo.vertex_shader = envMapVertexShader_;
+        pipelineInfo.fragment_shader = envMapFragmentShader_;
+        pipelineInfo.vertex_input_state.vertex_buffer_descriptions = &vbDesc;
+        pipelineInfo.vertex_input_state.num_vertex_buffers = 1;
+        pipelineInfo.vertex_input_state.vertex_attributes = attrs;
+        pipelineInfo.vertex_input_state.num_vertex_attributes = 3;
+        pipelineInfo.primitive_type = topology;
+        pipelineInfo.rasterizer_state.fill_mode = SDL_GPU_FILLMODE_FILL;
+        pipelineInfo.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_NONE;
+        pipelineInfo.rasterizer_state.front_face = SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE;
+        pipelineInfo.multisample_state.sample_count = SDL_GPU_SAMPLECOUNT_1;
+        pipelineInfo.depth_stencil_state.enable_depth_test = depthTest;
+        pipelineInfo.depth_stencil_state.enable_depth_write = depthWrite;
+        pipelineInfo.depth_stencil_state.compare_op = ToCompareOp(depthFunc);
+        pipelineInfo.target_info.color_target_descriptions = &colorTarget;
+        pipelineInfo.target_info.num_color_targets = 1;
+        pipelineInfo.target_info.has_depth_stencil_target = (depthStencilFormat_ != SDL_GPU_TEXTUREFORMAT_INVALID);
+        pipelineInfo.target_info.depth_stencil_format = depthStencilFormat_;
+
+        SDL_GPUGraphicsPipeline* pipeline = SDL_CreateGPUGraphicsPipeline(device_, &pipelineInfo);
+        if (pipeline == nullptr)
+            throw std::runtime_error(std::string("CNA SDL_GPU: failed to create env_map3d pipeline: ") + SDL_GetError());
+        envMapPipelines_[key] = pipeline;
+        return pipeline;
+    }
+
     void SdlGpuGraphicsBackend::QueueAlphaTestDraw(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
                                                     const Matrix& world, const Matrix& view, const Matrix& projection,
                                                     PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
@@ -2014,6 +2141,67 @@ namespace CNA::Internal::Backends::SdlGpu
         framePending_ = true;
     }
 
+    void SdlGpuGraphicsBackend::QueueEnvMapDraw(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
+                                                const Matrix& world, const Matrix& view, const Matrix& projection,
+                                                PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
+    {
+        const auto& sdlGpuVb = static_cast<const SdlGpuVertexBufferBackend&>(vb);
+        if (sdlGpuVb.Stride() != 32)
+            throw std::invalid_argument("CNA SDL_GPU: env_map3d requires a stride-32 "
+                                        "(VertexPositionNormalTexture) vertex buffer");
+
+        // params.envMap (ITextureCubeBackend*) may be either a plain, uploaded TextureCube
+        // (SdlGpuTextureCubeBackend, SDLGPU-51) or a RenderTargetCube sampled after being rendered
+        // into (SdlGpuRenderTargetCubeBackend, SDLGPU-36) -- both implement ITextureCubeBackend but
+        // are unrelated concrete classes, so resolve whichever one this actually is to get the raw
+        // SDL_GPUTexture* to bind (mirrors SpriteBatch::Draw's own dual-backend resolve for
+        // ITextureBackend/SdlGpuTextureBackend vs SdlGpuRenderTargetBackend).
+        SDL_GPUTexture* envMapTexture = nullptr;
+        if (const auto* plainCube = dynamic_cast<const SdlGpuTextureCubeBackend*>(params.envMap))
+            envMapTexture = plainCube->Texture();
+        else if (const auto* rtCube = dynamic_cast<const SdlGpuRenderTargetCubeBackend*>(params.envMap))
+            envMapTexture = rtCube->CubeTexture();
+        else
+            throw std::invalid_argument("CNA SDL_GPU: EnvironmentMapEffect received a cube texture from another graphics backend");
+
+        EnvMapDrawCommand command;
+        const int vertexStart = params.vertexStart;
+        const auto& shadow = sdlGpuVb.ShadowData();
+        const std::size_t byteOffset = static_cast<std::size_t>(vertexStart) * 32u;
+        if (byteOffset <= shadow.size())
+            command.vertexData.assign(shadow.begin() + static_cast<std::ptrdiff_t>(byteOffset), shadow.end());
+        command.topology = ToTopology(primitive);
+        command.depthTest = depthTestEnabled_;
+        command.depthFunc = depthCompareFunction_;
+        command.depthWrite = depthWriteEnabled_;
+        const Matrix wvp = world * view * projection;
+        FillEnvMapUniforms(command.uniforms, wvp, params);
+        FillEnvMapParams(command.envMapUniforms, params);
+        command.texture = static_cast<const SdlGpuTextureBackend*>(params.texture0);
+        command.envMapTexture = envMapTexture;
+        command.textureFilter = 0;
+        command.addressU = 1;
+        command.addressV = 1;
+
+        if (ib != nullptr)
+        {
+            const auto& sdlGpuIb = static_cast<const SdlGpuIndexBufferBackend&>(*ib);
+            command.indexed = true;
+            command.index32 = sdlGpuIb.IsThirtyTwoBit();
+            command.indexData = sdlGpuIb.ShadowData();
+            command.indexCount = static_cast<Uint32>(PrimitiveIndexCount(primitive, primitiveCount));
+            command.vertexCount = static_cast<Uint32>(sdlGpuVb.GetVertexCount()) - static_cast<Uint32>(vertexStart);
+        }
+        else
+        {
+            command.vertexCount = static_cast<Uint32>(PrimitiveVertexCount(primitive, primitiveCount));
+        }
+
+        command.target = CurrentDrawTarget();
+        envMapDrawCommands_.push_back(std::move(command));
+        framePending_ = true;
+    }
+
     void SdlGpuGraphicsBackend::RenderAlphaTestDraws(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
                                                      const DrawTarget& target, SDL_GPUTextureFormat colorFormat)
     {
@@ -2093,10 +2281,56 @@ namespace CNA::Internal::Backends::SdlGpu
         }
     }
 
+    void SdlGpuGraphicsBackend::RenderEnvMapDraws(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
+                                                  const DrawTarget& target, SDL_GPUTextureFormat colorFormat)
+    {
+        for (const EnvMapDrawCommand& command : envMapDrawCommands_)
+        {
+            if (command.uploadedVertexBuffer == nullptr || command.texture == nullptr
+                || command.envMapTexture == nullptr || command.target != target)
+                continue;
+
+            SDL_GPUGraphicsPipeline* pipeline = GetOrCreatePipelineEnvMap3D(
+                command.topology, command.depthTest, command.depthWrite, command.depthFunc, colorFormat);
+            SDL_BindGPUGraphicsPipeline(pass, pipeline);
+            SDL_PushGPUVertexUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
+            SDL_PushGPUVertexUniformData(cmd, 1, command.envMapUniforms.data(), sizeof(command.envMapUniforms));
+            SDL_PushGPUFragmentUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
+            SDL_PushGPUFragmentUniformData(cmd, 1, command.envMapUniforms.data(), sizeof(command.envMapUniforms));
+
+            SDL_GPUBufferBinding vbBinding{};
+            vbBinding.buffer = command.uploadedVertexBuffer;
+            SDL_BindGPUVertexBuffers(pass, 0, &vbBinding, 1);
+
+            // The env map is always sampled Linear+Clamp regardless of texture0's own filter/
+            // address settings -- matches this project's other backends' fixed reflection-map
+            // sampling convention (address mode is largely moot for a direction-addressed cube map).
+            SDL_GPUTextureSamplerBinding samplerBindings[2]{};
+            samplerBindings[0].texture = command.texture->Texture();
+            samplerBindings[0].sampler = GetOrCreateSampler(command.textureFilter, command.addressU, command.addressV);
+            samplerBindings[1].texture = command.envMapTexture;
+            samplerBindings[1].sampler = GetOrCreateSampler(0, 1, 1);
+            SDL_BindGPUFragmentSamplers(pass, 0, samplerBindings, 2);
+
+            if (command.indexed && command.uploadedIndexBuffer != nullptr)
+            {
+                SDL_GPUBufferBinding ibBinding{};
+                ibBinding.buffer = command.uploadedIndexBuffer;
+                SDL_BindGPUIndexBuffer(pass, &ibBinding,
+                                       command.index32 ? SDL_GPU_INDEXELEMENTSIZE_32BIT : SDL_GPU_INDEXELEMENTSIZE_16BIT);
+                SDL_DrawGPUIndexedPrimitives(pass, command.indexCount, 1, 0, 0, 0);
+            }
+            else
+            {
+                SDL_DrawGPUPrimitives(pass, command.vertexCount, 1, 0, 0);
+            }
+        }
+    }
+
     void SdlGpuGraphicsBackend::UploadSceneDrawData(SDL_GPUCommandBuffer* cmd)
     {
         if (coloredDrawCommands_.empty() && texturedDrawCommands_.empty() && litTexturedDrawCommands_.empty() &&
-            alphaTestDrawCommands_.empty() && dualTextureDrawCommands_.empty())
+            alphaTestDrawCommands_.empty() && dualTextureDrawCommands_.empty() && envMapDrawCommands_.empty())
             return;
 
         SDL_GPUCopyPass* copyPass = SDL_BeginGPUCopyPass(cmd);
@@ -2175,6 +2409,14 @@ namespace CNA::Internal::Backends::SdlGpu
                 command.uploadedIndexBuffer = uploadOne(command.indexData, SDL_GPU_BUFFERUSAGE_INDEX);
         }
         for (DualTextureDrawCommand& command : dualTextureDrawCommands_)
+        {
+            if (command.vertexCount == 0 || command.vertexData.empty())
+                continue;
+            command.uploadedVertexBuffer = uploadOne(command.vertexData, SDL_GPU_BUFFERUSAGE_VERTEX);
+            if (command.indexed && !command.indexData.empty())
+                command.uploadedIndexBuffer = uploadOne(command.indexData, SDL_GPU_BUFFERUSAGE_INDEX);
+        }
+        for (EnvMapDrawCommand& command : envMapDrawCommands_)
         {
             if (command.vertexCount == 0 || command.vertexData.empty())
                 continue;
@@ -2329,6 +2571,12 @@ namespace CNA::Internal::Backends::SdlGpu
             if (command.uploadedIndexBuffer != nullptr) SDL_ReleaseGPUBuffer(device_, command.uploadedIndexBuffer);
         }
         dualTextureDrawCommands_.clear();
+        for (EnvMapDrawCommand& command : envMapDrawCommands_)
+        {
+            if (command.uploadedVertexBuffer != nullptr) SDL_ReleaseGPUBuffer(device_, command.uploadedVertexBuffer);
+            if (command.uploadedIndexBuffer != nullptr) SDL_ReleaseGPUBuffer(device_, command.uploadedIndexBuffer);
+        }
+        envMapDrawCommands_.clear();
     }
 
     void SdlGpuGraphicsBackend::DrawColoredPrimitives(const IVertexBufferBackend& vb,
@@ -2354,11 +2602,13 @@ namespace CNA::Internal::Backends::SdlGpu
         const auto& sdlGpuVb = static_cast<const SdlGpuVertexBufferBackend&>(vb);
         const std::size_t stride = sdlGpuVb.Stride();
         // Matches VulkanGraphicsBackend/WebGPUGraphicsBackend's own dispatch precedence: alpha
-        // test wins over dual-texture (an AlphaTestEffect draw on a DualTextureEffect-shaped
-        // buffer never reaches dual_texture3d); EnvironmentMapEffect/SkinnedEffect are not
-        // implemented yet (plan_sdlgpu.md Phase SDLGPU-9/10) and fall through to plain BasicEffect.
+        // test wins over dual-texture and env-map (an AlphaTestEffect draw on a
+        // DualTextureEffect/EnvironmentMapEffect-shaped buffer never reaches those shaders);
+        // env-map wins over plain lit_textured3d (both use stride 32). SkinnedEffect is not
+        // implemented yet (plan_sdlgpu.md Phase SDLGPU-10) and falls through to plain BasicEffect.
         const bool needsAlphaTest = params.alphaTest[2] < 0.0f || params.alphaTest[3] < 0.0f;
         const bool needsDualTexture = !needsAlphaTest && params.dualTexture;
+        const bool needsEnvMap = !needsAlphaTest && !needsDualTexture && params.envMapping;
         if (needsAlphaTest && (stride == 20 || stride == 24 || stride == 32) && params.texture0 != nullptr)
         {
             QueueAlphaTestDraw(vb, nullptr, world, view, projection, primitive, primitiveCount, params);
@@ -2367,6 +2617,11 @@ namespace CNA::Internal::Backends::SdlGpu
         if (needsDualTexture && (stride == 20 || stride == 24) && params.texture0 != nullptr && params.texture1 != nullptr)
         {
             QueueDualTextureDraw(vb, nullptr, world, view, projection, primitive, primitiveCount, params);
+            return;
+        }
+        if (needsEnvMap && stride == 32 && params.texture0 != nullptr && params.envMap != nullptr)
+        {
+            QueueEnvMapDraw(vb, nullptr, world, view, projection, primitive, primitiveCount, params);
             return;
         }
         if (stride == 16)
@@ -2396,6 +2651,7 @@ namespace CNA::Internal::Backends::SdlGpu
         const std::size_t stride = sdlGpuVb.Stride();
         const bool needsAlphaTest = params.alphaTest[2] < 0.0f || params.alphaTest[3] < 0.0f;
         const bool needsDualTexture = !needsAlphaTest && params.dualTexture;
+        const bool needsEnvMap = !needsAlphaTest && !needsDualTexture && params.envMapping;
         if (needsAlphaTest && (stride == 20 || stride == 24 || stride == 32) && params.texture0 != nullptr)
         {
             QueueAlphaTestDraw(vb, &ib, world, view, projection, primitive, primitiveCount, params);
@@ -2404,6 +2660,11 @@ namespace CNA::Internal::Backends::SdlGpu
         if (needsDualTexture && (stride == 20 || stride == 24) && params.texture0 != nullptr && params.texture1 != nullptr)
         {
             QueueDualTextureDraw(vb, &ib, world, view, projection, primitive, primitiveCount, params);
+            return;
+        }
+        if (needsEnvMap && stride == 32 && params.texture0 != nullptr && params.envMap != nullptr)
+        {
+            QueueEnvMapDraw(vb, &ib, world, view, projection, primitive, primitiveCount, params);
             return;
         }
         if (stride == 16)

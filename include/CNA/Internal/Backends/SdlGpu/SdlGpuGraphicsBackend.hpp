@@ -276,6 +276,9 @@ namespace CNA::Internal::Backends::SdlGpu
         void GetData(int face, int level, int x, int y, int w, int h,
                     void* data, int dataLength) const override;
 
+        /** @brief Returns the underlying `SDL_GPUTexture`. NOXNA — internal use only. */
+        NOXNA [[nodiscard]] SDL_GPUTexture* Texture() const { return texture_; }
+
     private:
         SdlGpuGraphicsBackend* owner_ = nullptr;
         SDL_GPUTexture* texture_ = nullptr;
@@ -566,6 +569,35 @@ namespace CNA::Internal::Backends::SdlGpu
             SDL_GPUBuffer* uploadedIndexBuffer = nullptr;
         };
 
+        // EnvironmentMapEffect (Phase SDLGPU-9, SDLGPU-33) -- stride 32 (VertexPositionNormalTexture,
+        // same layout lit_textured3d uses). `envMapTexture` is resolved at Queue-time to the raw
+        // SDL_GPUTexture* since GpuDrawParams::envMap (an ITextureCubeBackend*) may be either a
+        // plain SdlGpuTextureCubeBackend or a SdlGpuRenderTargetCubeBackend -- mirrors
+        // SpriteBatch::Draw's own dual-backend resolve for ITextureBackend.
+        struct EnvMapDrawCommand
+        {
+            std::vector<std::uint8_t> vertexData;
+            std::vector<std::uint8_t> indexData;
+            bool indexed = false;
+            bool index32 = false;
+            Uint32 vertexCount = 0;
+            Uint32 indexCount = 0;
+            SDL_GPUPrimitiveType topology = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
+            std::array<float, 24> uniforms{};       ///< PC: mvp(16) + diffuseColor(4) + emissiveAmount(4)
+            std::array<float, 48> envMapUniforms{}; ///< EnvMapParams: world(16) + 8 vec4 (32) = 48 floats
+            bool depthTest = false;
+            bool depthWrite = false;
+            int depthFunc = 3;
+            const SdlGpuTextureBackend* texture = nullptr;
+            SDL_GPUTexture* envMapTexture = nullptr;
+            int textureFilter = 0;
+            int addressU = 1;
+            int addressV = 1;
+            DrawTarget target;  ///< default = swapchain
+            SDL_GPUBuffer* uploadedVertexBuffer = nullptr;
+            SDL_GPUBuffer* uploadedIndexBuffer = nullptr;
+        };
+
         /**
          * @brief Constructs the backend against an already-created SDL window.
          *
@@ -804,6 +836,18 @@ namespace CNA::Internal::Backends::SdlGpu
         void RenderDualTextureDraws(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
                                    const DrawTarget& target, SDL_GPUTextureFormat colorFormat);
 
+        // Phase SDLGPU-9: EnvironmentMapEffect (SDLGPU-33).
+        void CreateEnvMapResources();
+        void DestroyEnvMapResources();
+        [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipelineEnvMap3D(
+            SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
+            SDL_GPUTextureFormat colorFormat);
+        void QueueEnvMapDraw(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
+                             const Matrix& world, const Matrix& view, const Matrix& projection,
+                             PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
+        void RenderEnvMapDraws(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
+                               const DrawTarget& target, SDL_GPUTextureFormat colorFormat);
+
         // Uploads every queued 3D draw command's shadow-copied vertex/index data into a fresh
         // transient SDL_GPUBuffer per command (mirrors WebGPUGraphicsBackend's own per-draw
         // transient-buffer approach) -- must run in the same copy pass as UploadSpriteVertexData,
@@ -891,6 +935,11 @@ namespace CNA::Internal::Backends::SdlGpu
         std::unordered_map<int, SDL_GPUGraphicsPipeline*> dualTexturePipelines_;
         std::unordered_map<int, SDL_GPUGraphicsPipeline*> dualTextureColoredPipelines_;
         std::vector<DualTextureDrawCommand> dualTextureDrawCommands_;
+
+        SDL_GPUShader* envMapVertexShader_ = nullptr;
+        SDL_GPUShader* envMapFragmentShader_ = nullptr;
+        std::unordered_map<int, SDL_GPUGraphicsPipeline*> envMapPipelines_;
+        std::vector<EnvMapDrawCommand> envMapDrawCommands_;
 
         int depthCompareFunction_ = 3;  ///< XNA CompareFunction ordinal; 3 = LessEqual (DepthStencilState.Default)
 

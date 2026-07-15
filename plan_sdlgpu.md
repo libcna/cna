@@ -1,8 +1,9 @@
 # SDL GPU Graphics Backend — Implementation Plan
 
 > **Status (2026-07-15): Phases SDLGPU-1 through SDLGPU-6 are fully implemented and verified;
-> Phase SDLGPU-7 is half done** — `AlphaTestEffect`/`DualTextureEffect` are real and verified,
-> `EnvironmentMapEffect`/`SkinnedEffect` are deliberately deferred (see their own rows for why).
+> Phase SDLGPU-7 is mostly done** — `AlphaTestEffect`/`DualTextureEffect`/`EnvironmentMapEffect`
+> are real and verified (the latter landed later the same day once Phase `SDLGPU-9`'s cube-texture
+> backends existed, see below); `SkinnedEffect` remains deliberately deferred (see its own row for why).
 > `CNA_GRAPHICS_BACKEND=SDL_GPU` configures, builds (`cna_backend_graphics_sdl_gpu`, zero new
 > third-party dependencies as predicted), and a real window + real `SDL_GPUDevice` (Vulkan driver)
 > clears color+depth+stencil, uploads a real `Texture2D`, draws a real `SpriteBatch` scene (tint,
@@ -47,10 +48,11 @@
 > done and verified — `SdlGpuTextureCubeBackend` reused the exact same per-face `region.layer`
 > indexing `SdlGpuRenderTargetCubeBackend::GetData()` already established, and its `SetData` uses
 > `cycle=false` from the start (the `SDLGPU-40` bug was checked for and confirmed absent via a
-> deliberate "write all 6 faces, then re-read face 0 last" regression check). `SDLGPU-33`
-> (`EnvironmentMapEffect`) is now fully unblocked on the texture-source side (both `RenderTargetCube`
-> and plain `TextureCube` backends are real) — only `SDLGPU-34` (`SkinnedEffect`'s push-uniform-size
-> spike) remains deferred from Phase 7.
+> deliberate "write all 6 faces, then re-read face 0 last" regression check). With both cube-texture
+> sources now real, `SDLGPU-33` (`EnvironmentMapEffect`) was implemented and verified the same day —
+> see its own row for the new `env_map3d.glsl` shader pair and the dual-backend cube resolve this
+> required. Only `SDLGPU-34` (`SkinnedEffect`'s push-uniform-size spike) remains deferred from
+> Phase 7.
 >
 > **Real architectural gotcha found while writing `SDLGPU-37`'s test (applies to any code using
 > this backend, not just tests):** a `RenderTarget2D`/`RenderTargetCube` destroyed before this
@@ -74,7 +76,7 @@
 > `SDLGPU-35` introduced or fixed. This backend's own dedicated CTest suite
 > (`SdlGpu_Smoke`/`SdlGpu_2D`/`SdlGpu_3D`/`SdlGpu_Effects`/`SdlGpu_RenderTarget2D`/
 > `SdlGpu_RenderTargetCube`/`SdlGpu_MRT`/`SdlGpu_RenderTarget2DMSAA`/`SdlGpu_Texture3D`/
-> `SdlGpu_TextureCube`, `ctest -R SdlGpu`) is the actual validated methodology
+> `SdlGpu_TextureCube`/`SdlGpu_EnvMap`, `ctest -R SdlGpu`) is the actual validated methodology
 > for real-window backends in this project (mirrors
 > how Vulkan/D3D11/D3D12 are validated) — don't treat a full unfiltered `CnaTests` run under this
 > backend as a meaningful signal without first re-reading this note.
@@ -224,11 +226,11 @@ extends.
    `SDLGPU-41` (mips), and `SDLGPU-51` (plain `TextureCube`) are all done and verified 2026-07-15,
    all ✅ — see `SDLGPU-40`'s own row for a real `cycle=true` GPU-resource-orphaning bug this
    phase's own byte-exact round-trip tests caught and fixed (confirmed absent for `SDLGPU-51` too
-   via its own dedicated regression check). `SDLGPU-33` (`EnvironmentMapEffect`) is now fully
-   unblocked on the texture-source side — both `RenderTargetCube` and plain `TextureCube` backends
-   are real. Next up in this plan: `SDLGPU-33`/`34` (deferred effects) — `SDLGPU-34`
-   (`SkinnedEffect`) remains blocked on its own bone-palette push-size question, independent of
-   this phase.
+   via its own dedicated regression check).
+7. **`SDLGPU-33` (`EnvironmentMapEffect`) done and verified 2026-07-15**, once both cube-texture
+   sources existed — see its own row for the new `env_map3d.glsl` shader pair and the dual-backend
+   cube resolve this required. Only `SDLGPU-34` (`SkinnedEffect`) remains from Phase 7, still
+   blocked on its own bone-palette push-size question, independent of everything above.
 
 ---
 
@@ -310,7 +312,7 @@ extends.
 | --- | --- | --- | --- |
 | SDLGPU-31 | `AlphaTestEffect` (per-pixel discard) — strides 20/24/32. | ✅ | Done and runtime-verified 2026-07-15 (`SdlGpu_Effects` CTest + screenshot: `AlphaFunction=Greater`/`ReferenceAlpha=128` on a texture with an opaque top half and a fully-transparent bottom half genuinely discards the bottom half — the `CornflowerBlue` background shows through with a hard edge, not a translucent blend, proving real `discard`, not alpha blending). Strides 20/32 share `alpha_test3d.vert.glsl`/one shader but need distinct pipelines (different vertex-input-state) — the pipeline cache key folds in the stride explicitly for this one shader family, unlike every other family here which is already stride-specific by construction. |
 | SDLGPU-32 | `DualTextureEffect` (two-sampler multiply, `tex1.rgb*=2.0; result=tex1*tex2*tint`) — strides 20/24. | ✅ | Done and runtime-verified 2026-07-15 — screenshot shows the exact predicted result of multiplying a red/green/blue/white quadrant texture by a uniform yellow second texture: red/green pass through unchanged, blue becomes black (yellow has no blue channel), white becomes yellow. An unambiguous proof the real two-sampler multiply runs, not just one texture being shown. |
-| SDLGPU-33 | `EnvironmentMapEffect` (cubemap reflection) — needs `SDL_GPU_TEXTURETYPE_CUBE` texture creation + `SDL_GPUCubeMapFace`-indexed per-face upload. | ⬜ | **Fully unblocked on the texture-source side, 2026-07-15.** `SDLGPU-36` added a real `ITextureCubeBackend` implementation (`SdlGpuRenderTargetCubeBackend`), so `EnvironmentMapEffect` sampling a `RenderTargetCube`-sourced `envMap` is technically feasible. `SDLGPU-51` then added `SdlGpuTextureCubeBackend`, a real plain/uploaded `TextureCube` backend (what a real game's static skybox/reflection map would normally be, via content loading rather than render-to-texture) — `CreateTextureCube()` no longer returns the inherited `nullptr`. Both `TextureCube` sources now work; only the effect/shader itself remains unimplemented. Do not build the cube backend inline as part of the effect — it already exists as of `SDLGPU-51`. |
+| SDLGPU-33 | `EnvironmentMapEffect` (cubemap reflection) — needs `SDL_GPU_TEXTURETYPE_CUBE` texture creation + `SDL_GPUCubeMapFace`-indexed per-face upload. | ✅ | 2026-07-15. New `env_map3d.vert.glsl`/`env_map3d.frag.glsl` (stride-32 `VertexPositionNormalTexture`, identical vertex layout to `lit_textured3d.glsl`), compiled via `compile_shaders.py`. Mirrors `VulkanGraphicsBackend`'s own `env_map3d.vert/frag.glsl` technique field-for-field (reflect(-E,N) off a world-space normal, Fresnel-weighted or flat blend factor, FNA's real `mix(baseColor, envSample*combinedAlpha, blendFactor) + envMapSpecular*envSample.a*combinedAlpha` lerp semantics) — minus fog, deliberately deferred the same way `lit_textured3d.glsl` already defers it for this backend. A new `SdlGpuTextureCubeBackend::Texture()`/`SdlGpuRenderTargetCubeBackend::CubeTexture()` dual-backend resolve (mirrors `SpriteBatch::Draw`'s own `SdlGpuTextureBackend`-vs-`SdlGpuRenderTargetBackend` resolve) lets `GpuDrawParams::envMap` come from either a plain `TextureCube` (`SDLGPU-51`) or a `RenderTargetCube` (`SDLGPU-36`) — both now real backends. Full `EnvMapDrawCommand`/`CreateEnvMapResources`/`DestroyEnvMapResources`/`GetOrCreatePipelineEnvMap3D`/`QueueEnvMapDraw`/`RenderEnvMapDraws` plumbing added, mirroring `lit_textured3d`'s own family shape exactly; wired into `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx`'s dispatch with the same precedence `VulkanGraphicsBackend`/`WebGPUGraphicsBackend` already established (alpha test > dual-texture > env-map > plain lit/textured, since env-map and lit-textured share stride 32); added to all 3 `UploadSceneDrawData`/`RenderEnvMapDraws`(swapchain + 2 render-target passes)/`ReleaseSceneDrawBuffers` call sites. Verified via a new `SdlGpu_EnvMap`, 3/3 checks, directly ported from this project's own existing `vulkan_environmentmapeffect_amount_one_test.cpp` (same values/tolerance, `RenderTarget2D::GetData()` readback instead of `GetBackBufferData()` since this backend's swapchain-download path segfaults — see `SDLGPU-39`'s row): `EnvironmentMapAmount=1` with a solid white cubemap fully replaces the lit/textured color (FNA's real lerp semantics, not an additive contribution); the same with a solid gray cubemap reads back gray, not white or the diffuse texture's own color (proves the cube sample is genuinely being read, not a hardcoded/leftover value); `EnvironmentMapAmount=0` reads back the plain emissive-lit result, nowhere near either cubemap color (proves the blend amount is real, not always-on). `EnvironmentMapEffect::FresnelEnabled` has no public setter in this codebase (defaults permanently `true`, matching real XNA) — all 3 checks exercise the Fresnel-enabled code path by construction, not a separate untested branch. Full `ctest -R "SdlGpu"` re-run: **11/11 passing**, zero regressions. `SDLGPU-34` (`SkinnedEffect`) remains the only unimplemented row from Phase `SDLGPU-7`. |
 | SDLGPU-34 | `SkinnedEffect` (bone-matrix palette). | ⬜ | **Deliberately deferred, not attempted this session** — two real risks, not yet resolved: (1) a 72-bone palette is 4608 bytes, far larger than every push so far (max 224 bytes/`lit_textured3d`'s `LitLightParams`); `SDL_gpu.h` still does not document a hard per-driver push-uniform size limit, so this needs an empirical spike (a real 72-matrix push, or fall back to `SDL_BindGPUVertexStorageBuffers` if it fails) before committing to an approach. (2) needs a new stride-52 `VertexPositionNormalTextureSkinned` vertex format (bone weights `vec4` + bone indices as 4 small integers) not yet used by any pipeline here — check `SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4`/`UINT4`-equivalent support for the index attribute before assuming the layout ports directly from `VulkanGraphicsBackend`'s `uvec4 aBoneIndices`. |
 
 ---

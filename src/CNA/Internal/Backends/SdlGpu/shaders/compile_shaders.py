@@ -155,6 +155,8 @@ def main():
         ("dual_texture3d.vert.glsl", VERTEX_SHADER,   "kDualTexture3dVertSpv"),
         ("dual_texture_colored3d.vert.glsl", VERTEX_SHADER, "kDualTextureColored3dVertSpv"),
         ("dual_texture3d.frag.glsl", FRAGMENT_SHADER, "kDualTexture3dFragSpv"),
+        ("env_map3d.vert.glsl", VERTEX_SHADER,   "kEnvMap3dVertSpv"),
+        ("env_map3d.frag.glsl", FRAGMENT_SHADER, "kEnvMap3dFragSpv"),
     ]
 
     output_path = Path(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[1] == "--output" else \
