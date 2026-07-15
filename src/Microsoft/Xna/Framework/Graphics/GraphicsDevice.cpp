@@ -378,6 +378,14 @@ namespace Microsoft::Xna::Framework::Graphics
             const int appliedMultiSampleCount = backend_->ApplyMultiSampleCount(
                 presentationParameters_.getMultiSampleCountProperty());
             presentationParameters_.setMultiSampleCountProperty(appliedMultiSampleCount);
+
+            // Previously missing: this Reset() overload never forwarded PresentationInterval to
+            // the backend, unlike SetPresentationParameters()'s own identical field -- meaning
+            // GraphicsDeviceManager.SynchronizeWithVerticalRetrace/ApplyChanges() (which always
+            // goes through this path, not SetPresentationParameters()) never actually reached
+            // IGraphicsBackend::SetSwapInterval() on any backend. Matches SetPresentationParameters()'s
+            // own forwarding exactly.
+            backend_->SetSwapInterval(toSwapInterval(presentationParameters_.getPresentationIntervalProperty()));
         }
 
         UpdateViewportFromWindow();

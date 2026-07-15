@@ -3250,6 +3250,16 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # GraphicsDeviceManager.SynchronizeWithVerticalRetrace/ApplyChanges() must actually reach
+        # IGraphicsBackend::SetSwapInterval() -- backend-independent fix in GraphicsDevice::Reset().
+        cna_easygl_test(cna_test_easygl_graphicsdevicemanager_vsync
+                        examples/easygl_graphicsdevicemanager_vsync_test.cpp)
+        add_test(NAME EasyGL_GraphicsDeviceManager_Vsync
+                 COMMAND cna_test_easygl_graphicsdevicemanager_vsync)
+        set_tests_properties(EasyGL_GraphicsDeviceManager_Vsync PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     endif()
 
     # Vulkan integration tests
