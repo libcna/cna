@@ -6708,6 +6708,14 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
         LABELS "DX3")
+
+    # plan_dx3.md Phase X6 (DX3-50..DX3-54): SpriteFont / DrawString CTest.
+    cna_dx3_test(cna_test_dx3_spritefont examples/dx3_spritefont_test.cpp)
+    add_test(NAME Dx3_SpriteFont COMMAND cna_test_dx3_spritefont)
+    set_tests_properties(Dx3_SpriteFont PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
+        LABELS "DX3")
 endif()
 
 # plan_dx.md DX-80: D3D11 CTest registration. When cross-compiled from Linux (this backend is

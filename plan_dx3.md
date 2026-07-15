@@ -15,7 +15,7 @@
 >
 > **Status legend** (matches `../cna`'s own convention): ✅ implemented *and verified against its
 > stated acceptance criteria*; 🟨 code or documentation exists but has not met those criteria;
-> ⬜ not implemented. Phases X1/X2/X3/X4/X5 are ✅ (see their own tables below); X6 onward are ⬜.
+> ⬜ not implemented. Phases X1/X2/X3/X4/X5/X6 are ✅ (see their own tables below); X7 onward are ⬜.
 >
 > **Correction (2026-07-15, Phase X4 closure): the Phase X3 commit's "full `CnaTests` suite has no
 > new failures (one pre-existing, unrelated failure...)" claim was incomplete.** It was based on
@@ -301,11 +301,13 @@ per-formula math (DX3-40..43) below.
 
 | # | Task | Status | Notes |
 |---|---|---|---|
-| DX3-50 | Single glyph at a known position/size — confirm needs no code beyond Phase X4's `Draw()` path | ⬜ | |
-| DX3-51 | Multiple glyphs with spacing/kerning | ⬜ | Expect ✅ with no new code, per `SDL_RENDERER` Task 691's own finding. |
-| DX3-52 | `\n` newline advance | ⬜ | |
-| DX3-53 | Unknown-character fallback (`defaultCharacter`) | ⬜ | |
-| DX3-54 | `SpriteEffects` flip + rotation/origin/scale with `DrawString` | ⬜ | The shared `SpriteBatch.cpp` fix from `SDL_RENDERER` Task 694 is backend-agnostic and already applies here. |
+| DX3-50 | Single glyph at a known position/size — confirm needs no code beyond Phase X4's `Draw()` path | ✅ | Confirmed by reading `SpriteBatch.cpp`: `DrawString` lays out a destination rect per glyph and calls `pushSprite()` -> `backend_->Draw()`, the exact same `ISpriteBatchBackend::Draw()` overload Phase X4/X5 already implemented. Zero new backend code -- this phase adds only `Dx3_SpriteFont`, a CTest proving the claim empirically rather than merely asserting it. Verified via Check A (exact-pixel, no color-match tolerance needed, unlike `SDL_RENDERER`'s equivalent test). |
+| DX3-51 | Multiple glyphs with spacing/kerning | ✅ | Expect ✅ with no new code, per `SDL_RENDERER` Task 691's own finding — confirmed. Verified via `Dx3_SpriteFont` Check B (two distinctly-colored glyphs land at their correctly kerning-advanced positions; the gap between them stays background). |
+| DX3-52 | `\n` newline advance | ✅ | Verified via `Dx3_SpriteFont` Check C. |
+| DX3-53 | Unknown-character fallback (`defaultCharacter`) | ✅ | Verified via `Dx3_SpriteFont` Check D (both the fallback-glyph-used case and the throws-when-unset case). |
+| DX3-54 | `SpriteEffects` flip + rotation/origin/scale with `DrawString` | ✅ | The shared `SpriteBatch.cpp` fix from `SDL_RENDERER` Task 694 is backend-agnostic and already applies here — confirmed. Verified via `Dx3_SpriteFont` Check E (`FlipHorizontally` mirrors the whole glyph sequence, not just each glyph individually). |
+
+**Phase X6 CTest**: `Dx3_SpriteFont` (5 checks, all exact-pixel) — no `Dx3GraphicsBackend.cpp`/`.hpp` changes were needed for this phase at all, only the new test file + its `CMakeLists.txt` registration.
 
 ## Phase X7 — `ThrowNo3D` wiring and remaining defaults
 
