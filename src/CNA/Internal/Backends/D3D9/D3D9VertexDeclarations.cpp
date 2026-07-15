@@ -1,14 +1,28 @@
-// plan_dx9.md Phase D9-2 (D9-22).
+// plan_dx9.md Phase D9-2 (D9-22). COLOR0 element type corrected in D9-82 (see below).
 #include "CNA/Internal/Backends/D3D9/D3D9VertexDeclarations.hpp"
 
 namespace CNA::Internal::Backends::D3D9
 {
     namespace
     {
-        // VertexPositionColor (stride 16): POSITION0 (FLOAT3, 0), COLOR0 (D3DCOLOR, 12).
+        // D9-82 real finding (plan_dx9.md's D3D9GraphicsBackend's own first real draw, empirically
+        // verified with cna_test_d3d9_draw before AND after this fix -- not assumed): COLOR0 was
+        // originally declared D3DDECLTYPE_D3DCOLOR (D9-22, "same semantic meaning" as D3D11's
+        // DXGI_FORMAT_R8G8B8A8_UNORM). That is wrong -- MSDN's own D3DDECLTYPE reference says
+        // D3DDECLTYPE_D3DCOLOR's "Input is a D3DCOLOR and is expanded to RGBA order", i.e. it
+        // expects ARGB-packed memory bytes (B,G,R,A ascending) and byte-swizzles them into the
+        // shader's RGBA register order. XNA's own Color.PackedValue is R,G,B,A ascending (matches
+        // D3D9FormatMapping.cpp's identical finding for render-target formats) -- feeding that
+        // native layout through D3DDECLTYPE_D3DCOLOR silently swaps R and B. Confirmed live: a
+        // vertex fed XNA-native opaque red (0xFF0000FF) read back as opaque BLUE (R=0,G=0,B=255)
+        // with the old declaration. D3DDECLTYPE_UBYTE4N (four bytes normalized in their EXISTING
+        // order, no ARGB reorder) is the correct type for CNA's own native byte order -- switching
+        // to it made the same test read back exact, correct red.
+        //
+        // VertexPositionColor (stride 16): POSITION0 (FLOAT3, 0), COLOR0 (UBYTE4N, 12).
         constexpr D3DVERTEXELEMENT9 kStride16[] = {
             {0, 0,  D3DDECLTYPE_FLOAT3,   D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_POSITION, 0},
-            {0, 12, D3DDECLTYPE_D3DCOLOR, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_COLOR,    0},
+            {0, 12, D3DDECLTYPE_UBYTE4N,  D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_COLOR,    0},
             D3DDECL_END()
         };
 
@@ -19,11 +33,11 @@ namespace CNA::Internal::Backends::D3D9
             D3DDECL_END()
         };
 
-        // VertexPositionColorTexture (stride 24): POSITION0 (FLOAT3, 0), COLOR0 (D3DCOLOR, 12),
+        // VertexPositionColorTexture (stride 24): POSITION0 (FLOAT3, 0), COLOR0 (UBYTE4N, 12),
         // TEXCOORD0 (FLOAT2, 16).
         constexpr D3DVERTEXELEMENT9 kStride24[] = {
             {0, 0,  D3DDECLTYPE_FLOAT3,   D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_POSITION, 0},
-            {0, 12, D3DDECLTYPE_D3DCOLOR, D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_COLOR,    0},
+            {0, 12, D3DDECLTYPE_UBYTE4N,  D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_COLOR,    0},
             {0, 16, D3DDECLTYPE_FLOAT2,   D3DDECLMETHOD_DEFAULT, D3DDECLUSAGE_TEXCOORD, 0},
             D3DDECL_END()
         };

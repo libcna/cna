@@ -37,4 +37,9 @@ __pycache__/
 tools/fna-reference/bin/
 tools/fna-reference/obj/
 
+# DXVK shader/pipeline state cache, written next to wherever a D3D9/D3D11/D3D12 test .exe was
+# invoked from (e.g. running a CTest binary directly from the repo root) -- runtime artifact, not
+# source.
+*.dxvk-cache
+
 

@@ -15,6 +15,7 @@
 #include <d3d9.h>
 #include <wrl/client.h>
 
+#include <unordered_map>
 #include <vector>
 
 namespace CNA::Internal::Backends::D3D9
@@ -23,6 +24,7 @@ namespace CNA::Internal::Backends::D3D9
 
     class D3D9RenderTargetBackend;
     class D3D9RenderTargetCubeBackend;
+    class D3D9ShaderCache;
 
     /**
      * D3D9 graphics backend (plan_dx9.md). Implements IGraphicsBackend on top of plain Direct3D 9
@@ -38,8 +40,10 @@ namespace CNA::Internal::Backends::D3D9
      * section) -- not D3D11's own hardcoded-format precedent, which is fine for D3D11 (parity, not
      * authenticity) but would be a direct fidelity violation here. Clear()/all 6 Clear*
      * combos/Present()/ReadBackbuffer()/resize/the real XNA device-lost lifecycle/render-state
-     * pushes are all real. Phase D9-4 (D3D9Buffers.hpp) adds real vertex/index buffers. Textures,
-     * draws, and SpriteBatch still throw NotYetImplemented() naming their own follow-up task.
+     * pushes are all real. Phase D9-4 (D3D9Buffers.hpp) adds real vertex/index buffers. D9-82 adds
+     * the real BasicEffect-VertexColor-only DrawColoredPrimitives/DrawIndexedColoredPrimitives
+     * path; full effect-aware DrawPrimitivesEx dispatch and SpriteBatch still throw
+     * NotYetImplemented() naming their own follow-up task (D9-82b/c, D9-90).
      */
     class D3D9GraphicsBackend final : public IGraphicsBackend
     {
@@ -145,9 +149,16 @@ namespace CNA::Internal::Backends::D3D9
         void SetDepthTestEnabled(bool enabled) override;
         void SetBlendEnabled(bool enabled) override;
         void SetDepthWriteEnabled(bool enabled) override;
+        /// D9-82: real -- BasicEffect with VertexColorEnabled=true/DiffuseColor=white/fog disabled/
+        /// no texture/no lighting (matches every other backend's own DrawColoredPrimitives scope),
+        /// via the real "BasicEffect_VSBasicVcNoFog"/"BasicEffect_PSBasicNoFog" shader pair
+        /// (D9-80's dispatch tables) and D9-72's real register layout. Only stride 16
+        /// (VertexPositionColor) so far -- other strides/effect variants are DrawPrimitivesEx's own
+        /// job (D9-82b/c, not yet implemented).
         void DrawColoredPrimitives(const IVertexBufferBackend& vb,
                                    const Matrix& world, const Matrix& view, const Matrix& projection,
                                    PrimitiveType primitive, int primitiveCount) override;
+        /// D9-82: indexed counterpart of `DrawColoredPrimitives` above -- same scope.
         void DrawIndexedColoredPrimitives(const IVertexBufferBackend& vb, const IIndexBufferBackend& ib,
                                           const Matrix& world, const Matrix& view, const Matrix& projection,
                                           PrimitiveType primitive, int primitiveCount) override;
@@ -291,6 +302,12 @@ namespace CNA::Internal::Backends::D3D9
         /// surface is CURRENTLY bound, with no separate "get the implicit one" query. Null (cleared)
         /// when no depth format was requested, matching the back buffer having no depth (Check J).
         void CacheDefaultDepthStencilSurfaceEXT();
+        /// D9-82: returns (creating + caching on first request) the real IDirect3DVertexDeclaration9
+        /// for `strideInBytes`, using D3D9VertexDeclarations.hpp's own stride-keyed
+        /// D3DVERTEXELEMENT9 tables. Throws if `strideInBytes` is not one of the 5 established
+        /// layouts. Not a D3DPOOL_DEFAULT resource -- vertex declarations survive Reset() unaffected
+        /// (real D3D9 semantics), so this cache is never invalidated/re-registered.
+        IDirect3DVertexDeclaration9* GetOrCreateVertexDeclarationEXT(std::size_t strideInBytes);
 
         SDL_Window* window_ = nullptr;
         int width_ = 0;
@@ -344,5 +361,15 @@ namespace CNA::Internal::Backends::D3D9
         /// bound. Separate from currentCustomRT_ (a cube target is a distinct type from a 2D one) --
         /// see SetRenderTargetCubeFace()'s own doc comment for why this field exists at all.
         D3D9RenderTargetCubeBackend* currentCustomCubeRT_ = nullptr;
+
+        /// D9-82: lazily-constructed real vertex/pixel shader object cache (D9-74's
+        /// D3D9ShaderCache), keyed by name -- shared across every draw call. Shader objects are not
+        /// D3DPOOL_DEFAULT resources (unlike vertex/index buffers) so they survive Reset()
+        /// unaffected -- no RegisterDefaultPoolResourceEXT() wiring needed.
+        std::unique_ptr<D3D9ShaderCache> shaderCache_;
+        /// D9-82: real IDirect3DVertexDeclaration9 objects, cached by vertex stride in bytes
+        /// (mirrors D3D11GraphicsBackend::inputLayoutCache_'s shape). See
+        /// GetOrCreateVertexDeclarationEXT().
+        std::unordered_map<std::size_t, ComPtr<IDirect3DVertexDeclaration9>> vertexDeclCache_;
     };
 }

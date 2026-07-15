@@ -23,12 +23,18 @@ namespace CNA::Internal::Backends::D3D9
     /// Layouts (byte offsets/semantics match D3DCommon::InputElementsForStride()'s own doc
     /// exactly, just in D3D9's Usage/UsageIndex/Type vocabulary instead of DXGI_FORMAT + semantic
     /// name strings):
-    ///   16: POSITION0 (FLOAT3, 0), COLOR0 (D3DCOLOR, 12)
+    ///   16: POSITION0 (FLOAT3, 0), COLOR0 (UBYTE4N, 12)
     ///   20: POSITION0 (FLOAT3, 0), TEXCOORD0 (FLOAT2, 12)
-    ///   24: POSITION0 (FLOAT3, 0), COLOR0 (D3DCOLOR, 12), TEXCOORD0 (FLOAT2, 16)
+    ///   24: POSITION0 (FLOAT3, 0), COLOR0 (UBYTE4N, 12), TEXCOORD0 (FLOAT2, 16)
     ///   32: POSITION0 (FLOAT3, 0), NORMAL0 (FLOAT3, 12), TEXCOORD0 (FLOAT2, 24)
     ///   52: POSITION0 (0), NORMAL0 (12), TEXCOORD0 (24), BLENDWEIGHT0 (FLOAT4, 32),
     ///       BLENDINDICES0 (UBYTE4, 48)
+    ///
+    /// COLOR0 is UBYTE4N (four bytes normalized in their EXISTING memory order), not
+    /// D3DDECLTYPE_D3DCOLOR -- D9-82 found live that D3DDECLTYPE_D3DCOLOR's real contract expects
+    /// ARGB-packed (B,G,R,A ascending) memory bytes and byte-swizzles them into RGBA, which
+    /// silently swaps R and B against XNA's own native R,G,B,A ascending Color.PackedValue layout
+    /// (confirmed empirically: opaque red read back as opaque blue before this fix).
     ///
     /// Note (D9-90's own future concern, not this function's): stride 32 is ambiguous between
     /// VertexPositionNormalTexture and a hypothetical differently-shaped 32-byte SpriteBatch

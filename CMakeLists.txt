@@ -6825,6 +6825,15 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D9")
         TIMEOUT 60
         LABELS "D3D9")
 
+    # D9-82: this backend's first real 3D triangle -- DrawColoredPrimitives/
+    # DrawIndexedColoredPrimitives through the real public Game/GraphicsDeviceManager API.
+    cna_d3d9_test(cna_test_d3d9_draw examples/d3d9_draw_test.cpp)
+    cna_d3d9_ctest_command(_d3d9_draw_cmd cna_test_d3d9_draw)
+    add_test(NAME D3D9_Draw COMMAND ${_d3d9_draw_cmd})
+    set_tests_properties(D3D9_Draw PROPERTIES
+        TIMEOUT 60
+        LABELS "D3D9")
+
     # D9-74: D3D9ShaderCache creates all 66 embedded stock-effect shaders through a live device --
     # needs both DXVK and the real compiler's own bytecode output at once (the compiler DLL itself
     # is no longer needed at this step, D9-71 already embedded its output).

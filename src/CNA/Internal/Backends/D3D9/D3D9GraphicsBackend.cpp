@@ -6,11 +6,15 @@
 #include "CNA/Internal/Backends/D3D9/D3D9GraphicsBackend.hpp"
 #include "CNA/Internal/Backends/Common/NotYetImplemented.hpp"
 #include "CNA/Internal/Backends/D3D9/D3D9Buffers.hpp"
+#include "CNA/Internal/Backends/D3D9/D3D9ConstantUpload.hpp"
 #include "CNA/Internal/Backends/D3D9/D3D9FormatMapping.hpp"
+#include "CNA/Internal/Backends/D3D9/D3D9ShaderCache.hpp"
+#include "CNA/Internal/Backends/D3D9/D3D9ShaderDispatch.hpp"
 #include "CNA/Internal/Backends/D3D9/D3D9StateMapping.hpp"
 #include "CNA/Internal/Backends/D3D9/D3D9Textures.hpp"
 #include "CNA/Internal/Backends/D3D9/D3D9RenderTargets.hpp"
 #include "CNA/Internal/Backends/D3D9/D3D9OcclusionQuery.hpp"
+#include "CNA/Internal/Backends/D3D9/D3D9VertexDeclarations.hpp"
 
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DeviceLostException.hpp"
@@ -23,6 +27,7 @@
 #include <bit>
 #include <cstdio>
 #include <cstring>
+#include <iterator>
 
 namespace CNA::Internal::Backends::D3D9
 {
@@ -33,6 +38,22 @@ namespace CNA::Internal::Backends::D3D9
             char buf[32];
             std::snprintf(buf, sizeof(buf), "0x%08lX", static_cast<unsigned long>(hr));
             return buf;
+        }
+
+        /// D9-82: XNA's own PrimitiveType only ever needs these 4 D3DPRIMITIVETYPE values --
+        /// unlike D3D11/Vulkan/D3D12's own per-backend VertexCountForPrimitives() precedent, D3D9's
+        /// DrawPrimitive/DrawIndexedPrimitive already take a PrimitiveCount directly (not a raw
+        /// vertex/index count), so no equivalent conversion helper is needed here.
+        D3DPRIMITIVETYPE ToD3D9Topology(PrimitiveType pt)
+        {
+            switch (pt)
+            {
+            case PrimitiveType::TriangleList:  return D3DPT_TRIANGLELIST;
+            case PrimitiveType::TriangleStrip: return D3DPT_TRIANGLESTRIP;
+            case PrimitiveType::LineList:      return D3DPT_LINELIST;
+            case PrimitiveType::LineStrip:     return D3DPT_LINESTRIP;
+            }
+            return D3DPT_TRIANGLELIST;
         }
 
         using Microsoft::Xna::Framework::Graphics::DepthFormat;
@@ -562,18 +583,130 @@ namespace CNA::Internal::Backends::D3D9
         return std::make_unique<D3D9IndexBufferBackend>(*this, device_.Get(), index_capacity, true);
     }
 
-    void D3D9GraphicsBackend::DrawColoredPrimitives(const IVertexBufferBackend&,
-                                                     const Matrix&, const Matrix&, const Matrix&,
-                                                     PrimitiveType, int)
+    IDirect3DVertexDeclaration9* D3D9GraphicsBackend::GetOrCreateVertexDeclarationEXT(std::size_t strideInBytes)
     {
-        NotYetImplemented("D3D9", "DrawColoredPrimitives (see plan_dx9.md D9-82)");
+        auto it = vertexDeclCache_.find(strideInBytes);
+        if (it != vertexDeclCache_.end()) return it->second.Get();
+
+        UINT count = 0;
+        const D3DVERTEXELEMENT9* elements = VertexElementsForStrideD3D9(strideInBytes, count);
+        if (!elements || count == 0)
+            throw std::runtime_error(
+                "D3D9GraphicsBackend: no vertex declaration for stride " + std::to_string(strideInBytes));
+
+        ComPtr<IDirect3DVertexDeclaration9> decl;
+        const HRESULT hr = device_->CreateVertexDeclaration(elements, decl.GetAddressOf());
+        if (FAILED(hr))
+            throw std::runtime_error("D3D9GraphicsBackend: CreateVertexDeclaration failed, hr=" + FormatHr(hr));
+
+        IDirect3DVertexDeclaration9* raw = decl.Get();
+        vertexDeclCache_.emplace(strideInBytes, std::move(decl));
+        return raw;
     }
 
-    void D3D9GraphicsBackend::DrawIndexedColoredPrimitives(const IVertexBufferBackend&, const IIndexBufferBackend&,
-                                                            const Matrix&, const Matrix&, const Matrix&,
-                                                            PrimitiveType, int)
+    void D3D9GraphicsBackend::DrawColoredPrimitives(const IVertexBufferBackend& vb,
+                                                     const Matrix& world, const Matrix& view, const Matrix& projection,
+                                                     PrimitiveType primitive, int primitiveCount)
     {
-        NotYetImplemented("D3D9", "DrawIndexedColoredPrimitives (see plan_dx9.md D9-82)");
+        ThrowIfDeviceLost();
+
+        // D9-82: matches every other backend's own DrawColoredPrimitives scope (BasicEffect with
+        // VertexColorEnabled=true, DiffuseColor=white, fog disabled, no texture/lighting). Other
+        // strides and full effect-aware dispatch are DrawPrimitivesEx's job, not yet implemented
+        // (D9-82b/c) -- this row was split the same way D3D11's own DX-61 vs. DX-62..67 was.
+        const auto& d3dVb = static_cast<const D3D9VertexBufferBackend&>(vb);
+        const std::size_t stride = d3dVb.GetStrideEXT() > 0 ? d3dVb.GetStrideEXT() : 16;
+        if (stride != 16)
+            throw std::runtime_error(
+                "D3D9GraphicsBackend::DrawColoredPrimitives: only stride-16 (VertexPositionColor) "
+                "is implemented so far (plan_dx9.md D9-82)");
+
+        if (!shaderCache_) shaderCache_ = std::make_unique<D3D9ShaderCache>(device_.Get());
+
+        // fogEnabled=false, vertexColorEnabled=true, textureEnabled=false, lightingEnabled=false ->
+        // ShaderIndex 3 -> "BasicEffect_VSBasicVcNoFog"/"BasicEffect_PSBasicNoFog" (D9-80's own
+        // dispatch tables). Hardcoded to this one fixed variant (rather than a generic
+        // name->register-table lookup) since this legacy path only ever needs this single shader
+        // pair -- a generic lookup belongs to D9-82b/c's real effect-aware dispatch.
+        const int shaderIndex = ComputeBasicEffectShaderIndex(
+            /*fogEnabled=*/false, /*vertexColorEnabled=*/true, /*textureEnabled=*/false,
+            /*lightingEnabled=*/false, /*preferPerPixelLighting=*/false, /*oneLight=*/false);
+        IDirect3DVertexShader9* vs = shaderCache_->GetVertexShader(GetBasicEffectVertexShaderNameEXT(shaderIndex));
+        IDirect3DPixelShader9* ps = shaderCache_->GetPixelShader(GetBasicEffectPixelShaderNameEXT(shaderIndex));
+        device_->SetVertexShader(vs);
+        device_->SetPixelShader(ps);
+
+        // D9-72/D9-82: EffectParameter.SetValue(Matrix)'s real XNA upload convention -- register k
+        // receives COLUMN k of the row-major World*View*Projection matrix (M1k,M2k,M3k,M4k), i.e.
+        // the TRANSPOSE of Matrix::ToColumnMajor()'s own row-major-flat reading order. Verified
+        // against FNA's EffectHelpers.SetWorldViewProjAndFog -> EffectParameter.SetValue(Matrix),
+        // not assumed.
+        const Matrix wvpT = Matrix::Transpose(world * view * projection);
+        float wvpRegs[16];
+        wvpT.ToColumnMajor(wvpRegs);
+        UploadVertexShaderConstantEXT(device_.Get(), Shaders::kBasicEffect_VSBasicVcNoFog_Registers,
+                                      static_cast<int>(std::size(Shaders::kBasicEffect_VSBasicVcNoFog_Registers)),
+                                      "WorldViewProj", wvpRegs);
+        const float diffuseWhite[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+        UploadVertexShaderConstantEXT(device_.Get(), Shaders::kBasicEffect_VSBasicVcNoFog_Registers,
+                                      static_cast<int>(std::size(Shaders::kBasicEffect_VSBasicVcNoFog_Registers)),
+                                      "DiffuseColor", diffuseWhite);
+        // BasicEffect_PSBasicNoFog has no named constants at all (D9-72's own register table is
+        // empty for it) -- nothing to upload for the pixel stage.
+
+        device_->SetVertexDeclaration(GetOrCreateVertexDeclarationEXT(stride));
+        device_->SetStreamSource(0, d3dVb.GetBufferEXT(), 0, static_cast<UINT>(stride));
+
+        device_->DrawPrimitive(ToD3D9Topology(primitive), 0, static_cast<UINT>(primitiveCount));
+    }
+
+    void D3D9GraphicsBackend::DrawIndexedColoredPrimitives(const IVertexBufferBackend& vb, const IIndexBufferBackend& ib,
+                                                            const Matrix& world, const Matrix& view, const Matrix& projection,
+                                                            PrimitiveType primitive, int primitiveCount)
+    {
+        ThrowIfDeviceLost();
+
+        // D9-82: indexed counterpart of DrawColoredPrimitives above -- same colored-only scope.
+        const auto& d3dVb = static_cast<const D3D9VertexBufferBackend&>(vb);
+        const auto& d3dIb = static_cast<const D3D9IndexBufferBackend&>(ib);
+        const std::size_t stride = d3dVb.GetStrideEXT() > 0 ? d3dVb.GetStrideEXT() : 16;
+        if (stride != 16)
+            throw std::runtime_error(
+                "D3D9GraphicsBackend::DrawIndexedColoredPrimitives: only stride-16 "
+                "(VertexPositionColor) is implemented so far (plan_dx9.md D9-82)");
+
+        if (!shaderCache_) shaderCache_ = std::make_unique<D3D9ShaderCache>(device_.Get());
+
+        const int shaderIndex = ComputeBasicEffectShaderIndex(
+            /*fogEnabled=*/false, /*vertexColorEnabled=*/true, /*textureEnabled=*/false,
+            /*lightingEnabled=*/false, /*preferPerPixelLighting=*/false, /*oneLight=*/false);
+        IDirect3DVertexShader9* vs = shaderCache_->GetVertexShader(GetBasicEffectVertexShaderNameEXT(shaderIndex));
+        IDirect3DPixelShader9* ps = shaderCache_->GetPixelShader(GetBasicEffectPixelShaderNameEXT(shaderIndex));
+        device_->SetVertexShader(vs);
+        device_->SetPixelShader(ps);
+
+        const Matrix wvpT = Matrix::Transpose(world * view * projection);
+        float wvpRegs[16];
+        wvpT.ToColumnMajor(wvpRegs);
+        UploadVertexShaderConstantEXT(device_.Get(), Shaders::kBasicEffect_VSBasicVcNoFog_Registers,
+                                      static_cast<int>(std::size(Shaders::kBasicEffect_VSBasicVcNoFog_Registers)),
+                                      "WorldViewProj", wvpRegs);
+        const float diffuseWhite[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+        UploadVertexShaderConstantEXT(device_.Get(), Shaders::kBasicEffect_VSBasicVcNoFog_Registers,
+                                      static_cast<int>(std::size(Shaders::kBasicEffect_VSBasicVcNoFog_Registers)),
+                                      "DiffuseColor", diffuseWhite);
+
+        device_->SetVertexDeclaration(GetOrCreateVertexDeclarationEXT(stride));
+        device_->SetStreamSource(0, d3dVb.GetBufferEXT(), 0, static_cast<UINT>(stride));
+        device_->SetIndices(d3dIb.GetBufferEXT());
+
+        // NumVertices ("the number of vertices used, starting at BaseVertexIndex+MinVertexIndex" --
+        // real D3D9 semantics, not "vertices to render") is safe to over-report as the full buffer's
+        // own vertex count: IGraphicsBackend::DrawIndexedColoredPrimitives() carries no separate
+        // min-vertex-index/count from the caller to report a tighter range.
+        device_->DrawIndexedPrimitive(ToD3D9Topology(primitive), 0, 0,
+                                      static_cast<UINT>(d3dVb.GetVertexCount()),
+                                      0, static_cast<UINT>(primitiveCount));
     }
 
     std::unique_ptr<ITextureBackend> D3D9GraphicsBackend::CreateTexture(const ImageData& data)

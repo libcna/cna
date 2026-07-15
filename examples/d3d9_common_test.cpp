@@ -102,15 +102,18 @@ int main()
         check(elems != nullptr && count == 2 &&
               elems[0].Usage == D3DDECLUSAGE_POSITION && elems[0].Offset == 0 &&
               elems[1].Usage == D3DDECLUSAGE_COLOR && elems[1].Offset == 12 &&
-              elems[1].Type == D3DDECLTYPE_D3DCOLOR,
-              "stride 16 -> POSITION0+COLOR0(D3DCOLOR), matching VertexPositionColor's own layout");
+              elems[1].Type == D3DDECLTYPE_UBYTE4N,
+              "stride 16 -> POSITION0+COLOR0(UBYTE4N -- not D3DDECLTYPE_D3DCOLOR, D9-82's own "
+              "empirically-confirmed R/B-swizzle fix), matching VertexPositionColor's own layout");
     }
     {
         UINT count = 0;
         const D3DVERTEXELEMENT9* elems = VertexElementsForStrideD3D9(24, count);
         check(elems != nullptr && count == 3 &&
+              elems[1].Usage == D3DDECLUSAGE_COLOR && elems[1].Offset == 12 &&
+              elems[1].Type == D3DDECLTYPE_UBYTE4N &&
               elems[2].Usage == D3DDECLUSAGE_TEXCOORD && elems[2].Offset == 16,
-              "stride 24 -> POSITION0+COLOR0+TEXCOORD0, matching VertexPositionColorTexture's own layout");
+              "stride 24 -> POSITION0+COLOR0(UBYTE4N)+TEXCOORD0, matching VertexPositionColorTexture's own layout");
     }
     {
         UINT count = 0;
