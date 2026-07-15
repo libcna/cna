@@ -99,6 +99,33 @@ namespace CNA::Internal::Backends::Dx3
             surface->Unlock(desc.lpSurface);
         }
 
+        // Fills the full (width, height) extent of `surface` with a solid RGBA8 color via
+        // Lock()/Unlock(). Used by Clear() instead of DDBLT_COLORFILL: free-direct's own
+        // FillColor() hardcodes the written alpha byte to 255 unconditionally (confirmed in
+        // ../free-direct/src/directdraw/DirectDraw.cpp), so a ColorFill-based Clear() can never
+        // honor a requested alpha other than fully opaque. This writes all 4 channels directly,
+        // matching the requested color exactly.
+        void FillSurfaceColor(LPDIRECTDRAWSURFACE surface, int width, int height,
+                              uint8_t r, uint8_t g, uint8_t b, uint8_t a)
+        {
+            DDSURFACEDESC desc{};
+            desc.dwSize = sizeof(DDSURFACEDESC);
+            const HRESULT hr = surface->Lock(nullptr, &desc, 0, nullptr);
+            if (FAILED(hr)) ThrowHr("IDirectDrawSurface::Lock(clear)", hr);
+
+            auto* base = static_cast<uint8_t*>(desc.lpSurface);
+            for (int y = 0; y < height; ++y)
+            {
+                uint8_t* row = base + static_cast<std::size_t>(y) * static_cast<std::size_t>(desc.lPitch);
+                for (int x = 0; x < width; ++x)
+                {
+                    uint8_t* px = row + static_cast<std::size_t>(x) * 4u;
+                    px[0] = r; px[1] = g; px[2] = b; px[3] = a;
+                }
+            }
+            surface->Unlock(desc.lpSurface);
+        }
+
         [[noreturn]] void ThrowMipLevelUnsupported(int level)
         {
             throw std::runtime_error(
@@ -145,18 +172,26 @@ namespace CNA::Internal::Backends::Dx3
         // Detects which of the 4 BlendState presets (BlendState.cpp) the raw factors match, by
         // exact value -- not by BlendState identity (the backend never sees a BlendState object,
         // only GraphicsDevice::ApplyBlendState's raw ints).
-        Dx3BlendMode DetectBlendMode(int colorSrc, int alphaSrc, int colorDst, int alphaDst)
+        // A real preset match requires BOTH the 4 factors AND both blend functions (color/alpha)
+        // to match -- all 4 real BlendState.cpp presets use BlendFunction::Add (0) implicitly
+        // (their default-constructed value; none of the static presets override it). A custom
+        // BlendState with e.g. Opaque's exact factors but BlendFunction::Subtract is NOT
+        // equivalent to Opaque and must fall through to the DX3-44 AlphaBlend fallback below, not
+        // be misdetected as Opaque just because the factors happen to match.
+        Dx3BlendMode DetectBlendMode(int colorSrc, int alphaSrc, int colorDst, int alphaDst,
+                                     int colorFunc, int alphaFunc)
         {
+            const bool bothAdd = (colorFunc == 0 && alphaFunc == 0);
             // NonPremultiplied: ColorSrc=SourceAlpha, AlphaSrc=SourceAlpha, ColorDst=InvSrcAlpha, AlphaDst=InvSrcAlpha
-            if (colorSrc == 4 && alphaSrc == 4 && colorDst == 5 && alphaDst == 5) return Dx3BlendMode::NonPremultiplied;
+            if (bothAdd && colorSrc == 4 && alphaSrc == 4 && colorDst == 5 && alphaDst == 5) return Dx3BlendMode::NonPremultiplied;
             // Additive: ColorSrc=SourceAlpha, AlphaSrc=SourceAlpha, ColorDst=One, AlphaDst=One
-            if (colorSrc == 4 && alphaSrc == 4 && colorDst == 0 && alphaDst == 0) return Dx3BlendMode::Additive;
+            if (bothAdd && colorSrc == 4 && alphaSrc == 4 && colorDst == 0 && alphaDst == 0) return Dx3BlendMode::Additive;
             // Opaque: ColorSrc=One, AlphaSrc=One, ColorDst=Zero, AlphaDst=Zero
-            if (colorSrc == 0 && alphaSrc == 0 && colorDst == 1 && alphaDst == 1) return Dx3BlendMode::Opaque;
+            if (bothAdd && colorSrc == 0 && alphaSrc == 0 && colorDst == 1 && alphaDst == 1) return Dx3BlendMode::Opaque;
             // AlphaBlend: ColorSrc=One, AlphaSrc=One, ColorDst=InvSrcAlpha, AlphaDst=InvSrcAlpha --
-            // and DX3-44's fallback for any other/custom factor+op combination, same recorded
-            // scope limitation SOFTWARE's design decision 7 already made (no general blend-
-            // equation interpreter in v1).
+            // and DX3-44's fallback for any other/custom factor+op combination (including a
+            // factor match with a non-Add function), same recorded scope limitation SOFTWARE's
+            // design decision 7 already made (no general blend-equation interpreter in v1).
             return Dx3BlendMode::AlphaBlend;
         }
 
@@ -481,14 +516,17 @@ namespace CNA::Internal::Backends::Dx3
 
     void Dx3GraphicsBackend::Clear(float r, float g, float b, float a)
     {
-        (void)a; // DirectDraw ColorFill has no alpha channel concept (design decision 4: no palette/alpha surfaces).
-        DDBLTFX fx{};
-        fx.dwSize = sizeof(DDBLTFX);
-        fx.dwFillColor = (static_cast<DWORD>(r * 255.0f) << 16) |
-                         (static_cast<DWORD>(g * 255.0f) << 8) |
-                          static_cast<DWORD>(b * 255.0f);
-        const HRESULT hr = impl_->ActiveSurface()->Blt(nullptr, nullptr, nullptr, DDBLT_COLORFILL, &fx);
-        if (FAILED(hr)) ThrowHr("IDirectDrawSurface::Blt(COLORFILL)", hr);
+        // Not DDBLT_COLORFILL: free-direct's own FillColor() hardcodes the written alpha byte to
+        // 255 regardless of dwFillColor's contents, so a ColorFill-based Clear() could never
+        // honor a requested alpha other than fully opaque (a real bug, found in review and fixed
+        // here). FillSurfaceColor writes all 4 channels directly via Lock()/Unlock() instead.
+        int width = 0, height = 0;
+        impl_->ActiveSurfaceSize(width, height);
+        FillSurfaceColor(impl_->ActiveSurface(), width, height,
+                         static_cast<uint8_t>(std::clamp(r * 255.0f, 0.0f, 255.0f)),
+                         static_cast<uint8_t>(std::clamp(g * 255.0f, 0.0f, 255.0f)),
+                         static_cast<uint8_t>(std::clamp(b * 255.0f, 0.0f, 255.0f)),
+                         static_cast<uint8_t>(std::clamp(a * 255.0f, 0.0f, 255.0f)));
     }
 
     void Dx3GraphicsBackend::Present()
@@ -944,9 +982,10 @@ namespace CNA::Internal::Backends::Dx3
 
     void Dx3GraphicsBackend::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
                                              int colorDstBlend, int alphaDstBlend,
-                                             int /*colorBlendFunc*/, int /*alphaBlendFunc*/)
+                                             int colorBlendFunc, int alphaBlendFunc)
     {
-        impl_->currentBlendMode = DetectBlendMode(colorSrcBlend, alphaSrcBlend, colorDstBlend, alphaDstBlend);
+        impl_->currentBlendMode = DetectBlendMode(colorSrcBlend, alphaSrcBlend, colorDstBlend, alphaDstBlend,
+                                                  colorBlendFunc, alphaBlendFunc);
     }
 
     void Dx3GraphicsBackend::ClearColorAndDepth(float, float, float, float, float) { ThrowNo3D("ClearColorAndDepth"); }

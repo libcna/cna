@@ -15,9 +15,48 @@
 >
 > **Status legend** (matches `../cna`'s own convention): ✅ implemented *and verified against its
 > stated acceptance criteria*; 🟨 code or documentation exists but has not met those criteria;
-> ⬜ not implemented. **All 8 phases (X1-X8) are ✅ — this plan is COMPLETE** (see each phase's own
-> table below). `docs/dx3-backend.md` is the durable completeness-status reference going forward;
-> this plan document remains as the historical implementation record.
+> ⬜ not implemented. Phases X1-X8's own tables below are otherwise ✅, with one row (DX3-16)
+> downgraded to 🟨 in the external review below. `docs/dx3-backend.md` is the durable
+> completeness-status reference going forward; this plan document remains as the historical
+> implementation record.
+>
+> **Correction (2026-07-15, external code review): an earlier version of this header claimed "all
+> 8 phases are done, this plan is COMPLETE." The project owner explicitly rejected that framing**
+> after a real code review found 5 concrete issues, none of them cosmetic:
+> 1. **(high)** All 8 `Dx3_*` CTests failed unconditionally (`ctest -R '^Dx3_'` = 0/8) in an
+>    environment without a working `DISPLAY` -- the registration hardcoded
+>    `SDL_VIDEODRIVER=x11`/`DISPLAY=${CNA_TEST_DISPLAY}` (copy-pasted from `SDL_RENDERER`'s own
+>    pattern, which genuinely needs a real display), even though every DX3 pixel assertion reads
+>    back through the shadow-backbuffer surface directly and never needs one. Fixed: all 8
+>    registrations now use `SDL_VIDEODRIVER=dummy` (confirmed empirically: same 49/49 checks pass,
+>    no display required at all).
+> 2. **(high)** DX3-44's custom-`BlendState` fallback ignored `colorBlendFunc`/`alphaBlendFunc`
+>    entirely -- `DetectBlendMode()` matched presets on the 4 blend *factors* only, so a custom
+>    `BlendState` with Opaque's exact factors but `BlendFunction::Subtract` was misdetected as
+>    `Opaque`. Fixed: preset matching now also requires `BlendFunction::Add` (implicit in all 4
+>    real presets); a factor match with any other function correctly falls to the `AlphaBlend`
+>    fallback. New regression check added (`Dx3_Blend` Check F).
+> 3. **(medium)** DX3-16 was marked ✅ despite its own code openly documenting it doesn't meet its
+>    stated goal (`SetPresentationMode()` never actually changes physical output from `LETTERBOX`;
+>    `SetVirtualResolution()` self-admits a stale-scale bug after the first `Present()`).
+>    Corrected: downgraded to 🟨, per this document's own status-legend definition.
+> 4. **(medium)** `Clear(r,g,b,a)` silently discarded the requested alpha channel --
+>    `free-direct`'s own `FillColor()` (the `DDBLT_COLORFILL` path) hardcodes the written alpha
+>    byte to `255` unconditionally. Fixed: `Clear()` now writes all 4 channels directly via
+>    `Lock()`/`Unlock()` instead of `ColorFill`. New regression check added (`Dx3_Smoke` Check D,
+>    `a=128`).
+> 5. **(medium)** `GraphicsBackendCompileDefinitionsTest` still didn't know about
+>    `CNA_BACKEND_DX3` (nor `D3D11`/`D3D12`), so it failed under any DX3 build -- previously
+>    described as "pre-existing, out of scope," but trivial and directly relevant enough to just
+>    fix. Fixed: all 3 macros added to the check.
+>
+> All 5 are fixed, verified (build + all 8 `Dx3_*` CTests + full `CnaTests` regression), and
+> committed. **Full regression as of this correction: 4364 passed, 2 skipped, 12 failed** -- all
+> 12 the same pre-existing, structural `VertexBuffer`-construction-under-2D-only-backend failures
+> already described below (unrelated to DX3 code, predate this plan entirely). Zero DX3-caused
+> failures remain. The claim this plan document makes now is exactly that -- not "complete" in an
+> unqualified sense, since DX3-16 is a real, documented, permanent-for-now limitation (fixing it
+> needs a separate `free-direct`-side change, design decision 8) -- not a hidden gap.
 >
 > **Correction (2026-07-15, Phase X4 closure): the Phase X3 commit's "full `CnaTests` suite has no
 > new failures (one pre-existing, unrelated failure...)" claim was incomplete.** It was based on
@@ -32,10 +71,9 @@
 > backend-agnosticism -- out of scope for this plan. One additional failure
 > (`GraphicsDeviceValidationTest.SetRenderTargets_FourTargets_DoesNotThrow`) genuinely was
 > introduced by Phase X3's own `SetRenderTargets` MRT-throw change and has been fixed here (the
-> test's backend gate didn't know about `DX3`). Only `GraphicsBackendCompileDefinitionsTest`
-> remains as the one failure that predates `D3D11`/`D3D12`/`DX3` entirely (noted at Phase X3
-> closure). Total as of Phase X4 closure: 12 pre-existing/structural + 1 pre-existing/unrelated = 13
-> known failures, all understood and none caused by this plan beyond the one already fixed.
+> test's backend gate didn't know about `DX3`). `GraphicsBackendCompileDefinitionsTest` was a
+> third failure that predated `D3D11`/`D3D12`/`DX3` entirely -- fixed in the external-review pass
+> above, not left as "out of scope" as originally described here.
 >
 > **Real, confirmed finding not anticipated by this plan's original design decisions**: `free-direct`'s
 > `IDirectDrawSurface::Lock()` never exposes a writable pointer for the *primary* surface (confirmed
@@ -246,9 +284,9 @@ For every task: build the affected target(s) (`-DCNA_GRAPHICS_BACKEND=DX3`), run
 | DX3-11 | `SetCooperativeLevel(reinterpret_cast<HWND>(args.window), ...)` using CNA's own already-existing `SDL_Window*` — empirically verify Design decision 2's assumption (no second window gets created, no crash, `free-direct`'s internal `sdlWindow_` genuinely equals CNA's window) | ✅ | Verified via `Dx3_Smoke`: real window created, no crash, `free-direct`'s own log shows its internal `opengl`-backed SDL renderer bound against that exact window. |
 | DX3-12 | `SetDisplayMode(width, height, 32)` sized to the game's requested backbuffer/`PresentationParameters` | ✅ | Design decision 4 (32bpp only). |
 | DX3-13 | `CreateSurface` for the primary surface (`DDSCAPS_PRIMARYSURFACE`) — this becomes the backbuffer `IDirectDrawSurface*` | ✅ | |
-| DX3-14 | `Clear(r,g,b,a)`: real `Blt` with `DDBLT_COLORFILL`/`DDBLTFX.dwFillColor` against the primary (or bound render target) surface | ✅ | Targets the shadow-backbuffer surface, not the primary directly — see this file's own top-of-document note on the `Lock()`-on-primary gap. |
+| DX3-14 | `Clear(r,g,b,a)`: real `Blt` with `DDBLT_COLORFILL`/`DDBLTFX.dwFillColor` against the primary (or bound render target) surface | ✅ | Targets the shadow-backbuffer surface, not the primary directly — see this file's own top-of-document note on the `Lock()`-on-primary gap. **Corrected during external code review (2026-07-15)**: the original `DDBLT_COLORFILL` implementation silently discarded the requested alpha channel — `free-direct`'s own `FillColor()` hardcodes the written alpha byte to `255` unconditionally, so `Clear(..., a)` for any `a != 255` produced the wrong result with no error. Fixed by writing all 4 channels directly via `Lock()`/`Unlock()` (`FillSurfaceColor`) instead of `ColorFill`. Verified via `Dx3_Smoke` Check D (`Clear()` with `a=128` reads back exactly `128`, not `255`). |
 | DX3-15 | `Present()`: `Flip()` on the primary surface (Design decision 11: real, pixel-verifiable — read back via `Lock()` after present, same as `SDL_RENDERER`'s own `GetBackBufferData` proof pattern) | ✅ | Deviates intentionally from the literal task wording: a single identity `Blt()` from the shadow backbuffer onto the primary, relying on `free-direct`'s auto-present-on-dirty-`Blt`. `Flip()` is never called — confirmed in `free-direct` source that it only sets an internal `usesFlip_` flag that *disables* that auto-present path, with no compensating benefit (`Flip()` copies no pixels itself). |
-| DX3-16 | `GetViewportSize()`/`SetVirtualResolution()`/`SetPresentationMode()`: reuse the same backend-agnostic logical-resolution/letterbox math every other backend shares | ✅ | No literal shared class exists in this codebase (checked) — each backend's own math is backend-specific. `GetViewportSize()` returns the logical size directly (no physical-output fallback needed: DX3 has no independent renderer of its own). `SetPresentationMode()` stores the mode but honestly cannot make `free-direct` honor anything but its own hardcoded `LETTERBOX` physical scaling (documented limitation, not a silent gap). |
+| DX3-16 | `GetViewportSize()`/`SetVirtualResolution()`/`SetPresentationMode()`: reuse the same backend-agnostic logical-resolution/letterbox math every other backend shares | 🟨 | **Corrected from ✅ during external code review (2026-07-15) — this task's own stated goal is not actually met.** `GetViewportSize()` is genuinely correct. But `SetPresentationMode()` stores the requested mode and then honestly does nothing further with it — physical output is *always* `LETTERBOX` regardless of what's requested (`Stretch`/`Overscan`/`NativeBackBuffer` are silently no-ops), and `SetVirtualResolution()`'s own in-code comment already admits a real bug: a resolution change *after* the first `Present()` keeps presenting at the stale old physical scale (`free-direct`'s `logicalPresentationSet_` flag is only ever applied once). Per this plan's own status legend ("✅ = verified against its stated acceptance criteria"), a task whose own code documents it doesn't do what it says cannot be ✅. Not fixed: doing so requires changing `free-direct` itself (its `PresentPrimary` would need to re-apply logical presentation on resize and support non-`LETTERBOX` modes), which design decision 8 explicitly reserves for a separate, `free-direct`-side, project-owner-approved task — not something this plan can do unilaterally. |
 | DX3-17 | `GetWindowInternal()` returns the real `SDL_Window*`; `GetRendererInternal()` returns `nullptr` (no `SDL_Renderer*` — `free-direct` manages its own internal SDL renderer/texture privately, never exposed) | ✅ | |
 | DX3-18 | Smoke CTest (`Dx3_Smoke`): construct backend, clear to a known color, present, read back via `Lock()`, assert exact pixel match — the real, automated equivalent of `Software_Smoke`/`Headless_Smoke` (Design decision 11) | ✅ | Reads back via `Lock()` on the shadow backbuffer (not the primary, per the `Lock()`-on-primary gap). 3/3 checks pass; registered and passing via `ctest -R Dx3_Smoke`. |
 
@@ -295,7 +333,7 @@ per-formula math (DX3-40..43) below.
 | DX3-41 | `AlphaBlend` (premultiplied): straight `SrcAlpha`/`InvSrcAlpha` per-pixel formula | ✅ | Premultiplied convention: `out = src + dst*(1-srcAlpha)` — the source color is used as-is (not multiplied by `srcAlpha` again), since this preset assumes an already-premultiplied source pixel. Verified via `Dx3_Blend` CTest Check B. |
 | DX3-42 | `NonPremultiplied` (straight alpha): correct textbook blend | ✅ | `out = src*srcAlpha + dst*(1-srcAlpha)`. Verified via `Dx3_Blend` CTest Check C. |
 | DX3-43 | `Additive`: saturating add, clamp at 255 | ✅ | `out = src*srcAlpha + dst` (no destination attenuation at all — `ColorDestinationBlend=One`). Verified via `Dx3_Blend` CTest Check D. |
-| DX3-44 | Custom `BlendState` (non-preset factor/op combos): falls back to `AlphaBlend` behavior — same recorded scope limitation as `SOFTWARE` design decision 7 | ✅ | Verified via `Dx3_Blend` CTest Check E (a `BlendState` with `SourceColor`/`One` factors, matching none of the 4 presets, produces the exact `AlphaBlend` result). |
+| DX3-44 | Custom `BlendState` (non-preset factor/op combos): falls back to `AlphaBlend` behavior — same recorded scope limitation as `SOFTWARE` design decision 7 | ✅ | Verified via `Dx3_Blend` CTest Check E (a `BlendState` with `SourceColor`/`One` factors, matching none of the 4 presets, produces the exact `AlphaBlend` result). **Real bug found in external code review and fixed (2026-07-15)**: `DetectBlendMode()` originally matched presets on the 4 blend *factors* only, ignoring `colorBlendFunc`/`alphaBlendFunc` entirely — a custom `BlendState` with Opaque's exact factors (`One,One,Zero,Zero`) but `BlendFunction::Subtract` was misdetected as `Opaque` (wrong: the blend *equation*, not just the factors, differs). Fixed by requiring both factors AND `BlendFunction::Add` (all 4 real presets use `Add` implicitly) to match a preset; any other function falls to the `AlphaBlend` fallback like any other custom combination. Verified via `Dx3_Blend` CTest Check F (Opaque-matching factors + `Subtract` correctly falls back to `AlphaBlend`, not `Opaque`). |
 | DX3-45 | `TextureFilter` → nearest-neighbor vs. bilinear sampling in the compositor (Design decision 7's per-pixel sampling makes both genuinely implementable, unlike a native `SDL_ScaleMode`-style enum mapping) | ✅ | `ISpriteBatchBackend::SetSamplerFilter`'s raw `TextureFilter` ordinal is used directly (0=`Linear`→bilinear, everything else→nearest, matching the interface's own documented convention and `TextureFilter.hpp`'s real enum values). Verified via `Dx3_AddressMode` CTest Checks A/B (`Point` samples a pure endpoint at a texel boundary; `Linear` blends). |
 | DX3-46 | `TextureAddressMode::Wrap` (modulo) / `Mirror` (reflect) in the per-source-pixel sampler | ✅ | `WrapCoord()` handles `Wrap`(0)/`Clamp`(1)/`Mirror`(2) — ordinals confirmed to match `TextureAddressMode.hpp` exactly. Verified via `Dx3_AddressMode` CTest Checks C/D/E (an oversized source rectangle produces 3 distinct, predictable Red/Green tiling patterns per mode) — a real win over `SDL_RENDERER`'s ⛔ BLOCKED status for the same modes. |
 
@@ -336,7 +374,7 @@ per-formula math (DX3-40..43) below.
 | DX3-83 | `Dx3_AddressMode` CTest: `Wrap`/`Mirror` sampling pixel-verified (Design decision 7's real win) | ✅ | Landed in Phase X5 (5 checks — also covers `TextureFilter`/DX3-45, since both are "sampling" concerns tested together). |
 | DX3-84 | `docs/dx3-backend.md`: mirror `docs/sdl-renderer-2d-completeness.md`'s table/status-legend structure | ✅ | Written this phase — per-phase tables (X1/X2 through X7), a status legend (✅/❌-throws-by-design/⚪-degrades-to-nullptr), a "known permanent limitations" section, and a "what actually works today" summary table, mirroring the reference doc's structure at DX3's own (much narrower) scope. |
 | DX3-85 | Update `CMakeLists.txt`'s `CNA_GRAPHICS_BACKEND` STRINGS docstring and `../cna/plan.md`/`README.md` to list `DX3` | ✅ | `CMakeLists.txt`'s STRINGS docstring already included `DX3` since Phase X1 (DX3-1). `../cna/plan.md` doesn't exist relative to this repo — `cnadx3` is its own checkout with its own top-level `plan.md`, which is a cross-cutting *deferred-task* tracker, not a backend index; added a one-line update to its `a-0001` entry instead (DX3 now also implements `TransformLogicalToWindow`, DX3-68), which is genuinely relevant there. `README.md` updated: a new `DX3` bullet in §1 Project Status, and `DX3` (plus the previously-missing `WEBGPU`/`HEADLESS`/`SOFTWARE`/`D3D11`/`D3D12`) added to §6's backend list. `docs/README.md`'s file index updated too (58 files, new `dx3-backend.md` entry). |
-| DX3-86 | Full `CnaTests` regression run under `-DCNA_GRAPHICS_BACKEND=DX3` — confirm no unrelated suite breaks, same bar every other backend's Phase 1 closure already met | ✅ | Final run: 4363 passed, 2 skipped, 12 failed (all pre-existing/structural, unrelated to DX3 code — see the status-header correction note above) + 1 pre-existing `GraphicsBackendCompileDefinitionsTest` gap (predates D3D11/D3D12/DX3) = 13 known, understood failures, identical to every regression run since Phase X4 closure. Zero failures caused by DX3 itself remain unaccounted for. |
+| DX3-86 | Full `CnaTests` regression run under `-DCNA_GRAPHICS_BACKEND=DX3` — confirm no unrelated suite breaks, same bar every other backend's Phase 1 closure already met | ✅ | Final run (after the external-review fixes above): **4364 passed, 2 skipped, 12 failed** — all 12 the same pre-existing, structural `VertexBuffer`-construction-under-2D-only-backend failures, unrelated to DX3 code (see the status-header correction note). `GraphicsBackendCompileDefinitionsTest` — previously left as "out of scope" — is now fixed too, so the failure count actually dropped from 13 to 12 in this pass. Zero failures caused by DX3 itself remain unaccounted for. |
 
 ---
 

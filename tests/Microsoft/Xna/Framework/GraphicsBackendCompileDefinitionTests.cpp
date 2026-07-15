@@ -32,6 +32,15 @@ TEST(GraphicsBackendCompileDefinitionsTest, ExactlyOneGraphicsBackendIsSelected)
 #ifdef CNA_BACKEND_SOFTWARE
     ++enabled;
 #endif
+#ifdef CNA_BACKEND_D3D11
+    ++enabled;
+#endif
+#ifdef CNA_BACKEND_D3D12
+    ++enabled;
+#endif
+#ifdef CNA_BACKEND_DX3
+    ++enabled;
+#endif
 
     EXPECT_EQ(enabled, 1);
 }

@@ -11,7 +11,9 @@
 //   NonPremultiplied: ( 78,  30) -- straight alpha: src*srcAlpha, dst*(1-srcAlpha).
 //   Additive:         ( 78,  50) -- src*srcAlpha, dst passes through unattenuated.
 // Check E confirms DX3-44's fallback: a custom (non-preset) BlendState combination produces the
-// exact same result as AlphaBlend.
+// exact same result as AlphaBlend. Check F confirms the fallback also applies when factors alone
+// happen to match a preset (Opaque) but the BlendFunction doesn't -- the equation, not just the
+// factors, must match for a real preset detection.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
@@ -25,6 +27,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Blend.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BlendFunction.hpp"
 
 #include <cstdio>
 #include <cstdlib>
@@ -40,7 +43,7 @@ class Dx3BlendTest : public Game
 {
     std::unique_ptr<GraphicsDeviceManager> gdm_;
     int passCount_ = 0;
-    static constexpr int kTotal = 5;
+    static constexpr int kTotal = 6;
     int result_ = 1;
 
     void check(bool ok, const char* label)
@@ -106,6 +109,23 @@ protected:
             const auto [r, g] = DrawAndReadRG(dev, sb, custom);
             check(r == 200 && g == 30,
                   "Custom (non-preset) BlendState falls back to AlphaBlend behavior (DX3-44)");
+        }
+        {
+            // A BlendState with Opaque's EXACT factors (One,One,Zero,Zero) but a non-Add
+            // BlendFunction is NOT actually equivalent to Opaque -- the blend equation itself
+            // differs, not just the factors. Must still fall back to AlphaBlend (r=200,g=30),
+            // not be misdetected as Opaque (which would give r=200,g=0).
+            BlendState opaqueFactorsSubtractFunc;
+            opaqueFactorsSubtractFunc.setColorSourceBlendProperty(Blend::One);
+            opaqueFactorsSubtractFunc.setColorDestinationBlendProperty(Blend::Zero);
+            opaqueFactorsSubtractFunc.setAlphaSourceBlendProperty(Blend::One);
+            opaqueFactorsSubtractFunc.setAlphaDestinationBlendProperty(Blend::Zero);
+            opaqueFactorsSubtractFunc.setColorBlendFunctionProperty(BlendFunction::Subtract);
+            opaqueFactorsSubtractFunc.setAlphaBlendFunctionProperty(BlendFunction::Subtract);
+            const auto [r, g] = DrawAndReadRG(dev, sb, opaqueFactorsSubtractFunc);
+            check(r == 200 && g == 30,
+                  "Opaque-matching factors with BlendFunction::Subtract still falls back to "
+                  "AlphaBlend, not misdetected as Opaque (DX3-44)");
         }
 
         std::printf("=== %d/%d PASS ===\n", passCount_, kTotal);

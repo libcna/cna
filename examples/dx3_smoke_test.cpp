@@ -6,9 +6,14 @@
 //
 // Check A -- GetWindowInternal() returns a real, non-null window (unlike HEADLESS/SOFTWARE, DX3
 //   genuinely needs one -- free-direct's SetCooperativeLevel wraps it via reinterpret_cast).
-// Check B -- Clear(r,g,b,a) followed by GetBackBufferData() reads back the exact clear color, read
-//   from DX3's own Lockable shadow-backbuffer surface (design decision 5's fix for free-direct's
-//   IDirectDrawSurface::Lock() never exposing a writable pointer for the *primary* surface).
+// Check B -- Clear(r,g,b,a) followed by GetBackBufferData() reads back the exact clear color
+//   (RGB and alpha), read from DX3's own Lockable shadow-backbuffer surface (design decision 5's
+//   fix for free-direct's IDirectDrawSurface::Lock() never exposing a writable pointer for the
+//   *primary* surface).
+// Check D -- Clear() honors a non-opaque requested alpha (128) exactly, not silently forced to
+//   255 -- a real bug found in review: free-direct's own FillColor() (the DDBLT_COLORFILL path)
+//   hardcodes the written alpha byte to 255 unconditionally, so Clear() now writes all 4 channels
+//   directly via Lock()/Unlock() instead.
 // Check C -- Present() (the shadow-backbuffer -> primary identity Blt()) does not throw.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
@@ -53,7 +58,8 @@ protected:
         // Check A: real window.
         check(backend.GetWindowInternal() != nullptr, "GraphicsDevice has a real window under the DX3 backend");
 
-        // Check B: real, correct pixel readback after Clear(), via the shadow-backbuffer surface.
+        // Check B: real, correct pixel readback after Clear(), via the shadow-backbuffer surface,
+        // including the alpha channel.
         {
             dev.Clear(Color(20, 40, 60, 255));
             const Rectangle region(0, 0, 4, 4);
@@ -62,13 +68,37 @@ protected:
             bool allMatch = true;
             for (const Color& p : pixels)
             {
-                if (p.getRProperty() != 20 || p.getGProperty() != 40 || p.getBProperty() != 60)
+                if (p.getRProperty() != 20 || p.getGProperty() != 40 || p.getBProperty() != 60 ||
+                    p.getAProperty() != 255)
                 {
                     allMatch = false;
                     break;
                 }
             }
-            check(allMatch, "GetBackBufferData() reads back the exact Clear() color for every pixel");
+            check(allMatch, "GetBackBufferData() reads back the exact Clear() color (incl. alpha) for every pixel");
+        }
+
+        // Check D: Clear() honors a non-opaque requested alpha exactly. Real bug found and fixed
+        // in review: Clear() originally used DDBLT_COLORFILL, but free-direct's own FillColor()
+        // hardcodes the written alpha byte to 255 unconditionally, so any requested alpha other
+        // than 255 was silently discarded. Clear() now writes all 4 channels directly via
+        // Lock()/Unlock() instead.
+        {
+            dev.Clear(Color(10, 20, 30, 128));
+            const Rectangle region(0, 0, 4, 4);
+            std::vector<Color> pixels(4 * 4, Color(0, 0, 0, 0));
+            dev.GetBackBufferData(&region, pixels.data(), 0, static_cast<int>(pixels.size()));
+            bool allMatch = true;
+            for (const Color& p : pixels)
+            {
+                if (p.getRProperty() != 10 || p.getGProperty() != 20 || p.getBProperty() != 30 ||
+                    p.getAProperty() != 128)
+                {
+                    allMatch = false;
+                    break;
+                }
+            }
+            check(allMatch, "Clear() honors a non-opaque requested alpha exactly (128), not forced to 255");
         }
 
         // Check C: Present() (shadow backbuffer -> primary identity Blt()) does not throw.
@@ -83,8 +113,8 @@ protected:
             check(!threw, "Present() does not throw");
         }
 
-        std::printf("=== %d/%d PASS ===\n", passCount_, 3);
-        result_ = (passCount_ == 3) ? 0 : 1;
+        std::printf("=== %d/%d PASS ===\n", passCount_, 4);
+        result_ = (passCount_ == 4) ? 0 : 1;
         Exit();
     }
 
