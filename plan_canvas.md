@@ -319,7 +319,14 @@ task ✅ without both — but do not claim pixel-level ✅ verification that Des
 - **No headless-browser automated pixel testing in this iteration** (Design decision 9) — real
   pixel verification is `needs_human` until/unless the owner separately approves adding a
   Puppeteer/Playwright-style harness.
-- **Mip levels (`level>0` `SetData`)** — expected to be a throw, matching `SDL_RENDERER`'s Task 681
-  precedent, pending CANVAS-21 confirming no cheaper real option exists.
-- **`TextureAddressMode::Mirror`** — real status TBD by CANVAS-44; may still end up a throw if the
-  2×-tile pattern-source trick doesn't pan out.
+- **Mip levels (`level>0` `SetData`)** — confirmed (CANVAS-21) a permanent throw, matching
+  `SDL_RENDERER`'s Task 681 precedent; Canvas2D has no native mip chain to store into, so there is
+  no cheaper real option.
+- **Mixed per-axis `TextureAddressMode` (`addressU != addressV`) and a tinted or `AlphaBlend` draw
+  combined with an out-of-bounds Wrap/Mirror `sourceRectangle`** (CANVAS-44) — narrow, deliberate
+  throws rather than silently-wrong output; not pursued further for v1.
+- **Automated pixel/visual verification of anything in this backend** — the plan's Design decision 9
+  constraint held throughout implementation: this dev loop never had a real
+  `CanvasRenderingContext2D`/DOM to test against, confirmed empirically (not just assumed) as early
+  as Phase C1. `docs/canvas-backend.md`'s 10-item manual browser verification checklist is the
+  concrete, current stand-in for this — genuinely open, `needs_human`, not merely deferred busywork.
