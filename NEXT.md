@@ -75,7 +75,7 @@ plausibly."
 
 **Phase D9-0 is fully closed.** Next up: Phase D9-1 (CMake integration + backend skeleton).
 
-### Phase D9-A — the XNA 4.0 oracle: D9-A1–A4 closed, D9-A5 started (2 scenes), D9-A6 open
+### Phase D9-A — the XNA 4.0 oracle: D9-A1–A4 closed, D9-A5 started (3 scenes), D9-A6 open
 
 | Task | Status |
 |---|---|
@@ -83,7 +83,7 @@ plausibly."
 | `D9-A2` — minimal XNA 4.0 reference app, no content pipeline | ✅ |
 | `D9-A3` — byte-for-byte equivalent CNA app, shared declarative scene format | ✅ |
 | `D9-A4` — `scripts/xna-diff.py`, DXVK-into-XNA-prefix prerequisite | ✅ |
-| `D9-A5` — growing scene corpus | 🟨 (2 scenes: `colored3d`, `textured_quad`, both pixel-perfect) |
+| `D9-A5` — growing scene corpus | 🟨 (3 scenes: `colored3d`, `textured_quad`, `lit_textured_quad`, all pixel-perfect) |
 | `D9-A6` — run the corpus against CNA's other backends too | ⬜ |
 
 Closed 2026-07-15 (`D9-A3`/`D9-A4`): built the shared declarative scene format `D9-A3`'s own text
@@ -115,10 +115,23 @@ rewritten, scene-driven `Oracle.cs`, only against the old hardcoded `dx9-spike` 
 (ordinary block-bodied method), recompiled, re-ran `colored3d` through the real current `Oracle.cs`
 and reconfirmed `0/65536` — closing that verification gap. This is the first evidence this
 backend's `BasicEffect` TEXTURED dispatch is also genuinely indistinguishable from real XNA 4.0.
-`D9-A5`'s corpus now has 2 scenes, by design ("growing with the plan," not attempted all at once)
-— see `tools/xna-oracle/README.md`. Next: add more scenes as `D9-84` exercises each
-already-dispatched effect (lit `BasicEffect` variants, `AlphaTestEffect`, `DualTextureEffect`,
-`EnvironmentMapEffect`, `SkinnedEffect`).
+`D9-A5`'s corpus now has 3 scenes, by design ("growing with the plan," not attempted all at once)
+— see `tools/xna-oracle/README.md`.
+
+**3rd scene, `lit_textured_quad` (2026-07-15) — also pixel-perfect.** Extended the scene format
+again to a third vertex shape (`vertexformat=PositionNormalTexture`, matching `VSInputNmTx`'s
+Position+Normal+TexCoord shape and the existing stride-32 CNA vertex layout) plus
+`ambientcolor`/`light0enabled`/`light0diffuse`/`light0direction` keys wired to
+`BasicEffect.AmbientLightColor`/`DirectionalLight0` on both sides. Deliberately dimmed the light
+(`diffuse=0.5`, no ambient) rather than a bright one — a first draft saturated to full intensity,
+making the lit result indistinguishable from the raw texture and proving nothing about whether the
+lighting math is genuinely applied; the dimmed version visibly halves the texture color
+(`(255,0,0)`→`(128,0,0)`) and still matches real XNA exactly, `0/65536` pixels differ. First
+evidence this backend's lit+textured `BasicEffect` dispatch (`D9-82b`'s own "lit+textured" checks,
+previously only hand-verified against a hand-computed expected pixel) is genuinely
+indistinguishable from real XNA 4.0. Next: add more scenes as `D9-84` exercises each
+already-dispatched effect (`AlphaTestEffect`, `DualTextureEffect`, `EnvironmentMapEffect`,
+`SkinnedEffect`, multi-light/fog `BasicEffect` variants).
 
 ### Phase D9-1 — CMake integration and skeleton: CLOSED 2026-07-14
 
@@ -672,7 +685,8 @@ Most recent first. Full detail lives in `plan_dx9.md` — this is a short index.
 
 | Commit(s) | Summary |
 |---|---|
-| *(pending)* | **`D9-A5` grown to 2 scenes (`textured_quad`) — also PIXEL-PERFECT (0/65536 differ)**. Extended the shared scene format to a second vertex shape (`vertexformat=PositionColor`/`PositionTexture`) and inline procedural texture data (`texturewidth`/`textureheight`/`texturefilter`/`texturepixel`, no content-pipeline asset needed) on both `Oracle.cs` and `CnaOracleRender.cpp`. Exact match confirmed including the UV=(0.5,0.5) point-filter texel-boundary pixel. Real bug found and fixed in `Oracle.cs` itself: `ParseBool` used a C# 6 expression-bodied member the real .NET-4.0-era `csc.exe` rejects outright (`CS1002`/`CS1519`) -- meaning `D9-A3`'s own original "pixel-perfect" claim had never actually been verified against the rewritten, scene-driven `Oracle.cs` (only the old hardcoded spike); fixed, recompiled, re-ran `colored3d` and reconfirmed 0/65536. |
+| *(pending)* | **`D9-A5` grown to 3 scenes (`lit_textured_quad`) — also PIXEL-PERFECT (0/65536 differ)**. Extended the shared scene format to a third vertex shape (`vertexformat=PositionNormalTexture`, `VSInputNmTx`'s stride-32 shape) plus `ambientcolor`/`light0enabled`/`light0diffuse`/`light0direction` keys wired to `BasicEffect.AmbientLightColor`/`DirectionalLight0` on both sides. Deliberately dimmed the light (`diffuse=0.5`, no ambient) rather than a bright one that would saturate to full intensity and prove nothing about whether lighting math is genuinely applied -- the dimmed version visibly halves the texture color and still matches real XNA exactly. First evidence this backend's lit+textured `BasicEffect` dispatch is genuinely indistinguishable from real XNA 4.0, not just hand-verified pixel math. |
+| `fd8df277` | **`D9-A5` grown to 2 scenes (`textured_quad`) — also PIXEL-PERFECT (0/65536 differ)**. Extended the shared scene format to a second vertex shape (`vertexformat=PositionColor`/`PositionTexture`) and inline procedural texture data (`texturewidth`/`textureheight`/`texturefilter`/`texturepixel`, no content-pipeline asset needed) on both `Oracle.cs` and `CnaOracleRender.cpp`. Exact match confirmed including the UV=(0.5,0.5) point-filter texel-boundary pixel. Real bug found and fixed in `Oracle.cs` itself: `ParseBool` used a C# 6 expression-bodied member the real .NET-4.0-era `csc.exe` rejects outright (`CS1002`/`CS1519`) -- meaning `D9-A3`'s own original "pixel-perfect" claim had never actually been verified against the rewritten, scene-driven `Oracle.cs` (only the old hardcoded spike); fixed, recompiled, re-ran `colored3d` and reconfirmed 0/65536. |
 | `848e56b2` | **`D9-A3`/`D9-A4` closed (XNA oracle diff harness) — first real oracle comparison is PIXEL-PERFECT (0/65536 differ)**. New shared `.scene` text format (`tools/xna-oracle/scenes/*.scene`), a rewritten scene-driven `tools/xna-oracle/Oracle.cs` (moved from `dx9-spike/`), a new `tools/xna-oracle/CnaOracleRender.cpp` (real public `Game`/`GraphicsDeviceManager`/`BasicEffect` API, `cna_oracle_render` CMake target), and `scripts/xna-diff.py` (needs Pillow, `--tolerance` defaults to 0, mutation-verified). Installed DXVK into the XNA oracle's own Wine prefix (`~/.wine-cna-xna40`) -- `D9-A4`'s own critical prerequisite -- confirmed via the adapter string flipping from WineD3D's spoofed string to the real GPU. `colored3d` scene (`D9-A2`'s own original triangle) matches real XNA 4.0 byte-for-byte across all 65536 pixels. `D9-A5`'s corpus now has its first scene, growing incrementally from here. |
 | `6fd21fa3` | **`D9-64` closed (reuse backend-agnostic state CTests) — Phase D9-6 now FULLY CLOSED (all 5 rows)**. Reused D3D11's own 4-test subset (`easygl_blendstate_opaque_test.cpp`/`easygl_blendstate_alphablend_test.cpp`/`easygl_depthstencilstate_stencil_enable_test.cpp`/`easygl_rasterizerstate_cullmode_test.cpp`, verbatim) as new `D3D9_BlendState_Opaque`/`D3D9_BlendState_AlphaBlend`/`D3D9_DepthStencilState_StencilEnable`/`D3D9_RasterizerState_CullMode` CTests. Found and fixed 2 real, pre-existing backend bugs: (1) `SetDepthTestEnabled`/`SetDepthWriteEnabled` were silent-throw stubs since `D9-11`, never wired up -- same class of bug as D3D11's own 2026-07-14 fix (`191c28f1`), now direct `SetRenderState(D3DRS_ZENABLE/ZWRITEENABLE)` calls (`SetBlendEnabled` -> deliberate no-op, matching D3D11/D3D12); (2) `UpdatePresentationFormatEXT()` deferred a changed `DepthStencilFormat` until the next `Present()`, causing `Clear()` to fail `D3DERR_INVALIDCALL` on any test drawing depth/stencil content on the literal first frame -- fixed by applying eagerly inside `UpdatePresentationFormatEXT()` itself (within the interface's own documented allowance, no `IGraphicsBackend.hpp` change). New `D3D9_Smoke` Check Z (2 checks, ported from D3D11's own near/far depth-test proof) confirms fix 1 for real. Both mutation-verified. Full D3D9 CTest suite: 11/11 binaries green (`D3D9_Smoke` now 55/55). |
 | `90f59e7c` | **`D9-83` closed (`DrawInstancedPrimitivesEx` via `SetStreamSourceFreq`) — Phase D9-8's dispatch+instancing work is now COMPLETE**, only `D9-84` remains. New `D3D9InstancedDraw.cpp`, a fresh NOXNA `vs_2_0`/`ps_2_0` shader (`shaders/cna/Instanced3D.hlsl`, real XNA has no per-instance-aware Stock Effect shader) compiled+disassembly-verified, new stride-64 2-stream vertex declaration. `SetStreamSourceFreq(0/1, INDEXEDDATA\|count / INSTANCEDATA\|1)` per MSDN, reset to 1 before returning. Real bug found and fixed during development was in the new CTest's own pixel-sample coordinates (sat exactly on the test triangle's diagonal hypotenuse), not the instancing logic -- every D3D9 API call returned `S_OK` throughout. New `D3D9_Instanced` CTest, 4/4 (two distinct instances in one draw call, null-instanceVb fallback, stream-frequency reset regression check). Mutation-verified (hardcoded the instance-count frequency to 1; exactly the 2nd-instance check went red). Full 7-CTest D3D9 suite passes. |
@@ -714,11 +728,11 @@ surfaced two real, pre-existing D3D9 bugs along the way (`SetDepthTestEnabled`/
 `SetDepthWriteEnabled` silent-throw stubs; `UpdatePresentationFormatEXT()`'s deferred-format-apply
 timing) — both fixed and mutation-verified, see Phase D9-6's own section above.
 
-**Phase D9-A: `D9-A3`/`D9-A4` closed 2026-07-15 — the XNA oracle diff harness is real and both
-results landed so far are pixel-perfect** (`colored3d` and `textured_quad`, `0/65536` pixels
-differ from real XNA 4.0 each, see Phase D9-A's own section above). `D9-A5` (the scene corpus) has
-2 entries; `D9-84` (every draw path validated against the oracle) can now genuinely continue, one
-scene at a time.
+**Phase D9-A: `D9-A3`/`D9-A4` closed 2026-07-15 — the XNA oracle diff harness is real and all
+results landed so far are pixel-perfect** (`colored3d`, `textured_quad`, `lit_textured_quad`,
+`0/65536` pixels differ from real XNA 4.0 each, see Phase D9-A's own section above). `D9-A5` (the
+scene corpus) has 3 entries; `D9-84` (every draw path validated against the oracle) can now
+genuinely continue, one scene at a time.
 
 **Phase D9-8: `D9-80`–`D9-83` ALL CLOSED — real, verified dispatch for all 5 XNA Stock Effects plus
 hardware instancing on this backend.** The shader-dispatch tables/formulas are transcribed and

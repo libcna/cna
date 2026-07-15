@@ -13,7 +13,14 @@ using System.IO;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 
-public enum SceneVertexFormat { PositionColor, PositionTexture }
+public enum SceneVertexFormat { PositionColor, PositionTexture, PositionNormalTexture }
+
+public class SceneLight
+{
+    public bool Enabled;
+    public Vector3 Diffuse = Vector3.Zero;
+    public Vector3 Direction = new Vector3(0, 0, -1);
+}
 
 public class Scene
 {
@@ -28,9 +35,12 @@ public class Scene
     public int TextureWidth;
     public int TextureHeight;
     public bool TexturePointFilter = true;
+    public Vector3 AmbientColor = Vector3.Zero;
+    public SceneLight Light0 = new SceneLight();
     public PrimitiveType Primitive = PrimitiveType.TriangleList;
     public List<VertexPositionColor> ColorVertices = new List<VertexPositionColor>();
     public List<VertexPositionTexture> TextureVertices = new List<VertexPositionTexture>();
+    public List<VertexPositionNormalTexture> NormalTextureVertices = new List<VertexPositionNormalTexture>();
     public List<Color> TexturePixels = new List<Color>();
 
     public static Scene Load(string path)
@@ -55,8 +65,9 @@ public class Scene
                     break;
                 case "clearcolor": scene.ClearColor = ParseColor(value); break;
                 case "vertexformat":
-                    scene.VertexFormat = value == "PositionTexture"
-                        ? SceneVertexFormat.PositionTexture : SceneVertexFormat.PositionColor;
+                    if (value == "PositionTexture") scene.VertexFormat = SceneVertexFormat.PositionTexture;
+                    else if (value == "PositionNormalTexture") scene.VertexFormat = SceneVertexFormat.PositionNormalTexture;
+                    else scene.VertexFormat = SceneVertexFormat.PositionColor;
                     break;
                 case "vertexcolor": scene.VertexColorEnabled = ParseBool(value); break;
                 case "lighting": scene.LightingEnabled = ParseBool(value); break;
@@ -65,9 +76,15 @@ public class Scene
                 case "textureheight": scene.TextureHeight = int.Parse(value, CultureInfo.InvariantCulture); break;
                 case "texturefilter": scene.TexturePointFilter = value == "Point"; break;
                 case "texturepixel": scene.TexturePixels.Add(ParseColor(value)); break;
+                case "ambientcolor": scene.AmbientColor = ParseVector3(value); break;
+                case "light0enabled": scene.Light0.Enabled = ParseBool(value); break;
+                case "light0diffuse": scene.Light0.Diffuse = ParseVector3(value); break;
+                case "light0direction": scene.Light0.Direction = ParseVector3(value); break;
                 case "primitive": scene.Primitive = ParsePrimitive(value); break;
                 case "vertex":
-                    if (scene.VertexFormat == SceneVertexFormat.PositionTexture)
+                    if (scene.VertexFormat == SceneVertexFormat.PositionNormalTexture)
+                        scene.NormalTextureVertices.Add(ParseNormalTextureVertex(value));
+                    else if (scene.VertexFormat == SceneVertexFormat.PositionTexture)
                         scene.TextureVertices.Add(ParseTextureVertex(value));
                     else
                         scene.ColorVertices.Add(ParseColorVertex(value));
@@ -81,7 +98,9 @@ public class Scene
 
     public int VertexCount()
     {
-        return VertexFormat == SceneVertexFormat.PositionTexture ? TextureVertices.Count : ColorVertices.Count;
+        if (VertexFormat == SceneVertexFormat.PositionNormalTexture) return NormalTextureVertices.Count;
+        if (VertexFormat == SceneVertexFormat.PositionTexture) return TextureVertices.Count;
+        return ColorVertices.Count;
     }
 
     public int PrimitiveCount()
@@ -106,6 +125,14 @@ public class Scene
                           byte.Parse(p[1], CultureInfo.InvariantCulture),
                           byte.Parse(p[2], CultureInfo.InvariantCulture),
                           byte.Parse(p[3], CultureInfo.InvariantCulture));
+    }
+
+    static Vector3 ParseVector3(string s)
+    {
+        var p = s.Split(',');
+        return new Vector3(float.Parse(p[0], CultureInfo.InvariantCulture),
+                            float.Parse(p[1], CultureInfo.InvariantCulture),
+                            float.Parse(p[2], CultureInfo.InvariantCulture));
     }
 
     static PrimitiveType ParsePrimitive(string s)
@@ -146,6 +173,23 @@ public class Scene
             float.Parse(p[4], CultureInfo.InvariantCulture));
         return new VertexPositionTexture(pos, uv);
     }
+
+    static VertexPositionNormalTexture ParseNormalTextureVertex(string s)
+    {
+        var p = s.Split(',');
+        var pos = new Vector3(
+            float.Parse(p[0], CultureInfo.InvariantCulture),
+            float.Parse(p[1], CultureInfo.InvariantCulture),
+            float.Parse(p[2], CultureInfo.InvariantCulture));
+        var normal = new Vector3(
+            float.Parse(p[3], CultureInfo.InvariantCulture),
+            float.Parse(p[4], CultureInfo.InvariantCulture),
+            float.Parse(p[5], CultureInfo.InvariantCulture));
+        var uv = new Vector2(
+            float.Parse(p[6], CultureInfo.InvariantCulture),
+            float.Parse(p[7], CultureInfo.InvariantCulture));
+        return new VertexPositionNormalTexture(pos, normal, uv);
+    }
 }
 
 public class Oracle : Game
@@ -180,6 +224,14 @@ public class Oracle : Game
         fx.View = Matrix.Identity;
         fx.Projection = Matrix.Identity;
 
+        if (scene.LightingEnabled)
+        {
+            fx.AmbientLightColor = scene.AmbientColor;
+            fx.DirectionalLight0.Enabled = scene.Light0.Enabled;
+            fx.DirectionalLight0.DiffuseColor = scene.Light0.Diffuse;
+            fx.DirectionalLight0.Direction = scene.Light0.Direction;
+        }
+
         Texture2D texture = null;
         if (scene.TextureEnabled)
         {
@@ -192,7 +244,9 @@ public class Oracle : Game
         foreach (var pass in fx.CurrentTechnique.Passes)
         {
             pass.Apply();
-            if (scene.VertexFormat == SceneVertexFormat.PositionTexture)
+            if (scene.VertexFormat == SceneVertexFormat.PositionNormalTexture)
+                dev.DrawUserPrimitives(scene.Primitive, scene.NormalTextureVertices.ToArray(), 0, scene.PrimitiveCount());
+            else if (scene.VertexFormat == SceneVertexFormat.PositionTexture)
                 dev.DrawUserPrimitives(scene.Primitive, scene.TextureVertices.ToArray(), 0, scene.PrimitiveCount());
             else
                 dev.DrawUserPrimitives(scene.Primitive, scene.ColorVertices.ToArray(), 0, scene.PrimitiveCount());

@@ -1,0 +1,42 @@
+# plan_dx9.md D9-A5 scene corpus: lit_textured_quad
+# A single BasicEffect (TextureEnabled=true, LightingEnabled=true, VertexColorEnabled=false) quad
+# facing the camera (Normal=(0,0,1) at every vertex), lit by one directional light travelling
+# straight at the surface (Direction=(0,0,-1) -> dot(-Direction,Normal)=1, full-facing but
+# deliberately DIM (diffuse=0.5, no ambient) so the lit result is visibly darker than the raw
+# texture -- a light bright enough to saturate to full intensity would make this indistinguishable
+# from an "unlit" scene and prove nothing about whether lighting math is genuinely applied, sampling
+# the same 2x2 point-filtered checkerboard texture textured_quad.scene uses. World/View/Projection
+# all Identity. This is the first scene
+# to exercise BasicEffect's VSInputNmTx vertex shape (Position+Normal+TexCoord, the existing
+# stride-32 CNA vertex layout) and the lit-textured ShaderIndex bucket (D9-82b's own "lit+textured"
+# checks, previously only hand-verified against a hand-computed expected pixel, now verified
+# directly against the real XNA oracle instead).
+width=256
+height=256
+profile=HiDef
+clearcolor=100,149,237,255
+vertexformat=PositionNormalTexture
+vertexcolor=false
+lighting=true
+texture=true
+texturewidth=2
+textureheight=2
+texturefilter=Point
+ambientcolor=0,0,0
+light0enabled=true
+light0diffuse=0.5,0.5,0.5
+light0direction=0,0,-1
+primitive=TriangleList
+# Row-major, top row first: red,white / white,blue (same checkerboard as textured_quad.scene).
+texturepixel=255,0,0,255
+texturepixel=255,255,255,255
+texturepixel=255,255,255,255
+texturepixel=0,0,255,255
+# x,y,z,nx,ny,nz,u,v -- every vertex faces the camera (+Z normal), same UV layout as
+# textured_quad.scene: UV (0,0) is the texture's top-left (red texel).
+vertex=-0.6,0.6,0,0,0,1,0,0
+vertex=0.6,0.6,0,0,0,1,1,0
+vertex=-0.6,-0.6,0,0,0,1,0,1
+vertex=0.6,0.6,0,0,0,1,1,0
+vertex=0.6,-0.6,0,0,0,1,1,1
+vertex=-0.6,-0.6,0,0,0,1,0,1

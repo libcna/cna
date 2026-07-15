@@ -27,13 +27,15 @@ fully-commented examples.
 | `width`, `height` | back buffer size |
 | `profile` | `HiDef` or `Reach` |
 | `clearcolor` | `r,g,b,a` (0-255) |
-| `vertexformat` | `PositionColor` (default) or `PositionTexture` — selects which `vertex=` shape below, and which `VertexPosition*` struct both sides draw |
+| `vertexformat` | `PositionColor` (default), `PositionTexture`, or `PositionNormalTexture` — selects which `vertex=` shape below, and which `VertexPosition*` struct both sides draw |
 | `vertexcolor`, `lighting`, `texture` | `BasicEffect.VertexColorEnabled`/`LightingEnabled`/`TextureEnabled` (`true`/`false`) |
 | `texturewidth`, `textureheight` | size of an inline procedural texture (no content-pipeline asset file — matches `D9-A2`'s own "no content pipeline" constraint) |
 | `texturefilter` | `Point` or `Linear` — `SamplerState.PointClamp`/`LinearClamp` on slot 0 |
 | `texturepixel` | `r,g,b,a` — repeats `texturewidth*textureheight` times, row-major, only when `texture=true` |
+| `ambientcolor` | `r,g,b` (0-1 floats) — `BasicEffect.AmbientLightColor`, only when `lighting=true` |
+| `light0enabled`, `light0diffuse`, `light0direction` | `BasicEffect.DirectionalLight0.Enabled`/`DiffuseColor`/`Direction`, only when `lighting=true` |
 | `primitive` | `TriangleList`, `TriangleStrip`, `LineList`, or `LineStrip` |
-| `vertex` | `x,y,z,r,g,b,a` (`vertexformat=PositionColor`) or `x,y,z,u,v` (`vertexformat=PositionTexture`) — repeats once per vertex, `World`/`View`/`Projection` are always `Matrix.Identity` |
+| `vertex` | `x,y,z,r,g,b,a` (`PositionColor`), `x,y,z,u,v` (`PositionTexture`), or `x,y,z,nx,ny,nz,u,v` (`PositionNormalTexture`) — repeats once per vertex, `World`/`View`/`Projection` are always `Matrix.Identity` |
 
 ## Build and run — XNA side (the oracle)
 
@@ -88,7 +90,7 @@ Requires Pillow (`pip install pillow`) — not previously a dependency of this p
 
 ## Status
 
-Two scenes so far, **both pixel-perfect**:
+Three scenes so far, **all pixel-perfect**:
 
 - `colored3d` (`D9-A2`'s own original spike scene: a `BasicEffect` `VertexColorEnabled=true`/
   `LightingEnabled=false` triangle over a `CornflowerBlue` clear) — `0/65536` pixels differ,
@@ -100,6 +102,12 @@ Two scenes so far, **both pixel-perfect**:
   texture, `SamplerState.PointClamp`) — also `0/65536` pixels differ, including at the exact
   UV=(0.5,0.5) point-filter texel-boundary pixel (a genuine tie-break case: both sides independently
   pick the identical texel there, not merely "close").
+- `lit_textured_quad` (`BasicEffect.LightingEnabled=true` + `TextureEnabled=true`, `VSInputNmTx`'s
+  Position+Normal+TexCoord vertex shape, one dim `DirectionalLight0` — `0/65536` pixels differ.
+  Deliberately dimmed (`diffuse=0.5`, no ambient) so the lit result is visibly darker than the raw
+  texture (`(255,0,0)` → `(128,0,0)`, `(0,0,255)` → `(0,0,128)`) rather than saturating to full
+  brightness, which would have made this scene indistinguishable from an unlit one and proven
+  nothing about whether the lighting math is genuinely applied.
 
 `scripts/xna-diff.py` itself is mutation-verified: a deliberately 1-off-mutated copy of a passing
 CNA PNG is correctly reported as `FAIL: 1/65536 pixels differ ... max per-channel delta=1` at the
