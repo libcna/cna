@@ -148,6 +148,7 @@ namespace
         bool environmentMapEnabled = false;
         int environmentMapSize = 0;
         float environmentMapAmount = 1.0f;
+        float fresnelFactor = 1.0f;
         Color environmentMapPixel = Color::Black;
         Vector3 diffuseColor{1, 1, 1};
         Vector3 ambientColor{0, 0, 0};
@@ -321,6 +322,7 @@ namespace
             else if (key == "environmentmap") scene.environmentMapEnabled = ParseBool(value);
             else if (key == "environmentmapsize") scene.environmentMapSize = std::stoi(value);
             else if (key == "environmentmapamount") scene.environmentMapAmount = std::stof(value);
+            else if (key == "fresnelfactor") scene.fresnelFactor = std::stof(value);
             else if (key == "environmentmappixel") scene.environmentMapPixel = ParseColor(value);
             else if (key == "alphafunction") scene.alphaFunction = ParseCompareFunction(value);
             else if (key == "referencealpha") scene.referenceAlpha = std::stoi(value);
@@ -475,6 +477,7 @@ protected:
             envMapFx->setTextureProperty(texture.get());
             envMapFx->setEnvironmentMapProperty(environmentMap.get());
             envMapFx->setEnvironmentMapAmountProperty(scene_.environmentMapAmount);
+            envMapFx->setFresnelFactorProperty(scene_.fresnelFactor);
             envMapFx->setWorldProperty(Matrix::getIdentityProperty());
             envMapFx->setViewProperty(Matrix::getIdentityProperty());
             envMapFx->setProjectionProperty(Matrix::getIdentityProperty());

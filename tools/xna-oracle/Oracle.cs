@@ -108,6 +108,7 @@ public class Scene
     public bool EnvironmentMapEnabled;
     public int EnvironmentMapSize;
     public float EnvironmentMapAmount = 1.0f;
+    public float FresnelFactor = 1.0f;
     public Color EnvironmentMapPixel = Color.Black;
     public Vector3 DiffuseColor = Vector3.One;
     public Vector3 AmbientColor = Vector3.Zero;
@@ -161,6 +162,7 @@ public class Scene
                 case "environmentmap": scene.EnvironmentMapEnabled = ParseBool(value); break;
                 case "environmentmapsize": scene.EnvironmentMapSize = int.Parse(value, CultureInfo.InvariantCulture); break;
                 case "environmentmapamount": scene.EnvironmentMapAmount = float.Parse(value, CultureInfo.InvariantCulture); break;
+                case "fresnelfactor": scene.FresnelFactor = float.Parse(value, CultureInfo.InvariantCulture); break;
                 case "environmentmappixel": scene.EnvironmentMapPixel = ParseColor(value); break;
                 case "alphafunction": scene.AlphaFunction = ParseCompareFunction(value); break;
                 case "referencealpha": scene.ReferenceAlpha = int.Parse(value, CultureInfo.InvariantCulture); break;
@@ -452,6 +454,7 @@ public class Oracle : Game
             emfx.Texture = texture;
             emfx.EnvironmentMap = environmentMap;
             emfx.EnvironmentMapAmount = scene.EnvironmentMapAmount;
+            emfx.FresnelFactor = scene.FresnelFactor;
             emfx.World = Matrix.Identity;
             emfx.View = Matrix.Identity;
             emfx.Projection = Matrix.Identity;

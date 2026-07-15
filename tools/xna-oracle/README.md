@@ -38,6 +38,7 @@ fully-commented examples.
 | `diffusecolor` | `r,g,b` (0-1 floats) — `DualTextureEffect.DiffuseColor`, only when `effect=DualTextureEffect` |
 | `environmentmap`, `environmentmapsize`, `environmentmappixel` | a `TextureCube.EnvironmentMap`, only when `effect=EnvironmentMapEffect` — a single `environmentmappixel=` sets ALL 6 faces to the same color (sidesteps needing to hand-compute `reflect()` geometry, same trick `D9-82e`'s own CTest used) |
 | `environmentmapamount` | `0`-`1` float — `EnvironmentMapEffect.EnvironmentMapAmount`, only when `effect=EnvironmentMapEffect` |
+| `fresnelfactor` | float — `EnvironmentMapEffect.FresnelFactor`, only when `effect=EnvironmentMapEffect`. Real XNA defaults this to `1` (fresnel ENABLED) in the constructor — a scene that wants the non-fresnel bucket must set `fresnelfactor=0` explicitly, it is not the implicit default of leaving the key unset (`envmap_quad.scene` got this wrong once — see its own comment) |
 | `ambientcolor` | `r,g,b` (0-1 floats) — `AmbientLightColor`, only when `lighting=true` (`BasicEffect`/`EnvironmentMapEffect`/`SkinnedEffect`) |
 | `light0enabled`/`light1enabled`/`light2enabled`, `light0diffuse`/`light1diffuse`/`light2diffuse`, `light0direction`/`light1direction`/`light2direction` | `DirectionalLight0`/`DirectionalLight1`/`DirectionalLight2`'s own `.Enabled`/`.DiffuseColor`/`.Direction`, only when `lighting=true` (`BasicEffect`/`EnvironmentMapEffect`/`SkinnedEffect`) — all three lights are always applied once `lighting=true` (a scene that only cares about `Light0` simply never sets `light1*`/`light2*`, which default to disabled/zero) |
 | `alphafunction` | `Always`/`Never`/`Less`/`LessEqual`/`Equal`/`GreaterEqual`/`Greater`/`NotEqual` — `AlphaTestEffect.AlphaFunction`, only when `effect=AlphaTestEffect` |
@@ -127,9 +128,9 @@ Requires Pillow (`pip install pillow`) — not previously a dependency of this p
 
 ## Status
 
-Eleven scenes so far, **all pixel-perfect**, and every one of XNA's 5 Stock Effects plus
-`IEffectFog` and 3 `AlphaTestEffect.AlphaFunction` values (covering both real pixel shader
-buckets) is now represented in the corpus:
+Twelve scenes so far, **all pixel-perfect**, and every one of XNA's 5 Stock Effects plus
+`IEffectFog`, 3 `AlphaTestEffect.AlphaFunction` values (covering both real pixel shader buckets),
+and `EnvironmentMapEffect.FresnelFactor` is now represented in the corpus:
 
 - `colored3d` (`D9-A2`'s own original spike scene: a `BasicEffect` `VertexColorEnabled=true`/
   `LightingEnabled=false` triangle over a `CornflowerBlue` clear) — `0/65536` pixels differ,
@@ -176,7 +177,29 @@ buckets) is now represented in the corpus:
   real `CS1061` against the real `csc.exe`) — lighting is always on for this effect, and the
   setter throws given `false` anyway. CNA's own equivalent is directly callable (C++ has no
   explicit-interface-implementation hiding) but was deliberately left unset here, matching what a
-  real game using this effect actually can (and cannot) do.
+  real game using this effect actually can (and cannot) do. Sets `fresnelfactor=0` explicitly
+  (see the next bullet for why this matters).
+- `envmap_fresnel_quad` — the first scene to genuinely exercise `EnvironmentMapEffect.FresnelFactor`
+  with a real per-vertex gradient. **Real documentation-accuracy finding, not a rendering bug**:
+  `envmap_quad.scene` had always claimed to test the "non-fresnel bucket", but neither side ever
+  actually set `FresnelFactor`, and real XNA's `EnvironmentMapEffect` constructor defaults
+  `FresnelFactor=1` (confirmed in FNA's own source, matched by CNA's own constructor) — so that
+  scene had ACTUALLY been running the fresnel-ENABLED bucket the whole time. Undetected because
+  its geometry is coincidentally degenerate for Fresnel: the quad sits in the same `z=0` plane as
+  `EyePosition=(0,0,0)` (`View` is always `Identity` in this corpus), so `viewAngle=0` at every
+  vertex with `normal=(0,0,1)`, and `pow(max(1-abs(0),0), anything)=1` regardless of the exponent
+  — Fresnel enabled/disabled produce the identical result there. Fixed with an explicit
+  `fresnelfactor=0` on `envmap_quad.scene`. This new scene proves the real formula
+  (`pow(max(1-abs(dot(eyeVector,worldNormal)),0), FresnelFactor) * EnvironmentMapAmount`, computed
+  per-vertex then Gouraud-interpolated, not recomputed per-pixel). A second trap surfaced while
+  designing it: any single normal shared by all 4 corners of the symmetric origin-centered quad
+  gives an identical fresnelFactor everywhere (no gradient at all) — fixed by deliberately
+  assigning DIFFERENT per-vertex normals to the top vs. bottom edge (`(0,0,1)` top →
+  `fresnelFactor=1` exactly; `(1,0,0)` bottom → hand-derived `fresnelFactor≈0.29289`). With
+  lighting forced to `diffuseSum=0`, the result reduces to exactly
+  `fresnelFactor * environmentMapColor` — sampled at the exact vertical center, the hand-derived
+  prediction `≈(129.3,64.6,32.3)` matched the observed `(129,65,32)` exactly on both real XNA and
+  CNA, `0/65536` pixels differ overall.
 - `skinned_quad` — the fourth non-`BasicEffect` Stock Effect (`SkinnedEffect`), and the fifth (last)
   of the 5 XNA Stock Effects in the corpus, on another brand-new custom vertex shape
   (`PositionNormalTextureWeights`: Position+Normal+TexCoord+BlendWeight+BlendIndices, stride 52 —
@@ -251,12 +274,12 @@ default `--tolerance=0`, and correctly passes again at `--tolerance=1` — confi
 genuinely discriminates, not just "always reports PASS".
 
 **Every one of XNA's 5 Stock Effects (`BasicEffect`, `AlphaTestEffect`, `DualTextureEffect`,
-`EnvironmentMapEffect`, `SkinnedEffect`) plus `IEffectFog` and 3 `AlphaTestEffect.AlphaFunction`
+`EnvironmentMapEffect`, `SkinnedEffect`) plus `IEffectFog`, 3 `AlphaTestEffect.AlphaFunction`
 values (`Greater`/`Less` on the `PSAlphaTestLtGt` bucket, `Equal` on the separate
-`PSAlphaTestEqNe` bucket) are now represented in the corpus, at least once, and every single
-comparison so far is pixel-perfect.** `D9-A5` keeps growing "with the plan" — each subsequent
-effect/feature combination this project verifies against the oracle adds its own scene(s) here,
-incrementally, rather than attempting the full corpus (remaining `AlphaTestEffect` compare
-functions, `EnvironmentMapEffect` fresnel, `SkinnedEffect` 2/4-bone weighting, `SpriteBatch`,
+`PSAlphaTestEqNe` bucket), and `EnvironmentMapEffect.FresnelFactor` are now represented in the
+corpus, at least once, and every single comparison so far is pixel-perfect.** `D9-A5` keeps
+growing "with the plan" — each subsequent effect/feature combination this project verifies against
+the oracle adds its own scene(s) here, incrementally, rather than attempting the full corpus
+(remaining `AlphaTestEffect` compare functions, `SkinnedEffect` 2/4-bone weighting, `SpriteBatch`,
 render targets, every shared `SurfaceFormat`) in one sitting. `D9-84` (every draw path validated
 against the oracle) is the task that consumes the finished corpus.

@@ -1,0 +1,72 @@
+# plan_dx9.md D9-A5 scene corpus: envmap_fresnel_quad
+# The first scene to genuinely exercise EnvironmentMapEffect's FRESNEL bucket with a real,
+# non-degenerate per-vertex gradient (see envmap_quad.scene's own comment for why that scene,
+# despite defaulting FresnelFactor=1, produces a spatially CONSTANT result -- its z=0-coplanar-
+# with-eye geometry makes viewAngle=0 everywhere, so Fresnel-enabled and -disabled coincide).
+#
+# Real formula, confirmed against FNA's own EnvironmentMapEffect.fx (ComputeFresnelFactor,
+# EnvironmentMapEffect.fx:61-66): `fresnelFactor = pow(max(1-abs(dot(eyeVector,worldNormal)),0),
+# FresnelFactor) * EnvironmentMapAmount`, computed PER-VERTEX in the vertex shader (not
+# recomputed per-pixel -- same Gouraud-interpolation discipline this corpus's own lighting/fog
+# scenes already established: BasicEffect/EnvironmentMapEffect never use per-pixel lighting on
+# this backend, D9-82b/D9-82f's own "preferPerPixelLighting always false" finding), then linearly
+# interpolated across the triangle like any other per-vertex quantity.
+#
+# World/View/Projection are Identity everywhere in this corpus, so EyePosition=(0,0,0) always.
+# With the quad at z=0 (same plane as the eye), ANY single normal shared by all 4 vertices of
+# this specific square-centered-at-origin geometry gives an identical fresnelFactor at all 4
+# corners by symmetry (equal |x|,|y| at every corner) -- a real trap discovered while designing
+# this scene: no single constant normal can produce a genuine gradient here. The fix is to
+# deliberately assign DIFFERENT per-vertex normals to the top vs. bottom edge (a synthetic,
+# non-physically-realistic choice made purely to isolate and prove the Fresnel formula itself --
+# the same discipline this corpus already uses for e.g. its uniform-cubemap-color trick to
+# sidestep hand-computing reflect() geometry):
+#   Top edge    (y=0.6):  normal=(0,0,1) -> eyeVector.z=0 always (quad/eye coplanar) ->
+#                         viewAngle=dot(eyeVector,normal)=0 -> fresnelFactor=pow(1,1)*1=1 exactly
+#                         (full environment map, no Fresnel narrowing) at BOTH top vertices.
+#   Bottom edge (y=-0.6): normal=(1,0,0) -> at (-0.6,-0.6,0): eyeVector=normalize(0.6,0.6,0)=
+#                         (0.70711,0.70711,0), viewAngle=eyeVector.x=0.70711 ->
+#                         fresnelFactor=pow(1-0.70711,1)*1=0.29289. At (0.6,-0.6,0):
+#                         eyeVector=normalize(-0.6,0.6,0)=(-0.70711,0.70711,0),
+#                         viewAngle=-0.70711, abs=0.70711 -> SAME fresnelFactor=0.29289 (both
+#                         bottom corners agree by symmetry too) -- so top and bottom edges are
+#                         each internally constant, but DIFFERENT from each other (1 vs 0.29289),
+#                         giving a genuine, hand-derived, vertically-varying gradient once
+#                         interpolated across the two triangles.
+# lighting=true with light0enabled=false and ambientcolor=0,0,0 (light1/light2 default disabled)
+# forces diffuseSum=0, so texture*diffuseSum=0 (black) regardless of texture content -- meaning
+# result_rgb = lerp(0, environmentMap, fresnelFactor) = fresnelFactor * environmentMapColor
+# exactly, with no lighting math to disentangle from the Fresnel math itself.
+# Expected (environmentmappixel=200,100,50, environmentmapamount=1, fresnelfactor=1 exponent):
+#   top edge    -> exactly (200,100,50)      [fresnelFactor=1]
+#   bottom edge -> ~0.29289 * (200,100,50) = ~(58.6,29.3,14.6)  [fresnelFactor=0.29289]
+# (exact byte values depend on GPU float rounding -- confirmed identical on both sides via the
+# pixel diff, not independently re-derived byte-for-byte here.)
+width=256
+height=256
+profile=HiDef
+clearcolor=100,149,237,255
+effect=EnvironmentMapEffect
+vertexformat=PositionNormalTexture
+lighting=true
+ambientcolor=0,0,0
+light0enabled=false
+texture=true
+texturewidth=1
+textureheight=1
+texturefilter=Point
+environmentmap=true
+environmentmapsize=1
+environmentmapamount=1
+fresnelfactor=1
+primitive=TriangleList
+texturepixel=255,255,255,255
+environmentmappixel=200,100,50,255
+# x,y,z,nx,ny,nz,u,v -- top edge normal=(0,0,1) [fresnelFactor=1 exactly], bottom edge
+# normal=(1,0,0) [fresnelFactor=0.29289 by hand-derivation above].
+vertex=-0.6,0.6,0,0,0,1,0,0
+vertex=0.6,0.6,0,0,0,1,1,0
+vertex=-0.6,-0.6,0,1,0,0,0,1
+vertex=0.6,0.6,0,0,0,1,1,0
+vertex=0.6,-0.6,0,1,0,0,1,1
+vertex=-0.6,-0.6,0,1,0,0,0,1
