@@ -1,0 +1,37 @@
+# plan_dx9.md D9-A5 scene corpus: alphatest_never_quad
+# The first scene to exercise AlphaFunction=Never, the last untested PSAlphaTestLtGt value.
+# Confirmed against FNA's own AlphaTestEffect.cs source: Never sets `alphaTest.Z = -1;
+# alphaTest.W = -1;` (both branch targets negative) with alphaTest.X left at its zero default --
+# the shader's `clip((a < x) ? z : w)` evaluates to clip(-1) UNCONDITIONALLY, discarding every
+# fragment regardless of its actual alpha value. Reuses alphatest_quad.scene's exact texture
+# (alpha=255,1,255,64) unchanged -- under plain Greater, the alpha=255 texels would normally
+# PASS, but under Never they must ALL be discarded, including the ones that would otherwise
+# clearly pass. A backend that silently treated Never as "always pass" (a plausible off-by-one
+# mistake given Never/Always are easy to invert) would render the full texture here instead of
+# nothing -- this scene exists specifically to close that verification gap.
+width=256
+height=256
+profile=HiDef
+clearcolor=100,149,237,255
+effect=AlphaTestEffect
+vertexformat=PositionTexture
+vertexcolor=false
+texture=true
+texturewidth=2
+textureheight=2
+texturefilter=Point
+alphafunction=Never
+referencealpha=128
+primitive=TriangleList
+# Row-major, top row first: (red,a=255),(white,a=1) / (white,a=255),(blue,a=64) -- same texture as
+# alphatest_quad.scene; every texel here should be discarded under Never regardless of its alpha.
+texturepixel=255,0,0,255
+texturepixel=255,255,255,1
+texturepixel=255,255,255,255
+texturepixel=0,0,255,64
+vertex=-0.6,0.6,0,0,0
+vertex=0.6,0.6,0,1,0
+vertex=-0.6,-0.6,0,0,1
+vertex=0.6,0.6,0,1,0
+vertex=0.6,-0.6,0,1,1
+vertex=-0.6,-0.6,0,0,1

@@ -130,10 +130,10 @@ Requires Pillow (`pip install pillow`) — not previously a dependency of this p
 
 ## Status
 
-Sixteen scenes so far, **all pixel-perfect**, and every one of XNA's 5 Stock Effects plus
-`IEffectFog`, 6 `AlphaTestEffect.AlphaFunction` values (covering both real pixel shader buckets —
-only alpha-value-independent `Never`/`Always` remain), `EnvironmentMapEffect.FresnelFactor`, and a
-genuine `SkinnedEffect` 2-bone blend is now
+Eighteen scenes so far, **all pixel-perfect**, and every one of XNA's 5 Stock Effects plus
+`IEffectFog`, ALL 8 `AlphaTestEffect.AlphaFunction` values (`AlphaTestEffect` compare-function
+coverage is COMPLETE), `EnvironmentMapEffect.FresnelFactor`, and a genuine `SkinnedEffect` 2-bone
+blend is now
 represented in the corpus:
 
 - `colored3d` (`D9-A2`'s own original spike scene: a `BasicEffect` `VertexColorEnabled=true`/
@@ -319,8 +319,20 @@ represented in the corpus:
   before running either side, then confirmed pixel-for-pixel identical, `0/65536` pixels differ
   each. No code changes needed (both values already supported). Together these complete coverage
   of all 4 alpha-value-dependent `PSAlphaTestLtGt` values (`Less`/`LessEqual`/`GreaterEqual`/
-  `Greater`); only the alpha-value-independent `Never`/`Always` remain unrepresented in that
-  bucket.
+  `Greater`).
+- `alphatest_never_quad`/`alphatest_always_quad` — COMPLETE ALL 8 REAL XNA
+  `AlphaTestEffect.AlphaFunction` VALUES IN THE CORPUS. Confirmed against FNA's own
+  `AlphaTestEffect.cs` source: `Never` sets both branch targets negative — `clip((a < x) ? z : w)`
+  evaluates to `clip(-1)` unconditionally, discarding every fragment regardless of alpha; `Always`
+  sets both targets positive, `clip(1)` unconditionally, never discarding anything. Both scenes
+  reuse `alphatest_quad.scene`'s exact texture (`alpha=255,1,255,64`) unchanged — under `Never`,
+  all 4 texels (including the `alpha=255` ones that would normally pass `Greater`) are discarded,
+  rendering pure clear color everywhere; under `Always`, all 4 texels (including the
+  `alpha=1`/`alpha=64` ones that would normally fail `Greater`) survive and show their own raw
+  color. Confirmed pixel-for-pixel identical, `0/65536` pixels differ each. No code changes
+  needed. `AlphaTestEffect`'s entire compare-function surface is now independently verified:
+  `Less`/`LessEqual`/`GreaterEqual`/`Greater`/`Never`/`Always` on `PSAlphaTestLtGt`,
+  `Equal`/`NotEqual` on `PSAlphaTestEqNe`.
 
 `scripts/xna-diff.py` itself is mutation-verified: a deliberately 1-off-mutated copy of a passing
 CNA PNG is correctly reported as `FAIL: 1/65536 pixels differ ... max per-channel delta=1` at the
@@ -328,13 +340,13 @@ default `--tolerance=0`, and correctly passes again at `--tolerance=1` — confi
 genuinely discriminates, not just "always reports PASS".
 
 **Every one of XNA's 5 Stock Effects (`BasicEffect`, `AlphaTestEffect`, `DualTextureEffect`,
-`EnvironmentMapEffect`, `SkinnedEffect`) plus `IEffectFog`, 6 `AlphaTestEffect.AlphaFunction`
-values (`Greater`/`Less`/`GreaterEqual`/`LessEqual` on the `PSAlphaTestLtGt` bucket,
-`Equal`/`NotEqual` on the separate `PSAlphaTestEqNe` bucket), `EnvironmentMapEffect.FresnelFactor`,
-and a genuine `SkinnedEffect` 2-bone blend are now represented in the corpus, at least once, and
-every single comparison so far is pixel-perfect.** `D9-A5` keeps growing "with the plan" — each
-subsequent effect/feature combination this project verifies against the oracle adds its own
-scene(s) here, incrementally, rather than attempting the full corpus (the remaining
-alpha-value-independent `Never`/`Always` `AlphaTestEffect` functions, `SkinnedEffect` 4-bone
-weighting, `SpriteBatch`, render targets, every shared `SurfaceFormat`) in one sitting. `D9-84`
-(every draw path validated against the oracle) is the task that consumes the finished corpus.
+`EnvironmentMapEffect`, `SkinnedEffect`) plus `IEffectFog`, ALL 8 `AlphaTestEffect.AlphaFunction`
+values (`Less`/`LessEqual`/`GreaterEqual`/`Greater`/`Never`/`Always` on the `PSAlphaTestLtGt`
+bucket, `Equal`/`NotEqual` on the separate `PSAlphaTestEqNe` bucket — compare-function coverage is
+now COMPLETE), `EnvironmentMapEffect.FresnelFactor`, and a genuine `SkinnedEffect` 2-bone blend
+are now represented in the corpus, at least once, and every single comparison so far is
+pixel-perfect.** `D9-A5` keeps growing "with the plan" — each subsequent effect/feature
+combination this project verifies against the oracle adds its own scene(s) here, incrementally,
+rather than attempting the full corpus (`SkinnedEffect` 4-bone weighting, `SpriteBatch`, render
+targets, every shared `SurfaceFormat`) in one sitting. `D9-84` (every draw path validated against
+the oracle) is the task that consumes the finished corpus.
