@@ -15,8 +15,9 @@
 >
 > **Status legend** (matches `../cna`'s own convention): ✅ implemented *and verified against its
 > stated acceptance criteria*; 🟨 code or documentation exists but has not met those criteria;
-> ⬜ not implemented. Phases X1/X2/X3/X4/X5/X6/X7 are ✅ (see their own tables below); only
-> Phase X8 (tests + docs polish) remains.
+> ⬜ not implemented. **All 8 phases (X1-X8) are ✅ — this plan is COMPLETE** (see each phase's own
+> table below). `docs/dx3-backend.md` is the durable completeness-status reference going forward;
+> this plan document remains as the historical implementation record.
 >
 > **Correction (2026-07-15, Phase X4 closure): the Phase X3 commit's "full `CnaTests` suite has no
 > new failures (one pre-existing, unrelated failure...)" claim was incomplete.** It was based on
@@ -329,13 +330,13 @@ per-formula math (DX3-40..43) below.
 
 | # | Task | Status | Notes |
 |---|---|---|---|
-| DX3-80 | `Dx3_Smoke` CTest (see DX3-18) | ⬜ | |
-| DX3-81 | `Dx3_Compositor` CTest: rotation/scale/tint/flip pixel-verified, same rigor `Software_Rasterizer` applied | ⬜ | |
-| DX3-82 | `Dx3_Blend` CTest: all 4 supported blend modes pixel-verified | ⬜ | |
-| DX3-83 | `Dx3_AddressMode` CTest: `Wrap`/`Mirror` sampling pixel-verified (Design decision 7's real win) | ⬜ | |
-| DX3-84 | `docs/dx3-backend.md`: mirror `docs/sdl-renderer-2d-completeness.md`'s table/status-legend structure | ⬜ | |
-| DX3-85 | Update `CMakeLists.txt`'s `CNA_GRAPHICS_BACKEND` STRINGS docstring and `../cna/plan.md`/`README.md` to list `DX3` | ⬜ | |
-| DX3-86 | Full `CnaTests` regression run under `-DCNA_GRAPHICS_BACKEND=DX3` — confirm no unrelated suite breaks, same bar every other backend's Phase 1 closure already met | ⬜ | |
+| DX3-80 | `Dx3_Smoke` CTest (see DX3-18) | ✅ | Landed in Phase X2. |
+| DX3-81 | `Dx3_Compositor` CTest: rotation/scale/tint/flip pixel-verified, same rigor `Software_Rasterizer` applied | ✅ | Landed in Phase X4 as `Dx3_SpriteBatch` (10 checks) — same content/rigor this task asks for, under the name that matched this plan's own phase structure rather than the originally-guessed CTest name. |
+| DX3-82 | `Dx3_Blend` CTest: all 4 supported blend modes pixel-verified | ✅ | Landed in Phase X5 (5 checks, including the custom-`BlendState`-fallback case). |
+| DX3-83 | `Dx3_AddressMode` CTest: `Wrap`/`Mirror` sampling pixel-verified (Design decision 7's real win) | ✅ | Landed in Phase X5 (5 checks — also covers `TextureFilter`/DX3-45, since both are "sampling" concerns tested together). |
+| DX3-84 | `docs/dx3-backend.md`: mirror `docs/sdl-renderer-2d-completeness.md`'s table/status-legend structure | ✅ | Written this phase — per-phase tables (X1/X2 through X7), a status legend (✅/❌-throws-by-design/⚪-degrades-to-nullptr), a "known permanent limitations" section, and a "what actually works today" summary table, mirroring the reference doc's structure at DX3's own (much narrower) scope. |
+| DX3-85 | Update `CMakeLists.txt`'s `CNA_GRAPHICS_BACKEND` STRINGS docstring and `../cna/plan.md`/`README.md` to list `DX3` | ✅ | `CMakeLists.txt`'s STRINGS docstring already included `DX3` since Phase X1 (DX3-1). `../cna/plan.md` doesn't exist relative to this repo — `cnadx3` is its own checkout with its own top-level `plan.md`, which is a cross-cutting *deferred-task* tracker, not a backend index; added a one-line update to its `a-0001` entry instead (DX3 now also implements `TransformLogicalToWindow`, DX3-68), which is genuinely relevant there. `README.md` updated: a new `DX3` bullet in §1 Project Status, and `DX3` (plus the previously-missing `WEBGPU`/`HEADLESS`/`SOFTWARE`/`D3D11`/`D3D12`) added to §6's backend list. `docs/README.md`'s file index updated too (58 files, new `dx3-backend.md` entry). |
+| DX3-86 | Full `CnaTests` regression run under `-DCNA_GRAPHICS_BACKEND=DX3` — confirm no unrelated suite breaks, same bar every other backend's Phase 1 closure already met | ✅ | Final run: 4363 passed, 2 skipped, 12 failed (all pre-existing/structural, unrelated to DX3 code — see the status-header correction note above) + 1 pre-existing `GraphicsBackendCompileDefinitionsTest` gap (predates D3D11/D3D12/DX3) = 13 known, understood failures, identical to every regression run since Phase X4 closure. Zero failures caused by DX3 itself remain unaccounted for. |
 
 ---
 

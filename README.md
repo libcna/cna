@@ -32,6 +32,7 @@ ctest --test-dir build --output-on-failure
 - **`WEBGPU` backend:** Experimental fifth backend using native `wgpu-native`. The current baseline covers device/surface setup, clear/present, RGBA8 `Texture2D`, vertex/index uploads and WGSL SpriteBatch rendering. It is not yet a 3D-parity replacement for EasyGL/Vulkan/Bgfx; see [`docs/webgpu-backend.md`](docs/webgpu-backend.md) and `plan_webgpu.md`.
 - **`D3D11` backend:** Windows-only native Direct3D 11 backend, cross-compiled via MinGW-w64 and verified through Wine+DXVK on a real GPU (6 CTest binaries, 96+ checks) — all 10 stock HLSL shader variants (`BasicEffect`/`AlphaTestEffect`/`DualTextureEffect`/`EnvironmentMapEffect`/`SkinnedEffect`), textures/render targets (MRT/MSAA/occlusion queries), state objects, SpriteBatch, and a runtime-`D3DCompile()` custom `ShaderEffect` path are real and pixel-verified. Real-Windows hardware verification (device-lost recovery, WARP fallback, driver-specific parity) is still open. See [`docs/d3d11-backend.md`](docs/d3d11-backend.md) and `plan_dx.md`.
 - **`D3D12` backend:** Windows-only native Direct3D 12 backend, cross-compiled via MinGW-w64 and verified through Wine+vkd3d-proton on a real GPU, **off-screen only** (`D3D12_Smoke` CTest, 80/80 checks) — device/queue/heaps/command-lists/fences/barriers/PSOs/root-signatures are real, all 10 stock HLSL shader variants (same DXBC as `D3D11`) and a real `SpriteBatch` are pixel-verified off-screen, and device-removed recovery is real and functionally proven. Swap-chain presentation is a known, real, unresolved gap on this dev loop (genuine Wine/vkd3d-proton `dxgi.dll` architecture mismatch, not a CNA bug); runtime-settable blend/depth-stencil/rasterizer state, per-slot `SamplerState`, render targets, `Texture3D`, occlusion queries, and real-Windows hardware verification are all still open. See [`docs/d3d12-backend.md`](docs/d3d12-backend.md) and `plan_dx.md`.
+- **`DX3` backend:** Cross-platform (genuinely — builds and runs via ordinary `/usr/bin/c++`, no MinGW/Wine needed) DirectDraw-shaped 2D backend fronting `../free-direct`, a sibling project's own DirectDraw reimplementation. 2D-only by design, same spirit as `SDL_RENDERER`. All 8 plan phases complete: real device/window bring-up with a CPU-owned "shadow backbuffer" (working around a real `Lock()`-on-primary gap in `free-direct` itself), texture/render-target backends, a CPU `SpriteBatch` compositor (`BltFast` fast path + a from-scratch edge-function rasterizer for everything else), all 4 real `BlendState` presets with genuinely distinct formulas (not one collapsed baseline), bilinear filtering, and real `Wrap`/`Mirror` texture addressing — the latter two are a real capability win over `SDL_RENDERER`, which has `Wrap`/`Mirror` ⛔ BLOCKED. See [`docs/dx3-backend.md`](docs/dx3-backend.md) and `plan_dx3.md`.
 - **Verification methodology:** differential testing against a real, running `FNA.dll` reference implementation (`tools/fna-reference/`), disputed behavior settled against genuine XNA 4.0 on a Windows 7 VM, and a compile-time `NOXNA` purity check (a dedicated CMake build option that turns every non-XNA-tagged declaration into a `[[deprecated]]` warning under `-Werror`) — see `CHECKLIST.md`'s "NOXNA markers" section and `CMakeLists.txt`.
 - **CI is Linux-only and partial** (see `.github/workflows/`): it currently runs only the `Input` and `Devices`/`Sensors` gtest suites — not the full ~4,370-test unit suite and not the ~490-test GPU pixel-test suite across the 4 established graphics backends; the experimental WebGPU backend does not yet have pixel-test coverage. Everything Graphics-related in this README is verified by running the suites locally and by hand, not by an automated Graphics CI gate; there is currently no Windows, macOS, or Android CI at all (Windows/Android are verified manually, per §7/§9 below).
 
@@ -134,6 +135,12 @@ CNA supports backend selection at build-time via `CNA_GRAPHICS_BACKEND` (choose 
 - `EASYGL`
 - `BGFX`
 - `VULKAN`
+- `WEBGPU`
+- `HEADLESS`
+- `SOFTWARE`
+- `D3D11` (Windows-only)
+- `D3D12` (Windows-only)
+- `DX3`
 
 ### Tradeoffs
 
