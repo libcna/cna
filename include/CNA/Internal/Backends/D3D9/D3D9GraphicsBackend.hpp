@@ -342,6 +342,14 @@ namespace CNA::Internal::Backends::D3D9
                                 std::size_t stride, const Matrix& world, const Matrix& view,
                                 const Matrix& projection, PrimitiveType primitive, int primitiveCount,
                                 const GpuDrawParams& params);
+        /// D9-82c: real `AlphaTestEffect` dispatch -- same shape as `DrawBasicEffectEXT`, simpler
+        /// (no lighting, always textured). `isEqNe` sourced losslessly from
+        /// `params.alphaTest[1] (tolerance) > 0` per `D9-81`'s own finding. Defined in
+        /// `D3D9EffectDraw.cpp`.
+        void DrawAlphaTestEffectEXT(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
+                                    std::size_t stride, const Matrix& world, const Matrix& view,
+                                    const Matrix& projection, PrimitiveType primitive, int primitiveCount,
+                                    const GpuDrawParams& params);
 
         SDL_Window* window_ = nullptr;
         int width_ = 0;

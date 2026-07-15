@@ -1,7 +1,7 @@
-// plan_dx9.md Phase D9-8 (D9-82b): real effect-aware DrawPrimitivesEx/DrawIndexedPrimitivesEx
-// dispatch. This file covers BasicEffect only -- AlphaTestEffect/DualTextureEffect/
-// EnvironmentMapEffect/SkinnedEffect each throw a named not-yet-implemented naming their own
-// follow-up row (D9-82c/d/e/f), matching the priority-cascade shape
+// plan_dx9.md Phase D9-8 (D9-82b/D9-82c): real effect-aware DrawPrimitivesEx/DrawIndexedPrimitivesEx
+// dispatch. This file covers BasicEffect (D9-82b) and AlphaTestEffect (D9-82c) --
+// DualTextureEffect/EnvironmentMapEffect/SkinnedEffect each throw a named not-yet-implemented
+// naming their own follow-up row (D9-82d/e/f), matching the priority-cascade shape
 // D3D11GraphicsBackend::DrawPrimitivesExImpl already established (flag-driven effect selection,
 // GpuDrawParams as the only per-draw input).
 //
@@ -93,6 +93,33 @@ namespace CNA::Internal::Backends::D3D9
         struct Vec4Pad { float v[4]; };
         Vec4Pad Pad3(const float v3[3]) { return Vec4Pad{{v3[0], v3[1], v3[2], 0.0f}}; }
 
+        /// FNA's EffectHelpers.SetFogVector, using world*view (not the full WVP) -- shared by every
+        /// effect that has a FogVector constant (BasicEffect, AlphaTestEffect, DualTextureEffect,
+        /// EnvironmentMapEffect). When fog is disabled FNA resets this to zero, and
+        /// dot(position, 0) is always 0 (no fog), so the zero-initialized default already matches
+        /// "disabled" with no extra branching at the call site.
+        Vec4Pad ComputeFogVectorEXT(const Matrix& world, const Matrix& view, bool fogEnabled,
+                                    float fogStart, float fogEnd)
+        {
+            Vec4Pad fogVector{{0.0f, 0.0f, 0.0f, 0.0f}};
+            if (!fogEnabled) return fogVector;
+
+            const Matrix worldView = world * view;
+            if (fogStart == fogEnd)
+            {
+                fogVector.v[3] = 1.0f; // degenerate case: force 100% fogged (FNA's own SetFogVector)
+            }
+            else
+            {
+                const float scale = 1.0f / (fogStart - fogEnd);
+                fogVector.v[0] = worldView.M13 * scale;
+                fogVector.v[1] = worldView.M23 * scale;
+                fogVector.v[2] = worldView.M33 * scale;
+                fogVector.v[3] = (worldView.M43 + fogStart) * scale;
+            }
+            return fogVector;
+        }
+
         struct BasicEffectRegisterTables
         {
             const Shaders::D3D9ShaderConstantSlot* vs; int vsCount;
@@ -149,6 +176,59 @@ namespace CNA::Internal::Backends::D3D9
                     " has no matching CNA vertex layout (plan_dx9.md D9-82b)");
             }
         }
+
+        struct AlphaTestEffectRegisterTables
+        {
+            const Shaders::D3D9ShaderConstantSlot* vs; int vsCount;
+            const Shaders::D3D9ShaderConstantSlot* ps; int psCount;
+        };
+
+        /// D9-82c: all 8 of AlphaTestEffect's ShaderIndex values are drawable (unlike BasicEffect --
+        /// AlphaTestEffect's only two VSInput shapes, VSInputTx/VSInputTxVc, map 1:1 onto the
+        /// existing stride-20/24 CNA layouts with no wasted or missing fields).
+        AlphaTestEffectRegisterTables GetAlphaTestEffectRegisterTablesEXT(int shaderIndex)
+        {
+            using namespace Shaders;
+            switch (shaderIndex)
+            {
+            case 0: return {kAlphaTestEffect_VSAlphaTest_Registers,
+                            static_cast<int>(std::size(kAlphaTestEffect_VSAlphaTest_Registers)),
+                            kAlphaTestEffect_PSAlphaTestLtGt_Registers,
+                            static_cast<int>(std::size(kAlphaTestEffect_PSAlphaTestLtGt_Registers))};
+            case 1: return {kAlphaTestEffect_VSAlphaTestNoFog_Registers,
+                            static_cast<int>(std::size(kAlphaTestEffect_VSAlphaTestNoFog_Registers)),
+                            kAlphaTestEffect_PSAlphaTestLtGtNoFog_Registers,
+                            static_cast<int>(std::size(kAlphaTestEffect_PSAlphaTestLtGtNoFog_Registers))};
+            case 2: return {kAlphaTestEffect_VSAlphaTestVc_Registers,
+                            static_cast<int>(std::size(kAlphaTestEffect_VSAlphaTestVc_Registers)),
+                            kAlphaTestEffect_PSAlphaTestLtGt_Registers,
+                            static_cast<int>(std::size(kAlphaTestEffect_PSAlphaTestLtGt_Registers))};
+            case 3: return {kAlphaTestEffect_VSAlphaTestVcNoFog_Registers,
+                            static_cast<int>(std::size(kAlphaTestEffect_VSAlphaTestVcNoFog_Registers)),
+                            kAlphaTestEffect_PSAlphaTestLtGtNoFog_Registers,
+                            static_cast<int>(std::size(kAlphaTestEffect_PSAlphaTestLtGtNoFog_Registers))};
+            case 4: return {kAlphaTestEffect_VSAlphaTest_Registers,
+                            static_cast<int>(std::size(kAlphaTestEffect_VSAlphaTest_Registers)),
+                            kAlphaTestEffect_PSAlphaTestEqNe_Registers,
+                            static_cast<int>(std::size(kAlphaTestEffect_PSAlphaTestEqNe_Registers))};
+            case 5: return {kAlphaTestEffect_VSAlphaTestNoFog_Registers,
+                            static_cast<int>(std::size(kAlphaTestEffect_VSAlphaTestNoFog_Registers)),
+                            kAlphaTestEffect_PSAlphaTestEqNeNoFog_Registers,
+                            static_cast<int>(std::size(kAlphaTestEffect_PSAlphaTestEqNeNoFog_Registers))};
+            case 6: return {kAlphaTestEffect_VSAlphaTestVc_Registers,
+                            static_cast<int>(std::size(kAlphaTestEffect_VSAlphaTestVc_Registers)),
+                            kAlphaTestEffect_PSAlphaTestEqNe_Registers,
+                            static_cast<int>(std::size(kAlphaTestEffect_PSAlphaTestEqNe_Registers))};
+            case 7: return {kAlphaTestEffect_VSAlphaTestVcNoFog_Registers,
+                            static_cast<int>(std::size(kAlphaTestEffect_VSAlphaTestVcNoFog_Registers)),
+                            kAlphaTestEffect_PSAlphaTestEqNeNoFog_Registers,
+                            static_cast<int>(std::size(kAlphaTestEffect_PSAlphaTestEqNeNoFog_Registers))};
+            default:
+                throw std::out_of_range(
+                    "GetAlphaTestEffectRegisterTablesEXT: ShaderIndex " + std::to_string(shaderIndex) +
+                    " out of range [0, 8)");
+            }
+        }
     }
 
     void D3D9GraphicsBackend::DrawPrimitivesExImpl(
@@ -165,10 +245,6 @@ namespace CNA::Internal::Backends::D3D9
         const bool needsEnvMap    = params.envMapping  && !needsAlphaTest && !needsDualTex;
         const bool needsSkinned   = params.skinned     && !needsAlphaTest && !needsDualTex && !needsEnvMap;
 
-        if (needsAlphaTest)
-            throw std::runtime_error(
-                "D3D9GraphicsBackend::DrawPrimitivesEx: AlphaTestEffect dispatch not yet "
-                "implemented (plan_dx9.md D9-82c)");
         if (needsDualTex)
             throw std::runtime_error(
                 "D3D9GraphicsBackend::DrawPrimitivesEx: DualTextureEffect dispatch not yet "
@@ -184,6 +260,12 @@ namespace CNA::Internal::Backends::D3D9
 
         const auto& d3dVb = static_cast<const D3D9VertexBufferBackend&>(vb);
         const std::size_t stride = d3dVb.GetStrideEXT() > 0 ? d3dVb.GetStrideEXT() : 16;
+
+        if (needsAlphaTest)
+        {
+            DrawAlphaTestEffectEXT(vb, ib, stride, world, view, projection, primitive, primitiveCount, params);
+            return;
+        }
         DrawBasicEffectEXT(vb, ib, stride, world, view, projection, primitive, primitiveCount, params);
     }
 
@@ -262,27 +344,8 @@ namespace CNA::Internal::Backends::D3D9
         // against the FNA source directly.
         TryUploadVertexShaderConstantEXT(device_.Get(), regs.vs, regs.vsCount, "DiffuseColor", params.diffuseColor);
 
-        // FogVector: FNA's EffectHelpers.SetFogVector, using world*view (not the full WVP) --
-        // when fog is disabled FNA resets this to zero, and dot(position, 0) is always 0 (no fog),
-        // so the zero-initialized default already matches "disabled" with no extra branching.
-        float fogVector[4] = {0.0f, 0.0f, 0.0f, 0.0f};
-        if (params.fogEnabled)
-        {
-            const Matrix worldView = world * view;
-            if (params.fogStart == params.fogEnd)
-            {
-                fogVector[3] = 1.0f; // degenerate case: force 100% fogged (FNA's own SetFogVector)
-            }
-            else
-            {
-                const float scale = 1.0f / (params.fogStart - params.fogEnd);
-                fogVector[0] = worldView.M13 * scale;
-                fogVector[1] = worldView.M23 * scale;
-                fogVector[2] = worldView.M33 * scale;
-                fogVector[3] = (worldView.M43 + params.fogStart) * scale;
-            }
-        }
-        TryUploadVertexShaderConstantEXT(device_.Get(), regs.vs, regs.vsCount, "FogVector", fogVector);
+        const Vec4Pad fogVector = ComputeFogVectorEXT(world, view, params.fogEnabled, params.fogStart, params.fogEnd);
+        TryUploadVertexShaderConstantEXT(device_.Get(), regs.vs, regs.vsCount, "FogVector", fogVector.v);
         TryUploadPixelShaderConstantEXT(device_.Get(), regs.ps, regs.psCount, "FogColor", Pad3(params.fogColor).v);
 
         if (params.lightingEnabled)
@@ -339,6 +402,87 @@ namespace CNA::Internal::Backends::D3D9
             const auto* tex = static_cast<const D3D9TextureBackend*>(params.texture0);
             device_->SetTexture(0, tex->GetTextureEXT());
         }
+
+        device_->SetVertexDeclaration(GetOrCreateVertexDeclarationEXT(stride));
+        const auto& d3dVb = static_cast<const D3D9VertexBufferBackend&>(vb);
+        device_->SetStreamSource(0, d3dVb.GetBufferEXT(), 0, static_cast<UINT>(stride));
+
+        if (ib)
+        {
+            const auto& d3dIb = static_cast<const D3D9IndexBufferBackend&>(*ib);
+            device_->SetIndices(d3dIb.GetBufferEXT());
+            device_->DrawIndexedPrimitive(ToD3D9Topology(primitive), 0, 0,
+                                          static_cast<UINT>(d3dVb.GetVertexCount()),
+                                          0, static_cast<UINT>(primitiveCount));
+        }
+        else
+        {
+            device_->DrawPrimitive(ToD3D9Topology(primitive), 0, static_cast<UINT>(primitiveCount));
+        }
+    }
+
+    void D3D9GraphicsBackend::DrawAlphaTestEffectEXT(
+        const IVertexBufferBackend& vb, const IIndexBufferBackend* ib, std::size_t stride,
+        const Matrix& world, const Matrix& view, const Matrix& projection,
+        PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
+    {
+        // AlphaTestEffect always samples a texture (no untextured VSInput shape exists at all in
+        // AlphaTestEffect.fx) -- ComputeAlphaTestEffectShaderIndex() itself takes no textureEnabled
+        // parameter, unlike BasicEffect's.
+        if (!params.texture0)
+            throw std::runtime_error(
+                "D3D9GraphicsBackend::DrawPrimitivesEx (AlphaTestEffect): requires a non-null "
+                "texture0 (plan_dx9.md D9-82c)");
+
+        // AlphaTestEffect's only two VSInput shapes map 1:1 onto the existing CNA strides -- no
+        // collision/missing-layout gap like BasicEffect's (see D3D9EffectDraw.cpp's own header
+        // comment for that one).
+        bool comboOk;
+        switch (stride)
+        {
+        case 20: comboOk = !params.vertexColorEnabled; break;
+        case 24: comboOk = params.vertexColorEnabled;  break;
+        default: comboOk = false; break;
+        }
+        if (!comboOk)
+            throw std::runtime_error(
+                "D3D9GraphicsBackend::DrawPrimitivesEx (AlphaTestEffect): stride " + std::to_string(stride) +
+                " with vertexColor=" + (params.vertexColorEnabled ? "true" : "false") +
+                " has no matching CNA vertex layout (plan_dx9.md D9-82c)");
+
+        // D9-81's own finding: alphaTest[1] (tolerance) > 0 is a lossless recovery of isEqNe --
+        // AlphaTestEffect.cs's own OnApply() sets it to a fixed nonzero constant in EXACTLY the
+        // Equal/NotEqual CompareFunction cases and leaves it at 0 everywhere else.
+        const bool isEqNe = params.alphaTest[1] > 0.0f;
+
+        const int shaderIndex = ComputeAlphaTestEffectShaderIndex(params.fogEnabled, params.vertexColorEnabled, isEqNe);
+        const AlphaTestEffectRegisterTables regs = GetAlphaTestEffectRegisterTablesEXT(shaderIndex);
+
+        if (!shaderCache_) shaderCache_ = std::make_unique<D3D9ShaderCache>(device_.Get());
+        IDirect3DVertexShader9* vs = shaderCache_->GetVertexShader(GetAlphaTestEffectVertexShaderNameEXT(shaderIndex));
+        IDirect3DPixelShader9* ps = shaderCache_->GetPixelShader(GetAlphaTestEffectPixelShaderNameEXT(shaderIndex));
+        device_->SetVertexShader(vs);
+        device_->SetPixelShader(ps);
+
+        UploadMatrixConstantVS(device_.Get(), regs.vs, regs.vsCount, "WorldViewProj", world * view * projection);
+
+        // DiffuseColor: AlphaTestEffect::FillGpuDrawParams() computes diffuseColor*alpha, alpha --
+        // AlphaTestEffect has no lighting/emissive concept at all, so no adjustment is needed
+        // (unlike BasicEffect's lit path, there is nothing to fold in here).
+        TryUploadVertexShaderConstantEXT(device_.Get(), regs.vs, regs.vsCount, "DiffuseColor", params.diffuseColor);
+
+        const Vec4Pad fogVector = ComputeFogVectorEXT(world, view, params.fogEnabled, params.fogStart, params.fogEnd);
+        TryUploadVertexShaderConstantEXT(device_.Get(), regs.vs, regs.vsCount, "FogVector", fogVector.v);
+        TryUploadPixelShaderConstantEXT(device_.Get(), regs.ps, regs.psCount, "FogColor", Pad3(params.fogColor).v);
+
+        // AlphaTest: GpuDrawParams::alphaTest is already exactly the real {refVal,tolerance,
+        // passWeight,failWeight} register layout AlphaTestEffect.fx's own clip() expressions
+        // expect -- confirmed against its own doc comment and the .fx source's clip() calls
+        // directly, no reconstruction needed (unlike BasicEffect's EmissiveColor).
+        TryUploadPixelShaderConstantEXT(device_.Get(), regs.ps, regs.psCount, "AlphaTest", params.alphaTest);
+
+        const auto* tex = static_cast<const D3D9TextureBackend*>(params.texture0);
+        device_->SetTexture(0, tex->GetTextureEXT());
 
         device_->SetVertexDeclaration(GetOrCreateVertexDeclarationEXT(stride));
         const auto& d3dVb = static_cast<const D3D9VertexBufferBackend&>(vb);

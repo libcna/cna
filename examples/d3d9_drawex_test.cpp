@@ -1,15 +1,18 @@
 // SPDX-License-Identifier: MS-PL
-// plan_dx9.md Phase D9-8 (D9-82b): real effect-aware DrawPrimitivesEx/DrawIndexedPrimitivesEx
-// dispatch -- BasicEffect only (AlphaTestEffect/DualTextureEffect/EnvironmentMapEffect/
-// SkinnedEffect are D9-82c/d/e/f, not yet implemented; Check F confirms each throws a named,
-// row-specific not-yet-implemented rather than silently drawing the wrong thing).
+// plan_dx9.md Phase D9-8 (D9-82b/D9-82c): real effect-aware DrawPrimitivesEx/
+// DrawIndexedPrimitivesEx dispatch -- BasicEffect (D9-82b) and AlphaTestEffect (D9-82c).
+// DualTextureEffect/EnvironmentMapEffect/SkinnedEffect are D9-82d/e/f, not yet implemented; Check F
+// confirms each throws a named, row-specific not-yet-implemented rather than silently drawing the
+// wrong thing.
 //
-// Every expected pixel value below is HAND-COMPUTED directly from BasicEffect.fx's/Lighting.fxh's
-// own real HLSL formulas (SampleTexture*Diffuse, ComputeLights' mul(diffuse,lightDiffuse)*
-// DiffuseColor.rgb+EmissiveColor, ApplyFog's lerp), not just "close enough" -- SpecularColor is
-// deliberately zeroed in every check so AddSpecular() never contributes (sidesteps needing to also
-// hand-compute a half-vector-dependent specular term; SpecularColor=0 makes that term exactly zero
-// regardless of light direction/geometry, an exact simplification, not an approximation).
+// Every expected pixel value below is HAND-COMPUTED directly from BasicEffect.fx's/
+// AlphaTestEffect.fx's/Lighting.fxh's own real HLSL formulas (SampleTexture*Diffuse,
+// ComputeLights' mul(diffuse,lightDiffuse)*DiffuseColor.rgb+EmissiveColor, ApplyFog's lerp,
+// AlphaTestEffect's clip((cmp) ? AlphaTest.z : AlphaTest.w)), not just "close enough" --
+// SpecularColor is deliberately zeroed in every BasicEffect check so AddSpecular() never
+// contributes (sidesteps needing to also hand-compute a half-vector-dependent specular term;
+// SpecularColor=0 makes that term exactly zero regardless of light direction/geometry, an exact
+// simplification, not an approximation).
 //
 // Check A -- unlit + textured (stride 20, ShaderIndex 4/5): exact texture*DiffuseColor readback.
 // Check B -- unlit + vertex-color + textured (stride 24, ShaderIndex 6/7): exact
@@ -25,8 +28,14 @@
 //   readback (ApplyFog's lerp(color,FogColor*alpha,1) == FogColor*alpha).
 // Check F -- an unsupported BasicEffect flag/stride combination (no matching CNA vertex layout)
 //   throws a named error rather than silently drawing with the wrong stride; and each of
-//   AlphaTestEffect/DualTextureEffect/EnvironmentMapEffect/SkinnedEffect throws its own
-//   row-specific not-yet-implemented (D9-82c/d/e/f).
+//   DualTextureEffect/EnvironmentMapEffect/SkinnedEffect throws its own row-specific
+//   not-yet-implemented (D9-82d/e/f).
+// Check G -- AlphaTestEffect, Less compare, PASSES (LtGt bucket, stride 20): exact
+//   texture*DiffuseColor readback, proving DiffuseColor + the clip()-passes path both work.
+// Check H -- AlphaTestEffect, Less compare, FAILS (discarded): the background is left genuinely
+//   UNPAINTED -- proves clip() actually discards rather than always drawing.
+// Check I -- AlphaTestEffect, Equal compare, PASSES, vertex-color bucket (stride 24, EqNe PS):
+//   exact texture readback, proving the EqNe pixel shader and the Vc vertex shader both work.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
@@ -88,12 +97,12 @@ namespace
     };
 
     std::unique_ptr<CNA::Internal::Backends::ITextureBackend> Make1x1Texture(
-        D3D9GraphicsBackend& backend, uint8_t r, uint8_t g, uint8_t b)
+        D3D9GraphicsBackend& backend, uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255)
     {
         ImageData img;
         img.width = 1;
         img.height = 1;
-        img.pixels = {r, g, b, 255};
+        img.pixels = {r, g, b, a};
         return backend.CreateTexture(img);
     }
 
@@ -254,6 +263,86 @@ protected:
                   "DrawPrimitivesEx (BasicEffect fog, fully-fogged): exact FogColor readback (ApplyFog's lerp at fogFactor=1)");
         }
 
+        // Check G: AlphaTestEffect, Less compare, PASSES (LtGt bucket, stride 20).
+        {
+            auto vb = backend.CreateVertexBuffer(3);
+            vb->SetData(kTriTx, 3, sizeof(VPT));
+            auto atexLowAlpha = Make1x1Texture(backend, 200, 120, 40, 64);
+
+            GpuDrawParams params;
+            params.textureEnabled = true;
+            params.vertexColorEnabled = false;
+            params.texture0 = atexLowAlpha.get();
+            params.diffuseColor[0] = params.diffuseColor[1] = params.diffuseColor[2] = 0.5f;
+            params.diffuseColor[3] = 1.0f;
+            // Less: clip((color.a < AlphaTest.x) ? AlphaTest.z : AlphaTest.w). Texture alpha
+            // 64/255 = 0.251 < refVal 0.5 -> passes (AlphaTest.z=1).
+            params.alphaTest[0] = 0.5f; params.alphaTest[1] = 0.0f;
+            params.alphaTest[2] = 1.0f; params.alphaTest[3] = -1.0f;
+
+            dev.Clear(Color(0, 0, 255, 255));
+            backend.DrawPrimitivesEx(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                     Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, params);
+            Color px(0, 0, 0, 0);
+            ReadCenterPixel(dev, px);
+            // texture(200,120,40,64) * DiffuseColor(0.5,0.5,0.5,1) = (100,60,20,64) exactly.
+            check(px.getRProperty() == 100 && px.getGProperty() == 60 && px.getBProperty() == 20 && px.getAProperty() == 64,
+                  "DrawPrimitivesEx (AlphaTestEffect Less, PASSES, ShaderIndex LtGt bucket): "
+                  "exact texture*DiffuseColor readback (100,60,20,64)");
+        }
+
+        // Check H: AlphaTestEffect, Less compare, FAILS -- background left genuinely unpainted.
+        {
+            auto vb = backend.CreateVertexBuffer(3);
+            vb->SetData(kTriTx, 3, sizeof(VPT));
+            auto atexLowAlpha = Make1x1Texture(backend, 200, 120, 40, 64);
+
+            GpuDrawParams params;
+            params.textureEnabled = true;
+            params.vertexColorEnabled = false;
+            params.texture0 = atexLowAlpha.get();
+            params.diffuseColor[0] = params.diffuseColor[1] = params.diffuseColor[2] = params.diffuseColor[3] = 1.0f;
+            // Less: texture alpha 64/255 = 0.251 > refVal 0.1 -> the "< " test is FALSE -> discard (AlphaTest.w=-1).
+            params.alphaTest[0] = 0.1f; params.alphaTest[1] = 0.0f;
+            params.alphaTest[2] = 1.0f; params.alphaTest[3] = -1.0f;
+
+            dev.Clear(Color(0, 0, 255, 255));
+            backend.DrawPrimitivesEx(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                     Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, params);
+            Color px(0, 0, 0, 0);
+            ReadCenterPixel(dev, px);
+            check(px.getRProperty() == 0 && px.getGProperty() == 0 && px.getBProperty() == 255 && px.getAProperty() == 255,
+                  "DrawPrimitivesEx (AlphaTestEffect Less, FAILS/discarded): background genuinely UNPAINTED "
+                  "(clip() actually discards, not just always drawing)");
+        }
+
+        // Check I: AlphaTestEffect, Equal compare, PASSES, vertex-color bucket (stride 24, EqNe PS).
+        {
+            auto vb = backend.CreateVertexBuffer(3);
+            vb->SetData(kTriColorTx, 3, sizeof(VPCT)); // opaque white vertex color
+            auto atexMidAlpha = Make1x1Texture(backend, 200, 120, 40, 128);
+
+            GpuDrawParams params;
+            params.textureEnabled = true;
+            params.vertexColorEnabled = true;
+            params.texture0 = atexMidAlpha.get();
+            params.diffuseColor[0] = params.diffuseColor[1] = params.diffuseColor[2] = params.diffuseColor[3] = 1.0f;
+            // Equal/NotEqual bucket: clip((abs(color.a-AlphaTest.x) < AlphaTest.y) ? z : w).
+            // Texture alpha is exactly 128/255 -- same value used for refVal, so |0|<tolerance always
+            // passes regardless of float rounding. tolerance>0 is also D9-81's own isEqNe signal.
+            params.alphaTest[0] = 128.0f / 255.0f; params.alphaTest[1] = 0.1f;
+            params.alphaTest[2] = 1.0f; params.alphaTest[3] = -1.0f;
+
+            dev.Clear(Color(0, 0, 255, 255));
+            backend.DrawPrimitivesEx(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                     Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, params);
+            Color px(0, 0, 0, 0);
+            ReadCenterPixel(dev, px);
+            check(px.getRProperty() == 200 && px.getGProperty() == 120 && px.getBProperty() == 40 && px.getAProperty() == 128,
+                  "DrawPrimitivesEx (AlphaTestEffect Equal, PASSES, vertex-color bucket): "
+                  "exact texture readback (200,120,40,128)");
+        }
+
         // Check F: honest-gap / not-yet-implemented reporting.
         {
             auto vb = backend.CreateVertexBuffer(3);
@@ -270,14 +359,6 @@ protected:
             catch (const std::exception&) { threw = true; }
             check(threw, "DrawPrimitivesEx: an unsupported BasicEffect flag/stride combination throws "
                          "(no matching CNA vertex layout) rather than silently drawing wrong");
-
-            GpuDrawParams alphaTestParams;
-            alphaTestParams.alphaTest[2] = -1.0f; // negative failWeight -- D3D11's own "alpha test active" signal
-            threw = false;
-            try { backend.DrawPrimitivesEx(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
-                                           Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, alphaTestParams); }
-            catch (const std::exception&) { threw = true; }
-            check(threw, "DrawPrimitivesEx: AlphaTestEffect dispatch throws a named not-yet-implemented (D9-82c)");
 
             GpuDrawParams dualTexParams;
             dualTexParams.dualTexture = true;
