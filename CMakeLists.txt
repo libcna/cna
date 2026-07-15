@@ -6697,6 +6697,13 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     set_tests_properties(Ascii_Input PROPERTIES
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Phase G7 (ASCII-60): confirm ThrowNo3D reuse via the wrapped SdlGraphicsBackend.
+    cna_ascii_test(cna_test_ascii_throwno3d examples/ascii_throwno3d_test.cpp)
+    add_test(NAME Ascii_ThrowNo3D COMMAND cna_test_ascii_throwno3d)
+    set_tests_properties(Ascii_ThrowNo3D PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()
 
 # plan_dx.md DX-80: D3D11 CTest registration. When cross-compiled from Linux (this backend is
