@@ -46,7 +46,33 @@ namespace Microsoft::Xna::Framework::Content
         System::IServiceProvider* serviceProvider_ = nullptr;
         bool disposed_ = false;
 
-        std::unordered_map<std::string, std::any> loadedAssets_;
+        // plan_cnb.md CNB-36: keyed by (T's type_index, normalized logical name), not name
+        // alone -- otherwise a second Load<T2>() for a logical name a different T1 already
+        // cached under would std::any_cast<T2> a std::any actually holding T1, throwing
+        // std::bad_any_cast (an unrelated, undocumented exception type) instead of reaching the
+        // normal .cnb envelope validation that would otherwise produce a clear
+        // ContentLoadException naming both types.
+        struct AssetCacheKey
+        {
+            std::type_index typeIndex;
+            std::string normalizedName;
+
+            bool operator==(const AssetCacheKey& other) const
+            {
+                return typeIndex == other.typeIndex && normalizedName == other.normalizedName;
+            }
+        };
+
+        struct AssetCacheKeyHash
+        {
+            std::size_t operator()(const AssetCacheKey& k) const
+            {
+                return std::hash<std::type_index>()(k.typeIndex) ^
+                       (std::hash<std::string>()(k.normalizedName) << 1);
+            }
+        };
+
+        std::unordered_map<AssetCacheKey, std::any, AssetCacheKeyHash> loadedAssets_;
         std::unordered_map<std::type_index, std::any> typeReaders_;
 
         // plan_cnb.md CNB-24: per-C++-type table of named .cnb loaders, keyed first by the
@@ -205,9 +231,10 @@ namespace Microsoft::Xna::Framework::Content
             }
 
             const std::string key = NormalizeKey(assetName);
+            const AssetCacheKey cacheKey{std::type_index(typeid(T)), key};
             log::Debug(std::string("Loading asset: ") + assetName);
 
-            auto cacheIt = loadedAssets_.find(key);
+            auto cacheIt = loadedAssets_.find(cacheKey);
             if (cacheIt != loadedAssets_.end())
             {
                 return std::any_cast<T>(cacheIt->second);
@@ -233,7 +260,7 @@ namespace Microsoft::Xna::Framework::Content
             const std::string resolvedPath = ResolveAssetPath(assetName, reader);
 
             T result = reader.Read(resolvedPath, *this);
-            loadedAssets_[key] = result;
+            loadedAssets_[cacheKey] = result;
             return result;
         }
 
