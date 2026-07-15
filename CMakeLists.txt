@@ -91,8 +91,8 @@ if(EMSCRIPTEN OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
 else()
     set(_cna_default_backend "SDL_RENDERER")
 endif()
-set(CNA_GRAPHICS_BACKEND "${_cna_default_backend}" CACHE STRING "Graphics backend to use (SDL_RENDERER, EASYGL, BGFX, VULKAN, WEBGPU, HEADLESS, SOFTWARE, D3D11, or D3D12)")
-set_property(CACHE CNA_GRAPHICS_BACKEND PROPERTY STRINGS "SDL_RENDERER" "EASYGL" "BGFX" "VULKAN" "WEBGPU" "HEADLESS" "SOFTWARE" "D3D11" "D3D12")
+set(CNA_GRAPHICS_BACKEND "${_cna_default_backend}" CACHE STRING "Graphics backend to use (SDL_RENDERER, EASYGL, BGFX, VULKAN, WEBGPU, HEADLESS, SOFTWARE, D3D11, D3D12, or DX3)")
+set_property(CACHE CNA_GRAPHICS_BACKEND PROPERTY STRINGS "SDL_RENDERER" "EASYGL" "BGFX" "VULKAN" "WEBGPU" "HEADLESS" "SOFTWARE" "D3D11" "D3D12" "DX3")
 
 option(CNA_BACKEND_SDL_RENDERER "Enable SDL_Renderer graphics backend" OFF)
 option(CNA_BACKEND_EASY_GL "Enable easy-gl graphics backend" OFF)
@@ -103,9 +103,10 @@ option(CNA_BACKEND_HEADLESS "Enable Headless (no GPU/window) graphics backend" O
 option(CNA_BACKEND_SOFTWARE "Enable Software (CPU rasterizer) graphics backend" OFF)
 option(CNA_BACKEND_D3D11 "Enable Direct3D 11 graphics backend (Windows only)" OFF)
 option(CNA_BACKEND_D3D12 "Enable Direct3D 12 graphics backend (Windows only)" OFF)
+option(CNA_BACKEND_DX3 "Enable DirectX 3 (DirectDraw, via the ../free-direct sibling) graphics backend" OFF)
 
 set(_cna_explicit_backend_selection OFF)
-if(CNA_BACKEND_SDL_RENDERER OR CNA_BACKEND_EASY_GL OR CNA_BACKEND_BGFX OR CNA_BACKEND_VULKAN OR CNA_BACKEND_WEBGPU OR CNA_BACKEND_HEADLESS OR CNA_BACKEND_SOFTWARE OR CNA_BACKEND_D3D11 OR CNA_BACKEND_D3D12)
+if(CNA_BACKEND_SDL_RENDERER OR CNA_BACKEND_EASY_GL OR CNA_BACKEND_BGFX OR CNA_BACKEND_VULKAN OR CNA_BACKEND_WEBGPU OR CNA_BACKEND_HEADLESS OR CNA_BACKEND_SOFTWARE OR CNA_BACKEND_D3D11 OR CNA_BACKEND_D3D12 OR CNA_BACKEND_DX3)
     set(_cna_explicit_backend_selection ON)
 endif()
 
@@ -137,6 +138,9 @@ if(_cna_explicit_backend_selection)
     endif()
     if(CNA_BACKEND_D3D12)
         list(APPEND _cna_enabled_backends "D3D12")
+    endif()
+    if(CNA_BACKEND_DX3)
+        list(APPEND _cna_enabled_backends "DX3")
     endif()
 
     list(LENGTH _cna_enabled_backends _cna_enabled_backends_count)
@@ -175,6 +179,26 @@ if(CNA_GRAPHICS_BACKEND STREQUAL "EASYGL")
             "git clone https://github.com/openeggbert/easy-gl.git")
     endif()
     add_subdirectory(../easy-gl easy-gl)
+endif()
+
+# plan_dx3.md design decision 10 / Task DX3-2: free-direct is a SIBLING repository checkout, not a
+# git submodule of this repo -- same rationale as sharp-runtime/easy-gl's identical checks above.
+# free-direct's own CMakeLists.txt (add_subdirectory(../free-api ...)) resolves SDL3::SDL3/
+# SDL3_image::SDL3_image/SDL3_mixer::SDL3_mixer from CNA's own already-vendored targets (set up by
+# cna_configure_vendored_sdl() above, before backend selection runs), so no
+# -DFREE_API_USE_SYSTEM_SDL3 flag is needed here, mirroring how ../free-eggbert/../planetblupi
+# already consume free-direct today (design decision 10).
+if(CNA_GRAPHICS_BACKEND STREQUAL "DX3")
+    if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../free-direct/CMakeLists.txt")
+        message(FATAL_ERROR
+            "CNA: Missing sibling repository 'free-direct' at "
+            "${CMAKE_CURRENT_SOURCE_DIR}/../free-direct -- this is a separate git "
+            "checkout expected next to this repo's own directory, not a git "
+            "submodule (git submodule update --init will not fetch it). Fix: "
+            "cd ${CMAKE_CURRENT_SOURCE_DIR}/.. && "
+            "git clone https://github.com/openeggbert/free-direct.git")
+    endif()
+    add_subdirectory(../free-direct free-direct)
 endif()
 
 if(CNA_GRAPHICS_BACKEND STREQUAL "BGFX" AND NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
@@ -250,6 +274,11 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "D3D12")
     set(BACKEND_DIR "src/CNA/Internal/Backends/D3D12")
     set(BACKEND_TARGET "cna_backend_graphics_d3d12")
     add_compile_definitions(CNA_BACKEND_D3D12)
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "DX3")
+    message(STATUS "CNA: Using DX3 (DirectDraw via free-direct) graphics backend")
+    set(BACKEND_DIR "src/CNA/Internal/Backends/Dx3")
+    set(BACKEND_TARGET "cna_backend_graphics_dx3")
+    add_compile_definitions(CNA_BACKEND_DX3)
 else()
 
     message(FATAL_ERROR "CNA: Unknown graphics backend: ${CNA_GRAPHICS_BACKEND}")
@@ -322,6 +351,11 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "D3D11")
     # runtime D3DCompile() custom-ShaderEffect path (D3D11EffectBackend) -- confirmed safe to link
     # in isolation by DX-1/DX-14-compile's own spikes; the offline stock pipeline never calls it.
     target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 d3d11 dxgi d3dcompiler cna_backend_graphics_d3dcommon)
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "DX3")
+    # plan_dx3.md design decision 10: free-direct's own public target is the literal lowercase
+    # `free-direct` (PUBLIC-links free-api::free-api, PUBLIC-exposes its own include/ dir so
+    # #include <ddraw.h> resolves) -- no ALIAS namespace exists for it, unlike easy-gl's own target.
+    target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 free-direct)
 elseif(CNA_GRAPHICS_BACKEND STREQUAL "D3D12")
     # plan_dx.md DX-100/DX-101: d3d12+dxgi alone was confirmed sufficient for device/queue/
     # command-list creation by DX-100's own spike -- start from that minimum, same discipline as
@@ -6613,6 +6647,35 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SOFTWARE")
     # not registered as a ctest (see cna_diag_compare's own comment above), just a plain
     # executable a developer/script runs by hand.
     cna_software_test(cna_diag_software examples/cross_backend_diagnostic_scene.cpp)
+endif()
+
+# plan_dx3.md Phase X2/X8 (DX3-18/DX3-80): DX3 (DirectDraw via free-direct) CTest registration.
+# Window-based like SDL_RENDERER (needs a real X11 display), unlike SOFTWARE/HEADLESS above.
+if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
+   AND CNA_GRAPHICS_BACKEND STREQUAL "DX3")
+
+    enable_testing()
+
+    macro(cna_dx3_test target src)
+        add_executable(${target} ${src})
+        if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
+            target_link_libraries(${target} PRIVATE
+                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                SHARP_RUNTIME)
+        else()
+            target_link_libraries(${target} PRIVATE CNA SHARP_RUNTIME)
+        endif()
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(${target} PRIVATE SDL3::SDL3main)
+        endif()
+    endmacro()
+
+    cna_dx3_test(cna_test_dx3_smoke examples/dx3_smoke_test.cpp)
+    add_test(NAME Dx3_Smoke COMMAND cna_test_dx3_smoke)
+    set_tests_properties(Dx3_Smoke PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
+        LABELS "DX3")
 endif()
 
 # plan_dx.md DX-80: D3D11 CTest registration. When cross-compiled from Linux (this backend is
