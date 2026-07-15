@@ -91,8 +91,8 @@ if(EMSCRIPTEN OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
 else()
     set(_cna_default_backend "SDL_RENDERER")
 endif()
-set(CNA_GRAPHICS_BACKEND "${_cna_default_backend}" CACHE STRING "Graphics backend to use (SDL_RENDERER, EASYGL, BGFX, VULKAN, WEBGPU, HEADLESS, SOFTWARE, D3D11, or D3D12)")
-set_property(CACHE CNA_GRAPHICS_BACKEND PROPERTY STRINGS "SDL_RENDERER" "EASYGL" "BGFX" "VULKAN" "WEBGPU" "HEADLESS" "SOFTWARE" "D3D11" "D3D12")
+set(CNA_GRAPHICS_BACKEND "${_cna_default_backend}" CACHE STRING "Graphics backend to use (SDL_RENDERER, EASYGL, BGFX, VULKAN, WEBGPU, HEADLESS, SOFTWARE, D3D11, D3D12, or SDL_GPU)")
+set_property(CACHE CNA_GRAPHICS_BACKEND PROPERTY STRINGS "SDL_RENDERER" "EASYGL" "BGFX" "VULKAN" "WEBGPU" "HEADLESS" "SOFTWARE" "D3D11" "D3D12" "SDL_GPU")
 
 option(CNA_BACKEND_SDL_RENDERER "Enable SDL_Renderer graphics backend" OFF)
 option(CNA_BACKEND_EASY_GL "Enable easy-gl graphics backend" OFF)
@@ -103,9 +103,10 @@ option(CNA_BACKEND_HEADLESS "Enable Headless (no GPU/window) graphics backend" O
 option(CNA_BACKEND_SOFTWARE "Enable Software (CPU rasterizer) graphics backend" OFF)
 option(CNA_BACKEND_D3D11 "Enable Direct3D 11 graphics backend (Windows only)" OFF)
 option(CNA_BACKEND_D3D12 "Enable Direct3D 12 graphics backend (Windows only)" OFF)
+option(CNA_BACKEND_SDL_GPU "Enable SDL_gpu graphics backend" OFF)
 
 set(_cna_explicit_backend_selection OFF)
-if(CNA_BACKEND_SDL_RENDERER OR CNA_BACKEND_EASY_GL OR CNA_BACKEND_BGFX OR CNA_BACKEND_VULKAN OR CNA_BACKEND_WEBGPU OR CNA_BACKEND_HEADLESS OR CNA_BACKEND_SOFTWARE OR CNA_BACKEND_D3D11 OR CNA_BACKEND_D3D12)
+if(CNA_BACKEND_SDL_RENDERER OR CNA_BACKEND_EASY_GL OR CNA_BACKEND_BGFX OR CNA_BACKEND_VULKAN OR CNA_BACKEND_WEBGPU OR CNA_BACKEND_HEADLESS OR CNA_BACKEND_SOFTWARE OR CNA_BACKEND_D3D11 OR CNA_BACKEND_D3D12 OR CNA_BACKEND_SDL_GPU)
     set(_cna_explicit_backend_selection ON)
 endif()
 
@@ -137,6 +138,9 @@ if(_cna_explicit_backend_selection)
     endif()
     if(CNA_BACKEND_D3D12)
         list(APPEND _cna_enabled_backends "D3D12")
+    endif()
+    if(CNA_BACKEND_SDL_GPU)
+        list(APPEND _cna_enabled_backends "SDL_GPU")
     endif()
 
     list(LENGTH _cna_enabled_backends _cna_enabled_backends_count)
@@ -250,6 +254,11 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "D3D12")
     set(BACKEND_DIR "src/CNA/Internal/Backends/D3D12")
     set(BACKEND_TARGET "cna_backend_graphics_d3d12")
     add_compile_definitions(CNA_BACKEND_D3D12)
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "SDL_GPU")
+    message(STATUS "CNA: Using SDL_GPU graphics backend")
+    set(BACKEND_DIR "src/CNA/Internal/Backends/SdlGpu")
+    set(BACKEND_TARGET "cna_backend_graphics_sdl_gpu")
+    add_compile_definitions(CNA_BACKEND_SDL_GPU)
 else()
 
     message(FATAL_ERROR "CNA: Unknown graphics backend: ${CNA_GRAPHICS_BACKEND}")
@@ -329,6 +338,11 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "D3D12")
     # added by DX-121 (D3D12EffectBackend's runtime D3DCompile() path) -- confirmed safe to link in
     # isolation by D3D11's own DX-14-compile/DX-58 precedent.
     target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 d3d12 dxgi d3dcompiler cna_backend_graphics_d3dcommon)
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "SDL_GPU")
+    # plan_sdlgpu.md SDLGPU-1: SDL_gpu.h is part of SDL3 itself (SDL_gpu.c is already compiled
+    # into the same SDL3 library every other backend links against) -- no separate find_package
+    # or FetchContent is needed, unlike VULKAN/WEBGPU/BGFX above.
+    target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3)
 endif()
 
 file(GLOB_RECURSE CNA_SOURCES CONFIGURE_DEPENDS
@@ -6737,6 +6751,34 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D12")
     # dxgi.dll; a permanently-registered, always-crashing CTest would just be noise. Built so a
     # developer/script can still run it by hand for a real, up-to-date reading.
     cna_d3d12_test(cna_diag_d3d12_swapchain examples/d3d12_swapchain_diag.cpp)
+endif()
+
+# plan_sdlgpu.md SDLGPU-12: first end-to-end proof for the SDL_GPU graphics backend -- a real
+# window, a real SDL_GPUDevice, and a 60-frame Clear()+Present() loop. Needs a real
+# display/GPU, same as the Vulkan/Bgfx/D3D11 CTest entries above -- run with a real DISPLAY.
+if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SDL_GPU")
+    enable_testing()
+
+    macro(cna_sdlgpu_test target src)
+        add_executable(${target} ${src})
+        if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
+            target_link_libraries(${target} PRIVATE
+                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                SHARP_RUNTIME SDL3::SDL3)
+        else()
+            target_link_libraries(${target} PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+        endif()
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(${target} PRIVATE SDL3::SDL3main)
+        endif()
+    endmacro()
+
+    cna_sdlgpu_test(cna_test_sdlgpu_smoke examples/sdlgpu_smoke_test.cpp)
+    add_test(NAME SdlGpu_Smoke COMMAND cna_test_sdlgpu_smoke)
+    set_tests_properties(SdlGpu_Smoke PROPERTIES
+        TIMEOUT 60
+        LABELS "SdlGpu"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()
 
 # --- Task 6.1: real two-process ENet loopback test harness ---

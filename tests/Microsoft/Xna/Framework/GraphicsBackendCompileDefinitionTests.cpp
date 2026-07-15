@@ -32,6 +32,9 @@ TEST(GraphicsBackendCompileDefinitionsTest, ExactlyOneGraphicsBackendIsSelected)
 #ifdef CNA_BACKEND_SOFTWARE
     ++enabled;
 #endif
+#ifdef CNA_BACKEND_SDL_GPU
+    ++enabled;
+#endif
 
     EXPECT_EQ(enabled, 1);
 }
