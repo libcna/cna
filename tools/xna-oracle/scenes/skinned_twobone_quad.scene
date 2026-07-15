@@ -1,0 +1,55 @@
+# plan_dx9.md D9-A5 scene corpus: skinned_twobone_quad
+# The first scene to exercise a REAL, non-degenerate skinning blend: SkinnedEffect with
+# WeightsPerVertex=2 and two DIFFERENT bones (both bound with nonzero weight), not the single
+# Identity-bone no-op skinned_quad.scene uses. Also the first scene needing a SECOND
+# (boneindex,boneweight) pair per vertex -- the shared vertex line format was extended from 10
+# columns to an optional 12 (x,y,z,nx,ny,nz,u,v,boneindex0,boneweight0,boneindex1,boneweight1);
+# skinned_quad.scene's own 10-column lines are unaffected (the trailing pair defaults to
+# index=0/weight=0 when absent).
+#
+# Real formula, confirmed against FNA's own SkinnedEffect.fx (`Skin()`, SkinnedEffect.fx:57-69):
+# `skinning = sum over i<boneCount of Bones[Indices[i]] * Weights[i]`, a literal WEIGHTED SUM of
+# the raw 4x3 bone matrices (not a composition of transforms), then
+# `Position.xyz = mul(Position, skinning)`. Bone 0 is always Identity; Bone 1 is
+# `bone1translate=0.4,0,0` (a pure translation, no rotation/scale) -- chosen specifically so the
+# blended matrix stays cleanly hand-derivable: since both bones share the SAME (Identity)
+# rotation/scale part, the weighted sum's rotation/scale part is also exactly Identity
+# (0.5*I + 0.5*I = I), and only the translation blends: 0.5*(0,0,0) + 0.5*(0.4,0,0) = (0.2,0,0)
+# exactly. So the blended skinning matrix is exactly Translate(0.2,0,0) -- a pure, uniform
+# rightward shift of the whole quad by 0.2 NDC units (25.6 px at 256 wide), with the NORMAL
+# unaffected (skinning's rotation part is Identity, so lighting math is untouched).
+#
+# Expected: the SAME lit-textured formula skinned_quad.scene/lit_textured_quad.scene already
+# established (dim light diffuse=0.5, white texture -> exact (128,128,128,255)), but the quad's
+# screen-space footprint is shifted +0.2 NDC in X: from x=[-0.6,0.6] to x=[-0.4,0.8] (still safely
+# within the unclipped [-1,1] NDC range on both edges -- World/View/Projection remain Identity
+# everywhere in this corpus, so this is the shader's own skinning-driven position offset, not a
+# scene-level World transform).
+width=256
+height=256
+profile=HiDef
+clearcolor=100,149,237,255
+effect=SkinnedEffect
+vertexformat=PositionNormalTextureWeights
+lighting=true
+ambientcolor=0,0,0
+light0enabled=true
+light0diffuse=0.5,0.5,0.5
+light0direction=0,0,-1
+texture=true
+texturewidth=1
+textureheight=1
+texturefilter=Point
+weightspervertex=2
+bone1translate=0.4,0,0
+primitive=TriangleList
+texturepixel=255,255,255,255
+# x,y,z,nx,ny,nz,u,v,boneindex0,boneweight0,boneindex1,boneweight1 -- every vertex faces the
+# camera (+Z normal), bound 50/50 to bone 0 (Identity) and bone 1 (Translate(0.4,0,0)), blending
+# to an exact Translate(0.2,0,0).
+vertex=-0.6,0.6,0,0,0,1,0,0,0,0.5,1,0.5
+vertex=0.6,0.6,0,0,0,1,1,0,0,0.5,1,0.5
+vertex=-0.6,-0.6,0,0,0,1,0,1,0,0.5,1,0.5
+vertex=0.6,0.6,0,0,0,1,1,0,0,0.5,1,0.5
+vertex=0.6,-0.6,0,0,0,1,1,1,0,0.5,1,0.5
+vertex=-0.6,-0.6,0,0,0,1,0,1,0,0.5,1,0.5

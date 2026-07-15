@@ -75,13 +75,20 @@ public struct VertexPositionNormalTextureWeights : IVertexType
 
     public VertexPositionNormalTextureWeights(Vector3 position, Vector3 normal, Vector2 uv,
                                                byte boneIndex, float boneWeight)
+        : this(position, normal, uv, boneIndex, boneWeight, 0, 0f)
+    {
+    }
+
+    public VertexPositionNormalTextureWeights(Vector3 position, Vector3 normal, Vector2 uv,
+                                               byte boneIndex0, float boneWeight0,
+                                               byte boneIndex1, float boneWeight1)
     {
         Position = position;
         Normal = normal;
         TextureCoordinate = uv;
-        BlendWeight = new Vector4(boneWeight, 0, 0, 0);
-        BlendIndex0 = boneIndex;
-        BlendIndex1 = 0;
+        BlendWeight = new Vector4(boneWeight0, boneWeight1, 0, 0);
+        BlendIndex0 = boneIndex0;
+        BlendIndex1 = boneIndex1;
         BlendIndex2 = 0;
         BlendIndex3 = 0;
     }
@@ -122,6 +129,8 @@ public class Scene
     public Vector3 FogColor = Vector3.Zero;
     public float FogStart;
     public float FogEnd = 1.0f;
+    public int WeightsPerVertex = 4;
+    public Vector3 Bone1Translate = Vector3.Zero;
     public PrimitiveType Primitive = PrimitiveType.TriangleList;
     public List<VertexPositionColor> ColorVertices = new List<VertexPositionColor>();
     public List<VertexPositionTexture> TextureVertices = new List<VertexPositionTexture>();
@@ -170,6 +179,8 @@ public class Scene
                 case "fogcolor": scene.FogColor = ParseVector3(value); break;
                 case "fogstart": scene.FogStart = float.Parse(value, CultureInfo.InvariantCulture); break;
                 case "fogend": scene.FogEnd = float.Parse(value, CultureInfo.InvariantCulture); break;
+                case "weightspervertex": scene.WeightsPerVertex = int.Parse(value, CultureInfo.InvariantCulture); break;
+                case "bone1translate": scene.Bone1Translate = ParseVector3(value); break;
                 case "vertexformat":
                     if (value == "PositionTexture") scene.VertexFormat = SceneVertexFormat.PositionTexture;
                     else if (value == "PositionNormalTexture") scene.VertexFormat = SceneVertexFormat.PositionNormalTexture;
@@ -362,9 +373,19 @@ public class Scene
         var uv = new Vector2(
             float.Parse(p[6], CultureInfo.InvariantCulture),
             float.Parse(p[7], CultureInfo.InvariantCulture));
-        byte boneIndex = byte.Parse(p[8], CultureInfo.InvariantCulture);
-        float boneWeight = float.Parse(p[9], CultureInfo.InvariantCulture);
-        return new VertexPositionNormalTextureWeights(pos, normal, uv, boneIndex, boneWeight);
+        byte boneIndex0 = byte.Parse(p[8], CultureInfo.InvariantCulture);
+        float boneWeight0 = float.Parse(p[9], CultureInfo.InvariantCulture);
+        // A second (boneindex,boneweight) pair is optional -- present only for scenes that
+        // genuinely exercise WeightsPerVertex=2/4 blending (e.g. skinned_twobone_quad.scene);
+        // single-bone scenes (e.g. skinned_quad.scene) keep the original 10-column format.
+        byte boneIndex1 = 0;
+        float boneWeight1 = 0f;
+        if (p.Length >= 12)
+        {
+            boneIndex1 = byte.Parse(p[10], CultureInfo.InvariantCulture);
+            boneWeight1 = float.Parse(p[11], CultureInfo.InvariantCulture);
+        }
+        return new VertexPositionNormalTextureWeights(pos, normal, uv, boneIndex0, boneWeight0, boneIndex1, boneWeight1);
     }
 }
 
@@ -489,11 +510,16 @@ public class Oracle : Game
             skfx.World = Matrix.Identity;
             skfx.View = Matrix.Identity;
             skfx.Projection = Matrix.Identity;
-            // A single Identity bone at 100% vertex weight -- skinning is a mathematical no-op,
-            // matching D9-82f's own D3D9_DrawEx CTest discipline, while still genuinely exercising
-            // the real per-vertex BLENDWEIGHT0/BLENDINDICES0 upload and the full bone-matrix-array
-            // path end to end (not skipped).
-            skfx.SetBoneTransforms(new Matrix[] { Matrix.Identity });
+            // Bone 0 is always Identity; Bone 1 is an optional pure-translation bone, scene-
+            // configurable via bone1translate= (defaults to Vector3.Zero, i.e. also Identity, so
+            // single-bone scenes like skinned_quad.scene are unaffected). WeightsPerVertex
+            // defaults to 4, matching real XNA's own SkinnedEffect default (SkinnedEffect.cs:66)
+            // -- skinned_quad.scene's own "single Identity bone at 100% weight" no-op already
+            // relies on this default (weights[1..3]=0 makes the extra bones structurally inert
+            // regardless of which ShaderIndex bucket -- OneBone/TwoBones/FourBones -- is
+            // actually selected).
+            skfx.WeightsPerVertex = scene.WeightsPerVertex;
+            skfx.SetBoneTransforms(new Matrix[] { Matrix.Identity, Matrix.CreateTranslation(scene.Bone1Translate) });
             // Same explicit-interface-implementation LightingEnabled carve-out as
             // EnvironmentMapEffect (see that branch's own comment) -- confirmed against FNA's own
             // SkinnedEffect.cs source too.
