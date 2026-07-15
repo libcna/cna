@@ -1023,6 +1023,61 @@ COMPLETE), every comparison pixel-perfect; `D9-84` (every draw path validated ag
 can now genuinely continue, one scene at a
 time.
 
+**New blocker found 2026-07-15, NOT fixed, reverted to keep the tree clean — a real D3D9 backend
+crash when a `D3DUSAGE_RENDERTARGET`-flagged `RenderTarget2D` texture exists in-process alongside
+any subsequent draw call.** While attempting to add the corpus's first render-target oracle scene
+(`rendertarget_texture_quad.scene` — create a `RenderTarget2D`, `SetRenderTarget`/`Clear`/unbind
+it, then use it as a `BasicEffect` texture for an ordinary textured quad), `cna_oracle_render.exe`
+crashes with `terminate called after throwing an instance of 'dxvk::DxvkError'` — an UNCAUGHT
+exception (this file's own `main()` already has a `catch (const std::exception&)` around the
+entire `Game::Run()` call; the crash bypasses it entirely, meaning the throw happens on a
+different thread, most likely one of DXVK's own async shader-compiler threads: `DXVK_LOG_LEVEL=
+trace` + `DXVK_LOG_PATH=...` showed the crash lands immediately after `debug: Compiling shader
+FS_...`, with nothing more written to the log).
+
+**Isolated via bisection, not guessed:**
+- Reproduces regardless of render target SIZE (tried `1×1` and `4×4`).
+- Reproduces regardless of whether the render target is ever bound, cleared, or unbound at all —
+  a version that only *constructs* a `RenderTarget2D` (`new RenderTarget2D(dev, w, h)`) and never
+  calls `SetRenderTarget`/`Clear` on it still crashes identically on the next ordinary draw call.
+- Reproduces regardless of whether the render-to-texture happens in the same frame or a frame
+  earlier (tried deferring the RT construction to frame N-1 and the texture-sampling draw to
+  frame N, relying on the framework's automatic `Present()` between `Draw()` calls as a
+  synchronization boundary — no change).
+- Every one of this corpus's other 19 scenes (none of which ever construct a
+  `D3DUSAGE_RENDERTARGET`-flagged texture) pass pixel-perfect, including plain `Texture2D`-based
+  textured-quad scenes using the exact same `BasicEffect`/`PositionTexture`/unlit/untextured-
+  vertex-color shader bucket this new scene also uses — so the crash is specific to the presence
+  of a `RenderTarget2D`-backed (`D3DUSAGE_RENDERTARGET`) texture object, not to texturing or this
+  particular effect/shader bucket in general.
+- `D3D9RenderTargetBackend::Recreate()`/`GetTextureEXT()` (`src/CNA/Internal/Backends/D3D9/
+  D3D9RenderTargets.cpp`) both look correct on inspection: `CreateTexture(..., D3DUSAGE_RENDER
+  TARGET, D3DFMT_A8B8G8R8, D3DPOOL_DEFAULT, ...)` (a real, sample-able D3D9 texture per the D3D9
+  API contract, not a `CreateRenderTarget()` surface-only resource), `GetTextureEXT()` returns the
+  same `colorTexture_.Get()` this creates. Nothing wrong was found by code inspection alone —
+  this needs either Vulkan validation layers or DXVK-internals-level debugging to actually
+  diagnose, beyond what this task's own scope justifies.
+- **Not the same gap `CnaOracleRender.cpp`'s own header comment already documents** (that comment
+  is about `RenderTarget2D::GetData()`'s CPU readback path being unproven) — this new scene never
+  calls `GetData()` at all; the crash is in ordinary GPU-side texture *sampling* of a render
+  target from within a normal effect draw, a different and previously totally untested code path
+  (D9-53's own `D3D9_Smoke` Check S/T/U cover create/bind/Clear/`GetRenderTargetData`-readback/
+  unbind-restores-back-buffer, never "use the render target as a sampled shader texture").
+
+**Reverted, not committed**: all code (`CnaOracleRender.cpp`/`Oracle.cs` `rendertargettexture=`/
+`rendertargetwidth=`/`rendertargetheight=`/`rendertargetclearcolor=` scene-key wiring) and the
+new scene file were fully reverted (`git checkout --`) rather than landed half-working, per this
+project's own "no half-finished implementations" rule — the working tree is clean, all 19
+committed scenes still pass, `D3D9` CTest suite still 11/11 green. **Recommended next step for
+whoever picks this up**: reproduce with Vulkan validation layers enabled
+(`VK_LAYER_KHRONOS_validation` via `VK_INSTANCE_LAYERS`, if available in this environment) to get
+an actual Vulkan-level diagnostic message instead of an opaque `dxvk::DxvkError`; alternatively,
+compare against a minimal known-working D3D9 render-target-to-texture sample (outside this
+project) on the same DXVK/driver stack to establish whether this is a genuine CNA-side bug or an
+environment/DXVK-version limitation. Do not re-attempt the render-target oracle scene until this
+is root-caused — a scene that "passes" by accident (e.g. by catching and silently swallowing the
+crash) would be worse than no scene at all.
+
 **Phase D9-8: `D9-80`–`D9-83` ALL CLOSED — real, verified dispatch for all 5 XNA Stock Effects plus
 hardware instancing on this backend.** The shader-dispatch tables/formulas are transcribed and
 tested, the `GpuDrawParams` audit is independently re-verified (2 of its 4 gaps turned out resolvable
@@ -1145,12 +1200,15 @@ it) remain anywhere in the plan up to this point — and they are, by design, th
 effort: add a scene, validate it, move to the next effect.
 
 1. **`D9-A5`/`D9-84`** — add the next scene(s) to `tools/xna-oracle/scenes/` (natural next
-   candidates: `SpriteBatch` (rotation, scale, source rect, origin, `SpriteEffects`,
-   `SpriteSortMode`s), render targets, `SurfaceFormat` sweep — both `AlphaTestEffect`'s
-   compare-function surface AND `SkinnedEffect`'s weighting surface are now fully covered) and
-   validate them via `scripts/xna-diff.py` against the real XNA oracle — the last two open rows in
-   Phase D9-8/D9-A, and where `D9-21`'s `D3DCULL` proof and `D9-62`'s rasterizer-state proof both
-   finally close out too. See `tools/xna-oracle/README.md` for the current build/run commands.
+   candidates: `SurfaceFormat` sweep — both `AlphaTestEffect`'s compare-function surface AND
+   `SkinnedEffect`'s weighting surface are now fully covered. **Do NOT re-attempt a render-target
+   oracle scene** until the crash documented in §4's own "New blocker found 2026-07-15" is
+   root-caused — `SpriteBatch` is separately blocked too, since `D3D9GraphicsBackend::
+   CreateSpriteBatch()` still throws `NotYetImplemented` (Phase D9-9 is genuinely unstarted
+   backend work, not an oracle-scene gap)) and validate them via `scripts/xna-diff.py` against
+   the real XNA oracle — the last two open rows in Phase D9-8/D9-A, and where `D9-21`'s `D3DCULL`
+   proof and `D9-62`'s rasterizer-state proof both finally close out too. See
+   `tools/xna-oracle/README.md` for the current build/run commands.
 
 See `plan_dx9.md`'s "Execution order" table for the full sequence beyond this.
 
