@@ -10,11 +10,12 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Runtime.InteropServices;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 
-public enum SceneVertexFormat { PositionColor, PositionTexture, PositionNormalTexture, PositionDualTexture }
-public enum SceneEffectType { BasicEffect, AlphaTestEffect, DualTextureEffect, EnvironmentMapEffect }
+public enum SceneVertexFormat { PositionColor, PositionTexture, PositionNormalTexture, PositionDualTexture, PositionNormalTextureWeights }
+public enum SceneEffectType { BasicEffect, AlphaTestEffect, DualTextureEffect, EnvironmentMapEffect, SkinnedEffect }
 
 public class SceneLight
 {
@@ -26,6 +27,12 @@ public class SceneLight
 // Real XNA has no built-in dual-UV vertex struct -- a game using DualTextureEffect defines its
 // own IVertexType, exactly like this, matching CnaOracleRender.cpp's own explicit
 // VertexDeclaration for the same stride-28 layout (Position+TexCoord0+TexCoord1).
+// [StructLayout(LayoutKind.Sequential)] pins field order to declaration order -- C#'s default
+// "auto" layout does not formally guarantee this (the CLR is free to reorder fields to minimize
+// padding), and DrawUserPrimitives<T> marshals this struct's raw bytes directly against the
+// explicit byte-offset VertexDeclaration below, so an auto-reordered layout would silently
+// corrupt every attribute after the first.
+[StructLayout(LayoutKind.Sequential)]
 public struct VertexPositionDualTexture : IVertexType
 {
     public Vector3 Position;
@@ -42,6 +49,41 @@ public struct VertexPositionDualTexture : IVertexType
         Position = position;
         TextureCoordinate0 = uv0;
         TextureCoordinate1 = uv1;
+    }
+
+    VertexDeclaration IVertexType.VertexDeclaration { get { return VertexDeclaration; } }
+}
+
+// Real XNA has no built-in skinned vertex struct either -- mirrors VertexPositionDualTexture's
+// own precedent. Layout matches the existing stride-52 CNA vertex declaration byte-for-byte:
+// Position(0)/Normal(12)/TexCoord(24)/BlendWeight(32, Vector4)/BlendIndices(48, Byte4).
+[StructLayout(LayoutKind.Sequential)]
+public struct VertexPositionNormalTextureWeights : IVertexType
+{
+    public Vector3 Position;
+    public Vector3 Normal;
+    public Vector2 TextureCoordinate;
+    public Vector4 BlendWeight;
+    public byte BlendIndex0, BlendIndex1, BlendIndex2, BlendIndex3;
+
+    public static readonly VertexDeclaration VertexDeclaration = new VertexDeclaration(
+        new VertexElement(0,  VertexElementFormat.Vector3, VertexElementUsage.Position, 0),
+        new VertexElement(12, VertexElementFormat.Vector3, VertexElementUsage.Normal, 0),
+        new VertexElement(24, VertexElementFormat.Vector2, VertexElementUsage.TextureCoordinate, 0),
+        new VertexElement(32, VertexElementFormat.Vector4, VertexElementUsage.BlendWeight, 0),
+        new VertexElement(48, VertexElementFormat.Byte4, VertexElementUsage.BlendIndices, 0));
+
+    public VertexPositionNormalTextureWeights(Vector3 position, Vector3 normal, Vector2 uv,
+                                               byte boneIndex, float boneWeight)
+    {
+        Position = position;
+        Normal = normal;
+        TextureCoordinate = uv;
+        BlendWeight = new Vector4(boneWeight, 0, 0, 0);
+        BlendIndex0 = boneIndex;
+        BlendIndex1 = 0;
+        BlendIndex2 = 0;
+        BlendIndex3 = 0;
     }
 
     VertexDeclaration IVertexType.VertexDeclaration { get { return VertexDeclaration; } }
@@ -78,6 +120,7 @@ public class Scene
     public List<VertexPositionTexture> TextureVertices = new List<VertexPositionTexture>();
     public List<VertexPositionNormalTexture> NormalTextureVertices = new List<VertexPositionNormalTexture>();
     public List<VertexPositionDualTexture> DualTextureVertices = new List<VertexPositionDualTexture>();
+    public List<VertexPositionNormalTextureWeights> SkinnedVertices = new List<VertexPositionNormalTextureWeights>();
     public List<Color> TexturePixels = new List<Color>();
     public List<Color> Texture2Pixels = new List<Color>();
 
@@ -106,6 +149,7 @@ public class Scene
                     if (value == "AlphaTestEffect") scene.EffectType = SceneEffectType.AlphaTestEffect;
                     else if (value == "DualTextureEffect") scene.EffectType = SceneEffectType.DualTextureEffect;
                     else if (value == "EnvironmentMapEffect") scene.EffectType = SceneEffectType.EnvironmentMapEffect;
+                    else if (value == "SkinnedEffect") scene.EffectType = SceneEffectType.SkinnedEffect;
                     else scene.EffectType = SceneEffectType.BasicEffect;
                     break;
                 case "environmentmap": scene.EnvironmentMapEnabled = ParseBool(value); break;
@@ -118,6 +162,7 @@ public class Scene
                     if (value == "PositionTexture") scene.VertexFormat = SceneVertexFormat.PositionTexture;
                     else if (value == "PositionNormalTexture") scene.VertexFormat = SceneVertexFormat.PositionNormalTexture;
                     else if (value == "PositionDualTexture") scene.VertexFormat = SceneVertexFormat.PositionDualTexture;
+                    else if (value == "PositionNormalTextureWeights") scene.VertexFormat = SceneVertexFormat.PositionNormalTextureWeights;
                     else scene.VertexFormat = SceneVertexFormat.PositionColor;
                     break;
                 case "vertexcolor": scene.VertexColorEnabled = ParseBool(value); break;
@@ -138,7 +183,9 @@ public class Scene
                 case "light0direction": scene.Light0.Direction = ParseVector3(value); break;
                 case "primitive": scene.Primitive = ParsePrimitive(value); break;
                 case "vertex":
-                    if (scene.VertexFormat == SceneVertexFormat.PositionDualTexture)
+                    if (scene.VertexFormat == SceneVertexFormat.PositionNormalTextureWeights)
+                        scene.SkinnedVertices.Add(ParseSkinnedVertex(value));
+                    else if (scene.VertexFormat == SceneVertexFormat.PositionDualTexture)
                         scene.DualTextureVertices.Add(ParseDualTextureVertex(value));
                     else if (scene.VertexFormat == SceneVertexFormat.PositionNormalTexture)
                         scene.NormalTextureVertices.Add(ParseNormalTextureVertex(value));
@@ -156,6 +203,7 @@ public class Scene
 
     public int VertexCount()
     {
+        if (VertexFormat == SceneVertexFormat.PositionNormalTextureWeights) return SkinnedVertices.Count;
         if (VertexFormat == SceneVertexFormat.PositionDualTexture) return DualTextureVertices.Count;
         if (VertexFormat == SceneVertexFormat.PositionNormalTexture) return NormalTextureVertices.Count;
         if (VertexFormat == SceneVertexFormat.PositionTexture) return TextureVertices.Count;
@@ -281,6 +329,25 @@ public class Scene
             float.Parse(p[6], CultureInfo.InvariantCulture));
         return new VertexPositionDualTexture(pos, uv0, uv1);
     }
+
+    static VertexPositionNormalTextureWeights ParseSkinnedVertex(string s)
+    {
+        var p = s.Split(',');
+        var pos = new Vector3(
+            float.Parse(p[0], CultureInfo.InvariantCulture),
+            float.Parse(p[1], CultureInfo.InvariantCulture),
+            float.Parse(p[2], CultureInfo.InvariantCulture));
+        var normal = new Vector3(
+            float.Parse(p[3], CultureInfo.InvariantCulture),
+            float.Parse(p[4], CultureInfo.InvariantCulture),
+            float.Parse(p[5], CultureInfo.InvariantCulture));
+        var uv = new Vector2(
+            float.Parse(p[6], CultureInfo.InvariantCulture),
+            float.Parse(p[7], CultureInfo.InvariantCulture));
+        byte boneIndex = byte.Parse(p[8], CultureInfo.InvariantCulture);
+        float boneWeight = float.Parse(p[9], CultureInfo.InvariantCulture);
+        return new VertexPositionNormalTextureWeights(pos, normal, uv, boneIndex, boneWeight);
+    }
 }
 
 public class Oracle : Game
@@ -378,6 +445,30 @@ public class Oracle : Game
             }
             fx = emfx;
         }
+        else if (scene.EffectType == SceneEffectType.SkinnedEffect)
+        {
+            var skfx = new SkinnedEffect(dev);
+            skfx.Texture = texture;
+            skfx.World = Matrix.Identity;
+            skfx.View = Matrix.Identity;
+            skfx.Projection = Matrix.Identity;
+            // A single Identity bone at 100% vertex weight -- skinning is a mathematical no-op,
+            // matching D9-82f's own D3D9_DrawEx CTest discipline, while still genuinely exercising
+            // the real per-vertex BLENDWEIGHT0/BLENDINDICES0 upload and the full bone-matrix-array
+            // path end to end (not skipped).
+            skfx.SetBoneTransforms(new Matrix[] { Matrix.Identity });
+            // Same explicit-interface-implementation LightingEnabled carve-out as
+            // EnvironmentMapEffect (see that branch's own comment) -- confirmed against FNA's own
+            // SkinnedEffect.cs source too.
+            if (scene.LightingEnabled)
+            {
+                skfx.AmbientLightColor = scene.AmbientColor;
+                skfx.DirectionalLight0.Enabled = scene.Light0.Enabled;
+                skfx.DirectionalLight0.DiffuseColor = scene.Light0.Diffuse;
+                skfx.DirectionalLight0.Direction = scene.Light0.Direction;
+            }
+            fx = skfx;
+        }
         else
         {
             var bfx = new BasicEffect(dev);
@@ -401,7 +492,9 @@ public class Oracle : Game
         foreach (var pass in fx.CurrentTechnique.Passes)
         {
             pass.Apply();
-            if (scene.VertexFormat == SceneVertexFormat.PositionDualTexture)
+            if (scene.VertexFormat == SceneVertexFormat.PositionNormalTextureWeights)
+                dev.DrawUserPrimitives(scene.Primitive, scene.SkinnedVertices.ToArray(), 0, scene.PrimitiveCount());
+            else if (scene.VertexFormat == SceneVertexFormat.PositionDualTexture)
                 dev.DrawUserPrimitives(scene.Primitive, scene.DualTextureVertices.ToArray(), 0, scene.PrimitiveCount());
             else if (scene.VertexFormat == SceneVertexFormat.PositionNormalTexture)
                 dev.DrawUserPrimitives(scene.Primitive, scene.NormalTextureVertices.ToArray(), 0, scene.PrimitiveCount());

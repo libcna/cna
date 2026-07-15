@@ -2,9 +2,10 @@
 
 `plan_dx9.md` Phase D9-A (`D9-A3`/`D9-A4`). Renders the same declarative scene twice — once
 through the real XNA 4.0 runtime (`Oracle.cs`, under Wine) and once through CNA's real public
-`Game`/`GraphicsDeviceManager`/`GraphicsDevice`/`BasicEffect` API (`CnaOracleRender.cpp`, built
-against whichever `CNA_GRAPHICS_BACKEND` this branch targets — `D3D9` on `feature/dx9`) — and
-diffs the two resulting PNGs pixel-for-pixel (`scripts/xna-diff.py`).
+`Game`/`GraphicsDeviceManager`/`GraphicsDevice` API, using any of the 5 real XNA Stock Effects
+(`BasicEffect`/`AlphaTestEffect`/`DualTextureEffect`/`EnvironmentMapEffect`/`SkinnedEffect`)
+(`CnaOracleRender.cpp`, built against whichever `CNA_GRAPHICS_BACKEND` this branch targets —
+`D3D9` on `feature/dx9`) — and diffs the two resulting PNGs pixel-for-pixel (`scripts/xna-diff.py`).
 
 This is what makes "indistinguishable from real XNA" a testable claim rather than an aspiration
 (`plan_dx9.md`'s own framing for Phase D9-A). Moved here from `dx9-spike/xna-oracle/Oracle.cs`
@@ -27,9 +28,9 @@ fully-commented examples.
 | `width`, `height` | back buffer size |
 | `profile` | `HiDef` or `Reach` |
 | `clearcolor` | `r,g,b,a` (0-255) |
-| `effect` | `BasicEffect` (default), `AlphaTestEffect`, `DualTextureEffect`, or `EnvironmentMapEffect` — which Stock Effect both sides construct |
-| `vertexformat` | `PositionColor` (default), `PositionTexture`, `PositionNormalTexture`, or `PositionDualTexture` — selects which `vertex=` shape below, and which vertex struct both sides draw. `PositionDualTexture` has no XNA-built-in equivalent (real XNA has no dual-UV vertex type either) — both sides define their own custom `IVertexType`/`VertexDeclaration`, exactly as a real game using `DualTextureEffect` would have to |
-| `vertexcolor`, `lighting`, `texture` | `VertexColorEnabled`/`LightingEnabled` (`BasicEffect` only — see `EnvironmentMapEffect`'s own carve-out below)/`TextureEnabled` (`BasicEffect`) or texture-non-null (`AlphaTestEffect`/`DualTextureEffect`/`EnvironmentMapEffect`) (`true`/`false`) |
+| `effect` | `BasicEffect` (default), `AlphaTestEffect`, `DualTextureEffect`, `EnvironmentMapEffect`, or `SkinnedEffect` — which Stock Effect both sides construct (all 5 real XNA Stock Effects) |
+| `vertexformat` | `PositionColor` (default), `PositionTexture`, `PositionNormalTexture`, `PositionDualTexture`, or `PositionNormalTextureWeights` — selects which `vertex=` shape below, and which vertex struct both sides draw. `PositionDualTexture`/`PositionNormalTextureWeights` have no XNA-built-in equivalent (real XNA has no dual-UV or skinned vertex type either) — both sides define their own custom `IVertexType`/`VertexDeclaration`, exactly as a real game using `DualTextureEffect`/`SkinnedEffect` would have to |
+| `vertexcolor`, `lighting`, `texture` | `VertexColorEnabled`/`LightingEnabled` (`BasicEffect` only — see the `LightingEnabled` carve-out below)/`TextureEnabled` (`BasicEffect`) or texture-non-null (`AlphaTestEffect`/`DualTextureEffect`/`EnvironmentMapEffect`/`SkinnedEffect`) (`true`/`false`) |
 | `texturewidth`, `textureheight` | size of an inline procedural texture (no content-pipeline asset file — matches `D9-A2`'s own "no content pipeline" constraint) |
 | `texturefilter` | `Point` or `Linear` — `SamplerState.PointClamp`/`LinearClamp` on slot 0 |
 | `texturepixel` | `r,g,b,a` — repeats `texturewidth*textureheight` times, row-major, only when `texture=true` |
@@ -37,21 +38,28 @@ fully-commented examples.
 | `diffusecolor` | `r,g,b` (0-1 floats) — `DualTextureEffect.DiffuseColor`, only when `effect=DualTextureEffect` |
 | `environmentmap`, `environmentmapsize`, `environmentmappixel` | a `TextureCube.EnvironmentMap`, only when `effect=EnvironmentMapEffect` — a single `environmentmappixel=` sets ALL 6 faces to the same color (sidesteps needing to hand-compute `reflect()` geometry, same trick `D9-82e`'s own CTest used) |
 | `environmentmapamount` | `0`-`1` float — `EnvironmentMapEffect.EnvironmentMapAmount`, only when `effect=EnvironmentMapEffect` |
-| `ambientcolor` | `r,g,b` (0-1 floats) — `AmbientLightColor`, only when `lighting=true` (`BasicEffect`/`EnvironmentMapEffect`) |
-| `light0enabled`, `light0diffuse`, `light0direction` | `DirectionalLight0.Enabled`/`DiffuseColor`/`Direction`, only when `lighting=true` (`BasicEffect`/`EnvironmentMapEffect`) |
+| `ambientcolor` | `r,g,b` (0-1 floats) — `AmbientLightColor`, only when `lighting=true` (`BasicEffect`/`EnvironmentMapEffect`/`SkinnedEffect`) |
+| `light0enabled`, `light0diffuse`, `light0direction` | `DirectionalLight0.Enabled`/`DiffuseColor`/`Direction`, only when `lighting=true` (`BasicEffect`/`EnvironmentMapEffect`/`SkinnedEffect`) |
 | `alphafunction` | `Always`/`Never`/`Less`/`LessEqual`/`Equal`/`GreaterEqual`/`Greater`/`NotEqual` — `AlphaTestEffect.AlphaFunction`, only when `effect=AlphaTestEffect` |
 | `referencealpha` | `0`-`255` int — `AlphaTestEffect.ReferenceAlpha`, only when `effect=AlphaTestEffect` |
 | `primitive` | `TriangleList`, `TriangleStrip`, `LineList`, or `LineStrip` |
-| `vertex` | `x,y,z,r,g,b,a` (`PositionColor`), `x,y,z,u,v` (`PositionTexture`), `x,y,z,nx,ny,nz,u,v` (`PositionNormalTexture`), or `x,y,z,u0,v0,u1,v1` (`PositionDualTexture`) — repeats once per vertex, `World`/`View`/`Projection` are always `Matrix.Identity` |
+| `vertex` | `x,y,z,r,g,b,a` (`PositionColor`), `x,y,z,u,v` (`PositionTexture`), `x,y,z,nx,ny,nz,u,v` (`PositionNormalTexture`), `x,y,z,u0,v0,u1,v1` (`PositionDualTexture`), or `x,y,z,nx,ny,nz,u,v,boneindex,boneweight` (`PositionNormalTextureWeights`) — repeats once per vertex, `World`/`View`/`Projection` are always `Matrix.Identity` |
 
-**`EnvironmentMapEffect`'s own `lighting`/`ambientcolor`/`light0*` carve-out**: real XNA/FNA's
-`EnvironmentMapEffect` implements `IEffectLights.LightingEnabled` via **explicit interface
-implementation** — not a public member of the concrete class (confirmed live: a plain
-`emfx.LightingEnabled = ...` is a real `CS1061` compile error against the real `csc.exe`), and its
-setter throws if given `false` anyway (lighting is always on for this effect). Neither side calls
-it for `EnvironmentMapEffect`; `ambientcolor`/`light0*` are still applied (unconditionally, once
-`lighting=true`), since `AmbientLightColor`/`DirectionalLight0` genuinely are ordinary public
-members on this effect.
+**`LightingEnabled` carve-out for `EnvironmentMapEffect`/`SkinnedEffect`**: real XNA/FNA's
+`EnvironmentMapEffect` **and** `SkinnedEffect` both implement `IEffectLights.LightingEnabled` via
+**explicit interface implementation** — not a public member of either concrete class (confirmed
+live for both: a plain `emfx.LightingEnabled = ...`/`skfx.LightingEnabled = ...` is a real
+`CS1061` compile error against the real `csc.exe`), and the setter throws if given `false` anyway
+(lighting is always on for these two effects). Neither side calls it for either effect;
+`ambientcolor`/`light0*` are still applied (unconditionally, once `lighting=true`), since
+`AmbientLightColor`/`DirectionalLight0` genuinely are ordinary public members on both.
+
+`SkinnedEffect` always uses a **single Identity bone at 100% vertex weight** (`WeightsPerVertex=1`)
+— skinning becomes a mathematical no-op, so the expected pixel math reduces to exactly the same
+lit-textured formula `lit_textured_quad.scene` already established, while still genuinely
+exercising the real per-vertex `BLENDWEIGHT0`/`BLENDINDICES0` upload and the full bone-matrix-array
+path end to end. This is not scene-configurable (yet) — every `SkinnedEffect` scene in this corpus
+calls `SetBoneTransforms(new[] { Matrix.Identity })` on both sides, hardcoded.
 
 ## Build and run — XNA side (the oracle)
 
@@ -116,7 +124,8 @@ Requires Pillow (`pip install pillow`) — not previously a dependency of this p
 
 ## Status
 
-Six scenes so far, **all pixel-perfect**:
+Seven scenes so far, **all pixel-perfect**, and every one of XNA's 5 Stock Effects is now
+represented in the corpus:
 
 - `colored3d` (`D9-A2`'s own original spike scene: a `BasicEffect` `VertexColorEnabled=true`/
   `LightingEnabled=false` triangle over a `CornflowerBlue` clear) — `0/65536` pixels differ,
@@ -164,15 +173,27 @@ Six scenes so far, **all pixel-perfect**:
   setter throws given `false` anyway. CNA's own equivalent is directly callable (C++ has no
   explicit-interface-implementation hiding) but was deliberately left unset here, matching what a
   real game using this effect actually can (and cannot) do.
+- `skinned_quad` — the fourth non-`BasicEffect` Stock Effect (`SkinnedEffect`), and the fifth (last)
+  of the 5 XNA Stock Effects in the corpus, on another brand-new custom vertex shape
+  (`PositionNormalTextureWeights`: Position+Normal+TexCoord+BlendWeight+BlendIndices, stride 52 —
+  `VSInputNmTxWeights`, matches the existing stride-52 CNA vertex declaration byte-for-byte,
+  `D9-82f`'s own "no new vertex declaration needed" finding). A single Identity bone at 100%
+  vertex weight (skinning is a mathematical no-op) plus the same dim light/white texture
+  `lit_textured_quad.scene` uses — exact `(128,128,128,255)` on both sides, `0/65536` pixels
+  differ. Same `LightingEnabled` explicit-interface-implementation carve-out as
+  `EnvironmentMapEffect` (confirmed against FNA's own `SkinnedEffect.cs` source too).
 
 `scripts/xna-diff.py` itself is mutation-verified: a deliberately 1-off-mutated copy of a passing
 CNA PNG is correctly reported as `FAIL: 1/65536 pixels differ ... max per-channel delta=1` at the
 default `--tolerance=0`, and correctly passes again at `--tolerance=1` — confirming the tool
 genuinely discriminates, not just "always reports PASS".
 
-`D9-A5` grows the corpus "with the plan" — each subsequent effect/feature this project verifies
-against the oracle adds its own scene(s) here, incrementally, rather than attempting the full
-corpus (`BasicEffect` lighting/fog variants, `AlphaTestEffect`, `DualTextureEffect`,
-`EnvironmentMapEffect`, `SkinnedEffect`, `SpriteBatch`, render targets, every shared
-`SurfaceFormat`) in one sitting. `D9-84` (every draw path validated against the oracle) is the
-task that consumes the finished corpus.
+**Every one of XNA's 5 Stock Effects (`BasicEffect`, `AlphaTestEffect`, `DualTextureEffect`,
+`EnvironmentMapEffect`, `SkinnedEffect`) is now represented in the corpus, at least once, and
+every single comparison so far is pixel-perfect.** `D9-A5` keeps growing "with the plan" — each
+subsequent effect/feature combination this project verifies against the oracle adds its own
+scene(s) here, incrementally, rather than attempting the full corpus (`BasicEffect` multi-light/
+fog variants, remaining `AlphaTestEffect` compare functions, `EnvironmentMapEffect` fresnel,
+`SkinnedEffect` 2/4-bone weighting, `SpriteBatch`, render targets, every shared `SurfaceFormat`)
+in one sitting. `D9-84` (every draw path validated against the oracle) is the task that consumes
+the finished corpus.

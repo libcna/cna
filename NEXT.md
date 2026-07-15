@@ -75,7 +75,7 @@ plausibly."
 
 **Phase D9-0 is fully closed.** Next up: Phase D9-1 (CMake integration + backend skeleton).
 
-### Phase D9-A — the XNA 4.0 oracle: D9-A1–A4 closed, D9-A5 started (6 scenes), D9-A6 open
+### Phase D9-A — the XNA 4.0 oracle: D9-A1–A4 closed, D9-A5 started (7 scenes, all 5 Stock Effects), D9-A6 open
 
 | Task | Status |
 |---|---|
@@ -83,7 +83,7 @@ plausibly."
 | `D9-A2` — minimal XNA 4.0 reference app, no content pipeline | ✅ |
 | `D9-A3` — byte-for-byte equivalent CNA app, shared declarative scene format | ✅ |
 | `D9-A4` — `scripts/xna-diff.py`, DXVK-into-XNA-prefix prerequisite | ✅ |
-| `D9-A5` — growing scene corpus | 🟨 (6 scenes: `colored3d`, `textured_quad`, `lit_textured_quad`, `alphatest_quad`, `dualtexture_quad`, `envmap_quad`, all pixel-perfect) |
+| `D9-A5` — growing scene corpus | 🟨 (7 scenes, all 5 XNA Stock Effects represented: `colored3d`, `textured_quad`, `lit_textured_quad`, `alphatest_quad`, `dualtexture_quad`, `envmap_quad`, `skinned_quad`, all pixel-perfect) |
 | `D9-A6` — run the corpus against CNA's other backends too | ⬜ |
 
 Closed 2026-07-15 (`D9-A3`/`D9-A4`): built the shared declarative scene format `D9-A3`'s own text
@@ -181,9 +181,33 @@ behavior faithfully (getter always `true`, setter throws given `false`) — only
 differs (C++ has no explicit-interface-implementation hiding), not the behavior. Neither side
 calls it for this effect now, matching what a real game actually can do.
 
-Next: add more scenes as `D9-84` exercises each already-dispatched effect (`SkinnedEffect`,
-multi-light/fog `BasicEffect` variants, remaining `AlphaTestEffect` compare functions,
-`EnvironmentMapEffect` fresnel).
+**7th scene, `skinned_quad` (2026-07-15) — also pixel-perfect. MILESTONE: every one of XNA's 5
+Stock Effects is now represented in the corpus, all pixel-perfect.** Added `effect=SkinnedEffect`
+plus a fourth custom vertex shape (`vertexformat=PositionNormalTextureWeights`, stride 52,
+`VSInputNmTxWeights`, matches the existing stride-52 layout byte-for-byte — no new CNA vertex
+declaration needed, `D9-82f`'s own finding). Real XNA has no built-in skinned vertex struct either
+(same category as `DualTextureEffect`'s dual-UV gap), so both sides define their own custom type.
+Deliberately uses a single Identity bone at 100% vertex weight (`SetBoneTransforms(new[]
+{Matrix.Identity})`, hardcoded, not yet scene-configurable) — the same simplification `D9-82f`'s
+own CTest used: skinning is a mathematical no-op, so the expected math reduces to
+`lit_textured_quad.scene`'s own already-established formula, while still genuinely exercising the
+real per-vertex `BLENDWEIGHT0`/`BLENDINDICES0` upload end to end. Exact `(128,128,128,255)` on
+both sides, `0/65536` differ. Same `LightingEnabled` explicit-interface-implementation carve-out
+found for `SkinnedEffect` too (confirmed against FNA's own source) — not a new bug, a confirmation
+the same real-XNA quirk applies to both of this project's `IEffectLights`-but-always-on effects.
+
+**Also fixed proactively**: added `[StructLayout(LayoutKind.Sequential)]` to both
+`VertexPositionDualTexture` (retroactively) and the new `VertexPositionNormalTextureWeights` on
+the C# side — C#'s default "auto" struct layout does not formally guarantee field-declaration
+order is preserved in memory, which `DrawUserPrimitives<T>`'s raw-byte marshalling against an
+explicit-offset `VertexDeclaration` silently depends on. `VertexPositionDualTexture` had been
+relying on this working out in practice (all-`Vector2`/`Vector3` fields); the newly-mixed
+float+byte struct was a genuinely higher-risk case to leave unpinned. All 7 scenes re-verified
+pixel-perfect afterward, not just the new one.
+
+Next: add more scenes as `D9-84` exercises each combination (multi-light/fog `BasicEffect`
+variants, remaining `AlphaTestEffect` compare functions, `EnvironmentMapEffect` fresnel,
+`SkinnedEffect` 2/4-bone weighting, `SpriteBatch`, render targets, `SurfaceFormat` sweep).
 
 ### Phase D9-1 — CMake integration and skeleton: CLOSED 2026-07-14
 
@@ -737,7 +761,8 @@ Most recent first. Full detail lives in `plan_dx9.md` — this is a short index.
 
 | Commit(s) | Summary |
 |---|---|
-| *(pending)* | **`D9-A5` grown to 6 scenes (`envmap_quad`) — also PIXEL-PERFECT (0/65536 differ), 3rd non-BasicEffect Stock Effect**. Added `effect=EnvironmentMapEffect` plus `environmentmap*` keys, reusing the existing `PositionNormalTexture` shape. 1x1 base texture + 1x1 all-same-color `TextureCube` + dim light + `EnvironmentMapAmount=0.5`: real `lerp(texture*diffuseSum, environmentMap, environmentMapAmount)` produced exact `(164,114,89,255)` both sides. Real finding (not a bug): real XNA/FNA's `EnvironmentMapEffect` implements `IEffectLights.LightingEnabled` via explicit interface implementation, invisible on the concrete class (confirmed live: `emfx.LightingEnabled=...` is a genuine `CS1061`) -- lighting is always on, no game can disable it. CNA's own `setLightingEnabledProperty` already matches the exact same behavior (getter always true, setter throws given false); only the C++ vs C# visibility differs. Neither side calls it for this effect now. |
+| *(pending)* | **`D9-A5` grown to 7 scenes (`skinned_quad`) — also PIXEL-PERFECT (0/65536 differ). MILESTONE: all 5 XNA Stock Effects now represented in the corpus, all pixel-perfect.** Added `effect=SkinnedEffect` plus a fourth custom vertex shape (`PositionNormalTextureWeights`, stride 52, `VSInputNmTxWeights`, matches existing layout byte-for-byte). Single Identity bone at 100% weight (skinning is a no-op, matching `D9-82f`'s own CTest simplification) reduces expected math to `lit_textured_quad`'s own formula: exact `(128,128,128,255)` both sides. Same `LightingEnabled` explicit-interface-implementation carve-out found for `SkinnedEffect` too (confirmed against FNA source) -- same quirk as `EnvironmentMapEffect`, not a new bug. Also proactively added `[StructLayout(LayoutKind.Sequential)]` to both the new struct and (retroactively) `VertexPositionDualTexture` on the C# side -- C#'s default "auto" layout doesn't formally guarantee field order, which `DrawUserPrimitives<T>`'s raw-byte marshalling silently depends on. |
+| `bf2f467c` | **`D9-A5` grown to 6 scenes (`envmap_quad`) — also PIXEL-PERFECT (0/65536 differ), 3rd non-BasicEffect Stock Effect**. Added `effect=EnvironmentMapEffect` plus `environmentmap*` keys, reusing the existing `PositionNormalTexture` shape. 1x1 base texture + 1x1 all-same-color `TextureCube` + dim light + `EnvironmentMapAmount=0.5`: real `lerp(texture*diffuseSum, environmentMap, environmentMapAmount)` produced exact `(164,114,89,255)` both sides. Real finding (not a bug): real XNA/FNA's `EnvironmentMapEffect` implements `IEffectLights.LightingEnabled` via explicit interface implementation, invisible on the concrete class (confirmed live: `emfx.LightingEnabled=...` is a genuine `CS1061`) -- lighting is always on, no game can disable it. CNA's own `setLightingEnabledProperty` already matches the exact same behavior (getter always true, setter throws given false); only the C++ vs C# visibility differs. Neither side calls it for this effect now. |
 | `88dee0c2` | **`D9-A5` grown to 5 scenes (`dualtexture_quad`) — also PIXEL-PERFECT (0/65536 differ), 2nd non-BasicEffect Stock Effect, first scene needing a vertex shape neither side had a built-in type for**. Added `effect=DualTextureEffect` plus `texture2*`/`diffusecolor` keys and a new `vertexformat=PositionDualTexture` (stride 28, `VSInputTx2`) -- real XNA has no dual-UV vertex struct either, so both sides define their own custom `IVertexType`/`VertexDeclaration`. Two 1x1 solid-color textures + `DiffuseColor=(0.5,0.5,0.5)`: the doubling-blend formula's `*2*0.5` cancels out, expected result `(100,60,20,255)` hand-derived before running either side (matching `D9-82d`'s own proven check value), then confirmed pixel-for-pixel. Added as a third `std::unique_ptr` alongside `alphaFx`/`basicFx`, correctly avoiding a repeat of `alphatest_quad`'s own dangling-pointer bug -- no new bug this time. |
 | `b0272385` | **`D9-A5` grown to 4 scenes (`alphatest_quad`) — also PIXEL-PERFECT (0/65536 differ), first non-BasicEffect Stock Effect in the corpus**. Added `effect=BasicEffect`/`AlphaTestEffect` plus `alphafunction`/`referencealpha` keys. A 2x2 texture straddling `ReferenceAlpha=128` exercises `clip()`'s real discard end to end. Real bug found and fixed live in `CnaOracleRender.cpp`: a dangling-pointer bug (not a backend bug) -- the newly-constructed Effect object was scoped inside an `if`/`else` block and destroyed before the shared `DrawUserPrimitives()` call read `GraphicsDevice::currentEffect_` (a raw pointer `Effect::Apply()` sets), causing `textured_quad`/`lit_textured_quad` to spuriously fail with garbage flags; `colored3d` passed only by allocation-timing luck. Fixed via `std::unique_ptr` at `Draw()`'s own top level; re-verified all 4 scenes pixel-perfect afterward. |
 | `b4252bfa` | **`D9-A5` grown to 3 scenes (`lit_textured_quad`) — also PIXEL-PERFECT (0/65536 differ)**. Extended the shared scene format to a third vertex shape (`vertexformat=PositionNormalTexture`, `VSInputNmTx`'s stride-32 shape) plus `ambientcolor`/`light0enabled`/`light0diffuse`/`light0direction` keys wired to `BasicEffect.AmbientLightColor`/`DirectionalLight0` on both sides. Deliberately dimmed the light (`diffuse=0.5`, no ambient) rather than a bright one that would saturate to full intensity and prove nothing about whether lighting math is genuinely applied -- the dimmed version visibly halves the texture color and still matches real XNA exactly. First evidence this backend's lit+textured `BasicEffect` dispatch is genuinely indistinguishable from real XNA 4.0, not just hand-verified pixel math. |
@@ -785,9 +810,10 @@ timing) — both fixed and mutation-verified, see Phase D9-6's own section above
 
 **Phase D9-A: `D9-A3`/`D9-A4` closed 2026-07-15 — the XNA oracle diff harness is real and all
 results landed so far are pixel-perfect** (`colored3d`, `textured_quad`, `lit_textured_quad`,
-`alphatest_quad`, `dualtexture_quad`, `envmap_quad` — `0/65536` pixels differ from real XNA 4.0
-each, see Phase D9-A's own section above). `D9-A5` (the scene corpus) has 6 entries, three of them
-non-`BasicEffect` Stock Effects (`AlphaTestEffect`, `DualTextureEffect`, `EnvironmentMapEffect`);
+`alphatest_quad`, `dualtexture_quad`, `envmap_quad`, `skinned_quad` — `0/65536` pixels differ from
+real XNA 4.0 each, see Phase D9-A's own section above). `D9-A5` (the scene corpus) has 7 entries
+and now represents **all 5 XNA Stock Effects** (`BasicEffect`, `AlphaTestEffect`,
+`DualTextureEffect`, `EnvironmentMapEffect`, `SkinnedEffect`), every comparison pixel-perfect;
 `D9-84` (every draw path validated against the oracle) can now genuinely continue, one scene at a
 time.
 

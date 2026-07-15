@@ -19,6 +19,7 @@
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "Microsoft/Xna/Framework/Vector4.hpp"
 #include "Microsoft/Xna/Framework/Graphics/AlphaTestEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CompareFunction.hpp"
@@ -31,6 +32,7 @@
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerStateCollection.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
@@ -73,8 +75,8 @@ namespace
         return s.substr(start, end - start + 1);
     }
 
-    enum class SceneVertexFormat { PositionColor, PositionTexture, PositionNormalTexture, PositionDualTexture };
-    enum class SceneEffectType { BasicEffect, AlphaTestEffect, DualTextureEffect, EnvironmentMapEffect };
+    enum class SceneVertexFormat { PositionColor, PositionTexture, PositionNormalTexture, PositionDualTexture, PositionNormalTextureWeights };
+    enum class SceneEffectType { BasicEffect, AlphaTestEffect, DualTextureEffect, EnvironmentMapEffect, SkinnedEffect };
 
     // Real XNA has no built-in dual-UV vertex struct -- mirrors Oracle.cs's own
     // VertexPositionDualTexture (same 28-byte layout: Position+TexCoord0+TexCoord1).
@@ -91,6 +93,31 @@ namespace
             VertexElement(0,  VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
             VertexElement(12, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0),
             VertexElement(20, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 1),
+        });
+        return decl;
+    }
+
+    // Real XNA has no built-in skinned vertex struct either -- mirrors Oracle.cs's own
+    // VertexPositionNormalTextureWeights, same stride-52 layout as the existing CNA vertex
+    // declaration: Position(0)/Normal(12)/TexCoord(24)/BlendWeight(32, Vector4)/
+    // BlendIndices(48, Byte4 -- raw bytes, not a packed/normalized value).
+    struct VertexPositionNormalTextureWeights
+    {
+        Vector3 Position;
+        Vector3 Normal;
+        Vector2 TextureCoordinate;
+        Vector4 BlendWeight;
+        std::uint8_t BlendIndex0, BlendIndex1, BlendIndex2, BlendIndex3;
+    };
+
+    const VertexDeclaration& SkinnedVertexDeclaration()
+    {
+        static const VertexDeclaration decl(52, std::vector<VertexElement>{
+            VertexElement(0,  VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector3, VertexElementUsage::Normal, 0),
+            VertexElement(24, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0),
+            VertexElement(32, VertexElementFormat::Vector4, VertexElementUsage::BlendWeight, 0),
+            VertexElement(48, VertexElementFormat::Byte4, VertexElementUsage::BlendIndices, 0),
         });
         return decl;
     }
@@ -133,11 +160,14 @@ namespace
         std::vector<VertexPositionTexture> textureVertices;
         std::vector<VertexPositionNormalTexture> normalTextureVertices;
         std::vector<VertexPositionDualTexture> dualTextureVertices;
+        std::vector<VertexPositionNormalTextureWeights> skinnedVertices;
         std::vector<Color> texturePixels;
         std::vector<Color> texture2Pixels;
 
         int VertexCount() const
         {
+            if (vertexFormat == SceneVertexFormat::PositionNormalTextureWeights)
+                return static_cast<int>(skinnedVertices.size());
             if (vertexFormat == SceneVertexFormat::PositionDualTexture)
                 return static_cast<int>(dualTextureVertices.size());
             if (vertexFormat == SceneVertexFormat::PositionNormalTexture)
@@ -238,6 +268,21 @@ namespace
         return v;
     }
 
+    VertexPositionNormalTextureWeights ParseSkinnedVertex(const std::string& s)
+    {
+        const auto p = Split(s, ',');
+        VertexPositionNormalTextureWeights v{};
+        v.Position = Vector3(std::stof(p[0]), std::stof(p[1]), std::stof(p[2]));
+        v.Normal = Vector3(std::stof(p[3]), std::stof(p[4]), std::stof(p[5]));
+        v.TextureCoordinate = Vector2(std::stof(p[6]), std::stof(p[7]));
+        v.BlendIndex0 = static_cast<std::uint8_t>(std::stoi(p[8]));
+        v.BlendIndex1 = 0;
+        v.BlendIndex2 = 0;
+        v.BlendIndex3 = 0;
+        v.BlendWeight = Vector4(std::stof(p[9]), 0.0f, 0.0f, 0.0f);
+        return v;
+    }
+
     Scene LoadScene(const std::string& path)
     {
         std::ifstream file(path);
@@ -264,6 +309,7 @@ namespace
                 if (value == "AlphaTestEffect") scene.effectType = SceneEffectType::AlphaTestEffect;
                 else if (value == "DualTextureEffect") scene.effectType = SceneEffectType::DualTextureEffect;
                 else if (value == "EnvironmentMapEffect") scene.effectType = SceneEffectType::EnvironmentMapEffect;
+                else if (value == "SkinnedEffect") scene.effectType = SceneEffectType::SkinnedEffect;
                 else scene.effectType = SceneEffectType::BasicEffect;
             }
             else if (key == "environmentmap") scene.environmentMapEnabled = ParseBool(value);
@@ -277,6 +323,7 @@ namespace
                 if (value == "PositionTexture") scene.vertexFormat = SceneVertexFormat::PositionTexture;
                 else if (value == "PositionNormalTexture") scene.vertexFormat = SceneVertexFormat::PositionNormalTexture;
                 else if (value == "PositionDualTexture") scene.vertexFormat = SceneVertexFormat::PositionDualTexture;
+                else if (value == "PositionNormalTextureWeights") scene.vertexFormat = SceneVertexFormat::PositionNormalTextureWeights;
                 else scene.vertexFormat = SceneVertexFormat::PositionColor;
             }
             else if (key == "vertexcolor") scene.vertexColorEnabled = ParseBool(value);
@@ -298,7 +345,9 @@ namespace
             else if (key == "primitive") scene.primitive = ParsePrimitive(value);
             else if (key == "vertex")
             {
-                if (scene.vertexFormat == SceneVertexFormat::PositionDualTexture)
+                if (scene.vertexFormat == SceneVertexFormat::PositionNormalTextureWeights)
+                    scene.skinnedVertices.push_back(ParseSkinnedVertex(value));
+                else if (scene.vertexFormat == SceneVertexFormat::PositionDualTexture)
                     scene.dualTextureVertices.push_back(ParseDualTextureVertex(value));
                 else if (scene.vertexFormat == SceneVertexFormat::PositionNormalTexture)
                     scene.normalTextureVertices.push_back(ParseNormalTextureVertex(value));
@@ -369,6 +418,7 @@ protected:
         std::unique_ptr<AlphaTestEffect> alphaFx;
         std::unique_ptr<DualTextureEffect> dualFx;
         std::unique_ptr<EnvironmentMapEffect> envMapFx;
+        std::unique_ptr<SkinnedEffect> skinnedFx;
         std::unique_ptr<BasicEffect> basicFx;
 
         if (scene_.effectType == SceneEffectType::AlphaTestEffect)
@@ -419,6 +469,29 @@ protected:
             }
             envMapFx->Apply();
         }
+        else if (scene_.effectType == SceneEffectType::SkinnedEffect)
+        {
+            skinnedFx = std::make_unique<SkinnedEffect>(dev);
+            skinnedFx->setTextureProperty(texture.get());
+            skinnedFx->setWorldProperty(Matrix::getIdentityProperty());
+            skinnedFx->setViewProperty(Matrix::getIdentityProperty());
+            skinnedFx->setProjectionProperty(Matrix::getIdentityProperty());
+            // A single Identity bone at 100% vertex weight -- skinning is a mathematical no-op,
+            // matching D9-82f's own D3D9_DrawEx CTest discipline, while still genuinely exercising
+            // the real per-vertex BLENDWEIGHT0/BLENDINDICES0 upload and the full bone-matrix-array
+            // path end to end (not skipped).
+            skinnedFx->SetBoneTransforms(std::vector<Matrix>{Matrix::getIdentityProperty()});
+            // Same explicit-interface-implementation LightingEnabled carve-out as
+            // EnvironmentMapEffect above (confirmed against FNA's own SkinnedEffect.cs source too).
+            if (scene_.lightingEnabled)
+            {
+                skinnedFx->setAmbientLightColorProperty(scene_.ambientColor);
+                skinnedFx->DirectionalLight0.setEnabledProperty(scene_.light0.enabled);
+                skinnedFx->DirectionalLight0.setDiffuseColorProperty(scene_.light0.diffuse);
+                skinnedFx->DirectionalLight0.setDirectionProperty(scene_.light0.direction);
+            }
+            skinnedFx->Apply();
+        }
         else
         {
             basicFx = std::make_unique<BasicEffect>(dev);
@@ -439,7 +512,10 @@ protected:
             basicFx->Apply();
         }
 
-        if (scene_.vertexFormat == SceneVertexFormat::PositionDualTexture)
+        if (scene_.vertexFormat == SceneVertexFormat::PositionNormalTextureWeights)
+            dev.DrawUserPrimitives(scene_.primitive, scene_.skinnedVertices.data(), 0,
+                                   scene_.PrimitiveCount(), SkinnedVertexDeclaration());
+        else if (scene_.vertexFormat == SceneVertexFormat::PositionDualTexture)
             dev.DrawUserPrimitives(scene_.primitive, scene_.dualTextureVertices.data(), 0,
                                    scene_.PrimitiveCount(), DualTextureVertexDeclaration());
         else if (scene_.vertexFormat == SceneVertexFormat::PositionNormalTexture)
