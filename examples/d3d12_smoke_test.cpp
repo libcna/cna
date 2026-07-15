@@ -4409,6 +4409,98 @@ int main()
         }
     }
 
+    // ---- plan_dx.md DX-153: RenderTargetCube mip-chain generation for a NON-zero face -- MM1
+    // above only ever proved face 0. D3D12's own GenerateMipsEXT() is explicitly activeFace_-scoped
+    // (confirmed by reading the code, not assumed), so this mainly confirms the
+    // mip + face*levelCount subresource math generalizes correctly past face 0. ----
+    {
+        auto rtCubeMip2 = backend.CreateRenderTargetCube(8, 0 /*DepthFormat::None*/, true /*mipMap*/);
+        auto* d3dRtCubeMip2 = dynamic_cast<D3D12RenderTargetCubeBackend*>(rtCubeMip2.get());
+        Check(d3dRtCubeMip2 != nullptr, "TT0: D3D12RenderTargetCubeBackend: a second 8x8 mipMap=true "
+              "cube render target constructs cleanly (plan_dx.md DX-153)");
+
+        if (d3dRtCubeMip2 != nullptr)
+        {
+            rtCubeMip2->BindAsRenderTargetFace(2);
+            backend.Clear(60.0f / 255.0f, 120.0f / 255.0f, 180.0f / 255.0f, 1.0f);
+            rtCubeMip2->UnbindAsRenderTarget(); // GenerateMipsEXT() on face 2
+
+            auto readbackCubeFace2Mip = [&](int level, int w, int h) -> std::vector<uint8_t>
+            {
+                const UINT rowPitch = (static_cast<UINT>(w) * 4 + D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1)
+                                     & ~(D3D12_TEXTURE_DATA_PITCH_ALIGNMENT - 1);
+                const UINT64 bufSize = static_cast<UINT64>(rowPitch) * static_cast<UINT64>(h);
+
+                D3D12_HEAP_PROPERTIES readbackHeapProps{};
+                readbackHeapProps.Type = D3D12_HEAP_TYPE_READBACK;
+                D3D12_RESOURCE_DESC bufDesc{};
+                bufDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+                bufDesc.Width = bufSize;
+                bufDesc.Height = 1;
+                bufDesc.DepthOrArraySize = 1;
+                bufDesc.MipLevels = 1;
+                bufDesc.Format = DXGI_FORMAT_UNKNOWN;
+                bufDesc.SampleDesc.Count = 1;
+                bufDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+
+                Microsoft::WRL::ComPtr<ID3D12Resource> readback;
+                HRESULT hr = backend.GetDeviceEXT()->CreateCommittedResource(
+                    &readbackHeapProps, D3D12_HEAP_FLAG_NONE, &bufDesc,
+                    D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(readback.GetAddressOf()));
+                if (FAILED(hr)) return {};
+
+                D3D12_TEXTURE_COPY_LOCATION dst{};
+                dst.pResource = readback.Get();
+                dst.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+                dst.PlacedFootprint.Footprint.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+                dst.PlacedFootprint.Footprint.Width = static_cast<UINT>(w);
+                dst.PlacedFootprint.Footprint.Height = static_cast<UINT>(h);
+                dst.PlacedFootprint.Footprint.Depth = 1;
+                dst.PlacedFootprint.Footprint.RowPitch = rowPitch;
+
+                D3D12_TEXTURE_COPY_LOCATION src{};
+                src.pResource = d3dRtCubeMip2->GetColorResourceEXT();
+                src.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+                src.SubresourceIndex = static_cast<UINT>(level) + 2u * static_cast<UINT>(d3dRtCubeMip2->GetLevelCountEXT());
+
+                ID3D12CommandAllocator* allocator = backend.GetCommandAllocatorEXT(0);
+                ID3D12GraphicsCommandList* cmdList = backend.GetCommandListEXT();
+                allocator->Reset();
+                cmdList->Reset(allocator, nullptr);
+                auto& tracker = backend.GetResourceStateTrackerEXT();
+                const D3D12_RESOURCE_STATES priorState = tracker.GetTrackedStateEXT(d3dRtCubeMip2->GetColorResourceEXT());
+                tracker.TransitionTo(cmdList, d3dRtCubeMip2->GetColorResourceEXT(), D3D12_RESOURCE_STATE_COPY_SOURCE);
+                cmdList->CopyTextureRegion(&dst, 0, 0, 0, &src, nullptr);
+                tracker.TransitionTo(cmdList, d3dRtCubeMip2->GetColorResourceEXT(), priorState);
+                hr = cmdList->Close();
+                if (FAILED(hr)) return {};
+                backend.ExecuteCommandListAndWaitEXT(cmdList);
+
+                uint8_t* mapped = nullptr;
+                const D3D12_RANGE mapRange{0, static_cast<SIZE_T>(bufSize)};
+                if (FAILED(readback->Map(0, &mapRange, reinterpret_cast<void**>(&mapped)))) return {};
+                std::vector<uint8_t> out(static_cast<std::size_t>(w) * h * 4);
+                for (int row = 0; row < h; ++row)
+                    std::memcpy(out.data() + static_cast<std::size_t>(row) * w * 4,
+                                mapped + static_cast<std::size_t>(row) * rowPitch,
+                                static_cast<std::size_t>(w) * 4);
+                const D3D12_RANGE writtenRange{0, 0};
+                readback->Unmap(0, &writtenRange);
+                return out;
+            };
+
+            const auto face2Mip1 = readbackCubeFace2Mip(1, 4, 4);
+            bool face2Mip1Exact = face2Mip1.size() == 4u * 4u * 4u;
+            for (std::size_t i = 0; i < 4u * 4u && face2Mip1Exact; ++i)
+                face2Mip1Exact = face2Mip1[i * 4 + 0] == 60 && face2Mip1[i * 4 + 1] == 120 &&
+                                 face2Mip1[i * 4 + 2] == 180 && face2Mip1[i * 4 + 3] == 255;
+            Check(face2Mip1Exact,
+                  "TT1: D3D12RenderTargetCubeBackend: GenerateMipsEXT()-on-unbind regenerates a "
+                  "NON-zero face's (face 2) own mip chain correctly, not just face 0's, read back "
+                  "directly from the real GPU resource (plan_dx.md DX-153)");
+        }
+    }
+
     // ---- plan_dx.md DX-152: RenderTargetCube MSAA -- a real feature (previously deliberately out
     // of scope, this class's own prior header comment) landing now, not just a test. Mirrors
     // DX-117's own RenderTarget2D MSAA follow-up methodology exactly: an 8x8 cube face requested

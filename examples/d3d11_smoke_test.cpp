@@ -753,6 +753,34 @@ protected:
                   "leg stays open, a real follow-up feature, not a test gap)");
         }
 
+        // plan_dx.md DX-153: RenderTargetCube mip-chain generation for a NON-zero face -- DX-144's
+        // own test above only ever proved face 0. D3D11's own mechanism (UnbindAsRenderTarget()'s
+        // single, whole-resource ID3D11DeviceContext::GenerateMips(srv_.Get()) call, no face
+        // argument at all) is architecturally different from face-scoped regeneration -- it
+        // regenerates every face's own chain from whatever is currently in that face's own level-0
+        // content, so this proves face 2's chain regenerates correctly when face 2 (not face 0) was
+        // the one just drawn to, and that a DIFFERENT, previously-untouched face's own base level
+        // survives the call.
+        {
+            auto rtCubeMip2 = backend.CreateRenderTargetCube(8, 0 /*DepthFormat::None*/, true /*mipMap*/);
+            auto* d3dRtCubeMip2 = static_cast<D3D11RenderTargetCubeBackend*>(rtCubeMip2.get());
+            rtCubeMip2->BindAsRenderTargetFace(2);
+            dev.Clear(Color(60, 120, 180, 255));
+            rtCubeMip2->UnbindAsRenderTarget(); // GenerateMips() on the cube's shared SRV
+
+            // Subresource = mip + face * levelCount -- face 2, mip 1.
+            const auto cubeFace2Mip1 = ReadTexture2DMipRegion(
+                device, context, d3dRtCubeMip2->GetColorTextureEXT(),
+                1 + 2 * d3dRtCubeMip2->GetLevelCountEXT(), 0, 0, 4, 4);
+            bool cubeFace2Mip1Exact = cubeFace2Mip1.size() == 4u * 4u * 4u;
+            for (std::size_t i = 0; i < 4u * 4u && cubeFace2Mip1Exact; ++i)
+                cubeFace2Mip1Exact = cubeFace2Mip1[i * 4 + 0] == 60 && cubeFace2Mip1[i * 4 + 1] == 120 &&
+                                     cubeFace2Mip1[i * 4 + 2] == 180 && cubeFace2Mip1[i * 4 + 3] == 255;
+            check(cubeFace2Mip1Exact,
+                  "D3D11RenderTargetCubeBackend: GenerateMips()-on-unbind regenerates a NON-zero "
+                  "face's (face 2) own mip chain correctly, not just face 0's (plan_dx.md DX-153)");
+        }
+
         // plan_dx.md DX-145: RenderTarget2D DepthStencilFormat fidelity -- confirms a render target
         // actually gets the SPECIFIC depth/stencil DXGI format the game requested
         // (D3DFormatMapping.cpp's DepthFormatToDxgi()), not just *some* working depth buffer:
@@ -3309,7 +3337,8 @@ protected:
                                 + 3 /* DX-149 env_map3d DirectionalLight1/2 discrimination */
                                 + 3 /* DX-150 skinned3d DirectionalLight1/2 discrimination */
                                 + 2 /* DX-151 skinned3d specular discrimination */
-                                + 1 /* DX-152 RenderTargetCube MSAA */;
+                                + 1 /* DX-152 RenderTargetCube MSAA */
+                                + 1 /* DX-153 RenderTargetCube mip non-face-0 */;
         std::printf("=== %d/%d PASS ===\n", passCount_, totalChecks);
         result_ = (passCount_ == totalChecks) ? 0 : 1;
         Exit();
