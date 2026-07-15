@@ -1,10 +1,15 @@
 # SDL GPU Graphics Backend — Implementation Plan
 
-> **Status (2026-07-15): Phases SDLGPU-1 through SDLGPU-7 are all fully implemented and verified**
-> — `AlphaTestEffect`/`DualTextureEffect`/`EnvironmentMapEffect`/`SkinnedEffect` are all real and
-> verified (`EnvironmentMapEffect` landed later the same day once Phase `SDLGPU-9`'s cube-texture
-> backends existed; `SkinnedEffect` landed last, after a real empirical spike found and worked around
-> a genuine `SDL_gpu` push-uniform size cap — see that row for the full finding).
+> **Status (2026-07-15): every phase currently in this plan (SDLGPU-1 through SDLGPU-10) is fully
+> implemented and verified** — `AlphaTestEffect`/`DualTextureEffect`/`EnvironmentMapEffect`/
+> `SkinnedEffect` are all real and verified (`EnvironmentMapEffect` landed once Phase `SDLGPU-9`'s
+> cube-texture backends existed; `SkinnedEffect` landed after a real empirical spike found and
+> worked around a genuine `SDL_gpu` push-uniform size cap — see that row for the full finding), and
+> custom `ShaderEffect` support (Phase `SDLGPU-10`) landed last, via a real runtime GLSL→SPIR-V
+> compile (`libshaderc` linked into the backend binary itself, not just used at build time) — see
+> `SDLGPU-42`'s row for a genuine architectural finding this decision uncovered (Vulkan's own
+> `ShaderEffect` support doesn't actually runtime-compile GLSL text at all, despite the class's own
+> documented contract).
 > `CNA_GRAPHICS_BACKEND=SDL_GPU` configures, builds (`cna_backend_graphics_sdl_gpu`, zero new
 > third-party dependencies as predicted), and a real window + real `SDL_GPUDevice` (Vulkan driver)
 > clears color+depth+stencil, uploads a real `Texture2D`, draws a real `SpriteBatch` scene (tint,
@@ -77,7 +82,7 @@
 > `SDLGPU-35` introduced or fixed. This backend's own dedicated CTest suite
 > (`SdlGpu_Smoke`/`SdlGpu_2D`/`SdlGpu_3D`/`SdlGpu_Effects`/`SdlGpu_RenderTarget2D`/
 > `SdlGpu_RenderTargetCube`/`SdlGpu_MRT`/`SdlGpu_RenderTarget2DMSAA`/`SdlGpu_Texture3D`/
-> `SdlGpu_TextureCube`/`SdlGpu_EnvMap`/`SdlGpu_Skinned`, `ctest -R SdlGpu`) is the actual validated methodology
+> `SdlGpu_TextureCube`/`SdlGpu_EnvMap`/`SdlGpu_Skinned`/`SdlGpu_ShaderEffect`, `ctest -R SdlGpu`) is the actual validated methodology
 > for real-window backends in this project (mirrors
 > how Vulkan/D3D11/D3D12 are validated) — don't treat a full unfiltered `CnaTests` run under this
 > backend as a meaningful signal without first re-reading this note.
@@ -237,11 +242,19 @@ extends.
    backend's push-uniform-data mechanism has a genuine, undocumented ~4096-byte cap per slot, so
    the 72-bone (4608-byte) palette is uploaded as a real storage buffer
    (`SDL_BindGPUVertexStorageBuffers`) instead of a uniform push — see its own row for the full
-   binary-search finding and fix. All of Phases `SDLGPU-1`–`SDLGPU-9` are now done. Phase
-   `SDLGPU-10` (custom `ShaderEffect`/`IEffectBackend`) is unrelated, separate scope, still ⬜ (see
-   its own section) — plus the documented open findings (swapchain-readback segfault,
-   full-`CnaTests` instability under this backend, the render-target-destroyed-before-flush
-   use-after-free, `GraphicsDeviceManager`'s vsync-forwarding gap) remain.
+   binary-search finding and fix. All of Phases `SDLGPU-1`–`SDLGPU-9` are now done.
+9. **`SDLGPU-42`/`SDLGPU-43` (custom `ShaderEffect`) done and verified 2026-07-15 — Phase
+   `SDLGPU-10` is now fully closed, and every phase currently in this plan is done.** User chose a
+   real runtime `libshaderc` GLSL→SPIR-V compile over deferring — see `SDLGPU-42`'s own row for a
+   genuine finding this decision uncovered along the way (Vulkan's own `ShaderEffect` support
+   doesn't actually runtime-compile GLSL text at all, unlike what the class's own documented
+   contract says). `SdlGpuEffectBackend` + full `SpriteBatch` custom-effect wiring
+   (`SetCustomEffect`/per-`SpriteCommand` uniform snapshot at `Draw()`-call time/`RenderSprites()`
+   pipeline selection) verified end-to-end via `SdlGpu_ShaderEffect`, 3/3 checks, through the real
+   public `ShaderEffect`/`SpriteBatch.Begin(effect)` API. The documented open findings (swapchain-
+   readback segfault, full-`CnaTests` instability under this backend, the
+   render-target-destroyed-before-flush use-after-free, `GraphicsDeviceManager`'s vsync-forwarding
+   gap) remain the only unresolved items in this plan.
 
 ---
 
@@ -354,8 +367,8 @@ extends.
 
 | # | Task | Status | Notes |
 | --- | --- | --- | --- |
-| SDLGPU-42 | **Decision task.** `SDL_gpu` only accepts precompiled bytecode, so an arbitrary user-authored `ShaderEffect` needs either (a) a runtime GLSL→SPIR-V compile via `libshaderc` for the Vulkan-driver case only, or (b) deferring custom-`ShaderEffect` support on this backend until `SDLGPU-13`'s `SDL_shadercross` alternative (if chosen) is vendored. Document the choice and its exact platform scope — do not silently support it on Linux only while implying full parity with `D3D11`'s runtime `D3DCompile()` path. | ⬜ | |
-| SDLGPU-43 | Implement `SdlGpuEffectBackend::CompileProgram`/`Bind`/`Unbind`/`IsValid`/`GetCompileError` per the `SDLGPU-42` decision. | ⬜ | |
+| SDLGPU-42 | **Decision task.** `SDL_gpu` only accepts precompiled bytecode, so an arbitrary user-authored `ShaderEffect` needs either (a) a runtime GLSL→SPIR-V compile via `libshaderc` for the Vulkan-driver case only, or (b) deferring custom-`ShaderEffect` support on this backend until `SDLGPU-13`'s `SDL_shadercross` alternative (if chosen) is vendored. Document the choice and its exact platform scope — do not silently support it on Linux only while implying full parity with `D3D11`'s runtime `D3DCompile()` path. | ✅ | **Decided 2026-07-15 (user choice): (a), real runtime `libshaderc` compile — Linux/Vulkan-driver scope only, same as this backend's entire current scope (no Windows/macOS driver work has started).** A real architectural finding changed the framing of this decision before it was made: `VulkanGraphicsBackend`'s own `VulkanEffectBackend::CompileProgram` does **not** runtime-compile GLSL text at all — despite `ShaderEffect`'s own documented contract ("Contents of the GLSL vertex shader source, not a file path"), Vulkan's implementation expects the caller to already hand it precompiled SPIR-V bytes (its own doc comment literally says "`vertSpv` and `fragSpv` contain raw SPIR-V bytecode"), and `libshaderc` is used only by this project's own build-time `compile_shaders.py` scripts, never at runtime in any backend's actual C++ code before this task. `EasyGLEffectBackend`, by contrast, genuinely compiles raw GLSL text at runtime since the OpenGL driver does that natively. So the real choice was between mirroring Vulkan's own (narrower, arguably contract-violating) precompiled-bytes scope, or building the first-ever backend in this project whose `ShaderEffect` support matches the class's own documented contract for real. User chose the latter. This environment has no `libshaderc-dev` package (no unversioned `.so` symlink, no headers) — `CMakeLists.txt`'s `SDL_GPU` branch does a `find_library()` first (works if a dev package exists elsewhere/CI), falling back to globbing standard multiarch library directories for the runtime-only versioned `libshaderc.so.1`, linked by its exact path (mirrors how this project's own `.sdl-prebuilt-*` SDL3 libraries are already linked by full versioned path elsewhere in this file). Confirmed via `ldd` on a real built test binary that `libshaderc.so.1` is a genuine, resolved runtime dependency, not merely compiled-against. |
+| SDLGPU-43 | Implement `SdlGpuEffectBackend::CompileProgram`/`Bind`/`Unbind`/`IsValid`/`GetCompileError` per the `SDLGPU-42` decision. | ✅ | 2026-07-15. `SdlGpuEffectBackend : IEffectBackend`. `CompileProgram(vertSrc, fragSrc)` hand-declares the small `extern "C"` shaderc-C-API subset this project's own `compile_shaders.py` (ctypes) already proves correct against the identical shared library — no `shaderc.h` exists in this environment, so these prototypes are declared locally rather than pulled from a header (opaque handles all `void*`, matching `ctypes.c_void_p`). Compiles both stages independently to SPIR-V, then `SDL_CreateGPUShader`s each; failure at any step populates `GetCompileError()` and leaves `IsValid()` false — matches `VulkanGraphicsBackend`/`D3D11GraphicsBackend`'s own "report via the backend object, don't throw" convention. `Bind()`/`Unbind()` are real no-ops (documented why): this backend defers ALL actual GPU state changes to `Present()` time, so there is nothing for an immediate `Bind()` call to usefully do — the real "bind" is `RenderSprites()` selecting this object's own compiled pipeline over the stock sprite one, driven by a per-`SpriteCommand` pointer set at `Draw()`-call time (see below), not by a live "current effect" side-channel like `VulkanGraphicsBackend::activeCustomEffect_` uses. Fixed vertex contract (`SpriteVertex`-shaped, 32 bytes) and fixed 128-byte uniform layout mirror `D3D11EffectBackend`'s own byte-for-byte convention exactly (`[0..15]`=vpSize, `[16..79]`=matrix, `[80..95]`=color, `[96..99]`=float/int slot 0); per `SDL_CreateGPUShader`'s own binding-convention doc comment, the custom GLSL must declare its uniform block at vertex `set=1`/`binding=0` and fragment `set=3`/`binding=0`, and its one sampler at fragment `set=2`/`binding=0` — documented in the class's own header comment, not silently left implicit. `ISpriteBatchBackend::SetCustomEffect` no longer throws for a non-null effect (previously an honest "not implemented yet" stub) — stores the `Effect*`; `SdlGpuSpriteBatchBackend::Draw()` resolves `effect->GetEffectBackendPtr()` (the same clean accessor `D3D11SpriteBatchBackend` already uses, simpler than Vulkan's own side-channel) via `dynamic_cast<SdlGpuEffectBackend*>` and **snapshots its current 128-byte uniform state into the `SpriteCommand` right there at Draw()-call time** — not at `Present()` time, since a game may reasonably change uniforms between individual `Draw()` calls within one `Begin`/`End` cycle using the same effect object, and this backend's rendering is deferred until `Present()`, potentially long after those later `SetUniform*` calls would otherwise retroactively (and wrongly) apply to an already-queued sprite. `RenderSprites()` now checks each queued sprite's own `customEffect` pointer and binds that object's own cached pipeline (compiled per-`colorFormat` on first use, mirroring every other per-format pipeline cache in this backend) instead of the stock sprite pipeline, re-stamping only the render-time-known `vpSize` into the snapshot before pushing. Verified via a new `SdlGpu_ShaderEffect`, 3/3 checks, through the real public API (`ShaderEffect` → `SpriteBatch.Begin(effect)` → `Draw()` → `End()`, `RenderTarget2D::GetData()` readback since this backend's swapchain-download path segfaults, `SDLGPU-39`): `IsEffectValid()` true after a real runtime compile; a white 1×1 texture drawn through the custom shader with `SetUniformVec4` reads back the *exact* tint color (byte-exact, no blend artifacts — proves the compiled GLSL's own uniform is genuinely read, not the stock vertex-color path); the identical draw with `SetCustomEffect(nullptr)` reads back plain white, not the tint (the real discriminator that Check B's result came from genuine custom-shader binding, not a no-op that always "wins" regardless). Full `ctest -R "SdlGpu"` re-run: **13/13 passing**, zero regressions; the default `EASYGL`-backend debug build was also rebuilt to confirm zero cross-backend impact (all changes were SDL_GPU-backend-local). This closes Phase `SDLGPU-10` and every row currently in `plan_sdlgpu.md`. |
 
 ---
 

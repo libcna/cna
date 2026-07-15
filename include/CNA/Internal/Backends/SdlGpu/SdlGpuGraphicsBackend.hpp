@@ -346,6 +346,81 @@ namespace CNA::Internal::Backends::SdlGpu
         std::vector<std::uint8_t> shadowData_;
     };
 
+    /**
+     * @brief `SDL_gpu`-backed custom `ShaderEffect` (Phase `SDLGPU-10`, `SDLGPU-42`/`SDLGPU-43`).
+     *
+     * Compiles arbitrary user-authored GLSL vertex+fragment source to SPIR-V at RUNTIME via
+     * `libshaderc` (`SDL_gpu` only accepts precompiled bytecode, unlike EasyGL's native GLSL
+     * driver compile) -- unlike `SDLGPU-13`'s build-time-only `compile_shaders.py` decision for
+     * CNA's own built-in effect shaders, an arbitrary user `ShaderEffect`'s source isn't known
+     * until the game runs, so `libshaderc` is linked into the real backend binary here, not just
+     * the build-time script.
+     *
+     * Fixed vertex contract, matching every other backend's own custom-`ShaderEffect` convention
+     * (`VulkanEffectBackend`/`D3D11EffectBackend`/`D3D12EffectBackend`): `SpriteVertex`-shaped
+     * (pos `vec2` @0, uv `vec2` @8, color `vec4` @16, 32 bytes) -- a `SpriteBatch`-custom-shader
+     * facility, not a general arbitrary-vertex-format one (see
+     * `ISpriteBatchBackend::SetCustomEffect`'s own doc comment).
+     *
+     * Fixed 128-byte uniform layout, mirroring `D3D11EffectBackend`'s own byte-for-byte convention
+     * (both vertex and fragment stages get their own copy, matching this backend's established
+     * "same PC struct in both stages" convention): `[0..15]` = vpSize (`vec4`, xy used, zw pad for
+     * std140 alignment; set automatically once per sprite render via `SetViewportSizeEXT` -- the
+     * game/effect author never calls it directly), `[16..79]` = `mat4` matrix, `[80..95]` = `vec4`
+     * color, `[96..99]` = float/int slot 0 (`name` is deliberately ignored, matching every sibling
+     * `EffectBackend`'s own name-discarding convention). Per `SDL_gpu`'s own binding
+     * convention (`SDL_CreateGPUShader`'s doc comment), the compiled GLSL must declare its uniform
+     * block at vertex `set=1`/`binding=0` and fragment `set=3`/`binding=0`, and its one texture
+     * sampler at fragment `set=2`/`binding=0`.
+     */
+    class SdlGpuEffectBackend final : public IEffectBackend
+    {
+    public:
+        explicit SdlGpuEffectBackend(SdlGpuGraphicsBackend& owner);
+        ~SdlGpuEffectBackend() override;
+
+        SdlGpuEffectBackend(const SdlGpuEffectBackend&) = delete;
+        SdlGpuEffectBackend& operator=(const SdlGpuEffectBackend&) = delete;
+
+        bool CompileProgram(const std::string& vertSrc, const std::string& fragSrc) override;
+        /** @brief No-op -- this backend defers the actual pipeline bind to `RenderSprites()` at
+         * `Present()` time, using a per-`SpriteCommand` snapshot of this object's uniform state
+         * (see `SdlGpuGraphicsBackend::QueueSprite`'s own custom-effect handling). */
+        void Bind() override {}
+        /** @brief No-op, same rationale as `Bind()`. */
+        void Unbind() override {}
+        [[nodiscard]] bool IsValid() const override { return valid_; }
+        [[nodiscard]] std::string GetCompileError() const override { return compileError_; }
+
+        void SetUniformMat4(const char* name, const float* matrix) override;
+        void SetUniformVec4(const char* name, float x, float y, float z, float w) override;
+        void SetUniformVec3(const char* name, float x, float y, float z) override;
+        void SetUniformVec2(const char* name, float x, float y) override;
+        void SetUniformFloat(const char* name, float value) override;
+        void SetUniformInt(const char* name, int value) override;
+
+        /** @brief Writes the `[0..15]`-byte vpSize slot -- called once per sprite render by
+         * `SdlGpuGraphicsBackend::QueueSprite`, mirroring every sibling `EffectBackend`'s own
+         * "set automatically by the sprite-batch runtime" convention. NOXNA. */
+        NOXNA void SetViewportSizeEXT(float width, float height);
+        /** @brief Returns the pipeline for @p colorFormat, compiling+caching it on first use. Null
+         * if `CompileProgram()` did not succeed. NOXNA — internal use only. */
+        NOXNA [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipeline(SDL_GPUTextureFormat colorFormat);
+        /** @brief Returns a snapshot of the current 128-byte uniform block. NOXNA — internal use
+         * only (called once per queued sprite, so later `SetUniform*` calls on the live effect
+         * object don't retroactively change an already-queued sprite's rendered result). */
+        NOXNA [[nodiscard]] std::array<float, 32> SnapshotUniforms() const { return pushConst_; }
+
+    private:
+        SdlGpuGraphicsBackend* owner_ = nullptr;
+        SDL_GPUShader* vertexShader_ = nullptr;
+        SDL_GPUShader* fragmentShader_ = nullptr;
+        std::unordered_map<int, SDL_GPUGraphicsPipeline*> pipelines_;
+        std::array<float, 32> pushConst_{};
+        std::string compileError_;
+        bool valid_ = false;
+    };
+
     /** @brief `SDL_gpu`-backed `SpriteBatch`. Queues quads; actual draws happen at Present() time. */
     class SdlGpuSpriteBatchBackend final : public ISpriteBatchBackend
     {
@@ -380,6 +455,11 @@ namespace CNA::Internal::Backends::SdlGpu
         int textureFilter_ = 0;
         int addressU_ = 1;
         int addressV_ = 1;
+        /// Set at Begin() time (SetCustomEffect), cleared at End() -- SDLGPU-42/43. Resolved to the
+        /// concrete SdlGpuEffectBackend* and snapshotted per-sprite at Draw() time (see QueueSprite),
+        /// not read again at Present() time, so later SetUniform* calls on the same live effect
+        /// object never retroactively change an already-queued sprite's rendered result.
+        Effect* customEffect_ = nullptr;
     };
 
     /**
@@ -399,6 +479,7 @@ namespace CNA::Internal::Backends::SdlGpu
     {
         friend class SdlGpuRenderTargetBackend;
         friend class SdlGpuRenderTargetCubeBackend;
+        friend class SdlGpuEffectBackend;
     public:
         /** @brief Vertex layout for the `sprite2d` pipeline: position, UV, RGBA color (32 bytes). */
         struct SpriteVertex
@@ -437,6 +518,13 @@ namespace CNA::Internal::Backends::SdlGpu
             int addressU = 1;
             int addressV = 1;
             DrawTarget target;  ///< default = swapchain
+            // SDLGPU-42/43: non-null if this sprite was queued during a SetCustomEffect(effect)
+            // Begin/End cycle with a validly-compiled custom shader -- customUniforms is a snapshot
+            // of the effect's uniform state AT QUEUE TIME (see QueueSprite), not read again at
+            // Present() time, so later SetUniform* calls on the same live effect object never
+            // retroactively change this already-queued sprite's rendered result.
+            SdlGpuEffectBackend* customEffect = nullptr;
+            std::array<float, 32> customUniforms{};
         };
 
         // Phase SDLGPU-6: colored3d/textured3d/colored_textured3d/lit_textured3d draw commands.
@@ -722,6 +810,16 @@ namespace CNA::Internal::Backends::SdlGpu
                                                                 int surfaceFormat) override;
 
         /**
+         * @brief Creates a custom-`ShaderEffect` backend (Phase `SDLGPU-10`, `SDLGPU-42`/`SDLGPU-43`),
+         * compiling @p vertSrc/@p fragSrc (GLSL source) to SPIR-V at runtime via `libshaderc`.
+         * Compilation failure is reported via the returned backend's `IsValid()`/`GetCompileError()`
+         * (matches `VulkanGraphicsBackend`/`D3D11GraphicsBackend`'s own convention), not an
+         * exception.
+         */
+        std::unique_ptr<IEffectBackend> CreateEffectBackend(const std::string& vertSrc,
+                                                            const std::string& fragSrc) override;
+
+        /**
          * @brief Activates multiple render targets for MRT (Phase `SDLGPU-8`, `SDLGPU-37`).
          *
          * `rts[0]` becomes the real draw target (identical to `SetRenderTarget2D(rts[0])`);
@@ -769,7 +867,8 @@ namespace CNA::Internal::Backends::SdlGpu
                                 const Matrix& transform,
                                 int textureFilter,
                                 int addressU,
-                                int addressV);
+                                int addressV,
+                                SdlGpuEffectBackend* customEffect = nullptr);
 
         /** @brief Returns the underlying `SDL_GPUDevice`. NOXNA — internal use only. */
         NOXNA [[nodiscard]] SDL_GPUDevice* Device() const { return device_; }

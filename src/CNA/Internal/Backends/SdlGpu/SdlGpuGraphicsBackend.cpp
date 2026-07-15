@@ -4,6 +4,7 @@
 #include "CNA/Logger.hpp"
 #include "CNA/LogCategory.hpp"
 #include "CNA/Internal/Backends/SdlGpu/shaders/spirv_shaders.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -223,6 +224,68 @@ namespace CNA::Internal::Backends::SdlGpu
                 out[i] = p.boneTransforms[i];
             for (int i = count * 16; i < 72 * 16; ++i)
                 out[i] = 0.0f;
+        }
+
+        // ---- Runtime GLSL->SPIR-V compile for SdlGpuEffectBackend (SDLGPU-42/43) ----
+        // No libshaderc-dev package is available in this environment (see CMakeLists.txt's own
+        // find_library fallback comment), so there is no shaderc.h to include -- these extern "C"
+        // prototypes are hand-declared to match the real C ABI exactly, the same minimal subset
+        // compile_shaders.py's own ctypes bindings already prove correct against the identical
+        // shared library at build time. Opaque handles are all void* (matches ctypes.c_void_p);
+        // shaderc_shader_kind/shaderc_optimization_level are plain C enums, passed as int.
+        extern "C"
+        {
+            void* shaderc_compiler_initialize();
+            void shaderc_compiler_release(void*);
+            void* shaderc_compile_options_initialize();
+            void shaderc_compile_options_release(void*);
+            void shaderc_compile_options_set_optimization_level(void*, int);
+            void* shaderc_compile_into_spv(void* compiler, const char* source_text, std::size_t source_text_size,
+                                          int shader_kind, const char* input_file_name,
+                                          const char* entry_point_name, void* options);
+            int shaderc_result_get_compilation_status(void*);
+            const char* shaderc_result_get_error_message(void*);
+            std::size_t shaderc_result_get_length(void*);
+            const char* shaderc_result_get_bytes(void*);
+            void shaderc_result_release(void*);
+        }
+
+        constexpr int kShadercVertexShader = 0;    // shaderc_glsl_vertex_shader
+        constexpr int kShadercFragmentShader = 1;  // shaderc_glsl_fragment_shader
+        constexpr int kShadercOptPerformance = 2;  // shaderc_optimization_level_performance
+
+        // Compiles @p source (GLSL) to SPIR-V, appending the raw bytes to @p outSpirv. Returns
+        // true on success; on failure, @p outError holds shaderc's own error message and
+        // @p outSpirv is left untouched.
+        bool CompileGlslToSpirv(const std::string& source, int shaderKind, const char* filename,
+                                std::vector<std::uint8_t>& outSpirv, std::string& outError)
+        {
+            void* compiler = shaderc_compiler_initialize();
+            void* options = shaderc_compile_options_initialize();
+            shaderc_compile_options_set_optimization_level(options, kShadercOptPerformance);
+
+            void* result = shaderc_compile_into_spv(compiler, source.data(), source.size(), shaderKind,
+                                                    filename, "main", options);
+
+            const int status = shaderc_result_get_compilation_status(result);
+            if (status != 0)
+            {
+                const char* err = shaderc_result_get_error_message(result);
+                outError = err != nullptr ? err : "shader compilation failed (no error message)";
+                shaderc_result_release(result);
+                shaderc_compile_options_release(options);
+                shaderc_compiler_release(compiler);
+                return false;
+            }
+
+            const std::size_t length = shaderc_result_get_length(result);
+            const char* bytes = shaderc_result_get_bytes(result);
+            outSpirv.assign(bytes, bytes + length);
+
+            shaderc_result_release(result);
+            shaderc_compile_options_release(options);
+            shaderc_compiler_release(compiler);
+            return true;
         }
     }
 
@@ -1068,24 +1131,54 @@ namespace CNA::Internal::Backends::SdlGpu
         if (spriteCommands_.empty())
             return;
 
-        bool boundPipeline = false;
         const float viewportSize[2] = {
             static_cast<float>(target.rt != nullptr ? target.rt->GetWidth()
                               : target.cube != nullptr ? target.cube->GetSize() : physicalWidth_),
             static_cast<float>(target.rt != nullptr ? target.rt->GetHeight()
                               : target.cube != nullptr ? target.cube->GetSize() : physicalHeight_)};
 
+        // SDLGPU-42/43: a custom-effect sprite may be interleaved with stock ones within the same
+        // render pass (e.g. two Begin/End cycles, one with a custom effect, one without) -- always
+        // (re-)bind the pipeline and push this sprite's own uniforms, rather than hoisting the
+        // stock path's push outside the loop like before this feature existed. Slightly more work
+        // per sprite, but avoids a stale/wrong-sized uniform push from a previous sprite's pipeline
+        // leaking into this one's draw.
+        SDL_GPUGraphicsPipeline* boundPipeline = nullptr;
         for (std::size_t i = 0; i < spriteCommands_.size(); ++i)
         {
             const SpriteCommand& command = spriteCommands_[i];
             if (command.target != target)
                 continue;
-            if (!boundPipeline)
+
+            if (command.customEffect != nullptr)
             {
-                SDL_BindGPUGraphicsPipeline(pass, GetOrCreateSpritePipeline(colorFormat));
-                SDL_PushGPUVertexUniformData(cmd, 0, viewportSize, sizeof(viewportSize));
-                boundPipeline = true;
+                SDL_GPUGraphicsPipeline* pipeline = command.customEffect->GetOrCreatePipeline(colorFormat);
+                if (pipeline == nullptr)
+                    continue;  // compile/pipeline-creation failure -- skip, matches IsValid()-gated sibling backends
+                if (pipeline != boundPipeline)
+                {
+                    SDL_BindGPUGraphicsPipeline(pass, pipeline);
+                    boundPipeline = pipeline;
+                }
+                // vpSize is a render-time fact (this render pass's target size), not a Draw()-time
+                // one, so it's stamped into the snapshot here rather than at QueueSprite time.
+                std::array<float, 32> uniforms = command.customUniforms;
+                uniforms[0] = viewportSize[0];
+                uniforms[1] = viewportSize[1];
+                SDL_PushGPUVertexUniformData(cmd, 0, uniforms.data(), sizeof(uniforms));
+                SDL_PushGPUFragmentUniformData(cmd, 0, uniforms.data(), sizeof(uniforms));
             }
+            else
+            {
+                SDL_GPUGraphicsPipeline* pipeline = GetOrCreateSpritePipeline(colorFormat);
+                if (pipeline != boundPipeline)
+                {
+                    SDL_BindGPUGraphicsPipeline(pass, pipeline);
+                    boundPipeline = pipeline;
+                }
+                SDL_PushGPUVertexUniformData(cmd, 0, viewportSize, sizeof(viewportSize));
+            }
+
             SDL_GPUBufferBinding vbBinding{};
             vbBinding.buffer = spriteVertexBuffer_;
             vbBinding.offset = static_cast<Uint32>(i * sizeof(SpriteVertex) * 6);
@@ -1111,7 +1204,8 @@ namespace CNA::Internal::Backends::SdlGpu
                                              const Matrix& transform,
                                              int textureFilter,
                                              int addressU,
-                                             int addressV)
+                                             int addressV,
+                                             SdlGpuEffectBackend* customEffect)
     {
         if (destination.Width == 0 || destination.Height == 0 || source.Width == 0 || source.Height == 0)
             return;
@@ -1166,6 +1260,13 @@ namespace CNA::Internal::Backends::SdlGpu
         command.addressU = addressU;
         command.addressV = addressV;
         command.target = CurrentDrawTarget();
+        // SDLGPU-42/43: snapshot the custom effect's uniform state NOW, not at Present() time --
+        // see SpriteCommand's own doc comment for why.
+        if (customEffect != nullptr && customEffect->IsValid())
+        {
+            command.customEffect = customEffect;
+            command.customUniforms = customEffect->SnapshotUniforms();
+        }
         const float rgba[4] = {
             static_cast<float>(color.getRProperty()) / 255.0f,
             static_cast<float>(color.getGProperty()) / 255.0f,
@@ -3829,6 +3930,187 @@ namespace CNA::Internal::Backends::SdlGpu
         shadowData_.assign(static_cast<const std::uint8_t*>(data), static_cast<const std::uint8_t*>(data) + sizeBytes);
     }
 
+    // ---- SdlGpuEffectBackend (Phase SDLGPU-10, SDLGPU-42/43) ----
+
+    SdlGpuEffectBackend::SdlGpuEffectBackend(SdlGpuGraphicsBackend& owner)
+        : owner_(&owner)
+    {
+    }
+
+    SdlGpuEffectBackend::~SdlGpuEffectBackend()
+    {
+        for (auto& [key, pipeline] : pipelines_)
+            if (pipeline != nullptr) SDL_ReleaseGPUGraphicsPipeline(owner_->Device(), pipeline);
+        if (fragmentShader_ != nullptr) SDL_ReleaseGPUShader(owner_->Device(), fragmentShader_);
+        if (vertexShader_ != nullptr) SDL_ReleaseGPUShader(owner_->Device(), vertexShader_);
+    }
+
+    bool SdlGpuEffectBackend::CompileProgram(const std::string& vertSrc, const std::string& fragSrc)
+    {
+        compileError_.clear();
+        valid_ = false;
+        for (auto& [key, pipeline] : pipelines_)
+            if (pipeline != nullptr) SDL_ReleaseGPUGraphicsPipeline(owner_->Device(), pipeline);
+        pipelines_.clear();
+        if (fragmentShader_ != nullptr) { SDL_ReleaseGPUShader(owner_->Device(), fragmentShader_); fragmentShader_ = nullptr; }
+        if (vertexShader_ != nullptr) { SDL_ReleaseGPUShader(owner_->Device(), vertexShader_); vertexShader_ = nullptr; }
+
+        std::vector<std::uint8_t> vertSpirv;
+        if (!CompileGlslToSpirv(vertSrc, kShadercVertexShader, "ShaderEffect_vs", vertSpirv, compileError_))
+            return false;
+        std::vector<std::uint8_t> fragSpirv;
+        if (!CompileGlslToSpirv(fragSrc, kShadercFragmentShader, "ShaderEffect_fs", fragSpirv, compileError_))
+            return false;
+
+        SDL_GPUShaderCreateInfo vsInfo{};
+        vsInfo.code = vertSpirv.data();
+        vsInfo.code_size = vertSpirv.size();
+        vsInfo.entrypoint = "main";
+        vsInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
+        vsInfo.stage = SDL_GPU_SHADERSTAGE_VERTEX;
+        vsInfo.num_uniform_buffers = 1;
+        vertexShader_ = SDL_CreateGPUShader(owner_->Device(), &vsInfo);
+        if (vertexShader_ == nullptr)
+        {
+            compileError_ = std::string("SDL_CreateGPUShader (vertex) failed: ") + SDL_GetError();
+            return false;
+        }
+
+        SDL_GPUShaderCreateInfo fsInfo{};
+        fsInfo.code = fragSpirv.data();
+        fsInfo.code_size = fragSpirv.size();
+        fsInfo.entrypoint = "main";
+        fsInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
+        fsInfo.stage = SDL_GPU_SHADERSTAGE_FRAGMENT;
+        fsInfo.num_samplers = 1;
+        fsInfo.num_uniform_buffers = 1;
+        fragmentShader_ = SDL_CreateGPUShader(owner_->Device(), &fsInfo);
+        if (fragmentShader_ == nullptr)
+        {
+            compileError_ = std::string("SDL_CreateGPUShader (fragment) failed: ") + SDL_GetError();
+            SDL_ReleaseGPUShader(owner_->Device(), vertexShader_);
+            vertexShader_ = nullptr;
+            return false;
+        }
+
+        valid_ = true;
+        return true;
+    }
+
+    SDL_GPUGraphicsPipeline* SdlGpuEffectBackend::GetOrCreatePipeline(SDL_GPUTextureFormat colorFormat)
+    {
+        if (!valid_)
+            return nullptr;
+        const int key = static_cast<int>(colorFormat);
+        const auto it = pipelines_.find(key);
+        if (it != pipelines_.end())
+            return it->second;
+
+        // Fixed SpriteVertex-shaped contract (x,y|u,v|r,g,b,a, 32 bytes), matching the stock
+        // sprite pipeline's own vertex layout exactly (see GetOrCreateSpritePipeline) -- this is a
+        // SpriteBatch-custom-shader facility, not a general arbitrary-vertex-format one.
+        SDL_GPUVertexBufferDescription vbDesc{};
+        vbDesc.slot = 0;
+        vbDesc.pitch = sizeof(SdlGpuGraphicsBackend::SpriteVertex);
+        vbDesc.input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
+
+        SDL_GPUVertexAttribute attrs[3]{};
+        attrs[0].location = 0; attrs[0].buffer_slot = 0; attrs[0].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2;
+        attrs[0].offset = offsetof(SdlGpuGraphicsBackend::SpriteVertex, x);
+        attrs[1].location = 1; attrs[1].buffer_slot = 0; attrs[1].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2;
+        attrs[1].offset = offsetof(SdlGpuGraphicsBackend::SpriteVertex, u);
+        attrs[2].location = 2; attrs[2].buffer_slot = 0; attrs[2].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4;
+        attrs[2].offset = offsetof(SdlGpuGraphicsBackend::SpriteVertex, r);
+
+        // Same standard (non-premultiplied) alpha blend as the stock sprite pipeline.
+        SDL_GPUColorTargetDescription colorTarget{};
+        colorTarget.format = colorFormat;
+        colorTarget.blend_state.enable_blend = true;
+        colorTarget.blend_state.src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
+        colorTarget.blend_state.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+        colorTarget.blend_state.color_blend_op = SDL_GPU_BLENDOP_ADD;
+        colorTarget.blend_state.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+        colorTarget.blend_state.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+        colorTarget.blend_state.alpha_blend_op = SDL_GPU_BLENDOP_ADD;
+
+        SDL_GPUGraphicsPipelineCreateInfo pipelineInfo{};
+        pipelineInfo.vertex_shader = vertexShader_;
+        pipelineInfo.fragment_shader = fragmentShader_;
+        pipelineInfo.vertex_input_state.vertex_buffer_descriptions = &vbDesc;
+        pipelineInfo.vertex_input_state.num_vertex_buffers = 1;
+        pipelineInfo.vertex_input_state.vertex_attributes = attrs;
+        pipelineInfo.vertex_input_state.num_vertex_attributes = 3;
+        pipelineInfo.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
+        pipelineInfo.rasterizer_state.fill_mode = SDL_GPU_FILLMODE_FILL;
+        pipelineInfo.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_NONE;
+        pipelineInfo.rasterizer_state.front_face = SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE;
+        pipelineInfo.multisample_state.sample_count = SDL_GPU_SAMPLECOUNT_1;
+        pipelineInfo.depth_stencil_state.enable_depth_test = false;
+        pipelineInfo.depth_stencil_state.enable_depth_write = false;
+        pipelineInfo.depth_stencil_state.enable_stencil_test = false;
+        pipelineInfo.target_info.color_target_descriptions = &colorTarget;
+        pipelineInfo.target_info.num_color_targets = 1;
+        pipelineInfo.target_info.has_depth_stencil_target = (owner_->depthStencilFormat_ != SDL_GPU_TEXTUREFORMAT_INVALID);
+        pipelineInfo.target_info.depth_stencil_format = owner_->depthStencilFormat_;
+
+        SDL_GPUGraphicsPipeline* pipeline = SDL_CreateGPUGraphicsPipeline(owner_->Device(), &pipelineInfo);
+        if (pipeline == nullptr)
+        {
+            compileError_ = std::string("SDL_CreateGPUGraphicsPipeline failed: ") + SDL_GetError();
+            return nullptr;
+        }
+        pipelines_[key] = pipeline;
+        return pipeline;
+    }
+
+    // Fixed 128-byte layout mirroring D3D11EffectBackend's own convention byte-for-byte: [0..15]=
+    // vpSize (vec4, xy used), [16..79]=mat4 matrix, [80..95]=vec4 color, [96..99]=float/int slot 0.
+    // `name` is deliberately ignored, matching every sibling EffectBackend's own convention.
+    void SdlGpuEffectBackend::SetUniformMat4(const char* /*name*/, const float* matrix)
+    {
+        std::memcpy(pushConst_.data() + 4, matrix, 64);
+    }
+
+    void SdlGpuEffectBackend::SetUniformVec4(const char* /*name*/, float x, float y, float z, float w)
+    {
+        pushConst_[20] = x; pushConst_[21] = y; pushConst_[22] = z; pushConst_[23] = w;
+    }
+
+    void SdlGpuEffectBackend::SetUniformVec3(const char* /*name*/, float x, float y, float z)
+    {
+        pushConst_[20] = x; pushConst_[21] = y; pushConst_[22] = z;
+    }
+
+    void SdlGpuEffectBackend::SetUniformVec2(const char* /*name*/, float x, float y)
+    {
+        pushConst_[20] = x; pushConst_[21] = y;
+    }
+
+    void SdlGpuEffectBackend::SetUniformFloat(const char* /*name*/, float value)
+    {
+        pushConst_[24] = value;
+    }
+
+    void SdlGpuEffectBackend::SetUniformInt(const char* /*name*/, int value)
+    {
+        pushConst_[24] = static_cast<float>(value);
+    }
+
+    void SdlGpuEffectBackend::SetViewportSizeEXT(float width, float height)
+    {
+        pushConst_[0] = width;
+        pushConst_[1] = height;
+    }
+
+    std::unique_ptr<IEffectBackend> SdlGpuGraphicsBackend::CreateEffectBackend(
+        const std::string& vertSrc, const std::string& fragSrc)
+    {
+        auto backend = std::make_unique<SdlGpuEffectBackend>(*this);
+        if (!vertSrc.empty() && !fragSrc.empty())
+            backend->CompileProgram(vertSrc, fragSrc);
+        return backend;
+    }
+
     // ---- SdlGpuSpriteBatchBackend ----
 
     SdlGpuSpriteBatchBackend::SdlGpuSpriteBatchBackend(SdlGpuGraphicsBackend& owner)
@@ -3852,8 +4134,7 @@ namespace CNA::Internal::Backends::SdlGpu
 
     void SdlGpuSpriteBatchBackend::SetCustomEffect(Effect* effect)
     {
-        if (effect != nullptr)
-            throw std::runtime_error("CNA SDL_GPU: custom SpriteBatch effects are not implemented yet (see plan_sdlgpu.md)");
+        customEffect_ = effect;
     }
 
     void SdlGpuSpriteBatchBackend::Draw(const ITextureBackend& texture, float x, float y)
@@ -3893,8 +4174,15 @@ namespace CNA::Internal::Backends::SdlGpu
             nativeTexture = renderTarget->ColorTexture();
         else
             throw std::invalid_argument("CNA SDL_GPU: SpriteBatch received a texture from another graphics backend");
+        // SDLGPU-42/43: resolve the custom effect NOW (Draw()-call time), not once per Begin/End --
+        // a game may reasonably change uniforms between individual Draw() calls within one
+        // Begin/End cycle using the same custom effect object (see SpriteCommand's own doc comment).
+        SdlGpuEffectBackend* customEffectBackend = customEffect_
+            ? dynamic_cast<SdlGpuEffectBackend*>(customEffect_->GetEffectBackendPtr())
+            : nullptr;
         owner_->QueueSprite(texture, nativeTexture, destinationRectangle, sourceRectangle, color, rotation,
-                            origin, effects, layerDepth, transform_, textureFilter_, addressU_, addressV_);
+                            origin, effects, layerDepth, transform_, textureFilter_, addressU_, addressV_,
+                            customEffectBackend);
     }
 
 }
