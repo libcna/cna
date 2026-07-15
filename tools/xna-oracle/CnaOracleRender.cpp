@@ -18,7 +18,9 @@
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
+#include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
 #include "Microsoft/Xna/Framework/Graphics/AlphaTestEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
@@ -34,6 +36,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SamplerStateCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
@@ -48,6 +51,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <memory>
+#include <optional>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -135,6 +139,18 @@ namespace
         int height = 256;
         GraphicsProfile profile = GraphicsProfile::HiDef;
         Color clearColor = Color::CornflowerBlue;
+        // D9-90..93: a scene with spriteBatchMode=true bypasses the entire effect/vertex-format
+        // draw path below and instead drives the real public SpriteBatch/Texture2D API -- a
+        // genuinely different draw model (no vertex declaration, no Effect, real orthographic +
+        // half-pixel MatrixTransform construction happens entirely inside D3D9SpriteBatchBackend
+        // itself), so it gets its own top-level scene keys rather than overloading the
+        // effect-draw ones.
+        bool spriteBatchMode = false;
+        Rectangle spriteDestRect{0, 0, 0, 0};
+        Color spriteColor = Color::White;
+        float spriteRotation = 0.0f;
+        Vector2 spriteOrigin{0, 0};
+        SpriteEffects spriteEffects = SpriteEffects::None;
         SceneVertexFormat vertexFormat = SceneVertexFormat::PositionColor;
         bool vertexColorEnabled = false;
         bool lightingEnabled = false;
@@ -217,6 +233,12 @@ namespace
     {
         const auto p = Split(s, ',');
         return Vector3(std::stof(p[0]), std::stof(p[1]), std::stof(p[2]));
+    }
+
+    Rectangle ParseRectangle(const std::string& s)
+    {
+        const auto p = Split(s, ',');
+        return Rectangle(std::stoi(p[0]), std::stoi(p[1]), std::stoi(p[2]), std::stoi(p[3]));
     }
 
     PrimitiveType ParsePrimitive(const std::string& s)
@@ -334,6 +356,21 @@ namespace
             else if (key == "height") scene.height = std::stoi(value);
             else if (key == "profile") scene.profile = value == "Reach" ? GraphicsProfile::Reach : GraphicsProfile::HiDef;
             else if (key == "clearcolor") scene.clearColor = ParseColor(value);
+            else if (key == "spritebatchmode") scene.spriteBatchMode = ParseBool(value);
+            else if (key == "spritedestrect") scene.spriteDestRect = ParseRectangle(value);
+            else if (key == "spritecolor") scene.spriteColor = ParseColor(value);
+            else if (key == "spriterotation") scene.spriteRotation = std::stof(value);
+            else if (key == "spriteorigin")
+            {
+                const auto p = Split(value, ',');
+                scene.spriteOrigin = Vector2(std::stof(p[0]), std::stof(p[1]));
+            }
+            else if (key == "spriteeffects")
+            {
+                if (value == "FlipHorizontally") scene.spriteEffects = SpriteEffects::FlipHorizontally;
+                else if (value == "FlipVertically") scene.spriteEffects = SpriteEffects::FlipVertically;
+                else scene.spriteEffects = SpriteEffects::None;
+            }
             else if (key == "effect")
             {
                 if (value == "AlphaTestEffect") scene.effectType = SceneEffectType::AlphaTestEffect;
@@ -424,6 +461,32 @@ protected:
         auto& dev = getGraphicsDeviceProperty();
 
         dev.Clear(scene_.clearColor);
+
+        if (scene_.spriteBatchMode)
+        {
+            // D9-90..93: the real public SpriteBatch/Texture2D API, not the raw
+            // ISpriteBatchBackend interface -- matches D9-93's own explicit requirement.
+            Texture2D spriteTexture(dev, scene_.textureWidth, scene_.textureHeight);
+            spriteTexture.SetData(scene_.texturePixels.data(), static_cast<int>(scene_.texturePixels.size()));
+
+            SpriteBatch spriteBatch(dev);
+            spriteBatch.Begin();
+            spriteBatch.Draw(spriteTexture, scene_.spriteDestRect, std::nullopt, scene_.spriteColor,
+                             scene_.spriteRotation, scene_.spriteOrigin, scene_.spriteEffects, 0.0f);
+            spriteBatch.End();
+
+            const int pixelCount = scene_.width * scene_.height;
+            std::vector<Color> pixels(static_cast<std::size_t>(pixelCount), Color(0, 0, 0, 0));
+            dev.GetBackBufferData(pixels.data(), pixelCount);
+
+            Texture2D out(dev, scene_.width, scene_.height);
+            out.SetData(pixels.data(), pixelCount);
+            out.SaveAsPng(outputPath_);
+
+            std::printf("CNA-XNA-ORACLE-OK backend=D3D9 out=%s\n", outputPath_.c_str());
+            Exit();
+            return;
+        }
 
         std::unique_ptr<Texture2D> texture;
         if (scene_.textureEnabled)

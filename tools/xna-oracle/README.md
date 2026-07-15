@@ -28,7 +28,13 @@ fully-commented examples.
 | `width`, `height` | back buffer size |
 | `profile` | `HiDef` or `Reach` |
 | `clearcolor` | `r,g,b,a` (0-255) |
-| `effect` | `BasicEffect` (default), `AlphaTestEffect`, `DualTextureEffect`, `EnvironmentMapEffect`, or `SkinnedEffect` — which Stock Effect both sides construct (all 5 real XNA Stock Effects) |
+| `spritebatchmode` | `true`/`false` (default `false`) — when `true`, bypasses the entire effect/vertex-format draw path below and instead drives the real public `SpriteBatch`/`Texture2D` API. Uses the same `texture`/`texturewidth`/`textureheight`/`texturepixel` keys as the effect path for the sprite's own source texture, plus the `sprite*` keys below. No `effect=`/`vertexformat=`/`vertex=` lines are used in this mode |
+| `spritedestrect` | `x,y,w,h` — the destination rectangle passed to `SpriteBatch.Draw()`, only when `spritebatchmode=true` |
+| `spritecolor` | `r,g,b,a` (0-255) — tint color, defaults to opaque white, only when `spritebatchmode=true` |
+| `spriterotation` | float radians, only when `spritebatchmode=true`. Defaults to `0` |
+| `spriteorigin` | `x,y` in source-texture pixel space, only when `spritebatchmode=true`. Defaults to `(0,0)` |
+| `spriteeffects` | `None` (default), `FlipHorizontally`, or `FlipVertically`, only when `spritebatchmode=true` |
+| `effect` | `BasicEffect` (default), `AlphaTestEffect`, `DualTextureEffect`, `EnvironmentMapEffect`, or `SkinnedEffect` — which Stock Effect both sides construct (all 5 real XNA Stock Effects), only meaningful when `spritebatchmode` is unset/`false` |
 | `vertexformat` | `PositionColor` (default), `PositionTexture`, `PositionNormalTexture`, `PositionDualTexture`, or `PositionNormalTextureWeights` — selects which `vertex=` shape below, and which vertex struct both sides draw. `PositionDualTexture`/`PositionNormalTextureWeights` have no XNA-built-in equivalent (real XNA has no dual-UV or skinned vertex type either) — both sides define their own custom `IVertexType`/`VertexDeclaration`, exactly as a real game using `DualTextureEffect`/`SkinnedEffect` would have to |
 | `vertexcolor`, `lighting`, `texture` | `VertexColorEnabled`/`LightingEnabled` (`BasicEffect` only — see the `LightingEnabled` carve-out below)/`TextureEnabled` (`BasicEffect`) or texture-non-null (`AlphaTestEffect`/`DualTextureEffect`/`EnvironmentMapEffect`/`SkinnedEffect`) (`true`/`false`) |
 | `texturewidth`, `textureheight` | size of an inline procedural texture (no content-pipeline asset file — matches `D9-A2`'s own "no content pipeline" constraint) |
@@ -130,10 +136,11 @@ Requires Pillow (`pip install pillow`) — not previously a dependency of this p
 
 ## Status
 
-Nineteen scenes so far, **all pixel-perfect**, and every one of XNA's 5 Stock Effects plus
+Twenty-two scenes so far, **all pixel-perfect**, and every one of XNA's 5 Stock Effects plus
 `IEffectFog`, ALL 8 `AlphaTestEffect.AlphaFunction` values (`AlphaTestEffect` compare-function
-coverage is COMPLETE), `EnvironmentMapEffect.FresnelFactor`, and ALL 3
-`SkinnedEffect.WeightsPerVertex` values (`SkinnedEffect` weighting coverage is COMPLETE) is now
+coverage is COMPLETE), `EnvironmentMapEffect.FresnelFactor`, ALL 3
+`SkinnedEffect.WeightsPerVertex` values (`SkinnedEffect` weighting coverage is COMPLETE), and
+`SpriteBatch`'s core draw path (basic draw, rotation/origin, `SpriteEffects` flip) is now
 represented in the corpus:
 
 - `colored3d` (`D9-A2`'s own original spike scene: a `BasicEffect` `VertexColorEnabled=true`/
@@ -347,6 +354,36 @@ represented in the corpus:
   needed. `AlphaTestEffect`'s entire compare-function surface is now independently verified:
   `Less`/`LessEqual`/`GreaterEqual`/`Greater`/`Never`/`Always` on `PSAlphaTestLtGt`,
   `Equal`/`NotEqual` on `PSAlphaTestEqNe`.
+- `sprite_basic_quad` — the first scene to exercise `SpriteBatch` at all (Phase D9-9,
+  `D9-90`/`D9-91`), a genuinely different draw model from every earlier scene: no `Effect`, no
+  vertex declaration, no explicit `World`/`View`/`Projection` — just `SpriteBatch.Begin()`/
+  `Draw(texture, destRect, color)`/`End()` through the real public API. Also the first empirical
+  measurement of `D9-91`'s own half-pixel offset (design decision 10): a 1×1 solid-color texture
+  stretched into a clean integer destination rectangle (`x=50,y=60,w=80,h=40`), with sample
+  points just inside/outside each of the 4 edges. Pixel-perfect on the first attempt, boundaries
+  landing exactly at the requested rectangle on both sides.
+- `sprite_rotated_quad` — proves `D9-90`'s rotation/origin geometry with a 2×2 four-color texture
+  (not a 1×1 solid color, so a 90-degree rotation is independently verifiable: `cos(90°)=0`,
+  `sin(90°)=1`, no fractional trig) rotated exactly `π/2` around the texture's own center, on a
+  SQUARE destination so the bounding box doesn't change — only which quadrant color ends up
+  where. Pixel-perfect on the first attempt.
+- `sprite_flipped_quad` — proves `D9-90`'s `SpriteEffects.FlipHorizontally` handling, reusing
+  `sprite_rotated_quad.scene`'s exact four-color texture with no rotation instead: the horizontal
+  texel order swaps (TL↔TR, BL↔BR) while top/bottom stays put, confirmed pixel-for-pixel exactly
+  as predicted before running either side.
+
+**Real, non-obvious finding surfaced while mutation-testing the half-pixel offset (not caught by
+the oracle diffs alone)**: `sprite_basic_quad.scene`'s own 1×1 texture is structurally incapable
+of detecting the classic D3D9 half-pixel bug — it shifts which TEXTURE CONTENT a screen pixel
+samples, not where a rectangle's geometric edges land, and a single-texel texture has nothing to
+shift between. Discovered by commenting out the offset in `D3D9SpriteBatchBackend` and re-running
+every scene: `sprite_basic_quad.scene` stayed pixel-perfect even with the offset entirely removed
+(a false-positive "this proves it" trap), while `sprite_rotated_quad.scene`/
+`sprite_flipped_quad.scene` (both using the four-color texture) diverged from real XNA by
+`4800/65536` pixels — confirming the offset is genuinely necessary, and that a multi-texel,
+crisp-content-boundary scene is required to actually observe its effect. See
+`src/CNA/Internal/Backends/D3D9/D3D9SpriteBatch.cpp`'s own `BuildMatrixTransformEXT()` comment
+and the new `D3D9_SpriteBatch` CTest for the full record.
 
 `scripts/xna-diff.py` itself is mutation-verified: a deliberately 1-off-mutated copy of a passing
 CNA PNG is correctly reported as `FAIL: 1/65536 pixels differ ... max per-channel delta=1` at the
@@ -357,10 +394,13 @@ genuinely discriminates, not just "always reports PASS".
 `EnvironmentMapEffect`, `SkinnedEffect`) plus `IEffectFog`, ALL 8 `AlphaTestEffect.AlphaFunction`
 values (`Less`/`LessEqual`/`GreaterEqual`/`Greater`/`Never`/`Always` on the `PSAlphaTestLtGt`
 bucket, `Equal`/`NotEqual` on the separate `PSAlphaTestEqNe` bucket — compare-function coverage is
-now COMPLETE), `EnvironmentMapEffect.FresnelFactor`, and ALL 3 `SkinnedEffect.WeightsPerVertex`
-values (`SkinnedEffect` weighting coverage is now COMPLETE) are now represented in the corpus, at
-least once, and every single comparison so far is pixel-perfect.** `D9-A5` keeps growing "with
-the plan" — each subsequent effect/feature combination this project verifies against the oracle
-adds its own scene(s) here, incrementally, rather than attempting the full corpus (`SpriteBatch`,
-render targets, every shared `SurfaceFormat`) in one sitting. `D9-84` (every draw path validated
-against the oracle) is the task that consumes the finished corpus.
+now COMPLETE), `EnvironmentMapEffect.FresnelFactor`, ALL 3 `SkinnedEffect.WeightsPerVertex`
+values (`SkinnedEffect` weighting coverage is now COMPLETE), and `SpriteBatch`'s core draw path
+(basic draw, rotation/origin, `SpriteEffects` flip — `D9-90`/`D9-91`) are now represented in the
+corpus, at least once, and every single comparison so far is pixel-perfect.** `D9-A5` keeps
+growing "with the plan" — each subsequent effect/feature combination this project verifies
+against the oracle adds its own scene(s) here, incrementally, rather than attempting the full
+corpus (`SpriteBatch` sampler `Wrap`/`Mirror` address modes and multi-sprite `SpriteSortMode`
+sweep — `D9-92`/`D9-93`, both explicitly not yet closed — render targets, every shared
+`SurfaceFormat`) in one sitting. `D9-84` (every draw path validated against the oracle) is the
+task that consumes the finished corpus.

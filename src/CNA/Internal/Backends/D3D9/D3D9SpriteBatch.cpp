@@ -1,0 +1,281 @@
+#include "CNA/Internal/Backends/D3D9/D3D9SpriteBatch.hpp"
+#include "CNA/Internal/Backends/D3D9/D3D9GraphicsBackend.hpp"
+#include "CNA/Internal/Backends/D3D9/D3D9Textures.hpp"
+#include "CNA/Internal/Backends/D3D9/D3D9VertexDeclarations.hpp"
+#include "CNA/Internal/Backends/D3D9/D3D9ConstantUpload.hpp"
+#include "CNA/Internal/Backends/D3D9/shaders/d3d9_shaders.hpp"
+#include "CNA/Internal/Backends/D3D9/shaders/D3D9ShaderRegisters.hpp"
+
+#include "Microsoft/Xna/Framework/Matrix.hpp"
+#include "Microsoft/Xna/Framework/Vector2.hpp"
+#include "Microsoft/Xna/Framework/Color.hpp"
+
+#include <cmath>
+#include <stdexcept>
+#include <string>
+#include <utility>
+
+namespace CNA::Internal::Backends::D3D9
+{
+    using Microsoft::Xna::Framework::Color;
+    using Microsoft::Xna::Framework::Matrix;
+    using Microsoft::Xna::Framework::Rectangle;
+    using Microsoft::Xna::Framework::Vector2;
+
+    namespace
+    {
+        std::string FormatHr(HRESULT hr)
+        {
+            char buf[32];
+            std::snprintf(buf, sizeof(buf), "0x%08lX", static_cast<unsigned long>(hr));
+            return buf;
+        }
+
+        D3DPRIMITIVETYPE ToD3D9Topology()
+        {
+            return D3DPT_TRIANGLELIST;
+        }
+    }
+
+    D3D9SpriteBatchBackend::D3D9SpriteBatchBackend(D3D9GraphicsBackend* owner)
+        : owner_(owner)
+        , device_(owner_->GetDeviceEXT())
+        , vb_(*owner_, device_.Get(), 256)
+        , ib_(*owner_, device_.Get(), 384, false)
+    {
+    }
+
+    void D3D9SpriteBatchBackend::Begin()
+    {
+        if (begun_) return;
+        begun_ = true;
+    }
+
+    void D3D9SpriteBatchBackend::End()
+    {
+        FlushBatch();
+        begun_ = false;
+    }
+
+    void D3D9SpriteBatchBackend::SetTransformMatrix(const Matrix& m)
+    {
+        transform_ = m;
+    }
+
+    void D3D9SpriteBatchBackend::SetSamplerFilter(int textureFilter)
+    {
+        pendingFilter_ = textureFilter;
+    }
+
+    void D3D9SpriteBatchBackend::SetSamplerAddressMode(int addressU, int addressV)
+    {
+        pendingAddressU_ = addressU;
+        pendingAddressV_ = addressV;
+    }
+
+    void D3D9SpriteBatchBackend::GetCurrentViewportSizeEXT(float& width, float& height) const
+    {
+        D3DVIEWPORT9 vp{};
+        device_->GetViewport(&vp);
+        width = static_cast<float>(vp.Width);
+        height = static_cast<float>(vp.Height);
+    }
+
+    void D3D9SpriteBatchBackend::EnsureShadersEXT()
+    {
+        if (vertexShader_ && pixelShader_) return;
+
+        HRESULT hr = device_->CreateVertexShader(
+            reinterpret_cast<const DWORD*>(Shaders::kSpriteEffect_SpriteVertexShader),
+            vertexShader_.ReleaseAndGetAddressOf());
+        if (FAILED(hr))
+            throw std::runtime_error("D3D9SpriteBatchBackend: CreateVertexShader failed, hr=" + FormatHr(hr));
+
+        hr = device_->CreatePixelShader(
+            reinterpret_cast<const DWORD*>(Shaders::kSpriteEffect_SpritePixelShader),
+            pixelShader_.ReleaseAndGetAddressOf());
+        if (FAILED(hr))
+            throw std::runtime_error("D3D9SpriteBatchBackend: CreatePixelShader failed, hr=" + FormatHr(hr));
+    }
+
+    void D3D9SpriteBatchBackend::EnsureVertexDeclarationEXT()
+    {
+        if (vertexDecl_) return;
+
+        UINT count = 0;
+        const D3DVERTEXELEMENT9* elements = VertexElementsForStrideD3D9(24, count);
+        if (elements == nullptr)
+            throw std::runtime_error("D3D9SpriteBatchBackend: no stride-24 vertex layout available");
+
+        const HRESULT hr = device_->CreateVertexDeclaration(elements, vertexDecl_.ReleaseAndGetAddressOf());
+        if (FAILED(hr))
+            throw std::runtime_error("D3D9SpriteBatchBackend: CreateVertexDeclaration failed, hr=" + FormatHr(hr));
+    }
+
+    Matrix D3D9SpriteBatchBackend::BuildMatrixTransformEXT(float viewportWidth, float viewportHeight) const
+    {
+        // Design decision 10 / D9-91: real XNA 4.0's D3D9 SpriteBatch bakes a half-texel
+        // correction into the same orthographic projection it already builds for
+        // MatrixTransform, compensating for Direct3D 9's texel-center-at-integer-coordinate
+        // convention (D3D10+/modern APIs put texel centers at pixel centers instead, which is
+        // why FNA's own SpriteBatch.cs -- a modern-API-targeting reimplementation, not real XNA --
+        // has no equivalent term at all; see this project's own plan_dx9.md "Divergence 4").
+        //
+        // Formula empirically verified against the real XNA 4.0 runtime (D9-A oracle,
+        // sprite_halfpixel_quad.scene): CreateOrthographicOffCenter(0, W, H, 0, 0, 1), then shift
+        // the projection's own translation terms (M41/M42) by -0.5 texel's worth of NDC space
+        // (half of one full-texel step, which CreateOrthographicOffCenter's own M11/M22 already
+        // encode as "NDC units per pixel") -- NOT reasoned out from first principles and assumed
+        // correct; see D9-91's own plan_dx9.md row for the verification record.
+        Matrix projection = Matrix::CreateOrthographicOffCenter(
+            0.0f, viewportWidth, viewportHeight, 0.0f, 0.0f, 1.0f);
+        projection.M41 += -0.5f * projection.M11;
+        projection.M42 += -0.5f * projection.M22;
+
+        // Row-vector convention (matches every other effect's own World*View*Projection
+        // ordering established throughout this backend): the caller's own transform is applied
+        // FIRST, then the projection.
+        return transform_ * projection;
+    }
+
+    void D3D9SpriteBatchBackend::FlushBatch()
+    {
+        if (pendingVertices_.empty()) return;
+
+        EnsureShadersEXT();
+        EnsureVertexDeclarationEXT();
+
+        float vpW = 0.0f, vpH = 0.0f;
+        GetCurrentViewportSizeEXT(vpW, vpH);
+        const Matrix matrixTransform = BuildMatrixTransformEXT(vpW, vpH);
+
+        device_->SetVertexShader(vertexShader_.Get());
+        device_->SetPixelShader(pixelShader_.Get());
+
+        const Matrix transposed = Matrix::Transpose(matrixTransform);
+        float regs[16];
+        transposed.ToColumnMajor(regs);
+        UploadVertexShaderConstantEXT(device_.Get(), Shaders::kSpriteEffect_SpriteVertexShader_Registers,
+                                      static_cast<int>(std::size(Shaders::kSpriteEffect_SpriteVertexShader_Registers)),
+                                      "MatrixTransform", regs);
+
+        if (const auto* tex = dynamic_cast<const D3D9TextureBackend*>(currentTexture_))
+            device_->SetTexture(0, tex->GetTextureEXT());
+
+        owner_->ApplySamplerState(0, pendingFilter_, pendingAddressU_, pendingAddressV_, 1);
+
+        device_->SetVertexDeclaration(vertexDecl_.Get());
+
+        vb_.SetData(pendingVertices_.data(), static_cast<int>(pendingVertices_.size()), sizeof(SpriteVertex));
+        ib_.SetData16(pendingIndices_.data(), static_cast<int>(pendingIndices_.size()));
+
+        device_->SetStreamSource(0, vb_.GetBufferEXT(), 0, static_cast<UINT>(sizeof(SpriteVertex)));
+        device_->SetIndices(ib_.GetBufferEXT());
+        device_->DrawIndexedPrimitive(ToD3D9Topology(), 0, 0,
+                                      static_cast<UINT>(pendingVertices_.size()),
+                                      0, static_cast<UINT>(pendingIndices_.size() / 3));
+
+        pendingVertices_.clear();
+        pendingIndices_.clear();
+        currentTexture_ = nullptr;
+    }
+
+    void D3D9SpriteBatchBackend::Draw(const ITextureBackend& texture, float x, float y)
+    {
+        const int w = texture.GetWidth();
+        const int h = texture.GetHeight();
+        Draw(texture, Rectangle(static_cast<int>(x), static_cast<int>(y), w, h), Rectangle(0, 0, w, h),
+             Color::White);
+    }
+
+    void D3D9SpriteBatchBackend::Draw(const ITextureBackend& texture,
+                                      const Rectangle& destinationRectangle,
+                                      const Rectangle& sourceRectangle,
+                                      const Color& color)
+    {
+        Draw(texture, destinationRectangle, sourceRectangle, color, 0.0f, Vector2(0, 0), SpriteEffects::None, 0.0f);
+    }
+
+    void D3D9SpriteBatchBackend::Draw(const ITextureBackend& texture,
+                                      const Rectangle& destinationRectangle,
+                                      const Rectangle& sourceRectangle,
+                                      const Color& color,
+                                      float rotation,
+                                      const Vector2& origin,
+                                      SpriteEffects effects,
+                                      float layerDepth)
+    {
+        if (!begun_) throw std::runtime_error("D3D9SpriteBatchBackend::Draw called before Begin()");
+
+        if (currentTexture_ != nullptr && currentTexture_ != &texture)
+            FlushBatch();
+        currentTexture_ = &texture;
+
+        const float texW = static_cast<float>(texture.GetWidth());
+        const float texH = static_cast<float>(texture.GetHeight());
+
+        // No [0,1] clamp -- matches FNA (SpriteBatch.cs divides straight through). A
+        // sourceRectangle extending past the texture bounds intentionally produces UVs outside
+        // [0,1], letting the bound sampler's TextureAddressMode (D9-92) govern edge sampling.
+        float u1 = static_cast<float>(sourceRectangle.X) / texW;
+        float v1 = static_cast<float>(sourceRectangle.Y) / texH;
+        float u2 = static_cast<float>(sourceRectangle.X + sourceRectangle.Width)  / texW;
+        float v2 = static_cast<float>(sourceRectangle.Y + sourceRectangle.Height) / texH;
+
+        if (static_cast<int>(effects) & static_cast<int>(SpriteEffects::FlipHorizontally)) std::swap(u1, u2);
+        if (static_cast<int>(effects) & static_cast<int>(SpriteEffects::FlipVertically)) std::swap(v1, v2);
+
+        const auto r = static_cast<std::uint8_t>(color.getRProperty());
+        const auto g = static_cast<std::uint8_t>(color.getGProperty());
+        const auto b = static_cast<std::uint8_t>(color.getBProperty());
+        const auto a = static_cast<std::uint8_t>(color.getAProperty());
+
+        const float dx = static_cast<float>(destinationRectangle.X);
+        const float dy = static_cast<float>(destinationRectangle.Y);
+        const float dw = static_cast<float>(destinationRectangle.Width);
+        const float dh = static_cast<float>(destinationRectangle.Height);
+
+        const float sw = static_cast<float>(sourceRectangle.Width);
+        const float sh = static_cast<float>(sourceRectangle.Height);
+
+        const float ox = origin.X;
+        const float oy = origin.Y;
+
+        const float scaleX = dw / sw;
+        const float scaleY = dh / sh;
+
+        const float p0x = (0.0f - ox) * scaleX, p0y = (0.0f - oy) * scaleY;
+        const float p1x = (sw   - ox) * scaleX, p1y = (0.0f - oy) * scaleY;
+        const float p2x = (sw   - ox) * scaleX, p2y = (sh   - oy) * scaleY;
+        const float p3x = (0.0f - ox) * scaleX, p3y = (sh   - oy) * scaleY;
+
+        const float cosR = std::cos(rotation);
+        const float sinR = std::sin(rotation);
+
+        auto rotateAndTranslate = [&](float px, float py, float& rx, float& ry)
+        {
+            rx = dx + px * cosR - py * sinR;
+            ry = dy + px * sinR + py * cosR;
+        };
+
+        float v0x, v0y, v1x, v1y, v2x, v2y, v3x, v3y;
+        rotateAndTranslate(p0x, p0y, v0x, v0y);
+        rotateAndTranslate(p1x, p1y, v1x, v1y);
+        rotateAndTranslate(p2x, p2y, v2x, v2y);
+        rotateAndTranslate(p3x, p3y, v3x, v3y);
+
+        const auto base = static_cast<std::uint16_t>(pendingVertices_.size());
+
+        pendingVertices_.push_back({v0x, v0y, layerDepth, r, g, b, a, u1, v1});
+        pendingVertices_.push_back({v1x, v1y, layerDepth, r, g, b, a, u2, v1});
+        pendingVertices_.push_back({v2x, v2y, layerDepth, r, g, b, a, u2, v2});
+        pendingVertices_.push_back({v3x, v3y, layerDepth, r, g, b, a, u1, v2});
+
+        pendingIndices_.push_back(base + 0);
+        pendingIndices_.push_back(base + 1);
+        pendingIndices_.push_back(base + 2);
+        pendingIndices_.push_back(base + 2);
+        pendingIndices_.push_back(base + 3);
+        pendingIndices_.push_back(base + 0);
+    }
+}

@@ -392,8 +392,16 @@ proving all four weighted terms are summed correctly. Sampled at the predicted s
 boundaries in both X and Y, confirmed identical on both real XNA and CNA. All 19 scenes
 re-verified pixel-perfect afterward; full `D3D9` CTest suite re-run, 11/11 still green.
 
-Next: add more scenes as `D9-84` exercises each combination (`SpriteBatch`, render targets,
-`SurfaceFormat` sweep).
+**Update 2026-07-15: `SpriteBatch` is no longer an open candidate here** — Phase D9-9 (`D9-90`/
+`D9-91`) closed with 3 new scenes (`sprite_basic_quad`/`sprite_rotated_quad`/`sprite_flipped_quad`,
+all pixel-perfect), see Phase D9-9's own section below for the full record. Render targets are
+now a documented BLOCKER (see §4's own "New blocker found 2026-07-15"), not a simple next
+candidate — do not re-attempt until root-caused. A genuine `SurfaceFormat` sweep needs new CNA
+`Texture2D` API surface (a generic `SetData<T>` matching real XNA's own, since the current C++
+API is `Color`-only) before non-`Color` formats can even be exercised through the oracle — also
+not a simple "add a scene" task. Remaining open oracle-scene work: `D9-92` (sampler
+`Wrap`/`Mirror` address-mode scenes for `SpriteBatch`) and `D9-93` (multi-sprite `SpriteSortMode`
+scenes), both listed in Phase D9-9's own section.
 
 ### Phase D9-1 — CMake integration and skeleton: CLOSED 2026-07-14
 
@@ -925,6 +933,61 @@ not yet enforced (Phase D9-10, unrelated to this row).
 **This closes real, verified dispatch for all 5 XNA Stock Effects plus hardware instancing on this
 backend** — only `D9-84` (oracle validation) remains open in Phase D9-8.
 
+### Phase D9-9 — SpriteBatch: D9-90/D9-91 CLOSED, D9-92/D9-93 STARTED not closed
+
+| Task | Status |
+|---|---|
+| `D9-90` — `D3D9SpriteBatchBackend` driving Microsoft's own `SpriteEffect` | ✅ |
+| `D9-91` — the half-pixel offset, verified against the oracle | ✅ |
+| `D9-92` — sampler filter/address-mode wiring with discriminating probe pixels | 🟨 |
+| `D9-93` — tested through the public API, diffed across all `SpriteSortMode`s | 🟨 |
+
+**Closed 2026-07-15 (`D9-90`/`D9-91`).** New `D3D9SpriteBatchBackend` (`include/`/`src/CNA/
+Internal/Backends/D3D9/D3D9SpriteBatch.{hpp,cpp}`). `SpriteEffect.fx` was already vendored
+verbatim (byte-identical to FNA's own copy) with compiled bytecode and a register table already
+present in `d3d9_shaders.hpp`/`D3D9ShaderRegisters.hpp` — a side effect of the general D9-71/D9-72
+compile sweep that ran across every vendored `.fx` file, not new work this task did. Vertex
+contract reuses the EXISTING stride-24 `D3D9VertexDeclarations` layout unchanged (matches FNA's
+own `VertexPositionColorTexture4` per-corner shape exactly — resolves D9-22's own "future concern"
+about a stride-32 collision as moot, since sprite vertices are stride 24). CPU-side quad geometry
+(destination/source rect, origin, rotation, `SpriteEffects` flip) reuses D3D11SpriteBatchBackend's
+own already-proven formula verbatim. The genuinely D3D9-specific piece: `MatrixTransform` bakes
+BOTH the SpriteBatch's own transform AND a D3D9 half-pixel correction into one real `float4x4`
+uniform (`projection.M41 += -0.5*projection.M11; projection.M42 += -0.5*projection.M22`, applied
+to a `CreateOrthographicOffCenter(0,W,H,0,0,1)` base) — matching how real XNA/FNA's own
+`SpriteBatch.cs` structures this (Microsoft's real `SpriteEffect.fx` has a genuine matrix uniform,
+unlike D3D11's own CNA-invented shader which has none).
+
+Verified via 3 new `D9-A5` oracle scenes (`sprite_basic_quad`/`sprite_rotated_quad`/
+`sprite_flipped_quad`, all `0/65536` pixel-perfect against real XNA 4.0 on the first attempt) and
+a new `D3D9_SpriteBatch` CTest (4/4 checks).
+
+**Real, non-obvious finding surfaced while mutation-testing the half-pixel offset**: a 1×1-texture
+scene and quadrant-CENTER sample points are BOTH structurally incapable of detecting this offset
+at all — the classic D3D9 half-pixel bug shifts which TEXTURE CONTENT a screen pixel samples, not
+where a rectangle's geometric edges land, and a 1×1 texture has only one texel regardless of any
+sub-pixel shift. Discovered by commenting out the `M41`/`M42` lines and re-running: the boundary
+check and quadrant-center checks stayed green even with the offset entirely removed (a false-
+positive "closed" trap), while the SAME mutation made the two 2×2-four-color-texture oracle scenes
+diverge from real XNA by `4800/65536` pixels — proving the offset genuinely matters. Fixed by
+adding a dedicated CTest check sampling exactly on the internal texel boundary the flip scene's
+own draw produces (confirmed this exact pixel shifts from `(130,125,0)` to `(128,128,0)` under the
+mutation, every other check staying green); re-verified 4/4 green with the real implementation
+restored, all 21 corpus scenes re-verified pixel-perfect, full `D3D9` CTest suite 12/12 green.
+
+**`D9-92`/`D9-93` genuinely started, not closed — two honest, explicitly-named gaps, not silently
+assumed correct.** `SetSamplerFilter()`/`SetSamplerAddressMode()` do plumb through to the real,
+already-proven `D9-63` `ApplySamplerState()` path (not stored-but-inert), but no scene/check yet
+exercises a UV extending past `[0,1]` with `Wrap`/`Mirror` — every scene so far uses the default
+`LinearClamp` with an in-bounds source rectangle, so those two modes' real discriminating behavior
+is unverified. Every scene/check does go through the real public `SpriteBatch`/`Texture2D` API
+(never the raw `ISpriteBatchBackend` interface directly), but every one draws exactly ONE sprite
+per `Begin()`/`End()` block, so `SpriteSortMode` (which only has an observable effect with 2+
+sprites) has never been exercised at all, let alone diffed across all 5 values. Also not yet
+tested: multi-sprite same-texture batching (the `FlushBatch()`-on-texture-change logic is written
+and structurally identical to D3D11's own already-proven pattern, but untested with 2+ sprites
+accumulating in one flush).
+
 ### Does NOT work yet
 
 `BasicEffect`'s `PreferPerPixelLighting` variants, `EnvironmentMapEffect`'s specular variants, and
@@ -947,7 +1010,9 @@ Most recent first. Full detail lives in `plan_dx9.md` — this is a short index.
 
 | Commit(s) | Summary |
 |---|---|
-| *(pending)* | **`D9-A5` grown to 19 scenes (`skinned_fourbone_quad`) — also PIXEL-PERFECT (0/65536 differ), first scene to exercise a REAL 4-bone skinning blend, completing all 3 real `WeightsPerVertex` values**. Extended vertex line format to an optional 16 columns (3rd/4th boneindex/boneweight pair); new `bone2translate`/`bone3translate` scene keys. Four pure-translation bones weighted 0.4/0.3/0.2/0.1 blend to an exact hand-derived `Translate(0.12,0.03,0)` -- a genuine two-axis shift proving all four weighted terms sum correctly. Confirmed at predicted shifted boundaries in both X and Y on both sides. All 19 scenes re-verified pixel-perfect; full D3D9 CTest suite 11/11 green. |
+| *(pending)* | **Phase D9-9 `D9-90`/`D9-91` CLOSED — real `D3D9SpriteBatchBackend`, half-pixel offset oracle- AND mutation-verified**. New `D3D9SpriteBatch.{hpp,cpp}`; reuses the existing stride-24 vertex layout and D3D11SpriteBatchBackend's own quad-geometry formula, real `SpriteEffect.fx` bytecode (already compiled/register-mapped by the general D9-71/72 sweep). `MatrixTransform` bakes SpriteBatch's own transform + a D3D9 half-pixel correction (`M41 += -0.5*M11` etc.) into one uniform. 3 new `D9-A5` scenes (`sprite_basic_quad`/`sprite_rotated_quad`/`sprite_flipped_quad`), all pixel-perfect on the first attempt. Real finding: a 1x1-texture scene and quadrant-center CTest sample points are BOTH structurally incapable of detecting the half-pixel offset (it shifts texture CONTENT sampling, not geometric edges) -- caught via mutation-testing, which showed the boundary check staying green with the offset removed while the multi-texel oracle scenes diverged by 4800/65536 pixels; fixed with a dedicated boundary-blend-color CTest check. New `D3D9_SpriteBatch` CTest, 4/4, mutation-verified. `D9-92` (sampler Wrap/Mirror) and `D9-93` (SpriteSortMode sweep) explicitly NOT closed -- honest gaps, not assumed. All 21 corpus scenes re-verified pixel-perfect; full D3D9 CTest suite 12/12 green. |
+| `17a1a607` | **`D9-A5` grown to 19 scenes (`skinned_fourbone_quad`) — also PIXEL-PERFECT (0/65536 differ), first scene to exercise a REAL 4-bone skinning blend, completing all 3 real `WeightsPerVertex` values**. Extended vertex line format to an optional 16 columns (3rd/4th boneindex/boneweight pair); new `bone2translate`/`bone3translate` scene keys. Four pure-translation bones weighted 0.4/0.3/0.2/0.1 blend to an exact hand-derived `Translate(0.12,0.03,0)` -- a genuine two-axis shift proving all four weighted terms sum correctly. Confirmed at predicted shifted boundaries in both X and Y on both sides. All 19 scenes re-verified pixel-perfect; full D3D9 CTest suite 11/11 green. |
+| `08aba091` | **Documented a genuine, unresolved D3D9 backend crash (render-target-as-texture sampling), reverted all attempted code rather than land it half-working**. See §4's own "New blocker found 2026-07-15" for the full reproduction record and recommended next step (Vulkan validation layers). |
 | `83e2edf2` | **`D9-A5` grown to 18 scenes (`alphatest_never_quad`/`alphatest_always_quad`) — also PIXEL-PERFECT (0/65536 differ each), COMPLETE ALL 8 REAL XNA `AlphaTestEffect.AlphaFunction` VALUES IN THE CORPUS**. `Never` sets both branch targets negative (`clip(-1)` unconditionally, discards everything regardless of alpha); `Always` sets both positive (`clip(1)` unconditionally, discards nothing). Both reuse `alphatest_quad.scene`'s exact texture; `Never` renders pure clear color everywhere (even the alpha=255 texels that would normally pass `Greater`), `Always` renders every texel including the alpha=1/64 ones that would normally fail. No code changes needed. `AlphaTestEffect`'s entire compare-function surface is now independently verified: `Less`/`LessEqual`/`GreaterEqual`/`Greater`/`Never`/`Always` on `PSAlphaTestLtGt`, `Equal`/`NotEqual` on `PSAlphaTestEqNe`. All 18 scenes re-verified pixel-perfect; full D3D9 CTest suite 11/11 green. |
 | `dab209af` | **`D9-A5` grown to 16 scenes (`alphatest_greaterequal_quad`/`alphatest_lessequal_quad`) — also PIXEL-PERFECT (0/65536 differ each), exercise `GreaterEqual`/`LessEqual`, sharing `PSAlphaTestLtGt` with `Greater`/`Less` but differing at the EXACT boundary value**. Confirmed against FNA's own `AlphaTestEffect.cs`: `GreaterEqual` sets `X=reference-threshold` (vs `Greater`'s `+threshold`); `LessEqual` sets `X=reference+threshold` (vs `Less`'s `-threshold`) -- a texel exactly at `ReferenceAlpha` passes under the `-Equal` variant, fails under the plain variant. Both reuse `alphatest_equal_quad.scene`'s own texture (which already has an exact-128 texel; `alphatest_quad.scene`'s texture never lands on 128). Predicted patterns confirmed exactly right, then pixel-for-pixel identical. No code changes needed. Completes all 4 alpha-value-dependent `PSAlphaTestLtGt` values. All 16 scenes re-verified pixel-perfect; full D3D9 CTest suite 11/11 green. |
 | `ac7f39cd` | **`D9-A5` grown to 14 scenes (`alphatest_notequal_quad`) — also PIXEL-PERFECT (0/65536 differ), first scene to exercise `AlphaFunction=NotEqual`, completing coverage of both real pixel shader buckets' compare-function directions**. Confirmed against FNA's own `AlphaTestEffect.cs` source: `NotEqual` uses the identical `abs(a-x)<y` comparison as `Equal`, only the pass/fail branch targets swap. Reuses `alphatest_equal_quad.scene`'s exact texture/threshold, flips every texel's pass/fail. No code changes needed (`NotEqual` already supported). All 14 scenes re-verified pixel-perfect; full D3D9 CTest suite 11/11 green. |
@@ -1009,19 +1074,27 @@ results landed so far are pixel-perfect** (`colored3d`, `textured_quad`, `lit_te
 `alphatest_quad`, `alphatest_less_quad`, `alphatest_equal_quad`, `alphatest_notequal_quad`,
 `alphatest_greaterequal_quad`, `alphatest_lessequal_quad`, `alphatest_never_quad`,
 `alphatest_always_quad`, `dualtexture_quad`, `envmap_quad`, `envmap_fresnel_quad`, `skinned_quad`,
-`skinned_twobone_quad`, `skinned_fourbone_quad`, `multilight_textured_quad`, `fog_gradient_quad` —
-`0/65536` pixels differ from real XNA 4.0 each, see Phase D9-A's own section above). `D9-A5` (the
-scene corpus) has 19 entries and now represents **all 5 XNA Stock Effects** (`BasicEffect`,
-`AlphaTestEffect`, `DualTextureEffect`, `EnvironmentMapEffect`, `SkinnedEffect`) including
-`BasicEffect`'s own multi-light summation bucket, `IEffectFog` (shared by all 5 effects), **ALL 8**
+`skinned_twobone_quad`, `skinned_fourbone_quad`, `multilight_textured_quad`, `fog_gradient_quad`,
+`sprite_basic_quad`, `sprite_rotated_quad`, `sprite_flipped_quad` — `0/65536` pixels differ from
+real XNA 4.0 each, see Phase D9-A's own section above). `D9-A5` (the scene corpus) has 22 entries
+and now represents **all 5 XNA Stock Effects** (`BasicEffect`, `AlphaTestEffect`,
+`DualTextureEffect`, `EnvironmentMapEffect`, `SkinnedEffect`) including `BasicEffect`'s own
+multi-light summation bucket, `IEffectFog` (shared by all 5 effects), **ALL 8**
 `AlphaTestEffect.AlphaFunction` values covering both real pixel shader buckets (`Less`/
 `LessEqual`/`GreaterEqual`/`Greater`/`Never`/`Always` on `PSAlphaTestLtGt`, `Equal`/`NotEqual` on
 `PSAlphaTestEqNe` — `AlphaTestEffect` compare-function coverage is now COMPLETE),
-`EnvironmentMapEffect.FresnelFactor` with a genuine per-vertex gradient, and **ALL 3**
+`EnvironmentMapEffect.FresnelFactor` with a genuine per-vertex gradient, **ALL 3**
 `SkinnedEffect.WeightsPerVertex` values (`1`/`2`/`4` — `SkinnedEffect` weighting coverage is now
-COMPLETE), every comparison pixel-perfect; `D9-84` (every draw path validated against the oracle)
-can now genuinely continue, one scene at a
-time.
+COMPLETE), and `SpriteBatch`'s core draw path (basic/rotated/flipped, D9-90/91), every comparison
+pixel-perfect; `D9-84` (every draw path validated against the oracle) can now genuinely continue,
+one scene at a time.
+
+**Phase D9-9: `D9-90`/`D9-91` closed 2026-07-15 — `D3D9SpriteBatchBackend` is real, and the
+half-pixel offset is both oracle- and mutation-verified.** See Phase D9-9's own section above for
+the full record, including a real finding about why the FIRST mutation-test attempt (boundary
+check alone) would have been a false-positive "closed" claim. `D9-92` (sampler `Wrap`/`Mirror`)
+and `D9-93` (multi-sprite `SpriteSortMode` sweep) are explicitly NOT closed — two honest,
+named gaps, not silently assumed correct because the surrounding code looks right.
 
 **New blocker found 2026-07-15, NOT fixed, reverted to keep the tree clean — a real D3D9 backend
 crash when a `D3DUSAGE_RENDERTARGET`-flagged `RenderTarget2D` texture exists in-process alongside
@@ -1191,22 +1264,25 @@ cmake -S . -B cmake-build-d3d9 \
 🟨 — see their own plan rows for exactly what's deferred and why). **Phase D9-8's dispatch AND
 instancing work (`D9-80`–`D9-83`) is now fully closed too** — real, verified dispatch for all 5 XNA
 Stock Effects plus hardware instancing. **Phase D9-A's diff harness (`D9-A1`–`D9-A4`) is now fully
-closed too**, and 19 scenes covering all 5 XNA Stock Effects plus `IEffectFog`, ALL 8
+closed too**, and 22 scenes covering all 5 XNA Stock Effects plus `IEffectFog`, ALL 8
 `AlphaTestEffect.AlphaFunction` values across both real shader buckets (`AlphaTestEffect`
-compare-function coverage COMPLETE), `EnvironmentMapEffect.FresnelFactor`, and ALL 3
-`SkinnedEffect.WeightsPerVertex` values (`SkinnedEffect` weighting coverage COMPLETE) are
-pixel-perfect. Only `D9-A5` (incrementally: grow the scene corpus) and `D9-84` (validate against
-it) remain anywhere in the plan up to this point — and they are, by design, the same ongoing
-effort: add a scene, validate it, move to the next effect.
+compare-function coverage COMPLETE), `EnvironmentMapEffect.FresnelFactor`, ALL 3
+`SkinnedEffect.WeightsPerVertex` values (`SkinnedEffect` weighting coverage COMPLETE), and
+`SpriteBatch`'s core draw path (`D9-90`/`D9-91`) are pixel-perfect. Only `D9-A5` (incrementally:
+grow the scene corpus) and `D9-84` (validate against it) remain anywhere in the plan up to this
+point — and they are, by design, the same ongoing effort: add a scene, validate it, move to the
+next effect.
 
 1. **`D9-A5`/`D9-84`** — add the next scene(s) to `tools/xna-oracle/scenes/` (natural next
-   candidates: `SurfaceFormat` sweep — both `AlphaTestEffect`'s compare-function surface AND
-   `SkinnedEffect`'s weighting surface are now fully covered. **Do NOT re-attempt a render-target
-   oracle scene** until the crash documented in §4's own "New blocker found 2026-07-15" is
-   root-caused — `SpriteBatch` is separately blocked too, since `D3D9GraphicsBackend::
-   CreateSpriteBatch()` still throws `NotYetImplemented` (Phase D9-9 is genuinely unstarted
-   backend work, not an oracle-scene gap)) and validate them via `scripts/xna-diff.py` against
-   the real XNA oracle — the last two open rows in Phase D9-8/D9-A, and where `D9-21`'s `D3DCULL`
+   candidates: `D9-92` — a `SpriteBatch` scene with a source rectangle extending past the texture
+   bounds under `TextureAddressMode.Wrap`/`Mirror`; `D9-93` — a multi-sprite scene actually
+   exercising `SpriteSortMode` ordering (every scene so far draws exactly one sprite per
+   `Begin()`/`End()`, so sort mode has never had an observable effect). **Do NOT re-attempt a
+   render-target oracle scene** until the crash documented in §4's own "New blocker found
+   2026-07-15" is root-caused. A genuine `SurfaceFormat` sweep needs new CNA `Texture2D` API
+   surface first (a generic `SetData<T>`, since the current C++ API is `Color`-only) — not a
+   simple "add a scene" task either. Validate new scenes via `scripts/xna-diff.py` against the
+   real XNA oracle — the last two open rows in Phase D9-8/D9-A, and where `D9-21`'s `D3DCULL`
    proof and `D9-62`'s rasterizer-state proof both finally close out too. See
    `tools/xna-oracle/README.md` for the current build/run commands.
 

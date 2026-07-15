@@ -14,6 +14,7 @@
 #include "CNA/Internal/Backends/D3D9/D3D9Textures.hpp"
 #include "CNA/Internal/Backends/D3D9/D3D9RenderTargets.hpp"
 #include "CNA/Internal/Backends/D3D9/D3D9OcclusionQuery.hpp"
+#include "CNA/Internal/Backends/D3D9/D3D9SpriteBatch.hpp"
 #include "CNA/Internal/Backends/D3D9/D3D9VertexDeclarations.hpp"
 
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
@@ -908,7 +909,7 @@ namespace CNA::Internal::Backends::D3D9
 
     std::unique_ptr<ISpriteBatchBackend> D3D9GraphicsBackend::CreateSpriteBatch()
     {
-        NotYetImplemented("D3D9", "CreateSpriteBatch (see plan_dx9.md D9-90)");
+        return std::make_unique<D3D9SpriteBatchBackend>(this);
     }
 
     void D3D9GraphicsBackend::SetSwapInterval(int)

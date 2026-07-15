@@ -111,6 +111,12 @@ public class Scene
     public int Height = 256;
     public GraphicsProfile Profile = GraphicsProfile.HiDef;
     public Color ClearColor = Color.CornflowerBlue;
+    public bool SpriteBatchMode;
+    public Rectangle SpriteDestRect;
+    public Color SpriteColor = Color.White;
+    public float SpriteRotation;
+    public Vector2 SpriteOrigin;
+    public SpriteEffects SpriteEffects = SpriteEffects.None;
     public SceneVertexFormat VertexFormat = SceneVertexFormat.PositionColor;
     public bool VertexColorEnabled;
     public bool LightingEnabled;
@@ -172,6 +178,22 @@ public class Scene
                     scene.Profile = value == "Reach" ? GraphicsProfile.Reach : GraphicsProfile.HiDef;
                     break;
                 case "clearcolor": scene.ClearColor = ParseColor(value); break;
+                case "spritebatchmode": scene.SpriteBatchMode = ParseBool(value); break;
+                case "spritedestrect": scene.SpriteDestRect = ParseRectangle(value); break;
+                case "spritecolor": scene.SpriteColor = ParseColor(value); break;
+                case "spriterotation": scene.SpriteRotation = float.Parse(value, CultureInfo.InvariantCulture); break;
+                case "spriteorigin":
+                {
+                    var p = value.Split(',');
+                    scene.SpriteOrigin = new Vector2(float.Parse(p[0], CultureInfo.InvariantCulture),
+                                                      float.Parse(p[1], CultureInfo.InvariantCulture));
+                    break;
+                }
+                case "spriteeffects":
+                    if (value == "FlipHorizontally") scene.SpriteEffects = SpriteEffects.FlipHorizontally;
+                    else if (value == "FlipVertically") scene.SpriteEffects = SpriteEffects.FlipVertically;
+                    else scene.SpriteEffects = SpriteEffects.None;
+                    break;
                 case "effect":
                     if (value == "AlphaTestEffect") scene.EffectType = SceneEffectType.AlphaTestEffect;
                     else if (value == "DualTextureEffect") scene.EffectType = SceneEffectType.DualTextureEffect;
@@ -282,6 +304,15 @@ public class Scene
         return new Vector3(float.Parse(p[0], CultureInfo.InvariantCulture),
                             float.Parse(p[1], CultureInfo.InvariantCulture),
                             float.Parse(p[2], CultureInfo.InvariantCulture));
+    }
+
+    static Rectangle ParseRectangle(string s)
+    {
+        var p = s.Split(',');
+        return new Rectangle(int.Parse(p[0], CultureInfo.InvariantCulture),
+                              int.Parse(p[1], CultureInfo.InvariantCulture),
+                              int.Parse(p[2], CultureInfo.InvariantCulture),
+                              int.Parse(p[3], CultureInfo.InvariantCulture));
     }
 
     static CompareFunction ParseCompareFunction(string s)
@@ -434,6 +465,29 @@ public class Oracle : Game
         var rt = new RenderTarget2D(dev, scene.Width, scene.Height, false, SurfaceFormat.Color, DepthFormat.Depth24);
         dev.SetRenderTarget(rt);
         dev.Clear(scene.ClearColor);
+
+        if (scene.SpriteBatchMode)
+        {
+            // D9-90..93: the real public SpriteBatch/Texture2D API, not the raw
+            // ISpriteBatchBackend interface -- matches D9-93's own explicit requirement.
+            var spriteTexture = new Texture2D(dev, scene.TextureWidth, scene.TextureHeight);
+            spriteTexture.SetData(scene.TexturePixels.ToArray());
+
+            var spriteBatch = new SpriteBatch(dev);
+            spriteBatch.Begin();
+            spriteBatch.Draw(spriteTexture, scene.SpriteDestRect, null, scene.SpriteColor,
+                             scene.SpriteRotation, scene.SpriteOrigin, scene.SpriteEffects, 0.0f);
+            spriteBatch.End();
+
+            dev.SetRenderTarget(null);
+            using (var fs = File.Create(outputPath))
+                rt.SaveAsPng(fs, scene.Width, scene.Height);
+            Console.WriteLine("XNA-ORACLE-OK profile=" + dev.GraphicsProfile
+                              + " adapter=" + GraphicsAdapter.DefaultAdapter.Description
+                              + " out=" + outputPath);
+            Exit();
+            return;
+        }
 
         Texture2D texture = null;
         if (scene.TextureEnabled)
