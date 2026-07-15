@@ -2614,6 +2614,72 @@ namespace CNA::Internal::Backends::SdlGpu
             owner_->currentRenderTarget_ = nullptr;
     }
 
+    void SdlGpuRenderTargetBackend::GetData(int level, int x, int y, int w, int h,
+                                            void* data, int dataLength) const
+    {
+        if (w <= 0 || h <= 0)
+            return;
+        const Uint32 sizeBytes = static_cast<Uint32>(w) * static_cast<Uint32>(h) * 4;
+        if (static_cast<Uint32>(dataLength) < sizeBytes)
+            throw std::out_of_range("CNA SDL_GPU: RenderTarget2D::GetData: dataLength too small for the requested region");
+
+        // Must reflect this frame's draws, not stale/uninitialized GPU memory -- a no-op if
+        // nothing is pending (matches EnsureFrameRendered's own early-return contract).
+        owner_->EnsureFrameRendered();
+
+        SDL_GPUDevice* device = owner_->Device();
+        SDL_GPUTransferBufferCreateInfo transferInfo{};
+        transferInfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_DOWNLOAD;
+        transferInfo.size = sizeBytes;
+        SDL_GPUTransferBuffer* transferBuffer = SDL_CreateGPUTransferBuffer(device, &transferInfo);
+        if (transferBuffer == nullptr)
+            throw std::runtime_error(std::string("CNA SDL_GPU: RenderTarget2D::GetData: failed to create transfer buffer: ") + SDL_GetError());
+
+        SDL_GPUCommandBuffer* cmd = SDL_AcquireGPUCommandBuffer(device);
+        if (cmd == nullptr)
+        {
+            SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
+            throw std::runtime_error(std::string("CNA SDL_GPU: RenderTarget2D::GetData: SDL_AcquireGPUCommandBuffer failed: ") + SDL_GetError());
+        }
+
+        // Always downloads from colorTexture_ (the single-sample, sampleable texture) -- already
+        // resolved-into by the time any frame's pass has run, even when this target is MSAA.
+        SDL_GPUCopyPass* copyPass = SDL_BeginGPUCopyPass(cmd);
+        SDL_GPUTextureRegion region{};
+        region.texture = colorTexture_;
+        region.mip_level = static_cast<Uint32>(level);
+        region.x = static_cast<Uint32>(x);
+        region.y = static_cast<Uint32>(y);
+        region.w = static_cast<Uint32>(w);
+        region.h = static_cast<Uint32>(h);
+        region.d = 1;
+        SDL_GPUTextureTransferInfo dest{};
+        dest.transfer_buffer = transferBuffer;
+        dest.pixels_per_row = static_cast<Uint32>(w);
+        dest.rows_per_layer = static_cast<Uint32>(h);
+        SDL_DownloadFromGPUTexture(copyPass, &region, &dest);
+        SDL_EndGPUCopyPass(copyPass);
+
+        SDL_GPUFence* fence = SDL_SubmitGPUCommandBufferAndAcquireFence(cmd);
+        if (fence == nullptr)
+        {
+            SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
+            throw std::runtime_error(std::string("CNA SDL_GPU: RenderTarget2D::GetData: SDL_SubmitGPUCommandBufferAndAcquireFence failed: ") + SDL_GetError());
+        }
+        SDL_WaitForGPUFences(device, true, &fence, 1);
+        SDL_ReleaseGPUFence(device, fence);
+
+        void* mapped = SDL_MapGPUTransferBuffer(device, transferBuffer, false);
+        if (mapped == nullptr)
+        {
+            SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
+            throw std::runtime_error(std::string("CNA SDL_GPU: RenderTarget2D::GetData: SDL_MapGPUTransferBuffer failed: ") + SDL_GetError());
+        }
+        std::memcpy(data, mapped, sizeBytes);
+        SDL_UnmapGPUTransferBuffer(device, transferBuffer);
+        SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
+    }
+
     // ---- SdlGpuRenderTargetCubeBackend (Phase SDLGPU-8, SDLGPU-36) ----
 
     SdlGpuRenderTargetCubeBackend::SdlGpuRenderTargetCubeBackend(SdlGpuGraphicsBackend& owner, int size,

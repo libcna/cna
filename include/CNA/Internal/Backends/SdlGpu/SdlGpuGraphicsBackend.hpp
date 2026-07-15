@@ -84,6 +84,14 @@ namespace CNA::Internal::Backends::SdlGpu
         NOXNA [[nodiscard]] SDL_GPUTexture* DepthTexture() const { return depthTexture_; }
         /** @brief Whether a mip chain should be regenerated after this target's pass each frame. NOXNA. */
         NOXNA [[nodiscard]] bool WantsMipMap() const { return mipMap_; }
+        /**
+         * @brief Real GPU readback of this target's pixels (`SDLGPU-39`) -- reads from the
+         * always-single-sample, sampleable `colorTexture_` (already resolved-into if this target
+         * is MSAA), a texture this backend fully owns, unlike the swapchain -- so it does not hit
+         * the swapchain-download segfault documented in `plan_sdlgpu.md`'s `SDLGPU-39` row.
+         * Flushes any pending frame first so the read reflects this frame's draws.
+         */
+        void GetData(int level, int x, int y, int w, int h, void* data, int dataLength) const override;
 
         /** @brief Queues a color-only clear, consumed on this target's next render pass. NOXNA. */
         NOXNA void QueueClear(SDL_FColor color) { clearColor_ = color; clearColorPending_ = true; }

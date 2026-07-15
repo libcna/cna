@@ -3,13 +3,11 @@
 // COLOR_TARGET|SAMPLER texture rendered into during its own render pass and sampled during a
 // later pass within the same frame (Phase SDLGPU-8's per-target multi-pass EnsureFrameRendered).
 //
-// This backend does not implement ReadBackbuffer() (SDLGPU-39, still open -- an attempt to pull
-// it forward here hit a real segfault inside both SDL_DownloadFromGPUTexture and
-// SDL_CopyGPUTextureToTexture when the swapchain texture is the source, on this environment's
-// Vulkan driver; see plan_sdlgpu.md's SDLGPU-39 notes), so verification here follows this
-// backend's own established convention (sdlgpu_3d_test.cpp / sdlgpu_effects_test.cpp): real draws
-// through the public XNA API with no exception across many frames, plus a real screenshot taken
-// manually during development (not part of the automated check) to visually confirm correctness.
+// This backend does not implement ReadBackbuffer() (SDLGPU-39's swapchain leg is a documented,
+// unresolved segfault -- see plan_sdlgpu.md), but RenderTarget2D::GetData() itself IS real
+// (SDLGPU-39's RenderTarget2D leg, closed via a real ITextureBackend::GetData virtual +
+// SdlGpuRenderTargetBackend::GetData(), which reads its own self-owned colorTexture_, not the
+// swapchain) -- so Checks E/F/G below assert exact pixel values, not just "didn't throw".
 //
 // Check A -- Clear()-only fill of a RenderTarget2D (no draw call between bind/unbind), then
 //   sampled back via SpriteBatch onto the backbuffer, draws every frame with no exception. This
@@ -25,6 +23,9 @@
 // Check D -- MultiSampleCount property fidelity: a RenderTarget2D constructed with
 //   preferredMultiSampleCount=0 must report 0 (a real MSAA round-trip lives in its own dedicated
 //   test, sdlgpu_rendertarget2d_msaa_test.cpp, SDLGPU-38).
+// Check E/F/G -- real GetData() pixel assertions on rtClearOnly_/rtTriangle_/rtDepth_'s centre
+//   pixels, proving the same 3 render targets Checks A-C exercise actually contain the expected
+//   content, not just that drawing into them didn't throw.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
@@ -48,6 +49,7 @@
 #include "CNA/Internal/Backends/SdlGpu/SdlGpuGraphicsBackend.hpp"
 
 #include <cstdio>
+#include <cstdlib>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -60,6 +62,22 @@ namespace
 {
     constexpr int kRTSize = 32;
     constexpr int kTotalFrames = 120;
+
+    bool CloseTo(int a, int b, int tol) { return std::abs(a - b) <= tol; }
+    bool Matches(const Color& c, const Color& expected)
+    {
+        return CloseTo(c.getRProperty(), expected.getRProperty(), 8)
+            && CloseTo(c.getGProperty(), expected.getGProperty(), 8)
+            && CloseTo(c.getBProperty(), expected.getBProperty(), 8);
+    }
+
+    Color ReadCentrePixel(RenderTarget2D& rt)
+    {
+        Color px(0, 0, 0, 0);
+        const Rectangle rect(kRTSize / 2, kRTSize / 2, 1, 1);
+        rt.GetData(0, &rect, &px, 0, 1);
+        return px;
+    }
 }
 
 class SdlGpuRenderTarget2DTest : public Game
@@ -208,6 +226,34 @@ protected:
                                     DepthFormat::None, 0, RenderTargetUsage::DiscardContents);
             Check(rtNoMsaa.getMultiSampleCountProperty() == 0,
                   "RenderTarget2D MultiSampleCount request 0 -> applied 0");
+
+            // Check E/F/G: real GetData() pixel assertions (SDLGPU-39's RenderTarget2D leg) --
+            // proves the same 3 targets actually contain the expected content, not just that
+            // drawing into them didn't throw.
+            try
+            {
+                const Color gotClear = ReadCentrePixel(*rtClearOnly_);
+                Check(Matches(gotClear, Color::Green),
+                      ("GetData(): Clear-only RenderTarget2D centre pixel is green: got=("
+                       + std::to_string(gotClear.getRProperty()) + "," + std::to_string(gotClear.getGProperty())
+                       + "," + std::to_string(gotClear.getBProperty()) + ")").c_str());
+
+                const Color gotTriangle = ReadCentrePixel(*rtTriangle_);
+                Check(Matches(gotTriangle, Color::Red),
+                      ("GetData(): colored3d triangle RenderTarget2D centre pixel is red: got=("
+                       + std::to_string(gotTriangle.getRProperty()) + "," + std::to_string(gotTriangle.getGProperty())
+                       + "," + std::to_string(gotTriangle.getBProperty()) + ")").c_str());
+
+                const Color gotDepth = ReadCentrePixel(*rtDepth_);
+                Check(Matches(gotDepth, Color::Green),
+                      ("GetData(): depth-tested RenderTarget2D centre pixel is green (nearer quad won): got=("
+                       + std::to_string(gotDepth.getRProperty()) + "," + std::to_string(gotDepth.getGProperty())
+                       + "," + std::to_string(gotDepth.getBProperty()) + ")").c_str());
+            }
+            catch (const std::exception& e)
+            {
+                Check(false, (std::string("GetData() threw: ") + e.what()).c_str());
+            }
         }
         else
         {
@@ -218,8 +264,8 @@ protected:
         if (frame_ == kTotalFrames)
         {
             Check(true, "120 frames of RenderTarget2D render/sample render with no exception");
-            std::printf("=== %d/4 PASS ===\n", passCount_);
-            result_ = (passCount_ == 4) ? 0 : 1;
+            std::printf("=== %d/7 PASS ===\n", passCount_);
+            result_ = (passCount_ == 7) ? 0 : 1;
             Exit();
         }
     }
