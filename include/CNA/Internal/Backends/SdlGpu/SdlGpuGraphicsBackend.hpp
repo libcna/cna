@@ -44,6 +44,41 @@ namespace CNA::Internal::Backends::SdlGpu
     };
 
     /**
+     * @brief `SDL_gpu`-backed `Texture3D` (Phase `SDLGPU-9`, `SDLGPU-40`/`SDLGPU-41`).
+     *
+     * A single `SDL_GPU_TEXTURETYPE_3D` texture, `SAMPLER` usage only (never a render target).
+     * `SetData`/`GetData` both carry an explicit mip `level` straight through to
+     * `SDL_GPUTextureRegion.mip_level`, so authored per-level mip data (SDLGPU-41) needs no special
+     * handling beyond the region upload/download itself. When `mipMap` was requested at
+     * construction, a full level-0 `SetData` additionally triggers a real
+     * `SDL_GenerateMipmapsForGPUTexture` pass immediately afterward (the "generated case" — real
+     * XNA/FNA has no explicit "regenerate mips" call for `Texture3D`, so this is the natural
+     * trigger point).
+     */
+    class SdlGpuTexture3DBackend final : public ITexture3DBackend
+    {
+    public:
+        SdlGpuTexture3DBackend(SdlGpuGraphicsBackend& owner, int width, int height, int depth, bool mipMap);
+        ~SdlGpuTexture3DBackend() override;
+
+        SdlGpuTexture3DBackend(const SdlGpuTexture3DBackend&) = delete;
+        SdlGpuTexture3DBackend& operator=(const SdlGpuTexture3DBackend&) = delete;
+
+        void SetData(int level, int x, int y, int z, int w, int h, int depth,
+                    const void* data, int dataLength) override;
+        void GetData(int level, int x, int y, int z, int w, int h, int depth,
+                    void* data, int dataLength) const override;
+
+    private:
+        SdlGpuGraphicsBackend* owner_ = nullptr;
+        SDL_GPUTexture* texture_ = nullptr;
+        int width_ = 0;
+        int height_ = 0;
+        int depth_ = 0;
+        bool mipMap_ = false;
+    };
+
+    /**
      * @brief `SDL_gpu`-backed `RenderTarget2D` (Phase `SDLGPU-8`, `SDLGPU-35`/`SDLGPU-38`).
      *
      * Owns a standalone `COLOR_TARGET | SAMPLER` texture rendered into its own render pass, one
@@ -577,6 +612,10 @@ namespace CNA::Internal::Backends::SdlGpu
         std::unique_ptr<IRenderTargetCubeBackend> CreateRenderTargetCube(int size, int depthFormat,
                                                                           bool mipMap = false,
                                                                           int multiSampleCount = 0) override;
+
+        /** @brief Creates a `Texture3D` (Phase `SDLGPU-9`, `SDLGPU-40`/`SDLGPU-41`). */
+        std::unique_ptr<ITexture3DBackend> CreateTexture3D(int w, int h, int depth, bool mipMap,
+                                                            int surfaceFormat) override;
 
         /**
          * @brief Activates multiple render targets for MRT (Phase `SDLGPU-8`, `SDLGPU-37`).

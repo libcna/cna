@@ -37,6 +37,14 @@
 > textures are completely unaffected (confirmed via 123/123 passing `Texture2DTest`/
 > `TextureCubeTest`/`Texture3DTest`). See `SDLGPU-39`'s own row for the full detail.
 >
+> **Phase `SDLGPU-9` started and Texture3D closed 2026-07-15**: `SDLGPU-40` (`Texture3D`) and
+> `SDLGPU-41` (mips) are done and verified — see `SDLGPU-40`'s own row for a real bug this task's
+> own byte-exact round-trip test caught and fixed (`SDL_UploadToGPUTexture`'s `cycle=true` silently
+> orphaned earlier partial sub-volume writes onto an abandoned GPU resource; fixed with
+> `cycle=false` for `Texture3D` specifically). `SDLGPU-51` (plain `TextureCube`) remains ⬜ — a new
+> row added this same session (a numbering/documentation fix; Phase `SDLGPU-9` never actually had
+> one before, see `SDLGPU-51`'s own row for why).
+>
 > **Real architectural gotcha found while writing `SDLGPU-37`'s test (applies to any code using
 > this backend, not just tests):** a `RenderTarget2D`/`RenderTargetCube` destroyed before this
 > backend's deferred `Present()`-time render pass actually executes is a genuine use-after-free —
@@ -58,8 +66,8 @@
 > not a deterministic logic bug in one test). This is a pre-existing condition, not something
 > `SDLGPU-35` introduced or fixed. This backend's own dedicated CTest suite
 > (`SdlGpu_Smoke`/`SdlGpu_2D`/`SdlGpu_3D`/`SdlGpu_Effects`/`SdlGpu_RenderTarget2D`/
-> `SdlGpu_RenderTargetCube`/`SdlGpu_MRT`/`SdlGpu_RenderTarget2DMSAA`, `ctest -R SdlGpu`) is the
-> actual validated methodology
+> `SdlGpu_RenderTargetCube`/`SdlGpu_MRT`/`SdlGpu_RenderTarget2DMSAA`/`SdlGpu_Texture3D`, `ctest -R
+> SdlGpu`) is the actual validated methodology
 > for real-window backends in this project (mirrors
 > how Vulkan/D3D11/D3D12 are validated) — don't treat a full unfiltered `CnaTests` run under this
 > backend as a meaningful signal without first re-reading this note.
@@ -203,8 +211,11 @@ extends.
    plain `Texture2D`/`TextureCube`) stay 🟨: the swapchain leg hit a real, unresolved segfault
    specific to the swapchain texture as a download/copy source (see that row) — do not re-attempt
    without reading it first; plain `Texture2D` needs no fix (already-accurate CPU shadow); plain
-   `TextureCube` is blocked on `SDLGPU-51` (no plain `TextureCube` backend exists yet). Next up in
-   this plan: `SDLGPU-33`/`34` (deferred effects) or Phase `SDLGPU-9` (`Texture3D`/`TextureCube`).
+   `TextureCube` is blocked on `SDLGPU-51` (no plain `TextureCube` backend exists yet).
+6. Phase `SDLGPU-9` started 2026-07-15: `SDLGPU-40` (`Texture3D`) and `SDLGPU-41` (mips) done and
+   verified, all ✅ — see `SDLGPU-40`'s own row for a real `cycle=true` GPU-resource-orphaning bug
+   this task's own byte-exact round-trip test caught and fixed. `SDLGPU-51` (plain `TextureCube`)
+   remains ⬜. Next up in this plan: `SDLGPU-51`, or `SDLGPU-33`/`34` (deferred effects).
    `SDLGPU-33` (`EnvironmentMapEffect`) is now partially unblocked (a real `ITextureCubeBackend`
    exists via `RenderTargetCube`) but still deferred pending `SDLGPU-51` (plain uploaded
    `TextureCube`) so both cube sources work. `SDLGPU-34` (`SkinnedEffect`) remains blocked on its
@@ -312,8 +323,8 @@ extends.
 
 | # | Task | Status | Notes |
 | --- | --- | --- | --- |
-| SDLGPU-40 | `Texture3D` — `SDL_GPU_TEXTURETYPE_3D`, sub-volume upload/readback. | ⬜ | Match the byte-exact round-trip bar D3D12 already met (`DX-122`). |
-| SDLGPU-41 | Mipmaps — `SDL_GenerateMipmapsForGPUTexture` for the generated case, explicit per-level `SDL_UploadToGPUTexture` calls when XNA supplies authored mip data. | ⬜ | |
+| SDLGPU-40 | `Texture3D` — `SDL_GPU_TEXTURETYPE_3D`, sub-volume upload/readback. | ✅ | 2026-07-15. `SdlGpuTexture3DBackend : ITexture3DBackend` — a single `SDL_GPU_TEXTURETYPE_3D` texture, `SAMPLER` usage only (never a render target, so no `EnsureFrameRendered()` flush needed before `GetData()`, unlike the render-target `GetData()` overrides — a plain texture's content only ever changes via its own immediate, synchronous `SetData()` uploads). `SetData`/`GetData` both carry the mip `level` straight through to `SDL_GPUTextureRegion.mip_level`/`region.z`/`region.d`, matching `Texture3D.cpp`'s own already-correct, unconditional `backend_->SetData/GetData(...)` dispatch (no XNA-layer change needed at all — `Texture3D::GetData()` already called through to the backend the same way `TextureCube::GetData()` does, confirming this codebase's established "plain non-render-target textures always ask the backend directly" convention). Wired into `CreateTexture3D()`, no longer the inherited `nullptr` default. **Real bug found and fixed via this task's own byte-exact round-trip test**: `SDL_UploadToGPUTexture`'s `cycle=true` (copied from `SdlGpuTextureBackend::UpdatePixels`'s own single-full-replace pattern) silently cycles the texture to a **fresh, separate underlying GPU resource** each time it's called on an already-"bound" texture — fine for a single full-texture replace, but `Texture3D` content is built up via multiple independent sub-volume/per-level `SetData()` calls that must all land on the SAME resource; with `cycle=true`, an earlier partial write (e.g. a sub-volume at Z=0) was silently orphaned onto an abandoned resource the moment a second write (Z=1) followed it, reading back as zero/uninitialized instead of its real content. Fixed by passing `cycle=false` for `Texture3D` uploads specifically (`SdlGpuTextureBackend::UpdatePixels`'s own single-full-replace `cycle=true` is unaffected and correct as-is). **Real proof** (matches the byte-exact bar `D3D12Texture3DBackend`/`DX-122` already met): `SdlGpu_Texture3D`, 6/6 checks — a deliberately off-center 2×2×2 sub-volume within a 4×4×2 texture, with a *different* solid color per Z slice, round-trips byte-exact (this is the exact check that caught the `cycle` bug above); a full-volume round-trip; and a check that level 0 remains intact after a later, separate level-1 `SetData()` call (genuinely proves cumulative writes, not just "the last write is readable"). |
+| SDLGPU-41 | Mipmaps — `SDL_GenerateMipmapsForGPUTexture` for the generated case, explicit per-level `SDL_UploadToGPUTexture` calls when XNA supplies authored mip data. | ✅ | 2026-07-15, closed together with `SDLGPU-40` (see that row for the shared implementation). "Authored mip data" needed no special handling beyond `SetData`'s own `level` passthrough (already required for `SDLGPU-40` itself). "Generated case": a full level-0 `SetData` call (exact bounds match the texture's full width/height/depth) additionally triggers a real `SDL_GenerateMipmapsForGPUTexture` pass on the same command buffer, immediately after the copy pass ends (per `SDL_gpu.h`: must run outside any pass) — real XNA/FNA has no explicit "regenerate mips" call for `Texture3D`, so a full level-0 upload is the natural trigger point. Verified: `SdlGpu_Texture3D`'s Checks C/D — a uniform-color full level-0 upload's auto-generated level 1 reads back the same color (a uniform source downsamples to itself); explicit, authored data written directly to level 1 afterward is not clobbered by that auto-generation and reads back exactly what was uploaded. |
 | SDLGPU-51 | Plain, non-render-target `TextureCube` — `CreateTextureCube()` currently returns `IGraphicsBackend`'s default `nullptr`; needs a real `SdlGpuTextureCubeBackend : ITextureCubeBackend` (upload via `SDL_GPU_TEXTURETYPE_CUBE` + `SDL_GPUCubeMapFace`-indexed per-face `SetData`/`GetData`), analogous to `SdlGpuTextureBackend` for plain `Texture2D`. | ⬜ | Added 2026-07-15 — this row didn't exist when `SDLGPU-33`'s/`SDLGPU-39`'s Notes columns were first written and mistakenly cited `SDLGPU-40` (`Texture3D`) as the blocker for plain `TextureCube` instead; those references have been corrected to point here. Needed before `SDLGPU-33` (`EnvironmentMapEffect`) can support a real, content-loaded skybox/reflection cubemap rather than only a `RenderTargetCube`-sourced one. |
 
 ---

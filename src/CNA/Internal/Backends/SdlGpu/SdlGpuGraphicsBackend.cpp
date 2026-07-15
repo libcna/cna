@@ -764,6 +764,12 @@ namespace CNA::Internal::Backends::SdlGpu
         return std::make_unique<SdlGpuRenderTargetCubeBackend>(*this, size, depthFormat, mipMap, multiSampleCount);
     }
 
+    std::unique_ptr<ITexture3DBackend> SdlGpuGraphicsBackend::CreateTexture3D(
+        int w, int h, int depth, bool mipMap, int /*surfaceFormat*/)
+    {
+        return std::make_unique<SdlGpuTexture3DBackend>(*this, w, h, depth, mipMap);
+    }
+
     void SdlGpuGraphicsBackend::SetRenderTargets(IRenderTargetBackend* const* rts, int count)
     {
         currentExtraMrtTargets_.clear();
@@ -2495,6 +2501,168 @@ namespace CNA::Internal::Backends::SdlGpu
             SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
             throw std::runtime_error(std::string("CNA SDL_GPU: SDL_SubmitGPUCommandBuffer (texture upload) failed: ") + SDL_GetError());
         }
+        SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
+    }
+
+    // ---- SdlGpuTexture3DBackend (Phase SDLGPU-9, SDLGPU-40/SDLGPU-41) ----
+
+    SdlGpuTexture3DBackend::SdlGpuTexture3DBackend(SdlGpuGraphicsBackend& owner, int width, int height,
+                                                    int depth, bool mipMap)
+        : owner_(&owner), width_(width), height_(height), depth_(depth), mipMap_(mipMap)
+    {
+        SDL_GPUTextureCreateInfo createInfo{};
+        createInfo.type = SDL_GPU_TEXTURETYPE_3D;
+        createInfo.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+        createInfo.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER;
+        createInfo.width = static_cast<Uint32>(width);
+        createInfo.height = static_cast<Uint32>(height);
+        createInfo.layer_count_or_depth = static_cast<Uint32>(depth);
+        // Mirrors FNA's Texture3D constructor: LevelCount = mipMap ? CalculateMipLevels(width, height)
+        // : 1 -- depth does not participate in the mip-level count.
+        createInfo.num_levels = mipMap_ ? static_cast<Uint32>(CalculateMipLevels(width, height)) : 1;
+        createInfo.sample_count = SDL_GPU_SAMPLECOUNT_1;
+
+        texture_ = SDL_CreateGPUTexture(owner_->Device(), &createInfo);
+        if (texture_ == nullptr)
+            throw std::runtime_error(std::string("CNA SDL_GPU: failed to create Texture3D: ") + SDL_GetError());
+    }
+
+    SdlGpuTexture3DBackend::~SdlGpuTexture3DBackend()
+    {
+        if (texture_ != nullptr)
+            SDL_ReleaseGPUTexture(owner_->Device(), texture_);
+    }
+
+    void SdlGpuTexture3DBackend::SetData(int level, int x, int y, int z, int w, int h, int depth,
+                                         const void* data, int dataLength)
+    {
+        if (w <= 0 || h <= 0 || depth <= 0)
+            return;
+        const Uint32 sizeBytes = static_cast<Uint32>(w) * static_cast<Uint32>(h) * static_cast<Uint32>(depth) * 4;
+        if (static_cast<Uint32>(dataLength) < sizeBytes)
+            throw std::out_of_range("CNA SDL_GPU: Texture3D::SetData: dataLength too small for the requested region");
+
+        SDL_GPUDevice* device = owner_->Device();
+        SDL_GPUTransferBufferCreateInfo transferInfo{};
+        transferInfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+        transferInfo.size = sizeBytes;
+        SDL_GPUTransferBuffer* transferBuffer = SDL_CreateGPUTransferBuffer(device, &transferInfo);
+        if (transferBuffer == nullptr)
+            throw std::runtime_error(std::string("CNA SDL_GPU: Texture3D::SetData: failed to create transfer buffer: ") + SDL_GetError());
+
+        void* mapped = SDL_MapGPUTransferBuffer(device, transferBuffer, false);
+        if (mapped == nullptr)
+        {
+            SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
+            throw std::runtime_error(std::string("CNA SDL_GPU: Texture3D::SetData: failed to map transfer buffer: ") + SDL_GetError());
+        }
+        std::memcpy(mapped, data, sizeBytes);
+        SDL_UnmapGPUTransferBuffer(device, transferBuffer);
+
+        SDL_GPUCommandBuffer* cmd = SDL_AcquireGPUCommandBuffer(device);
+        if (cmd == nullptr)
+        {
+            SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
+            throw std::runtime_error(std::string("CNA SDL_GPU: Texture3D::SetData: SDL_AcquireGPUCommandBuffer failed: ") + SDL_GetError());
+        }
+        SDL_GPUCopyPass* copyPass = SDL_BeginGPUCopyPass(cmd);
+        SDL_GPUTextureTransferInfo source{};
+        source.transfer_buffer = transferBuffer;
+        source.pixels_per_row = static_cast<Uint32>(w);
+        source.rows_per_layer = static_cast<Uint32>(h);
+        SDL_GPUTextureRegion destination{};
+        destination.texture = texture_;
+        destination.mip_level = static_cast<Uint32>(level);
+        destination.x = static_cast<Uint32>(x);
+        destination.y = static_cast<Uint32>(y);
+        destination.z = static_cast<Uint32>(z);
+        destination.w = static_cast<Uint32>(w);
+        destination.h = static_cast<Uint32>(h);
+        destination.d = static_cast<Uint32>(depth);
+        // cycle=false: unlike SdlGpuTextureBackend::UpdatePixels's single full-texture replace
+        // (where cycle=true's "swap to a fresh resource" avoids stalling on an in-flight read),
+        // Texture3D content is built up via multiple independent sub-volume/per-level SetData
+        // calls that must all land on the SAME underlying resource -- cycle=true here silently
+        // orphaned earlier partial writes onto an abandoned resource (found via a real byte-exact
+        // round-trip test: an off-center sub-volume written first came back as zero/uninitialized
+        // once a second sub-volume was written afterward).
+        SDL_UploadToGPUTexture(copyPass, &source, &destination, false);
+        SDL_EndGPUCopyPass(copyPass);
+
+        // "Generated case" (SDLGPU-41): a full level-0 upload with mips requested regenerates the
+        // whole chain immediately -- real XNA/FNA has no explicit "regenerate mips" call for
+        // Texture3D, so this is the natural trigger point. Per SDL_gpu.h, must run outside any pass.
+        const bool isFullLevel0Upload = level == 0 && x == 0 && y == 0 && z == 0 &&
+                                        w == width_ && h == height_ && depth == depth_;
+        if (mipMap_ && isFullLevel0Upload)
+            SDL_GenerateMipmapsForGPUTexture(cmd, texture_);
+
+        if (!SDL_SubmitGPUCommandBuffer(cmd))
+        {
+            SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
+            throw std::runtime_error(std::string("CNA SDL_GPU: Texture3D::SetData: SDL_SubmitGPUCommandBuffer failed: ") + SDL_GetError());
+        }
+        SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
+    }
+
+    void SdlGpuTexture3DBackend::GetData(int level, int x, int y, int z, int w, int h, int depth,
+                                         void* data, int dataLength) const
+    {
+        if (w <= 0 || h <= 0 || depth <= 0)
+            return;
+        const Uint32 sizeBytes = static_cast<Uint32>(w) * static_cast<Uint32>(h) * static_cast<Uint32>(depth) * 4;
+        if (static_cast<Uint32>(dataLength) < sizeBytes)
+            throw std::out_of_range("CNA SDL_GPU: Texture3D::GetData: dataLength too small for the requested region");
+
+        SDL_GPUDevice* device = owner_->Device();
+        SDL_GPUTransferBufferCreateInfo transferInfo{};
+        transferInfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_DOWNLOAD;
+        transferInfo.size = sizeBytes;
+        SDL_GPUTransferBuffer* transferBuffer = SDL_CreateGPUTransferBuffer(device, &transferInfo);
+        if (transferBuffer == nullptr)
+            throw std::runtime_error(std::string("CNA SDL_GPU: Texture3D::GetData: failed to create transfer buffer: ") + SDL_GetError());
+
+        SDL_GPUCommandBuffer* cmd = SDL_AcquireGPUCommandBuffer(device);
+        if (cmd == nullptr)
+        {
+            SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
+            throw std::runtime_error(std::string("CNA SDL_GPU: Texture3D::GetData: SDL_AcquireGPUCommandBuffer failed: ") + SDL_GetError());
+        }
+
+        SDL_GPUCopyPass* copyPass = SDL_BeginGPUCopyPass(cmd);
+        SDL_GPUTextureRegion region{};
+        region.texture = texture_;
+        region.mip_level = static_cast<Uint32>(level);
+        region.x = static_cast<Uint32>(x);
+        region.y = static_cast<Uint32>(y);
+        region.z = static_cast<Uint32>(z);
+        region.w = static_cast<Uint32>(w);
+        region.h = static_cast<Uint32>(h);
+        region.d = static_cast<Uint32>(depth);
+        SDL_GPUTextureTransferInfo dest{};
+        dest.transfer_buffer = transferBuffer;
+        dest.pixels_per_row = static_cast<Uint32>(w);
+        dest.rows_per_layer = static_cast<Uint32>(h);
+        SDL_DownloadFromGPUTexture(copyPass, &region, &dest);
+        SDL_EndGPUCopyPass(copyPass);
+
+        SDL_GPUFence* fence = SDL_SubmitGPUCommandBufferAndAcquireFence(cmd);
+        if (fence == nullptr)
+        {
+            SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
+            throw std::runtime_error(std::string("CNA SDL_GPU: Texture3D::GetData: SDL_SubmitGPUCommandBufferAndAcquireFence failed: ") + SDL_GetError());
+        }
+        SDL_WaitForGPUFences(device, true, &fence, 1);
+        SDL_ReleaseGPUFence(device, fence);
+
+        void* mapped = SDL_MapGPUTransferBuffer(device, transferBuffer, false);
+        if (mapped == nullptr)
+        {
+            SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
+            throw std::runtime_error(std::string("CNA SDL_GPU: Texture3D::GetData: SDL_MapGPUTransferBuffer failed: ") + SDL_GetError());
+        }
+        std::memcpy(data, mapped, sizeBytes);
+        SDL_UnmapGPUTransferBuffer(device, transferBuffer);
         SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
     }
 
