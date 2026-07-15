@@ -47,6 +47,11 @@
 //   derivation must resolve to false) -- exact lerp(texture*diffuseSum, envmap, envMapAmount).
 // Check N -- EnvironmentMapEffect, OneLight bucket: ONE active light -- exact readback, different
 //   from Check M, proving correct bucket selection (mirrors Checks C/D's own discipline).
+// Check O -- SkinnedEffect, vertex-lighting bucket (stride 52): TWO active lights, a single
+//   Identity bone at 100% weight (skinning is a deliberate no-op) -- exact texture*diffuseSum
+//   readback, proving the Bones[72] register upload doesn't corrupt the draw even when trivial.
+// Check P -- SkinnedEffect, OneLight bucket: ONE active light -- exact readback, different from
+//   Check O, proving correct bucket selection.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
@@ -64,6 +69,7 @@
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "CNA/Internal/Graphics/ImageData.hpp"
 
+#include <algorithm>
 #include <cstdint>
 #include <cstdio>
 #include <vector>
@@ -111,6 +117,16 @@ namespace
         {-1.0f, -1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f},
         { 3.0f, -1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f},
         {-1.0f,  3.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f},
+    };
+    // stride 52: Position+Normal+TexCoord+BlendWeight(FLOAT4)+BlendIndices(UBYTE4).
+    struct VPNTW { float x, y, z, nx, ny, nz, u, v; float w0, w1, w2, w3; uint8_t idx[4]; };
+    // Full weight on bone 0 -- with bone 0 set to Identity, skinning is a no-op, so the expected
+    // pixel math reduces to exactly the same lit-textured formulas the BasicEffect/
+    // EnvironmentMapEffect checks already use.
+    const VPNTW kTriSkinned[3] = {
+        {-1.0f, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, {0, 0, 0, 0}},
+        { 3.0f, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, {0, 0, 0, 0}},
+        {-1.0f,  3.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, {0, 0, 0, 0}},
     };
 
     std::unique_ptr<CNA::Internal::Backends::ITextureBackend> Make1x1Texture(
@@ -463,6 +479,75 @@ protected:
                   "(90,124,33) -- different from Check M, proves correct bucket selection");
         }
 
+        // Check O: SkinnedEffect, vertex-lighting bucket (TWO active lights, stride 52). Bone 0 is
+        // Identity and every vertex is 100% weighted to it, so skinning is a no-op and the expected
+        // math reduces to exactly the same lit-textured formula BasicEffect's own Check C uses.
+        {
+            auto vb = backend.CreateVertexBuffer(3);
+            vb->SetData(kTriSkinned, 3, sizeof(VPNTW));
+            auto tex = Make1x1Texture(backend, 200, 120, 40, 255);
+
+            GpuDrawParams params;
+            params.skinned = true;
+            params.textureEnabled = true;
+            params.vertexColorEnabled = false;
+            params.texture0 = tex.get();
+            params.diffuseColor[0] = params.diffuseColor[1] = params.diffuseColor[2] = params.diffuseColor[3] = 1.0f;
+            params.specularColor[0] = params.specularColor[1] = params.specularColor[2] = 0.0f;
+            params.weightsPerVertex = 1;
+            params.boneCount = 1;
+            // Identity, row-major flat (matches Matrix::ToColumnMajor()'s own reading order).
+            const float identity16[16] = {1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1};
+            std::copy(identity16, identity16 + 16, params.boneTransforms);
+            params.light0Dir[0] = 0.0f; params.light0Dir[1] = 0.0f; params.light0Dir[2] = -1.0f;
+            params.light0Diffuse[0] = params.light0Diffuse[1] = params.light0Diffuse[2] = 0.3f;
+            params.light1Dir[0] = 0.0f; params.light1Dir[1] = 0.0f; params.light1Dir[2] = -1.0f;
+            params.light1Diffuse[0] = params.light1Diffuse[1] = params.light1Diffuse[2] = 0.2f;
+            // light2 stays zero -> oneLight must resolve to false (light1 nonzero).
+
+            dev.Clear(Color(0, 0, 255, 255));
+            backend.DrawPrimitivesEx(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                     Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, params);
+            Color px(0, 0, 0, 0);
+            ReadCenterPixel(dev, px);
+            // diffuse sum = 1*0.3+1*0.2 = 0.5 -> texture(200,120,40)*0.5 = (100,60,20) exactly.
+            check(px.getRProperty() == 100 && px.getGProperty() == 60 && px.getBProperty() == 20 && px.getAProperty() == 255,
+                  "DrawPrimitivesEx (SkinnedEffect, vertex-lighting bucket, 2 lights, Identity bone): "
+                  "exact readback (100,60,20)");
+        }
+
+        // Check P: SkinnedEffect, OneLight bucket (ONE active light).
+        {
+            auto vb = backend.CreateVertexBuffer(3);
+            vb->SetData(kTriSkinned, 3, sizeof(VPNTW));
+            auto tex = Make1x1Texture(backend, 200, 120, 40, 255);
+
+            GpuDrawParams params;
+            params.skinned = true;
+            params.textureEnabled = true;
+            params.vertexColorEnabled = false;
+            params.texture0 = tex.get();
+            params.diffuseColor[0] = params.diffuseColor[1] = params.diffuseColor[2] = params.diffuseColor[3] = 1.0f;
+            params.specularColor[0] = params.specularColor[1] = params.specularColor[2] = 0.0f;
+            params.weightsPerVertex = 1;
+            params.boneCount = 1;
+            const float identity16[16] = {1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1};
+            std::copy(identity16, identity16 + 16, params.boneTransforms);
+            params.light0Dir[0] = 0.0f; params.light0Dir[1] = 0.0f; params.light0Dir[2] = -1.0f;
+            params.light0Diffuse[0] = params.light0Diffuse[1] = params.light0Diffuse[2] = 0.4f;
+            // light1/light2 stay zero -> oneLight must resolve to true.
+
+            dev.Clear(Color(0, 0, 255, 255));
+            backend.DrawPrimitivesEx(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                     Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, params);
+            Color px(0, 0, 0, 0);
+            ReadCenterPixel(dev, px);
+            // diffuse sum = 1*0.4 = 0.4 -> texture(200,120,40)*0.4 = (80,48,16) exactly.
+            check(px.getRProperty() == 80 && px.getGProperty() == 48 && px.getBProperty() == 16 && px.getAProperty() == 255,
+                  "DrawPrimitivesEx (SkinnedEffect, OneLight bucket, 1 light, Identity bone): "
+                  "exact readback (80,48,16) -- different from Check O, proves correct bucket selection");
+        }
+
         // Check F: honest-gap / not-yet-implemented reporting.
         {
             auto vb = backend.CreateVertexBuffer(3);
@@ -503,13 +588,15 @@ protected:
             catch (const std::exception&) { threw = true; }
             check(threw, "DrawPrimitivesEx: an unsupported EnvironmentMapEffect vertex layout throws");
 
+            // No matching CNA vertex layout: SkinnedEffect requires stride 52
+            // (VSInputNmTxWeights), and this vb is stride 20.
             GpuDrawParams skinnedParams;
             skinnedParams.skinned = true;
             threw = false;
             try { backend.DrawPrimitivesEx(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                            Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, skinnedParams); }
             catch (const std::exception&) { threw = true; }
-            check(threw, "DrawPrimitivesEx: SkinnedEffect dispatch throws a named not-yet-implemented (D9-82f)");
+            check(threw, "DrawPrimitivesEx: an unsupported SkinnedEffect vertex layout throws");
         }
 
         std::printf("=== %d/%d PASS ===\n", passCount, totalCount);

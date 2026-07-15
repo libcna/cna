@@ -368,6 +368,15 @@ namespace CNA::Internal::Backends::D3D9
                                          std::size_t stride, const Matrix& world, const Matrix& view,
                                          const Matrix& projection, PrimitiveType primitive, int primitiveCount,
                                          const GpuDrawParams& params);
+        /// D9-82f: real `SkinnedEffect` dispatch -- per-vertex bone-matrix-array upload
+        /// (`Bones[72]`, 216 registers). Only the 12 non-pixel-lighting `ShaderIndex` values are
+        /// reachable (`PreferPerPixelLighting` stays `D9-81`'s still-open gap, same as
+        /// `BasicEffect`'s case). Uses the existing stride-52 layout (`VSInputNmTxWeights` matches
+        /// it exactly). Defined in `D3D9EffectDraw.cpp`.
+        void DrawSkinnedEffectEXT(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
+                                  std::size_t stride, const Matrix& world, const Matrix& view,
+                                  const Matrix& projection, PrimitiveType primitive, int primitiveCount,
+                                  const GpuDrawParams& params);
 
         SDL_Window* window_ = nullptr;
         int width_ = 0;
