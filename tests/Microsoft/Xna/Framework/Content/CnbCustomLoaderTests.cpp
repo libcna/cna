@@ -68,7 +68,19 @@ namespace
     };
 }
 
+// plan_cnb.md CNB-38: no GraphicsDevice here -- none of this fixture's tests touch graphics, so
+// none of them need to pay for real window/SDL-video-subsystem creation (which fails outright
+// under a genuinely headless environment, e.g. CNA_GRAPHICS_BACKEND=HEADLESS's whole point, or
+// SDL_VIDEODRIVER=dummy under EasyGL). Only FactoryCanRecursivelyLoadReferencedTexture actually
+// needs one, via CnbCustomLoaderGraphicsTest below.
 class CnbCustomLoaderTest : public ::testing::Test
+{
+};
+
+// The one test in this file that genuinely needs a real GraphicsDevice (it loads a Texture2D).
+// Kept as a separate fixture so the other 8, graphics-independent tests above don't pay for
+// window/SDL-video creation they never use.
+class CnbCustomLoaderGraphicsTest : public CnbCustomLoaderTest
 {
 protected:
     GraphicsDevice gd;
@@ -151,7 +163,7 @@ TEST_F(CnbCustomLoaderTest, UnsupportedCnbVersionThrowsEvenWithRegisteredType)
     EXPECT_FALSE(factoryInvoked);
 }
 
-TEST_F(CnbCustomLoaderTest, FactoryCanRecursivelyLoadReferencedTexture)
+TEST_F(CnbCustomLoaderGraphicsTest, FactoryCanRecursivelyLoadReferencedTexture)
 {
     ScratchContentRoot root;
 
