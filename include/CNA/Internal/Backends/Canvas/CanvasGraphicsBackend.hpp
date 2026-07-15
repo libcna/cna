@@ -50,6 +50,13 @@ namespace CNA::Internal::Backends::Canvas
         void SetRenderTargets(IRenderTargetBackend* const* rts, int count) override;
         void ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels) override;
 
+        // plan_canvas.md CANVAS-40/41: maps the 4 standard BlendState presets to
+        // globalCompositeOperation (Design decision 5); throws for any other Blend/BlendFunction
+        // combination -- Canvas2D has no generic blend-factor/equation model to fall back on.
+        void ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
+                             int colorDstBlend, int alphaDstBlend,
+                             int colorBlendFunc, int alphaBlendFunc) override;
+
         void ClearColorAndDepth(float r, float g, float b, float a, float depth) override;
         void ClearDepth(float depth) override;
         void ClearStencil(int stencil) override;

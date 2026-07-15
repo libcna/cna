@@ -25,12 +25,30 @@
 // non-white RGB tint needs the scratch-canvas multiply trick Design decision/CANVAS-32 anticipated
 // (Canvas2D has no native per-draw RGB-multiply primitive) -- skipped entirely for the overwhelmingly
 // common Color.White case, so most draws pay zero extra-canvas cost.
+//
+// CANVAS-42: smoothingEnabled maps the "expand"/magnification component of TextureFilter to
+// ctx.imageSmoothingEnabled (Canvas2D's only smoothing control).
+//
+// CANVAS-43/44: addressU/addressV are the raw TextureAddressMode ints (0=Wrap, 1=Clamp, 2=Mirror).
+// Clamp is implemented for real by explicitly clamping the source rect into the texture's actual
+// bounds -- not by relying on drawImage's own out-of-bounds behavior, which this dev loop cannot
+// verify in a real browser (Design decision 9). Wrap/Mirror only change behavior when the requested
+// sourceRectangle exceeds the texture's own bounds (the only case they can ever visibly differ from
+// Clamp) -- ctx.createPattern(...,'repeat') for Wrap; for Mirror, a lazily-built 2x2 pre-tiled
+// mirrored canvas (createPattern has no native mirror-repeat mode) is used as the pattern source
+// instead, per plan_canvas.md CANVAS-44's own suggested "pre-composited 2x-tile" approach. Both
+// patterns are filled via ctx.fillRect() under the SAME rotate/scale/flip transform stack as the
+// plain drawImage path, so rotation/flip apply for free (fillStyle=pattern honors the current
+// transform exactly like any other fill). Mixed per-axis modes (addressU != addressV) and a tinted
+// draw combined with an out-of-bounds Wrap/Mirror sourceRectangle both throw rather than guess --
+// narrow, honestly-documented gaps (see plan_canvas.md CANVAS-44's notes), not silently-wrong output.
 EM_JS(void, CNA_Canvas2D_DrawSprite, (
     int id, int sx, int sy, int sw, int sh,
     double destX, double destY, double destW, double destH,
     double rotation, double originX, double originY,
     int flipH, int flipV,
-    int r, int g, int b, int a
+    int r, int g, int b, int a,
+    int smoothingEnabled, int addressU, int addressV
 ), {
     const entry = Module['cnaTextures'] && Module['cnaTextures'][id];
     if (!entry) { console.error('[CNA] Canvas2D: Draw on unknown texture id', id); return; }
@@ -38,37 +56,17 @@ EM_JS(void, CNA_Canvas2D_DrawSprite, (
     const ctx = Module['cnaCurrentCtx'];
     if (!ctx || sw <= 0 || sh <= 0 || destW === 0 || destH === 0) return;
 
-    let source = entry.canvas;
-    let drawSx = sx, drawSy = sy;
-    if (r !== 255 || g !== 255 || b !== 255) {
-        if (!Module['cnaScratchCanvas']) {
-            Module['cnaScratchCanvas'] = (typeof OffscreenCanvas !== 'undefined')
-                ? new OffscreenCanvas(1, 1) : document.createElement('canvas');
-        }
-        const scratch = Module['cnaScratchCanvas'];
-        scratch.width = sw; scratch.height = sh;
-        const sctx = scratch.getContext('2d');
-        sctx.setTransform(1, 0, 0, 1, 0, 0);
-        sctx.globalAlpha = 1;
-        sctx.globalCompositeOperation = 'source-over';
-        sctx.clearRect(0, 0, sw, sh);
-        sctx.drawImage(entry.canvas, sx, sy, sw, sh, 0, 0, sw, sh);
-        sctx.globalCompositeOperation = 'multiply';
-        sctx.fillStyle = 'rgb(' + r + ',' + g + ',' + b + ')';
-        sctx.fillRect(0, 0, sw, sh);
-        sctx.globalCompositeOperation = 'destination-in';
-        sctx.drawImage(entry.canvas, sx, sy, sw, sh, 0, 0, sw, sh);
-        sctx.globalCompositeOperation = 'source-over';
-        source = scratch;
-        drawSx = 0; drawSy = 0;
-    }
+    const texW = entry.canvas.width, texH = entry.canvas.height;
+    const exceedsBounds = sx < 0 || sy < 0 || sx + sw > texW || sy + sh > texH;
+    const tinted = (r !== 255 || g !== 255 || b !== 255);
 
-    const scaleX = destW / sw, scaleY = destH / sh;
     ctx.save();
+    ctx.imageSmoothingEnabled = !!smoothingEnabled;
+    ctx.globalCompositeOperation = Module['cnaCompositeOp'] || 'source-over';
     ctx.globalAlpha = a / 255;
     ctx.translate(destX, destY);
     ctx.rotate(rotation);
-    ctx.scale(scaleX, scaleY);
+    ctx.scale(destW / sw, destH / sh);
     if (flipH) {
         const cx = -originX + sw / 2;
         ctx.translate(cx, 0); ctx.scale(-1, 1); ctx.translate(-cx, 0);
@@ -77,7 +75,87 @@ EM_JS(void, CNA_Canvas2D_DrawSprite, (
         const cy = -originY + sh / 2;
         ctx.translate(0, cy); ctx.scale(1, -1); ctx.translate(0, -cy);
     }
-    ctx.drawImage(source, drawSx, drawSy, sw, sh, -originX, -originY, sw, sh);
+
+    if (exceedsBounds && (addressU !== 1 || addressV !== 1)) {
+        if (addressU !== addressV) {
+            console.error('[CNA] Canvas2D: mixed U/V TextureAddressMode with an out-of-bounds '
+                + 'sourceRectangle is not supported (addressU=' + addressU + ', addressV=' + addressV + ')');
+            ctx.restore();
+            return;
+        }
+        if (tinted) {
+            console.error('[CNA] Canvas2D: a tinted draw combined with a Wrap/Mirror '
+                + 'out-of-bounds sourceRectangle is not supported');
+            ctx.restore();
+            return;
+        }
+        let tileSource = entry.canvas;
+        let tileW = texW, tileH = texH;
+        if (addressU === 2) { // Mirror
+            if (!Module['cnaMirrorTiles']) Module['cnaMirrorTiles'] = {};
+            let tile = Module['cnaMirrorTiles'][id];
+            if (!tile) {
+                tile = (typeof OffscreenCanvas !== 'undefined')
+                    ? new OffscreenCanvas(texW * 2, texH * 2) : document.createElement('canvas');
+                tile.width = texW * 2; tile.height = texH * 2;
+                const tctx = tile.getContext('2d');
+                tctx.drawImage(entry.canvas, 0, 0);
+                tctx.save(); tctx.translate(texW * 2, 0); tctx.scale(-1, 1); tctx.drawImage(entry.canvas, 0, 0); tctx.restore();
+                tctx.save(); tctx.translate(0, texH * 2); tctx.scale(1, -1); tctx.drawImage(entry.canvas, 0, 0); tctx.restore();
+                tctx.save(); tctx.translate(texW * 2, texH * 2); tctx.scale(-1, -1); tctx.drawImage(entry.canvas, 0, 0); tctx.restore();
+                Module['cnaMirrorTiles'][id] = tile;
+            }
+            tileSource = tile; tileW = texW * 2; tileH = texH * 2;
+        }
+        const pattern = ctx.createPattern(tileSource, 'repeat');
+        if (pattern.setTransform) {
+            const m = new DOMMatrix();
+            m.e = -originX - sx; m.f = -originY - sy;
+            pattern.setTransform(m);
+        }
+        ctx.fillStyle = pattern;
+        ctx.fillRect(-originX, -originY, sw, sh);
+        ctx.restore();
+        return;
+    }
+
+    // Clamp path (also the common in-bounds path, regardless of address mode): clamp the source
+    // rect into the texture's real bounds explicitly, then place/scale the clamped sub-rect at the
+    // equivalent offset within the destination -- a no-op when already in-bounds.
+    const csx = Math.max(0, Math.min(sx, texW));
+    const csy = Math.max(0, Math.min(sy, texH));
+    const csw = Math.max(0, Math.min(sx + sw, texW) - csx);
+    const csh = Math.max(0, Math.min(sy + sh, texH) - csy);
+    if (csw <= 0 || csh <= 0) { ctx.restore(); return; }
+
+    let source = entry.canvas;
+    let drawSx = csx, drawSy = csy;
+    if (tinted) {
+        if (!Module['cnaScratchCanvas']) {
+            Module['cnaScratchCanvas'] = (typeof OffscreenCanvas !== 'undefined')
+                ? new OffscreenCanvas(1, 1) : document.createElement('canvas');
+        }
+        const scratch = Module['cnaScratchCanvas'];
+        scratch.width = csw; scratch.height = csh;
+        const sctx = scratch.getContext('2d');
+        sctx.setTransform(1, 0, 0, 1, 0, 0);
+        sctx.globalAlpha = 1;
+        sctx.globalCompositeOperation = 'source-over';
+        sctx.clearRect(0, 0, csw, csh);
+        sctx.drawImage(entry.canvas, csx, csy, csw, csh, 0, 0, csw, csh);
+        sctx.globalCompositeOperation = 'multiply';
+        sctx.fillStyle = 'rgb(' + r + ',' + g + ',' + b + ')';
+        sctx.fillRect(0, 0, csw, csh);
+        sctx.globalCompositeOperation = 'destination-in';
+        sctx.drawImage(entry.canvas, csx, csy, csw, csh, 0, 0, csw, csh);
+        sctx.globalCompositeOperation = 'source-over';
+        source = scratch;
+        drawSx = 0; drawSy = 0;
+    }
+
+    const offX = (csx - sx) * (destW / sw), offY = (csy - sy) * (destH / sh);
+    const outW = csw * (destW / sw), outH = csh * (destH / sh);
+    ctx.drawImage(source, drawSx, drawSy, csw, csh, -originX + offX, -originY + offY, outW, outH);
     ctx.restore();
 });
 
@@ -120,7 +198,10 @@ namespace CNA::Internal::Backends::Canvas
                         const Color& color,
                         float rotation,
                         const Vector2& origin,
-                        SpriteEffects effects)
+                        SpriteEffects effects,
+                        bool smoothingEnabled,
+                        int addressU,
+                        int addressV)
         {
             const int id = CanvasIdOf(texture);
             if (id == 0) return;
@@ -133,9 +214,11 @@ namespace CNA::Internal::Backends::Canvas
                 destinationRectangle.Width, destinationRectangle.Height,
                 static_cast<double>(rotation), static_cast<double>(origin.X), static_cast<double>(origin.Y),
                 flipH ? 1 : 0, flipV ? 1 : 0,
-                color.getRProperty(), color.getGProperty(), color.getBProperty(), color.getAProperty());
+                color.getRProperty(), color.getGProperty(), color.getBProperty(), color.getAProperty(),
+                smoothingEnabled ? 1 : 0, addressU, addressV);
 #else
             (void)destinationRectangle; (void)sourceRectangle; (void)color; (void)rotation; (void)origin; (void)effects;
+            (void)smoothingEnabled; (void)addressU; (void)addressV;
 #endif
         }
     }
@@ -176,12 +259,38 @@ namespace CNA::Internal::Backends::Canvas
                 "no programmable shader stage exists on this backend.");
     }
 
+    void CanvasSpriteBatchBackend::SetSamplerFilter(int textureFilter)
+    {
+        // Same magnification-dominant reasoning as SdlSpriteBatchBackend::SetSamplerFilter (Task
+        // 701): SpriteBatch draws are near-universally magnification-dominant, so the "expand"
+        // component of TextureFilter is what visibly matters against Canvas2D's single binary
+        // smoothing toggle. Linear=0, Anisotropic=2, LinearMipPoint=3, MinPointMagLinearMipLinear=7,
+        // MinPointMagLinearMipPoint=8 all have mag=Linear -> smoothing on; everything else (Point
+        // and the MagPoint variants) -> smoothing off.
+        switch (textureFilter)
+        {
+            case 0: case 2: case 3: case 7: case 8:
+                smoothingEnabled_ = true;
+                break;
+            default:
+                smoothingEnabled_ = false;
+                break;
+        }
+    }
+
+    void CanvasSpriteBatchBackend::SetSamplerAddressMode(int addressU, int addressV)
+    {
+        addressU_ = addressU;
+        addressV_ = addressV;
+    }
+
     void CanvasSpriteBatchBackend::Draw(const ITextureBackend& texture, float x, float y)
     {
         if (!begun_) throw std::runtime_error("CanvasSpriteBatchBackend::Draw called before Begin().");
         const Rectangle destRect(static_cast<int>(x), static_cast<int>(y), texture.GetWidth(), texture.GetHeight());
         const Rectangle srcRect(0, 0, texture.GetWidth(), texture.GetHeight());
-        DrawSprite(texture, destRect, srcRect, Color(255, 255, 255, 255), 0.0f, Vector2(0, 0), SpriteEffects::None);
+        DrawSprite(texture, destRect, srcRect, Color(255, 255, 255, 255), 0.0f, Vector2(0, 0), SpriteEffects::None,
+                  smoothingEnabled_, addressU_, addressV_);
     }
 
     void CanvasSpriteBatchBackend::Draw(const ITextureBackend& texture,
@@ -190,7 +299,8 @@ namespace CNA::Internal::Backends::Canvas
                                        const Color& color)
     {
         if (!begun_) throw std::runtime_error("CanvasSpriteBatchBackend::Draw called before Begin().");
-        DrawSprite(texture, destinationRectangle, sourceRectangle, color, 0.0f, Vector2(0, 0), SpriteEffects::None);
+        DrawSprite(texture, destinationRectangle, sourceRectangle, color, 0.0f, Vector2(0, 0), SpriteEffects::None,
+                  smoothingEnabled_, addressU_, addressV_);
     }
 
     void CanvasSpriteBatchBackend::Draw(const ITextureBackend& texture,
@@ -204,6 +314,7 @@ namespace CNA::Internal::Backends::Canvas
     {
         (void)layerDepth;
         if (!begun_) throw std::runtime_error("CanvasSpriteBatchBackend::Draw called before Begin().");
-        DrawSprite(texture, destinationRectangle, sourceRectangle, color, rotation, origin, effects);
+        DrawSprite(texture, destinationRectangle, sourceRectangle, color, rotation, origin, effects,
+                  smoothingEnabled_, addressU_, addressV_);
     }
 }

@@ -24,6 +24,15 @@ namespace CNA::Internal::Backends::Canvas
         /// CANVAS-38: throws for a non-null custom Effect (Design decision 10) -- no programmable
         /// shader stage exists on this backend, same conclusion SDL_RENDERER reached (Task 676).
         void SetCustomEffect(Effect* effect) override;
+        /// CANVAS-42: maps the "expand"/magnification component of TextureFilter to
+        /// ctx.imageSmoothingEnabled -- Canvas2D only has a binary smoothing toggle, same
+        /// magnification-dominant reasoning SDL_RENDERER's Task 701 fix used for its own coarser
+        /// single-SDL_ScaleMode primitive.
+        void SetSamplerFilter(int textureFilter) override;
+        /// CANVAS-43/44: stores the raw TextureAddressMode ints (0=Wrap, 1=Clamp, 2=Mirror) --
+        /// Draw() only branches on these when a sourceRectangle actually exceeds the texture's own
+        /// bounds (the only case Wrap/Mirror vs. Clamp can ever visibly differ).
+        void SetSamplerAddressMode(int addressU, int addressV) override;
 
         void Draw(const ITextureBackend& texture, float x, float y) override;
         void Draw(const ITextureBackend& texture,
@@ -43,5 +52,10 @@ namespace CNA::Internal::Backends::Canvas
 
     private:
         bool begun_ = false;
+        bool smoothingEnabled_ = true;
+        /// Raw TextureAddressMode ints (0=Wrap, 1=Clamp, 2=Mirror); default Clamp matches XNA/FNA's
+        /// own default SamplerState (LinearClamp).
+        int addressU_ = 1;
+        int addressV_ = 1;
     };
 }
