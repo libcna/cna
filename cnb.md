@@ -8,11 +8,13 @@
 > migrated once, offline, to either a directly-loadable native format (PNG/JPEG/WAV, loaded by
 > extension) or a `.cnb` JSON file next to the original asset.
 >
-> **Status: ✅ IMPLEMENTED 2026-07-15 — `plan_cnb.md`'s Phases 0–7 (`CNB-1`–`CNB-27`) all closed.**
+> **Status: ✅ IMPLEMENTED 2026-07-15 — `plan_cnb.md`'s all 9 phases (`CNB-1`–`CNB-39`) closed.**
 > `ContentManager` (`src/Microsoft/Xna/Framework/Content/ContentManager.cpp`,
 > `include/Microsoft/Xna/Framework/Content/ContentManager.hpp`,
-> `include/CNA/Internal/CnbEnvelope.hpp`) now implements this document as designed: the `.cnb`
-> envelope (`cnbVersion`/`type`/`sourceFile`) parses and validates against the requested C++ type;
+> `include/CNA/Internal/CnbEnvelope.hpp`, `include/CNA/Internal/Json.hpp`,
+> `include/CNA/Internal/CnbSourceFile.hpp`) now implements this document as designed: the `.cnb`
+> envelope (`cnbVersion`/`type`/`sourceFile`) parses via a real recursive-descent JSON parser and
+> validates against the requested C++ type with a strict `cnbVersion == 1` policy;
 > `.cnb` is tried **before** any native extension for every registered type
 > (`ResolveAssetPath`), letting it act as an optional metadata sidecar (proven on `Texture2D` via
 > `sourceFile` + `colorKey`) rather than only a mutually-exclusive alternative; `SpriteFontTypeReader`,
@@ -23,8 +25,14 @@
 > (Avatar, `NOXNA`) was deliberately **kept separate, not migrated** — see `plan_cnb.md` `CNB-22`
 > for the full reasoning (real cross-language tooling depends on that extension name, it already
 > has the most mature test coverage of any of the four readers, and it's explicitly a distinct
-> non-`Model`-shaped system). Full-suite regression after the last phase: 4404 tests, 4402 passed,
-> 2 pre-existing unrelated hardware skips, 0 failures. See `plan_cnb.md` for the complete,
+> non-`Model`-shaped system). Phases 0–8 (`CNB-1`–`CNB-31`) landed first; a same-day external
+> review then found 2 real bugs (fixed) and prompted Phase 9 (`CNB-32`–`CNB-39`, also same day),
+> which added `sourceFile` path-safety enforcement, a per-reader capability matrix, a type-safe
+> asset cache, deterministic custom-loader registration, and a headless-runnable `.cnb` test lane
+> — see `plan_cnb.md` for the full task-by-task record. Final full-suite regression after all 9
+> phases: 4452 tests, 4450 passed, 2 pre-existing unrelated hardware skips, 0 failures. Dedicated
+> `.cnb` coverage: 61 test cases across 14 gtest suites, with a 47-test graphics-independent subset
+> verified under `SDL_VIDEODRIVER=dummy`. See `plan_cnb.md` for the complete,
 > task-by-task implementation record — this document remains the design reference; that one is the
 > log of what actually landed and why. See also "Relationship to `xnb.md`/`plan_xnb.md`" below for
 > how the two binary-vs-JSON strategies compare and that plan's own adoption status.
@@ -244,6 +252,14 @@ pixel format, compression, ...) to be interpreted at all. `sourceFile` is resolv
 same two-step rule as the top-level asset (`.cnb` first, then native extension) — it just can't
 itself point at another `.cnb` with its own `sourceFile` (no chained/recursive sidecars; one `.cnb`
 per physical payload, matching how `Model`'s sidecars are never themselves JSON).
+
+**Enforced safety guarantees** (`plan_cnb.md` CNB-32, `CNA::Internal::ResolveCnbSourceFileSafely()`
+in `include/CNA/Internal/CnbSourceFile.hpp`): `sourceFile` cannot be an absolute path; its resolved
+target cannot escape the content root (including via `../` or a symlink); and it cannot resolve to
+another `.cnb`, whether named explicitly (`"foo.cnb"`) or implicitly (`"foo"`, where the normal
+resolver would pick a sibling `"foo.cnb"` over any other candidate — this closes a self-referential
+cycle too, since a cycle is just a chain back to the same file). Any violation throws
+`ContentLoadException` naming both the referring `.cnb` and the rejected target.
 
 Authoring note: `.cnb`'s presence always wins (see "The core rule" above) — a `Content/ahoj.png` with
 an unrelated, coincidentally-same-named `Content/ahoj.cnb` sitting next to it (self-contained, no
