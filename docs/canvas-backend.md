@@ -117,8 +117,12 @@ abstractly) and fixed. Listed here for visibility, not buried in the per-feature
 4. **Wrap/Mirror validation gaps silently skipped the draw instead of throwing.** Contradicted the
    plan's own "throw rather than guess" intent. Fixed by moving validation into C++, throwing a real
    `std::runtime_error` before ever reaching JS.
-5. **The Mirror-tile cache was never invalidated after `Texture2D::SetData`.** Could show stale
-   pixels after a texture update. Fixed by deleting the cached tile on every pixel update.
+5. **The Mirror-tile cache was never invalidated after a pixel update.** Fixed in two passes: first
+   for `Texture2D::SetData` (deleting the cached tile on every `UpdatePixels` call); a follow-up
+   review round then caught that a bound `RenderTarget2D`'s pixels can *also* change via direct
+   `Clear()`/`Draw()` calls made against it while bound, never going through `UpdatePixels` at all —
+   so `RenderTarget2D::BindAsRenderTarget()` now also invalidates the cache, conservatively, on every
+   bind (treating "this target was just bound" as "its content may be about to change").
 
 A 6th issue (Clear() blending with old content under a leftover composite mode, and permanently
 resetting the transform rather than save/restore) was found and fixed in the same pass — see the
@@ -156,7 +160,8 @@ Phase C1). None of this has been checked yet.
 - [ ] `TextureAddressMode::Wrap` and `Mirror` with a `sourceRectangle` larger than the texture (the
       one case they can ever visibly differ from `Clamp`) — **this is the least-verified area in the
       whole backend**; also confirm a `Mirror`-addressed draw shows updated pixels after a
-      `Texture2D::SetData()` call (cache-invalidation fix above).
+      `Texture2D::SetData()` call AND after drawing new content into a bound `RenderTarget2D` that
+      was previously Mirror-addressed (both cache-invalidation fixes above).
 - [ ] `Begin(transformMatrix)` with a genuinely non-Identity matrix (e.g. a camera pan/zoom) —
       confirm sprites transform correctly on top of their own placement/rotation.
 - [ ] `Clear()` called *between* a `SpriteBatch.Begin(transformMatrix)`/`End()` pair — confirm draws
