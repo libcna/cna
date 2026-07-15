@@ -1148,13 +1148,13 @@ undocumented, and FNA implements none of it either (confirmed by `D9-100`'s own 
 inventing one without a reference would risk asserting behavior this project cannot actually
 verify against real XNA. Both real, honest follow-ups, not claimed done.
 
-### Phase D9-12 — the indistinguishability suite: D9-120/D9-121 CLOSED, D9-122/D9-123 still open
+### Phase D9-12 — the indistinguishability suite: D9-120/D9-121/D9-122 CLOSED, D9-123 still open
 
 | Task | Status |
 |---|---|
 | `D9-120` — promote `D9-A`'s corpus to a real, checked-in-reference-image CTest | ✅ |
 | `D9-121` — a written, honest divergence report | ✅ |
-| `D9-122` — `D3D9_Smoke`/`D3D9_Common` + the 4 reused state tests, mutation-verified | ⬜ |
+| `D9-122` — `D3D9_Smoke`/`D3D9_Common` + the 4 reused state tests, mutation-verified | ✅ |
 | `D9-123` — `CnaTests` under `CNA_GRAPHICS_BACKEND=D3D9` | ⬜ (known-blocked, see below) |
 
 **Closed 2026-07-15 (`D9-120`/`D9-121`).** All 31 `D9-A5` scenes' real-XNA-4.0 renders regenerated
@@ -1178,14 +1178,48 @@ for D3D9's own dispatch correctness only. Also documents the 2 real backend bugs
 measurement effort found and fixed (`D9-93`'s `SpriteSortMode` Z-clipping; Phase D9-10's own
 `GraphicsProfile`-never-reaches-the-device bug) as evidence the methodology finds real problems.
 
-**`D9-122`/`D9-123` still open, not attempted this pass.** `D9-123` is a KNOWN, already-documented
-blocker, not a new gap: `CnaTests` genuinely fails to build under `CNA_GRAPHICS_BACKEND=D3D9`
-today (confirmed live while regression-checking Phase D9-10's own `GraphicsDeviceManager` fix —
+**Closed 2026-07-15 (`D9-122`).** Read every task's closure note that produced a `D3D9_Smoke`/
+`D3D9_Common` check (`D9-23`, `D9-30`–`D9-64`, `D9-82`/`D9-83`, Phase D9-10) and classified each
+check CONFIRMED (explicit mutation-test evidence on record) or GAP (never deliberately broken).
+Ran 6 new mutation cycles against the highest-priority GAPs — each: break the implementation →
+rebuild `cna_test_d3d9_smoke` → confirm EXACTLY the predicted check(s) go red and nothing else →
+revert → rebuild → reconfirm `55/55`:
+
+1. `ApplyBlendState()`'s `D3DRS_DESTBLEND` forced to `D3DBLEND_ONE` — first-ever mutation proof for
+   `D3D9_BlendState_Opaque`/`D3D9_BlendState_AlphaBlend`.
+2. `PerformResetRecovery()`'s `deviceLost_ = false;` disabled — Check M's own recovery assertion
+   failed as predicted, and surfaced a genuine finding (not a bug): the very next line in Check M
+   is a bare `dev.Clear(...)` with no try/catch, so a still-lost device throws an uncaught
+   `DeviceLostException` and crashes the whole test binary (exit 3) before Checks N–Z ever run — a
+   broken device-lost recovery doesn't fail one check, it takes the rest of the suite down with it.
+3. `SetRenderTargets()`'s per-slot bind loop hardcoded to slot 0 — failed only Check V's "both
+   targets get the exact color" assertion; the pre-existing "over-request throws" and "unbind
+   restores back buffer" halves stayed correctly unaffected.
+4. `D3D9RenderTargetBackend::BindAsRenderTarget()`'s `SetRenderTarget(0, ...)` disabled — failed
+   both Check S (baseline, previously UNVERIFIED) and Check U (MSAA), Check T (cube) correctly
+   unaffected, confirming 2D/cube code-path isolation.
+5. `D3D9VertexBufferBackend::Upload()`'s `memcpy` swapped for a zeroing `memset` — failed Check N
+   (baseline round-trip, previously UNVERIFIED), Check P (device-lost buffer recovery), and
+   cascaded into Check Z's two `SetDepthTestEnabled` assertions (expected — Check Z's quads come
+   from `SetData()`-uploaded buffers, a real transitive dependency, not a false positive).
+6. `D3D9TextureCubeBackend::SetData()`'s row-copy `memcpy` swapped for zeroing — failed only Check
+   R's cube-face round-trip assertion (previously UNVERIFIED).
+
+All 6 reverted (`git diff --stat` confirmed zero-diff each time), full `D3D9_Smoke` reconfirmed
+`55/55` after every cycle. **Explicitly NOT mutation-tested, real remaining gaps, not silently
+assumed covered**: Check Y's `MAGFILTER`/`MIPFILTER`/`ADDRESSV` fields (deprioritized — same
+combined boolean assertion as the already-CONFIRMED `ADDRESSU`); Check R's volume-texture half
+(only the cube half was tested); `D3D9_Smoke` Checks B/C/D–I/J/L; `D3D9_Common`'s other 29 of 30
+checks (only 1 `CullMode`-mapping check has explicit evidence, judged lower-priority — homogeneous
+lookup-table checks, method already proven on one representative entry). Full detail in
+`plan_dx9.md`'s own `D9-122` row.
+
+**`D9-123` still open, not attempted.** A KNOWN, already-documented blocker, not a new gap:
+`CnaTests` genuinely fails to build under `CNA_GRAPHICS_BACKEND=D3D9` today (confirmed live while
+regression-checking Phase D9-10's own `GraphicsDeviceManager` fix —
 `AudioEngineTests.cpp`/`WaveBankTests.cpp`/`CueTests.cpp` and others call POSIX-only `::setenv()`)
 — the same wall `D3D11` already hits (`plan_dx9.md`'s own `D9-123` row text already predicted
-this). `D9-122` (mutation-verifying `D3D9_Smoke`/`D3D9_Common` + the 4 reused state tests) is
-real, remaining, low-risk follow-up work — each of those tests already has SOME mutation-testing
-history from when they were first closed, but a dedicated, systematic re-pass hasn't been done.
+this).
 
 ### Does NOT work yet
 
