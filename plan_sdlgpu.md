@@ -1,5 +1,14 @@
 # SDL GPU Graphics Backend — Implementation Plan
 
+> **Correction (2026-07-15, later the same day): the banner below's "every phase ... is fully
+> implemented" claim was wrong when written** — `SDLGPU-17`–`20` (the genuine keyed pipeline cache,
+> plus dynamic `BlendState`/`DepthStencilState`/`RasterizerState`) were still `⬜`/🟨 at that point;
+> every 3D/sprite pipeline was still hardcoded Opaque/no-cull/Solid/no-stencil regardless of what
+> `GraphicsDevice.BlendState`/`DepthStencilState`/`RasterizerState` were assigned. Found on a
+> later re-check the same day and closed for real — see execution-order item 10 and each row's own
+> Notes column. A genuine bug (`SDL_SetGPUStencilReference()` never called anywhere, so
+> `ReferenceStencil` was silently ignored) was found and fixed along the way.
+>
 > **Status (2026-07-15): every phase currently in this plan (SDLGPU-1 through SDLGPU-10) is fully
 > implemented and verified** — `AlphaTestEffect`/`DualTextureEffect`/`EnvironmentMapEffect`/
 > `SkinnedEffect` are all real and verified (`EnvironmentMapEffect` landed once Phase `SDLGPU-9`'s
@@ -244,17 +253,50 @@ extends.
    (`SDL_BindGPUVertexStorageBuffers`) instead of a uniform push — see its own row for the full
    binary-search finding and fix. All of Phases `SDLGPU-1`–`SDLGPU-9` are now done.
 9. **`SDLGPU-42`/`SDLGPU-43` (custom `ShaderEffect`) done and verified 2026-07-15 — Phase
-   `SDLGPU-10` is now fully closed, and every phase currently in this plan is done.** User chose a
+   `SDLGPU-10` is now fully closed.** User chose a
    real runtime `libshaderc` GLSL→SPIR-V compile over deferring — see `SDLGPU-42`'s own row for a
    genuine finding this decision uncovered along the way (Vulkan's own `ShaderEffect` support
    doesn't actually runtime-compile GLSL text at all, unlike what the class's own documented
    contract says). `SdlGpuEffectBackend` + full `SpriteBatch` custom-effect wiring
    (`SetCustomEffect`/per-`SpriteCommand` uniform snapshot at `Draw()`-call time/`RenderSprites()`
    pipeline selection) verified end-to-end via `SdlGpu_ShaderEffect`, 3/3 checks, through the real
-   public `ShaderEffect`/`SpriteBatch.Begin(effect)` API. The documented open findings (swapchain-
-   readback segfault, full-`CnaTests` instability under this backend, the
-   render-target-destroyed-before-flush use-after-free, `GraphicsDeviceManager`'s vsync-forwarding
-   gap) remain the only unresolved items in this plan.
+   public `ShaderEffect`/`SpriteBatch.Begin(effect)` API. **Correction**: this item's own prior text
+   claimed "every phase currently in this plan is done" — that was wrong; `SDLGPU-17`–`20`
+   (dynamic `BlendState`/`DepthStencilState`/`RasterizerState`, and the genuine keyed pipeline
+   cache their combination needs) were still `⬜`/🟨 at this point, found on a later re-check and
+   closed as item 10 below. `GraphicsDeviceManager`'s vsync-forwarding gap (listed here as still
+   open) was also fixed separately the same day on `fix/graphicsdevicemanager-vsync` (backend-
+   independent, not SDL_GPU-specific — see that branch's own commit).
+10. **`SDLGPU-17`–`20` (real dynamic `BlendState`/`DepthStencilState`/`RasterizerState`, plus the
+    hash-keyed pipeline cache all three together need) done and verified 2026-07-15.** Every
+    pipeline family (sprite + all 7 3D shader families) previously hardcoded Opaque blending,
+    `CullMode::None`, `FillMode::Solid`, and no stencil test at all — `GraphicsDevice.BlendState`/
+    `DepthStencilState`/`RasterizerState` assignments never reached this backend's own pipeline-
+    baked state. A real bug was found and fixed along the way, not just new plumbing added: SDL_gpu
+    exposes `ReferenceStencil` as a genuine per-draw *dynamic* value (`SDL_SetGPUStencilReference`),
+    not pipeline-baked, and this call was missing from every draw path — a real per-pixel stencil
+    test could never actually use a non-zero reference. New `SdlGpu_RenderState` test, 13/13 checks,
+    all real `RenderTarget2D::GetData()` pixel assertions (not "didn't throw"): `BlendState.Additive`/
+    `AlphaBlend`, a real stencil-mask-then-masked-draw proof (temporarily reverting the
+    `SDL_SetGPUStencilReference()` fix reproduced the original bug exactly, confirming the test
+    catches it), a `CullMode` differential (`CullCounterClockwise`/`CullClockwise`/`None`), a
+    `FillMode` differential (`Solid`/`WireFrame`), and a `ScissorTestEnable`+`ScissorRectangle`
+    clip proof. `RasterizerState.DepthBias`/`SlopeScaleDepthBias` are captured but deliberately not
+    applied (no SDL_gpu per-draw dynamic-depth-bias equivalent exists at all, unlike Vulkan's
+    `vkCmdSetDepthBias`); `TwoSidedStencilMode`'s CCW fields are wired but not separately empirically
+    differentiated by a dedicated front/back test in this pass — both documented, deliberate scope
+    boundaries, not silent gaps. Full `ctest -R "SdlGpu"` re-run: **14/14 passing** (stable across
+    repeated runs; this real-display GPU suite is occasionally flaky run-to-run on an unrelated
+    test — a transient segfault on a different test each time, gone on immediate rerun, reproduces
+    on unmodified code too — not something this task introduced). Full `CnaTests` (4367 of 4375,
+    excluding 8 pre-existing-crash `ContentManagerSkinnedModelTest` cases confirmed to segfault
+    identically on unmodified `feature/sdlgpu` HEAD): 4364 passed, 2 pre-existing hardware-sensor
+    skips, 1 pre-existing failure (`ContextRecoveryTest.GetDataThrowsAfterFullUploadWithRecoveryDisabled`,
+    also confirmed to fail identically on unmodified `feature/sdlgpu` HEAD) — zero regressions from
+    this task's own changes. The documented open findings (swapchain-readback segfault, full-
+    `CnaTests` in-process instability under this backend in this environment, the
+    render-target-destroyed-before-flush use-after-free) remain the only unresolved items in this
+    plan.
 
 ---
 
@@ -299,10 +341,10 @@ extends.
 
 | # | Task | Status | Notes |
 | --- | --- | --- | --- |
-| SDLGPU-17 | `SDL_GPUGraphicsPipelineCreateInfo` construction plus a pipeline cache keyed by (shader pair, vertex format, blend state, depth/stencil state, rasterizer state, sample count, color/depth target formats). | 🟨 | The `GetOrCreate`-lazy-pipeline *pattern* is established (`GetOrCreateSpritePipeline()`), but there is exactly one fixed pipeline (sprite2d: standard alpha blend, no depth test/write, no cull) — not yet a real multi-key cache, since no other pipeline variant exists yet to require one. Extend into a genuine keyed cache when Phase `SDLGPU-6`'s 3D pipelines land. |
-| SDLGPU-18 | `BlendState` mapping — XNA `BlendState` → `SDL_GPUColorTargetBlendState` (`SDL_GPUBlendFactor`/`SDL_GPUBlendOp`). | ⬜ | Not started. The sprite2d pipeline hardcodes one fixed non-premultiplied alpha blend (`SrcAlpha`/`OneMinusSrcAlpha`) — note `ISpriteBatchBackend` (this codebase's common interface, all backends) has no setter for `SpriteBatch.Begin()`'s own `BlendState` parameter at all, so every backend, not just this one, currently ignores it; not a gap introduced here. |
-| SDLGPU-19 | `DepthStencilState` mapping — `SDL_GPUDepthStencilState` (`SDL_GPUCompareOp`, `SDL_GPUStencilOpState`), covering `DepthBufferEnable`/`DepthBufferWriteEnable`/`StencilEnable` and all three XNA stencil-op fields (`StencilFail`/`StencilDepthBufferFail`/`StencilPass`). | ⬜ | Not started — `ApplyDepthStencilState()` is not overridden (uses `IGraphicsBackend`'s no-op default). The sprite2d pipeline hardcodes depth test/write off. |
-| SDLGPU-20 | `RasterizerState` mapping — `SDL_GPURasterizerState` (`SDL_GPUFillMode`, `SDL_GPUCullMode`, `SDL_GPUFrontFace`), covering `CullMode.CullClockwiseFace`/`CullCounterClockwiseFace`/`None` and `FillMode.WireFrame`/`Solid`. | ⬜ | Not started — `ApplyRasterizerState()` is not overridden. The sprite2d pipeline hardcodes `CULLMODE_NONE`/`FILLMODE_FILL`. |
+| SDLGPU-17 | `SDL_GPUGraphicsPipelineCreateInfo` construction plus a pipeline cache keyed by (shader pair, vertex format, blend state, depth/stencil state, rasterizer state, sample count, color/depth target formats). | ✅ | 2026-07-15 (closed alongside `SDLGPU-18`–`20`). `PipelineCacheKey()` now folds topology/depthTest/depthWrite/depthFunc/colorFormat plus the *full* `RenderStateSnapshot` (blend, cull, fill mode, stencil) via a boost-style `HashCombine()` chain, replacing the old 5-field hand-packed `int` key — a hash was chosen specifically to avoid `VulkanGraphicsBackend`'s own documented bit-packing budget problem once every render-state dimension is folded in. Disabled dimensions (blend off, stencil off, two-sided off) always collapse their own sub-fields out of the hash regardless of value, mirroring Vulkan's own `PackBlendBits`'s "collapse to 0 when disabled" rule, so irrelevant values don't fragment the cache with duplicate pipelines. All 12 cache maps (sprite + 7 3D families, `AlphaTest3D`'s stride-24 map included) changed from `unordered_map<int, ...>` to `unordered_map<size_t, ...>`; the custom `ShaderEffect` pipeline cache (`SdlGpuEffectBackend::pipelines_`) deliberately kept as `int` since its own pipeline stays out of this task's scope (see `SDLGPU-19`/`20`'s own notes). |
+| SDLGPU-18 | `BlendState` mapping — XNA `BlendState` → `SDL_GPUColorTargetBlendState` (`SDL_GPUBlendFactor`/`SDL_GPUBlendOp`). | ✅ | 2026-07-15. `ApplyBlendState()` overridden; `ToBlendFactor`/`ToBlendOp` mirror `VulkanGraphicsBackend`'s own XNA-ordinal tables exactly. A new shared `FillBlendState()` fills every pipeline family's (sprite + all 7 3D shader families) own `SDL_GPUColorTargetBlendState` from a captured `RenderStateSnapshot` instead of a hardcoded Opaque/no-op struct. Verified: `BlendState.Additive` over a Red background reads back `(255,128,0)` (real colour-add, not a stuck-Opaque overwrite — note XNA's own `Color.Green` is `(0,128,0)`, not lime); `BlendState.AlphaBlend` (`One`/`InverseSourceAlpha`) with a half-alpha source over White reads back mid-grey. |
+| SDLGPU-19 | `DepthStencilState` mapping — `SDL_GPUDepthStencilState` (`SDL_GPUCompareOp`, `SDL_GPUStencilOpState`), covering `DepthBufferEnable`/`DepthBufferWriteEnable`/`StencilEnable` and all three XNA stencil-op fields (`StencilFail`/`StencilDepthBufferFail`/`StencilPass`). | ✅ | 2026-07-15. `ApplyDepthStencilState()` overridden, forwarding into the same `depthTestEnabled_`/`depthWriteEnabled_`/`depthCompareFunction_` fields the pre-existing `SetDepthTestEnabled`-style shortcuts already used (whichever setter runs last wins, by design), plus a new `stencilParams_`/`stencilReadMask_`/`stencilWriteMask_`. A new shared `FillDepthStencilState()` bakes `StencilFail`/`StencilPass`/`StencilDepthBufferFail`/`StencilFunction` into every pipeline family's front/back `SDL_GPUStencilOpState` (`TwoSidedStencilMode=false` copies front into back, matching this project's own EasyGL/Vulkan fallback convention — **not** empirically differentiated front-vs-back in this pass; a dedicated two-sided CW/CCW differential test was not written, a documented scope boundary, not a silent gap). **Real bug found and fixed along the way:** `GraphicsDevice.ReferenceStencil`/`DepthStencilState.ReferenceStencil` were captured into `referenceStencil_` but never actually reached the GPU — SDL_gpu exposes stencil reference as a genuine *per-draw dynamic* value (`SDL_SetGPUStencilReference`), not a pipeline-baked one, and this call was missing entirely from every draw path. Fixed by adding `stencilReference` to `RenderStateSnapshot` (captured per-`DrawCommand`/`SpriteCommand` at queue time, like the rest of the snapshot) and calling `SDL_SetGPUStencilReference()` in all 8 `Render*Draws`/`RenderSprites` call sites. Verified via a real per-pixel stencil-mask proof (`StencilFunction=Always`/`StencilPass=Replace`/`ReferenceStencil=1` writes a mask over the left half only; a second full-screen `StencilFunction=Equal`/`ReferenceStencil=1` draw shows its new colour ONLY on the left, leaving the right half's background untouched) — **temporarily disabling the new `SDL_SetGPUStencilReference()` calls reproduced the original bug exactly** (right half wrongly passed too), confirming the test and the fix both genuinely matter. |
+| SDLGPU-20 | `RasterizerState` mapping — `SDL_GPURasterizerState` (`SDL_GPUFillMode`, `SDL_GPUCullMode`, `SDL_GPUFrontFace`), covering `CullMode.CullClockwiseFace`/`CullCounterClockwiseFace`/`None` and `FillMode.WireFrame`/`Solid`. | ✅ | 2026-07-15. `ApplyRasterizerState()` overridden; `ToCullMode` mirrors this project's own EasyGL backend's real, hardware-validated cull mapping (`CullClockwiseFace`→`SDL_GPU_CULLMODE_BACK`, `CullCounterClockwiseFace`→`SDL_GPU_CULLMODE_FRONT`, `front_face` hardcoded `COUNTER_CLOCKWISE` everywhere — **not** Vulkan's own documented Task-870 front/back swap, since this backend's 3D shaders need no NDC Y-flip like EasyGL's). A new shared `FillRasterizerState()` bakes `cull_mode`/`fill_mode` into every pipeline family from the captured snapshot. `SetScissorRect()`/`ApplyScissorForPass()` also added (`SDL_SetGPUScissor`, applied once per render pass using the live scissor state as of that pass's own flush — **not** re-snapshotted per queued draw like blend/cull/stencil, a deliberate, documented simplification; real XNA games rarely change `ScissorRectangle` differently across different render targets within one frame). Depth bias (`RasterizerState.DepthBias`/`SlopeScaleDepthBias`) is captured but **not applied** — SDL_gpu has no dynamic per-draw depth-bias equivalent to Vulkan's `vkCmdSetDepthBias` at all, so this would require folding floats into the pipeline cache key; a genuine SDL_gpu API-surface limitation, not a silent drop. Verified: the same CW-wound quad shows visible under `CullCounterClockwise` (this project's own default) and `CullNone`, culled under `CullClockwise`; the same triangle's centroid pixel is filled under `FillMode.Solid` but stays background under `FillMode.WireFrame`; a full-screen draw with `ScissorTestEnable=true` + a left-half `ScissorRectangle` only affects the left half. |
 | SDLGPU-21 | `SamplerState` mapping — `SDL_GPUSamplerCreateInfo` (`SDL_GPUFilter`, `SDL_GPUSamplerMipmapMode`, `SDL_GPUSamplerAddressMode`) for per-slot Wrap/Clamp/Mirror + Point/Linear/Anisotropic. | 🟨 | The sampler-object creation/caching itself is done and runtime-verified (`GetOrCreateSampler()`, 18-entry cache mirroring `WebGPUGraphicsBackend::SamplerCacheIndex`'s exact indexing; `SdlGpu_2D`'s Point+Wrap and Linear+Wrap sprites both confirmed visually distinct and correct via screenshot). Not done: `ApplySamplerState()` (the per-slot dynamic setter used by direct 3D draws, matching D3D11/D3D12's `DX-119`/`DX-154`) — `SpriteBatch`'s own per-draw sampler selection (`SetSamplerFilter`/`SetSamplerAddressMode`) is the only path wired up so far. |
 
 ---

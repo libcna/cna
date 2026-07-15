@@ -56,16 +56,191 @@ namespace CNA::Internal::Backends::SdlGpu
             }
         }
 
-        // Packs (topology, depthTest, depthWrite, depthFunc, colorFormat) into one cache key --
-        // mirrors WebGPUGraphicsBackend's own int-keyed pipeline cache convention. colorFormat was
-        // added in Phase SDLGPU-8 (previously every pipeline only ever targeted the swapchain);
-        // SDL_GPUTextureFormat's enum range comfortably fits under the *128 multiplier.
-        [[nodiscard]] int PipelineCacheKey(SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
-                                           SDL_GPUTextureFormat colorFormat)
+        // SDLGPU-18/19/20: XNA StencilOperation ordinals -> SDL_GPUStencilOp (mirrors
+        // VulkanGraphicsBackend::ToVkStencilOp/EasyGL's ToEasyGLStencilOp exactly): Keep=0, Zero=1,
+        // Replace=2, Increment=3, Decrement=4, IncrementSaturation=5, DecrementSaturation=6, Invert=7.
+        [[nodiscard]] SDL_GPUStencilOp ToStencilOp(int xnaOp)
         {
-            const int base = (static_cast<int>(topology) * 2 + (depthTest ? 1 : 0)) * 2 * 16 +
-                   (depthWrite ? 1 : 0) * 16 + std::clamp(depthFunc, 0, 15);
-            return base * 128 + static_cast<int>(colorFormat);
+            switch (xnaOp)
+            {
+                case 1: return SDL_GPU_STENCILOP_ZERO;
+                case 2: return SDL_GPU_STENCILOP_REPLACE;
+                case 3: return SDL_GPU_STENCILOP_INCREMENT_AND_WRAP;
+                case 4: return SDL_GPU_STENCILOP_DECREMENT_AND_WRAP;
+                case 5: return SDL_GPU_STENCILOP_INCREMENT_AND_CLAMP;
+                case 6: return SDL_GPU_STENCILOP_DECREMENT_AND_CLAMP;
+                case 7: return SDL_GPU_STENCILOP_INVERT;
+                default: return SDL_GPU_STENCILOP_KEEP;
+            }
+        }
+
+        // SDLGPU-18: XNA Blend ordinals -> SDL_GPUBlendFactor (mirrors VulkanGraphicsBackend::
+        // ToVkBlendFactor/EasyGL's ToEasyGLBlendFactor exactly): One=0, Zero=1, SourceColor=2,
+        // InverseSourceColor=3, SourceAlpha=4, InverseSourceAlpha=5, DestinationColor=6,
+        // InverseDestinationColor=7, DestinationAlpha=8, InverseDestinationAlpha=9, BlendFactor=10,
+        // InverseBlendFactor=11, SourceAlphaSaturation=12.
+        [[nodiscard]] SDL_GPUBlendFactor ToBlendFactor(int xnaBlend)
+        {
+            switch (xnaBlend)
+            {
+                case  1: return SDL_GPU_BLENDFACTOR_ZERO;
+                case  2: return SDL_GPU_BLENDFACTOR_SRC_COLOR;
+                case  3: return SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_COLOR;
+                case  4: return SDL_GPU_BLENDFACTOR_SRC_ALPHA;
+                case  5: return SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+                case  6: return SDL_GPU_BLENDFACTOR_DST_COLOR;
+                case  7: return SDL_GPU_BLENDFACTOR_ONE_MINUS_DST_COLOR;
+                case  8: return SDL_GPU_BLENDFACTOR_DST_ALPHA;
+                case  9: return SDL_GPU_BLENDFACTOR_ONE_MINUS_DST_ALPHA;
+                case 10: return SDL_GPU_BLENDFACTOR_CONSTANT_COLOR;
+                case 11: return SDL_GPU_BLENDFACTOR_ONE_MINUS_CONSTANT_COLOR;
+                case 12: return SDL_GPU_BLENDFACTOR_SRC_ALPHA_SATURATE;
+                default: return SDL_GPU_BLENDFACTOR_ONE;
+            }
+        }
+
+        // SDLGPU-18: XNA BlendFunction ordinals -> SDL_GPUBlendOp: Add=0, Subtract=1,
+        // ReverseSubtract=2, Max=3, Min=4.
+        [[nodiscard]] SDL_GPUBlendOp ToBlendOp(int xnaBlendFunc)
+        {
+            switch (xnaBlendFunc)
+            {
+                case 1: return SDL_GPU_BLENDOP_SUBTRACT;
+                case 2: return SDL_GPU_BLENDOP_REVERSE_SUBTRACT;
+                case 3: return SDL_GPU_BLENDOP_MAX;
+                case 4: return SDL_GPU_BLENDOP_MIN;
+                default: return SDL_GPU_BLENDOP_ADD;
+            }
+        }
+
+        // SDLGPU-20: XNA CullMode ordinals -> SDL_GPUCullMode. Every pipeline in this backend uses
+        // front_face = SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE (matches this project's own EasyGL
+        // backend's real, hardware-validated "OpenGL default front face is CCW; CW faces are back
+        // faces" convention -- confirmed this session that SDL_GPU's 3D shaders, like EasyGL's,
+        // need no NDC Y-flip, so no Vulkan-style winding-reversal adjustment applies here): None=0,
+        // CullClockwiseFace=1 (cull the CW/back faces), CullCounterClockwiseFace=2 (cull the
+        // CCW/front faces).
+        [[nodiscard]] SDL_GPUCullMode ToCullMode(int xnaCullMode)
+        {
+            switch (xnaCullMode)
+            {
+                case 1: return SDL_GPU_CULLMODE_BACK;
+                case 2: return SDL_GPU_CULLMODE_FRONT;
+                default: return SDL_GPU_CULLMODE_NONE;
+            }
+        }
+
+        // boost::hash_combine's well-known mixing formula -- used to fold every render-state
+        // dimension (SDLGPU-18/19/20) into one pipeline cache key without hand-packing bit ranges
+        // per field (which VulkanGraphicsBackend's own PackBlendBits/PackDepthStencilBits comments
+        // note it outgrew once every dimension was added -- this sidesteps that entirely).
+        [[nodiscard]] std::size_t HashCombine(std::size_t seed, std::size_t value)
+        {
+            return seed ^ (value + 0x9e3779b97f4a7c15ULL + (seed << 6) + (seed >> 2));
+        }
+
+        // Packs (topology, depthTest, depthWrite, depthFunc, colorFormat, full RenderStateSnapshot)
+        // into one cache key. Disabled dimensions (blend off, stencil off, two-sided off) always
+        // collapse their own sub-fields out of the hash regardless of what they're set to, so
+        // different "irrelevant" values don't create duplicate pipelines -- mirrors
+        // VulkanGraphicsBackend::PackBlendBits's identical "collapse to 0 when disabled" rule.
+        [[nodiscard]] std::size_t PipelineCacheKey(SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
+                                                    SDL_GPUTextureFormat colorFormat,
+                                                    const SdlGpuGraphicsBackend::RenderStateSnapshot& rs)
+        {
+            std::size_t key = static_cast<std::size_t>(topology);
+            key = HashCombine(key, depthTest ? 1u : 0u);
+            key = HashCombine(key, depthWrite ? 1u : 0u);
+            key = HashCombine(key, static_cast<std::size_t>(depthFunc));
+            key = HashCombine(key, static_cast<std::size_t>(colorFormat));
+            key = HashCombine(key, rs.blendEnabled ? 1u : 0u);
+            if (rs.blendEnabled)
+            {
+                key = HashCombine(key, static_cast<std::size_t>(rs.blend.colorSrc));
+                key = HashCombine(key, static_cast<std::size_t>(rs.blend.colorDst));
+                key = HashCombine(key, static_cast<std::size_t>(rs.blend.alphaSrc));
+                key = HashCombine(key, static_cast<std::size_t>(rs.blend.alphaDst));
+                key = HashCombine(key, static_cast<std::size_t>(rs.blend.colorFunc));
+                key = HashCombine(key, static_cast<std::size_t>(rs.blend.alphaFunc));
+            }
+            key = HashCombine(key, static_cast<std::size_t>(rs.cullMode));
+            key = HashCombine(key, rs.wireframe ? 1u : 0u);
+            key = HashCombine(key, rs.stencil.enable ? 1u : 0u);
+            if (rs.stencil.enable)
+            {
+                key = HashCombine(key, static_cast<std::size_t>(rs.stencil.func));
+                key = HashCombine(key, static_cast<std::size_t>(rs.stencil.fail));
+                key = HashCombine(key, static_cast<std::size_t>(rs.stencil.depthFail));
+                key = HashCombine(key, static_cast<std::size_t>(rs.stencil.pass));
+                key = HashCombine(key, rs.stencil.twoSided ? 1u : 0u);
+                if (rs.stencil.twoSided)
+                {
+                    key = HashCombine(key, static_cast<std::size_t>(rs.stencil.ccwFunc));
+                    key = HashCombine(key, static_cast<std::size_t>(rs.stencil.ccwFail));
+                    key = HashCombine(key, static_cast<std::size_t>(rs.stencil.ccwDepthFail));
+                    key = HashCombine(key, static_cast<std::size_t>(rs.stencil.ccwPass));
+                }
+            }
+            return key;
+        }
+
+        // Fills a color target's real blend factors/op from a RenderStateSnapshot -- shared by
+        // every pipeline-creation function so the exact same XNA->SDL_gpu mapping is used
+        // everywhere (mirrors VulkanGraphicsBackend::FillBlendAttachmentState's identical role).
+        void FillBlendState(SDL_GPUColorTargetBlendState& out, const SdlGpuGraphicsBackend::RenderStateSnapshot& rs)
+        {
+            out.enable_blend = rs.blendEnabled;
+            if (rs.blendEnabled)
+            {
+                out.src_color_blendfactor = ToBlendFactor(rs.blend.colorSrc);
+                out.dst_color_blendfactor = ToBlendFactor(rs.blend.colorDst);
+                out.color_blend_op        = ToBlendOp(rs.blend.colorFunc);
+                out.src_alpha_blendfactor = ToBlendFactor(rs.blend.alphaSrc);
+                out.dst_alpha_blendfactor = ToBlendFactor(rs.blend.alphaDst);
+                out.alpha_blend_op        = ToBlendOp(rs.blend.alphaFunc);
+            }
+        }
+
+        // Fills a pipeline's real front/back stencil-op state (SDLGPU-19) from a
+        // RenderStateSnapshot, on top of the depthTest/depthWrite/depthFunc every pipeline already
+        // threads through separately. XNA's TwoSidedStencilMode=false uses the SAME (front,
+        // clockwise) ops/func for both faces (matches this project's own EasyGL/Vulkan backends'
+        // identical fallback-to-front convention -- FNA's own real behavior: the CCW fields are
+        // simply ignored when this is false, not reset to any default).
+        void FillDepthStencilState(SDL_GPUDepthStencilState& out, bool depthTest, bool depthWrite, int depthFunc,
+                                    const SdlGpuGraphicsBackend::RenderStateSnapshot& rs)
+        {
+            out.enable_depth_test = depthTest;
+            out.enable_depth_write = depthWrite;
+            out.compare_op = ToCompareOp(depthFunc);
+            out.enable_stencil_test = rs.stencil.enable;
+            out.compare_mask = 0xFF;
+            out.write_mask = 0xFF;
+            out.front_stencil_state.fail_op = ToStencilOp(rs.stencil.fail);
+            out.front_stencil_state.pass_op = ToStencilOp(rs.stencil.pass);
+            out.front_stencil_state.depth_fail_op = ToStencilOp(rs.stencil.depthFail);
+            out.front_stencil_state.compare_op = ToCompareOp(rs.stencil.func);
+            if (rs.stencil.twoSided)
+            {
+                out.back_stencil_state.fail_op = ToStencilOp(rs.stencil.ccwFail);
+                out.back_stencil_state.pass_op = ToStencilOp(rs.stencil.ccwPass);
+                out.back_stencil_state.depth_fail_op = ToStencilOp(rs.stencil.ccwDepthFail);
+                out.back_stencil_state.compare_op = ToCompareOp(rs.stencil.ccwFunc);
+            }
+            else
+            {
+                out.back_stencil_state = out.front_stencil_state;
+            }
+        }
+
+        // Fills a pipeline's real cull/fill-mode rasterizer state (SDLGPU-20) from a
+        // RenderStateSnapshot. front_face stays hardcoded COUNTER_CLOCKWISE everywhere in this
+        // backend (see ToCullMode's own doc comment).
+        void FillRasterizerState(SDL_GPURasterizerState& out, const SdlGpuGraphicsBackend::RenderStateSnapshot& rs)
+        {
+            out.fill_mode = rs.wireframe ? SDL_GPU_FILLMODE_LINE : SDL_GPU_FILLMODE_FILL;
+            out.cull_mode = ToCullMode(rs.cullMode);
+            out.front_face = SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE;
         }
 
         // Mirrors VulkanGraphicsBackend's CalculateVulkanRTMipLevels / Texture2D.cpp's
@@ -492,6 +667,11 @@ namespace CNA::Internal::Backends::SdlGpu
         const SDL_GPUTextureFormat swapchainFormat = SDL_GetGPUSwapchainTextureFormat(device_, window_);
         SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(
             cmd, &colorTarget, 1, depthStencilTexture_ != nullptr ? &depthStencilTarget : nullptr);
+        // SDLGPU-20: applied once per render pass (the live scissor state as of Present() time),
+        // not re-snapshotted per queued draw -- a deliberate, documented scope simplification
+        // relative to Vulkan's own true per-draw dynamic vkCmdSetScissor (real XNA games rarely
+        // change ScissorRectangle multiple times within a single frame between different draws).
+        ApplyScissorForPass(pass, physicalWidth_, physicalHeight_);
         // 3D draws first, 2D SpriteBatch/UI on top -- matches typical XNA game draw order
         // (World.Draw() then a HUD SpriteBatch pass), both collapsed into this one deferred pass.
         const DrawTarget swapchainTarget{};
@@ -573,6 +753,7 @@ namespace CNA::Internal::Backends::SdlGpu
         }
 
         SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(cmd, &colorTarget, 1, hasDepth ? &depthStencilTarget : nullptr);
+        ApplyScissorForPass(pass, target->GetWidth(), target->GetHeight());
         const DrawTarget dt{target, nullptr, -1};
         RenderColoredDraws(pass, cmd, dt, kRenderTargetFormat);
         RenderTexturedDraws(pass, cmd, dt, kRenderTargetFormat);
@@ -628,6 +809,7 @@ namespace CNA::Internal::Backends::SdlGpu
         }
 
         SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(cmd, &colorTarget, 1, hasDepth ? &depthStencilTarget : nullptr);
+        ApplyScissorForPass(pass, cube->GetSize(), cube->GetSize());
         const DrawTarget dt{nullptr, cube, face};
         RenderColoredDraws(pass, cmd, dt, kRenderTargetFormat);
         RenderTexturedDraws(pass, cmd, dt, kRenderTargetFormat);
@@ -853,6 +1035,112 @@ namespace CNA::Internal::Backends::SdlGpu
         return std::make_unique<SdlGpuSpriteBatchBackend>(*this);
     }
 
+    void SdlGpuGraphicsBackend::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
+                                                int colorDstBlend, int alphaDstBlend,
+                                                int colorBlendFunc, int alphaBlendFunc)
+    {
+        // Blend::One=0, Blend::Zero=1 -> Opaque preset: src=One, dst=Zero -> no blending. Matches
+        // VulkanGraphicsBackend::ApplyBlendState's own derivation exactly.
+        blendEnabled_ = !(colorSrcBlend == 0 && colorDstBlend == 1 &&
+                          alphaSrcBlend == 0 && alphaDstBlend == 1);
+        blendParams_.colorSrc  = colorSrcBlend;
+        blendParams_.colorDst  = colorDstBlend;
+        blendParams_.alphaSrc  = alphaSrcBlend;
+        blendParams_.alphaDst  = alphaDstBlend;
+        blendParams_.colorFunc = colorBlendFunc;
+        blendParams_.alphaFunc = alphaBlendFunc;
+    }
+
+    void SdlGpuGraphicsBackend::ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable, int depthFunc,
+                                                       bool stencilEnable, int stencilFunc,
+                                                       int stencilPass, int stencilFail, int stencilDepthFail,
+                                                       int stencilMask, int stencilWriteMask, int referenceStencil,
+                                                       bool twoSidedStencilMode,
+                                                       int ccwStencilFunc, int ccwStencilPass,
+                                                       int ccwStencilFail, int ccwStencilDepthFail)
+    {
+        depthTestEnabled_  = depthEnable;
+        depthWriteEnabled_ = depthWriteEnable;
+        depthCompareFunction_ = depthFunc;
+        stencilParams_.enable       = stencilEnable;
+        stencilParams_.func         = stencilFunc;
+        stencilParams_.fail         = stencilFail;
+        stencilParams_.depthFail    = stencilDepthFail;
+        stencilParams_.pass         = stencilPass;
+        stencilParams_.twoSided     = twoSidedStencilMode;
+        stencilParams_.ccwFunc      = ccwStencilFunc;
+        stencilParams_.ccwFail      = ccwStencilFail;
+        stencilParams_.ccwDepthFail = ccwStencilDepthFail;
+        stencilParams_.ccwPass      = ccwStencilPass;
+        stencilReadMask_  = stencilMask;
+        stencilWriteMask_ = stencilWriteMask;
+        // FNA applies a DepthStencilState's own ReferenceStencil atomically as part of the whole
+        // native state struct (matches GraphicsDevice::setDepthStencilStateProperty's own
+        // "keep GraphicsDevice.ReferenceStencil in sync" comment) -- SetReferenceStencil() is the
+        // single place that actually stores referenceStencil_, reused here too.
+        SetReferenceStencil(referenceStencil);
+    }
+
+    void SdlGpuGraphicsBackend::ApplyRasterizerState(int cullMode, int fillMode, bool scissorTestEnable,
+                                                     float depthBias, float slopeScaleDepthBias)
+    {
+        cullMode_ = cullMode;
+        fillModeWireframe_ = (fillMode == 1);  // XNA FillMode::WireFrame = 1
+        scissorEnabled_ = scissorTestEnable;
+        // Stored but deliberately not yet applied -- see this method's own header doc comment
+        // (SDL_gpu has no per-draw-dynamic depth-bias equivalent to Vulkan's vkCmdSetDepthBias).
+        depthBias_ = depthBias;
+        slopeScaleDepthBias_ = slopeScaleDepthBias;
+    }
+
+    void SdlGpuGraphicsBackend::SetReferenceStencil(int value)
+    {
+        referenceStencil_ = value;
+    }
+
+    void SdlGpuGraphicsBackend::SetScissorRect(int x, int y, int w, int h)
+    {
+        scissorX_ = x;
+        scissorY_ = y;
+        scissorW_ = w;
+        scissorH_ = h;
+    }
+
+    void SdlGpuGraphicsBackend::ApplyScissorForPass(SDL_GPURenderPass* pass, int targetWidth, int targetHeight) const
+    {
+        SDL_Rect rect{};
+        if (scissorEnabled_ && scissorW_ > 0 && scissorH_ > 0)
+        {
+            rect.x = scissorX_;
+            rect.y = scissorY_;
+            rect.w = scissorW_;
+            rect.h = scissorH_;
+        }
+        else
+        {
+            // Disabled (or a not-yet-set, zero-size) scissor rect means "no clipping" -- use the
+            // full render target/swapchain extents, matching VulkanGraphicsBackend's own
+            // scissorEnabled_-gated fallback-to-full-target convention.
+            rect.x = 0;
+            rect.y = 0;
+            rect.w = targetWidth;
+            rect.h = targetHeight;
+        }
+        SDL_SetGPUScissor(pass, &rect);
+    }
+
+    SdlGpuGraphicsBackend::RenderStateSnapshot SdlGpuGraphicsBackend::CaptureRenderState() const
+    {
+        RenderStateSnapshot rs;
+        rs.blendEnabled = blendEnabled_;
+        rs.blend = blendParams_;
+        rs.cullMode = cullMode_;
+        rs.wireframe = fillModeWireframe_;
+        rs.stencil = stencilParams_;
+        rs.stencilReference = referenceStencil_;
+        return rs;
+    }
+
     std::unique_ptr<IVertexBufferBackend> SdlGpuGraphicsBackend::CreateVertexBuffer(int vertex_capacity)
     {
         return std::make_unique<SdlGpuVertexBufferBackend>(*this, vertex_capacity);
@@ -986,9 +1274,12 @@ namespace CNA::Internal::Backends::SdlGpu
         }
     }
 
-    SDL_GPUGraphicsPipeline* SdlGpuGraphicsBackend::GetOrCreateSpritePipeline(SDL_GPUTextureFormat colorFormat)
+    SDL_GPUGraphicsPipeline* SdlGpuGraphicsBackend::GetOrCreateSpritePipeline(
+        SDL_GPUTextureFormat colorFormat, bool depthTest, bool depthWrite, int depthFunc,
+        const RenderStateSnapshot& renderState)
     {
-        const int key = static_cast<int>(colorFormat);
+        const std::size_t key = PipelineCacheKey(SDL_GPU_PRIMITIVETYPE_TRIANGLELIST, depthTest, depthWrite, depthFunc,
+                                                  colorFormat, renderState);
         const auto it = spritePipelines_.find(key);
         if (it != spritePipelines_.end())
             return it->second;
@@ -1012,16 +1303,15 @@ namespace CNA::Internal::Backends::SdlGpu
         attrs[2].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4;
         attrs[2].offset = offsetof(SpriteVertex, r);
 
-        // Standard (non-premultiplied) alpha blend: src*srcAlpha + dst*(1-srcAlpha).
+        // SDLGPU-18: real BlendState mapping. Note the DEFAULT (BlendState.AlphaBlend, what
+        // SpriteBatch.Begin() applies when the game passes no explicit BlendState) is
+        // src=SourceAlpha/dst=InverseSourceAlpha/Add for color, src=One/dst=InverseSourceAlpha/Add
+        // for alpha -- i.e. exactly the standard non-premultiplied alpha blend this pipeline used
+        // to hardcode unconditionally; FillBlendState now derives the same result from real
+        // BlendState data instead, and genuinely reflects whatever BlendState is actually current.
         SDL_GPUColorTargetDescription colorTarget{};
         colorTarget.format = colorFormat;
-        colorTarget.blend_state.enable_blend = true;
-        colorTarget.blend_state.src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
-        colorTarget.blend_state.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
-        colorTarget.blend_state.color_blend_op = SDL_GPU_BLENDOP_ADD;
-        colorTarget.blend_state.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
-        colorTarget.blend_state.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
-        colorTarget.blend_state.alpha_blend_op = SDL_GPU_BLENDOP_ADD;
+        FillBlendState(colorTarget.blend_state, renderState);
 
         SDL_GPUGraphicsPipelineCreateInfo pipelineInfo{};
         pipelineInfo.vertex_shader = spriteVertexShader_;
@@ -1031,17 +1321,13 @@ namespace CNA::Internal::Backends::SdlGpu
         pipelineInfo.vertex_input_state.vertex_attributes = attrs;
         pipelineInfo.vertex_input_state.num_vertex_attributes = 3;
         pipelineInfo.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
-        pipelineInfo.rasterizer_state.fill_mode = SDL_GPU_FILLMODE_FILL;
-        pipelineInfo.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_NONE;
-        pipelineInfo.rasterizer_state.front_face = SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE;
+        FillRasterizerState(pipelineInfo.rasterizer_state, renderState);
         pipelineInfo.multisample_state.sample_count = SDL_GPU_SAMPLECOUNT_1;
-        // No depth test/write for 2D sprites, but the pipeline must still declare a compatible
-        // depth-stencil target format when one is present in the render passes it's used in
-        // (this backend's render pass always includes one once depthStencilFormat_ is known --
-        // see EnsureFrameRendered/EnsureDepthStencilTexture).
-        pipelineInfo.depth_stencil_state.enable_depth_test = false;
-        pipelineInfo.depth_stencil_state.enable_depth_write = false;
-        pipelineInfo.depth_stencil_state.enable_stencil_test = false;
+        // SDLGPU-19: real DepthStencilState mapping -- SpriteBatch.Begin() defaults to
+        // DepthStencilState.None (depth test/write both off) when the game passes no explicit
+        // state, matching this pipeline's own former hardcoded always-off behavior, but a game CAN
+        // now genuinely enable depth-tested sprite layering by passing a different state.
+        FillDepthStencilState(pipelineInfo.depth_stencil_state, depthTest, depthWrite, depthFunc, renderState);
         pipelineInfo.target_info.color_target_descriptions = &colorTarget;
         pipelineInfo.target_info.num_color_targets = 1;
         pipelineInfo.target_info.has_depth_stencil_target = (depthStencilFormat_ != SDL_GPU_TEXTUREFORMAT_INVALID);
@@ -1170,12 +1456,17 @@ namespace CNA::Internal::Backends::SdlGpu
             }
             else
             {
-                SDL_GPUGraphicsPipeline* pipeline = GetOrCreateSpritePipeline(colorFormat);
+                SDL_GPUGraphicsPipeline* pipeline = GetOrCreateSpritePipeline(
+                    colorFormat, command.depthTest, command.depthWrite, command.depthFunc, command.renderState);
                 if (pipeline != boundPipeline)
                 {
                     SDL_BindGPUGraphicsPipeline(pass, pipeline);
                     boundPipeline = pipeline;
                 }
+                // A genuine per-draw dynamic value (not pipeline-baked) -- set every sprite
+                // regardless of whether the pipeline itself changed (two sprites can share a
+                // pipeline yet want different stencil references).
+                SDL_SetGPUStencilReference(pass, static_cast<Uint8>(command.renderState.stencilReference));
                 SDL_PushGPUVertexUniformData(cmd, 0, viewportSize, sizeof(viewportSize));
             }
 
@@ -1260,6 +1551,12 @@ namespace CNA::Internal::Backends::SdlGpu
         command.addressU = addressU;
         command.addressV = addressV;
         command.target = CurrentDrawTarget();
+        // SDLGPU-18/19/20: snapshot the current BlendState/DepthStencilState/RasterizerState NOW,
+        // matching every 3D Queue*Draw's own identical per-command snapshot convention.
+        command.depthTest = depthTestEnabled_;
+        command.depthWrite = depthWriteEnabled_;
+        command.depthFunc = depthCompareFunction_;
+        command.renderState = CaptureRenderState();
         // SDLGPU-42/43: snapshot the custom effect's uniform state NOW, not at Present() time --
         // see SpriteCommand's own doc comment for why.
         if (customEffect != nullptr && customEffect->IsValid())
@@ -1367,9 +1664,9 @@ namespace CNA::Internal::Backends::SdlGpu
 
     SDL_GPUGraphicsPipeline* SdlGpuGraphicsBackend::GetOrCreatePipelineColored3D(
         SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
-        SDL_GPUTextureFormat colorFormat)
+        SDL_GPUTextureFormat colorFormat, const RenderStateSnapshot& renderState)
     {
-        const int key = PipelineCacheKey(topology, depthTest, depthWrite, depthFunc, colorFormat);
+        const std::size_t key = PipelineCacheKey(topology, depthTest, depthWrite, depthFunc, colorFormat, renderState);
         const auto it = coloredPipelines_.find(key);
         if (it != coloredPipelines_.end())
             return it->second;
@@ -1385,7 +1682,7 @@ namespace CNA::Internal::Backends::SdlGpu
 
         SDL_GPUColorTargetDescription colorTarget{};
         colorTarget.format = colorFormat;
-        // Opaque -- BlendState mapping (plan_sdlgpu.md SDLGPU-18) is not needed for this milestone.
+        FillBlendState(colorTarget.blend_state, renderState);  // SDLGPU-18
 
         SDL_GPUGraphicsPipelineCreateInfo pipelineInfo{};
         pipelineInfo.vertex_shader = coloredVertexShader_;
@@ -1395,13 +1692,9 @@ namespace CNA::Internal::Backends::SdlGpu
         pipelineInfo.vertex_input_state.vertex_attributes = attrs;
         pipelineInfo.vertex_input_state.num_vertex_attributes = 2;
         pipelineInfo.primitive_type = topology;
-        pipelineInfo.rasterizer_state.fill_mode = SDL_GPU_FILLMODE_FILL;
-        pipelineInfo.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_NONE;
-        pipelineInfo.rasterizer_state.front_face = SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE;
+        FillRasterizerState(pipelineInfo.rasterizer_state, renderState);  // SDLGPU-20
         pipelineInfo.multisample_state.sample_count = SDL_GPU_SAMPLECOUNT_1;
-        pipelineInfo.depth_stencil_state.enable_depth_test = depthTest;
-        pipelineInfo.depth_stencil_state.enable_depth_write = depthWrite;
-        pipelineInfo.depth_stencil_state.compare_op = ToCompareOp(depthFunc);
+        FillDepthStencilState(pipelineInfo.depth_stencil_state, depthTest, depthWrite, depthFunc, renderState);  // SDLGPU-19
         pipelineInfo.target_info.color_target_descriptions = &colorTarget;
         pipelineInfo.target_info.num_color_targets = 1;
         pipelineInfo.target_info.has_depth_stencil_target = (depthStencilFormat_ != SDL_GPU_TEXTUREFORMAT_INVALID);
@@ -1479,9 +1772,9 @@ namespace CNA::Internal::Backends::SdlGpu
 
     SDL_GPUGraphicsPipeline* SdlGpuGraphicsBackend::GetOrCreatePipelineTextured3D(
         SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
-        SDL_GPUTextureFormat colorFormat)
+        SDL_GPUTextureFormat colorFormat, const RenderStateSnapshot& renderState)
     {
-        const int key = PipelineCacheKey(topology, depthTest, depthWrite, depthFunc, colorFormat);
+        const std::size_t key = PipelineCacheKey(topology, depthTest, depthWrite, depthFunc, colorFormat, renderState);
         const auto it = texturedPipelines_.find(key);
         if (it != texturedPipelines_.end())
             return it->second;
@@ -1497,6 +1790,7 @@ namespace CNA::Internal::Backends::SdlGpu
 
         SDL_GPUColorTargetDescription colorTarget{};
         colorTarget.format = colorFormat;
+        FillBlendState(colorTarget.blend_state, renderState);
 
         SDL_GPUGraphicsPipelineCreateInfo pipelineInfo{};
         pipelineInfo.vertex_shader = texturedVertexShader_;
@@ -1506,13 +1800,9 @@ namespace CNA::Internal::Backends::SdlGpu
         pipelineInfo.vertex_input_state.vertex_attributes = attrs;
         pipelineInfo.vertex_input_state.num_vertex_attributes = 2;
         pipelineInfo.primitive_type = topology;
-        pipelineInfo.rasterizer_state.fill_mode = SDL_GPU_FILLMODE_FILL;
-        pipelineInfo.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_NONE;
-        pipelineInfo.rasterizer_state.front_face = SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE;
+        FillRasterizerState(pipelineInfo.rasterizer_state, renderState);
         pipelineInfo.multisample_state.sample_count = SDL_GPU_SAMPLECOUNT_1;
-        pipelineInfo.depth_stencil_state.enable_depth_test = depthTest;
-        pipelineInfo.depth_stencil_state.enable_depth_write = depthWrite;
-        pipelineInfo.depth_stencil_state.compare_op = ToCompareOp(depthFunc);
+        FillDepthStencilState(pipelineInfo.depth_stencil_state, depthTest, depthWrite, depthFunc, renderState);
         pipelineInfo.target_info.color_target_descriptions = &colorTarget;
         pipelineInfo.target_info.num_color_targets = 1;
         pipelineInfo.target_info.has_depth_stencil_target = (depthStencilFormat_ != SDL_GPU_TEXTUREFORMAT_INVALID);
@@ -1527,9 +1817,9 @@ namespace CNA::Internal::Backends::SdlGpu
 
     SDL_GPUGraphicsPipeline* SdlGpuGraphicsBackend::GetOrCreatePipelineColoredTextured3D(
         SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
-        SDL_GPUTextureFormat colorFormat)
+        SDL_GPUTextureFormat colorFormat, const RenderStateSnapshot& renderState)
     {
-        const int key = PipelineCacheKey(topology, depthTest, depthWrite, depthFunc, colorFormat);
+        const std::size_t key = PipelineCacheKey(topology, depthTest, depthWrite, depthFunc, colorFormat, renderState);
         const auto it = coloredTexturedPipelines_.find(key);
         if (it != coloredTexturedPipelines_.end())
             return it->second;
@@ -1546,6 +1836,7 @@ namespace CNA::Internal::Backends::SdlGpu
 
         SDL_GPUColorTargetDescription colorTarget{};
         colorTarget.format = colorFormat;
+        FillBlendState(colorTarget.blend_state, renderState);
 
         SDL_GPUGraphicsPipelineCreateInfo pipelineInfo{};
         pipelineInfo.vertex_shader = coloredTexturedVertexShader_;
@@ -1555,13 +1846,9 @@ namespace CNA::Internal::Backends::SdlGpu
         pipelineInfo.vertex_input_state.vertex_attributes = attrs;
         pipelineInfo.vertex_input_state.num_vertex_attributes = 3;
         pipelineInfo.primitive_type = topology;
-        pipelineInfo.rasterizer_state.fill_mode = SDL_GPU_FILLMODE_FILL;
-        pipelineInfo.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_NONE;
-        pipelineInfo.rasterizer_state.front_face = SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE;
+        FillRasterizerState(pipelineInfo.rasterizer_state, renderState);
         pipelineInfo.multisample_state.sample_count = SDL_GPU_SAMPLECOUNT_1;
-        pipelineInfo.depth_stencil_state.enable_depth_test = depthTest;
-        pipelineInfo.depth_stencil_state.enable_depth_write = depthWrite;
-        pipelineInfo.depth_stencil_state.compare_op = ToCompareOp(depthFunc);
+        FillDepthStencilState(pipelineInfo.depth_stencil_state, depthTest, depthWrite, depthFunc, renderState);
         pipelineInfo.target_info.color_target_descriptions = &colorTarget;
         pipelineInfo.target_info.num_color_targets = 1;
         pipelineInfo.target_info.has_depth_stencil_target = (depthStencilFormat_ != SDL_GPU_TEXTUREFORMAT_INVALID);
@@ -1618,9 +1905,9 @@ namespace CNA::Internal::Backends::SdlGpu
 
     SDL_GPUGraphicsPipeline* SdlGpuGraphicsBackend::GetOrCreatePipelineLitTextured3D(
         SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
-        SDL_GPUTextureFormat colorFormat)
+        SDL_GPUTextureFormat colorFormat, const RenderStateSnapshot& renderState)
     {
-        const int key = PipelineCacheKey(topology, depthTest, depthWrite, depthFunc, colorFormat);
+        const std::size_t key = PipelineCacheKey(topology, depthTest, depthWrite, depthFunc, colorFormat, renderState);
         const auto it = litTexturedPipelines_.find(key);
         if (it != litTexturedPipelines_.end())
             return it->second;
@@ -1637,6 +1924,7 @@ namespace CNA::Internal::Backends::SdlGpu
 
         SDL_GPUColorTargetDescription colorTarget{};
         colorTarget.format = colorFormat;
+        FillBlendState(colorTarget.blend_state, renderState);
 
         SDL_GPUGraphicsPipelineCreateInfo pipelineInfo{};
         pipelineInfo.vertex_shader = litTexturedVertexShader_;
@@ -1646,13 +1934,9 @@ namespace CNA::Internal::Backends::SdlGpu
         pipelineInfo.vertex_input_state.vertex_attributes = attrs;
         pipelineInfo.vertex_input_state.num_vertex_attributes = 3;
         pipelineInfo.primitive_type = topology;
-        pipelineInfo.rasterizer_state.fill_mode = SDL_GPU_FILLMODE_FILL;
-        pipelineInfo.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_NONE;
-        pipelineInfo.rasterizer_state.front_face = SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE;
+        FillRasterizerState(pipelineInfo.rasterizer_state, renderState);
         pipelineInfo.multisample_state.sample_count = SDL_GPU_SAMPLECOUNT_1;
-        pipelineInfo.depth_stencil_state.enable_depth_test = depthTest;
-        pipelineInfo.depth_stencil_state.enable_depth_write = depthWrite;
-        pipelineInfo.depth_stencil_state.compare_op = ToCompareOp(depthFunc);
+        FillDepthStencilState(pipelineInfo.depth_stencil_state, depthTest, depthWrite, depthFunc, renderState);
         pipelineInfo.target_info.color_target_descriptions = &colorTarget;
         pipelineInfo.target_info.num_color_targets = 1;
         pipelineInfo.target_info.has_depth_stencil_target = (depthStencilFormat_ != SDL_GPU_TEXTUREFORMAT_INVALID);
@@ -1685,6 +1969,7 @@ namespace CNA::Internal::Backends::SdlGpu
         command.depthTest = depthTestEnabled_;
         command.depthFunc = depthCompareFunction_;
         command.depthWrite = depthWriteEnabled_;
+        command.renderState = CaptureRenderState();
         if (params != nullptr)
         {
             const Matrix wvp = world * view * projection;
@@ -1732,6 +2017,7 @@ namespace CNA::Internal::Backends::SdlGpu
         command.depthTest = depthTestEnabled_;
         command.depthFunc = depthCompareFunction_;
         command.depthWrite = depthWriteEnabled_;
+        command.renderState = CaptureRenderState();
         const Matrix wvp = world * view * projection;
         FillExtUniforms(command.uniforms, wvp, params);
         command.texture = static_cast<const SdlGpuTextureBackend*>(params.texture0);
@@ -1779,6 +2065,7 @@ namespace CNA::Internal::Backends::SdlGpu
         command.depthTest = depthTestEnabled_;
         command.depthFunc = depthCompareFunction_;
         command.depthWrite = depthWriteEnabled_;
+        command.renderState = CaptureRenderState();
         const Matrix wvp = world * view * projection;
         FillExtUniforms(command.uniforms, wvp, params);
         FillLitLightUniforms(command.lightUniforms, params);
@@ -1871,7 +2158,7 @@ namespace CNA::Internal::Backends::SdlGpu
 
     SDL_GPUGraphicsPipeline* SdlGpuGraphicsBackend::GetOrCreatePipelineAlphaTest3D(
         std::size_t stride, SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
-        SDL_GPUTextureFormat colorFormat)
+        SDL_GPUTextureFormat colorFormat, const RenderStateSnapshot& renderState)
     {
         // stride 24 (vertex colour) uses its own dedicated map, keyed the same way every other
         // stride-specific map here is. strides 20/32 share alphaTestVertexShader_ but need
@@ -1879,7 +2166,7 @@ namespace CNA::Internal::Backends::SdlGpu
         // the stride explicitly.
         if (stride == 24)
         {
-            const int key = PipelineCacheKey(topology, depthTest, depthWrite, depthFunc, colorFormat);
+            const std::size_t key = PipelineCacheKey(topology, depthTest, depthWrite, depthFunc, colorFormat, renderState);
             const auto it = alphaTestColoredPipelines_.find(key);
             if (it != alphaTestColoredPipelines_.end())
                 return it->second;
@@ -1895,6 +2182,7 @@ namespace CNA::Internal::Backends::SdlGpu
 
             SDL_GPUColorTargetDescription colorTarget{};
             colorTarget.format = colorFormat;
+            FillBlendState(colorTarget.blend_state, renderState);
 
             SDL_GPUGraphicsPipelineCreateInfo pipelineInfo{};
             pipelineInfo.vertex_shader = alphaTestColoredVertexShader_;
@@ -1904,13 +2192,9 @@ namespace CNA::Internal::Backends::SdlGpu
             pipelineInfo.vertex_input_state.vertex_attributes = attrs;
             pipelineInfo.vertex_input_state.num_vertex_attributes = 3;
             pipelineInfo.primitive_type = topology;
-            pipelineInfo.rasterizer_state.fill_mode = SDL_GPU_FILLMODE_FILL;
-            pipelineInfo.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_NONE;
-            pipelineInfo.rasterizer_state.front_face = SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE;
+            FillRasterizerState(pipelineInfo.rasterizer_state, renderState);
             pipelineInfo.multisample_state.sample_count = SDL_GPU_SAMPLECOUNT_1;
-            pipelineInfo.depth_stencil_state.enable_depth_test = depthTest;
-            pipelineInfo.depth_stencil_state.enable_depth_write = depthWrite;
-            pipelineInfo.depth_stencil_state.compare_op = ToCompareOp(depthFunc);
+            FillDepthStencilState(pipelineInfo.depth_stencil_state, depthTest, depthWrite, depthFunc, renderState);
             pipelineInfo.target_info.color_target_descriptions = &colorTarget;
             pipelineInfo.target_info.num_color_targets = 1;
             pipelineInfo.target_info.has_depth_stencil_target = (depthStencilFormat_ != SDL_GPU_TEXTUREFORMAT_INVALID);
@@ -1923,7 +2207,8 @@ namespace CNA::Internal::Backends::SdlGpu
             return pipeline;
         }
 
-        const int key = static_cast<int>(stride) * 1000000 + PipelineCacheKey(topology, depthTest, depthWrite, depthFunc, colorFormat);
+        const std::size_t key = HashCombine(static_cast<std::size_t>(stride),
+            PipelineCacheKey(topology, depthTest, depthWrite, depthFunc, colorFormat, renderState));
         const auto it = alphaTestPipelines_.find(key);
         if (it != alphaTestPipelines_.end())
             return it->second;
@@ -1939,6 +2224,7 @@ namespace CNA::Internal::Backends::SdlGpu
 
         SDL_GPUColorTargetDescription colorTarget{};
         colorTarget.format = colorFormat;
+        FillBlendState(colorTarget.blend_state, renderState);
 
         SDL_GPUGraphicsPipelineCreateInfo pipelineInfo{};
         pipelineInfo.vertex_shader = alphaTestVertexShader_;
@@ -1948,13 +2234,9 @@ namespace CNA::Internal::Backends::SdlGpu
         pipelineInfo.vertex_input_state.vertex_attributes = attrs;
         pipelineInfo.vertex_input_state.num_vertex_attributes = 2;
         pipelineInfo.primitive_type = topology;
-        pipelineInfo.rasterizer_state.fill_mode = SDL_GPU_FILLMODE_FILL;
-        pipelineInfo.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_NONE;
-        pipelineInfo.rasterizer_state.front_face = SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE;
+        FillRasterizerState(pipelineInfo.rasterizer_state, renderState);
         pipelineInfo.multisample_state.sample_count = SDL_GPU_SAMPLECOUNT_1;
-        pipelineInfo.depth_stencil_state.enable_depth_test = depthTest;
-        pipelineInfo.depth_stencil_state.enable_depth_write = depthWrite;
-        pipelineInfo.depth_stencil_state.compare_op = ToCompareOp(depthFunc);
+        FillDepthStencilState(pipelineInfo.depth_stencil_state, depthTest, depthWrite, depthFunc, renderState);
         pipelineInfo.target_info.color_target_descriptions = &colorTarget;
         pipelineInfo.target_info.num_color_targets = 1;
         pipelineInfo.target_info.has_depth_stencil_target = (depthStencilFormat_ != SDL_GPU_TEXTUREFORMAT_INVALID);
@@ -2031,10 +2313,10 @@ namespace CNA::Internal::Backends::SdlGpu
 
     SDL_GPUGraphicsPipeline* SdlGpuGraphicsBackend::GetOrCreatePipelineDualTexture3D(
         std::size_t stride, SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
-        SDL_GPUTextureFormat colorFormat)
+        SDL_GPUTextureFormat colorFormat, const RenderStateSnapshot& renderState)
     {
         auto& cache = (stride == 24) ? dualTextureColoredPipelines_ : dualTexturePipelines_;
-        const int key = PipelineCacheKey(topology, depthTest, depthWrite, depthFunc, colorFormat);
+        const std::size_t key = PipelineCacheKey(topology, depthTest, depthWrite, depthFunc, colorFormat, renderState);
         const auto it = cache.find(key);
         if (it != cache.end())
             return it->second;
@@ -2062,6 +2344,7 @@ namespace CNA::Internal::Backends::SdlGpu
 
         SDL_GPUColorTargetDescription colorTarget{};
         colorTarget.format = colorFormat;
+        FillBlendState(colorTarget.blend_state, renderState);
 
         SDL_GPUGraphicsPipelineCreateInfo pipelineInfo{};
         pipelineInfo.vertex_shader = (stride == 24) ? dualTextureColoredVertexShader_ : dualTextureVertexShader_;
@@ -2071,13 +2354,9 @@ namespace CNA::Internal::Backends::SdlGpu
         pipelineInfo.vertex_input_state.vertex_attributes = attrs;
         pipelineInfo.vertex_input_state.num_vertex_attributes = numAttrs;
         pipelineInfo.primitive_type = topology;
-        pipelineInfo.rasterizer_state.fill_mode = SDL_GPU_FILLMODE_FILL;
-        pipelineInfo.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_NONE;
-        pipelineInfo.rasterizer_state.front_face = SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE;
+        FillRasterizerState(pipelineInfo.rasterizer_state, renderState);
         pipelineInfo.multisample_state.sample_count = SDL_GPU_SAMPLECOUNT_1;
-        pipelineInfo.depth_stencil_state.enable_depth_test = depthTest;
-        pipelineInfo.depth_stencil_state.enable_depth_write = depthWrite;
-        pipelineInfo.depth_stencil_state.compare_op = ToCompareOp(depthFunc);
+        FillDepthStencilState(pipelineInfo.depth_stencil_state, depthTest, depthWrite, depthFunc, renderState);
         pipelineInfo.target_info.color_target_descriptions = &colorTarget;
         pipelineInfo.target_info.num_color_targets = 1;
         pipelineInfo.target_info.has_depth_stencil_target = (depthStencilFormat_ != SDL_GPU_TEXTUREFORMAT_INVALID);
@@ -2134,9 +2413,9 @@ namespace CNA::Internal::Backends::SdlGpu
 
     SDL_GPUGraphicsPipeline* SdlGpuGraphicsBackend::GetOrCreatePipelineEnvMap3D(
         SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
-        SDL_GPUTextureFormat colorFormat)
+        SDL_GPUTextureFormat colorFormat, const RenderStateSnapshot& renderState)
     {
-        const int key = PipelineCacheKey(topology, depthTest, depthWrite, depthFunc, colorFormat);
+        const std::size_t key = PipelineCacheKey(topology, depthTest, depthWrite, depthFunc, colorFormat, renderState);
         const auto it = envMapPipelines_.find(key);
         if (it != envMapPipelines_.end())
             return it->second;
@@ -2154,6 +2433,7 @@ namespace CNA::Internal::Backends::SdlGpu
 
         SDL_GPUColorTargetDescription colorTarget{};
         colorTarget.format = colorFormat;
+        FillBlendState(colorTarget.blend_state, renderState);
 
         SDL_GPUGraphicsPipelineCreateInfo pipelineInfo{};
         pipelineInfo.vertex_shader = envMapVertexShader_;
@@ -2163,13 +2443,9 @@ namespace CNA::Internal::Backends::SdlGpu
         pipelineInfo.vertex_input_state.vertex_attributes = attrs;
         pipelineInfo.vertex_input_state.num_vertex_attributes = 3;
         pipelineInfo.primitive_type = topology;
-        pipelineInfo.rasterizer_state.fill_mode = SDL_GPU_FILLMODE_FILL;
-        pipelineInfo.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_NONE;
-        pipelineInfo.rasterizer_state.front_face = SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE;
+        FillRasterizerState(pipelineInfo.rasterizer_state, renderState);
         pipelineInfo.multisample_state.sample_count = SDL_GPU_SAMPLECOUNT_1;
-        pipelineInfo.depth_stencil_state.enable_depth_test = depthTest;
-        pipelineInfo.depth_stencil_state.enable_depth_write = depthWrite;
-        pipelineInfo.depth_stencil_state.compare_op = ToCompareOp(depthFunc);
+        FillDepthStencilState(pipelineInfo.depth_stencil_state, depthTest, depthWrite, depthFunc, renderState);
         pipelineInfo.target_info.color_target_descriptions = &colorTarget;
         pipelineInfo.target_info.num_color_targets = 1;
         pipelineInfo.target_info.has_depth_stencil_target = (depthStencilFormat_ != SDL_GPU_TEXTUREFORMAT_INVALID);
@@ -2210,9 +2486,9 @@ namespace CNA::Internal::Backends::SdlGpu
 
     SDL_GPUGraphicsPipeline* SdlGpuGraphicsBackend::GetOrCreatePipelineSkinned3D(
         SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
-        SDL_GPUTextureFormat colorFormat)
+        SDL_GPUTextureFormat colorFormat, const RenderStateSnapshot& renderState)
     {
-        const int key = PipelineCacheKey(topology, depthTest, depthWrite, depthFunc, colorFormat);
+        const std::size_t key = PipelineCacheKey(topology, depthTest, depthWrite, depthFunc, colorFormat, renderState);
         const auto it = skinnedPipelines_.find(key);
         if (it != skinnedPipelines_.end())
             return it->second;
@@ -2233,6 +2509,7 @@ namespace CNA::Internal::Backends::SdlGpu
 
         SDL_GPUColorTargetDescription colorTarget{};
         colorTarget.format = colorFormat;
+        FillBlendState(colorTarget.blend_state, renderState);
 
         SDL_GPUGraphicsPipelineCreateInfo pipelineInfo{};
         pipelineInfo.vertex_shader = skinnedVertexShader_;
@@ -2242,13 +2519,9 @@ namespace CNA::Internal::Backends::SdlGpu
         pipelineInfo.vertex_input_state.vertex_attributes = attrs;
         pipelineInfo.vertex_input_state.num_vertex_attributes = 5;
         pipelineInfo.primitive_type = topology;
-        pipelineInfo.rasterizer_state.fill_mode = SDL_GPU_FILLMODE_FILL;
-        pipelineInfo.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_NONE;
-        pipelineInfo.rasterizer_state.front_face = SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE;
+        FillRasterizerState(pipelineInfo.rasterizer_state, renderState);
         pipelineInfo.multisample_state.sample_count = SDL_GPU_SAMPLECOUNT_1;
-        pipelineInfo.depth_stencil_state.enable_depth_test = depthTest;
-        pipelineInfo.depth_stencil_state.enable_depth_write = depthWrite;
-        pipelineInfo.depth_stencil_state.compare_op = ToCompareOp(depthFunc);
+        FillDepthStencilState(pipelineInfo.depth_stencil_state, depthTest, depthWrite, depthFunc, renderState);
         pipelineInfo.target_info.color_target_descriptions = &colorTarget;
         pipelineInfo.target_info.num_color_targets = 1;
         pipelineInfo.target_info.has_depth_stencil_target = (depthStencilFormat_ != SDL_GPU_TEXTUREFORMAT_INVALID);
@@ -2279,6 +2552,7 @@ namespace CNA::Internal::Backends::SdlGpu
         command.depthTest = depthTestEnabled_;
         command.depthFunc = depthCompareFunction_;
         command.depthWrite = depthWriteEnabled_;
+        command.renderState = CaptureRenderState();
         const Matrix wvp = world * view * projection;
         FillAlphaTestUniforms(command.uniforms, wvp, params);
         command.texture = static_cast<const SdlGpuTextureBackend*>(params.texture0);
@@ -2323,6 +2597,7 @@ namespace CNA::Internal::Backends::SdlGpu
         command.depthTest = depthTestEnabled_;
         command.depthFunc = depthCompareFunction_;
         command.depthWrite = depthWriteEnabled_;
+        command.renderState = CaptureRenderState();
         const Matrix wvp = world * view * projection;
         FillExtUniforms(command.uniforms, wvp, params);
         command.texture0 = static_cast<const SdlGpuTextureBackend*>(params.texture0);
@@ -2383,6 +2658,7 @@ namespace CNA::Internal::Backends::SdlGpu
         command.depthTest = depthTestEnabled_;
         command.depthFunc = depthCompareFunction_;
         command.depthWrite = depthWriteEnabled_;
+        command.renderState = CaptureRenderState();
         const Matrix wvp = world * view * projection;
         FillEnvMapUniforms(command.uniforms, wvp, params);
         FillEnvMapParams(command.envMapUniforms, params);
@@ -2430,6 +2706,7 @@ namespace CNA::Internal::Backends::SdlGpu
         command.depthTest = depthTestEnabled_;
         command.depthFunc = depthCompareFunction_;
         command.depthWrite = depthWriteEnabled_;
+        command.renderState = CaptureRenderState();
         const Matrix wvp = world * view * projection;
         FillExtUniforms(command.uniforms, wvp, params);
         FillSkinnedBoneUniforms(command.boneUniforms, params);
@@ -2467,8 +2744,9 @@ namespace CNA::Internal::Backends::SdlGpu
                 continue;
 
             SDL_GPUGraphicsPipeline* pipeline = GetOrCreatePipelineAlphaTest3D(
-                command.stride, command.topology, command.depthTest, command.depthWrite, command.depthFunc, colorFormat);
+                command.stride, command.topology, command.depthTest, command.depthWrite, command.depthFunc, colorFormat, command.renderState);
             SDL_BindGPUGraphicsPipeline(pass, pipeline);
+            SDL_SetGPUStencilReference(pass, static_cast<Uint8>(command.renderState.stencilReference));
             SDL_PushGPUVertexUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
             SDL_PushGPUFragmentUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
 
@@ -2506,8 +2784,9 @@ namespace CNA::Internal::Backends::SdlGpu
                 continue;
 
             SDL_GPUGraphicsPipeline* pipeline = GetOrCreatePipelineDualTexture3D(
-                command.hasVertexColor ? 24 : 20, command.topology, command.depthTest, command.depthWrite, command.depthFunc, colorFormat);
+                command.hasVertexColor ? 24 : 20, command.topology, command.depthTest, command.depthWrite, command.depthFunc, colorFormat, command.renderState);
             SDL_BindGPUGraphicsPipeline(pass, pipeline);
+            SDL_SetGPUStencilReference(pass, static_cast<Uint8>(command.renderState.stencilReference));
             SDL_PushGPUVertexUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
 
             SDL_GPUBufferBinding vbBinding{};
@@ -2547,8 +2826,9 @@ namespace CNA::Internal::Backends::SdlGpu
                 continue;
 
             SDL_GPUGraphicsPipeline* pipeline = GetOrCreatePipelineEnvMap3D(
-                command.topology, command.depthTest, command.depthWrite, command.depthFunc, colorFormat);
+                command.topology, command.depthTest, command.depthWrite, command.depthFunc, colorFormat, command.renderState);
             SDL_BindGPUGraphicsPipeline(pass, pipeline);
+            SDL_SetGPUStencilReference(pass, static_cast<Uint8>(command.renderState.stencilReference));
             SDL_PushGPUVertexUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
             SDL_PushGPUVertexUniformData(cmd, 1, command.envMapUniforms.data(), sizeof(command.envMapUniforms));
             SDL_PushGPUFragmentUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
@@ -2593,8 +2873,9 @@ namespace CNA::Internal::Backends::SdlGpu
                 continue;
 
             SDL_GPUGraphicsPipeline* pipeline = GetOrCreatePipelineSkinned3D(
-                command.topology, command.depthTest, command.depthWrite, command.depthFunc, colorFormat);
+                command.topology, command.depthTest, command.depthWrite, command.depthFunc, colorFormat, command.renderState);
             SDL_BindGPUGraphicsPipeline(pass, pipeline);
+            SDL_SetGPUStencilReference(pass, static_cast<Uint8>(command.renderState.stencilReference));
             SDL_PushGPUVertexUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
             SDL_PushGPUVertexUniformData(cmd, 1, command.lightUniforms.data(), sizeof(command.lightUniforms));
             // litTexturedFragmentShader_ (reused unchanged) expects PC at slot 0 and
@@ -2753,8 +3034,10 @@ namespace CNA::Internal::Backends::SdlGpu
                 continue;
 
             SDL_GPUGraphicsPipeline* pipeline = GetOrCreatePipelineColored3D(command.topology, command.depthTest,
-                                                                              command.depthWrite, command.depthFunc, colorFormat);
+                                                                              command.depthWrite, command.depthFunc, colorFormat,
+                                                                              command.renderState);
             SDL_BindGPUGraphicsPipeline(pass, pipeline);
+            SDL_SetGPUStencilReference(pass, static_cast<Uint8>(command.renderState.stencilReference));
             SDL_PushGPUVertexUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
 
             SDL_GPUBufferBinding vbBinding{};
@@ -2785,9 +3068,10 @@ namespace CNA::Internal::Backends::SdlGpu
                 continue;
 
             SDL_GPUGraphicsPipeline* pipeline = command.hasVertexColor
-                ? GetOrCreatePipelineColoredTextured3D(command.topology, command.depthTest, command.depthWrite, command.depthFunc, colorFormat)
-                : GetOrCreatePipelineTextured3D(command.topology, command.depthTest, command.depthWrite, command.depthFunc, colorFormat);
+                ? GetOrCreatePipelineColoredTextured3D(command.topology, command.depthTest, command.depthWrite, command.depthFunc, colorFormat, command.renderState)
+                : GetOrCreatePipelineTextured3D(command.topology, command.depthTest, command.depthWrite, command.depthFunc, colorFormat, command.renderState);
             SDL_BindGPUGraphicsPipeline(pass, pipeline);
+            SDL_SetGPUStencilReference(pass, static_cast<Uint8>(command.renderState.stencilReference));
             SDL_PushGPUVertexUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
             SDL_PushGPUFragmentUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
 
@@ -2824,8 +3108,9 @@ namespace CNA::Internal::Backends::SdlGpu
                 continue;
 
             SDL_GPUGraphicsPipeline* pipeline = GetOrCreatePipelineLitTextured3D(
-                command.topology, command.depthTest, command.depthWrite, command.depthFunc, colorFormat);
+                command.topology, command.depthTest, command.depthWrite, command.depthFunc, colorFormat, command.renderState);
             SDL_BindGPUGraphicsPipeline(pass, pipeline);
+            SDL_SetGPUStencilReference(pass, static_cast<Uint8>(command.renderState.stencilReference));
             SDL_PushGPUVertexUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
             SDL_PushGPUVertexUniformData(cmd, 1, command.lightUniforms.data(), sizeof(command.lightUniforms));
             SDL_PushGPUFragmentUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));

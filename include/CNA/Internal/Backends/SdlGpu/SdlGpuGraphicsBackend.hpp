@@ -506,6 +506,47 @@ namespace CNA::Internal::Backends::SdlGpu
             bool operator!=(const DrawTarget& other) const { return !(*this == other); }
         };
 
+        // SDLGPU-18: raw XNA Blend/BlendFunction ordinals, captured at Queue*Draw time so the
+        // exact requested blend equation (not just enabled/disabled) is baked into the pipeline
+        // that command actually renders with. Defaults mirror BlendState.Opaque (One/Zero/Add).
+        struct BlendKeyParams
+        {
+            int colorSrc = 0, colorDst = 1, alphaSrc = 0, alphaDst = 1, colorFunc = 0, alphaFunc = 0;
+        };
+
+        // SDLGPU-19: raw XNA StencilOperation/CompareFunction ordinals for real front/back
+        // stencil-op pipeline baking. Defaults mirror DepthStencilState.Default (stencil disabled).
+        struct StencilKeyParams
+        {
+            bool enable = false;
+            int func = 0, fail = 0, depthFail = 0, pass = 0;
+            bool twoSided = false;
+            int ccwFunc = 0, ccwFail = 0, ccwDepthFail = 0, ccwPass = 0;
+        };
+
+        // SDLGPU-18/19/20: snapshot of BlendState/the stencil half of DepthStencilState/
+        // RasterizerState's cull+fill fields, captured at Queue*Draw time -- mirrors DrawTarget's
+        // own "one shared struct field per DrawCommand" precedent. depthTest/depthWrite/depthFunc
+        // stay as each DrawCommand's own pre-existing, separate fields (unchanged) since those
+        // predate this and are already correctly threaded through; this struct only carries the
+        // NEW dimensions this task adds. ScissorTestEnable/DepthBias/SlopeScaleDepthBias are
+        // deliberately NOT here -- scissor is real render-pass-time state (see SetScissorRect),
+        // and SDL_gpu has no per-draw-dynamic depth-bias equivalent to Vulkan's vkCmdSetDepthBias
+        // (only a pipeline-baked one), so depth bias is a documented, deliberate deferral (see
+        // plan_sdlgpu.md's SDLGPU-20 row).
+        struct RenderStateSnapshot
+        {
+            bool blendEnabled = false;
+            BlendKeyParams blend;
+            int cullMode = 0;   // XNA CullMode ordinal; 0 = None
+            bool wireframe = false;
+            StencilKeyParams stencil;
+            // SDL_gpu exposes this as a genuine per-draw dynamic value (SDL_SetGPUStencilReference),
+            // not a pipeline-baked one -- captured per-command like the rest of this snapshot rather
+            // than applied once per pass (unlike scissor, which has no per-draw SDL_gpu equivalent).
+            int stencilReference = 0;
+        };
+
         struct SpriteCommand
         {
             // Raw native handle rather than a concrete backend pointer -- SpriteBatch can draw
@@ -525,6 +566,15 @@ namespace CNA::Internal::Backends::SdlGpu
             // retroactively change this already-queued sprite's rendered result.
             SdlGpuEffectBackend* customEffect = nullptr;
             std::array<float, 32> customUniforms{};
+            // SDLGPU-18/19/20: SpriteBatch.Begin() sets GraphicsDevice.BlendState/DepthStencilState/
+            // RasterizerState the same way any other draw does (defaulting to
+            // BlendState.AlphaBlend/DepthStencilState.None/RasterizerState.CullCounterClockwise
+            // per SpriteBatch.Begin()'s own real XNA defaults), so sprites bake the same
+            // dynamically-captured state as every 3D shader family, not a hardcoded blend/no-depth.
+            bool depthTest = false;
+            bool depthWrite = false;
+            int depthFunc = 3;
+            RenderStateSnapshot renderState;
         };
 
         // Phase SDLGPU-6: colored3d/textured3d/colored_textured3d/lit_textured3d draw commands.
@@ -546,6 +596,7 @@ namespace CNA::Internal::Backends::SdlGpu
             bool depthTest = false;
             bool depthWrite = false;
             int depthFunc = 3;  ///< XNA CompareFunction ordinal; 3 = LessEqual
+            RenderStateSnapshot renderState;  ///< SDLGPU-18/19/20
             DrawTarget target;  ///< default = swapchain
             SDL_GPUBuffer* uploadedVertexBuffer = nullptr;  ///< transient, set by UploadSceneDrawData
             SDL_GPUBuffer* uploadedIndexBuffer = nullptr;   ///< transient, set by UploadSceneDrawData
@@ -567,6 +618,7 @@ namespace CNA::Internal::Backends::SdlGpu
             bool depthTest = false;
             bool depthWrite = false;
             int depthFunc = 3;
+            RenderStateSnapshot renderState;  ///< SDLGPU-18/19/20
             const SdlGpuTextureBackend* texture = nullptr;
             int textureFilter = 0;
             int addressU = 1;
@@ -592,6 +644,7 @@ namespace CNA::Internal::Backends::SdlGpu
             bool depthTest = false;
             bool depthWrite = false;
             int depthFunc = 3;
+            RenderStateSnapshot renderState;  ///< SDLGPU-18/19/20
             const SdlGpuTextureBackend* texture = nullptr;
             int textureFilter = 0;
             int addressU = 1;
@@ -618,6 +671,7 @@ namespace CNA::Internal::Backends::SdlGpu
             bool depthTest = false;
             bool depthWrite = false;
             int depthFunc = 3;
+            RenderStateSnapshot renderState;  ///< SDLGPU-18/19/20
             const SdlGpuTextureBackend* texture = nullptr;
             int textureFilter = 0;
             int addressU = 1;
@@ -646,6 +700,7 @@ namespace CNA::Internal::Backends::SdlGpu
             bool depthTest = false;
             bool depthWrite = false;
             int depthFunc = 3;
+            RenderStateSnapshot renderState;  ///< SDLGPU-18/19/20
             const SdlGpuTextureBackend* texture0 = nullptr;
             const SdlGpuTextureBackend* texture1 = nullptr;
             int textureFilter = 0;
@@ -676,6 +731,7 @@ namespace CNA::Internal::Backends::SdlGpu
             bool depthTest = false;
             bool depthWrite = false;
             int depthFunc = 3;
+            RenderStateSnapshot renderState;  ///< SDLGPU-18/19/20
             const SdlGpuTextureBackend* texture = nullptr;
             SDL_GPUTexture* envMapTexture = nullptr;
             int textureFilter = 0;
@@ -709,6 +765,7 @@ namespace CNA::Internal::Backends::SdlGpu
             bool depthTest = false;
             bool depthWrite = false;
             int depthFunc = 3;
+            RenderStateSnapshot renderState;  ///< SDLGPU-18/19/20
             const SdlGpuTextureBackend* texture = nullptr;
             int textureFilter = 0;
             int addressU = 1;
@@ -775,10 +832,64 @@ namespace CNA::Internal::Backends::SdlGpu
         void ClearColorDepthAndStencil(float r, float g, float b, float a, float depth, int stencil) override;
         /** @brief Stores the depth-test enabled flag, read by the 3D draw path's pipeline cache key. */
         void SetDepthTestEnabled(bool enabled) override { depthTestEnabled_ = enabled; }
-        /** @brief Stores the blend-enabled flag (not yet wired to a pipeline — every 3D pipeline is currently opaque, no blend). */
+        /** @brief Stores the blend-enabled flag directly -- a test-only shortcut separate from the
+         * real `BlendState` object; `ApplyBlendState()` below is the real production path and may
+         * overwrite this same field the next time a `BlendState` is assigned. */
         void SetBlendEnabled(bool enabled) override { blendEnabled_ = enabled; }
         /** @brief Stores the depth-write enabled flag, read by the 3D draw path's pipeline cache key. */
         void SetDepthWriteEnabled(bool enabled) override { depthWriteEnabled_ = enabled; }
+
+        /**
+         * @brief Real `BlendState` mapping (`SDLGPU-18`) -- stores the full requested blend
+         * equation (not just enabled/disabled), baked into every 3D/sprite pipeline's
+         * `SDL_GPUColorTargetBlendState` at `Queue*Draw()` time. Blend is considered "enabled"
+         * unless the request is exactly `BlendState.Opaque`'s own values (`One`/`Zero`/`Add`),
+         * mirroring `VulkanGraphicsBackend::ApplyBlendState`'s own convention.
+         */
+        void ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
+                             int colorDstBlend, int alphaDstBlend,
+                             int colorBlendFunc, int alphaBlendFunc) override;
+        /**
+         * @brief Real `DepthStencilState` mapping (`SDLGPU-19`) -- `depthEnable`/`depthWriteEnable`/
+         * `depthFunc` update the same fields `SetDepthTestEnabled`/`SetDepthWriteEnabled` already
+         * drive (whichever was set most recently wins, matching two setters sharing one field);
+         * the stencil fields are new, baked into every 3D/sprite pipeline's front/back
+         * `SDL_GPUStencilOpState`. `referenceStencil` is applied immediately and separately (real
+         * render-pass-time state, not baked into the pipeline) via `SetReferenceStencil()`'s own
+         * mechanism, matching `GraphicsDevice.ReferenceStencil`'s real standalone-property
+         * semantics.
+         */
+        void ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable, int depthFunc,
+                                    bool stencilEnable, int stencilFunc,
+                                    int stencilPass, int stencilFail, int stencilDepthFail,
+                                    int stencilMask, int stencilWriteMask, int referenceStencil,
+                                    bool twoSidedStencilMode,
+                                    int ccwStencilFunc, int ccwStencilPass,
+                                    int ccwStencilFail, int ccwStencilDepthFail) override;
+        /**
+         * @brief Real `RasterizerState` mapping (`SDLGPU-20`) -- `cullMode`/`fillMode` are baked
+         * into every 3D/sprite pipeline's `SDL_GPURasterizerState`; `scissorTestEnable` is applied
+         * per render pass via `SDL_SetGPUScissor` (see `SetScissorRect()`). `depthBias`/
+         * `slopeScaleDepthBias` are stored but deliberately NOT yet applied: unlike Vulkan's
+         * `vkCmdSetDepthBias` (a true per-draw dynamic state), `SDL_gpu` only exposes depth bias as
+         * pipeline-baked `SDL_GPURasterizerState` fields, which would require folding two floats
+         * into the pipeline cache key -- a real, documented deferral (see `plan_sdlgpu.md`'s
+         * `SDLGPU-20` row), not a silent drop.
+         */
+        void ApplyRasterizerState(int cullMode, int fillMode, bool scissorTestEnable,
+                                  float depthBias = 0.0f, float slopeScaleDepthBias = 0.0f) override;
+        /** @brief Stores `GraphicsDevice.ReferenceStencil`, independent of a full `DepthStencilState`
+         * re-application -- matches `IGraphicsBackend::SetReferenceStencil`'s own documented
+         * standalone-property contract. Captured into `RenderStateSnapshot::stencilReference` at
+         * the next `Queue*Draw()`/`QueueSprite()` call, then applied per draw call via a real
+         * `SDL_SetGPUStencilReference` (a genuine SDL_gpu per-draw dynamic value, not baked into
+         * the pipeline) in each `Render*Draws`/`RenderSprites` function. */
+        void SetReferenceStencil(int value) override;
+        /** @brief Real scissor-rect mapping (`SDLGPU-20`) -- stores the rect; actually applied via
+         * `SDL_SetGPUScissor` once per render pass in `RenderSprites`/`Render*Draws`, gated on
+         * `ApplyRasterizerState`'s own `scissorTestEnable` flag (a disabled scissor test uses the
+         * full render-target extents instead of this rect, matching "no clipping"). */
+        void SetScissorRect(int x, int y, int w, int h) override;
 
         std::unique_ptr<IVertexBufferBackend> CreateVertexBuffer(int vertex_capacity) override;
         std::unique_ptr<IIndexBufferBackend> CreateIndexBuffer16(int index_capacity) override;
@@ -903,7 +1014,9 @@ namespace CNA::Internal::Backends::SdlGpu
         // WebGPUGraphicsBackend::SamplerCacheIndex's exact indexing scheme (filterIndex*9+u*3+v).
         void CreateSpriteResources();
         void DestroySpriteResources();
-        [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreateSpritePipeline(SDL_GPUTextureFormat colorFormat);
+        [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreateSpritePipeline(SDL_GPUTextureFormat colorFormat,
+                                                                          bool depthTest, bool depthWrite, int depthFunc,
+                                                                          const RenderStateSnapshot& renderState);
         [[nodiscard]] SDL_GPUSampler* GetOrCreateSampler(int textureFilter, int addressU, int addressV);
         // Uploads all queued sprite vertex data (copy pass) -- must run BEFORE
         // BeginGPURenderPass; SDL_gpu forbids a copy pass nested inside a render pass.
@@ -923,16 +1036,16 @@ namespace CNA::Internal::Backends::SdlGpu
         void DestroyLitTexturedResources();
         [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipelineColored3D(
             SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
-            SDL_GPUTextureFormat colorFormat);
+            SDL_GPUTextureFormat colorFormat, const RenderStateSnapshot& renderState);
         [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipelineTextured3D(
             SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
-            SDL_GPUTextureFormat colorFormat);
+            SDL_GPUTextureFormat colorFormat, const RenderStateSnapshot& renderState);
         [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipelineColoredTextured3D(
             SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
-            SDL_GPUTextureFormat colorFormat);
+            SDL_GPUTextureFormat colorFormat, const RenderStateSnapshot& renderState);
         [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipelineLitTextured3D(
             SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
-            SDL_GPUTextureFormat colorFormat);
+            SDL_GPUTextureFormat colorFormat, const RenderStateSnapshot& renderState);
         // params == nullptr: the legacy DrawColoredPrimitives path (hardcoded white diffuse,
         // vertexColorEnabled=true). params != nullptr: DrawPrimitivesEx's real GpuDrawParams path.
         void QueueColoredDraw(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
@@ -953,10 +1066,10 @@ namespace CNA::Internal::Backends::SdlGpu
         void DestroyDualTextureResources();
         [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipelineAlphaTest3D(
             std::size_t stride, SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
-            SDL_GPUTextureFormat colorFormat);
+            SDL_GPUTextureFormat colorFormat, const RenderStateSnapshot& renderState);
         [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipelineDualTexture3D(
             std::size_t stride, SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
-            SDL_GPUTextureFormat colorFormat);
+            SDL_GPUTextureFormat colorFormat, const RenderStateSnapshot& renderState);
         void QueueAlphaTestDraw(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
                                 const Matrix& world, const Matrix& view, const Matrix& projection,
                                 PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
@@ -973,7 +1086,7 @@ namespace CNA::Internal::Backends::SdlGpu
         void DestroyEnvMapResources();
         [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipelineEnvMap3D(
             SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
-            SDL_GPUTextureFormat colorFormat);
+            SDL_GPUTextureFormat colorFormat, const RenderStateSnapshot& renderState);
         void QueueEnvMapDraw(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
                              const Matrix& world, const Matrix& view, const Matrix& projection,
                              PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
@@ -985,7 +1098,7 @@ namespace CNA::Internal::Backends::SdlGpu
         void DestroySkinnedResources();
         [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipelineSkinned3D(
             SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
-            SDL_GPUTextureFormat colorFormat);
+            SDL_GPUTextureFormat colorFormat, const RenderStateSnapshot& renderState);
         void QueueSkinnedDraw(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
                               const Matrix& world, const Matrix& view, const Matrix& projection,
                               PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
@@ -1023,6 +1136,17 @@ namespace CNA::Internal::Backends::SdlGpu
         // currently bound -- 2D and cube binding are mutually exclusive (see
         // SdlGpuRenderTargetBackend::BindAsRenderTarget/SdlGpuRenderTargetCubeBackend::BindAsRenderTargetFace).
         [[nodiscard]] DrawTarget CurrentDrawTarget() const;
+        // SDLGPU-18/19/20: snapshots the backend's current blend/cull/fillmode/stencil state --
+        // called once per Queue*Draw()/QueueSprite() so later ApplyBlendState/ApplyRasterizerState/
+        // ApplyDepthStencilState calls never retroactively change an already-queued draw's baked
+        // pipeline (mirrors every other per-command uniform snapshot already established here).
+        [[nodiscard]] RenderStateSnapshot CaptureRenderState() const;
+        // Applies SDL_SetGPUScissor for the current render pass, using scissorEnabled_'s rect if
+        // set, otherwise the full render-target/swapchain extents (SDLGPU-20) -- called once per
+        // render pass from RenderSprites/Render*Draws' own pass-setup code, mirroring how
+        // viewport/scissor are real render-pass-time state on this backend's Vulkan-driven peers,
+        // not baked into any pipeline.
+        void ApplyScissorForPass(SDL_GPURenderPass* pass, int targetWidth, int targetHeight) const;
 
         SDL_Window* window_ = nullptr;
         SDL_GPUDevice* device_ = nullptr;
@@ -1034,7 +1158,7 @@ namespace CNA::Internal::Backends::SdlGpu
         // Keyed by (int)colorFormat -- Phase SDLGPU-8 needs more than one variant (swapchain
         // format vs. render-target R8G8B8A8_UNORM), unlike Phases 1-7 where sprites only ever
         // targeted the swapchain.
-        std::unordered_map<int, SDL_GPUGraphicsPipeline*> spritePipelines_;
+        std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> spritePipelines_;
         std::array<SDL_GPUSampler*, 18> samplerCache_{};
         SDL_GPUBuffer* spriteVertexBuffer_ = nullptr;
         Uint32 spriteVertexCapacityBytes_ = 0;
@@ -1047,19 +1171,19 @@ namespace CNA::Internal::Backends::SdlGpu
         // the exact packing, mirroring WebGPUGraphicsBackend's own int-keyed cache convention).
         SDL_GPUShader* coloredVertexShader_ = nullptr;
         SDL_GPUShader* coloredFragmentShader_ = nullptr;
-        std::unordered_map<int, SDL_GPUGraphicsPipeline*> coloredPipelines_;
+        std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> coloredPipelines_;
         std::vector<ColoredDrawCommand> coloredDrawCommands_;
 
         SDL_GPUShader* texturedVertexShader_ = nullptr;         ///< stride 20 (VertexPositionTexture)
         SDL_GPUShader* coloredTexturedVertexShader_ = nullptr;  ///< stride 24 (VertexPositionColorTexture)
         SDL_GPUShader* texturedFragmentShader_ = nullptr;       ///< shared by both stride-20/24 pipelines
-        std::unordered_map<int, SDL_GPUGraphicsPipeline*> texturedPipelines_;
-        std::unordered_map<int, SDL_GPUGraphicsPipeline*> coloredTexturedPipelines_;
+        std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> texturedPipelines_;
+        std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> coloredTexturedPipelines_;
         std::vector<TexturedDrawCommand> texturedDrawCommands_;
 
         SDL_GPUShader* litTexturedVertexShader_ = nullptr;
         SDL_GPUShader* litTexturedFragmentShader_ = nullptr;
-        std::unordered_map<int, SDL_GPUGraphicsPipeline*> litTexturedPipelines_;
+        std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> litTexturedPipelines_;
         std::vector<LitTexturedDrawCommand> litTexturedDrawCommands_;
 
         // Phase SDLGPU-7. alphaTestPipelines_ holds BOTH stride-20 and stride-32 pipelines
@@ -1069,26 +1193,26 @@ namespace CNA::Internal::Backends::SdlGpu
         SDL_GPUShader* alphaTestVertexShader_ = nullptr;         ///< strides 20/32 (no vertex colour)
         SDL_GPUShader* alphaTestColoredVertexShader_ = nullptr;  ///< stride 24 (vertex colour tint)
         SDL_GPUShader* alphaTestFragmentShader_ = nullptr;
-        std::unordered_map<int, SDL_GPUGraphicsPipeline*> alphaTestPipelines_;
-        std::unordered_map<int, SDL_GPUGraphicsPipeline*> alphaTestColoredPipelines_;
+        std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> alphaTestPipelines_;
+        std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> alphaTestColoredPipelines_;
         std::vector<AlphaTestDrawCommand> alphaTestDrawCommands_;
 
         SDL_GPUShader* dualTextureVertexShader_ = nullptr;         ///< stride 20
         SDL_GPUShader* dualTextureColoredVertexShader_ = nullptr;  ///< stride 24
         SDL_GPUShader* dualTextureFragmentShader_ = nullptr;
-        std::unordered_map<int, SDL_GPUGraphicsPipeline*> dualTexturePipelines_;
-        std::unordered_map<int, SDL_GPUGraphicsPipeline*> dualTextureColoredPipelines_;
+        std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> dualTexturePipelines_;
+        std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> dualTextureColoredPipelines_;
         std::vector<DualTextureDrawCommand> dualTextureDrawCommands_;
 
         SDL_GPUShader* envMapVertexShader_ = nullptr;
         SDL_GPUShader* envMapFragmentShader_ = nullptr;
-        std::unordered_map<int, SDL_GPUGraphicsPipeline*> envMapPipelines_;
+        std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> envMapPipelines_;
         std::vector<EnvMapDrawCommand> envMapDrawCommands_;
 
         // No dedicated fragment shader -- reuses litTexturedFragmentShader_ (see SkinnedDrawCommand's
         // own doc comment).
         SDL_GPUShader* skinnedVertexShader_ = nullptr;
-        std::unordered_map<int, SDL_GPUGraphicsPipeline*> skinnedPipelines_;
+        std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> skinnedPipelines_;
         std::vector<SkinnedDrawCommand> skinnedDrawCommands_;
 
         int depthCompareFunction_ = 3;  ///< XNA CompareFunction ordinal; 3 = LessEqual (DepthStencilState.Default)
@@ -1133,6 +1257,26 @@ namespace CNA::Internal::Backends::SdlGpu
 
         bool depthTestEnabled_ = false;
         bool depthWriteEnabled_ = false;
-        bool blendEnabled_ = true;
+        bool blendEnabled_ = false;  ///< matches BlendState.Opaque (no blend), the real XNA default
+
+        // SDLGPU-18/19/20: "current" render state, mirroring VulkanGraphicsBackend's own
+        // blendParams_/dsParams_/cullMode_ pattern for a backend whose pipeline objects are
+        // pre-baked/immutable, not a live pipeline-state-object mechanism. Captured into a
+        // RenderStateSnapshot at Queue*Draw()/QueueSprite() time (see CaptureRenderState()).
+        BlendKeyParams blendParams_;
+        int cullMode_ = 2;         ///< XNA CullMode ordinal; 2 = CullCounterClockwiseFace (RasterizerState's real default)
+        bool fillModeWireframe_ = false;
+        StencilKeyParams stencilParams_;
+        int stencilReadMask_ = 0xFF;
+        int stencilWriteMask_ = 0xFF;
+        int referenceStencil_ = 0;  ///< real render-pass-time state (SDL_SetGPUStencilReference), not baked into any pipeline
+        bool scissorEnabled_ = false;
+        int scissorX_ = 0;
+        int scissorY_ = 0;
+        int scissorW_ = 0;
+        int scissorH_ = 0;
+        // Stored but deliberately not yet applied -- see ApplyRasterizerState's own doc comment.
+        float depthBias_ = 0.0f;
+        float slopeScaleDepthBias_ = 0.0f;
     };
 }
