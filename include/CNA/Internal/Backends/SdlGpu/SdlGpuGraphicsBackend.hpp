@@ -557,6 +557,10 @@ namespace CNA::Internal::Backends::SdlGpu
             int func = 0, fail = 0, depthFail = 0, pass = 0;
             bool twoSided = false;
             int ccwFunc = 0, ccwFail = 0, ccwDepthFail = 0, ccwPass = 0;
+            // DepthStencilState.StencilMask/StencilWriteMask -- real XNA default is 0x7FFFFFFF
+            // (DepthStencilState's own field default), truncated to the low byte SDL_gpu's
+            // compare_mask/write_mask (Uint8) actually hold, i.e. 0xFF.
+            int readMask = 0xFF, writeMask = 0xFF;
         };
 
         // SDLGPU-18/19/20: snapshot of BlendState/the stencil half of DepthStencilState/
@@ -1358,9 +1362,7 @@ namespace CNA::Internal::Backends::SdlGpu
         BlendKeyParams blendParams_;
         int cullMode_ = 2;         ///< XNA CullMode ordinal; 2 = CullCounterClockwiseFace (RasterizerState's real default)
         bool fillModeWireframe_ = false;
-        StencilKeyParams stencilParams_;
-        int stencilReadMask_ = 0xFF;
-        int stencilWriteMask_ = 0xFF;
+        StencilKeyParams stencilParams_;  ///< readMask/writeMask live here now, see StencilKeyParams's own doc comment
         int referenceStencil_ = 0;  ///< real render-pass-time state (SDL_SetGPUStencilReference), not baked into any pipeline
         bool scissorEnabled_ = false;
         int scissorX_ = 0;

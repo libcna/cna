@@ -105,11 +105,14 @@ class SdlGpuRenderStateTest : public Game
     std::unique_ptr<RenderTarget2D> rtFillSolid_;
     std::unique_ptr<RenderTarget2D> rtFillWire_;
     std::unique_ptr<RenderTarget2D> rtScissor_;
+    std::unique_ptr<RenderTarget2D> rtStencilWriteMask_;
+    std::unique_ptr<RenderTarget2D> rtStencilReadMask_;
 
     std::unique_ptr<VertexBuffer> fullQuadGreenVb_;
     std::unique_ptr<VertexBuffer> fullQuadBlackAlphaVb_;
     std::unique_ptr<VertexBuffer> fullQuadBlueVb_;
     std::unique_ptr<VertexBuffer> leftHalfQuadBlueVb_;
+    std::unique_ptr<VertexBuffer> rightHalfQuadBlueVb_;
     std::unique_ptr<VertexBuffer> cullQuadGreenVb_;
     std::unique_ptr<VertexBuffer> fillTriangleGreenVb_;
 
@@ -195,6 +198,77 @@ class SdlGpuRenderStateTest : public Game
         maskedDraw.setStencilPassProperty(StencilOperation::Keep);
         maskedDraw.setReferenceStencilProperty(1);
         dev.setDepthStencilStateProperty(maskedDraw);
+        DrawFullQuad(dev, *fullQuadGreenVb_);
+
+        dev.setDepthStencilStateProperty(DepthStencilState::Default);
+        dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+    }
+
+    // Check G: DepthStencilState.StencilWriteMask -- a write with StencilWriteMask=0x00 must NOT
+    // change the stencil buffer at all, even with StencilFunction=Always/StencilPass=Replace.
+    void RunStencilWriteMaskCheck(GraphicsDevice& dev)
+    {
+        dev.SetRenderTarget(rtStencilWriteMask_.get());
+        dev.Clear(ClearOptions::Target | ClearOptions::DepthBuffer | ClearOptions::Stencil, Color::Blue, 1.0f, 0);
+
+        DepthStencilState writeLeft;
+        writeLeft.setDepthBufferEnableProperty(false);
+        writeLeft.setStencilEnableProperty(true);
+        writeLeft.setStencilFunctionProperty(CompareFunction::Always);
+        writeLeft.setStencilPassProperty(StencilOperation::Replace);
+        writeLeft.setReferenceStencilProperty(1);
+        writeLeft.setStencilWriteMaskProperty(0xFF);  // normal -- left half really gets stencil=1
+        dev.setDepthStencilStateProperty(writeLeft);
+        DrawFullQuad(dev, *leftHalfQuadBlueVb_);
+
+        DepthStencilState writeRightBlocked;
+        writeRightBlocked.setDepthBufferEnableProperty(false);
+        writeRightBlocked.setStencilEnableProperty(true);
+        writeRightBlocked.setStencilFunctionProperty(CompareFunction::Always);
+        writeRightBlocked.setStencilPassProperty(StencilOperation::Replace);
+        writeRightBlocked.setReferenceStencilProperty(1);
+        writeRightBlocked.setStencilWriteMaskProperty(0x00);  // blocks the write entirely
+        dev.setDepthStencilStateProperty(writeRightBlocked);
+        DrawFullQuad(dev, *rightHalfQuadBlueVb_);
+
+        DepthStencilState readBack;
+        readBack.setDepthBufferEnableProperty(false);
+        readBack.setStencilEnableProperty(true);
+        readBack.setStencilFunctionProperty(CompareFunction::Equal);
+        readBack.setStencilPassProperty(StencilOperation::Keep);
+        readBack.setReferenceStencilProperty(1);
+        dev.setDepthStencilStateProperty(readBack);
+        DrawFullQuad(dev, *fullQuadGreenVb_);
+
+        dev.setDepthStencilStateProperty(DepthStencilState::Default);
+        dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+    }
+
+    // Check H: DepthStencilState.StencilMask (the compare mask) -- StencilMask=0x00 masks BOTH the
+    // reference and stored value to 0 before comparing, so an Equal test must pass regardless of
+    // the real stencil content, even when ReferenceStencil deliberately does not match it.
+    void RunStencilReadMaskCheck(GraphicsDevice& dev)
+    {
+        dev.SetRenderTarget(rtStencilReadMask_.get());
+        dev.Clear(ClearOptions::Target | ClearOptions::DepthBuffer | ClearOptions::Stencil, Color::Blue, 1.0f, 0);
+
+        DepthStencilState writeOne;
+        writeOne.setDepthBufferEnableProperty(false);
+        writeOne.setStencilEnableProperty(true);
+        writeOne.setStencilFunctionProperty(CompareFunction::Always);
+        writeOne.setStencilPassProperty(StencilOperation::Replace);
+        writeOne.setReferenceStencilProperty(1);
+        dev.setDepthStencilStateProperty(writeOne);
+        DrawFullQuad(dev, *fullQuadBlueVb_);
+
+        DepthStencilState maskedCompare;
+        maskedCompare.setDepthBufferEnableProperty(false);
+        maskedCompare.setStencilEnableProperty(true);
+        maskedCompare.setStencilFunctionProperty(CompareFunction::Equal);
+        maskedCompare.setStencilPassProperty(StencilOperation::Keep);
+        maskedCompare.setReferenceStencilProperty(0);  // deliberately mismatches the real stencil=1
+        maskedCompare.setStencilMaskProperty(0x00);    // masks the mismatch away entirely
+        dev.setDepthStencilStateProperty(maskedCompare);
         DrawFullQuad(dev, *fullQuadGreenVb_);
 
         dev.setDepthStencilStateProperty(DepthStencilState::Default);
@@ -296,6 +370,8 @@ class SdlGpuRenderStateTest : public Game
     {
         RunBlendChecks(dev);
         RunStencilCheck(dev);
+        RunStencilWriteMaskCheck(dev);
+        RunStencilReadMaskCheck(dev);
         RunCullChecks(dev);
         RunFillModeChecks(dev);
         RunScissorCheck(dev);
@@ -324,6 +400,10 @@ protected:
                                                         DepthFormat::None, 0, RenderTargetUsage::DiscardContents);
         rtScissor_ = std::make_unique<RenderTarget2D>(dev, kRTSize, kRTSize, false, SurfaceFormat::Color,
                                                        DepthFormat::None, 0, RenderTargetUsage::DiscardContents);
+        rtStencilWriteMask_ = std::make_unique<RenderTarget2D>(dev, kRTSize, kRTSize, false, SurfaceFormat::Color,
+                                                                DepthFormat::Depth24Stencil8, 0, RenderTargetUsage::DiscardContents);
+        rtStencilReadMask_ = std::make_unique<RenderTarget2D>(dev, kRTSize, kRTSize, false, SurfaceFormat::Color,
+                                                               DepthFormat::Depth24Stencil8, 0, RenderTargetUsage::DiscardContents);
 
         fullQuadGreenVb_ = MakeFullQuad(dev, Color::Green);
         fullQuadBlackAlphaVb_ = MakeFullQuad(dev, Color(0, 0, 0, 128));
@@ -336,6 +416,14 @@ protected:
         };
         leftHalfQuadBlueVb_ = std::make_unique<VertexBuffer>(dev, VertexPositionColor::getVertexDeclarationStatic(), 6, BufferUsage::None);
         leftHalfQuadBlueVb_->SetData(leftHalfVerts, 0, 6);
+
+        // Same CW winding, right half only (x: 0..1).
+        const VertexPositionColor rightHalfVerts[6] = {
+            { Vector3(0.0f, 1.0f, 0.0f), Color::Blue }, { Vector3(1.0f, -1.0f, 0.0f), Color::Blue }, { Vector3(0.0f, -1.0f, 0.0f), Color::Blue },
+            { Vector3(0.0f, 1.0f, 0.0f), Color::Blue }, { Vector3(1.0f, 1.0f, 0.0f), Color::Blue }, { Vector3(1.0f, -1.0f, 0.0f), Color::Blue },
+        };
+        rightHalfQuadBlueVb_ = std::make_unique<VertexBuffer>(dev, VertexPositionColor::getVertexDeclarationStatic(), 6, BufferUsage::None);
+        rightHalfQuadBlueVb_->SetData(rightHalfVerts, 0, 6);
 
         // Same CW winding as MakeFullQuad -- visible under the project default
         // (RasterizerState.CullCounterClockwise), culled under CullClockwise, the differential
@@ -398,6 +486,17 @@ protected:
             Check(Matches(gotStencilRight, Color::Blue),
                   ("Check C: unmasked right half stays Blue (stencil test rejected): got=" + ColorStr(gotStencilRight)).c_str());
 
+            const Color gotWriteMaskLeft = ReadPixel(*rtStencilWriteMask_, kRTSize / 4, kRTSize / 2);
+            Check(Matches(gotWriteMaskLeft, Color::Green),
+                  ("Check G: StencilWriteMask=0xFF left half really wrote stencil=1 -> Green: got=" + ColorStr(gotWriteMaskLeft)).c_str());
+            const Color gotWriteMaskRight = ReadPixel(*rtStencilWriteMask_, (kRTSize * 3) / 4, kRTSize / 2);
+            Check(Matches(gotWriteMaskRight, Color::Blue),
+                  ("Check G: StencilWriteMask=0x00 right half blocked the write, stencil stayed 0 -> Blue: got=" + ColorStr(gotWriteMaskRight)).c_str());
+
+            const Color gotReadMask = ReadPixel(*rtStencilReadMask_, kRTSize / 2, kRTSize / 2);
+            Check(Matches(gotReadMask, Color::Green),
+                  ("Check H: StencilMask=0x00 masks a mismatched ReferenceStencil away -> Equal still passes -> Green: got=" + ColorStr(gotReadMask)).c_str());
+
             const Color gotCullCcw = ReadPixel(*rtCullCcw_, kRTSize / 2, kRTSize / 2);
             Check(Matches(gotCullCcw, Color::Green),
                   ("Check D: CullCounterClockwise (project default) -> quad visible: got=" + ColorStr(gotCullCcw)).c_str());
@@ -428,8 +527,8 @@ protected:
         if (frame_ == kTotalFrames)
         {
             Check(true, "120 frames of all RenderState checks render with no exception");
-            std::printf("=== %d/13 PASS ===\n", passCount_);
-            result_ = (passCount_ == 13) ? 0 : 1;
+            std::printf("=== %d/16 PASS ===\n", passCount_);
+            result_ = (passCount_ == 16) ? 0 : 1;
             Exit();
         }
     }

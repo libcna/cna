@@ -172,6 +172,10 @@ namespace CNA::Internal::Backends::SdlGpu
                 key = HashCombine(key, static_cast<std::size_t>(rs.stencil.fail));
                 key = HashCombine(key, static_cast<std::size_t>(rs.stencil.depthFail));
                 key = HashCombine(key, static_cast<std::size_t>(rs.stencil.pass));
+                // Truncated to the Uint8 range actually applied (FillDepthStencilState), so two
+                // int values that truncate to the same byte don't fragment the pipeline cache.
+                key = HashCombine(key, static_cast<std::size_t>(static_cast<Uint8>(rs.stencil.readMask)));
+                key = HashCombine(key, static_cast<std::size_t>(static_cast<Uint8>(rs.stencil.writeMask)));
                 key = HashCombine(key, rs.stencil.twoSided ? 1u : 0u);
                 if (rs.stencil.twoSided)
                 {
@@ -214,8 +218,9 @@ namespace CNA::Internal::Backends::SdlGpu
             out.enable_depth_write = depthWrite;
             out.compare_op = ToCompareOp(depthFunc);
             out.enable_stencil_test = rs.stencil.enable;
-            out.compare_mask = 0xFF;
-            out.write_mask = 0xFF;
+            // DepthStencilState.StencilMask/StencilWriteMask -- real values, not hardcoded 0xFF.
+            out.compare_mask = static_cast<Uint8>(rs.stencil.readMask);
+            out.write_mask = static_cast<Uint8>(rs.stencil.writeMask);
             out.front_stencil_state.fail_op = ToStencilOp(rs.stencil.fail);
             out.front_stencil_state.pass_op = ToStencilOp(rs.stencil.pass);
             out.front_stencil_state.depth_fail_op = ToStencilOp(rs.stencil.depthFail);
@@ -1102,8 +1107,8 @@ namespace CNA::Internal::Backends::SdlGpu
         stencilParams_.ccwFail      = ccwStencilFail;
         stencilParams_.ccwDepthFail = ccwStencilDepthFail;
         stencilParams_.ccwPass      = ccwStencilPass;
-        stencilReadMask_  = stencilMask;
-        stencilWriteMask_ = stencilWriteMask;
+        stencilParams_.readMask  = stencilMask;
+        stencilParams_.writeMask = stencilWriteMask;
         // FNA applies a DepthStencilState's own ReferenceStencil atomically as part of the whole
         // native state struct (matches GraphicsDevice::setDepthStencilStateProperty's own
         // "keep GraphicsDevice.ReferenceStencil in sync" comment) -- SetReferenceStencil() is the
