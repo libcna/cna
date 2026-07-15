@@ -109,6 +109,18 @@ namespace CNA::Internal::Backends::SdlGpu
         // only ever sees this GPU-state struct via DrawTarget, not the (possibly already-destroyed)
         // wrapper -- see this struct's own doc comment above.
         SDL_GPUSampleCount sampleCount = SDL_GPU_SAMPLECOUNT_1;
+        // SDLGPU-37 (real MRT): non-empty only on the PRIMARY (rts[0]) of the most recent
+        // SetRenderTargets(count>1) call -- RenderToTarget() builds ONE render pass with
+        // 1+mrtSiblings.size() SDL_GPUColorTargetInfo entries instead of just this target's own,
+        // making "several SDL_GPUColorTargetInfo entries in one render pass" real rather than
+        // aspirational. Each sibling's own clearColor/clearColorPending etc. (set via
+        // Clear()'s existing currentExtraMrtTargets_ propagation) are read directly off its own
+        // state here -- no separate bookkeeping needed.
+        std::vector<std::shared_ptr<SdlGpuRenderTarget2DState>> mrtSiblings;
+        // True on any target bound as rts[1..] of the most recent SetRenderTargets(count>1) call --
+        // tells EnsureFrameRendered's per-target loop to skip this target's own separate pass,
+        // since its primary's multi-attachment pass above already covers it.
+        bool isMrtSibling = false;
         bool clearColorPending = true;
         bool clearDepthPending = true;
         bool clearStencilPending = false;
@@ -439,10 +451,16 @@ namespace CNA::Internal::Backends::SdlGpu
          * `SdlGpuGraphicsBackend::QueueSprite`, mirroring every sibling `EffectBackend`'s own
          * "set automatically by the sprite-batch runtime" convention. NOXNA. */
         NOXNA void SetViewportSizeEXT(float width, float height);
-        /** @brief Returns the pipeline for @p colorFormat / @p sampleCount, compiling+caching it on
-         * first use. Null if `CompileProgram()` did not succeed. NOXNA — internal use only. */
+        /** @brief Returns the pipeline for @p colorFormat / @p sampleCount / @p colorTargetCount,
+         * compiling+caching it on first use. @p colorTargetCount > 1 (real MRT, SDLGPU-37) builds
+         * a pipeline with that many `color_target_descriptions`, all sharing @p colorFormat (every
+         * `RenderTarget2D` in this backend is `R8G8B8A8_UNORM`) -- lets a custom multi-output
+         * fragment shader (the only kind of shader in this codebase that can genuinely write more
+         * than one attachment) really render simultaneous MRT. Null if `CompileProgram()` did not
+         * succeed. NOXNA — internal use only. */
         NOXNA [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipeline(SDL_GPUTextureFormat colorFormat,
-                                                                          SDL_GPUSampleCount sampleCount);
+                                                                          SDL_GPUSampleCount sampleCount,
+                                                                          int colorTargetCount = 1);
         /** @brief Returns a snapshot of the current 128-byte uniform block. NOXNA — internal use
          * only (called once per queued sprite, so later `SetUniform*` calls on the live effect
          * object don't retroactively change an already-queued sprite's rendered result). */
@@ -1123,8 +1141,13 @@ namespace CNA::Internal::Backends::SdlGpu
         // Issues the actual bind+draw calls for each queued sprite targeting @p target (nullptr =
         // swapchain) -- must run INSIDE the render pass, after UploadSpriteVertexData's copy pass
         // has already been submitted-queued on the same command buffer.
+        // colorTargetCount > 1 (real MRT, SDLGPU-37) is forwarded to a customEffect's own
+        // GetOrCreatePipeline() so a real multi-output fragment shader can build a pipeline
+        // matching this pass's actual attachment count -- stock (single-output) sprites are
+        // unaffected, since GetOrCreateSpritePipeline() always builds exactly 1 color target.
         void RenderSprites(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
-                           const DrawTarget& target, SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount);
+                           const DrawTarget& target, SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
+                           int colorTargetCount = 1);
 
         // Phase SDLGPU-6: colored3d/textured3d/colored_textured3d/lit_textured3d.
         void CreateColoredResources();

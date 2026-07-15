@@ -661,9 +661,15 @@ namespace CNA::Internal::Backends::SdlGpu
         // Phase SDLGPU-8: every off-screen render target (2D and cube face) used this frame gets
         // its own pass FIRST, in first-bind order, so a target bound-then-unbound earlier in the
         // frame can safely be sampled by a later swapchain-targeted draw within the same frame
-        // (SDLGPU-35's own "bound in one pass, sampled in a later pass" contract).
+        // (SDLGPU-35's own "bound in one pass, sampled in a later pass" contract). A target with
+        // isMrtSibling set is rendered as an extra attachment of its primary's own multi-attachment
+        // pass below, not as its own separate pass (SDLGPU-37: real MRT).
         for (const auto& target : usedRenderTargetsThisFrame_)
+        {
+            if (target->isMrtSibling)
+                continue;
             RenderToTarget(cmd, target);
+        }
         for (auto& [cube, face] : usedRenderTargetCubeFacesThisFrame_)
             RenderToTargetCubeFace(cmd, cube, face);
 
@@ -759,23 +765,41 @@ namespace CNA::Internal::Backends::SdlGpu
         return true;
     }
 
+    namespace
+    {
+        // Shared by RenderToTarget's primary + each SDLGPU-37 MRT sibling -- fills one
+        // SDL_GPUColorTargetInfo entry from a render-target state exactly like the single-target
+        // case always did.
+        void FillColorTargetInfo(SDL_GPUColorTargetInfo& out, const SdlGpuRenderTarget2DState& state)
+        {
+            out.texture = state.msaaTexture != nullptr ? state.msaaTexture : state.colorTexture;
+            out.clear_color = state.clearColor;
+            out.load_op = state.clearColorPending ? SDL_GPU_LOADOP_CLEAR : SDL_GPU_LOADOP_LOAD;
+            if (state.msaaTexture != nullptr)
+            {
+                out.resolve_texture = state.colorTexture;
+                out.store_op = SDL_GPU_STOREOP_RESOLVE;
+            }
+            else
+            {
+                out.store_op = SDL_GPU_STOREOP_STORE;
+            }
+        }
+    }
+
     void SdlGpuGraphicsBackend::RenderToTarget(SDL_GPUCommandBuffer* cmd, const std::shared_ptr<SdlGpuRenderTarget2DState>& target)
     {
         constexpr SDL_GPUTextureFormat kRenderTargetFormat = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
 
-        SDL_GPUColorTargetInfo colorTarget{};
-        colorTarget.texture = target->msaaTexture != nullptr ? target->msaaTexture : target->colorTexture;
-        colorTarget.clear_color = target->clearColor;
-        colorTarget.load_op = target->clearColorPending ? SDL_GPU_LOADOP_CLEAR : SDL_GPU_LOADOP_LOAD;
-        if (target->msaaTexture != nullptr)
-        {
-            colorTarget.resolve_texture = target->colorTexture;
-            colorTarget.store_op = SDL_GPU_STOREOP_RESOLVE;
-        }
-        else
-        {
-            colorTarget.store_op = SDL_GPU_STOREOP_STORE;
-        }
+        // SDLGPU-37: real MRT -- target->mrtSiblings is non-empty only when this target is the
+        // primary (rts[0]) of the most recent SetRenderTargets(count>1) call, in which case this
+        // one render pass gets 1+mrtSiblings.size() real simultaneous color attachments, not just
+        // this target's own.
+        std::vector<SDL_GPUColorTargetInfo> colorTargets(1 + target->mrtSiblings.size());
+        FillColorTargetInfo(colorTargets[0], *target);
+        for (std::size_t i = 0; i < target->mrtSiblings.size(); ++i)
+            FillColorTargetInfo(colorTargets[i + 1], *target->mrtSiblings[i]);
+        const int colorTargetCount = static_cast<int>(colorTargets.size());
 
         SDL_GPUDepthStencilTargetInfo depthStencilTarget{};
         const bool hasDepth = target->depthTexture != nullptr;
@@ -790,7 +814,8 @@ namespace CNA::Internal::Backends::SdlGpu
             depthStencilTarget.stencil_store_op = SDL_GPU_STOREOP_STORE;
         }
 
-        SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(cmd, &colorTarget, 1, hasDepth ? &depthStencilTarget : nullptr);
+        SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(cmd, colorTargets.data(), static_cast<Uint32>(colorTargetCount),
+                                                          hasDepth ? &depthStencilTarget : nullptr);
         ApplyScissorForPass(pass, target->width, target->height);
         const DrawTarget dt{target.get(), nullptr, -1};
         RenderColoredDraws(pass, cmd, dt, kRenderTargetFormat, target->sampleCount);
@@ -800,7 +825,7 @@ namespace CNA::Internal::Backends::SdlGpu
         RenderDualTextureDraws(pass, cmd, dt, kRenderTargetFormat, target->sampleCount);
         RenderEnvMapDraws(pass, cmd, dt, kRenderTargetFormat, target->sampleCount);
         RenderSkinnedDraws(pass, cmd, dt, kRenderTargetFormat, target->sampleCount);
-        RenderSprites(pass, cmd, dt, kRenderTargetFormat, target->sampleCount);
+        RenderSprites(pass, cmd, dt, kRenderTargetFormat, target->sampleCount, colorTargetCount);
         SDL_EndGPURenderPass(pass);
 
         // Per SDL_gpu.h: SDL_GenerateMipmapsForGPUTexture must not be called inside any pass --
@@ -808,6 +833,9 @@ namespace CNA::Internal::Backends::SdlGpu
         // contents are final for the frame).
         if (target->mipMap)
             SDL_GenerateMipmapsForGPUTexture(cmd, target->colorTexture);
+        for (const auto& sibling : target->mrtSiblings)
+            if (sibling->mipMap)
+                SDL_GenerateMipmapsForGPUTexture(cmd, sibling->colorTexture);
     }
 
     void SdlGpuGraphicsBackend::RenderToTargetCubeFace(SDL_GPUCommandBuffer* cmd, const std::shared_ptr<SdlGpuRenderTargetCubeState>& cube, int face)
@@ -1211,7 +1239,14 @@ namespace CNA::Internal::Backends::SdlGpu
     {
         if (rt != nullptr)
         {
-            static_cast<SdlGpuRenderTargetBackend*>(rt)->BindAsRenderTarget();
+            auto* backend = static_cast<SdlGpuRenderTargetBackend*>(rt);
+            backend->BindAsRenderTarget();
+            // A stale mrtSiblings/isMrtSibling from an earlier SetRenderTargets(count>1) call
+            // (this same target as either a primary or an extra) must not silently carry over into
+            // a plain single-target bind -- SetRenderTargets() itself repopulates these right after
+            // this call when count>1, so this reset is always safe to do unconditionally here.
+            backend->State()->isMrtSibling = false;
+            backend->State()->mrtSiblings.clear();
         }
         else
         {
@@ -1250,16 +1285,21 @@ namespace CNA::Internal::Backends::SdlGpu
             return;
         }
 
-        // Draws remain single-target (rts[0] only) -- no shader in this codebase declares more
-        // than one fragment output, the same honest scope boundary this project's D3D11/D3D12 MRT
-        // support already established. Extra targets are bound (get their own real pass this
-        // frame) and independently cleared (see Clear()/ClearDepth()/ClearStencil()) but never
-        // become currentRenderTarget_.
-        SetRenderTarget2D(rts[0]);
+        // Stock (single-output) draws remain single-target (rts[0] only) -- no stock shader family
+        // in this codebase declares more than one fragment output, matching this project's
+        // D3D11/D3D12 stock-effect behavior. A custom multi-output ShaderEffect drawn as a sprite
+        // WHILE this binding is active genuinely renders into all `count` targets simultaneously,
+        // in one real render pass (see RenderToTarget's own mrtSiblings-driven multi-attachment
+        // build) -- extra targets are no longer just Clear()-only placeholders.
+        SetRenderTarget2D(rts[0]);  // also resets rts[0]'s own mrtSiblings/isMrtSibling, see there
+        auto* primary = static_cast<SdlGpuRenderTargetBackend*>(rts[0]);
         for (int i = 1; i < count; ++i)
         {
             auto* extra = static_cast<SdlGpuRenderTargetBackend*>(rts[i]);
             extra->MarkUsedThisFrame();
+            extra->State()->isMrtSibling = true;
+            extra->State()->mrtSiblings.clear();  // an extra doesn't carry its own sibling list
+            primary->State()->mrtSiblings.push_back(extra->State());
             currentExtraMrtTargets_.push_back(extra);
         }
     }
@@ -1463,7 +1503,7 @@ namespace CNA::Internal::Backends::SdlGpu
 
     void SdlGpuGraphicsBackend::RenderSprites(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
                                               const DrawTarget& target, SDL_GPUTextureFormat colorFormat,
-                                              SDL_GPUSampleCount sampleCount)
+                                              SDL_GPUSampleCount sampleCount, int colorTargetCount)
     {
         if (spriteCommands_.empty())
             return;
@@ -1489,7 +1529,7 @@ namespace CNA::Internal::Backends::SdlGpu
 
             if (command.customEffect != nullptr)
             {
-                SDL_GPUGraphicsPipeline* pipeline = command.customEffect->GetOrCreatePipeline(colorFormat, sampleCount);
+                SDL_GPUGraphicsPipeline* pipeline = command.customEffect->GetOrCreatePipeline(colorFormat, sampleCount, colorTargetCount);
                 if (pipeline == nullptr)
                     continue;  // compile/pipeline-creation failure -- skip, matches IsValid()-gated sibling backends
                 if (pipeline != boundPipeline)
@@ -4370,14 +4410,18 @@ namespace CNA::Internal::Backends::SdlGpu
     }
 
     SDL_GPUGraphicsPipeline* SdlGpuEffectBackend::GetOrCreatePipeline(SDL_GPUTextureFormat colorFormat,
-                                                                       SDL_GPUSampleCount sampleCount)
+                                                                       SDL_GPUSampleCount sampleCount,
+                                                                       int colorTargetCount)
     {
         if (!valid_)
             return nullptr;
-        // sampleCount folded into the low 4 bits -- SampleCountToInt() only ever returns 0/2/4/8,
-        // so this never collides with a distinct colorFormat value (SDLGPU-38's MSAA fix: a
-        // pipeline created for the wrong sample_count must not be reused for a different one).
-        const int key = (static_cast<int>(colorFormat) << 4) | SampleCountToInt(sampleCount);
+        // colorTargetCount (real MRT, SDLGPU-37 -- every RenderTarget2D in this backend is
+        // R8G8B8A8_UNORM, so all N simultaneous attachments always share one colorFormat) folded
+        // into bits [0..3], sampleCount (0/2/4/8) into bits [4..7] -- so a pipeline built for the
+        // wrong sample_count or the wrong attachment count is never wrongly reused (SDLGPU-38's
+        // MSAA fix established the same "don't let an untracked dimension collide" rule for
+        // sample_count; this extends it to attachment count).
+        const int key = (static_cast<int>(colorFormat) << 8) | (SampleCountToInt(sampleCount) << 4) | colorTargetCount;
         const auto it = pipelines_.find(key);
         if (it != pipelines_.end())
             return it->second;
@@ -4398,16 +4442,22 @@ namespace CNA::Internal::Backends::SdlGpu
         attrs[2].location = 2; attrs[2].buffer_slot = 0; attrs[2].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4;
         attrs[2].offset = offsetof(SdlGpuGraphicsBackend::SpriteVertex, r);
 
-        // Same standard (non-premultiplied) alpha blend as the stock sprite pipeline.
-        SDL_GPUColorTargetDescription colorTarget{};
-        colorTarget.format = colorFormat;
-        colorTarget.blend_state.enable_blend = true;
-        colorTarget.blend_state.src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
-        colorTarget.blend_state.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
-        colorTarget.blend_state.color_blend_op = SDL_GPU_BLENDOP_ADD;
-        colorTarget.blend_state.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
-        colorTarget.blend_state.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
-        colorTarget.blend_state.alpha_blend_op = SDL_GPU_BLENDOP_ADD;
+        // Same standard (non-premultiplied) alpha blend as the stock sprite pipeline, applied to
+        // every simultaneous attachment alike -- this backend has no per-attachment BlendState
+        // concept to draw a different one from (real XNA doesn't either; GraphicsDevice.BlendState
+        // is one value for the whole draw).
+        std::vector<SDL_GPUColorTargetDescription> colorTargets(std::max(1, colorTargetCount));
+        for (SDL_GPUColorTargetDescription& colorTarget : colorTargets)
+        {
+            colorTarget.format = colorFormat;
+            colorTarget.blend_state.enable_blend = true;
+            colorTarget.blend_state.src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
+            colorTarget.blend_state.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+            colorTarget.blend_state.color_blend_op = SDL_GPU_BLENDOP_ADD;
+            colorTarget.blend_state.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+            colorTarget.blend_state.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+            colorTarget.blend_state.alpha_blend_op = SDL_GPU_BLENDOP_ADD;
+        }
 
         SDL_GPUGraphicsPipelineCreateInfo pipelineInfo{};
         pipelineInfo.vertex_shader = vertexShader_;
@@ -4424,8 +4474,8 @@ namespace CNA::Internal::Backends::SdlGpu
         pipelineInfo.depth_stencil_state.enable_depth_test = false;
         pipelineInfo.depth_stencil_state.enable_depth_write = false;
         pipelineInfo.depth_stencil_state.enable_stencil_test = false;
-        pipelineInfo.target_info.color_target_descriptions = &colorTarget;
-        pipelineInfo.target_info.num_color_targets = 1;
+        pipelineInfo.target_info.color_target_descriptions = colorTargets.data();
+        pipelineInfo.target_info.num_color_targets = static_cast<Uint32>(colorTargets.size());
         pipelineInfo.target_info.has_depth_stencil_target = (owner_->depthStencilFormat_ != SDL_GPU_TEXTUREFORMAT_INVALID);
         pipelineInfo.target_info.depth_stencil_format = owner_->depthStencilFormat_;
 
