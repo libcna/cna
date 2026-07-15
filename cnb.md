@@ -8,20 +8,26 @@
 > migrated once, offline, to either a directly-loadable native format (PNG/JPEG/WAV, loaded by
 > extension) or a `.cnb` JSON file next to the original asset.
 >
-> **Status: the strategy is already reality, the file convention isn't unified yet.** CNA's
-> `ContentManager` (`src/Microsoft/Xna/Framework/Content/ContentManager.cpp`) already implements
-> exactly this "no binary XNB, native-by-extension or JSON-sidecar" strategy today — `Texture2D`/
-> `TextureCube`/`SoundEffect`/`Song`/`Video` load natively by extension, and `SpriteFont`/`Model`/
-> `Effect`/`SkinnedModelEXT` already load from hand-written JSON descriptors with binary sidecars
-> for large data (`.model.json` + `.verts.bin`/`.idx.bin`, `.skinnedmodel.json` +
-> `.skeleton.bin`/`.clip.bin`). What's *not* yet true is the single-shared-`.cnb`-extension part —
-> each of those four JSON types currently has its own bespoke extension (`.font.json`, `.model.json`,
-> `.shader.json`, `.skinnedmodel.json`) instead of one `.cnb` extension with an internal `"type"`
-> field. See "Relationship to CNA's existing per-type JSON conventions" below for what unifying them
-> would actually require. This document is a **target design**, not a green-field proposal — the
-> open question is whether/when to migrate the four existing formats onto it, not whether the
-> underlying strategy is sound (it's already shipping). See also the "Relationship to
-> `xnb.md`/`plan_xnb.md`" section at the end for how the two binary-vs-JSON strategies compare.
+> **Status: ✅ IMPLEMENTED 2026-07-15 — `plan_cnb.md`'s Phases 0–7 (`CNB-1`–`CNB-27`) all closed.**
+> `ContentManager` (`src/Microsoft/Xna/Framework/Content/ContentManager.cpp`,
+> `include/Microsoft/Xna/Framework/Content/ContentManager.hpp`,
+> `include/CNA/Internal/CnbEnvelope.hpp`) now implements this document as designed: the `.cnb`
+> envelope (`cnbVersion`/`type`/`sourceFile`) parses and validates against the requested C++ type;
+> `.cnb` is tried **before** any native extension for every registered type
+> (`ResolveAssetPath`), letting it act as an optional metadata sidecar (proven on `Texture2D` via
+> `sourceFile` + `colorKey`) rather than only a mutually-exclusive alternative; `SpriteFontTypeReader`,
+> `EffectTypeReader`, and `ModelTypeReader` all migrated from their old bespoke extensions
+> (`.font.json`/`.shader.json`/`.model.json`) to `.cnb`; and `RegisterCnbLoader<T>` lets a game
+> register several differently-named `.cnb` `"type"`s that all produce the same C++ type, for
+> data with no dedicated `ContentTypeReader<T>` at all. `SkinnedModelTypeReader`/`.skinnedmodel.json`
+> (Avatar, `NOXNA`) was deliberately **kept separate, not migrated** — see `plan_cnb.md` `CNB-22`
+> for the full reasoning (real cross-language tooling depends on that extension name, it already
+> has the most mature test coverage of any of the four readers, and it's explicitly a distinct
+> non-`Model`-shaped system). Full-suite regression after the last phase: 4404 tests, 4402 passed,
+> 2 pre-existing unrelated hardware skips, 0 failures. See `plan_cnb.md` for the complete,
+> task-by-task implementation record — this document remains the design reference; that one is the
+> log of what actually landed and why. See also "Relationship to `xnb.md`/`plan_xnb.md`" below for
+> how the two binary-vs-JSON strategies compare and that plan's own adoption status.
 
 ## Why this alternative exists
 
@@ -356,31 +362,30 @@ reflection over a loaded .NET assembly, so none of the dynamic type-loading/refl
 
 ## Relationship to CNA's existing per-type JSON conventions
 
-This document's `.cnb` envelope (`cnbVersion`/`type` wrapper, single shared extension) is not
-implemented today; CNA's four existing JSON content readers predate it and use their own bespoke
-extensions instead:
+Before this document was implemented, CNA's JSON content readers predated the `.cnb` envelope and
+each used their own bespoke extension. Three of the four were migrated (`plan_cnb.md` Phases 3–5);
+one — `SkinnedModelTypeReader` — was deliberately kept separate (`CNB-22`):
 
-| Existing extension | Reader class | Real field names (for reference) |
-|---|---|---|
-| `.font.json` | `SpriteFontTypeReader` | `texture`, `lineSpacing`, `spacing`, `defaultCharacter`, `glyphs[].char`/`source`/`crop`/`kerning` |
-| `.model.json` | `ModelTypeReader` | `bones`, `meshes[].vertices`/`indices`/`vertexStride`/`texture` (binary sidecars for vertex/index data) |
-| `.shader.json` | `EffectTypeReader` | see `EffectTypeReader::Read` in `ContentManager.cpp` |
-| `.skinnedmodel.json` | `SkinnedModelTypeReader` (NOXNA, Avatar-only) | `skeleton`, `parts[].vertices`/`indices`/`vertexStride`/`texture`, `animations[].name`/`clip` |
+| Reader class | Extension before | Extension now | Real field names (for reference) |
+|---|---|---|---|
+| `SpriteFontTypeReader` | `.font.json` | `.cnb` | `texture`, `lineSpacing`, `spacing`, `defaultCharacter`, `glyphs[].char`/`source`/`crop`/`kerning` |
+| `ModelTypeReader` | `.model.json` | `.cnb` | `bones`, `meshes[].vertices`/`indices`/`vertexStride`/`texture` (binary sidecars for vertex/index data) |
+| `EffectTypeReader` | `.shader.json` | `.cnb` | see `EffectTypeReader::Read` in `ContentManager.cpp` |
+| `SkinnedModelTypeReader` (NOXNA, Avatar-only) | `.skinnedmodel.json` | **unchanged** — see `CNB-22` | `skeleton`, `parts[].vertices`/`indices`/`vertexStride`/`texture`, `animations[].name`/`clip` |
 
-If this `.cnb` design is adopted as the long-term target, unifying these four is a **migration of
-already-working, already-tested code**, not a green-field build: each reader's `GetExtensions()`
-changes from its own extension to `{".cnb"}`, each reader gains a `"cnbVersion"`/`"type"` envelope
-check, and every existing `.font.json`/`.model.json`/`.shader.json`/`.skinnedmodel.json` file in the
-repo (examples, tests, and any real game content authored against the current convention) needs
-renaming plus the two new envelope fields added. None of the four readers' actual field parsing needs
-to change otherwise — preserving today's field names as-is (as the `SpriteFont` example above does)
-keeps that diff small and low-risk.
+Unifying the three was a **migration of already-working, already-tested code**, not a green-field
+build, exactly as anticipated: each reader's `GetExtensions()` changed from its own extension to
+`{".cnb"}`, each reader gained a `"cnbVersion"`/`"type"` envelope check, and every existing fixture
+in the repo (7 example programs' `.model.json` fixtures, `easygl_bloom_extract_test.cpp`'s
+`.shader.json` fixture) was renamed with the two new envelope fields added. None of the readers'
+actual field parsing needed to change otherwise — field names were kept exactly as they were, which
+kept the diff small and low-risk, confirmed by a clean full-suite regression after each phase.
 
-Two things introduced above are *not* just a rename, though, and are net-new scope beyond migrating
-the four existing readers: the `.cnb`-first resolution order (letting `.cnb` act as an optional
-metadata sidecar for `Texture2D`/`SoundEffect`/etc., which have never had any sidecar mechanism at
-all) and the `RegisterCnbLoader<T>` custom-loader registry (nothing today provides an equivalent).
-Both extend the four-reader migration; neither depends on it being done first.
+Two things were genuinely net-new scope beyond the three-reader migration, not just a rename: the
+`.cnb`-first resolution order (letting `.cnb` act as an optional metadata sidecar for `Texture2D` —
+proven via `sourceFile` + `colorKey` — which had no sidecar mechanism at all before) and the
+`RegisterCnbLoader<T>` custom-loader registry (nothing before provided an equivalent). See
+`plan_cnb.md` Phases 1–2 and 7 for how each was implemented and tested.
 
 This is separate from (and much smaller than) the XNA→CNA *content migration* effort described below
 in "What migration actually requires" (which is about converting original `.fbx`/`.png`/`.wav`/
@@ -443,36 +448,27 @@ them remain useful reference material if the decision is ever revisited, and sev
 protocol-accuracy findings (e.g. the true difficulty of the general `EffectReader`/compiled-shader
 problem, or the FBX/model-importer cost on the writer side) apply identically here.
 
-## Suggested next step (not started)
+## Implementation record
 
-If this direction is confirmed, the natural follow-up is a `plan_cnb.md` numbered task list
-(`CNB-1`, `CNB-2`, ...), mirroring how `plan_xnb.md` turned `xnb.md` into concrete tasks. Unlike a
-green-field build, most of the work is now a **migration of four already-working, already-tested
-readers** (see "Relationship to CNA's existing per-type JSON conventions" above), not new design:
+The design above was implemented in full via `plan_cnb.md`'s numbered task list (`CNB-1`–`CNB-27`,
+Phases 0–7), mirroring how `plan_xnb.md` turned `xnb.md` into concrete tasks — see that file for
+the complete, phase-by-phase record (what changed, why, and each phase's regression-test tally).
+Summary of what landed, in the order it happened:
 
-1. Add the `"cnbVersion"`/`"type"` envelope convention + a small shared validation helper (reject a
-   `.cnb` whose `"type"` doesn't match the reader that opened it).
-2. Change `ResolveAssetPath` to try `.cnb` before a reader's own declared extensions, for *every*
-   registered type (not just the four JSON ones) — this is what lets `Texture2D`/`SoundEffect`/etc.
-   gain optional `.cnb` sidecars later without another resolver change.
-3. Add `"sourceFile"` support to the envelope helper (load the referenced file via the same
-   `ResolveAssetPath`, apply the `.cnb`'s remaining fields as overrides) and wire it into
-   `Texture2DTypeReader` first, as the smallest useful end-to-end proof (e.g. `colorKey` support via
-   a `.cnb` sidecar — something the native PNG path has no way to express today).
-4. Migrate `SpriteFontTypeReader` (`.font.json` → `.cnb`, cheapest of the four, smallest blast
-   radius) — update its `GetExtensions()`, its field parsing to expect the envelope, and every
-   example/test `.font.json` file in the repo.
-5. Migrate `EffectTypeReader` (`.shader.json` → `.cnb`) the same way.
-6. Migrate `ModelTypeReader` (`.model.json` → `.cnb`) — larger blast radius (`docs/model-content-
-   pipeline-support.md` already documents several open gaps in this reader; worth fixing those in the
-   same pass or explicitly deferring, not silently carrying them into the new format).
-7. Decide whether `SkinnedModelTypeReader` (`.skinnedmodel.json`, NOXNA/Avatar-only) migrates too, or
-   stays deliberately separate since it's already a distinct, non-`Model`-shaped system (see
-   `docs/avatar-real-rendering-ext.md`).
-8. Add `RegisterCnbLoader<T>` (see "Custom loaders" above) once the envelope/dispatch plumbing from
-   steps 1-3 exists to hang it off of.
-9. Only afterward: genuinely new `.cnb` types that don't have an existing reader today (e.g.
-   `AnimationClip` for plain `Model`, game-specific custom data).
+1. `.cnb` envelope parsing + validation (`CNA::Internal::CnbEnvelope.hpp`) — Phase 0.
+2. `.cnb`-first resolver order in `ResolveAssetPath`, for every registered type — Phase 1.
+3. `sourceFile` support, proven on `Texture2D` via `colorKey` (selective pixel transparency) —
+   Phase 2.
+4. `SpriteFontTypeReader` migrated `.font.json` → `.cnb` — Phase 3.
+5. `EffectTypeReader` migrated `.shader.json` → `.cnb` — Phase 4.
+6. `ModelTypeReader` migrated `.model.json` → `.cnb` (its pre-existing FNA-fidelity gaps —
+   single-bone synthesis, unassigned `ParentBone`, unset `BoundingSphere`/`Tag` — were deliberately
+   *not* fixed in the same pass; see `plan_cnb.md` `CNB-21` for the reasoning) — Phase 5.
+7. `SkinnedModelTypeReader` decided to stay separate, not migrated — see `plan_cnb.md` `CNB-22` and
+   "Relationship to CNA's existing per-type JSON conventions" above — Phase 6.
+8. `RegisterCnbLoader<T>` — Phase 7.
 
-No such task list has been created yet — this document is analysis/design only, per the request that
-scoped it to a plan document, not implementation.
+Genuinely new `.cnb` types with no existing reader today (e.g. `AnimationClip` for plain `Model`,
+further game-specific custom data) remain a natural, open-ended follow-up — `RegisterCnbLoader<T>`
+already supports them for game-specific data without any CNA core change; a first-party
+`AnimationClip` reader would be new scope beyond what `plan_cnb.md` covered.

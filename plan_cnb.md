@@ -1,15 +1,26 @@
 # `.cnb` content format — implementation plan for CNA
 
-> **Status: planning document only. Nothing described here is implemented yet.** Turns
-> [`cnb.md`](cnb.md)'s design into a phased, numbered task list (`CNB-1`, `CNB-2`, ...), mirroring
-> how [`plan_xnb.md`](plan_xnb.md) turned [`xnb.md`](xnb.md) into concrete tasks. Read `cnb.md`
-> first — this file assumes its design decisions (resolution order, envelope shape, `sourceFile`,
-> `RegisterCnbLoader<T>`) as given and does not re-argue them.
+> **Status: ✅ COMPLETE 2026-07-15 — all 8 phases (`CNB-1`–`CNB-31`) closed** on `feature/cnb`.
+> Full `CnaTests` regression: 4404 tests, 4402 passed, 2 pre-existing unrelated hardware skips
+> (`Accelerometer`/`Gyroscope`), 0 failures — a clean baseline both before this plan started and
+> after every phase landed. Dedicated `.cnb`-specific coverage: 27/27 passing across 8 gtest
+> suites (`ParseCnbEnvelopeTest`, `ValidateCnbEnvelopeTest`, `CnbResolverOrderTest`,
+> `CnbSourceFileTest`, `CnbSpriteFontTest`, `CnbEffectTest`, `CnbModelTest`,
+> `CnbCustomLoaderTest`). `SkinnedModelTypeReader`/`.skinnedmodel.json` was deliberately kept
+> separate, not migrated (`CNB-22`'s recorded decision) — every other reader now speaks `.cnb`.
+> `xnb.md`/`plan_xnb.md` are frozen as "researched, not adopted" (`CNB-30`). Not yet merged to
+> `develop` — awaiting the project owner's decision on next steps (PR, merge, etc.).
 >
-> Unlike `plan_xnb.md`, this is **mostly a migration of four already-working, already-tested-or-
-> exercised readers** (`SpriteFontTypeReader`, `EffectTypeReader`, `ModelTypeReader`,
-> `SkinnedModelTypeReader`), not a green-field protocol build. Scope and risk are correspondingly
-> much smaller — see `cnb.md`'s own "Relationship to CNA's existing per-type JSON conventions".
+> Turns [`cnb.md`](cnb.md)'s design into a phased, numbered task list (`CNB-1`, `CNB-2`, ...),
+> mirroring how [`plan_xnb.md`](plan_xnb.md) turned [`xnb.md`](xnb.md) into concrete tasks. Read
+> `cnb.md` first — this file assumes its design decisions (resolution order, envelope shape,
+> `sourceFile`, `RegisterCnbLoader<T>`) as given and does not re-argue them.
+>
+> Unlike `plan_xnb.md`, this was **mostly a migration of already-working, already-tested-or-
+> exercised readers** (`SpriteFontTypeReader`, `EffectTypeReader`, `ModelTypeReader`), not a
+> green-field protocol build — confirmed in practice: every phase's full-suite regression stayed
+> at 0 failures, and each of the 3 migrated readers' pre-existing example-program behavior (where
+> any existed) was re-verified passing after its migration.
 
 ## Execution-order mandate for autonomous work
 
@@ -189,10 +200,10 @@ onto `.cnb`, and `RegisterCnbLoader<T>`.
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| CNB-28 | Update `cnb.md`'s status header to reflect what's actually implemented vs. still planned, once the phases above land | ⬜ | Mirrors how `plan_ascii.md`/`plan_xnb.md` keep their own top-of-file status current |
-| CNB-29 | Full `CnaTests` regression run + a dedicated `.cnb`-specific ctest tally, recorded in this file's status header | ⬜ | Follow `plan_ascii.md`'s completion-note style as the template |
-| CNB-30 | Decide the fate of `xnb.md`/`plan_xnb.md` per `cnb.md`'s own "Relationship to `xnb.md`/`plan_xnb.md`" section (freeze as "researched, not adopted" vs. leave open) and record the decision in both files | ⬜ | |
-| CNB-31 | Final compliance sweep: every task above closed, every new/changed public method has Doxygen (per `CLAUDE.md`) and test coverage, no `.font.json`/`.model.json`/`.shader.json`/`.skinnedmodel.json` fixture left un-migrated except by the explicit CNB-22 decision | ⬜ | |
+| CNB-28 | Update `cnb.md`'s status header to reflect what's actually implemented vs. still planned, once the phases above land | ✅ | Status blockquote rewritten to "✅ IMPLEMENTED"; "Relationship to CNA's existing per-type JSON conventions" and the former "Suggested next step" (now "Implementation record") sections rewritten past-tense to match reality instead of contradicting the new status |
+| CNB-29 | Full `CnaTests` regression run + a dedicated `.cnb`-specific ctest tally, recorded in this file's status header | ✅ | Final confirmation run (no code changes since Phase 7's own regression): 4404 tests, 4402 passed, same 2 pre-existing hardware skips, 0 failures. Dedicated `--gtest_filter="*Cnb*"` tally: 27/27 passing across 8 suites |
+| CNB-30 | Decide the fate of `xnb.md`/`plan_xnb.md` per `cnb.md`'s own "Relationship to `xnb.md`/`plan_xnb.md`" section (freeze as "researched, not adopted" vs. leave open) and record the decision in both files | ✅ | **Decision: froze both, per `cnb.md`'s own pre-existing recommendation.** Added a "🧊 FROZEN — researched, not adopted" status banner to the top of both `xnb.md` and `plan_xnb.md`, pointing at `cnb.md`/`plan_cnb.md` as the adopted strategy. Neither file's content was deleted — both remain as reference material, exactly as `cnb.md` itself already recommended before this plan started |
+| CNB-31 | Final compliance sweep: every task above closed, every new/changed public method has Doxygen (per `CLAUDE.md`) and test coverage, no `.font.json`/`.model.json`/`.shader.json`/`.skinnedmodel.json` fixture left un-migrated except by the explicit CNB-22 decision | ✅ | Swept: zero `.font.json`/`.model.json`/`.shader.json` files remain anywhere in the repo (`find` + `GetExtensions()` grep both clean); `.skinnedmodel.json` files remain only per the CNB-22 decision. `CnbEnvelope.hpp`'s public struct/functions and `ContentManager.hpp`'s new `CnbLoaderFn`/`RegisterCnbLoader<T>` all have full Doxygen blocks. Every phase (0–7) closed with a passing regression run. All 31 tasks `✅` |
 
 ---
 
