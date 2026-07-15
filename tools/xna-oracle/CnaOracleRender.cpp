@@ -22,12 +22,16 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SamplerStateCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
 
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
+#include <memory>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -55,20 +59,36 @@ namespace
         return s.substr(start, end - start + 1);
     }
 
+    enum class SceneVertexFormat { PositionColor, PositionTexture };
+
     struct Scene
     {
         int width = 256;
         int height = 256;
         GraphicsProfile profile = GraphicsProfile::HiDef;
         Color clearColor = Color::CornflowerBlue;
+        SceneVertexFormat vertexFormat = SceneVertexFormat::PositionColor;
         bool vertexColorEnabled = false;
         bool lightingEnabled = false;
+        bool textureEnabled = false;
+        int textureWidth = 0;
+        int textureHeight = 0;
+        bool texturePointFilter = true;
         PrimitiveType primitive = PrimitiveType::TriangleList;
-        std::vector<VertexPositionColor> vertices;
+        std::vector<VertexPositionColor> colorVertices;
+        std::vector<VertexPositionTexture> textureVertices;
+        std::vector<Color> texturePixels;
+
+        int VertexCount() const
+        {
+            return vertexFormat == SceneVertexFormat::PositionTexture
+                ? static_cast<int>(textureVertices.size())
+                : static_cast<int>(colorVertices.size());
+        }
 
         int PrimitiveCount() const
         {
-            const int n = static_cast<int>(vertices.size());
+            const int n = VertexCount();
             switch (primitive)
             {
             case PrimitiveType::TriangleList:  return n / 3;
@@ -100,7 +120,7 @@ namespace
         throw std::runtime_error("Scene: unknown primitive '" + s + "'");
     }
 
-    VertexPositionColor ParseVertex(const std::string& s)
+    VertexPositionColor ParseColorVertex(const std::string& s)
     {
         const auto p = Split(s, ',');
         const Vector3 pos(std::stof(p[0]), std::stof(p[1]), std::stof(p[2]));
@@ -109,6 +129,14 @@ namespace
                           static_cast<std::uint8_t>(std::stoi(p[5])),
                           static_cast<std::uint8_t>(std::stoi(p[6])));
         return VertexPositionColor(pos, color);
+    }
+
+    VertexPositionTexture ParseTextureVertex(const std::string& s)
+    {
+        const auto p = Split(s, ',');
+        const Vector3 pos(std::stof(p[0]), std::stof(p[1]), std::stof(p[2]));
+        const Vector2 uv(std::stof(p[3]), std::stof(p[4]));
+        return VertexPositionTexture(pos, uv);
     }
 
     Scene LoadScene(const std::string& path)
@@ -132,10 +160,23 @@ namespace
             else if (key == "height") scene.height = std::stoi(value);
             else if (key == "profile") scene.profile = value == "Reach" ? GraphicsProfile::Reach : GraphicsProfile::HiDef;
             else if (key == "clearcolor") scene.clearColor = ParseColor(value);
+            else if (key == "vertexformat") scene.vertexFormat = value == "PositionTexture"
+                ? SceneVertexFormat::PositionTexture : SceneVertexFormat::PositionColor;
             else if (key == "vertexcolor") scene.vertexColorEnabled = ParseBool(value);
             else if (key == "lighting") scene.lightingEnabled = ParseBool(value);
+            else if (key == "texture") scene.textureEnabled = ParseBool(value);
+            else if (key == "texturewidth") scene.textureWidth = std::stoi(value);
+            else if (key == "textureheight") scene.textureHeight = std::stoi(value);
+            else if (key == "texturefilter") scene.texturePointFilter = value == "Point";
+            else if (key == "texturepixel") scene.texturePixels.push_back(ParseColor(value));
             else if (key == "primitive") scene.primitive = ParsePrimitive(value);
-            else if (key == "vertex") scene.vertices.push_back(ParseVertex(value));
+            else if (key == "vertex")
+            {
+                if (scene.vertexFormat == SceneVertexFormat::PositionTexture)
+                    scene.textureVertices.push_back(ParseTextureVertex(value));
+                else
+                    scene.colorVertices.push_back(ParseColorVertex(value));
+            }
             else throw std::runtime_error("Scene: unknown key '" + key + "' in " + path);
         }
         return scene;
@@ -163,12 +204,27 @@ protected:
         BasicEffect fx(dev);
         fx.VertexColorEnabled = scene_.vertexColorEnabled;
         fx.setLightingEnabledProperty(scene_.lightingEnabled);
+        fx.setTextureEnabledProperty(scene_.textureEnabled);
         fx.World = Matrix::getIdentityProperty();
         fx.View = Matrix::getIdentityProperty();
         fx.Projection = Matrix::getIdentityProperty();
+
+        std::unique_ptr<Texture2D> texture;
+        if (scene_.textureEnabled)
+        {
+            texture = std::make_unique<Texture2D>(dev, scene_.textureWidth, scene_.textureHeight);
+            texture->SetData(scene_.texturePixels.data(), static_cast<int>(scene_.texturePixels.size()));
+            fx.setTextureProperty(texture.get());
+            dev.getSamplerStatesProperty()[0] =
+                scene_.texturePointFilter ? SamplerState::PointClamp : SamplerState::LinearClamp;
+        }
+
         fx.Apply();
 
-        dev.DrawUserPrimitives(scene_.primitive, scene_.vertices.data(), 0, scene_.PrimitiveCount());
+        if (scene_.vertexFormat == SceneVertexFormat::PositionTexture)
+            dev.DrawUserPrimitives(scene_.primitive, scene_.textureVertices.data(), 0, scene_.PrimitiveCount());
+        else
+            dev.DrawUserPrimitives(scene_.primitive, scene_.colorVertices.data(), 0, scene_.PrimitiveCount());
 
         const int pixelCount = scene_.width * scene_.height;
         std::vector<Color> pixels(static_cast<std::size_t>(pixelCount), Color(0, 0, 0, 0));

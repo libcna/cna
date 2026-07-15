@@ -17,19 +17,23 @@ hand-transcribed twice, or the harness will drift."
 `scenes/*.scene` — a minimal, line-oriented, dependency-free text format both `Oracle.cs` and
 `CnaOracleRender.cpp` parse identically (no JSON library needed on either side — the XNA-side
 build environment is GAC-only .NET 4.0 with no NuGet). `#`-prefixed lines and blank lines are
-comments; every other line is `key=value`; `vertex=` may repeat (one `VertexPositionColor` per
-line, in draw order). Unknown keys are a hard error on both sides (not silently ignored) — a typo
-in a scene file should fail loudly, not quietly change what a "match" means. See
-`scenes/colored3d.scene` for a fully-commented example.
+comments; every other line is `key=value`; `vertex=`/`texturepixel=` may repeat. Unknown keys are
+a hard error on both sides (not silently ignored) — a typo in a scene file should fail loudly, not
+quietly change what a "match" means. See `scenes/colored3d.scene`/`scenes/textured_quad.scene` for
+fully-commented examples.
 
 | Key | Meaning |
 |---|---|
 | `width`, `height` | back buffer size |
 | `profile` | `HiDef` or `Reach` |
 | `clearcolor` | `r,g,b,a` (0-255) |
-| `vertexcolor`, `lighting` | `BasicEffect.VertexColorEnabled`/`LightingEnabled` (`true`/`false`) |
+| `vertexformat` | `PositionColor` (default) or `PositionTexture` — selects which `vertex=` shape below, and which `VertexPosition*` struct both sides draw |
+| `vertexcolor`, `lighting`, `texture` | `BasicEffect.VertexColorEnabled`/`LightingEnabled`/`TextureEnabled` (`true`/`false`) |
+| `texturewidth`, `textureheight` | size of an inline procedural texture (no content-pipeline asset file — matches `D9-A2`'s own "no content pipeline" constraint) |
+| `texturefilter` | `Point` or `Linear` — `SamplerState.PointClamp`/`LinearClamp` on slot 0 |
+| `texturepixel` | `r,g,b,a` — repeats `texturewidth*textureheight` times, row-major, only when `texture=true` |
 | `primitive` | `TriangleList`, `TriangleStrip`, `LineList`, or `LineStrip` |
-| `vertex` | `x,y,z,r,g,b,a` — repeats once per vertex, `World`/`View`/`Projection` are always `Matrix.Identity` |
+| `vertex` | `x,y,z,r,g,b,a` (`vertexformat=PositionColor`) or `x,y,z,u,v` (`vertexformat=PositionTexture`) — repeats once per vertex, `World`/`View`/`Projection` are always `Matrix.Identity` |
 
 ## Build and run — XNA side (the oracle)
 
@@ -53,6 +57,12 @@ wine "$CSC" /nologo /target:exe /platform:x86 /out:Oracle.exe \
 
 wine Oracle.exe scenes/colored3d.scene xna_out.png
 ```
+
+**This `csc.exe` targets .NET Framework 4.0-era C# — no expression-bodied members (`=>` on a
+method), no string interpolation, no null-conditional operators, none of C# 6+.** Nothing about
+writing ordinary-looking modern C# signals which language version an old compiler accepts; this
+project's own `Oracle.cs` shipped with an expression-bodied `ParseBool` briefly and the real
+compiler rejected it (`CS1002`/`CS1519`) — write plain, old-style C# here.
 
 ## Build and run — CNA side
 
@@ -78,24 +88,27 @@ Requires Pillow (`pip install pillow`) — not previously a dependency of this p
 
 ## Status
 
-`colored3d` (`D9-A2`'s own original spike scene: a `BasicEffect` `VertexColorEnabled=true`/
-`LightingEnabled=false` triangle over a `CornflowerBlue` clear) is the first scene in the corpus,
-and it is **pixel-perfect**: `0/65536` pixels differ, `max per-channel delta=0`, across every
-channel of every pixel, corner clear color through the triangle's own Gouraud-interpolated
-interior. Confirmed both via 3 hand-picked sample points (corner `(100,149,237,255)`, centre
-`(69,118,69,255)`, near-apex `(17,222,17,255)` — all three match `D9-A2`'s own original,
-independently-recorded values from before DXVK was installed into the XNA prefix, confirming the
-DXVK switch changed nothing about XNA's own rendered output) and via a full `scripts/xna-diff.py`
-sweep of all 65,536 pixels.
+Two scenes so far, **both pixel-perfect**:
 
-`scripts/xna-diff.py` itself is mutation-verified: a deliberately 1-off-mutated copy of the CNA
-PNG is correctly reported as `FAIL: 1/65536 pixels differ ... max per-channel delta=1` at the
+- `colored3d` (`D9-A2`'s own original spike scene: a `BasicEffect` `VertexColorEnabled=true`/
+  `LightingEnabled=false` triangle over a `CornflowerBlue` clear) — `0/65536` pixels differ,
+  `max per-channel delta=0`, across every channel of every pixel, corner clear color through the
+  triangle's own Gouraud-interpolated interior. Confirmed both via 3 hand-picked sample points
+  (corner `(100,149,237,255)`, centre `(69,118,69,255)`, near-apex `(17,222,17,255)`) and via a
+  full `scripts/xna-diff.py` sweep of all 65,536 pixels.
+- `textured_quad` (`BasicEffect.TextureEnabled=true`, a tiny 2×2 point-filtered checkerboard
+  texture, `SamplerState.PointClamp`) — also `0/65536` pixels differ, including at the exact
+  UV=(0.5,0.5) point-filter texel-boundary pixel (a genuine tie-break case: both sides independently
+  pick the identical texel there, not merely "close").
+
+`scripts/xna-diff.py` itself is mutation-verified: a deliberately 1-off-mutated copy of a passing
+CNA PNG is correctly reported as `FAIL: 1/65536 pixels differ ... max per-channel delta=1` at the
 default `--tolerance=0`, and correctly passes again at `--tolerance=1` — confirming the tool
 genuinely discriminates, not just "always reports PASS".
 
-The corpus has exactly one scene so far. `D9-A5` grows it "with the plan" — each subsequent
-effect/feature this project verifies against the oracle adds its own scene(s) here, incrementally,
-rather than attempting the full corpus (`BasicEffect` lighting/fog variants, `AlphaTestEffect`,
-`DualTextureEffect`, `EnvironmentMapEffect`, `SkinnedEffect`, `SpriteBatch`, render targets, every
-shared `SurfaceFormat`) in one sitting. `D9-84` (every draw path validated against the oracle) is
-the task that consumes the finished corpus.
+`D9-A5` grows the corpus "with the plan" — each subsequent effect/feature this project verifies
+against the oracle adds its own scene(s) here, incrementally, rather than attempting the full
+corpus (`BasicEffect` lighting/fog variants, `AlphaTestEffect`, `DualTextureEffect`,
+`EnvironmentMapEffect`, `SkinnedEffect`, `SpriteBatch`, render targets, every shared
+`SurfaceFormat`) in one sitting. `D9-84` (every draw path validated against the oracle) is the
+task that consumes the finished corpus.

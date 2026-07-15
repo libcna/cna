@@ -13,16 +13,25 @@ using System.IO;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 
+public enum SceneVertexFormat { PositionColor, PositionTexture }
+
 public class Scene
 {
     public int Width = 256;
     public int Height = 256;
     public GraphicsProfile Profile = GraphicsProfile.HiDef;
     public Color ClearColor = Color.CornflowerBlue;
+    public SceneVertexFormat VertexFormat = SceneVertexFormat.PositionColor;
     public bool VertexColorEnabled;
     public bool LightingEnabled;
+    public bool TextureEnabled;
+    public int TextureWidth;
+    public int TextureHeight;
+    public bool TexturePointFilter = true;
     public PrimitiveType Primitive = PrimitiveType.TriangleList;
-    public List<VertexPositionColor> Vertices = new List<VertexPositionColor>();
+    public List<VertexPositionColor> ColorVertices = new List<VertexPositionColor>();
+    public List<VertexPositionTexture> TextureVertices = new List<VertexPositionTexture>();
+    public List<Color> TexturePixels = new List<Color>();
 
     public static Scene Load(string path)
     {
@@ -45,10 +54,24 @@ public class Scene
                     scene.Profile = value == "Reach" ? GraphicsProfile.Reach : GraphicsProfile.HiDef;
                     break;
                 case "clearcolor": scene.ClearColor = ParseColor(value); break;
+                case "vertexformat":
+                    scene.VertexFormat = value == "PositionTexture"
+                        ? SceneVertexFormat.PositionTexture : SceneVertexFormat.PositionColor;
+                    break;
                 case "vertexcolor": scene.VertexColorEnabled = ParseBool(value); break;
                 case "lighting": scene.LightingEnabled = ParseBool(value); break;
+                case "texture": scene.TextureEnabled = ParseBool(value); break;
+                case "texturewidth": scene.TextureWidth = int.Parse(value, CultureInfo.InvariantCulture); break;
+                case "textureheight": scene.TextureHeight = int.Parse(value, CultureInfo.InvariantCulture); break;
+                case "texturefilter": scene.TexturePointFilter = value == "Point"; break;
+                case "texturepixel": scene.TexturePixels.Add(ParseColor(value)); break;
                 case "primitive": scene.Primitive = ParsePrimitive(value); break;
-                case "vertex": scene.Vertices.Add(ParseVertex(value)); break;
+                case "vertex":
+                    if (scene.VertexFormat == SceneVertexFormat.PositionTexture)
+                        scene.TextureVertices.Add(ParseTextureVertex(value));
+                    else
+                        scene.ColorVertices.Add(ParseColorVertex(value));
+                    break;
                 default:
                     throw new InvalidDataException("Scene: unknown key '" + key + "' in " + path);
             }
@@ -56,9 +79,14 @@ public class Scene
         return scene;
     }
 
+    public int VertexCount()
+    {
+        return VertexFormat == SceneVertexFormat.PositionTexture ? TextureVertices.Count : ColorVertices.Count;
+    }
+
     public int PrimitiveCount()
     {
-        int n = Vertices.Count;
+        int n = VertexCount();
         switch (Primitive)
         {
             case PrimitiveType.TriangleList: return n / 3;
@@ -69,7 +97,7 @@ public class Scene
         throw new InvalidOperationException("Scene: unhandled PrimitiveType " + Primitive);
     }
 
-    static bool ParseBool(string s) => s == "true";
+    static bool ParseBool(string s) { return s == "true"; }
 
     static Color ParseColor(string s)
     {
@@ -92,7 +120,7 @@ public class Scene
         throw new InvalidDataException("Scene: unknown primitive '" + s + "'");
     }
 
-    static VertexPositionColor ParseVertex(string s)
+    static VertexPositionColor ParseColorVertex(string s)
     {
         var p = s.Split(',');
         var pos = new Vector3(
@@ -104,6 +132,19 @@ public class Scene
                                byte.Parse(p[5], CultureInfo.InvariantCulture),
                                byte.Parse(p[6], CultureInfo.InvariantCulture));
         return new VertexPositionColor(pos, color);
+    }
+
+    static VertexPositionTexture ParseTextureVertex(string s)
+    {
+        var p = s.Split(',');
+        var pos = new Vector3(
+            float.Parse(p[0], CultureInfo.InvariantCulture),
+            float.Parse(p[1], CultureInfo.InvariantCulture),
+            float.Parse(p[2], CultureInfo.InvariantCulture));
+        var uv = new Vector2(
+            float.Parse(p[3], CultureInfo.InvariantCulture),
+            float.Parse(p[4], CultureInfo.InvariantCulture));
+        return new VertexPositionTexture(pos, uv);
     }
 }
 
@@ -134,15 +175,27 @@ public class Oracle : Game
         var fx = new BasicEffect(dev);
         fx.VertexColorEnabled = scene.VertexColorEnabled;
         fx.LightingEnabled = scene.LightingEnabled;
+        fx.TextureEnabled = scene.TextureEnabled;
         fx.World = Matrix.Identity;
         fx.View = Matrix.Identity;
         fx.Projection = Matrix.Identity;
 
-        var v = scene.Vertices.ToArray();
+        Texture2D texture = null;
+        if (scene.TextureEnabled)
+        {
+            texture = new Texture2D(dev, scene.TextureWidth, scene.TextureHeight);
+            texture.SetData(scene.TexturePixels.ToArray());
+            fx.Texture = texture;
+            dev.SamplerStates[0] = scene.TexturePointFilter ? SamplerState.PointClamp : SamplerState.LinearClamp;
+        }
+
         foreach (var pass in fx.CurrentTechnique.Passes)
         {
             pass.Apply();
-            dev.DrawUserPrimitives(scene.Primitive, v, 0, scene.PrimitiveCount());
+            if (scene.VertexFormat == SceneVertexFormat.PositionTexture)
+                dev.DrawUserPrimitives(scene.Primitive, scene.TextureVertices.ToArray(), 0, scene.PrimitiveCount());
+            else
+                dev.DrawUserPrimitives(scene.Primitive, scene.ColorVertices.ToArray(), 0, scene.PrimitiveCount());
         }
 
         dev.SetRenderTarget(null);
