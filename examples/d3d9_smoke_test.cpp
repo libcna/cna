@@ -86,10 +86,12 @@
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
+#include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ClearOptions.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureFilter.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureAddressMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DeviceLostException.hpp"
@@ -113,6 +115,7 @@ using namespace Microsoft::Xna::Framework::Graphics;
 using namespace CNA::Internal::Backends::D3D9;
 using CNA::Internal::Backends::ImageData;
 using CNA::Internal::Backends::IRenderTargetBackend;
+using CNA::Internal::Backends::GpuDrawParams;
 
 namespace
 {
@@ -954,6 +957,74 @@ protected:
             }
             check(!threwOnOutOfRange,
                   "D9-63: an out-of-range sampler slot is silently ignored (does not throw), matching D3D11's own bound-check precedent");
+        }
+
+        // Check Z (D9-64) -- real bug fix, found while wiring up D9-64's reused EasyGL state
+        // CTests: GraphicsDevice::SetDepthTestEnabled()/SetDepthWriteEnabled() were silent-throw
+        // stubs on D3D9 (D9-11's original skeleton, never wired up by D9-61/D9-82's own
+        // ApplyDepthStencilState()-only path) -- a game calling dev.SetDepthTestEnabled(false)
+        // (real, public NOXNA API that easygl_blendstate_opaque_test.cpp/EasyGL itself both use)
+        // got a crash instead of a real depth-test toggle. Now a direct SetRenderState(D3DRS_ZENABLE/
+        // ZWRITEENABLE) call each, mirroring D3D11's own identical 2026-07-14 fix (D3D9 needs no
+        // cached-state-object rebuild since D3D9 render states are independently settable). Proven
+        // by the depth test's real effect on rasterization, not by inspection: the same near/far
+        // draw order is issued twice, differing ONLY in whether SetDepthTestEnabled() was called --
+        // a no-op cannot pass both.
+        {
+            struct VPCd { float x, y, z; uint32_t color; };
+            const uint32_t kRedD = 0xFF0000FFu;   // R=255
+            const uint32_t kGreenD = 0xFF00FF00u; // G=255
+
+            // Near red quad (z=0.2), then FAR green quad (z=0.8), drawn second.
+            static const VPCd kNear[3] = {
+                {-1.0f, -1.0f, 0.2f, kRedD}, {3.0f, -1.0f, 0.2f, kRedD}, {-1.0f, 3.0f, 0.2f, kRedD}};
+            static const VPCd kFar[3] = {
+                {-1.0f, -1.0f, 0.8f, kGreenD}, {3.0f, -1.0f, 0.8f, kGreenD}, {-1.0f, 3.0f, 0.8f, kGreenD}};
+
+            auto vbNear = backend.CreateVertexBuffer(3);
+            vbNear->SetData(kNear, 3, sizeof(VPCd));
+            auto vbFar = backend.CreateVertexBuffer(3);
+            vbFar->SetData(kFar, 3, sizeof(VPCd));
+
+            GpuDrawParams dp;
+            dp.vertexColorEnabled = true;
+            const Microsoft::Xna::Framework::Rectangle probe(30, 30, 1, 1);
+            const Matrix& I = Matrix::getIdentityProperty();
+
+            // These quads' winding is back-facing under CNA's real default RasterizerState
+            // (CullCounterClockwiseFace) -- needs CullNone, same finding as every other oversized
+            // full-screen-quad test in this project (e.g. easygl_depthstencilstate_stencil_enable_
+            // test.cpp's own "Task 896" comment).
+            backend.ApplyRasterizerState(0 /*CullMode::None*/, 0 /*FillMode::Solid*/, false, 0.0f, 0.0f);
+
+            auto drawNearThenFar = [&]() {
+                dev.Clear(Color(10, 10, 10, 255)); // clears depth to 1.0 too
+                backend.DrawPrimitivesEx(*vbNear, I, I, I, PrimitiveType::TriangleList, 1, dp);
+                backend.DrawPrimitivesEx(*vbFar, I, I, I, PrimitiveType::TriangleList, 1, dp);
+                Color px(0, 0, 0, 0);
+                dev.GetBackBufferData(&probe, &px, 0, 1);
+                return px;
+            };
+
+            // Depth test ON: the far green quad must be REJECTED by the nearer red one already there.
+            backend.SetDepthWriteEnabled(true);
+            backend.SetDepthTestEnabled(true);
+            const Color withDepth = drawNearThenFar();
+            check(withDepth.getRProperty() == 255 && withDepth.getGProperty() == 0,
+                  "D3D9GraphicsBackend::SetDepthTestEnabled(true): a FARTHER quad drawn after a nearer "
+                  "one is genuinely REJECTED (red survives) -- proves the call really enables the depth "
+                  "test, instead of throwing/being a no-op");
+
+            // Depth test OFF: the same far green quad must now overwrite the red one (painter's order).
+            backend.SetDepthTestEnabled(false);
+            const Color withoutDepth = drawNearThenFar();
+            check(withoutDepth.getGProperty() == 255 && withoutDepth.getRProperty() == 0,
+                  "D3D9GraphicsBackend::SetDepthTestEnabled(false): the SAME farther quad now genuinely "
+                  "OVERWRITES the nearer one (green wins) -- only the SetDepthTestEnabled() call differs "
+                  "between the two, so a no-op implementation cannot pass both checks");
+
+            backend.SetDepthTestEnabled(false);
+            backend.SetDepthWriteEnabled(false);
         }
 
         std::printf("=== %d/%d PASS (main Game checks) ===\n", passCount, totalCount);

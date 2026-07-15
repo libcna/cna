@@ -289,6 +289,16 @@ namespace CNA::Internal::Backends::D3D9
         depthStencilFormatOrdinal_ = depthStencilFormat;
         isFullScreen_ = isFullScreen;
         presentationDirty_ = true;
+        // D9-64 fix: apply immediately rather than deferring to the next Present(). A game (or
+        // test) that draws depth/stencil-dependent content on the very first frame, before ever
+        // presenting, must see the newly-requested format take effect right away -- deferring left
+        // Clear() calls against a stale (often absent) depth-stencil surface failing with
+        // D3DERR_INVALIDCALL on that first frame. IGraphicsBackend::UpdatePresentationFormatEXT()'s
+        // own contract only requires applying "on the next natural resize/reset point", not
+        // specifically Present() -- EnsureDeviceSize() IS that reset point, just invoked eagerly
+        // here instead of lazily. device_ is already constructed by the time this is reachable (see
+        // this method's own call site, GraphicsDevice::Reset()).
+        EnsureDeviceSize();
     }
 
     void D3D9GraphicsBackend::RegisterDefaultPoolResourceEXT(ID3D9DefaultPoolResourceEXT* resource)
@@ -553,19 +563,29 @@ namespace CNA::Internal::Backends::D3D9
         sysmem->UnlockRect();
     }
 
-    void D3D9GraphicsBackend::SetDepthTestEnabled(bool)
+    // D9-64 fix: these were silent-throw stubs left over from D9-11's skeleton, never wired up by
+    // D9-61/D9-82 (which only ever push depth/stencil state through the multi-field
+    // ApplyDepthStencilState() path). GraphicsDevice::SetDepthTestEnabled()/SetDepthWriteEnabled()
+    // are real public (NOXNA) API that EasyGL honours and D3D11/D3D12 both wire up -- a game (or,
+    // as found here, the reused easygl_blendstate_opaque_test.cpp CTest) calling
+    // dev.SetDepthTestEnabled(false) on D3D9 threw instead of taking effect. Unlike D3D11 (which
+    // must rebuild a whole cached ID3D11DepthStencilState object from tracked fields), D3D9's
+    // render states are independently settable, so this is a direct, single SetRenderState call --
+    // no field-tracking struct needed.
+    void D3D9GraphicsBackend::SetDepthTestEnabled(bool enabled)
     {
-        NotYetImplemented("D3D9", "SetDepthTestEnabled (see plan_dx9.md D9-61/D9-82)");
+        device_->SetRenderState(D3DRS_ZENABLE, enabled ? D3DZB_TRUE : D3DZB_FALSE);
     }
 
-    void D3D9GraphicsBackend::SetBlendEnabled(bool)
-    {
-        NotYetImplemented("D3D9", "SetBlendEnabled (see plan_dx9.md D9-60/D9-82)");
-    }
+    // Deliberate no-op, matching D3D11's/D3D12's own identical choice: a bare "enable blending" has
+    // no defined blend factors in XNA -- real blend configuration always arrives via
+    // ApplyBlendState(), which already unconditionally enables blending (D3DRS_ALPHABLENDENABLE)
+    // whenever it's called.
+    void D3D9GraphicsBackend::SetBlendEnabled(bool) {}
 
-    void D3D9GraphicsBackend::SetDepthWriteEnabled(bool)
+    void D3D9GraphicsBackend::SetDepthWriteEnabled(bool enabled)
     {
-        NotYetImplemented("D3D9", "SetDepthWriteEnabled (see plan_dx9.md D9-61/D9-82)");
+        device_->SetRenderState(D3DRS_ZWRITEENABLE, enabled ? TRUE : FALSE);
     }
 
     std::unique_ptr<IVertexBufferBackend> D3D9GraphicsBackend::CreateVertexBuffer(int vertex_capacity)

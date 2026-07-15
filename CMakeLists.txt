@@ -6859,6 +6859,32 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D9")
     set_tests_properties(D3D9_ShaderCache PROPERTIES
         TIMEOUT 60
         LABELS "D3D9")
+
+    # D9-64: state-object pixel-behaviour tests, reusing the same backend-agnostic EasyGL-authored
+    # sources D3D11/Vulkan already reuse verbatim (they only touch the public GraphicsDevice/
+    # BasicEffect API, nothing EasyGL-specific) -- real behavioural proof through the full public
+    # draw path, not just "the D3D9 state object was created/bound". Same 4-test subset
+    # D3D11_BlendState_Opaque/D3D11_BlendState_AlphaBlend/D3D11_DepthStencilState_StencilEnable/
+    # D3D11_RasterizerState_CullMode already established, not Vulkan's full set.
+    cna_d3d9_test(cna_test_d3d9_blendstate_opaque examples/easygl_blendstate_opaque_test.cpp)
+    cna_d3d9_ctest_command(_d3d9_blend_opaque_cmd cna_test_d3d9_blendstate_opaque)
+    add_test(NAME D3D9_BlendState_Opaque COMMAND ${_d3d9_blend_opaque_cmd})
+    set_tests_properties(D3D9_BlendState_Opaque PROPERTIES TIMEOUT 60 LABELS "D3D9")
+
+    cna_d3d9_test(cna_test_d3d9_blendstate_alphablend examples/easygl_blendstate_alphablend_test.cpp)
+    cna_d3d9_ctest_command(_d3d9_blend_alpha_cmd cna_test_d3d9_blendstate_alphablend)
+    add_test(NAME D3D9_BlendState_AlphaBlend COMMAND ${_d3d9_blend_alpha_cmd})
+    set_tests_properties(D3D9_BlendState_AlphaBlend PROPERTIES TIMEOUT 60 LABELS "D3D9")
+
+    cna_d3d9_test(cna_test_d3d9_depthstencilstate_stencil_enable examples/easygl_depthstencilstate_stencil_enable_test.cpp)
+    cna_d3d9_ctest_command(_d3d9_ds_stencil_cmd cna_test_d3d9_depthstencilstate_stencil_enable)
+    add_test(NAME D3D9_DepthStencilState_StencilEnable COMMAND ${_d3d9_ds_stencil_cmd})
+    set_tests_properties(D3D9_DepthStencilState_StencilEnable PROPERTIES TIMEOUT 60 LABELS "D3D9")
+
+    cna_d3d9_test(cna_test_d3d9_rasterizerstate_cullmode examples/easygl_rasterizerstate_cullmode_test.cpp)
+    cna_d3d9_ctest_command(_d3d9_rast_cullmode_cmd cna_test_d3d9_rasterizerstate_cullmode)
+    add_test(NAME D3D9_RasterizerState_CullMode COMMAND ${_d3d9_rast_cullmode_cmd})
+    set_tests_properties(D3D9_RasterizerState_CullMode PROPERTIES TIMEOUT 60 LABELS "D3D9")
 endif()
 
 # --- Task 6.1: real two-process ENet loopback test harness ---
