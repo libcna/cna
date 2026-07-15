@@ -6716,6 +6716,22 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
         LABELS "DX3")
+
+    # plan_dx3.md Phase X7 (DX3-60..DX3-67, DX3-69): ThrowNo3D wiring / remaining-defaults CTest.
+    cna_dx3_test(cna_test_dx3_no3d examples/dx3_no3d_test.cpp)
+    add_test(NAME Dx3_No3D COMMAND cna_test_dx3_no3d)
+    set_tests_properties(Dx3_No3D PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
+        LABELS "DX3")
+
+    # plan_dx3.md Phase X7 (DX3-68): logical/window coordinate transform CTest.
+    cna_dx3_test(cna_test_dx3_logical_transform examples/dx3_logical_transform_test.cpp)
+    add_test(NAME Dx3_LogicalTransform COMMAND cna_test_dx3_logical_transform)
+    set_tests_properties(Dx3_LogicalTransform PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
+        LABELS "DX3")
 endif()
 
 # plan_dx.md DX-80: D3D11 CTest registration. When cross-compiled from Linux (this backend is

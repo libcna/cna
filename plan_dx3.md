@@ -15,7 +15,8 @@
 >
 > **Status legend** (matches `../cna`'s own convention): ✅ implemented *and verified against its
 > stated acceptance criteria*; 🟨 code or documentation exists but has not met those criteria;
-> ⬜ not implemented. Phases X1/X2/X3/X4/X5/X6 are ✅ (see their own tables below); X7 onward are ⬜.
+> ⬜ not implemented. Phases X1/X2/X3/X4/X5/X6/X7 are ✅ (see their own tables below); only
+> Phase X8 (tests + docs polish) remains.
 >
 > **Correction (2026-07-15, Phase X4 closure): the Phase X3 commit's "full `CnaTests` suite has no
 > new failures (one pre-existing, unrelated failure...)" claim was incomplete.** It was based on
@@ -313,16 +314,16 @@ per-formula math (DX3-40..43) below.
 
 | # | Task | Status | Notes |
 |---|---|---|---|
-| DX3-60 | `ClearColorAndDepth`/`ClearDepth`/`ClearStencil`/`ClearDepthAndStencil`/`ClearColorAndStencil`/`ClearColorDepthAndStencil` → `ThrowNo3D` | ⬜ | |
-| DX3-61 | `SetDepthTestEnabled`/`SetBlendEnabled`/`SetDepthWriteEnabled` → `ThrowNo3D` | ⬜ | |
-| DX3-62 | `CreateVertexBuffer`/`CreateIndexBuffer16`/`CreateIndexBuffer32` → `ThrowNo3D` | ⬜ | |
-| DX3-63 | `DrawColoredPrimitives`/`DrawIndexedColoredPrimitives`/`DrawPrimitivesEx`/`DrawIndexedPrimitivesEx`/`DrawInstancedPrimitivesEx` → `ThrowNo3D` | ⬜ | |
-| DX3-64 | `CreateTexture3D`/`CreateTextureCube`/`CreateRenderTargetCube` → `nullptr` | ⬜ | |
-| DX3-65 | `SupportsDepthStencil()` → `false` | ⬜ | |
-| DX3-66 | `CreateOcclusionQuery()` → `nullptr` | ⬜ | |
-| DX3-67 | `CreateEffectBackend()` → `nullptr` | ⬜ | |
-| DX3-68 | `TransformWindowToLogical`/`TransformLogicalToWindow`: implement for real (needed for correct mouse-coordinate mapping under letterboxing) | ⬜ | |
-| DX3-69 | `DebugSimulateContextLoss`/`DebugRestoreContext`: likely no-op (`IsLost`/`Restore` are inert stubs in `free-direct` itself, per its own `docs/directdraw-limitations.md`) — confirm rather than assume | ⬜ | |
+| DX3-60 | `ClearColorAndDepth`/`ClearDepth`/`ClearStencil`/`ClearDepthAndStencil`/`ClearColorAndStencil`/`ClearColorDepthAndStencil` → `ThrowNo3D` | ✅ | Already implemented since Phase X1/X2. **Real finding**: these are provably unreachable from the public `GraphicsDevice::Clear(ClearOptions, ...)` API — shared `GraphicsDevice.cpp` masks `DepthBuffer`/`Stencil` out of the request before it ever reaches the backend, because `SupportsDepthStencil()` is `false` (DX3-65). Verified both the graceful-degrade behavior (`Dx3_No3D` Check D, `Clear()` doesn't throw) and that the methods still throw if ever reached directly (same check, direct backend calls). |
+| DX3-61 | `SetDepthTestEnabled`/`SetBlendEnabled`/`SetDepthWriteEnabled` → `ThrowNo3D` | ✅ | Already implemented since Phase X1/X2; unlike DX3-60, these ARE directly, unconditionally reachable from `GraphicsDevice` (no masking). Verified via `Dx3_No3D` Check E. |
+| DX3-62 | `CreateVertexBuffer`/`CreateIndexBuffer16`/`CreateIndexBuffer32` → `ThrowNo3D` | ✅ | `CreateVertexBuffer`/`CreateIndexBuffer16` already implemented since Phase X1/X2; `CreateIndexBuffer32` needed no override at all — `IGraphicsBackend`'s own default delegates to `CreateIndexBuffer16`, which already throws, so the composition is correct for free. Verified via `Dx3_No3D` Checks A/B/C (`VertexBuffer`/`IndexBuffer` construction throws for both 16- and 32-bit). |
+| DX3-63 | `DrawColoredPrimitives`/`DrawIndexedColoredPrimitives`/`DrawPrimitivesEx`/`DrawIndexedPrimitivesEx`/`DrawInstancedPrimitivesEx` → `ThrowNo3D` | ✅ | `DrawColoredPrimitives`/`DrawIndexedColoredPrimitives` already implemented since Phase X1/X2; the `*Ex` variants needed no override — `IGraphicsBackend`'s own defaults delegate to the non-`Ex` methods (or throw directly for `DrawInstancedPrimitivesEx`). **Real finding**: since DX3-62 already makes it impossible to construct a `VertexBuffer` at all, every method in this row is provably unreachable from the public API — not directly tested via a synthetic backend call (would need a fabricated `IVertexBufferBackend`, adding artificial complexity to re-prove something DX3-62 already establishes). |
+| DX3-64 | `CreateTexture3D`/`CreateTextureCube`/`CreateRenderTargetCube` → `nullptr` | ✅ | No override needed — `IGraphicsBackend`'s own defaults already return `nullptr`, and `Texture3D`/`TextureCube`/`RenderTargetCube` are all designed to degrade gracefully against a null backend (confirmed by reading their `.cpp` constructors). Verified via `Dx3_No3D` Check F. |
+| DX3-65 | `SupportsDepthStencil()` → `false` | ✅ | Already implemented since Phase X1/X2 (inline in the header). Verified both directly and via its real consequence for DX3-60 (`Dx3_No3D` Check D). |
+| DX3-66 | `CreateOcclusionQuery()` → `nullptr` | ✅ | **Real bug found and fixed**: the Phase X1/X2 skeleton had this throwing (`ThrowNo3D`), inconsistent with this row's own spec (`-> nullptr`) and with `OcclusionQuery`'s own null-safe design (its constructor/`Begin`/`End`/getters all check for a null backend and degrade gracefully — confirmed by reading `OcclusionQuery.cpp`). Fixed by removing the override entirely, letting `IGraphicsBackend`'s own default (`return nullptr`) apply, matching DX3-64/67's same pattern. Verified via `Dx3_No3D` Check G. |
+| DX3-67 | `CreateEffectBackend()` → `nullptr` | ✅ | No override needed — same reasoning as DX3-64; `ShaderEffect` (the NOXNA class that calls `CreateEffectBackend`) is null-safe throughout (confirmed by reading `ShaderEffect.cpp`). Verified via `Dx3_No3D` Check H. |
+| DX3-68 | `TransformWindowToLogical`/`TransformLogicalToWindow`: implement for real (needed for correct mouse-coordinate mapping under letterboxing) | ✅ | Real, new code (the only genuinely new implementation this phase needed): an independent letterbox scale+offset computation from the real physical `SDL_Window` size (queried directly) vs `Impl::logicalWidth/Height` — matches `free-direct`'s own hardcoded `SDL_LOGICAL_PRESENTATION_LETTERBOX` behavior without ever needing access to its internal (never-exposed) `SDL_Renderer`. `Dx3_LogicalTransform` CTest verifies round-trip correctness, centering, uniform (non-anisotropic) scale, and the actual "fit-largest-without-overflow" formula against the real physical window size in this dev environment (2048x1152, a genuinely non-trivial letterbox against the 64x64 logical size) — `SDL_SetWindowSize` was tried first but is not reliably honored by the window manager in this sandboxed environment, so the test queries whatever the real size actually is instead of forcing one. |
+| DX3-69 | `DebugSimulateContextLoss`/`DebugRestoreContext`: likely no-op (`IsLost`/`Restore` are inert stubs in `free-direct` itself, per its own `docs/directdraw-limitations.md`) — confirm rather than assume | ✅ | Confirmed: no override needed. No other 2D-only CNA backend (`SDL_RENDERER`/`SOFTWARE`/`HEADLESS`) overrides these either — only `EasyGL` does, since it is the only backend with a real GL context that can genuinely be lost/restored. DX3's CPU/`DirectDraw` compositor has no equivalent concept, so the inherited no-op default is correct. Verified via `Dx3_No3D` Check I. |
 
 ## Phase X8 — Tests and documentation
 

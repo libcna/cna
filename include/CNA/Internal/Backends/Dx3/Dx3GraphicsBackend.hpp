@@ -69,6 +69,14 @@ namespace CNA::Internal::Backends::Dx3
         // SetCooperativeLevel) -- it is never exposed to CNA, so this always returns nullptr,
         // same as every other non-SDL_Renderer-based backend.
         SDL_Renderer* GetRendererInternal() const override { return nullptr; }
+        // DX3-68 (Phase X7): a real letterbox scale+offset transform (uniform scale to fit,
+        // centered), independently recomputed from the real physical SDL_Window size -- matches
+        // free-direct's own hardcoded SDL_LOGICAL_PRESENTATION_LETTERBOX behavior without needing
+        // access to its internal (never-exposed) SDL_Renderer.
+        bool TransformWindowToLogical(float windowX, float windowY,
+                                      float& logX, float& logY) const override;
+        bool TransformLogicalToWindow(float logX, float logY,
+                                      float& windowX, float& windowY) const override;
 
         // ---- IGraphicsBackend: real (Phase X3) ----
         // Both CreateTexture() and CreateRenderTarget2D() own a private offscreen
@@ -109,7 +117,12 @@ namespace CNA::Internal::Backends::Dx3
         void SetDepthWriteEnabled(bool enabled) override;
         std::unique_ptr<IVertexBufferBackend> CreateVertexBuffer(int vertex_capacity) override;
         std::unique_ptr<IIndexBufferBackend> CreateIndexBuffer16(int index_capacity) override;
-        std::unique_ptr<IOcclusionQueryBackend> CreateOcclusionQuery() override;
+        // DX3-66: no override -- IGraphicsBackend's own default (return nullptr) is already
+        // correct and is what OcclusionQuery's own constructor/Begin/End/getters are designed to
+        // degrade gracefully against (see OcclusionQuery.cpp), same as CreateTexture3D/
+        // CreateTextureCube/CreateRenderTargetCube/CreateEffectBackend below not being overridden
+        // either. A prior throwing override here (Phase X1/X2) was inconsistent with that
+        // established "optional capability -> nullptr" contract -- corrected in Phase X7.
         void DrawColoredPrimitives(const IVertexBufferBackend& vb,
                                    const Matrix& world, const Matrix& view, const Matrix& projection,
                                    PrimitiveType primitive, int primitiveCount) override;

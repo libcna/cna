@@ -551,6 +551,53 @@ namespace CNA::Internal::Backends::Dx3
         return impl_->window;
     }
 
+    // DX3-68: real letterbox scale+offset transform between physical window pixels and logical
+    // (virtual) game pixels. free-direct's own PresentPrimary hardcodes
+    // SDL_LOGICAL_PRESENTATION_LETTERBOX against its internal SDL_Renderer (never exposed to CNA,
+    // GetRendererInternal() always returns nullptr) -- this independently recomputes the exact
+    // same letterbox math (uniform scale to fit, centered, black bars on the non-fitting axis)
+    // from the real physical SDL_Window size queried directly, so it stays correct without ever
+    // needing access to free-direct's own internal renderer state.
+    namespace
+    {
+        bool ComputeLetterbox(SDL_Window* window, int logicalWidth, int logicalHeight,
+                              float& scale, float& offsetX, float& offsetY)
+        {
+            if (!window || logicalWidth <= 0 || logicalHeight <= 0) return false;
+            int physW = 0, physH = 0;
+            SDL_GetWindowSize(window, &physW, &physH);
+            if (physW <= 0 || physH <= 0) return false;
+
+            scale = std::min(static_cast<float>(physW) / static_cast<float>(logicalWidth),
+                             static_cast<float>(physH) / static_cast<float>(logicalHeight));
+            offsetX = (static_cast<float>(physW) - static_cast<float>(logicalWidth) * scale) * 0.5f;
+            offsetY = (static_cast<float>(physH) - static_cast<float>(logicalHeight) * scale) * 0.5f;
+            return true;
+        }
+    }
+
+    bool Dx3GraphicsBackend::TransformWindowToLogical(float windowX, float windowY,
+                                                       float& logX, float& logY) const
+    {
+        float scale = 1.0f, offsetX = 0.0f, offsetY = 0.0f;
+        if (!ComputeLetterbox(impl_->window, impl_->logicalWidth, impl_->logicalHeight, scale, offsetX, offsetY))
+            return false;
+        logX = (windowX - offsetX) / scale;
+        logY = (windowY - offsetY) / scale;
+        return true;
+    }
+
+    bool Dx3GraphicsBackend::TransformLogicalToWindow(float logX, float logY,
+                                                       float& windowX, float& windowY) const
+    {
+        float scale = 1.0f, offsetX = 0.0f, offsetY = 0.0f;
+        if (!ComputeLetterbox(impl_->window, impl_->logicalWidth, impl_->logicalHeight, scale, offsetX, offsetY))
+            return false;
+        windowX = logX * scale + offsetX;
+        windowY = logY * scale + offsetY;
+        return true;
+    }
+
     // ---- Phase X3: textures and render targets ----
     // Both classes below are never named outside this .cpp (only returned polymorphically), so
     // <ddraw.h> stays fully contained here -- see this file's own Dx3TextureBackend/
@@ -920,11 +967,6 @@ namespace CNA::Internal::Backends::Dx3
     std::unique_ptr<IIndexBufferBackend> Dx3GraphicsBackend::CreateIndexBuffer16(int)
     {
         ThrowNo3D("CreateIndexBuffer16");
-    }
-
-    std::unique_ptr<IOcclusionQueryBackend> Dx3GraphicsBackend::CreateOcclusionQuery()
-    {
-        ThrowNo3D("CreateOcclusionQuery");
     }
 
     void Dx3GraphicsBackend::DrawColoredPrimitives(const IVertexBufferBackend&,
