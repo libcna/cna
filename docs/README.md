@@ -72,6 +72,8 @@ Kept for their investigation methodology and root-cause detail, not as current s
 - `android-graphics-limitations.md`, `web-emscripten-graphics-limitations.md` — per-platform
   Graphics constraints (Emscripten, Android NDK).
 - `sdl-renderer-2d-completeness.md` — SDL_Renderer's own full Phase 70 2D audit.
+- **[`ascii-backend.md`](ascii-backend.md)** — current status for the `ASCII` (SDL-windowed retro
+  glyph-grid) backend; see `../plan_ascii.md` for full task-by-task detail.
 - `fna-reference-harness.md` — the differential-testing infra (`tools/fna-reference/`) mentioned
   in `../README.md`'s verification-methodology bullet.
 

@@ -1,8 +1,12 @@
 # ASCII Graphics Backend (SDL-windowed, not a real terminal) — Implementation Plan
 
-> **Status: APPROVED 2026-07-15 — owner explicitly authorized implementation on `feature/ascii`
-> (worktree `../cnaascii`, branched from `develop`).** Implementation proceeds phase by phase per
-> this plan; update task statuses (✅/🟨/⬜) as they land.
+> **Status: ✅ COMPLETE 2026-07-15 — all 8 phases (`ASCII-1`–`ASCII-82`) closed** on `feature/ascii`
+> (worktree `../cnaascii`, branched from `develop`, pushed to `origin/feature/ascii`). Full
+> `CnaTests` regression: 4364 pass / 2 skip / 11 pre-existing failures (zero regressions across
+> the whole plan); dedicated `Ascii_*` ctest suite: 6/6. Two real bugs found and fixed along the
+> way — see `ASCII-40`'s own note (a blend-state bug that silently hid every `Color`-mode
+> background fill) and `ASCII-41`'s (a double-buffer-swap pixel-verification pitfall). Not yet
+> merged to `develop` — awaiting the project owner's decision on next steps (PR, merge, etc.).
 >
 > **Revision note**: the original direction (rendering to a *real* terminal via raw `stdin`/ANSI
 > escape codes) has been **fully cancelled by the owner** and is not part of this plan. The
@@ -202,9 +206,9 @@ effort-to-value ratio.
 
 | # | Task | Status | Notes |
 |---|---|---|---|
-| ASCII-80 | `docs/ascii-backend.md`: mirror `docs/sdl-renderer-2d-completeness.md`'s structure — no `needs_human` column needed this time (Design decision 9) | ⬜ | |
-| ASCII-81 | Full `CnaTests` regression run under `-DCNA_GRAPHICS_BACKEND=ASCII` | ⬜ | |
-| ASCII-82 | Update `CMakeLists.txt`'s `CNA_GRAPHICS_BACKEND` docstring and `../cna/plan.md`/`README.md` | ⬜ | |
+| ASCII-80 | `docs/ascii-backend.md`: mirror `docs/sdl-renderer-2d-completeness.md`'s structure — no `needs_human` column needed this time (Design decision 9) | ✅ | Written. Section 1 states plainly that `docs/sdl-renderer-2d-completeness.md`'s own table applies unchanged for everything `AsciiGraphicsBackend` forwards to `SdlGraphicsBackend`, rather than duplicating it; sections 2-6 cover only what's genuinely new (`ThrowNo3D` reuse, the quantizer, the font atlas, `Present()`'s grid draw incl. both real bugs found and fixed, input). |
+| ASCII-81 | Full `CnaTests` regression run under `-DCNA_GRAPHICS_BACKEND=ASCII` | ✅ | Final run: **4364 pass / 2 skip / 11 pre-existing failures** (same exact baseline established at `ASCII-5` and reconfirmed after every phase since — zero regressions introduced across the whole plan). Full `Ascii_*` ctest suite: **6/6** (`Ascii_FontAtlas`, `Ascii_OffscreenTarget`, `Ascii_Quantizer`, `Ascii_Present`, `Ascii_Input`, `Ascii_ThrowNo3D`). |
+| ASCII-82 | Update `CMakeLists.txt`'s `CNA_GRAPHICS_BACKEND` docstring and `../cna/plan.md`/`README.md` | ✅ | `CMakeLists.txt`'s docstring/`STRINGS` already listed `ASCII` since `ASCII-1` (Phase G1). `README.md` gained a backend bullet matching the existing `SDL_RENDERER`/`EASYGL`/.../`D3D12` bullets' own style, plus `docs/README.md`'s index gained an entry for `docs/ascii-backend.md`. **`../cna/plan.md` itself was not touched** — read it and confirmed it is a small (84-line) cross-cutting/deferred-task tracker, not a backend registry; it has no content this task is actually about updating. |
 
 ---
 
