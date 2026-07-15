@@ -423,10 +423,18 @@ namespace CNA::Internal::Backends::SdlGpu
         constexpr SDL_GPUTextureFormat kRenderTargetFormat = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
 
         SDL_GPUColorTargetInfo colorTarget{};
-        colorTarget.texture = target->ColorTexture();
+        colorTarget.texture = target->MsaaTexture() != nullptr ? target->MsaaTexture() : target->ColorTexture();
         colorTarget.clear_color = target->ClearColorValue();
         colorTarget.load_op = target->ClearColorPending() ? SDL_GPU_LOADOP_CLEAR : SDL_GPU_LOADOP_LOAD;
-        colorTarget.store_op = SDL_GPU_STOREOP_STORE;
+        if (target->MsaaTexture() != nullptr)
+        {
+            colorTarget.resolve_texture = target->ColorTexture();
+            colorTarget.store_op = SDL_GPU_STOREOP_RESOLVE;
+        }
+        else
+        {
+            colorTarget.store_op = SDL_GPU_STOREOP_STORE;
+        }
 
         SDL_GPUDepthStencilTargetInfo depthStencilTarget{};
         const bool hasDepth = target->DepthTexture() != nullptr;
@@ -731,13 +739,7 @@ namespace CNA::Internal::Backends::SdlGpu
     std::unique_ptr<IRenderTargetBackend> SdlGpuGraphicsBackend::CreateRenderTarget2D(
         int w, int h, int depthFormat, bool /*preserveContents*/, bool mipMap, int multiSampleCount)
     {
-        // Not a permanent SDL_gpu API limitation -- MSAA render targets are real, deferred
-        // scaffolding work (plan_sdlgpu.md SDLGPU-38), so this throws rather than silently
-        // rendering without the MSAA the caller asked for.
-        if (multiSampleCount > 0)
-            throw std::runtime_error(
-                "CNA SDL_GPU: RenderTarget2D MSAA is not implemented yet (plan_sdlgpu.md SDLGPU-38)");
-        return std::make_unique<SdlGpuRenderTargetBackend>(*this, w, h, depthFormat, mipMap);
+        return std::make_unique<SdlGpuRenderTargetBackend>(*this, w, h, depthFormat, mipMap, multiSampleCount);
     }
 
     void SdlGpuGraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* rt)
@@ -2499,24 +2501,53 @@ namespace CNA::Internal::Backends::SdlGpu
     // ---- SdlGpuRenderTargetBackend (Phase SDLGPU-8, SDLGPU-35) ----
 
     SdlGpuRenderTargetBackend::SdlGpuRenderTargetBackend(SdlGpuGraphicsBackend& owner, int width, int height,
-                                                          int depthFormat, bool mipMap)
-        : owner_(&owner), width_(width), height_(height), mipMap_(mipMap)
+                                                          int depthFormat, bool mipMap, int multiSampleCount)
+        : owner_(&owner), width_(width), height_(height)
     {
         SDL_GPUDevice* device = owner_->Device();
+        constexpr SDL_GPUTextureFormat kFormat = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+
+        const SDL_GPUSampleCount sampleCount = ClampSampleCount(device, kFormat, multiSampleCount);
+        multiSampleCount_ = SampleCountToInt(sampleCount);
+        // MSAA and mip generation are mutually exclusive on the same attachment, same rationale
+        // SdlGpuRenderTargetCubeBackend's own MSAA support already established.
+        mipMap_ = mipMap && multiSampleCount_ == 0;
 
         SDL_GPUTextureCreateInfo colorInfo{};
         colorInfo.type = SDL_GPU_TEXTURETYPE_2D;
-        colorInfo.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+        colorInfo.format = kFormat;
         colorInfo.usage = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
         colorInfo.width = static_cast<Uint32>(width);
         colorInfo.height = static_cast<Uint32>(height);
         colorInfo.layer_count_or_depth = 1;
         colorInfo.num_levels = mipMap_ ? static_cast<Uint32>(CalculateMipLevels(width, height)) : 1;
-        colorInfo.sample_count = SDL_GPU_SAMPLECOUNT_1;
+        colorInfo.sample_count = SDL_GPU_SAMPLECOUNT_1;  // the sampleable texture itself is always single-sample
 
         colorTexture_ = SDL_CreateGPUTexture(device, &colorInfo);
         if (colorTexture_ == nullptr)
             throw std::runtime_error(std::string("CNA SDL_GPU: failed to create RenderTarget2D color texture: ") + SDL_GetError());
+
+        if (multiSampleCount_ > 0)
+        {
+            // The real multisampled render target, resolved into colorTexture_ automatically via
+            // SDL_GPUColorTargetInfo.resolve_texture at render-pass end -- same mechanism as
+            // SdlGpuRenderTargetCubeBackend's own MSAA support.
+            SDL_GPUTextureCreateInfo msaaInfo{};
+            msaaInfo.type = SDL_GPU_TEXTURETYPE_2D;
+            msaaInfo.format = kFormat;
+            msaaInfo.usage = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET;
+            msaaInfo.width = static_cast<Uint32>(width);
+            msaaInfo.height = static_cast<Uint32>(height);
+            msaaInfo.layer_count_or_depth = 1;
+            msaaInfo.num_levels = 1;
+            msaaInfo.sample_count = sampleCount;
+            msaaTexture_ = SDL_CreateGPUTexture(device, &msaaInfo);
+            if (msaaTexture_ == nullptr)
+            {
+                SDL_ReleaseGPUTexture(device, colorTexture_);
+                throw std::runtime_error(std::string("CNA SDL_GPU: failed to create RenderTarget2D MSAA texture: ") + SDL_GetError());
+            }
+        }
 
         // DepthFormat::None (0) requests no depth attachment at all; otherwise this target gets its
         // own depth/stencil texture sized to its own width/height (which may differ from the
@@ -2532,10 +2563,11 @@ namespace CNA::Internal::Backends::SdlGpu
             depthInfo.height = static_cast<Uint32>(height);
             depthInfo.layer_count_or_depth = 1;
             depthInfo.num_levels = 1;
-            depthInfo.sample_count = SDL_GPU_SAMPLECOUNT_1;
+            depthInfo.sample_count = sampleCount;  // MSAA depth matches MSAA color
             depthTexture_ = SDL_CreateGPUTexture(device, &depthInfo);
             if (depthTexture_ == nullptr)
             {
+                if (msaaTexture_ != nullptr) SDL_ReleaseGPUTexture(device, msaaTexture_);
                 SDL_ReleaseGPUTexture(device, colorTexture_);
                 throw std::runtime_error(std::string("CNA SDL_GPU: failed to create RenderTarget2D depth texture: ") + SDL_GetError());
             }
@@ -2551,6 +2583,7 @@ namespace CNA::Internal::Backends::SdlGpu
 
         SDL_GPUDevice* device = owner_->Device();
         if (depthTexture_ != nullptr) SDL_ReleaseGPUTexture(device, depthTexture_);
+        if (msaaTexture_ != nullptr) SDL_ReleaseGPUTexture(device, msaaTexture_);
         if (colorTexture_ != nullptr) SDL_ReleaseGPUTexture(device, colorTexture_);
     }
 

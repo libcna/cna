@@ -22,8 +22,9 @@
 // Check C -- A depth-tested RenderTarget2D (DepthFormat::Depth24Stencil8): draws a farther red
 //   quad then a nearer green quad over the same screen area, then samples it, draws every frame
 //   with no exception. Exercises this target's own dedicated depth texture.
-// Check D -- CreateRenderTarget2D throws when multiSampleCount > 0 is requested (SDLGPU-38 is not
-//   implemented yet -- a real, documented boundary, not silent misbehavior).
+// Check D -- MultiSampleCount property fidelity: a RenderTarget2D constructed with
+//   preferredMultiSampleCount=0 must report 0 (a real MSAA round-trip lives in its own dedicated
+//   test, sdlgpu_rendertarget2d_msaa_test.cpp, SDLGPU-38).
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
@@ -201,18 +202,12 @@ protected:
             }
             (void)threw;
 
-            // Check D: multiSampleCount > 0 is a real, documented boundary (SDLGPU-38).
-            bool msaaThrew = false;
-            try
-            {
-                RenderTarget2D rt(dev, kRTSize, kRTSize, false, SurfaceFormat::Color,
-                                  DepthFormat::None, 4, RenderTargetUsage::DiscardContents);
-            }
-            catch (const std::exception&)
-            {
-                msaaThrew = true;
-            }
-            Check(msaaThrew, "RenderTarget2D with multiSampleCount>0 throws (SDLGPU-38 not implemented yet)");
+            // Check D: MultiSampleCount property fidelity for the non-MSAA case (real MSAA
+            // round-trip verification lives in sdlgpu_rendertarget2d_msaa_test.cpp, SDLGPU-38).
+            RenderTarget2D rtNoMsaa(dev, kRTSize, kRTSize, false, SurfaceFormat::Color,
+                                    DepthFormat::None, 0, RenderTargetUsage::DiscardContents);
+            Check(rtNoMsaa.getMultiSampleCountProperty() == 0,
+                  "RenderTarget2D MultiSampleCount request 0 -> applied 0");
         }
         else
         {

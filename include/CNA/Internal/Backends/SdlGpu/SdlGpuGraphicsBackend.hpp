@@ -44,20 +44,21 @@ namespace CNA::Internal::Backends::SdlGpu
     };
 
     /**
-     * @brief `SDL_gpu`-backed `RenderTarget2D` (Phase `SDLGPU-8`, `SDLGPU-35`).
+     * @brief `SDL_gpu`-backed `RenderTarget2D` (Phase `SDLGPU-8`, `SDLGPU-35`/`SDLGPU-38`).
      *
      * Owns a standalone `COLOR_TARGET | SAMPLER` texture rendered into its own render pass, one
      * per frame (see `SdlGpuGraphicsBackend::EnsureFrameRendered`'s per-target grouping) --
      * offscreen passes run before the swapchain pass so a target bound-then-unbound earlier in
      * the frame can safely be sampled by a later swapchain-targeted draw within the same frame.
-     * MSAA (`SDLGPU-38`) is not implemented yet -- `CreateRenderTarget2D` throws if
-     * `multiSampleCount > 0` is requested rather than silently ignoring it.
+     * MSAA (`SDLGPU-38`) resolves automatically via `SDL_GPUColorTargetInfo.resolve_texture` at
+     * render-pass end -- no manual resolve step needed, same mechanism as
+     * `SdlGpuRenderTargetCubeBackend`'s own MSAA support.
      */
     class SdlGpuRenderTargetBackend final : public IRenderTargetBackend
     {
     public:
         SdlGpuRenderTargetBackend(SdlGpuGraphicsBackend& owner, int width, int height,
-                                  int depthFormat, bool mipMap);
+                                  int depthFormat, bool mipMap, int multiSampleCount);
         ~SdlGpuRenderTargetBackend() override;
 
         SdlGpuRenderTargetBackend(const SdlGpuRenderTargetBackend&) = delete;
@@ -69,13 +70,16 @@ namespace CNA::Internal::Backends::SdlGpu
 
         void BindAsRenderTarget() override;
         void UnbindAsRenderTarget() override;
+        [[nodiscard]] int GetMultiSampleCount() const override { return multiSampleCount_; }
         [[nodiscard]] bool HasRealDepthBuffer(bool depthFormatWasRequested) const override
         {
             return depthFormatWasRequested && depthTexture_ != nullptr;
         }
 
-        /** @brief Returns the sampleable color texture. NOXNA — internal use only. */
+        /** @brief Returns the sampleable (single-sample, resolved-into-if-MSAA) color texture. NOXNA. */
         NOXNA [[nodiscard]] SDL_GPUTexture* ColorTexture() const { return colorTexture_; }
+        /** @brief Returns the multisampled render texture, or null when not multisampled. NOXNA. */
+        NOXNA [[nodiscard]] SDL_GPUTexture* MsaaTexture() const { return msaaTexture_; }
         /** @brief Returns the depth/stencil texture, or null when `DepthFormat::None` was requested. NOXNA. */
         NOXNA [[nodiscard]] SDL_GPUTexture* DepthTexture() const { return depthTexture_; }
         /** @brief Whether a mip chain should be regenerated after this target's pass each frame. NOXNA. */
@@ -107,7 +111,9 @@ namespace CNA::Internal::Backends::SdlGpu
         int width_ = 0;
         int height_ = 0;
         bool mipMap_ = false;
+        int multiSampleCount_ = 0;
         SDL_GPUTexture* colorTexture_ = nullptr;
+        SDL_GPUTexture* msaaTexture_ = nullptr;
         SDL_GPUTexture* depthTexture_ = nullptr;
         bool clearColorPending_ = true;
         bool clearDepthPending_ = true;
@@ -547,10 +553,8 @@ namespace CNA::Internal::Backends::SdlGpu
         std::unique_ptr<IIndexBufferBackend> CreateIndexBuffer16(int index_capacity) override;
 
         /**
-         * @brief Creates an off-screen `RenderTarget2D` (Phase `SDLGPU-8`, `SDLGPU-35`).
-         *
-         * @param multiSampleCount Must be 0 — MSAA render targets are `SDLGPU-38`, not yet
-         *        implemented; a non-zero value throws rather than silently rendering without MSAA.
+         * @brief Creates an off-screen `RenderTarget2D` (Phase `SDLGPU-8`, `SDLGPU-35`/`SDLGPU-38`),
+         * including real MSAA.
          */
         std::unique_ptr<IRenderTargetBackend> CreateRenderTarget2D(int w, int h, int depthFormat,
                                                                     bool preserveContents = false,
