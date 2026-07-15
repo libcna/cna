@@ -125,9 +125,9 @@ onto `.cnb`, and `RegisterCnbLoader<T>`.
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| CNB-11 | Update `SpriteFontTypeReader::GetExtensions()`/`Read()` to expect the `.cnb` envelope (`cnbVersion`/`type` via CNB-1/CNB-2) wrapped around today's unchanged field parsing (`texture`/`lineSpacing`/`spacing`/`defaultCharacter`/`glyphs[].char`/`source`/`crop`/`kerning`, per `cnb.md`'s worked example) | ⬜ | Field names stay exactly as-is per `cnb.md` — only the envelope + extension change |
-| CNB-12 | Add at least one real `.cnb` `SpriteFont` fixture (texture atlas + a handful of glyphs) under `tests/`/`examples/` content | ⬜ | |
-| CNB-13 | Tests: `Content.Load<SpriteFont>("...")` against the CNB-12 fixture succeeds and matches expected glyph/kerning/spacing values; a `.cnb` with `"type": "Model"` requested as `Load<SpriteFont>()` throws with a message naming both types (exercises CNB-2 through a real reader) | ⬜ | First gtest coverage of `SpriteFontTypeReader` at all |
+| CNB-11 | Update `SpriteFontTypeReader::GetExtensions()`/`Read()` to expect the `.cnb` envelope (`cnbVersion`/`type` via CNB-1/CNB-2) wrapped around today's unchanged field parsing (`texture`/`lineSpacing`/`spacing`/`defaultCharacter`/`glyphs[].char`/`source`/`crop`/`kerning`, per `cnb.md`'s worked example) | ✅ | `GetExtensions()` → `{".cnb"}`; `Read()` gains one `ParseCnbEnvelope`+`ValidateCnbEnvelope` call up front, all existing field-scanning code below it untouched — field names really did stay exactly as-is |
+| CNB-12 | Add at least one real `.cnb` `SpriteFont` fixture (texture atlas + a handful of glyphs) under `tests/`/`examples/` content | ✅ | Inline fixture generated at test time in `CnbSpriteFontTests.cpp` (16x24 solid-color atlas PNG + a one-glyph `.cnb`), not a checked-in static asset — matches this repo's existing `ScratchContentRoot` test convention rather than adding binary fixture files to the tree |
+| CNB-13 | Tests: `Content.Load<SpriteFont>("...")` against the CNB-12 fixture succeeds and matches expected glyph/kerning/spacing values; a `.cnb` with `"type": "Model"` requested as `Load<SpriteFont>()` throws with a message naming both types (exercises CNB-2 through a real reader) | ✅ | `tests/Microsoft/Xna/Framework/Content/CnbSpriteFontTests.cpp` (2 cases) — first-ever gtest coverage of `SpriteFontTypeReader`. Full-suite regression: 4396 tests, 4394 passed, same 2 pre-existing hardware skips, 0 failures |
 
 ---
 

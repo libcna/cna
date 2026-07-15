@@ -460,7 +460,7 @@ namespace Microsoft::Xna::Framework::Content
         public:
             [[nodiscard]] std::vector<std::string> GetExtensions() const override
             {
-                return {".font.json"};
+                return {".cnb"};
             }
 
             Graphics::SpriteFont Read(const std::string& path, ContentManager& cm) override
@@ -469,6 +469,9 @@ namespace Microsoft::Xna::Framework::Content
                 using SharpRuntime::charcs;
 
                 const std::string json = ReadTextFile(path);
+
+                const CNA::Internal::CnbEnvelope envelope = CNA::Internal::ParseCnbEnvelope(json);
+                CNA::Internal::ValidateCnbEnvelope(envelope, "SpriteFont", path);
 
                 const std::string textureName   = ExtractJsonStringField(json, "texture");
                 const int         lineSpacing    = JsonInt(json, "lineSpacing");
