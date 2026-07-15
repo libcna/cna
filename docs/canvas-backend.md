@@ -29,7 +29,7 @@ passed. Real visual verification needs a human with a browser — see
 | Rotation around `origin` | ✅ | Derived and verified algebraically against FNA's real `GenerateVertexInfo` placement — `origin` (source-pixel space) maps exactly to `(destX,destY)`, invariant under rotation. |
 | Scalar / `Vector2` scale overloads | ✅ | Confirmed backend-agnostic — `SpriteBatch.cpp` converts every scale overload into the same `(destinationRectangle, sourceRectangle, ...)` call. |
 | `SpriteEffects::FlipHorizontally`/`FlipVertically` | ✅ | Mirrors about the sprite's own local center (not the pivot) via `translate`/`scale(-1,1)`/`translate` — matches real XNA/FNA semantics where flip only changes which source corner maps to which unchanged destination corner. |
-| Color tint | ✅ | Alpha always via `ctx.globalAlpha` (free). Non-white RGB uses a reused scratch canvas (`multiply` fill + `destination-in` to restore alpha), skipped entirely for `Color.White`. |
+| Color tint | ✅ (fixed) | An earlier `multiply` fill + `destination-in` scratch-canvas trick was mathematically wrong — verified algebraically against the CSS Compositing spec's blend-mode formula, it produced `Rt*(1-As*(1-Rs))` instead of `Rt*Rs`, a real dark/light-fringing bug at semi-transparent, non-white edge pixels (found in external review). Fixed with a direct per-pixel `getImageData`/`putImageData` RGB multiply that leaves alpha completely untouched — exact, no compositing-order pitfalls. Alpha is still applied separately via `ctx.globalAlpha` (free). |
 | `transformMatrix` in `Begin()` | ✅ | `ctx.setTransform(M11,M12,M21,M22,M41,M42)` as the baseline every `Draw()`'s own relative transform composes on top of — simpler than a hardware backend needing a separate non-Identity code path. |
 | Custom `Effect` via `Begin(effect)` | ✅ throws-by-design | No programmable shader stage exists on this backend. |
 | `SpriteSortMode` / `Begin`/`End` sequencing | ✅ | Confirmed backend-agnostic — `ISpriteBatchBackend::Begin()` takes no sort-mode parameter at all; sorting/buffering (if any) happens entirely in shared `SpriteBatch.cpp`. |
@@ -52,9 +52,9 @@ passed. Real visual verification needs a human with a browser — see
 
 | Feature | Status | Notes |
 |---|---|---|
-| `Opaque` | ✅ | Maps to `'copy'` — a real hard overwrite. Plain `'source-over'` would still blend through partial alpha, which is wrong for `Opaque` (`srcBlend=One`/`dstBlend=Zero`). |
-| `AlphaBlend` | ✅ | Maps to `'source-over'`. |
-| `NonPremultiplied` | ✅ | Also maps to `'source-over'` — see the "Known findings" section below for why this coincides with `AlphaBlend` on this backend specifically. |
+| `Opaque` | ✅ (fixed) | Maps to `'copy'` — a real hard overwrite, clipped to exactly the sprite's own drawn rect. An earlier version applied `'copy'` with no clip, which cleared the **entire canvas** outside the sprite's footprint to transparent (Porter-Duff `'copy'` is evaluated over the whole compositing area, not just the drawn shape — confirmed via the CSS Compositing spec's per-pixel formula, found in external review). Fixed via `ctx.clip()` to the exact drawn rect before applying `'copy'` (a no-op for `'source-over'`/`'lighter'`, which never touch pixels outside the drawn shape anyway). |
+| `AlphaBlend` | ✅ (fixed) | Maps to `'source-over'`, with a real per-pixel un-premultiply pass (divide RGB by alpha) applied to the source pixels first. An earlier version treated this identically to `NonPremultiplied` (no conversion at all) on the reasoning that this backend's own textures are never genuinely premultiplied — but `SDL_RENDERER` has a dedicated pixel test (Task 697) that constructs genuinely premultiplied source data specifically to verify `AlphaBlend`, proving that assumption doesn't hold project-wide (found in external review). Un-premultiplying before Canvas2D's own internal premultiply-before-composite step now correctly reproduces a `srcBlend=One` equation for real premultiplied input. |
+| `NonPremultiplied` | ✅ | Maps to `'source-over'` directly, no extra processing — Canvas2D already treats `drawImage`/`putImageData` input as straight alpha natively, exactly what `NonPremultiplied`'s `srcBlend=SourceAlpha` factor assumes. |
 | `Additive` | ✅ | Maps to `'lighter'`. |
 | Any other custom `Blend`/`BlendFunction` combination | ✅ throws-by-design | `globalCompositeOperation` has no generic blend-factor/equation model to fall back on — a narrower, more honest scope than `SDL_RENDERER`'s own `SDL_ComposeCustomBlendMode`-based approximation. |
 
@@ -65,9 +65,10 @@ passed. Real visual verification needs a human with a browser — see
 | `TextureFilter` (magnification) | ✅ | Maps the "expand" component to `ctx.imageSmoothingEnabled` — same magnification-dominant grouping `SDL_RENDERER`'s Task 701 fix used, against a coarser native primitive (Canvas2D has no separate min/mag/mip control). |
 | `TextureAddressMode::Clamp` | ✅ | Implemented for real via an explicit source-rect clamp — not reliance on `drawImage`'s native out-of-bounds behavior, which this dev loop cannot verify in a real browser. |
 | `TextureAddressMode::Wrap` | 🟨 | Implemented via `ctx.createPattern(source,'repeat')`, only takes effect when `sourceRectangle` exceeds the texture's own bounds (the only case Wrap can ever visibly differ from Clamp). Unverified in a real browser. |
-| `TextureAddressMode::Mirror` | 🟨 | Implemented via a lazily-built, cached 2×2 pre-tiled mirrored canvas as the pattern source (no native mirror-repeat mode exists). Same bounds-exceeding trigger and same real-browser caveat as `Wrap`. |
-| Mixed per-axis `Wrap`/`Mirror`/`Clamp` (`addressU != addressV`) | ⬜ throws-by-design | Narrow, deliberate gap — throws rather than guess at unverified interaction behavior. |
-| Tinted draw + out-of-bounds `Wrap`/`Mirror` `sourceRectangle` | ⬜ throws-by-design | Narrow, deliberate gap — same reasoning. |
+| `TextureAddressMode::Mirror` | 🟨 | Implemented via a lazily-built, cached 2×2 pre-tiled mirrored canvas as the pattern source (no native mirror-repeat mode exists); the cache is invalidated on `Texture2D::SetData` (fixed — an earlier version left the cached tile stale after a pixel update, found in external review). Same bounds-exceeding trigger and same real-browser caveat as `Wrap`. |
+| Mixed per-axis `Wrap`/`Mirror`/`Clamp` (`addressU != addressV`) | ✅ throws-by-design (fixed) | Real `std::runtime_error`, thrown from C++ (`ValidateAddressModeCombination`) before ever reaching the JS draw path. An earlier version only logged `console.error` to the browser console and silently skipped the draw entirely — contradicting the plan's own "throw rather than guess" intent (found in external review). |
+| Tinted draw + out-of-bounds `Wrap`/`Mirror` `sourceRectangle` | ✅ throws-by-design (fixed) | Same fix as above — real exception, not a silent skip. |
+| `AlphaBlend` draw + out-of-bounds `Wrap`/`Mirror` `sourceRectangle` | ✅ throws-by-design | Also validated in C++ — the tiled pattern source would need its own per-pixel un-premultiply pass, not yet implemented; throws rather than producing wrong output. |
 
 ## 5. Viewport / PresentationParameters
 
@@ -77,6 +78,7 @@ passed. Real visual verification needs a human with a browser — see
 | `TransformWindowToLogical`/`TransformLogicalToWindow` | ✅ | Same verbatim port, for correct mouse-coordinate mapping under letterboxing. |
 | `GetWindowInternal()`/`GetRendererInternal()` | ✅ | Returns the real `SDL_Window*`; `GetRendererInternal()` is `nullptr` (no `SDL_Renderer*` exists on this backend, same as `EASYGL`). |
 | `Present()` | ✅ | Genuine no-op — the browser compositor presents the canvas automatically on the next paint tick. |
+| `Clear(color)` | ✅ (fixed) | `ctx.save()`/`fillRect` under an explicit `globalCompositeOperation='copy'`/`ctx.restore()`. An earlier version used a plain `fillRect` with whatever composite mode a previous `SpriteBatch` draw happened to leave active (e.g. `'lighter'`/`'copy'` from `Additive`/`Opaque`), blending the clear color with old content instead of the exact overwrite real XNA/FNA's `Clear()` performs; it also permanently reset the transform via `setTransform(identity)` rather than `save`/`restore`, corrupting an active `SpriteBatch` camera transform if `Clear()` was called mid-`Begin()`/`End()` (both found in external review). |
 
 ## 6. 3D surface (`ThrowNo3D`) and remaining defaults
 
@@ -94,25 +96,39 @@ passed. Real visual verification needs a human with a browser — see
 
 ---
 
-## Known findings that revise the original DRAFT plan
+## Bugs found in external review (2026-07-15) and fixed
 
-Two places where actually implementing this backend produced a different (better-grounded) answer
-than `plan_canvas.md`'s pre-implementation draft assumed — recorded here for owner review, not
-silently substituted:
+An external code review of this backend (after the initial "all 8 phases complete" pass) found 5
+real bugs — all confirmed against the actual Canvas2D/CSS Compositing spec math (not just re-argued
+abstractly) and fixed. Listed here for visibility, not buried in the per-feature tables above:
 
-1. **`AlphaBlend` needs no premultiplied→straight conversion on this backend.** The DRAFT assumed
-   `AlphaBlend` (`srcBlend=One`) would need such a conversion before compositing via `'source-over'`.
-   In practice: this backend never produces genuinely premultiplied pixel data anywhere (`putImageData`
-   uploads straight RGBA8 untouched; the tint pass multiplies RGB directly, not pre-scaled by alpha),
-   and Canvas2D's `'source-over'` already premultiplies straight-alpha input internally before
-   compositing — which *is* the conversion the DRAFT anticipated needing to hand-roll. So `AlphaBlend`
-   and `NonPremultiplied` end up mapping to the exact same `globalCompositeOperation` on this backend,
-   with no extra logic. See `CanvasGraphicsBackend::BlendStateToCompositeOp`'s own comment.
-2. **`Wrap`/`Mirror` are implemented, but unverified in a real browser.** This dev loop cannot check
-   Canvas2D's actual rendered pixels at all (no DOM in `node`), so while the `createPattern`-based
-   implementation is code-reviewed and believed correct, it has not been visually confirmed the way
-   `SDL_RENDERER`'s own Wrap/Mirror investigation would have required before closing those tasks.
-   See the checklist below.
+1. **`BlendState.Opaque` cleared the entire canvas, not just the sprite.** `globalCompositeOperation
+   = 'copy'` with no clip region wipes out everything outside the newly-drawn shape too (Porter-Duff
+   `'copy'` is evaluated over the whole compositing area). Fixed via `ctx.clip()` to the exact drawn
+   rect first.
+2. **`AlphaBlend` and `NonPremultiplied` were wrongly treated as identical.** The original reasoning
+   ("this backend's textures are never genuinely premultiplied, so no conversion is needed") doesn't
+   hold project-wide: `SDL_RENDERER` has a dedicated pixel test (Task 697) that deliberately
+   constructs premultiplied source data to verify `AlphaBlend` specifically. Fixed with a real
+   per-pixel un-premultiply pass, applied only for `AlphaBlend`.
+3. **RGB tint darkened/lightened semi-transparent edges (an A² bug).** The original `multiply` +
+   `destination-in` scratch-canvas trick was algebraically wrong (verified against the CSS
+   Compositing spec's blend-mode formula). Fixed with a direct, exact per-pixel RGB multiply.
+4. **Wrap/Mirror validation gaps silently skipped the draw instead of throwing.** Contradicted the
+   plan's own "throw rather than guess" intent. Fixed by moving validation into C++, throwing a real
+   `std::runtime_error` before ever reaching JS.
+5. **The Mirror-tile cache was never invalidated after `Texture2D::SetData`.** Could show stale
+   pixels after a texture update. Fixed by deleting the cached tile on every pixel update.
+
+A 6th issue (Clear() blending with old content under a leftover composite mode, and permanently
+resetting the transform rather than save/restore) was found and fixed in the same pass — see the
+`Clear(color)` row in §5 above.
+
+**Still true after these fixes**: none of this has been pixel-verified in a real browser (this dev
+loop has no `CanvasRenderingContext2D` at all — see the checklist below). The fixes above were
+verified by deriving the exact Porter-Duff/CSS-Compositing math by hand and checking the code against
+it, plus structural GTest coverage of the now-pure, now-testable C++ logic (`BlendStateToCompositeOp`,
+`ValidateAddressModeCombination`) — not by looking at actual rendered pixels.
 
 ## Manual browser verification checklist
 
@@ -128,17 +144,23 @@ Phase C1). None of this has been checked yet.
       destination quad's screen position must stay fixed; only the visible content should mirror.
 - [ ] Color tint: alpha-only (fade), and non-white RGB tint (verify no dark/light fringing at
       semi-transparent edges).
-- [ ] All 4 `BlendState` presets (`Opaque`/`AlphaBlend`/`NonPremultiplied`/`Additive`) against an
-      overlapping semi-transparent sprite pair — confirm `AlphaBlend`/`NonPremultiplied` really do
-      look identical on this backend, per the finding above.
+- [ ] `Opaque` blend against a scene with other content already drawn elsewhere on the canvas —
+      confirm only the sprite's own footprint is affected, nothing else disappears.
+- [ ] `AlphaBlend` with genuinely premultiplied texture data (RGB pre-scaled by alpha) vs.
+      `NonPremultiplied` with straight-alpha data — confirm both render correctly (no double-darkening)
+      and, drawn against each other's "wrong" data convention, confirm they now look *different* (not
+      identical, per the fix above).
 - [ ] `RenderTarget2D` round-trip: render into it, sample it back as a `Texture2D`, `GetBackBufferData`.
 - [ ] `SpriteFont` text: multi-line (`\n`), a string containing an unmapped character
       (`defaultCharacter` fallback), and a flipped+rotated `DrawString`.
 - [ ] `TextureAddressMode::Wrap` and `Mirror` with a `sourceRectangle` larger than the texture (the
       one case they can ever visibly differ from `Clamp`) — **this is the least-verified area in the
-      whole backend** (see the finding above).
+      whole backend**; also confirm a `Mirror`-addressed draw shows updated pixels after a
+      `Texture2D::SetData()` call (cache-invalidation fix above).
 - [ ] `Begin(transformMatrix)` with a genuinely non-Identity matrix (e.g. a camera pan/zoom) —
       confirm sprites transform correctly on top of their own placement/rotation.
+- [ ] `Clear()` called *between* a `SpriteBatch.Begin(transformMatrix)`/`End()` pair — confirm draws
+      after the `Clear()` still use the batch's own transform correctly (not reset to identity).
 - [ ] Mouse-coordinate mapping under a letterboxed/scaled window (`TransformWindowToLogical`).
 
 ## See also

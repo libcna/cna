@@ -31,25 +31,33 @@ EM_JS(void, CNA_Canvas2D_EnsureMainContext, (), {
 });
 
 // plan_canvas.md CANVAS-11: real Clear() against whichever context is currently bound (main canvas
-// or a bound render target -- see CANVAS-22). alpha<=0 uses clearRect (transparent), matching
-// FNA's Clear() semantics for a fully-transparent clear color; otherwise an opaque fillRect
-// (Canvas2D has no separate "clear to this exact RGBA" primitive when alpha>0 -- a solid fillStyle
-// + fillRect is the correct equivalent).
+// or a bound render target -- see CANVAS-22). alpha<=0 uses clearRect (transparent, and clearRect
+// always ignores globalCompositeOperation by spec, so no explicit reset is needed for that path).
+// alpha>0 uses an explicit globalCompositeOperation='copy' fillRect: real XNA/FNA's Clear(color) is
+// an unconditional overwrite of every pixel to exactly `color`, not a blend with whatever was
+// already there -- plain 'source-over' (or whatever composite mode a previous SpriteBatch draw left
+// active, e.g. 'lighter'/'copy' from BlendState.Additive/Opaque) would incorrectly blend instead.
+// Wrapped in save()/restore() (not a permanent setTransform/globalCompositeOperation mutation) so a
+// Clear() called mid-SpriteBatch-session (legal in XNA/FNA -- Begin()/End() doesn't prevent other
+// GraphicsDevice calls in between) doesn't corrupt that session's own active transform/blend state
+// for subsequent Draw() calls after Clear() returns.
 EM_JS(void, CNA_Canvas2D_Clear, (double r, double g, double b, double a), {
     CNA_Canvas2D_EnsureMainContext();
     const ctx = Module['cnaCurrentCtx'];
     if (!ctx) return;
-    // Defensive: fillRect/clearRect below assume an untransformed context. A SpriteBatch's
-    // SetTransformMatrix() resets this itself on End() (belt and suspenders -- see
-    // CanvasSpriteBatchBackend::End()), but Clear() doesn't otherwise know whether a batch is
-    // currently open when it's called (matches real XNA/FNA, where Clear() can legally be called
-    // between a Begin()/End() pair too).
+    ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     const w = ctx.canvas.width, h = ctx.canvas.height;
-    if (a <= 0) { ctx.clearRect(0, 0, w, h); return; }
-    const ri = Math.round(r * 255), gi = Math.round(g * 255), bi = Math.round(b * 255);
-    ctx.fillStyle = 'rgba(' + ri + ',' + gi + ',' + bi + ',' + a + ')';
-    ctx.fillRect(0, 0, w, h);
+    if (a <= 0) {
+        ctx.clearRect(0, 0, w, h);
+    } else {
+        ctx.globalCompositeOperation = 'copy';
+        ctx.globalAlpha = 1;
+        const ri = Math.round(r * 255), gi = Math.round(g * 255), bi = Math.round(b * 255);
+        ctx.fillStyle = 'rgba(' + ri + ',' + gi + ',' + bi + ',' + a + ')';
+        ctx.fillRect(0, 0, w, h);
+    }
+    ctx.restore();
 });
 
 // plan_canvas.md CANVAS-25: real, synchronous ctx.getImageData() readback against whichever
@@ -64,14 +72,17 @@ EM_JS(void, CNA_Canvas2D_ReadCurrentPixels, (int x, int y, int w, int h, uint8_t
 });
 
 // plan_canvas.md CANVAS-40/41/Design decision 5: caches the globalCompositeOperation string
-// CanvasSpriteBatchBackend's own DrawSprite EM_JS function applies to its final blit. opCode: 0 =
-// 'copy' (Opaque -- a hard overwrite ignoring alpha, matching BlendState.Opaque's real
-// srcBlend=One/dstBlend=Zero factors), 1 = 'source-over' (AlphaBlend and NonPremultiplied both map
-// here -- see CanvasGraphicsBackend::ApplyBlendState's own comment for why they coincide on this
-// backend), 2 = 'lighter' (Additive).
+// CanvasSpriteBatchBackend's own DrawSprite EM_JS function applies to its final blit, plus a
+// separate needsUnpremultiply flag (Module['cnaNeedsUnpremultiply']) -- the composite-op STRING is
+// the same 'source-over' for both AlphaBlend and NonPremultiplied (Canvas2D has only one alpha-blend
+// composite operator), but only AlphaBlend's source data needs the per-pixel un-premultiply pass
+// DrawSprite applies before compositing (see CanvasCompositeOp's own doc comment). opCode: 0 =
+// 'copy' (Opaque), 1 = 'source-over'/no unpremultiply (NonPremultiplied), 2 = 'source-over'/
+// unpremultiply (AlphaBlend), 3 = 'lighter' (Additive).
 EM_JS(void, CNA_Canvas2D_SetCompositeOp, (int opCode), {
-    const ops = ['copy', 'source-over', 'lighter'];
+    const ops = ['copy', 'source-over', 'source-over', 'lighter'];
     Module['cnaCompositeOp'] = ops[opCode] || 'source-over';
+    Module['cnaNeedsUnpremultiply'] = (opCode === 2);
 });
 
 // plan_canvas.md CANVAS-22: restores the main canvas as the current draw/clear/read target --
@@ -254,22 +265,25 @@ namespace CNA::Internal::Backends::Canvas
         {
             return CanvasCompositeOp::Copy; // Opaque -> 'copy'
         }
-        if (isAdd && symmetric && ((colorSrcBlend == 0 && colorDstBlend == 5) ||
-                                   (colorSrcBlend == 4 && colorDstBlend == 5)))
+        if (isAdd && symmetric && colorSrcBlend == 0 && colorDstBlend == 5)
         {
-            // AlphaBlend (srcBlend=One, assumes premultiplied input) and NonPremultiplied
-            // (srcBlend=SourceAlpha, assumes straight input) both map to plain 'source-over' on
-            // this backend: CanvasTextureBackend/CanvasSpriteBatchBackend never actually produce
-            // premultiplied pixel data anywhere (putImageData uploads straight RGBA8 untouched,
-            // and the tint pass multiplies RGB directly rather than pre-multiplying by alpha) --
-            // so the "convert premultiplied source to straight first" step Design decision 5
-            // anticipated is unconditionally a no-op for this specific implementation, not
-            // something to hand-roll. 'source-over' already composites straight-alpha input
-            // exactly as AlphaBlend's real srcBlend=One/dstBlend=InverseSourceAlpha equation
-            // requires, because the browser's own internal premultiply-before-composite step for
-            // 'source-over' does precisely that conversion. This is a deliberate finding, not a
-            // shortcut -- see plan_canvas.md CANVAS-41's notes.
-            return CanvasCompositeOp::SourceOver;
+            // AlphaBlend: srcBlend=One assumes the source color is already premultiplied by its
+            // own alpha (real hardware's blend unit just adds it in as-is). Canvas2D's
+            // 'source-over' always treats drawImage/fillStyle input as STRAIGHT alpha and
+            // premultiplies it internally before compositing -- so genuinely premultiplied source
+            // data (SDL_RENDERER's own Task 697 pixel test constructs exactly this) would get
+            // multiplied by its own alpha a SECOND time, darkening semi-transparent regions.
+            // CanvasSpriteBatchBackend.cpp's DrawSprite un-premultiplies (divides RGB by alpha)
+            // before handing pixels to 'source-over' specifically when this op is active, so the
+            // net result matches feeding truly-premultiplied data into a srcBlend=One equation.
+            return CanvasCompositeOp::AlphaBlendSourceOver;
+        }
+        if (isAdd && symmetric && colorSrcBlend == 4 && colorDstBlend == 5)
+        {
+            // NonPremultiplied: srcBlend=SourceAlpha assumes straight (non-premultiplied) source
+            // color -- exactly what Canvas2D's 'source-over' already assumes natively, so no
+            // extra per-pixel processing is needed here.
+            return CanvasCompositeOp::NonPremultipliedSourceOver;
         }
         if (isAdd && symmetric && colorSrcBlend == 4 && colorDstBlend == 0)
         {

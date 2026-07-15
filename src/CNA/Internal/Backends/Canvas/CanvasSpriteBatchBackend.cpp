@@ -21,10 +21,23 @@
 // footprint is unaffected by flipping -- matching real XNA/FNA semantics where SpriteEffects only
 // changes which source texture corner maps to which (unchanged) destination corner.
 //
-// Tint (CANVAS-32): color.A is always applied via ctx.globalAlpha (exact, zero extra cost). A
-// non-white RGB tint needs the scratch-canvas multiply trick Design decision/CANVAS-32 anticipated
-// (Canvas2D has no native per-draw RGB-multiply primitive) -- skipped entirely for the overwhelmingly
-// common Color.White case, so most draws pay zero extra-canvas cost.
+// Opaque clip: ctx.clip() is set to the EXACT rect this draw actually paints (in both branches
+// below) before globalCompositeOperation is applied. This matters specifically for
+// BlendState.Opaque's 'copy' operator: Porter-Duff 'copy' is Co=Cs/alphao=alphas evaluated over the
+// WHOLE compositing area, not just the drawn shape's own footprint -- an earlier version of this
+// code set 'copy' without a clip, which cleared the ENTIRE canvas to transparent outside the
+// sprite's own quad (confirmed via the CSS Compositing spec's per-pixel formula, not assumed). The
+// clip is a no-op for 'source-over'/'lighter' (they never touch pixels outside the drawn shape
+// anyway), so it's applied unconditionally rather than conditionally on the composite-op string.
+//
+// Tint (CANVAS-32) and premultiply-alpha handling (CANVAS-41): both are implemented as a single
+// per-pixel getImageData/putImageData pass, below, rather than composite-mode tricks -- an earlier
+// multiply+destination-in version of the tint pass was mathematically wrong
+// (verified algebraically against the CSS Compositing spec's blend-mode formula: it produced
+// Rt*(1-As*(1-Rs)) instead of the desired Rt*Rs, a real A^2-style darkening error at semi-transparent,
+// non-white edge pixels). The per-pixel pass is exact: RGB channels are transformed directly,
+// alpha is copied through completely untouched. Skipped entirely when neither tint nor
+// un-premultiply is needed (the common case), so most draws pay zero extra-canvas cost.
 //
 // CANVAS-42: smoothingEnabled maps the "expand"/magnification component of TextureFilter to
 // ctx.imageSmoothingEnabled (Canvas2D's only smoothing control).
@@ -38,10 +51,11 @@
 // mirrored canvas (createPattern has no native mirror-repeat mode) is used as the pattern source
 // instead, per plan_canvas.md CANVAS-44's own suggested "pre-composited 2x-tile" approach. Both
 // patterns are filled via ctx.fillRect() under the SAME rotate/scale/flip transform stack as the
-// plain drawImage path, so rotation/flip apply for free (fillStyle=pattern honors the current
-// transform exactly like any other fill). Mixed per-axis modes (addressU != addressV) and a tinted
-// draw combined with an out-of-bounds Wrap/Mirror sourceRectangle both throw rather than guess --
-// narrow, honestly-documented gaps (see plan_canvas.md CANVAS-44's notes), not silently-wrong output.
+// plain drawImage path, so rotation/flip apply for free. Mixed per-axis modes, a tinted draw, and an
+// AlphaBlend draw needing un-premultiply are all validated and thrown for in C++ (DrawSprite, below)
+// BEFORE this function is ever called when combined with an out-of-bounds Wrap/Mirror
+// sourceRectangle -- narrow, honestly-documented gaps (plan_canvas.md CANVAS-44's notes), not
+// silently-wrong output -- so this function can assume neither case reaches the pattern-fill branch.
 EM_JS(void, CNA_Canvas2D_DrawSprite, (
     int id, int sx, int sy, int sw, int sh,
     double destX, double destY, double destW, double destH,
@@ -59,6 +73,7 @@ EM_JS(void, CNA_Canvas2D_DrawSprite, (
     const texW = entry.canvas.width, texH = entry.canvas.height;
     const exceedsBounds = sx < 0 || sy < 0 || sx + sw > texW || sy + sh > texH;
     const tinted = (r !== 255 || g !== 255 || b !== 255);
+    const needsUnpremultiply = !!Module['cnaNeedsUnpremultiply'];
 
     ctx.save();
     ctx.imageSmoothingEnabled = !!smoothingEnabled;
@@ -77,20 +92,9 @@ EM_JS(void, CNA_Canvas2D_DrawSprite, (
     }
 
     if (exceedsBounds && (addressU !== 1 || addressV !== 1)) {
-        if (addressU !== addressV) {
-            console.error('[CNA] Canvas2D: mixed U/V TextureAddressMode with an out-of-bounds '
-                + 'sourceRectangle is not supported (addressU=' + addressU + ', addressV=' + addressV + ')');
-            ctx.restore();
-            return;
-        }
-        if (tinted) {
-            console.error('[CNA] Canvas2D: a tinted draw combined with a Wrap/Mirror '
-                + 'out-of-bounds sourceRectangle is not supported');
-            ctx.restore();
-            return;
-        }
+        // C++'s DrawSprite already validated addressU===addressV and !tinted and
+        // !needsUnpremultiply before ever calling here -- see this function's own header comment.
         let tileSource = entry.canvas;
-        let tileW = texW, tileH = texH;
         if (addressU === 2) { // Mirror
             if (!Module['cnaMirrorTiles']) Module['cnaMirrorTiles'] = {};
             let tile = Module['cnaMirrorTiles'][id];
@@ -105,7 +109,7 @@ EM_JS(void, CNA_Canvas2D_DrawSprite, (
                 tctx.save(); tctx.translate(texW * 2, texH * 2); tctx.scale(-1, -1); tctx.drawImage(entry.canvas, 0, 0); tctx.restore();
                 Module['cnaMirrorTiles'][id] = tile;
             }
-            tileSource = tile; tileW = texW * 2; tileH = texH * 2;
+            tileSource = tile;
         }
         const pattern = ctx.createPattern(tileSource, 'repeat');
         if (pattern.setTransform) {
@@ -113,6 +117,9 @@ EM_JS(void, CNA_Canvas2D_DrawSprite, (
             m.e = -originX - sx; m.f = -originY - sy;
             pattern.setTransform(m);
         }
+        ctx.beginPath();
+        ctx.rect(-originX, -originY, sw, sh);
+        ctx.clip();
         ctx.fillStyle = pattern;
         ctx.fillRect(-originX, -originY, sw, sh);
         ctx.restore();
@@ -130,33 +137,54 @@ EM_JS(void, CNA_Canvas2D_DrawSprite, (
 
     let source = entry.canvas;
     let drawSx = csx, drawSy = csy;
-    if (tinted) {
+    if (tinted || needsUnpremultiply) {
+        // Exact per-pixel processing: divide RGB by alpha first (un-premultiply, only for
+        // AlphaBlend), then multiply RGB by the tint (only if tinted) -- alpha is read and written
+        // back completely untouched in every case.
+        const imgData = entry.ctx.getImageData(csx, csy, csw, csh);
+        const data = imgData.data;
+        for (let i = 0; i < data.length; i += 4) {
+            let rr = data[i], gg = data[i + 1], bb = data[i + 2];
+            const aa = data[i + 3];
+            if (needsUnpremultiply && aa > 0) {
+                const inv = 255 / aa;
+                rr = Math.min(255, rr * inv);
+                gg = Math.min(255, gg * inv);
+                bb = Math.min(255, bb * inv);
+            }
+            if (tinted) {
+                rr = (rr * r) / 255;
+                gg = (gg * g) / 255;
+                bb = (bb * b) / 255;
+            }
+            data[i] = rr; data[i + 1] = gg; data[i + 2] = bb;
+        }
         if (!Module['cnaScratchCanvas']) {
             Module['cnaScratchCanvas'] = (typeof OffscreenCanvas !== 'undefined')
                 ? new OffscreenCanvas(1, 1) : document.createElement('canvas');
         }
         const scratch = Module['cnaScratchCanvas'];
         scratch.width = csw; scratch.height = csh;
-        const sctx = scratch.getContext('2d');
-        sctx.setTransform(1, 0, 0, 1, 0, 0);
-        sctx.globalAlpha = 1;
-        sctx.globalCompositeOperation = 'source-over';
-        sctx.clearRect(0, 0, csw, csh);
-        sctx.drawImage(entry.canvas, csx, csy, csw, csh, 0, 0, csw, csh);
-        sctx.globalCompositeOperation = 'multiply';
-        sctx.fillStyle = 'rgb(' + r + ',' + g + ',' + b + ')';
-        sctx.fillRect(0, 0, csw, csh);
-        sctx.globalCompositeOperation = 'destination-in';
-        sctx.drawImage(entry.canvas, csx, csy, csw, csh, 0, 0, csw, csh);
-        sctx.globalCompositeOperation = 'source-over';
+        scratch.getContext('2d').putImageData(imgData, 0, 0);
         source = scratch;
         drawSx = 0; drawSy = 0;
     }
 
     const offX = (csx - sx) * (destW / sw), offY = (csy - sy) * (destH / sh);
     const outW = csw * (destW / sw), outH = csh * (destH / sh);
+    ctx.beginPath();
+    ctx.rect(-originX + offX, -originY + offY, outW, outH);
+    ctx.clip();
     ctx.drawImage(source, drawSx, drawSy, csw, csh, -originX + offX, -originY + offY, outW, outH);
     ctx.restore();
+});
+
+// C++-callable query for the current BlendState's un-premultiply requirement (set by
+// CanvasGraphicsBackend::ApplyBlendState -> CNA_Canvas2D_SetCompositeOp) -- used by DrawSprite
+// (below) to validate the AlphaBlend + out-of-bounds-Wrap/Mirror combination before ever reaching
+// the JS draw path, consistent with how the tint/mixed-address-mode checks are validated in C++.
+EM_JS(int, CNA_Canvas2D_GetNeedsUnpremultiply, (), {
+    return Module['cnaNeedsUnpremultiply'] ? 1 : 0;
 });
 
 // plan_canvas.md CANVAS-36: sets the base transform every subsequent CNA_Canvas2D_DrawSprite call
@@ -191,7 +219,30 @@ namespace CNA::Internal::Backends::Canvas
             if (const auto* rt = dynamic_cast<const CanvasRenderTargetBackend*>(&texture)) return rt->GetCanvasId();
             return 0;
         }
+    }
 
+    void ValidateAddressModeCombination(int addressU, int addressV, bool exceedsBounds,
+                                        bool tinted, bool needsUnpremultiply)
+    {
+        if (!exceedsBounds || (addressU == 1 && addressV == 1)) return; // Clamp, or in-bounds: always fine.
+        if (addressU != addressV)
+            throw std::runtime_error(
+                "Canvas (HTML Canvas 2D): mixed U/V TextureAddressMode with an out-of-bounds "
+                "sourceRectangle is not supported (addressU=" + std::to_string(addressU) +
+                ", addressV=" + std::to_string(addressV) + ")");
+        if (tinted)
+            throw std::runtime_error(
+                "Canvas (HTML Canvas 2D): a tinted draw combined with a Wrap/Mirror out-of-bounds "
+                "sourceRectangle is not supported");
+        if (needsUnpremultiply)
+            throw std::runtime_error(
+                "Canvas (HTML Canvas 2D): an AlphaBlend draw combined with a Wrap/Mirror "
+                "out-of-bounds sourceRectangle is not supported (needs per-pixel un-premultiply of "
+                "a tiled pattern source, not yet implemented)");
+    }
+
+    namespace
+    {
         void DrawSprite(const ITextureBackend& texture,
                         const Rectangle& destinationRectangle,
                         const Rectangle& sourceRectangle,
@@ -206,6 +257,14 @@ namespace CNA::Internal::Backends::Canvas
             const int id = CanvasIdOf(texture);
             if (id == 0) return;
 #if defined(__EMSCRIPTEN__)
+            const bool exceedsBounds = sourceRectangle.X < 0 || sourceRectangle.Y < 0 ||
+                sourceRectangle.X + sourceRectangle.Width > texture.GetWidth() ||
+                sourceRectangle.Y + sourceRectangle.Height > texture.GetHeight();
+            const bool tinted = color.getRProperty() != 255 || color.getGProperty() != 255 ||
+                                color.getBProperty() != 255;
+            const bool needsUnpremultiply = CNA_Canvas2D_GetNeedsUnpremultiply() != 0;
+            ValidateAddressModeCombination(addressU, addressV, exceedsBounds, tinted, needsUnpremultiply);
+
             const bool flipH = (static_cast<int>(effects) & static_cast<int>(SpriteEffects::FlipHorizontally)) != 0;
             const bool flipV = (static_cast<int>(effects) & static_cast<int>(SpriteEffects::FlipVertically)) != 0;
             CNA_Canvas2D_DrawSprite(

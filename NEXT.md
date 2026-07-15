@@ -22,6 +22,32 @@
 > owner: what to do next with `feature/canvas` (PR, merge to `develop`, or something else) — not yet
 > answered as of this update.
 >
+> **2026-07-15 (later same day): external code review found 5 real bugs in the above, all fixed.**
+> `BlendState.Opaque`'s `'copy'` composite op had no clip, clearing the **entire canvas** outside the
+> sprite's own footprint (Porter-Duff `'copy'` is evaluated over the whole compositing area, not just
+> the drawn shape). `AlphaBlend`/`NonPremultiplied` were wrongly treated as identical -- the
+> `SDL_RENDERER` backend has a dedicated pixel test (Task 697) that deliberately constructs
+> genuinely-premultiplied source data specifically to verify `AlphaBlend`, proving the original "this
+> backend never produces premultiplied data" reasoning doesn't hold project-wide; fixed with a real
+> per-pixel un-premultiply pass. RGB tint darkened/lightened semi-transparent, non-white edge pixels
+> (an A-squared-style bug in the original `multiply`+`destination-in` scratch-canvas trick, confirmed
+> algebraically against the CSS Compositing spec); fixed with an exact per-pixel RGB multiply that
+> leaves alpha untouched. Wrap/Mirror validation gaps only `console.error`'d and silently skipped the
+> draw instead of throwing, contradicting the plan's own "throw rather than guess" intent; fixed by
+> moving validation into C++ (now unit-testable). The Mirror-tile cache was never invalidated after
+> `Texture2D::SetData`, risking stale pixels; fixed. A 6th issue found in the same pass: `Clear()`
+> blended with old content under whatever composite mode a previous draw left active instead of doing
+> an exact overwrite, and permanently reset the transform (`setTransform(identity)`) instead of
+> `save`/`restore`, corrupting an active `SpriteBatch` transform if `Clear()` ran mid-session; both
+> fixed. All verified by deriving the exact Porter-Duff/CSS-Compositing math by hand (not just
+> re-asserted) plus new GTest coverage of the now-pure, now-testable C++ validation/mapping logic
+> (`ValidateAddressModeCombination`, `BlendStateToCompositeOp` now returning distinct enum values for
+> `AlphaBlend`/`NonPremultiplied`) -- see `docs/canvas-backend.md`'s "Bugs found in external review"
+> section. **Genuinely important lesson, not just a footnote**: "implemented and structurally
+> reviewed" (the state after the first pass) did not mean bug-free -- all 5 bugs lived in JS logic the
+> original structural GTest suite had no way to exercise, precisely because this dev loop cannot
+> pixel-test in a real browser. Still fully open: real browser pixel verification (unchanged).
+>
 > **Both `plan_dx.md` backends' full software/logic layer are done and Wine-verified as of
 > 2026-07-14.** **D3D11**: Phase DX1 through DX11 are ALL closed — every task except `DX-90`/`DX-91`
 > (real-Windows hardware, `needs_human`, no such machine available here). 6 CTest binaries, 96+

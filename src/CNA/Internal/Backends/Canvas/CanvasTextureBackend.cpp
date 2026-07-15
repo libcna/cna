@@ -43,16 +43,21 @@ EM_JS(void, CNA_Canvas2D_CreateBlankCanvas, (int id, int width, int height), {
 });
 
 // plan_canvas.md CANVAS-20: full level-0 re-upload, same synchronous putImageData() path as
-// creation above.
+// creation above. Also invalidates this texture's cached mirror-tile (Module['cnaMirrorTiles'][id],
+// built lazily by CanvasSpriteBatchBackend.cpp's DrawSprite for Mirror addressing) -- without this,
+// a Texture2D::SetData() call after a Mirror-addressed draw had already built+cached the tile would
+// leave that tile stale, so a subsequent Mirror-addressed draw would show pre-update pixels.
 EM_JS(void, CNA_Canvas2D_UpdatePixels, (int id, int width, int height, const uint8_t* rgba), {
     const entry = Module['cnaTextures'] && Module['cnaTextures'][id];
     if (!entry) { console.error('[CNA] Canvas2D: UpdatePixels on unknown texture id', id); return; }
     const bytes = new Uint8ClampedArray(Module.HEAPU8.subarray(rgba, rgba + width * height * 4));
     entry.ctx.putImageData(new ImageData(bytes, width, height), 0, 0);
+    if (Module['cnaMirrorTiles']) delete Module['cnaMirrorTiles'][id];
 });
 
 EM_JS(void, CNA_Canvas2D_DestroyTexture, (int id), {
     if (Module['cnaTextures']) delete Module['cnaTextures'][id];
+    if (Module['cnaMirrorTiles']) delete Module['cnaMirrorTiles'][id];
 });
 #endif
 

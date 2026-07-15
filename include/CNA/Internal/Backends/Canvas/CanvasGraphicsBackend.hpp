@@ -9,7 +9,14 @@
 namespace CNA::Internal::Backends::Canvas
 {
     /// Composite-op codes CNA_Canvas2D_SetCompositeOp (CanvasGraphicsBackend.cpp) understands.
-    enum class CanvasCompositeOp { Copy = 0, SourceOver = 1, Lighter = 2 };
+    /// AlphaBlend and NonPremultiplied are DELIBERATELY kept distinct (not both "SourceOver"): both
+    /// resolve to the same ctx.globalCompositeOperation ('source-over'), but AlphaBlend's real
+    /// contract (srcBlend=One) assumes the source color is already premultiplied by its own alpha --
+    /// the SDL_RENDERER backend has a dedicated pixel test (Task 697) constructing genuinely
+    /// premultiplied source data specifically to verify this, so a Canvas2D draw under AlphaBlend
+    /// must un-premultiply that data first (see CanvasSpriteBatchBackend.cpp's per-pixel pass),
+    /// since Canvas2D's own 'source-over' always treats its input as straight alpha.
+    enum class CanvasCompositeOp { Copy = 0, NonPremultipliedSourceOver = 1, AlphaBlendSourceOver = 2, Lighter = 3 };
 
     /// Pure mapping from raw BlendState factors/BlendFunction (see IGraphicsBackend::ApplyBlendState's
     /// own parameter doc) to a CanvasCompositeOp; throws std::runtime_error for any Blend/BlendFunction

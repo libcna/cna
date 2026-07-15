@@ -45,10 +45,14 @@ namespace
 
 TEST(CanvasBlendStateMapping, StandardPresetsMapCorrectly)
 {
-    EXPECT_EQ(BlendStateToCompositeOp(0, 0, 1, 1, 0, 0), CanvasCompositeOp::Copy);       // Opaque
-    EXPECT_EQ(BlendStateToCompositeOp(0, 0, 5, 5, 0, 0), CanvasCompositeOp::SourceOver); // AlphaBlend
-    EXPECT_EQ(BlendStateToCompositeOp(4, 4, 5, 5, 0, 0), CanvasCompositeOp::SourceOver); // NonPremultiplied
-    EXPECT_EQ(BlendStateToCompositeOp(4, 4, 0, 0, 0, 0), CanvasCompositeOp::Lighter);    // Additive
+    EXPECT_EQ(BlendStateToCompositeOp(0, 0, 1, 1, 0, 0), CanvasCompositeOp::Copy);   // Opaque
+    EXPECT_EQ(BlendStateToCompositeOp(0, 0, 5, 5, 0, 0), CanvasCompositeOp::AlphaBlendSourceOver);
+    EXPECT_EQ(BlendStateToCompositeOp(4, 4, 5, 5, 0, 0), CanvasCompositeOp::NonPremultipliedSourceOver);
+    EXPECT_EQ(BlendStateToCompositeOp(4, 4, 0, 0, 0, 0), CanvasCompositeOp::Lighter); // Additive
+    // AlphaBlend and NonPremultiplied must NOT collapse to the same enum value -- they need
+    // different per-pixel processing (un-premultiply only for AlphaBlend) even though both end up
+    // driving the same ctx.globalCompositeOperation string.
+    EXPECT_NE(BlendStateToCompositeOp(0, 0, 5, 5, 0, 0), BlendStateToCompositeOp(4, 4, 5, 5, 0, 0));
 }
 
 TEST(CanvasBlendStateMapping, AsymmetricColorAlphaFactorsThrow)
@@ -131,5 +135,31 @@ TEST(CanvasSpriteBatchBackendTest, NullCustomEffectDoesNotThrow)
 {
     CanvasSpriteBatchBackend batch;
     EXPECT_NO_THROW(batch.SetCustomEffect(nullptr));
+}
+
+TEST(CanvasAddressModeValidation, ClampOrInBoundsNeverThrows)
+{
+    // addressU=addressV=1 (Clamp): never throws regardless of exceedsBounds/tinted/unpremultiply.
+    EXPECT_NO_THROW(ValidateAddressModeCombination(1, 1, true, true, true));
+    // In-bounds: never throws regardless of address mode.
+    EXPECT_NO_THROW(ValidateAddressModeCombination(0, 2, false, true, true));
+}
+
+TEST(CanvasAddressModeValidation, MixedAxisModesThrowOnlyWhenExceedingBounds)
+{
+    EXPECT_NO_THROW(ValidateAddressModeCombination(0, 2, false, false, false));
+    EXPECT_THROW(ValidateAddressModeCombination(0, 2, true, false, false), std::runtime_error);
+}
+
+TEST(CanvasAddressModeValidation, TintedDrawThrowsWhenExceedingBoundsWithWrap)
+{
+    EXPECT_NO_THROW(ValidateAddressModeCombination(0, 0, true, false, false));
+    EXPECT_THROW(ValidateAddressModeCombination(0, 0, true, true, false), std::runtime_error);
+}
+
+TEST(CanvasAddressModeValidation, UnpremultipliedDrawThrowsWhenExceedingBoundsWithMirror)
+{
+    EXPECT_NO_THROW(ValidateAddressModeCombination(2, 2, true, false, false));
+    EXPECT_THROW(ValidateAddressModeCombination(2, 2, true, false, true), std::runtime_error);
 }
 #endif
