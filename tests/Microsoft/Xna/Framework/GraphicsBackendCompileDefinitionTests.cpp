@@ -35,6 +35,9 @@ TEST(GraphicsBackendCompileDefinitionsTest, ExactlyOneGraphicsBackendIsSelected)
 #ifdef CNA_BACKEND_CANVAS
     ++enabled;
 #endif
+#ifdef CNA_BACKEND_ASCII
+    ++enabled;
+#endif
 
     EXPECT_EQ(enabled, 1);
 }

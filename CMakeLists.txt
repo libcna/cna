@@ -91,8 +91,8 @@ if(EMSCRIPTEN OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
 else()
     set(_cna_default_backend "SDL_RENDERER")
 endif()
-set(CNA_GRAPHICS_BACKEND "${_cna_default_backend}" CACHE STRING "Graphics backend to use (SDL_RENDERER, EASYGL, BGFX, VULKAN, WEBGPU, HEADLESS, SOFTWARE, D3D11, D3D12, or CANVAS)")
-set_property(CACHE CNA_GRAPHICS_BACKEND PROPERTY STRINGS "SDL_RENDERER" "EASYGL" "BGFX" "VULKAN" "WEBGPU" "HEADLESS" "SOFTWARE" "D3D11" "D3D12" "CANVAS")
+set(CNA_GRAPHICS_BACKEND "${_cna_default_backend}" CACHE STRING "Graphics backend to use (SDL_RENDERER, EASYGL, BGFX, VULKAN, WEBGPU, HEADLESS, SOFTWARE, D3D11, D3D12, CANVAS, or ASCII)")
+set_property(CACHE CNA_GRAPHICS_BACKEND PROPERTY STRINGS "SDL_RENDERER" "EASYGL" "BGFX" "VULKAN" "WEBGPU" "HEADLESS" "SOFTWARE" "D3D11" "D3D12" "CANVAS" "ASCII")
 
 option(CNA_BACKEND_SDL_RENDERER "Enable SDL_Renderer graphics backend" OFF)
 option(CNA_BACKEND_EASY_GL "Enable easy-gl graphics backend" OFF)
@@ -106,9 +106,13 @@ option(CNA_BACKEND_D3D12 "Enable Direct3D 12 graphics backend (Windows only)" OF
 # plan_canvas.md: HTML Canvas 2D backend -- Emscripten-only (design decision 1), a browser-native,
 # GPU-free 2D-only backend using canvas.getContext('2d') instead of EASYGL's WebGL2 context.
 option(CNA_BACKEND_CANVAS "Enable HTML Canvas 2D graphics backend (Emscripten only)" OFF)
+# plan_ascii.md: SDL-windowed retro text/glyph-grid backend -- a thin decorator around
+# SDL_RENDERER's own SdlGraphicsBackend (see the shared cna_backend_graphics_sdl_renderer_core
+# library below), not a real terminal/TTY backend.
+option(CNA_BACKEND_ASCII "Enable ASCII (SDL-windowed glyph-grid) graphics backend" OFF)
 
 set(_cna_explicit_backend_selection OFF)
-if(CNA_BACKEND_SDL_RENDERER OR CNA_BACKEND_EASY_GL OR CNA_BACKEND_BGFX OR CNA_BACKEND_VULKAN OR CNA_BACKEND_WEBGPU OR CNA_BACKEND_HEADLESS OR CNA_BACKEND_SOFTWARE OR CNA_BACKEND_D3D11 OR CNA_BACKEND_D3D12 OR CNA_BACKEND_CANVAS)
+if(CNA_BACKEND_SDL_RENDERER OR CNA_BACKEND_EASY_GL OR CNA_BACKEND_BGFX OR CNA_BACKEND_VULKAN OR CNA_BACKEND_WEBGPU OR CNA_BACKEND_HEADLESS OR CNA_BACKEND_SOFTWARE OR CNA_BACKEND_D3D11 OR CNA_BACKEND_D3D12 OR CNA_BACKEND_CANVAS OR CNA_BACKEND_ASCII)
     set(_cna_explicit_backend_selection ON)
 endif()
 
@@ -143,6 +147,9 @@ if(_cna_explicit_backend_selection)
     endif()
     if(CNA_BACKEND_CANVAS)
         list(APPEND _cna_enabled_backends "CANVAS")
+    endif()
+    if(CNA_BACKEND_ASCII)
+        list(APPEND _cna_enabled_backends "ASCII")
     endif()
 
     list(LENGTH _cna_enabled_backends _cna_enabled_backends_count)
@@ -271,6 +278,11 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "CANVAS")
     set(BACKEND_DIR "src/CNA/Internal/Backends/Canvas")
     set(BACKEND_TARGET "cna_backend_graphics_canvas")
     add_compile_definitions(CNA_BACKEND_CANVAS)
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "ASCII")
+    message(STATUS "CNA: Using ASCII (SDL-windowed glyph-grid) graphics backend")
+    set(BACKEND_DIR "src/CNA/Internal/Backends/Ascii")
+    set(BACKEND_TARGET "cna_backend_graphics_ascii")
+    add_compile_definitions(CNA_BACKEND_ASCII)
 else()
 
     message(FATAL_ERROR "CNA: Unknown graphics backend: ${CNA_GRAPHICS_BACKEND}")
@@ -311,6 +323,22 @@ if(CNA_GRAPHICS_BACKEND STREQUAL "D3D11" OR CNA_GRAPHICS_BACKEND STREQUAL "D3D12
     add_library(cna_backend_graphics_d3dcommon STATIC ${D3DCOMMON_SOURCES})
     target_link_libraries(cna_backend_graphics_d3dcommon PUBLIC cna_backend_graphics_common SHARP_RUNTIME d3d11 dxgi)
     target_include_directories(cna_backend_graphics_d3dcommon PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+endif()
+
+# plan_ascii.md design decision 2: ASCII is a thin decorator around SDL_RENDERER's own
+# SdlGraphicsBackend (composition, not reimplementation) -- it needs SdlGraphicsBackend.cpp's real
+# implementation compiled in even though CNA_GRAPHICS_BACKEND=SDL_RENDERER was not itself selected.
+# Mirrors the D3DCommon shared-core pattern just above: a small static lib, built only when
+# actually needed. CNA_BACKEND_SDL_RENDERER is deliberately NOT defined for this build, so
+# SdlGraphicsBackend.cpp's own #ifdef CNA_BACKEND_SDL_RENDERER-guarded CreateGraphicsBackend() is
+# compiled out here, leaving Ascii's own CreateGraphicsBackend() (guarded by CNA_BACKEND_ASCII) as
+# the only factory definition -- no duplicate-symbol clash.
+if(CNA_GRAPHICS_BACKEND STREQUAL "ASCII")
+    file(GLOB CNA_ASCII_SDLRENDERER_SOURCES "src/CNA/Internal/Backends/SdlRenderer/*.cpp")
+    add_library(cna_backend_graphics_sdl_renderer_core STATIC ${CNA_ASCII_SDLRENDERER_SOURCES})
+    target_link_libraries(cna_backend_graphics_sdl_renderer_core PUBLIC cna_backend_graphics_common SHARP_RUNTIME)
+    target_link_libraries(cna_backend_graphics_sdl_renderer_core PRIVATE SDL3::SDL3)
+    target_include_directories(cna_backend_graphics_sdl_renderer_core PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 endif()
 
 # Backend target
@@ -354,6 +382,8 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "CANVAS")
     # plan_canvas.md design decision 2: reuses the existing SDL-created window/canvas element,
     # so still links SDL3 even though actual rendering goes through EM_JS/Canvas2D, not SDL_Renderer.
     target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3)
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "ASCII")
+    target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 cna_backend_graphics_sdl_renderer_core)
 endif()
 
 file(GLOB_RECURSE CNA_SOURCES CONFIGURE_DEPENDS
@@ -6648,6 +6678,67 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SOFTWARE")
     # not registered as a ctest (see cna_diag_compare's own comment above), just a plain
     # executable a developer/script runs by hand.
     cna_software_test(cna_diag_software examples/cross_backend_diagnostic_scene.cpp)
+endif()
+
+# plan_ascii.md Phase G2+: ASCII (SDL-windowed glyph-grid) backend test registration.
+if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
+   AND CNA_GRAPHICS_BACKEND STREQUAL "ASCII")
+
+    enable_testing()
+
+    macro(cna_ascii_test target src)
+        add_executable(${target} ${src})
+        if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
+            target_link_libraries(${target} PRIVATE
+                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                SHARP_RUNTIME)
+        else()
+            target_link_libraries(${target} PRIVATE CNA SHARP_RUNTIME)
+        endif()
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(${target} PRIVATE SDL3::SDL3main)
+        endif()
+    endmacro()
+
+    # Phase G2 (ASCII-10/11): hand-authored glyph-density font atlas smoke test.
+    cna_ascii_test(cna_test_ascii_fontatlas examples/ascii_fontatlas_test.cpp)
+    add_test(NAME Ascii_FontAtlas COMMAND cna_test_ascii_fontatlas)
+    set_tests_properties(Ascii_FontAtlas PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Phase G3 (ASCII-20/21): offscreen gameTarget_ + SetRenderTarget(nullptr) redirect.
+    cna_ascii_test(cna_test_ascii_offscreentarget examples/ascii_offscreentarget_test.cpp)
+    add_test(NAME Ascii_OffscreenTarget COMMAND cna_test_ascii_offscreentarget)
+    set_tests_properties(Ascii_OffscreenTarget PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Phase G4 (ASCII-30..33): quantizer -- pure function, no GraphicsDevice/window needed.
+    cna_ascii_test(cna_test_ascii_quantizer examples/ascii_quantizer_test.cpp)
+    add_test(NAME Ascii_Quantizer COMMAND cna_test_ascii_quantizer)
+    set_tests_properties(Ascii_Quantizer PROPERTIES TIMEOUT 30)
+
+    # Phase G5 (ASCII-40/41): Present() draws the quantized grid into the real window.
+    cna_ascii_test(cna_test_ascii_present examples/ascii_present_test.cpp)
+    add_test(NAME Ascii_Present COMMAND cna_test_ascii_present)
+    set_tests_properties(Ascii_Present PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Phase G6 (ASCII-50/51): Mouse/Keyboard/GamePad need zero new code against a real window.
+    cna_ascii_test(cna_test_ascii_input examples/ascii_input_test.cpp)
+    add_test(NAME Ascii_Input COMMAND cna_test_ascii_input)
+    set_tests_properties(Ascii_Input PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Phase G7 (ASCII-60): confirm ThrowNo3D reuse via the wrapped SdlGraphicsBackend.
+    cna_ascii_test(cna_test_ascii_throwno3d examples/ascii_throwno3d_test.cpp)
+    add_test(NAME Ascii_ThrowNo3D COMMAND cna_test_ascii_throwno3d)
+    set_tests_properties(Ascii_ThrowNo3D PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()
 
 # plan_dx.md DX-80: D3D11 CTest registration. When cross-compiled from Linux (this backend is

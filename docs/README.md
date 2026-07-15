@@ -78,6 +78,8 @@ Kept for their investigation methodology and root-cause detail, not as current s
 - `canvas-backend.md` — the CANVAS (HTML Canvas 2D) backend's own completeness status; unlike the
   others here, its ✅ marks mean "implemented and structurally reviewed," not "pixel-verified" — see
   the doc's own caveat.
+- **[`ascii-backend.md`](ascii-backend.md)** — current status for the `ASCII` (SDL-windowed retro
+  glyph-grid) backend; see `../plan_ascii.md` for full task-by-task detail.
 - `fna-reference-harness.md` — the differential-testing infra (`tools/fna-reference/`) mentioned
   in `../README.md`'s verification-methodology bullet.
 
