@@ -210,7 +210,9 @@ protected:
 
         WriteSolidColorQoi(root / "solid_red.qoi", 2, 2, 255, 0, 0, 255);
 
-        WriteFile(root / "rig.model.json", R"({
+        WriteFile(root / "rig.cnb", R"({
+  "cnbVersion": 1,
+  "type": "Model",
   "skeleton": "rig.skeleton.bin",
   "animations": [
     { "name": "Move", "clip": "move.clip.bin" }

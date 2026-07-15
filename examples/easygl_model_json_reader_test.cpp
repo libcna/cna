@@ -121,7 +121,9 @@ protected:
                    static_cast<std::streamsize>(idxBytes.size()));
         idxf.close();
 
-        WriteFile(root / "quad.model.json", R"({
+        WriteFile(root / "quad.cnb", R"({
+  "cnbVersion": 1,
+  "type": "Model",
   "meshes": [
     {
       "name": "Quad",

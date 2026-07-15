@@ -707,7 +707,7 @@ namespace Microsoft::Xna::Framework::Content
         public:
             [[nodiscard]] std::vector<std::string> GetExtensions() const override
             {
-                return {".model.json"};
+                return {".cnb"};
             }
 
             Graphics::Model Read(const std::string& path, ContentManager& cm) override
@@ -715,6 +715,10 @@ namespace Microsoft::Xna::Framework::Content
                 namespace fs = std::filesystem;
 
                 const std::string json = ReadTextFile(path);
+
+                const CNA::Internal::CnbEnvelope envelope = CNA::Internal::ParseCnbEnvelope(json);
+                CNA::Internal::ValidateCnbEnvelope(envelope, "Model", path);
+
                 const std::string root = cm.getRootDirectoryProperty();
                 Graphics::GraphicsDevice& device = cm.getGraphicsDeviceInternal();
 
