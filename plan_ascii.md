@@ -158,8 +158,8 @@ effort-to-value ratio.
 
 | # | Task | Status | Notes |
 |---|---|---|---|
-| ASCII-10 | Source or author a license-clean monospace glyph atlas (e.g. VGA CP437 8×16) | ⬜ | Design decision 4 — the one new asset dependency. |
-| ASCII-11 | Load it through CNA's existing `SpriteFont`/`BitmapFont` infrastructure rather than a new texture-atlas loader | ⬜ | |
+| ASCII-10 | Source or author a license-clean monospace glyph atlas (e.g. VGA CP437 8×16) | ✅ | **Deviated from the "8×16" example deliberately**: hand-authored an 8×8 atlas instead (`AsciiFontAtlas.cpp`'s `kGlyphBitmaps`), covering exactly the 10 characters in `kAsciiGlyphRamp` (`" .:-=+*#%@"`) rather than full CP437 — the quantizer (Phase G4) only ever indexes by ramp position, never by arbitrary character, so a full font would be unused scope. 8×8 was simpler to hand-verify correctly than 8×16 for a first cut; extending to 8×16 later is a data-only change, no architecture change. Fully custom/original pixel data (not a vendored font file) — no license/attribution to track, matches CNA's own existing convention of hand-built fixtures instead of real font assets (`docs/sdl-renderer-2d-completeness.md`'s SpriteFont tests do the same). |
+| ASCII-11 | Load it through CNA's existing `SpriteFont`/`BitmapFont` infrastructure rather than a new texture-atlas loader | ✅ | `BuildAsciiFontAtlas(GraphicsDevice&)` builds a real `Texture2D` (white-on-transparent glyph pixels, tinted by `SpriteBatch`'s per-draw color like any other CNA texture) and returns a real `SpriteFont` over it via the exact same "app builds the atlas itself" constructor path CNA's own SpriteFont tests already use (no XNB pipeline exists or is needed). Verified 2026-07-15: `Ascii_FontAtlas` ctest, 4/4 checks — glyph pixel-count ramp is strictly increasing (0,2,4,6,12,20,24,40,48,60 of 64 px, verified by direct popcount, not just eyeballed), atlas builds without throwing, `SpriteFont::getCharactersProperty()` matches `kAsciiGlyphRamp` exactly in order, default character is space. |
 
 ## Phase G3 — Offscreen game-resolution render target
 

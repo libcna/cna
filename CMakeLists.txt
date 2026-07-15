@@ -6645,6 +6645,34 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SOFTWARE")
     cna_software_test(cna_diag_software examples/cross_backend_diagnostic_scene.cpp)
 endif()
 
+# plan_ascii.md Phase G2+: ASCII (SDL-windowed glyph-grid) backend test registration.
+if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
+   AND CNA_GRAPHICS_BACKEND STREQUAL "ASCII")
+
+    enable_testing()
+
+    macro(cna_ascii_test target src)
+        add_executable(${target} ${src})
+        if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
+            target_link_libraries(${target} PRIVATE
+                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                SHARP_RUNTIME)
+        else()
+            target_link_libraries(${target} PRIVATE CNA SHARP_RUNTIME)
+        endif()
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(${target} PRIVATE SDL3::SDL3main)
+        endif()
+    endmacro()
+
+    # Phase G2 (ASCII-10/11): hand-authored glyph-density font atlas smoke test.
+    cna_ascii_test(cna_test_ascii_fontatlas examples/ascii_fontatlas_test.cpp)
+    add_test(NAME Ascii_FontAtlas COMMAND cna_test_ascii_fontatlas)
+    set_tests_properties(Ascii_FontAtlas PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+endif()
+
 # plan_dx.md DX-80: D3D11 CTest registration. When cross-compiled from Linux (this backend is
 # Windows-only, design decision 2), CTest itself still runs on the Linux host, so the test COMMAND
 # wraps the real .exe with scripts/run-wine-dxvk.sh (DX-3). A native MSVC configure on a real
