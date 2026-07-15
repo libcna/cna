@@ -1,5 +1,6 @@
 #pragma once
 
+#include "CNA/Internal/Graphics/ImageData.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteFont.hpp"
 #include <array>
 #include <cstdint>
@@ -14,10 +15,27 @@ namespace CNA::Internal::Backends::Ascii
     inline constexpr int kAsciiGlyphRampLength = 10;
     inline constexpr int kAsciiGlyphWidth = 8;
     inline constexpr int kAsciiGlyphHeight = 8;
+    /// The atlas texture has one extra slot past kAsciiGlyphRamp's own characters: a fully solid
+    /// white 8x8 block, used only by Present()'s internal background-fill draws (Phase G5) --
+    /// never exposed as a SpriteFont character, since it isn't one.
+    inline constexpr int kAsciiSolidGlyphIndex = kAsciiGlyphRampLength;
+    inline constexpr int kAsciiAtlasGlyphCount = kAsciiGlyphRampLength + 1;
+
+    /**
+     * @brief Builds the raw RGBA8 pixel data for the hand-authored glyph atlas -- no
+     * GraphicsDevice/Texture2D dependency, usable directly via IGraphicsBackend::CreateTexture()
+     * from inside a backend itself (Phase G5's Present() needs this; BuildAsciiFontAtlas() below
+     * needs a real GraphicsDevice it doesn't have access to there).
+     *
+     * @return width = kAsciiGlyphWidth * kAsciiAtlasGlyphCount, height = kAsciiGlyphHeight.
+     */
+    CNA::Internal::Graphics::ImageData BuildAsciiFontAtlasImageData();
 
     /**
      * @brief Builds a small, hand-authored monospace glyph atlas covering exactly the characters
-     * in kAsciiGlyphRamp.
+     * in kAsciiGlyphRamp, wrapped as a real SpriteFont for game/application code that already has
+     * a GraphicsDevice (e.g. for diagnostics/demos) -- see BuildAsciiFontAtlasImageData() for the
+     * lower-level version Present() itself uses.
      *
      * Design decision 4 (plan_ascii.md): a custom-authored atlas, not a vendored font file --
      * avoids a new asset/license dependency entirely. Glyph pixels are opaque white on a fully

@@ -20,8 +20,12 @@ namespace CNA::Internal::Backends::Ascii
      * as the default target instead -- SetRenderTarget2D(nullptr)/SetRenderTargets(..., 0) (XNA's
      * "target the back buffer" idiom) are intercepted and redirected to gameTarget_ rather than
      * forwarded as a literal nullptr, so the game can never accidentally draw straight onto the
-     * real window. Present() unbinds gameTarget_, draws it (Phase G3: a plain stretch-blit; Phase
-     * G4/G5: the quantized glyph grid instead) onto the real backbuffer, presents for real, then
+     * real window.
+     *
+     * Phase G4/G5: Present() reads gameTarget_ back, quantizes it into a glyph/color grid
+     * (AsciiQuantizer.hpp) using mode_, then draws that grid -- one textured, tinted quad per
+     * cell from fontAtlasTexture_ (AsciiFontAtlas.hpp) -- onto the real backbuffer via the same
+     * internal-only presentSpriteBatch_ the Phase G3 plain blit used, presents for real, then
      * rebinds gameTarget_ for the next frame.
      */
     class AsciiGraphicsBackend : public IGraphicsBackend
@@ -34,6 +38,20 @@ namespace CNA::Internal::Backends::Ascii
         /// time, including before Game::Run(), same as HeadlessGraphicsBackend::SetMode().
         void SetMode(AsciiQuantizeMode mode) { mode_ = mode; }
         [[nodiscard]] AsciiQuantizeMode GetMode() const { return mode_; }
+
+        /// Does everything Present() does EXCEPT the real double-buffer swap and the gameTarget_
+        /// rebind -- exposed only for testing (Ascii_Present ctest). A real swap can genuinely
+        /// invalidate immediate readback of what was just drawn (confirmed empirically: SDL's
+        /// OpenGL-backed present is a buffer swap, not a copy), so a test that needs to verify
+        /// drawn pixel content must read them before any swap happens. Real game code must always
+        /// call Present() instead -- never this.
+        void DrawQuantizedGridForTesting();
+
+        /// Reads the REAL backbuffer (not gameTarget_) -- exposed only for testing
+        /// (Ascii_Present ctest), normally called right after DrawQuantizedGridForTesting().
+        /// Normal game code always reads gameTarget_ via the ordinary
+        /// ReadBackbuffer()/GetBackBufferData() path.
+        void ReadRealBackbufferForTesting(int x, int y, int w, int h, uint8_t* pixels);
 
         void Clear(float r, float g, float b, float a) override;
         void Present() override;
@@ -94,9 +112,13 @@ namespace CNA::Internal::Backends::Ascii
         /// Offscreen target the game actually draws to (Phase G3). Sized to the game's own
         /// logical/virtual resolution, independent of the real window's physical size.
         std::unique_ptr<IRenderTargetBackend> gameTarget_;
-        /// Internal-only sprite batch used by Present() to draw gameTarget_ onto the real
-        /// backbuffer -- never exposed to game code (which gets its own via CreateSpriteBatch()).
+        /// Internal-only sprite batch used by Present() to draw onto the real backbuffer --
+        /// never exposed to game code (which gets its own via CreateSpriteBatch()).
         std::unique_ptr<ISpriteBatchBackend> presentSpriteBatch_;
+        /// The Phase G2 glyph atlas, uploaded once at construction as a plain backend texture
+        /// (not a SpriteFont -- Present() has no GraphicsDevice to build one with; see
+        /// AsciiFontAtlas::BuildAsciiFontAtlasImageData()'s own doc comment).
+        std::unique_ptr<ITextureBackend> fontAtlasTexture_;
         int virtualWidth_ = 0;
         int virtualHeight_ = 0;
         /// Quantization mode, parsed from CNA_ASCII_MODE at construction (design decision 5),
@@ -105,5 +127,10 @@ namespace CNA::Internal::Backends::Ascii
 
         /// (Re)creates gameTarget_ at the given size and binds it as the current target.
         void RecreateGameTarget(int width, int height);
+
+        /// Shared by Present() and DrawQuantizedGridForTesting(): reads gameTarget_, quantizes
+        /// it, switches to the real backbuffer, and draws the grid there. Does not swap or
+        /// rebind gameTarget_ -- callers do that themselves.
+        void DrawQuantizedGridOntoRealBackbuffer();
     };
 }

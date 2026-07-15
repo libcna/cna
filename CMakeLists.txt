@@ -6683,6 +6683,13 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_ascii_test(cna_test_ascii_quantizer examples/ascii_quantizer_test.cpp)
     add_test(NAME Ascii_Quantizer COMMAND cna_test_ascii_quantizer)
     set_tests_properties(Ascii_Quantizer PROPERTIES TIMEOUT 30)
+
+    # Phase G5 (ASCII-40/41): Present() draws the quantized grid into the real window.
+    cna_ascii_test(cna_test_ascii_present examples/ascii_present_test.cpp)
+    add_test(NAME Ascii_Present COMMAND cna_test_ascii_present)
+    set_tests_properties(Ascii_Present PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()
 
 # plan_dx.md DX-80: D3D11 CTest registration. When cross-compiled from Linux (this backend is

@@ -1,7 +1,15 @@
 #include "CNA/Internal/Backends/Ascii/AsciiGraphicsBackend.hpp"
+#include "CNA/Internal/Backends/Ascii/AsciiFontAtlas.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Blend.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BlendFunction.hpp"
+
+#include <vector>
 
 namespace CNA::Internal::Backends::Ascii
 {
+    using Microsoft::Xna::Framework::Graphics::Blend;
+    using Microsoft::Xna::Framework::Graphics::BlendFunction;
+
     AsciiGraphicsBackend::AsciiGraphicsBackend(const GraphicsBackendCreateArgs& args)
         : inner_(std::make_unique<SdlRenderer::SdlGraphicsBackend>(
               args.window, args.virtualWidth, args.virtualHeight,
@@ -9,6 +17,7 @@ namespace CNA::Internal::Backends::Ascii
         , mode_(ParseAsciiModeFromEnvironment())
     {
         presentSpriteBatch_ = inner_->CreateSpriteBatch();
+        fontAtlasTexture_ = inner_->CreateTexture(BuildAsciiFontAtlasImageData());
         RecreateGameTarget(args.virtualWidth, args.virtualHeight);
     }
 
@@ -24,27 +33,93 @@ namespace CNA::Internal::Backends::Ascii
 
     void AsciiGraphicsBackend::Clear(float r, float g, float b, float a) { inner_->Clear(r, g, b, a); }
 
-    // Phase G3: the game only ever draws into gameTarget_ (never the real backbuffer directly --
-    // see SetRenderTarget2D/SetRenderTargets below). Present() unbinds gameTarget_, blits its full
-    // content onto the real backbuffer (Phase G3: a plain stretch, no quantization yet -- Phase
-    // G4/G5 will replace this blit with the quantized glyph-grid draw), presents for real, then
-    // rebinds gameTarget_ so the next frame's game draws still land there.
-    void AsciiGraphicsBackend::Present()
+    // Shared by Present() and DrawQuantizedGridForTesting(): reads gameTarget_ back while it's
+    // still bound (ReadBackbuffer reads whatever's current), quantizes that into a glyph/color
+    // grid, switches to the real backbuffer, and draws the grid there -- one tinted textured
+    // quad per cell (background fill, if any, then the glyph on top), reusing the same
+    // internal-only presentSpriteBatch_ the Phase G3 plain blit used. Deliberately does NOT call
+    // inner_->Present() or rebind gameTarget_ -- callers do that themselves, since a real
+    // double-buffer swap invalidates immediate readback (see DrawQuantizedGridForTesting's own
+    // doc comment for why this split exists at all).
+    void AsciiGraphicsBackend::DrawQuantizedGridOntoRealBackbuffer()
     {
+        std::vector<std::uint8_t> pixels(static_cast<std::size_t>(virtualWidth_) * static_cast<std::size_t>(virtualHeight_) * 4);
+        inner_->ReadBackbuffer(0, 0, virtualWidth_, virtualHeight_, pixels.data());
+
+        const AsciiGrid grid = QuantizeFrameToGrid(pixels.data(), virtualWidth_, virtualHeight_,
+                                                   kAsciiGlyphWidth, kAsciiGlyphHeight, mode_);
+
         inner_->SetRenderTarget2D(nullptr);
 
         int realWidth = 0, realHeight = 0;
         inner_->GetViewportSize(realWidth, realHeight);
 
+        inner_->Clear(0.0f, 0.0f, 0.0f, 1.0f);
+
+        // presentSpriteBatch_ never goes through GraphicsDevice::BlendState (only real XNA-level
+        // SpriteBatch::Begin() calls do that) -- confirmed empirically (Ascii_Present ctest) that
+        // without this, the renderer's blend mode is whatever it happened to default to, which
+        // isn't guaranteed to be alpha-aware, and glyph "off" pixels (transparent) were seen
+        // silently overwriting the background fill with the texture's stored RGB (black) instead
+        // of leaving it alone. Force real premultiplied AlphaBlend (XNA's own BlendState.AlphaBlend
+        // factors) before drawing, every time, independent of whatever the game's own BlendState is.
+        inner_->ApplyBlendState(static_cast<int>(Blend::One), static_cast<int>(Blend::One),
+                                static_cast<int>(Blend::InverseSourceAlpha), static_cast<int>(Blend::InverseSourceAlpha),
+                                static_cast<int>(BlendFunction::Add), static_cast<int>(BlendFunction::Add));
+
+        const Rectangle solidSrc(kAsciiSolidGlyphIndex * kAsciiGlyphWidth, 0, kAsciiGlyphWidth, kAsciiGlyphHeight);
+
         presentSpriteBatch_->Begin();
-        presentSpriteBatch_->Draw(*gameTarget_,
-                                  Rectangle(0, 0, realWidth, realHeight),
-                                  Rectangle(0, 0, virtualWidth_, virtualHeight_),
-                                  Color(255, 255, 255, 255));
+        for (int row = 0; row < grid.rows; ++row)
+        {
+            // Both edges of each cell are computed directly from row/col (not accumulated by
+            // adding a per-cell width/height repeatedly), so adjacent cells' shared edge always
+            // matches exactly -- no rounding-induced gaps or overlaps between cells.
+            const int cellY0 = static_cast<int>((static_cast<long long>(row) * realHeight) / grid.rows);
+            const int cellY1 = static_cast<int>((static_cast<long long>(row + 1) * realHeight) / grid.rows);
+            for (int col = 0; col < grid.columns; ++col)
+            {
+                const int cellX0 = static_cast<int>((static_cast<long long>(col) * realWidth) / grid.columns);
+                const int cellX1 = static_cast<int>((static_cast<long long>(col + 1) * realWidth) / grid.columns);
+                const Rectangle dest(cellX0, cellY0, cellX1 - cellX0, cellY1 - cellY0);
+
+                const AsciiCell& cell = grid.At(col, row);
+                if (cell.hasBackground)
+                {
+                    presentSpriteBatch_->Draw(*fontAtlasTexture_, dest, solidSrc, cell.background);
+                }
+
+                const Rectangle glyphSrc(cell.glyphIndex * kAsciiGlyphWidth, 0, kAsciiGlyphWidth, kAsciiGlyphHeight);
+                presentSpriteBatch_->Draw(*fontAtlasTexture_, dest, glyphSrc, cell.foreground);
+            }
+        }
         presentSpriteBatch_->End();
+    }
 
+    void AsciiGraphicsBackend::Present()
+    {
+        DrawQuantizedGridOntoRealBackbuffer();
         inner_->Present();
+        inner_->SetRenderTarget2D(gameTarget_.get());
+    }
 
+    // A real double-buffer swap (the inner_->Present() call above) can genuinely invalidate
+    // immediate readback of what was just drawn -- confirmed empirically (Ascii_Present ctest):
+    // reading right after a real Present() returned all-black, because SDL_Renderer/OpenGL
+    // presents by swapping buffers, not copying, so "the current render target" right after a
+    // swap is the *other*, not-yet-drawn-this-frame buffer. This method stops right after
+    // drawing, before any swap, so ReadRealBackbufferForTesting() called immediately afterward
+    // reads the buffer that was actually just drawn into -- exposed only for testing; real game
+    // code must always go through the real Present() instead.
+    void AsciiGraphicsBackend::DrawQuantizedGridForTesting()
+    {
+        DrawQuantizedGridOntoRealBackbuffer();
+    }
+
+    void AsciiGraphicsBackend::ReadRealBackbufferForTesting(int x, int y, int w, int h, uint8_t* pixels)
+    {
+        inner_->SetRenderTarget2D(nullptr);
+        inner_->ReadBackbuffer(x, y, w, h, pixels);
         inner_->SetRenderTarget2D(gameTarget_.get());
     }
 

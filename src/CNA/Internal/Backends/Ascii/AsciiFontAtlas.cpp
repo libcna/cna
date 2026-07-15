@@ -54,30 +54,43 @@ namespace CNA::Internal::Backends::Ascii
         return rows;
     }
 
-    SpriteFont BuildAsciiFontAtlas(GraphicsDevice& device)
+    CNA::Internal::Graphics::ImageData BuildAsciiFontAtlasImageData()
     {
-        const int atlasWidth = kAsciiGlyphWidth * kAsciiGlyphRampLength;
-        const int atlasHeight = kAsciiGlyphHeight;
+        CNA::Internal::Graphics::ImageData image;
+        image.width = kAsciiGlyphWidth * kAsciiAtlasGlyphCount;
+        image.height = kAsciiGlyphHeight;
+        image.pixels.assign(static_cast<std::size_t>(image.width) * static_cast<std::size_t>(image.height) * 4, 0);
 
-        std::vector<Color> pixels(static_cast<std::size_t>(atlasWidth) * atlasHeight, Color(0, 0, 0, 0));
-        for (int g = 0; g < kAsciiGlyphRampLength; ++g)
+        for (int g = 0; g < kAsciiAtlasGlyphCount; ++g)
         {
             for (int y = 0; y < kAsciiGlyphHeight; ++y)
             {
-                const std::uint8_t rowBits = kGlyphBitmaps[g][y];
+                // The solid-fill slot (kAsciiSolidGlyphIndex) is fully opaque white on every row;
+                // every real ramp glyph uses its own hand-authored bitmap row.
+                const std::uint8_t rowBits = (g == kAsciiSolidGlyphIndex) ? 0xFF : kGlyphBitmaps[g][y];
                 for (int x = 0; x < kAsciiGlyphWidth; ++x)
                 {
                     if ((rowBits & (0x80 >> x)) != 0)
                     {
                         const int px = g * kAsciiGlyphWidth + x;
-                        pixels[static_cast<std::size_t>(y) * atlasWidth + px] = Color(255, 255, 255, 255);
+                        const std::size_t idx = (static_cast<std::size_t>(y) * static_cast<std::size_t>(image.width) + static_cast<std::size_t>(px)) * 4;
+                        image.pixels[idx + 0] = 255;
+                        image.pixels[idx + 1] = 255;
+                        image.pixels[idx + 2] = 255;
+                        image.pixels[idx + 3] = 255;
                     }
                 }
             }
         }
+        return image;
+    }
 
-        Texture2D texture(device, atlasWidth, atlasHeight);
-        texture.SetData(pixels.data(), static_cast<int>(pixels.size()));
+    SpriteFont BuildAsciiFontAtlas(GraphicsDevice& device)
+    {
+        const CNA::Internal::Graphics::ImageData image = BuildAsciiFontAtlasImageData();
+
+        Texture2D texture(device, image.width, image.height);
+        texture.SetDataRGBA(image.pixels.data(), image.width * image.height);
 
         std::vector<Rectangle> glyphBounds;
         std::vector<Rectangle> cropping;
