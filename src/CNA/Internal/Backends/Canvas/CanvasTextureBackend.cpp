@@ -21,7 +21,7 @@ EM_JS(void, CNA_Canvas2D_CreateTextureWithPixels, (int id, int width, int height
         canvas.height = height;
     }
     const ctx = canvas.getContext('2d');
-    const bytes = new Uint8ClampedArray(Module.HEAPU8.subarray(rgba, rgba + width * height * 4));
+    const bytes = new Uint8ClampedArray(HEAPU8.subarray(rgba, rgba + width * height * 4));
     ctx.putImageData(new ImageData(bytes, width, height), 0, 0);
     Module['cnaTextures'][id] = { canvas: canvas, ctx: ctx };
 });
@@ -50,7 +50,7 @@ EM_JS(void, CNA_Canvas2D_CreateBlankCanvas, (int id, int width, int height), {
 EM_JS(void, CNA_Canvas2D_UpdatePixels, (int id, int width, int height, const uint8_t* rgba), {
     const entry = Module['cnaTextures'] && Module['cnaTextures'][id];
     if (!entry) { console.error('[CNA] Canvas2D: UpdatePixels on unknown texture id', id); return; }
-    const bytes = new Uint8ClampedArray(Module.HEAPU8.subarray(rgba, rgba + width * height * 4));
+    const bytes = new Uint8ClampedArray(HEAPU8.subarray(rgba, rgba + width * height * 4));
     entry.ctx.putImageData(new ImageData(bytes, width, height), 0, 0);
     if (Module['cnaMirrorTiles']) delete Module['cnaMirrorTiles'][id];
 });

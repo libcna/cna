@@ -68,7 +68,7 @@ EM_JS(void, CNA_Canvas2D_ReadCurrentPixels, (int x, int y, int w, int h, uint8_t
     const ctx = Module['cnaCurrentCtx'];
     if (!ctx) return;
     const imageData = ctx.getImageData(x, y, w, h);
-    Module.HEAPU8.set(imageData.data, outPixels);
+    HEAPU8.set(imageData.data, outPixels);
 });
 
 // plan_canvas.md CANVAS-40/41/Design decision 5: caches the globalCompositeOperation string
