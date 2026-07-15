@@ -117,6 +117,10 @@ public class Scene
     public SceneEffectType EffectType = SceneEffectType.BasicEffect;
     public CompareFunction AlphaFunction = CompareFunction.Always;
     public int ReferenceAlpha;
+    public bool FogEnabled;
+    public Vector3 FogColor = Vector3.Zero;
+    public float FogStart;
+    public float FogEnd = 1.0f;
     public PrimitiveType Primitive = PrimitiveType.TriangleList;
     public List<VertexPositionColor> ColorVertices = new List<VertexPositionColor>();
     public List<VertexPositionTexture> TextureVertices = new List<VertexPositionTexture>();
@@ -160,6 +164,10 @@ public class Scene
                 case "environmentmappixel": scene.EnvironmentMapPixel = ParseColor(value); break;
                 case "alphafunction": scene.AlphaFunction = ParseCompareFunction(value); break;
                 case "referencealpha": scene.ReferenceAlpha = int.Parse(value, CultureInfo.InvariantCulture); break;
+                case "fogenabled": scene.FogEnabled = ParseBool(value); break;
+                case "fogcolor": scene.FogColor = ParseVector3(value); break;
+                case "fogstart": scene.FogStart = float.Parse(value, CultureInfo.InvariantCulture); break;
+                case "fogend": scene.FogEnd = float.Parse(value, CultureInfo.InvariantCulture); break;
                 case "vertexformat":
                     if (value == "PositionTexture") scene.VertexFormat = SceneVertexFormat.PositionTexture;
                     else if (value == "PositionNormalTexture") scene.VertexFormat = SceneVertexFormat.PositionNormalTexture;
@@ -416,6 +424,10 @@ public class Oracle : Game
             atfx.World = Matrix.Identity;
             atfx.View = Matrix.Identity;
             atfx.Projection = Matrix.Identity;
+            atfx.FogEnabled = scene.FogEnabled;
+            atfx.FogColor = scene.FogColor;
+            atfx.FogStart = scene.FogStart;
+            atfx.FogEnd = scene.FogEnd;
             fx = atfx;
         }
         else if (scene.EffectType == SceneEffectType.DualTextureEffect)
@@ -428,6 +440,10 @@ public class Oracle : Game
             dtfx.World = Matrix.Identity;
             dtfx.View = Matrix.Identity;
             dtfx.Projection = Matrix.Identity;
+            dtfx.FogEnabled = scene.FogEnabled;
+            dtfx.FogColor = scene.FogColor;
+            dtfx.FogStart = scene.FogStart;
+            dtfx.FogEnd = scene.FogEnd;
             fx = dtfx;
         }
         else if (scene.EffectType == SceneEffectType.EnvironmentMapEffect)
@@ -457,6 +473,10 @@ public class Oracle : Game
                 emfx.DirectionalLight2.DiffuseColor = scene.Light2.Diffuse;
                 emfx.DirectionalLight2.Direction = scene.Light2.Direction;
             }
+            emfx.FogEnabled = scene.FogEnabled;
+            emfx.FogColor = scene.FogColor;
+            emfx.FogStart = scene.FogStart;
+            emfx.FogEnd = scene.FogEnd;
             fx = emfx;
         }
         else if (scene.EffectType == SceneEffectType.SkinnedEffect)
@@ -487,6 +507,10 @@ public class Oracle : Game
                 skfx.DirectionalLight2.DiffuseColor = scene.Light2.Diffuse;
                 skfx.DirectionalLight2.Direction = scene.Light2.Direction;
             }
+            skfx.FogEnabled = scene.FogEnabled;
+            skfx.FogColor = scene.FogColor;
+            skfx.FogStart = scene.FogStart;
+            skfx.FogEnd = scene.FogEnd;
             fx = skfx;
         }
         else
@@ -512,6 +536,10 @@ public class Oracle : Game
                 bfx.DirectionalLight2.Direction = scene.Light2.Direction;
             }
             if (scene.TextureEnabled) bfx.Texture = texture;
+            bfx.FogEnabled = scene.FogEnabled;
+            bfx.FogColor = scene.FogColor;
+            bfx.FogStart = scene.FogStart;
+            bfx.FogEnd = scene.FogEnd;
             fx = bfx;
         }
 

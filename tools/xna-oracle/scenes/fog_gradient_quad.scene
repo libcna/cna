@@ -1,0 +1,54 @@
+# plan_dx9.md D9-A5 scene corpus: fog_gradient_quad
+# The first scene to exercise IEffectFog (BasicEffect.FogEnabled/FogColor/FogStart/FogEnd), a
+# feature shared by all 5 XNA Stock Effects but not yet touched by any earlier scene in this
+# corpus. A solid-white VertexColorEnabled quad spanning z=0 (near/top edge) to z=1 (far/bottom
+# edge) in clip space -- NOT flat, so the fog blend genuinely varies per-pixel across the
+# primitive (a real Gouraud-style interpolation proof, the same discipline colored3d.scene's own
+# centre/near-apex sample points established for vertex color interpolation), rather than a
+# single uniform tint that could pass even if fog were computed once per-draw instead of
+# per-vertex/per-pixel.
+#
+# IMPORTANT real-XNA finding (confirmed against FNA's own EffectHelpers.SetFogVector /
+# Common.fxh ComputeFogFactor -- see EffectHelpers.cs:117-142, Common.fxh:9-11): the fog vector
+# dotted with clip-space Position is built from the WorldView matrix using the standard "camera
+# looks down -Z" convention, giving fogFactor = saturate(z * scale + fogStart * scale) where
+# scale = 1/(fogStart-fogEnd), for World=View=Identity. Two consequences discovered empirically
+# while building this scene:
+#   1. A first draft used vertex z=0 (near) to z=1 (far) with FogStart=0/FogEnd=1 (the "obvious"
+#      reading of the property names). That gives fogFactor=saturate(-z), which is <=0 for all
+#      z>=0 -- saturate() clamps every pixel to 0% fog, so the quad rendered uniformly WHITE
+#      (unfogged) on BOTH real XNA and CNA: an exact pixel-perfect but visually-uninteresting
+#      match that proved nothing about the fog gradient.
+#   2. A second draft tried flipping the far vertices to z=-1 to get a genuinely negative
+#      view-space Z (matching the -Z-forward convention). That instead pushed the primitive
+#      outside D3D's valid post-projection depth range [0,w] (Projection is also Identity here,
+#      so clip-space z IS the vertex z with no re-mapping) -- the whole quad was near-plane
+#      clipped away on BOTH sides, rendering nothing (pure clear color).
+# The working fix keeps z in the safe, un-clipped [0,1] clip-space range (as the ORIGINAL
+# vertices below already did) and instead solves fogFactor=z*scale+fogStart*scale for the
+# FogStart/FogEnd pair that produces fogFactor=0 at z=0 and fogFactor=1 at z=1: FogStart=0,
+# FogEnd=-1 (NEGATIVE). scale=1/(0-(-1))=1, fogVector.Z=1*scale=1, fogVector.W=(0+0)*scale=0,
+# so fogFactor=z*1=z directly -- exactly the intended near=unfogged/far=fogged gradient, with no
+# clipping risk. FogColor=black: the near (z=0) edge renders fully unfogged (white), the far
+# (z=1) edge fully fogged (black), with a grey gradient in between.
+width=256
+height=256
+profile=HiDef
+clearcolor=100,149,237,255
+effect=BasicEffect
+vertexformat=PositionColor
+vertexcolor=true
+lighting=false
+texture=false
+fogenabled=true
+fogcolor=0,0,0
+fogstart=0
+fogend=-1
+primitive=TriangleList
+# x,y,z,r,g,b,a -- solid white, z=0 at the near (top) edge, z=1 at the far (bottom) edge.
+vertex=-0.6,0.6,0,255,255,255,255
+vertex=0.6,0.6,0,255,255,255,255
+vertex=-0.6,-0.6,1,255,255,255,255
+vertex=0.6,0.6,0,255,255,255,255
+vertex=0.6,-0.6,1,255,255,255,255
+vertex=-0.6,-0.6,1,255,255,255,255

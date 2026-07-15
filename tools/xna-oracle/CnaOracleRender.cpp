@@ -157,6 +157,10 @@ namespace
         SceneEffectType effectType = SceneEffectType::BasicEffect;
         CompareFunction alphaFunction = CompareFunction::Always;
         int referenceAlpha = 0;
+        bool fogEnabled = false;
+        Vector3 fogColor{0, 0, 0};
+        float fogStart = 0.0f;
+        float fogEnd = 1.0f;
         PrimitiveType primitive = PrimitiveType::TriangleList;
         std::vector<VertexPositionColor> colorVertices;
         std::vector<VertexPositionTexture> textureVertices;
@@ -320,6 +324,10 @@ namespace
             else if (key == "environmentmappixel") scene.environmentMapPixel = ParseColor(value);
             else if (key == "alphafunction") scene.alphaFunction = ParseCompareFunction(value);
             else if (key == "referencealpha") scene.referenceAlpha = std::stoi(value);
+            else if (key == "fogenabled") scene.fogEnabled = ParseBool(value);
+            else if (key == "fogcolor") scene.fogColor = ParseVector3(value);
+            else if (key == "fogstart") scene.fogStart = std::stof(value);
+            else if (key == "fogend") scene.fogEnd = std::stof(value);
             else if (key == "vertexformat")
             {
                 if (value == "PositionTexture") scene.vertexFormat = SceneVertexFormat::PositionTexture;
@@ -439,6 +447,10 @@ protected:
             alphaFx->setWorldProperty(Matrix::getIdentityProperty());
             alphaFx->setViewProperty(Matrix::getIdentityProperty());
             alphaFx->setProjectionProperty(Matrix::getIdentityProperty());
+            alphaFx->setFogEnabledProperty(scene_.fogEnabled);
+            alphaFx->setFogColorProperty(scene_.fogColor);
+            alphaFx->setFogStartProperty(scene_.fogStart);
+            alphaFx->setFogEndProperty(scene_.fogEnd);
             alphaFx->Apply();
         }
         else if (scene_.effectType == SceneEffectType::DualTextureEffect)
@@ -451,6 +463,10 @@ protected:
             dualFx->setWorldProperty(Matrix::getIdentityProperty());
             dualFx->setViewProperty(Matrix::getIdentityProperty());
             dualFx->setProjectionProperty(Matrix::getIdentityProperty());
+            dualFx->setFogEnabledProperty(scene_.fogEnabled);
+            dualFx->setFogColorProperty(scene_.fogColor);
+            dualFx->setFogStartProperty(scene_.fogStart);
+            dualFx->setFogEndProperty(scene_.fogEnd);
             dualFx->Apply();
         }
         else if (scene_.effectType == SceneEffectType::EnvironmentMapEffect)
@@ -481,6 +497,10 @@ protected:
                 envMapFx->DirectionalLight2.setDiffuseColorProperty(scene_.light2.diffuse);
                 envMapFx->DirectionalLight2.setDirectionProperty(scene_.light2.direction);
             }
+            envMapFx->setFogEnabledProperty(scene_.fogEnabled);
+            envMapFx->setFogColorProperty(scene_.fogColor);
+            envMapFx->setFogStartProperty(scene_.fogStart);
+            envMapFx->setFogEndProperty(scene_.fogEnd);
             envMapFx->Apply();
         }
         else if (scene_.effectType == SceneEffectType::SkinnedEffect)
@@ -510,6 +530,10 @@ protected:
                 skinnedFx->DirectionalLight2.setDiffuseColorProperty(scene_.light2.diffuse);
                 skinnedFx->DirectionalLight2.setDirectionProperty(scene_.light2.direction);
             }
+            skinnedFx->setFogEnabledProperty(scene_.fogEnabled);
+            skinnedFx->setFogColorProperty(scene_.fogColor);
+            skinnedFx->setFogStartProperty(scene_.fogStart);
+            skinnedFx->setFogEndProperty(scene_.fogEnd);
             skinnedFx->Apply();
         }
         else
@@ -535,6 +559,10 @@ protected:
                 basicFx->DirectionalLight2.setDirectionProperty(scene_.light2.direction);
             }
             if (scene_.textureEnabled) basicFx->setTextureProperty(texture.get());
+            basicFx->setFogEnabledProperty(scene_.fogEnabled);
+            basicFx->setFogColorProperty(scene_.fogColor);
+            basicFx->setFogStartProperty(scene_.fogStart);
+            basicFx->setFogEndProperty(scene_.fogEnd);
             basicFx->Apply();
         }
 

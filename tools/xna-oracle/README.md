@@ -42,6 +42,9 @@ fully-commented examples.
 | `light0enabled`/`light1enabled`/`light2enabled`, `light0diffuse`/`light1diffuse`/`light2diffuse`, `light0direction`/`light1direction`/`light2direction` | `DirectionalLight0`/`DirectionalLight1`/`DirectionalLight2`'s own `.Enabled`/`.DiffuseColor`/`.Direction`, only when `lighting=true` (`BasicEffect`/`EnvironmentMapEffect`/`SkinnedEffect`) — all three lights are always applied once `lighting=true` (a scene that only cares about `Light0` simply never sets `light1*`/`light2*`, which default to disabled/zero) |
 | `alphafunction` | `Always`/`Never`/`Less`/`LessEqual`/`Equal`/`GreaterEqual`/`Greater`/`NotEqual` — `AlphaTestEffect.AlphaFunction`, only when `effect=AlphaTestEffect` |
 | `referencealpha` | `0`-`255` int — `AlphaTestEffect.ReferenceAlpha`, only when `effect=AlphaTestEffect` |
+| `fogenabled` | `true`/`false` — `IEffectFog.FogEnabled`, applied uniformly to all 5 Stock Effects (`IEffectFog` is shared by all of them) |
+| `fogcolor` | `r,g,b` (0-1 floats) — `IEffectFog.FogColor`, only meaningful when `fogenabled=true` |
+| `fogstart`, `fogend` | floats — `IEffectFog.FogStart`/`FogEnd`. **Not simple world-space distances**: with `World`/`View` both `Identity` (this corpus's own convention), the fog factor is `saturate(z*scale + fogStart*scale)` where `scale=1/(fogStart-fogEnd)` — see `fog_gradient_quad.scene`'s own extensive comment for the two false starts this produced (a saturated-to-zero uniform result, then a near-plane-clipped empty result) before landing on `FogStart=0`/`FogEnd=-1` (negative) to get a genuine `z=0`→unfogged, `z=1`→fogged gradient without leaving the safe `[0,1]` clip-space z range |
 | `primitive` | `TriangleList`, `TriangleStrip`, `LineList`, or `LineStrip` |
 | `vertex` | `x,y,z,r,g,b,a` (`PositionColor`), `x,y,z,u,v` (`PositionTexture`), `x,y,z,nx,ny,nz,u,v` (`PositionNormalTexture`), `x,y,z,u0,v0,u1,v1` (`PositionDualTexture`), or `x,y,z,nx,ny,nz,u,v,boneindex,boneweight` (`PositionNormalTextureWeights`) — repeats once per vertex, `World`/`View`/`Projection` are always `Matrix.Identity` |
 
@@ -124,8 +127,8 @@ Requires Pillow (`pip install pillow`) — not previously a dependency of this p
 
 ## Status
 
-Eight scenes so far, **all pixel-perfect**, and every one of XNA's 5 Stock Effects is now
-represented in the corpus:
+Nine scenes so far, **all pixel-perfect**, and every one of XNA's 5 Stock Effects plus
+`IEffectFog` is now represented in the corpus:
 
 - `colored3d` (`D9-A2`'s own original spike scene: a `BasicEffect` `VertexColorEnabled=true`/
   `LightingEnabled=false` triangle over a `CornflowerBlue` clear) — `0/65536` pixels differ,
@@ -194,6 +197,24 @@ represented in the corpus:
   be far brighter than `128` if it leaked in). Extended `light1*`/`light2*` scene keys and applied
   them to all three lit effects (`BasicEffect`/`EnvironmentMapEffect`/`SkinnedEffect`) uniformly,
   even though only this scene currently sets them — `0/65536` pixels differ.
+- `fog_gradient_quad` — the first scene to exercise `IEffectFog` (`FogEnabled`/`FogColor`/
+  `FogStart`/`FogEnd`, shared by all 5 Stock Effects; fog wiring was added to all 5 effect
+  branches on both sides even though this scene itself only uses `BasicEffect`). A solid-white
+  `VertexColorEnabled` quad spanning `z=0` (near/top edge) to `z=1` (far/bottom edge) in clip
+  space, `FogColor=black`. **Took two false starts to get a genuinely non-trivial gradient**,
+  confirmed against FNA's own `EffectHelpers.SetFogVector`/`Common.fxh`'s `ComputeFogFactor`
+  (`saturate(dot(position, FogVector))`): with `World=View=Identity`, `FogStart=0`/`FogEnd=1` (the
+  "obvious" reading) gives `fogFactor=saturate(-z)`, which is `<=0` for all `z>=0` — every pixel
+  clamps to 0% fog, rendering **uniformly white** on both real XNA and CNA (an exact `0/65536`
+  match that proved nothing, since fog was never actually applied on either side). Flipping the
+  far vertices to `z=-1` for a "correct" negative view-space Z instead near-plane-clipped the
+  whole quad away on both sides (`Projection` is also `Identity`, so clip-space z is the raw
+  vertex z, and `-1` is outside D3D's valid `[0,w]` depth range) — also an exact but empty match.
+  The working fix keeps vertex z in the safe `[0,1]` range and uses `FogStart=0`/`FogEnd=-1`
+  (**negative**), which reduces `fogFactor` to exactly `z` — a genuine monotonic white
+  (`(249,249,249)`) → grey (`(127,127,127)` at centre) → black (`(8,8,8)` at the far edge)
+  gradient, confirmed pixel-for-pixel identical on both sides, `0/65536` pixels differ. See
+  `scenes/fog_gradient_quad.scene`'s own comment for the full derivation.
 
 `scripts/xna-diff.py` itself is mutation-verified: a deliberately 1-off-mutated copy of a passing
 CNA PNG is correctly reported as `FAIL: 1/65536 pixels differ ... max per-channel delta=1` at the
@@ -201,11 +222,10 @@ default `--tolerance=0`, and correctly passes again at `--tolerance=1` — confi
 genuinely discriminates, not just "always reports PASS".
 
 **Every one of XNA's 5 Stock Effects (`BasicEffect`, `AlphaTestEffect`, `DualTextureEffect`,
-`EnvironmentMapEffect`, `SkinnedEffect`) is now represented in the corpus, at least once, and
-every single comparison so far is pixel-perfect.** `D9-A5` keeps growing "with the plan" — each
-subsequent effect/feature combination this project verifies against the oracle adds its own
-scene(s) here, incrementally, rather than attempting the full corpus (`BasicEffect` multi-light/
-fog variants, remaining `AlphaTestEffect` compare functions, `EnvironmentMapEffect` fresnel,
-`SkinnedEffect` 2/4-bone weighting, `SpriteBatch`, render targets, every shared `SurfaceFormat`)
-in one sitting. `D9-84` (every draw path validated against the oracle) is the task that consumes
-the finished corpus.
+`EnvironmentMapEffect`, `SkinnedEffect`) plus `IEffectFog` is now represented in the corpus, at
+least once, and every single comparison so far is pixel-perfect.** `D9-A5` keeps growing "with the
+plan" — each subsequent effect/feature combination this project verifies against the oracle adds
+its own scene(s) here, incrementally, rather than attempting the full corpus (remaining
+`AlphaTestEffect` compare functions, `EnvironmentMapEffect` fresnel, `SkinnedEffect` 2/4-bone
+weighting, `SpriteBatch`, render targets, every shared `SurfaceFormat`) in one sitting. `D9-84`
+(every draw path validated against the oracle) is the task that consumes the finished corpus.
