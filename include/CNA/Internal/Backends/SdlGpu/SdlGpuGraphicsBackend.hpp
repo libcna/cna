@@ -14,6 +14,7 @@
 namespace CNA::Internal::Backends::SdlGpu
 {
     class SdlGpuGraphicsBackend;
+    class SdlGpuRenderTargetBackend;
 
     /** @brief `SDL_gpu`-backed `Texture2D`. Plain 2D, `SAMPLER` usage only (no mip chain yet). */
     class SdlGpuTextureBackend final : public ITextureBackend
@@ -38,6 +39,74 @@ namespace CNA::Internal::Backends::SdlGpu
         SDL_GPUTexture* texture_ = nullptr;
         int width_ = 0;
         int height_ = 0;
+    };
+
+    /**
+     * @brief `SDL_gpu`-backed `RenderTarget2D` (Phase `SDLGPU-8`, `SDLGPU-35`).
+     *
+     * Owns a standalone `COLOR_TARGET | SAMPLER` texture rendered into its own render pass, one
+     * per frame (see `SdlGpuGraphicsBackend::EnsureFrameRendered`'s per-target grouping) --
+     * offscreen passes run before the swapchain pass so a target bound-then-unbound earlier in
+     * the frame can safely be sampled by a later swapchain-targeted draw within the same frame.
+     * MSAA (`SDLGPU-38`) is not implemented yet -- `CreateRenderTarget2D` throws if
+     * `multiSampleCount > 0` is requested rather than silently ignoring it.
+     */
+    class SdlGpuRenderTargetBackend final : public IRenderTargetBackend
+    {
+    public:
+        SdlGpuRenderTargetBackend(SdlGpuGraphicsBackend& owner, int width, int height,
+                                  int depthFormat, bool mipMap);
+        ~SdlGpuRenderTargetBackend() override;
+
+        SdlGpuRenderTargetBackend(const SdlGpuRenderTargetBackend&) = delete;
+        SdlGpuRenderTargetBackend& operator=(const SdlGpuRenderTargetBackend&) = delete;
+
+        [[nodiscard]] int GetWidth() const override { return width_; }
+        [[nodiscard]] int GetHeight() const override { return height_; }
+        [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
+
+        void BindAsRenderTarget() override;
+        void UnbindAsRenderTarget() override;
+        [[nodiscard]] bool HasRealDepthBuffer(bool depthFormatWasRequested) const override
+        {
+            return depthFormatWasRequested && depthTexture_ != nullptr;
+        }
+
+        /** @brief Returns the sampleable color texture. NOXNA — internal use only. */
+        NOXNA [[nodiscard]] SDL_GPUTexture* ColorTexture() const { return colorTexture_; }
+        /** @brief Returns the depth/stencil texture, or null when `DepthFormat::None` was requested. NOXNA. */
+        NOXNA [[nodiscard]] SDL_GPUTexture* DepthTexture() const { return depthTexture_; }
+        /** @brief Whether a mip chain should be regenerated after this target's pass each frame. NOXNA. */
+        NOXNA [[nodiscard]] bool WantsMipMap() const { return mipMap_; }
+
+        /** @brief Queues a color-only clear, consumed on this target's next render pass. NOXNA. */
+        NOXNA void QueueClear(SDL_FColor color) { clearColor_ = color; clearColorPending_ = true; }
+        /** @brief Queues a depth clear, consumed on this target's next render pass. NOXNA. */
+        NOXNA void QueueClearDepth(float depth) { clearDepth_ = depth; clearDepthPending_ = true; }
+        /** @brief Queues a stencil clear, consumed on this target's next render pass. NOXNA. */
+        NOXNA void QueueClearStencil(Uint8 stencil) { clearStencil_ = stencil; clearStencilPending_ = true; }
+        NOXNA [[nodiscard]] bool ClearColorPending() const { return clearColorPending_; }
+        NOXNA [[nodiscard]] bool ClearDepthPending() const { return clearDepthPending_; }
+        NOXNA [[nodiscard]] bool ClearStencilPending() const { return clearStencilPending_; }
+        NOXNA [[nodiscard]] SDL_FColor ClearColorValue() const { return clearColor_; }
+        NOXNA [[nodiscard]] float ClearDepthValue() const { return clearDepth_; }
+        NOXNA [[nodiscard]] Uint8 ClearStencilValue() const { return clearStencil_; }
+        /** @brief Resets pending-clear flags after this target's pass has rendered this frame. NOXNA. */
+        NOXNA void ResetPendingClears() { clearColorPending_ = false; clearDepthPending_ = false; clearStencilPending_ = false; }
+
+    private:
+        SdlGpuGraphicsBackend* owner_ = nullptr;
+        int width_ = 0;
+        int height_ = 0;
+        bool mipMap_ = false;
+        SDL_GPUTexture* colorTexture_ = nullptr;
+        SDL_GPUTexture* depthTexture_ = nullptr;
+        bool clearColorPending_ = true;
+        bool clearDepthPending_ = true;
+        bool clearStencilPending_ = false;
+        SDL_FColor clearColor_{0.0f, 0.0f, 0.0f, 1.0f};
+        float clearDepth_ = 1.0f;
+        Uint8 clearStencil_ = 0;
     };
 
     /** @brief `SDL_gpu`-backed vertex buffer. */
@@ -151,6 +220,7 @@ namespace CNA::Internal::Backends::SdlGpu
      */
     class SdlGpuGraphicsBackend final : public IGraphicsBackend
     {
+        friend class SdlGpuRenderTargetBackend;
     public:
         /** @brief Vertex layout for the `sprite2d` pipeline: position, UV, RGBA color (32 bytes). */
         struct SpriteVertex
@@ -162,11 +232,16 @@ namespace CNA::Internal::Backends::SdlGpu
 
         struct SpriteCommand
         {
-            const SdlGpuTextureBackend* texture = nullptr;
+            // Raw native handle rather than a concrete backend pointer -- SpriteBatch can draw
+            // either a plain Texture2D (SdlGpuTextureBackend) or a RenderTarget2D
+            // (SdlGpuRenderTargetBackend); both expose an SDL_GPUTexture* but are unrelated
+            // classes (see QueueSprite/SdlGpuSpriteBatchBackend::Draw).
+            SDL_GPUTexture* texture = nullptr;
             std::array<SpriteVertex, 6> vertices{};
             int textureFilter = 0;
             int addressU = 1;
             int addressV = 1;
+            const SdlGpuRenderTargetBackend* target = nullptr;  ///< nullptr = swapchain
         };
 
         // Phase SDLGPU-6: colored3d/textured3d/colored_textured3d/lit_textured3d draw commands.
@@ -188,6 +263,7 @@ namespace CNA::Internal::Backends::SdlGpu
             bool depthTest = false;
             bool depthWrite = false;
             int depthFunc = 3;  ///< XNA CompareFunction ordinal; 3 = LessEqual
+            const SdlGpuRenderTargetBackend* target = nullptr;  ///< nullptr = swapchain
             SDL_GPUBuffer* uploadedVertexBuffer = nullptr;  ///< transient, set by UploadSceneDrawData
             SDL_GPUBuffer* uploadedIndexBuffer = nullptr;   ///< transient, set by UploadSceneDrawData
         };
@@ -213,6 +289,7 @@ namespace CNA::Internal::Backends::SdlGpu
             int addressU = 1;
             int addressV = 1;
             bool hasVertexColor = false;  ///< stride 24 vs stride 20
+            const SdlGpuRenderTargetBackend* target = nullptr;  ///< nullptr = swapchain
             SDL_GPUBuffer* uploadedVertexBuffer = nullptr;
             SDL_GPUBuffer* uploadedIndexBuffer = nullptr;
         };
@@ -236,6 +313,7 @@ namespace CNA::Internal::Backends::SdlGpu
             int textureFilter = 0;
             int addressU = 1;
             int addressV = 1;
+            const SdlGpuRenderTargetBackend* target = nullptr;  ///< nullptr = swapchain
             SDL_GPUBuffer* uploadedVertexBuffer = nullptr;
             SDL_GPUBuffer* uploadedIndexBuffer = nullptr;
         };
@@ -262,6 +340,7 @@ namespace CNA::Internal::Backends::SdlGpu
             int addressU = 1;
             int addressV = 1;
             std::size_t stride = 20;  ///< 20, 24, or 32 -- selects vertex layout + shader
+            const SdlGpuRenderTargetBackend* target = nullptr;  ///< nullptr = swapchain
             SDL_GPUBuffer* uploadedVertexBuffer = nullptr;
             SDL_GPUBuffer* uploadedIndexBuffer = nullptr;
         };
@@ -290,6 +369,7 @@ namespace CNA::Internal::Backends::SdlGpu
             int addressU = 1;
             int addressV = 1;
             bool hasVertexColor = false;  ///< stride 24 vs stride 20
+            const SdlGpuRenderTargetBackend* target = nullptr;  ///< nullptr = swapchain
             SDL_GPUBuffer* uploadedVertexBuffer = nullptr;
             SDL_GPUBuffer* uploadedIndexBuffer = nullptr;
         };
@@ -358,6 +438,19 @@ namespace CNA::Internal::Backends::SdlGpu
         std::unique_ptr<IVertexBufferBackend> CreateVertexBuffer(int vertex_capacity) override;
         std::unique_ptr<IIndexBufferBackend> CreateIndexBuffer16(int index_capacity) override;
 
+        /**
+         * @brief Creates an off-screen `RenderTarget2D` (Phase `SDLGPU-8`, `SDLGPU-35`).
+         *
+         * @param multiSampleCount Must be 0 — MSAA render targets are `SDLGPU-38`, not yet
+         *        implemented; a non-zero value throws rather than silently rendering without MSAA.
+         */
+        std::unique_ptr<IRenderTargetBackend> CreateRenderTarget2D(int w, int h, int depthFormat,
+                                                                    bool preserveContents = false,
+                                                                    bool mipMap = false,
+                                                                    int multiSampleCount = 0) override;
+        /** @brief Activates the given render target (pass nullptr to restore the swapchain). */
+        void SetRenderTarget2D(IRenderTargetBackend* rt) override;
+
         /** @brief Draws stride-16 (VertexPositionColor) primitives with a hardcoded white/vertex-color-enabled BasicEffect. */
         void DrawColoredPrimitives(const IVertexBufferBackend& vb,
                                    const Matrix& world, const Matrix& view, const Matrix& projection,
@@ -378,8 +471,14 @@ namespace CNA::Internal::Backends::SdlGpu
                                      PrimitiveType primitive, int primitiveCount,
                                      const GpuDrawParams& params) override;
 
-        /** @brief Queues a sprite quad for drawing on the next render pass. NOXNA — internal use only. */
-        NOXNA void QueueSprite(const SdlGpuTextureBackend& texture,
+        /**
+         * @brief Queues a sprite quad for drawing on the next render pass. NOXNA — internal use
+         * only. @p texture supplies GetWidth()/GetHeight() for UV math (works for any
+         * ITextureBackend); @p nativeTexture is the raw SDL_GPUTexture* actually bound at render
+         * time (Texture2D and RenderTarget2D are unrelated concrete backend classes, so
+         * SdlGpuSpriteBatchBackend::Draw resolves this once at call time).
+         */
+        NOXNA void QueueSprite(const ITextureBackend& texture, SDL_GPUTexture* nativeTexture,
                                 const Rectangle& destinationRectangle,
                                 const Rectangle& sourceRectangle,
                                 const Color& color,
@@ -425,15 +524,16 @@ namespace CNA::Internal::Backends::SdlGpu
         // WebGPUGraphicsBackend::SamplerCacheIndex's exact indexing scheme (filterIndex*9+u*3+v).
         void CreateSpriteResources();
         void DestroySpriteResources();
-        [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreateSpritePipeline();
+        [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreateSpritePipeline(SDL_GPUTextureFormat colorFormat);
         [[nodiscard]] SDL_GPUSampler* GetOrCreateSampler(int textureFilter, int addressU, int addressV);
         // Uploads all queued sprite vertex data (copy pass) -- must run BEFORE
         // BeginGPURenderPass; SDL_gpu forbids a copy pass nested inside a render pass.
         void UploadSpriteVertexData(SDL_GPUCommandBuffer* cmd);
-        // Issues the actual bind+draw calls for each queued sprite -- must run INSIDE the
-        // render pass, after UploadSpriteVertexData's copy pass has already been submitted-queued
-        // on the same command buffer.
-        void RenderSprites(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd);
+        // Issues the actual bind+draw calls for each queued sprite targeting @p target (nullptr =
+        // swapchain) -- must run INSIDE the render pass, after UploadSpriteVertexData's copy pass
+        // has already been submitted-queued on the same command buffer.
+        void RenderSprites(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
+                           const SdlGpuRenderTargetBackend* target, SDL_GPUTextureFormat colorFormat);
 
         // Phase SDLGPU-6: colored3d/textured3d/colored_textured3d/lit_textured3d.
         void CreateColoredResources();
@@ -443,13 +543,17 @@ namespace CNA::Internal::Backends::SdlGpu
         void CreateLitTexturedResources();
         void DestroyLitTexturedResources();
         [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipelineColored3D(
-            SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc);
+            SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
+            SDL_GPUTextureFormat colorFormat);
         [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipelineTextured3D(
-            SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc);
+            SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
+            SDL_GPUTextureFormat colorFormat);
         [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipelineColoredTextured3D(
-            SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc);
+            SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
+            SDL_GPUTextureFormat colorFormat);
         [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipelineLitTextured3D(
-            SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc);
+            SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
+            SDL_GPUTextureFormat colorFormat);
         // params == nullptr: the legacy DrawColoredPrimitives path (hardcoded white diffuse,
         // vertexColorEnabled=true). params != nullptr: DrawPrimitivesEx's real GpuDrawParams path.
         void QueueColoredDraw(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
@@ -469,26 +573,33 @@ namespace CNA::Internal::Backends::SdlGpu
         void CreateDualTextureResources();
         void DestroyDualTextureResources();
         [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipelineAlphaTest3D(
-            std::size_t stride, SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc);
+            std::size_t stride, SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
+            SDL_GPUTextureFormat colorFormat);
         [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipelineDualTexture3D(
-            std::size_t stride, SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc);
+            std::size_t stride, SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
+            SDL_GPUTextureFormat colorFormat);
         void QueueAlphaTestDraw(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
                                 const Matrix& world, const Matrix& view, const Matrix& projection,
                                 PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
         void QueueDualTextureDraw(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
                                   const Matrix& world, const Matrix& view, const Matrix& projection,
                                   PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
-        void RenderAlphaTestDraws(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd);
-        void RenderDualTextureDraws(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd);
+        void RenderAlphaTestDraws(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
+                                  const SdlGpuRenderTargetBackend* target, SDL_GPUTextureFormat colorFormat);
+        void RenderDualTextureDraws(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
+                                   const SdlGpuRenderTargetBackend* target, SDL_GPUTextureFormat colorFormat);
 
         // Uploads every queued 3D draw command's shadow-copied vertex/index data into a fresh
         // transient SDL_GPUBuffer per command (mirrors WebGPUGraphicsBackend's own per-draw
         // transient-buffer approach) -- must run in the same copy pass as UploadSpriteVertexData,
         // BEFORE BeginGPURenderPass.
         void UploadSceneDrawData(SDL_GPUCommandBuffer* cmd);
-        void RenderColoredDraws(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd);
-        void RenderTexturedDraws(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd);
-        void RenderLitTexturedDraws(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd);
+        void RenderColoredDraws(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
+                               const SdlGpuRenderTargetBackend* target, SDL_GPUTextureFormat colorFormat);
+        void RenderTexturedDraws(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
+                                 const SdlGpuRenderTargetBackend* target, SDL_GPUTextureFormat colorFormat);
+        void RenderLitTexturedDraws(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
+                                    const SdlGpuRenderTargetBackend* target, SDL_GPUTextureFormat colorFormat);
         // Releases every transient buffer UploadSceneDrawData created, and clears all 3 queues --
         // safe to call immediately after SDL_SubmitGPUCommandBuffer (SDL_gpu defers the actual
         // free until the GPU is done, per SDL_ReleaseGPUBuffer's own documented contract).
@@ -497,6 +608,12 @@ namespace CNA::Internal::Backends::SdlGpu
         [[nodiscard]] int PrimitiveVertexCount(PrimitiveType primitive, int primitiveCount) const;
         [[nodiscard]] int PrimitiveIndexCount(PrimitiveType primitive, int primitiveCount) const;
 
+        // Phase SDLGPU-8: renders one off-screen render target's own pass (all draws/sprites
+        // queued against it, across every shader family) and regenerates its mip chain afterward
+        // if requested -- called once per distinct target used this frame, before the swapchain
+        // pass itself (see EnsureFrameRendered's per-target grouping).
+        void RenderToTarget(SDL_GPUCommandBuffer* cmd, SdlGpuRenderTargetBackend* target);
+
         SDL_Window* window_ = nullptr;
         SDL_GPUDevice* device_ = nullptr;
         SDL_GPUTexture* depthStencilTexture_ = nullptr;
@@ -504,7 +621,10 @@ namespace CNA::Internal::Backends::SdlGpu
 
         SDL_GPUShader* spriteVertexShader_ = nullptr;
         SDL_GPUShader* spriteFragmentShader_ = nullptr;
-        SDL_GPUGraphicsPipeline* spritePipeline_ = nullptr;
+        // Keyed by (int)colorFormat -- Phase SDLGPU-8 needs more than one variant (swapchain
+        // format vs. render-target R8G8B8A8_UNORM), unlike Phases 1-7 where sprites only ever
+        // targeted the swapchain.
+        std::unordered_map<int, SDL_GPUGraphicsPipeline*> spritePipelines_;
         std::array<SDL_GPUSampler*, 18> samplerCache_{};
         SDL_GPUBuffer* spriteVertexBuffer_ = nullptr;
         Uint32 spriteVertexCapacityBytes_ = 0;
@@ -551,6 +671,14 @@ namespace CNA::Internal::Backends::SdlGpu
         std::vector<DualTextureDrawCommand> dualTextureDrawCommands_;
 
         int depthCompareFunction_ = 3;  ///< XNA CompareFunction ordinal; 3 = LessEqual (DepthStencilState.Default)
+
+        // Phase SDLGPU-8: nullptr = the swapchain is the active target. usedRenderTargetsThisFrame_
+        // preserves first-bind order so EnsureFrameRendered renders each in that order, all before
+        // the swapchain's own pass (see RenderToTarget/EnsureFrameRendered) -- every Clear()/draw
+        // call recorded against the same target within one frame is accumulated into that target's
+        // single pass, regardless of how many times SetRenderTarget2D re-selected it meanwhile.
+        SdlGpuRenderTargetBackend* currentRenderTarget_ = nullptr;
+        std::vector<SdlGpuRenderTargetBackend*> usedRenderTargetsThisFrame_;
 
         int physicalWidth_ = 0;
         int physicalHeight_ = 0;

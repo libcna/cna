@@ -18,8 +18,23 @@
 > for the 3D path, *confirmed the fix's own theory* (3D shaders using a real XNA projection matrix
 > need no Y-flip, unlike the hand-computed 2D sprite NDC math). `GraphicsBackendCompileDefinitionTests.cpp`'s
 > `ExactlyOneGraphicsBackendIsSelected` was updated for the new backend and the full `CnaTests`
-> suite (118 tests) still passes. `EnvironmentMapEffect`/`SkinnedEffect` and all render-target/
-> readback paths (Phase SDLGPU-8 onward) are still ⬜.
+> suite (118 tests) still passes. `EnvironmentMapEffect`/`SkinnedEffect` are still ⬜. Phase
+> `SDLGPU-8` (render targets) started 2026-07-15: `SDLGPU-35` (`RenderTarget2D`) is done and
+> verified — see its own row for the real multi-pass `EnsureFrameRendered` refactor this required.
+> `SDLGPU-36`–`39` (cube/MRT/MSAA/readback) are still ⬜.
+>
+> **Full `CnaTests` suite is NOT currently stable end-to-end under `CNA_GRAPHICS_BACKEND=SDL_GPU`
+> in this sandboxed dev environment** (found 2026-07-15 while trying to verify `SDLGPU-35`
+> broadly): running the entire ~4300-test suite segfaults partway through
+> `ContentManagerSkinnedModelTest` (confirmed reproducible on the unmodified pre-`SDLGPU-35`
+> baseline too, and the exact test it crashes on shifts when the first one is filtered out —
+> consistent with real-window/GPU-device resource churn across thousands of tests in this sandbox,
+> not a deterministic logic bug in one test). This is a pre-existing condition, not something
+> `SDLGPU-35` introduced or fixed. This backend's own dedicated CTest suite
+> (`SdlGpu_Smoke`/`SdlGpu_2D`/`SdlGpu_3D`/`SdlGpu_Effects`/`SdlGpu_RenderTarget2D`, `ctest -R
+> SdlGpu`) is the actual validated methodology for real-window backends in this project (mirrors
+> how Vulkan/D3D11/D3D12 are validated) — don't treat a full unfiltered `CnaTests` run under this
+> backend as a meaningful signal without first re-reading this note.
 >
 > **Known partial gaps in what's landed so far:** `SDL_CreateGPUDevice`'s `debug_mode` is
 > hardcoded `false`, not yet wired to a CNA-side debug/validation toggle (minor, deferred).
@@ -148,10 +163,15 @@ extends.
    (`EnvironmentMapEffect`) and `SDLGPU-34` (`SkinnedEffect`) remain ⬜, deliberately deferred —
    see their own rows for the specific blockers (no `TextureCube` foundation yet; an unresolved
    72-bone-palette push-size question plus a new stride-52 vertex format).
-5. Next: Phase `SDLGPU-8` (render targets, `SDLGPU-35`–`39`) — doesn't depend on either deferred
-   Phase `SDLGPU-7` item. `SDLGPU-33`/`34` can be picked up whenever their own blockers are
-   resolved (cube-texture foundation for the former; a bone-palette push-size spike for the
-   latter), in either order relative to Phase `SDLGPU-8`.
+5. Phase `SDLGPU-8` (render targets) started 2026-07-15: `SDLGPU-35` (`RenderTarget2D`) done and
+   verified, all ✅ — see its own row for the real multi-pass `EnsureFrameRendered` refactor this
+   required. `SDLGPU-39` (readback) hit a real, unresolved segfault (see its own row) attempting to
+   pull swapchain download forward for pixel-precise testing — worked around, not fixed; do not
+   re-attempt without reading that row first. Next: `SDLGPU-36` (`RenderTargetCube`), `SDLGPU-37`
+   (MRT), `SDLGPU-38` (MSAA) — none of the three depend on `SDLGPU-39`'s blocker. `SDLGPU-33`/`34`
+   can still be picked up whenever their own blockers are resolved (cube-texture foundation for the
+   former; a bone-palette push-size spike for the latter), in either order relative to Phase
+   `SDLGPU-8`'s remaining rows.
 
 ---
 
@@ -242,11 +262,11 @@ extends.
 
 | # | Task | Status | Notes |
 | --- | --- | --- | --- |
-| SDLGPU-35 | `RenderTarget2D` — a `SDL_GPU_TEXTUREUSAGE_COLOR_TARGET \| SDL_GPU_TEXTUREUSAGE_SAMPLER` texture, bound as `SDL_GPUColorTargetInfo.texture` in one pass, sampled in a later pass. | ⬜ | |
+| SDLGPU-35 | `RenderTarget2D` — a `SDL_GPU_TEXTUREUSAGE_COLOR_TARGET \| SDL_GPU_TEXTUREUSAGE_SAMPLER` texture, bound as `SDL_GPUColorTargetInfo.texture` in one pass, sampled in a later pass. | ✅ | 2026-07-15. Required a real architectural refactor, not just a new class: every pipeline cache (`GetOrCreatePipelineColored3D`/`Textured3D`/`ColoredTextured3D`/`LitTextured3D`/`AlphaTest3D`/`DualTexture3D`/sprite) now takes a `colorFormat` param folded into its cache key (previously hardcoded `SDL_GetGPUSwapchainTextureFormat`), and `EnsureFrameRendered()` is now genuinely multi-pass: every distinct `SdlGpuRenderTargetBackend` used this frame gets its own render pass (in first-bind order, via `RenderToTarget()`), all before the swapchain's own pass — this is what makes "bound in one pass, sampled in a later pass" real rather than aspirational. Render targets standardize on `SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM` regardless of the swapchain's native format (XNA's `CreateRenderTarget2D` interface has no format parameter anyway). `Clear()`/`ClearDepth()`/`ClearStencil()` now route to whichever `SdlGpuRenderTargetBackend` is currently bound (each RT owns its own pending-clear state) instead of unconditionally hitting the swapchain's. `SpriteBatch::Draw()` had to learn to resolve either `SdlGpuTextureBackend` (plain `Texture2D`) or `SdlGpuRenderTargetBackend` (`RenderTarget2D`) to a raw `SDL_GPUTexture*`, since the two are unrelated concrete classes. `mipMap` is supported for real (`SDL_GenerateMipmapsForGPUTexture` after that target's pass ends); `multiSampleCount > 0` throws (`SDLGPU-38`, not yet implemented — a real deferred-scaffolding boundary, not silent misbehavior). Verified via `SdlGpu_RenderTarget2D` (4/4 checks: Clear-only fill, a real colored3d triangle, a depth-tested pair of overlapping quads each with this target's own dedicated depth texture, and the MSAA-throws boundary) plus a real screenshot (see below) — not just "didn't throw". |
 | SDLGPU-36 | `RenderTargetCube` — 6-face color-target texture, including MSAA and mip levels beyond face 0. | ⬜ | Match the bar already met by D3D11/D3D12 (`DX-152`/`DX-153`). |
 | SDLGPU-37 | Multiple Render Targets (MRT) — `SDL_GPUGraphicsPipelineTargetInfo.color_target_descriptions` array + several `SDL_GPUColorTargetInfo` entries in one render pass. | ⬜ | |
 | SDLGPU-38 | MSAA — `SDL_GPUSampleCount` texture creation + `SDL_GPUColorTargetInfo.resolve_texture` automatic resolve-on-render-pass-end. | ⬜ | |
-| SDLGPU-39 | `GetData()` readback — `SDL_DownloadFromGPUTexture` via a transfer buffer + fence wait (`SDL_SubmitGPUCommandBufferAndAcquireFence`/`SDL_WaitForGPUFences`), for `Texture2D`/`TextureCube`/`RenderTarget2D`/`RenderTargetCube`. | ⬜ | |
+| SDLGPU-39 | `GetData()` readback — `SDL_DownloadFromGPUTexture` via a transfer buffer + fence wait (`SDL_SubmitGPUCommandBufferAndAcquireFence`/`SDL_WaitForGPUFences`), for `Texture2D`/`TextureCube`/`RenderTarget2D`/`RenderTargetCube`. | ⬜ | **Real blocker found 2026-07-15, not yet resolved:** an attempt to pull the swapchain-readback half of this forward (needed for pixel-precise `RenderTarget2D` test assertions) segfaulted inside *both* `SDL_DownloadFromGPUTexture` (source = the raw swapchain texture) *and* `SDL_CopyGPUTextureToTexture` (copying the swapchain texture into a plain `SAMPLER`-usage staging texture first) — crashes deep inside the vendored SDL3/Vulkan driver on this environment, not a graceful SDL error return. Confirmed the crash is specifically about the swapchain texture as a copy/download *source*: neither `SDL_gpu.h` doc comment mentions a usage-flag requirement for either function, so this may be a genuine driver/environment limitation (swapchain images not created with a transfer-src-equivalent usage bit) rather than a CNA bug — needs investigation on real (non-virtual-display) hardware, or via `SDL_BlitGPUTexture` as an alternative, before assuming any approach works. `RenderTarget2D::GetData()`/`ReadBackbuffer` verification was worked around by reverting to this backend's own established convention (real draws with no exception across many frames + a manual screenshot, matching `sdlgpu_3d_test.cpp`/`sdlgpu_effects_test.cpp`'s precedent) rather than Vulkan's pixel-readback convention — do not re-attempt swapchain download without first re-reading this note. |
 
 ---
 

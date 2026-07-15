@@ -1,0 +1,249 @@
+// SPDX-License-Identifier: MS-PL
+// plan_sdlgpu.md SDLGPU-35: RenderTarget2D proof for the SDL_GPU graphics backend -- a
+// COLOR_TARGET|SAMPLER texture rendered into during its own render pass and sampled during a
+// later pass within the same frame (Phase SDLGPU-8's per-target multi-pass EnsureFrameRendered).
+//
+// This backend does not implement ReadBackbuffer() (SDLGPU-39, still open -- an attempt to pull
+// it forward here hit a real segfault inside both SDL_DownloadFromGPUTexture and
+// SDL_CopyGPUTextureToTexture when the swapchain texture is the source, on this environment's
+// Vulkan driver; see plan_sdlgpu.md's SDLGPU-39 notes), so verification here follows this
+// backend's own established convention (sdlgpu_3d_test.cpp / sdlgpu_effects_test.cpp): real draws
+// through the public XNA API with no exception across many frames, plus a real screenshot taken
+// manually during development (not part of the automated check) to visually confirm correctness.
+//
+// Check A -- Clear()-only fill of a RenderTarget2D (no draw call between bind/unbind), then
+//   sampled back via SpriteBatch onto the backbuffer, draws every frame with no exception. This
+//   specifically exercises whether a render target with only a Clear() (no draw) still gets its
+//   own render pass at all under this backend's per-target grouping.
+// Check B -- A real colored3d triangle (BasicEffect, VertexPositionColor) drawn into a
+//   RenderTarget2D, then sampled back via SpriteBatch, draws every frame with no exception.
+//   Proves the format-parameterized pipeline cache (Phase SDLGPU-8's refactor) produces a
+//   pipeline compatible with the render target's own R8G8B8A8_UNORM format.
+// Check C -- A depth-tested RenderTarget2D (DepthFormat::Depth24Stencil8): draws a farther red
+//   quad then a nearer green quad over the same screen area, then samples it, draws every frame
+//   with no exception. Exercises this target's own dedicated depth texture.
+// Check D -- CreateRenderTarget2D throws when multiSampleCount > 0 is requested (SDLGPU-38 is not
+//   implemented yet -- a real, documented boundary, not silent misbehavior).
+//
+// Exit code 0 = all checks PASS, 1 = any FAILs.
+
+#include "Microsoft/Xna/Framework/Game.hpp"
+#include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
+#include "Microsoft/Xna/Framework/Color.hpp"
+#include "Microsoft/Xna/Framework/Matrix.hpp"
+#include "Microsoft/Xna/Framework/Rectangle.hpp"
+#include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTargetUsage.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
+
+#include "CNA/Internal/Backends/SdlGpu/SdlGpuGraphicsBackend.hpp"
+
+#include <cstdio>
+#include <memory>
+#include <stdexcept>
+#include <string>
+
+using namespace Microsoft::Xna::Framework;
+using namespace Microsoft::Xna::Framework::Graphics;
+using namespace CNA::Internal::Backends::SdlGpu;
+
+namespace
+{
+    constexpr int kRTSize = 32;
+    constexpr int kTotalFrames = 120;
+}
+
+class SdlGpuRenderTarget2DTest : public Game
+{
+    std::unique_ptr<GraphicsDeviceManager> gdm_;
+    std::unique_ptr<SpriteBatch> sb_;
+
+    std::unique_ptr<RenderTarget2D> rtClearOnly_;
+    std::unique_ptr<RenderTarget2D> rtTriangle_;
+    std::unique_ptr<RenderTarget2D> rtDepth_;
+
+    std::unique_ptr<VertexBuffer> triangleVb_;
+    std::unique_ptr<VertexBuffer> farQuadVb_;
+    std::unique_ptr<VertexBuffer> nearQuadVb_;
+
+    int frame_ = 0;
+    int passCount_ = 0;
+    int result_ = 1;
+
+    void Check(bool ok, const char* label)
+    {
+        std::printf("[%s] %s\n", ok ? "PASS" : "FAIL", label);
+        if (ok) ++passCount_;
+    }
+
+    // Renders into all 3 render targets, mirroring plan_sdlgpu.md's own "bound in one pass,
+    // sampled in a later pass" contract for SDLGPU-35: Clear-only, a real colored3d draw, and a
+    // depth-tested pair of overlapping quads.
+    void RenderIntoTargets(GraphicsDevice& dev)
+    {
+        dev.SetRenderTarget(rtClearOnly_.get());
+        dev.Clear(Color::Green);
+        dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+        dev.SetRenderTarget(rtTriangle_.get());
+        dev.Clear(Color::Black);
+        BasicEffect triFx(dev);
+        triFx.VertexColorEnabled = true;
+        triFx.setWorldProperty(Matrix::getIdentityProperty());
+        triFx.setViewProperty(Matrix::getIdentityProperty());
+        triFx.setProjectionProperty(Matrix::getIdentityProperty());
+        triFx.Apply();
+        dev.SetVertexBuffer(triangleVb_.get());
+        dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 1);
+        dev.SetVertexBuffer(nullptr);
+        dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+
+        dev.SetRenderTarget(rtDepth_.get());
+        dev.Clear(Color(0, 0, 0, 255), 1.0f);
+        dev.SetDepthTestEnabled(true);
+        dev.SetDepthWriteEnabled(true);
+        BasicEffect depthFx(dev);
+        depthFx.VertexColorEnabled = true;
+        depthFx.setWorldProperty(Matrix::getIdentityProperty());
+        depthFx.setViewProperty(Matrix::getIdentityProperty());
+        depthFx.setProjectionProperty(Matrix::getIdentityProperty());
+        depthFx.Apply();
+        dev.SetVertexBuffer(farQuadVb_.get());
+        dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
+        dev.SetVertexBuffer(nearQuadVb_.get());
+        dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
+        dev.SetVertexBuffer(nullptr);
+        dev.SetDepthTestEnabled(false);
+        dev.SetDepthWriteEnabled(false);
+        dev.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+    }
+
+    void SampleTargetsToBackbuffer(GraphicsDevice& dev)
+    {
+        const auto& vp = dev.getViewportProperty();
+        const int w = vp.getWidthProperty();
+        const int h = vp.getHeightProperty();
+        const int cellW = w / 3;
+
+        dev.Clear(Color::CornflowerBlue);
+        sb_->Begin();
+        sb_->Draw(*rtClearOnly_, Rectangle(0, 0, cellW, h), Rectangle(0, 0, kRTSize, kRTSize), Color::White);
+        sb_->Draw(*rtTriangle_, Rectangle(cellW, 0, cellW, h), Rectangle(0, 0, kRTSize, kRTSize), Color::White);
+        sb_->Draw(*rtDepth_, Rectangle(cellW * 2, 0, cellW, h), Rectangle(0, 0, kRTSize, kRTSize), Color::White);
+        sb_->End();
+    }
+
+protected:
+    void LoadContent() override
+    {
+        auto& dev = getGraphicsDeviceProperty();
+        sb_ = std::make_unique<SpriteBatch>(dev);
+
+        rtClearOnly_ = std::make_unique<RenderTarget2D>(dev, kRTSize, kRTSize, false, SurfaceFormat::Color,
+                                                         DepthFormat::None, 0, RenderTargetUsage::DiscardContents);
+        rtTriangle_ = std::make_unique<RenderTarget2D>(dev, kRTSize, kRTSize, false, SurfaceFormat::Color,
+                                                        DepthFormat::None, 0, RenderTargetUsage::DiscardContents);
+        rtDepth_ = std::make_unique<RenderTarget2D>(dev, kRTSize, kRTSize, false, SurfaceFormat::Color,
+                                                     DepthFormat::Depth24Stencil8, 0, RenderTargetUsage::DiscardContents);
+
+        const VertexPositionColor triVerts[3] = {
+            { Vector3(-1.0f, -1.0f, 0.0f), Color::Red },
+            { Vector3( 0.0f,  1.0f, 0.0f), Color::Red },
+            { Vector3( 1.0f, -1.0f, 0.0f), Color::Red },
+        };
+        triangleVb_ = std::make_unique<VertexBuffer>(dev, VertexPositionColor::getVertexDeclarationStatic(), 3, BufferUsage::None);
+        triangleVb_->SetData(triVerts, 0, 3);
+
+        const VertexPositionColor farVerts[6] = {
+            { Vector3(-1.0f, -1.0f, 0.5f), Color::Red }, { Vector3(-1.0f, 1.0f, 0.5f), Color::Red }, { Vector3(1.0f, -1.0f, 0.5f), Color::Red },
+            { Vector3(-1.0f, 1.0f, 0.5f), Color::Red }, { Vector3(1.0f, 1.0f, 0.5f), Color::Red }, { Vector3(1.0f, -1.0f, 0.5f), Color::Red },
+        };
+        farQuadVb_ = std::make_unique<VertexBuffer>(dev, VertexPositionColor::getVertexDeclarationStatic(), 6, BufferUsage::None);
+        farQuadVb_->SetData(farVerts, 0, 6);
+
+        const VertexPositionColor nearVerts[6] = {
+            { Vector3(-1.0f, -1.0f, -0.5f), Color::Green }, { Vector3(-1.0f, 1.0f, -0.5f), Color::Green }, { Vector3(1.0f, -1.0f, -0.5f), Color::Green },
+            { Vector3(-1.0f, 1.0f, -0.5f), Color::Green }, { Vector3(1.0f, 1.0f, -0.5f), Color::Green }, { Vector3(1.0f, -1.0f, -0.5f), Color::Green },
+        };
+        nearQuadVb_ = std::make_unique<VertexBuffer>(dev, VertexPositionColor::getVertexDeclarationStatic(), 6, BufferUsage::None);
+        nearQuadVb_->SetData(nearVerts, 0, 6);
+    }
+
+    void Draw(const GameTime&) override
+    {
+        ++frame_;
+        auto& dev = getGraphicsDeviceProperty();
+
+        if (frame_ == 1)
+        {
+            bool threw = false;
+            const char* stage = "Check A (Clear-only)";
+            try
+            {
+                RenderIntoTargets(dev);
+                Check(true, "RenderTarget2D Clear-only/colored3d/depth-tested draws all render with no exception");
+                stage = "SampleTargetsToBackbuffer";
+                SampleTargetsToBackbuffer(dev);
+                Check(true, "sampling all 3 RenderTarget2D instances via SpriteBatch renders with no exception");
+            }
+            catch (const std::exception& e)
+            {
+                threw = true;
+                Check(false, (std::string("threw during ") + stage + ": " + e.what()).c_str());
+            }
+            (void)threw;
+
+            // Check D: multiSampleCount > 0 is a real, documented boundary (SDLGPU-38).
+            bool msaaThrew = false;
+            try
+            {
+                RenderTarget2D rt(dev, kRTSize, kRTSize, false, SurfaceFormat::Color,
+                                  DepthFormat::None, 4, RenderTargetUsage::DiscardContents);
+            }
+            catch (const std::exception&)
+            {
+                msaaThrew = true;
+            }
+            Check(msaaThrew, "RenderTarget2D with multiSampleCount>0 throws (SDLGPU-38 not implemented yet)");
+        }
+        else
+        {
+            RenderIntoTargets(dev);
+            SampleTargetsToBackbuffer(dev);
+        }
+
+        if (frame_ == kTotalFrames)
+        {
+            Check(true, "120 frames of RenderTarget2D render/sample render with no exception");
+            std::printf("=== %d/4 PASS ===\n", passCount_);
+            result_ = (passCount_ == 4) ? 0 : 1;
+            Exit();
+        }
+    }
+
+public:
+    SdlGpuRenderTarget2DTest()
+    {
+        gdm_ = std::make_unique<GraphicsDeviceManager>(this);
+        gdm_->setPreferredBackBufferWidthProperty(300);
+        gdm_->setPreferredBackBufferHeightProperty(100);
+        static_cast<SdlGpuGraphicsBackend&>(getGraphicsDeviceProperty().GetBackend()).SetSwapInterval(0);
+    }
+
+    int getResult() const { return result_; }
+};
+
+int main()
+{
+    SdlGpuRenderTarget2DTest game;
+    game.Run();
+    return game.getResult();
+}

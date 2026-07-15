@@ -55,12 +55,25 @@ namespace CNA::Internal::Backends::SdlGpu
             }
         }
 
-        // Packs (topology, depthTest, depthWrite, depthFunc) into one cache key -- mirrors
-        // WebGPUGraphicsBackend's own int-keyed pipeline cache convention.
-        [[nodiscard]] int PipelineCacheKey(SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc)
+        // Packs (topology, depthTest, depthWrite, depthFunc, colorFormat) into one cache key --
+        // mirrors WebGPUGraphicsBackend's own int-keyed pipeline cache convention. colorFormat was
+        // added in Phase SDLGPU-8 (previously every pipeline only ever targeted the swapchain);
+        // SDL_GPUTextureFormat's enum range comfortably fits under the *128 multiplier.
+        [[nodiscard]] int PipelineCacheKey(SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
+                                           SDL_GPUTextureFormat colorFormat)
         {
-            return (static_cast<int>(topology) * 2 + (depthTest ? 1 : 0)) * 2 * 16 +
+            const int base = (static_cast<int>(topology) * 2 + (depthTest ? 1 : 0)) * 2 * 16 +
                    (depthWrite ? 1 : 0) * 16 + std::clamp(depthFunc, 0, 15);
+            return base * 128 + static_cast<int>(colorFormat);
+        }
+
+        // Mirrors VulkanGraphicsBackend's CalculateVulkanRTMipLevels / Texture2D.cpp's
+        // CalculateMipLevels -- each backend keeps its own copy of this small helper.
+        [[nodiscard]] int CalculateMipLevels(int w, int h)
+        {
+            int levels = 1;
+            while (w > 1 || h > 1) { w = std::max(1, w / 2); h = std::max(1, h / 2); ++levels; }
+            return levels;
         }
 
         // Mirrors VulkanGraphicsBackend::FillExtPushConst()'s 128-byte layout byte-for-byte
@@ -292,9 +305,17 @@ namespace CNA::Internal::Backends::SdlGpu
         EnsureDepthStencilTexture(swapchainWidth, swapchainHeight);
 
         // Sprite/3D vertex data must be uploaded via a copy pass BEFORE BeginGPURenderPass --
-        // SDL_gpu forbids a copy pass nested inside a render pass.
+        // SDL_gpu forbids a copy pass nested inside a render pass. Covers every target's draws
+        // regardless of which render pass below will consume them.
         UploadSpriteVertexData(cmd);
         UploadSceneDrawData(cmd);
+
+        // Phase SDLGPU-8: every off-screen render target used this frame gets its own pass FIRST,
+        // in first-bind order, so a target bound-then-unbound earlier in the frame can safely be
+        // sampled by a later swapchain-targeted draw within the same frame (SDLGPU-35's own
+        // "bound in one pass, sampled in a later pass" contract).
+        for (SdlGpuRenderTargetBackend* target : usedRenderTargetsThisFrame_)
+            RenderToTarget(cmd, target);
 
         SDL_GPUColorTargetInfo colorTarget{};
         colorTarget.texture = swapchainTexture;
@@ -314,16 +335,17 @@ namespace CNA::Internal::Backends::SdlGpu
             depthStencilTarget.stencil_store_op = SDL_GPU_STOREOP_STORE;
         }
 
+        const SDL_GPUTextureFormat swapchainFormat = SDL_GetGPUSwapchainTextureFormat(device_, window_);
         SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(
             cmd, &colorTarget, 1, depthStencilTexture_ != nullptr ? &depthStencilTarget : nullptr);
         // 3D draws first, 2D SpriteBatch/UI on top -- matches typical XNA game draw order
         // (World.Draw() then a HUD SpriteBatch pass), both collapsed into this one deferred pass.
-        RenderColoredDraws(pass, cmd);
-        RenderTexturedDraws(pass, cmd);
-        RenderLitTexturedDraws(pass, cmd);
-        RenderAlphaTestDraws(pass, cmd);
-        RenderDualTextureDraws(pass, cmd);
-        RenderSprites(pass, cmd);
+        RenderColoredDraws(pass, cmd, nullptr, swapchainFormat);
+        RenderTexturedDraws(pass, cmd, nullptr, swapchainFormat);
+        RenderLitTexturedDraws(pass, cmd, nullptr, swapchainFormat);
+        RenderAlphaTestDraws(pass, cmd, nullptr, swapchainFormat);
+        RenderDualTextureDraws(pass, cmd, nullptr, swapchainFormat);
+        RenderSprites(pass, cmd, nullptr, swapchainFormat);
         SDL_EndGPURenderPass(pass);
 
         if (!SDL_SubmitGPUCommandBuffer(cmd))
@@ -335,14 +357,61 @@ namespace CNA::Internal::Backends::SdlGpu
         clearColorPending_ = false;
         clearDepthPending_ = false;
         clearStencilPending_ = false;
+        for (SdlGpuRenderTargetBackend* target : usedRenderTargetsThisFrame_)
+            target->ResetPendingClears();
+        usedRenderTargetsThisFrame_.clear();
         framePending_ = false;
         return true;
     }
 
+    void SdlGpuGraphicsBackend::RenderToTarget(SDL_GPUCommandBuffer* cmd, SdlGpuRenderTargetBackend* target)
+    {
+        constexpr SDL_GPUTextureFormat kRenderTargetFormat = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+
+        SDL_GPUColorTargetInfo colorTarget{};
+        colorTarget.texture = target->ColorTexture();
+        colorTarget.clear_color = target->ClearColorValue();
+        colorTarget.load_op = target->ClearColorPending() ? SDL_GPU_LOADOP_CLEAR : SDL_GPU_LOADOP_LOAD;
+        colorTarget.store_op = SDL_GPU_STOREOP_STORE;
+
+        SDL_GPUDepthStencilTargetInfo depthStencilTarget{};
+        const bool hasDepth = target->DepthTexture() != nullptr;
+        if (hasDepth)
+        {
+            depthStencilTarget.texture = target->DepthTexture();
+            depthStencilTarget.clear_depth = target->ClearDepthValue();
+            depthStencilTarget.load_op = target->ClearDepthPending() ? SDL_GPU_LOADOP_CLEAR : SDL_GPU_LOADOP_LOAD;
+            depthStencilTarget.store_op = SDL_GPU_STOREOP_STORE;
+            depthStencilTarget.clear_stencil = target->ClearStencilValue();
+            depthStencilTarget.stencil_load_op = target->ClearStencilPending() ? SDL_GPU_LOADOP_CLEAR : SDL_GPU_LOADOP_LOAD;
+            depthStencilTarget.stencil_store_op = SDL_GPU_STOREOP_STORE;
+        }
+
+        SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(cmd, &colorTarget, 1, hasDepth ? &depthStencilTarget : nullptr);
+        RenderColoredDraws(pass, cmd, target, kRenderTargetFormat);
+        RenderTexturedDraws(pass, cmd, target, kRenderTargetFormat);
+        RenderLitTexturedDraws(pass, cmd, target, kRenderTargetFormat);
+        RenderAlphaTestDraws(pass, cmd, target, kRenderTargetFormat);
+        RenderDualTextureDraws(pass, cmd, target, kRenderTargetFormat);
+        RenderSprites(pass, cmd, target, kRenderTargetFormat);
+        SDL_EndGPURenderPass(pass);
+
+        // Per SDL_gpu.h: SDL_GenerateMipmapsForGPUTexture must not be called inside any pass --
+        // matches FNA3D's OPENGL_ResolveTarget semantics (mip chain regenerated once this target's
+        // contents are final for the frame).
+        if (target->WantsMipMap())
+            SDL_GenerateMipmapsForGPUTexture(cmd, target->ColorTexture());
+    }
+
     void SdlGpuGraphicsBackend::Clear(float r, float g, float b, float a)
     {
-        clearColor_ = SDL_FColor{r, g, b, a};
-        clearColorPending_ = true;
+        if (currentRenderTarget_ != nullptr)
+            currentRenderTarget_->QueueClear(SDL_FColor{r, g, b, a});
+        else
+        {
+            clearColor_ = SDL_FColor{r, g, b, a};
+            clearColorPending_ = true;
+        }
         framePending_ = true;
     }
 
@@ -354,15 +423,25 @@ namespace CNA::Internal::Backends::SdlGpu
 
     void SdlGpuGraphicsBackend::ClearDepth(float depth)
     {
-        clearDepth_ = depth;
-        clearDepthPending_ = true;
+        if (currentRenderTarget_ != nullptr)
+            currentRenderTarget_->QueueClearDepth(depth);
+        else
+        {
+            clearDepth_ = depth;
+            clearDepthPending_ = true;
+        }
         framePending_ = true;
     }
 
     void SdlGpuGraphicsBackend::ClearStencil(int stencil)
     {
-        clearStencil_ = static_cast<Uint8>(stencil);
-        clearStencilPending_ = true;
+        if (currentRenderTarget_ != nullptr)
+            currentRenderTarget_->QueueClearStencil(static_cast<Uint8>(stencil));
+        else
+        {
+            clearStencil_ = static_cast<Uint8>(stencil);
+            clearStencilPending_ = true;
+        }
         framePending_ = true;
     }
 
@@ -516,6 +595,26 @@ namespace CNA::Internal::Backends::SdlGpu
         return std::make_unique<SdlGpuIndexBufferBackend>(*this, index_capacity, false);
     }
 
+    std::unique_ptr<IRenderTargetBackend> SdlGpuGraphicsBackend::CreateRenderTarget2D(
+        int w, int h, int depthFormat, bool /*preserveContents*/, bool mipMap, int multiSampleCount)
+    {
+        // Not a permanent SDL_gpu API limitation -- MSAA render targets are real, deferred
+        // scaffolding work (plan_sdlgpu.md SDLGPU-38), so this throws rather than silently
+        // rendering without the MSAA the caller asked for.
+        if (multiSampleCount > 0)
+            throw std::runtime_error(
+                "CNA SDL_GPU: RenderTarget2D MSAA is not implemented yet (plan_sdlgpu.md SDLGPU-38)");
+        return std::make_unique<SdlGpuRenderTargetBackend>(*this, w, h, depthFormat, mipMap);
+    }
+
+    void SdlGpuGraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* rt)
+    {
+        if (rt != nullptr)
+            static_cast<SdlGpuRenderTargetBackend*>(rt)->BindAsRenderTarget();
+        else if (currentRenderTarget_ != nullptr)
+            currentRenderTarget_->UnbindAsRenderTarget();
+    }
+
     void SdlGpuGraphicsBackend::CreateSpriteResources()
     {
         if (spriteVertexShader_ != nullptr)
@@ -550,11 +649,9 @@ namespace CNA::Internal::Backends::SdlGpu
 
     void SdlGpuGraphicsBackend::DestroySpriteResources()
     {
-        if (spritePipeline_ != nullptr)
-        {
-            SDL_ReleaseGPUGraphicsPipeline(device_, spritePipeline_);
-            spritePipeline_ = nullptr;
-        }
+        for (auto& [key, pipeline] : spritePipelines_)
+            if (pipeline != nullptr) SDL_ReleaseGPUGraphicsPipeline(device_, pipeline);
+        spritePipelines_.clear();
         for (SDL_GPUSampler*& sampler : samplerCache_)
         {
             if (sampler != nullptr)
@@ -578,10 +675,12 @@ namespace CNA::Internal::Backends::SdlGpu
         }
     }
 
-    SDL_GPUGraphicsPipeline* SdlGpuGraphicsBackend::GetOrCreateSpritePipeline()
+    SDL_GPUGraphicsPipeline* SdlGpuGraphicsBackend::GetOrCreateSpritePipeline(SDL_GPUTextureFormat colorFormat)
     {
-        if (spritePipeline_ != nullptr)
-            return spritePipeline_;
+        const int key = static_cast<int>(colorFormat);
+        const auto it = spritePipelines_.find(key);
+        if (it != spritePipelines_.end())
+            return it->second;
 
         SDL_GPUVertexBufferDescription vbDesc{};
         vbDesc.slot = 0;
@@ -604,7 +703,7 @@ namespace CNA::Internal::Backends::SdlGpu
 
         // Standard (non-premultiplied) alpha blend: src*srcAlpha + dst*(1-srcAlpha).
         SDL_GPUColorTargetDescription colorTarget{};
-        colorTarget.format = SDL_GetGPUSwapchainTextureFormat(device_, window_);
+        colorTarget.format = colorFormat;
         colorTarget.blend_state.enable_blend = true;
         colorTarget.blend_state.src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
         colorTarget.blend_state.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
@@ -637,10 +736,11 @@ namespace CNA::Internal::Backends::SdlGpu
         pipelineInfo.target_info.has_depth_stencil_target = (depthStencilFormat_ != SDL_GPU_TEXTUREFORMAT_INVALID);
         pipelineInfo.target_info.depth_stencil_format = depthStencilFormat_;
 
-        spritePipeline_ = SDL_CreateGPUGraphicsPipeline(device_, &pipelineInfo);
-        if (spritePipeline_ == nullptr)
+        SDL_GPUGraphicsPipeline* pipeline = SDL_CreateGPUGraphicsPipeline(device_, &pipelineInfo);
+        if (pipeline == nullptr)
             throw std::runtime_error(std::string("CNA SDL_GPU: failed to create sprite pipeline: ") + SDL_GetError());
-        return spritePipeline_;
+        spritePipelines_[key] = pipeline;
+        return pipeline;
     }
 
     SDL_GPUSampler* SdlGpuGraphicsBackend::GetOrCreateSampler(int textureFilter, int addressU, int addressV)
@@ -714,26 +814,35 @@ namespace CNA::Internal::Backends::SdlGpu
         SDL_ReleaseGPUTransferBuffer(device_, transferBuffer);
     }
 
-    void SdlGpuGraphicsBackend::RenderSprites(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd)
+    void SdlGpuGraphicsBackend::RenderSprites(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
+                                              const SdlGpuRenderTargetBackend* target, SDL_GPUTextureFormat colorFormat)
     {
         if (spriteCommands_.empty())
             return;
 
-        SDL_BindGPUGraphicsPipeline(pass, GetOrCreateSpritePipeline());
-
-        const float viewportSize[2] = {static_cast<float>(physicalWidth_), static_cast<float>(physicalHeight_)};
-        SDL_PushGPUVertexUniformData(cmd, 0, viewportSize, sizeof(viewportSize));
+        bool boundPipeline = false;
+        const float viewportSize[2] = {
+            static_cast<float>(target != nullptr ? target->GetWidth() : physicalWidth_),
+            static_cast<float>(target != nullptr ? target->GetHeight() : physicalHeight_)};
 
         for (std::size_t i = 0; i < spriteCommands_.size(); ++i)
         {
             const SpriteCommand& command = spriteCommands_[i];
+            if (command.target != target)
+                continue;
+            if (!boundPipeline)
+            {
+                SDL_BindGPUGraphicsPipeline(pass, GetOrCreateSpritePipeline(colorFormat));
+                SDL_PushGPUVertexUniformData(cmd, 0, viewportSize, sizeof(viewportSize));
+                boundPipeline = true;
+            }
             SDL_GPUBufferBinding vbBinding{};
             vbBinding.buffer = spriteVertexBuffer_;
             vbBinding.offset = static_cast<Uint32>(i * sizeof(SpriteVertex) * 6);
             SDL_BindGPUVertexBuffers(pass, 0, &vbBinding, 1);
 
             SDL_GPUTextureSamplerBinding samplerBinding{};
-            samplerBinding.texture = command.texture->Texture();
+            samplerBinding.texture = command.texture;
             samplerBinding.sampler = GetOrCreateSampler(command.textureFilter, command.addressU, command.addressV);
             SDL_BindGPUFragmentSamplers(pass, 0, &samplerBinding, 1);
 
@@ -741,7 +850,7 @@ namespace CNA::Internal::Backends::SdlGpu
         }
     }
 
-    void SdlGpuGraphicsBackend::QueueSprite(const SdlGpuTextureBackend& texture,
+    void SdlGpuGraphicsBackend::QueueSprite(const ITextureBackend& texture, SDL_GPUTexture* nativeTexture,
                                              const Rectangle& destination,
                                              const Rectangle& source,
                                              const Color& color,
@@ -756,8 +865,22 @@ namespace CNA::Internal::Backends::SdlGpu
     {
         if (destination.Width == 0 || destination.Height == 0 || source.Width == 0 || source.Height == 0)
             return;
-        const LogicalViewport viewport = ComputeLogicalViewport();
-        if (viewport.logicalWidth <= 0.0f || viewport.logicalHeight <= 0.0f || physicalWidth_ <= 0 || physicalHeight_ <= 0)
+        // A render-target-bound sprite draws in the target's own 1:1 pixel space -- the swapchain's
+        // virtual-resolution letterbox/presentation-mode scaling (ComputeLogicalViewport) only
+        // applies when drawing to the actual window.
+        LogicalViewport viewport;
+        if (currentRenderTarget_ != nullptr)
+        {
+            viewport.width = viewport.logicalWidth = static_cast<float>(currentRenderTarget_->GetWidth());
+            viewport.height = viewport.logicalHeight = static_cast<float>(currentRenderTarget_->GetHeight());
+        }
+        else
+        {
+            viewport = ComputeLogicalViewport();
+            if (physicalWidth_ <= 0 || physicalHeight_ <= 0)
+                return;
+        }
+        if (viewport.logicalWidth <= 0.0f || viewport.logicalHeight <= 0.0f)
             return;
 
         const float scaleX = static_cast<float>(destination.Width) / static_cast<float>(source.Width);
@@ -788,10 +911,11 @@ namespace CNA::Internal::Backends::SdlGpu
         constexpr int indices[6] = {0, 1, 2, 2, 1, 3};
 
         SpriteCommand command{};
-        command.texture = &texture;
+        command.texture = nativeTexture;
         command.textureFilter = textureFilter;
         command.addressU = addressU;
         command.addressV = addressV;
+        command.target = currentRenderTarget_;
         const float rgba[4] = {
             static_cast<float>(color.getRProperty()) / 255.0f,
             static_cast<float>(color.getGProperty()) / 255.0f,
@@ -891,9 +1015,10 @@ namespace CNA::Internal::Backends::SdlGpu
     }
 
     SDL_GPUGraphicsPipeline* SdlGpuGraphicsBackend::GetOrCreatePipelineColored3D(
-        SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc)
+        SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
+        SDL_GPUTextureFormat colorFormat)
     {
-        const int key = PipelineCacheKey(topology, depthTest, depthWrite, depthFunc);
+        const int key = PipelineCacheKey(topology, depthTest, depthWrite, depthFunc, colorFormat);
         const auto it = coloredPipelines_.find(key);
         if (it != coloredPipelines_.end())
             return it->second;
@@ -908,7 +1033,7 @@ namespace CNA::Internal::Backends::SdlGpu
         attrs[1].location = 1; attrs[1].buffer_slot = 0; attrs[1].format = SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4_NORM; attrs[1].offset = 12;
 
         SDL_GPUColorTargetDescription colorTarget{};
-        colorTarget.format = SDL_GetGPUSwapchainTextureFormat(device_, window_);
+        colorTarget.format = colorFormat;
         // Opaque -- BlendState mapping (plan_sdlgpu.md SDLGPU-18) is not needed for this milestone.
 
         SDL_GPUGraphicsPipelineCreateInfo pipelineInfo{};
@@ -1002,9 +1127,10 @@ namespace CNA::Internal::Backends::SdlGpu
     }
 
     SDL_GPUGraphicsPipeline* SdlGpuGraphicsBackend::GetOrCreatePipelineTextured3D(
-        SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc)
+        SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
+        SDL_GPUTextureFormat colorFormat)
     {
-        const int key = PipelineCacheKey(topology, depthTest, depthWrite, depthFunc);
+        const int key = PipelineCacheKey(topology, depthTest, depthWrite, depthFunc, colorFormat);
         const auto it = texturedPipelines_.find(key);
         if (it != texturedPipelines_.end())
             return it->second;
@@ -1019,7 +1145,7 @@ namespace CNA::Internal::Backends::SdlGpu
         attrs[1].location = 1; attrs[1].buffer_slot = 0; attrs[1].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2; attrs[1].offset = 12;
 
         SDL_GPUColorTargetDescription colorTarget{};
-        colorTarget.format = SDL_GetGPUSwapchainTextureFormat(device_, window_);
+        colorTarget.format = colorFormat;
 
         SDL_GPUGraphicsPipelineCreateInfo pipelineInfo{};
         pipelineInfo.vertex_shader = texturedVertexShader_;
@@ -1049,9 +1175,10 @@ namespace CNA::Internal::Backends::SdlGpu
     }
 
     SDL_GPUGraphicsPipeline* SdlGpuGraphicsBackend::GetOrCreatePipelineColoredTextured3D(
-        SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc)
+        SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
+        SDL_GPUTextureFormat colorFormat)
     {
-        const int key = PipelineCacheKey(topology, depthTest, depthWrite, depthFunc);
+        const int key = PipelineCacheKey(topology, depthTest, depthWrite, depthFunc, colorFormat);
         const auto it = coloredTexturedPipelines_.find(key);
         if (it != coloredTexturedPipelines_.end())
             return it->second;
@@ -1067,7 +1194,7 @@ namespace CNA::Internal::Backends::SdlGpu
         attrs[2].location = 2; attrs[2].buffer_slot = 0; attrs[2].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2; attrs[2].offset = 16;
 
         SDL_GPUColorTargetDescription colorTarget{};
-        colorTarget.format = SDL_GetGPUSwapchainTextureFormat(device_, window_);
+        colorTarget.format = colorFormat;
 
         SDL_GPUGraphicsPipelineCreateInfo pipelineInfo{};
         pipelineInfo.vertex_shader = coloredTexturedVertexShader_;
@@ -1139,9 +1266,10 @@ namespace CNA::Internal::Backends::SdlGpu
     }
 
     SDL_GPUGraphicsPipeline* SdlGpuGraphicsBackend::GetOrCreatePipelineLitTextured3D(
-        SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc)
+        SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
+        SDL_GPUTextureFormat colorFormat)
     {
-        const int key = PipelineCacheKey(topology, depthTest, depthWrite, depthFunc);
+        const int key = PipelineCacheKey(topology, depthTest, depthWrite, depthFunc, colorFormat);
         const auto it = litTexturedPipelines_.find(key);
         if (it != litTexturedPipelines_.end())
             return it->second;
@@ -1157,7 +1285,7 @@ namespace CNA::Internal::Backends::SdlGpu
         attrs[2].location = 2; attrs[2].buffer_slot = 0; attrs[2].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2; attrs[2].offset = 24;
 
         SDL_GPUColorTargetDescription colorTarget{};
-        colorTarget.format = SDL_GetGPUSwapchainTextureFormat(device_, window_);
+        colorTarget.format = colorFormat;
 
         SDL_GPUGraphicsPipelineCreateInfo pipelineInfo{};
         pipelineInfo.vertex_shader = litTexturedVertexShader_;
@@ -1230,6 +1358,7 @@ namespace CNA::Internal::Backends::SdlGpu
             command.vertexCount = static_cast<Uint32>(PrimitiveVertexCount(primitive, primitiveCount));
         }
 
+        command.target = currentRenderTarget_;
         coloredDrawCommands_.push_back(std::move(command));
         framePending_ = true;
     }
@@ -1275,6 +1404,7 @@ namespace CNA::Internal::Backends::SdlGpu
             command.vertexCount = static_cast<Uint32>(PrimitiveVertexCount(primitive, primitiveCount));
         }
 
+        command.target = currentRenderTarget_;
         texturedDrawCommands_.push_back(std::move(command));
         framePending_ = true;
     }
@@ -1320,6 +1450,7 @@ namespace CNA::Internal::Backends::SdlGpu
             command.vertexCount = static_cast<Uint32>(PrimitiveVertexCount(primitive, primitiveCount));
         }
 
+        command.target = currentRenderTarget_;
         litTexturedDrawCommands_.push_back(std::move(command));
         framePending_ = true;
     }
@@ -1388,7 +1519,8 @@ namespace CNA::Internal::Backends::SdlGpu
     }
 
     SDL_GPUGraphicsPipeline* SdlGpuGraphicsBackend::GetOrCreatePipelineAlphaTest3D(
-        std::size_t stride, SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc)
+        std::size_t stride, SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
+        SDL_GPUTextureFormat colorFormat)
     {
         // stride 24 (vertex colour) uses its own dedicated map, keyed the same way every other
         // stride-specific map here is. strides 20/32 share alphaTestVertexShader_ but need
@@ -1396,7 +1528,7 @@ namespace CNA::Internal::Backends::SdlGpu
         // the stride explicitly.
         if (stride == 24)
         {
-            const int key = PipelineCacheKey(topology, depthTest, depthWrite, depthFunc);
+            const int key = PipelineCacheKey(topology, depthTest, depthWrite, depthFunc, colorFormat);
             const auto it = alphaTestColoredPipelines_.find(key);
             if (it != alphaTestColoredPipelines_.end())
                 return it->second;
@@ -1411,7 +1543,7 @@ namespace CNA::Internal::Backends::SdlGpu
             attrs[2].location = 2; attrs[2].buffer_slot = 0; attrs[2].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2; attrs[2].offset = 16;
 
             SDL_GPUColorTargetDescription colorTarget{};
-            colorTarget.format = SDL_GetGPUSwapchainTextureFormat(device_, window_);
+            colorTarget.format = colorFormat;
 
             SDL_GPUGraphicsPipelineCreateInfo pipelineInfo{};
             pipelineInfo.vertex_shader = alphaTestColoredVertexShader_;
@@ -1440,7 +1572,7 @@ namespace CNA::Internal::Backends::SdlGpu
             return pipeline;
         }
 
-        const int key = static_cast<int>(stride) * 10000 + PipelineCacheKey(topology, depthTest, depthWrite, depthFunc);
+        const int key = static_cast<int>(stride) * 1000000 + PipelineCacheKey(topology, depthTest, depthWrite, depthFunc, colorFormat);
         const auto it = alphaTestPipelines_.find(key);
         if (it != alphaTestPipelines_.end())
             return it->second;
@@ -1455,7 +1587,7 @@ namespace CNA::Internal::Backends::SdlGpu
         attrs[1].offset = (stride == 32) ? 24 : 12;  // stride 32: UV past the 3-float normal; stride 20: UV right after position
 
         SDL_GPUColorTargetDescription colorTarget{};
-        colorTarget.format = SDL_GetGPUSwapchainTextureFormat(device_, window_);
+        colorTarget.format = colorFormat;
 
         SDL_GPUGraphicsPipelineCreateInfo pipelineInfo{};
         pipelineInfo.vertex_shader = alphaTestVertexShader_;
@@ -1547,10 +1679,11 @@ namespace CNA::Internal::Backends::SdlGpu
     }
 
     SDL_GPUGraphicsPipeline* SdlGpuGraphicsBackend::GetOrCreatePipelineDualTexture3D(
-        std::size_t stride, SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc)
+        std::size_t stride, SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
+        SDL_GPUTextureFormat colorFormat)
     {
         auto& cache = (stride == 24) ? dualTextureColoredPipelines_ : dualTexturePipelines_;
-        const int key = PipelineCacheKey(topology, depthTest, depthWrite, depthFunc);
+        const int key = PipelineCacheKey(topology, depthTest, depthWrite, depthFunc, colorFormat);
         const auto it = cache.find(key);
         if (it != cache.end())
             return it->second;
@@ -1577,7 +1710,7 @@ namespace CNA::Internal::Backends::SdlGpu
         }
 
         SDL_GPUColorTargetDescription colorTarget{};
-        colorTarget.format = SDL_GetGPUSwapchainTextureFormat(device_, window_);
+        colorTarget.format = colorFormat;
 
         SDL_GPUGraphicsPipelineCreateInfo pipelineInfo{};
         pipelineInfo.vertex_shader = (stride == 24) ? dualTextureColoredVertexShader_ : dualTextureVertexShader_;
@@ -1645,6 +1778,7 @@ namespace CNA::Internal::Backends::SdlGpu
             command.vertexCount = static_cast<Uint32>(PrimitiveVertexCount(primitive, primitiveCount));
         }
 
+        command.target = currentRenderTarget_;
         alphaTestDrawCommands_.push_back(std::move(command));
         framePending_ = true;
     }
@@ -1689,19 +1823,21 @@ namespace CNA::Internal::Backends::SdlGpu
             command.vertexCount = static_cast<Uint32>(PrimitiveVertexCount(primitive, primitiveCount));
         }
 
+        command.target = currentRenderTarget_;
         dualTextureDrawCommands_.push_back(std::move(command));
         framePending_ = true;
     }
 
-    void SdlGpuGraphicsBackend::RenderAlphaTestDraws(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd)
+    void SdlGpuGraphicsBackend::RenderAlphaTestDraws(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
+                                                     const SdlGpuRenderTargetBackend* target, SDL_GPUTextureFormat colorFormat)
     {
         for (const AlphaTestDrawCommand& command : alphaTestDrawCommands_)
         {
-            if (command.uploadedVertexBuffer == nullptr || command.texture == nullptr)
+            if (command.uploadedVertexBuffer == nullptr || command.texture == nullptr || command.target != target)
                 continue;
 
             SDL_GPUGraphicsPipeline* pipeline = GetOrCreatePipelineAlphaTest3D(
-                command.stride, command.topology, command.depthTest, command.depthWrite, command.depthFunc);
+                command.stride, command.topology, command.depthTest, command.depthWrite, command.depthFunc, colorFormat);
             SDL_BindGPUGraphicsPipeline(pass, pipeline);
             SDL_PushGPUVertexUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
             SDL_PushGPUFragmentUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
@@ -1730,15 +1866,17 @@ namespace CNA::Internal::Backends::SdlGpu
         }
     }
 
-    void SdlGpuGraphicsBackend::RenderDualTextureDraws(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd)
+    void SdlGpuGraphicsBackend::RenderDualTextureDraws(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
+                                                       const SdlGpuRenderTargetBackend* target, SDL_GPUTextureFormat colorFormat)
     {
         for (const DualTextureDrawCommand& command : dualTextureDrawCommands_)
         {
-            if (command.uploadedVertexBuffer == nullptr || command.texture0 == nullptr || command.texture1 == nullptr)
+            if (command.uploadedVertexBuffer == nullptr || command.texture0 == nullptr || command.texture1 == nullptr
+                || command.target != target)
                 continue;
 
             SDL_GPUGraphicsPipeline* pipeline = GetOrCreatePipelineDualTexture3D(
-                command.hasVertexColor ? 24 : 20, command.topology, command.depthTest, command.depthWrite, command.depthFunc);
+                command.hasVertexColor ? 24 : 20, command.topology, command.depthTest, command.depthWrite, command.depthFunc, colorFormat);
             SDL_BindGPUGraphicsPipeline(pass, pipeline);
             SDL_PushGPUVertexUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
 
@@ -1862,15 +2000,16 @@ namespace CNA::Internal::Backends::SdlGpu
         SDL_EndGPUCopyPass(copyPass);
     }
 
-    void SdlGpuGraphicsBackend::RenderColoredDraws(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd)
+    void SdlGpuGraphicsBackend::RenderColoredDraws(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
+                                                   const SdlGpuRenderTargetBackend* target, SDL_GPUTextureFormat colorFormat)
     {
         for (const ColoredDrawCommand& command : coloredDrawCommands_)
         {
-            if (command.uploadedVertexBuffer == nullptr)
+            if (command.uploadedVertexBuffer == nullptr || command.target != target)
                 continue;
 
             SDL_GPUGraphicsPipeline* pipeline = GetOrCreatePipelineColored3D(command.topology, command.depthTest,
-                                                                              command.depthWrite, command.depthFunc);
+                                                                              command.depthWrite, command.depthFunc, colorFormat);
             SDL_BindGPUGraphicsPipeline(pass, pipeline);
             SDL_PushGPUVertexUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
 
@@ -1893,16 +2032,17 @@ namespace CNA::Internal::Backends::SdlGpu
         }
     }
 
-    void SdlGpuGraphicsBackend::RenderTexturedDraws(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd)
+    void SdlGpuGraphicsBackend::RenderTexturedDraws(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
+                                                    const SdlGpuRenderTargetBackend* target, SDL_GPUTextureFormat colorFormat)
     {
         for (const TexturedDrawCommand& command : texturedDrawCommands_)
         {
-            if (command.uploadedVertexBuffer == nullptr || command.texture == nullptr)
+            if (command.uploadedVertexBuffer == nullptr || command.texture == nullptr || command.target != target)
                 continue;
 
             SDL_GPUGraphicsPipeline* pipeline = command.hasVertexColor
-                ? GetOrCreatePipelineColoredTextured3D(command.topology, command.depthTest, command.depthWrite, command.depthFunc)
-                : GetOrCreatePipelineTextured3D(command.topology, command.depthTest, command.depthWrite, command.depthFunc);
+                ? GetOrCreatePipelineColoredTextured3D(command.topology, command.depthTest, command.depthWrite, command.depthFunc, colorFormat)
+                : GetOrCreatePipelineTextured3D(command.topology, command.depthTest, command.depthWrite, command.depthFunc, colorFormat);
             SDL_BindGPUGraphicsPipeline(pass, pipeline);
             SDL_PushGPUVertexUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
             SDL_PushGPUFragmentUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
@@ -1931,15 +2071,16 @@ namespace CNA::Internal::Backends::SdlGpu
         }
     }
 
-    void SdlGpuGraphicsBackend::RenderLitTexturedDraws(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd)
+    void SdlGpuGraphicsBackend::RenderLitTexturedDraws(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
+                                                       const SdlGpuRenderTargetBackend* target, SDL_GPUTextureFormat colorFormat)
     {
         for (const LitTexturedDrawCommand& command : litTexturedDrawCommands_)
         {
-            if (command.uploadedVertexBuffer == nullptr || command.texture == nullptr)
+            if (command.uploadedVertexBuffer == nullptr || command.texture == nullptr || command.target != target)
                 continue;
 
             SDL_GPUGraphicsPipeline* pipeline = GetOrCreatePipelineLitTextured3D(
-                command.topology, command.depthTest, command.depthWrite, command.depthFunc);
+                command.topology, command.depthTest, command.depthWrite, command.depthFunc, colorFormat);
             SDL_BindGPUGraphicsPipeline(pass, pipeline);
             SDL_PushGPUVertexUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
             SDL_PushGPUVertexUniformData(cmd, 1, command.lightUniforms.data(), sizeof(command.lightUniforms));
@@ -2183,6 +2324,79 @@ namespace CNA::Internal::Backends::SdlGpu
         SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
     }
 
+    // ---- SdlGpuRenderTargetBackend (Phase SDLGPU-8, SDLGPU-35) ----
+
+    SdlGpuRenderTargetBackend::SdlGpuRenderTargetBackend(SdlGpuGraphicsBackend& owner, int width, int height,
+                                                          int depthFormat, bool mipMap)
+        : owner_(&owner), width_(width), height_(height), mipMap_(mipMap)
+    {
+        SDL_GPUDevice* device = owner_->Device();
+
+        SDL_GPUTextureCreateInfo colorInfo{};
+        colorInfo.type = SDL_GPU_TEXTURETYPE_2D;
+        colorInfo.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+        colorInfo.usage = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
+        colorInfo.width = static_cast<Uint32>(width);
+        colorInfo.height = static_cast<Uint32>(height);
+        colorInfo.layer_count_or_depth = 1;
+        colorInfo.num_levels = mipMap_ ? static_cast<Uint32>(CalculateMipLevels(width, height)) : 1;
+        colorInfo.sample_count = SDL_GPU_SAMPLECOUNT_1;
+
+        colorTexture_ = SDL_CreateGPUTexture(device, &colorInfo);
+        if (colorTexture_ == nullptr)
+            throw std::runtime_error(std::string("CNA SDL_GPU: failed to create RenderTarget2D color texture: ") + SDL_GetError());
+
+        // DepthFormat::None (0) requests no depth attachment at all; otherwise this target gets its
+        // own depth/stencil texture sized to its own width/height (which may differ from the
+        // swapchain's) -- reuses the one combined format this device supports, same simplification
+        // the swapchain's own depthStencilTexture_ already makes (see QueryDepthStencilFormat).
+        if (depthFormat != 0 && owner_->depthStencilFormat_ != SDL_GPU_TEXTUREFORMAT_INVALID)
+        {
+            SDL_GPUTextureCreateInfo depthInfo{};
+            depthInfo.type = SDL_GPU_TEXTURETYPE_2D;
+            depthInfo.format = owner_->depthStencilFormat_;
+            depthInfo.usage = SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET;
+            depthInfo.width = static_cast<Uint32>(width);
+            depthInfo.height = static_cast<Uint32>(height);
+            depthInfo.layer_count_or_depth = 1;
+            depthInfo.num_levels = 1;
+            depthInfo.sample_count = SDL_GPU_SAMPLECOUNT_1;
+            depthTexture_ = SDL_CreateGPUTexture(device, &depthInfo);
+            if (depthTexture_ == nullptr)
+            {
+                SDL_ReleaseGPUTexture(device, colorTexture_);
+                throw std::runtime_error(std::string("CNA SDL_GPU: failed to create RenderTarget2D depth texture: ") + SDL_GetError());
+            }
+        }
+    }
+
+    SdlGpuRenderTargetBackend::~SdlGpuRenderTargetBackend()
+    {
+        if (owner_->currentRenderTarget_ == this)
+            owner_->currentRenderTarget_ = nullptr;
+        auto& used = owner_->usedRenderTargetsThisFrame_;
+        used.erase(std::remove(used.begin(), used.end(), this), used.end());
+
+        SDL_GPUDevice* device = owner_->Device();
+        if (depthTexture_ != nullptr) SDL_ReleaseGPUTexture(device, depthTexture_);
+        if (colorTexture_ != nullptr) SDL_ReleaseGPUTexture(device, colorTexture_);
+    }
+
+    void SdlGpuRenderTargetBackend::BindAsRenderTarget()
+    {
+        owner_->currentRenderTarget_ = this;
+        auto& used = owner_->usedRenderTargetsThisFrame_;
+        if (std::find(used.begin(), used.end(), this) == used.end())
+            used.push_back(this);
+        owner_->framePending_ = true;
+    }
+
+    void SdlGpuRenderTargetBackend::UnbindAsRenderTarget()
+    {
+        if (owner_->currentRenderTarget_ == this)
+            owner_->currentRenderTarget_ = nullptr;
+    }
+
     // ---- SdlGpuVertexBufferBackend ----
 
     SdlGpuVertexBufferBackend::SdlGpuVertexBufferBackend(SdlGpuGraphicsBackend& owner, int vertexCapacity)
@@ -2382,10 +2596,18 @@ namespace CNA::Internal::Backends::SdlGpu
     {
         if (!begun_)
             throw std::logic_error("CNA SDL_GPU SpriteBatch.Draw called outside Begin/End");
-        const auto* sdlGpuTexture = dynamic_cast<const SdlGpuTextureBackend*>(&texture);
-        if (sdlGpuTexture == nullptr)
+        // A drawn texture is either a plain Texture2D (SdlGpuTextureBackend) or a RenderTarget2D
+        // sampled after being rendered into (SdlGpuRenderTargetBackend, Phase SDLGPU-8) -- both
+        // implement ITextureBackend but are unrelated concrete classes, so resolve whichever one
+        // this actually is to get the raw SDL_GPUTexture* to bind.
+        SDL_GPUTexture* nativeTexture = nullptr;
+        if (const auto* plainTexture = dynamic_cast<const SdlGpuTextureBackend*>(&texture))
+            nativeTexture = plainTexture->Texture();
+        else if (const auto* renderTarget = dynamic_cast<const SdlGpuRenderTargetBackend*>(&texture))
+            nativeTexture = renderTarget->ColorTexture();
+        else
             throw std::invalid_argument("CNA SDL_GPU: SpriteBatch received a texture from another graphics backend");
-        owner_->QueueSprite(*sdlGpuTexture, destinationRectangle, sourceRectangle, color, rotation,
+        owner_->QueueSprite(texture, nativeTexture, destinationRectangle, sourceRectangle, color, rotation,
                             origin, effects, layerDepth, transform_, textureFilter_, addressU_, addressV_);
     }
 
