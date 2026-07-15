@@ -1,7 +1,7 @@
-// plan_dx9.md Phase D9-8 (D9-82b/c/d): real effect-aware DrawPrimitivesEx/DrawIndexedPrimitivesEx
-// dispatch. This file covers BasicEffect (D9-82b), AlphaTestEffect (D9-82c), and DualTextureEffect
-// (D9-82d) -- EnvironmentMapEffect/SkinnedEffect each throw a named not-yet-implemented naming
-// their own follow-up row (D9-82e/f), matching the priority-cascade shape
+// plan_dx9.md Phase D9-8 (D9-82b/c/d/e): real effect-aware DrawPrimitivesEx/DrawIndexedPrimitivesEx
+// dispatch. This file covers BasicEffect (D9-82b), AlphaTestEffect (D9-82c), DualTextureEffect
+// (D9-82d), and EnvironmentMapEffect (D9-82e) -- SkinnedEffect throws a named not-yet-implemented
+// naming its own follow-up row (D9-82f), matching the priority-cascade shape
 // D3D11GraphicsBackend::DrawPrimitivesExImpl already established (flag-driven effect selection,
 // GpuDrawParams as the only per-draw input).
 //
@@ -118,6 +118,25 @@ namespace CNA::Internal::Backends::D3D9
                 fogVector.v[3] = (worldView.M43 + fogStart) * scale;
             }
             return fogVector;
+        }
+
+        /// D9-81 (corrected during D9-82b -- see that row's own updated note): a light with BOTH
+        /// diffuse and specular still (0,0,0) contributes exactly zero to Lighting.fxh's
+        /// ComputeLights() regardless of whether that zero came from Enabled=false or from an
+        /// Enabled=true light with literal black colors -- a linear multiply by an all-zero color
+        /// is zero either way. So this derivation is provably lossless for shader-VARIANT
+        /// selection, computed entirely from GpuDrawParams' own existing fields -- shared by every
+        /// effect with a real one-light optimization bucket (BasicEffect, EnvironmentMapEffect,
+        /// SkinnedEffect).
+        bool ComputeOneLightEXT(const GpuDrawParams& params)
+        {
+            const bool light1Zero = params.light1Diffuse[0] == 0.0f && params.light1Diffuse[1] == 0.0f &&
+                                    params.light1Diffuse[2] == 0.0f && params.light1Specular[0] == 0.0f &&
+                                    params.light1Specular[1] == 0.0f && params.light1Specular[2] == 0.0f;
+            const bool light2Zero = params.light2Diffuse[0] == 0.0f && params.light2Diffuse[1] == 0.0f &&
+                                    params.light2Diffuse[2] == 0.0f && params.light2Specular[0] == 0.0f &&
+                                    params.light2Specular[1] == 0.0f && params.light2Specular[2] == 0.0f;
+            return light1Zero && light2Zero;
         }
 
         struct BasicEffectRegisterTables
@@ -258,6 +277,59 @@ namespace CNA::Internal::Backends::D3D9
                     " has no matching CNA vertex layout (plan_dx9.md D9-82d)");
             }
         }
+
+        struct EnvironmentMapEffectRegisterTables
+        {
+            const Shaders::D3D9ShaderConstantSlot* vs; int vsCount;
+            const Shaders::D3D9ShaderConstantSlot* ps; int psCount;
+        };
+
+        /// D9-82e: only ShaderIndex 0/1/2/3/8/9/10/11 (non-specular) are reachable -- specular is
+        /// always false in this backend's own ComputeEnvironmentMapEffectShaderIndex() call
+        /// (D9-81's still-open specularEnabled gap, same category as BasicEffect's
+        /// PreferPerPixelLighting), so ShaderIndex 4-7/12-15 are structurally unreachable, not
+        /// merely unimplemented. VSInputNmTx matches the EXISTING stride-32 layout exactly -- no
+        /// new vertex declaration needed here (unlike DualTextureEffect's D9-82d case).
+        EnvironmentMapEffectRegisterTables GetEnvironmentMapEffectRegisterTablesEXT(int shaderIndex)
+        {
+            using namespace Shaders;
+            switch (shaderIndex)
+            {
+            case 0: return {kEnvironmentMapEffect_VSEnvMap_Registers,
+                            static_cast<int>(std::size(kEnvironmentMapEffect_VSEnvMap_Registers)),
+                            kEnvironmentMapEffect_PSEnvMap_Registers,
+                            static_cast<int>(std::size(kEnvironmentMapEffect_PSEnvMap_Registers))};
+            case 1: return {kEnvironmentMapEffect_VSEnvMap_Registers,
+                            static_cast<int>(std::size(kEnvironmentMapEffect_VSEnvMap_Registers)),
+                            nullptr, 0};
+            case 2: return {kEnvironmentMapEffect_VSEnvMapFresnel_Registers,
+                            static_cast<int>(std::size(kEnvironmentMapEffect_VSEnvMapFresnel_Registers)),
+                            kEnvironmentMapEffect_PSEnvMap_Registers,
+                            static_cast<int>(std::size(kEnvironmentMapEffect_PSEnvMap_Registers))};
+            case 3: return {kEnvironmentMapEffect_VSEnvMapFresnel_Registers,
+                            static_cast<int>(std::size(kEnvironmentMapEffect_VSEnvMapFresnel_Registers)),
+                            nullptr, 0};
+            case 8: return {kEnvironmentMapEffect_VSEnvMapOneLight_Registers,
+                            static_cast<int>(std::size(kEnvironmentMapEffect_VSEnvMapOneLight_Registers)),
+                            kEnvironmentMapEffect_PSEnvMap_Registers,
+                            static_cast<int>(std::size(kEnvironmentMapEffect_PSEnvMap_Registers))};
+            case 9: return {kEnvironmentMapEffect_VSEnvMapOneLight_Registers,
+                            static_cast<int>(std::size(kEnvironmentMapEffect_VSEnvMapOneLight_Registers)),
+                            nullptr, 0};
+            case 10: return {kEnvironmentMapEffect_VSEnvMapOneLightFresnel_Registers,
+                             static_cast<int>(std::size(kEnvironmentMapEffect_VSEnvMapOneLightFresnel_Registers)),
+                             kEnvironmentMapEffect_PSEnvMap_Registers,
+                             static_cast<int>(std::size(kEnvironmentMapEffect_PSEnvMap_Registers))};
+            case 11: return {kEnvironmentMapEffect_VSEnvMapOneLightFresnel_Registers,
+                             static_cast<int>(std::size(kEnvironmentMapEffect_VSEnvMapOneLightFresnel_Registers)),
+                             nullptr, 0};
+            default:
+                throw std::out_of_range(
+                    "GetEnvironmentMapEffectRegisterTablesEXT: ShaderIndex " + std::to_string(shaderIndex) +
+                    " is a specular variant, blocked on plan_dx9.md D9-81's still-open "
+                    "specularEnabled gap");
+            }
+        }
     }
 
     void D3D9GraphicsBackend::DrawPrimitivesExImpl(
@@ -274,10 +346,6 @@ namespace CNA::Internal::Backends::D3D9
         const bool needsEnvMap    = params.envMapping  && !needsAlphaTest && !needsDualTex;
         const bool needsSkinned   = params.skinned     && !needsAlphaTest && !needsDualTex && !needsEnvMap;
 
-        if (needsEnvMap)
-            throw std::runtime_error(
-                "D3D9GraphicsBackend::DrawPrimitivesEx: EnvironmentMapEffect dispatch not yet "
-                "implemented (plan_dx9.md D9-82e)");
         if (needsSkinned)
             throw std::runtime_error(
                 "D3D9GraphicsBackend::DrawPrimitivesEx: SkinnedEffect dispatch not yet "
@@ -294,6 +362,11 @@ namespace CNA::Internal::Backends::D3D9
         if (needsDualTex)
         {
             DrawDualTextureEffectEXT(vb, ib, stride, world, view, projection, primitive, primitiveCount, params);
+            return;
+        }
+        if (needsEnvMap)
+        {
+            DrawEnvironmentMapEffectEXT(vb, ib, stride, world, view, projection, primitive, primitiveCount, params);
             return;
         }
         DrawBasicEffectEXT(vb, ib, stride, world, view, projection, primitive, primitiveCount, params);
@@ -338,19 +411,7 @@ namespace CNA::Internal::Backends::D3D9
                 " has no matching CNA vertex layout (plan_dx9.md D9-82b)");
         }
 
-        // D9-81 (corrected during D9-82b -- see that row's own updated note): a light with BOTH
-        // diffuse and specular still (0,0,0) contributes exactly zero to Lighting.fxh's
-        // ComputeLights() regardless of whether that zero came from Enabled=false or from an
-        // Enabled=true light with literal black colors -- a linear multiply by an all-zero color
-        // is zero either way. So this derivation is provably lossless for shader-VARIANT
-        // selection, computed entirely from GpuDrawParams' own existing fields.
-        const bool light1Zero = params.light1Diffuse[0] == 0.0f && params.light1Diffuse[1] == 0.0f &&
-                                params.light1Diffuse[2] == 0.0f && params.light1Specular[0] == 0.0f &&
-                                params.light1Specular[1] == 0.0f && params.light1Specular[2] == 0.0f;
-        const bool light2Zero = params.light2Diffuse[0] == 0.0f && params.light2Diffuse[1] == 0.0f &&
-                                params.light2Diffuse[2] == 0.0f && params.light2Specular[0] == 0.0f &&
-                                params.light2Specular[1] == 0.0f && params.light2Specular[2] == 0.0f;
-        const bool oneLight = light1Zero && light2Zero;
+        const bool oneLight = ComputeOneLightEXT(params);
 
         // preferPerPixelLighting is always false here -- GpuDrawParams has no field for it
         // (plan_dx9.md D9-81 item 1, still unresolved) -- see this file's own header comment.
@@ -578,6 +639,101 @@ namespace CNA::Internal::Backends::D3D9
         const auto* tex1 = static_cast<const D3D9TextureBackend*>(params.texture1);
         device_->SetTexture(0, tex0->GetTextureEXT());
         device_->SetTexture(1, tex1->GetTextureEXT());
+
+        device_->SetVertexDeclaration(GetOrCreateVertexDeclarationEXT(stride));
+        const auto& d3dVb = static_cast<const D3D9VertexBufferBackend&>(vb);
+        device_->SetStreamSource(0, d3dVb.GetBufferEXT(), 0, static_cast<UINT>(stride));
+
+        if (ib)
+        {
+            const auto& d3dIb = static_cast<const D3D9IndexBufferBackend&>(*ib);
+            device_->SetIndices(d3dIb.GetBufferEXT());
+            device_->DrawIndexedPrimitive(ToD3D9Topology(primitive), 0, 0,
+                                          static_cast<UINT>(d3dVb.GetVertexCount()),
+                                          0, static_cast<UINT>(primitiveCount));
+        }
+        else
+        {
+            device_->DrawPrimitive(ToD3D9Topology(primitive), 0, static_cast<UINT>(primitiveCount));
+        }
+    }
+
+    void D3D9GraphicsBackend::DrawEnvironmentMapEffectEXT(
+        const IVertexBufferBackend& vb, const IIndexBufferBackend* ib, std::size_t stride,
+        const Matrix& world, const Matrix& view, const Matrix& projection,
+        PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
+    {
+        if (!params.texture0 || !params.envMap)
+            throw std::runtime_error(
+                "D3D9GraphicsBackend::DrawPrimitivesEx (EnvironmentMapEffect): requires non-null "
+                "texture0 AND envMap (plan_dx9.md D9-82e)");
+
+        // VSInputNmTx (Position+Normal+TexCoord) matches the existing stride-32 layout exactly --
+        // no new vertex declaration needed here (unlike DualTextureEffect's D9-82d case).
+        if (stride != 32)
+            throw std::runtime_error(
+                "D3D9GraphicsBackend::DrawPrimitivesEx (EnvironmentMapEffect): stride " +
+                std::to_string(stride) + " has no matching CNA vertex layout (plan_dx9.md D9-82e)");
+
+        // specularEnabled is always false here -- GpuDrawParams has no field for it (plan_dx9.md
+        // D9-81 item 4, still unresolved; same category as BasicEffect's PreferPerPixelLighting).
+        // This makes ShaderIndex 4-7/12-15 structurally unreachable, not merely unimplemented.
+        const bool oneLight = ComputeOneLightEXT(params);
+        const int shaderIndex = ComputeEnvironmentMapEffectShaderIndex(
+            params.fogEnabled, params.fresnelEnabled, /*specularEnabled=*/false, oneLight);
+
+        const EnvironmentMapEffectRegisterTables regs = GetEnvironmentMapEffectRegisterTablesEXT(shaderIndex);
+
+        if (!shaderCache_) shaderCache_ = std::make_unique<D3D9ShaderCache>(device_.Get());
+        IDirect3DVertexShader9* vs = shaderCache_->GetVertexShader(GetEnvironmentMapEffectVertexShaderNameEXT(shaderIndex));
+        IDirect3DPixelShader9* ps = shaderCache_->GetPixelShader(GetEnvironmentMapEffectPixelShaderNameEXT(shaderIndex));
+        device_->SetVertexShader(vs);
+        device_->SetPixelShader(ps);
+
+        UploadMatrixConstantVS(device_.Get(), regs.vs, regs.vsCount, "WorldViewProj", world * view * projection);
+        UploadMatrixConstantVS(device_.Get(), regs.vs, regs.vsCount, "World", world);
+        const Matrix worldInverseTranspose = Matrix::Transpose(Matrix::Invert(world));
+        UploadMatrixConstantVS(device_.Get(), regs.vs, regs.vsCount, "WorldInverseTranspose", worldInverseTranspose);
+
+        TryUploadVertexShaderConstantEXT(device_.Get(), regs.vs, regs.vsCount, "DiffuseColor", params.diffuseColor);
+
+        // EmissiveColor: unlike BasicEffect, EnvironmentMapEffect::FillGpuDrawParams() already
+        // pre-folds ambient*diffuse+emissive (confirmed at its own call site) -- upload verbatim.
+        TryUploadVertexShaderConstantEXT(device_.Get(), regs.vs, regs.vsCount, "EmissiveColor",
+                                         Pad3(params.emissiveColor).v);
+
+        TryUploadVertexShaderConstantEXT(device_.Get(), regs.vs, regs.vsCount, "EyePosition",
+                                         Pad3(params.eyePositionWorld).v);
+
+        const float envMapAmount4[4] = {params.envMapAmount, 0.0f, 0.0f, 0.0f};
+        TryUploadVertexShaderConstantEXT(device_.Get(), regs.vs, regs.vsCount, "EnvironmentMapAmount", envMapAmount4);
+        const float fresnelFactor4[4] = {params.fresnelFactor, 0.0f, 0.0f, 0.0f};
+        TryUploadVertexShaderConstantEXT(device_.Get(), regs.vs, regs.vsCount, "FresnelFactor", fresnelFactor4);
+
+        // No SpecularColor/SpecularPower/DirLight*SpecularColor here -- EnvironmentMapEffect.fx
+        // #defines all of them to 0 rather than declaring real constants (Lighting.fxh needs the
+        // symbols to compile but this effect never varies them), so no register exists to upload.
+        TryUploadVertexShaderConstantEXT(device_.Get(), regs.vs, regs.vsCount, "DirLight0Direction",
+                                         Pad3(params.light0Dir).v);
+        TryUploadVertexShaderConstantEXT(device_.Get(), regs.vs, regs.vsCount, "DirLight0DiffuseColor",
+                                         Pad3(params.light0Diffuse).v);
+        TryUploadVertexShaderConstantEXT(device_.Get(), regs.vs, regs.vsCount, "DirLight1Direction",
+                                         Pad3(params.light1Dir).v);
+        TryUploadVertexShaderConstantEXT(device_.Get(), regs.vs, regs.vsCount, "DirLight1DiffuseColor",
+                                         Pad3(params.light1Diffuse).v);
+        TryUploadVertexShaderConstantEXT(device_.Get(), regs.vs, regs.vsCount, "DirLight2Direction",
+                                         Pad3(params.light2Dir).v);
+        TryUploadVertexShaderConstantEXT(device_.Get(), regs.vs, regs.vsCount, "DirLight2DiffuseColor",
+                                         Pad3(params.light2Diffuse).v);
+
+        const Vec4Pad fogVector = ComputeFogVectorEXT(world, view, params.fogEnabled, params.fogStart, params.fogEnd);
+        TryUploadVertexShaderConstantEXT(device_.Get(), regs.vs, regs.vsCount, "FogVector", fogVector.v);
+        TryUploadPixelShaderConstantEXT(device_.Get(), regs.ps, regs.psCount, "FogColor", Pad3(params.fogColor).v);
+
+        const auto* tex = static_cast<const D3D9TextureBackend*>(params.texture0);
+        const auto* cube = static_cast<const D3D9TextureCubeBackend*>(params.envMap);
+        device_->SetTexture(0, tex->GetTextureEXT());
+        device_->SetTexture(1, cube->GetTextureEXT());
 
         device_->SetVertexDeclaration(GetOrCreateVertexDeclarationEXT(stride));
         const auto& d3dVb = static_cast<const D3D9VertexBufferBackend&>(vb);

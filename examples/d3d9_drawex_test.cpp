@@ -1,18 +1,23 @@
 // SPDX-License-Identifier: MS-PL
-// plan_dx9.md Phase D9-8 (D9-82b/c/d): real effect-aware DrawPrimitivesEx/DrawIndexedPrimitivesEx
-// dispatch -- BasicEffect (D9-82b), AlphaTestEffect (D9-82c), DualTextureEffect (D9-82d).
-// EnvironmentMapEffect/SkinnedEffect are D9-82e/f, not yet implemented; Check F confirms each
-// throws a named, row-specific not-yet-implemented rather than silently drawing the wrong thing.
+// plan_dx9.md Phase D9-8 (D9-82b/c/d/e): real effect-aware DrawPrimitivesEx/DrawIndexedPrimitivesEx
+// dispatch -- BasicEffect (D9-82b), AlphaTestEffect (D9-82c), DualTextureEffect (D9-82d),
+// EnvironmentMapEffect (D9-82e). SkinnedEffect is D9-82f, not yet implemented; Check F confirms it
+// throws a named not-yet-implemented rather than silently drawing the wrong thing (plus two
+// "unsupported combination" throw checks for BasicEffect/DualTextureEffect/EnvironmentMapEffect's
+// own honest vertex-layout/GpuDrawParams gaps).
 //
 // Every expected pixel value below is HAND-COMPUTED directly from BasicEffect.fx's/
-// AlphaTestEffect.fx's/DualTextureEffect.fx's/Lighting.fxh's own real HLSL formulas
-// (SampleTexture*Diffuse, ComputeLights' mul(diffuse,lightDiffuse)*DiffuseColor.rgb+EmissiveColor,
-// ApplyFog's lerp, AlphaTestEffect's clip((cmp) ? AlphaTest.z : AlphaTest.w),
-// DualTextureEffect's color.rgb*=2; color*=overlay*Diffuse), not just "close enough" --
+// AlphaTestEffect.fx's/DualTextureEffect.fx's/EnvironmentMapEffect.fx's/Lighting.fxh's own real
+// HLSL formulas (SampleTexture*Diffuse, ComputeLights' mul(diffuse,lightDiffuse)*
+// DiffuseColor.rgb+EmissiveColor, ApplyFog's lerp, AlphaTestEffect's
+// clip((cmp) ? AlphaTest.z : AlphaTest.w), DualTextureEffect's color.rgb*=2; color*=overlay*Diffuse,
+// EnvironmentMapEffect's lerp(color.rgb,envmap.rgb,Specular.rgb)), not just "close enough" --
 // SpecularColor is deliberately zeroed in every BasicEffect check so AddSpecular() never
 // contributes (sidesteps needing to also hand-compute a half-vector-dependent specular term;
 // SpecularColor=0 makes that term exactly zero regardless of light direction/geometry, an exact
-// simplification, not an approximation).
+// simplification, not an approximation). EnvironmentMapEffect checks deliberately use the
+// non-fresnel buckets (Specular.rgb = a constant EnvironmentMapAmount, not a
+// geometry/eye-vector-dependent Fresnel formula) for the same exactness reason.
 //
 // Check A -- unlit + textured (stride 20, ShaderIndex 4/5): exact texture*DiffuseColor readback.
 // Check B -- unlit + vertex-color + textured (stride 24, ShaderIndex 6/7): exact
@@ -26,10 +31,9 @@
 // Check E -- fog: same unlit+textured setup as Check A, but with fog forced to its fully-fogged
 //   (fogFactor=1) case via a specific fogStart/fogEnd/geometry-Z combination -- exact FogColor
 //   readback (ApplyFog's lerp(color,FogColor*alpha,1) == FogColor*alpha).
-// Check F -- an unsupported BasicEffect flag/stride combination and an unsupported
-//   DualTextureEffect flag combination (no matching CNA vertex layout) each throw a named error
-//   rather than silently drawing wrong; EnvironmentMapEffect/SkinnedEffect each throw their own
-//   row-specific not-yet-implemented (D9-82e/f).
+// Check F -- unsupported BasicEffect/DualTextureEffect/EnvironmentMapEffect flag/stride
+//   combinations (no matching CNA vertex layout) each throw a named error rather than silently
+//   drawing wrong; SkinnedEffect throws its own row-specific not-yet-implemented (D9-82f).
 // Check G -- AlphaTestEffect, Less compare, PASSES (LtGt bucket, stride 20): exact
 //   texture*DiffuseColor readback, proving DiffuseColor + the clip()-passes path both work.
 // Check H -- AlphaTestEffect, Less compare, FAILS (discarded): the background is left genuinely
@@ -39,6 +43,10 @@
 // Check J -- DualTextureEffect, no fog/vertex color (stride 28, the new D3D9-only layout): exact
 //   2*texture0*texture1*DiffuseColor readback, proving the doubling-blend formula, the two-sampler
 //   bind (texture0/texture1), and the new stride-28 vertex declaration all work together.
+// Check M -- EnvironmentMapEffect, "basic" bucket (stride 32): TWO active lights (oneLight
+//   derivation must resolve to false) -- exact lerp(texture*diffuseSum, envmap, envMapAmount).
+// Check N -- EnvironmentMapEffect, OneLight bucket: ONE active light -- exact readback, different
+//   from Check M, proving correct bucket selection (mirrors Checks C/D's own discipline).
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
@@ -113,6 +121,16 @@ namespace
         img.height = 1;
         img.pixels = {r, g, b, a};
         return backend.CreateTexture(img);
+    }
+
+    std::unique_ptr<CNA::Internal::Backends::ITextureCubeBackend> Make1x1CubeTexture(
+        D3D9GraphicsBackend& backend, uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255)
+    {
+        auto cube = backend.CreateTextureCube(1, false, 0);
+        const uint8_t pixel[4] = {r, g, b, a};
+        for (int face = 0; face < 6; ++face)
+            cube->SetData(face, 0, 0, 0, 1, 1, pixel, sizeof(pixel));
+        return cube;
     }
 
     bool ReadCenterPixel(GraphicsDevice& dev, Color& out)
@@ -381,6 +399,70 @@ protected:
                   "2*texture0*texture1*DiffuseColor readback (100,60,20,255)");
         }
 
+        // Check M: EnvironmentMapEffect, "basic" bucket (TWO active lights, non-fresnel, stride 32).
+        {
+            auto vb = backend.CreateVertexBuffer(3);
+            vb->SetData(kTriNormalTx, 3, sizeof(VPNT));
+            auto tex = Make1x1Texture(backend, 200, 120, 40, 255);
+            auto cube = Make1x1CubeTexture(backend, 100, 200, 50, 255);
+
+            GpuDrawParams params;
+            params.envMapping = true;
+            params.textureEnabled = true;
+            params.vertexColorEnabled = false;
+            params.texture0 = tex.get();
+            params.envMap = cube.get();
+            params.diffuseColor[0] = params.diffuseColor[1] = params.diffuseColor[2] = params.diffuseColor[3] = 1.0f;
+            params.envMapAmount = 0.5f;
+            params.light0Dir[0] = 0.0f; params.light0Dir[1] = 0.0f; params.light0Dir[2] = -1.0f;
+            params.light0Diffuse[0] = params.light0Diffuse[1] = params.light0Diffuse[2] = 0.3f;
+            params.light1Dir[0] = 0.0f; params.light1Dir[1] = 0.0f; params.light1Dir[2] = -1.0f;
+            params.light1Diffuse[0] = params.light1Diffuse[1] = params.light1Diffuse[2] = 0.2f;
+            // light2 stays zero -> oneLight must resolve to false (light1 nonzero).
+
+            dev.Clear(Color(0, 0, 255, 255));
+            backend.DrawPrimitivesEx(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                     Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, params);
+            Color px(0, 0, 0, 0);
+            ReadCenterPixel(dev, px);
+            // diffuse sum = 1*0.3+1*0.2 = 0.5 -> texColor = tex*0.5 = (100,60,20).
+            // lerp(texColor, envmap, 0.5) = ((100+100)/2,(60+200)/2,(20+50)/2) = (100,130,35).
+            check(px.getRProperty() == 100 && px.getGProperty() == 130 && px.getBProperty() == 35 && px.getAProperty() == 255,
+                  "DrawPrimitivesEx (EnvironmentMapEffect, basic bucket, 2 lights): exact "
+                  "lerp(texture*diffuseSum, envmap, envMapAmount) readback (100,130,35)");
+        }
+
+        // Check N: EnvironmentMapEffect, "oneLight" bucket (ONE active light, non-fresnel).
+        {
+            auto vb = backend.CreateVertexBuffer(3);
+            vb->SetData(kTriNormalTx, 3, sizeof(VPNT));
+            auto tex = Make1x1Texture(backend, 200, 120, 40, 255);
+            auto cube = Make1x1CubeTexture(backend, 100, 200, 50, 255);
+
+            GpuDrawParams params;
+            params.envMapping = true;
+            params.textureEnabled = true;
+            params.vertexColorEnabled = false;
+            params.texture0 = tex.get();
+            params.envMap = cube.get();
+            params.diffuseColor[0] = params.diffuseColor[1] = params.diffuseColor[2] = params.diffuseColor[3] = 1.0f;
+            params.envMapAmount = 0.5f;
+            params.light0Dir[0] = 0.0f; params.light0Dir[1] = 0.0f; params.light0Dir[2] = -1.0f;
+            params.light0Diffuse[0] = params.light0Diffuse[1] = params.light0Diffuse[2] = 0.4f;
+            // light1/light2 stay zero -> oneLight must resolve to true.
+
+            dev.Clear(Color(0, 0, 255, 255));
+            backend.DrawPrimitivesEx(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                     Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, params);
+            Color px(0, 0, 0, 0);
+            ReadCenterPixel(dev, px);
+            // diffuse sum = 1*0.4 = 0.4 -> texColor = tex*0.4 = (80,48,16).
+            // lerp(texColor, envmap, 0.5) = ((80+100)/2,(48+200)/2,(16+50)/2) = (90,124,33).
+            check(px.getRProperty() == 90 && px.getGProperty() == 124 && px.getBProperty() == 33 && px.getAProperty() == 255,
+                  "DrawPrimitivesEx (EnvironmentMapEffect, OneLight bucket, 1 light): exact readback "
+                  "(90,124,33) -- different from Check M, proves correct bucket selection");
+        }
+
         // Check F: honest-gap / not-yet-implemented reporting.
         {
             auto vb = backend.CreateVertexBuffer(3);
@@ -411,13 +493,15 @@ protected:
             check(threw, "DrawPrimitivesEx: an unsupported DualTextureEffect flag combination throws "
                          "(no matching CNA vertex layout)");
 
+            // No matching CNA vertex layout: EnvironmentMapEffect requires stride 32
+            // (VSInputNmTx), and this vb is stride 20.
             GpuDrawParams envMapParams;
             envMapParams.envMapping = true;
             threw = false;
             try { backend.DrawPrimitivesEx(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
                                            Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, envMapParams); }
             catch (const std::exception&) { threw = true; }
-            check(threw, "DrawPrimitivesEx: EnvironmentMapEffect dispatch throws a named not-yet-implemented (D9-82e)");
+            check(threw, "DrawPrimitivesEx: an unsupported EnvironmentMapEffect vertex layout throws");
 
             GpuDrawParams skinnedParams;
             skinnedParams.skinned = true;

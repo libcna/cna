@@ -359,6 +359,15 @@ namespace CNA::Internal::Backends::D3D9
                                       std::size_t stride, const Matrix& world, const Matrix& view,
                                       const Matrix& projection, PrimitiveType primitive, int primitiveCount,
                                       const GpuDrawParams& params);
+        /// D9-82e: real `EnvironmentMapEffect` dispatch -- cube-map sampling (`envMap` ->
+        /// `EnvironmentMap`). Only the 8 non-specular `ShaderIndex` values are reachable
+        /// (`specularEnabled` stays `D9-81`'s still-open gap, same category as `BasicEffect`'s
+        /// `PreferPerPixelLighting`). Uses the existing stride-32 layout (`VSInputNmTx` matches it
+        /// exactly, unlike `DualTextureEffect`'s case). Defined in `D3D9EffectDraw.cpp`.
+        void DrawEnvironmentMapEffectEXT(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
+                                         std::size_t stride, const Matrix& world, const Matrix& view,
+                                         const Matrix& projection, PrimitiveType primitive, int primitiveCount,
+                                         const GpuDrawParams& params);
 
         SDL_Window* window_ = nullptr;
         int width_ = 0;
