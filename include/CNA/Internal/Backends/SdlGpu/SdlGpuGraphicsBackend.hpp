@@ -248,6 +248,41 @@ namespace CNA::Internal::Backends::SdlGpu
         std::array<Uint8, 6> clearStencil_{};
     };
 
+    /**
+     * @brief `SDL_gpu`-backed plain (non-render-target), uploaded `TextureCube` (Phase `SDLGPU-9`,
+     * `SDLGPU-51`).
+     *
+     * A single `SDL_GPU_TEXTURETYPE_CUBE` texture, `SAMPLER` usage only (never a render target).
+     * Each face is one of the cube texture's 6 array layers -- `SetData`/`GetData` both carry the
+     * face straight through to `SDL_GPUTextureRegion.layer` (matching
+     * `SdlGpuRenderTargetCubeBackend::GetData`'s own convention), and the mip `level` straight
+     * through to `mip_level`, same as `SdlGpuTexture3DBackend`. Uploads use `cycle=false` for the
+     * same reason `SdlGpuTexture3DBackend::SetData` does: a real cube map is built up via multiple
+     * independent per-face (and potentially per-level) `SetData` calls that must all land on the
+     * SAME underlying resource -- `cycle=true` would silently orphan earlier faces' writes (the
+     * bug `SDLGPU-40` found and fixed for `Texture3D`).
+     */
+    class SdlGpuTextureCubeBackend final : public ITextureCubeBackend
+    {
+    public:
+        SdlGpuTextureCubeBackend(SdlGpuGraphicsBackend& owner, int size, bool mipMap);
+        ~SdlGpuTextureCubeBackend() override;
+
+        SdlGpuTextureCubeBackend(const SdlGpuTextureCubeBackend&) = delete;
+        SdlGpuTextureCubeBackend& operator=(const SdlGpuTextureCubeBackend&) = delete;
+
+        void SetData(int face, int level, int x, int y, int w, int h,
+                    const void* data, int dataLength) override;
+        void GetData(int face, int level, int x, int y, int w, int h,
+                    void* data, int dataLength) const override;
+
+    private:
+        SdlGpuGraphicsBackend* owner_ = nullptr;
+        SDL_GPUTexture* texture_ = nullptr;
+        int size_ = 0;
+        bool mipMap_ = false;
+    };
+
     /** @brief `SDL_gpu`-backed vertex buffer. */
     class SdlGpuVertexBufferBackend final : public IVertexBufferBackend
     {
@@ -616,6 +651,10 @@ namespace CNA::Internal::Backends::SdlGpu
         /** @brief Creates a `Texture3D` (Phase `SDLGPU-9`, `SDLGPU-40`/`SDLGPU-41`). */
         std::unique_ptr<ITexture3DBackend> CreateTexture3D(int w, int h, int depth, bool mipMap,
                                                             int surfaceFormat) override;
+
+        /** @brief Creates a plain, uploaded `TextureCube` (Phase `SDLGPU-9`, `SDLGPU-51`). */
+        std::unique_ptr<ITextureCubeBackend> CreateTextureCube(int size, bool mipMap,
+                                                                int surfaceFormat) override;
 
         /**
          * @brief Activates multiple render targets for MRT (Phase `SDLGPU-8`, `SDLGPU-37`).
