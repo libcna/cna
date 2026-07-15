@@ -308,18 +308,26 @@ endif()
 # Backend target
 file(GLOB BACKEND_SOURCES "${BACKEND_DIR}/*.cpp")
 
-# plan_dx9.md Phase D9-11 (D9-111), design decision 16: D3D9EffectBackend.cpp calls D3DCompile()
-# (the custom-ShaderEffect runtime compile path), which needs d3dcompiler -- but the stock D3D9
-# pipeline must stay d3dcompiler-free (unlike D3D11/D3D12, which link it into their whole backend
-# target unconditionally, DX-58/DX-121). Excluded from the main glob and built as its own isolated
-# static library instead, with d3dcompiler linked ONLY there (D9-111's own "on this target only").
-# D9-112 links this into ${BACKEND_TARGET} once D3D9GraphicsBackend::CreateEffectBackend() actually
-# needs to construct one; until then it exists purely for D3D9_EffectBackend's own CTest to link
-# directly (same pattern cna_test_d3d9_constanttable already uses for its own d3dcompiler need).
-set(D3D9_EFFECT_BACKEND_SRC "${CMAKE_CURRENT_SOURCE_DIR}/src/CNA/Internal/Backends/D3D9/D3D9EffectBackend.cpp")
-if(CNA_GRAPHICS_BACKEND STREQUAL "D3D9" AND EXISTS "${D3D9_EFFECT_BACKEND_SRC}")
-    list(REMOVE_ITEM BACKEND_SOURCES "${D3D9_EFFECT_BACKEND_SRC}")
-    add_library(cna_backend_graphics_d3d9_effect STATIC "${D3D9_EFFECT_BACKEND_SRC}")
+# plan_dx9.md Phase D9-11 (D9-110/D9-111), design decision 16: D3D9EffectBackend.cpp calls
+# D3DCompile() (the custom-ShaderEffect runtime compile path), which needs d3dcompiler -- but the
+# stock D3D9 pipeline must stay d3dcompiler-free (unlike D3D11/D3D12, which link it into their
+# whole backend target unconditionally, DX-58/DX-121). Excluded from the main glob and built as its
+# own isolated static library instead, with d3dcompiler linked ONLY there (D9-111's own "on this
+# target only"). D3D9ConstantTable.cpp (D9-110's CTAB parser) moves here too -- it has no consumer
+# outside D3D9EffectBackend.cpp, and leaving it in the main glob while D3D9EffectBackend.cpp moved
+# out created a genuine link-order circular dependency between the two targets (this effect target
+# calling ParseConstantTableEXT() while ALSO needing to be linked INTO the main backend target for
+# D3D9GraphicsBackend::CreateEffectBackend() to construct one) -- found empirically via a real
+# "undefined reference to ParseConstantTableEXT" link failure across every D3D9 test binary, not
+# assumed in advance. ${BACKEND_TARGET} links this target (D9-112) so
+# D3D9GraphicsBackend::CreateEffectBackend() can construct one.
+set(D3D9_EFFECT_BACKEND_SOURCES
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/CNA/Internal/Backends/D3D9/D3D9EffectBackend.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/CNA/Internal/Backends/D3D9/D3D9ConstantTable.cpp"
+)
+if(CNA_GRAPHICS_BACKEND STREQUAL "D3D9" AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/CNA/Internal/Backends/D3D9/D3D9EffectBackend.cpp")
+    list(REMOVE_ITEM BACKEND_SOURCES ${D3D9_EFFECT_BACKEND_SOURCES})
+    add_library(cna_backend_graphics_d3d9_effect STATIC ${D3D9_EFFECT_BACKEND_SOURCES})
     target_link_libraries(cna_backend_graphics_d3d9_effect PUBLIC cna_backend_graphics_common SHARP_RUNTIME)
     target_link_libraries(cna_backend_graphics_d3d9_effect PRIVATE d3d9 d3dcompiler)
     target_include_directories(cna_backend_graphics_d3d9_effect PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
@@ -427,12 +435,20 @@ target_link_libraries(CNA
 # because libCNA.a is fully scanned before libcna_backend_graphics_d3d11.a creates the need.
 # CMake's documented static-library-cycle support (see LINK_INTERFACE_MULTIPLICITY) resolves this
 # by repeating the archives on the final link line once this cycle is declared.
-# plan_dx9.md D9-10: D3D9 deliberately does NOT join this condition yet. Nothing in the D3D9
-# backend calls back into a CNA-defined symbol (e.g. Effect::Apply()) until SpriteBatch's
-# custom-Effect path lands (D9-112, Phase D9-11 -- ask-first, not yet authorized to start). Add
-# "D3D9" here when that task actually needs it, not preemptively.
-if(CNA_GRAPHICS_BACKEND STREQUAL "D3D11" OR CNA_GRAPHICS_BACKEND STREQUAL "D3D12")
+# plan_dx9.md D9-112 (Phase D9-11, authorized 2026-07-15): D3D9 now joins this condition too --
+# D3D9SpriteBatchBackend::FlushBatch() calls customEffect_->Apply() (a CNA-defined symbol) for
+# SpriteBatch::Begin(effect)'s custom-Effect path, the same genuine circular dependency D3D11/D3D12
+# already have. (D9-10's own original note said "add D3D9 here when D9-112 actually needs it" --
+# this is that task.)
+if(CNA_GRAPHICS_BACKEND STREQUAL "D3D11" OR CNA_GRAPHICS_BACKEND STREQUAL "D3D12" OR CNA_GRAPHICS_BACKEND STREQUAL "D3D9")
     target_link_libraries(${BACKEND_TARGET} PRIVATE CNA)
+endif()
+
+# D9-112: D3D9GraphicsBackend::CreateEffectBackend() (below) needs to construct a real
+# D3D9EffectBackend, so ${BACKEND_TARGET} now links the isolated, d3dcompiler-carrying
+# cna_backend_graphics_d3d9_effect target (D9-111, design decision 16) it didn't need before.
+if(TARGET cna_backend_graphics_d3d9_effect)
+    target_link_libraries(${BACKEND_TARGET} PRIVATE cna_backend_graphics_d3d9_effect)
 endif()
 
 if(ANDROID)
@@ -6979,6 +6995,20 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D9")
         cna_d3d9_ctest_command(_d3d9_effectbackend_cmd cna_test_d3d9_effectbackend)
         add_test(NAME D3D9_EffectBackend COMMAND ${_d3d9_effectbackend_cmd})
         set_tests_properties(D3D9_EffectBackend PROPERTIES
+            TIMEOUT 60
+            LABELS "D3D9"
+            ENVIRONMENT "CNA_D3D9_WINEPREFIX=$ENV{HOME}/.wine-cna-d3d9-spike")
+
+        # D9-112: SpriteBatch::Begin(effect) wiring, through the real public
+        # SpriteBatch/ShaderEffect API (not the raw backend), mirroring D3D11's own DX-71 test
+        # bar. CNA itself now links cna_backend_graphics_d3d9_effect (the circular-link fix
+        # above), so this needs no extra target_link_libraries beyond the standard cna_d3d9_test()
+        # macro set -- ShaderEffect's own constructor reaches D3D9GraphicsBackend::
+        # CreateEffectBackend() transitively through the real device.
+        cna_d3d9_test(cna_test_d3d9_spritebatch_customeffect examples/d3d9_spritebatch_customeffect_test.cpp)
+        cna_d3d9_ctest_command(_d3d9_sb_customeffect_cmd cna_test_d3d9_spritebatch_customeffect)
+        add_test(NAME D3D9_SpriteBatch_CustomEffect COMMAND ${_d3d9_sb_customeffect_cmd})
+        set_tests_properties(D3D9_SpriteBatch_CustomEffect PROPERTIES
             TIMEOUT 60
             LABELS "D3D9"
             ENVIRONMENT "CNA_D3D9_WINEPREFIX=$ENV{HOME}/.wine-cna-d3d9-spike")

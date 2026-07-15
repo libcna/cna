@@ -7,6 +7,7 @@
 #include "CNA/Internal/Backends/Common/NotYetImplemented.hpp"
 #include "CNA/Internal/Backends/D3D9/D3D9Buffers.hpp"
 #include "CNA/Internal/Backends/D3D9/D3D9ConstantUpload.hpp"
+#include "CNA/Internal/Backends/D3D9/D3D9EffectBackend.hpp"
 #include "CNA/Internal/Backends/D3D9/D3D9FormatMapping.hpp"
 #include "CNA/Internal/Backends/D3D9/D3D9ShaderCache.hpp"
 #include "CNA/Internal/Backends/D3D9/D3D9ShaderDispatch.hpp"
@@ -910,6 +911,17 @@ namespace CNA::Internal::Backends::D3D9
     std::unique_ptr<ISpriteBatchBackend> D3D9GraphicsBackend::CreateSpriteBatch()
     {
         return std::make_unique<D3D9SpriteBatchBackend>(this);
+    }
+
+    std::unique_ptr<IEffectBackend> D3D9GraphicsBackend::CreateEffectBackend(
+        const std::string& vertSrc, const std::string& fragSrc)
+    {
+        using Microsoft::Xna::Framework::Graphics::GraphicsProfile;
+        const bool hiDef = static_cast<GraphicsProfile>(graphicsProfileOrdinal_) == GraphicsProfile::HiDef;
+        auto backend = std::make_unique<D3D9EffectBackend>(device_.Get(), hiDef);
+        if (!vertSrc.empty() && !fragSrc.empty())
+            backend->CompileProgram(vertSrc, fragSrc);
+        return backend;
     }
 
     void D3D9GraphicsBackend::SetSwapInterval(int)

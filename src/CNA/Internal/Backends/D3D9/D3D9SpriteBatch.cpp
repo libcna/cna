@@ -3,9 +3,11 @@
 #include "CNA/Internal/Backends/D3D9/D3D9Textures.hpp"
 #include "CNA/Internal/Backends/D3D9/D3D9VertexDeclarations.hpp"
 #include "CNA/Internal/Backends/D3D9/D3D9ConstantUpload.hpp"
+#include "CNA/Internal/Backends/D3D9/D3D9EffectBackend.hpp"
 #include "CNA/Internal/Backends/D3D9/shaders/d3d9_shaders.hpp"
 #include "CNA/Internal/Backends/D3D9/shaders/D3D9ShaderRegisters.hpp"
 
+#include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
@@ -60,6 +62,18 @@ namespace CNA::Internal::Backends::D3D9
     void D3D9SpriteBatchBackend::SetTransformMatrix(const Matrix& m)
     {
         transform_ = m;
+    }
+
+    void D3D9SpriteBatchBackend::SetCustomEffect(Effect* effect)
+    {
+        // D9-112: flush on change (mirrors D3D11SpriteBatchBackend::SetCustomEffect() exactly) --
+        // any pending batch was built expecting the PREVIOUS shader/effect, so it must be drawn
+        // before the switch takes effect, not silently redrawn with the new one.
+        if (customEffect_ != effect)
+        {
+            FlushBatch();
+            customEffect_ = effect;
+        }
     }
 
     void D3D9SpriteBatchBackend::SetSamplerFilter(int textureFilter)
@@ -162,17 +176,45 @@ namespace CNA::Internal::Backends::D3D9
 
         float vpW = 0.0f, vpH = 0.0f;
         GetCurrentViewportSizeEXT(vpW, vpH);
-        const Matrix matrixTransform = BuildMatrixTransformEXT(vpW, vpH);
 
-        device_->SetVertexShader(vertexShader_.Get());
-        device_->SetPixelShader(pixelShader_.Get());
+        // D9-112: a custom Effect (SpriteBatch::Begin(effect)) replaces Microsoft's own
+        // SpriteEffect shaders entirely for this flush -- draws the SAME stride-24 SpriteVertex
+        // data (position/color/texcoord), since D3D9's vertex declaration is a device state
+        // decoupled from shader compilation, not baked into the shader like D3D11's InputLayout
+        // (D9-111's own design note) -- no separate declaration/layout needed for this path.
+        //
+        // Unlike the stock path's real XNA "MatrixTransform" register, a custom shader receives
+        // the current viewport size via a "vpSize" uniform instead (mirrors
+        // D3D11SpriteBatchBackend's own established, NOXNA, documented CNA convention for this
+        // mechanism -- SetViewportSizeEXT() there, the generic per-name SetUniformVec2() here,
+        // since D3D9EffectBackend's name-based lookup makes a dedicated method unnecessary): the
+        // custom vertex shader is expected to build its own 2D->clip-space transform from
+        // viewport width/height, the same responsibility D3D11's own custom-shader contract
+        // already assigns to the shader author, for cross-backend consistency.
+        D3D9EffectBackend* customBackend = nullptr;
+        if (customEffect_)
+            customBackend = dynamic_cast<D3D9EffectBackend*>(customEffect_->GetEffectBackendPtr());
 
-        const Matrix transposed = Matrix::Transpose(matrixTransform);
-        float regs[16];
-        transposed.ToColumnMajor(regs);
-        UploadVertexShaderConstantEXT(device_.Get(), Shaders::kSpriteEffect_SpriteVertexShader_Registers,
-                                      static_cast<int>(std::size(Shaders::kSpriteEffect_SpriteVertexShader_Registers)),
-                                      "MatrixTransform", regs);
+        if (customBackend && customBackend->IsValid())
+        {
+            customBackend->SetUniformVec2("vpSize", vpW, vpH);
+            customEffect_->Apply();
+            customBackend->Bind();
+        }
+        else
+        {
+            const Matrix matrixTransform = BuildMatrixTransformEXT(vpW, vpH);
+
+            device_->SetVertexShader(vertexShader_.Get());
+            device_->SetPixelShader(pixelShader_.Get());
+
+            const Matrix transposed = Matrix::Transpose(matrixTransform);
+            float regs[16];
+            transposed.ToColumnMajor(regs);
+            UploadVertexShaderConstantEXT(device_.Get(), Shaders::kSpriteEffect_SpriteVertexShader_Registers,
+                                          static_cast<int>(std::size(Shaders::kSpriteEffect_SpriteVertexShader_Registers)),
+                                          "MatrixTransform", regs);
+        }
 
         if (const auto* tex = dynamic_cast<const D3D9TextureBackend*>(currentTexture_))
             device_->SetTexture(0, tex->GetTextureEXT());

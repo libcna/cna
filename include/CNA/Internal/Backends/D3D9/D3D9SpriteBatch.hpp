@@ -60,6 +60,7 @@ namespace CNA::Internal::Backends::D3D9
         void Begin() override;
         void End() override;
         void SetTransformMatrix(const Matrix& m) override;
+        void SetCustomEffect(Effect* effect) override;
         void SetSamplerFilter(int textureFilter) override;
         void SetSamplerAddressMode(int addressU, int addressV) override;
 
@@ -102,6 +103,11 @@ namespace CNA::Internal::Backends::D3D9
 
         bool begun_ = false;
         Matrix transform_ = Matrix::getIdentityProperty();
+
+        /// D9-112: the custom Effect passed to SpriteBatch::Begin(effect), or nullptr for the
+        /// stock SpriteEffect path. Not owned -- the caller (SpriteBatch/the game) owns its own
+        /// lifetime, matching D3D11SpriteBatchBackend's own identical convention.
+        Effect* customEffect_ = nullptr;
 
         // Defaults mirror D3D11SpriteBatchBackend's own: Linear filter, Clamp address -- a
         // SpriteBatch that never calls SetSamplerFilter/SetSamplerAddressMode behaves exactly as

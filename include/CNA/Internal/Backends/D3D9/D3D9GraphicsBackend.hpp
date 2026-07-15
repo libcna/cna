@@ -188,6 +188,13 @@ namespace CNA::Internal::Backends::D3D9
                                        const GpuDrawParams& params) override;
         std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() override;
 
+        /// D9-111/D9-112 (Phase D9-11): real runtime D3DCompile() custom ShaderEffect. Compile
+        /// target follows the current GraphicsProfile (D9-100): vs_3_0/ps_3_0 under HiDef,
+        /// vs_2_0/ps_2_0 under Reach. Mirrors D3D11GraphicsBackend::CreateEffectBackend()'s own
+        /// "construct, compile immediately if both sources are non-empty" contract.
+        std::unique_ptr<IEffectBackend> CreateEffectBackend(const std::string& vertSrc,
+                                                             const std::string& fragSrc) override;
+
         // ---- IGraphicsBackend: real (D9-30/D9-6 -- GraphicsDevice's own constructor unconditionally
         // pushes BlendState::Opaque/DepthStencilState::Default/RasterizerState::CullCounterClockwise
         // and the viewport right after construction (Task 896/955, UpdateViewportFromWindow()), so
