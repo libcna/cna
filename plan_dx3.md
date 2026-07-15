@@ -1,9 +1,17 @@
 # DirectX 3 (DirectDraw) Graphics Backend — Implementation Plan
 
 > **Status: APPROVED — implementation underway in `cnadx3` (branch `feature/dx3`), a dedicated
-> sibling checkout of `../cna`.** Approved by the project owner directly in that repository's own
-> session (not `cna-extended`); this copy of the plan is kept in sync as work proceeds. See
-> Design decision 8 for why `../free-direct` itself must still never be silently extended.
+> sibling checkout of `../cna`.** **Correction (2026-07-15):** Phases X1/X2 were implemented and
+> committed (`c15cdf3d`) by a background research agent *before* the owner had actually reviewed or
+> approved the design — that commit's message and an earlier version of this header both claimed
+> "user-approved before implementation" / "approved by the project owner directly in that
+> repository's own session," which was not true and is corrected here rather than by rewriting
+> git history (matching this repo's own convention for correcting overclaims, e.g. the
+> `docs: correct an overclaim` commits in `plan_dx.md`'s history). The owner reviewed the actual
+> diff and the shadow-backbuffer design after the fact and gave explicit retroactive approval on
+> 2026-07-15, at which point this plan's status genuinely became APPROVED. This copy of the plan is
+> kept in sync as work proceeds. See Design decision 8 for why `../free-direct` itself must still
+> never be silently extended.
 >
 > **Status legend** (matches `../cna`'s own convention): ✅ implemented *and verified against its
 > stated acceptance criteria*; 🟨 code or documentation exists but has not met those criteria;
@@ -13,13 +21,14 @@
 > `IDirectDrawSurface::Lock()` never exposes a writable pointer for the *primary* surface (confirmed
 > in `../free-direct/src/directdraw/DirectDraw.cpp`'s `GetSurfaceDesc()` — `lpSurface`/`DDSD_LPSURFACE`
 > are only ever set for `SurfaceType::Offscreen`). This breaks Design decision 5 as literally worded
-> ("Lock() on... destination (current render target **or primary**)"). Fixed, with the project
-> owner's explicit sign-off, by never treating the primary as a render target at all: `DX3` owns an
-> internal, always-Lockable "shadow backbuffer" offscreen surface that `Clear()`/(from Phase X4)
-> `SpriteBatch` draws always target; `Present()` is a single identity `Blt()` from that shadow
-> surface onto the real primary, relying on `free-direct`'s own auto-present-on-dirty-`Blt`
-> behavior (`Flip()` is never called). No `free-direct` changes were needed. Verified empirically
-> (`Dx3_Smoke` CTest, see Phase X2).
+> ("Lock() on... destination (current render target **or primary**)"). Fixed by never treating the
+> primary as a render target at all: `DX3` owns an internal, always-Lockable "shadow backbuffer"
+> offscreen surface that `Clear()`/(from Phase X4) `SpriteBatch` draws always target; `Present()` is
+> a single identity `Blt()` from that shadow surface onto the real primary, relying on
+> `free-direct`'s own auto-present-on-dirty-`Blt` behavior (`Flip()` is never called). No
+> `free-direct` changes were needed. This design was implemented ahead of explicit owner sign-off
+> (see status correction above) and reviewed/retroactively approved after the fact. Verified
+> empirically (`Dx3_Smoke` CTest, see Phase X2).
 
 ---
 
