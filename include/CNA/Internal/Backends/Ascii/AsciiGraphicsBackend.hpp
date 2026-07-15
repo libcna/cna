@@ -2,6 +2,7 @@
 
 #include "../Common/IGraphicsBackend.hpp"
 #include "../SdlRenderer/SdlGraphicsBackend.hpp"
+#include "AsciiQuantizer.hpp"
 #include <memory>
 
 namespace CNA::Internal::Backends::Ascii
@@ -28,6 +29,11 @@ namespace CNA::Internal::Backends::Ascii
     public:
         explicit AsciiGraphicsBackend(const GraphicsBackendCreateArgs& args);
         ~AsciiGraphicsBackend() override = default;
+
+        /// Sets the quantization mode used by Present() (design decision 5). Callable at any
+        /// time, including before Game::Run(), same as HeadlessGraphicsBackend::SetMode().
+        void SetMode(AsciiQuantizeMode mode) { mode_ = mode; }
+        [[nodiscard]] AsciiQuantizeMode GetMode() const { return mode_; }
 
         void Clear(float r, float g, float b, float a) override;
         void Present() override;
@@ -93,6 +99,9 @@ namespace CNA::Internal::Backends::Ascii
         std::unique_ptr<ISpriteBatchBackend> presentSpriteBatch_;
         int virtualWidth_ = 0;
         int virtualHeight_ = 0;
+        /// Quantization mode, parsed from CNA_ASCII_MODE at construction (design decision 5),
+        /// overridable at any time via SetMode().
+        AsciiQuantizeMode mode_ = AsciiQuantizeMode::Color;
 
         /// (Re)creates gameTarget_ at the given size and binds it as the current target.
         void RecreateGameTarget(int width, int height);

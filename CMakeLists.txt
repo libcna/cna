@@ -6678,6 +6678,11 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     set_tests_properties(Ascii_OffscreenTarget PROPERTIES
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Phase G4 (ASCII-30..33): quantizer -- pure function, no GraphicsDevice/window needed.
+    cna_ascii_test(cna_test_ascii_quantizer examples/ascii_quantizer_test.cpp)
+    add_test(NAME Ascii_Quantizer COMMAND cna_test_ascii_quantizer)
+    set_tests_properties(Ascii_Quantizer PROPERTIES TIMEOUT 30)
 endif()
 
 # plan_dx.md DX-80: D3D11 CTest registration. When cross-compiled from Linux (this backend is

@@ -6,6 +6,7 @@ namespace CNA::Internal::Backends::Ascii
         : inner_(std::make_unique<SdlRenderer::SdlGraphicsBackend>(
               args.window, args.virtualWidth, args.virtualHeight,
               args.presentationMode, args.swapInterval))
+        , mode_(ParseAsciiModeFromEnvironment())
     {
         presentSpriteBatch_ = inner_->CreateSpriteBatch();
         RecreateGameTarget(args.virtualWidth, args.virtualHeight);
