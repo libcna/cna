@@ -427,7 +427,16 @@ target_link_libraries(CNA
 # because libCNA.a is fully scanned before libcna_backend_graphics_d3d11.a creates the need.
 # CMake's documented static-library-cycle support (see LINK_INTERFACE_MULTIPLICITY) resolves this
 # by repeating the archives on the final link line once this cycle is declared.
-if(CNA_GRAPHICS_BACKEND STREQUAL "D3D11" OR CNA_GRAPHICS_BACKEND STREQUAL "D3D12")
+#
+# plan_sdlgpu.md: the SDL_GPU backend (SdlGpuGraphicsBackend.cpp) calls CNA::Logger::Warn (a
+# CNA-defined symbol) for its own real, non-fatal capability-gap warnings -- the exact same
+# single-pass archive-scanning problem under GNU ld, not just MinGW: any executable linking the
+# plain CNA target without --start-group/--end-group (cna_reference_dump, cna_demo_xact) hit a
+# real "undefined reference to CNA::Logger::Warn" at link time, because libCNA.a (which contains
+# Logger.cpp.o) is fully scanned before libcna_backend_graphics_sdl_gpu.a creates the need. Only
+# the SDL_GPU CTest targets (cna_sdlgpu_test's own --start-group/--end-group wrapping) avoided
+# this; every other SDL_GPU-backend executable did not. Fixed the same way as D3D11/D3D12.
+if(CNA_GRAPHICS_BACKEND STREQUAL "D3D11" OR CNA_GRAPHICS_BACKEND STREQUAL "D3D12" OR CNA_GRAPHICS_BACKEND STREQUAL "SDL_GPU")
     target_link_libraries(${BACKEND_TARGET} PRIVATE CNA)
 endif()
 
