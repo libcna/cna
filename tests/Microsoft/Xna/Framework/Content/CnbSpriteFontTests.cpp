@@ -113,3 +113,21 @@ TEST_F(CnbSpriteFontTest, MismatchedTypeThrowsContentLoadException)
 
     EXPECT_THROW(cm.Load<SpriteFont>("wrong"), ContentLoadException);
 }
+
+// plan_cnb.md CNB-35: end-to-end proof that the strict envelope/version policy is wired through
+// a real built-in reader, not just unit-tested against ParseCnbEnvelope/ValidateCnbEnvelope in
+// isolation.
+TEST_F(CnbSpriteFontTest, UnsupportedCnbVersionThrowsThroughRealReader)
+{
+    ScratchContentRoot root;
+
+    WriteFile(root.path() / "future.cnb", R"({
+        "cnbVersion": 2,
+        "type": "SpriteFont"
+    })");
+
+    ContentManager cm(nullptr, root.path().string());
+    cm.setGraphicsDevice(gd);
+
+    EXPECT_THROW(cm.Load<SpriteFont>("future"), ContentLoadException);
+}

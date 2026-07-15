@@ -129,6 +129,28 @@ TEST_F(CnbCustomLoaderTest, MissingCnbVersionThrowsEvenWithRegisteredType)
     EXPECT_FALSE(factoryInvoked);
 }
 
+// plan_cnb.md CNB-35: the strict envelope/version policy applies equally to the
+// RegisterCnbLoader<T> dispatch path, not just built-in readers.
+TEST_F(CnbCustomLoaderTest, UnsupportedCnbVersionThrowsEvenWithRegisteredType)
+{
+    ScratchContentRoot root;
+    WriteFile(root.path() / "future.cnb", R"({"cnbVersion": 2, "type": "EnemyDefinition"})");
+
+    ContentManager cm(nullptr, root.path().string());
+    bool factoryInvoked = false;
+    cm.RegisterCnbLoader<GameData>("EnemyDefinition",
+        [&factoryInvoked](const std::string&, ContentManager&)
+        {
+            factoryInvoked = true;
+            GameData d;
+            d.kind = "Enemy";
+            return d;
+        });
+
+    EXPECT_THROW(cm.Load<GameData>("future"), ContentLoadException);
+    EXPECT_FALSE(factoryInvoked);
+}
+
 TEST_F(CnbCustomLoaderTest, FactoryCanRecursivelyLoadReferencedTexture)
 {
     ScratchContentRoot root;

@@ -265,16 +265,7 @@ namespace Microsoft::Xna::Framework::Content
                 const std::string json = ss.str();
 
                 const CNA::Internal::CnbEnvelope envelope = CNA::Internal::ParseCnbEnvelope(json);
-                if (!envelope.hasCnbVersion)
-                {
-                    throw ContentLoadException(
-                        "ContentManager: '" + path + "' is missing the required 'cnbVersion' field.");
-                }
-                if (!envelope.hasType)
-                {
-                    throw ContentLoadException(
-                        "ContentManager: '" + path + "' is missing the required 'type' field.");
-                }
+                CNA::Internal::ValidateCnbEnvelopeBaseline(envelope, path);
 
                 auto outerIt = cm.cnbNamedLoaders_.find(std::type_index(typeid(T)));
                 if (outerIt != cm.cnbNamedLoaders_.end())
