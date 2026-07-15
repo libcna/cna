@@ -206,6 +206,17 @@ namespace Microsoft::Xna::Framework::Content
                 return base;
             }
 
+            // .cnb is always tried before any native/reader-declared extension (cnb.md's "core
+            // rule" -- when a .cnb sidecar is present, it always has final say over how an asset
+            // name resolves, even if a native file with the same name also exists). This makes
+            // .cnb usable as an optional metadata sidecar (plan_cnb.md CNB-4), not just a
+            // mutually-exclusive alternative to a native file.
+            const std::string cnbCandidate = base + ".cnb";
+            if (std::filesystem::exists(cnbCandidate))
+            {
+                return cnbCandidate;
+            }
+
             // Try each extension declared by the reader.
             const auto extensions = reader.GetExtensions();
             for (const auto& ext : extensions)
