@@ -20,6 +20,12 @@
 // Check C -- a depth-tested MSAA target (DepthFormat::Depth24Stencil8): draws a farther red quad
 //   then a nearer green quad, renders every frame with no exception. Exercises the MSAA depth
 //   texture (sample count matches the MSAA color texture).
+// Check D/E -- real RenderTarget2D::GetData() pixel readback of the resolved MSAA color/
+//   depth-tested targets (Green in both cases) -- this is the actual discriminator for the
+//   adversarial-review finding that every pipeline hardcoded SDL_GPU_SAMPLECOUNT_1 regardless of
+//   the render pass's real MSAA sample count: SDL_gpu does not hard-crash on that mismatch (it
+//   silently tolerates it), so Checks B/C alone ("didn't throw") could not have caught the bug --
+//   only a real pixel readback proving the resolved content is correct can.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
@@ -46,6 +52,7 @@
 #include "common/PixelTestGame.hpp"
 
 #include <cstdio>
+#include <cstdlib>
 #include <memory>
 #include <string>
 
@@ -57,6 +64,22 @@ namespace
 {
     constexpr int kRTSize = 32;
     constexpr int kTotalFrames = 60;
+
+    bool CloseTo(int a, int b, int tol) { return std::abs(a - b) <= tol; }
+    bool Matches(const Color& c, const Color& expected, int tol = 10)
+    {
+        return CloseTo(c.getRProperty(), expected.getRProperty(), tol)
+            && CloseTo(c.getGProperty(), expected.getGProperty(), tol)
+            && CloseTo(c.getBProperty(), expected.getBProperty(), tol);
+    }
+
+    Color ReadPixel(RenderTarget2D& rt, int x, int y)
+    {
+        Color px(0, 0, 0, 0);
+        const Rectangle rect(x, y, 1, 1);
+        rt.GetData(0, &rect, &px, 0, 1);
+        return px;
+    }
 }
 
 class SdlGpuRenderTarget2DMsaaTest : public Game
@@ -175,6 +198,24 @@ protected:
                 Check(true, "colored3d quad drawn into MSAA RenderTarget2D + resolve renders with no exception");
                 stage = "depth-tested MSAA target";
                 Check(true, "depth-tested MSAA RenderTarget2D renders with no exception");
+
+                // Checks D/E: the actual discriminator (see this file's own top comment) -- a
+                // pipeline created with the wrong sample_count for this MSAA render pass is not
+                // guaranteed to hard-crash on this driver, so only a real pixel readback of the
+                // resolved content can prove the fix matters.
+                stage = "RenderTarget2D::GetData() readback of resolved MSAA color target";
+                const Color gotColor = ReadPixel(*rtMsaa_, kRTSize / 2, kRTSize / 2);
+                Check(Matches(gotColor, Color::Green),
+                      "Check D: resolved MSAA colored3d quad reads back Green, got " +
+                      std::to_string(gotColor.getRProperty()) + "," + std::to_string(gotColor.getGProperty()) +
+                      "," + std::to_string(gotColor.getBProperty()));
+
+                stage = "RenderTarget2D::GetData() readback of resolved MSAA depth-tested target";
+                const Color gotDepth = ReadPixel(*rtMsaaDepth_, kRTSize / 2, kRTSize / 2);
+                Check(Matches(gotDepth, Color::Green),
+                      "Check E: resolved MSAA depth-tested target shows nearer Green quad, got " +
+                      std::to_string(gotDepth.getRProperty()) + "," + std::to_string(gotDepth.getGProperty()) +
+                      "," + std::to_string(gotDepth.getBProperty()));
             }
             catch (const std::exception& e)
             {
@@ -191,8 +232,8 @@ protected:
         if (frame_ == kTotalFrames)
         {
             Check(true, std::to_string(kTotalFrames) + " frames of MSAA RenderTarget2D render/sample render with no exception");
-            std::printf("=== %d/4 PASS ===\n", passCount_);
-            result_ = (passCount_ == 4) ? 0 : 1;
+            std::printf("=== %d/6 PASS ===\n", passCount_);
+            result_ = (passCount_ == 6) ? 0 : 1;
             Exit();
         }
     }
