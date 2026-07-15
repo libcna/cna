@@ -12,11 +12,16 @@ namespace CNA::Internal::Backends::Ascii
      * Not a real terminal/TTY backend -- see plan_ascii.md. Architecturally a thin decorator
      * around SDL_RENDERER's own SdlGraphicsBackend (design decision 2): every IGraphicsBackend
      * method not related to presentation forwards straight to a wrapped, fully real
-     * SdlRenderer::SdlGraphicsBackend instance, which does all the actual compositing. This
-     * backend adds exactly one new behavior on top: Present() quantizes the rendered frame into
-     * a grid of glyph+color cells before it reaches the screen (Phase G4/G5 -- not yet
-     * implemented in this skeleton; Present() currently forwards unchanged, matching
-     * SDL_RENDERER's own output, until Phase G4/G5 land).
+     * SdlRenderer::SdlGraphicsBackend instance, which does all the actual compositing.
+     *
+     * Phase G3: the game never draws directly to the real backbuffer. A private offscreen
+     * render target (gameTarget_), sized to the game's own logical/virtual resolution, is bound
+     * as the default target instead -- SetRenderTarget2D(nullptr)/SetRenderTargets(..., 0) (XNA's
+     * "target the back buffer" idiom) are intercepted and redirected to gameTarget_ rather than
+     * forwarded as a literal nullptr, so the game can never accidentally draw straight onto the
+     * real window. Present() unbinds gameTarget_, draws it (Phase G3: a plain stretch-blit; Phase
+     * G4/G5: the quantized glyph grid instead) onto the real backbuffer, presents for real, then
+     * rebinds gameTarget_ for the next frame.
      */
     class AsciiGraphicsBackend : public IGraphicsBackend
     {
@@ -79,5 +84,17 @@ namespace CNA::Internal::Backends::Ascii
         /// The real, wrapped SDL_RENDERER backend instance that does all the actual compositing
         /// (design decision 2). Never exposed outside this class.
         std::unique_ptr<SdlRenderer::SdlGraphicsBackend> inner_;
+
+        /// Offscreen target the game actually draws to (Phase G3). Sized to the game's own
+        /// logical/virtual resolution, independent of the real window's physical size.
+        std::unique_ptr<IRenderTargetBackend> gameTarget_;
+        /// Internal-only sprite batch used by Present() to draw gameTarget_ onto the real
+        /// backbuffer -- never exposed to game code (which gets its own via CreateSpriteBatch()).
+        std::unique_ptr<ISpriteBatchBackend> presentSpriteBatch_;
+        int virtualWidth_ = 0;
+        int virtualHeight_ = 0;
+
+        /// (Re)creates gameTarget_ at the given size and binds it as the current target.
+        void RecreateGameTarget(int width, int height);
     };
 }

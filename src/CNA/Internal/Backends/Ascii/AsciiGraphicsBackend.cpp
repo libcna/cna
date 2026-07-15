@@ -7,18 +7,57 @@ namespace CNA::Internal::Backends::Ascii
               args.window, args.virtualWidth, args.virtualHeight,
               args.presentationMode, args.swapInterval))
     {
+        presentSpriteBatch_ = inner_->CreateSpriteBatch();
+        RecreateGameTarget(args.virtualWidth, args.virtualHeight);
+    }
+
+    void AsciiGraphicsBackend::RecreateGameTarget(int width, int height)
+    {
+        virtualWidth_ = width;
+        virtualHeight_ = height;
+        gameTarget_ = inner_->CreateRenderTarget2D(width, height, /*depthFormat=*/0,
+                                                    /*preserveContents=*/false, /*mipMap=*/false,
+                                                    /*multiSampleCount=*/0);
+        inner_->SetRenderTarget2D(gameTarget_.get());
     }
 
     void AsciiGraphicsBackend::Clear(float r, float g, float b, float a) { inner_->Clear(r, g, b, a); }
 
-    // Phase G4/G5 (not yet implemented): quantize the rendered frame into a glyph/color grid
-    // before it reaches the screen. Until then, this forwards unchanged -- behaviorally identical
-    // to SDL_RENDERER, matching Phase G1's "unblocks everything else" milestone.
-    void AsciiGraphicsBackend::Present() { inner_->Present(); }
+    // Phase G3: the game only ever draws into gameTarget_ (never the real backbuffer directly --
+    // see SetRenderTarget2D/SetRenderTargets below). Present() unbinds gameTarget_, blits its full
+    // content onto the real backbuffer (Phase G3: a plain stretch, no quantization yet -- Phase
+    // G4/G5 will replace this blit with the quantized glyph-grid draw), presents for real, then
+    // rebinds gameTarget_ so the next frame's game draws still land there.
+    void AsciiGraphicsBackend::Present()
+    {
+        inner_->SetRenderTarget2D(nullptr);
+
+        int realWidth = 0, realHeight = 0;
+        inner_->GetViewportSize(realWidth, realHeight);
+
+        presentSpriteBatch_->Begin();
+        presentSpriteBatch_->Draw(*gameTarget_,
+                                  Rectangle(0, 0, realWidth, realHeight),
+                                  Rectangle(0, 0, virtualWidth_, virtualHeight_),
+                                  Color(255, 255, 255, 255));
+        presentSpriteBatch_->End();
+
+        inner_->Present();
+
+        inner_->SetRenderTarget2D(gameTarget_.get());
+    }
 
     void AsciiGraphicsBackend::GetViewportSize(int& width, int& height) { inner_->GetViewportSize(width, height); }
     void AsciiGraphicsBackend::ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels) { inner_->ReadBackbuffer(x, y, w, h, pixels); }
-    void AsciiGraphicsBackend::SetVirtualResolution(int width, int height) { inner_->SetVirtualResolution(width, height); }
+    // Phase G3: gameTarget_ is sized to the game's own logical/virtual resolution, independent
+    // of the real window's physical size -- a resolution change (unlike a real-window resize,
+    // which SDL's own logical-presentation scaling already absorbs transparently) genuinely needs
+    // a new offscreen target at the new size.
+    void AsciiGraphicsBackend::SetVirtualResolution(int width, int height)
+    {
+        inner_->SetVirtualResolution(width, height);
+        RecreateGameTarget(width, height);
+    }
     void AsciiGraphicsBackend::SetPresentationMode(int mode) { inner_->SetPresentationMode(mode); }
     void AsciiGraphicsBackend::SetSwapInterval(int interval) { inner_->SetSwapInterval(interval); }
     int AsciiGraphicsBackend::ApplyMultiSampleCount(int requestedMultiSampleCount) { return inner_->ApplyMultiSampleCount(requestedMultiSampleCount); }
@@ -34,8 +73,25 @@ namespace CNA::Internal::Backends::Ascii
     {
         return inner_->CreateRenderTarget2D(w, h, depthFormat, preserveContents, mipMap, multiSampleCount);
     }
-    void AsciiGraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* rt) { inner_->SetRenderTarget2D(rt); }
-    void AsciiGraphicsBackend::SetRenderTargets(IRenderTargetBackend* const* rts, int count) { inner_->SetRenderTargets(rts, count); }
+    // Phase G3: XNA's "target the back buffer" idiom (a null target) is redirected to gameTarget_
+    // instead of being forwarded as a literal nullptr -- the game must never be able to draw
+    // straight onto the real window, only onto its own offscreen target (design decision 2/3).
+    // A genuinely non-null target (the game's own RenderTarget2D) is forwarded unchanged.
+    void AsciiGraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* rt)
+    {
+        inner_->SetRenderTarget2D(rt != nullptr ? rt : gameTarget_.get());
+    }
+    void AsciiGraphicsBackend::SetRenderTargets(IRenderTargetBackend* const* rts, int count)
+    {
+        if (count == 0)
+        {
+            inner_->SetRenderTarget2D(gameTarget_.get());
+        }
+        else
+        {
+            inner_->SetRenderTargets(rts, count);
+        }
+    }
     void AsciiGraphicsBackend::SetScissorRect(int x, int y, int w, int h) { inner_->SetScissorRect(x, y, w, h); }
     void AsciiGraphicsBackend::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
                                                 int colorDstBlend, int alphaDstBlend,
