@@ -14,6 +14,7 @@
 #include "Microsoft/Xna/Framework/Audio/AudioChannels.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundState.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
+#include "System/Environment.hpp"
 #include "System/NotSupportedException.hpp"
 #include "System/ObjectDisposedException.hpp"
 #include "System/TimeSpan.hpp"
@@ -41,7 +42,7 @@ namespace
     // Returns nullptr if no audio device can be opened (the caller should skip).
     std::unique_ptr<SoundEffect> makeEffect()
     {
-        ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+        System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
         try
         {
             std::vector<unsigned char> pcm(4 * 1024, 0); // 1024 stereo S16 frames
@@ -210,7 +211,7 @@ TEST(SoundEffectTest, MasterVolumePassesThroughUnclamped)
     // (MIX_GetMixerGain/MIX_SetMixerGain), matching FNA's own live-query-the-device semantics
     // (SoundEffect.cs's MasterVolume queries/sets the FAudio master voice directly, no local
     // cache) -- so this now needs a (dummy) audio device, unlike before this fix.
-    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
     float saved = 1.0f;
     try
     {
@@ -234,7 +235,7 @@ TEST(SoundEffectTest, MasterVolumePassesThroughUnclamped)
 // own gain (Volume_ only) must stay constant while the mixer's gain is what actually changes.
 TEST(SoundEffectTest, MasterVolumeAffectsAlreadyPlayingInstanceViaMixerGainNotTrackGain)
 {
-    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
     auto effect = makeEffect();
     if (!effect)
     {
@@ -339,7 +340,7 @@ TEST(SoundEffectTest, BufferRangeConstructorRejectsOffsetCountIntegerOverflow)
 // that call rather than the mixed audio output itself -- see SoundEffectInstanceTestAccess).
 TEST(SoundEffectTest, BufferRangeConstructorPropagatesLoopRegionToInstance)
 {
-    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
     std::vector<unsigned char> pcm(4 * 1000, 0); // 1000 stereo S16 frames
     SoundEffect effect(pcm, 0, static_cast<int>(pcm.size()), 44100, AudioChannels::Stereo,
                        100, 400);
@@ -357,7 +358,7 @@ TEST(SoundEffectTest, BufferRangeConstructorPropagatesLoopRegionToInstance)
 // an explicitly-authored full-length region also propagates correctly and doesn't crash Play().
 TEST(SoundEffectTest, BufferRangeConstructorPropagatesLoopRegionCoveringEntireSound)
 {
-    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
     std::vector<unsigned char> pcm(4 * 1000, 0); // 1000 stereo S16 frames
     SoundEffect effect(pcm, 0, static_cast<int>(pcm.size()), 44100, AudioChannels::Stereo,
                        0, 1000);
@@ -374,7 +375,7 @@ TEST(SoundEffectTest, BufferRangeConstructorPropagatesLoopRegionCoveringEntireSo
 // start) is distinct from both the all-zero default and the start==0 full-cover case above.
 TEST(SoundEffectTest, BufferRangeConstructorPropagatesLoopRegionEndingExactlyAtFullLength)
 {
-    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
     std::vector<unsigned char> pcm(4 * 1000, 0); // 1000 stereo S16 frames
     SoundEffect effect(pcm, 0, static_cast<int>(pcm.size()), 44100, AudioChannels::Stereo,
                        200, 800); // 200 + 800 == 1000, the full frame count
@@ -392,7 +393,7 @@ TEST(SoundEffectTest, BufferRangeConstructorPropagatesLoopRegionEndingExactlyAtF
 // values must still propagate exactly as given, and Play() must not throw or crash.
 TEST(SoundEffectTest, BufferRangeConstructorAcceptsLoopRegionExceedingActualSampleLength)
 {
-    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
     std::vector<unsigned char> pcm(4 * 1000, 0); // 1000 stereo S16 frames
     SoundEffect effect(pcm, 0, static_cast<int>(pcm.size()), 44100, AudioChannels::Stereo,
                        900, 5000); // 900 + 5000 far exceeds the 1000-frame sample
@@ -415,7 +416,7 @@ TEST(SoundEffectTest, FromStreamEmptyThrowsNotSupported)
 
 TEST(SoundEffectTest, FromStreamGarbageThrowsNotSupported)
 {
-    ::setenv("SDL_AUDIODRIVER", "dummy", 1); // FromStream reaches the mixer for non-empty data
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy"); // FromStream reaches the mixer for non-empty data
     std::istringstream garbage("this is not audio data at all");
     try
     {
@@ -435,7 +436,7 @@ TEST(SoundEffectTest, FromStreamGarbageThrowsNotSupported)
 
 TEST(SoundEffectTest, FromStreamValidWavSucceedsAndReportsNonzeroDuration)
 {
-    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
     auto bytes = BuildMinimalWavBytes();
     std::string s(reinterpret_cast<const char*>(bytes.data()), bytes.size());
     std::istringstream valid(s);
@@ -461,7 +462,7 @@ TEST(SoundEffectTest, FromStreamValidWavSucceedsAndReportsNonzeroDuration)
 // hand-rolled WAV parser (which scans for exactly this chunk after the "data" chunk).
 TEST(SoundEffectTest, FromStreamParsesSmplChunkIntoLoopRegion)
 {
-    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
     auto bytes = BuildWavBytesWithSmplChunk(500, 3000);
     std::string s(reinterpret_cast<const char*>(bytes.data()), bytes.size());
     std::istringstream withLoop(s);
@@ -486,7 +487,7 @@ TEST(SoundEffectTest, FromStreamParsesSmplChunkIntoLoopRegion)
 // (0, 0) -- i.e. "loop the entire track" once IsLooped is set, not some stale/garbage value.
 TEST(SoundEffectTest, FromStreamWithoutSmplChunkLeavesLoopRegionAtZero)
 {
-    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
     auto bytes = BuildMinimalWavBytes();
     std::string s(reinterpret_cast<const char*>(bytes.data()), bytes.size());
     std::istringstream noLoop(s);
@@ -511,7 +512,7 @@ TEST(SoundEffectTest, FromStreamWithoutSmplChunkLeavesLoopRegionAtZero)
 // not crash/overread -- just leave the loop region at its default (0, 0).
 TEST(SoundEffectTest, FromStreamWithTruncatedSmplChunkDoesNotCrash)
 {
-    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
     auto bytes = BuildMinimalWavBytes();
 
     std::vector<uint8_t> smpl;
@@ -550,7 +551,7 @@ TEST(SoundEffectTest, FromStreamWithTruncatedSmplChunkDoesNotCrash)
 // not support must be rejected the same way plain garbage bytes are, not silently misread.
 TEST(SoundEffectTest, FromStreamUnsupportedFormatTagThrowsNotSupported)
 {
-    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
     auto bytes = BuildWavBytesWithUnsupportedFormatTag();
     std::string s(reinterpret_cast<const char*>(bytes.data()), bytes.size());
     std::istringstream stream(s);
@@ -575,7 +576,7 @@ TEST(SoundEffectTest, FromStreamUnsupportedFormatTagThrowsNotSupported)
 // ends partway through them, with no "data" chunk at all) must be rejected, not overread.
 TEST(SoundEffectTest, FromStreamTruncatedFmtChunkThrowsNotSupported)
 {
-    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
     auto bytes = BuildWavBytesWithTruncatedFmtChunk();
     std::string s(reinterpret_cast<const char*>(bytes.data()), bytes.size());
     std::istringstream stream(s);
@@ -600,7 +601,7 @@ TEST(SoundEffectTest, FromStreamTruncatedFmtChunkThrowsNotSupported)
 // in the file must be rejected, not read past the real end of the buffer.
 TEST(SoundEffectTest, FromStreamTruncatedDataChunkThrowsNotSupported)
 {
-    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
     auto bytes = BuildWavBytesWithTruncatedDataChunk();
     std::string s(reinterpret_cast<const char*>(bytes.data()), bytes.size());
     std::istringstream stream(s);
@@ -634,7 +635,7 @@ TEST(SoundEffectTest, ConstructFromEmptyPathIsNoOp)
 
 TEST(SoundEffectTest, ConstructFromNonexistentPathThrowsNotSupported)
 {
-    ::setenv("SDL_AUDIODRIVER", "dummy", 1); // a non-empty path reaches the mixer
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy"); // a non-empty path reaches the mixer
     try
     {
         SoundEffect fx("/nonexistent/cna_test_path/does_not_exist_12345.wav");
@@ -801,7 +802,7 @@ TEST(SoundEffectTest, GetTypeNameIsDottedXnaName)
 // `const SoundEffect*` pointing at that already-destroyed temporary (heap-use-after-free).
 TEST(SoundEffectTest, PlaySucceedsAfterOriginatingSoundEffectTemporaryIsDestroyed)
 {
-    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
     std::vector<unsigned char> pcm(4 * 1024, 0);
 
     try

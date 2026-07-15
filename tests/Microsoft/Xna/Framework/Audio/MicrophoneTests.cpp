@@ -5,6 +5,7 @@
 #include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
 #include "System/ArgumentException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
+#include "System/Environment.hpp"
 #include "System/TimeSpan.hpp"
 
 #include <chrono>
@@ -56,7 +57,7 @@ namespace
     // fixture's test happens to run first.
     const bool g_forceDummyAudioDriver = []
     {
-        ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+        System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
         return true;
     }();
 }

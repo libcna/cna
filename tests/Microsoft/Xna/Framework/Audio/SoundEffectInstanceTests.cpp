@@ -19,6 +19,7 @@
 #include "Microsoft/Xna/Framework/Audio/SoundState.hpp"
 #include "System/ArgumentNullException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
+#include "System/Environment.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/NotSupportedException.hpp"
 #include "System/ObjectDisposedException.hpp"
@@ -43,7 +44,7 @@ class SoundEffectInstanceTest : public ::testing::Test
 protected:
     void SetUp() override
     {
-        ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+        System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
         try
         {
             std::vector<unsigned char> pcm(4 * 2048, 0); // 2048 stereo S16 frames

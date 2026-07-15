@@ -12,6 +12,7 @@
 #include "SoundBankTestAccess.hpp"
 #include "SoundEffectInstanceTestAccess.hpp"
 #include "System/ArgumentNullException.hpp"
+#include "System/Environment.hpp"
 #include "System/EventArgs.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/IO/FileNotFoundException.hpp"
@@ -507,7 +508,7 @@ TEST(SoundBankTest, PlayCueThreeArgAfterDisposeThrowsObjectDisposed)
 // real WaveBank-backed fixture instead and reads back the actual SDL_mixer track gain.
 TEST(SoundBankTest, PlayCueThreeArgAppliesRealAttenuationToActiveInstance)
 {
-    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
 
     try
     {
@@ -644,7 +645,7 @@ TEST(SoundBankTest, DisposeForceStopsCueObtainedViaGetCue)
 // IsPaused directly; it doesn't require the entry to have been swept from fireAndForget_ yet).
 TEST(SoundBankTest, IsInUseFalseSoonAfterFireAndForgetCueNaturallyFinishes)
 {
-    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
 
     try
     {

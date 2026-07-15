@@ -7,6 +7,7 @@
 #include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
 #include "Microsoft/Xna/Framework/Audio/WaveBank.hpp"
 #include "System/ArgumentNullException.hpp"
+#include "System/Environment.hpp"
 #include "System/EventArgs.hpp"
 #include "System/IO/FileNotFoundException.hpp"
 #include "System/Object.hpp"
@@ -552,7 +553,7 @@ TEST(WaveBankTest, StreamingCtorDoesNotLoadWaveDataSegmentIntoMemory)
 // entry 1's decoded duration would not match its own non-streaming counterpart.
 TEST(WaveBankTest, StreamingGetSoundEffectReadsCorrectPerEntryOffsetAndLength)
 {
-    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
 
     try
     {
@@ -664,7 +665,7 @@ TEST(WaveBankTest, IsInUseFalseWithNoCues)
 
 TEST(WaveBankTest, IsInUseTrueWhilePlayingThenFalseAfterStop)
 {
-    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
 
     try
     {
@@ -698,7 +699,7 @@ TEST(WaveBankTest, IsInUseTrueWhilePlayingThenFalseAfterStop)
 // report false afterward rather than reading a stale/dangling cue pointer.
 TEST(WaveBankTest, IsInUseFalseAfterDisposeWhilePlaying)
 {
-    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
 
     try
     {
@@ -734,7 +735,7 @@ TEST(WaveBankTest, IsInUseFalseAfterDisposeWhilePlaying)
 // IsInUseFalseAfterDisposeWhilePlaying above, but actually checking the cue was stopped.
 TEST(WaveBankTest, DisposeForceStopsStillPlayingCue)
 {
-    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
 
     try
     {
@@ -769,7 +770,7 @@ TEST(WaveBankTest, DisposeForceStopsStillPlayingCue)
 // falsely report itself as not in use.
 TEST(WaveBankTest, IsInUseTrueWhilePausedNotJustWhilePlaying)
 {
-    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
 
     try
     {
@@ -807,7 +808,7 @@ TEST(WaveBankTest, IsInUseTrueWhilePausedNotJustWhilePlaying)
 // every getIsInUseProperty() query (see WaveBank::getIsInUseProperty()).
 TEST(WaveBankTest, IsInUseFalseSoonAfterCueNaturallyFinishesWithoutExplicitStop)
 {
-    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
 
     try
     {
@@ -843,7 +844,7 @@ TEST(WaveBankTest, IsInUseFalseSoonAfterCueNaturallyFinishesWithoutExplicitStop)
 // constructs a SoundEffect directly). FromStream used to leak the heap SoundEffect it returns.
 TEST(WaveBankTest, GetSoundEffectFor8BitPcmEntrySucceeds)
 {
-    ::setenv("SDL_AUDIODRIVER", "dummy", 1);
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
 
     try
     {

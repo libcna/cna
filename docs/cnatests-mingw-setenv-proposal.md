@@ -1,11 +1,22 @@
 # Proposal: fix `CnaTests`' POSIX `::setenv()`/`::unsetenv()` blocker under MinGW-w64
 
-**Status: proposal only, not started.** Written from `feature/dx9` (`D9-123`) because that is
-where this session hit the blocker, but the problem and the fix are **not D3D9-specific** — it
-already independently blocked `D3D11` (`plan_dx.md` `DX-15`) and `D3D12` (`DX-115`), both of which
-deferred it with near-identical wording rather than fixing it inline. This document exists so the
-next attempt (on whichever branch/worktree the project owner assigns it to) does not have to
-re-derive the scope from scratch.
+**Status: IMPLEMENTED 2026-07-15 on `feature/dx9`, project-owner go-ahead given.** Originally
+written as a proposal-only document; the table below is kept as-written (62 call sites total, not
+64 — this table slightly overcounted `SoundEffectTests.cpp`, see the correction note at the bottom)
+for the historical record of what was scoped before implementation. See `plan_dx9.md`'s `D9-123`
+row for the full implementation/verification result: `CnaTests` now compiles cleanly under
+`CNA_GRAPHICS_BACKEND=D3D9` (first time ever for any Windows-cross backend), with a **new,
+previously-unreachable finding** — `ctest -L D3D9` hits a separate, distinct blocker
+(`gtest_discover_tests` can't execute the cross-compiled `.exe` without a Wine
+`CMAKE_CROSSCOMPILING_EMULATOR`), not fixed by this task.
+
+Originally written from `feature/dx9` (`D9-123`) because that is where this session hit the
+blocker, but the problem and the fix are **not D3D9-specific** — it already independently blocked
+`D3D11` (`plan_dx.md` `DX-15`) and `D3D12` (`DX-115`), both of which deferred it with near-identical
+wording rather than fixing it inline. This fix has not been independently re-verified on D3D11/
+D3D12's own build directories (not configured in this worktree) — no regression is expected since
+only shared `tests/`/`examples/`/`tools/` files changed and `sharp-runtime`'s wrapper was already
+proven compiling under those same toolchains, but this specific commit's effect there is unconfirmed.
 
 ## The problem
 
@@ -15,11 +26,15 @@ re-derive the scope from scratch.
 pure build-time blocker (compilation fails, nothing runs) — it has nothing to do with any one
 backend's rendering correctness.
 
-## Exact scope — 63 `setenv` + 2 `unsetenv` call sites, 13 files, 100% test setup/teardown
+## Exact scope — 62 `setenv`+`unsetenv` call sites, 13 files, 100% test setup/teardown
+
+*(Correction, post-implementation: `SoundEffectTests.cpp` is 17 `setenv` sites, not 18 as
+originally counted below — 60 `setenv` + 2 `unsetenv` = 62 total, not 65. The per-file breakdown
+below is otherwise accurate.)*
 
 | File | Call sites | What it's setting |
 |---|---|---|
-| `tests/Microsoft/Xna/Framework/Audio/SoundEffectTests.cpp` | 18 `setenv` | `SDL_AUDIODRIVER=dummy` |
+| `tests/Microsoft/Xna/Framework/Audio/SoundEffectTests.cpp` | 17 `setenv` | `SDL_AUDIODRIVER=dummy` |
 | `tests/Microsoft/Xna/Framework/Audio/CueTests.cpp` | 11 `setenv` | `SDL_AUDIODRIVER=dummy` |
 | `tests/Microsoft/Xna/Framework/Audio/AudioCategoryTests.cpp` | 10 `setenv` | `SDL_AUDIODRIVER=dummy` |
 | `tests/Microsoft/Xna/Framework/Audio/WaveBankTests.cpp` | 7 `setenv` | `SDL_AUDIODRIVER=dummy` |
@@ -76,27 +91,42 @@ System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "");  // empty va
 No new abstraction needs inventing, and no `sharp-runtime` change is needed — the wrapper this
 needs is already shipped and already exercised by other code paths.
 
-## Recommended scope for the real task
+## Implementation result (2026-07-15)
 
-1. One task, on whichever branch/worktree the project owner assigns it — it only touches
-   `tests/`, `examples/headless_coverage_gaps_test.cpp`, and
-   `tools/audio/audio_no_hardware_harness.cpp`; no backend-specific code anywhere.
-2. Mechanically replace all 63 `setenv` + 2 `unsetenv` call sites per the pattern above.
-3. Verify no regression on every already-working Linux-native backend (`EasyGL`/`Vulkan`/`Bgfx`/
-   `SDL_Renderer`) — should be behavior-preserving there too, since `SetEnvironmentVariable`'s
-   POSIX branch calls the same underlying `::setenv`/`::unsetenv`.
-4. Verify `CnaTests` now *builds* under `D3D9`/`D3D11`/`D3D12`'s MinGW cross-compilation. Whether
-   every test then *passes* is a separate question — audio tests may hit other Windows-cross gaps
-   beyond just this compile blocker (e.g. whether SDL's `dummy` audio driver is even available in
-   this MinGW/Wine runtime environment at all); this task closes the build blocker, not
-   necessarily every downstream test result. Report honestly if some tests newly build but then
-   fail/skip for an unrelated reason.
-5. **Coordinate before landing**, since `feature/graphics` (a separate, independently-active clone
-   doing `D3D11`/`D3D12` work) touches the exact same shared files — land on a shared ancestor
-   (e.g. `develop`) if possible, or explicitly notify so the fix isn't duplicated or merge-conflicted.
+1. All 62 call sites replaced per the pattern above, across all 13 files; `#include
+   "System/Environment.hpp"` added wherever missing. `tools/audio/audio_no_hardware_harness.cpp`
+   turned out to already have a working `#if defined(_WIN32)` → `_putenv_s()` branch (so it was
+   never actually part of the compile blocker) — simplified to the shared wrapper anyway, removing
+   the now-redundant local `#ifdef`.
+2. **EasyGL regression-checked**: `cmake --build cmake-build-debug --target CnaTests` succeeds;
+   the 11 affected gtest suites (`AudioEngineTest`, `FrameworkDispatcherTest`,
+   `DynamicSoundEffectInstanceTest`, `SoundEffectInstanceTest`, `MicrophoneTest`, `Texture2DTest`
+   + its 2 sibling suites, `SoundBankTest`, `SoundEffectTest`, `WaveBankTest`, `AudioCategoryTest`,
+   `CueTest`) — **491/491 pass**, full output grepped for `FAILED` (not tail-truncated).
+3. **D3D9 verified**: `cmake --build cmake-build-d3d9 --target CnaTests` — **`CnaTests.exe` now
+   compiles and links with zero errors and zero remaining `setenv`/`unsetenv`** (grepped the full
+   build log, not just the tail). This is the first time this binary has ever successfully built
+   for any Windows-cross-compiled backend.
+4. **New, previously-unreachable finding**: `ctest -L D3D9` now fails at a *different*, later step
+   — `gtest_discover_tests(CnaTests DISCOVERY_MODE PRE_TEST)` (`CMakeLists.txt:7117`, unconditional,
+   no `MINGW` guard) tries to directly execute `CnaTests.exe` to enumerate test names at
+   build/ctest time. It's a real PE32+ Windows binary (confirmed via `file`), so it cannot run
+   natively on this Linux host (`run-detectors: unable to find an interpreter`) — no
+   `CMAKE_CROSSCOMPILING_EMULATOR` routes it through Wine. This was invisible before because the
+   binary never compiled far enough to reach this step under any Windows-cross backend. **Not
+   fixed as part of this task** — it's a distinct, separate gap in the CTest registration itself
+   (shared across every backend's `CnaTests` target, not D3D9-specific), and fixing it needs its
+   own scoped decision (e.g. wiring a Wine-wrapping `CMAKE_CROSSCOMPILING_EMULATOR`, or switching
+   discovery mode, or guarding the call behind `if(NOT MINGW)` with a manual `add_test` that shells
+   through `run-wine-dxvk9.sh`-style tooling instead).
+5. **Not independently re-verified on `D3D11`/`D3D12`'s own build directories** (not configured in
+   this worktree) — `sharp-runtime`'s `Environment.cpp` was already confirmed compiling there
+   before this change, so no regression is expected, but this specific commit's effect there is
+   unconfirmed. Coordinate with whoever is working `feature/graphics` before assuming this is also
+   resolved there.
 
 ## Risk / size estimate
 
-Small and low-risk — no logic changes, a proven existing primitive, one call-site pattern repeated
-identically 65 times across 13 files. The main real risk is coordination across the two active
-worktrees sharing `tests/`, not the code change itself.
+Was low-risk as predicted — no logic changes, a proven existing primitive, one call-site pattern
+repeated across 13 files. The actual, only real surprise was the second `gtest_discover_tests`
+blocker above, invisible until the compile blocker was actually cleared.

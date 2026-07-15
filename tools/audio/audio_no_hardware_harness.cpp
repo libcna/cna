@@ -20,6 +20,7 @@
 // exception type was thrown.
 #include "Microsoft/Xna/Framework/Audio/NoAudioHardwareException.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
+#include "System/Environment.hpp"
 
 #include <cstdio>
 #include <cstdlib>
@@ -30,11 +31,7 @@ int main()
     // Must be set before any SDL subsystem in this process ever touches audio -- SDL only reads
     // SDL_AUDIODRIVER on the first SDL_Init(SDL_INIT_AUDIO) call, so this only works because this
     // harness is a brand-new process with no prior audio initialization.
-#if defined(_WIN32)
-    _putenv_s("SDL_AUDIODRIVER", "cna_p9hw005_nonexistent_driver");
-#else
-    setenv("SDL_AUDIODRIVER", "cna_p9hw005_nonexistent_driver", 1);
-#endif
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "cna_p9hw005_nonexistent_driver");
 
     try
     {
