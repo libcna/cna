@@ -16,6 +16,7 @@ cmake-build-d3d11/*
 cmake-build-d3d12/*
 cmake-build-canvas/*
 cmake-build-ascii/*
+cmake-build-dx3/*
 vkd3d-proton.cache.write
 vkd3d-proton.cache
 vendor/wgpu-native/

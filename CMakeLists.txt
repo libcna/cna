@@ -91,8 +91,8 @@ if(EMSCRIPTEN OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
 else()
     set(_cna_default_backend "SDL_RENDERER")
 endif()
-set(CNA_GRAPHICS_BACKEND "${_cna_default_backend}" CACHE STRING "Graphics backend to use (SDL_RENDERER, EASYGL, BGFX, VULKAN, WEBGPU, HEADLESS, SOFTWARE, D3D11, D3D12, CANVAS, or ASCII)")
-set_property(CACHE CNA_GRAPHICS_BACKEND PROPERTY STRINGS "SDL_RENDERER" "EASYGL" "BGFX" "VULKAN" "WEBGPU" "HEADLESS" "SOFTWARE" "D3D11" "D3D12" "CANVAS" "ASCII")
+set(CNA_GRAPHICS_BACKEND "${_cna_default_backend}" CACHE STRING "Graphics backend to use (SDL_RENDERER, EASYGL, BGFX, VULKAN, WEBGPU, HEADLESS, SOFTWARE, D3D11, D3D12, CANVAS, ASCII, or DX3)")
+set_property(CACHE CNA_GRAPHICS_BACKEND PROPERTY STRINGS "SDL_RENDERER" "EASYGL" "BGFX" "VULKAN" "WEBGPU" "HEADLESS" "SOFTWARE" "D3D11" "D3D12" "CANVAS" "ASCII" "DX3")
 
 option(CNA_BACKEND_SDL_RENDERER "Enable SDL_Renderer graphics backend" OFF)
 option(CNA_BACKEND_EASY_GL "Enable easy-gl graphics backend" OFF)
@@ -110,9 +110,10 @@ option(CNA_BACKEND_CANVAS "Enable HTML Canvas 2D graphics backend (Emscripten on
 # SDL_RENDERER's own SdlGraphicsBackend (see the shared cna_backend_graphics_sdl_renderer_core
 # library below), not a real terminal/TTY backend.
 option(CNA_BACKEND_ASCII "Enable ASCII (SDL-windowed glyph-grid) graphics backend" OFF)
+option(CNA_BACKEND_DX3 "Enable DirectX 3 (DirectDraw, via the ../free-direct sibling) graphics backend" OFF)
 
 set(_cna_explicit_backend_selection OFF)
-if(CNA_BACKEND_SDL_RENDERER OR CNA_BACKEND_EASY_GL OR CNA_BACKEND_BGFX OR CNA_BACKEND_VULKAN OR CNA_BACKEND_WEBGPU OR CNA_BACKEND_HEADLESS OR CNA_BACKEND_SOFTWARE OR CNA_BACKEND_D3D11 OR CNA_BACKEND_D3D12 OR CNA_BACKEND_CANVAS OR CNA_BACKEND_ASCII)
+if(CNA_BACKEND_SDL_RENDERER OR CNA_BACKEND_EASY_GL OR CNA_BACKEND_BGFX OR CNA_BACKEND_VULKAN OR CNA_BACKEND_WEBGPU OR CNA_BACKEND_HEADLESS OR CNA_BACKEND_SOFTWARE OR CNA_BACKEND_D3D11 OR CNA_BACKEND_D3D12 OR CNA_BACKEND_CANVAS OR CNA_BACKEND_ASCII OR CNA_BACKEND_DX3)
     set(_cna_explicit_backend_selection ON)
 endif()
 
@@ -150,6 +151,9 @@ if(_cna_explicit_backend_selection)
     endif()
     if(CNA_BACKEND_ASCII)
         list(APPEND _cna_enabled_backends "ASCII")
+    endif()
+    if(CNA_BACKEND_DX3)
+        list(APPEND _cna_enabled_backends "DX3")
     endif()
 
     list(LENGTH _cna_enabled_backends _cna_enabled_backends_count)
@@ -198,6 +202,26 @@ if(CNA_GRAPHICS_BACKEND STREQUAL "EASYGL")
             "git clone https://github.com/openeggbert/easy-gl.git")
     endif()
     add_subdirectory(../easy-gl easy-gl)
+endif()
+
+# plan_dx3.md design decision 10 / Task DX3-2: free-direct is a SIBLING repository checkout, not a
+# git submodule of this repo -- same rationale as sharp-runtime/easy-gl's identical checks above.
+# free-direct's own CMakeLists.txt (add_subdirectory(../free-api ...)) resolves SDL3::SDL3/
+# SDL3_image::SDL3_image/SDL3_mixer::SDL3_mixer from CNA's own already-vendored targets (set up by
+# cna_configure_vendored_sdl() above, before backend selection runs), so no
+# -DFREE_API_USE_SYSTEM_SDL3 flag is needed here, mirroring how ../free-eggbert/../planetblupi
+# already consume free-direct today (design decision 10).
+if(CNA_GRAPHICS_BACKEND STREQUAL "DX3")
+    if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../free-direct/CMakeLists.txt")
+        message(FATAL_ERROR
+            "CNA: Missing sibling repository 'free-direct' at "
+            "${CMAKE_CURRENT_SOURCE_DIR}/../free-direct -- this is a separate git "
+            "checkout expected next to this repo's own directory, not a git "
+            "submodule (git submodule update --init will not fetch it). Fix: "
+            "cd ${CMAKE_CURRENT_SOURCE_DIR}/.. && "
+            "git clone https://github.com/openeggbert/free-direct.git")
+    endif()
+    add_subdirectory(../free-direct free-direct)
 endif()
 
 if(CNA_GRAPHICS_BACKEND STREQUAL "BGFX" AND NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
@@ -283,6 +307,11 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "ASCII")
     set(BACKEND_DIR "src/CNA/Internal/Backends/Ascii")
     set(BACKEND_TARGET "cna_backend_graphics_ascii")
     add_compile_definitions(CNA_BACKEND_ASCII)
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "DX3")
+    message(STATUS "CNA: Using DX3 (DirectDraw via free-direct) graphics backend")
+    set(BACKEND_DIR "src/CNA/Internal/Backends/Dx3")
+    set(BACKEND_TARGET "cna_backend_graphics_dx3")
+    add_compile_definitions(CNA_BACKEND_DX3)
 else()
 
     message(FATAL_ERROR "CNA: Unknown graphics backend: ${CNA_GRAPHICS_BACKEND}")
@@ -371,6 +400,11 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "D3D11")
     # runtime D3DCompile() custom-ShaderEffect path (D3D11EffectBackend) -- confirmed safe to link
     # in isolation by DX-1/DX-14-compile's own spikes; the offline stock pipeline never calls it.
     target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 d3d11 dxgi d3dcompiler cna_backend_graphics_d3dcommon)
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "DX3")
+    # plan_dx3.md design decision 10: free-direct's own public target is the literal lowercase
+    # `free-direct` (PUBLIC-links free-api::free-api, PUBLIC-exposes its own include/ dir so
+    # #include <ddraw.h> resolves) -- no ALIAS namespace exists for it, unlike easy-gl's own target.
+    target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 free-direct)
 elseif(CNA_GRAPHICS_BACKEND STREQUAL "D3D12")
     # plan_dx.md DX-100/DX-101: d3d12+dxgi alone was confirmed sufficient for device/queue/
     # command-list creation by DX-100's own spike -- start from that minimum, same discipline as
@@ -6739,6 +6773,104 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     set_tests_properties(Ascii_ThrowNo3D PROPERTIES
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+endif()
+
+# plan_dx3.md Phase X2/X8 (DX3-18/DX3-80): DX3 (DirectDraw via free-direct) CTest registration.
+# Unlike SDL_RENDERER's own window-based ctests, these do NOT need a real/virtual X11 display:
+# every pixel assertion reads back through the shadow-backbuffer surface directly
+# (Dx3GraphicsBackend::ReadBackbuffer/GetBackBufferData), never through real physical
+# presentation, so SDL_VIDEODRIVER=dummy (no display required at all) produces identical,
+# verified-correct results (confirmed empirically: all 8 binaries, 49/49 checks, under
+# SDL_VIDEODRIVER=dummy) while being far more portable than requiring CNA_TEST_DISPLAY to point
+# at a working X11 server. This was a real registration bug found in review: the original
+# SDL_VIDEODRIVER=x11 registration (copy-pasted from SDL_RENDERER's own pattern, which genuinely
+# does need a real display) made every one of these 8 ctests fail outright in any environment
+# without a live DISPLAY, even though the underlying binaries themselves were always correct.
+if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
+   AND CNA_GRAPHICS_BACKEND STREQUAL "DX3")
+
+    enable_testing()
+
+    macro(cna_dx3_test target src)
+        add_executable(${target} ${src})
+        if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
+            target_link_libraries(${target} PRIVATE
+                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                SHARP_RUNTIME)
+        else()
+            target_link_libraries(${target} PRIVATE CNA SHARP_RUNTIME)
+        endif()
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(${target} PRIVATE SDL3::SDL3main)
+        endif()
+    endmacro()
+
+    cna_dx3_test(cna_test_dx3_smoke examples/dx3_smoke_test.cpp)
+    add_test(NAME Dx3_Smoke COMMAND cna_test_dx3_smoke)
+    set_tests_properties(Dx3_Smoke PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=dummy"
+        LABELS "DX3")
+
+    # plan_dx3.md Phase X3 (DX3-20..DX3-28): texture/render-target backend CTest.
+    cna_dx3_test(cna_test_dx3_texture_rendertarget examples/dx3_texture_rendertarget_test.cpp)
+    add_test(NAME Dx3_TextureRenderTarget COMMAND cna_test_dx3_texture_rendertarget)
+    set_tests_properties(Dx3_TextureRenderTarget PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=dummy"
+        LABELS "DX3")
+
+    # plan_dx3.md Phase X4 (DX3-30..DX3-39): CPU compositor / SpriteBatch draw path CTest.
+    cna_dx3_test(cna_test_dx3_spritebatch examples/dx3_spritebatch_test.cpp)
+    add_test(NAME Dx3_SpriteBatch COMMAND cna_test_dx3_spritebatch)
+    set_tests_properties(Dx3_SpriteBatch PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=dummy"
+        LABELS "DX3")
+
+    # plan_dx3.md Phase X5 (DX3-40..DX3-44): blend-mode compositing math CTest.
+    cna_dx3_test(cna_test_dx3_blend examples/dx3_blend_test.cpp)
+    add_test(NAME Dx3_Blend COMMAND cna_test_dx3_blend)
+    set_tests_properties(Dx3_Blend PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=dummy"
+        LABELS "DX3")
+
+    # plan_dx3.md Phase X5 (DX3-45/DX3-46): TextureFilter + TextureAddressMode sampling CTest.
+    cna_dx3_test(cna_test_dx3_sampling examples/dx3_sampling_test.cpp)
+    add_test(NAME Dx3_AddressMode COMMAND cna_test_dx3_sampling)
+    set_tests_properties(Dx3_AddressMode PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=dummy"
+        LABELS "DX3")
+
+    # plan_dx3.md Phase X6 (DX3-50..DX3-54): SpriteFont / DrawString CTest.
+    cna_dx3_test(cna_test_dx3_spritefont examples/dx3_spritefont_test.cpp)
+    add_test(NAME Dx3_SpriteFont COMMAND cna_test_dx3_spritefont)
+    set_tests_properties(Dx3_SpriteFont PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=dummy"
+        LABELS "DX3")
+
+    # plan_dx3.md Phase X7 (DX3-60..DX3-67, DX3-69): ThrowNo3D wiring / remaining-defaults CTest.
+    cna_dx3_test(cna_test_dx3_no3d examples/dx3_no3d_test.cpp)
+    add_test(NAME Dx3_No3D COMMAND cna_test_dx3_no3d)
+    set_tests_properties(Dx3_No3D PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=dummy"
+        LABELS "DX3")
+
+    # plan_dx3.md Phase X7 (DX3-68): logical/window coordinate transform CTest. Note:
+    # SDL_VIDEODRIVER=dummy reports a fixed 1024x768 "window" size (no real display to query), so
+    # this test's letterbox-invariant checks run against that fixed size rather than whatever a
+    # real display would report -- still a genuine, non-trivial letterbox (1024x768 vs 64x64
+    # logical) and still verified correct, just no longer dependent on the host's actual screen.
+    cna_dx3_test(cna_test_dx3_logical_transform examples/dx3_logical_transform_test.cpp)
+    add_test(NAME Dx3_LogicalTransform COMMAND cna_test_dx3_logical_transform)
+    set_tests_properties(Dx3_LogicalTransform PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=dummy"
+        LABELS "DX3")
 endif()
 
 # plan_dx.md DX-80: D3D11 CTest registration. When cross-compiled from Linux (this backend is
