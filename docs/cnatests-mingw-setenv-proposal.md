@@ -1,14 +1,15 @@
 # Proposal: fix `CnaTests`' POSIX `::setenv()`/`::unsetenv()` blocker under MinGW-w64
 
-**Status: IMPLEMENTED 2026-07-15 on `feature/dx9`, project-owner go-ahead given.** Originally
+**Status: FULLY IMPLEMENTED 2026-07-15 on `feature/dx9`, project-owner go-ahead given.** Originally
 written as a proposal-only document; the table below is kept as-written (62 call sites total, not
 64 — this table slightly overcounted `SoundEffectTests.cpp`, see the correction note at the bottom)
 for the historical record of what was scoped before implementation. See `plan_dx9.md`'s `D9-123`
 row for the full implementation/verification result: `CnaTests` now compiles cleanly under
-`CNA_GRAPHICS_BACKEND=D3D9` (first time ever for any Windows-cross backend), with a **new,
-previously-unreachable finding** — `ctest -L D3D9` hits a separate, distinct blocker
-(`gtest_discover_tests` can't execute the cross-compiled `.exe` without a Wine
-`CMAKE_CROSSCOMPILING_EMULATOR`), not fixed by this task.
+`CNA_GRAPHICS_BACKEND=D3D9` (first time ever for any Windows-cross backend), AND the follow-up
+`gtest_discover_tests` CTest-registration blocker this fix surfaced (`ctest -L D3D9` couldn't
+execute the cross-compiled `.exe` to enumerate test names) is also fixed and verified
+end-to-end — `ctest -L D3D9` runs clean, 4383 tests are registered, and spot-checked individual
+tests genuinely execute through Wine and pass.
 
 Originally written from `feature/dx9` (`D9-123`) because that is where this session hit the
 blocker, but the problem and the fix are **not D3D9-specific** — it already independently blocked
@@ -107,23 +108,37 @@ needs is already shipped and already exercised by other code paths.
    compiles and links with zero errors and zero remaining `setenv`/`unsetenv`** (grepped the full
    build log, not just the tail). This is the first time this binary has ever successfully built
    for any Windows-cross-compiled backend.
-4. **New, previously-unreachable finding**: `ctest -L D3D9` now fails at a *different*, later step
-   — `gtest_discover_tests(CnaTests DISCOVERY_MODE PRE_TEST)` (`CMakeLists.txt:7117`, unconditional,
-   no `MINGW` guard) tries to directly execute `CnaTests.exe` to enumerate test names at
-   build/ctest time. It's a real PE32+ Windows binary (confirmed via `file`), so it cannot run
-   natively on this Linux host (`run-detectors: unable to find an interpreter`) — no
-   `CMAKE_CROSSCOMPILING_EMULATOR` routes it through Wine. This was invisible before because the
-   binary never compiled far enough to reach this step under any Windows-cross backend. **Not
-   fixed as part of this task** — it's a distinct, separate gap in the CTest registration itself
-   (shared across every backend's `CnaTests` target, not D3D9-specific), and fixing it needs its
-   own scoped decision (e.g. wiring a Wine-wrapping `CMAKE_CROSSCOMPILING_EMULATOR`, or switching
-   discovery mode, or guarding the call behind `if(NOT MINGW)` with a manual `add_test` that shells
-   through `run-wine-dxvk9.sh`-style tooling instead).
+4. **New, previously-unreachable finding, fixed the same day**: `ctest -L D3D9` initially failed at
+   a *different*, later step — `gtest_discover_tests(CnaTests DISCOVERY_MODE PRE_TEST)`
+   (`CMakeLists.txt:7117`, unconditional, no `MINGW` guard) tried to directly execute
+   `CnaTests.exe` to enumerate test names at build/ctest time. It's a real PE32+ Windows binary
+   (confirmed via `file`), so it cannot run natively on this Linux host (`run-detectors: unable to
+   find an interpreter`) — no `CMAKE_CROSSCOMPILING_EMULATOR` routed it through Wine. This was
+   invisible before because the binary never compiled far enough to reach this step under any
+   Windows-cross backend. **Fixed**: measured the naive fix's real cost first (a single Wine
+   process spawn costs ~1.2s; the 4367 individually-discovered test cases would cost ~87 minutes
+   of pure process overhead if each became its own separately-spawned CTest entry) before choosing
+   an approach. Set `CROSSCOMPILING_EMULATOR` on the `CnaTests` target — the same CMake-native
+   mechanism `plan_dx.md` `DX-80`'s own `cna_d3d11_ctest_command` macro already uses for D3D11/
+   D3D12's own CTests — selecting the correct per-backend Wine wrapper
+   (`run-wine-dxvk9.sh`/`run-wine-dxvk.sh`/`run-wine-vkd3d.sh`) with that wrapper's own
+   authenticity gate deliberately disabled inline (`env CNA_D3D9_SKIP_DXVK_GATE=1 <wrapper>`, no
+   new script needed) — `CnaTests` spans non-Graphics namespaces that never open a device, so the
+   gate would otherwise misreport every one of those as a fake fallback. This also automatically
+   fixed `CnaInputTests`'s own separate `add_test`, no extra change needed. Deliberately did NOT
+   redesign test granularity: the project's real workflow (`ctest -L D3D9`) label-filters, and none
+   of the 4367 discovered cases carry that label, so they're registered but never actually invoked
+   by the normal command — the 87-minute concern only applies to a hypothetical unfiltered full
+   run. **Verified end-to-end**: `ctest -L D3D9` 14/14 pass (no more crash); `ctest -N` shows 4383
+   total registered tests; explicitly ran 2 individual discovered cases plus `CnaInputTests` via
+   `ctest -R` — genuinely execute through Wine and pass, not just register. EasyGL
+   regression-checked (reconfigured + rebuilt, same spot-checks pass natively).
 5. **Not independently re-verified on `D3D11`/`D3D12`'s own build directories** (not configured in
    this worktree) — `sharp-runtime`'s `Environment.cpp` was already confirmed compiling there
-   before this change, so no regression is expected, but this specific commit's effect there is
-   unconfirmed. Coordinate with whoever is working `feature/graphics` before assuming this is also
-   resolved there.
+   before this change, and the `CROSSCOMPILING_EMULATOR` fix mirrors D3D11/D3D12's own already-
+   proven `cna_d3d11_ctest_command` pattern exactly, so no regression is expected, but this
+   specific commit's effect there is unconfirmed. Coordinate with whoever is working
+   `feature/graphics` before assuming this is also resolved there.
 
 ## Risk / size estimate
 

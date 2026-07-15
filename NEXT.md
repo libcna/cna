@@ -1148,14 +1148,14 @@ undocumented, and FNA implements none of it either (confirmed by `D9-100`'s own 
 inventing one without a reference would risk asserting behavior this project cannot actually
 verify against real XNA. Both real, honest follow-ups, not claimed done.
 
-### Phase D9-12 — the indistinguishability suite: D9-120/D9-121/D9-122 CLOSED, D9-123 partially (🟨)
+### Phase D9-12 — the indistinguishability suite: ALL CLOSED (D9-120/D9-121/D9-122/D9-123)
 
 | Task | Status |
 |---|---|
 | `D9-120` — promote `D9-A`'s corpus to a real, checked-in-reference-image CTest | ✅ |
 | `D9-121` — a written, honest divergence report | ✅ |
 | `D9-122` — `D3D9_Smoke`/`D3D9_Common` + the 4 reused state tests, mutation-verified | ✅ |
-| `D9-123` — `CnaTests` under `CNA_GRAPHICS_BACKEND=D3D9` | 🟨 (compile blocker fixed; new `gtest_discover_tests` gap found, see below) |
+| `D9-123` — `CnaTests` under `CNA_GRAPHICS_BACKEND=D3D9` | ✅ (both the setenv compile blocker and the follow-up `gtest_discover_tests` CTest-registration blocker fixed and verified, see below) |
 
 **Closed 2026-07-15 (`D9-120`/`D9-121`).** All 31 `D9-A5` scenes' real-XNA-4.0 renders regenerated
 FRESH (not trusted from an earlier cached run) and confirmed byte-identical (SHA-256) to the
@@ -1214,17 +1214,36 @@ checks (only 1 `CullMode`-mapping check has explicit evidence, judged lower-prio
 lookup-table checks, method already proven on one representative entry). Full detail in
 `plan_dx9.md`'s own `D9-122` row.
 
-**`D9-123` — compile blocker FIXED 2026-07-15, a new downstream blocker found.** The POSIX
-`::setenv()`/`::unsetenv()` wall (`AudioEngineTests.cpp`/`WaveBankTests.cpp`/`CueTests.cpp` and 10
-other files) is resolved — all 62 call sites replaced with `System::Environment::
-SetEnvironmentVariable` (`sharp-runtime`, already MinGW-proven). `CnaTests` now compiles and links
-cleanly under `CNA_GRAPHICS_BACKEND=D3D9` for the first time ever. Running `ctest -L D3D9` now
-reaches a **new, previously-unreachable** blocker instead: `gtest_discover_tests` tries to execute
-the cross-compiled `CnaTests.exe` directly to enumerate test names, and a PE32+ Windows binary
-can't run natively on Linux without a Wine `CMAKE_CROSSCOMPILING_EMULATOR` — invisible before since
-the binary never compiled far enough to reach this step. Not fixed as part of this task; see
-`docs/cnatests-mingw-setenv-proposal.md`'s "Implementation result" section and `plan_dx9.md`'s
-`D9-123` row for full detail.
+**`D9-123` — FULLY CLOSED 2026-07-15, both the compile blocker and its own downstream follow-up.**
+The POSIX `::setenv()`/`::unsetenv()` wall (`AudioEngineTests.cpp`/`WaveBankTests.cpp`/
+`CueTests.cpp` and 10 other files) is resolved — all 62 call sites replaced with
+`System::Environment::SetEnvironmentVariable` (`sharp-runtime`, already MinGW-proven). `CnaTests`
+now compiles and links cleanly under `CNA_GRAPHICS_BACKEND=D3D9` for the first time ever.
+
+That fix surfaced a second, previously-unreachable blocker: `gtest_discover_tests` tried to
+execute the cross-compiled `CnaTests.exe` directly to enumerate test names, and a PE32+ Windows
+binary can't run natively on Linux without a Wine `CMAKE_CROSSCOMPILING_EMULATOR` — invisible
+before since the binary never compiled far enough to reach this step. Measured the naive fix's
+real cost first (a single Wine spawn costs ~1.2s; the discovered suite has 4367 individual test
+cases, so spawning each separately would cost ~87 minutes of pure process overhead) before picking
+an approach. Fixed by setting `CROSSCOMPILING_EMULATOR` on the `CnaTests` target (the same
+CMake-native mechanism `DX-80`'s own `cna_d3d11_ctest_command` macro already uses for D3D11/D3D12's
+own CTests), selecting the correct per-backend Wine wrapper with its DXVK/vkd3d-proton
+authenticity gate deliberately disabled (`CnaTests` spans non-Graphics namespaces that never open
+a device, so that gate would misreport every one of those as a fake fallback). This also
+automatically fixed `CnaInputTests`' own separate `add_test` registration a few lines below, with
+no code change needed there. Deliberately did NOT redesign test granularity — the project's real
+workflow (`ctest -L D3D9`) label-filters, and none of the 4367 discovered cases carry that label,
+so they're registered but never actually invoked by the normal command; the 87-minute concern only
+applies to a hypothetical unfiltered full run.
+
+**Verified end-to-end, not just "no longer crashes"**: `ctest -L D3D9` — 14/14 pass, no more
+test-file-generation crash; `ctest -N` shows 4383 total registered tests; explicitly ran 2
+individual discovered cases plus `CnaInputTests` itself via `ctest -R` — all genuinely execute
+through Wine and pass. **EasyGL regression-checked**: reconfigured + rebuilt, ran the same 2
+spot-checks natively — pass at native speed, `CMAKE_CROSSCOMPILING` guard correctly no-ops for the
+9 already-established non-cross backends. Not independently re-verified on D3D11/D3D12's own build
+dirs (not configured in this worktree); full detail in `plan_dx9.md`'s `D9-123` row.
 
 ### Phase D9-13 — docs: `D9-130` CLOSED, `D9-140` still open (`needs_human`)
 
@@ -1269,7 +1288,8 @@ Most recent first. Full detail lives in `plan_dx9.md` — this is a short index.
 
 | Commit(s) | Summary |
 |---|---|
-| *(pending)* | **`D9-123` IMPLEMENTED (project-owner go-ahead given) — `CnaTests` now compiles under D3D9 for the first time ever, plus a new, previously-unreachable finding**. All 62 `::setenv()`/`::unsetenv()` call sites (60 setenv + 2 unsetenv — a small correction from the proposal's "63+2" estimate) across 13 files replaced with `System::Environment::SetEnvironmentVariable`; `#include "System/Environment.hpp"` added where missing. `tools/audio/audio_no_hardware_harness.cpp` already had a working `#if _WIN32` `_putenv_s()` branch (not actually blocking) — simplified to the shared wrapper for consistency anyway. EasyGL regression-checked: 491/491 tests pass across the 11 affected suites, full-output-grepped for `FAILED`. D3D9 verified: `cmake --build cmake-build-d3d9 --target CnaTests` now compiles and links with zero errors and zero remaining setenv/unsetenv (grepped the full log, not the tail). **New finding**: `ctest -L D3D9` now fails at a *different*, later, previously-unreachable step — `gtest_discover_tests` (`CMakeLists.txt:7117`, unconditional, no `MINGW` guard) tries to directly execute the cross-compiled `CnaTests.exe` to enumerate test names, and a PE32+ Windows binary can't run natively on this Linux host without a Wine `CMAKE_CROSSCOMPILING_EMULATOR`. Not fixed here — a distinct, separate CTest-registration gap, reported honestly rather than silently attempted. Not independently re-verified on D3D11/D3D12's own build dirs (not configured in this worktree). Full detail: `docs/cnatests-mingw-setenv-proposal.md`'s new "Implementation result" section, `plan_dx9.md`'s `D9-123` row (now 🟨, not ✅ — the literal build blocker is fixed, running the suite needs the new gap addressed too). |
+| *(pending)* | **`D9-123` FULLY CLOSED — the `gtest_discover_tests` cross-compile follow-up**. `CMakeLists.txt:7117`'s `gtest_discover_tests(CnaTests DISCOVERY_MODE PRE_TEST)` had no `MINGW`/`CMAKE_CROSSCOMPILING` guard and tried to directly execute the cross-compiled `CnaTests.exe` (a PE32+ binary) to enumerate test names — invisible before the setenv fix landed. Measured the naive per-test-Wine-spawn cost first (~1.2s/spawn × 4367 discovered cases ≈ 87 minutes) before picking an approach. Fixed by setting `CROSSCOMPILING_EMULATOR` on the `CnaTests` target (same CMake-native mechanism `DX-80`'s own `cna_d3d11_ctest_command` macro already uses), routing through the correct per-backend Wine wrapper with its DXVK/vkd3d-proton authenticity gate deliberately disabled inline (`env CNA_D3D9_SKIP_DXVK_GATE=1 <wrapper>`) — `CnaTests` spans non-Graphics namespaces that never open a device. Also automatically fixed `CnaInputTests`' own separate `add_test`, no extra change needed. Deliberately kept `gtest_discover_tests` as-is rather than redesigning granularity: confirmed the real workflow (`ctest -L D3D9`) label-filters and none of the 4367 discovered cases carry that label, so the 87-minute concern never applies to the actual documented command. **Verified end-to-end**: `ctest -L D3D9` 14/14 pass (no more test-file-generation crash); `ctest -N` shows 4383 total registered tests; 2 individual discovered cases plus `CnaInputTests` itself explicitly run via `ctest -R` and genuinely execute through Wine, not just register. EasyGL regression-checked (reconfigured + rebuilt, same 2 spot-checks pass natively, `CMAKE_CROSSCOMPILING` guard correctly no-ops). Not independently re-verified on D3D11/D3D12's own build dirs. `plan_dx9.md`'s `D9-123` row now ✅ in full. |
+| `5e5dcc7c` | **`D9-123` setenv compile blocker IMPLEMENTED (project-owner go-ahead given) — `CnaTests` compiles under D3D9 for the first time ever**. All 62 `::setenv()`/`::unsetenv()` call sites (60 setenv + 2 unsetenv — a small correction from the proposal's "63+2" estimate) across 13 files replaced with `System::Environment::SetEnvironmentVariable`; `#include "System/Environment.hpp"` added where missing. `tools/audio/audio_no_hardware_harness.cpp` already had a working `#if _WIN32` `_putenv_s()` branch (not actually blocking) — simplified to the shared wrapper for consistency anyway. EasyGL regression-checked: 491/491 tests pass across the 11 affected suites, full-output-grepped for `FAILED`. D3D9 verified: compiles and links with zero errors and zero remaining setenv/unsetenv. Surfaced a second, distinct `gtest_discover_tests` blocker (see the entry above, fixed the same day). |
 | `cf082a52` | **`D9-123` written proposal (superseded by implementation above)** — new `docs/cnatests-mingw-setenv-proposal.md`, grounded by actually grepping every call site rather than the earlier "~10 test files" estimate. Confirmed a zero-new-risk fix already exists: `sharp-runtime`'s `System::Environment::SetEnvironmentVariable` already branches `_putenv_s()` on `_WIN32`, already compiles/links in the existing D3D11/D3D12 MinGW builds, matches .NET's empty-value-unsets convention — a mechanical 1:1 replace, no new abstraction. |
 | `5e3a82c0` | **`D9-130` CLOSED (Phase D9-13 docs) — new `docs/d3d9-backend.md`, a full `D3D9` column across all 7 tables in `docs/graphics-backend-feature-matrix.md`, and a `README.md`/`programs.md` build-doc update**. `docs/d3d9-backend.md` leads with XNA pixel-authenticity (not a feature checklist), the real-Microsoft-shader fact, and the 0/31-divergence oracle result, following `docs/d3d11-backend.md`'s own structure. Every feature-matrix cell was grounded by reading `tools/xna-oracle/scenes/*.scene` directly (confirmed exact `SpriteSortMode`/`AlphaFunction`/`WeightsPerVertex` coverage, and that `EnvironmentMapEffect.specularEnabled` is structurally unreachable, `D9-82e`) rather than recalled from memory; ungrounded cells marked honestly `⬜`/`🟨`. New matrix section "Remaining genuine D3D9 limitations", matching the Vulkan/Bgfx precedent sections. `README.md`: new `D3D9` Project-Status bullet, a "Build (Windows cross-compilation — D3D9 backend)" section, a Tested-Compilers row. `programs.md` §9: new D3D9-specific three-Wine-prefix subsection, closing the gap `plan_dx9.md`'s own line 103 flagged. |
 | `2a0f1576` | **Phase D9-12 `D9-122` CLOSED — systematic mutation-verification of `D3D9_Smoke`/`D3D9_Common` + the 4 reused state tests**. Classified every check as CONFIRMED (explicit prior mutation evidence) or GAP, then ran 6 new mutation cycles against the highest-priority GAPs (`ApplyBlendState`'s `D3DRS_DESTBLEND`, `PerformResetRecovery`'s `deviceLost_` flag — which also surfaced that a broken recovery crashes the whole test binary via an uncaught `DeviceLostException`, not just failing one check — `SetRenderTargets`' per-slot MRT bind, `BindAsRenderTarget`, `D3D9VertexBufferBackend::Upload`, `D3D9TextureCubeBackend::SetData`), each confirmed to fail exactly the predicted check(s) and nothing else, then reverted clean. Full D3D9 CTest suite reconfirmed 14/14 independently (not just the closing agent's own self-report). Full detail in `plan_dx9.md`'s own `D9-122` row and §2's Phase D9-12 section above. |
@@ -1539,28 +1559,22 @@ cmake -S . -B cmake-build-d3d9 \
 
 ## 8. Next smallest tasks
 
-**Phases D9-0 through D9-10 are all fully closed** (`D9-32`/`D9-34`/`D9-60`/`D9-62`/`D9-73`
+**Phases D9-0 through D9-13 are ALL fully closed** (`D9-32`/`D9-34`/`D9-60`/`D9-62`/`D9-73`
 honestly 🟨 — see their own plan rows for exactly what's deferred and why). **Phase D9-A's diff
 harness (`D9-A1`–`D9-A4`) is fully closed**, 31 scenes deep, all pixel-perfect. **Phase D9-12 is
-now fully closed except `D9-123`**: `D9-120`/`D9-121`/`D9-122` all ✅ (see §2's own Phase D9-12
-section for the full `D9-122` mutation-cycle detail). **`D9-130` (Phase D9-13 docs) is now closed
+now fully closed, including `D9-123`** — `D9-120`/`D9-121`/`D9-122`/`D9-123` all ✅ (see §2's own
+Phase D9-12 section for the full `D9-122`/`D9-123` detail, including the `gtest_discover_tests`
+cross-compile fix and its own end-to-end verification). **`D9-130` (Phase D9-13 docs) is closed
 too** — `docs/d3d9-backend.md`, a full `D3D9` column across all 7 tables in
 `docs/graphics-backend-feature-matrix.md`, a `D3D9` build section + Tested-Compilers row in
 `README.md`, and the `programs.md` §9 Wine-prefix gap it flagged are all done.
 
-**`D9-123` is now 🟨 (compile blocker fixed 2026-07-15)**, with one new, genuinely unblocked
-follow-up left, plus 2 items that remain blocked/ask-first:
+Only 2 things remain in this plan, both explicitly blocked/ask-first — there is no more cheap,
+unblocked, unilaterally-startable work left:
 
-1. **Wire `CMAKE_CROSSCOMPILING_EMULATOR` (or equivalent) so `gtest_discover_tests` can enumerate
-   `CnaTests.exe` under D3D9/D3D11/D3D12** — the new blocker `D9-123`'s implementation surfaced:
-   `CMakeLists.txt:7117`'s `gtest_discover_tests(CnaTests DISCOVERY_MODE PRE_TEST)` has no `MINGW`
-   guard and tries to execute the cross-compiled `.exe` directly, which fails on this Linux host.
-   This is genuinely new, cheap-ish, unilaterally-startable work (touches shared `CMakeLists.txt`
-   CTest registration, same coordination caveat as `D9-123` itself w.r.t. `feature/graphics`) — a
-   real candidate for the next task, once picked.
-2. **Phase D9-11 (custom `ShaderEffect`)** — explicitly flagged ask-first in `plan_dx9.md`'s own
+1. **Phase D9-11 (custom `ShaderEffect`)** — explicitly flagged ask-first in `plan_dx9.md`'s own
    execution order; do not start without the project owner's go-ahead.
-3. **`D9-140`** (real Windows hardware verification) — `needs_human`, out of scope for this dev
+2. **`D9-140`** (real Windows hardware verification) — `needs_human`, out of scope for this dev
    environment entirely.
 
 The `D9-A5`/`D9-84` scene-corpus-growth candidates remain exhausted for the same reasons recorded

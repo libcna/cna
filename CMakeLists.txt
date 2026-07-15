@@ -7113,6 +7113,37 @@ if(CNA_BUILD_TESTS)
         target_link_libraries(CnaTests PRIVATE easy-gl)
     endif()
 
+    # D9-123 follow-up: when cross-compiled for a Windows-only backend (D3D9/D3D11/D3D12), CTest
+    # itself still runs on the Linux host, so gtest_discover_tests' own PRE_TEST discovery step
+    # (which must directly execute CnaTests.exe with --gtest_list_tests to enumerate test names)
+    # cannot run a PE32+ binary natively -- this previously failed CMake's own test-file generation
+    # outright ("unable to find an interpreter"), invisible before D9-123's setenv fix because
+    # CnaTests never compiled that far under any Windows-cross backend. Fixed the same way DX-80's
+    # own per-backend D3D11/D3D12 CTests already do it (see cna_d3d11_ctest_command above): route
+    # through this backend's Wine wrapper via the CROSSCOMPILING_EMULATOR target property, which
+    # CMake automatically applies both to gtest_discover_tests' own discovery step AND to every
+    # test it (or any other add_test referencing this target, e.g. CnaInputTests below) registers.
+    #
+    # CnaTests spans every XNA namespace (Audio/Input/Content/...), not just Graphics, so most
+    # individual cases never create a real graphics device at all -- unlike the dedicated,
+    # single-purpose pixel-authenticity CTests (D3D9_Smoke etc.), it must NOT be gated on a
+    # "DXVK: <version>"/vkd3d-proton log line appearing (run-wine-dxvk9.sh's own D9-5 gate) or
+    # every non-Graphics test run would be misreported as a fake WineD3D/native-d3d12 fallback.
+    # `env VAR=1 <wrapper>` injects the matching per-backend gate-skip flag inline, reusing each
+    # backend's existing wrapper script rather than adding a new one.
+    if(CMAKE_CROSSCOMPILING)
+        if(CNA_GRAPHICS_BACKEND STREQUAL "D3D9")
+            set_target_properties(CnaTests PROPERTIES CROSSCOMPILING_EMULATOR
+                "env;CNA_D3D9_SKIP_DXVK_GATE=1;${CMAKE_SOURCE_DIR}/scripts/run-wine-dxvk9.sh")
+        elseif(CNA_GRAPHICS_BACKEND STREQUAL "D3D11")
+            set_target_properties(CnaTests PROPERTIES CROSSCOMPILING_EMULATOR
+                "env;CNA_D3D11_SKIP_DXVK_GATE=1;${CMAKE_SOURCE_DIR}/scripts/run-wine-dxvk.sh")
+        elseif(CNA_GRAPHICS_BACKEND STREQUAL "D3D12")
+            set_target_properties(CnaTests PROPERTIES CROSSCOMPILING_EMULATOR
+                "env;CNA_D3D12_SKIP_VKD3D_GATE=1;${CMAKE_SOURCE_DIR}/scripts/run-wine-vkd3d.sh")
+        endif()
+    endif()
+
     include(GoogleTest)
     gtest_discover_tests(CnaTests DISCOVERY_MODE PRE_TEST)
 
