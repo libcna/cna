@@ -59,7 +59,7 @@ plausibly."
 
 | Build dir | Backend | Status |
 |---|---|---|
-| `cmake-build-d3d9` | D3D9 (Windows cross-compile, MinGW-w64) | **Verified clean 2026-07-15**: `cmake -DCNA_GRAPHICS_BACKEND=D3D9 -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64.cmake -DCNA_BUILD_TESTS=ON` configures; `CNA`/`cna_backend_graphics_d3d9`/`cna_test_d3d9_common`/`cna_test_d3d9_smoke`/`cna_test_d3d9_shadercache` all build clean. `D3D9_Common` 28/28 + `D3D9_Smoke` 53/53 + `D3D9_ShaderCache` 6/6 pass via `ctest --test-dir cmake-build-d3d9 -L D3D9`. A real device now creates, clears, presents, reads back pixels, resizes, recovers from a (simulated) device-lost event, round-trips real vertex/index buffer data, round-trips real 2D/cube/volume texture data (including a genuinely non-power-of-two texture), creates/binds/clears/reads back real 2D/cube/MSAA render targets, binds a real 2-target MRT set, runs a real occlusion query, applies real sampler state, and creates all 66 real Microsoft stock-effect shaders through a live device, all through the actual public `Game`/`GraphicsDeviceManager`/`GraphicsDevice` API (or, for the shader cache, the backend's own real device handle). |
+| `cmake-build-d3d9` | D3D9 (Windows cross-compile, MinGW-w64) | **Verified clean 2026-07-15**: `cmake -DCNA_GRAPHICS_BACKEND=D3D9 -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64.cmake -DCNA_BUILD_TESTS=ON` configures; `CNA`/`cna_backend_graphics_d3d9`/`cna_test_d3d9_common`/`cna_test_d3d9_smoke`/`cna_test_d3d9_shadercache`/`cna_test_d3d9_shaderdispatch` all build clean. `D3D9_Common` 28/28 + `D3D9_ShaderDispatch` 23/23 + `D3D9_Smoke` 53/53 + `D3D9_ShaderCache` 6/6 pass via `ctest --test-dir cmake-build-d3d9 -L D3D9` (4 CTests). A real device now creates, clears, presents, reads back pixels, resizes, recovers from a (simulated) device-lost event, round-trips real vertex/index buffer data, round-trips real 2D/cube/volume texture data (including a genuinely non-power-of-two texture), creates/binds/clears/reads back real 2D/cube/MSAA render targets, binds a real 2-target MRT set, runs a real occlusion query, applies real sampler state, creates all 66 real Microsoft stock-effect shaders through a live device, and correctly replicates XNA's own shader-permutation selection logic for all 5 effects, all through the actual public `Game`/`GraphicsDeviceManager`/`GraphicsDevice` API (or, for the shader cache/dispatch, the backend's own real device handle or pure functions). |
 
 ### Phase D9-0 — feasibility spikes: CLOSED 2026-07-14
 
@@ -369,6 +369,42 @@ throws too, and vice versa). Runs clean against both the default CTest prefix an
 -equipped compiler prefix. Mutation-verified (made `CreateAllEXT()` skip the first pixel shader,
 confirmed exactly the count-dependent checks went red). Full 3-CTest D3D9 suite passes.
 
+### Phase D9-8 — XNA shader dispatch: D9-80/D9-81 CLOSED, D9-82/83/84 open
+
+| Task | Status |
+|---|---|
+| `D9-80` — replicate XNA's shader-permutation model (`VSIndices`/`PSIndices`/`ShaderIndex`) | ✅ |
+| `D9-81` — audit `GpuDrawParams` vs. XNA's real `ShaderIndex` inputs, report the gaps | ✅ |
+| `D9-82` — upload constants at Microsoft's registers, implement the real draw calls | ⬜ |
+| `D9-83` — `DrawInstancedPrimitivesEx` via `SetStreamSourceFreq` | ⬜ |
+| `D9-84` — every draw path validated against the oracle | ⬜ |
+
+`D9-81`: the audit's own findings were already fully written into the plan row when `plan_dx9.md`
+was first authored (2026-07-14) — this closure is an independent RE-VERIFICATION against the
+CURRENT source (not trusted from memory), via a forked agent that read every cited file directly.
+**Result: all 4 gaps are still real, and 2 of the 4 turn out resolvable without any `GpuDrawParams`
+change** — `oneLight` (`SkinnedEffect.cpp` already computes it from the real `Enabled` properties
+internally) and `AlphaTestEffect`'s `isEqNe` (`alphaTest[1]` (tolerance) `> 0` is a **lossless**,
+provably-exact recovery from `AlphaTestEffect.cs`'s own `alphaTest.Y = threshold` assignment, which
+fires in exactly the `Equal`/`NotEqual` cases and nowhere else — not the "plausible inference, may
+misfire" the plan's own original wording hedged). `PreferPerPixelLighting` and
+`EnvironmentMapEffect`'s `specularEnabled` remain genuine, unresolved gaps needing a cross-cutting,
+project-owner-level `GpuDrawParams` decision — reported, not fixed, per this row's own instruction.
+
+`D9-80`: new `include/`/`src/CNA/Internal/Backends/D3D9/D3D9ShaderDispatch.hpp`+`.cpp` — for all 5
+effects, a `Compute<Effect>ShaderIndex()` ported line-for-line from that effect's own `OnApply()`
+in the FNA `.cs` source, plus `Get<Effect>{Vertex,Pixel}ShaderNameEXT()` backed by the
+`VSIndices`/`PSIndices`/`VSArray`/`PSArray` tables transcribed directly from the vendored `.fx`
+file's own rows. Functions take the real XNA-shaped booleans as parameters, not `GpuDrawParams` —
+sourcing them correctly (using `D9-81`'s own findings for `oneLight`/`isEqNe`) is `D9-82`'s job.
+New `D3D9_ShaderDispatch` CTest (pure-function, no device needed), 23 checks. **Mutation-testing
+found a real gap in the test's own first draft**: an initial "exhaustive sweep" only checked that
+resolved names started with the right effect prefix — a deliberately-corrupted single `VSIndices`
+table entry (mapped to a WRONG-but-still-real, same-prefixed name) was NOT caught by that weaker
+check. Rewrote it as an exact-match sweep against a second, independently-typed expected-name array
+in the test file; re-ran the same mutation, now correctly caught (exact mismatch reported); reverted,
+reconfirmed 23/23 green. Full D3D9 CTest suite (4 binaries) passes.
+
 ### Does NOT work yet
 
 Draws, `SpriteBatch` — still throw `NotYetImplemented()` naming their own follow-up task, by design.
@@ -385,7 +421,8 @@ Most recent first. Full detail lives in `plan_dx9.md` — this is a short index.
 
 | Commit(s) | Summary |
 |---|---|
-| *(pending)* | **`D9-74` closed (`D3D9ShaderCache`) — Phase D9-7 FULLY CLOSED** (`D9-73` honestly 🟨): installed DXVK into `~/.wine-cna-d3d9-spike` (now has both the real compiler and a live device); new `D3D9ShaderCache` + `Shaders::kAllShaders[]` manifest (regenerated, not hand-typed) + new `D3D9_ShaderCache` CTest (4 checks: all 66 create live, caching works, unknown names throw, stage-aware lookup). Mutation-verified (skipped one shader in `CreateAllEXT()`, confirmed the count-dependent checks went red). Full 3-CTest D3D9 suite passes. |
+| *(pending)* | **`D9-80`/`D9-81` closed (XNA shader dispatch + audit)**: new `D3D9ShaderDispatch` — `Compute<Effect>ShaderIndex()`/`Get<Effect>{Vertex,Pixel}ShaderNameEXT()` for all 5 stock effects, transcribed from FNA's `.cs` sources + the vendored `.fx` files' own tables. `D9-81`'s audit independently re-verified against current source (forked agent): all 4 `GpuDrawParams` gaps still real, but `oneLight`/`isEqNe` turn out resolvable from CNA's own existing internal state with no `GpuDrawParams` change (only `PreferPerPixelLighting`/`specularEnabled` remain genuine cross-cutting blockers). New `D3D9_ShaderDispatch` CTest, 23 checks. Mutation-testing found a real gap in the test's own first draft (a prefix-only sweep missed a corrupted table entry); rewrote as an exact-match sweep against an independently-typed expected array, re-confirmed the mutation is now caught. Full 4-CTest D3D9 suite passes. |
+| `678bc3be` | **`D9-74` closed (`D3D9ShaderCache`) — Phase D9-7 FULLY CLOSED** (`D9-73` honestly 🟨): installed DXVK into `~/.wine-cna-d3d9-spike` (now has both the real compiler and a live device); new `D3D9ShaderCache` + `Shaders::kAllShaders[]` manifest (regenerated, not hand-typed) + new `D3D9_ShaderCache` CTest (4 checks: all 66 create live, caching works, unknown names throw, stage-aware lookup). Mutation-verified (skipped one shader in `CreateAllEXT()`, confirmed the count-dependent checks went red). Full 3-CTest D3D9 suite passes. |
 | `7ecd2d42` | **`D9-72` closed (transcribe register layout)**: real, empirical finding (`EnvironmentMapEffect.fx`'s `VSEnvMap` allocates `World` only 3 registers, not the naively-assumed 4, since that entry point never reads `pos_ws.w`) invalidated the plan's own original hand-derive-from-source approach. New `extract_shader_registers.py` compiles+disassembles all 66 shaders via a new `disasm_tool.cpp`, parsing the compiler's own `// Registers:` comment block for the real, per-entry-point ground truth. Output `D3D9ShaderRegisters.hpp` (627 lines), compiles clean, spot-checked against 3 independently-verified cases. |
 | `dddeecbc` | **`D9-71` closed (compile all 66 entry points)**: new `compile_shaders_sm2.py` parses the entry-point list from the vendored `.fx` files' own `compile` statements (not hand-maintained), cross-builds the moved-in `fxc_tool.cpp` with MinGW-w64, compiles via a bare `wine` call against `~/.wine-cna-d3d9-spike`. Real run: 66/66 compiled, 0 failures, into a checked-in `d3d9_shaders.hpp` (381 KB) confirmed to compile clean as real C++ and to regenerate byte-identically on a second run. Bonus: re-ran `compare_against_fxb.py` against the real header's own bytecode — 61/66 exact matches, same 5 divergent `PixelLighting` variants the Phase D9-0 spike already found. `fxc_tool.cpp`/`compare_against_fxb.py` fully moved out of `dx9-spike/` into their real home. |
 | `64de9d29` | **`D9-70` closed (vendor Stock Effects HLSL)**: all 10 files copied byte-for-byte from the FNA tree into `src/CNA/Internal/Backends/D3D9/shaders/xna/`, plus `LICENSE`, a provenance `README.md` (66 entry points, grep-verified), and a specific `THIRD_PARTY_NOTICES.md` entry. New `scripts/verify-d3d9-stock-effects-vendored.sh` mechanically diffs against the FNA tree. Mutation-verified (appended a line to the vendored `BasicEffect.fx`, confirmed the script reports `MISMATCH`/exit 1). First row of Phase D9-7. |
@@ -409,20 +446,17 @@ Most recent first. Full detail lives in `plan_dx9.md` — this is a short index.
 
 ## 4. Current blocker / main problem
 
-**No blocker.** Phases D9-0/D9-1/D9-2/D9-3/D9-4/D9-5 are all fully closed (D9-32/D9-34 honestly 🟨 —
-see their own plan rows for exactly what's deferred and why). Phase D9-6: `D9-60`–`D9-63` are closed
-(`D9-60`/`D9-62` honestly 🟨); only `D9-64` remains, not actionable until a real draw path exists
-(`D9-82`, part of Phase D9-8, not D9-9). **Phase D9-7 (Microsoft's stock effects) is now fully
-closed** (`D9-70` through `D9-74`, `D9-73` honestly 🟨 — its own deferred oracle-proof obligation,
-not a gap in this phase's own work). Next smallest task: **Phase D9-8 (XNA shader dispatch)** — the
-next SEQUENTIAL phase per `plan_dx9.md`'s own "Execution order" table (D9-8 before D9-9
-`SpriteBatch`, not a parallel choice). Start with `D9-80`/`D9-81` (transcription/audit, no draw
-path needed yet) before `D9-82` (the actual draw path, which then unblocks `D9-64`/`D9-83`/`D9-84`
-and Phase D9-9). **Worth checking first**: `D9-81`'s own plan row already contains a fully detailed,
-dated ("verified 2026-07-14") four-finding audit of `GpuDrawParams` vs. XNA's real `ShaderIndex`
-inputs, despite still showing `⬜` — looks like a stale status icon on already-completed analysis
-from an earlier session, not unstarted work; verify and correct the icon rather than redoing the
-audit from scratch.
+**No blocker.** Phases D9-0/D9-1/D9-2/D9-3/D9-4/D9-5/D9-7 are all fully closed (D9-32/D9-34/D9-73
+honestly 🟨 — see their own plan rows for exactly what's deferred and why). Phase D9-6: `D9-60`–`D9-63`
+closed (`D9-60`/`D9-62` honestly 🟨); only `D9-64` remains, not actionable until `D9-82` lands.
+**Phase D9-8: `D9-80`/`D9-81` closed** — the shader-dispatch tables/formulas are transcribed and
+tested, and the `GpuDrawParams` audit is independently re-verified (2 of its 4 gaps turned out
+resolvable with no `GpuDrawParams` change; the other 2 remain genuine cross-cutting blockers, not
+this plan's call). Next smallest task: `D9-82` — upload constants at Microsoft's real registers
+(`D9-72`'s own table) via `SetVertexShaderConstantF`/`SetPixelShaderConstantF`; implement
+`DrawColoredPrimitives`/`DrawIndexedColoredPrimitives`/`DrawPrimitivesEx`/`DrawIndexedPrimitivesEx`.
+The real draw path — unblocks `D9-64`, `D9-83`, `D9-84`, and Phase D9-9 (`SpriteBatch`). Expect the
+`D3DCULL` winding trap (`D9-21`) to bite on the first triangle.
 
 ---
 
@@ -488,25 +522,24 @@ cmake -S . -B cmake-build-d3d9 \
 ## 8. Next smallest tasks
 
 **Phases D9-0 through D9-7 are all fully closed** (`D9-32`/`D9-34`/`D9-60`/`D9-62`/`D9-73` honestly
-🟨 — see their own plan rows for exactly what's deferred and why). Phase D9-6's `D9-64` is the only
-row anywhere before Phase D9-8 still open, and it isn't actionable until `D9-82` lands.
+🟨 — see their own plan rows for exactly what's deferred and why). Phase D9-8: `D9-80`/`D9-81`
+closed. Phase D9-6's `D9-64` is the only row anywhere before Phase D9-8 still open, and it isn't
+actionable until `D9-82` lands.
 
-1. **`D9-80`** — replicate the XNA shader-permutation model exactly: the `VSIndices[32]`/
-   `PSIndices[32]` tables and the `ShaderIndex` computation, transcribed from `BasicEffect.cs`/
-   `AlphaTestEffect.cs`/`DualTextureEffect.cs`/`EnvironmentMapEffect.cs`/`SkinnedEffect.cs` (all in
-   the FNA tree). A transcription task, not a design task (design decision 7) — no draw path needed.
-2. **`D9-81`** — **check this one before redoing it**: its own plan row already contains a fully
-   detailed, dated ("verified 2026-07-14") four-finding audit of `GpuDrawParams` vs. XNA's real
-   `ShaderIndex` inputs (`PreferPerPixelLighting`, `oneLight`, `AlphaTestEffect`'s `isEqNe`,
-   `EnvironmentMapEffect`'s `specularEnabled`), despite still showing `⬜` — looks like a stale
-   status icon on already-completed analysis, not unstarted work.
-3. **`D9-82`** — upload constants at Microsoft's real registers (`D9-72`'s own table) via
+1. **`D9-82`** — upload constants at Microsoft's real registers (`D9-72`'s own table) via
    `SetVertexShaderConstantF`/`SetPixelShaderConstantF`; implement `DrawColoredPrimitives`/
    `DrawIndexedColoredPrimitives`/`DrawPrimitivesEx`/`DrawIndexedPrimitivesEx`. The real draw path —
    unblocks `D9-64`, `D9-83`, `D9-84`, and Phase D9-9 (`SpriteBatch`). Expect the `D3DCULL` winding
-   trap (`D9-21`) to bite on the first triangle.
-4. **`D9-64`** (reuse the backend-agnostic `easygl_blendstate_*`/`easygl_depthstencilstate_*`/
+   trap (`D9-21`) to bite on the first triangle. `D9-80`'s `D3D9ShaderDispatch` + `D9-74`'s
+   `D3D9ShaderCache` are both ready to consume: `cache.GetVertexShader(GetBasicEffectVertexShaderNameEXT(
+   ComputeBasicEffectShaderIndex(...)))` chains directly. For `oneLight`/`isEqNe`, source them from
+   CNA's own real internal state per `D9-81`'s findings (`Light1/2.getEnabledProperty()`,
+   `alphaTest[1] > 0`) — not from an inference of `GpuDrawParams`' other fields.
+2. **`D9-83`** — `DrawInstancedPrimitivesEx` via `SetStreamSourceFreq` (needs `D9-82` first).
+3. **`D9-64`** (reuse the backend-agnostic `easygl_blendstate_*`/`easygl_depthstencilstate_*`/
    `easygl_rasterizerstate_*` CTest sources verbatim) — sequence once `D9-82` lands, not before.
+4. **`D9-84`** — every draw path validated against the real XNA oracle (needs `D9-82` first, and is
+   where `D9-21`'s `D3DCULL` proof and `D9-62`'s rasterizer-state proof both finally close out too).
 
 See `plan_dx9.md`'s "Execution order" table for the full sequence beyond this.
 

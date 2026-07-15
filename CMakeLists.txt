@@ -6805,6 +6805,16 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D9")
         # CNA_D3D11_SKIP_DXVK_GATE usage). Harmless no-op when CMAKE_CROSSCOMPILING is false.
         ENVIRONMENT "CNA_D3D9_SKIP_DXVK_GATE=1")
 
+    # D9-80: pure-function checks for the transcribed XNA shader-permutation model
+    # (ShaderIndex/VSIndices/PSIndices) -- no device/window/GPU needed.
+    cna_d3d9_test(cna_test_d3d9_shaderdispatch examples/d3d9_shaderdispatch_test.cpp)
+    cna_d3d9_ctest_command(_d3d9_shaderdispatch_cmd cna_test_d3d9_shaderdispatch)
+    add_test(NAME D3D9_ShaderDispatch COMMAND ${_d3d9_shaderdispatch_cmd})
+    set_tests_properties(D3D9_ShaderDispatch PROPERTIES
+        TIMEOUT 30
+        LABELS "D3D9"
+        ENVIRONMENT "CNA_D3D9_SKIP_DXVK_GATE=1")
+
     # D9-30/D9-31: real device/Clear/Present/readback smoke test -- this backend's first genuine
     # pixel-correctness proof, through the real public Game/GraphicsDeviceManager/GraphicsDevice
     # API (not the raw backend interface).
