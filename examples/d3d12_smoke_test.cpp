@@ -2533,6 +2533,116 @@ int main()
         backend.UnbindOffscreenColorTargetEXT();
     }
 
+    // ---- Check PP (plan_dx.md DX-149): env_map3d -- DirectionalLight1/DirectionalLight2 each
+    // independently and exactly contribute, not just Light0. Reuses Check U's own fixture
+    // (normal +Z, white 2x2 texture, a dummy cube -- irrelevant content since envMapAmount=0.0
+    // collapses the base-lerp to the pure lit*texColor path per DX-134's own already-proven
+    // formula, so the env-map SAMPLE call still executes but its result never reaches the output)
+    // and DX-138's own exact-color-per-term isolation methodology (light0Diffuse zeroed so only
+    // the field under test contributes; each sub-check gets an EXACT expected RGB). ----
+    {
+        constexpr int kRtWidth = 64;
+        constexpr int kRtHeight = 64;
+
+        D3D12_HEAP_PROPERTIES heapProps{};
+        heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
+        D3D12_RESOURCE_DESC rtDesc{};
+        rtDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+        rtDesc.Width = kRtWidth;
+        rtDesc.Height = kRtHeight;
+        rtDesc.DepthOrArraySize = 1;
+        rtDesc.MipLevels = 1;
+        rtDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        rtDesc.SampleDesc.Count = 1;
+        rtDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+        rtDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+
+        Microsoft::WRL::ComPtr<ID3D12Resource> rtPP;
+        HRESULT hrRtPP = backend.GetDeviceEXT()->CreateCommittedResource(
+            &heapProps, D3D12_HEAP_FLAG_NONE, &rtDesc,
+            D3D12_RESOURCE_STATE_RENDER_TARGET, nullptr, IID_PPV_ARGS(rtPP.GetAddressOf()));
+        backend.GetResourceStateTrackerEXT().TrackResource(rtPP.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET);
+        D3D12_CPU_DESCRIPTOR_HANDLE rtvPP = backend.AllocateRtvDescriptorEXT();
+        backend.GetDeviceEXT()->CreateRenderTargetView(rtPP.Get(), nullptr, rtvPP);
+        backend.BindOffscreenColorTargetEXT(rtPP.Get(), rtvPP, DXGI_FORMAT_R8G8B8A8_UNORM, kRtWidth, kRtHeight);
+
+        auto pixelAtPP = [&](const std::vector<uint8_t>& buf, int x, int y) -> std::array<uint8_t, 4>
+        {
+            const std::size_t idx = (static_cast<std::size_t>(y) * kRtWidth + static_cast<std::size_t>(x)) * 4;
+            return {buf[idx + 0], buf[idx + 1], buf[idx + 2], buf[idx + 3]};
+        };
+        auto centerIsExactPP = [&](const std::vector<uint8_t>& buf, uint8_t r, uint8_t g, uint8_t b)
+        {
+            const auto p = pixelAtPP(buf, 30, 30);
+            return p[0] == r && p[1] == g && p[2] == b;
+        };
+
+        struct VPNTEP { float x, y, z; float nx, ny, nz; float u, v; };
+        static const VPNTEP kTriPP[3] = {
+            {-1.0f, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f},
+            { 3.0f, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 2.0f, 1.0f},
+            {-1.0f,  3.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, -1.0f},
+        };
+        D3D12VertexBufferBackend vbPP(&backend, 3);
+        vbPP.SetData(kTriPP, 3, sizeof(VPNTEP));
+
+        ImageData whiteImgPP;
+        whiteImgPP.width = 2; whiteImgPP.height = 2; whiteImgPP.mipLevels = 1;
+        whiteImgPP.pixels.assign(2 * 2 * 4, 255);
+        D3D12TextureBackend whiteTexPP(&backend, whiteImgPP);
+
+        D3D12TextureCubeBackend cubePP(&backend, 8, false, 0);
+        std::vector<uint8_t> dummyFace(8 * 8 * 4, 0);
+        for (int face = 0; face < 6; ++face)
+            cubePP.SetData(face, 0, 0, 0, 8, 8, dummyFace.data(), static_cast<int>(dummyFace.size()));
+
+        GpuDrawParams baseEP;
+        baseEP.texture0 = &whiteTexPP;
+        baseEP.textureEnabled = true;
+        baseEP.envMap = &cubePP;
+        baseEP.envMapping = true;
+        baseEP.envMapAmount = 0.0f; // DX-134: collapses base-lerp to pure lit*texColor, no reflection interference
+        baseEP.light0Diffuse[0] = 0.0f; baseEP.light0Diffuse[1] = 0.0f; baseEP.light0Diffuse[2] = 0.0f; // Light0 off
+
+        // PP1: DirectionalLight1 alone, full-facing direction, red diffuse -> exact (255,0,0).
+        GpuDrawParams pp1 = baseEP;
+        pp1.light1Dir[0] = 0.0f; pp1.light1Dir[1] = 0.0f; pp1.light1Dir[2] = -1.0f; // travels -Z -> faces the +Z normal
+        pp1.light1Diffuse[0] = 1.0f; pp1.light1Diffuse[1] = 0.0f; pp1.light1Diffuse[2] = 0.0f;
+        backend.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+        backend.DrawPrimitivesEx(vbPP, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                 Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, pp1);
+        auto rPP1 = ReadBackRenderTargetFull(backend, rtPP.Get(), kRtWidth, kRtHeight);
+        Check(centerIsExactPP(rPP1, 255, 0, 0),
+              "PP1: DrawPrimitivesEx() real env_map3d -- DirectionalLight1 alone contributes the "
+              "exact expected red, independent of Light0/Light2 (plan_dx.md DX-149)");
+
+        // PP2: same geometry/light1Dir, but light1Diffuse disabled (black) -- proves PP1 wasn't
+        // some other constant leaking in.
+        GpuDrawParams pp1off = pp1;
+        pp1off.light1Diffuse[0] = 0.0f; pp1off.light1Diffuse[1] = 0.0f; pp1off.light1Diffuse[2] = 0.0f;
+        backend.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+        backend.DrawPrimitivesEx(vbPP, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                 Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, pp1off);
+        auto rPP1off = ReadBackRenderTargetFull(backend, rtPP.Get(), kRtWidth, kRtHeight);
+        Check(centerIsExactPP(rPP1off, 0, 0, 0),
+              "PP2: disabling DirectionalLight1's diffuse (zeroed) removes its contribution "
+              "exactly -- confirms PP1 was real, not a leaked default (plan_dx.md DX-149)");
+
+        // PP3: DirectionalLight2 alone, green diffuse -> exact (0,255,0).
+        GpuDrawParams pp2 = baseEP;
+        pp2.light2Dir[0] = 0.0f; pp2.light2Dir[1] = 0.0f; pp2.light2Dir[2] = -1.0f;
+        pp2.light2Diffuse[0] = 0.0f; pp2.light2Diffuse[1] = 1.0f; pp2.light2Diffuse[2] = 0.0f;
+        backend.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+        backend.DrawPrimitivesEx(vbPP, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                 Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, pp2);
+        auto rPP2 = ReadBackRenderTargetFull(backend, rtPP.Get(), kRtWidth, kRtHeight);
+        Check(centerIsExactPP(rPP2, 0, 255, 0),
+              "PP3: DrawPrimitivesEx() real env_map3d -- DirectionalLight2 alone contributes the "
+              "exact expected green, independent of Light0/Light1 (plan_dx.md DX-149)");
+
+        backend.UnbindOffscreenColorTargetEXT();
+    }
+
     // ---- Check V (DX-113): a dedicated fog-on/fog-off pixel test, closing the same real gap ----
     // ---- D3D11's own DX-81 audit found and fixed (d3d11_smoke_test.cpp Check AC) -- fog was wired ----
     // ---- into every applicable variant's constant buffer (colored3d's DrawPrimitivesEx bundle ----

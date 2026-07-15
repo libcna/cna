@@ -1682,6 +1682,54 @@ protected:
                       "D3D11GraphicsBackend::DrawPrimitivesEx(): env_map3d fogEnabled=true with Z at "
                       "FogEnd genuinely blends all the way to the exact FogColor (plan_dx.md DX-137)");
             }
+
+            // plan_dx.md DX-149: env_map3d -- DirectionalLight1/DirectionalLight2 each independently
+            // and exactly contribute, not just Light0. Reuses this block's own fixture (normal +Z,
+            // white 2x2 texture, the same cube -- irrelevant content since envMapAmount=0.0 collapses
+            // the base-lerp to the pure lit*texColor path per DX-134's own already-proven formula, so
+            // the env-map sample still executes but its result never reaches the output) and DX-124's
+            // own exact-color-per-term isolation methodology.
+            {
+                ep.envMapAmount = 0.0f;
+                ep.light0Diffuse[0] = 0.0f; ep.light0Diffuse[1] = 0.0f; ep.light0Diffuse[2] = 0.0f; // Light0 off
+                const Microsoft::Xna::Framework::Rectangle ppRegion(30, 30, 1, 1);
+
+                // PP1: DirectionalLight1 alone, full-facing direction, red diffuse -> exact (255,0,0).
+                ep.light1Dir[0] = 0.0f; ep.light1Dir[1] = 0.0f; ep.light1Dir[2] = -1.0f; // travels -Z -> faces the +Z normal
+                ep.light1Diffuse[0] = 1.0f; ep.light1Diffuse[1] = 0.0f; ep.light1Diffuse[2] = 0.0f;
+                dev.Clear(Color(0, 0, 0, 255));
+                backend.DrawPrimitivesEx(*vbEnv, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                         Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, ep);
+                Color pp1(0, 0, 0, 0);
+                dev.GetBackBufferData(&ppRegion, &pp1, 0, 1);
+                check(pp1.getRProperty() == 255 && pp1.getGProperty() == 0 && pp1.getBProperty() == 0,
+                      "D3D11GraphicsBackend::DrawPrimitivesEx(): real env_map3d -- DirectionalLight1 "
+                      "alone contributes the exact expected red, independent of Light0/Light2 (plan_dx.md DX-149)");
+
+                // PP2: same geometry/light1Dir, but light1Diffuse disabled -> confirms PP1 wasn't a leak.
+                ep.light1Diffuse[0] = 0.0f; ep.light1Diffuse[1] = 0.0f; ep.light1Diffuse[2] = 0.0f;
+                dev.Clear(Color(0, 0, 0, 255));
+                backend.DrawPrimitivesEx(*vbEnv, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                         Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, ep);
+                Color pp1off(0, 0, 0, 0);
+                dev.GetBackBufferData(&ppRegion, &pp1off, 0, 1);
+                check(pp1off.getRProperty() == 0 && pp1off.getGProperty() == 0 && pp1off.getBProperty() == 0,
+                      "D3D11GraphicsBackend::DrawPrimitivesEx(): disabling env_map3d DirectionalLight1's "
+                      "diffuse (zeroed) removes its contribution exactly -- confirms the prior check was "
+                      "real, not a leaked default (plan_dx.md DX-149)");
+
+                // PP3: DirectionalLight2 alone, green diffuse -> exact (0,255,0).
+                ep.light2Dir[0] = 0.0f; ep.light2Dir[1] = 0.0f; ep.light2Dir[2] = -1.0f;
+                ep.light2Diffuse[0] = 0.0f; ep.light2Diffuse[1] = 1.0f; ep.light2Diffuse[2] = 0.0f;
+                dev.Clear(Color(0, 0, 0, 255));
+                backend.DrawPrimitivesEx(*vbEnv, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                         Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, ep);
+                Color pp2(0, 0, 0, 0);
+                dev.GetBackBufferData(&ppRegion, &pp2, 0, 1);
+                check(pp2.getRProperty() == 0 && pp2.getGProperty() == 255 && pp2.getBProperty() == 0,
+                      "D3D11GraphicsBackend::DrawPrimitivesEx(): real env_map3d -- DirectionalLight2 "
+                      "alone contributes the exact expected green, independent of Light0/Light1 (plan_dx.md DX-149)");
+            }
         }
 
         // Check V (DX-67): skinned3d. A single identity bone (BoneBlock genuinely populated from
@@ -3104,7 +3152,8 @@ protected:
                                 + 3 /* DX-129 RenderTargetCube bind+clear+readback+unbind proof */
                                 + 8 /* DX-130 combo Clear* variants (DSV, stencil-readable, stencil x2, control, depth x2, color-untouched) */
                                 + 12 /* DX-137 fog for 6 remaining variants x 2 checks each */
-                                + 3 /* DX-136 alpha_test_colored3d VertexColorEnabled on/off + discard-still-works */;
+                                + 3 /* DX-136 alpha_test_colored3d VertexColorEnabled on/off + discard-still-works */
+                                + 3 /* DX-149 env_map3d DirectionalLight1/2 discrimination */;
         std::printf("=== %d/%d PASS ===\n", passCount_, totalChecks);
         result_ = (passCount_ == totalChecks) ? 0 : 1;
         Exit();
