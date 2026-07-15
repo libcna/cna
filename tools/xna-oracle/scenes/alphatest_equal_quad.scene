@@ -1,0 +1,47 @@
+# plan_dx9.md D9-A5 scene corpus: alphatest_equal_quad
+# The first scene to exercise AlphaTestEffect.AlphaFunction=Equal -- a STRUCTURALLY different
+# pixel shader bucket from Greater/Less (both alphatest_quad.scene and alphatest_less_quad.scene
+# use real XNA's shared PSAlphaTestLtGt shader; Equal/NotEqual instead compile to the entirely
+# separate PSAlphaTestEqNe shader, confirmed from FNA's own AlphaTestEffect.cs source: Less/
+# LessEqual/GreaterEqual/Greater/Never/Always all evaluate `clip((a < x) ? z : w)`, while Equal/
+# NotEqual evaluate `clip((abs(a - x) < y) ? z : w)` -- a genuinely different comparison, not just
+# a differently-signed threshold on the same one).
+#
+# FNA's own AlphaTestEffect.cs shows the EXACT tolerance used: `threshold = 0.5f / 255f` (half of
+# one 8-bit integer step). This scene deliberately straddles that boundary to prove the real
+# epsilon is honored precisely, not a sloppier "close enough" comparison:
+#   top-left     alpha=128 (EXACT match to ReferenceAlpha=128)      -> abs diff=0            -> PASS
+#   top-right    alpha=127 (off by exactly 1/255 ~= 0.0039)         -> diff > 0.5/255 (0.00196) -> FAIL
+#   bottom-left  alpha=129 (off by exactly 1/255, other direction)  -> diff > 0.5/255           -> FAIL
+#   bottom-right alpha=1   (far off)                                -> diff >> 0.5/255          -> FAIL
+# A backend using a looser or backwards tolerance (e.g. off-by-one passing, or exact match
+# failing) would diverge here even though it might already pass alphatest_quad.scene/
+# alphatest_less_quad.scene (both Less/Greater, a different shader bucket entirely).
+width=256
+height=256
+profile=HiDef
+clearcolor=100,149,237,255
+effect=AlphaTestEffect
+vertexformat=PositionTexture
+vertexcolor=false
+texture=true
+texturewidth=2
+textureheight=2
+texturefilter=Point
+alphafunction=Equal
+referencealpha=128
+primitive=TriangleList
+# Row-major, top row first: (red,a=128 EXACT MATCH -> passes) / (white,a=127) ; (white,a=129) /
+# (blue,a=1) -- only the exact-match texel passes, all three near-miss/far-miss texels are
+# discarded via clip(), showing the CornflowerBlue clear color through.
+texturepixel=255,0,0,128
+texturepixel=255,255,255,127
+texturepixel=255,255,255,129
+texturepixel=0,0,255,1
+# UV (0,0) is the texture's top-left (red, alpha=128, the only passing texel).
+vertex=-0.6,0.6,0,0,0
+vertex=0.6,0.6,0,1,0
+vertex=-0.6,-0.6,0,0,1
+vertex=0.6,0.6,0,1,0
+vertex=0.6,-0.6,0,1,1
+vertex=-0.6,-0.6,0,0,1
