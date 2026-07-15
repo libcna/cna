@@ -1385,6 +1385,37 @@ those before their prerequisite.
 
 ---
 
+## Phase DX16 — Remaining EasyGL-parity gaps, round 2 (found via a full feature-matrix percentage audit, 2026-07-15)
+
+Phase DX15 closed 18/18 of its own rows, but a follow-up exercise — computing an actual "how much of
+what EasyGL does can D3D11/D3D12 also do" percentage by walking every row of
+`docs/graphics-backend-feature-matrix.md` that has an EasyGL/D3D11/D3D12 column — found 34 rows where
+EasyGL is a clean ✅ (rows where EasyGL itself has a gap, e.g. `DualTextureEffect.VertexColorEnabled`
+or `ReferenceStencil`, are excluded, same exclusion rule `DX15`'s own intro already established: a
+backend can't have a "parity gap" against a feature EasyGL doesn't have either). Result: D3D11 and
+D3D12 both land at **~79% fully pixel-verified (✅), ~97% functionally implemented (✅+🟨)** against
+that 34-row baseline — the ~6 shared 🟨/⬜ rows below are the entire remaining gap on both backends.
+One additional row (`OcclusionQuery` pixel/query correctness) turned out to be a stale
+`graphics-backend-feature-matrix.md` doc row, not a real gap — `DX-147` already closed it for both
+backends; fixed directly (doc-only) rather than opened as a task here, same as this session's other
+stale-row fixes (`DX-29`/`DX-102`/`DX-113`).
+
+Same rule as `DX15`: some rows need a D3D11 leg, a D3D12 leg, or both — noted per row. All 7 below are
+currently ⬜ (not started) — writing them down per the project owner's request, not implementing them
+yet.
+
+| # | Task | Status | Notes |
+|---|---|---|---|
+| DX-149 | `EnvironmentMapEffect.DirectionalLight1`/`2` dedicated pixel test, both D3D11 and D3D12 | ⬜ | Currently 🟨 on both backends — the lighting terms share `D3DLightingConstants` wiring with `BasicEffect` (`DX-124`/`DX-138`'s own already-proven population code), so they almost certainly already work, just have no dedicated test isolating them on `env_map3d` specifically. Reuse `DX-138`'s own exact-color-per-term methodology (isolate one light at a time, zero the rest, confirm an exact expected RGB — not just "differs") against `env_map3d`'s own already-established geometrically-constrained-reflection fixture (`DX-66`/`DX-111`/`DX-134`). |
+| DX-150 | `SkinnedEffect.DirectionalLight1`/`2` dedicated pixel test, both D3D11 and D3D12 | ⬜ | Currently 🟨 on both backends, same shared-wiring reasoning as `DX-149` — no dedicated test on `skinned3d`. Reuse `DX-138`'s own exact-color-per-term methodology, combined with `DX-135`'s own already-working single-bone-identity `skinned3d` fixture so bone math doesn't complicate the lighting isolation. |
+| DX-151 | `SkinnedEffect.SpecularColor`/`SpecularPower` dedicated pixel test, both D3D11 and D3D12 | ⬜ | Currently 🟨 on both backends ("same specular-determinism gap as BasicEffect" per the feature matrix) — but that gap is already SOLVED for `BasicEffect` on both backends (`DX-125` D3D11, `DX-139` D3D12): pick geometry where the half-vector exactly equals the surface normal, collapsing the Blinn-Phong term to an exact, hand-derivable color instead of an approximate one. Apply the identical methodology to `skinned3d`, combined with `DX-135`'s single-bone-identity fixture. |
+| DX-152 | `RenderTargetCube` MSAA support + dedicated pixel test, both D3D11 and D3D12 | ⬜ | Currently explicitly out of scope on both backends (`D3D11RenderTargetCubeBackend`/`D3D12RenderTargetCubeBackend`'s own documented scope boundary, matching each other) — EasyGL supports it. This reopens a previously-deliberate scope decision, not a silent oversight; confirm intent before starting given `DX-45`'s/`DX-117`'s own rows both call it out by name as intentionally excluded. If pursued: D3D11 mirrors `DX-45`'s existing 2D MSAA design (`ClampMultiSampleCount`/resolve-on-unbind) extended to the cube's 6-RTV-array shape; D3D12 mirrors `DX-117`'s own follow-up (`ResolveMsaaEXT`/`resolveResource_`) the same way. |
+| DX-153 | `RenderTargetCube` mip-chain generation — non-face-0 dedicated test, both D3D11 and D3D12 | ⬜ | `DX-129`(D3D11)/`DX-144`(D3D12) both already prove face 0 specifically; neither independently proves a non-zero face. The two backends' actual mechanisms genuinely differ here (confirmed by reading both, not assumed identical): **D3D12**'s `D3D12RenderTargetCubeBackend::GenerateMipsEXT()` explicitly reads `activeFace_` and only regenerates that one face's own CPU box-filter cascade (`D3D12RenderTargets.cpp` line ~536) — a non-face-0 test here mainly confirms the `mip + face*levelCount` subresource math generalizes past face 0. **D3D11** is architecturally different: `UnbindAsRenderTarget()` calls the single driver-level `ID3D11DeviceContext::GenerateMips(srv_.Get())` with **no face argument at all** — this regenerates every face's own chain from whatever is currently in that face's own level-0 content, not scoped to "the last-bound face" the way D3D12's manual cascade is. So the open question for D3D11 is different in kind: whether writing to face 2 (say) and never re-touching face 0 still leaves face 0's own (now-stale) chain alone while genuinely regenerating face 2's — not a subresource-math question like D3D12's, a whole-resource-driver-call-semantics question. |
+| DX-154 | Per-slot `SamplerState` — all-16-slots-simultaneously dedicated test for D3D12 | ⬜ | D3D11 already has this (`DX-142`, all 16 `D3D11_COMMONSHADER_SAMPLER_SLOT_COUNT` slots bound simultaneously with 16 distinct configs, re-queried afterward to prove no slot clobbered another). D3D12 has the equivalent per-slot dynamic sampler system (`D3D12SamplerCache`, `DX-119`) but no equivalent all-slots-simultaneously test. Port `DX-142`'s methodology directly — same slot count, same distinctness-then-re-query proof, adapted to `D3D12SamplerCache`'s own descriptor-handle introspection instead of `PSGetSamplers()`. |
+| DX-155 | `Model` constructor root-bone-index flexibility (Task 916's own `rootBoneIndex` parameter) dedicated test against D3D11 and D3D12 | ⬜ | Task 916 (EasyGL, closed 2026-07-09) added an optional `rootBoneIndex` parameter to `Model`'s constructor so `Root` doesn't have to default to `bones[0]`. Never independently tested against either D3D backend — `DX-128`(D3D11)/`DX-148`(D3D12) both use a default 2-bone hierarchy with the implicit `bones[0]` root, so this parameter's actual effect on either backend's real draw path is unverified. Construct a `Model` with a non-zero `rootBoneIndex` and confirm `Model::Draw()` still orchestrates correctly (right absolute transform folded in) through both backends' real `ModelMesh::Draw()` path. |
+
+---
+
 ## Boundaries (stop and ask, don't improvise)
 
 - **Historical note**: this boundary originally read "do not start any task in this plan without
