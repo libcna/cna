@@ -130,9 +130,10 @@ Requires Pillow (`pip install pillow`) — not previously a dependency of this p
 
 ## Status
 
-Thirteen scenes so far, **all pixel-perfect**, and every one of XNA's 5 Stock Effects plus
-`IEffectFog`, 3 `AlphaTestEffect.AlphaFunction` values (covering both real pixel shader buckets),
-`EnvironmentMapEffect.FresnelFactor`, and a genuine `SkinnedEffect` 2-bone blend is now
+Fourteen scenes so far, **all pixel-perfect**, and every one of XNA's 5 Stock Effects plus
+`IEffectFog`, all 4 `AlphaTestEffect.AlphaFunction` compare directions (covering both real pixel
+shader buckets), `EnvironmentMapEffect.FresnelFactor`, and a genuine `SkinnedEffect` 2-bone blend
+is now
 represented in the corpus:
 
 - `colored3d` (`D9-A2`'s own original spike scene: a `BasicEffect` `VertexColorEnabled=true`/
@@ -295,6 +296,16 @@ represented in the corpus:
   `alpha=1` (far off, FAILS) — the pass/fail pattern was predicted before running either side,
   then confirmed pixel-for-pixel identical, `0/65536` pixels differ. No code changes needed on
   either side (`Equal` was already a supported `CompareFunction` value in both parsers).
+- `alphatest_notequal_quad` — the first scene to exercise `AlphaFunction=NotEqual`, the negation
+  of `alphatest_equal_quad.scene` within the SAME `PSAlphaTestEqNe` shader bucket. Confirmed
+  against FNA's own `AlphaTestEffect.cs` source: `NotEqual` uses the identical `abs(a - x) < y`
+  comparison as `Equal`, only the pass/fail branch targets (`AlphaTest.z`/`AlphaTest.w`) are
+  swapped. Reuses `alphatest_equal_quad.scene`'s exact texture and threshold, only `AlphaFunction`
+  changes — deliberately flips every texel's pass/fail (the exact-match `alpha=128` texel now
+  FAILS; the three near/far-miss texels now PASS), confirmed pixel-for-pixel identical,
+  `0/65536` pixels differ. No code changes needed (`NotEqual` already supported). This completes
+  coverage of both compare-function directions on both real pixel shader buckets (`Greater`/`Less`
+  on `PSAlphaTestLtGt`, `Equal`/`NotEqual` on `PSAlphaTestEqNe`).
 
 `scripts/xna-diff.py` itself is mutation-verified: a deliberately 1-off-mutated copy of a passing
 CNA PNG is correctly reported as `FAIL: 1/65536 pixels differ ... max per-channel delta=1` at the
@@ -302,13 +313,13 @@ default `--tolerance=0`, and correctly passes again at `--tolerance=1` — confi
 genuinely discriminates, not just "always reports PASS".
 
 **Every one of XNA's 5 Stock Effects (`BasicEffect`, `AlphaTestEffect`, `DualTextureEffect`,
-`EnvironmentMapEffect`, `SkinnedEffect`) plus `IEffectFog`, 3 `AlphaTestEffect.AlphaFunction`
-values (`Greater`/`Less` on the `PSAlphaTestLtGt` bucket, `Equal` on the separate
-`PSAlphaTestEqNe` bucket), `EnvironmentMapEffect.FresnelFactor`, and a genuine `SkinnedEffect`
-2-bone blend are now represented in the corpus, at least once, and every single comparison so far
-is pixel-perfect.** `D9-A5` keeps growing "with the plan" — each subsequent effect/feature
-combination this project verifies against the oracle adds its own scene(s) here, incrementally,
-rather than attempting the full corpus (remaining `AlphaTestEffect` compare functions,
-`SkinnedEffect` 4-bone weighting, `SpriteBatch`, render targets, every shared `SurfaceFormat`) in
-one sitting. `D9-84` (every draw path validated against the oracle) is the task that consumes the
-finished corpus.
+`EnvironmentMapEffect`, `SkinnedEffect`) plus `IEffectFog`, all 4 `AlphaTestEffect.AlphaFunction`
+compare directions (`Greater`/`Less` on the `PSAlphaTestLtGt` bucket, `Equal`/`NotEqual` on the
+separate `PSAlphaTestEqNe` bucket), `EnvironmentMapEffect.FresnelFactor`, and a genuine
+`SkinnedEffect` 2-bone blend are now represented in the corpus, at least once, and every single
+comparison so far is pixel-perfect.** `D9-A5` keeps growing "with the plan" — each subsequent
+effect/feature combination this project verifies against the oracle adds its own scene(s) here,
+incrementally, rather than attempting the full corpus (remaining `AlphaTestEffect` compare
+functions `LessEqual`/`GreaterEqual`/`Never`/`Always`, `SkinnedEffect` 4-bone weighting,
+`SpriteBatch`, render targets, every shared `SurfaceFormat`) in one sitting. `D9-84` (every draw
+path validated against the oracle) is the task that consumes the finished corpus.
