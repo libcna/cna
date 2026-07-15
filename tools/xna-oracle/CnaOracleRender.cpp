@@ -19,7 +19,9 @@
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "Microsoft/Xna/Framework/Graphics/AlphaTestEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/CompareFunction.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DirectionalLight.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
@@ -63,6 +65,7 @@ namespace
     }
 
     enum class SceneVertexFormat { PositionColor, PositionTexture, PositionNormalTexture };
+    enum class SceneEffectType { BasicEffect, AlphaTestEffect };
 
     struct SceneLight
     {
@@ -86,6 +89,9 @@ namespace
         bool texturePointFilter = true;
         Vector3 ambientColor{0, 0, 0};
         SceneLight light0;
+        SceneEffectType effectType = SceneEffectType::BasicEffect;
+        CompareFunction alphaFunction = CompareFunction::Always;
+        int referenceAlpha = 0;
         PrimitiveType primitive = PrimitiveType::TriangleList;
         std::vector<VertexPositionColor> colorVertices;
         std::vector<VertexPositionTexture> textureVertices;
@@ -141,6 +147,19 @@ namespace
         throw std::runtime_error("Scene: unknown primitive '" + s + "'");
     }
 
+    CompareFunction ParseCompareFunction(const std::string& s)
+    {
+        if (s == "Always")       return CompareFunction::Always;
+        if (s == "Never")        return CompareFunction::Never;
+        if (s == "Less")         return CompareFunction::Less;
+        if (s == "LessEqual")    return CompareFunction::LessEqual;
+        if (s == "Equal")        return CompareFunction::Equal;
+        if (s == "GreaterEqual") return CompareFunction::GreaterEqual;
+        if (s == "Greater")      return CompareFunction::Greater;
+        if (s == "NotEqual")     return CompareFunction::NotEqual;
+        throw std::runtime_error("Scene: unknown compare function '" + s + "'");
+    }
+
     VertexPositionColor ParseColorVertex(const std::string& s)
     {
         const auto p = Split(s, ',');
@@ -190,6 +209,10 @@ namespace
             else if (key == "height") scene.height = std::stoi(value);
             else if (key == "profile") scene.profile = value == "Reach" ? GraphicsProfile::Reach : GraphicsProfile::HiDef;
             else if (key == "clearcolor") scene.clearColor = ParseColor(value);
+            else if (key == "effect") scene.effectType = value == "AlphaTestEffect"
+                ? SceneEffectType::AlphaTestEffect : SceneEffectType::BasicEffect;
+            else if (key == "alphafunction") scene.alphaFunction = ParseCompareFunction(value);
+            else if (key == "referencealpha") scene.referenceAlpha = std::stoi(value);
             else if (key == "vertexformat")
             {
                 if (value == "PositionTexture") scene.vertexFormat = SceneVertexFormat::PositionTexture;
@@ -241,33 +264,54 @@ protected:
 
         dev.Clear(scene_.clearColor);
 
-        BasicEffect fx(dev);
-        fx.VertexColorEnabled = scene_.vertexColorEnabled;
-        fx.setLightingEnabledProperty(scene_.lightingEnabled);
-        fx.setTextureEnabledProperty(scene_.textureEnabled);
-        fx.World = Matrix::getIdentityProperty();
-        fx.View = Matrix::getIdentityProperty();
-        fx.Projection = Matrix::getIdentityProperty();
-
-        if (scene_.lightingEnabled)
-        {
-            fx.setAmbientLightColorProperty(scene_.ambientColor);
-            fx.DirectionalLight0.setEnabledProperty(scene_.light0.enabled);
-            fx.DirectionalLight0.setDiffuseColorProperty(scene_.light0.diffuse);
-            fx.DirectionalLight0.setDirectionProperty(scene_.light0.direction);
-        }
-
         std::unique_ptr<Texture2D> texture;
         if (scene_.textureEnabled)
         {
             texture = std::make_unique<Texture2D>(dev, scene_.textureWidth, scene_.textureHeight);
             texture->SetData(scene_.texturePixels.data(), static_cast<int>(scene_.texturePixels.size()));
-            fx.setTextureProperty(texture.get());
             dev.getSamplerStatesProperty()[0] =
                 scene_.texturePointFilter ? SamplerState::PointClamp : SamplerState::LinearClamp;
         }
 
-        fx.Apply();
+        // The chosen Effect must outlive this scope: GraphicsDevice::DrawUserPrimitives() below
+        // reads GpuDrawParams from currentEffect_, a RAW pointer Effect::Apply() sets -- an Effect
+        // scoped only to this if/else block would be destroyed before that read, leaving a
+        // dangling pointer (a real bug found live: DrawUserPrimitives reported completely wrong
+        // vertexColor/texture flags -- stale stack memory, not the values actually just set).
+        std::unique_ptr<AlphaTestEffect> alphaFx;
+        std::unique_ptr<BasicEffect> basicFx;
+
+        if (scene_.effectType == SceneEffectType::AlphaTestEffect)
+        {
+            alphaFx = std::make_unique<AlphaTestEffect>(dev);
+            alphaFx->setVertexColorEnabledProperty(scene_.vertexColorEnabled);
+            alphaFx->setTextureProperty(texture.get());
+            alphaFx->setAlphaFunctionProperty(scene_.alphaFunction);
+            alphaFx->setReferenceAlphaProperty(scene_.referenceAlpha);
+            alphaFx->setWorldProperty(Matrix::getIdentityProperty());
+            alphaFx->setViewProperty(Matrix::getIdentityProperty());
+            alphaFx->setProjectionProperty(Matrix::getIdentityProperty());
+            alphaFx->Apply();
+        }
+        else
+        {
+            basicFx = std::make_unique<BasicEffect>(dev);
+            basicFx->VertexColorEnabled = scene_.vertexColorEnabled;
+            basicFx->setLightingEnabledProperty(scene_.lightingEnabled);
+            basicFx->setTextureEnabledProperty(scene_.textureEnabled);
+            basicFx->World = Matrix::getIdentityProperty();
+            basicFx->View = Matrix::getIdentityProperty();
+            basicFx->Projection = Matrix::getIdentityProperty();
+            if (scene_.lightingEnabled)
+            {
+                basicFx->setAmbientLightColorProperty(scene_.ambientColor);
+                basicFx->DirectionalLight0.setEnabledProperty(scene_.light0.enabled);
+                basicFx->DirectionalLight0.setDiffuseColorProperty(scene_.light0.diffuse);
+                basicFx->DirectionalLight0.setDirectionProperty(scene_.light0.direction);
+            }
+            if (scene_.textureEnabled) basicFx->setTextureProperty(texture.get());
+            basicFx->Apply();
+        }
 
         if (scene_.vertexFormat == SceneVertexFormat::PositionNormalTexture)
             dev.DrawUserPrimitives(scene_.primitive, scene_.normalTextureVertices.data(), 0, scene_.PrimitiveCount());

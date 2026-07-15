@@ -27,13 +27,16 @@ fully-commented examples.
 | `width`, `height` | back buffer size |
 | `profile` | `HiDef` or `Reach` |
 | `clearcolor` | `r,g,b,a` (0-255) |
+| `effect` | `BasicEffect` (default) or `AlphaTestEffect` — which Stock Effect both sides construct |
 | `vertexformat` | `PositionColor` (default), `PositionTexture`, or `PositionNormalTexture` — selects which `vertex=` shape below, and which `VertexPosition*` struct both sides draw |
-| `vertexcolor`, `lighting`, `texture` | `BasicEffect.VertexColorEnabled`/`LightingEnabled`/`TextureEnabled` (`true`/`false`) |
+| `vertexcolor`, `lighting`, `texture` | `VertexColorEnabled`/`LightingEnabled` (`BasicEffect` only)/`TextureEnabled` (`BasicEffect`) or texture-non-null (`AlphaTestEffect`) (`true`/`false`) |
 | `texturewidth`, `textureheight` | size of an inline procedural texture (no content-pipeline asset file — matches `D9-A2`'s own "no content pipeline" constraint) |
 | `texturefilter` | `Point` or `Linear` — `SamplerState.PointClamp`/`LinearClamp` on slot 0 |
 | `texturepixel` | `r,g,b,a` — repeats `texturewidth*textureheight` times, row-major, only when `texture=true` |
 | `ambientcolor` | `r,g,b` (0-1 floats) — `BasicEffect.AmbientLightColor`, only when `lighting=true` |
 | `light0enabled`, `light0diffuse`, `light0direction` | `BasicEffect.DirectionalLight0.Enabled`/`DiffuseColor`/`Direction`, only when `lighting=true` |
+| `alphafunction` | `Always`/`Never`/`Less`/`LessEqual`/`Equal`/`GreaterEqual`/`Greater`/`NotEqual` — `AlphaTestEffect.AlphaFunction`, only when `effect=AlphaTestEffect` |
+| `referencealpha` | `0`-`255` int — `AlphaTestEffect.ReferenceAlpha`, only when `effect=AlphaTestEffect` |
 | `primitive` | `TriangleList`, `TriangleStrip`, `LineList`, or `LineStrip` |
 | `vertex` | `x,y,z,r,g,b,a` (`PositionColor`), `x,y,z,u,v` (`PositionTexture`), or `x,y,z,nx,ny,nz,u,v` (`PositionNormalTexture`) — repeats once per vertex, `World`/`View`/`Projection` are always `Matrix.Identity` |
 
@@ -79,6 +82,16 @@ Not registered as a CTest (`add_test`) — it has no pass/fail assertion of its 
 produces a PNG; `scripts/xna-diff.py` is what judges it. `D9-120` is the task that promotes this
 corpus into a real, checked-in-reference-image CTest that doesn't need the XNA prefix to run.
 
+**`GraphicsDevice::DrawUserPrimitives()` reads its `GpuDrawParams` from `currentEffect_`, a raw
+pointer `Effect::Apply()` sets — the constructed `BasicEffect`/`AlphaTestEffect` object must
+outlive every `DrawUserPrimitives()` call that follows its `Apply()`.** A real bug found live while
+adding a second effect type here: the effect object was originally scoped inside an `if`/`else`
+block selecting which Stock Effect to construct, and was destroyed at that block's closing brace —
+before the (deliberately effect-agnostic, shared) `DrawUserPrimitives()` call further down read the
+now-dangling `currentEffect_` pointer, reporting stale stack garbage instead of the flags actually
+just set. Fixed by declaring both possible effect objects as `std::unique_ptr` at `Draw()`'s own
+top level so whichever one gets constructed survives to the end of the function.
+
 ## Diff
 
 ```bash
@@ -90,7 +103,7 @@ Requires Pillow (`pip install pillow`) — not previously a dependency of this p
 
 ## Status
 
-Three scenes so far, **all pixel-perfect**:
+Four scenes so far, **all pixel-perfect**:
 
 - `colored3d` (`D9-A2`'s own original spike scene: a `BasicEffect` `VertexColorEnabled=true`/
   `LightingEnabled=false` triangle over a `CornflowerBlue` clear) — `0/65536` pixels differ,
@@ -108,6 +121,12 @@ Three scenes so far, **all pixel-perfect**:
   texture (`(255,0,0)` → `(128,0,0)`, `(0,0,255)` → `(0,0,128)`) rather than saturating to full
   brightness, which would have made this scene indistinguishable from an unlit one and proven
   nothing about whether the lighting math is genuinely applied.
+- `alphatest_quad` — the first scene to use a non-`BasicEffect` Stock Effect (`AlphaTestEffect`,
+  `AlphaFunction=Greater`, `ReferenceAlpha=128`) on the existing `VertexPositionTexture` shape. A
+  2×2 texture whose 4 texels deliberately straddle the threshold (alpha `255`/`0`/`255`/`64`) —
+  `0/65536` pixels differ, and the passing/failing texels are visibly, correctly different (passing
+  texels show their own color; failing texels show the `CornflowerBlue` clear color through
+  `clip()`'s real discard, not some blended/wrong value).
 
 `scripts/xna-diff.py` itself is mutation-verified: a deliberately 1-off-mutated copy of a passing
 CNA PNG is correctly reported as `FAIL: 1/65536 pixels differ ... max per-channel delta=1` at the

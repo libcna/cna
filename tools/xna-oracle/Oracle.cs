@@ -14,6 +14,7 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 
 public enum SceneVertexFormat { PositionColor, PositionTexture, PositionNormalTexture }
+public enum SceneEffectType { BasicEffect, AlphaTestEffect }
 
 public class SceneLight
 {
@@ -37,6 +38,9 @@ public class Scene
     public bool TexturePointFilter = true;
     public Vector3 AmbientColor = Vector3.Zero;
     public SceneLight Light0 = new SceneLight();
+    public SceneEffectType EffectType = SceneEffectType.BasicEffect;
+    public CompareFunction AlphaFunction = CompareFunction.Always;
+    public int ReferenceAlpha;
     public PrimitiveType Primitive = PrimitiveType.TriangleList;
     public List<VertexPositionColor> ColorVertices = new List<VertexPositionColor>();
     public List<VertexPositionTexture> TextureVertices = new List<VertexPositionTexture>();
@@ -64,6 +68,12 @@ public class Scene
                     scene.Profile = value == "Reach" ? GraphicsProfile.Reach : GraphicsProfile.HiDef;
                     break;
                 case "clearcolor": scene.ClearColor = ParseColor(value); break;
+                case "effect":
+                    scene.EffectType = value == "AlphaTestEffect"
+                        ? SceneEffectType.AlphaTestEffect : SceneEffectType.BasicEffect;
+                    break;
+                case "alphafunction": scene.AlphaFunction = ParseCompareFunction(value); break;
+                case "referencealpha": scene.ReferenceAlpha = int.Parse(value, CultureInfo.InvariantCulture); break;
                 case "vertexformat":
                     if (value == "PositionTexture") scene.VertexFormat = SceneVertexFormat.PositionTexture;
                     else if (value == "PositionNormalTexture") scene.VertexFormat = SceneVertexFormat.PositionNormalTexture;
@@ -133,6 +143,22 @@ public class Scene
         return new Vector3(float.Parse(p[0], CultureInfo.InvariantCulture),
                             float.Parse(p[1], CultureInfo.InvariantCulture),
                             float.Parse(p[2], CultureInfo.InvariantCulture));
+    }
+
+    static CompareFunction ParseCompareFunction(string s)
+    {
+        switch (s)
+        {
+            case "Always": return CompareFunction.Always;
+            case "Never": return CompareFunction.Never;
+            case "Less": return CompareFunction.Less;
+            case "LessEqual": return CompareFunction.LessEqual;
+            case "Equal": return CompareFunction.Equal;
+            case "GreaterEqual": return CompareFunction.GreaterEqual;
+            case "Greater": return CompareFunction.Greater;
+            case "NotEqual": return CompareFunction.NotEqual;
+        }
+        throw new InvalidDataException("Scene: unknown compare function '" + s + "'");
     }
 
     static PrimitiveType ParsePrimitive(string s)
@@ -216,29 +242,45 @@ public class Oracle : Game
         dev.SetRenderTarget(rt);
         dev.Clear(scene.ClearColor);
 
-        var fx = new BasicEffect(dev);
-        fx.VertexColorEnabled = scene.VertexColorEnabled;
-        fx.LightingEnabled = scene.LightingEnabled;
-        fx.TextureEnabled = scene.TextureEnabled;
-        fx.World = Matrix.Identity;
-        fx.View = Matrix.Identity;
-        fx.Projection = Matrix.Identity;
-
-        if (scene.LightingEnabled)
-        {
-            fx.AmbientLightColor = scene.AmbientColor;
-            fx.DirectionalLight0.Enabled = scene.Light0.Enabled;
-            fx.DirectionalLight0.DiffuseColor = scene.Light0.Diffuse;
-            fx.DirectionalLight0.Direction = scene.Light0.Direction;
-        }
-
         Texture2D texture = null;
         if (scene.TextureEnabled)
         {
             texture = new Texture2D(dev, scene.TextureWidth, scene.TextureHeight);
             texture.SetData(scene.TexturePixels.ToArray());
-            fx.Texture = texture;
             dev.SamplerStates[0] = scene.TexturePointFilter ? SamplerState.PointClamp : SamplerState.LinearClamp;
+        }
+
+        Effect fx;
+        if (scene.EffectType == SceneEffectType.AlphaTestEffect)
+        {
+            var atfx = new AlphaTestEffect(dev);
+            atfx.VertexColorEnabled = scene.VertexColorEnabled;
+            atfx.Texture = texture;
+            atfx.AlphaFunction = scene.AlphaFunction;
+            atfx.ReferenceAlpha = scene.ReferenceAlpha;
+            atfx.World = Matrix.Identity;
+            atfx.View = Matrix.Identity;
+            atfx.Projection = Matrix.Identity;
+            fx = atfx;
+        }
+        else
+        {
+            var bfx = new BasicEffect(dev);
+            bfx.VertexColorEnabled = scene.VertexColorEnabled;
+            bfx.LightingEnabled = scene.LightingEnabled;
+            bfx.TextureEnabled = scene.TextureEnabled;
+            bfx.World = Matrix.Identity;
+            bfx.View = Matrix.Identity;
+            bfx.Projection = Matrix.Identity;
+            if (scene.LightingEnabled)
+            {
+                bfx.AmbientLightColor = scene.AmbientColor;
+                bfx.DirectionalLight0.Enabled = scene.Light0.Enabled;
+                bfx.DirectionalLight0.DiffuseColor = scene.Light0.Diffuse;
+                bfx.DirectionalLight0.Direction = scene.Light0.Direction;
+            }
+            if (scene.TextureEnabled) bfx.Texture = texture;
+            fx = bfx;
         }
 
         foreach (var pass in fx.CurrentTechnique.Passes)
