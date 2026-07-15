@@ -31,6 +31,8 @@
 
 #include "CNA/Internal/Backends/SdlGpu/SdlGpuGraphicsBackend.hpp"
 
+#include "common/PixelTestGame.hpp"
+
 #include <cstdio>
 #include <vector>
 
@@ -156,6 +158,9 @@ public:
 
 int main()
 {
+    if (!CNA::Examples::ProbeGpuDisplayAvailable())
+        return CNA::Examples::kSkipExitCode;
+
     SdlGpuTexture3DTest game;
     game.Run();
     return game.getResult();

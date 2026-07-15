@@ -42,6 +42,8 @@
 
 #include "CNA/Internal/Backends/SdlGpu/SdlGpuGraphicsBackend.hpp"
 
+#include "common/PixelTestGame.hpp"
+
 #include <array>
 #include <cstdio>
 #include <memory>
@@ -359,6 +361,9 @@ public:
 
 int main()
 {
+    if (!CNA::Examples::ProbeGpuDisplayAvailable())
+        return CNA::Examples::kSkipExitCode;
+
     SdlGpu3DTest game;
     game.Run();
     return game.getResult();

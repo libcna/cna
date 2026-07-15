@@ -242,6 +242,26 @@ namespace CNA::Examples
     // that exits with this code is reported by ctest as SKIPPED rather than FAILED.
     inline constexpr int kSkipExitCode = 77;
 
+    // Headless-safe pre-flight check (Task 470) for hand-rolled, multi-frame Game-subclass tests
+    // that don't fit PixelTestGame's single-shot shape (this project's own convention above --
+    // see this header's own top comment for why those tests keep hand-rolling their own
+    // Game subclass instead of using RunPixelTest<TGame>()). Returns true if a GPU/display is
+    // available (safe to proceed constructing a real Game/GraphicsDevice); false if it already
+    // printed "[SKIP] ..." and the caller should immediately `return kSkipExitCode;` from main()
+    // without ever constructing its Game subclass. Same SDL_InitSubSystem/SDL_QuitSubSystem probe
+    // RunPixelTest<TGame>() itself uses.
+    inline bool ProbeGpuDisplayAvailable()
+    {
+        if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
+        {
+            std::printf("[SKIP] no GPU/display available (SDL_InitSubSystem(SDL_INIT_VIDEO) "
+                        "failed: %s)\n", SDL_GetError());
+            return false;
+        }
+        SDL_QuitSubSystem(SDL_INIT_VIDEO);
+        return true;
+    }
+
     // Constructs, runs, and returns the process exit code for a PixelTestGame-derived test in
     // one line, matching this project's existing single-shot example main() convention.
     //

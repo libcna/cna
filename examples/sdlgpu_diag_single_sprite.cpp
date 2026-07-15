@@ -13,6 +13,8 @@
 
 #include "CNA/Internal/Backends/SdlGpu/SdlGpuGraphicsBackend.hpp"
 
+#include "common/PixelTestGame.hpp"
+
 #include <cstdio>
 #include <memory>
 #include <vector>
@@ -74,6 +76,9 @@ public:
 
 int main()
 {
+    if (!CNA::Examples::ProbeGpuDisplayAvailable())
+        return CNA::Examples::kSkipExitCode;
+
     DiagSingleSprite game;
     game.Run();
     return 0;
