@@ -162,6 +162,19 @@ namespace CNA::Internal::Backends::D3D9
         void DrawIndexedColoredPrimitives(const IVertexBufferBackend& vb, const IIndexBufferBackend& ib,
                                           const Matrix& world, const Matrix& view, const Matrix& projection,
                                           PrimitiveType primitive, int primitiveCount) override;
+        /// D9-82b: real effect-aware dispatch, `BasicEffect` only so far (`AlphaTestEffect`/
+        /// `DualTextureEffect`/`EnvironmentMapEffect`/`SkinnedEffect` throw a named
+        /// not-yet-implemented naming their own follow-up row -- `D9-82c`/`d`/`e`/`f`). See
+        /// `D3D9EffectDraw.cpp`'s own header comment for the full `BasicEffect` coverage/gaps.
+        void DrawPrimitivesEx(const IVertexBufferBackend& vb,
+                              const Matrix& world, const Matrix& view, const Matrix& projection,
+                              PrimitiveType primitive, int primitiveCount,
+                              const GpuDrawParams& params) override;
+        /// D9-82b: indexed counterpart of `DrawPrimitivesEx` above -- same scope.
+        void DrawIndexedPrimitivesEx(const IVertexBufferBackend& vb, const IIndexBufferBackend& ib,
+                                     const Matrix& world, const Matrix& view, const Matrix& projection,
+                                     PrimitiveType primitive, int primitiveCount,
+                                     const GpuDrawParams& params) override;
         std::unique_ptr<ISpriteBatchBackend> CreateSpriteBatch() override;
 
         // ---- IGraphicsBackend: real (D9-30/D9-6 -- GraphicsDevice's own constructor unconditionally
@@ -308,6 +321,27 @@ namespace CNA::Internal::Backends::D3D9
         /// layouts. Not a D3DPOOL_DEFAULT resource -- vertex declarations survive Reset() unaffected
         /// (real D3D9 semantics), so this cache is never invalidated/re-registered.
         IDirect3DVertexDeclaration9* GetOrCreateVertexDeclarationEXT(std::size_t strideInBytes);
+
+        /// D9-82b: shared entry point for `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` -- `ib` is
+        /// null for the non-indexed call. Selects which Stock Effect `params` indicates (mirrors
+        /// `D3D11GraphicsBackend::DrawPrimitivesExImpl`'s own flag priority-cascade) and dispatches
+        /// to that effect's own draw helper; throws a named not-yet-implemented for effects whose
+        /// row hasn't landed yet. Defined in `D3D9EffectDraw.cpp`.
+        void DrawPrimitivesExImpl(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
+                                  const Matrix& world, const Matrix& view, const Matrix& projection,
+                                  PrimitiveType primitive, int primitiveCount,
+                                  const GpuDrawParams& params);
+        /// D9-82b: real `BasicEffect` dispatch -- computes `ShaderIndex` from `params` (with the
+        /// `oneLight` derivation `D9-81`'s corrected note describes), selects/creates the matching
+        /// shader pair via `D9-80`'s dispatch tables + `D9-74`'s shader cache, uploads every named
+        /// constant that variant's own `D9-72` register table declares, binds textures/vertex
+        /// declaration, and issues the draw. Throws for combinations with no matching CNA vertex
+        /// layout (see `D3D9EffectDraw.cpp`'s own header comment for the exact supported set).
+        /// Defined in `D3D9EffectDraw.cpp`.
+        void DrawBasicEffectEXT(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
+                                std::size_t stride, const Matrix& world, const Matrix& view,
+                                const Matrix& projection, PrimitiveType primitive, int primitiveCount,
+                                const GpuDrawParams& params);
 
         SDL_Window* window_ = nullptr;
         int width_ = 0;

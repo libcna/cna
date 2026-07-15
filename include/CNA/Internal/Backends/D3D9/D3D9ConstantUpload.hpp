@@ -28,4 +28,19 @@ namespace CNA::Internal::Backends::D3D9
     void UploadPixelShaderConstantEXT(IDirect3DDevice9* device,
                                       const Shaders::D3D9ShaderConstantSlot* table, int count,
                                       const char* name, const float* data);
+
+    /// D9-82b: "soft" counterpart of `UploadVertexShaderConstantEXT` -- returns `true` if
+    /// uploaded, `false` (never throws) if `name` is not present in `table` (empty OR simply not
+    /// declared by this specific compiled variant). Lets a generic effect-dispatch path attempt
+    /// every constant an effect COULD have and let each variant's own real (D9-72) register table
+    /// decide which ones actually apply, instead of hand-tracking a separate "which constants does
+    /// variant X need" list that could drift out of sync with the compiler-verified ground truth.
+    bool TryUploadVertexShaderConstantEXT(IDirect3DDevice9* device,
+                                          const Shaders::D3D9ShaderConstantSlot* table, int count,
+                                          const char* name, const float* data);
+
+    /// Pixel-shader counterpart of `TryUploadVertexShaderConstantEXT`.
+    bool TryUploadPixelShaderConstantEXT(IDirect3DDevice9* device,
+                                         const Shaders::D3D9ShaderConstantSlot* table, int count,
+                                         const char* name, const float* data);
 }

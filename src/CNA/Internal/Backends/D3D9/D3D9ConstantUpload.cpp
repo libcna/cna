@@ -49,4 +49,26 @@ namespace CNA::Internal::Backends::D3D9
         }
         device->SetPixelShaderConstantF(slot->registerIndex, data, slot->registerCount);
     }
+
+    bool TryUploadVertexShaderConstantEXT(IDirect3DDevice9* device,
+                                          const Shaders::D3D9ShaderConstantSlot* table, int count,
+                                          const char* name, const float* data)
+    {
+        if (!table || count == 0) return false;
+        const Shaders::D3D9ShaderConstantSlot* slot = FindSlot(table, count, name);
+        if (!slot) return false;
+        device->SetVertexShaderConstantF(slot->registerIndex, data, slot->registerCount);
+        return true;
+    }
+
+    bool TryUploadPixelShaderConstantEXT(IDirect3DDevice9* device,
+                                         const Shaders::D3D9ShaderConstantSlot* table, int count,
+                                         const char* name, const float* data)
+    {
+        if (!table || count == 0) return false;
+        const Shaders::D3D9ShaderConstantSlot* slot = FindSlot(table, count, name);
+        if (!slot) return false;
+        device->SetPixelShaderConstantF(slot->registerIndex, data, slot->registerCount);
+        return true;
+    }
 }

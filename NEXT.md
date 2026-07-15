@@ -59,7 +59,7 @@ plausibly."
 
 | Build dir | Backend | Status |
 |---|---|---|
-| `cmake-build-d3d9` | D3D9 (Windows cross-compile, MinGW-w64) | **Verified clean 2026-07-15**: `cmake -DCNA_GRAPHICS_BACKEND=D3D9 -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64.cmake -DCNA_BUILD_TESTS=ON` configures; `CNA`/`cna_backend_graphics_d3d9`/`cna_test_d3d9_common`/`cna_test_d3d9_smoke`/`cna_test_d3d9_shadercache`/`cna_test_d3d9_shaderdispatch`/`cna_test_d3d9_draw` all build clean. `D3D9_Common` 28/28 + `D3D9_ShaderDispatch` 23/23 + `D3D9_Smoke` 53/53 + `D3D9_Draw` 3/3 + `D3D9_ShaderCache` 6/6 pass via `ctest --test-dir cmake-build-d3d9 -L D3D9` (5 CTests). A real device now creates, clears, presents, reads back pixels, resizes, recovers from a (simulated) device-lost event, round-trips real vertex/index buffer data, round-trips real 2D/cube/volume texture data (including a genuinely non-power-of-two texture), creates/binds/clears/reads back real 2D/cube/MSAA render targets, binds a real 2-target MRT set, runs a real occlusion query, applies real sampler state, creates all 66 real Microsoft stock-effect shaders through a live device, correctly replicates XNA's own shader-permutation selection logic for all 5 effects, and draws its first real 3D triangle (`DrawColoredPrimitives`/`DrawIndexedColoredPrimitives`, exact vertex color, real `WorldViewProj` register upload), all through the actual public `Game`/`GraphicsDeviceManager`/`GraphicsDevice` API (or, for the shader cache/dispatch, the backend's own real device handle or pure functions). |
+| `cmake-build-d3d9` | D3D9 (Windows cross-compile, MinGW-w64) | **Verified clean 2026-07-15**: `cmake -DCNA_GRAPHICS_BACKEND=D3D9 -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64.cmake -DCNA_BUILD_TESTS=ON` configures; `CNA`/`cna_backend_graphics_d3d9`/`cna_test_d3d9_common`/`cna_test_d3d9_smoke`/`cna_test_d3d9_shadercache`/`cna_test_d3d9_shaderdispatch`/`cna_test_d3d9_draw`/`cna_test_d3d9_drawex` all build clean. `D3D9_Common` 28/28 + `D3D9_ShaderDispatch` 23/23 + `D3D9_Smoke` 53/53 + `D3D9_Draw` 3/3 + `D3D9_DrawEx` 10/10 + `D3D9_ShaderCache` 6/6 pass via `ctest --test-dir cmake-build-d3d9 -L D3D9` (6 CTests). A real device now creates, clears, presents, reads back pixels, resizes, recovers from a (simulated) device-lost event, round-trips real vertex/index buffer data, round-trips real 2D/cube/volume texture data (including a genuinely non-power-of-two texture), creates/binds/clears/reads back real 2D/cube/MSAA render targets, binds a real 2-target MRT set, runs a real occlusion query, applies real sampler state, creates all 66 real Microsoft stock-effect shaders through a live device, correctly replicates XNA's own shader-permutation selection logic for all 5 effects, draws its first real 3D triangle (`DrawColoredPrimitives`/`DrawIndexedColoredPrimitives`), and draws real effect-aware `BasicEffect` geometry (`DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` — textured, vertex-color, two-light and one-light vertex-lit, fog, all pixel-exact against hand-computed expected colors), all through the actual public `Game`/`GraphicsDeviceManager`/`GraphicsDevice` API (or, for the shader cache/dispatch, the backend's own real device handle or pure functions). |
 
 ### Phase D9-0 — feasibility spikes: CLOSED 2026-07-14
 
@@ -369,14 +369,18 @@ throws too, and vice versa). Runs clean against both the default CTest prefix an
 -equipped compiler prefix. Mutation-verified (made `CreateAllEXT()` skip the first pixel shader,
 confirmed exactly the count-dependent checks went red). Full 3-CTest D3D9 suite passes.
 
-### Phase D9-8 — XNA shader dispatch: D9-80/D9-81/D9-82 CLOSED, D9-82b/83/84 open
+### Phase D9-8 — XNA shader dispatch: D9-80/D9-81/D9-82/D9-82b CLOSED, D9-82c/d/e/f + D9-83/84 open
 
 | Task | Status |
 |---|---|
 | `D9-80` — replicate XNA's shader-permutation model (`VSIndices`/`PSIndices`/`ShaderIndex`) | ✅ |
 | `D9-81` — audit `GpuDrawParams` vs. XNA's real `ShaderIndex` inputs, report the gaps | ✅ |
 | `D9-82` — upload constants at Microsoft's registers; `DrawColoredPrimitives`/`DrawIndexedColoredPrimitives` (non-effect-aware, BasicEffect-VertexColor-only scope) | ✅ |
-| `D9-82b` — full effect-aware `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` (all 5 Stock Effects) | ⬜ |
+| `D9-82b` — `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` entry point + `BasicEffect` dispatch | ✅ |
+| `D9-82c` — `AlphaTestEffect` dispatch | ⬜ |
+| `D9-82d` — `DualTextureEffect` dispatch | ⬜ |
+| `D9-82e` — `EnvironmentMapEffect` dispatch | ⬜ |
+| `D9-82f` — `SkinnedEffect` dispatch | ⬜ |
 | `D9-83` — `DrawInstancedPrimitivesEx` via `SetStreamSourceFreq` | ⬜ |
 | `D9-84` — every draw path validated against the oracle | ⬜ |
 
@@ -428,15 +432,59 @@ match. New `D3D9_Draw` CTest (real device draw): 3/3 (non-indexed paint, indexed
 indexed/transform checks stayed green (correctly isolated blast radius); reverted, reconfirmed 3/3
 green. Full D3D9 CTest suite (5 binaries) passes.
 
+`D9-82b`: new `D3D9EffectDraw.cpp` — `DrawPrimitivesExImpl()` (the shared entry point, same
+flag-priority-cascade shape `D3D11GraphicsBackend::DrawPrimitivesExImpl` already uses) +
+`DrawBasicEffectEXT()`. New "soft" `TryUpload{Vertex,Pixel}ShaderConstantEXT()` (never throws on a
+missing name) added to `D3D9ConstantUpload` — the generic dispatcher attempts EVERY constant
+`BasicEffect` could ever declare and lets each variant's own real (`D9-72`) register table silently
+filter out whichever don't apply.
+
+**Real, honest scope-narrowing finding: only 10 of `BasicEffect`'s 32 `ShaderIndex` values are
+actually drawable, not the 24 this row originally estimated.** `BasicEffect`'s remaining `VSInput`
+shapes need vertex layouts this project's 5 established strides (16/20/24/32/52) simply don't
+have (`VSInput` Position-only 12 bytes; `VSInputNm` Position+Normal 24 bytes — collides with the
+EXISTING Position+Color+TexCoord 24-byte layout; `VSInputNmVc`/`VSInputNmTxVc` 28/36 bytes) — every
+unsupported combination throws a named "no matching CNA vertex layout" error (same honest-gap
+category as D3D11's own "`dual_texture_colored3d` not ported"), not a silent wrong-stride draw.
+
+**`D9-81`'s `oneLight` finding corrected during real implementation** — its original text ("read
+`SkinnedEffect.cpp`'s own internal `oneLight_` directly") turned out not actually reachable from
+`IGraphicsBackend::DrawPrimitivesEx()`'s own `GpuDrawParams`-only input (no channel back to the
+originating `Effect` object's private members). Real fix: a light with BOTH diffuse and specular
+still `(0,0,0)` contributes exactly zero to `Lighting.fxh`'s `ComputeLights()` regardless of
+`Enabled`, so `oneLight` is derivable losslessly from `GpuDrawParams`' own existing fields — no
+`GpuDrawParams` extension needed after all (that row's own text updated to match).
+
+Also found/derived live: the `EffectParameter.SetValue(Matrix)` register-transpose trick generalizes
+correctly to a `float3x3`-declared constant (`WorldInverseTranspose`) as well as a truncated
+`float4x4` (`World`, 3 of 4 registers — the same "entry point never reads `.w`" pattern `D9-72`
+first found for `EnvironmentMapEffect`, now confirmed for `BasicEffect`'s lit path too); `EmissiveColor`
+needed reconstruction from `GpuDrawParams`' separate `ambientColor`/`diffuseColor`/`emissiveColor`
+fields (`emissiveColor + ambientColor*diffuseColor`, matching `Lighting.fxh` exactly).
+
+New `D3D9_DrawEx` CTest (real device draw), 10/10 — every expected pixel HAND-COMPUTED from
+`BasicEffect.fx`/`Lighting.fxh`'s own real formulas: unlit+textured, unlit+vertexColor+textured,
+lit+textured 2-light-sum (exact `(150,90,30)`), lit+textured 1-light/`OneLight` bucket (exact
+`(80,48,16)` — deliberately different from the 2-light case so the pair together proves correct
+bucket selection), fog fully-fogged (exact `FogColor` readback), an unsupported combo throws, and
+`AlphaTestEffect`/`DualTextureEffect`/`EnvironmentMapEffect`/`SkinnedEffect` each throw their own
+named not-yet-implemented (`D9-82c`/`d`/`e`/`f`). Mutation-verified: forced `oneLight` to always
+`true`; exactly the 2-light check (the only one sensitive to a bucket-selection bug) went red,
+everything else stayed green; reverted, reconfirmed 10/10. Full D3D9 CTest suite (6 binaries) passes.
+
 ### Does NOT work yet
 
-Full effect-aware draws (`DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` — `D9-82b`), `SpriteBatch` —
-still throw `NotYetImplemented()` naming their own follow-up task, by design. The narrow
-`DrawColoredPrimitives`/`DrawIndexedColoredPrimitives` path (`D9-82`) is real. `D9-64` (reused state
-CTests) is the only remaining open row in Phase D9-6, and isn't actionable until `D9-82b` lands (it
-needs a real effect-aware draw path, not just the colored-only one). The mapping tables (`D9-20`–`23`)
-are now consumed by the render-state push path, the buffer-creation path, the
-texture/render-target-creation paths, and (`D9-22`, for real now) the draw path itself.
+`AlphaTestEffect`/`DualTextureEffect`/`EnvironmentMapEffect`/`SkinnedEffect` dispatch (`D9-82c`–`f`),
+`BasicEffect`'s `PreferPerPixelLighting` variants (blocked on `D9-81`'s still-open `GpuDrawParams`
+gap) and any `BasicEffect` combination with no matching CNA vertex layout (`D9-82b`'s own
+enumeration), `SpriteBatch` — all still throw `NotYetImplemented()`/a named not-yet-implemented
+naming their own follow-up task, by design. `BasicEffect`'s realistically-drawable 10 `ShaderIndex`
+values and the narrow `DrawColoredPrimitives`/`DrawIndexedColoredPrimitives` path are real. `D9-64`
+(reused state CTests) is the only remaining open row in Phase D9-6, and isn't actionable until at
+least one of `D9-82c`–`f` lands (needs a second real effect-aware draw path to meaningfully exercise
+state changes against, beyond `BasicEffect` alone). The mapping tables (`D9-20`–`23`) are now
+consumed by the render-state push path, the buffer-creation path, the
+texture/render-target-creation paths, and the draw path itself.
 
 ---
 
@@ -446,7 +494,8 @@ Most recent first. Full detail lives in `plan_dx9.md` — this is a short index.
 
 | Commit(s) | Summary |
 |---|---|
-| *(pending)* | **`D9-82` closed (first real 3D triangle) — split from its original scope into `D9-82`/`D9-82b`**: new `D3D9ConstantUpload` (name-keyed register lookup + `Set{Vertex,Pixel}ShaderConstantF`); real `DrawColoredPrimitives`/`DrawIndexedColoredPrimitives` (stride-16, `BasicEffect` `ShaderIndex 3` only, chaining `D9-80`'s dispatch into `D9-74`'s shader cache); new stride-keyed vertex-declaration cache. Found and fixed a second real trap live (not the predicted `D3DCULL` one): `D9-22`'s `D3DDECLTYPE_D3DCOLOR` for `COLOR0` silently swapped R/B against XNA's own R,G,B,A `Color.PackedValue` layout (confirmed: fed red, read back blue, before the fix) — switched to `D3DDECLTYPE_UBYTE4N` (no reorder), confirmed exact red after. `D3D9_Common`'s stride-16/24 assertions updated to match. New `D3D9_Draw` CTest, 3/3 (paint non-indexed, paint indexed, real `WorldViewProj`-upload proof). Mutation-verified (corrupted `DiffuseColor`, confirmed only the mutated check went red). Full 5-CTest D3D9 suite passes. |
+| *(pending)* | **`D9-82b` closed (`DrawPrimitivesEx` entry point + `BasicEffect` dispatch)**: new `D3D9EffectDraw.cpp`; new "soft" `TryUpload*ShaderConstantEXT` helpers. Real, honest finding: only 10 of `BasicEffect`'s 32 `ShaderIndex` values are actually drawable (no CNA vertex layout for the rest) — narrower than this row's original 24-value estimate, documented not hidden. Corrected `D9-81`'s `oneLight` finding (the original "read `SkinnedEffect.cpp` directly" text wasn't actually reachable from `GpuDrawParams`-only input; the real fix is a provably-lossless derivation from existing `GpuDrawParams` fields). New `D3D9_DrawEx` CTest, 10/10, every expected pixel hand-computed from `BasicEffect.fx`/`Lighting.fxh`'s own formulas. Mutation-verified (forced `oneLight=true`, confirmed only the bucket-sensitive check went red). Full 6-CTest D3D9 suite passes. |
+| `031e33a5` | **`D9-82` closed (first real 3D triangle) — split from its original scope into `D9-82`/`D9-82b`**: new `D3D9ConstantUpload` (name-keyed register lookup + `Set{Vertex,Pixel}ShaderConstantF`); real `DrawColoredPrimitives`/`DrawIndexedColoredPrimitives` (stride-16, `BasicEffect` `ShaderIndex 3` only, chaining `D9-80`'s dispatch into `D9-74`'s shader cache); new stride-keyed vertex-declaration cache. Found and fixed a second real trap live (not the predicted `D3DCULL` one): `D9-22`'s `D3DDECLTYPE_D3DCOLOR` for `COLOR0` silently swapped R/B against XNA's own R,G,B,A `Color.PackedValue` layout (confirmed: fed red, read back blue, before the fix) — switched to `D3DDECLTYPE_UBYTE4N` (no reorder), confirmed exact red after. `D3D9_Common`'s stride-16/24 assertions updated to match. New `D3D9_Draw` CTest, 3/3 (paint non-indexed, paint indexed, real `WorldViewProj`-upload proof). Mutation-verified (corrupted `DiffuseColor`, confirmed only the mutated check went red). Full 5-CTest D3D9 suite passes. |
 | `e5aa797b` | **`D9-80`/`D9-81` closed (XNA shader dispatch + audit)**: new `D3D9ShaderDispatch` — `Compute<Effect>ShaderIndex()`/`Get<Effect>{Vertex,Pixel}ShaderNameEXT()` for all 5 stock effects, transcribed from FNA's `.cs` sources + the vendored `.fx` files' own tables. `D9-81`'s audit independently re-verified against current source (forked agent): all 4 `GpuDrawParams` gaps still real, but `oneLight`/`isEqNe` turn out resolvable from CNA's own existing internal state with no `GpuDrawParams` change (only `PreferPerPixelLighting`/`specularEnabled` remain genuine cross-cutting blockers). New `D3D9_ShaderDispatch` CTest, 23 checks. Mutation-testing found a real gap in the test's own first draft (a prefix-only sweep missed a corrupted table entry); rewrote as an exact-match sweep against an independently-typed expected array, re-confirmed the mutation is now caught. Full 4-CTest D3D9 suite passes. |
 | `678bc3be` | **`D9-74` closed (`D3D9ShaderCache`) — Phase D9-7 FULLY CLOSED** (`D9-73` honestly 🟨): installed DXVK into `~/.wine-cna-d3d9-spike` (now has both the real compiler and a live device); new `D3D9ShaderCache` + `Shaders::kAllShaders[]` manifest (regenerated, not hand-typed) + new `D3D9_ShaderCache` CTest (4 checks: all 66 create live, caching works, unknown names throw, stage-aware lookup). Mutation-verified (skipped one shader in `CreateAllEXT()`, confirmed the count-dependent checks went red). Full 3-CTest D3D9 suite passes. |
 | `7ecd2d42` | **`D9-72` closed (transcribe register layout)**: real, empirical finding (`EnvironmentMapEffect.fx`'s `VSEnvMap` allocates `World` only 3 registers, not the naively-assumed 4, since that entry point never reads `pos_ws.w`) invalidated the plan's own original hand-derive-from-source approach. New `extract_shader_registers.py` compiles+disassembles all 66 shaders via a new `disasm_tool.cpp`, parsing the compiler's own `// Registers:` comment block for the real, per-entry-point ground truth. Output `D3D9ShaderRegisters.hpp` (627 lines), compiles clean, spot-checked against 3 independently-verified cases. |
@@ -474,32 +523,47 @@ Most recent first. Full detail lives in `plan_dx9.md` — this is a short index.
 
 **No blocker.** Phases D9-0/D9-1/D9-2/D9-3/D9-4/D9-5/D9-7 are all fully closed (D9-32/D9-34/D9-73
 honestly 🟨 — see their own plan rows for exactly what's deferred and why). Phase D9-6: `D9-60`–`D9-63`
-closed (`D9-60`/`D9-62` honestly 🟨); only `D9-64` remains, not actionable until `D9-82b` lands.
-**Phase D9-8: `D9-80`/`D9-81`/`D9-82` closed** — the shader-dispatch tables/formulas are transcribed
-and tested, the `GpuDrawParams` audit is independently re-verified (2 of its 4 gaps turned out
-resolvable with no `GpuDrawParams` change; the other 2 remain genuine cross-cutting blockers, not
-this plan's call), and this backend has drawn its first real, pixel-verified 3D triangle
-(`DrawColoredPrimitives`/`DrawIndexedColoredPrimitives`, `BasicEffect`-VertexColor-only scope — split
-out of `D9-82`'s original row into `D9-82` (this narrow scope, now closed) + `D9-82b` (full
-effect-aware dispatch, still open), mirroring `plan_dx.md`'s own `DX-61`/`DX-62..67` split). Next
-smallest task: `D9-82b` — full effect-aware `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` across all 5
-Stock Effects, consuming `D9-80`'s dispatch tables + this task's own `D3D9ConstantUpload` helper for
-every one of the 78 shader-variant register mappings (not just the one fixed `BasicEffect` variant
-`D9-82` hardcoded) — unblocks `D9-64`, `D9-83`, `D9-84`, and Phase D9-9 (`SpriteBatch`). Source
-`oneLight`/`isEqNe` from CNA's own real internal state per `D9-81`'s findings, not by inferring from
-other `GpuDrawParams` fields; `PreferPerPixelLighting`/`specularEnabled` variants stay blocked on a
-project-owner-level `GpuDrawParams` decision. The `D3DCULL` winding trap (`D9-21`) did NOT need to be
-worked around for `D9-82` (explicit `CullMode::None` reset sidestepped it, matching `D3D11_Smoke`'s
-own precedent) — it's still open, and `D9-82b`/`D9-84` may yet hit it for real once culling-sensitive
-scenes are drawn.
+closed (`D9-60`/`D9-62` honestly 🟨); only `D9-64` remains, not actionable until at least one of
+`D9-82c`–`f` lands.
+
+**Phase D9-8: `D9-80`/`D9-81`/`D9-82`/`D9-82b` closed** — the shader-dispatch tables/formulas are
+transcribed and tested, the `GpuDrawParams` audit is independently re-verified (2 of its 4 gaps
+turned out resolvable with no `GpuDrawParams` change; the other 2 remain genuine cross-cutting
+blockers, not this plan's call), this backend has drawn its first real, pixel-verified 3D triangle
+(`DrawColoredPrimitives`/`DrawIndexedColoredPrimitives`, `BasicEffect`-VertexColor-only scope), and
+now draws real effect-aware `BasicEffect` geometry too (`DrawPrimitivesEx`/`DrawIndexedPrimitivesEx`
+— 10 of `BasicEffect`'s 32 `ShaderIndex` values are actually drawable given this project's 5
+established vertex layouts, all 10 pixel-verified). Next smallest task: `D9-82c` (`AlphaTestEffect`)
+— the shared dispatcher/entry-point plumbing and register-upload helpers `D9-82b` built are ready to
+consume directly (`DrawPrimitivesExImpl()`'s own `needsAlphaTest` branch already routes here, just
+needs a real `DrawAlphaTestEffectEXT()` implemented instead of throwing). `D9-82d`/`e`/f` follow the
+same shape for `DualTextureEffect`/`EnvironmentMapEffect`/`SkinnedEffect`. `PreferPerPixelLighting`
+variants and `EnvironmentMapEffect`'s specular variants stay blocked on a project-owner-level
+`GpuDrawParams` decision (`D9-81`'s still-open findings). The `D3DCULL` winding trap (`D9-21`) did
+NOT need to be worked around for `D9-82`/`D9-82b` (explicit `CullMode::None` resets sidestepped it,
+matching `D3D11_Smoke`'s own precedent) — it's still open, and `D9-82c`–`f`/`D9-84` may yet hit it
+for real once culling-sensitive scenes are drawn.
 
 ---
 
 ## 5. Known bugs and limitations
 
-None yet specific to this backend — no backend code exists. See `plan_dx9.md`'s "CNA's divergences
-from XNA 4.0" for the six pre-existing, cross-cutting CNA-vs-XNA fidelity gaps this plan will measure
-(not fix) once Phase D9-A's oracle is complete.
+- `BasicEffect` via `DrawPrimitivesEx` only supports 10 of its 32 `ShaderIndex` values — every
+  combination whose `VSInput` shape has no matching CNA vertex layout (Position-only 12 bytes;
+  Position+Normal 24 bytes, colliding with the existing Position+Color+TexCoord layout;
+  Position+Normal+Color[+TexCoord] 28/36 bytes) throws a named error instead of drawing. See
+  `plan_dx9.md` `D9-82b`'s own closure note / `D3D9EffectDraw.cpp`'s header comment for the exact
+  enumeration.
+- `BasicEffect`'s `PreferPerPixelLighting` is silently ignored (always treated as `false`, i.e.
+  vertex-lit) — `GpuDrawParams` has no field to convey it (`plan_dx9.md` `D9-81` item 1, unresolved,
+  needs a project-owner-level `GpuDrawParams` decision).
+- `AlphaTestEffect`/`DualTextureEffect`/`EnvironmentMapEffect`/`SkinnedEffect` dispatch is not yet
+  implemented (`plan_dx9.md` `D9-82c`/`d`/`e`/`f`) — each throws a named not-yet-implemented.
+- `D3DCULL` winding (`CullClockwiseFace`/`CullCounterClockwiseFace` vs. `D3DCULL_CW`/`_CCW`) is
+  mapped but not yet pixel-proven against the real XNA oracle (`plan_dx9.md` `D9-21`/`D9-84`).
+
+See `plan_dx9.md`'s "CNA's divergences from XNA 4.0" for the six pre-existing, cross-cutting
+CNA-vs-XNA fidelity gaps this plan will measure (not fix) once Phase D9-A's oracle is complete.
 
 ---
 
@@ -510,7 +574,7 @@ from XNA 4.0" for the six pre-existing, cross-cutting CNA-vs-XNA fidelity gaps t
 | Layer | Location | Notes |
 |---|---|---|
 | Backend contracts | `include/CNA/Internal/Backends/Common/IGraphicsBackend.hpp` | Being extended additively (approved) for D3D9's needs — see `plan_dx9.md`. |
-| **D3D9 backend** | `include/\|src/CNA/Internal/Backends/D3D9/` | **Not yet created.** Windows-only, MinGW-w64 cross-compiled, own format/state/vertex-declaration mapping (not `D3DCommon`). |
+| **D3D9 backend** | `include/\|src/CNA/Internal/Backends/D3D9/` | Windows-only, MinGW-w64 cross-compiled, own format/state/vertex-declaration mapping (not `D3DCommon`). Device/present/buffers/textures/render-targets/render-state/stock-effect-shaders/colored+`BasicEffect` draws are real; `D9-82c`–`f`/`SpriteBatch` still pending. |
 | Vendored XNA stock effects | `src/CNA/Internal/Backends/D3D9/shaders/xna/` (destination) | Microsoft's `.fx`/`.fxh`, verbatim, MS-PL. |
 | Spike artifacts (temporary) | `dx9-spike/` | Proven Phase D9-0 code, being moved into the real tree task by task. |
 
@@ -557,29 +621,39 @@ cmake -S . -B cmake-build-d3d9 \
 ## 8. Next smallest tasks
 
 **Phases D9-0 through D9-7 are all fully closed** (`D9-32`/`D9-34`/`D9-60`/`D9-62`/`D9-73` honestly
-🟨 — see their own plan rows for exactly what's deferred and why). Phase D9-8: `D9-80`/`D9-81`/`D9-82`
-closed. Phase D9-6's `D9-64` is the only row anywhere before Phase D9-8 still open, and it isn't
-actionable until `D9-82b` lands.
+🟨 — see their own plan rows for exactly what's deferred and why). Phase D9-8: `D9-80`/`D9-81`/`D9-82`/
+`D9-82b` closed. Phase D9-6's `D9-64` is the only row anywhere before Phase D9-8 still open, and it
+isn't actionable until at least one of `D9-82c`–`f` lands.
 
-1. **`D9-82b`** — full effect-aware dispatch: `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` across all
-   5 Stock Effects (`BasicEffect`/`AlphaTestEffect`/`DualTextureEffect`/`EnvironmentMapEffect`/
-   `SkinnedEffect`). `D9-82`'s own new `D3D9ConstantUpload` helper + `D9-80`'s `D3D9ShaderDispatch` +
-   `D9-74`'s `D3D9ShaderCache` are all ready to consume:
-   `cache.GetVertexShader(GetBasicEffectVertexShaderNameEXT(ComputeBasicEffectShaderIndex(...)))`
-   chains directly, then `UploadVertexShaderConstantEXT(device, Shaders::k<Variant>_Registers,
-   count, "<Name>", data)` per named constant. For `oneLight`/`isEqNe`, source them from CNA's own
-   real internal state per `D9-81`'s findings (`Light1/2.getEnabledProperty()`, `alphaTest[1] > 0`)
-   — not from an inference of `GpuDrawParams`' other fields. `PreferPerPixelLighting`/
-   `specularEnabled` variants stay blocked on a project-owner-level `GpuDrawParams` decision;
-   every other fog/vertex-color/texture/one-light/skinning-weight combination is unblocked now.
-   Expect the `D3DCULL` winding trap (`D9-21`) to finally need a real resolution once a
-   culling-sensitive scene is drawn (`D9-82`'s own basic triangle sidestepped it with
-   `CullMode::None`, same as `D3D11_Smoke`'s precedent).
-2. **`D9-83`** — `DrawInstancedPrimitivesEx` via `SetStreamSourceFreq` (needs `D9-82b` first).
-3. **`D9-64`** (reuse the backend-agnostic `easygl_blendstate_*`/`easygl_depthstencilstate_*`/
-   `easygl_rasterizerstate_*` CTest sources verbatim) — sequence once `D9-82b` lands, not before.
-4. **`D9-84`** — every draw path validated against the real XNA oracle (needs `D9-82b` first, and is
-   where `D9-21`'s `D3DCULL` proof and `D9-62`'s rasterizer-state proof both finally close out too).
+1. **`D9-82c`** — `AlphaTestEffect` dispatch (8 `ShaderIndex` values, all unblocked). `D9-82b`'s
+   `DrawPrimitivesExImpl()` already routes here via its own `needsAlphaTest` branch (currently
+   throwing) — implement a real `DrawAlphaTestEffectEXT()` following `DrawBasicEffectEXT()`'s own
+   shape (register-table switch keyed on `ShaderIndex`, `TryUpload*ShaderConstantEXT` for every
+   possible constant, letting each variant's real `D9-72` table decide what applies). Source
+   `isEqNe` from `alphaTest[1] (tolerance) > 0` per `D9-81`'s own finding (lossless, not a guess).
+   `AlphaTest`'s own compare-function math (`{refVal,tolerance,passWeight,failWeight}` →
+   discard-or-not) needs a real per-pixel `clip()`/`discard` in the D3D9 shader itself — already
+   present in the real compiled `PSAlphaTestLtGt`/`PSAlphaTestEqNe` shaders, just needs the
+   `AlphaTest` constant (`refVal`/`tolerance` packed into a `float4`) uploaded correctly.
+2. **`D9-82d`** — `DualTextureEffect` dispatch (4 `ShaderIndex` values, all unblocked). Two-sampler
+   draw (`texture0`+`texture1`, `SetTexture(0,...)`/`SetTexture(1,...)`) — first real second-texture-
+   unit exercise on this backend.
+3. **`D9-82e`** — `EnvironmentMapEffect` dispatch (8 of 16 `ShaderIndex` values unblocked, 8 specular
+   ones blocked on `D9-81`'s still-open `specularEnabled` gap). First real cube-map sampling draw
+   (`SetTexture` with an `IDirect3DCubeTexture9`) on this backend.
+4. **`D9-82f`** — `SkinnedEffect` dispatch (12 of 18 `ShaderIndex` values unblocked, 6
+   `PreferPerPixelLighting` ones blocked same as `D9-82b`'s `BasicEffect` case). First real
+   per-vertex bone-matrix-array upload (`Bones[72]`, 216 registers) on this backend.
+5. **`D9-83`** — `DrawInstancedPrimitivesEx` via `SetStreamSourceFreq` (needs at least one of
+   `D9-82c`–`f` first — D3D9 hardware instancing is indexed-only, and every currently-implemented
+   effect's own indexed path already exists via `D9-82b`, so this is more about the instance-stream
+   plumbing than about which effect it targets).
+6. **`D9-64`** (reuse the backend-agnostic `easygl_blendstate_*`/`easygl_depthstencilstate_*`/
+   `easygl_rasterizerstate_*` CTest sources verbatim) — sequence once a second effect (`D9-82c`+)
+   lands, not before.
+7. **`D9-84`** — every draw path validated against the real XNA oracle (needs `D9-82c`–`f` first, and
+   is where `D9-21`'s `D3DCULL` proof and `D9-62`'s rasterizer-state proof both finally close out
+   too).
 
 See `plan_dx9.md`'s "Execution order" table for the full sequence beyond this.
 
