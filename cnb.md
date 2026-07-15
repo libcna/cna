@@ -230,11 +230,12 @@ as *metadata about* that file rather than as the data itself:
 }
 ```
 
-This is genuinely new capability, not a rename of something that already exists: today `Texture2D`/
-`SoundEffect`/etc. only ever load a self-describing native file as-is — there is no way to attach
-CNA-specific import metadata (color-key transparency, a sprite-sheet sub-rect, premultiplied-alpha
-hints, mip generation, ...) without baking it into the pixel data itself or inventing a whole new
-file format. `sourceFile` gives every asset type that same "metadata + payload" split `Model`
+This is genuinely new capability, not a rename of something that already exists: before this,
+`Texture2D`/`SoundEffect`/`TextureCube` only ever loaded a self-describing native file as-is —
+there was no way to attach CNA-specific import metadata (color-key transparency, a sprite-sheet
+sub-rect, premultiplied-alpha hints, mip generation, ...) without baking it into the pixel data
+itself or inventing a whole new file format. `sourceFile` gives every native-payload asset type
+that same "metadata + payload" split `Model`
 (`.model.json` + `.verts.bin`/`.idx.bin`) and `SkinnedModelEXT` (`.skinnedmodel.json` +
 `.skeleton.bin`/`.clip.bin`) already have, generalized to *any* payload — including a normal, already
 fully-supported native format the `.cnb` is simply enriching, or a raw/proprietary blob (arbitrary
@@ -251,6 +252,27 @@ a resolver bug, it's the same "one name, `.cnb` wins" rule applied consistently 
 calling out explicitly as a content-authoring footgun, since nothing on disk visually distinguishes
 "enrichment sidecar" from "unrelated same-named asset" other than opening the file and checking for
 `sourceFile`.
+
+### The `sourceFile` capability matrix (plan_cnb.md CNB-34)
+
+Not every built-in reader accepts `sourceFile` — the resolver tries `.cnb` for *every* registered
+type (per "The core rule"), but only types with an actual native, independently-loadable payload
+can meaningfully delegate to one. Implemented, enforced behavior per reader:
+
+| Reader | `sourceFile` | Notes |
+|---|---|---|
+| `Texture2D` | ✅ Supported, + `colorKey` metadata | The original, proven case (Phase 2) |
+| `SoundEffect` | ✅ Supported, no metadata fields yet | Delegates to the native `.wav` decoder |
+| `TextureCube` | ✅ Supported, no metadata fields yet | Delegates to `DDSFromStreamEXT` |
+| `SpriteFont` | ❌ Rejected | Self-contained descriptor — glyph atlas is referenced via its own `"texture"` field, not `sourceFile` |
+| `Effect` | ❌ Rejected | Self-contained descriptor — vertex/fragment sources referenced via their own `"vertex"`/`"fragment"` fields |
+| `Model` | ❌ Rejected | Self-contained descriptor — mesh data referenced via its own `"meshes"` fields |
+| game-specific `RegisterCnbLoader<T>` | Reader-defined | Not part of the built-in envelope contract at all — a custom factory receives the raw `.cnb` JSON and is free to define (or ignore) its own `sourceFile`-like convention |
+
+A `SpriteFont`/`Effect`/`Model` `.cnb` with a `sourceFile` field throws `ContentLoadException`
+immediately (naming the reader and the file), rather than either silently ignoring the field or
+letting the reader's own native decoder choke on the raw `.cnb` JSON text with a confusing
+low-level error.
 
 ### Why one shared extension is not a new risk
 

@@ -159,6 +159,23 @@ namespace Microsoft::Xna::Framework::Content
         // (plan_cnb.md CNB-8), ahead of where it's textually defined.
         std::string ReadTextFile(const std::string& path);
 
+        // plan_cnb.md CNB-34: SpriteFont/Effect/Model .cnb documents are self-contained
+        // descriptors -- unlike Texture2D/SoundEffect/TextureCube, they have no meaning for a
+        // "sourceFile" field. Reject it explicitly with a clear error instead of silently
+        // ignoring it (the previous behavior) or letting some future field-parsing change
+        // accidentally half-honor it.
+        void RejectSourceFileForSelfContainedCnb(const CNA::Internal::CnbEnvelope& envelope,
+                                                  const std::string& typeName, const std::string& path)
+        {
+            if (envelope.hasSourceFile)
+            {
+                throw ContentLoadException(
+                    "ContentManager: " + typeName + " .cnb '" + path + "' has a 'sourceFile' "
+                    "field, but " + typeName + " .cnb documents are self-contained and do not "
+                    "support 'sourceFile'.");
+            }
+        }
+
         // Minimal "colorKey": [r, g, b] extractor for a Texture2D .cnb sidecar (CNB-8). Kept
         // local/self-contained rather than reusing JsonIntArray4 (a 4-element parser) below, since
         // colorKey is always exactly 3 components and duplicating this ~10-line scan is cheaper and
@@ -269,9 +286,35 @@ namespace Microsoft::Xna::Framework::Content
 
             Graphics::TextureCube Read(const std::string& path, ContentManager& cm) override
             {
+                if (std::filesystem::path(path).extension() == ".cnb")
+                {
+                    return ReadCnb(path, cm);
+                }
+
                 Graphics::GraphicsDevice& gd = cm.getGraphicsDeviceInternal();
                 System::IO::FileStream stream(path);
                 return Graphics::TextureCube::DDSFromStreamEXT(gd, stream);
+            }
+
+        private:
+            static Graphics::TextureCube ReadCnb(const std::string& path, ContentManager& cm)
+            {
+                const std::string json = ReadTextFile(path);
+                const CNA::Internal::CnbEnvelope envelope = CNA::Internal::ParseCnbEnvelope(json);
+                CNA::Internal::ValidateCnbEnvelope(envelope, "TextureCube", path);
+
+                if (!envelope.hasSourceFile)
+                {
+                    throw ContentLoadException(
+                        "ContentManager: TextureCube .cnb '" + path + "' has no 'sourceFile' "
+                        "field (a self-contained, non-sourceFile TextureCube .cnb is not "
+                        "supported).");
+                }
+
+                const CNA::Internal::CnbSourceFileResult resolved =
+                    CNA::Internal::ResolveCnbSourceFileSafely(
+                        path, cm.getRootDirectoryProperty(), envelope.sourceFile);
+                return cm.Load<Graphics::TextureCube>(resolved.logicalName);
             }
         };
 
@@ -283,9 +326,35 @@ namespace Microsoft::Xna::Framework::Content
                 return {".wav"};
             }
 
-            Audio::SoundEffect Read(const std::string& path, ContentManager& /*cm*/) override
+            Audio::SoundEffect Read(const std::string& path, ContentManager& cm) override
             {
+                if (std::filesystem::path(path).extension() == ".cnb")
+                {
+                    return ReadCnb(path, cm);
+                }
+
                 return Audio::SoundEffect(path);
+            }
+
+        private:
+            static Audio::SoundEffect ReadCnb(const std::string& path, ContentManager& cm)
+            {
+                const std::string json = ReadTextFile(path);
+                const CNA::Internal::CnbEnvelope envelope = CNA::Internal::ParseCnbEnvelope(json);
+                CNA::Internal::ValidateCnbEnvelope(envelope, "SoundEffect", path);
+
+                if (!envelope.hasSourceFile)
+                {
+                    throw ContentLoadException(
+                        "ContentManager: SoundEffect .cnb '" + path + "' has no 'sourceFile' "
+                        "field (a self-contained, non-sourceFile SoundEffect .cnb is not "
+                        "supported).");
+                }
+
+                const CNA::Internal::CnbSourceFileResult resolved =
+                    CNA::Internal::ResolveCnbSourceFileSafely(
+                        path, cm.getRootDirectoryProperty(), envelope.sourceFile);
+                return cm.Load<Audio::SoundEffect>(resolved.logicalName);
             }
         };
 
@@ -344,6 +413,7 @@ namespace Microsoft::Xna::Framework::Content
 
                 const CNA::Internal::CnbEnvelope envelope = CNA::Internal::ParseCnbEnvelope(jsonText);
                 CNA::Internal::ValidateCnbEnvelope(envelope, "Effect", jsonPath);
+                RejectSourceFileForSelfContainedCnb(envelope, "Effect", jsonPath);
 
                 const std::string vertRel = ExtractJsonStringField(jsonText, "vertex");
                 const std::string fragRel = ExtractJsonStringField(jsonText, "fragment");
@@ -455,6 +525,7 @@ namespace Microsoft::Xna::Framework::Content
 
                 const CNA::Internal::CnbEnvelope envelope = CNA::Internal::ParseCnbEnvelope(json);
                 CNA::Internal::ValidateCnbEnvelope(envelope, "SpriteFont", path);
+                RejectSourceFileForSelfContainedCnb(envelope, "SpriteFont", path);
 
                 const std::string textureName   = ExtractJsonStringField(json, "texture");
                 const int         lineSpacing    = JsonInt(json, "lineSpacing");
@@ -698,6 +769,7 @@ namespace Microsoft::Xna::Framework::Content
 
                 const CNA::Internal::CnbEnvelope envelope = CNA::Internal::ParseCnbEnvelope(json);
                 CNA::Internal::ValidateCnbEnvelope(envelope, "Model", path);
+                RejectSourceFileForSelfContainedCnb(envelope, "Model", path);
 
                 const std::string root = cm.getRootDirectoryProperty();
                 Graphics::GraphicsDevice& device = cm.getGraphicsDeviceInternal();
