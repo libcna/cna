@@ -76,6 +76,37 @@ namespace CNA::Internal::Backends::SdlGpu
             return levels;
         }
 
+        // SDLGPU-36: clamps an XNA multiSampleCount request down to the largest SDL_gpu sample
+        // count this device/format actually supports, mirroring D3D12RenderTargetCubeBackend's own
+        // ClampMultiSampleCount() convention (XNA's RenderTargetCube.MultiSampleCount is documented
+        // to reflect the real clamped value, not the raw constructor request).
+        [[nodiscard]] SDL_GPUSampleCount ClampSampleCount(SDL_GPUDevice* device, SDL_GPUTextureFormat format, int requested)
+        {
+            if (requested <= 1)
+                return SDL_GPU_SAMPLECOUNT_1;
+            SDL_GPUSampleCount candidate = requested >= 8 ? SDL_GPU_SAMPLECOUNT_8
+                                          : requested >= 4 ? SDL_GPU_SAMPLECOUNT_4
+                                                            : SDL_GPU_SAMPLECOUNT_2;
+            while (candidate != SDL_GPU_SAMPLECOUNT_1 && !SDL_GPUTextureSupportsSampleCount(device, format, candidate))
+            {
+                candidate = candidate == SDL_GPU_SAMPLECOUNT_8 ? SDL_GPU_SAMPLECOUNT_4
+                          : candidate == SDL_GPU_SAMPLECOUNT_4 ? SDL_GPU_SAMPLECOUNT_2
+                                                                : SDL_GPU_SAMPLECOUNT_1;
+            }
+            return candidate;
+        }
+
+        [[nodiscard]] int SampleCountToInt(SDL_GPUSampleCount count)
+        {
+            switch (count)
+            {
+                case SDL_GPU_SAMPLECOUNT_2: return 2;
+                case SDL_GPU_SAMPLECOUNT_4: return 4;
+                case SDL_GPU_SAMPLECOUNT_8: return 8;
+                default: return 0;
+            }
+        }
+
         // Mirrors VulkanGraphicsBackend::FillExtPushConst()'s 128-byte layout byte-for-byte
         // (DrawColoredPrimitives()'s hardcoded white/vertex-color-always-true behaviour).
         void FillColoredUniforms(std::array<float, 32>& out, const Matrix& world, const Matrix& view,
@@ -310,12 +341,14 @@ namespace CNA::Internal::Backends::SdlGpu
         UploadSpriteVertexData(cmd);
         UploadSceneDrawData(cmd);
 
-        // Phase SDLGPU-8: every off-screen render target used this frame gets its own pass FIRST,
-        // in first-bind order, so a target bound-then-unbound earlier in the frame can safely be
-        // sampled by a later swapchain-targeted draw within the same frame (SDLGPU-35's own
-        // "bound in one pass, sampled in a later pass" contract).
+        // Phase SDLGPU-8: every off-screen render target (2D and cube face) used this frame gets
+        // its own pass FIRST, in first-bind order, so a target bound-then-unbound earlier in the
+        // frame can safely be sampled by a later swapchain-targeted draw within the same frame
+        // (SDLGPU-35's own "bound in one pass, sampled in a later pass" contract).
         for (SdlGpuRenderTargetBackend* target : usedRenderTargetsThisFrame_)
             RenderToTarget(cmd, target);
+        for (auto& [cube, face] : usedRenderTargetCubeFacesThisFrame_)
+            RenderToTargetCubeFace(cmd, cube, face);
 
         SDL_GPUColorTargetInfo colorTarget{};
         colorTarget.texture = swapchainTexture;
@@ -340,13 +373,31 @@ namespace CNA::Internal::Backends::SdlGpu
             cmd, &colorTarget, 1, depthStencilTexture_ != nullptr ? &depthStencilTarget : nullptr);
         // 3D draws first, 2D SpriteBatch/UI on top -- matches typical XNA game draw order
         // (World.Draw() then a HUD SpriteBatch pass), both collapsed into this one deferred pass.
-        RenderColoredDraws(pass, cmd, nullptr, swapchainFormat);
-        RenderTexturedDraws(pass, cmd, nullptr, swapchainFormat);
-        RenderLitTexturedDraws(pass, cmd, nullptr, swapchainFormat);
-        RenderAlphaTestDraws(pass, cmd, nullptr, swapchainFormat);
-        RenderDualTextureDraws(pass, cmd, nullptr, swapchainFormat);
-        RenderSprites(pass, cmd, nullptr, swapchainFormat);
+        const DrawTarget swapchainTarget{};
+        RenderColoredDraws(pass, cmd, swapchainTarget, swapchainFormat);
+        RenderTexturedDraws(pass, cmd, swapchainTarget, swapchainFormat);
+        RenderLitTexturedDraws(pass, cmd, swapchainTarget, swapchainFormat);
+        RenderAlphaTestDraws(pass, cmd, swapchainTarget, swapchainFormat);
+        RenderDualTextureDraws(pass, cmd, swapchainTarget, swapchainFormat);
+        RenderSprites(pass, cmd, swapchainTarget, swapchainFormat);
         SDL_EndGPURenderPass(pass);
+
+        // Cube mip regen is real GPU work -- must happen on this command buffer BEFORE submission
+        // (per SDL_gpu.h: SDL_GenerateMipmapsForGPUTexture must not be called inside any pass, but
+        // is otherwise fine any time before submit). No per-layer control on this call -- it
+        // regenerates all 6 faces' chains; harmless for a face untouched this frame (same
+        // unchanged level-0 data produces an identical result).
+        {
+            std::vector<SdlGpuRenderTargetCubeBackend*> mipRegenerated;
+            for (auto& [cube, face] : usedRenderTargetCubeFacesThisFrame_)
+            {
+                if (cube->WantsMipMap() && std::find(mipRegenerated.begin(), mipRegenerated.end(), cube) == mipRegenerated.end())
+                {
+                    SDL_GenerateMipmapsForGPUTexture(cmd, cube->CubeTexture());
+                    mipRegenerated.push_back(cube);
+                }
+            }
+        }
 
         if (!SDL_SubmitGPUCommandBuffer(cmd))
             throw std::runtime_error(std::string("CNA SDL_GPU: SDL_SubmitGPUCommandBuffer failed: ") + SDL_GetError());
@@ -360,6 +411,9 @@ namespace CNA::Internal::Backends::SdlGpu
         for (SdlGpuRenderTargetBackend* target : usedRenderTargetsThisFrame_)
             target->ResetPendingClears();
         usedRenderTargetsThisFrame_.clear();
+        for (auto& [cube, face] : usedRenderTargetCubeFacesThisFrame_)
+            cube->ResetPendingClears(face);
+        usedRenderTargetCubeFacesThisFrame_.clear();
         framePending_ = false;
         return true;
     }
@@ -388,12 +442,13 @@ namespace CNA::Internal::Backends::SdlGpu
         }
 
         SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(cmd, &colorTarget, 1, hasDepth ? &depthStencilTarget : nullptr);
-        RenderColoredDraws(pass, cmd, target, kRenderTargetFormat);
-        RenderTexturedDraws(pass, cmd, target, kRenderTargetFormat);
-        RenderLitTexturedDraws(pass, cmd, target, kRenderTargetFormat);
-        RenderAlphaTestDraws(pass, cmd, target, kRenderTargetFormat);
-        RenderDualTextureDraws(pass, cmd, target, kRenderTargetFormat);
-        RenderSprites(pass, cmd, target, kRenderTargetFormat);
+        const DrawTarget dt{target, nullptr, -1};
+        RenderColoredDraws(pass, cmd, dt, kRenderTargetFormat);
+        RenderTexturedDraws(pass, cmd, dt, kRenderTargetFormat);
+        RenderLitTexturedDraws(pass, cmd, dt, kRenderTargetFormat);
+        RenderAlphaTestDraws(pass, cmd, dt, kRenderTargetFormat);
+        RenderDualTextureDraws(pass, cmd, dt, kRenderTargetFormat);
+        RenderSprites(pass, cmd, dt, kRenderTargetFormat);
         SDL_EndGPURenderPass(pass);
 
         // Per SDL_gpu.h: SDL_GenerateMipmapsForGPUTexture must not be called inside any pass --
@@ -403,9 +458,58 @@ namespace CNA::Internal::Backends::SdlGpu
             SDL_GenerateMipmapsForGPUTexture(cmd, target->ColorTexture());
     }
 
+    void SdlGpuGraphicsBackend::RenderToTargetCubeFace(SDL_GPUCommandBuffer* cmd, SdlGpuRenderTargetCubeBackend* cube, int face)
+    {
+        constexpr SDL_GPUTextureFormat kRenderTargetFormat = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+
+        SDL_GPUColorTargetInfo colorTarget{};
+        colorTarget.texture = cube->MsaaTexture() != nullptr ? cube->MsaaTexture() : cube->CubeTexture();
+        colorTarget.layer_or_depth_plane = static_cast<Uint32>(face);
+        colorTarget.clear_color = cube->ClearColorValue(face);
+        colorTarget.load_op = cube->ClearColorPending(face) ? SDL_GPU_LOADOP_CLEAR : SDL_GPU_LOADOP_LOAD;
+        if (cube->MsaaTexture() != nullptr)
+        {
+            // Automatic render-pass-end resolve -- SDL_gpu has no multisampled cube texture type,
+            // so the MSAA color target is a plain 6-layer 2D array resolved directly into the
+            // active face of the real (single-sample) cube texture.
+            colorTarget.resolve_texture = cube->CubeTexture();
+            colorTarget.resolve_layer = static_cast<Uint32>(face);
+            colorTarget.store_op = SDL_GPU_STOREOP_RESOLVE;
+        }
+        else
+        {
+            colorTarget.store_op = SDL_GPU_STOREOP_STORE;
+        }
+
+        SDL_GPUDepthStencilTargetInfo depthStencilTarget{};
+        const bool hasDepth = cube->DepthTexture() != nullptr;
+        if (hasDepth)
+        {
+            depthStencilTarget.texture = cube->DepthTexture();
+            depthStencilTarget.clear_depth = cube->ClearDepthValue(face);
+            depthStencilTarget.load_op = cube->ClearDepthPending(face) ? SDL_GPU_LOADOP_CLEAR : SDL_GPU_LOADOP_LOAD;
+            depthStencilTarget.store_op = SDL_GPU_STOREOP_STORE;
+            depthStencilTarget.clear_stencil = cube->ClearStencilValue(face);
+            depthStencilTarget.stencil_load_op = cube->ClearStencilPending(face) ? SDL_GPU_LOADOP_CLEAR : SDL_GPU_LOADOP_LOAD;
+            depthStencilTarget.stencil_store_op = SDL_GPU_STOREOP_STORE;
+        }
+
+        SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(cmd, &colorTarget, 1, hasDepth ? &depthStencilTarget : nullptr);
+        const DrawTarget dt{nullptr, cube, face};
+        RenderColoredDraws(pass, cmd, dt, kRenderTargetFormat);
+        RenderTexturedDraws(pass, cmd, dt, kRenderTargetFormat);
+        RenderLitTexturedDraws(pass, cmd, dt, kRenderTargetFormat);
+        RenderAlphaTestDraws(pass, cmd, dt, kRenderTargetFormat);
+        RenderDualTextureDraws(pass, cmd, dt, kRenderTargetFormat);
+        RenderSprites(pass, cmd, dt, kRenderTargetFormat);
+        SDL_EndGPURenderPass(pass);
+    }
+
     void SdlGpuGraphicsBackend::Clear(float r, float g, float b, float a)
     {
-        if (currentRenderTarget_ != nullptr)
+        if (currentRenderTargetCube_ != nullptr)
+            currentRenderTargetCube_->QueueClear(currentActiveCubeFace_, SDL_FColor{r, g, b, a});
+        else if (currentRenderTarget_ != nullptr)
             currentRenderTarget_->QueueClear(SDL_FColor{r, g, b, a});
         else
         {
@@ -423,7 +527,9 @@ namespace CNA::Internal::Backends::SdlGpu
 
     void SdlGpuGraphicsBackend::ClearDepth(float depth)
     {
-        if (currentRenderTarget_ != nullptr)
+        if (currentRenderTargetCube_ != nullptr)
+            currentRenderTargetCube_->QueueClearDepth(currentActiveCubeFace_, depth);
+        else if (currentRenderTarget_ != nullptr)
             currentRenderTarget_->QueueClearDepth(depth);
         else
         {
@@ -435,7 +541,9 @@ namespace CNA::Internal::Backends::SdlGpu
 
     void SdlGpuGraphicsBackend::ClearStencil(int stencil)
     {
-        if (currentRenderTarget_ != nullptr)
+        if (currentRenderTargetCube_ != nullptr)
+            currentRenderTargetCube_->QueueClearStencil(currentActiveCubeFace_, static_cast<Uint8>(stencil));
+        else if (currentRenderTarget_ != nullptr)
             currentRenderTarget_->QueueClearStencil(static_cast<Uint8>(stencil));
         else
         {
@@ -443,6 +551,13 @@ namespace CNA::Internal::Backends::SdlGpu
             clearStencilPending_ = true;
         }
         framePending_ = true;
+    }
+
+    SdlGpuGraphicsBackend::DrawTarget SdlGpuGraphicsBackend::CurrentDrawTarget() const
+    {
+        if (currentRenderTargetCube_ != nullptr)
+            return DrawTarget{nullptr, currentRenderTargetCube_, currentActiveCubeFace_};
+        return DrawTarget{currentRenderTarget_, nullptr, -1};
     }
 
     void SdlGpuGraphicsBackend::ClearDepthAndStencil(float depth, int stencil)
@@ -610,9 +725,23 @@ namespace CNA::Internal::Backends::SdlGpu
     void SdlGpuGraphicsBackend::SetRenderTarget2D(IRenderTargetBackend* rt)
     {
         if (rt != nullptr)
+        {
             static_cast<SdlGpuRenderTargetBackend*>(rt)->BindAsRenderTarget();
-        else if (currentRenderTarget_ != nullptr)
-            currentRenderTarget_->UnbindAsRenderTarget();
+        }
+        else
+        {
+            // Restoring the swapchain must clear whichever kind of target was previously bound --
+            // 2D and cube-face binding are mutually exclusive (see BindAsRenderTarget/
+            // BindAsRenderTargetFace, which each clear the other's current-target pointer too).
+            if (currentRenderTarget_ != nullptr) currentRenderTarget_->UnbindAsRenderTarget();
+            if (currentRenderTargetCube_ != nullptr) currentRenderTargetCube_->UnbindAsRenderTarget();
+        }
+    }
+
+    std::unique_ptr<IRenderTargetCubeBackend> SdlGpuGraphicsBackend::CreateRenderTargetCube(
+        int size, int depthFormat, bool mipMap, int multiSampleCount)
+    {
+        return std::make_unique<SdlGpuRenderTargetCubeBackend>(*this, size, depthFormat, mipMap, multiSampleCount);
     }
 
     void SdlGpuGraphicsBackend::CreateSpriteResources()
@@ -815,15 +944,17 @@ namespace CNA::Internal::Backends::SdlGpu
     }
 
     void SdlGpuGraphicsBackend::RenderSprites(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
-                                              const SdlGpuRenderTargetBackend* target, SDL_GPUTextureFormat colorFormat)
+                                              const DrawTarget& target, SDL_GPUTextureFormat colorFormat)
     {
         if (spriteCommands_.empty())
             return;
 
         bool boundPipeline = false;
         const float viewportSize[2] = {
-            static_cast<float>(target != nullptr ? target->GetWidth() : physicalWidth_),
-            static_cast<float>(target != nullptr ? target->GetHeight() : physicalHeight_)};
+            static_cast<float>(target.rt != nullptr ? target.rt->GetWidth()
+                              : target.cube != nullptr ? target.cube->GetSize() : physicalWidth_),
+            static_cast<float>(target.rt != nullptr ? target.rt->GetHeight()
+                              : target.cube != nullptr ? target.cube->GetSize() : physicalHeight_)};
 
         for (std::size_t i = 0; i < spriteCommands_.size(); ++i)
         {
@@ -915,7 +1046,7 @@ namespace CNA::Internal::Backends::SdlGpu
         command.textureFilter = textureFilter;
         command.addressU = addressU;
         command.addressV = addressV;
-        command.target = currentRenderTarget_;
+        command.target = CurrentDrawTarget();
         const float rgba[4] = {
             static_cast<float>(color.getRProperty()) / 255.0f,
             static_cast<float>(color.getGProperty()) / 255.0f,
@@ -1358,7 +1489,7 @@ namespace CNA::Internal::Backends::SdlGpu
             command.vertexCount = static_cast<Uint32>(PrimitiveVertexCount(primitive, primitiveCount));
         }
 
-        command.target = currentRenderTarget_;
+        command.target = CurrentDrawTarget();
         coloredDrawCommands_.push_back(std::move(command));
         framePending_ = true;
     }
@@ -1404,7 +1535,7 @@ namespace CNA::Internal::Backends::SdlGpu
             command.vertexCount = static_cast<Uint32>(PrimitiveVertexCount(primitive, primitiveCount));
         }
 
-        command.target = currentRenderTarget_;
+        command.target = CurrentDrawTarget();
         texturedDrawCommands_.push_back(std::move(command));
         framePending_ = true;
     }
@@ -1450,7 +1581,7 @@ namespace CNA::Internal::Backends::SdlGpu
             command.vertexCount = static_cast<Uint32>(PrimitiveVertexCount(primitive, primitiveCount));
         }
 
-        command.target = currentRenderTarget_;
+        command.target = CurrentDrawTarget();
         litTexturedDrawCommands_.push_back(std::move(command));
         framePending_ = true;
     }
@@ -1778,7 +1909,7 @@ namespace CNA::Internal::Backends::SdlGpu
             command.vertexCount = static_cast<Uint32>(PrimitiveVertexCount(primitive, primitiveCount));
         }
 
-        command.target = currentRenderTarget_;
+        command.target = CurrentDrawTarget();
         alphaTestDrawCommands_.push_back(std::move(command));
         framePending_ = true;
     }
@@ -1823,13 +1954,13 @@ namespace CNA::Internal::Backends::SdlGpu
             command.vertexCount = static_cast<Uint32>(PrimitiveVertexCount(primitive, primitiveCount));
         }
 
-        command.target = currentRenderTarget_;
+        command.target = CurrentDrawTarget();
         dualTextureDrawCommands_.push_back(std::move(command));
         framePending_ = true;
     }
 
     void SdlGpuGraphicsBackend::RenderAlphaTestDraws(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
-                                                     const SdlGpuRenderTargetBackend* target, SDL_GPUTextureFormat colorFormat)
+                                                     const DrawTarget& target, SDL_GPUTextureFormat colorFormat)
     {
         for (const AlphaTestDrawCommand& command : alphaTestDrawCommands_)
         {
@@ -1867,7 +1998,7 @@ namespace CNA::Internal::Backends::SdlGpu
     }
 
     void SdlGpuGraphicsBackend::RenderDualTextureDraws(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
-                                                       const SdlGpuRenderTargetBackend* target, SDL_GPUTextureFormat colorFormat)
+                                                       const DrawTarget& target, SDL_GPUTextureFormat colorFormat)
     {
         for (const DualTextureDrawCommand& command : dualTextureDrawCommands_)
         {
@@ -2001,7 +2132,7 @@ namespace CNA::Internal::Backends::SdlGpu
     }
 
     void SdlGpuGraphicsBackend::RenderColoredDraws(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
-                                                   const SdlGpuRenderTargetBackend* target, SDL_GPUTextureFormat colorFormat)
+                                                   const DrawTarget& target, SDL_GPUTextureFormat colorFormat)
     {
         for (const ColoredDrawCommand& command : coloredDrawCommands_)
         {
@@ -2033,7 +2164,7 @@ namespace CNA::Internal::Backends::SdlGpu
     }
 
     void SdlGpuGraphicsBackend::RenderTexturedDraws(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
-                                                    const SdlGpuRenderTargetBackend* target, SDL_GPUTextureFormat colorFormat)
+                                                    const DrawTarget& target, SDL_GPUTextureFormat colorFormat)
     {
         for (const TexturedDrawCommand& command : texturedDrawCommands_)
         {
@@ -2072,7 +2203,7 @@ namespace CNA::Internal::Backends::SdlGpu
     }
 
     void SdlGpuGraphicsBackend::RenderLitTexturedDraws(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
-                                                       const SdlGpuRenderTargetBackend* target, SDL_GPUTextureFormat colorFormat)
+                                                       const DrawTarget& target, SDL_GPUTextureFormat colorFormat)
     {
         for (const LitTexturedDrawCommand& command : litTexturedDrawCommands_)
         {
@@ -2385,6 +2516,13 @@ namespace CNA::Internal::Backends::SdlGpu
     void SdlGpuRenderTargetBackend::BindAsRenderTarget()
     {
         owner_->currentRenderTarget_ = this;
+        // Mutually exclusive with a bound RenderTargetCube face -- matches real XNA
+        // single-current-target semantics (SetRenderTarget always replaces whatever was there).
+        if (owner_->currentRenderTargetCube_ != nullptr)
+        {
+            owner_->currentRenderTargetCube_ = nullptr;
+            owner_->currentActiveCubeFace_ = -1;
+        }
         auto& used = owner_->usedRenderTargetsThisFrame_;
         if (std::find(used.begin(), used.end(), this) == used.end())
             used.push_back(this);
@@ -2395,6 +2533,184 @@ namespace CNA::Internal::Backends::SdlGpu
     {
         if (owner_->currentRenderTarget_ == this)
             owner_->currentRenderTarget_ = nullptr;
+    }
+
+    // ---- SdlGpuRenderTargetCubeBackend (Phase SDLGPU-8, SDLGPU-36) ----
+
+    SdlGpuRenderTargetCubeBackend::SdlGpuRenderTargetCubeBackend(SdlGpuGraphicsBackend& owner, int size,
+                                                                  int depthFormat, bool mipMap, int multiSampleCount)
+        : owner_(&owner), size_(size), mipMap_(mipMap)
+    {
+        SDL_GPUDevice* device = owner_->Device();
+        constexpr SDL_GPUTextureFormat kFormat = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+
+        const SDL_GPUSampleCount sampleCount = ClampSampleCount(device, kFormat, multiSampleCount);
+        multiSampleCount_ = SampleCountToInt(sampleCount);
+        // MSAA and mip generation are mutually exclusive on the same attachment, same rationale
+        // D3D12RenderTargetCubeBackend's own MSAA follow-up already established.
+        mipMap_ = mipMap_ && multiSampleCount_ == 0;
+
+        SDL_GPUTextureCreateInfo cubeInfo{};
+        cubeInfo.type = SDL_GPU_TEXTURETYPE_CUBE;
+        cubeInfo.format = kFormat;
+        cubeInfo.usage = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
+        cubeInfo.width = static_cast<Uint32>(size);
+        cubeInfo.height = static_cast<Uint32>(size);
+        cubeInfo.layer_count_or_depth = 6;
+        cubeInfo.num_levels = mipMap_ ? static_cast<Uint32>(CalculateMipLevels(size, size)) : 1;
+        cubeInfo.sample_count = SDL_GPU_SAMPLECOUNT_1;  // the cube texture itself is always single-sample
+        cubeTexture_ = SDL_CreateGPUTexture(device, &cubeInfo);
+        if (cubeTexture_ == nullptr)
+            throw std::runtime_error(std::string("CNA SDL_GPU: failed to create RenderTargetCube color texture: ") + SDL_GetError());
+
+        if (multiSampleCount_ > 0)
+        {
+            // SDL_GPU_TEXTURETYPE_CUBE has no multisampled variant -- the actual multisampled
+            // render target is a plain 6-layer 2D array, resolved into cubeTexture_'s active face
+            // automatically via SDL_GPUColorTargetInfo.resolve_texture/resolve_layer at render-pass
+            // end (see RenderToTargetCubeFace) -- no manual ResolveSubresource-equivalent needed.
+            SDL_GPUTextureCreateInfo msaaInfo{};
+            msaaInfo.type = SDL_GPU_TEXTURETYPE_2D_ARRAY;
+            msaaInfo.format = kFormat;
+            msaaInfo.usage = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET;
+            msaaInfo.width = static_cast<Uint32>(size);
+            msaaInfo.height = static_cast<Uint32>(size);
+            msaaInfo.layer_count_or_depth = 6;
+            msaaInfo.num_levels = 1;
+            msaaInfo.sample_count = sampleCount;
+            msaaTexture_ = SDL_CreateGPUTexture(device, &msaaInfo);
+            if (msaaTexture_ == nullptr)
+            {
+                SDL_ReleaseGPUTexture(device, cubeTexture_);
+                throw std::runtime_error(std::string("CNA SDL_GPU: failed to create RenderTargetCube MSAA texture: ") + SDL_GetError());
+            }
+        }
+
+        if (depthFormat != 0 && owner_->depthStencilFormat_ != SDL_GPU_TEXTUREFORMAT_INVALID)
+        {
+            SDL_GPUTextureCreateInfo depthInfo{};
+            depthInfo.type = SDL_GPU_TEXTURETYPE_2D;
+            depthInfo.format = owner_->depthStencilFormat_;
+            depthInfo.usage = SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET;
+            depthInfo.width = static_cast<Uint32>(size);
+            depthInfo.height = static_cast<Uint32>(size);
+            depthInfo.layer_count_or_depth = 1;
+            depthInfo.num_levels = 1;
+            depthInfo.sample_count = sampleCount;
+            depthTexture_ = SDL_CreateGPUTexture(device, &depthInfo);
+            if (depthTexture_ == nullptr)
+            {
+                if (msaaTexture_ != nullptr) SDL_ReleaseGPUTexture(device, msaaTexture_);
+                SDL_ReleaseGPUTexture(device, cubeTexture_);
+                throw std::runtime_error(std::string("CNA SDL_GPU: failed to create RenderTargetCube depth texture: ") + SDL_GetError());
+            }
+        }
+    }
+
+    SdlGpuRenderTargetCubeBackend::~SdlGpuRenderTargetCubeBackend()
+    {
+        if (owner_->currentRenderTargetCube_ == this)
+        {
+            owner_->currentRenderTargetCube_ = nullptr;
+            owner_->currentActiveCubeFace_ = -1;
+        }
+        auto& used = owner_->usedRenderTargetCubeFacesThisFrame_;
+        used.erase(std::remove_if(used.begin(), used.end(),
+                                  [this](const auto& pair) { return pair.first == this; }),
+                   used.end());
+
+        SDL_GPUDevice* device = owner_->Device();
+        if (depthTexture_ != nullptr) SDL_ReleaseGPUTexture(device, depthTexture_);
+        if (msaaTexture_ != nullptr) SDL_ReleaseGPUTexture(device, msaaTexture_);
+        if (cubeTexture_ != nullptr) SDL_ReleaseGPUTexture(device, cubeTexture_);
+    }
+
+    void SdlGpuRenderTargetCubeBackend::BindAsRenderTargetFace(int face)
+    {
+        owner_->currentRenderTargetCube_ = this;
+        owner_->currentActiveCubeFace_ = face;
+        // Mutually exclusive with a bound RenderTarget2D -- matches real XNA single-current-target
+        // semantics (SetRenderTargetCubeFace always replaces whatever was there).
+        owner_->currentRenderTarget_ = nullptr;
+        auto& used = owner_->usedRenderTargetCubeFacesThisFrame_;
+        const auto key = std::make_pair(this, face);
+        if (std::find(used.begin(), used.end(), key) == used.end())
+            used.push_back(key);
+        owner_->framePending_ = true;
+    }
+
+    void SdlGpuRenderTargetCubeBackend::UnbindAsRenderTarget()
+    {
+        if (owner_->currentRenderTargetCube_ == this)
+        {
+            owner_->currentRenderTargetCube_ = nullptr;
+            owner_->currentActiveCubeFace_ = -1;
+        }
+    }
+
+    void SdlGpuRenderTargetCubeBackend::GetData(int face, int level, int x, int y, int w, int h,
+                                                void* data, int dataLength) const
+    {
+        if (w <= 0 || h <= 0)
+            return;
+        const Uint32 sizeBytes = static_cast<Uint32>(w) * static_cast<Uint32>(h) * 4;
+        if (static_cast<Uint32>(dataLength) < sizeBytes)
+            throw std::out_of_range("CNA SDL_GPU: RenderTargetCube::GetData: dataLength too small for the requested region");
+
+        // Must reflect this frame's draws, not stale/uninitialized GPU memory -- a no-op if
+        // nothing is pending (matches EnsureFrameRendered's own early-return contract).
+        owner_->EnsureFrameRendered();
+
+        SDL_GPUDevice* device = owner_->Device();
+        SDL_GPUTransferBufferCreateInfo transferInfo{};
+        transferInfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_DOWNLOAD;
+        transferInfo.size = sizeBytes;
+        SDL_GPUTransferBuffer* transferBuffer = SDL_CreateGPUTransferBuffer(device, &transferInfo);
+        if (transferBuffer == nullptr)
+            throw std::runtime_error(std::string("CNA SDL_GPU: RenderTargetCube::GetData: failed to create transfer buffer: ") + SDL_GetError());
+
+        SDL_GPUCommandBuffer* cmd = SDL_AcquireGPUCommandBuffer(device);
+        if (cmd == nullptr)
+        {
+            SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
+            throw std::runtime_error(std::string("CNA SDL_GPU: RenderTargetCube::GetData: SDL_AcquireGPUCommandBuffer failed: ") + SDL_GetError());
+        }
+
+        SDL_GPUCopyPass* copyPass = SDL_BeginGPUCopyPass(cmd);
+        SDL_GPUTextureRegion region{};
+        region.texture = cubeTexture_;
+        region.mip_level = static_cast<Uint32>(level);
+        region.layer = static_cast<Uint32>(face);
+        region.x = static_cast<Uint32>(x);
+        region.y = static_cast<Uint32>(y);
+        region.w = static_cast<Uint32>(w);
+        region.h = static_cast<Uint32>(h);
+        region.d = 1;
+        SDL_GPUTextureTransferInfo dest{};
+        dest.transfer_buffer = transferBuffer;
+        dest.pixels_per_row = static_cast<Uint32>(w);
+        dest.rows_per_layer = static_cast<Uint32>(h);
+        SDL_DownloadFromGPUTexture(copyPass, &region, &dest);
+        SDL_EndGPUCopyPass(copyPass);
+
+        SDL_GPUFence* fence = SDL_SubmitGPUCommandBufferAndAcquireFence(cmd);
+        if (fence == nullptr)
+        {
+            SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
+            throw std::runtime_error(std::string("CNA SDL_GPU: RenderTargetCube::GetData: SDL_SubmitGPUCommandBufferAndAcquireFence failed: ") + SDL_GetError());
+        }
+        SDL_WaitForGPUFences(device, true, &fence, 1);
+        SDL_ReleaseGPUFence(device, fence);
+
+        void* mapped = SDL_MapGPUTransferBuffer(device, transferBuffer, false);
+        if (mapped == nullptr)
+        {
+            SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
+            throw std::runtime_error(std::string("CNA SDL_GPU: RenderTargetCube::GetData: SDL_MapGPUTransferBuffer failed: ") + SDL_GetError());
+        }
+        std::memcpy(data, mapped, sizeBytes);
+        SDL_UnmapGPUTransferBuffer(device, transferBuffer);
+        SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
     }
 
     // ---- SdlGpuVertexBufferBackend ----

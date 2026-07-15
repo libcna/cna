@@ -6814,6 +6814,14 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SDL_GPU")
         TIMEOUT 60
         LABELS "SdlGpu"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_sdlgpu.md SDLGPU-36: RenderTargetCube.
+    cna_sdlgpu_test(cna_test_sdlgpu_rendertargetcube examples/sdlgpu_rendertargetcube_test.cpp)
+    add_test(NAME SdlGpu_RenderTargetCube COMMAND cna_test_sdlgpu_rendertargetcube)
+    set_tests_properties(SdlGpu_RenderTargetCube PROPERTIES
+        TIMEOUT 60
+        LABELS "SdlGpu"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()
 
 # --- Task 6.1: real two-process ENet loopback test harness ---
