@@ -91,8 +91,8 @@ if(EMSCRIPTEN OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
 else()
     set(_cna_default_backend "SDL_RENDERER")
 endif()
-set(CNA_GRAPHICS_BACKEND "${_cna_default_backend}" CACHE STRING "Graphics backend to use (SDL_RENDERER, EASYGL, BGFX, VULKAN, WEBGPU, HEADLESS, SOFTWARE, D3D11, or D3D12)")
-set_property(CACHE CNA_GRAPHICS_BACKEND PROPERTY STRINGS "SDL_RENDERER" "EASYGL" "BGFX" "VULKAN" "WEBGPU" "HEADLESS" "SOFTWARE" "D3D11" "D3D12")
+set(CNA_GRAPHICS_BACKEND "${_cna_default_backend}" CACHE STRING "Graphics backend to use (SDL_RENDERER, EASYGL, BGFX, VULKAN, WEBGPU, HEADLESS, SOFTWARE, D3D11, D3D12, or ASCII)")
+set_property(CACHE CNA_GRAPHICS_BACKEND PROPERTY STRINGS "SDL_RENDERER" "EASYGL" "BGFX" "VULKAN" "WEBGPU" "HEADLESS" "SOFTWARE" "D3D11" "D3D12" "ASCII")
 
 option(CNA_BACKEND_SDL_RENDERER "Enable SDL_Renderer graphics backend" OFF)
 option(CNA_BACKEND_EASY_GL "Enable easy-gl graphics backend" OFF)
@@ -103,9 +103,13 @@ option(CNA_BACKEND_HEADLESS "Enable Headless (no GPU/window) graphics backend" O
 option(CNA_BACKEND_SOFTWARE "Enable Software (CPU rasterizer) graphics backend" OFF)
 option(CNA_BACKEND_D3D11 "Enable Direct3D 11 graphics backend (Windows only)" OFF)
 option(CNA_BACKEND_D3D12 "Enable Direct3D 12 graphics backend (Windows only)" OFF)
+# plan_ascii.md: SDL-windowed retro text/glyph-grid backend -- a thin decorator around
+# SDL_RENDERER's own SdlGraphicsBackend (see the shared cna_backend_graphics_sdl_renderer_core
+# library below), not a real terminal/TTY backend.
+option(CNA_BACKEND_ASCII "Enable ASCII (SDL-windowed glyph-grid) graphics backend" OFF)
 
 set(_cna_explicit_backend_selection OFF)
-if(CNA_BACKEND_SDL_RENDERER OR CNA_BACKEND_EASY_GL OR CNA_BACKEND_BGFX OR CNA_BACKEND_VULKAN OR CNA_BACKEND_WEBGPU OR CNA_BACKEND_HEADLESS OR CNA_BACKEND_SOFTWARE OR CNA_BACKEND_D3D11 OR CNA_BACKEND_D3D12)
+if(CNA_BACKEND_SDL_RENDERER OR CNA_BACKEND_EASY_GL OR CNA_BACKEND_BGFX OR CNA_BACKEND_VULKAN OR CNA_BACKEND_WEBGPU OR CNA_BACKEND_HEADLESS OR CNA_BACKEND_SOFTWARE OR CNA_BACKEND_D3D11 OR CNA_BACKEND_D3D12 OR CNA_BACKEND_ASCII)
     set(_cna_explicit_backend_selection ON)
 endif()
 
@@ -137,6 +141,9 @@ if(_cna_explicit_backend_selection)
     endif()
     if(CNA_BACKEND_D3D12)
         list(APPEND _cna_enabled_backends "D3D12")
+    endif()
+    if(CNA_BACKEND_ASCII)
+        list(APPEND _cna_enabled_backends "ASCII")
     endif()
 
     list(LENGTH _cna_enabled_backends _cna_enabled_backends_count)
@@ -250,6 +257,11 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "D3D12")
     set(BACKEND_DIR "src/CNA/Internal/Backends/D3D12")
     set(BACKEND_TARGET "cna_backend_graphics_d3d12")
     add_compile_definitions(CNA_BACKEND_D3D12)
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "ASCII")
+    message(STATUS "CNA: Using ASCII (SDL-windowed glyph-grid) graphics backend")
+    set(BACKEND_DIR "src/CNA/Internal/Backends/Ascii")
+    set(BACKEND_TARGET "cna_backend_graphics_ascii")
+    add_compile_definitions(CNA_BACKEND_ASCII)
 else()
 
     message(FATAL_ERROR "CNA: Unknown graphics backend: ${CNA_GRAPHICS_BACKEND}")
@@ -292,6 +304,22 @@ if(CNA_GRAPHICS_BACKEND STREQUAL "D3D11" OR CNA_GRAPHICS_BACKEND STREQUAL "D3D12
     target_include_directories(cna_backend_graphics_d3dcommon PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 endif()
 
+# plan_ascii.md design decision 2: ASCII is a thin decorator around SDL_RENDERER's own
+# SdlGraphicsBackend (composition, not reimplementation) -- it needs SdlGraphicsBackend.cpp's real
+# implementation compiled in even though CNA_GRAPHICS_BACKEND=SDL_RENDERER was not itself selected.
+# Mirrors the D3DCommon shared-core pattern just above: a small static lib, built only when
+# actually needed. CNA_BACKEND_SDL_RENDERER is deliberately NOT defined for this build, so
+# SdlGraphicsBackend.cpp's own #ifdef CNA_BACKEND_SDL_RENDERER-guarded CreateGraphicsBackend() is
+# compiled out here, leaving Ascii's own CreateGraphicsBackend() (guarded by CNA_BACKEND_ASCII) as
+# the only factory definition -- no duplicate-symbol clash.
+if(CNA_GRAPHICS_BACKEND STREQUAL "ASCII")
+    file(GLOB CNA_ASCII_SDLRENDERER_SOURCES "src/CNA/Internal/Backends/SdlRenderer/*.cpp")
+    add_library(cna_backend_graphics_sdl_renderer_core STATIC ${CNA_ASCII_SDLRENDERER_SOURCES})
+    target_link_libraries(cna_backend_graphics_sdl_renderer_core PUBLIC cna_backend_graphics_common SHARP_RUNTIME)
+    target_link_libraries(cna_backend_graphics_sdl_renderer_core PRIVATE SDL3::SDL3)
+    target_include_directories(cna_backend_graphics_sdl_renderer_core PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+endif()
+
 # Backend target
 file(GLOB BACKEND_SOURCES "${BACKEND_DIR}/*.cpp")
 add_library(${BACKEND_TARGET} STATIC ${BACKEND_SOURCES})
@@ -329,6 +357,8 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "D3D12")
     # added by DX-121 (D3D12EffectBackend's runtime D3DCompile() path) -- confirmed safe to link in
     # isolation by D3D11's own DX-14-compile/DX-58 precedent.
     target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 d3d12 dxgi d3dcompiler cna_backend_graphics_d3dcommon)
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "ASCII")
+    target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 cna_backend_graphics_sdl_renderer_core)
 endif()
 
 file(GLOB_RECURSE CNA_SOURCES CONFIGURE_DEPENDS
