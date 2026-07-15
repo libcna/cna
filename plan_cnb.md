@@ -133,13 +133,16 @@ onto `.cnb`, and `RegisterCnbLoader<T>`.
 
 ## Phase 4 — Migrate `EffectTypeReader` (`.shader.json` → `.cnb`)
 
-> Same situation as Phase 3: no existing test or example references `.shader.json`/`EffectTypeReader`.
+> **Correction**: unlike Phase 3, this assumption was wrong — `examples/easygl_bloom_extract_test.cpp`
+> (a standalone example program, not part of `CnaTests`) does exercise this reader via `.shader.json`.
+> No *gtest* coverage existed, though (confirmed separately) — that part of the original assumption
+> holds.
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| CNB-14 | Update `EffectTypeReader::GetExtensions()`/`Read()` to expect the `.cnb` envelope, same shape as CNB-11 | ⬜ | |
-| CNB-15 | Add at least one real `.cnb` `Effect`/stock-effect-parameter fixture | ⬜ | |
-| CNB-16 | Tests: `Content.Load<...>()` against the CNB-15 fixture succeeds; type-mismatch test as in CNB-13 | ⬜ | First gtest coverage of `EffectTypeReader` at all |
+| CNB-14 | Update `EffectTypeReader::GetExtensions()`/`Read()` to expect the `.cnb` envelope, same shape as CNB-11 | ✅ | Also preserved the reader's pre-existing "append `.shader.json` if the path doesn't already end with it" defensive re-append, just retargeted at `.cnb` |
+| CNB-15 | Add at least one real `.cnb` `Effect`/stock-effect-parameter fixture | ✅ | Two fixtures: `CnbEffectTests.cpp`'s inline one, and `examples/easygl_bloom_extract_test.cpp`'s `bloom_extract.shader.json` → `bloom_extract.cnb` (`"type": "Effect"`) migration — rebuilt and re-ran that example standalone (`cna_test_easygl_bloom_extract`), still `[PASS]` after the migration |
+| CNB-16 | Tests: `Content.Load<...>()` against the CNB-15 fixture succeeds; type-mismatch test as in CNB-13 | ✅ | `tests/Microsoft/Xna/Framework/Content/CnbEffectTests.cpp` (2 cases) — first-ever *gtest* coverage of `EffectTypeReader`. Full-suite regression: 4398 tests, 4396 passed, same 2 pre-existing hardware skips, 0 failures |
 
 ---
 

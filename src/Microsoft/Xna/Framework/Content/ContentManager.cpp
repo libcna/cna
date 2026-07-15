@@ -346,14 +346,14 @@ namespace Microsoft::Xna::Framework::Content
         public:
             [[nodiscard]] std::vector<std::string> GetExtensions() const override
             {
-                return {".shader.json"};
+                return {".cnb"};
             }
 
             std::shared_ptr<Graphics::Effect> Read(const std::string& path, ContentManager& cm) override
             {
-                // If path doesn't already end with .shader.json, append it.
+                // If path doesn't already end with .cnb, append it.
                 std::string jsonPath = path;
-                const std::string ext = ".shader.json";
+                const std::string ext = ".cnb";
                 if (jsonPath.size() < ext.size() ||
                     jsonPath.substr(jsonPath.size() - ext.size()) != ext)
                 {
@@ -361,6 +361,9 @@ namespace Microsoft::Xna::Framework::Content
                 }
 
                 const std::string jsonText = ReadTextFile(jsonPath);
+
+                const CNA::Internal::CnbEnvelope envelope = CNA::Internal::ParseCnbEnvelope(jsonText);
+                CNA::Internal::ValidateCnbEnvelope(envelope, "Effect", jsonPath);
 
                 const std::string vertRel = ExtractJsonStringField(jsonText, "vertex");
                 const std::string fragRel = ExtractJsonStringField(jsonText, "fragment");
