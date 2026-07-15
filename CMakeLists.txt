@@ -6690,6 +6690,13 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     set_tests_properties(Ascii_Present PROPERTIES
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Phase G6 (ASCII-50/51): Mouse/Keyboard/GamePad need zero new code against a real window.
+    cna_ascii_test(cna_test_ascii_input examples/ascii_input_test.cpp)
+    add_test(NAME Ascii_Input COMMAND cna_test_ascii_input)
+    set_tests_properties(Ascii_Input PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()
 
 # plan_dx.md DX-80: D3D11 CTest registration. When cross-compiled from Linux (this backend is
