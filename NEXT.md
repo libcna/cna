@@ -1128,15 +1128,25 @@ returning `true` here proves the comparison LOGIC is correct, not that a real Hi
 exists in this loop (it doesn't). Provisional until `D9-140` (real Windows hardware,
 `needs_human`).
 
-**Explicitly NOT covered, not silently assumed**: `TextureCube`/`Texture3D` size ceilings (same
-mechanical pattern as `Texture2D`, not yet wired); `MaxRenderTargets` enforcement at
-`SetRenderTargets` time (Reach=1, a DIFFERENT/lower ceiling than `D9-54`'s own hardware-cap
-enforcement); hardware-instancing's own real HiDef-only gate (noted as a Phase D9-10 follow-up
-back when `D9-83` closed, still open); and NPOT-wrap-on-`Reach` (D9-56's own originally-deferred
-example) — real XNA's own enforcement timing/behavior here is undocumented, and FNA implements
-none of it either (confirmed by `D9-100`'s own research), so inventing one without a reference
-would risk asserting behavior this project cannot actually verify against real XNA. All real,
-honest follow-ups, not claimed done.
+**Follow-up CLOSED 2026-07-15: `TextureCube`/`Texture3D` size ceilings and `MaxRenderTargets`
+enforcement.** All three reuse `D3D9ProfileCapabilities`' own already-written helpers (no new
+capability logic, just wiring): `TextureCube` throws past 512 (Reach)/4096 (HiDef);
+`Texture3D` throws UNCONDITIONALLY under Reach (volume textures unsupported at all, not merely
+size-capped) and past 256 under HiDef; `GraphicsDevice::SetRenderTargets()` throws past 1 target
+under Reach (4 under HiDef) — a separate, lower, software-imposed ceiling from
+`MAX_RENDERTARGET_BINDINGS` (XNA's general 4-target cap) and from `D9-54`'s own hardware-cap
+enforcement inside the backend. 8 new checks (`D3D9_GraphicsProfile` now 19/19), same
+"same request refused under Reach, allowed under HiDef" pattern, mutation-verified (disabled all
+3 new profile-ceiling functions at once, confirmed exactly the 6 tied checks — 3 per profile —
+went red, restored). Regression-checked again on EasyGL (150 relevant `CnaTests` cases, all
+green). Full `D3D9` CTest suite 13/13 green.
+
+**Explicitly NOT covered, not silently assumed**: hardware-instancing's own real HiDef-only gate
+(noted as a Phase D9-10 follow-up back when `D9-83` closed, still open); and NPOT-wrap-on-`Reach`
+(D9-56's own originally-deferred example) — real XNA's own enforcement timing/behavior here is
+undocumented, and FNA implements none of it either (confirmed by `D9-100`'s own research), so
+inventing one without a reference would risk asserting behavior this project cannot actually
+verify against real XNA. Both real, honest follow-ups, not claimed done.
 
 ### Does NOT work yet
 
@@ -1162,7 +1172,8 @@ Most recent first. Full detail lives in `plan_dx9.md` — this is a short index.
 
 | Commit(s) | Summary |
 |---|---|
-| *(pending)* | **Phase D9-10 CLOSED (`D9-100`–`D9-105`) — `GraphicsProfile.Reach`/`HiDef` made real on D3D9, plus a real cross-backend `GraphicsProfile`-propagation bug found and fixed**. New `D3D9ProfileCapabilities.{hpp,cpp}` (`D3DCAPS9` probed via `IDirect3D9::GetDeviceCaps`/`CheckDeviceFormat`/`CheckDeviceType`/`CheckDeviceMultiSampleType`, all pre-device-creation, backend-local under `#ifdef CNA_BACKEND_D3D9`). `IsProfileSupported()`/`QueryRenderTargetFormat()`/`QueryBackBufferFormat()` real; `Texture2D` throws `System::NotSupportedException` past its own profile's size ceiling (2048 Reach/4096 HiDef). Real bug found in SHARED code: `Game`'s `GraphicsDevice_` member is eagerly default-constructed (hardcoded Reach) before `GraphicsDeviceManager` exists, and `applyToExistingBackend()` never wrote a changed profile back onto the live device -- `graphics.GraphicsProfile = HiDef; graphics.ApplyChanges();` had NO path to the real device at all. Fixed with new `GraphicsDevice::SetGraphicsProfileEXT()`. EasyGL's own `CnaTests` (70 cases) regression-checked, all green. New `D3D9_GraphicsProfile` CTest, 10/10, mutation-verified. Full D3D9 CTest suite 13/13 green. |
+| *(pending)* | **Phase D9-10 follow-up CLOSED — `TextureCube`/`Texture3D` profile size ceilings + `MaxRenderTargets` enforcement**. Reuses `D3D9ProfileCapabilities`' own already-written helpers (no new capability logic, just wiring): `TextureCube` throws past 512 (Reach)/4096 (HiDef); `Texture3D` throws UNCONDITIONALLY under Reach (volume textures unsupported entirely) and past 256 under HiDef; `GraphicsDevice::SetRenderTargets()` throws past 1 target under Reach (4 under HiDef) -- separate from `MAX_RENDERTARGET_BINDINGS` (XNA's general cap) and `D9-54`'s own hardware-cap enforcement. 8 new checks (`D3D9_GraphicsProfile` now 19/19), mutation-verified (disabled all 3 new profile functions at once, confirmed exactly the 6 tied checks failed, restored) -- also found and fixed a real bug in the CTest's OWN cleanup logic (only unbinding render targets on the throw path left them bound and crashed `Present()` when a mutation made the call NOT throw). Regression-checked again on EasyGL (150 relevant `CnaTests` cases, all green). Full D3D9 CTest suite 13/13 green. Only NPOT-wrap-on-`Reach` and hardware-instancing's HiDef-only gate remain open in Phase D9-10. |
+| `9c3210df` | **Phase D9-10 CLOSED (`D9-100`–`D9-105`) — `GraphicsProfile.Reach`/`HiDef` made real on D3D9, plus a real cross-backend `GraphicsProfile`-propagation bug found and fixed**. New `D3D9ProfileCapabilities.{hpp,cpp}` (`D3DCAPS9` probed via `IDirect3D9::GetDeviceCaps`/`CheckDeviceFormat`/`CheckDeviceType`/`CheckDeviceMultiSampleType`, all pre-device-creation, backend-local under `#ifdef CNA_BACKEND_D3D9`). `IsProfileSupported()`/`QueryRenderTargetFormat()`/`QueryBackBufferFormat()` real; `Texture2D` throws `System::NotSupportedException` past its own profile's size ceiling (2048 Reach/4096 HiDef). Real bug found in SHARED code: `Game`'s `GraphicsDevice_` member is eagerly default-constructed (hardcoded Reach) before `GraphicsDeviceManager` exists, and `applyToExistingBackend()` never wrote a changed profile back onto the live device -- `graphics.GraphicsProfile = HiDef; graphics.ApplyChanges();` had NO path to the real device at all. Fixed with new `GraphicsDevice::SetGraphicsProfileEXT()`. EasyGL's own `CnaTests` (70 cases) regression-checked, all green. New `D3D9_GraphicsProfile` CTest, 10/10, mutation-verified. Full D3D9 CTest suite 13/13 green. |
 | `47ca4a15` | **`D9-A5` grown to 31 scenes (`colored_linelist_quad`/`colored_linestrip_quad`) — completes ALL 4 real `PrimitiveType` values, both PIXEL-PERFECT (0/65536 differ) on the first attempt**. `LineList`: two SEPARATE horizontal segments at different Y rows, proving independent segments with nothing connecting them (confirmed on real XNA: RED/GREEN midpoints exact, the row between stays background). `LineStrip`: a 3-vertex "V" polyline, proving 2 CONNECTED segments share the middle vertex (confirmed on real XNA: 307 non-background pixels spanning the full expected extent, both leg midpoints exact RED). New `D3D9_Draw` Check E/F (now 6/6) — real bug found and fixed in the CTest's OWN color-packing, not CNA: `0x00FF00FFu` decodes (byte order R,G,B,A ascending, little-endian literal) to `R=255,G=0,B=255,A=0` — magenta at zero alpha, invisible — not green; fixed to `0xFF00FF00u`. Caught immediately via a full-frame debug scan showing the RED segment rendered exactly as predicted but no GREEN pixels anywhere. Mutation-verified after the fix (hardcoded both `primitiveCount`s to 1, confirmed exactly Check E/F went red, restored). All 31 corpus scenes re-verified pixel-perfect; full D3D9 CTest suite 12/12 green. |
 | `426d8af7` | **`D9-A5` grown to 29 scenes (`colored_trianglestrip_quad`) — first scene to ever use `PrimitiveType.TriangleStrip`, PIXEL-PERFECT (0/65536 differ) on the first attempt**. Every earlier scene (and every existing `D3D9_Draw`/`D3D9_DrawEx` check) only ever used `TriangleList`, even though `GraphicsDevice::PrimitiveVerts()`/`ToD3D9Topology()` already handled all 4 `PrimitiveType` values unconditionally -- a real, previously-untested code path, not a new feature (no code changes needed). A 4-vertex colored quad in the canonical "Z" strip order (TL/TR/BL/BR), 4 distinct corner colors so a broken vertex-count<->primitiveCount conversion would show a missing quadrant or wrong Gouraud gradient. New `D3D9_Draw` Check D (now 4/4): an oversized strip quad sampled at the first triangle's own corner AND the second triangle's own corner (only covered if `primitiveCount` genuinely resolved to 2, not 1). Mutation-verified (hardcoded `primitiveCount=1`, confirmed exactly Check D went red, restored, reconfirmed green). All 29 corpus scenes re-verified pixel-perfect; full D3D9 CTest suite 12/12 green. |
 | `b557c2bf` | **`D9-A5` grown to 28 scenes (`sprite_multitexture_quad`) — closes D9-90's own explicitly-named multi-texture-batching gap, PIXEL-PERFECT (0/65536 differ) on the first attempt**. 3 non-overlapping sprites, interleaved RED-texture/BLUE-texture/RED-texture (not RED-RED-BLUE, so the second red draw genuinely forces a SECOND rebind after the blue draw's own flush) -- new optional trailing `textureIndex` column on `spritedraw=` lines, reusing the scene format's existing `texture2*` keys rather than inventing new ones. Mutation-verified (disabled the texture-change flush trigger in `D3D9SpriteBatchBackend::Draw()`, confirmed the middle sprite's BLUE leaked into the third position -- `1600/65536` pixels wrong -- then restored and reconfirmed green). New `D3D9_SpriteBatch` Check I (now 10/10). All 28 corpus scenes re-verified pixel-perfect; full D3D9 CTest suite 12/12 green. |
@@ -1461,9 +1472,9 @@ next effect.
    - **`EnvironmentMapEffect` specular variants / `PreferPerPixelLighting` (`BasicEffect`/
      `EnvironmentMapEffect`/`SkinnedEffect`)**: blocked on `D9-81`'s still-open `GpuDrawParams`
      gaps (the cross-cutting dispatch-layer blocker, not a D3D9-specific one).
-   - **`TextureCube`/`Texture3D` profile size ceilings, `MaxRenderTargets` enforcement, hardware-
-     instancing's own HiDef-only gate, NPOT-wrap-on-`Reach`**: Phase D9-10's own explicitly-named
-     follow-ups (its `D9-103` row's closure note has the full list and why each was set aside).
+   - **Hardware-instancing's own HiDef-only gate, NPOT-wrap-on-`Reach`**: Phase D9-10's own last
+     2 explicitly-named follow-ups (`TextureCube`/`Texture3D` size ceilings and
+     `MaxRenderTargets` enforcement are now closed too — see that phase's own section above).
    Picking any of these is a real scope decision, not a "grow the corpus" continuation — see
    `tools/xna-oracle/README.md` for the current build/run commands if one is picked.
 2. **Phase D9-11 (custom `ShaderEffect`)** — explicitly flagged ask-first in `plan_dx9.md`'s own

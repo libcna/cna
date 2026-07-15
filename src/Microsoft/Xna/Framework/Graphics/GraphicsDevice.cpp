@@ -20,6 +20,16 @@
 #include "CNA/Internal/Backends/Bgfx/BgfxGraphicsBackend.hpp"
 #endif
 
+// plan_dx9.md Phase D9-10 (D9-103 follow-up): GraphicsProfile.Reach's own MaxRenderTargets=1
+// ceiling, real on this backend only -- matches Texture2D.cpp's own #ifdef CNA_BACKEND_D3D9
+// convention exactly. Distinct from MAX_RENDERTARGET_BINDINGS below (XNA's own general 4-target
+// ceiling, backend-agnostic) and from D9-54's own NumSimultaneousRTs hardware-cap enforcement
+// inside D3D9GraphicsBackend::SetRenderTargets() -- this is the profile's own, separately lower,
+// software-imposed ceiling.
+#ifdef CNA_BACKEND_D3D9
+#include "CNA/Internal/Backends/D3D9/D3D9ProfileCapabilities.hpp"
+#endif
+
 #include <SDL3/SDL.h>
 
 #include <algorithm>
@@ -30,6 +40,7 @@
 
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/InvalidOperationException.hpp"
+#include "System/NotSupportedException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
@@ -1859,6 +1870,25 @@ namespace Microsoft::Xna::Framework::Graphics
         if (renderTargets.size() > MAX_RENDERTARGET_BINDINGS)
             throw std::invalid_argument("SetRenderTargets: at most " +
                 std::to_string(MAX_RENDERTARGET_BINDINGS) + " render targets may be bound at once.");
+
+#ifdef CNA_BACKEND_D3D9
+        // D9-103 follow-up: GraphicsProfile.Reach's own MaxRenderTargets=1 ceiling (D9-100's own
+        // table) -- a SEPARATE, lower, software-imposed limit from MAX_RENDERTARGET_BINDINGS
+        // above (XNA's own general 4-target ceiling) and from D9-54's own hardware-cap
+        // enforcement inside the backend (NumSimultaneousRTs, which could be higher).
+        {
+            const int profile = static_cast<int>(graphicsProfile_);
+            const int maxForProfile = CNA::Internal::Backends::D3D9::MaxRenderTargetsForProfileEXT(profile);
+            if (static_cast<int>(renderTargets.size()) > maxForProfile)
+            {
+                throw System::NotSupportedException(
+                    "SetRenderTargets: " + std::to_string(renderTargets.size()) +
+                    " render targets exceeds GraphicsProfile." +
+                    (profile == 1 ? std::string("HiDef") : std::string("Reach")) +
+                    "'s own maximum of " + std::to_string(maxForProfile));
+            }
+        }
+#endif
 
         // Task 717 finding: SetRenderTarget(RenderTarget2D*) (singular) already guards against a
         // disposed target -- this plural overload didn't, letting a disposed RenderTarget2D reach

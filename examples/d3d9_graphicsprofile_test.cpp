@@ -18,6 +18,19 @@
 //   is allocated (the check runs first in the constructor, so the "throws" case never pays for a
 //   large allocation).
 // Check H/I -- the HiDef equivalent: exactly 4096 succeeds, one pixel over throws.
+// Check J/K -- MaxRenderTargets (D9-103 follow-up): binding 2 render targets via the real public
+//   GraphicsDevice::SetRenderTargets() throws under Reach (its own MaxRenderTargets=1 ceiling,
+//   D9-100's own table -- a SEPARATE, lower limit from XNA's general 4-target
+//   MAX_RENDERTARGET_BINDINGS cap and from D9-54's own hardware NumSimultaneousRTs enforcement)
+//   but succeeds under HiDef (ceiling=4) from the identical request.
+// Check L/M -- TextureCube size enforcement (D9-103 follow-up): a normal-sized cube (64) still
+//   succeeds under Reach (regression proof); one past Reach's own 512 ceiling (513) throws.
+// Check N/O -- the HiDef counterpart: the SAME size (513) Check M refused now succeeds under
+//   HiDef (ceiling=4096); one past HiDef's own 4096 ceiling (4097) throws.
+// Check P/Q -- Texture3D (volume texture) enforcement (D9-103 follow-up): GraphicsProfile.Reach
+//   forbids volume textures ENTIRELY (D9-100's own table, MaxVolumeExtent=0) -- even a trivial
+//   1x1x1 request throws; the SAME request succeeds under HiDef.
+// Check R -- the HiDef ceiling: one past HiDef's own 256 maximum volume extent throws.
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
@@ -29,10 +42,15 @@
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTargetBinding.hpp"
 #include "System/NotSupportedException.hpp"
 
 #include <cstdio>
 #include <memory>
+#include <vector>
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -133,6 +151,51 @@ protected:
                   "System::NotSupportedException -- one pixel past Reach's own 2048 ceiling");
         }
 
+        // Check J: MaxRenderTargets under Reach (D9-103 follow-up) -- binding 2 render targets
+        // via the real public GraphicsDevice::SetRenderTargets() throws, Reach's own ceiling is 1.
+        {
+            RenderTarget2D rt0(dev, 4, 4);
+            RenderTarget2D rt1(dev, 4, 4);
+            std::vector<RenderTargetBinding> bindings{RenderTargetBinding(&rt0), RenderTargetBinding(&rt1)};
+            bool threw = false;
+            try { dev.SetRenderTargets(bindings); }
+            catch (const System::NotSupportedException&) { threw = true; }
+            catch (const std::exception&) { /* wrong exception type -- leave threw false */ }
+            dev.SetRenderTargets({}); // always unbind before this Game exits, threw or not
+            check(threw,
+                  "GraphicsDevice::SetRenderTargets() with 2 targets under GraphicsProfile.Reach: "
+                  "throws System::NotSupportedException -- Reach's own MaxRenderTargets ceiling is 1");
+        }
+
+        // Check L/M: TextureCube size enforcement under Reach (D9-103 follow-up).
+        {
+            bool threwNormal = false;
+            try { TextureCube c(dev, 64, false, SurfaceFormat::Color); } catch (const std::exception&) { threwNormal = true; }
+            check(!threwNormal,
+                  "TextureCube(dev, 64, ...) under GraphicsProfile.Reach: succeeds -- a normal-sized "
+                  "cube is unaffected by the new size ceiling (regression proof)");
+
+            bool threwOverCube = false;
+            try { TextureCube c(dev, 513, false, SurfaceFormat::Color); }
+            catch (const System::NotSupportedException&) { threwOverCube = true; }
+            catch (const std::exception&) { /* wrong exception type -- leave threwOverCube false */ }
+            check(threwOverCube,
+                  "TextureCube(dev, 513, ...) under GraphicsProfile.Reach: throws "
+                  "System::NotSupportedException -- one past Reach's own 512 cube-size ceiling");
+        }
+
+        // Check P: Texture3D (volume texture) is forbidden ENTIRELY under Reach -- even a
+        // trivial 1x1x1 request throws (D9-100's own table: MaxVolumeExtent=0 for Reach).
+        {
+            bool threw = false;
+            try { Texture3D t(dev, 1, 1, 1, false, SurfaceFormat::Color); }
+            catch (const System::NotSupportedException&) { threw = true; }
+            catch (const std::exception&) { /* wrong exception type -- leave threw false */ }
+            check(threw,
+                  "Texture3D(dev, 1, 1, 1, ...) under GraphicsProfile.Reach: throws "
+                  "System::NotSupportedException -- Reach does not support volume textures at all");
+        }
+
         std::printf("=== %d/%d PASS ===\n", passCount, totalCount);
         Exit();
     }
@@ -195,6 +258,57 @@ protected:
         check(threwOverCeiling,
               "Texture2D(dev, 4097, 4097) under GraphicsProfile.HiDef: throws "
               "System::NotSupportedException -- one pixel past HiDef's own 4096 ceiling");
+
+        // Check K: MaxRenderTargets under HiDef -- the SAME 2-target request Check J refused
+        // under Reach now succeeds (HiDef's own ceiling is 4).
+        {
+            RenderTarget2D rt0(dev, 4, 4);
+            RenderTarget2D rt1(dev, 4, 4);
+            std::vector<RenderTargetBinding> bindings{RenderTargetBinding(&rt0), RenderTargetBinding(&rt1)};
+            bool threw = false;
+            try { dev.SetRenderTargets(bindings); } catch (const std::exception&) { threw = true; }
+            dev.SetRenderTargets({}); // unbind before this Game exits
+            check(!threw,
+                  "GraphicsDevice::SetRenderTargets() with 2 targets under GraphicsProfile.HiDef: "
+                  "succeeds -- the SAME request Check J refused under Reach, HiDef's own ceiling is 4");
+        }
+
+        // Check N/O: TextureCube under HiDef -- the SAME size (513) Check M refused under Reach
+        // now succeeds; one past HiDef's own 4096 ceiling (4097) throws.
+        {
+            bool threwAllowed = false;
+            try { TextureCube c(dev, 513, false, SurfaceFormat::Color); } catch (const std::exception&) { threwAllowed = true; }
+            check(!threwAllowed,
+                  "TextureCube(dev, 513, ...) under GraphicsProfile.HiDef: succeeds -- the SAME "
+                  "size Check M refused under Reach, HiDef's own cube-size ceiling is 4096");
+
+            bool threwOverCube = false;
+            try { TextureCube c(dev, 4097, false, SurfaceFormat::Color); }
+            catch (const System::NotSupportedException&) { threwOverCube = true; }
+            catch (const std::exception&) { /* wrong exception type -- leave threwOverCube false */ }
+            check(threwOverCube,
+                  "TextureCube(dev, 4097, ...) under GraphicsProfile.HiDef: throws "
+                  "System::NotSupportedException -- one past HiDef's own 4096 cube-size ceiling");
+        }
+
+        // Check Q/R: Texture3D under HiDef -- the SAME 1x1x1 request Check P refused under Reach
+        // now succeeds (volume textures ARE supported under HiDef); one past HiDef's own 256
+        // maximum volume extent throws.
+        {
+            bool threwAllowed = false;
+            try { Texture3D t(dev, 1, 1, 1, false, SurfaceFormat::Color); } catch (const std::exception&) { threwAllowed = true; }
+            check(!threwAllowed,
+                  "Texture3D(dev, 1, 1, 1, ...) under GraphicsProfile.HiDef: succeeds -- the SAME "
+                  "request Check P refused under Reach, volume textures ARE supported under HiDef");
+
+            bool threwOverVolume = false;
+            try { Texture3D t(dev, 257, 1, 1, false, SurfaceFormat::Color); }
+            catch (const System::NotSupportedException&) { threwOverVolume = true; }
+            catch (const std::exception&) { /* wrong exception type -- leave threwOverVolume false */ }
+            check(threwOverVolume,
+                  "Texture3D(dev, 257, 1, 1, ...) under GraphicsProfile.HiDef: throws "
+                  "System::NotSupportedException -- one past HiDef's own 256 maximum volume extent");
+        }
 
         std::printf("=== %d/%d PASS ===\n", passCount, totalCount);
         Exit();
