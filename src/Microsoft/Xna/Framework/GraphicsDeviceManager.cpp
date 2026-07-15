@@ -557,6 +557,14 @@ namespace Microsoft::Xna::Framework
 
         auto& pp = gdi.getPresentationParametersProperty();
 
+        // plan_dx9.md D9-103 finding: Game's own GraphicsDevice_ member is eagerly
+        // default-constructed (hardcoded GraphicsProfile::Reach) before GraphicsDeviceManager
+        // even exists, so a game's `graphics.GraphicsProfile = GraphicsProfile.HiDef;
+        // graphics.ApplyChanges();` request had no path to ever reach the real device -- fixed by
+        // propagating gdi's own profile (set from graphicsProfile_ just above, in
+        // PrepareDeviceSettings) into the existing device explicitly, here, before Reset().
+        graphicsDevice_->SetGraphicsProfileEXT(gdi.getGraphicsProfileProperty());
+
         // The presentation/scaling mode must be applied before Reset()'s own
         // SetVirtualResolution() call below -- SDL_Renderer's logical-presentation size
         // computation depends on which mode is already active, so setting the mode

@@ -674,6 +674,20 @@ namespace Microsoft::Xna::Framework::Graphics
         /** @brief Enables or disables depth writes. */
         NOXNA void SetDepthWriteEnabled(bool enabled);
         /**
+         * @brief Task/plan_dx9.md D9-103 finding: real XNA fixes GraphicsProfile at device
+         * construction (the public GraphicsDevice.GraphicsProfile property is read-only), but
+         * CNA's own GraphicsDeviceManager architecture eagerly default-constructs Game's
+         * GraphicsDevice_ member (hardcoded GraphicsProfile::Reach) BEFORE GraphicsDeviceManager
+         * -- and therefore before a game's own GraphicsDeviceManager.GraphicsProfile request --
+         * even exists. Without this, GraphicsDeviceManager::CreateDevice()/ApplyChanges() has no
+         * way to make the FIRST real device creation honor a non-Reach request at all: a game's
+         * `graphics.GraphicsProfile = GraphicsProfile.HiDef; graphics.ApplyChanges();` would
+         * silently keep using Reach. Called once, internally, from
+         * GraphicsDeviceManager::applyToExistingBackend() right before Reset() -- not exposed as
+         * a general public runtime profile-switch (real XNA has none either).
+         */
+        NOXNA void SetGraphicsProfileEXT(GraphicsProfile profile);
+        /**
          * @brief Disables GL context-loss recovery (CPU shadow copies + ResourceRegistry).
          *
          * Must be called before the device is initialized. Safe on desktop where

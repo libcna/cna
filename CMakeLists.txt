@@ -6859,6 +6859,16 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D9")
         TIMEOUT 60
         LABELS "D3D9")
 
+    # D9-100/D9-101/D9-102/D9-103: GraphicsProfile.Reach/HiDef made real (IsProfileSupported(),
+    # QueryRenderTargetFormat(), and Texture2D size enforcement), through the real public
+    # GraphicsAdapter/Game/GraphicsDeviceManager/Texture2D API.
+    cna_d3d9_test(cna_test_d3d9_graphicsprofile examples/d3d9_graphicsprofile_test.cpp)
+    cna_d3d9_ctest_command(_d3d9_graphicsprofile_cmd cna_test_d3d9_graphicsprofile)
+    add_test(NAME D3D9_GraphicsProfile COMMAND ${_d3d9_graphicsprofile_cmd})
+    set_tests_properties(D3D9_GraphicsProfile PROPERTIES
+        TIMEOUT 60
+        LABELS "D3D9")
+
     # D9-74: D3D9ShaderCache creates all 66 embedded stock-effect shaders through a live device --
     # needs both DXVK and the real compiler's own bytecode output at once (the compiler DLL itself
     # is no longer needed at this step, D9-71 already embedded its output).

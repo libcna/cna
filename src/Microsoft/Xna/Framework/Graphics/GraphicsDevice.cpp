@@ -487,6 +487,11 @@ namespace Microsoft::Xna::Framework::Graphics
         if (backend_ != nullptr) backend_->SetDepthWriteEnabled(enabled);
     }
 
+    void GraphicsDevice::SetGraphicsProfileEXT(GraphicsProfile profile)
+    {
+        graphicsProfile_ = profile;
+    }
+
     void GraphicsDevice::SetVertexBuffer(const VertexBuffer* vertexBuffer)
     {
         if (vertexBuffer && vertexBuffer->getIsDisposedProperty())
