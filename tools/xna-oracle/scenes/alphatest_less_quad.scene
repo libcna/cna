@@ -1,0 +1,56 @@
+# plan_dx9.md D9-A5 scene corpus: alphatest_less_quad
+# The first scene to exercise a SECOND AlphaTestEffect.AlphaFunction value (Less), not just the
+# single Greater value alphatest_quad.scene already covers -- proving the real AlphaFunction
+# dispatch itself is honored end to end against real XNA, not merely that clip()'s discard exists
+# at all (which Greater alone already establishes, but says nothing about which direction the
+# compare runs). Reuses the exact same 2x2 texture and ReferenceAlpha=128 threshold as
+# alphatest_quad.scene (alpha=255,1,255,64 -- see note below on why 1, not 0), only the
+# AlphaFunction changes from Greater to Less -- this deliberately FLIPS which texels pass vs. get
+# discarded relative to that scene:
+#   Greater (alphatest_quad.scene): passes alpha=255 texels (top-left, bottom-left), discards
+#     alpha=1/64 (top-right, bottom-right).
+#   Less (this scene):              passes alpha=1/64 texels (top-right, bottom-right), discards
+#     alpha=255 (top-left, bottom-left) -- the exact inverse pass/discard pattern.
+# A backend that silently ignored AlphaFunction and always used Greater (or always discarded
+# nothing) would still pass alphatest_quad.scene but fail this one -- this scene exists
+# specifically to close that verification gap.
+#
+# Real, non-obvious finding (SaveAsPng encoder behavior, NOT a rendering bug): a first draft used
+# alpha=0 (not 1) for the passing top-right texel. That texel's pixel shader output was
+# byte-identical on both sides (RGBA=(255,255,255,0), confirmed via GraphicsDevice.GetData
+# cross-checks), yet the SAVED PNG differed: real XNA's Texture2D.SaveAsPng wrote RGB=(0,0,0) for
+# that EXACT-alpha=0 pixel, while CNA's own PNG writer preserved the raw RGB=(255,255,255) --
+# real XNA appears to canonicalize fully-transparent pixels' RGB to black when encoding PNG, a
+# property of the ENCODER, not the GPU/shader pipeline this oracle exists to validate (confirmed
+# by the adjacent alpha=64 texel matching byte-for-byte on both sides -- only exact alpha=0
+# diverges, ruling out any general premultiply-before-encode behavior). Changed to alpha=1
+# (still < ReferenceAlpha=128, so it exercises the identical Less code path) to sidestep this
+# irrelevant encoder-side edge case; re-verified `0/65536` pixels differ.
+width=256
+height=256
+profile=HiDef
+clearcolor=100,149,237,255
+effect=AlphaTestEffect
+vertexformat=PositionTexture
+vertexcolor=false
+texture=true
+texturewidth=2
+textureheight=2
+texturefilter=Point
+alphafunction=Less
+referencealpha=128
+primitive=TriangleList
+# Row-major, top row first: (red,a=255),(white,a=1) / (white,a=255),(blue,a=64).
+# Less than 128 passes: top-right (a=1) and bottom-right (a=64) draw; top-left/bottom-left (a=255)
+# are discarded, showing the CornflowerBlue clear color through instead.
+texturepixel=255,0,0,255
+texturepixel=255,255,255,1
+texturepixel=255,255,255,255
+texturepixel=0,0,255,64
+# UV (0,0) is the texture's top-left (red, alpha=255 -- discarded under Less).
+vertex=-0.6,0.6,0,0,0
+vertex=0.6,0.6,0,1,0
+vertex=-0.6,-0.6,0,0,1
+vertex=0.6,0.6,0,1,0
+vertex=0.6,-0.6,0,1,1
+vertex=-0.6,-0.6,0,0,1

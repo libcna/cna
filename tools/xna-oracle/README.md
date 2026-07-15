@@ -127,8 +127,8 @@ Requires Pillow (`pip install pillow`) — not previously a dependency of this p
 
 ## Status
 
-Nine scenes so far, **all pixel-perfect**, and every one of XNA's 5 Stock Effects plus
-`IEffectFog` is now represented in the corpus:
+Ten scenes so far, **all pixel-perfect**, and every one of XNA's 5 Stock Effects plus
+`IEffectFog` and a 2nd `AlphaTestEffect.AlphaFunction` is now represented in the corpus:
 
 - `colored3d` (`D9-A2`'s own original spike scene: a `BasicEffect` `VertexColorEnabled=true`/
   `LightingEnabled=false` triangle over a `CornflowerBlue` clear) — `0/65536` pixels differ,
@@ -215,6 +215,21 @@ Nine scenes so far, **all pixel-perfect**, and every one of XNA's 5 Stock Effect
   (`(249,249,249)`) → grey (`(127,127,127)` at centre) → black (`(8,8,8)` at the far edge)
   gradient, confirmed pixel-for-pixel identical on both sides, `0/65536` pixels differ. See
   `scenes/fog_gradient_quad.scene`'s own comment for the full derivation.
+- `alphatest_less_quad` — the first scene to exercise a SECOND `AlphaTestEffect.AlphaFunction`
+  value (`Less`), not just the single `Greater` value `alphatest_quad.scene` covers. Reuses the
+  exact same 2×2 texture and `ReferenceAlpha=128` threshold, only `AlphaFunction` changes — this
+  deliberately flips which texels pass vs. get discarded relative to the `Greater` scene, proving
+  the compare function itself is genuinely honored (a backend that silently ignored
+  `AlphaFunction` would still pass `alphatest_quad.scene` but fail this one). No code changes were
+  needed on either side (`Less` was already a supported `CompareFunction` value in both parsers).
+  **Real finding — a PNG-encoder quirk in the oracle tooling, not a rendering bug**: a first draft
+  used a texel with `alpha=0` for the passing top-right texel. The actual shader output was
+  byte-identical on both sides (`RGBA=(255,255,255,0)`), yet the SAVED PNG differed: real XNA's
+  `Texture2D.SaveAsPng` wrote `RGB=(0,0,0)` for that exact-`alpha=0` pixel, while CNA's own PNG
+  writer preserved the raw `RGB=(255,255,255)` — confirmed specific to `alpha==0` (not a general
+  premultiply-before-encode step) since the adjacent `alpha=64` texel matched byte-for-byte on
+  both sides in the same run. Fixed by using `alpha=1` instead of `0` for that texel (still
+  exercises the identical `Less` code path) — re-verified `0/65536` pixels differ.
 
 `scripts/xna-diff.py` itself is mutation-verified: a deliberately 1-off-mutated copy of a passing
 CNA PNG is correctly reported as `FAIL: 1/65536 pixels differ ... max per-channel delta=1` at the
@@ -222,10 +237,11 @@ default `--tolerance=0`, and correctly passes again at `--tolerance=1` — confi
 genuinely discriminates, not just "always reports PASS".
 
 **Every one of XNA's 5 Stock Effects (`BasicEffect`, `AlphaTestEffect`, `DualTextureEffect`,
-`EnvironmentMapEffect`, `SkinnedEffect`) plus `IEffectFog` is now represented in the corpus, at
-least once, and every single comparison so far is pixel-perfect.** `D9-A5` keeps growing "with the
-plan" — each subsequent effect/feature combination this project verifies against the oracle adds
-its own scene(s) here, incrementally, rather than attempting the full corpus (remaining
-`AlphaTestEffect` compare functions, `EnvironmentMapEffect` fresnel, `SkinnedEffect` 2/4-bone
-weighting, `SpriteBatch`, render targets, every shared `SurfaceFormat`) in one sitting. `D9-84`
-(every draw path validated against the oracle) is the task that consumes the finished corpus.
+`EnvironmentMapEffect`, `SkinnedEffect`) plus `IEffectFog` and a 2nd `AlphaTestEffect.AlphaFunction`
+are now represented in the corpus, at least once, and every single comparison so far is
+pixel-perfect.** `D9-A5` keeps growing "with the plan" — each subsequent effect/feature combination
+this project verifies against the oracle adds its own scene(s) here, incrementally, rather than
+attempting the full corpus (remaining `AlphaTestEffect` compare functions,
+`EnvironmentMapEffect` fresnel, `SkinnedEffect` 2/4-bone weighting, `SpriteBatch`, render targets,
+every shared `SurfaceFormat`) in one sitting. `D9-84` (every draw path validated against the
+oracle) is the task that consumes the finished corpus.

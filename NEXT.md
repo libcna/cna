@@ -75,7 +75,7 @@ plausibly."
 
 **Phase D9-0 is fully closed.** Next up: Phase D9-1 (CMake integration + backend skeleton).
 
-### Phase D9-A — the XNA 4.0 oracle: D9-A1–A4 closed, D9-A5 started (9 scenes, all 5 Stock Effects + fog), D9-A6 open
+### Phase D9-A — the XNA 4.0 oracle: D9-A1–A4 closed, D9-A5 started (10 scenes, all 5 Stock Effects + fog + 2 AlphaFunctions), D9-A6 open
 
 | Task | Status |
 |---|---|
@@ -83,7 +83,7 @@ plausibly."
 | `D9-A2` — minimal XNA 4.0 reference app, no content pipeline | ✅ |
 | `D9-A3` — byte-for-byte equivalent CNA app, shared declarative scene format | ✅ |
 | `D9-A4` — `scripts/xna-diff.py`, DXVK-into-XNA-prefix prerequisite | ✅ |
-| `D9-A5` — growing scene corpus | 🟨 (9 scenes, all 5 XNA Stock Effects + `IEffectFog` represented: `colored3d`, `textured_quad`, `lit_textured_quad`, `alphatest_quad`, `dualtexture_quad`, `envmap_quad`, `skinned_quad`, `multilight_textured_quad`, `fog_gradient_quad`, all pixel-perfect) |
+| `D9-A5` — growing scene corpus | 🟨 (10 scenes, all 5 XNA Stock Effects + `IEffectFog` + a 2nd `AlphaTestEffect.AlphaFunction` represented: `colored3d`, `textured_quad`, `lit_textured_quad`, `alphatest_quad`, `alphatest_less_quad`, `dualtexture_quad`, `envmap_quad`, `skinned_quad`, `multilight_textured_quad`, `fog_gradient_quad`, all pixel-perfect) |
 | `D9-A6` — run the corpus against CNA's other backends too | ⬜ |
 
 Closed 2026-07-15 (`D9-A3`/`D9-A4`): built the shared declarative scene format `D9-A3`'s own text
@@ -254,9 +254,29 @@ FogVector))`).** With `World=View=Identity`: `fogVector.Z = worldView.M33*scale`
 All 9 scenes re-verified pixel-perfect afterward (not just the new one); full `D3D9` CTest suite
 re-run, 11/11 still green.
 
+**10th scene, `alphatest_less_quad` (2026-07-15) — also pixel-perfect, first scene to exercise a
+SECOND `AlphaTestEffect.AlphaFunction` value (`Less`), not just the single `Greater` value
+`alphatest_quad.scene` covers.** Reuses the same 2×2 texture and `ReferenceAlpha=128` threshold,
+only `AlphaFunction` changes — deliberately **flips** which texels pass vs. get discarded relative
+to the `Greater` scene, proving the compare function itself is genuinely honored (a backend that
+silently ignored `AlphaFunction` would still pass `alphatest_quad.scene` but fail this one). No
+code changes needed on either side — `Less` was already a supported `CompareFunction` value in
+both parsers.
+
+**Real finding — a PNG-encoder quirk in the oracle tooling itself, not a rendering bug.** A first
+draft used a texel with `alpha=0` for the passing top-right texel. The actual shader OUTPUT was
+byte-identical on both sides (`RGBA=(255,255,255,0)`), yet the SAVED PNG differed: real XNA's
+`Texture2D.SaveAsPng` wrote `RGB=(0,0,0)` for that exact-`alpha=0` pixel, while CNA's own PNG
+writer preserved the raw `RGB=(255,255,255)` — confirmed specific to `alpha==0` (not a general
+premultiply-before-encode behavior) because the adjacent `alpha=64` texel matched byte-for-byte on
+both sides in the same run. Fixed by changing that texel's alpha from `0` to `1` (still exercises
+the identical `Less` code path, sidesteps the encoder's fully-transparent-pixel edge case) —
+re-verified `0/65536` differ. All 10 scenes re-verified pixel-perfect afterward; full `D3D9` CTest
+suite re-run, 11/11 still green.
+
 Next: add more scenes as `D9-84` exercises each combination (remaining `AlphaTestEffect` compare
-functions, `EnvironmentMapEffect` fresnel, `SkinnedEffect` 2/4-bone weighting, `SpriteBatch`,
-render targets, `SurfaceFormat` sweep).
+functions beyond `Greater`/`Less`, `EnvironmentMapEffect` fresnel, `SkinnedEffect` 2/4-bone
+weighting, `SpriteBatch`, render targets, `SurfaceFormat` sweep).
 
 ### Phase D9-1 — CMake integration and skeleton: CLOSED 2026-07-14
 
@@ -810,7 +830,8 @@ Most recent first. Full detail lives in `plan_dx9.md` — this is a short index.
 
 | Commit(s) | Summary |
 |---|---|
-| *(pending)* | **`D9-A5` grown to 9 scenes (`fog_gradient_quad`) — also PIXEL-PERFECT (0/65536 differ), first scene to exercise `IEffectFog`**. Fog wiring added to all 5 effect branches on both sides. Required two false starts before a genuinely correct gradient rendered identically on both sides: (1) `z=0..1`/`FogStart=0`/`FogEnd=1` gave `fogFactor=saturate(-z)`, always clamped to 0 -- uniformly white on both sides, an exact but meaningless match; (2) flipping far vertices to `z=-1` for a "correct" negative view-space Z instead near-plane-clipped the whole quad away on both sides (`Projection` is also `Identity`, so clip-space z is the raw vertex z). Working fix: keep `z=0..1`, use `FogStart=0`/`FogEnd=-1` (negative) so `fogFactor=z` directly -- produced a genuine monotonic white-to-black gradient, confirmed pixel-for-pixel identical on both sides. All 9 scenes re-verified pixel-perfect; full D3D9 CTest suite 11/11 green. |
+| *(pending)* | **`D9-A5` grown to 10 scenes (`alphatest_less_quad`) — also PIXEL-PERFECT (0/65536 differ), first scene to exercise a SECOND `AlphaTestEffect.AlphaFunction` value (`Less`)**. Reuses `alphatest_quad`'s own texture/threshold, only `AlphaFunction` changes -- flips which texels pass vs. discard, proving the compare function is genuinely honored (not just that `clip()` exists). No code changes needed (`Less` already supported). Real finding: a PNG-encoder quirk, not a rendering bug -- a first draft used `alpha=0` for a passing texel; the shader OUTPUT matched byte-for-byte on both sides, but real XNA's `SaveAsPng` zeroed RGB for that exact-`alpha=0` pixel while CNA preserved it (confirmed `alpha==0`-specific, not general premultiply, since `alpha=64` matched exactly). Fixed by using `alpha=1` instead of `0`. All 10 scenes re-verified pixel-perfect; full D3D9 CTest suite 11/11 green. |
+| `658b4c8c` | **`D9-A5` grown to 9 scenes (`fog_gradient_quad`) — also PIXEL-PERFECT (0/65536 differ), first scene to exercise `IEffectFog`**. Fog wiring added to all 5 effect branches on both sides. Required two false starts before a genuinely correct gradient rendered identically on both sides: (1) `z=0..1`/`FogStart=0`/`FogEnd=1` gave `fogFactor=saturate(-z)`, always clamped to 0 -- uniformly white on both sides, an exact but meaningless match; (2) flipping far vertices to `z=-1` for a "correct" negative view-space Z instead near-plane-clipped the whole quad away on both sides (`Projection` is also `Identity`, so clip-space z is the raw vertex z). Working fix: keep `z=0..1`, use `FogStart=0`/`FogEnd=-1` (negative) so `fogFactor=z` directly -- produced a genuine monotonic white-to-black gradient, confirmed pixel-for-pixel identical on both sides. All 9 scenes re-verified pixel-perfect; full D3D9 CTest suite 11/11 green. |
 | `9b8a4e9a` | **`D9-A5` grown to 8 scenes (`multilight_textured_quad`) — also PIXEL-PERFECT (0/65536 differ)**. First scene to genuinely exercise `BasicEffect`'s multi-light SUMMATION formula (`D9-82b`'s own "2-light-sum" `ShaderIndex` bucket, structurally different from the "OneLight" bucket every earlier lit scene uses). Two active lights (diffuse 0.3+0.2, same direction) sum to the exact same dimming `lit_textured_quad`'s own single 0.5 light produces -- exact `(128,128,128,255)`, matching byte-for-byte, proving genuine summation not overwrite. A third light present but disabled (large nonzero diffuse) confirmed NOT to contribute. Extended `light1*`/`light2*` keys, applied uniformly to all 3 lit effects. All 8 scenes re-verified pixel-perfect. |
 | `e0afe3a0` | **`D9-A5` grown to 7 scenes (`skinned_quad`) — also PIXEL-PERFECT (0/65536 differ). MILESTONE: all 5 XNA Stock Effects now represented in the corpus, all pixel-perfect.** Added `effect=SkinnedEffect` plus a fourth custom vertex shape (`PositionNormalTextureWeights`, stride 52, `VSInputNmTxWeights`, matches existing layout byte-for-byte). Single Identity bone at 100% weight (skinning is a no-op, matching `D9-82f`'s own CTest simplification) reduces expected math to `lit_textured_quad`'s own formula: exact `(128,128,128,255)` both sides. Same `LightingEnabled` explicit-interface-implementation carve-out found for `SkinnedEffect` too (confirmed against FNA source) -- same quirk as `EnvironmentMapEffect`, not a new bug. Also proactively added `[StructLayout(LayoutKind.Sequential)]` to both the new struct and (retroactively) `VertexPositionDualTexture` on the C# side -- C#'s default "auto" layout doesn't formally guarantee field order, which `DrawUserPrimitives<T>`'s raw-byte marshalling silently depends on. |
 | `bf2f467c` | **`D9-A5` grown to 6 scenes (`envmap_quad`) — also PIXEL-PERFECT (0/65536 differ), 3rd non-BasicEffect Stock Effect**. Added `effect=EnvironmentMapEffect` plus `environmentmap*` keys, reusing the existing `PositionNormalTexture` shape. 1x1 base texture + 1x1 all-same-color `TextureCube` + dim light + `EnvironmentMapAmount=0.5`: real `lerp(texture*diffuseSum, environmentMap, environmentMapAmount)` produced exact `(164,114,89,255)` both sides. Real finding (not a bug): real XNA/FNA's `EnvironmentMapEffect` implements `IEffectLights.LightingEnabled` via explicit interface implementation, invisible on the concrete class (confirmed live: `emfx.LightingEnabled=...` is a genuine `CS1061`) -- lighting is always on, no game can disable it. CNA's own `setLightingEnabledProperty` already matches the exact same behavior (getter always true, setter throws given false); only the C++ vs C# visibility differs. Neither side calls it for this effect now. |
@@ -861,13 +882,14 @@ timing) — both fixed and mutation-verified, see Phase D9-6's own section above
 
 **Phase D9-A: `D9-A3`/`D9-A4` closed 2026-07-15 — the XNA oracle diff harness is real and all
 results landed so far are pixel-perfect** (`colored3d`, `textured_quad`, `lit_textured_quad`,
-`alphatest_quad`, `dualtexture_quad`, `envmap_quad`, `skinned_quad`, `multilight_textured_quad`,
-`fog_gradient_quad` — `0/65536` pixels differ from real XNA 4.0 each, see Phase D9-A's own section
-above). `D9-A5` (the scene corpus) has 9 entries and now represents **all 5 XNA Stock Effects**
-(`BasicEffect`, `AlphaTestEffect`, `DualTextureEffect`, `EnvironmentMapEffect`, `SkinnedEffect`)
-including `BasicEffect`'s own multi-light summation bucket and `IEffectFog` (shared by all 5
-effects), every comparison pixel-perfect; `D9-84` (every draw path validated against the oracle)
-can now genuinely continue, one scene at a time.
+`alphatest_quad`, `alphatest_less_quad`, `dualtexture_quad`, `envmap_quad`, `skinned_quad`,
+`multilight_textured_quad`, `fog_gradient_quad` — `0/65536` pixels differ from real XNA 4.0 each,
+see Phase D9-A's own section above). `D9-A5` (the scene corpus) has 10 entries and now represents
+**all 5 XNA Stock Effects** (`BasicEffect`, `AlphaTestEffect`, `DualTextureEffect`,
+`EnvironmentMapEffect`, `SkinnedEffect`) including `BasicEffect`'s own multi-light summation
+bucket, `IEffectFog` (shared by all 5 effects), and a second `AlphaTestEffect.AlphaFunction`
+value, every comparison pixel-perfect; `D9-84` (every draw path validated against the oracle) can
+now genuinely continue, one scene at a time.
 
 **Phase D9-8: `D9-80`–`D9-83` ALL CLOSED — real, verified dispatch for all 5 XNA Stock Effects plus
 hardware instancing on this backend.** The shader-dispatch tables/formulas are transcribed and
@@ -982,17 +1004,18 @@ cmake -S . -B cmake-build-d3d9 \
 🟨 — see their own plan rows for exactly what's deferred and why). **Phase D9-8's dispatch AND
 instancing work (`D9-80`–`D9-83`) is now fully closed too** — real, verified dispatch for all 5 XNA
 Stock Effects plus hardware instancing. **Phase D9-A's diff harness (`D9-A1`–`D9-A4`) is now fully
-closed too**, and 9 scenes covering all 5 XNA Stock Effects plus `IEffectFog` are pixel-perfect.
-Only `D9-A5` (incrementally: grow the scene corpus) and `D9-84` (validate against it) remain
-anywhere in the plan up to this point — and they are, by design, the same ongoing effort: add a
-scene, validate it, move to the next effect.
+closed too**, and 10 scenes covering all 5 XNA Stock Effects plus `IEffectFog` and a 2nd
+`AlphaTestEffect.AlphaFunction` are pixel-perfect. Only `D9-A5` (incrementally: grow the scene
+corpus) and `D9-84` (validate against it) remain anywhere in the plan up to this point — and they
+are, by design, the same ongoing effort: add a scene, validate it, move to the next effect.
 
 1. **`D9-A5`/`D9-84`** — add the next scene(s) to `tools/xna-oracle/scenes/` (natural next
-   candidates: remaining `AlphaTestEffect` compare functions beyond `Greater`, `EnvironmentMapEffect`
-   fresnel, `SkinnedEffect` 2/4-bone weighting, `SpriteBatch`, render targets, `SurfaceFormat` sweep)
-   and validate them via `scripts/xna-diff.py` against the real XNA oracle — the last two open rows
-   in Phase D9-8/D9-A, and where `D9-21`'s `D3DCULL` proof and `D9-62`'s rasterizer-state proof both
-   finally close out too. See `tools/xna-oracle/README.md` for the current build/run commands.
+   candidates: remaining `AlphaTestEffect` compare functions beyond `Greater`/`Less`,
+   `EnvironmentMapEffect` fresnel, `SkinnedEffect` 2/4-bone weighting, `SpriteBatch`, render
+   targets, `SurfaceFormat` sweep) and validate them via `scripts/xna-diff.py` against the real
+   XNA oracle — the last two open rows in Phase D9-8/D9-A, and where `D9-21`'s `D3DCULL` proof and
+   `D9-62`'s rasterizer-state proof both finally close out too. See `tools/xna-oracle/README.md`
+   for the current build/run commands.
 
 See `plan_dx9.md`'s "Execution order" table for the full sequence beyond this.
 
