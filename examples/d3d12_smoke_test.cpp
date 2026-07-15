@@ -2290,6 +2290,115 @@ int main()
         backend.UnbindOffscreenColorTargetEXT();
     }
 
+    // ---- Check QQ (plan_dx.md DX-150): skinned3d -- DirectionalLight1/DirectionalLight2 each
+    // independently and exactly contribute. Reuses this file's own single-identity-bone
+    // skinned3d fixture (DX-67/DX-111/DX-135, boneCount=1/weightsPerVertex=1 so bone math doesn't
+    // complicate the lighting isolation) combined with DX-124/DX-138's own exact-color-per-term
+    // methodology (ambient/light0/specular all zeroed, white texture, each sub-check gets an
+    // EXACT expected RGB). ----
+    {
+        constexpr int kRtWidth = 64;
+        constexpr int kRtHeight = 64;
+
+        D3D12_HEAP_PROPERTIES heapProps{};
+        heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
+        D3D12_RESOURCE_DESC rtDesc{};
+        rtDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+        rtDesc.Width = kRtWidth;
+        rtDesc.Height = kRtHeight;
+        rtDesc.DepthOrArraySize = 1;
+        rtDesc.MipLevels = 1;
+        rtDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        rtDesc.SampleDesc.Count = 1;
+        rtDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+        rtDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+
+        Microsoft::WRL::ComPtr<ID3D12Resource> rtQQ;
+        HRESULT hrRtQQ = backend.GetDeviceEXT()->CreateCommittedResource(
+            &heapProps, D3D12_HEAP_FLAG_NONE, &rtDesc,
+            D3D12_RESOURCE_STATE_RENDER_TARGET, nullptr, IID_PPV_ARGS(rtQQ.GetAddressOf()));
+        backend.GetResourceStateTrackerEXT().TrackResource(rtQQ.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET);
+        D3D12_CPU_DESCRIPTOR_HANDLE rtvQQ = backend.AllocateRtvDescriptorEXT();
+        backend.GetDeviceEXT()->CreateRenderTargetView(rtQQ.Get(), nullptr, rtvQQ);
+        backend.BindOffscreenColorTargetEXT(rtQQ.Get(), rtvQQ, DXGI_FORMAT_R8G8B8A8_UNORM, kRtWidth, kRtHeight);
+
+        auto pixelAtQQ = [&](const std::vector<uint8_t>& buf, int x, int y) -> std::array<uint8_t, 4>
+        {
+            const std::size_t idx = (static_cast<std::size_t>(y) * kRtWidth + static_cast<std::size_t>(x)) * 4;
+            return {buf[idx + 0], buf[idx + 1], buf[idx + 2], buf[idx + 3]};
+        };
+        auto centerIsExactQQ = [&](const std::vector<uint8_t>& buf, uint8_t r, uint8_t g, uint8_t b)
+        {
+            const auto p = pixelAtQQ(buf, 30, 30);
+            return p[0] == r && p[1] == g && p[2] == b;
+        };
+
+        struct VPNTSQ { float x, y, z; float nx, ny, nz; float u, v;
+                       float bw0, bw1, bw2, bw3; uint8_t bi0, bi1, bi2, bi3; };
+        static const VPNTSQ kTriQQ[3] = {
+            {-1.0f, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0},
+            { 3.0f, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 2.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0},
+            {-1.0f,  3.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, -1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0},
+        };
+        D3D12VertexBufferBackend vbQQ(&backend, 3);
+        vbQQ.SetData(kTriQQ, 3, sizeof(VPNTSQ));
+
+        ImageData whiteImgQQ;
+        whiteImgQQ.width = 2; whiteImgQQ.height = 2; whiteImgQQ.mipLevels = 1;
+        whiteImgQQ.pixels.assign(2 * 2 * 4, 255);
+        D3D12TextureBackend whiteTexQQ(&backend, whiteImgQQ);
+
+        GpuDrawParams baseQP;
+        baseQP.texture0 = &whiteTexQQ;
+        baseQP.textureEnabled = true;
+        baseQP.skinned = true;
+        baseQP.boneCount = 1;
+        baseQP.weightsPerVertex = 1;
+        Matrix::getIdentityProperty().ToColumnMajor(baseQP.boneTransforms);
+        baseQP.ambientColor[0] = 0.0f; baseQP.ambientColor[1] = 0.0f; baseQP.ambientColor[2] = 0.0f;
+        baseQP.light0Diffuse[0] = 0.0f; baseQP.light0Diffuse[1] = 0.0f; baseQP.light0Diffuse[2] = 0.0f; // Light0 off
+        baseQP.specularColor[0] = 0.0f; baseQP.specularColor[1] = 0.0f; baseQP.specularColor[2] = 0.0f; // no specular noise
+        baseQP.eyePositionWorld[0] = 0.0f; baseQP.eyePositionWorld[1] = 0.0f; baseQP.eyePositionWorld[2] = -10.0f;
+
+        // QQ1: DirectionalLight1 alone, full-facing direction, red diffuse -> exact (255,0,0).
+        GpuDrawParams qp1 = baseQP;
+        qp1.light1Dir[0] = 0.0f; qp1.light1Dir[1] = 0.0f; qp1.light1Dir[2] = -1.0f; // travels -Z -> faces the +Z normal
+        qp1.light1Diffuse[0] = 1.0f; qp1.light1Diffuse[1] = 0.0f; qp1.light1Diffuse[2] = 0.0f;
+        backend.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+        backend.DrawPrimitivesEx(vbQQ, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                 Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, qp1);
+        auto rQQ1 = ReadBackRenderTargetFull(backend, rtQQ.Get(), kRtWidth, kRtHeight);
+        Check(centerIsExactQQ(rQQ1, 255, 0, 0),
+              "QQ1: DrawPrimitivesEx() real skinned3d -- DirectionalLight1 alone contributes the "
+              "exact expected red, independent of Light0/Light2 (plan_dx.md DX-150)");
+
+        // QQ2: same geometry/light1Dir, but light1Diffuse disabled (black) -- proves QQ1 wasn't
+        // some other constant leaking in.
+        GpuDrawParams qp1off = qp1;
+        qp1off.light1Diffuse[0] = 0.0f; qp1off.light1Diffuse[1] = 0.0f; qp1off.light1Diffuse[2] = 0.0f;
+        backend.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+        backend.DrawPrimitivesEx(vbQQ, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                 Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, qp1off);
+        auto rQQ1off = ReadBackRenderTargetFull(backend, rtQQ.Get(), kRtWidth, kRtHeight);
+        Check(centerIsExactQQ(rQQ1off, 0, 0, 0),
+              "QQ2: disabling DirectionalLight1's diffuse (zeroed) removes its contribution "
+              "exactly -- confirms QQ1 was real, not a leaked default (plan_dx.md DX-150)");
+
+        // QQ3: DirectionalLight2 alone, green diffuse -> exact (0,255,0).
+        GpuDrawParams qp2 = baseQP;
+        qp2.light2Dir[0] = 0.0f; qp2.light2Dir[1] = 0.0f; qp2.light2Dir[2] = -1.0f;
+        qp2.light2Diffuse[0] = 0.0f; qp2.light2Diffuse[1] = 1.0f; qp2.light2Diffuse[2] = 0.0f;
+        backend.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+        backend.DrawPrimitivesEx(vbQQ, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                 Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, qp2);
+        auto rQQ2 = ReadBackRenderTargetFull(backend, rtQQ.Get(), kRtWidth, kRtHeight);
+        Check(centerIsExactQQ(rQQ2, 0, 255, 0),
+              "QQ3: DrawPrimitivesEx() real skinned3d -- DirectionalLight2 alone contributes the "
+              "exact expected green, independent of Light0/Light1 (plan_dx.md DX-150)");
+
+        backend.UnbindOffscreenColorTargetEXT();
+    }
+
     // ---- Check T (DX-111 finish): instanced3d -- real per-instance world buffer, dual vertex stream ----
     {
         constexpr int kRtWidth = 64;

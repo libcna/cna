@@ -1895,6 +1895,70 @@ protected:
                       "D3D11GraphicsBackend::DrawPrimitivesEx(): skinned3d fogEnabled=true with Z at "
                       "FogEnd genuinely blends all the way to the exact FogColor (plan_dx.md DX-137)");
             }
+
+            // plan_dx.md DX-150: skinned3d -- DirectionalLight1/DirectionalLight2 each independently
+            // and exactly contribute. Reuses this block's own single-identity-bone fixture
+            // (boneCount=1/weightsPerVertex=1) with a fresh white texture and DX-124's own
+            // exact-color-per-term isolation methodology (ambient/light0/specular all zeroed).
+            {
+                ImageData whiteImgQQ;
+                whiteImgQQ.width = 2; whiteImgQQ.height = 2; whiteImgQQ.mipLevels = 1;
+                whiteImgQQ.pixels.assign(2 * 2 * 4, 255);
+                auto whiteTexQQ = backend.CreateTexture(whiteImgQQ);
+
+                GpuDrawParams baseQP;
+                baseQP.texture0 = whiteTexQQ.get();
+                baseQP.textureEnabled = true;
+                baseQP.skinned = true;
+                baseQP.boneCount = 1;
+                baseQP.weightsPerVertex = 1;
+                Matrix::getIdentityProperty().ToColumnMajor(baseQP.boneTransforms);
+                baseQP.ambientColor[0] = 0.0f; baseQP.ambientColor[1] = 0.0f; baseQP.ambientColor[2] = 0.0f;
+                baseQP.light0Diffuse[0] = 0.0f; baseQP.light0Diffuse[1] = 0.0f; baseQP.light0Diffuse[2] = 0.0f; // Light0 off
+                baseQP.specularColor[0] = 0.0f; baseQP.specularColor[1] = 0.0f; baseQP.specularColor[2] = 0.0f; // no specular noise
+                baseQP.eyePositionWorld[0] = 0.0f; baseQP.eyePositionWorld[1] = 0.0f; baseQP.eyePositionWorld[2] = -10.0f;
+
+                const Microsoft::Xna::Framework::Rectangle qqRegion(30, 30, 1, 1);
+
+                // QQ1: DirectionalLight1 alone, full-facing direction, red diffuse -> exact (255,0,0).
+                GpuDrawParams qp1 = baseQP;
+                qp1.light1Dir[0] = 0.0f; qp1.light1Dir[1] = 0.0f; qp1.light1Dir[2] = -1.0f; // travels -Z -> faces the +Z normal
+                qp1.light1Diffuse[0] = 1.0f; qp1.light1Diffuse[1] = 0.0f; qp1.light1Diffuse[2] = 0.0f;
+                dev.Clear(Color(0, 0, 0, 255));
+                backend.DrawPrimitivesEx(*vbSkin, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                         Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, qp1);
+                Color qq1(0, 0, 0, 0);
+                dev.GetBackBufferData(&qqRegion, &qq1, 0, 1);
+                check(qq1.getRProperty() == 255 && qq1.getGProperty() == 0 && qq1.getBProperty() == 0,
+                      "D3D11GraphicsBackend::DrawPrimitivesEx(): real skinned3d -- DirectionalLight1 "
+                      "alone contributes the exact expected red, independent of Light0/Light2 (plan_dx.md DX-150)");
+
+                // QQ2: same geometry/light1Dir, but light1Diffuse disabled -> confirms QQ1 wasn't a leak.
+                GpuDrawParams qp1off = qp1;
+                qp1off.light1Diffuse[0] = 0.0f; qp1off.light1Diffuse[1] = 0.0f; qp1off.light1Diffuse[2] = 0.0f;
+                dev.Clear(Color(0, 0, 0, 255));
+                backend.DrawPrimitivesEx(*vbSkin, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                         Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, qp1off);
+                Color qq1off(0, 0, 0, 0);
+                dev.GetBackBufferData(&qqRegion, &qq1off, 0, 1);
+                check(qq1off.getRProperty() == 0 && qq1off.getGProperty() == 0 && qq1off.getBProperty() == 0,
+                      "D3D11GraphicsBackend::DrawPrimitivesEx(): disabling skinned3d DirectionalLight1's "
+                      "diffuse (zeroed) removes its contribution exactly -- confirms the prior check was "
+                      "real, not a leaked default (plan_dx.md DX-150)");
+
+                // QQ3: DirectionalLight2 alone, green diffuse -> exact (0,255,0).
+                GpuDrawParams qp2 = baseQP;
+                qp2.light2Dir[0] = 0.0f; qp2.light2Dir[1] = 0.0f; qp2.light2Dir[2] = -1.0f;
+                qp2.light2Diffuse[0] = 0.0f; qp2.light2Diffuse[1] = 1.0f; qp2.light2Diffuse[2] = 0.0f;
+                dev.Clear(Color(0, 0, 0, 255));
+                backend.DrawPrimitivesEx(*vbSkin, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                         Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, qp2);
+                Color qq2(0, 0, 0, 0);
+                dev.GetBackBufferData(&qqRegion, &qq2, 0, 1);
+                check(qq2.getRProperty() == 0 && qq2.getGProperty() == 255 && qq2.getBProperty() == 0,
+                      "D3D11GraphicsBackend::DrawPrimitivesEx(): real skinned3d -- DirectionalLight2 "
+                      "alone contributes the exact expected green, independent of Light0/Light1 (plan_dx.md DX-150)");
+            }
         }
 
         // Check W (DX-68): instanced3d. DrawInstancedPrimitivesEx() with one identity-transform
@@ -3153,7 +3217,8 @@ protected:
                                 + 8 /* DX-130 combo Clear* variants (DSV, stencil-readable, stencil x2, control, depth x2, color-untouched) */
                                 + 12 /* DX-137 fog for 6 remaining variants x 2 checks each */
                                 + 3 /* DX-136 alpha_test_colored3d VertexColorEnabled on/off + discard-still-works */
-                                + 3 /* DX-149 env_map3d DirectionalLight1/2 discrimination */;
+                                + 3 /* DX-149 env_map3d DirectionalLight1/2 discrimination */
+                                + 3 /* DX-150 skinned3d DirectionalLight1/2 discrimination */;
         std::printf("=== %d/%d PASS ===\n", passCount_, totalChecks);
         result_ = (passCount_ == totalChecks) ? 0 : 1;
         Exit();
