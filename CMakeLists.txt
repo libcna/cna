@@ -307,6 +307,24 @@ endif()
 
 # Backend target
 file(GLOB BACKEND_SOURCES "${BACKEND_DIR}/*.cpp")
+
+# plan_dx9.md Phase D9-11 (D9-111), design decision 16: D3D9EffectBackend.cpp calls D3DCompile()
+# (the custom-ShaderEffect runtime compile path), which needs d3dcompiler -- but the stock D3D9
+# pipeline must stay d3dcompiler-free (unlike D3D11/D3D12, which link it into their whole backend
+# target unconditionally, DX-58/DX-121). Excluded from the main glob and built as its own isolated
+# static library instead, with d3dcompiler linked ONLY there (D9-111's own "on this target only").
+# D9-112 links this into ${BACKEND_TARGET} once D3D9GraphicsBackend::CreateEffectBackend() actually
+# needs to construct one; until then it exists purely for D3D9_EffectBackend's own CTest to link
+# directly (same pattern cna_test_d3d9_constanttable already uses for its own d3dcompiler need).
+set(D3D9_EFFECT_BACKEND_SRC "${CMAKE_CURRENT_SOURCE_DIR}/src/CNA/Internal/Backends/D3D9/D3D9EffectBackend.cpp")
+if(CNA_GRAPHICS_BACKEND STREQUAL "D3D9" AND EXISTS "${D3D9_EFFECT_BACKEND_SRC}")
+    list(REMOVE_ITEM BACKEND_SOURCES "${D3D9_EFFECT_BACKEND_SRC}")
+    add_library(cna_backend_graphics_d3d9_effect STATIC "${D3D9_EFFECT_BACKEND_SRC}")
+    target_link_libraries(cna_backend_graphics_d3d9_effect PUBLIC cna_backend_graphics_common SHARP_RUNTIME)
+    target_link_libraries(cna_backend_graphics_d3d9_effect PRIVATE d3d9 d3dcompiler)
+    target_include_directories(cna_backend_graphics_d3d9_effect PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+endif()
+
 add_library(${BACKEND_TARGET} STATIC ${BACKEND_SOURCES})
 target_link_libraries(${BACKEND_TARGET} PUBLIC cna_backend_graphics_common SHARP_RUNTIME)
 target_include_directories(${BACKEND_TARGET} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
@@ -6949,6 +6967,22 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D9")
         # the real-compiler prefix regardless of whatever prefix the ambient shell/CI environment
         # might otherwise have set for the rest of the D3D9 suite.
         ENVIRONMENT "CNA_D3D9_SKIP_DXVK_GATE=1;CNA_D3D9_WINEPREFIX=$ENV{HOME}/.wine-cna-d3d9-spike")
+
+    # D9-111 (Phase D9-11): validates D3D9EffectBackend against a real device (compile, bind, draw,
+    # uniform-driven pixel readback). Needs BOTH d3dcompiler (via the isolated
+    # cna_backend_graphics_d3d9_effect target, design decision 16) and a real D3D9 device (unlike
+    # D3D9_ConstantTable, this genuinely opens one and draws), so it needs the real-compiler prefix
+    # (~/.wine-cna-d3d9-spike) AND is NOT exempt from the DXVK-engagement gate.
+    if(TARGET cna_backend_graphics_d3d9_effect)
+        cna_d3d9_test(cna_test_d3d9_effectbackend examples/d3d9_effectbackend_test.cpp)
+        target_link_libraries(cna_test_d3d9_effectbackend PRIVATE cna_backend_graphics_d3d9_effect)
+        cna_d3d9_ctest_command(_d3d9_effectbackend_cmd cna_test_d3d9_effectbackend)
+        add_test(NAME D3D9_EffectBackend COMMAND ${_d3d9_effectbackend_cmd})
+        set_tests_properties(D3D9_EffectBackend PROPERTIES
+            TIMEOUT 60
+            LABELS "D3D9"
+            ENVIRONMENT "CNA_D3D9_WINEPREFIX=$ENV{HOME}/.wine-cna-d3d9-spike")
+    endif()
 endif()
 
 # --- Task 6.1: real two-process ENet loopback test harness ---
