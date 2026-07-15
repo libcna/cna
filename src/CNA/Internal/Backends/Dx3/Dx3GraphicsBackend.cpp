@@ -133,19 +133,106 @@ namespace CNA::Internal::Backends::Dx3
             return w0 >= 0.0f && w1 >= 0.0f && w2 >= 0.0f;
         }
 
+        // ---- Phase X5: real, distinct blend formulas + filter/address sampling (design decisions
+        // 6/7) ----
+
+        // Matches every other CNA backend's Blend-enum-ordinal mapping (e.g.
+        // SdlGraphicsBackend::ToSdlBlendFactor): One=0, Zero=1, SourceColor=2,
+        // InverseSourceColor=3, SourceAlpha=4, InverseSourceAlpha=5, DestinationColor=6,
+        // InverseDestinationColor=7, DestinationAlpha=8, InverseDestinationAlpha=9.
+        enum class Dx3BlendMode { Opaque, AlphaBlend, NonPremultiplied, Additive };
+
+        // Detects which of the 4 BlendState presets (BlendState.cpp) the raw factors match, by
+        // exact value -- not by BlendState identity (the backend never sees a BlendState object,
+        // only GraphicsDevice::ApplyBlendState's raw ints).
+        Dx3BlendMode DetectBlendMode(int colorSrc, int alphaSrc, int colorDst, int alphaDst)
+        {
+            // NonPremultiplied: ColorSrc=SourceAlpha, AlphaSrc=SourceAlpha, ColorDst=InvSrcAlpha, AlphaDst=InvSrcAlpha
+            if (colorSrc == 4 && alphaSrc == 4 && colorDst == 5 && alphaDst == 5) return Dx3BlendMode::NonPremultiplied;
+            // Additive: ColorSrc=SourceAlpha, AlphaSrc=SourceAlpha, ColorDst=One, AlphaDst=One
+            if (colorSrc == 4 && alphaSrc == 4 && colorDst == 0 && alphaDst == 0) return Dx3BlendMode::Additive;
+            // Opaque: ColorSrc=One, AlphaSrc=One, ColorDst=Zero, AlphaDst=Zero
+            if (colorSrc == 0 && alphaSrc == 0 && colorDst == 1 && alphaDst == 1) return Dx3BlendMode::Opaque;
+            // AlphaBlend: ColorSrc=One, AlphaSrc=One, ColorDst=InvSrcAlpha, AlphaDst=InvSrcAlpha --
+            // and DX3-44's fallback for any other/custom factor+op combination, same recorded
+            // scope limitation SOFTWARE's design decision 7 already made (no general blend-
+            // equation interpreter in v1).
+            return Dx3BlendMode::AlphaBlend;
+        }
+
+        // TextureAddressMode raw int convention (matches ISpriteBatchBackend::SetSamplerAddressMode's
+        // own doc): 0=Wrap, 1=Clamp, 2=Mirror. Maps a possibly out-of-[0,size) integer texel
+        // coordinate into range accordingly (DX3-46).
+        int WrapCoord(int coord, int size, int addressMode)
+        {
+            if (addressMode == 0) // Wrap
+            {
+                int m = coord % size;
+                if (m < 0) m += size;
+                return m;
+            }
+            if (addressMode == 2) // Mirror
+            {
+                const int period = 2 * size;
+                int m = coord % period;
+                if (m < 0) m += period;
+                return m < size ? m : (period - 1 - m);
+            }
+            return std::clamp(coord, 0, size - 1); // Clamp (default)
+        }
+
+        // Samples `srcBase` at normalized (u, v), honoring `filter` (0=Linear/bilinear, else
+        // Point/nearest -- matches ISpriteBatchBackend::SetSamplerFilter's own doc, DX3-45) and
+        // `addressU`/`addressV` (DX3-46). Writes 4 raw bytes (RGBA8) into `out`.
+        void SampleTexel(const uint8_t* srcBase, int srcPitch, int srcW, int srcH,
+                         float u, float v, int filter, int addressU, int addressV, uint8_t out[4])
+        {
+            const auto texelAt = [&](int xi, int yi) -> const uint8_t*
+            {
+                const int sx = WrapCoord(xi, srcW, addressU);
+                const int sy = WrapCoord(yi, srcH, addressV);
+                return srcBase + static_cast<std::size_t>(sy) * static_cast<std::size_t>(srcPitch) +
+                       static_cast<std::size_t>(sx) * 4u;
+            };
+
+            if (filter == 0) // Linear (bilinear)
+            {
+                const float fx = u * static_cast<float>(srcW) - 0.5f;
+                const float fy = v * static_cast<float>(srcH) - 0.5f;
+                const int x0 = static_cast<int>(std::floor(fx));
+                const int y0 = static_cast<int>(std::floor(fy));
+                const float tx = fx - static_cast<float>(x0);
+                const float ty = fy - static_cast<float>(y0);
+
+                const uint8_t* p00 = texelAt(x0, y0);
+                const uint8_t* p10 = texelAt(x0 + 1, y0);
+                const uint8_t* p01 = texelAt(x0, y0 + 1);
+                const uint8_t* p11 = texelAt(x0 + 1, y0 + 1);
+                for (int c = 0; c < 4; ++c)
+                {
+                    const float top = static_cast<float>(p00[c]) * (1.0f - tx) + static_cast<float>(p10[c]) * tx;
+                    const float bot = static_cast<float>(p01[c]) * (1.0f - tx) + static_cast<float>(p11[c]) * tx;
+                    out[c] = static_cast<uint8_t>(std::clamp(top * (1.0f - ty) + bot * ty, 0.0f, 255.0f));
+                }
+            }
+            else // Point (nearest)
+            {
+                const uint8_t* p = texelAt(static_cast<int>(std::floor(u * static_cast<float>(srcW))),
+                                           static_cast<int>(std::floor(v * static_cast<float>(srcH))));
+                out[0] = p[0]; out[1] = p[1]; out[2] = p[2]; out[3] = p[3];
+            }
+        }
+
         // Composites a textured, tinted quad (corners[0..3]/uvs[0..3], same winding order: TL, TR,
-        // BR, BL) as two triangles (0,1,2) and (2,3,0) into `dstSurface`, sampling `srcSurface`
-        // nearest-neighbor (Design decision 7's bilinear/wrap/mirror sampling upgrades are Phase
-        // X5). `blendEnabled` selects a straight-alpha "over" formula as a v1 baseline; Phase X5
-        // (DX3-40..44) replaces this with the real, distinct Opaque/AlphaBlend/NonPremultiplied/
-        // Additive formulas keyed off the actual BlendState factors, mirroring the same
-        // "correctness over performance, get a working baseline first" shape plan_software.md's
-        // design decision 1 already used for its own rasterizer.
+        // BR, BL) as two triangles (0,1,2) and (2,3,0) into `dstSurface`, sampling `srcSurface` per
+        // `filter`/`addressU`/`addressV` (DX3-45/46) and blending per `blendMode`'s real, distinct
+        // Opaque/AlphaBlend/NonPremultiplied/Additive formula (DX3-40..44) -- the exact factors
+        // BlendState.cpp's own presets specify, not a single baseline approximation.
         void CompositeQuad(LPDIRECTDRAWSURFACE dstSurface, int dstW, int dstH,
                            LPDIRECTDRAWSURFACE srcSurface, int srcW, int srcH,
                            const Vector2 corners[4], const Vector2 uvs[4],
                            float tintR, float tintG, float tintB, float tintA,
-                           bool blendEnabled)
+                           Dx3BlendMode blendMode, int filter, int addressU, int addressV)
         {
             DDSURFACEDESC dstDesc{};
             dstDesc.dwSize = sizeof(DDSURFACEDESC);
@@ -192,11 +279,9 @@ namespace CNA::Internal::Backends::Dx3
 
                         const float u = w0 * uvs[tri[0]].X + w1 * uvs[tri[1]].X + w2 * uvs[tri[2]].X;
                         const float v = w0 * uvs[tri[0]].Y + w1 * uvs[tri[1]].Y + w2 * uvs[tri[2]].Y;
-                        const int sx = std::clamp(static_cast<int>(u * static_cast<float>(srcW)), 0, srcW - 1);
-                        const int sy = std::clamp(static_cast<int>(v * static_cast<float>(srcH)), 0, srcH - 1);
 
-                        const uint8_t* sp = srcBase + static_cast<std::size_t>(sy) * static_cast<std::size_t>(srcDesc.lPitch) +
-                                            static_cast<std::size_t>(sx) * 4u;
+                        uint8_t sp[4];
+                        SampleTexel(srcBase, srcDesc.lPitch, srcW, srcH, u, v, filter, addressU, addressV, sp);
                         const float srcR = static_cast<float>(sp[0]) / 255.0f * tintR;
                         const float srcG = static_cast<float>(sp[1]) / 255.0f * tintG;
                         const float srcB = static_cast<float>(sp[2]) / 255.0f * tintB;
@@ -204,22 +289,49 @@ namespace CNA::Internal::Backends::Dx3
 
                         uint8_t* dp = dstBase + static_cast<std::size_t>(y) * static_cast<std::size_t>(dstDesc.lPitch) +
                                      static_cast<std::size_t>(x) * 4u;
-                        if (blendEnabled)
+
+                        switch (blendMode)
                         {
-                            // Straight-alpha "over": out = srcColor*srcAlpha + dstColor*(1-srcAlpha)
-                            // (the same v1-baseline formula SOFTWARE's own rasterizer uses).
-                            const float invA = 1.0f - srcA;
-                            dp[0] = static_cast<uint8_t>(std::clamp((srcR * 255.0f) * srcA + static_cast<float>(dp[0]) * invA, 0.0f, 255.0f));
-                            dp[1] = static_cast<uint8_t>(std::clamp((srcG * 255.0f) * srcA + static_cast<float>(dp[1]) * invA, 0.0f, 255.0f));
-                            dp[2] = static_cast<uint8_t>(std::clamp((srcB * 255.0f) * srcA + static_cast<float>(dp[2]) * invA, 0.0f, 255.0f));
-                            dp[3] = static_cast<uint8_t>(std::clamp((srcA * 255.0f) + static_cast<float>(dp[3]) * invA, 0.0f, 255.0f));
-                        }
-                        else
-                        {
+                        case Dx3BlendMode::Opaque:
+                            // Direct overwrite -- source alpha is not part of the blend equation
+                            // at all (ColorSrcBlend=One, ColorDstBlend=Zero).
                             dp[0] = static_cast<uint8_t>(std::clamp(srcR * 255.0f, 0.0f, 255.0f));
                             dp[1] = static_cast<uint8_t>(std::clamp(srcG * 255.0f, 0.0f, 255.0f));
                             dp[2] = static_cast<uint8_t>(std::clamp(srcB * 255.0f, 0.0f, 255.0f));
                             dp[3] = static_cast<uint8_t>(std::clamp(srcA * 255.0f, 0.0f, 255.0f));
+                            break;
+                        case Dx3BlendMode::AlphaBlend:
+                        {
+                            // Premultiplied convention (ColorSrcBlend=One, ColorDstBlend=
+                            // InverseSourceAlpha): the source color is used as-is, NOT multiplied
+                            // by srcAlpha again -- SpriteBatch's default preset assumes
+                            // already-premultiplied source pixels.
+                            const float invA = 1.0f - srcA;
+                            dp[0] = static_cast<uint8_t>(std::clamp(srcR * 255.0f + static_cast<float>(dp[0]) * invA, 0.0f, 255.0f));
+                            dp[1] = static_cast<uint8_t>(std::clamp(srcG * 255.0f + static_cast<float>(dp[1]) * invA, 0.0f, 255.0f));
+                            dp[2] = static_cast<uint8_t>(std::clamp(srcB * 255.0f + static_cast<float>(dp[2]) * invA, 0.0f, 255.0f));
+                            dp[3] = static_cast<uint8_t>(std::clamp(srcA * 255.0f + static_cast<float>(dp[3]) * invA, 0.0f, 255.0f));
+                            break;
+                        }
+                        case Dx3BlendMode::NonPremultiplied:
+                        {
+                            // Straight alpha (ColorSrcBlend=SourceAlpha, ColorDstBlend=
+                            // InverseSourceAlpha): out = src*srcAlpha + dst*(1-srcAlpha).
+                            const float invA = 1.0f - srcA;
+                            dp[0] = static_cast<uint8_t>(std::clamp(srcR * 255.0f * srcA + static_cast<float>(dp[0]) * invA, 0.0f, 255.0f));
+                            dp[1] = static_cast<uint8_t>(std::clamp(srcG * 255.0f * srcA + static_cast<float>(dp[1]) * invA, 0.0f, 255.0f));
+                            dp[2] = static_cast<uint8_t>(std::clamp(srcB * 255.0f * srcA + static_cast<float>(dp[2]) * invA, 0.0f, 255.0f));
+                            dp[3] = static_cast<uint8_t>(std::clamp(srcA * 255.0f * srcA + static_cast<float>(dp[3]) * invA, 0.0f, 255.0f));
+                            break;
+                        }
+                        case Dx3BlendMode::Additive:
+                            // ColorSrcBlend=SourceAlpha, ColorDstBlend=One: saturating add, no
+                            // destination attenuation at all.
+                            dp[0] = static_cast<uint8_t>(std::clamp(srcR * 255.0f * srcA + static_cast<float>(dp[0]), 0.0f, 255.0f));
+                            dp[1] = static_cast<uint8_t>(std::clamp(srcG * 255.0f * srcA + static_cast<float>(dp[1]), 0.0f, 255.0f));
+                            dp[2] = static_cast<uint8_t>(std::clamp(srcB * 255.0f * srcA + static_cast<float>(dp[2]), 0.0f, 255.0f));
+                            dp[3] = static_cast<uint8_t>(std::clamp(srcA * 255.0f * srcA + static_cast<float>(dp[3]), 0.0f, 255.0f));
+                            break;
                         }
                         break;
                     }
@@ -275,13 +387,11 @@ namespace CNA::Internal::Backends::Dx3
         int logicalHeight = 0;
         CnaPresentationMode presentationMode = CnaPresentationMode::Overscan;
 
-        // Phase X4/X5 (design decision 6): true only for the exact Opaque preset (src=One,
-        // dst=Zero for both color and alpha) -- same detection formula SOFTWARE's own
-        // ApplyBlendState already uses. Gates the SpriteBatch identity fast path (design decision
-        // 5) and CompositeQuad's baseline blend-vs-overwrite choice. Phase X5 (DX3-40..44)
-        // replaces this single boolean with real per-formula Opaque/AlphaBlend/NonPremultiplied/
-        // Additive math.
-        bool isOpaqueBlend = false;
+        // Phase X5 (design decision 6): the real, distinct blend mode detected from
+        // ApplyBlendState's raw factors (DetectBlendMode) -- gates the SpriteBatch identity fast
+        // path (design decision 5, Opaque only) and selects CompositeQuad's per-formula math.
+        // Default AlphaBlend matches SpriteBatch::Begin()'s own default blend state.
+        Dx3BlendMode currentBlendMode = Dx3BlendMode::AlphaBlend;
 
         // Resolves to whichever surface Clear()/ReadBackbuffer() should currently target: the
         // bound render target's surface if one is bound, else the shadow backbuffer. Present()
@@ -607,10 +717,10 @@ namespace CNA::Internal::Backends::Dx3
     public:
         Dx3SpriteBatchBackend(std::function<LPDIRECTDRAWSURFACE()> getActiveSurface,
                               std::function<void(int&, int&)> getActiveSurfaceSize,
-                              std::function<bool()> isOpaqueBlend)
+                              std::function<Dx3BlendMode()> getBlendMode)
             : getActiveSurface_(std::move(getActiveSurface)),
               getActiveSurfaceSize_(std::move(getActiveSurfaceSize)),
-              isOpaqueBlend_(std::move(isOpaqueBlend))
+              getBlendMode_(std::move(getBlendMode))
         {
         }
 
@@ -639,6 +749,17 @@ namespace CNA::Internal::Backends::Dx3
                 throw std::runtime_error(
                     "DX3 (DirectDraw) does not support custom SpriteBatch Effects: no programmable "
                     "shader stage exists on this backend.");
+        }
+
+        // DX3-45: 0=Linear (bilinear), else Point/nearest -- matches ISpriteBatchBackend's own
+        // documented convention.
+        void SetSamplerFilter(int textureFilter) override { filter_ = textureFilter; }
+
+        // DX3-46: raw TextureAddressMode ints (0=Wrap, 1=Clamp, 2=Mirror).
+        void SetSamplerAddressMode(int addressU, int addressV) override
+        {
+            addressU_ = addressU;
+            addressV_ = addressV;
         }
 
         void Draw(const ITextureBackend& texture, float x, float y) override
@@ -701,7 +822,7 @@ namespace CNA::Internal::Backends::Dx3
             const bool isWhiteTint =
                 color.getRProperty() == 255 && color.getGProperty() == 255 &&
                 color.getBProperty() == 255 && color.getAProperty() == 255;
-            if (isIdentityGeometry && isWhiteTint && isOpaqueBlend_())
+            if (isIdentityGeometry && isWhiteTint && getBlendMode_() == Dx3BlendMode::Opaque)
             {
                 RECT srcRect{};
                 srcRect.left = sourceRectangle.X;
@@ -748,15 +869,21 @@ namespace CNA::Internal::Backends::Dx3
                          static_cast<float>(color.getGProperty()) / 255.0f,
                          static_cast<float>(color.getBProperty()) / 255.0f,
                          static_cast<float>(color.getAProperty()) / 255.0f,
-                         !isOpaqueBlend_());
+                         getBlendMode_(), filter_, addressU_, addressV_);
         }
 
     private:
         std::function<LPDIRECTDRAWSURFACE()> getActiveSurface_;
         std::function<void(int&, int&)> getActiveSurfaceSize_;
-        std::function<bool()> isOpaqueBlend_;
+        std::function<Dx3BlendMode()> getBlendMode_;
         bool begun_ = false;
         Matrix transformMatrix_ = Matrix::getIdentityProperty();
+        // Defaults match SpriteBatch::Begin()'s own documented default sampler state
+        // ("AlphaBlend, LinearClamp, no depth"): Linear filter (0), Clamp address mode (1) on
+        // both axes.
+        int filter_ = 0;
+        int addressU_ = 1;
+        int addressV_ = 1;
     };
 
     std::unique_ptr<ISpriteBatchBackend> Dx3GraphicsBackend::CreateSpriteBatch()
@@ -765,15 +892,14 @@ namespace CNA::Internal::Backends::Dx3
         return std::make_unique<Dx3SpriteBatchBackend>(
             [impl]() { return impl->ActiveSurface(); },
             [impl](int& w, int& h) { impl->ActiveSurfaceSize(w, h); },
-            [impl]() { return impl->isOpaqueBlend; });
+            [impl]() { return impl->currentBlendMode; });
     }
 
     void Dx3GraphicsBackend::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
                                              int colorDstBlend, int alphaDstBlend,
                                              int /*colorBlendFunc*/, int /*alphaBlendFunc*/)
     {
-        impl_->isOpaqueBlend = (colorSrcBlend == 0 && colorDstBlend == 1 &&
-                                alphaSrcBlend == 0 && alphaDstBlend == 1);
+        impl_->currentBlendMode = DetectBlendMode(colorSrcBlend, alphaSrcBlend, colorDstBlend, alphaDstBlend);
     }
 
     void Dx3GraphicsBackend::ClearColorAndDepth(float, float, float, float, float) { ThrowNo3D("ClearColorAndDepth"); }

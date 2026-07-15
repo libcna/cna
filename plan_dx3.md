@@ -15,7 +15,7 @@
 >
 > **Status legend** (matches `../cna`'s own convention): ✅ implemented *and verified against its
 > stated acceptance criteria*; 🟨 code or documentation exists but has not met those criteria;
-> ⬜ not implemented. Phases X1/X2/X3/X4 are ✅ (see their own tables below); X5 onward are ⬜.
+> ⬜ not implemented. Phases X1/X2/X3/X4/X5 are ✅ (see their own tables below); X6 onward are ⬜.
 >
 > **Correction (2026-07-15, Phase X4 closure): the Phase X3 commit's "full `CnaTests` suite has no
 > new failures (one pre-existing, unrelated failure...)" claim was incomplete.** It was based on
@@ -279,19 +279,23 @@ For every task: build the affected target(s) (`-DCNA_GRAPHICS_BACKEND=DX3`), run
 | DX3-38 | Custom `Effect` via `Begin(effect)`: throws for non-null custom effects (no shader stage exists here either) | ✅ | Verified via `Dx3_SpriteBatch` Check J. |
 | DX3-39 | Source-rectangle cropping | ✅ | Exercised implicitly by every `Draw()` call in `Dx3_SpriteBatch` (all use an explicit `sourceRectangle`). |
 
-**Phase X4/X5 blend-state note**: `Dx3GraphicsBackend::ApplyBlendState()` was added in this phase, but only as a boolean Opaque-vs-"blend" gate (`isOpaqueBlend`, mirroring `SOFTWARE`'s own exact Opaque-preset detection formula) — sufficient to pick the identity fast path and `CompositeQuad`'s straight-alpha-over baseline. It does **not** yet distinguish `AlphaBlend`/`NonPremultiplied`/`Additive`; that real per-formula math is still Phase X5 (DX3-40..44), unchanged from the original plan.
+**Phase X4/X5 blend-state note**: `Dx3GraphicsBackend::ApplyBlendState()` started in Phase X4 as
+only a boolean Opaque-vs-"blend" gate; Phase X5 replaced it with `DetectBlendMode()`, which
+matches the raw factors against all 4 `BlendState.cpp` presets by exact value (falling back to
+`AlphaBlend` for any other/custom combination, DX3-44) and drives `CompositeQuad`'s real,
+per-formula math (DX3-40..43) below.
 
 ## Phase X5 — Blend-mode compositing math
 
 | # | Task | Status | Notes |
 |---|---|---|---|
-| DX3-40 | `Opaque`: direct overwrite, ignore source alpha | ⬜ | Design decision 6. |
-| DX3-41 | `AlphaBlend` (premultiplied): straight `SrcAlpha`/`InvSrcAlpha` per-pixel formula | ⬜ | |
-| DX3-42 | `NonPremultiplied` (straight alpha): correct textbook blend | ⬜ | |
-| DX3-43 | `Additive`: saturating add, clamp at 255 | ⬜ | |
-| DX3-44 | Custom `BlendState` (non-preset factor/op combos): falls back to `AlphaBlend` behavior — same recorded scope limitation as `SOFTWARE` design decision 7 | ⬜ | |
-| DX3-45 | `TextureFilter` → nearest-neighbor vs. bilinear sampling in the compositor (Design decision 7's per-pixel sampling makes both genuinely implementable, unlike a native `SDL_ScaleMode`-style enum mapping) | ⬜ | |
-| DX3-46 | `TextureAddressMode::Wrap` (modulo) / `Mirror` (reflect) in the per-source-pixel sampler | ⬜ | Design decision 7 — a real win over `SDL_RENDERER`'s ⛔ BLOCKED status for the same modes. |
+| DX3-40 | `Opaque`: direct overwrite, ignore source alpha | ✅ | Verified via `Dx3_Blend` CTest Check A. |
+| DX3-41 | `AlphaBlend` (premultiplied): straight `SrcAlpha`/`InvSrcAlpha` per-pixel formula | ✅ | Premultiplied convention: `out = src + dst*(1-srcAlpha)` — the source color is used as-is (not multiplied by `srcAlpha` again), since this preset assumes an already-premultiplied source pixel. Verified via `Dx3_Blend` CTest Check B. |
+| DX3-42 | `NonPremultiplied` (straight alpha): correct textbook blend | ✅ | `out = src*srcAlpha + dst*(1-srcAlpha)`. Verified via `Dx3_Blend` CTest Check C. |
+| DX3-43 | `Additive`: saturating add, clamp at 255 | ✅ | `out = src*srcAlpha + dst` (no destination attenuation at all — `ColorDestinationBlend=One`). Verified via `Dx3_Blend` CTest Check D. |
+| DX3-44 | Custom `BlendState` (non-preset factor/op combos): falls back to `AlphaBlend` behavior — same recorded scope limitation as `SOFTWARE` design decision 7 | ✅ | Verified via `Dx3_Blend` CTest Check E (a `BlendState` with `SourceColor`/`One` factors, matching none of the 4 presets, produces the exact `AlphaBlend` result). |
+| DX3-45 | `TextureFilter` → nearest-neighbor vs. bilinear sampling in the compositor (Design decision 7's per-pixel sampling makes both genuinely implementable, unlike a native `SDL_ScaleMode`-style enum mapping) | ✅ | `ISpriteBatchBackend::SetSamplerFilter`'s raw `TextureFilter` ordinal is used directly (0=`Linear`→bilinear, everything else→nearest, matching the interface's own documented convention and `TextureFilter.hpp`'s real enum values). Verified via `Dx3_AddressMode` CTest Checks A/B (`Point` samples a pure endpoint at a texel boundary; `Linear` blends). |
+| DX3-46 | `TextureAddressMode::Wrap` (modulo) / `Mirror` (reflect) in the per-source-pixel sampler | ✅ | `WrapCoord()` handles `Wrap`(0)/`Clamp`(1)/`Mirror`(2) — ordinals confirmed to match `TextureAddressMode.hpp` exactly. Verified via `Dx3_AddressMode` CTest Checks C/D/E (an oversized source rectangle produces 3 distinct, predictable Red/Green tiling patterns per mode) — a real win over `SDL_RENDERER`'s ⛔ BLOCKED status for the same modes. |
 
 ## Phase X6 — `SpriteFont`
 

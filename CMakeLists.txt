@@ -6692,6 +6692,22 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
         LABELS "DX3")
+
+    # plan_dx3.md Phase X5 (DX3-40..DX3-44): blend-mode compositing math CTest.
+    cna_dx3_test(cna_test_dx3_blend examples/dx3_blend_test.cpp)
+    add_test(NAME Dx3_Blend COMMAND cna_test_dx3_blend)
+    set_tests_properties(Dx3_Blend PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
+        LABELS "DX3")
+
+    # plan_dx3.md Phase X5 (DX3-45/DX3-46): TextureFilter + TextureAddressMode sampling CTest.
+    cna_dx3_test(cna_test_dx3_sampling examples/dx3_sampling_test.cpp)
+    add_test(NAME Dx3_AddressMode COMMAND cna_test_dx3_sampling)
+    set_tests_properties(Dx3_AddressMode PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
+        LABELS "DX3")
 endif()
 
 # plan_dx.md DX-80: D3D11 CTest registration. When cross-compiled from Linux (this backend is
