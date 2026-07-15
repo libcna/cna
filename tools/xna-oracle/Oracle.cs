@@ -13,14 +13,38 @@ using System.IO;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 
-public enum SceneVertexFormat { PositionColor, PositionTexture, PositionNormalTexture }
-public enum SceneEffectType { BasicEffect, AlphaTestEffect }
+public enum SceneVertexFormat { PositionColor, PositionTexture, PositionNormalTexture, PositionDualTexture }
+public enum SceneEffectType { BasicEffect, AlphaTestEffect, DualTextureEffect }
 
 public class SceneLight
 {
     public bool Enabled;
     public Vector3 Diffuse = Vector3.Zero;
     public Vector3 Direction = new Vector3(0, 0, -1);
+}
+
+// Real XNA has no built-in dual-UV vertex struct -- a game using DualTextureEffect defines its
+// own IVertexType, exactly like this, matching CnaOracleRender.cpp's own explicit
+// VertexDeclaration for the same stride-28 layout (Position+TexCoord0+TexCoord1).
+public struct VertexPositionDualTexture : IVertexType
+{
+    public Vector3 Position;
+    public Vector2 TextureCoordinate0;
+    public Vector2 TextureCoordinate1;
+
+    public static readonly VertexDeclaration VertexDeclaration = new VertexDeclaration(
+        new VertexElement(0, VertexElementFormat.Vector3, VertexElementUsage.Position, 0),
+        new VertexElement(12, VertexElementFormat.Vector2, VertexElementUsage.TextureCoordinate, 0),
+        new VertexElement(20, VertexElementFormat.Vector2, VertexElementUsage.TextureCoordinate, 1));
+
+    public VertexPositionDualTexture(Vector3 position, Vector2 uv0, Vector2 uv1)
+    {
+        Position = position;
+        TextureCoordinate0 = uv0;
+        TextureCoordinate1 = uv1;
+    }
+
+    VertexDeclaration IVertexType.VertexDeclaration { get { return VertexDeclaration; } }
 }
 
 public class Scene
@@ -36,6 +60,10 @@ public class Scene
     public int TextureWidth;
     public int TextureHeight;
     public bool TexturePointFilter = true;
+    public bool Texture2Enabled;
+    public int Texture2Width;
+    public int Texture2Height;
+    public Vector3 DiffuseColor = Vector3.One;
     public Vector3 AmbientColor = Vector3.Zero;
     public SceneLight Light0 = new SceneLight();
     public SceneEffectType EffectType = SceneEffectType.BasicEffect;
@@ -45,7 +73,9 @@ public class Scene
     public List<VertexPositionColor> ColorVertices = new List<VertexPositionColor>();
     public List<VertexPositionTexture> TextureVertices = new List<VertexPositionTexture>();
     public List<VertexPositionNormalTexture> NormalTextureVertices = new List<VertexPositionNormalTexture>();
+    public List<VertexPositionDualTexture> DualTextureVertices = new List<VertexPositionDualTexture>();
     public List<Color> TexturePixels = new List<Color>();
+    public List<Color> Texture2Pixels = new List<Color>();
 
     public static Scene Load(string path)
     {
@@ -69,14 +99,16 @@ public class Scene
                     break;
                 case "clearcolor": scene.ClearColor = ParseColor(value); break;
                 case "effect":
-                    scene.EffectType = value == "AlphaTestEffect"
-                        ? SceneEffectType.AlphaTestEffect : SceneEffectType.BasicEffect;
+                    if (value == "AlphaTestEffect") scene.EffectType = SceneEffectType.AlphaTestEffect;
+                    else if (value == "DualTextureEffect") scene.EffectType = SceneEffectType.DualTextureEffect;
+                    else scene.EffectType = SceneEffectType.BasicEffect;
                     break;
                 case "alphafunction": scene.AlphaFunction = ParseCompareFunction(value); break;
                 case "referencealpha": scene.ReferenceAlpha = int.Parse(value, CultureInfo.InvariantCulture); break;
                 case "vertexformat":
                     if (value == "PositionTexture") scene.VertexFormat = SceneVertexFormat.PositionTexture;
                     else if (value == "PositionNormalTexture") scene.VertexFormat = SceneVertexFormat.PositionNormalTexture;
+                    else if (value == "PositionDualTexture") scene.VertexFormat = SceneVertexFormat.PositionDualTexture;
                     else scene.VertexFormat = SceneVertexFormat.PositionColor;
                     break;
                 case "vertexcolor": scene.VertexColorEnabled = ParseBool(value); break;
@@ -86,13 +118,20 @@ public class Scene
                 case "textureheight": scene.TextureHeight = int.Parse(value, CultureInfo.InvariantCulture); break;
                 case "texturefilter": scene.TexturePointFilter = value == "Point"; break;
                 case "texturepixel": scene.TexturePixels.Add(ParseColor(value)); break;
+                case "texture2": scene.Texture2Enabled = ParseBool(value); break;
+                case "texture2width": scene.Texture2Width = int.Parse(value, CultureInfo.InvariantCulture); break;
+                case "texture2height": scene.Texture2Height = int.Parse(value, CultureInfo.InvariantCulture); break;
+                case "texture2pixel": scene.Texture2Pixels.Add(ParseColor(value)); break;
+                case "diffusecolor": scene.DiffuseColor = ParseVector3(value); break;
                 case "ambientcolor": scene.AmbientColor = ParseVector3(value); break;
                 case "light0enabled": scene.Light0.Enabled = ParseBool(value); break;
                 case "light0diffuse": scene.Light0.Diffuse = ParseVector3(value); break;
                 case "light0direction": scene.Light0.Direction = ParseVector3(value); break;
                 case "primitive": scene.Primitive = ParsePrimitive(value); break;
                 case "vertex":
-                    if (scene.VertexFormat == SceneVertexFormat.PositionNormalTexture)
+                    if (scene.VertexFormat == SceneVertexFormat.PositionDualTexture)
+                        scene.DualTextureVertices.Add(ParseDualTextureVertex(value));
+                    else if (scene.VertexFormat == SceneVertexFormat.PositionNormalTexture)
                         scene.NormalTextureVertices.Add(ParseNormalTextureVertex(value));
                     else if (scene.VertexFormat == SceneVertexFormat.PositionTexture)
                         scene.TextureVertices.Add(ParseTextureVertex(value));
@@ -108,6 +147,7 @@ public class Scene
 
     public int VertexCount()
     {
+        if (VertexFormat == SceneVertexFormat.PositionDualTexture) return DualTextureVertices.Count;
         if (VertexFormat == SceneVertexFormat.PositionNormalTexture) return NormalTextureVertices.Count;
         if (VertexFormat == SceneVertexFormat.PositionTexture) return TextureVertices.Count;
         return ColorVertices.Count;
@@ -216,6 +256,22 @@ public class Scene
             float.Parse(p[7], CultureInfo.InvariantCulture));
         return new VertexPositionNormalTexture(pos, normal, uv);
     }
+
+    static VertexPositionDualTexture ParseDualTextureVertex(string s)
+    {
+        var p = s.Split(',');
+        var pos = new Vector3(
+            float.Parse(p[0], CultureInfo.InvariantCulture),
+            float.Parse(p[1], CultureInfo.InvariantCulture),
+            float.Parse(p[2], CultureInfo.InvariantCulture));
+        var uv0 = new Vector2(
+            float.Parse(p[3], CultureInfo.InvariantCulture),
+            float.Parse(p[4], CultureInfo.InvariantCulture));
+        var uv1 = new Vector2(
+            float.Parse(p[5], CultureInfo.InvariantCulture),
+            float.Parse(p[6], CultureInfo.InvariantCulture));
+        return new VertexPositionDualTexture(pos, uv0, uv1);
+    }
 }
 
 public class Oracle : Game
@@ -249,6 +305,12 @@ public class Oracle : Game
             texture.SetData(scene.TexturePixels.ToArray());
             dev.SamplerStates[0] = scene.TexturePointFilter ? SamplerState.PointClamp : SamplerState.LinearClamp;
         }
+        Texture2D texture2 = null;
+        if (scene.Texture2Enabled)
+        {
+            texture2 = new Texture2D(dev, scene.Texture2Width, scene.Texture2Height);
+            texture2.SetData(scene.Texture2Pixels.ToArray());
+        }
 
         Effect fx;
         if (scene.EffectType == SceneEffectType.AlphaTestEffect)
@@ -262,6 +324,18 @@ public class Oracle : Game
             atfx.View = Matrix.Identity;
             atfx.Projection = Matrix.Identity;
             fx = atfx;
+        }
+        else if (scene.EffectType == SceneEffectType.DualTextureEffect)
+        {
+            var dtfx = new DualTextureEffect(dev);
+            dtfx.VertexColorEnabled = scene.VertexColorEnabled;
+            dtfx.Texture = texture;
+            dtfx.Texture2 = texture2;
+            dtfx.DiffuseColor = scene.DiffuseColor;
+            dtfx.World = Matrix.Identity;
+            dtfx.View = Matrix.Identity;
+            dtfx.Projection = Matrix.Identity;
+            fx = dtfx;
         }
         else
         {
@@ -286,7 +360,9 @@ public class Oracle : Game
         foreach (var pass in fx.CurrentTechnique.Passes)
         {
             pass.Apply();
-            if (scene.VertexFormat == SceneVertexFormat.PositionNormalTexture)
+            if (scene.VertexFormat == SceneVertexFormat.PositionDualTexture)
+                dev.DrawUserPrimitives(scene.Primitive, scene.DualTextureVertices.ToArray(), 0, scene.PrimitiveCount());
+            else if (scene.VertexFormat == SceneVertexFormat.PositionNormalTexture)
                 dev.DrawUserPrimitives(scene.Primitive, scene.NormalTextureVertices.ToArray(), 0, scene.PrimitiveCount());
             else if (scene.VertexFormat == SceneVertexFormat.PositionTexture)
                 dev.DrawUserPrimitives(scene.Primitive, scene.TextureVertices.ToArray(), 0, scene.PrimitiveCount());

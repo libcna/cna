@@ -27,18 +27,20 @@ fully-commented examples.
 | `width`, `height` | back buffer size |
 | `profile` | `HiDef` or `Reach` |
 | `clearcolor` | `r,g,b,a` (0-255) |
-| `effect` | `BasicEffect` (default) or `AlphaTestEffect` — which Stock Effect both sides construct |
-| `vertexformat` | `PositionColor` (default), `PositionTexture`, or `PositionNormalTexture` — selects which `vertex=` shape below, and which `VertexPosition*` struct both sides draw |
-| `vertexcolor`, `lighting`, `texture` | `VertexColorEnabled`/`LightingEnabled` (`BasicEffect` only)/`TextureEnabled` (`BasicEffect`) or texture-non-null (`AlphaTestEffect`) (`true`/`false`) |
+| `effect` | `BasicEffect` (default), `AlphaTestEffect`, or `DualTextureEffect` — which Stock Effect both sides construct |
+| `vertexformat` | `PositionColor` (default), `PositionTexture`, `PositionNormalTexture`, or `PositionDualTexture` — selects which `vertex=` shape below, and which vertex struct both sides draw. `PositionDualTexture` has no XNA-built-in equivalent (real XNA has no dual-UV vertex type either) — both sides define their own custom `IVertexType`/`VertexDeclaration`, exactly as a real game using `DualTextureEffect` would have to |
+| `vertexcolor`, `lighting`, `texture` | `VertexColorEnabled`/`LightingEnabled` (`BasicEffect` only)/`TextureEnabled` (`BasicEffect`) or texture-non-null (`AlphaTestEffect`/`DualTextureEffect`) (`true`/`false`) |
 | `texturewidth`, `textureheight` | size of an inline procedural texture (no content-pipeline asset file — matches `D9-A2`'s own "no content pipeline" constraint) |
 | `texturefilter` | `Point` or `Linear` — `SamplerState.PointClamp`/`LinearClamp` on slot 0 |
 | `texturepixel` | `r,g,b,a` — repeats `texturewidth*textureheight` times, row-major, only when `texture=true` |
+| `texture2`, `texture2width`, `texture2height`, `texture2pixel` | same shape as `texture`/`texturewidth`/`textureheight`/`texturepixel`, for `DualTextureEffect.Texture2` (the second sampler), only when `effect=DualTextureEffect` |
+| `diffusecolor` | `r,g,b` (0-1 floats) — `DualTextureEffect.DiffuseColor`, only when `effect=DualTextureEffect` |
 | `ambientcolor` | `r,g,b` (0-1 floats) — `BasicEffect.AmbientLightColor`, only when `lighting=true` |
 | `light0enabled`, `light0diffuse`, `light0direction` | `BasicEffect.DirectionalLight0.Enabled`/`DiffuseColor`/`Direction`, only when `lighting=true` |
 | `alphafunction` | `Always`/`Never`/`Less`/`LessEqual`/`Equal`/`GreaterEqual`/`Greater`/`NotEqual` — `AlphaTestEffect.AlphaFunction`, only when `effect=AlphaTestEffect` |
 | `referencealpha` | `0`-`255` int — `AlphaTestEffect.ReferenceAlpha`, only when `effect=AlphaTestEffect` |
 | `primitive` | `TriangleList`, `TriangleStrip`, `LineList`, or `LineStrip` |
-| `vertex` | `x,y,z,r,g,b,a` (`PositionColor`), `x,y,z,u,v` (`PositionTexture`), or `x,y,z,nx,ny,nz,u,v` (`PositionNormalTexture`) — repeats once per vertex, `World`/`View`/`Projection` are always `Matrix.Identity` |
+| `vertex` | `x,y,z,r,g,b,a` (`PositionColor`), `x,y,z,u,v` (`PositionTexture`), `x,y,z,nx,ny,nz,u,v` (`PositionNormalTexture`), or `x,y,z,u0,v0,u1,v1` (`PositionDualTexture`) — repeats once per vertex, `World`/`View`/`Projection` are always `Matrix.Identity` |
 
 ## Build and run — XNA side (the oracle)
 
@@ -103,7 +105,7 @@ Requires Pillow (`pip install pillow`) — not previously a dependency of this p
 
 ## Status
 
-Four scenes so far, **all pixel-perfect**:
+Five scenes so far, **all pixel-perfect**:
 
 - `colored3d` (`D9-A2`'s own original spike scene: a `BasicEffect` `VertexColorEnabled=true`/
   `LightingEnabled=false` triangle over a `CornflowerBlue` clear) — `0/65536` pixels differ,
@@ -127,6 +129,17 @@ Four scenes so far, **all pixel-perfect**:
   `0/65536` pixels differ, and the passing/failing texels are visibly, correctly different (passing
   texels show their own color; failing texels show the `CornflowerBlue` clear color through
   `clip()`'s real discard, not some blended/wrong value).
+- `dualtexture_quad` — the second non-`BasicEffect` Stock Effect (`DualTextureEffect`), and the
+  first scene needing a brand-new vertex shape neither side had a built-in type for
+  (`PositionDualTexture`: Position+TexCoord0+TexCoord1, stride 28 — real XNA has no dual-UV vertex
+  struct either, so both `Oracle.cs` and `CnaOracleRender.cpp` define their own custom
+  `IVertexType`/`VertexDeclaration`). Two 1×1 solid-color textures (white, `(100,60,20)`) and
+  `DiffuseColor=(0.5,0.5,0.5)` — the real doubling-blend formula (`texture0 * texture1 * 2 *
+  DiffuseColor`) makes the `*2*0.5` cancel out, so the expected result is exactly `(100,60,20,255)`,
+  confirmed independently by hand before running the oracle and then confirmed pixel-for-pixel —
+  `0/65536` pixels differ. `DualTextureEffect` was added as a THIRD `std::unique_ptr` alongside
+  `alphaFx`/`basicFx` (see "Build and run — CNA side" above for why that pattern exists), correctly
+  avoiding a repeat of the dangling-pointer bug `AlphaTestEffect` found — no new bug this time.
 
 `scripts/xna-diff.py` itself is mutation-verified: a deliberately 1-off-mutated copy of a passing
 CNA PNG is correctly reported as `FAIL: 1/65536 pixels differ ... max per-channel delta=1` at the

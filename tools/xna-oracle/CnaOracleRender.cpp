@@ -23,12 +23,17 @@
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CompareFunction.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DirectionalLight.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DualTextureEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerStateCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
@@ -64,8 +69,27 @@ namespace
         return s.substr(start, end - start + 1);
     }
 
-    enum class SceneVertexFormat { PositionColor, PositionTexture, PositionNormalTexture };
-    enum class SceneEffectType { BasicEffect, AlphaTestEffect };
+    enum class SceneVertexFormat { PositionColor, PositionTexture, PositionNormalTexture, PositionDualTexture };
+    enum class SceneEffectType { BasicEffect, AlphaTestEffect, DualTextureEffect };
+
+    // Real XNA has no built-in dual-UV vertex struct -- mirrors Oracle.cs's own
+    // VertexPositionDualTexture (same 28-byte layout: Position+TexCoord0+TexCoord1).
+    struct VertexPositionDualTexture
+    {
+        Vector3 Position;
+        Vector2 TextureCoordinate0;
+        Vector2 TextureCoordinate1;
+    };
+
+    const VertexDeclaration& DualTextureVertexDeclaration()
+    {
+        static const VertexDeclaration decl(28, std::vector<VertexElement>{
+            VertexElement(0,  VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0),
+            VertexElement(20, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 1),
+        });
+        return decl;
+    }
 
     struct SceneLight
     {
@@ -87,6 +111,10 @@ namespace
         int textureWidth = 0;
         int textureHeight = 0;
         bool texturePointFilter = true;
+        bool texture2Enabled = false;
+        int texture2Width = 0;
+        int texture2Height = 0;
+        Vector3 diffuseColor{1, 1, 1};
         Vector3 ambientColor{0, 0, 0};
         SceneLight light0;
         SceneEffectType effectType = SceneEffectType::BasicEffect;
@@ -96,10 +124,14 @@ namespace
         std::vector<VertexPositionColor> colorVertices;
         std::vector<VertexPositionTexture> textureVertices;
         std::vector<VertexPositionNormalTexture> normalTextureVertices;
+        std::vector<VertexPositionDualTexture> dualTextureVertices;
         std::vector<Color> texturePixels;
+        std::vector<Color> texture2Pixels;
 
         int VertexCount() const
         {
+            if (vertexFormat == SceneVertexFormat::PositionDualTexture)
+                return static_cast<int>(dualTextureVertices.size());
             if (vertexFormat == SceneVertexFormat::PositionNormalTexture)
                 return static_cast<int>(normalTextureVertices.size());
             if (vertexFormat == SceneVertexFormat::PositionTexture)
@@ -188,6 +220,16 @@ namespace
         return VertexPositionNormalTexture(pos, normal, uv);
     }
 
+    VertexPositionDualTexture ParseDualTextureVertex(const std::string& s)
+    {
+        const auto p = Split(s, ',');
+        VertexPositionDualTexture v;
+        v.Position = Vector3(std::stof(p[0]), std::stof(p[1]), std::stof(p[2]));
+        v.TextureCoordinate0 = Vector2(std::stof(p[3]), std::stof(p[4]));
+        v.TextureCoordinate1 = Vector2(std::stof(p[5]), std::stof(p[6]));
+        return v;
+    }
+
     Scene LoadScene(const std::string& path)
     {
         std::ifstream file(path);
@@ -209,14 +251,19 @@ namespace
             else if (key == "height") scene.height = std::stoi(value);
             else if (key == "profile") scene.profile = value == "Reach" ? GraphicsProfile::Reach : GraphicsProfile::HiDef;
             else if (key == "clearcolor") scene.clearColor = ParseColor(value);
-            else if (key == "effect") scene.effectType = value == "AlphaTestEffect"
-                ? SceneEffectType::AlphaTestEffect : SceneEffectType::BasicEffect;
+            else if (key == "effect")
+            {
+                if (value == "AlphaTestEffect") scene.effectType = SceneEffectType::AlphaTestEffect;
+                else if (value == "DualTextureEffect") scene.effectType = SceneEffectType::DualTextureEffect;
+                else scene.effectType = SceneEffectType::BasicEffect;
+            }
             else if (key == "alphafunction") scene.alphaFunction = ParseCompareFunction(value);
             else if (key == "referencealpha") scene.referenceAlpha = std::stoi(value);
             else if (key == "vertexformat")
             {
                 if (value == "PositionTexture") scene.vertexFormat = SceneVertexFormat::PositionTexture;
                 else if (value == "PositionNormalTexture") scene.vertexFormat = SceneVertexFormat::PositionNormalTexture;
+                else if (value == "PositionDualTexture") scene.vertexFormat = SceneVertexFormat::PositionDualTexture;
                 else scene.vertexFormat = SceneVertexFormat::PositionColor;
             }
             else if (key == "vertexcolor") scene.vertexColorEnabled = ParseBool(value);
@@ -226,6 +273,11 @@ namespace
             else if (key == "textureheight") scene.textureHeight = std::stoi(value);
             else if (key == "texturefilter") scene.texturePointFilter = value == "Point";
             else if (key == "texturepixel") scene.texturePixels.push_back(ParseColor(value));
+            else if (key == "texture2") scene.texture2Enabled = ParseBool(value);
+            else if (key == "texture2width") scene.texture2Width = std::stoi(value);
+            else if (key == "texture2height") scene.texture2Height = std::stoi(value);
+            else if (key == "texture2pixel") scene.texture2Pixels.push_back(ParseColor(value));
+            else if (key == "diffusecolor") scene.diffuseColor = ParseVector3(value);
             else if (key == "ambientcolor") scene.ambientColor = ParseVector3(value);
             else if (key == "light0enabled") scene.light0.enabled = ParseBool(value);
             else if (key == "light0diffuse") scene.light0.diffuse = ParseVector3(value);
@@ -233,7 +285,9 @@ namespace
             else if (key == "primitive") scene.primitive = ParsePrimitive(value);
             else if (key == "vertex")
             {
-                if (scene.vertexFormat == SceneVertexFormat::PositionNormalTexture)
+                if (scene.vertexFormat == SceneVertexFormat::PositionDualTexture)
+                    scene.dualTextureVertices.push_back(ParseDualTextureVertex(value));
+                else if (scene.vertexFormat == SceneVertexFormat::PositionNormalTexture)
                     scene.normalTextureVertices.push_back(ParseNormalTextureVertex(value));
                 else if (scene.vertexFormat == SceneVertexFormat::PositionTexture)
                     scene.textureVertices.push_back(ParseTextureVertex(value));
@@ -272,6 +326,12 @@ protected:
             dev.getSamplerStatesProperty()[0] =
                 scene_.texturePointFilter ? SamplerState::PointClamp : SamplerState::LinearClamp;
         }
+        std::unique_ptr<Texture2D> texture2;
+        if (scene_.texture2Enabled)
+        {
+            texture2 = std::make_unique<Texture2D>(dev, scene_.texture2Width, scene_.texture2Height);
+            texture2->SetData(scene_.texture2Pixels.data(), static_cast<int>(scene_.texture2Pixels.size()));
+        }
 
         // The chosen Effect must outlive this scope: GraphicsDevice::DrawUserPrimitives() below
         // reads GpuDrawParams from currentEffect_, a RAW pointer Effect::Apply() sets -- an Effect
@@ -279,6 +339,7 @@ protected:
         // dangling pointer (a real bug found live: DrawUserPrimitives reported completely wrong
         // vertexColor/texture flags -- stale stack memory, not the values actually just set).
         std::unique_ptr<AlphaTestEffect> alphaFx;
+        std::unique_ptr<DualTextureEffect> dualFx;
         std::unique_ptr<BasicEffect> basicFx;
 
         if (scene_.effectType == SceneEffectType::AlphaTestEffect)
@@ -292,6 +353,18 @@ protected:
             alphaFx->setViewProperty(Matrix::getIdentityProperty());
             alphaFx->setProjectionProperty(Matrix::getIdentityProperty());
             alphaFx->Apply();
+        }
+        else if (scene_.effectType == SceneEffectType::DualTextureEffect)
+        {
+            dualFx = std::make_unique<DualTextureEffect>(dev);
+            dualFx->setVertexColorEnabledProperty(scene_.vertexColorEnabled);
+            dualFx->setTextureProperty(texture.get());
+            dualFx->setTexture2Property(texture2.get());
+            dualFx->setDiffuseColorProperty(scene_.diffuseColor);
+            dualFx->setWorldProperty(Matrix::getIdentityProperty());
+            dualFx->setViewProperty(Matrix::getIdentityProperty());
+            dualFx->setProjectionProperty(Matrix::getIdentityProperty());
+            dualFx->Apply();
         }
         else
         {
@@ -313,7 +386,10 @@ protected:
             basicFx->Apply();
         }
 
-        if (scene_.vertexFormat == SceneVertexFormat::PositionNormalTexture)
+        if (scene_.vertexFormat == SceneVertexFormat::PositionDualTexture)
+            dev.DrawUserPrimitives(scene_.primitive, scene_.dualTextureVertices.data(), 0,
+                                   scene_.PrimitiveCount(), DualTextureVertexDeclaration());
+        else if (scene_.vertexFormat == SceneVertexFormat::PositionNormalTexture)
             dev.DrawUserPrimitives(scene_.primitive, scene_.normalTextureVertices.data(), 0, scene_.PrimitiveCount());
         else if (scene_.vertexFormat == SceneVertexFormat::PositionTexture)
             dev.DrawUserPrimitives(scene_.primitive, scene_.textureVertices.data(), 0, scene_.PrimitiveCount());
