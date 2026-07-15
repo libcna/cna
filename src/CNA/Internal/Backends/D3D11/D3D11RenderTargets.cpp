@@ -169,20 +169,32 @@ namespace CNA::Internal::Backends::D3D11
 
     D3D11RenderTargetCubeBackend::D3D11RenderTargetCubeBackend(
         D3D11GraphicsBackend* owner, ID3D11Device* device, ID3D11DeviceContext* context,
-        int size, int depthFormat, bool mipMap)
+        int size, int depthFormat, bool mipMap, int multiSampleCount)
         : owner_(owner), device_(device), context_(context)
-        , size_(size), mipMap_(mipMap), levelCount_(mipMap ? CalculateMipLevels(size, size) : 1)
+        , size_(size)
     {
+        appliedMultiSampleCount_ = ClampMultiSampleCount(device_.Get(), DXGI_FORMAT_R8G8B8A8_UNORM, multiSampleCount);
+        isMsaa_ = appliedMultiSampleCount_ > 0;
+        // Mutually exclusive on the same attachment, same rationale D3D11RenderTargetBackend's own
+        // DX-45 already established -- a full mip chain needs a single-sample source.
+        mipMap_ = mipMap && !isMsaa_;
+        levelCount_ = mipMap_ ? CalculateMipLevels(size, size) : 1;
+
         D3D11_TEXTURE2D_DESC desc{};
         desc.Width = static_cast<UINT>(size_);
         desc.Height = static_cast<UINT>(size_);
         desc.MipLevels = static_cast<UINT>(levelCount_);
         desc.ArraySize = 6;
         desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-        desc.SampleDesc.Count = 1;
+        desc.SampleDesc.Count = isMsaa_ ? static_cast<UINT>(appliedMultiSampleCount_) : 1;
+        // D3D11 cannot combine D3D11_RESOURCE_MISC_TEXTURECUBE with SampleDesc.Count > 1 on one
+        // resource (a TextureCube SRV can never be multisampled) -- when MSAA, this becomes a
+        // plain (non-cube) 6-slice Texture2DMSArray used ONLY as an RTV target, never sampled
+        // directly; resolveTexture_ below is the real, single-sample, cube-flagged resource the
+        // SRV actually targets.
         desc.Usage = D3D11_USAGE_DEFAULT;
-        desc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
-        desc.MiscFlags = D3D11_RESOURCE_MISC_TEXTURECUBE | (mipMap_ ? D3D11_RESOURCE_MISC_GENERATE_MIPS : 0);
+        desc.BindFlags = D3D11_BIND_RENDER_TARGET | (isMsaa_ ? 0 : D3D11_BIND_SHADER_RESOURCE);
+        desc.MiscFlags = (isMsaa_ ? 0 : D3D11_RESOURCE_MISC_TEXTURECUBE) | (mipMap_ ? D3D11_RESOURCE_MISC_GENERATE_MIPS : 0);
 
         HRESULT hr = device_->CreateTexture2D(&desc, nullptr, texture_.GetAddressOf());
         if (FAILED(hr))
@@ -192,14 +204,40 @@ namespace CNA::Internal::Backends::D3D11
         {
             D3D11_RENDER_TARGET_VIEW_DESC rtvDesc{};
             rtvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-            rtvDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2DARRAY;
-            rtvDesc.Texture2DArray.MipSlice = 0;
-            rtvDesc.Texture2DArray.FirstArraySlice = static_cast<UINT>(face);
-            rtvDesc.Texture2DArray.ArraySize = 1;
+            if (isMsaa_)
+            {
+                rtvDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2DMSARRAY;
+                rtvDesc.Texture2DMSArray.FirstArraySlice = static_cast<UINT>(face);
+                rtvDesc.Texture2DMSArray.ArraySize = 1;
+            }
+            else
+            {
+                rtvDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2DARRAY;
+                rtvDesc.Texture2DArray.MipSlice = 0;
+                rtvDesc.Texture2DArray.FirstArraySlice = static_cast<UINT>(face);
+                rtvDesc.Texture2DArray.ArraySize = 1;
+            }
 
             hr = device_->CreateRenderTargetView(texture_.Get(), &rtvDesc, rtv_[face].GetAddressOf());
             if (FAILED(hr))
                 throw std::runtime_error("D3D11RenderTargetCubeBackend: CreateRenderTargetView(face) failed, hr=" + FormatHr(hr));
+        }
+
+        if (isMsaa_)
+        {
+            D3D11_TEXTURE2D_DESC resolveDesc{};
+            resolveDesc.Width = static_cast<UINT>(size_);
+            resolveDesc.Height = static_cast<UINT>(size_);
+            resolveDesc.MipLevels = static_cast<UINT>(levelCount_);
+            resolveDesc.ArraySize = 6;
+            resolveDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+            resolveDesc.SampleDesc.Count = 1;
+            resolveDesc.Usage = D3D11_USAGE_DEFAULT;
+            resolveDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+            resolveDesc.MiscFlags = D3D11_RESOURCE_MISC_TEXTURECUBE;
+            hr = device_->CreateTexture2D(&resolveDesc, nullptr, resolveTexture_.GetAddressOf());
+            if (FAILED(hr))
+                throw std::runtime_error("D3D11RenderTargetCubeBackend: CreateTexture2D(resolve) failed, hr=" + FormatHr(hr));
         }
 
         D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc{};
@@ -207,7 +245,7 @@ namespace CNA::Internal::Backends::D3D11
         srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURECUBE;
         srvDesc.TextureCube.MostDetailedMip = 0;
         srvDesc.TextureCube.MipLevels = static_cast<UINT>(levelCount_);
-        hr = device_->CreateShaderResourceView(texture_.Get(), &srvDesc, srv_.GetAddressOf());
+        hr = device_->CreateShaderResourceView(isMsaa_ ? resolveTexture_.Get() : texture_.Get(), &srvDesc, srv_.GetAddressOf());
         if (FAILED(hr))
             throw std::runtime_error("D3D11RenderTargetCubeBackend: CreateShaderResourceView failed, hr=" + FormatHr(hr));
 
@@ -220,7 +258,7 @@ namespace CNA::Internal::Backends::D3D11
             depthDesc.MipLevels = 1;
             depthDesc.ArraySize = 1;
             depthDesc.Format = depthDxgiFormat;
-            depthDesc.SampleDesc.Count = 1;
+            depthDesc.SampleDesc.Count = desc.SampleDesc.Count; // MSAA depth matches MSAA color
             depthDesc.Usage = D3D11_USAGE_DEFAULT;
             depthDesc.BindFlags = D3D11_BIND_DEPTH_STENCIL;
 
@@ -252,8 +290,22 @@ namespace CNA::Internal::Backends::D3D11
         if (owner_) owner_->TrackCurrentRenderTargetEXT(&rtv, 1, dsv_.Get());
     }
 
+    void D3D11RenderTargetCubeBackend::ResolveMsaaEXT()
+    {
+        if (!isMsaa_ || !resolveTexture_ || activeFace_ < 0) return;
+        // Only the currently-active face -- matches this class's own existing "only one face is
+        // ever the active draw target at a time" mip-regen convention. Both the MSAA source (no
+        // mips) and the resolve destination's base mip level use the same per-face subresource
+        // formula (levelCount_ is always 1 here since mipMap_ is forced false when isMsaa_).
+        const UINT srcSubresource = static_cast<UINT>(activeFace_);
+        const UINT dstSubresource = static_cast<UINT>(activeFace_) * static_cast<UINT>(levelCount_);
+        context_->ResolveSubresource(resolveTexture_.Get(), dstSubresource, texture_.Get(), srcSubresource,
+                                     DXGI_FORMAT_R8G8B8A8_UNORM);
+    }
+
     void D3D11RenderTargetCubeBackend::UnbindAsRenderTarget()
     {
+        ResolveMsaaEXT();
         if (mipMap_ && srv_)
         {
             context_->GenerateMips(srv_.Get());

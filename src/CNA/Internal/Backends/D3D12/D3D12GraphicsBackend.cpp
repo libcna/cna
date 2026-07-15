@@ -852,12 +852,14 @@ namespace CNA::Internal::Backends::D3D12
     }
 
     std::unique_ptr<IRenderTargetCubeBackend> D3D12GraphicsBackend::CreateRenderTargetCube(
-        int size, int depthFormat, bool mipMap, int /*multiSampleCount*/)
+        int size, int depthFormat, bool mipMap, int multiSampleCount)
     {
         // DX-144 follow-up: mipMap now honored, same real CPU box-filter downsample cascade
-        // D3D12RenderTargetBackend's own 2D leg uses (see D3D12RenderTargets.hpp/.cpp). MSAA still
-        // deliberately not supported (D3D11RenderTargetCubeBackend's own established scope).
-        return std::make_unique<D3D12RenderTargetCubeBackend>(this, device_.Get(), size, depthFormat, mipMap);
+        // D3D12RenderTargetBackend's own 2D leg uses (see D3D12RenderTargets.hpp/.cpp). DX-152:
+        // multiSampleCount is now honored too -- device-queried and clamped to 0 (off) by
+        // D3D12RenderTargetCubeBackend's own ClampMultiSampleCount() when unsupported.
+        return std::make_unique<D3D12RenderTargetCubeBackend>(this, device_.Get(), size, depthFormat, mipMap,
+                                                               multiSampleCount);
     }
 
     void D3D12GraphicsBackend::SetRenderTargets(IRenderTargetBackend* const* rts, int count)

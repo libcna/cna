@@ -4409,6 +4409,39 @@ int main()
         }
     }
 
+    // ---- plan_dx.md DX-152: RenderTargetCube MSAA -- a real feature (previously deliberately out
+    // of scope, this class's own prior header comment) landing now, not just a test. Mirrors
+    // DX-117's own RenderTarget2D MSAA follow-up methodology exactly: an 8x8 cube face requested
+    // at 4x MSAA, cleared, read back through GetSampleableColorResourceEXT() (the resolved,
+    // single-sample resource ResolveMsaaEXT() writes on unbind, face-scoped) via
+    // ReadBackRenderTargetFull() -- proves the real ResolveSubresource()-on-unbind round-trip
+    // produces the exact clear color for face 0, not that the device granted a specific sample
+    // count (printed as diagnostics only, same honest framing DX-45/DX-117 already established). ----
+    {
+        auto rtCubeMsaa = backend.CreateRenderTargetCube(8, 0 /*DepthFormat::None*/, false /*mipMap*/, 4);
+        auto* d3dRtCubeMsaa = dynamic_cast<D3D12RenderTargetCubeBackend*>(rtCubeMsaa.get());
+        Check(d3dRtCubeMsaa != nullptr, "SS0: D3D12RenderTargetCubeBackend: CreateRenderTargetCube(multiSampleCount=4) "
+              "returns a real backend object (plan_dx.md DX-152)");
+
+        if (d3dRtCubeMsaa != nullptr)
+        {
+            rtCubeMsaa->BindAsRenderTargetFace(0);
+            backend.Clear(77.0f / 255.0f, 88.0f / 255.0f, 99.0f / 255.0f, 1.0f);
+            rtCubeMsaa->UnbindAsRenderTarget(); // ResolveMsaaEXT() for face 0
+
+            const auto resolvedCube = ReadBackRenderTargetFull(backend, d3dRtCubeMsaa->GetSampleableColorResourceEXT(), 8, 8);
+            bool msaaCubeMatches = resolvedCube.size() == 8u * 8u * 4u;
+            for (std::size_t i = 0; i < 8u * 8u && msaaCubeMatches; ++i)
+                msaaCubeMatches = resolvedCube[i * 4 + 0] == 77 && resolvedCube[i * 4 + 1] == 88 &&
+                                 resolvedCube[i * 4 + 2] == 99 && resolvedCube[i * 4 + 3] == 255;
+            Check(msaaCubeMatches,
+                  "SS1: D3D12RenderTargetCubeBackend (MSAA): Clear()+ResolveSubresource()-on-unbind "
+                  "produces the exact color in the resolved, sampleable resource for face 0, read back "
+                  "directly from the real GPU resource (plan_dx.md DX-152)");
+            std::printf("    RenderTargetCube MSAA: requested 4x, device-applied %dx\n", d3dRtCubeMsaa->GetMultiSampleCount());
+        }
+    }
+
     // ---- plan_dx.md DX-117 MSAA follow-up: RenderTarget2D MSAA support -- mirrors D3D11's own
     // already-closed DX-45 methodology exactly: an 8x8 render target requested at 4x MSAA, cleared,
     // then read back through GetSampleableColorResourceEXT() (the resolved, single-sample resource

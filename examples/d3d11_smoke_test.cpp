@@ -3150,6 +3150,32 @@ protected:
                   "buffer as Clear()'s next target (plan_dx.md DX-129)");
         }
 
+        // plan_dx.md DX-152: RenderTargetCube MSAA -- a real feature (previously deliberately out
+        // of scope, D3D11RenderTargetCubeBackend's own header comment) landing now, not just a
+        // test. Same real, device-queried methodology as Check K's own RenderTarget2D MSAA proof
+        // (DX-45): pass/fail is purely about pixel correctness of the resolve; whether the device
+        // actually granted real multi-sampling is printed as diagnostics, not gated on, since
+        // that's real hardware/driver capability.
+        {
+            auto rtCubeMsaa = backend.CreateRenderTargetCube(8, 0 /*DepthFormat::None*/, false /*mipMap*/, 4);
+            auto* d3dRtCubeMsaa = static_cast<D3D11RenderTargetCubeBackend*>(rtCubeMsaa.get());
+            rtCubeMsaa->BindAsRenderTargetFace(0);
+            dev.Clear(Color(77, 88, 99, 255));
+            rtCubeMsaa->UnbindAsRenderTarget(); // ResolveMsaaEXT() for face 0
+
+            const auto resolvedCube = ReadTexture2DMipRegion(
+                device, context, d3dRtCubeMsaa->GetSampleableTextureEXT(), 0 /*face 0, mip 0*/, 0, 0, 4, 4);
+            bool msaaCubeMatches = resolvedCube.size() == 4u * 4u * 4u;
+            for (std::size_t i = 0; i < 4u * 4u && msaaCubeMatches; ++i)
+                msaaCubeMatches = resolvedCube[i * 4 + 0] == 77 && resolvedCube[i * 4 + 1] == 88 &&
+                                  resolvedCube[i * 4 + 2] == 99 && resolvedCube[i * 4 + 3] == 255;
+            check(msaaCubeMatches,
+                  "D3D11RenderTargetCubeBackend (MSAA): Clear()+resolve-on-unbind produces the exact "
+                  "color in the resolved texture, face 0 (plan_dx.md DX-152)");
+            std::printf("    RenderTargetCube MSAA: requested 4x, device-applied %dx\n",
+                        d3dRtCubeMsaa->GetMultiSampleCount());
+        }
+
         // plan_dx.md DX-130: the 5 combo Clear* variants dedicated round-trip pixel test --
         // ClearDepthStencilView() calls already exist and are implemented identically to the
         // proven plain Clear(r,g,b,a) path, but only plain Clear had a dedicated pixel test until
@@ -3282,7 +3308,8 @@ protected:
                                 + 3 /* DX-136 alpha_test_colored3d VertexColorEnabled on/off + discard-still-works */
                                 + 3 /* DX-149 env_map3d DirectionalLight1/2 discrimination */
                                 + 3 /* DX-150 skinned3d DirectionalLight1/2 discrimination */
-                                + 2 /* DX-151 skinned3d specular discrimination */;
+                                + 2 /* DX-151 skinned3d specular discrimination */
+                                + 1 /* DX-152 RenderTargetCube MSAA */;
         std::printf("=== %d/%d PASS ===\n", passCount_, totalChecks);
         result_ = (passCount_ == totalChecks) ? 0 : 1;
         Exit();

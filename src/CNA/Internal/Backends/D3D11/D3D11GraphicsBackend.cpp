@@ -555,12 +555,10 @@ namespace CNA::Internal::Backends::D3D11
     std::unique_ptr<IRenderTargetCubeBackend> D3D11GraphicsBackend::CreateRenderTargetCube(
         int size, int depthFormat, bool mipMap, int multiSampleCount)
     {
-        (void)multiSampleCount; // D3D11RenderTargetCubeBackend deliberately doesn't support MSAA
-                                 // (see its own header comment) -- silently ignored, same as every
-                                 // other backend's undocumented-parameter-combination behavior
-                                 // rather than throwing on a combination a game is unlikely to hit.
+        // DX-152: multiSampleCount is now honored -- device-queried and clamped to 0 (off) by
+        // D3D11RenderTargetCubeBackend's own ClampMultiSampleCount() when unsupported.
         return std::make_unique<D3D11::D3D11RenderTargetCubeBackend>(
-            this, device_.Get(), context_.Get(), size, depthFormat, mipMap);
+            this, device_.Get(), context_.Get(), size, depthFormat, mipMap, multiSampleCount);
     }
 
     void D3D11GraphicsBackend::SetRenderTargets(IRenderTargetBackend* const* rts, int count)

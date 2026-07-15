@@ -26,10 +26,16 @@
 // never sampled directly -- ResolveSubresource() into a separate single-sample resource on
 // UnbindAsRenderTarget(), the D3D12-command-list equivalent of D3D11's own
 // ID3D11DeviceContext::ResolveSubresource() call (D3D12's own version additionally needs explicit
-// RESOLVE_SOURCE/RESOLVE_DEST resource-state transitions, which D3D11 doesn't). MSAA is
-// deliberately NOT added to D3D12RenderTargetCubeBackend, matching D3D11RenderTargetCubeBackend's
-// own established scope boundary (combining a texture-cube array with MSAA was judged a narrower,
-// rarer case, out of scope for both backends identically) -- GetMultiSampleCount() stays 0 there.
+// RESOLVE_SOURCE/RESOLVE_DEST resource-state transitions, which D3D11 doesn't).
+//
+// plan_dx.md DX-152: MSAA is now also real for D3D12RenderTargetCubeBackend (reopening what was
+// originally a deliberate, matched scope exclusion on both D3D backends), same design as the 2D
+// leg above -- D3D12_SRV_DIMENSION_TEXTURECUBE has no multisampled variant (same restriction that
+// keeps D3D11's own TextureCube SRV from ever being MSAA), so colorResource_ becomes the
+// MSAA-or-not RTV-only target and a separate resolveResource_ (always single-sample) is the real
+// TextureCube SRV source, ResolveSubresource()'d from ONLY the currently-active face on unbind --
+// matching this class's own pre-existing "only one face is ever the active draw target at a time"
+// convention that GenerateMipsEXT() already established.
 //
 // The depth-stencil resource+DSV this class creates (when depthFormat != DepthFormat::None) is
 // real, but -- exactly like DX-116's own back-buffer depth-stencil buffer -- not yet wired into
@@ -145,14 +151,27 @@ namespace CNA::Internal::Backends::D3D12
     {
     public:
         D3D12RenderTargetCubeBackend(D3D12GraphicsBackend* owner, ID3D12Device* device,
-                                     int size, int depthFormat, bool mipMap = false);
+                                     int size, int depthFormat, bool mipMap = false,
+                                     int multiSampleCount = 0);
 
         [[nodiscard]] int GetSize() const override { return size_; }
         void BindAsRenderTargetFace(int face) override;
         void UnbindAsRenderTarget() override;
-        [[nodiscard]] int GetMultiSampleCount() const override { return 0; }
+        [[nodiscard]] int GetMultiSampleCount() const override { return appliedMultiSampleCount_; }
 
+        /// The resource actually bound for rendering (NOXNA) -- the MSAA array itself when
+        /// `GetMultiSampleCount() > 0`; use `GetSampleableColorResourceEXT()` instead for
+        /// readback/sampling, which is always the resolved single-sample resource.
         [[nodiscard]] ID3D12Resource* GetColorResourceEXT() const { return colorResource_.Get(); }
+        /// The resource tests/shaders should actually read from -- `resolveResource_` when MSAA
+        /// (post-`ResolveSubresource()`, only valid for the active face after
+        /// `UnbindAsRenderTarget()` has run at least once), else the same object
+        /// `GetColorResourceEXT()` already returns (NOXNA, mirrors `D3D12RenderTargetBackend`'s own
+        /// `GetSampleableColorResourceEXT()` naming/behavior exactly).
+        [[nodiscard]] ID3D12Resource* GetSampleableColorResourceEXT() const
+        {
+            return isMsaa_ ? resolveResource_.Get() : colorResource_.Get();
+        }
         [[nodiscard]] D3D12_GPU_DESCRIPTOR_HANDLE GetShaderResourceViewGpuHandleEXT() const { return srvGpu_; }
         /// Real mip-chain level count this cube target was allocated with (1 when `mipMap` was
         /// false) -- NOXNA, DX-144 subresource math/test introspection. Face `f`'s mip level `m` is
@@ -164,6 +183,10 @@ namespace CNA::Internal::Backends::D3D12
         /// DX-144: CPU box-filter downsample cascade, per face, base level (0) -> levelCount_-1,
         /// called from UnbindAsRenderTarget(). No-op when mipMap_ is false or levelCount_ is 1.
         void GenerateMipsEXT();
+        /// DX-152: ResolveSubresource() the currently-active face from the MSAA color array into
+        /// resolveResource_, called from UnbindAsRenderTarget() before GenerateMipsEXT(). No-op
+        /// when isMsaa_ is false or no face is currently active.
+        void ResolveMsaaEXT();
 
         D3D12GraphicsBackend* owner_ = nullptr;
         ComPtr<ID3D12Device> device_;
@@ -172,6 +195,9 @@ namespace CNA::Internal::Backends::D3D12
         D3D12_CPU_DESCRIPTOR_HANDLE rtv_[6]{};
         D3D12_CPU_DESCRIPTOR_HANDLE srvCpu_{};
         D3D12_GPU_DESCRIPTOR_HANDLE srvGpu_{};
+        /// DX-152: the separate single-sample resource ResolveSubresource() writes into on unbind.
+        /// Only allocated/valid when isMsaa_.
+        ComPtr<ID3D12Resource> resolveResource_;
 
         ComPtr<ID3D12Resource> depthResource_;
         D3D12_CPU_DESCRIPTOR_HANDLE dsv_{};
@@ -181,5 +207,7 @@ namespace CNA::Internal::Backends::D3D12
         int activeFace_ = -1;
         bool mipMap_ = false;
         int levelCount_ = 1;
+        bool isMsaa_ = false;
+        int appliedMultiSampleCount_ = 0;
     };
 }

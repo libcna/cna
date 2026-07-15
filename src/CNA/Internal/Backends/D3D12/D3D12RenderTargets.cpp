@@ -424,10 +424,17 @@ namespace CNA::Internal::Backends::D3D12
     // -------------------------------------------------------------------------
 
     D3D12RenderTargetCubeBackend::D3D12RenderTargetCubeBackend(
-        D3D12GraphicsBackend* owner, ID3D12Device* device, int size, int depthFormat, bool mipMap)
+        D3D12GraphicsBackend* owner, ID3D12Device* device, int size, int depthFormat, bool mipMap,
+        int multiSampleCount)
         : owner_(owner), device_(device), size_(size)
-        , mipMap_(mipMap), levelCount_(mipMap ? CalculateMipLevels(size, size) : 1)
+        , appliedMultiSampleCount_(ClampMultiSampleCount(device, DXGI_FORMAT_R8G8B8A8_UNORM, multiSampleCount))
     {
+        isMsaa_ = appliedMultiSampleCount_ > 0;
+        // Mutually exclusive on the same attachment, same rationale D3D12RenderTargetBackend's own
+        // DX-117 MSAA follow-up already established for the 2D leg.
+        mipMap_ = mipMap && !isMsaa_;
+        levelCount_ = mipMap_ ? CalculateMipLevels(size, size) : 1;
+
         D3D12_HEAP_PROPERTIES heapProps{};
         heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
 
@@ -438,7 +445,7 @@ namespace CNA::Internal::Backends::D3D12
         colorDesc.DepthOrArraySize = 6;
         colorDesc.MipLevels = static_cast<UINT16>(levelCount_);
         colorDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-        colorDesc.SampleDesc.Count = 1;
+        colorDesc.SampleDesc.Count = isMsaa_ ? static_cast<UINT>(appliedMultiSampleCount_) : 1;
         colorDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
         colorDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
 
@@ -458,11 +465,38 @@ namespace CNA::Internal::Backends::D3D12
             rtv_[face] = owner_->AllocateRtvDescriptorEXT();
             D3D12_RENDER_TARGET_VIEW_DESC rtvDesc{};
             rtvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-            rtvDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2DARRAY;
-            rtvDesc.Texture2DArray.MipSlice = 0;
-            rtvDesc.Texture2DArray.FirstArraySlice = face;
-            rtvDesc.Texture2DArray.ArraySize = 1;
+            if (isMsaa_)
+            {
+                rtvDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2DMSARRAY;
+                rtvDesc.Texture2DMSArray.FirstArraySlice = face;
+                rtvDesc.Texture2DMSArray.ArraySize = 1;
+            }
+            else
+            {
+                rtvDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2DARRAY;
+                rtvDesc.Texture2DArray.MipSlice = 0;
+                rtvDesc.Texture2DArray.FirstArraySlice = face;
+                rtvDesc.Texture2DArray.ArraySize = 1;
+            }
             device_->CreateRenderTargetView(colorResource_.Get(), &rtvDesc, rtv_[face]);
+        }
+
+        if (isMsaa_)
+        {
+            // D3D12_SRV_DIMENSION_TEXTURECUBE has no multisampled variant -- the MSAA color
+            // resource above is RTV-only, never sampled directly. This separate single-sample
+            // resource is what the real TextureCube SRV below targets, ResolveSubresource()'d from
+            // the active face only on UnbindAsRenderTarget() (mirrors the 2D leg's own
+            // resolveResource_/ResolveMsaaEXT() design, DX-117 follow-up).
+            D3D12_RESOURCE_DESC resolveDesc = colorDesc;
+            resolveDesc.SampleDesc.Count = 1;
+            resolveDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
+            hr = device_->CreateCommittedResource(
+                &heapProps, D3D12_HEAP_FLAG_NONE, &resolveDesc,
+                D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(resolveResource_.ReleaseAndGetAddressOf()));
+            if (FAILED(hr))
+                throw std::runtime_error("D3D12RenderTargetCubeBackend: CreateCommittedResource(resolve) failed, hr=" + FormatHr(hr));
+            owner_->GetResourceStateTrackerEXT().TrackResource(resolveResource_.Get(), D3D12_RESOURCE_STATE_COMMON);
         }
 
         D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc{};
@@ -471,7 +505,7 @@ namespace CNA::Internal::Backends::D3D12
         srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
         srvDesc.TextureCube.MipLevels = static_cast<UINT>(levelCount_);
         owner_->AllocateCbvSrvUavDescriptorEXT(srvCpu_, srvGpu_);
-        device_->CreateShaderResourceView(colorResource_.Get(), &srvDesc, srvCpu_);
+        device_->CreateShaderResourceView(isMsaa_ ? resolveResource_.Get() : colorResource_.Get(), &srvDesc, srvCpu_);
 
         const DXGI_FORMAT depthDxgiFormat = D3DCommon::DepthFormatToDxgi(depthFormat);
         hasDepth_ = depthDxgiFormat != DXGI_FORMAT_UNKNOWN;
@@ -484,7 +518,7 @@ namespace CNA::Internal::Backends::D3D12
             depthDesc.DepthOrArraySize = 1;
             depthDesc.MipLevels = 1;
             depthDesc.Format = depthDxgiFormat;
-            depthDesc.SampleDesc.Count = 1;
+            depthDesc.SampleDesc.Count = colorDesc.SampleDesc.Count; // MSAA depth matches MSAA color
             depthDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
 
             D3D12_CLEAR_VALUE depthClear{};
@@ -501,7 +535,7 @@ namespace CNA::Internal::Backends::D3D12
             dsv_ = owner_->AllocateDsvDescriptorEXT();
             D3D12_DEPTH_STENCIL_VIEW_DESC dsvDesc{};
             dsvDesc.Format = depthDxgiFormat;
-            dsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
+            dsvDesc.ViewDimension = isMsaa_ ? D3D12_DSV_DIMENSION_TEXTURE2DMS : D3D12_DSV_DIMENSION_TEXTURE2D;
             device_->CreateDepthStencilView(depthResource_.Get(), &dsvDesc, dsv_);
         }
     }
@@ -516,11 +550,47 @@ namespace CNA::Internal::Backends::D3D12
         }
     }
 
+    void D3D12RenderTargetCubeBackend::ResolveMsaaEXT()
+    {
+        if (!isMsaa_ || !resolveResource_ || !owner_ || activeFace_ < 0) return;
+
+        constexpr D3D12_RESOURCE_STATES kShaderReadableState =
+            static_cast<D3D12_RESOURCE_STATES>(
+                static_cast<int>(D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE) |
+                static_cast<int>(D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE));
+
+        ID3D12CommandAllocator* allocator = owner_->GetCommandAllocatorEXT(0);
+        ID3D12GraphicsCommandList* cmdList = owner_->GetCommandListEXT();
+        allocator->Reset();
+        cmdList->Reset(allocator, nullptr);
+
+        // Only the currently-active face -- matches GenerateMipsEXT()'s own existing "only one
+        // face is ever the active draw target at a time" convention. The MSAA source has no mips
+        // (subresource = face); the resolve destination's base mip level uses the standard
+        // mip + face*levelCount_ formula (levelCount_ is always 1 here since mipMap_ is forced
+        // false when isMsaa_).
+        const UINT srcSubresource = static_cast<UINT>(activeFace_);
+        const UINT dstSubresource = static_cast<UINT>(activeFace_) * static_cast<UINT>(levelCount_);
+
+        auto& tracker = owner_->GetResourceStateTrackerEXT();
+        const D3D12_RESOURCE_STATES priorColorState = tracker.GetTrackedStateEXT(colorResource_.Get());
+        tracker.TransitionTo(cmdList, colorResource_.Get(), D3D12_RESOURCE_STATE_RESOLVE_SOURCE);
+        tracker.TransitionTo(cmdList, resolveResource_.Get(), D3D12_RESOURCE_STATE_RESOLVE_DEST);
+        cmdList->ResolveSubresource(resolveResource_.Get(), dstSubresource, colorResource_.Get(), srcSubresource,
+                                    DXGI_FORMAT_R8G8B8A8_UNORM);
+        tracker.TransitionTo(cmdList, colorResource_.Get(), priorColorState);
+        tracker.TransitionTo(cmdList, resolveResource_.Get(), kShaderReadableState);
+
+        if (FAILED(cmdList->Close())) return;
+        owner_->ExecuteCommandListAndWaitEXT(cmdList);
+    }
+
     void D3D12RenderTargetCubeBackend::UnbindAsRenderTarget()
     {
-        // DX-144: generate the active face's mip chain BEFORE clearing activeFace_ -- mirrors
-        // D3D12RenderTargetBackend::UnbindAsRenderTarget()'s own "mip-gen before back-buffer
-        // restore" ordering.
+        // DX-152/DX-144: resolve MSAA, then generate the active face's mip chain (mutually
+        // exclusive in practice -- isMsaa_ forces mipMap_ false -- but ordered the same way the
+        // 2D leg orders ResolveMsaaEXT()/GenerateMipsEXT()), BEFORE clearing activeFace_.
+        ResolveMsaaEXT();
         GenerateMipsEXT();
         activeFace_ = -1;
         if (owner_) owner_->RestoreBackBufferRenderTargetEXT();

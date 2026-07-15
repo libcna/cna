@@ -501,7 +501,12 @@ namespace CNA::Internal::Backends::D3D12
         // DX-144 (render-target mip-chain generation): raised again from 32 -- exhausted for real
         // the moment this task's own new render target (the "LL" mip-chain checks) was allocated,
         // same growing-suite-vs-no-free-list cause as the 8->32 raise above.
-        static constexpr UINT kRtvHeapCapacity = 48;
+        // DX-152 (RenderTargetCube MSAA): raised again from 48 -- a cube target allocates 6 RTVs
+        // (one per face) in one call, and the growing test suite exhausted 48 the moment this
+        // task's own new cube render target was allocated. Same fixed-bump-allocator simplification,
+        // sized generously (not just to the exact observed demand) to leave headroom for DX-153's
+        // own follow-up cube allocation landing right after this in the same phase.
+        static constexpr UINT kRtvHeapCapacity = 64;
         static constexpr UINT kDsvHeapCapacity = 8;
         static constexpr UINT kCbvSrvUavHeapCapacity = 64;
         // DX-119: one sampler slot per distinct XNA SamplerState combination actually used across a
