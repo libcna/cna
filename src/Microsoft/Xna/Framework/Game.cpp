@@ -914,6 +914,19 @@ namespace Microsoft::Xna::Framework
                     setIsActiveProperty(true);
                     break;
 
+                // Desktop focus switch (e.g. Alt-Tab), as opposed to the mobile-style
+                // background/foreground events above. Matches FNA's SDL3 platform loop, which sets
+                // game.IsActive = false/true on these same two events
+                // (SDL3_FNAPlatform.cs:1006-1037). Keyboard/mouse state is intentionally NOT
+                // cleared here — see DEC-15 in docs/input-fna-fidelity.md.
+                case SDL_EVENT_WINDOW_FOCUS_LOST:
+                    setIsActiveProperty(false);
+                    break;
+
+                case SDL_EVENT_WINDOW_FOCUS_GAINED:
+                    setIsActiveProperty(true);
+                    break;
+
                 default:
                     break;
             }

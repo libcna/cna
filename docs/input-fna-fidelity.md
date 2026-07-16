@@ -292,6 +292,18 @@ type + interruption is partial (task 906).
   and **rejected** (it would silently diverge from the reference); the XNA-standard mitigation is for the
   game to gate input on `Game.IsActive`. Pinned by
   `SdlInputBridgeKeyboardTest.WindowFocusLostDoesNotClearHeldKeysMatchingFna`.
+- **`Game.IsActive` on desktop focus change (INP-AUD-002, fixed 2026-07-16):** the "gate on
+  `Game.IsActive`" mitigation described just above only works if `IsActive` is actually correct.
+  Until this fix, `Game::PollEvents()` handled the mobile-style
+  `SDL_EVENT_WILL_ENTER_BACKGROUND`/`SDL_EVENT_DID_ENTER_FOREGROUND` pair but had no case for the
+  desktop `SDL_EVENT_WINDOW_FOCUS_LOST`/`SDL_EVENT_WINDOW_FOCUS_GAINED` pair, so an ordinary desktop
+  Alt-Tab left `Game::IsActive` `true` forever and never raised `Activated`/`Deactivated`. Both
+  events now route through `setIsActiveProperty`, matching FNA
+  (`SDL3_FNAPlatform.cs:1006-1037`). **Known scope gap (intentional, not part of this fix):** FNA's
+  handler for these two events also toggles the X11 "fullscreen desktop" window flag and
+  enables/disables the SDL screensaver; CNA does not replicate either. Neither affects input
+  semantics (the subject of this audit); revisit only if X11 fullscreen-on-Alt-Tab behavior or
+  screensaver suppression is reported as a real-world gap.
 - **Coordinate consistency (INPUT-TOUCH-024, was task 952 — verified):** both touch paths target the same
   **logical (virtual back-buffer) coordinate space.** `GraphicsDevice` sets `TouchPanel::DisplayWidth/Height`
   to `virtualWidth/Height`. The **gesture** path scales the normalized SDL coord linearly by
