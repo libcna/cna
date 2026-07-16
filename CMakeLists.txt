@@ -2032,6 +2032,16 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 947: PostprocessEffect.Fx's 5 techniques -- with this, NonPhotoRealistic sample's
+        # shader blocker is fully cleared.
+        cna_easygl_test(cna_test_easygl_postprocesseffect_shader
+                        examples/easygl_postprocesseffect_shader_test.cpp)
+        add_test(NAME EasyGL_PostprocessEffect_Shader
+                 COMMAND cna_test_easygl_postprocesseffect_shader)
+        set_tests_properties(EasyGL_PostprocessEffect_Shader PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 133: DualTextureEffect — magenta×yellow→red pixel readback
         cna_easygl_test(cna_test_easygl_dual_texture
                         examples/easygl_dual_texture_test.cpp)
