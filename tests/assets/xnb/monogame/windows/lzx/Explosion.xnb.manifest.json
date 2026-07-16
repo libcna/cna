@@ -1,0 +1,24 @@
+{
+  "producer": "MonoGame content pipeline (mgcb)",
+  "sourceRepo": "https://github.com/MonoGame/MonoGame",
+  "sourcePath": "Tests/Interactive/MacOS/SoundTest/Content/Explosion.xnb",
+  "sourceLicense": "Ms-PL (same license as CNA itself)",
+  "platform": "w",
+  "version": 5,
+  "compressed": true,
+  "totalLength": 1614,
+  "compressedSize": 1600,
+  "decompressedSize": 16561,
+  "rootReader": "Microsoft.Xna.Framework.Content.Texture2DReader",
+  "expectedType": "Texture2D",
+  "sharedResourceCount": 0,
+  "expectedFields": {
+    "surfaceFormat": 0,
+    "surfaceFormatName": "Color",
+    "width": 64,
+    "height": 64,
+    "mipLevelCount": 1,
+    "level0ByteCount": 16384
+  },
+  "notes": "Despite the folder name ('SoundTest') and filename ('Explosion'), this fixture's root type-reader is Texture2DReader, not SoundEffectReader -- confirmed by direct inspection, not assumption from the path (likely an explosion sprite/animation texture used by that sample). Single-block LZX payload (decompresses to under 32KB). Used by plan_xnb.md XNB-28/29/30B as the first real, externally-produced *compressed* .xnb fixture."
+}

@@ -16,6 +16,7 @@
 
 #include "CNA/CNAHelper.hpp"
 #include "CNA/Internal/CnbEnvelope.hpp"
+#include "CNA/Internal/Xnb/XnbDecompression.hpp"
 #include "CNA/Internal/Xnb/XnbHeader.hpp"
 #include "CNA/Logger.hpp"
 #include "SharpRuntime/Prop.hpp"
@@ -408,15 +409,16 @@ namespace Microsoft::Xna::Framework::Content
 
         /**
          * @brief Loads @p assetName as a real `.xnb` binary asset from @p xnbPath
-         *        (plan_xnb.md XNB-17B), via ContentReader's root-object dispatch.
+         *        (plan_xnb.md XNB-17B), via ContentReader's root-object dispatch. LZX-compressed
+         *        files (plan_xnb.md XNB-28/29) are decompressed first.
          *
          * @tparam T        Requested asset type; must match (via `std::any_cast`) whatever the
          *                  file's root type-reader actually produces.
          * @param xnbPath   Full filesystem path to the `.xnb` file.
          * @param assetName Logical asset name, passed through to ContentReader for diagnostics.
          * @return The deserialized root asset.
-         * @throws ContentLoadException if the file is malformed, LZX-compressed (Phase D is not
-         *         yet implemented), or names an unregistered/version-mismatched reader.
+         * @throws ContentLoadException if the file is malformed, decompression fails, or names
+         *         an unregistered/version-mismatched reader.
          */
         template <typename T>
         [[nodiscard]] T LoadXnbAsset(const std::string& xnbPath, const std::string& assetName)
@@ -437,10 +439,19 @@ namespace Microsoft::Xna::Framework::Content
 
             if (header.compressed)
             {
-                throw ContentLoadException(
-                    "ContentManager: '" + xnbPath + "' is LZX-compressed; CNA's .xnb reader "
-                    "currently only supports uncompressed files (plan_xnb.md Phase D is not yet "
-                    "implemented).");
+                System::IO::MemoryStream sizeStream(
+                    reinterpret_cast<const uint8_t*>(bytes.data()) + 10, 4);
+                System::IO::BinaryReader sizeReader(&sizeStream, true);
+                const int32_t decompressedSize = sizeReader.ReadInt32();
+                const int32_t compressedSize = header.totalLength - 14;
+
+                const auto decompressed = CNA::Internal::Xnb::DecompressXnbPayload(
+                    reinterpret_cast<const uint8_t*>(bytes.data()) + 14,
+                    compressedSize, decompressedSize, xnbPath);
+
+                System::IO::MemoryStream bodyStream(decompressed.data(), static_cast<int32_t>(decompressed.size()));
+                ContentReader contentReader(this, &bodyStream, assetName, header.version, header.platform);
+                return contentReader.ReadAsset<T>();
             }
 
             System::IO::MemoryStream bodyStream(

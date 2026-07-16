@@ -96,6 +96,40 @@ TEST_F(ContentManagerTexture2DXnbTest, LoadRealMonoGameFixtureEndToEnd)
     EXPECT_EQ(pixel.getAProperty(), 0xFF);
 }
 
+TEST_F(ContentManagerTexture2DXnbTest, LoadRealLzxCompressedFixtureEndToEnd)
+{
+    // plan_xnb.md XNB-30B: re-runs the same end-to-end milestone as
+    // LoadRealMonoGameFixtureEndToEnd, but against a real, externally-produced *LZX-compressed*
+    // fixture (MonoGame's own Tests/Interactive/MacOS/SoundTest/Content/Explosion.xnb -- despite
+    // the name, its root type-reader is Texture2DReader, confirmed by direct inspection).
+    // ContentManager root points straight at the fixture directory; no copy needed since nothing
+    // in this test writes to it.
+    ContentManager cm(nullptr, "tests/assets/xnb/monogame/windows/lzx");
+    cm.setGraphicsDevice(gd);
+
+    Texture2D texture = cm.Load<Texture2D>("Explosion");
+
+    EXPECT_EQ(texture.getWidthProperty(), 64);
+    EXPECT_EQ(texture.getHeightProperty(), 64);
+    EXPECT_EQ(texture.getFormatProperty(), SurfaceFormat::Color);
+
+    std::vector<Color> pixels(64 * 64, Color(0, 0, 0, 0));
+    texture.GetData(pixels.data(), (int)pixels.size());
+    // Not asserting exact pixel values (no independent reference render), but confirming the
+    // decoded image is not uniformly blank/garbage -- a real explosion sprite has more than one
+    // distinct color across 4096 pixels.
+    bool sawNonUniform = false;
+    for (std::size_t i = 1; i < pixels.size(); ++i)
+    {
+        if (pixels[i].getPackedValueProperty() != pixels[0].getPackedValueProperty())
+        {
+            sawNonUniform = true;
+            break;
+        }
+    }
+    EXPECT_TRUE(sawNonUniform);
+}
+
 TEST_F(ContentManagerTexture2DXnbTest, LoadCachesTheXnbTextureLikeAnyOtherTexture)
 {
     ScratchContentRoot root;
