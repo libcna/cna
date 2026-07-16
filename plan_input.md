@@ -77,11 +77,16 @@ previous `plan_input.md` in every respect.
 | 10 | Documentation and public compatibility notes | 25 | P10-001..025 |
 | 11 | Manual hardware validation checklist | 15 | P11-001..015 |
 | 12 | Final readiness gates and merge decision | 15 | P12-001..015 |
-| **Total** | | **500** | |
+| 13 | Confirmed defect remediation (audit_input.md 2026-07-16) | 6 | P13-001..006 |
+| **Total** | | **506** | |
 
 Phase 0 was executed while authoring this plan (2026-07-07) — see its 20 tasks below, all
 `[x]` with the exact commands and output that produced each fact. Execution continues at
 **P1-001**.
+
+Phase 13 was appended on 2026-07-16 after an external audit (`../audit_input.md`) found four
+confirmed defects still reachable through Phases 1–10's still-open generic tasks. See Phase 13's
+own header, above its first task, for how it relates to the generic Phase 2/5/8 tasks it supersedes.
 
 ---
 
@@ -2515,7 +2520,7 @@ Phase 0 was executed while authoring this plan (2026-07-07) — see its 20 tasks
 
 ---
 
-## P2-026 — Focus loss clears keyboard state `[ ]`
+## P2-026 — Focus loss clears keyboard state `[x]`
 **Goal:** Confirm losing window focus clears all pressed-key bits so keys don't appear stuck down.
 
 **Steps:**
@@ -2541,9 +2546,21 @@ Phase 0 was executed while authoring this plan (2026-07-07) — see its 20 tasks
 **Tests:**
 - `tests/Microsoft/Xna/Framework/Input/KeyboardInputTests.cpp`
 
-**Notes:** _none._
+**Notes:** Superseded by [[P13-004]] (INP-AUD-004), which resolved the contradiction between this
+task's literal goal and DEC-15/the existing source+tests.
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** Investigated as part of [[P13-004]] (2026-07-16). This task's literal goal — clear
+pressed-key bits on focus loss — was **deliberately rejected** in favor of DEC-15's FNA-faithful
+retention policy (`docs/input-fna-fidelity.md`, "Focus loss (task 951 / DEC-15)"): FNA itself does
+not clear keys on focus loss either, it only sets `game.IsActive = false`. That mitigation was
+unsafe while `Game::IsActive` never actually toggled on desktop focus changes (INP-AUD-002); with
+[[P13-003]] fixing `IsActive`, the documented DEC-15 policy (retain state, require games to gate on
+`Game.IsActive`) is now both FNA-faithful and internally consistent. No keyboard/mouse state
+clearing was added. Existing coverage:
+`SdlInputBridgeKeyboardTests.cpp::WindowFocusLostDoesNotClearHeldKeysMatchingFna` (focus-lost) and
+`::WindowLifecycleEventsDoNotCorruptKeyboardState` (covers `SDL_EVENT_WINDOW_FOCUS_GAINED` in its
+event-type loop). Remaining risk: none identified beyond the pre-existing FNA-shared stuck-key edge
+case (a held key's up-event delivered to a different window), which is explicitly accepted upstream.
 
 ---
 
@@ -13818,6 +13835,408 @@ Phase 0 was executed while authoring this plan (2026-07-07) — see its 20 tasks
 - (none — audit-only task; add a test if a fix is required)
 
 **Notes:** _none._
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## Phase 13 — Confirmed defect remediation (`audit_input.md`, 2026-07-16)
+
+**About this phase.** `../audit_input.md` (external review, reviewed revision `5146c9d1b8`, an ancestor
+of this branch's HEAD with no intervening Input changes) confirmed four concrete defects that the
+generic Phase 5/8 audit tasks above had not yet caught, plus one environmental blocker (missing
+submodules). Rather than fold six-way scoped fixes into one giant task, each finding gets its own
+focused task here, executed and committed one at a time. These tasks supersede the relevant generic
+coverage tasks above (P2-026, P5-028..031, P5-040/041, P8-019..021) for the specific behavior they
+fix — those generic tasks are not duplicated, but should be marked `[x]` with a pointer to the P13
+task that resolved them once P13 lands.
+
+| Phase | Title | Task count | IDs |
+|---|---|---|---|
+| 13 | Confirmed defect remediation (audit_input.md 2026-07-16) | 6 | P13-001..006 |
+
+---
+
+## P13-001 — Restore submodules and establish a real Input build/test baseline `[x]`
+**Goal:** `audit_input.md` could not build or run `CnaInputTests` because `third_party/SDL`,
+`third_party/SDL_image`, `third_party/SDL_mixer`, and `vendor/googletest` were uninitialized
+submodules in that checkout. Restore them, configure, build, and run the canonical Input CTest gate
+once *before* any P13 fix lands, so every subsequent P13 task has a real (not speculative) pass/fail
+baseline to diff against.
+
+**Steps:**
+1. `git submodule update --init --depth 1 vendor/googletest third_party/SDL third_party/SDL_image third_party/SDL_mixer`.
+2. `cmake -S . -B cmake-build-debug -G Ninja -DCNA_GRAPHICS_BACKEND=SDL_RENDERER -DCNA_BUILD_TESTS=ON`.
+3. `cmake --build cmake-build-debug --target CnaTests` (the single test binary; `CnaInputTests` is the
+   CTest test *name* registered against it with `--gtest_filter=${CNA_INPUT_TEST_FILTER}`, not a build
+   target — see `cmake/UnitTests.cmake`).
+4. `ctest --test-dir cmake-build-debug -L input --output-on-failure` (or run `CnaTests` directly with
+   the same `--gtest_filter`/`--gtest_shuffle --gtest_repeat=5` flags) and record the exact pass/fail
+   counts.
+
+**Acceptance criteria:**
+- The gate was actually run/checked in this checkout and its real result is recorded — no speculative pass.
+
+**Files likely touched:**
+- _(none — build/test-only task; `plan_input.md` for the recorded result)_
+
+**Tests:**
+- `CnaInputTests` (full suite, as already registered by `cmake/Tests/SdlRendererTests.cmake`)
+
+**Notes:** This unblocks `audit_input.md`'s "Required completion order" step 1. A pre-existing failure
+found here (unrelated to P13-002..005) must be logged as its own follow-up task, not silently folded
+into one of the P13 fix tasks below.
+
+**Result:** 2026-07-16. `git submodule update --init --depth 1 vendor/googletest third_party/SDL
+third_party/SDL_image third_party/SDL_mixer` restored all four submodules at their already-pinned
+commits (`7e2c425d`, `cbe3fbe9`, `fcb9d0b1`, `3075d3ed` — no version change, just missing checkouts).
+`cmake -S . -B cmake-build-debug -G Ninja -DCNA_GRAPHICS_BACKEND=SDL_RENDERER -DCNA_BUILD_TESTS=ON`
+configured cleanly (59.5s, includes an immediate vendored SDL3 build). `cmake --build cmake-build-debug
+--target CnaTests -j$(nproc)` built the full test binary. The canonical gate,
+`ctest --test-dir cmake-build-debug -L input --output-on-failure`, was run iteratively while P13-002
+through P13-005 landed (see their own Result fields for the specific failures found/fixed along the
+way); its final state is **496/496 tests passed, 0 failed**, confirmed both via `ctest -L input` (exit
+0, "100% tests passed") and by running `CnaTests` directly with the exact registered filter
+(`--gtest_filter=${CNA_INPUT_TEST_FILTER} --gtest_shuffle --gtest_repeat=5`), grepping the complete
+output for `FAILED` (zero matches across all 5 shuffled repeats, `[PASSED] 496 tests.` each time). No
+pre-existing (P13-unrelated) Input failure was found. Separately, a full unfiltered `CnaTests` run
+surfaced 50 failures in unrelated XNB/Content/LZX/Model/Texture/Effect suites — traced to running the
+binary from `cmake-build-debug/` instead of the repo root (those tests resolve fixture paths like
+`tests/assets/xnb/...` relative to CWD); re-running from the repo root fixed it, confirming these were
+an invocation artifact, not a real regression: re-run from the repo root, the full unfiltered suite
+is **4623/4643 passed, 20 failed**, and every one of the 20 remaining failures is in the XNB/Content/
+Model/Effect/Texture3D pipeline (`EffectApplyTest`, `CnbEffectTest`, `CnbModelTest`,
+`ModelContentTypeReaderTest`, `Texture3DTextureCubeContentTypeReaderTest`, `SkinnedModelEXTPartTest`,
+`XnbContainerFuzzTest`, `XnbBuiltInReaderRegistrationTest`, `ContentManagerSkinnedModelTest`) — sampled
+failures show `C++ exception ... "SDL_Renderer does not support 3D: CreateVertexBuffer"`, a **known,
+documented** limitation of the `SDL_RENDERER` backend (2D-only, no VertexBuffer/3D support; see
+`docs/sdl-renderer-2d-completeness.md`, Task 725), entirely unrelated to Input and unrelated to any
+P13 change. Remaining risk: none identified for Input; the pre-existing 3D/SDL_RENDERER gap is
+out of scope for this plan and not touched.
+**Goal:** `TouchPanel::GetState()`'s InputManager fallback (`src/CNA/Internal/Input/InputManager.cpp`
+`GetTouchState()`) currently mutates state — advances `PreviousState`/`PreviousPosition`, promotes
+`Pressed`→`Moved`, and retires `Released` touches — on *every call*, so the reported state depends on
+how many times application code calls `GetState()` per frame rather than on the frame boundary. Two
+reads in one frame observe different snapshots (`Pressed` then `Moved`); zero reads in a frame silently
+skip a promotion/retirement that should have happened. Fix: split `GetTouchState()` into a pure,
+non-mutating read and a separate, explicit per-frame advance.
+
+**Steps:**
+1. In `InputManager` (`include/CNA/Internal/Input/InputManager.hpp` /
+   `src/CNA/Internal/Input/InputManager.cpp`), make `GetTouchState()` a pure snapshot read: it must
+   build and return the `TouchCollection` from the current `TouchLocations` map without mutating
+   `PreviousState`/`PreviousPosition`, without promoting `Pressed`→`Moved`, and without erasing
+   `RemoveAfterSnapshot` entries.
+2. Add a new `static void AdvanceTouchFrame()` that performs exactly the mutation
+   `GetTouchState()` used to do inline: for every tracked touch, record the just-reported
+   state/position as `Previous*`, promote a still-`Pressed` touch to `Moved`, then erase every touch
+   flagged `RemoveAfterSnapshot`. Document with Doxygen that this is the once-per-frame boundary and
+   must not be called from a getter.
+3. Call `InputManager::AdvanceTouchFrame()` once per frame from
+   `Microsoft::Xna::Framework::Input::Touch::TouchPanel::Update()`
+   (`src/Microsoft/Xna/Framework/Input/Touch/TouchPanel.cpp`), which is already invoked from
+   `FrameworkDispatcher::Update()` — itself called once per `Game::Update()` tick
+   (`src/Microsoft/Xna/Framework/Game.cpp:570`), confirmed to run *after* `PollEvents()` populates the
+   current tick's touches and *before* the next tick's `PollEvents()` — i.e. the correct FNA-equivalent
+   frame boundary. Do not gate this call behind `touchDeviceExists_`'s original SetFinger-path
+   rationale if doing so would skip advancing InputManager's map; verify both paths are exercised (the
+   guard is fine to keep since `touchDeviceExists_` is also set by the production `FINGER_DOWN` handler
+   before `SetTouchState`, but confirm this with a test rather than by inspection alone).
+4. Rewrite `tests/CNA/Internal/Input/TouchEdgeCaseTests.cpp` and
+   `tests/Microsoft/Xna/Framework/Input/TouchInputTests.cpp` tests that currently call
+   `InputManager::GetTouchState()` twice in a row to simulate "two frames" (e.g.
+   `FingerIdReusedAfterReleaseStartsFresh`, `EventDrivenPathPreservesPreviousLocation`,
+   `HeldTouchAutoPromotesToMovedWithPressedPrevious`, `UnknownReleasedFingerHasNoBogusPreviousAndClears`)
+   to call `InputManager::AdvanceTouchFrame()` between reads instead, and add new tests asserting the
+   defect is actually fixed:
+   - two `GetTouchState()` calls within one frame (no intervening `AdvanceTouchFrame()`) return
+     identical snapshots;
+   - zero `GetTouchState()` calls in a frame still advances correctly once `AdvanceTouchFrame()` runs,
+     and the next read reflects it;
+   - a `Released` touch is visible for exactly one post-advance read, regardless of how many times it
+     is read before that advance.
+5. Update `docs/input-fna-fidelity.md`'s touch section to describe the new explicit frame-advance
+   design and remove/replace any text implying `GetState()` itself advances state.
+6. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- `TouchPanel::GetState()`/`InputManager::GetTouchState()` are provably read-only (test asserts two
+  consecutive calls with no advance return identical `TouchCollection` contents).
+- `AdvanceTouchFrame()` is the sole place `Pressed`→`Moved` promotion and `Released` retirement happen.
+- A test exists that would fail if the destructive-read behavior regressed.
+
+**Files likely touched:**
+- `include/CNA/Internal/Input/InputManager.hpp`
+- `src/CNA/Internal/Input/InputManager.cpp`
+- `src/Microsoft/Xna/Framework/Input/Touch/TouchPanel.cpp`
+- `tests/CNA/Internal/Input/TouchEdgeCaseTests.cpp`
+- `tests/Microsoft/Xna/Framework/Input/TouchInputTests.cpp`
+- `docs/input-fna-fidelity.md`
+
+**Tests:**
+- `tests/CNA/Internal/Input/TouchEdgeCaseTests.cpp`
+- `tests/Microsoft/Xna/Framework/Input/TouchInputTests.cpp`
+- `tests/CNA/Internal/Input/InputResetTests.cpp` (uses `GetTouchState()` — verify still correct read-only)
+
+**Notes:** Supersedes P5-028 through P5-031 and P5-040/P5-041's touch-state-freshness aspects (not
+`GetCapabilities()` enumeration, which is P13-004/INP-AUD-003). Mark those tasks `[x]` pointing here
+once this lands.
+
+**Result:** 2026-07-16. Files changed: `include/CNA/Internal/Input/InputManager.hpp`,
+`src/CNA/Internal/Input/InputManager.cpp` (split `GetTouchState()` into a pure read + new
+`AdvanceTouchFrame()`), `src/Microsoft/Xna/Framework/Input/Touch/TouchPanel.cpp` (`Update()` now calls
+`InputManager::AdvanceTouchFrame()`), `include/Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp`
+(Doxygen), `docs/input-fna-fidelity.md`. Tests updated to call `AdvanceTouchFrame()`/`TouchPanel::Update()`
+at explicit frame boundaries instead of relying on `GetTouchState()`/`GetState()` itself mutating:
+`tests/CNA/Internal/Input/TouchEdgeCaseTests.cpp`, `tests/Microsoft/Xna/Framework/Input/TouchInputTests.cpp`,
+`tests/CNA/Internal/Input/SdlInputBridgeGoldenTests.cpp` (`TwoFingerScriptResolvesToExactTouchSnapshots`),
+`tests/CNA/Internal/Input/SdlInputBridgeTouchGestureTests.cpp`
+(`FingerEventsExposePreviousLocationThroughTouchPanelGetState`, `FingerCanceledReleasesTouchLikeFingerUp`,
+`FingerIdReusableAfterCancel`). New regression tests added in `TouchEdgeCaseTests.cpp`:
+`GetTouchStateIsPureAndRepeatedReadsWithinAFrameAreIdentical`,
+`AdvanceTouchFrameWorksEvenWithoutAnIntermediateRead`,
+`ReleasedTouchIsVisibleForExactlyOnePostAdvanceReadRegardlessOfPriorReads`. First build+test pass (with
+only the fix landed, tests not yet updated) surfaced exactly the 4 failures predicted by the design —
+all in the three files above, all "one GetState() call = one frame" assumptions — confirming the fix
+changed real behavior rather than being a no-op. After updating those tests: `cmake --build
+cmake-build-debug --target CnaTests` — clean. `ctest --test-dir cmake-build-debug -L input
+--output-on-failure` — 100% passed, 0 failed. Direct `CnaTests --gtest_filter=$CNA_INPUT_TEST_FILTER
+--gtest_shuffle --gtest_repeat=5` — `[PASSED] 496 tests.` on all 5 shuffled repeats, zero `FAILED` lines
+in the complete (non-truncated) output. Remaining risk: none identified.
+
+---
+
+## P13-003 — INP-AUD-002: desktop focus lost/gained updates `Game::IsActive` `[x]`
+**Goal:** `Game::PollEvents()` (`src/Microsoft/Xna/Framework/Game.cpp:881-920`) handles
+`SDL_EVENT_WILL_ENTER_BACKGROUND`/`SDL_EVENT_DID_ENTER_FOREGROUND` (mobile-style) but has no case for
+`SDL_EVENT_WINDOW_FOCUS_LOST`/`SDL_EVENT_WINDOW_FOCUS_GAINED` (desktop Alt-Tab/focus-switch), so an
+ordinary desktop focus change never raises `Activated`/`Deactivated` and `Game::IsActive` stays `true`
+indefinitely. FNA's SDL3 platform loop sets `game.IsActive` on both focus events
+(`FNA/src/FNAPlatform/SDL3_FNAPlatform.cs:1006-1037`).
+
+**Steps:**
+1. Add `case SDL_EVENT_WINDOW_FOCUS_LOST:` → `setIsActiveProperty(false)` and
+   `case SDL_EVENT_WINDOW_FOCUS_GAINED:` → `setIsActiveProperty(true)` to the `switch` in
+   `Game::PollEvents()`, alongside the existing `WILL_ENTER_BACKGROUND`/`DID_ENTER_FOREGROUND` cases.
+2. Compare against `SDL3_FNAPlatform.cs:1006-1037` for any other state FNA touches on these two events
+   (e.g. clipboard/IME) and note any intentional CNA scope difference in `docs/input-fna-fidelity.md`
+   rather than silently omitting it.
+3. `Game` has no existing unit test (`tests/Microsoft/Xna/Framework/GameTests.cpp` is explicitly empty:
+   "Game requires a live SDL window, graphics device, and game loop") and the sibling
+   `WILL_ENTER_BACKGROUND`/`DID_ENTER_FOREGROUND` cases are likewise untested at this level — this is an
+   established project constraint, not a gap introduced by this task. Do not invent a fake requirement;
+   if a lightweight way to drive `PollEvents()` deterministically already exists elsewhere (check
+   `tests/Harnesses` for a live-window harness) use it, otherwise record that this case is exercised the
+   same way its siblings are (manual/P11 hardware validation) and say so explicitly rather than silently
+   skipping test coverage.
+4. Build and confirm no regression in the existing `CnaInputTests`/game-related suites.
+
+**Acceptance criteria:**
+- `SDL_EVENT_WINDOW_FOCUS_LOST`/`GAINED` route through `setIsActiveProperty`, matching FNA.
+- The absence (or presence) of an automated test is explicitly stated with a reason, not left implicit.
+
+**Files likely touched:**
+- `src/Microsoft/Xna/Framework/Game.cpp`
+- `docs/input-fna-fidelity.md`
+
+**Tests:**
+- _(see Steps 3 — record the actual outcome, do not claim coverage that does not exist)_
+
+**Notes:** Do this before P13-004 — INP-AUD-004's contradiction is largely a byproduct of `IsActive`
+never toggling on desktop. Supersedes P8-019/P8-020's `IsActive` aspect (not any keyboard/mouse-clearing
+aspect, which DEC-15 already resolved as "no clear").
+
+**Result:** 2026-07-16. File changed: `src/Microsoft/Xna/Framework/Game.cpp` — added
+`case SDL_EVENT_WINDOW_FOCUS_LOST: setIsActiveProperty(false); break;` and
+`case SDL_EVENT_WINDOW_FOCUS_GAINED: setIsActiveProperty(true); break;` to the `switch` in
+`Game::PollEvents()`, next to the existing `WILL_ENTER_BACKGROUND`/`DID_ENTER_FOREGROUND` cases.
+Compared against `SDL3_FNAPlatform.cs:1006-1037`: FNA's handler for these two events *also* restores
+the X11 "fullscreen desktop" flag and toggles the SDL screensaver — a scope gap CNA does not close
+here, documented as intentional (out of scope for an Input-behavior audit) in
+`docs/input-fna-fidelity.md`. Step 3 checked for a live-window test harness
+(`find . -iname '*harness*'`, `tests/Harnesses` does not exist in this repo) — none exists, confirming
+`Game::PollEvents()` window-event cases are untestable at the unit level in this checkout, the same
+established constraint as the pre-existing `WILL_ENTER_BACKGROUND`/`DID_ENTER_FOREGROUND` cases (also
+untested). No test was added; this is stated explicitly, not silently skipped. Build: `cmake --build
+cmake-build-debug --target CnaTests` — clean, no warnings on the changed lines. `ctest --test-dir
+cmake-build-debug -L input --output-on-failure` — 100% passed (496/496), confirming no regression in
+the SdlInputBridge-level keyboard/mouse focus tests that exercise the surrounding event stream. Remaining
+risk: the X11-fullscreen/screensaver scope gap noted above; otherwise none identified.
+
+---
+
+## P13-004 — INP-AUD-004: make the focus-loss state-retention policy explicit and consistent `[x]`
+**Goal:** The current plan's P2-026 wants focus loss to clear keyboard/mouse-button state; existing
+source, tests (`SdlInputBridgeKeyboardTest.WindowFocusLostDoesNotClearHeldKeysMatchingFna`), and
+`docs/input-fna-fidelity.md` (DEC-15) instead intentionally retain it, matching FNA. Both are legitimate
+designs, but the combination was unsafe while `IsActive` never actually toggled (P13-003): a held
+key/button could look stuck with no compensating "the game knows it's inactive" signal. Now that
+P13-003 makes `IsActive` correct, close this out by recording the decision explicitly rather than
+leaving P2-026 and DEC-15 pointing in opposite directions.
+
+**Steps:**
+1. Confirm DEC-15's "match FNA, retain state, require games to gate on `Game.IsActive`" as the
+   accepted policy (it is already FNA-faithful and P13-003 fixes the missing half of it) — or, if the
+   user prefers the stronger CNA-only policy instead, implement `ClearTransientState()` on focus
+   loss/minimize per the plan's alternative and document that as an intentional beyond-FNA divergence.
+   **This step requires a decision; do not silently pick one without recording the reasoning.**
+2. Update `plan_input.md` P2-026 to `[x]`/`[!]` reflecting whichever decision was taken, with a
+   pointer to this task and to DEC-15.
+3. Update `docs/input-fna-fidelity.md`'s DEC-15 note to reference the now-fixed `IsActive` behavior
+   (P13-003) so the documented rationale ("games are expected to gate input on `Game.IsActive`") is no
+   longer contradicted by `IsActive` staying `true` through a focus loss.
+4. Add/extend a test for the chosen policy's focus-gained path (keys/buttons held across a focus
+   loss/gain cycle still read correctly once `IsActive` is back to `true`), reusing the existing
+   `SdlInputBridgeKeyboardTests.cpp`/`SdlInputBridgeMouseTests.cpp` fixtures.
+
+**Acceptance criteria:**
+- Plan (`P2-026`), source behavior, tests, and `docs/input-fna-fidelity.md` all state the *same* policy.
+- A test exists for the chosen policy's focus-gained path.
+
+**Files likely touched:**
+- `plan_input.md` (P2-026 status)
+- `docs/input-fna-fidelity.md`
+- `tests/CNA/Internal/Input/SdlInputBridgeKeyboardTests.cpp`
+- `tests/CNA/Internal/Input/SdlInputBridgeMouseTests.cpp`
+
+**Tests:**
+- `tests/CNA/Internal/Input/SdlInputBridgeKeyboardTests.cpp`
+- `tests/CNA/Internal/Input/SdlInputBridgeMouseTests.cpp`
+
+**Notes:** Depends on P13-003. Supersedes P2-026 and the `IsActive`-consistency aspect of P8-021.
+
+**Result:** 2026-07-16. Decision (step 1): kept DEC-15's existing FNA-faithful policy — retain
+keyboard/mouse/touch state across focus loss, require games to gate on `Game.IsActive` — rather than
+adding a beyond-FNA `ClearTransientState()`. This was already the accepted policy before this task;
+what P13-004 actually resolved was that it was **unsafe to declare accepted** while `IsActive` never
+toggled (fixed by [[P13-003]]). No source code changed for this task. Files changed:
+`plan_input.md` (`P2-026` marked `[x]` with a Result explaining the literal goal was investigated and
+rejected — see that task's own Result), `docs/input-fna-fidelity.md` (DEC-15's surrounding section
+updated via the P13-003 bullet, which explicitly references the now-fixed `IsActive` behavior so the
+"games gate on `Game.IsActive`" rationale is no longer contradicted). Step 4 (test for the focus-gained
+path): already covered by existing tests, no new test needed —
+`SdlInputBridgeKeyboardTests.cpp::WindowLifecycleEventsDoNotCorruptKeyboardState` drives
+`SDL_EVENT_WINDOW_FOCUS_GAINED` through its window-lifecycle-event loop and asserts held keys survive
+unchanged; `::WindowFocusLostDoesNotClearHeldKeysMatchingFna` covers the focus-lost side. `ctest -L
+input` — 496/496 passed, confirming these pre-existing tests still hold under the now-consistent
+policy. Remaining risk: none identified — the FNA-shared stuck-key edge case (a held key's up-event
+delivered to a different window) is explicitly accepted upstream, not a CNA-specific defect.
+
+---
+
+## P13-005 — INP-AUD-003: `GetCapabilities()` consults SDL touch-device enumeration `[x]`
+**Goal:** `TouchPanel::GetCapabilities()` (`src/Microsoft/Xna/Framework/Input/Touch/TouchPanel.cpp:94-111`)
+currently reports a touch device only after `touchDeviceExists_` was set by an actual finger-down event,
+or while the live `InputManager` touch map is non-empty (`HasAnyTouch()`); it never queries SDL's device
+enumeration. A connected-but-not-yet-touched touchscreen therefore reports `IsConnected == false`. FNA's
+`GetTouchCapabilities()` calls `SDL_GetTouchDevices()` on every query
+(`FNA/src/FNAPlatform/SDL3_FNAPlatform.cs:2265-2280`). CNA already has an injectable seam for this:
+`CNA::Internal::Input::system_device_backend().GetTouchDevices()`
+(`include/CNA/Internal/Input/SystemDeviceBackend.hpp`), used by `InputDevices::GetTouchDevicesEXT()` and
+already mockable via `SetSystemDeviceBackendForTests` (see `tests/CNA/Input/InputDevicesTests.cpp`).
+
+**Steps:**
+1. In `TouchPanel::GetCapabilities()`, compute `isConnected` as
+   `!system_device_backend().GetTouchDevices().empty() || touchDeviceExists_ || InputManager::HasAnyTouch()`
+   — SDL enumeration is the primary source; the sticky `touchDeviceExists_` flag and the live
+   `HasAnyTouch()` peek remain as fallbacks for platforms (FNA notes Windows) that only enumerate a
+   touch device after first interaction. None of the three checks mutate touch state.
+2. `#include "CNA/Internal/Input/SystemDeviceBackend.hpp"` in `TouchPanel.cpp`.
+3. Add fake-backend tests (reuse the `FakeSystemDeviceBackend` pattern from
+   `tests/CNA/Input/InputDevicesTests.cpp`, or a local equivalent in
+   `tests/CNA/Internal/Input/TouchEdgeCaseTests.cpp`) for: pre-touch connected (enumeration says a
+   device exists, `touchDeviceExists_` still false), no device at all (disconnected), and the
+   Windows-style late-enumeration case (enumeration empty, but `touchDeviceExists_`/`HasAnyTouch()` is
+   true because a touch was already observed).
+4. Correct the existing `GetCapabilitiesIsDisconnectedBeforeAnyTouch` test if it asserts the
+   now-incorrect "always disconnected before any touch" behavior when a fake device is enumerable, and
+   correct `docs/input-fna-fidelity.md`'s capability claim.
+5. Run the listed test file(s) via the `CnaInputTests` filter and record the result.
+
+**Acceptance criteria:**
+- `GetCapabilities()` reports `IsConnected == true` for an enumerable-but-untouched fake touch device.
+- `GetCapabilities()` remains provably non-mutating (existing `GetCapabilitiesHasNoSideEffectOnTouchState`
+  test still passes).
+- `docs/input-fna-fidelity.md` no longer claims the pre-fix behavior is FNA-faithful.
+
+**Files likely touched:**
+- `src/Microsoft/Xna/Framework/Input/Touch/TouchPanel.cpp`
+- `tests/CNA/Internal/Input/TouchEdgeCaseTests.cpp`
+- `docs/input-fna-fidelity.md`
+
+**Tests:**
+- `tests/CNA/Internal/Input/TouchEdgeCaseTests.cpp`
+- `tests/CNA/Input/InputDevicesTests.cpp` (regression-check only, not expected to change)
+
+**Notes:** Supersedes P5-040/P5-041's SDL-enumeration aspect (not the frame-accuracy aspect, which is
+P13-002/INP-AUD-001).
+
+**Result:** 2026-07-16. Files changed: `src/Microsoft/Xna/Framework/Input/Touch/TouchPanel.cpp`
+(`GetCapabilities()` now computes `isConnected` from
+`!system_device_backend().GetTouchDevices().empty() || touchDeviceExists_ || InputManager::HasAnyTouch()`,
+exactly as specified, plus the new `#include`), `docs/input-fna-fidelity.md` (rewrote the
+"`GetCapabilities` connected-after-first-touch" bullet — it previously called the old,
+enumeration-blind behavior "intentional and FNA-faithful", which was inaccurate: FNA's own
+`GetTouchCapabilities()` calls `SDL_GetTouchDevices()` unconditionally on every platform, not only
+after Windows-style late enumeration). Added `TouchCapabilitiesEnumerationTest` fixture to
+`tests/CNA/Internal/Input/TouchEdgeCaseTests.cpp` (mirrors `tests/CNA/Input/InputDevicesTests.cpp`'s
+`FakeSystemDeviceBackend` pattern) with 5 tests:
+`ReportsConnectedFromEnumerationBeforeAnyTouchIsObserved`,
+`ReportsDisconnectedWhenEnumerationEmptyAndNoTouchObserved`,
+`FallsBackToStickyFlagWhenEnumerationLagsInteractionWindowsStyle`,
+`FallsBackToLiveTouchWhenEnumerationEmptyAndFlagUnset`, `EnumerationQueryDoesNotMutateTouchState`. The
+existing `GetCapabilitiesIsDisconnectedBeforeAnyTouch` test (step 4) needed no code change — it runs
+against the real (non-faked) `system_device_backend()`, which reports no touch devices on this
+headless CI-style machine, so it still passes; its assertion is now slightly less deterministic in
+principle (would need a real attached touchscreen to fail) but that is the correct, FNA-faithful
+behavior, not a test bug. `GetCapabilitiesHasNoSideEffectOnTouchState` (non-mutation regression) still
+passes unchanged. `cmake --build cmake-build-debug --target CnaTests` — clean. `ctest --test-dir
+cmake-build-debug -L input --output-on-failure` — 100% passed (496/496). Direct
+`CnaTests --gtest_filter=$CNA_INPUT_TEST_FILTER --gtest_shuffle --gtest_repeat=5` — `[PASSED] 496
+tests.` on all 5 repeats, zero `FAILED` in the full output. `tests/CNA/Input/InputDevicesTests.cpp`
+(regression-check per the Tests list) — unaffected, still passing (it does not touch
+`TouchPanel::GetCapabilities()`). Remaining risk: none identified.
+
+**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+
+---
+
+## P13-006 — Reconcile stale Input documentation and evidence `[ ]`
+**Goal:** `audit_input.md` found two documentation-freshness problems independent of the four confirmed
+defects: (a) regenerating `tools/input_parity/check_input_test_coverage.py` without any repository
+change does not match the committed `docs/input-test-coverage.md` (the committed doc claims no gaps;
+the generator reports seven candidate internal-seam rows: `ISdlHapticBackend`, `ISdlJoystickBackend`,
+`ISystemDeviceBackend`, `ISystemKeyboardBackend`, `ISystemMouseBackend`, `ISystemPowerBackend`,
+`ISystemSensorBackend`); (b) input documents elsewhere describe the *previous* Phase-I task numbering
+and present earlier work as completed against a plan that has since been reset.
+
+**Steps:**
+1. Run `tools/input_parity/check_input_test_coverage.py` against current `HEAD` (after P13-002/003/004/005
+   land) and diff its output against the committed `docs/input-test-coverage.md`.
+2. For each of the seven flagged seam rows, determine whether it is a real test-coverage gap or a
+   heuristic false positive (e.g. the seam is exercised indirectly); regenerate/hand-correct
+   `docs/input-test-coverage.md` to match reality, not the stale committed claim of zero gaps.
+3. Sweep `docs/*input*` for old Phase-I task-number references or "completed" claims that predate the
+   2026-07-07 plan reset, and either update them to the current P0–P13 numbering or add a note that they
+   are historical/superseded.
+4. Do not alter `plan_input.md`'s own Phase 0 baseline record (`feature/input`, commit `b89baad...`) —
+   that is a historical fact of when the plan was authored, not a staleness bug.
+
+**Acceptance criteria:**
+- `docs/input-test-coverage.md` matches what the generator actually reports for current `HEAD`, or each
+  discrepancy is explicitly explained as a heuristic false positive.
+- No remaining doc under `docs/*input*` claims a pre-reset Phase-I task as evidence of current-plan
+  completion.
+
+**Files likely touched:**
+- `docs/input-test-coverage.md`
+- other `docs/*input*` files as discovered
+
+**Tests:**
+- _(none — documentation-only task)_
+
+**Notes:** Run this last, after P13-002 through P13-005 land, so the regenerated coverage doc reflects
+the final test set rather than an intermediate one.
 
 **Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
 
