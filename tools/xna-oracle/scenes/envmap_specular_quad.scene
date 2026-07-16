@@ -1,0 +1,41 @@
+# plan_dx9.md D9-A5 scene corpus: envmap_specular_quad
+# First scene to exercise EnvironmentMapEffect.EnvironmentMapSpecular with a genuinely non-zero
+# value (plan_dx9.md D9-81 item 4, resolved 2026-07-16 -- GpuDrawParams now carries a real
+# specularEnabled field, derived from EnvironmentMapSpecular being non-black, matching CNA's own
+# EnvironmentMapEffect.cpp setter logic and real XNA's identical behavior). Otherwise identical to
+# envmap_quad.scene (same lit-white-texture + env-map lerp setup, fresnelfactor=0) -- only
+# environmentmapspecular is added, selecting PSEnvMapSpecular/PSEnvMapSpecularNoFog (the
+# specular-enabled pixel shader bucket) instead of PSEnvMap/PSEnvMapNoFog. Per
+# EnvironmentMapEffect.fx's own PSEnvMapSpecular: color.rgb = lerp(litTexture, envMap, amount);
+# color.rgb += EnvironmentMapSpecular * envMap.a -- an ADDITIVE contribution on top of the
+# already-established lerp result, not a replacement.
+width=256
+height=256
+profile=HiDef
+clearcolor=100,149,237,255
+effect=EnvironmentMapEffect
+vertexformat=PositionNormalTexture
+lighting=true
+ambientcolor=0,0,0
+light0enabled=true
+light0diffuse=0.5,0.5,0.5
+light0direction=0,0,-1
+texture=true
+texturewidth=1
+textureheight=1
+texturefilter=Point
+environmentmap=true
+environmentmapsize=1
+environmentmapamount=0.5
+environmentmapspecular=20,10,5
+fresnelfactor=0
+primitive=TriangleList
+texturepixel=255,255,255,255
+environmentmappixel=200,100,50,255
+# x,y,z,nx,ny,nz,u,v -- every vertex faces the camera (+Z normal), matching envmap_quad.scene.
+vertex=-0.6,0.6,0,0,0,1,0,0
+vertex=0.6,0.6,0,0,0,1,1,0
+vertex=-0.6,-0.6,0,0,0,1,0,1
+vertex=0.6,0.6,0,0,0,1,1,0
+vertex=0.6,-0.6,0,0,0,1,1,1
+vertex=-0.6,-0.6,0,0,0,1,0,1

@@ -217,6 +217,10 @@ namespace
         SceneVertexFormat vertexFormat = SceneVertexFormat::PositionColor;
         bool vertexColorEnabled = false;
         bool lightingEnabled = false;
+        // plan_dx9.md D9-81 item 1, resolved 2026-07-16: BasicEffect/SkinnedEffect's real
+        // PreferPerPixelLighting, now that GpuDrawParams carries it. Defaults false, matching
+        // real XNA's own default (per-vertex/Gouraud lighting).
+        bool preferPerPixelLighting = false;
         bool textureEnabled = false;
         int textureWidth = 0;
         int textureHeight = 0;
@@ -228,6 +232,10 @@ namespace
         int environmentMapSize = 0;
         float environmentMapAmount = 1.0f;
         float fresnelFactor = 1.0f;
+        // plan_dx9.md D9-81 item 4, resolved 2026-07-16: EnvironmentMapEffect.EnvironmentMapSpecular,
+        // whose non-zero-ness drives the real specularEnabled bool now that GpuDrawParams carries
+        // it. Defaults to Vector3::Zero, matching real XNA's own default (specular disabled).
+        Vector3 environmentMapSpecular{0, 0, 0};
         Color environmentMapPixel = Color::Black;
         Vector3 diffuseColor{1, 1, 1};
         Vector3 ambientColor{0, 0, 0};
@@ -472,6 +480,7 @@ namespace
             else if (key == "environmentmapsize") scene.environmentMapSize = std::stoi(value);
             else if (key == "environmentmapamount") scene.environmentMapAmount = std::stof(value);
             else if (key == "fresnelfactor") scene.fresnelFactor = std::stof(value);
+            else if (key == "environmentmapspecular") scene.environmentMapSpecular = ParseVector3(value);
             else if (key == "environmentmappixel") scene.environmentMapPixel = ParseColor(value);
             else if (key == "alphafunction") scene.alphaFunction = ParseCompareFunction(value);
             else if (key == "referencealpha") scene.referenceAlpha = std::stoi(value);
@@ -493,6 +502,7 @@ namespace
             }
             else if (key == "vertexcolor") scene.vertexColorEnabled = ParseBool(value);
             else if (key == "lighting") scene.lightingEnabled = ParseBool(value);
+            else if (key == "preferpixellighting") scene.preferPerPixelLighting = ParseBool(value);
             else if (key == "texture") scene.textureEnabled = ParseBool(value);
             else if (key == "texturewidth") scene.textureWidth = std::stoi(value);
             else if (key == "textureheight") scene.textureHeight = std::stoi(value);
@@ -702,6 +712,7 @@ protected:
             envMapFx->setEnvironmentMapProperty(environmentMap.get());
             envMapFx->setEnvironmentMapAmountProperty(scene_.environmentMapAmount);
             envMapFx->setFresnelFactorProperty(scene_.fresnelFactor);
+            envMapFx->setEnvironmentMapSpecularProperty(scene_.environmentMapSpecular);
             envMapFx->setWorldProperty(Matrix::getIdentityProperty());
             envMapFx->setViewProperty(Matrix::getIdentityProperty());
             envMapFx->setProjectionProperty(Matrix::getIdentityProperty());
@@ -746,6 +757,7 @@ protected:
             // inert regardless of which ShaderIndex bucket -- OneBone/TwoBones/FourBones -- is
             // actually selected).
             skinnedFx->setWeightsPerVertexProperty(scene_.weightsPerVertex);
+            skinnedFx->setPreferPerPixelLightingProperty(scene_.preferPerPixelLighting);
             skinnedFx->SetBoneTransforms(std::vector<Matrix>{
                 Matrix::getIdentityProperty(),
                 Matrix::CreateTranslation(scene_.bone1Translate),
@@ -777,6 +789,7 @@ protected:
             basicFx = std::make_unique<BasicEffect>(dev);
             basicFx->VertexColorEnabled = scene_.vertexColorEnabled;
             basicFx->setLightingEnabledProperty(scene_.lightingEnabled);
+            basicFx->setPreferPerPixelLightingProperty(scene_.preferPerPixelLighting);
             basicFx->setTextureEnabledProperty(scene_.textureEnabled);
             basicFx->World = Matrix::getIdentityProperty();
             basicFx->View = Matrix::getIdentityProperty();

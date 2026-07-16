@@ -22,16 +22,24 @@
 //   stride 20 (Position+TexCoord)         -> textureEnabled, no vertex color, no lighting.
 //   stride 24 (Position+Color+TexCoord)   -> vertexColorEnabled + textureEnabled, no lighting.
 //   stride 32 (Position+Normal+TexCoord)  -> lightingEnabled + textureEnabled, no vertex color.
-// That is 10 of BasicEffect's 32 ShaderIndex values (2/3/4/5/6/7/12/13/20/21, fog on/off each) --
-// every OTHER combination throws a named "no matching CNA vertex layout" error rather than
-// silently drawing with the wrong stride. This is an honest, reported gap (matches D3D11's own
-// "dual_texture_colored3d was not ported" precedent), not a corner cut in secret.
+// That is 10 of BasicEffect's 32 ShaderIndex values via stride 16/20/24 (2/3/4/5/6/7) plus stride
+// 32's vertex-lit/one-light textured buckets (12/13/20/21) -- every OTHER combination whose
+// VSInput shape has no matching stride still throws a named "no matching CNA vertex layout" error
+// rather than silently drawing with the wrong stride. This is an honest, reported gap (matches
+// D3D11's own "dual_texture_colored3d was not ported" precedent), not a corner cut in secret.
+// Stride 32's textured+lit bucket ALSO supplies BasicEffect's pixel-lighting-textured ShaderIndex
+// values (28/29, VSBasicPixelLightingTx also declares a VSInputNmTx parameter, D9-81 item 1,
+// resolved 2026-07-16 below) -- 12 of 32 ShaderIndex values are drawable in total, not 10; the
+// untextured pixel-lighting bucket (24/25, VSBasicPixelLighting takes plain VSInput, Position
+// only) remains blocked by the same missing-vertex-layout gap as the untextured vertex-lit bucket
+// (8/9) above, unrelated to PreferPerPixelLighting itself.
 //
-// PreferPerPixelLighting is a separate, already-reported gap (plan_dx9.md D9-81, item 1):
-// GpuDrawParams has no field for it at all, so this backend always computes ShaderIndex with
-// preferPerPixelLighting=false -- a lit draw request always gets the vertex-lit (or one-light)
-// shader, never the per-pixel one, silently. This is a pre-existing, cross-cutting limitation
-// (same category as D9-81's other unresolved gap), not something introduced here.
+// PreferPerPixelLighting (plan_dx9.md D9-81, item 1) and EnvironmentMapEffect's specularEnabled
+// (item 4) are RESOLVED 2026-07-16: GpuDrawParams now carries both real fields (see
+// IGraphicsBackend.hpp), forwarded by BasicEffect/SkinnedEffect/EnvironmentMapEffect's own
+// FillGpuDrawParams(). This file's dispatch functions read them directly instead of hardcoding
+// false -- see each DrawXxxEffectEXT()'s own ComputeXxxShaderIndex() call, and each
+// GetXxxRegisterTablesEXT()'s newly-added cases for the previously-unreachable ShaderIndex values.
 
 #include "CNA/Internal/Backends/D3D9/D3D9GraphicsBackend.hpp"
 #include "CNA/Internal/Backends/D3D9/D3D9Buffers.hpp"
@@ -229,6 +237,19 @@ namespace CNA::Internal::Backends::D3D9
             case 21: return {kBasicEffect_VSBasicOneLightTx_Registers,
                              static_cast<int>(std::size(kBasicEffect_VSBasicOneLightTx_Registers)),
                              nullptr, 0};
+            // ShaderIndex 28/29 (pixel lighting + texture, fog on/off): BasicEffect.fx's own
+            // VSIndices[28]==VSIndices[29]==18 and PSIndices[28]==PSIndices[29]==9 -- unlike every
+            // other lit bucket above, the pixel-lighting VSArray/PSArray entries have NO separate
+            // NoFog compiled variant at all (confirmed directly in the .fx source: only 4 VSArray
+            // entries and 1 relevant PSArray entry exist for this whole bucket), so both cases
+            // below intentionally reference the identical register table -- the shared
+            // ComputeFogVectorEXT() FogVector already produces a no-op fog contribution when
+            // fogEnabled is false, which is how the single compiled shader covers both cases.
+            case 28: [[fallthrough]];
+            case 29: return {kBasicEffect_VSBasicPixelLightingTx_Registers,
+                              static_cast<int>(std::size(kBasicEffect_VSBasicPixelLightingTx_Registers)),
+                              kBasicEffect_PSBasicPixelLightingTx_Registers,
+                              static_cast<int>(std::size(kBasicEffect_PSBasicPixelLightingTx_Registers))};
             default:
                 throw std::out_of_range(
                     "GetBasicEffectRegisterTablesEXT: ShaderIndex " + std::to_string(shaderIndex) +
@@ -324,12 +345,12 @@ namespace CNA::Internal::Backends::D3D9
             const Shaders::D3D9ShaderConstantSlot* ps; int psCount;
         };
 
-        /// D9-82e: only ShaderIndex 0/1/2/3/8/9/10/11 (non-specular) are reachable -- specular is
-        /// always false in this backend's own ComputeEnvironmentMapEffectShaderIndex() call
-        /// (D9-81's still-open specularEnabled gap, same category as BasicEffect's
-        /// PreferPerPixelLighting), so ShaderIndex 4-7/12-15 are structurally unreachable, not
-        /// merely unimplemented. VSInputNmTx matches the EXISTING stride-32 layout exactly -- no
-        /// new vertex declaration needed here (unlike DualTextureEffect's D9-82d case).
+        /// D9-82e: all 16 ShaderIndex values are reachable -- specularEnabled now reads
+        /// GpuDrawParams' real field (D9-81 item 4, resolved 2026-07-16; the specular ShaderIndex
+        /// values 4-7/12-15 reuse the SAME vertex shader as their non-specular counterpart, only
+        /// the pixel shader differs, confirmed directly against EnvironmentMapEffect.fx's own
+        /// VSIndices table). VSInputNmTx matches the EXISTING stride-32 layout exactly -- no new
+        /// vertex declaration needed here (unlike DualTextureEffect's D9-82d case).
         EnvironmentMapEffectRegisterTables GetEnvironmentMapEffectRegisterTablesEXT(int shaderIndex)
         {
             using namespace Shaders;
@@ -363,11 +384,48 @@ namespace CNA::Internal::Backends::D3D9
             case 11: return {kEnvironmentMapEffect_VSEnvMapOneLightFresnel_Registers,
                              static_cast<int>(std::size(kEnvironmentMapEffect_VSEnvMapOneLightFresnel_Registers)),
                              nullptr, 0};
+            // ShaderIndex 4-7/12-15 (specular variants): EnvironmentMapEffect.fx's own VSIndices
+            // table reuses the IDENTICAL vertex shader as the corresponding non-specular bucket
+            // (specular only changes the PIXEL shader -- VSIndices[4]==VSIndices[0], VSIndices[6]==
+            // VSIndices[2], VSIndices[12]==VSIndices[8], VSIndices[14]==VSIndices[10], confirmed
+            // directly in the .fx source), so only the PS side differs here (PSEnvMapSpecular /
+            // PSEnvMapSpecularNoFog instead of PSEnvMap / nullptr).
+            case 4:  return {kEnvironmentMapEffect_VSEnvMap_Registers,
+                             static_cast<int>(std::size(kEnvironmentMapEffect_VSEnvMap_Registers)),
+                             kEnvironmentMapEffect_PSEnvMapSpecular_Registers,
+                             static_cast<int>(std::size(kEnvironmentMapEffect_PSEnvMapSpecular_Registers))};
+            case 5:  return {kEnvironmentMapEffect_VSEnvMap_Registers,
+                             static_cast<int>(std::size(kEnvironmentMapEffect_VSEnvMap_Registers)),
+                             kEnvironmentMapEffect_PSEnvMapSpecularNoFog_Registers,
+                             static_cast<int>(std::size(kEnvironmentMapEffect_PSEnvMapSpecularNoFog_Registers))};
+            case 6:  return {kEnvironmentMapEffect_VSEnvMapFresnel_Registers,
+                             static_cast<int>(std::size(kEnvironmentMapEffect_VSEnvMapFresnel_Registers)),
+                             kEnvironmentMapEffect_PSEnvMapSpecular_Registers,
+                             static_cast<int>(std::size(kEnvironmentMapEffect_PSEnvMapSpecular_Registers))};
+            case 7:  return {kEnvironmentMapEffect_VSEnvMapFresnel_Registers,
+                             static_cast<int>(std::size(kEnvironmentMapEffect_VSEnvMapFresnel_Registers)),
+                             kEnvironmentMapEffect_PSEnvMapSpecularNoFog_Registers,
+                             static_cast<int>(std::size(kEnvironmentMapEffect_PSEnvMapSpecularNoFog_Registers))};
+            case 12: return {kEnvironmentMapEffect_VSEnvMapOneLight_Registers,
+                             static_cast<int>(std::size(kEnvironmentMapEffect_VSEnvMapOneLight_Registers)),
+                             kEnvironmentMapEffect_PSEnvMapSpecular_Registers,
+                             static_cast<int>(std::size(kEnvironmentMapEffect_PSEnvMapSpecular_Registers))};
+            case 13: return {kEnvironmentMapEffect_VSEnvMapOneLight_Registers,
+                             static_cast<int>(std::size(kEnvironmentMapEffect_VSEnvMapOneLight_Registers)),
+                             kEnvironmentMapEffect_PSEnvMapSpecularNoFog_Registers,
+                             static_cast<int>(std::size(kEnvironmentMapEffect_PSEnvMapSpecularNoFog_Registers))};
+            case 14: return {kEnvironmentMapEffect_VSEnvMapOneLightFresnel_Registers,
+                             static_cast<int>(std::size(kEnvironmentMapEffect_VSEnvMapOneLightFresnel_Registers)),
+                             kEnvironmentMapEffect_PSEnvMapSpecular_Registers,
+                             static_cast<int>(std::size(kEnvironmentMapEffect_PSEnvMapSpecular_Registers))};
+            case 15: return {kEnvironmentMapEffect_VSEnvMapOneLightFresnel_Registers,
+                             static_cast<int>(std::size(kEnvironmentMapEffect_VSEnvMapOneLightFresnel_Registers)),
+                             kEnvironmentMapEffect_PSEnvMapSpecularNoFog_Registers,
+                             static_cast<int>(std::size(kEnvironmentMapEffect_PSEnvMapSpecularNoFog_Registers))};
             default:
                 throw std::out_of_range(
                     "GetEnvironmentMapEffectRegisterTablesEXT: ShaderIndex " + std::to_string(shaderIndex) +
-                    " is a specular variant, blocked on plan_dx9.md D9-81's still-open "
-                    "specularEnabled gap");
+                    " out of range [0, 16)");
             }
         }
 
@@ -377,11 +435,11 @@ namespace CNA::Internal::Backends::D3D9
             const Shaders::D3D9ShaderConstantSlot* ps; int psCount;
         };
 
-        /// D9-82f: only ShaderIndex 0-11 (vertex-lighting and one-light buckets, all 3
-        /// weightsPerVertex values, fog on/off) are reachable -- preferPerPixelLighting is always
-        /// false in this backend's own dispatch (D9-81's still-open gap, same category as
-        /// BasicEffect's case), making ShaderIndex 12-17 (the pixel-lighting bucket) structurally
-        /// unreachable. VSInputNmTxWeights matches the EXISTING stride-52 layout exactly -- no new
+        /// D9-82f: all 18 ShaderIndex values are reachable -- preferPerPixelLighting now reads
+        /// GpuDrawParams' real field (D9-81 item 1, resolved 2026-07-16; the pixel-lighting bucket,
+        /// ShaderIndex 12-17, uses the SAME VSInputNmTxWeights vertex shape as the vertex-lit/
+        /// one-light buckets above, confirmed directly against SkinnedEffect.fx's own VSIndices
+        /// table). VSInputNmTxWeights matches the EXISTING stride-52 layout exactly -- no new
         /// vertex declaration needed here.
         SkinnedEffectRegisterTables GetSkinnedEffectRegisterTablesEXT(int shaderIndex)
         {
@@ -430,11 +488,31 @@ namespace CNA::Internal::Backends::D3D9
             case 11: return {kSkinnedEffect_VSSkinnedOneLightFourBones_Registers,
                              static_cast<int>(std::size(kSkinnedEffect_VSSkinnedOneLightFourBones_Registers)),
                              nullptr, 0};
+            // ShaderIndex 12-17 (pixel lighting, one/two/four bones, fog on/off): SkinnedEffect.fx's
+            // own VSIndices/PSIndices show the SAME VS per bone count and the SAME PS
+            // (PSSkinnedPixelLighting) regardless of fog -- unlike the vertex-lighting/one-light
+            // buckets above, there is no separate NoFog compiled variant for pixel lighting at all
+            // (confirmed directly in the .fx source), matching BasicEffect's own pixel-lighting
+            // bucket shape (GetBasicEffectRegisterTablesEXT's own case 28/29).
+            case 12: [[fallthrough]];
+            case 13: return {kSkinnedEffect_VSSkinnedPixelLightingOneBone_Registers,
+                              static_cast<int>(std::size(kSkinnedEffect_VSSkinnedPixelLightingOneBone_Registers)),
+                              kSkinnedEffect_PSSkinnedPixelLighting_Registers,
+                              static_cast<int>(std::size(kSkinnedEffect_PSSkinnedPixelLighting_Registers))};
+            case 14: [[fallthrough]];
+            case 15: return {kSkinnedEffect_VSSkinnedPixelLightingTwoBones_Registers,
+                              static_cast<int>(std::size(kSkinnedEffect_VSSkinnedPixelLightingTwoBones_Registers)),
+                              kSkinnedEffect_PSSkinnedPixelLighting_Registers,
+                              static_cast<int>(std::size(kSkinnedEffect_PSSkinnedPixelLighting_Registers))};
+            case 16: [[fallthrough]];
+            case 17: return {kSkinnedEffect_VSSkinnedPixelLightingFourBones_Registers,
+                              static_cast<int>(std::size(kSkinnedEffect_VSSkinnedPixelLightingFourBones_Registers)),
+                              kSkinnedEffect_PSSkinnedPixelLighting_Registers,
+                              static_cast<int>(std::size(kSkinnedEffect_PSSkinnedPixelLighting_Registers))};
             default:
                 throw std::out_of_range(
                     "GetSkinnedEffectRegisterTablesEXT: ShaderIndex " + std::to_string(shaderIndex) +
-                    " is a pixel-lighting variant, blocked on plan_dx9.md D9-81's still-open "
-                    "PreferPerPixelLighting gap");
+                    " out of range [0, 18)");
             }
         }
 
@@ -545,11 +623,11 @@ namespace CNA::Internal::Backends::D3D9
 
         const bool oneLight = ComputeOneLightEXT(params);
 
-        // preferPerPixelLighting is always false here -- GpuDrawParams has no field for it
-        // (plan_dx9.md D9-81 item 1, still unresolved) -- see this file's own header comment.
+        // preferPerPixelLighting now reads GpuDrawParams' real field (plan_dx9.md D9-81 item 1,
+        // resolved 2026-07-16 -- see this file's own header comment).
         const int shaderIndex = ComputeBasicEffectShaderIndex(
             params.fogEnabled, params.vertexColorEnabled, params.textureEnabled,
-            params.lightingEnabled, /*preferPerPixelLighting=*/false, oneLight);
+            params.lightingEnabled, params.preferPerPixelLighting, oneLight);
 
         const BasicEffectRegisterTables regs = GetBasicEffectRegisterTablesEXT(shaderIndex);
 
@@ -566,6 +644,13 @@ namespace CNA::Internal::Backends::D3D9
         // the unlit path ((diffuseColor+emissiveColor)*alpha) -- no adjustment needed, verified
         // against the FNA source directly.
         TryUploadVertexShaderConstantEXT(device_.Get(), regs.vs, regs.vsCount, "DiffuseColor", params.diffuseColor);
+        // PreferPerPixelLighting's PSBasicPixelLighting*/PSSkinnedPixelLighting shaders declare
+        // their OWN DiffuseColor pixel-shader constant (D3D9ShaderRegisters.hpp's
+        // kBasicEffect_PSBasicPixelLightingTx_Registers) -- real XNA's ComputeLights() runs
+        // entirely in the pixel stage for this bucket, so DiffuseColor must reach the pixel shader
+        // too, not just the vertex shader every other bucket uses. TryUploadPixelShaderConstantEXT
+        // silently no-ops for every non-pixel-lit bucket's PS table, which has no such name.
+        TryUploadPixelShaderConstantEXT(device_.Get(), regs.ps, regs.psCount, "DiffuseColor", params.diffuseColor);
 
         const Vec4Pad fogVector = ComputeFogVectorEXT(world, view, params.fogEnabled, params.fogStart, params.fogEnd);
         TryUploadVertexShaderConstantEXT(device_.Get(), regs.vs, regs.vsCount, "FogVector", fogVector.v);
@@ -577,7 +662,20 @@ namespace CNA::Internal::Backends::D3D9
             const Matrix worldInverseTranspose = Matrix::Transpose(Matrix::Invert(world));
             UploadMatrixConstantVS(device_.Get(), regs.vs, regs.vsCount, "WorldInverseTranspose", worldInverseTranspose);
 
+            // Real bug found and fixed 2026-07-16, while oracle-proving the PreferPerPixelLighting
+            // bucket (plan_dx9.md D9-73's own outstanding obligation): FNA's Lighting.fxh's
+            // ComputeLights() runs in the VERTEX shader for every bucket EXCEPT PixelLighting, where
+            // it runs in the PIXEL shader instead -- confirmed directly against
+            // D3D9ShaderRegisters.hpp, where kBasicEffect_PSBasicPixelLightingTx_Registers (not the
+            // VS table) declares EmissiveColor/SpecularColor/SpecularPower/DirLight0-2*/EyePosition.
+            // Every upload below now goes to BOTH stages via the soft, never-throws
+            // TryUpload*ShaderConstantEXT helpers, which silently no-op wherever a stage's own
+            // register table doesn't declare that name -- vertex-lit/one-light buckets are
+            // unaffected (their PS tables have none of these names), only the pixel-lit bucket
+            // actually receives the PS-side values it was silently missing before this fix.
             TryUploadVertexShaderConstantEXT(device_.Get(), regs.vs, regs.vsCount, "EyePosition",
+                                             Pad3(params.eyePositionWorld).v);
+            TryUploadPixelShaderConstantEXT(device_.Get(), regs.ps, regs.psCount, "EyePosition",
                                              Pad3(params.eyePositionWorld).v);
 
             // EmissiveColor: FNA's Lighting.fxh folds the ambient contribution into this constant
@@ -595,28 +693,51 @@ namespace CNA::Internal::Backends::D3D9
             };
             TryUploadVertexShaderConstantEXT(device_.Get(), regs.vs, regs.vsCount, "EmissiveColor",
                                              Pad3(emissiveFolded).v);
+            TryUploadPixelShaderConstantEXT(device_.Get(), regs.ps, regs.psCount, "EmissiveColor",
+                                             Pad3(emissiveFolded).v);
             TryUploadVertexShaderConstantEXT(device_.Get(), regs.vs, regs.vsCount, "SpecularColor",
+                                             Pad3(params.specularColor).v);
+            TryUploadPixelShaderConstantEXT(device_.Get(), regs.ps, regs.psCount, "SpecularColor",
                                              Pad3(params.specularColor).v);
             const float specularPower4[4] = {params.specularPower, 0.0f, 0.0f, 0.0f};
             TryUploadVertexShaderConstantEXT(device_.Get(), regs.vs, regs.vsCount, "SpecularPower", specularPower4);
+            TryUploadPixelShaderConstantEXT(device_.Get(), regs.ps, regs.psCount, "SpecularPower", specularPower4);
 
             TryUploadVertexShaderConstantEXT(device_.Get(), regs.vs, regs.vsCount, "DirLight0Direction",
                                              Pad3(params.light0Dir).v);
+            TryUploadPixelShaderConstantEXT(device_.Get(), regs.ps, regs.psCount, "DirLight0Direction",
+                                             Pad3(params.light0Dir).v);
             TryUploadVertexShaderConstantEXT(device_.Get(), regs.vs, regs.vsCount, "DirLight0DiffuseColor",
+                                             Pad3(params.light0Diffuse).v);
+            TryUploadPixelShaderConstantEXT(device_.Get(), regs.ps, regs.psCount, "DirLight0DiffuseColor",
                                              Pad3(params.light0Diffuse).v);
             TryUploadVertexShaderConstantEXT(device_.Get(), regs.vs, regs.vsCount, "DirLight0SpecularColor",
                                              Pad3(params.light0Specular).v);
+            TryUploadPixelShaderConstantEXT(device_.Get(), regs.ps, regs.psCount, "DirLight0SpecularColor",
+                                             Pad3(params.light0Specular).v);
             TryUploadVertexShaderConstantEXT(device_.Get(), regs.vs, regs.vsCount, "DirLight1Direction",
+                                             Pad3(params.light1Dir).v);
+            TryUploadPixelShaderConstantEXT(device_.Get(), regs.ps, regs.psCount, "DirLight1Direction",
                                              Pad3(params.light1Dir).v);
             TryUploadVertexShaderConstantEXT(device_.Get(), regs.vs, regs.vsCount, "DirLight1DiffuseColor",
                                              Pad3(params.light1Diffuse).v);
+            TryUploadPixelShaderConstantEXT(device_.Get(), regs.ps, regs.psCount, "DirLight1DiffuseColor",
+                                             Pad3(params.light1Diffuse).v);
             TryUploadVertexShaderConstantEXT(device_.Get(), regs.vs, regs.vsCount, "DirLight1SpecularColor",
+                                             Pad3(params.light1Specular).v);
+            TryUploadPixelShaderConstantEXT(device_.Get(), regs.ps, regs.psCount, "DirLight1SpecularColor",
                                              Pad3(params.light1Specular).v);
             TryUploadVertexShaderConstantEXT(device_.Get(), regs.vs, regs.vsCount, "DirLight2Direction",
                                              Pad3(params.light2Dir).v);
+            TryUploadPixelShaderConstantEXT(device_.Get(), regs.ps, regs.psCount, "DirLight2Direction",
+                                             Pad3(params.light2Dir).v);
             TryUploadVertexShaderConstantEXT(device_.Get(), regs.vs, regs.vsCount, "DirLight2DiffuseColor",
                                              Pad3(params.light2Diffuse).v);
+            TryUploadPixelShaderConstantEXT(device_.Get(), regs.ps, regs.psCount, "DirLight2DiffuseColor",
+                                             Pad3(params.light2Diffuse).v);
             TryUploadVertexShaderConstantEXT(device_.Get(), regs.vs, regs.vsCount, "DirLight2SpecularColor",
+                                             Pad3(params.light2Specular).v);
+            TryUploadPixelShaderConstantEXT(device_.Get(), regs.ps, regs.psCount, "DirLight2SpecularColor",
                                              Pad3(params.light2Specular).v);
         }
 
@@ -803,12 +924,11 @@ namespace CNA::Internal::Backends::D3D9
                 "D3D9GraphicsBackend::DrawPrimitivesEx (EnvironmentMapEffect): stride " +
                 std::to_string(stride) + " has no matching CNA vertex layout (plan_dx9.md D9-82e)");
 
-        // specularEnabled is always false here -- GpuDrawParams has no field for it (plan_dx9.md
-        // D9-81 item 4, still unresolved; same category as BasicEffect's PreferPerPixelLighting).
-        // This makes ShaderIndex 4-7/12-15 structurally unreachable, not merely unimplemented.
+        // specularEnabled now reads GpuDrawParams' real field (plan_dx9.md D9-81 item 4, resolved
+        // 2026-07-16; same category as BasicEffect's PreferPerPixelLighting above).
         const bool oneLight = ComputeOneLightEXT(params);
         const int shaderIndex = ComputeEnvironmentMapEffectShaderIndex(
-            params.fogEnabled, params.fresnelEnabled, /*specularEnabled=*/false, oneLight);
+            params.fogEnabled, params.fresnelEnabled, params.specularEnabled, oneLight);
 
         const EnvironmentMapEffectRegisterTables regs = GetEnvironmentMapEffectRegisterTablesEXT(shaderIndex);
 
@@ -837,6 +957,15 @@ namespace CNA::Internal::Backends::D3D9
         TryUploadVertexShaderConstantEXT(device_.Get(), regs.vs, regs.vsCount, "EnvironmentMapAmount", envMapAmount4);
         const float fresnelFactor4[4] = {params.fresnelFactor, 0.0f, 0.0f, 0.0f};
         TryUploadVertexShaderConstantEXT(device_.Get(), regs.vs, regs.vsCount, "FresnelFactor", fresnelFactor4);
+        // Real bug found and fixed 2026-07-16, alongside the same category of gap in
+        // DrawBasicEffectEXT/DrawSkinnedEffectEXT above: EnvironmentMapSpecular was never uploaded
+        // anywhere -- specularEnabled was hardcoded false (D9-81 item 4) so the specular pixel
+        // shader variant (PSEnvMapSpecular/PSEnvMapSpecularNoFog, the only place
+        // EnvironmentMapSpecular's 'p',0,1 register lives, per D3D9ShaderRegisters.hpp) was never
+        // reachable, and the missing upload went unnoticed. Now that specularEnabled reads its
+        // real GpuDrawParams field, the specular pixel shader IS reachable and needs this.
+        TryUploadPixelShaderConstantEXT(device_.Get(), regs.ps, regs.psCount, "EnvironmentMapSpecular",
+                                         Pad3(params.envMapSpecular).v);
 
         // No SpecularColor/SpecularPower/DirLight*SpecularColor here -- EnvironmentMapEffect.fx
         // #defines all of them to 0 rather than declaring real constants (Lighting.fxh needs the
@@ -897,10 +1026,10 @@ namespace CNA::Internal::Backends::D3D9
                 " has no matching CNA vertex layout (plan_dx9.md D9-82f)");
 
         const bool oneLight = ComputeOneLightEXT(params);
-        // preferPerPixelLighting is always false here -- GpuDrawParams has no field for it
-        // (plan_dx9.md D9-81 item 1, still unresolved; same gap as BasicEffect's own case).
+        // preferPerPixelLighting now reads GpuDrawParams' real field (plan_dx9.md D9-81 item 1,
+        // resolved 2026-07-16; same gap as BasicEffect's own case above).
         const int shaderIndex = ComputeSkinnedEffectShaderIndex(
-            params.fogEnabled, params.weightsPerVertex, /*preferPerPixelLighting=*/false, oneLight);
+            params.fogEnabled, params.weightsPerVertex, params.preferPerPixelLighting, oneLight);
 
         const SkinnedEffectRegisterTables regs = GetSkinnedEffectRegisterTablesEXT(shaderIndex);
 
@@ -921,32 +1050,66 @@ namespace CNA::Internal::Backends::D3D9
         // is already pre-folded with ambient*diffuse (like EnvironmentMapEffect's case) -- upload
         // both verbatim, no reconstruction needed.
         TryUploadVertexShaderConstantEXT(device_.Get(), regs.vs, regs.vsCount, "DiffuseColor", params.diffuseColor);
+        // Same real bug/fix as DrawBasicEffectEXT above (found 2026-07-16 while oracle-proving the
+        // PreferPerPixelLighting bucket): SkinnedEffect.fx's PSSkinnedPixelLighting shader declares
+        // its own PS-side DiffuseColor/EmissiveColor/SpecularColor/SpecularPower/DirLight0-2*/
+        // EyePosition (ComputeLights() runs per-pixel for this bucket only) -- every upload below
+        // now also goes to the pixel stage via the soft TryUploadPixelShaderConstantEXT, which
+        // silently no-ops for every other bucket's PS table (none of them declare these names).
+        // Bones stays vertex-stage-only for every bucket -- skinning transforms Position/Normal in
+        // the vertex shader regardless of which lighting bucket is selected.
+        TryUploadPixelShaderConstantEXT(device_.Get(), regs.ps, regs.psCount, "DiffuseColor", params.diffuseColor);
         TryUploadVertexShaderConstantEXT(device_.Get(), regs.vs, regs.vsCount, "EmissiveColor",
+                                         Pad3(params.emissiveColor).v);
+        TryUploadPixelShaderConstantEXT(device_.Get(), regs.ps, regs.psCount, "EmissiveColor",
                                          Pad3(params.emissiveColor).v);
         TryUploadVertexShaderConstantEXT(device_.Get(), regs.vs, regs.vsCount, "SpecularColor",
                                          Pad3(params.specularColor).v);
+        TryUploadPixelShaderConstantEXT(device_.Get(), regs.ps, regs.psCount, "SpecularColor",
+                                         Pad3(params.specularColor).v);
         const float specularPower4[4] = {params.specularPower, 0.0f, 0.0f, 0.0f};
         TryUploadVertexShaderConstantEXT(device_.Get(), regs.vs, regs.vsCount, "SpecularPower", specularPower4);
+        TryUploadPixelShaderConstantEXT(device_.Get(), regs.ps, regs.psCount, "SpecularPower", specularPower4);
         TryUploadVertexShaderConstantEXT(device_.Get(), regs.vs, regs.vsCount, "EyePosition",
+                                         Pad3(params.eyePositionWorld).v);
+        TryUploadPixelShaderConstantEXT(device_.Get(), regs.ps, regs.psCount, "EyePosition",
                                          Pad3(params.eyePositionWorld).v);
 
         TryUploadVertexShaderConstantEXT(device_.Get(), regs.vs, regs.vsCount, "DirLight0Direction",
                                          Pad3(params.light0Dir).v);
+        TryUploadPixelShaderConstantEXT(device_.Get(), regs.ps, regs.psCount, "DirLight0Direction",
+                                         Pad3(params.light0Dir).v);
         TryUploadVertexShaderConstantEXT(device_.Get(), regs.vs, regs.vsCount, "DirLight0DiffuseColor",
+                                         Pad3(params.light0Diffuse).v);
+        TryUploadPixelShaderConstantEXT(device_.Get(), regs.ps, regs.psCount, "DirLight0DiffuseColor",
                                          Pad3(params.light0Diffuse).v);
         TryUploadVertexShaderConstantEXT(device_.Get(), regs.vs, regs.vsCount, "DirLight0SpecularColor",
                                          Pad3(params.light0Specular).v);
+        TryUploadPixelShaderConstantEXT(device_.Get(), regs.ps, regs.psCount, "DirLight0SpecularColor",
+                                         Pad3(params.light0Specular).v);
         TryUploadVertexShaderConstantEXT(device_.Get(), regs.vs, regs.vsCount, "DirLight1Direction",
+                                         Pad3(params.light1Dir).v);
+        TryUploadPixelShaderConstantEXT(device_.Get(), regs.ps, regs.psCount, "DirLight1Direction",
                                          Pad3(params.light1Dir).v);
         TryUploadVertexShaderConstantEXT(device_.Get(), regs.vs, regs.vsCount, "DirLight1DiffuseColor",
                                          Pad3(params.light1Diffuse).v);
+        TryUploadPixelShaderConstantEXT(device_.Get(), regs.ps, regs.psCount, "DirLight1DiffuseColor",
+                                         Pad3(params.light1Diffuse).v);
         TryUploadVertexShaderConstantEXT(device_.Get(), regs.vs, regs.vsCount, "DirLight1SpecularColor",
+                                         Pad3(params.light1Specular).v);
+        TryUploadPixelShaderConstantEXT(device_.Get(), regs.ps, regs.psCount, "DirLight1SpecularColor",
                                          Pad3(params.light1Specular).v);
         TryUploadVertexShaderConstantEXT(device_.Get(), regs.vs, regs.vsCount, "DirLight2Direction",
                                          Pad3(params.light2Dir).v);
+        TryUploadPixelShaderConstantEXT(device_.Get(), regs.ps, regs.psCount, "DirLight2Direction",
+                                         Pad3(params.light2Dir).v);
         TryUploadVertexShaderConstantEXT(device_.Get(), regs.vs, regs.vsCount, "DirLight2DiffuseColor",
                                          Pad3(params.light2Diffuse).v);
+        TryUploadPixelShaderConstantEXT(device_.Get(), regs.ps, regs.psCount, "DirLight2DiffuseColor",
+                                         Pad3(params.light2Diffuse).v);
         TryUploadVertexShaderConstantEXT(device_.Get(), regs.vs, regs.vsCount, "DirLight2SpecularColor",
+                                         Pad3(params.light2Specular).v);
+        TryUploadPixelShaderConstantEXT(device_.Get(), regs.ps, regs.psCount, "DirLight2SpecularColor",
                                          Pad3(params.light2Specular).v);
 
         UploadBonesVS(device_.Get(), regs.vs, regs.vsCount, params);

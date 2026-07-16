@@ -1,0 +1,38 @@
+# plan_dx9.md D9-A5 scene corpus: skinned_pixellighting_twobone_quad
+# Second D9-73 oracle-proof scene for SkinnedEffect.PreferPerPixelLighting=true (see
+# skinned_pixellighting_quad.scene's own header for the full split-normal discriminator
+# rationale) -- this one selects VSSkinnedPixelLightingTwoBones/PSSkinnedPixelLighting (one of
+# the 5 D9-73-divergent shader variants), by reusing skinned_twobone_quad.scene's own real,
+# non-degenerate 2-bone blend (Bone 0 Identity, Bone 1 Translate(0.4,0,0), 50/50 weights -- both
+# bones share Identity rotation/scale, so the blended matrix is exactly Translate(0.2,0,0) and the
+# NORMAL is unaffected by skinning, keeping the split-normal discriminator meaningful).
+width=256
+height=256
+profile=HiDef
+clearcolor=100,149,237,255
+effect=SkinnedEffect
+vertexformat=PositionNormalTextureWeights
+lighting=true
+preferpixellighting=true
+ambientcolor=0,0,0
+light0enabled=true
+light0diffuse=0.8,0.8,0.8
+light0direction=0,0,-1
+texture=true
+texturewidth=1
+textureheight=1
+texturefilter=Point
+weightspervertex=2
+bone1translate=0.4,0,0
+primitive=TriangleList
+texturepixel=255,255,255,255
+# x,y,z,nx,ny,nz,u,v,boneindex0,boneweight0,boneindex1,boneweight1 -- left-edge vertices face the
+# light (0,0,1), right-edge vertices tilt away (0.7071,0,-0.7071), same split as
+# skinned_pixellighting_quad.scene; 50/50 bound to bone 0 (Identity) and bone 1
+# (Translate(0.4,0,0)), blending to an exact Translate(0.2,0,0) that leaves the normal untouched.
+vertex=-0.6,0.6,0,0,0,1,0,0,0,0.5,1,0.5
+vertex=0.6,0.6,0,0.7071,0,-0.7071,1,0,0,0.5,1,0.5
+vertex=-0.6,-0.6,0,0,0,1,0,1,0,0.5,1,0.5
+vertex=0.6,0.6,0,0.7071,0,-0.7071,1,0,0,0.5,1,0.5
+vertex=0.6,-0.6,0,0.7071,0,-0.7071,1,1,0,0.5,1,0.5
+vertex=-0.6,-0.6,0,0,0,1,0,1,0,0.5,1,0.5

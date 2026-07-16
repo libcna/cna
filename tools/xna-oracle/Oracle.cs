@@ -138,6 +138,7 @@ public class Scene
     public SceneVertexFormat VertexFormat = SceneVertexFormat.PositionColor;
     public bool VertexColorEnabled;
     public bool LightingEnabled;
+    public bool PreferPerPixelLighting;
     public bool TextureEnabled;
     public int TextureWidth;
     public int TextureHeight;
@@ -149,6 +150,7 @@ public class Scene
     public int EnvironmentMapSize;
     public float EnvironmentMapAmount = 1.0f;
     public float FresnelFactor = 1.0f;
+    public Vector3 EnvironmentMapSpecular = Vector3.Zero;
     public Color EnvironmentMapPixel = Color.Black;
     public Vector3 DiffuseColor = Vector3.One;
     public Vector3 AmbientColor = Vector3.Zero;
@@ -250,6 +252,7 @@ public class Scene
                 case "environmentmapsize": scene.EnvironmentMapSize = int.Parse(value, CultureInfo.InvariantCulture); break;
                 case "environmentmapamount": scene.EnvironmentMapAmount = float.Parse(value, CultureInfo.InvariantCulture); break;
                 case "fresnelfactor": scene.FresnelFactor = float.Parse(value, CultureInfo.InvariantCulture); break;
+                case "environmentmapspecular": scene.EnvironmentMapSpecular = ParseVector3(value); break;
                 case "environmentmappixel": scene.EnvironmentMapPixel = ParseColor(value); break;
                 case "alphafunction": scene.AlphaFunction = ParseCompareFunction(value); break;
                 case "referencealpha": scene.ReferenceAlpha = int.Parse(value, CultureInfo.InvariantCulture); break;
@@ -270,6 +273,7 @@ public class Scene
                     break;
                 case "vertexcolor": scene.VertexColorEnabled = ParseBool(value); break;
                 case "lighting": scene.LightingEnabled = ParseBool(value); break;
+                case "preferpixellighting": scene.PreferPerPixelLighting = ParseBool(value); break;
                 case "texture": scene.TextureEnabled = ParseBool(value); break;
                 case "texturewidth": scene.TextureWidth = int.Parse(value, CultureInfo.InvariantCulture); break;
                 case "textureheight": scene.TextureHeight = int.Parse(value, CultureInfo.InvariantCulture); break;
@@ -635,6 +639,7 @@ public class Oracle : Game
             emfx.EnvironmentMap = environmentMap;
             emfx.EnvironmentMapAmount = scene.EnvironmentMapAmount;
             emfx.FresnelFactor = scene.FresnelFactor;
+            emfx.EnvironmentMapSpecular = scene.EnvironmentMapSpecular;
             emfx.World = Matrix.Identity;
             emfx.View = Matrix.Identity;
             emfx.Projection = Matrix.Identity;
@@ -678,6 +683,7 @@ public class Oracle : Game
             // regardless of which ShaderIndex bucket -- OneBone/TwoBones/FourBones -- is
             // actually selected).
             skfx.WeightsPerVertex = scene.WeightsPerVertex;
+            skfx.PreferPerPixelLighting = scene.PreferPerPixelLighting;
             skfx.SetBoneTransforms(new Matrix[] {
                 Matrix.Identity,
                 Matrix.CreateTranslation(scene.Bone1Translate),
@@ -710,6 +716,7 @@ public class Oracle : Game
             var bfx = new BasicEffect(dev);
             bfx.VertexColorEnabled = scene.VertexColorEnabled;
             bfx.LightingEnabled = scene.LightingEnabled;
+            bfx.PreferPerPixelLighting = scene.PreferPerPixelLighting;
             bfx.TextureEnabled = scene.TextureEnabled;
             bfx.World = Matrix.Identity;
             bfx.View = Matrix.Identity;

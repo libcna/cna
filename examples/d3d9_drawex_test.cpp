@@ -67,6 +67,24 @@
 //   D3D11GraphicsBackend.cpp's own established GetSrvForTextureEXT precedent for the identical
 //   situation. This check's exact readback (matching Check A's own color) proves the render
 //   target's REAL content is genuinely sampled, not merely "didn't crash".
+// Check R -- BasicEffect PreferPerPixelLighting=true, textured (ShaderIndex 28/29 -- one of the 5
+//   shader variants plan_dx9.md D9-73 found do NOT byte-match Microsoft's shipped .fxb, a
+//   compiler-version difference the same row demands be PROVEN pixel-equivalent against the real
+//   XNA oracle -- see the new lit_textured_quad_pixellighting.scene oracle scene for that proof; a
+//   flat single-normal triangle like this one cannot itself distinguish vertex-lit from pixel-lit
+//   output, since dot(light,N) is linear in a CONSTANT N -- only that this backend's dispatch and
+//   constant upload plumbing for the pixel-lighting bucket are wired correctly at all). Same
+//   one-light setup as Check D, same exact expected value (80,48,16) -- proving this. Real bug
+//   found and fixed while adding this bucket (2026-07-16, confirmed independently against the real
+//   XNA oracle first): FNA's Lighting.fxh's ComputeLights() runs in the PIXEL shader for this
+//   bucket only (every other bucket computes it in the vertex shader) -- D3D9ShaderRegisters.hpp's
+//   kBasicEffect_PSBasicPixelLightingTx_Registers (not the VS table) declares
+//   EmissiveColor/SpecularColor/SpecularPower/DirLight0-2*/EyePosition/DiffuseColor, but every
+//   upload in DrawBasicEffectEXT used to target the vertex shader only -- silently leaving the
+//   pixel shader's own registers at zero, degenerating this bucket to unlit black regardless of
+//   light state. Fixed by uploading each of these to BOTH stages via the soft, never-throws
+//   TryUpload*ShaderConstantEXT helpers (a genuine no-op for every other bucket's PS table, which
+//   declares none of these names).
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
@@ -591,6 +609,38 @@ protected:
             check(px.getRProperty() == 200 && px.getGProperty() == 120 && px.getBProperty() == 40 && px.getAProperty() == 255,
                   "DrawPrimitivesEx (BasicEffect unlit+textured, texture0 = a RenderTarget2D's own backend): "
                   "exact readback of the render target's real cleared content, no crash");
+        }
+
+        // Check R: lit + textured, PreferPerPixelLighting=true (ShaderIndex 28/29) -- same exact
+        // one-light setup and expected value as Check D, proving the pixel-lighting bucket's own
+        // constant upload plumbing (VS+PS both) works, not just the vertex-lighting/one-light ones.
+        {
+            auto vb = backend.CreateVertexBuffer(3);
+            vb->SetData(kTriNormalTx, 3, sizeof(VPNT));
+
+            GpuDrawParams params;
+            params.textureEnabled = true;
+            params.vertexColorEnabled = false; // GpuDrawParams defaults this to true
+            params.lightingEnabled = true;
+            params.preferPerPixelLighting = true;
+            params.texture0 = tex.get();
+            params.diffuseColor[0] = params.diffuseColor[1] = params.diffuseColor[2] = params.diffuseColor[3] = 1.0f;
+            params.specularColor[0] = params.specularColor[1] = params.specularColor[2] = 0.0f;
+            params.light0Dir[0] = 0.0f; params.light0Dir[1] = 0.0f; params.light0Dir[2] = -1.0f;
+            params.light0Diffuse[0] = params.light0Diffuse[1] = params.light0Diffuse[2] = 0.4f;
+            // light1/light2 stay at their zero defaults.
+
+            dev.Clear(Color(0, 0, 255, 255));
+            backend.DrawPrimitivesEx(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                     Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, params);
+            Color px(0, 0, 0, 0);
+            ReadCenterPixel(dev, px);
+            // diffuse sum = 1*0.4 = 0.4 -> texture(200,120,40)*0.4 = (80,48,16) exactly -- same as
+            // Check D's own vertex-lit OneLight bucket (a flat normal makes the two mathematically
+            // identical; the real XNA oracle scene is what actually distinguishes them pixel-wise).
+            check(px.getRProperty() == 80 && px.getGProperty() == 48 && px.getBProperty() == 16 && px.getAProperty() == 255,
+                  "DrawPrimitivesEx (BasicEffect lit+textured, PreferPerPixelLighting=true bucket, ShaderIndex 28/29): "
+                  "exact readback (80,48,16) via the pixel shader's own lighting constants");
         }
 
         // Check F: honest-gap / not-yet-implemented reporting.

@@ -1591,25 +1591,29 @@ for real once culling-sensitive scenes are drawn.
 
 ## 5. Known bugs and limitations
 
-- `BasicEffect` via `DrawPrimitivesEx` only supports 10 of its 32 `ShaderIndex` values — every
-  combination whose `VSInput` shape has no matching CNA vertex layout (Position-only 12 bytes;
-  Position+Normal 24 bytes, colliding with the existing Position+Color+TexCoord layout;
-  Position+Normal+Color[+TexCoord] 28/36 bytes) throws a named error instead of drawing. See
-  `plan_dx9.md` `D9-82b`'s own closure note / `D3D9EffectDraw.cpp`'s header comment for the exact
-  enumeration.
-- `BasicEffect`'s `PreferPerPixelLighting` is silently ignored (always treated as `false`, i.e.
-  vertex-lit) — `GpuDrawParams` has no field to convey it (`plan_dx9.md` `D9-81` item 1, unresolved,
-  needs a project-owner-level `GpuDrawParams` decision).
+- `BasicEffect` via `DrawPrimitivesEx` only supports 12 of its 32 `ShaderIndex` values (was 10,
+  updated 2026-07-16 — see below) — every combination whose `VSInput` shape has no matching CNA
+  vertex layout (Position-only 12 bytes; Position+Normal 24 bytes, colliding with the existing
+  Position+Color+TexCoord layout; Position+Normal+Color[+TexCoord] 28/36 bytes) throws a named
+  error instead of drawing. See `plan_dx9.md` `D9-82b`'s own closure note / `D3D9EffectDraw.cpp`'s
+  header comment for the exact enumeration.
+- **RESOLVED 2026-07-16 (`plan_graphics.md` Phase 80, project-owner-authorized cross-backend
+  fix): `GpuDrawParams` now carries real `preferPerPixelLighting`/`specularEnabled` fields, and
+  this backend's dispatch reads them instead of hardcoding `false`.** `BasicEffect`'s
+  pixel-lighting-textured bucket (`ShaderIndex` 28/29) and `SkinnedEffect`'s entire pixel-lighting
+  bucket (12-17, all 3 `WeightsPerVertex` values) are now reachable and oracle-proven pixel-perfect
+  against real XNA (4 of `D9-73`'s own 5 divergent shader variants — see that row); the untextured
+  bucket (`BasicEffect` `ShaderIndex` 24/25, `VSBasicPixelLighting`) stays permanently blocked by
+  the SAME missing-vertex-layout gap as the untextured vertex-lit bucket above, unrelated to this
+  fix. `EnvironmentMapEffect`'s specular buckets (all 8, `ShaderIndex` 4-7/12-15) are also now
+  reachable — a real bug (constants uploaded to the wrong shader stage, or not at all for
+  `EnvironmentMapSpecular`) was found and fixed along the way, see `plan_dx9.md` `D9-73`/`D9-84`'s
+  own rows for the full record.
 - `DualTextureEffect` via `DrawPrimitivesEx` only supports 2 of its 4 `ShaderIndex` values — the
   vertex-color variant (`VSInputTx2Vc`, 32 bytes) collides with the existing
   Position+Normal+TexCoord layout and throws a named error instead of drawing (`plan_dx9.md`
-  `D9-82d`'s own closure note).
-- `EnvironmentMapEffect`'s `specularEnabled` variants (8 of its 16 `ShaderIndex` values) are
-  silently unreachable (always treated as `false`) — same category as `BasicEffect`'s
-  `PreferPerPixelLighting` (`plan_dx9.md` `D9-81` item 4, unresolved).
-- `SkinnedEffect`'s `PreferPerPixelLighting` variants (6 of its 18 `ShaderIndex` values) are
-  silently unreachable (always treated as `false`) — same `D9-81` item-1 gap as `BasicEffect`'s
-  case (`plan_dx9.md` `D9-82f`'s own closure note).
+  `D9-82d`'s own closure note). Unaffected by the above (no `PreferPerPixelLighting`/
+  `specularEnabled` concept in this effect).
 - `D3DCULL` winding (`CullClockwiseFace`/`CullCounterClockwiseFace` vs. `D3DCULL_CW`/`_CCW`) is
   mapped but not yet pixel-proven against the real XNA oracle (`plan_dx9.md` `D9-21`/`D9-84`).
 
@@ -1672,8 +1676,22 @@ cmake -S . -B cmake-build-d3d9 \
 ## 8. Next smallest tasks
 
 **Phases D9-0 through D9-13 are ALL fully closed** (`D9-32`/`D9-34`/`D9-60`/`D9-62`/`D9-73`
-honestly 🟨 — see their own plan rows for exactly what's deferred and why). **Phase D9-A's diff
-harness (`D9-A1`–`D9-A4`) is fully closed**, 31 scenes deep, all pixel-perfect. **Phase D9-12 is
+honestly 🟨 — see their own plan rows for exactly what's deferred and why; `D9-73` is now 4/5
+closed, only the permanently-blocked untextured `VSBasicPixelLighting` variant remains, see below).
+**Phase D9-A's diff harness (`D9-A1`–`D9-A4`) is fully closed**, now 36 scenes deep, all
+pixel-perfect (5 new since the 31-scene count above: `lit_textured_quad_pixellighting`,
+`skinned_pixellighting_quad`/`_twobone_quad`/`_fourbone_quad`, `envmap_specular_quad`).
+
+**`D9-81`'s `PreferPerPixelLighting`/`specularEnabled` `GpuDrawParams` gap is now RESOLVED, 2026-07-16**
+(project owner authorized the full cross-backend fix, `plan_graphics.md` Phase 80, D3D9 first since
+it needs no new shader — Microsoft's own `.fx` sources already have both shader families). This
+backend's dispatch now reads the real values; `plan_dx9.md`'s `D9-73`/`D9-84` rows have the full
+record, including a real bug found and fixed along the way (lighting constants uploaded to the
+wrong shader stage for the pixel-lighting bucket, and a missing `EnvironmentMapSpecular` upload
+entirely). **The remaining 8 backends (EasyGL/Vulkan/Bgfx/WebGPU/D3D11/D3D12/Software each need a
+genuinely new per-vertex-lit shader; `SdlRenderer`/`Headless` don't render 3D lighting at all) are
+`plan_graphics.md`'s own scope, not this plan's** — see that file's Phase 80 for the per-backend
+task breakdown, sequenced one at a time by explicit project-owner request. **Phase D9-12 is
 now fully closed, including `D9-123`** — `D9-120`/`D9-121`/`D9-122`/`D9-123` all ✅ (see §2's own
 Phase D9-12 section for the full `D9-122`/`D9-123` detail, including the `gtest_discover_tests`
 cross-compile fix and its own end-to-end verification). **`D9-130` (Phase D9-13 docs) is closed
