@@ -1,0 +1,306 @@
+// SPDX-License-Identifier: MS-PL
+#pragma once
+
+#include <any>
+#include <functional>
+#include <memory>
+#include <string>
+#include <type_traits>
+#include <vector>
+
+#include "CNA/CNAHelper.hpp"
+#include "CNA/Internal/Xnb/XnbReadLimits.hpp"
+#include "Microsoft/Xna/Framework/BoundingSphere.hpp"
+#include "Microsoft/Xna/Framework/Color.hpp"
+#include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
+#include "Microsoft/Xna/Framework/Content/ContentTypeReader.hpp"
+#include "Microsoft/Xna/Framework/Matrix.hpp"
+#include "Microsoft/Xna/Framework/Quaternion.hpp"
+#include "Microsoft/Xna/Framework/Vector2.hpp"
+#include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "Microsoft/Xna/Framework/Vector4.hpp"
+#include "System/IDisposable.hpp"
+#include "System/IO/BinaryReader.hpp"
+#include "System/NotImplementedException.hpp"
+
+namespace Microsoft::Xna::Framework::Content
+{
+    class ContentManager;
+
+    namespace Detail
+    {
+        template <typename T>
+        struct IsDisposableSharedPtr : std::false_type {};
+
+        template <typename U>
+        struct IsDisposableSharedPtr<std::shared_ptr<U>>
+            : std::bool_constant<std::is_base_of_v<System::IDisposable, U>> {};
+    }
+
+    /**
+     * @brief Matches FNA's real, public-sealed `Microsoft.Xna.Framework.Content.ContentReader`
+     *        (`src/Content/ContentReader.cs`) -- the object-graph reader passed to every
+     *        `ContentTypeReader<T>::Read()`.
+     *
+     * Implements plan_xnb.md XNB-15 (shared-resource fixups) and XNB-16/16B (1-based
+     * type-reader-index root/nested-object dispatch, reader-version enforcement).
+     * `ReadExternalReference<T>()` (needs a working `ContentManager::Load<T>()` round-trip) is
+     * deliberately deferred to Phase E (XNB-35) and throws `System::NotImplementedException`
+     * until then -- this class's own `Initialize`/dispatch machinery does not depend on it.
+     *
+     * @p manager may be null (unlike real XNA, where it is always a real instance): this class is
+     * usable standalone, ahead of `ContentManager`'s own `.xnb` integration (Phase B2, XNB-17B).
+     * A null @p manager only matters if `ReadExternalReference<T>()` or the `ContentManager`-
+     * fallback path of `RecordDisposable()` is actually reached.
+     */
+    class ContentReader : public System::IO::BinaryReader
+    {
+    public:
+        /** @brief Callback invoked to record a disposable result, mirroring FNA's `Action<IDisposable>`. */
+        using RecordDisposableFn = std::function<void(std::shared_ptr<System::IDisposable>)>;
+
+        /**
+         * @brief FNA's internal constructor.
+         *
+         * @param manager                Owning ContentManager, or nullptr (see class docs).
+         * @param stream                 Backing stream, positioned immediately after the `.xnb`
+         *                               container header and its type-reader table have both
+         *                               been consumed by the caller -- @ref InitializeTypeReaders
+         *                               re-derives the table itself from @p stream's current
+         *                               position, matching FNA's own `InitializeTypeReaders`.
+         * @param assetName              Logical asset name, used for diagnostics.
+         * @param version                Container version (4 or 5) from the `.xnb` header.
+         * @param platform               Platform identifier byte from the `.xnb` header.
+         * @param recordDisposableObject Optional override for disposal tracking; falls back to
+         *                               @p manager if null and @p manager is non-null, else is a
+         *                               no-op (see RecordDisposable()).
+         * @param limits                 Bounds applied to the type-reader/shared-resource counts
+         *                               (plan_xnb.md XNB-10A).
+         */
+        ContentReader(
+            ContentManager* manager,
+            System::IO::Stream* stream,
+            std::string assetName,
+            int version,
+            char platform,
+            RecordDisposableFn recordDisposableObject = nullptr,
+            const CNA::Internal::Xnb::XnbReadLimits& limits = CNA::Internal::Xnb::DefaultXnbReadLimits());
+
+        /** @brief FNA's `ContentReader.ContentManager` property. May be null (see class docs). */
+        [[nodiscard]] ContentManager* getContentManagerProperty() const { return contentManager_; }
+
+        /** @brief FNA's `ContentReader.AssetName` property. */
+        [[nodiscard]] const std::string& getAssetNameProperty() const { return assetName_; }
+
+        /** @brief NOXNA diagnostic accessor for FNA's `internal int version` field. */
+        NOXNA [[nodiscard]] int getVersionProperty() const { return version_; }
+
+        /** @brief NOXNA diagnostic accessor for FNA's `internal char platform` field. */
+        NOXNA [[nodiscard]] char getPlatformProperty() const { return platform_; }
+
+        // -- Public Read Methods (FNA's own "Public Read Methods" region) --
+
+        /** @brief FNA's `ContentReader.ReadMatrix()`. */
+        [[nodiscard]] Matrix ReadMatrix();
+
+        /** @brief FNA's `ContentReader.ReadQuaternion()`. */
+        [[nodiscard]] Quaternion ReadQuaternion();
+
+        /** @brief FNA's `ContentReader.ReadVector2()`. */
+        [[nodiscard]] Vector2 ReadVector2();
+
+        /** @brief FNA's `ContentReader.ReadVector3()`. */
+        [[nodiscard]] Vector3 ReadVector3();
+
+        /** @brief FNA's `ContentReader.ReadVector4()`. */
+        [[nodiscard]] Vector4 ReadVector4();
+
+        /** @brief FNA's `ContentReader.ReadColor()`. */
+        [[nodiscard]] Color ReadColor();
+
+        /**
+         * @brief FNA's `T ReadExternalReference<T>()`.
+         *
+         * @throws System::NotImplementedException always -- deferred to Phase E (plan_xnb.md
+         *         XNB-35), which needs a working `ContentManager::Load<T>()` round-trip this
+         *         phase does not yet provide.
+         */
+        template <typename T>
+        T ReadExternalReference()
+        {
+            throw System::NotImplementedException(
+                "ContentReader::ReadExternalReference<T>() is deferred to Phase E "
+                "(plan_xnb.md XNB-35).");
+        }
+
+        /** @brief FNA's `T ReadObject<T>()`: reads the next object via the 1-based dispatch protocol. */
+        template <typename T>
+        T ReadObject()
+        {
+            return InnerReadObject<T>(T{});
+        }
+
+        /** @brief FNA's `T ReadObject<T>(T existingInstance)`: as ReadObject<T>(), deserializing into @p existingInstance. */
+        template <typename T>
+        T ReadObject(T existingInstance)
+        {
+            return InnerReadObject<T>(std::move(existingInstance));
+        }
+
+        /** @brief FNA's `T ReadObject<T>(ContentTypeReader typeReader)`: reads using a specific reader, bypassing dispatch. */
+        template <typename T>
+        T ReadObject(ContentTypeReaderBase& typeReader)
+        {
+            T result = std::any_cast<T>(typeReader.ReadUntyped(*this, std::any{}));
+            RecordDisposable(result);
+            return result;
+        }
+
+        /** @brief FNA's `T ReadObject<T>(ContentTypeReader typeReader, T existingInstance)`. */
+        template <typename T>
+        T ReadObject(ContentTypeReaderBase& typeReader, T existingInstance)
+        {
+            T result = std::any_cast<T>(typeReader.ReadUntyped(*this, std::any(std::move(existingInstance))));
+            RecordDisposable(result);
+            return result;
+        }
+
+        /** @brief FNA's `T ReadRawObject<T>(ContentTypeReader typeReader)`: invokes @p typeReader directly, no dispatch/index consumed. */
+        template <typename T>
+        T ReadRawObject(ContentTypeReaderBase& typeReader)
+        {
+            return std::any_cast<T>(typeReader.ReadUntyped(*this, std::any{}));
+        }
+
+        /** @brief FNA's `T ReadRawObject<T>(ContentTypeReader typeReader, T existingInstance)`. */
+        template <typename T>
+        T ReadRawObject(ContentTypeReaderBase& typeReader, T existingInstance)
+        {
+            return std::any_cast<T>(typeReader.ReadUntyped(*this, std::any(std::move(existingInstance))));
+        }
+
+        /**
+         * @brief FNA's `void ReadSharedResource<T>(Action<T> fixup)` (plan_xnb.md XNB-15).
+         *
+         * Reads the shared-resource's 1-based index; index 0 means "no reference", and @p fixup
+         * is never called. Otherwise, @p fixup is queued and invoked once the referenced shared
+         * resource is actually read (see ReadSharedResources()) -- always strictly after
+         * InitializeTypeReaders()/the root object have been read, matching FNA's own two-pass
+         * "read every shared resource, then run all fixups" order.
+         *
+         * @throws std::bad_any_cast if the shared resource ends up holding something other than @p T.
+         */
+        template <typename T>
+        void ReadSharedResource(std::function<void(T)> fixup)
+        {
+            const int32_t index = Read7BitEncodedInt();
+            if (index > 0)
+            {
+                if (index - 1 >= static_cast<int32_t>(sharedResourceFixups_.size()))
+                {
+                    throw ContentLoadException(
+                        "'" + assetName_ + "' references an out-of-range shared resource index.");
+                }
+                sharedResourceFixups_[static_cast<std::size_t>(index - 1)].push_back(
+                    [fixup](const std::any& value) { fixup(std::any_cast<T>(value)); });
+            }
+        }
+
+        /**
+         * @brief FNA's internal `object ReadAsset<T>()`: the single top-level entry point --
+         *        initializes the type-reader table, reads the root object, then reads and fixes
+         *        up every shared resource.
+         */
+        template <typename T>
+        T ReadAsset()
+        {
+            InitializeTypeReaders();
+            T result = ReadObject<T>();
+            ReadSharedResources();
+            return result;
+        }
+
+        /**
+         * @brief FNA's internal `void InitializeTypeReaders()`: parses the type-reader table
+         *        (plan_xnb.md XNB-12) at the stream's current position, creates one fresh reader
+         *        instance per entry via `ContentTypeReaderManager` (XNB-14/14A), calls
+         *        `Initialize()` on each, then reads the shared-resource count and allocates the
+         *        per-resource fixup lists.
+         *
+         * @throws ContentLoadException if any table entry names an unregistered reader.
+         */
+        void InitializeTypeReaders();
+
+        /**
+         * @brief FNA's internal `void ReadSharedResources()`: reads every shared resource (in
+         *        file order), then runs every queued fixup for each one, in that order --
+         *        matching FNA's own two-pass comment ("we have to read _all_ the objects first,
+         *        BEFORE doing fixups").
+         */
+        void ReadSharedResources();
+
+        /** @brief FNA's internal `BoundingSphere ReadBoundingSphere()`. */
+        [[nodiscard]] BoundingSphere ReadBoundingSphere();
+
+    private:
+        /**
+         * @brief Type-erased counterpart of InnerReadObject<T>(), used only by
+         *        ReadSharedResources() to read each shared resource without knowing its static
+         *        type ahead of time (matching FNA's own `InnerReadObject<object>(null)` call
+         *        there). Deliberately does not call RecordDisposable() -- doing so would need a
+         *        dynamic "is this actually IDisposable" check with no static T to dispatch on;
+         *        see RecordDisposable()'s own docs. `ReadObject<T>()`/`ReadRawObject<T>()`, which
+         *        always know T statically, remain the disposal-tracked paths.
+         */
+        std::any InnerReadObjectAny();
+
+        template <typename T>
+        T InnerReadObject(T existingInstance)
+        {
+            const int32_t typeReaderIndex = Read7BitEncodedInt();
+            if (typeReaderIndex == 0)
+            {
+                return existingInstance;
+            }
+            if (typeReaderIndex < 0 || static_cast<std::size_t>(typeReaderIndex) > typeReaders_.size())
+            {
+                throw ContentLoadException(
+                    "'" + assetName_ + "' has an incorrect type reader index.");
+            }
+            ContentTypeReaderBase& typeReader = *typeReaders_[static_cast<std::size_t>(typeReaderIndex - 1)];
+            std::any resultAny = typeReader.ReadUntyped(*this, std::any(std::move(existingInstance)));
+            T result = std::any_cast<T>(std::move(resultAny));
+            RecordDisposable(result);
+            return result;
+        }
+
+        template <typename T>
+        void RecordDisposable(const T& result)
+        {
+            if constexpr (Detail::IsDisposableSharedPtr<T>::value)
+            {
+                if (!result) return;
+                auto disposable = std::static_pointer_cast<System::IDisposable>(result);
+                if (recordDisposableObject_)
+                {
+                    recordDisposableObject_(std::move(disposable));
+                }
+                // Falling back to contentManager_->RecordDisposable(...) is deferred to Phase B2
+                // (XNB-17B), which is when ContentManager gains that tracking mechanism at all.
+            }
+            // Value types (Vector3, Matrix, Curve, ...) are never IDisposable and are skipped.
+        }
+
+        ContentManager* contentManager_;
+        std::string assetName_;
+        int version_;
+        char platform_;
+        RecordDisposableFn recordDisposableObject_;
+        CNA::Internal::Xnb::XnbReadLimits limits_;
+
+        std::vector<std::unique_ptr<ContentTypeReaderBase>> typeReaders_;
+        int32_t sharedResourceCount_ = 0;
+        std::vector<std::any> sharedResources_;
+        std::vector<std::vector<std::function<void(const std::any&)>>> sharedResourceFixups_;
+    };
+}

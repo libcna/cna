@@ -46,6 +46,21 @@ namespace Microsoft::Xna::Framework::Content
         [[nodiscard]] virtual int getTypeVersionProperty() const { return 0; }
 
         /**
+         * @brief NOXNA reader-version enforcement (plan_xnb.md XNB-16B) -- FNA has no equivalent
+         * (it never checks the serialized version against `TypeVersion`, only ever parses and
+         * discards it). Default "Strict" mode requires an exact match against
+         * @ref getTypeVersionProperty(); a reader supporting multiple on-disk versions
+         * ("Compatibility" mode) overrides this instead of just widening the check inline.
+         *
+         * @param serializedVersion The version int actually read from this file's type-reader table entry.
+         * @return True if this reader instance can deserialize data serialized at that version.
+         */
+        [[nodiscard]] virtual bool SupportsVersion(int serializedVersion) const
+        {
+            return serializedVersion == getTypeVersionProperty();
+        }
+
+        /**
          * @brief FNA's `protected internal virtual void Initialize(ContentTypeReaderManager)`.
          *
          * Called once per freshly-created reader instance, after the whole type-reader table for
