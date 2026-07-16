@@ -711,6 +711,69 @@ case more exist).
 
 ---
 
+## Phase 12 — `NetworkSession::Dispose()` double-call use-after-free (confirmed real bug, open)
+
+- [ ] **Task 12.1** — `NetworkSession::Dispose()` (`src/Microsoft/Xna/Framework/Net/NetworkSession.cpp:278-294`)
+  is not idempotent: unlike the destructor (which the Phase 2 fix gated on `if (!isDisposed_)`),
+  `Dispose()` itself never checks `isDisposed_` before running, so calling it a second time
+  re-enters the whole body.
+
+  **Confirmed real bug, not theoretical** — found by an unrelated `-DCNA_SANITIZE=address,undefined`
+  full-suite run (done while closing out `plan_xnb.md`'s XNB-30A fuzz-testing task; this bug has
+  nothing to do with `.xnb`/LZX, it was just the first time the whole test suite had been run under
+  ASan). `ASan` reported a `heap-buffer-overflow`/use-after-free at
+  `NetworkSession.cpp:282` (`gamer->ClearPacketQueue();` inside `Dispose()`'s first loop, over
+  `localGamers_`), in `ENetBackendTest.DisposeDisconnectsConnectedPeersPromptlyInsteadOfWaitingForTimeout`
+  (`tests/CNA/Internal/Net/ENetBackendTests.cpp:1127`). Root cause, fully traced:
+  1. That test explicitly calls `host.session->Dispose()` itself (line 1160, to exercise the
+     "prompt disconnect" behavior the test is named for).
+  2. `Dispose()` runs its full body: the `ClearPacketQueue()` loop over `localGamers_` (fine, gamer
+     still alive), `ENetBackend::TeardownSession(this)`, then `ownedGamers_.clear()` — which
+     actually **destroys** the local "HostPlayer" `LocalNetworkGamer` object (it's the sole owner,
+     per Task 3.1's ownership split: `localGamers_`/`allGamers_` only ever hold non-owning raw
+     pointers). Nothing prunes the now-dangling pointer out of `localGamers_`/`allGamers_` at this
+     point — only `RemoveGamer()` does that, and `Dispose()` never calls it.
+  3. `isDisposed_ = true` is set at the very end of this first call.
+  4. When the test function returns, its `SystemLinkSessionFixture host` local goes out of scope.
+     That fixture's destructor (`tests/CNA/Internal/Net/ENetBackendTests.cpp:59`) unconditionally
+     calls `session->Dispose()` again, with **no `isDisposed_` check of its own** — a second,
+     redundant `Dispose()` call.
+  5. This second call's `ClearPacketQueue()` loop iterates `localGamers_` again — which **still
+     lists the same raw pointer** to the gamer object step 2 already destroyed. Use-after-free.
+
+  This is a genuine API-contract violation, not just a test-fixture quirk: real XNA's
+  `IDisposable.Dispose()` contract requires `Dispose()` itself to be safe to call more than once
+  (CLAUDE.md's own IDisposable section: "Always check `isDisposed_` before acting"). Any real
+  caller that disposes a session explicitly and *also* relies on an RAII wrapper/second cleanup
+  path calling `Dispose()` again (exactly this fixture's own pattern, which is a reasonable and
+  common shape) would hit the identical crash outside of tests too.
+
+  **Suggested fix** (not applied yet — this task is a write-up only, not a fix): add
+  `if (isDisposed_) return;` as the very first line of `Dispose()`'s body, mirroring the guard
+  pattern the destructor already uses. Since `RemoveGamer()` is the only code that actually prunes
+  `localGamers_`/`allGamers_`, and `Dispose()` never calls it, a defense-in-depth alternative (or
+  addition) is to also clear `localGamers_`/`remoteGamers_`/`allGamers_` themselves before/alongside
+  `ownedGamers_.clear()`, so a hypothetical future caller cannot observe a stale gamer pointer
+  through those collections either, even without a double-`Dispose()` call.
+
+  **Add tests**: (a) calling `Dispose()` twice directly (no fixture involved) must not crash and
+  must leave the session in the same state as a single call; (b) the existing
+  `DisposeDisconnectsConnectedPeersPromptlyInsteadOfWaitingForTimeout` test should keep passing
+  once the guard is added — re-run it under `-DCNA_SANITIZE=address,undefined` specifically (not
+  just the plain build) to confirm the use-after-free is actually gone, not merely no-longer-
+  reached by luck; (c) confirm `GetOwnedGamerCountForTesting()`/`getLocalGamersProperty()` stay
+  consistent (empty) after a double-`Dispose()`, matching a single-`Dispose()` call's end state.
+
+  **Not fixed as part of this write-up** — flagged here for a dedicated follow-up pass. Whoever
+  picks this up should also decide whether `SystemLinkSessionFixture`'s own destructor
+  (`ENetBackendTests.cpp:59`) should gain its own `if (!session->getIsDisposedProperty())` guard as
+  a second, independent safety net, or whether relying solely on `Dispose()` itself becoming
+  idempotent is the intended fix (the latter seems more correct: every other `IDisposable` caller
+  in this codebase shouldn't need to remember to check `isDisposed_` themselves before calling
+  `Dispose()`).
+
+---
+
 ## Implementation quality rules (carried over, still binding)
 
 - Keep changes minimal but complete — no half-finished implementations.
