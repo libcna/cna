@@ -2,6 +2,7 @@
 #pragma once
 
 #include <any>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -109,8 +110,17 @@ namespace Microsoft::Xna::Framework::Content
         /**
          * @brief FNA's `protected internal abstract T Read(ContentReader input, T
          *        existingInstance)` -- the method a concrete reader overrides.
+         *
+         * @p existingInstance uses `std::optional<T>` rather than a bare `T` (FNA's literal
+         * signature): C#'s `default(T)` is free for a reference type (`null`, no construction at
+         * all) but real construction for a value type -- a distinction C++ has no uniform way to
+         * express when `T` is a value-semantics type with no default constructor (e.g.
+         * `SpriteFont`, which always requires real construction arguments). `std::nullopt`
+         * represents FNA's null/`default(T)` uniformly regardless of whether `T` happens to be
+         * default-constructible; a concrete reader constructs a fresh `T` itself when it's empty,
+         * exactly as a real FNA reader does for `existingInstance == null`.
          */
-        virtual T Read(ContentReader& input, T existingInstance) = 0;
+        virtual T Read(ContentReader& input, std::optional<T> existingInstance) = 0;
 
     public:
         /**
@@ -122,7 +132,9 @@ namespace Microsoft::Xna::Framework::Content
          */
         std::any ReadUntyped(ContentReader& input, std::any existingInstance) override
         {
-            T existing = existingInstance.has_value() ? std::any_cast<T>(std::move(existingInstance)) : T{};
+            std::optional<T> existing = existingInstance.has_value()
+                ? std::optional<T>(std::any_cast<T>(std::move(existingInstance)))
+                : std::nullopt;
             T result = Read(input, std::move(existing));
             return std::any(std::move(result));
         }

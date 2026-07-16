@@ -28,9 +28,9 @@ namespace
         TestOnlyInt32Reader() : ContentTypeReader<int32_t>("CNA.Test.Int32") {}
 
     protected:
-        int32_t Read(ContentReader& /*input*/, int32_t existingInstance) override
+        int32_t Read(ContentReader& /*input*/, std::optional<int32_t> existingInstance) override
         {
-            return existingInstance;
+            return existingInstance.value_or(0);
         }
     };
 

@@ -4,6 +4,7 @@
 #include <any>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <type_traits>
 #include <vector>
@@ -137,14 +138,14 @@ namespace Microsoft::Xna::Framework::Content
         template <typename T>
         T ReadObject()
         {
-            return InnerReadObject<T>(T{});
+            return InnerReadObject<T>(std::nullopt);
         }
 
         /** @brief FNA's `T ReadObject<T>(T existingInstance)`: as ReadObject<T>(), deserializing into @p existingInstance. */
         template <typename T>
         T ReadObject(T existingInstance)
         {
-            return InnerReadObject<T>(std::move(existingInstance));
+            return InnerReadObject<T>(std::optional<T>(std::move(existingInstance)));
         }
 
         /** @brief FNA's `T ReadObject<T>(ContentTypeReader typeReader)`: reads using a specific reader, bypassing dispatch. */
@@ -254,13 +255,35 @@ namespace Microsoft::Xna::Framework::Content
          */
         std::any InnerReadObjectAny();
 
+        // existingInstance is std::optional<T>, not a bare T -- see ContentTypeReader<T>::Read's
+        // own docs for why: C++ has no way to construct a placeholder T{} generically when T has
+        // no default constructor (e.g. SpriteFont), unlike C#'s free default(T) for reference
+        // types. nullopt uniformly represents "no existing instance" regardless of whether T
+        // happens to be default-constructible.
         template <typename T>
-        T InnerReadObject(T existingInstance)
+        T InnerReadObject(std::optional<T> existingInstance)
         {
             const int32_t typeReaderIndex = Read7BitEncodedInt();
             if (typeReaderIndex == 0)
             {
-                return existingInstance;
+                // Real FNA never fails here: default(T) always succeeds, for both C# reference
+                // types (null) and value types (zero-init). Mirror that for a default-constructible
+                // T; only a T with no default constructor AND no existing instance has no C++
+                // representation for "null" to fall back to.
+                if (existingInstance.has_value())
+                {
+                    return std::move(*existingInstance);
+                }
+                if constexpr (std::is_default_constructible_v<T>)
+                {
+                    return T{};
+                }
+                else
+                {
+                    throw ContentLoadException(
+                        "'" + assetName_ + "' has a null object of a type with no default "
+                        "constructor and no existing instance to fall back to.");
+                }
             }
             if (typeReaderIndex < 0 || static_cast<std::size_t>(typeReaderIndex) > typeReaders_.size())
             {
@@ -268,7 +291,10 @@ namespace Microsoft::Xna::Framework::Content
                     "'" + assetName_ + "' has an incorrect type reader index.");
             }
             ContentTypeReaderBase& typeReader = *typeReaders_[static_cast<std::size_t>(typeReaderIndex - 1)];
-            std::any resultAny = typeReader.ReadUntyped(*this, std::any(std::move(existingInstance)));
+            std::any existingAny = existingInstance.has_value()
+                ? std::any(std::move(*existingInstance))
+                : std::any{};
+            std::any resultAny = typeReader.ReadUntyped(*this, std::move(existingAny));
             T result = std::any_cast<T>(std::move(resultAny));
             RecordDisposable(result);
             return result;

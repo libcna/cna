@@ -32,10 +32,11 @@ namespace
         TestOnlyPayloadReader() : ContentTypeReader<TestPayload>("CNA.Test.TestPayload") {}
 
     protected:
-        TestPayload Read(ContentReader& input, TestPayload existingInstance) override
+        TestPayload Read(ContentReader& input, std::optional<TestPayload> existingInstance) override
         {
-            existingInstance.value = input.ReadInt32();
-            return existingInstance;
+            TestPayload result = existingInstance.value_or(TestPayload{});
+            result.value = input.ReadInt32();
+            return result;
         }
     };
 
@@ -52,9 +53,9 @@ namespace
 
     protected:
         std::shared_ptr<TestNodeResult> Read(
-            ContentReader& input, std::shared_ptr<TestNodeResult> existingInstance) override
+            ContentReader& input, std::optional<std::shared_ptr<TestNodeResult>> existingInstance) override
         {
-            auto node = existingInstance ? existingInstance : std::make_shared<TestNodeResult>();
+            auto node = (existingInstance && *existingInstance) ? *existingInstance : std::make_shared<TestNodeResult>();
             TestNodeResult* raw = node.get();
             input.ReadSharedResource<TestPayload>([raw](TestPayload p) {
                 raw->sharedValue = p.value;
@@ -135,6 +136,26 @@ TEST_F(ContentReaderTest, RootIndexZeroReturnsDefaultInstance)
     const TestPayload result = reader.ReadAsset<TestPayload>();
 
     EXPECT_EQ(result.value, 0); // TestPayload{} default
+}
+
+TEST_F(ContentReaderTest, RootIndexZeroWithNoDefaultConstructorAndNoExistingInstanceThrows)
+{
+    // A type genuinely lacking a default constructor and no existing instance passed in has no
+    // C++ representation for FNA's default(T)/null root object -- see InnerReadObject<T>()'s docs.
+    struct NoDefaultCtor
+    {
+        explicit NoDefaultCtor(int v) : value(v) {}
+        int value;
+    };
+
+    const auto bytes = BuildBody(
+        {}, 0,
+        [](System::IO::BinaryWriter& w) { w.Write7BitEncodedInt(0); });
+
+    System::IO::MemoryStream ms(bytes.data(), (int32_t)bytes.size());
+    ContentReader reader(nullptr, &ms, "test", 5, 'w');
+
+    EXPECT_THROW(reader.ReadAsset<NoDefaultCtor>(), ContentLoadException);
 }
 
 TEST_F(ContentReaderTest, UnregisteredReaderNameThrowsContentLoadException)
@@ -268,8 +289,9 @@ TEST_F(ContentReaderTest, RealMonoGameFixtureLoadsEndToEndThroughGenericDispatch
     public:
         RawTextureHeaderReader() : ContentTypeReader<RawTextureHeader>("CNA.Test.RawTextureHeader") {}
     protected:
-        RawTextureHeader Read(ContentReader& input, RawTextureHeader existing) override
+        RawTextureHeader Read(ContentReader& input, std::optional<RawTextureHeader> existingInstance) override
         {
+            RawTextureHeader existing = existingInstance.value_or(RawTextureHeader{});
             existing.surfaceFormat = input.ReadInt32();
             existing.width = input.ReadInt32();
             existing.height = input.ReadInt32();

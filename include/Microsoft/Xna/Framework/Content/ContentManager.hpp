@@ -16,13 +16,17 @@
 
 #include "CNA/CNAHelper.hpp"
 #include "CNA/Internal/CnbEnvelope.hpp"
+#include "CNA/Internal/Xnb/XnbHeader.hpp"
 #include "CNA/Logger.hpp"
 #include "SharpRuntime/Prop.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
+#include "Microsoft/Xna/Framework/Content/ContentReader.hpp"
 #include "Microsoft/Xna/Framework/Content/LooseFileContentTypeReader.hpp"
 #include "System/IServiceProvider.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "System/IDisposable.hpp"
+#include "System/IO/BinaryReader.hpp"
+#include "System/IO/MemoryStream.hpp"
 
 namespace Microsoft::Xna::Framework::Audio  { class SoundEffect; }
 namespace Microsoft::Xna::Framework::Graphics { class GraphicsDevice; class Texture2D; class TextureCube; }
@@ -269,6 +273,21 @@ namespace Microsoft::Xna::Framework::Content
                 return std::any_cast<T>(cacheIt->second);
             }
 
+            // .xnb always wins first (cnb.md's "Core rule", 2026-07-16 decision): checked even
+            // ahead of a literal caller-given path or a registered LooseFileContentTypeReader<T>
+            // (a real compiled .xnb asset represents authentic external content that should never
+            // be silently shadowed by CNA's own loose-file/.cnb conveniences). Unlike the
+            // loose-file path, .xnb dispatch needs no per-T reader registered on ContentManager
+            // at all -- root-object dispatch is entirely driven by the file's own type-reader
+            // table via the process-wide ContentTypeReaderManager registry (plan_xnb.md XNB-17B).
+            const std::string xnbCandidate = BuildAssetPath(assetName) + ".xnb";
+            if (std::filesystem::exists(xnbCandidate))
+            {
+                T result = LoadXnbAsset<T>(xnbCandidate, assetName);
+                loadedAssets_[cacheKey] = result;
+                return result;
+            }
+
             auto readerIt = typeReaders_.find(std::type_index(typeid(T)));
             if (readerIt == typeReaders_.end())
             {
@@ -342,6 +361,50 @@ namespace Microsoft::Xna::Framework::Content
                     envelope.type + "'.");
             }
         };
+
+        /**
+         * @brief Loads @p assetName as a real `.xnb` binary asset from @p xnbPath
+         *        (plan_xnb.md XNB-17B), via ContentReader's root-object dispatch.
+         *
+         * @tparam T        Requested asset type; must match (via `std::any_cast`) whatever the
+         *                  file's root type-reader actually produces.
+         * @param xnbPath   Full filesystem path to the `.xnb` file.
+         * @param assetName Logical asset name, passed through to ContentReader for diagnostics.
+         * @return The deserialized root asset.
+         * @throws ContentLoadException if the file is malformed, LZX-compressed (Phase D is not
+         *         yet implemented), or names an unregistered/version-mismatched reader.
+         */
+        template <typename T>
+        [[nodiscard]] T LoadXnbAsset(const std::string& xnbPath, const std::string& assetName)
+        {
+            std::ifstream file(xnbPath, std::ios::binary);
+            if (!file.is_open())
+            {
+                throw ContentLoadException("ContentManager: cannot open '" + xnbPath + "'.");
+            }
+            std::ostringstream ss;
+            ss << file.rdbuf();
+            const std::string bytes = ss.str();
+
+            System::IO::MemoryStream headerStream(
+                reinterpret_cast<const uint8_t*>(bytes.data()), static_cast<int32_t>(bytes.size()));
+            System::IO::BinaryReader headerReader(&headerStream, true);
+            const auto header = CNA::Internal::Xnb::ParseXnbHeader(headerReader, xnbPath);
+
+            if (header.compressed)
+            {
+                throw ContentLoadException(
+                    "ContentManager: '" + xnbPath + "' is LZX-compressed; CNA's .xnb reader "
+                    "currently only supports uncompressed files (plan_xnb.md Phase D is not yet "
+                    "implemented).");
+            }
+
+            System::IO::MemoryStream bodyStream(
+                reinterpret_cast<const uint8_t*>(bytes.data()) + 10,
+                static_cast<int32_t>(bytes.size()) - 10);
+            ContentReader contentReader(this, &bodyStream, assetName, header.version, header.platform);
+            return contentReader.ReadAsset<T>();
+        }
 
         /**
          * @brief Resolves the full filesystem path for an asset, trying reader extensions
