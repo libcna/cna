@@ -61,6 +61,13 @@ namespace Microsoft::Xna::Framework::Content
          */
         NOXNA static std::unique_ptr<ContentTypeReaderBase> CreateReader(const std::string& canonicalName);
 
+        /**
+         * @brief NOXNA query-only check: is a factory registered for @p canonicalName, without
+         *        constructing an instance (plan_xnb.md XNB-67 -- the manifest's reader-usage
+         *        summary needs this without any construction side effect).
+         */
+        NOXNA [[nodiscard]] static bool IsRegistered(const std::string& canonicalName);
+
     private:
         static std::unordered_map<std::string, ReaderFactory>& TypeCreators();
     };

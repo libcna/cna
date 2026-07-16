@@ -4,6 +4,8 @@
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "CNA/Internal/CnbEnvelope.hpp"
 #include "CNA/Internal/CnbSourceFile.hpp"
+#include "CNA/Internal/Xnb/XnbTypeReaderTable.hpp"
+#include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/AnimationPlayer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
@@ -119,6 +121,155 @@ namespace Microsoft::Xna::Framework::Content
     {
         loadedAssets_.clear();
         textureCache_.clear();
+    }
+
+    // ---------------------------------------------------------------------------
+    // Content manifest (plan_xnb.md Phase B3: XNB-65/65A/66/67/61a)
+    // ---------------------------------------------------------------------------
+
+    std::vector<std::string> ContentManager::ScanXnbReaderNames(const std::filesystem::path& xnbPath) const
+    {
+        std::vector<std::string> names;
+        try
+        {
+            std::ifstream file(xnbPath, std::ios::binary);
+            if (!file.is_open())
+            {
+                return names;
+            }
+            std::ostringstream ss;
+            ss << file.rdbuf();
+            const std::string bytes = ss.str();
+            if (bytes.size() < 10)
+            {
+                return names;
+            }
+
+            System::IO::MemoryStream headerStream(
+                reinterpret_cast<const uint8_t*>(bytes.data()), static_cast<int32_t>(bytes.size()));
+            System::IO::BinaryReader headerReader(&headerStream, true);
+            const auto header = CNA::Internal::Xnb::ParseXnbHeader(headerReader, xnbPath.string());
+
+            if (header.compressed)
+            {
+                // XNB-61b (LZX-compressed inventory) is deferred to Phase D -- an empty
+                // inventory for this one entry is not a scan failure.
+                return names;
+            }
+
+            System::IO::MemoryStream bodyStream(
+                reinterpret_cast<const uint8_t*>(bytes.data()) + 10,
+                static_cast<int32_t>(bytes.size()) - 10);
+            System::IO::BinaryReader bodyReader(&bodyStream, true);
+            const auto table = CNA::Internal::Xnb::ParseXnbTypeReaderTable(bodyReader, xnbPath.string());
+            names.reserve(table.size());
+            for (const auto& entry : table)
+            {
+                names.push_back(entry.normalizedName);
+            }
+        }
+        catch (...)
+        {
+            // Best-effort: a malformed .xnb elsewhere in the content root must not abort the
+            // whole manifest scan -- just leave this one entry's inventory empty.
+            names.clear();
+        }
+        return names;
+    }
+
+    void ContentManager::RefreshContentManifest()
+    {
+        namespace fs = std::filesystem;
+        std::unordered_map<std::string, ContentManifestEntry> entriesByBase;
+
+        std::error_code ec;
+        if (!fs::exists(rootDirectory_, ec) || ec)
+        {
+            contentManifest_.clear();
+            contentManifestBuilt_ = true;
+            return;
+        }
+
+        auto it = fs::recursive_directory_iterator(
+            rootDirectory_, fs::directory_options::skip_permission_denied, ec);
+        const auto end = fs::recursive_directory_iterator();
+        for (; !ec && it != end; it.increment(ec))
+        {
+            if (!it->is_regular_file(ec) || ec)
+            {
+                continue;
+            }
+
+            const fs::path& path = it->path();
+            fs::path relative = fs::relative(path, rootDirectory_, ec);
+            if (ec)
+            {
+                continue;
+            }
+
+            const std::string ext = path.extension().string();
+            std::string relStr = relative.generic_string();
+            const std::string base = relStr.substr(0, relStr.size() - ext.size());
+
+            ContentManifestEntry& entry = entriesByBase[base];
+            entry.relativePath = base;
+            if (ext == ".xnb")
+            {
+                entry.hasXnb = true;
+                entry.xnbReaderNames = ScanXnbReaderNames(path);
+            }
+            else if (ext == ".cnb")
+            {
+                entry.hasCnb = true;
+            }
+            else
+            {
+                entry.nativeExtensions.push_back(ext);
+            }
+        }
+
+        contentManifest_.clear();
+        contentManifest_.reserve(entriesByBase.size());
+        for (auto& [base, entry] : entriesByBase)
+        {
+            contentManifest_.push_back(std::move(entry));
+        }
+        contentManifestBuilt_ = true;
+    }
+
+    const std::vector<ContentManifestEntry>& ContentManager::GetContentManifest()
+    {
+        if (!contentManifestBuilt_)
+        {
+            RefreshContentManifest();
+        }
+        return contentManifest_;
+    }
+
+    std::vector<ContentManifestReaderUsage> ContentManager::GetXnbReaderUsageSummary()
+    {
+        const auto& manifest = GetContentManifest();
+
+        std::unordered_map<std::string, int> counts;
+        for (const auto& entry : manifest)
+        {
+            for (const auto& readerName : entry.xnbReaderNames)
+            {
+                ++counts[readerName];
+            }
+        }
+
+        std::vector<ContentManifestReaderUsage> result;
+        result.reserve(counts.size());
+        for (const auto& [readerName, count] : counts)
+        {
+            ContentManifestReaderUsage usage;
+            usage.readerName = readerName;
+            usage.fileCount = count;
+            usage.isRegistered = ContentTypeReaderManager::IsRegistered(readerName);
+            result.push_back(std::move(usage));
+        }
+        return result;
     }
 
     // ---------------------------------------------------------------------------

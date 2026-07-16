@@ -34,4 +34,10 @@ namespace Microsoft::Xna::Framework::Content
         }
         return it->second();
     }
+
+    bool ContentTypeReaderManager::IsRegistered(const std::string& canonicalName)
+    {
+        const auto& creators = TypeCreators();
+        return creators.find(canonicalName) != creators.end();
+    }
 }

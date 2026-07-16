@@ -20,6 +20,7 @@
 #include "CNA/Logger.hpp"
 #include "SharpRuntime/Prop.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
+#include "Microsoft/Xna/Framework/Content/ContentManifestEntry.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentReader.hpp"
 #include "Microsoft/Xna/Framework/Content/LooseFileContentTypeReader.hpp"
 #include "System/IServiceProvider.hpp"
@@ -92,6 +93,18 @@ namespace Microsoft::Xna::Framework::Content
         };
         std::unordered_map<std::string, WeakTextureEntry> textureCache_;
 
+        // plan_xnb.md Phase B3 (XNB-65/66/67): a point-in-time snapshot of the content root,
+        // built lazily on first access (or explicitly via RefreshContentManifest()). Additive
+        // only in this pass -- NOT yet consulted by ResolveAssetPath()/Load<T>()'s own
+        // exists()-based resolution, which keeps its existing live-filesystem-check behavior
+        // unchanged. Wiring the manifest into that hot path is deliberately deferred to a
+        // separate, isolated follow-up task, so as not to risk the very large existing test
+        // surface that depends on ContentManager noticing a file the instant it's written.
+        std::vector<ContentManifestEntry> contentManifest_;
+        bool contentManifestBuilt_ = false;
+
+        [[nodiscard]] std::vector<std::string> ScanXnbReaderNames(const std::filesystem::path& xnbPath) const;
+
         DEF_PROP(std::string, RootDirectory, getter1, setter1, member0, static0, constret1, ref1, constmet1)
 
         [[nodiscard]] std::string BuildAssetPath(const std::string& assetName) const;
@@ -148,6 +161,37 @@ namespace Microsoft::Xna::Framework::Content
 
         /** @brief Unloads all cached assets and frees the associated resources. */
         void Unload();
+
+        /**
+         * @brief NOXNA: (re)scans the content root and rebuilds the content manifest
+         *        (plan_xnb.md XNB-65/65A), replacing any previous scan. Not called
+         *        automatically after construction -- the first call to GetContentManifest()/
+         *        GetXnbReaderUsageSummary() triggers it lazily if it hasn't run yet.
+         *
+         * The manifest is a point-in-time snapshot: a file added to the content root after this
+         * call is not reflected until RefreshContentManifest() runs again. There is no
+         * filesystem-watch/hot-reload mechanism.
+         */
+        NOXNA void RefreshContentManifest();
+
+        /**
+         * @brief NOXNA: returns the content manifest (plan_xnb.md XNB-66), one entry per logical
+         *        asset name found under the content root, building it via RefreshContentManifest()
+         *        first if it hasn't been built yet.
+         *
+         * @return The current manifest snapshot.
+         */
+        NOXNA [[nodiscard]] const std::vector<ContentManifestEntry>& GetContentManifest();
+
+        /**
+         * @brief NOXNA: aggregates the manifest's per-file `.xnb` reader-name inventories
+         *        (plan_xnb.md XNB-67) into one row per distinct reader name -- how many files
+         *        reference it, and whether `ContentTypeReaderManager` currently has a reader
+         *        registered for it. Builds the manifest first via GetContentManifest() if needed.
+         *
+         * @return One ContentManifestReaderUsage row per distinct reader name found, unordered.
+         */
+        NOXNA [[nodiscard]] std::vector<ContentManifestReaderUsage> GetXnbReaderUsageSummary();
 
         /**
          * @brief Registers a custom type reader for assets of type T.
