@@ -2158,6 +2158,16 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 947: ShipGame's own Particle.fx (real GPU point sprites via PSIZE/gl_PointSize) --
+        # the 4th and final ShipGame custom shader, fully clearing ShipGame's shader blocker.
+        cna_easygl_test(cna_test_easygl_shipgame_particle_shader
+                        examples/easygl_shipgame_particle_shader_test.cpp)
+        add_test(NAME EasyGL_ShipGame_Particle_Shader
+                 COMMAND cna_test_easygl_shipgame_particle_shader)
+        set_tests_properties(EasyGL_ShipGame_Particle_Shader PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 133: DualTextureEffect — magenta×yellow→red pixel readback
         cna_easygl_test(cna_test_easygl_dual_texture
                         examples/easygl_dual_texture_test.cpp)
