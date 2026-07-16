@@ -348,6 +348,17 @@ namespace CNA::Internal::Backends::SdlGpu
         ~SdlGpuVertexBufferBackend() override;
 
         void SetData(const void* data, int vertexCount, std::size_t strideInBytes) override;
+        /**
+         * @brief SDLGPU-23: real `Discard`/`NoOverwrite` streaming hints, not the
+         * `IGraphicsBackend` default (which ignores @p options and calls the plain `SetData()`).
+         * Maps to `SDL_UploadToGPUBuffer`'s own `cycle` flag exactly like `EasyGLVertexBufferBackend`'s
+         * established `Discard`→orphan/`NoOverwrite`→in-place convention: `Discard`/`None` cycle the
+         * buffer to a fresh backing resource (avoids a GPU stall on any in-flight read of the old
+         * data, `SDL_gpu.h`'s own documented `cycle=true` behavior); `NoOverwrite` does not cycle
+         * (the caller's own promise that no in-flight GPU read is being overwritten).
+         */
+        void SetDataWithOptions(const void* data, int vertexCount, std::size_t strideInBytes,
+                                SetDataOptions options) override;
         [[nodiscard]] int GetVertexCount() const override { return vertexCount_; }
 
         /** @brief Returns the underlying `SDL_GPUBuffer`. NOXNA — internal use only. */
@@ -380,6 +391,10 @@ namespace CNA::Internal::Backends::SdlGpu
 
         void SetData16(const void* data, int indexCount) override;
         void SetData32(const void* data, int indexCount) override;
+        /** @brief SDLGPU-23: real streaming hint, same rationale as `SdlGpuVertexBufferBackend::SetDataWithOptions`. */
+        void SetData16WithOptions(const void* data, int indexCount, SetDataOptions options) override;
+        /** @brief SDLGPU-23: real streaming hint, same rationale as `SdlGpuVertexBufferBackend::SetDataWithOptions`. */
+        void SetData32WithOptions(const void* data, int indexCount, SetDataOptions options) override;
         [[nodiscard]] int GetIndexCount() const override { return indexCount_; }
         [[nodiscard]] bool IsThirtyTwoBit() const override { return thirtyTwoBit_; }
 
@@ -389,7 +404,7 @@ namespace CNA::Internal::Backends::SdlGpu
         NOXNA [[nodiscard]] const std::vector<std::uint8_t>& ShadowData() const { return shadowData_; }
 
     private:
-        void Upload(const void* data, int indexCount, bool dataIsThirtyTwoBit);
+        void Upload(const void* data, int indexCount, bool dataIsThirtyTwoBit, bool cycle);
 
         SdlGpuGraphicsBackend* owner_ = nullptr;
         SDL_GPUBuffer* buffer_ = nullptr;

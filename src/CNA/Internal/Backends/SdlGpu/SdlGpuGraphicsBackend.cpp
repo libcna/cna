@@ -4277,6 +4277,14 @@ namespace CNA::Internal::Backends::SdlGpu
 
     void SdlGpuVertexBufferBackend::SetData(const void* data, int vertexCount, std::size_t strideInBytes)
     {
+        // SetDataOptions::None/Discard both cycle -- see SetDataWithOptions's own doc comment.
+        SetDataWithOptions(data, vertexCount, strideInBytes, SetDataOptions::Discard);
+    }
+
+    void SdlGpuVertexBufferBackend::SetDataWithOptions(const void* data, int vertexCount,
+                                                        std::size_t strideInBytes, SetDataOptions options)
+    {
+        const bool cycle = (options != SetDataOptions::NoOverwrite);
         SDL_GPUDevice* device = owner_->Device();
         const Uint32 sizeBytes = static_cast<Uint32>(vertexCount) * static_cast<Uint32>(strideInBytes);
         if (buffer_ == nullptr || capacityBytes_ < sizeBytes)
@@ -4319,7 +4327,7 @@ namespace CNA::Internal::Backends::SdlGpu
         SDL_GPUBufferRegion destRegion{};
         destRegion.buffer = buffer_;
         destRegion.size = sizeBytes;
-        SDL_UploadToGPUBuffer(copyPass, &source, &destRegion, true);
+        SDL_UploadToGPUBuffer(copyPass, &source, &destRegion, cycle);
         SDL_EndGPUCopyPass(copyPass);
         if (!SDL_SubmitGPUCommandBuffer(cmd))
         {
@@ -4346,10 +4354,20 @@ namespace CNA::Internal::Backends::SdlGpu
             SDL_ReleaseGPUBuffer(owner_->Device(), buffer_);
     }
 
-    void SdlGpuIndexBufferBackend::SetData16(const void* data, int indexCount) { Upload(data, indexCount, false); }
-    void SdlGpuIndexBufferBackend::SetData32(const void* data, int indexCount) { Upload(data, indexCount, true); }
+    // SetDataOptions::None/Discard both cycle -- see SdlGpuVertexBufferBackend::SetDataWithOptions's
+    // own doc comment for the real Discard/NoOverwrite rationale.
+    void SdlGpuIndexBufferBackend::SetData16(const void* data, int indexCount) { Upload(data, indexCount, false, true); }
+    void SdlGpuIndexBufferBackend::SetData32(const void* data, int indexCount) { Upload(data, indexCount, true, true); }
+    void SdlGpuIndexBufferBackend::SetData16WithOptions(const void* data, int indexCount, SetDataOptions options)
+    {
+        Upload(data, indexCount, false, options != SetDataOptions::NoOverwrite);
+    }
+    void SdlGpuIndexBufferBackend::SetData32WithOptions(const void* data, int indexCount, SetDataOptions options)
+    {
+        Upload(data, indexCount, true, options != SetDataOptions::NoOverwrite);
+    }
 
-    void SdlGpuIndexBufferBackend::Upload(const void* data, int indexCount, bool dataIsThirtyTwoBit)
+    void SdlGpuIndexBufferBackend::Upload(const void* data, int indexCount, bool dataIsThirtyTwoBit, bool cycle)
     {
         SDL_GPUDevice* device = owner_->Device();
         const std::size_t elementSize = dataIsThirtyTwoBit ? sizeof(std::uint32_t) : sizeof(std::uint16_t);
@@ -4394,7 +4412,7 @@ namespace CNA::Internal::Backends::SdlGpu
         SDL_GPUBufferRegion destRegion{};
         destRegion.buffer = buffer_;
         destRegion.size = sizeBytes;
-        SDL_UploadToGPUBuffer(copyPass, &source, &destRegion, true);
+        SDL_UploadToGPUBuffer(copyPass, &source, &destRegion, cycle);
         SDL_EndGPUCopyPass(copyPass);
         if (!SDL_SubmitGPUCommandBuffer(cmd))
         {
