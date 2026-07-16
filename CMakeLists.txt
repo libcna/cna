@@ -2042,6 +2042,25 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 947: DrawModel.fx's CreateShadowMap technique (ShadowMappingSample_4_0).
+        cna_easygl_test(cna_test_easygl_shadowmapping_createshadowmap_shader
+                        examples/easygl_shadowmapping_createshadowmap_shader_test.cpp)
+        add_test(NAME EasyGL_ShadowMapping_CreateShadowMap_Shader
+                 COMMAND cna_test_easygl_shadowmapping_createshadowmap_shader)
+        set_tests_properties(EasyGL_ShadowMapping_CreateShadowMap_Shader PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 947: DrawModel.fx's DrawWithShadowMap technique -- with this, ShadowMapping
+        # sample's shader blocker is fully cleared.
+        cna_easygl_test(cna_test_easygl_shadowmapping_drawwithshadowmap_shader
+                        examples/easygl_shadowmapping_drawwithshadowmap_shader_test.cpp)
+        add_test(NAME EasyGL_ShadowMapping_DrawWithShadowMap_Shader
+                 COMMAND cna_test_easygl_shadowmapping_drawwithshadowmap_shader)
+        set_tests_properties(EasyGL_ShadowMapping_DrawWithShadowMap_Shader PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 133: DualTextureEffect — magenta×yellow→red pixel readback
         cna_easygl_test(cna_test_easygl_dual_texture
                         examples/easygl_dual_texture_test.cpp)
