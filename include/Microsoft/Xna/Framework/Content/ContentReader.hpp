@@ -299,6 +299,27 @@ namespace Microsoft::Xna::Framework::Content
         NOXNA void CheckCollectionElementCount(int64_t count, const std::string& readerName) const;
 
         /**
+         * @brief NOXNA bounds check for a decoded pixel/voxel buffer's byte size (e.g.
+         *        `width * height * 4` for an uncompressed `Texture2D`) against
+         *        `XnbReadLimits::maxDecompressedSize` (plan_xnb.md XNB-43), called before any
+         *        texture-sized allocation is attempted.
+         *
+         * Deliberately a *separate* check from `CheckCollectionElementCount()`, not a reuse of
+         * it: `maxCollectionElementCount` (10 million) is tuned for array/list/dictionary element
+         * counts and would incorrectly reject a common, entirely legitimate real texture size
+         * (e.g. 4096x4096 = ~16.8 million pixels). `maxDecompressedSize` (256MB) already exists
+         * for exactly this "one large in-memory buffer" purpose (Phase D's LZX payload) and is a
+         * far more appropriate ceiling for a decoded RGBA buffer's byte size specifically.
+         *
+         * @param byteSize   The decoded buffer's required size in bytes (e.g.
+         *                   `int64_t{width} * height * 4`, computed by the caller in `int64_t` so
+         *                   the multiplication itself can't silently wrap back into range).
+         * @param readerName Canonical reader name, used only for the exception message.
+         * @throws ContentLoadException if @p byteSize is negative or exceeds the configured limit.
+         */
+        NOXNA void CheckDecodedByteSize(int64_t byteSize, const std::string& readerName) const;
+
+        /**
          * @brief NOXNA hardened counterpart of `BinaryReader::ReadBytes(int)` for `.xnb` readers
          *        that read a declared-length raw byte blob (texture pixel data, audio data,
          *        vertex/index buffer data) and require getting back *exactly* that many bytes

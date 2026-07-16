@@ -437,6 +437,19 @@ namespace Microsoft::Xna::Framework::Content
             System::IO::BinaryReader headerReader(&headerStream, true);
             const auto header = CNA::Internal::Xnb::ParseXnbHeader(headerReader, xnbPath);
 
+            // header.totalLength is a value the FILE ITSELF declares, not something ParseXnbHeader
+            // can verify against the real file size on its own -- cross-check it against the
+            // actual number of bytes just read from disk before it's used for any pointer
+            // arithmetic below (plan_xnb.md XNB-43). A file claiming more bytes than it actually
+            // has (truncated, or an adversarial totalLength) would otherwise let the Lzx branch's
+            // compressedSize computation read past the end of `bytes`.
+            if (header.totalLength < 10 || static_cast<std::size_t>(header.totalLength) > bytes.size())
+            {
+                throw ContentLoadException(
+                    "'" + xnbPath + "' declares a totalLength (" + std::to_string(header.totalLength) +
+                    ") inconsistent with its actual file size (" + std::to_string(bytes.size()) + ").");
+            }
+
             switch (header.compression)
             {
                 case CNA::Internal::Xnb::XnbCompression::None:

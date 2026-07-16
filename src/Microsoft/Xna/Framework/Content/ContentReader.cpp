@@ -160,6 +160,16 @@ namespace Microsoft::Xna::Framework::Content
         }
     }
 
+    void ContentReader::CheckDecodedByteSize(int64_t byteSize, const std::string& readerName) const
+    {
+        if (byteSize < 0 || byteSize > limits_.maxDecompressedSize)
+        {
+            throw ContentLoadException(
+                "'" + assetName_ + "': " + readerName + " declares dimensions requiring an "
+                "invalid decoded byte size (" + std::to_string(byteSize) + ").");
+        }
+    }
+
     std::vector<uint8_t> ContentReader::ReadBytesExactOrThrow(int32_t count, const std::string& readerName)
     {
         if (count < 0)

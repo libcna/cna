@@ -47,6 +47,17 @@ namespace CNA::Internal::Xnb
         int32_t depth = input.ReadInt32();
         const int32_t levelCount = input.ReadInt32();
 
+        // Reject an adversarial/corrupt width/height/depth before any allocation is attempted --
+        // see Texture2DReader's own note for why both the individual-positivity and the
+        // int64_t-widened-product checks are both needed (plan_xnb.md XNB-43).
+        if (width <= 0 || height <= 0 || depth <= 0)
+        {
+            throw ContentLoadException("Texture3DReader: invalid width/height/depth.");
+        }
+        input.CheckDecodedByteSize(
+            static_cast<int64_t>(width) * static_cast<int64_t>(height) * static_cast<int64_t>(depth) * 4,
+            "Texture3DReader");
+
         // Always decompress DXT to Color -- see Texture2DReader's own class docs for why.
         const SurfaceFormat uploadFormat = IsCompressed(surfaceFormat) ? SurfaceFormat::Color : surfaceFormat;
         if (uploadFormat != SurfaceFormat::Color)
@@ -70,25 +81,52 @@ namespace CNA::Internal::Xnb
 
             if (IsCompressed(surfaceFormat))
             {
-                switch (surfaceFormat)
+                // A compressed volume texture is `depth` consecutive, independently-compressed
+                // 2D slices (DXT/BC is fundamentally a 2D block format) -- decompress each slice
+                // separately and concatenate, rather than treating the whole level as one 2D
+                // image (which would silently drop every slice past the first).
+                const std::size_t sliceCompressedSize =
+                    bytes.size() / std::max<std::size_t>(1, static_cast<std::size_t>(depth));
+                std::vector<uint8_t> decompressed;
+                decompressed.reserve(static_cast<std::size_t>(width) * height * depth * 4);
+                for (int32_t slice = 0; slice < depth; ++slice)
                 {
-                    case SurfaceFormat::Dxt1:
-                        bytes = CNA::Internal::Graphics::DxtUtil::DecompressDxt1(bytes.data(), bytes.size(), width, height);
-                        break;
-                    case SurfaceFormat::Dxt3:
-                        bytes = CNA::Internal::Graphics::DxtUtil::DecompressDxt3(bytes.data(), bytes.size(), width, height);
-                        break;
-                    case SurfaceFormat::Dxt5:
-                        bytes = CNA::Internal::Graphics::DxtUtil::DecompressDxt5(bytes.data(), bytes.size(), width, height);
-                        break;
-                    default:
-                        break; // unreachable: IsCompressed() only true for the three cases above
+                    const uint8_t* sliceData = bytes.data() + static_cast<std::size_t>(slice) * sliceCompressedSize;
+                    std::vector<uint8_t> sliceOut;
+                    switch (surfaceFormat)
+                    {
+                        case SurfaceFormat::Dxt1:
+                            sliceOut = CNA::Internal::Graphics::DxtUtil::DecompressDxt1(sliceData, sliceCompressedSize, width, height);
+                            break;
+                        case SurfaceFormat::Dxt3:
+                            sliceOut = CNA::Internal::Graphics::DxtUtil::DecompressDxt3(sliceData, sliceCompressedSize, width, height);
+                            break;
+                        case SurfaceFormat::Dxt5:
+                            sliceOut = CNA::Internal::Graphics::DxtUtil::DecompressDxt5(sliceData, sliceCompressedSize, width, height);
+                            break;
+                        default:
+                            break; // unreachable: IsCompressed() only true for the three cases above
+                    }
+                    decompressed.insert(decompressed.end(), sliceOut.begin(), sliceOut.end());
                 }
+                bytes = std::move(decompressed);
             }
 
             // Color is not a raw 4-byte POD (it has a vtable) -- see Texture2DReader's own class
             // docs for why raw RGBA bytes must be unpacked into real Color values one at a time.
             const int32_t voxelCount = width * height * depth;
+            // The compressed branch above always produces exactly voxelCount*4 bytes by
+            // construction; only the uncompressed Color branch can still disagree here, if the
+            // file's own declared byteCount doesn't actually match width/height/depth (a
+            // truncated/adversarial file) -- catch that before indexing into bytes below.
+            if (bytes.size() != static_cast<std::size_t>(voxelCount) * 4)
+            {
+                throw ContentLoadException(
+                    "Texture3DReader: level " + std::to_string(level) + " byte count (" +
+                    std::to_string(bytes.size()) + ") does not match " + std::to_string(width) + "x" +
+                    std::to_string(height) + "x" + std::to_string(depth) + "'s required " +
+                    std::to_string(static_cast<std::size_t>(voxelCount) * 4) + " bytes.");
+            }
             std::vector<Color> colors;
             colors.reserve(static_cast<std::size_t>(voxelCount));
             for (int32_t i = 0; i < voxelCount; ++i)

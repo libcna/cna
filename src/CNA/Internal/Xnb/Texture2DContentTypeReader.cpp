@@ -56,6 +56,18 @@ namespace CNA::Internal::Xnb
         const int32_t height = input.ReadInt32();
         const int32_t levelCount = input.ReadInt32();
 
+        // Reject an adversarial/corrupt width/height before any allocation is attempted -- both
+        // must be positive individually (two negatives would otherwise multiply to a
+        // small-looking positive product and slip past the byte-size check below), and the
+        // decoded-byte-size product is computed in int64_t so it can't itself silently wrap back
+        // into range (plan_xnb.md XNB-43).
+        if (width <= 0 || height <= 0)
+        {
+            throw ContentLoadException("Texture2DReader: invalid width/height.");
+        }
+        input.CheckDecodedByteSize(
+            static_cast<int64_t>(width) * static_cast<int64_t>(height) * 4, "Texture2DReader");
+
         // Always decompress DXT to Color -- see this reader's class docs for why (XNB-24's
         // fuller per-backend capability query is deferred, not required for correctness).
         const SurfaceFormat uploadFormat = IsCompressed(surfaceFormat) ? SurfaceFormat::Color : surfaceFormat;
@@ -113,6 +125,18 @@ namespace CNA::Internal::Xnb
             // methods, so it carries a vtable pointer. Raw RGBA bytes must be used to construct
             // real Color values one at a time, never reinterpret_cast wholesale.
             const int32_t pixelCount = levelWidth * levelHeight;
+            // The compressed branch above always produces exactly pixelCount*4 bytes by
+            // construction; only the uncompressed Color branch can still disagree here, if the
+            // file's own declared byteCount doesn't actually match levelWidth/levelHeight (a
+            // truncated/adversarial file) -- catch that before indexing into bytes below.
+            if (bytes.size() != static_cast<std::size_t>(pixelCount) * 4)
+            {
+                throw ContentLoadException(
+                    "Texture2DReader: level " + std::to_string(level) + " byte count (" +
+                    std::to_string(bytes.size()) + ") does not match " + std::to_string(levelWidth) +
+                    "x" + std::to_string(levelHeight) + "'s required " +
+                    std::to_string(static_cast<std::size_t>(pixelCount) * 4) + " bytes.");
+            }
             std::vector<Color> colors;
             colors.reserve(static_cast<std::size_t>(pixelCount));
             for (int32_t i = 0; i < pixelCount; ++i)

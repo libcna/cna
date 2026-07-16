@@ -228,6 +228,26 @@ TEST_F(ContentManagerXnbTest, UnregisteredXnbReaderNameThrowsContentLoadExceptio
     EXPECT_THROW(cm.Load<TestValue>("fixture"), ContentLoadException);
 }
 
+// plan_xnb.md XNB-43/47: found via a whole-container fuzz test that mutated a real .xnb's own
+// totalLength header field independently of the file's actual on-disk size -- confirmed as a real
+// heap-buffer-overflow under -DCNA_SANITIZE=address,undefined (the Lzx branch's compressedSize =
+// totalLength - 14 was used to size a read straight from the just-read file buffer, with nothing
+// cross-checking totalLength against how many bytes that buffer actually holds).
+TEST_F(ContentManagerXnbTest, TotalLengthLargerThanActualFileSizeThrowsContentLoadException)
+{
+    ScratchContentRoot root;
+    // A real, valid 10-byte uncompressed header, except totalLength (bytes 6-9) claims 100000
+    // bytes while the file on disk is only the 10-byte header itself.
+    std::vector<std::uint8_t> fileBytes{'X', 'N', 'B', 'w', 5, 0, 0, 0, 0, 0};
+    const int32_t bogusTotalLength = 100000;
+    std::memcpy(fileBytes.data() + 6, &bogusTotalLength, 4);
+    WriteBytes(root.path() / "fixture.xnb", fileBytes);
+
+    ContentManager cm(nullptr, root.path().string());
+
+    EXPECT_THROW(cm.Load<TestValue>("fixture"), ContentLoadException);
+}
+
 TEST_F(ContentManagerXnbTest, XnbWinsOverCnbAndNativeExtensionForTheSameName)
 {
     ScratchContentRoot root;
