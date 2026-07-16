@@ -21,7 +21,7 @@
 > `EffectTypeReader`, and `ModelTypeReader` all migrated from their old bespoke extensions
 > (`.font.json`/`.shader.json`/`.model.json`) to `.cnb`; and `RegisterCnbLoader<T>` lets a game
 > register several differently-named `.cnb` `"type"`s that all produce the same C++ type, for
-> data with no dedicated `ContentTypeReader<T>` at all. `SkinnedModelTypeReader`/`.skinnedmodel.json`
+> data with no dedicated `LooseFileContentTypeReader<T>` at all. `SkinnedModelTypeReader`/`.skinnedmodel.json`
 > (Avatar, `NOXNA`) was deliberately **kept separate, not migrated** — see `plan_cnb.md` `CNB-22`
 > for the full reasoning (real cross-language tooling depends on that extension name, it already
 > has the most mature test coverage of any of the four readers, and it's explicitly a distinct
@@ -408,7 +408,7 @@ no change to `Load<T>()`'s own dispatch was needed. That generic reader parses t
 up the `.cnb`'s `"type"` in the table, and invokes whichever factory matches. This only applies to
 a `T` with **no existing reader already registered** (built-in or otherwise) — `RegisterCnbLoader`
 throws immediately if one already exists for `T`, since that reader would never consult this table.
-No `ContentTypeReader<T>` subclass or CNA core change is needed per game-specific `.cnb` `type` —
+No `LooseFileContentTypeReader<T>` subclass or CNA core change is needed per game-specific `.cnb` `type` —
 same "don't grow CNA core for one game's data" principle already used for the plain
 game-specific-`type` row in the table above, just now with the dispatch key coming from the `.cnb`
 file itself instead of requiring the caller to already know which of several shapes it's asking
@@ -592,3 +592,10 @@ decision; summarized here because it changes "The core rule" below:
 - Writing/producing `.xnb` files remains permanently out of scope, exactly as `plan_xnb.md`'s own
   "Scope" section already stated — CNA only ever consumes `.xnb` files built by real XNA/MonoGame/
   FNA tooling.
+- **Renamed:** the `.cnb`/loose-file loader interface described throughout this document as
+  `ContentTypeReader<T>` is now `LooseFileContentTypeReader<T>`
+  (`include/Microsoft/Xna/Framework/Content/LooseFileContentTypeReader.hpp`) — freeing the real
+  name for FNA's actual `Microsoft.Xna.Framework.Content.ContentTypeReader`/`ContentTypeReader<T>`
+  (`Read(ContentReader&, T)`), which this interface's shape (`Read(const std::string&,
+  ContentManager&)`) never matched. Purely a rename — `RegisterTypeReader<T>`,
+  `RegisterCnbLoader<T>`, and every existing `.cnb` reader keep their exact same behavior.

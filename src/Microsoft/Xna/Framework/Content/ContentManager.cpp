@@ -227,7 +227,7 @@ namespace Microsoft::Xna::Framework::Content
             texture.SetData(pixels.data(), count);
         }
 
-        class Texture2DTypeReader : public ContentTypeReader<Graphics::Texture2D>
+        class Texture2DTypeReader : public LooseFileContentTypeReader<Graphics::Texture2D>
         {
         public:
             [[nodiscard]] std::vector<std::string> GetExtensions() const override
@@ -276,7 +276,7 @@ namespace Microsoft::Xna::Framework::Content
             }
         };
 
-        class TextureCubeTypeReader : public ContentTypeReader<Graphics::TextureCube>
+        class TextureCubeTypeReader : public LooseFileContentTypeReader<Graphics::TextureCube>
         {
         public:
             [[nodiscard]] std::vector<std::string> GetExtensions() const override
@@ -318,7 +318,7 @@ namespace Microsoft::Xna::Framework::Content
             }
         };
 
-        class SoundEffectTypeReader : public ContentTypeReader<Audio::SoundEffect>
+        class SoundEffectTypeReader : public LooseFileContentTypeReader<Audio::SoundEffect>
         {
         public:
             [[nodiscard]] std::vector<std::string> GetExtensions() const override
@@ -390,7 +390,7 @@ namespace Microsoft::Xna::Framework::Content
             return json.substr(pos + 1, end - pos - 1);
         }
 
-        class EffectTypeReader : public ContentTypeReader<std::shared_ptr<Graphics::Effect>>
+        class EffectTypeReader : public LooseFileContentTypeReader<std::shared_ptr<Graphics::Effect>>
         {
         public:
             [[nodiscard]] std::vector<std::string> GetExtensions() const override
@@ -508,7 +508,7 @@ namespace Microsoft::Xna::Framework::Content
             return r;
         }
 
-        class SpriteFontTypeReader : public ContentTypeReader<Graphics::SpriteFont>
+        class SpriteFontTypeReader : public LooseFileContentTypeReader<Graphics::SpriteFont>
         {
         public:
             [[nodiscard]] std::vector<std::string> GetExtensions() const override
@@ -753,7 +753,7 @@ namespace Microsoft::Xna::Framework::Content
         // .model.json descriptor reader
         // ---------------------------------------------------------------------------
 
-        class ModelTypeReader : public ContentTypeReader<Graphics::Model>
+        class ModelTypeReader : public LooseFileContentTypeReader<Graphics::Model>
         {
         public:
             [[nodiscard]] std::vector<std::string> GetExtensions() const override
@@ -1105,7 +1105,7 @@ namespace Microsoft::Xna::Framework::Content
         // ---------------------------------------------------------------------------
 
         class SkinnedModelTypeReader
-            : public ContentTypeReader<std::shared_ptr<Graphics::SkinnedModelEXT>>
+            : public LooseFileContentTypeReader<std::shared_ptr<Graphics::SkinnedModelEXT>>
         {
         public:
             [[nodiscard]] std::vector<std::string> GetExtensions() const override
@@ -1263,7 +1263,7 @@ namespace Microsoft::Xna::Framework::Content
             }
         };
 
-        class SongTypeReader : public ContentTypeReader<Media::Song>
+        class SongTypeReader : public LooseFileContentTypeReader<Media::Song>
         {
         public:
             [[nodiscard]] std::vector<std::string> GetExtensions() const override
@@ -1280,7 +1280,7 @@ namespace Microsoft::Xna::Framework::Content
         };
 
 #if !defined(__EMSCRIPTEN__) && !defined(__ANDROID__) && !defined(__MINGW32__)
-        class VideoTypeReader : public ContentTypeReader<Media::Video>
+        class VideoTypeReader : public LooseFileContentTypeReader<Media::Video>
         {
         public:
             [[nodiscard]] std::vector<std::string> GetExtensions() const override
@@ -1367,13 +1367,13 @@ namespace Microsoft::Xna::Framework::Content
                 + assetName + "'.");
 
         auto* readerPtr = std::any_cast<
-            std::shared_ptr<ContentTypeReader<Graphics::Texture2D>>>(&readerIt->second);
+            std::shared_ptr<LooseFileContentTypeReader<Graphics::Texture2D>>>(&readerIt->second);
         if (!readerPtr || !*readerPtr)
             throw ContentLoadException(
                 std::string("ContentManager::Load<Texture2D>(): Reader is null, asset '")
                 + assetName + "'.");
 
-        ContentTypeReader<Graphics::Texture2D>& reader = **readerPtr;
+        LooseFileContentTypeReader<Graphics::Texture2D>& reader = **readerPtr;
         const std::string resolvedPath = ResolveAssetPath(assetName, reader);
 
         Graphics::Texture2D result = reader.Read(resolvedPath, *this);
@@ -1409,13 +1409,13 @@ namespace Microsoft::Xna::Framework::Content
                 + assetName + "'.");
 
         auto* readerPtr = std::any_cast<
-            std::shared_ptr<ContentTypeReader<Audio::SoundEffect>>>(&readerIt->second);
+            std::shared_ptr<LooseFileContentTypeReader<Audio::SoundEffect>>>(&readerIt->second);
         if (!readerPtr || !*readerPtr)
             throw ContentLoadException(
                 std::string("ContentManager::Load<T>(): Reader is null for asset '")
                 + assetName + "'.");
 
-        ContentTypeReader<Audio::SoundEffect>& reader = **readerPtr;
+        LooseFileContentTypeReader<Audio::SoundEffect>& reader = **readerPtr;
         const std::string resolvedPath = ResolveAssetPath(assetName, reader);
 
         return reader.Read(resolvedPath, *this);
@@ -1442,13 +1442,13 @@ namespace Microsoft::Xna::Framework::Content
                 + assetName + "'.");
 
         auto* readerPtr = std::any_cast<
-            std::shared_ptr<ContentTypeReader<Graphics::TextureCube>>>(&readerIt->second);
+            std::shared_ptr<LooseFileContentTypeReader<Graphics::TextureCube>>>(&readerIt->second);
         if (!readerPtr || !*readerPtr)
             throw ContentLoadException(
                 std::string("ContentManager::Load<T>(): Reader is null for asset '")
                 + assetName + "'.");
 
-        ContentTypeReader<Graphics::TextureCube>& reader = **readerPtr;
+        LooseFileContentTypeReader<Graphics::TextureCube>& reader = **readerPtr;
         const std::string resolvedPath = ResolveAssetPath(assetName, reader);
 
         return reader.Read(resolvedPath, *this);

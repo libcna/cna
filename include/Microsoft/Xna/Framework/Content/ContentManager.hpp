@@ -19,7 +19,7 @@
 #include "CNA/Logger.hpp"
 #include "SharpRuntime/Prop.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
-#include "Microsoft/Xna/Framework/Content/ContentTypeReader.hpp"
+#include "Microsoft/Xna/Framework/Content/LooseFileContentTypeReader.hpp"
 #include "System/IServiceProvider.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "System/IDisposable.hpp"
@@ -152,10 +152,10 @@ namespace Microsoft::Xna::Framework::Content
          * @param reader Unique pointer to the type reader to register.
          */
         template <typename T>
-        void RegisterTypeReader(std::unique_ptr<ContentTypeReader<T>> reader)
+        void RegisterTypeReader(std::unique_ptr<LooseFileContentTypeReader<T>> reader)
         {
             typeReaders_[std::type_index(typeid(T))] =
-                std::shared_ptr<ContentTypeReader<T>>(std::move(reader));
+                std::shared_ptr<LooseFileContentTypeReader<T>>(std::move(reader));
         }
 
         /**
@@ -277,7 +277,7 @@ namespace Microsoft::Xna::Framework::Content
                     + assetName + "'.");
             }
 
-            auto* readerPtr = std::any_cast<std::shared_ptr<ContentTypeReader<T>>>(&readerIt->second);
+            auto* readerPtr = std::any_cast<std::shared_ptr<LooseFileContentTypeReader<T>>>(&readerIt->second);
             if (!readerPtr || !*readerPtr)
             {
                 throw ContentLoadException(
@@ -285,7 +285,7 @@ namespace Microsoft::Xna::Framework::Content
                     + assetName + "'.");
             }
 
-            ContentTypeReader<T>& reader = **readerPtr;
+            LooseFileContentTypeReader<T>& reader = **readerPtr;
             const std::string resolvedPath = ResolveAssetPath(assetName, reader);
 
             T result = reader.Read(resolvedPath, *this);
@@ -295,13 +295,13 @@ namespace Microsoft::Xna::Framework::Content
 
     private:
         // Generic reader for game-registered .cnb "type" values that don't have a dedicated
-        // ContentTypeReader<T>. Looks up the .cnb envelope's "type" field in cnbNamedLoaders_
+        // LooseFileContentTypeReader<T>. Looks up the .cnb envelope's "type" field in cnbNamedLoaders_
         // and invokes whichever RegisterCnbLoader<T>()-registered factory matches (cnb.md's
         // "Custom loaders" section). Auto-registered by RegisterCnbLoader<T>() the first time
         // it's called for a T with no existing reader; never auto-registered for a T that
         // already has a built-in or otherwise-registered reader.
         template <typename T>
-        class GenericCnbTypeReader : public ContentTypeReader<T>
+        class GenericCnbTypeReader : public LooseFileContentTypeReader<T>
         {
         public:
             [[nodiscard]] std::vector<std::string> GetExtensions() const override
@@ -355,7 +355,7 @@ namespace Microsoft::Xna::Framework::Content
         template <typename T>
         [[nodiscard]] std::string ResolveAssetPath(
             const std::string& assetName,
-            ContentTypeReader<T>& reader) const
+            LooseFileContentTypeReader<T>& reader) const
         {
             const std::string base = BuildAssetPath(assetName);
 
