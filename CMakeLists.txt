@@ -1987,6 +1987,17 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 1102b: SkinnedEffect pixel test — PreferPerPixelLighting genuinely selects between
+        # a real per-vertex-lit shader variant and the existing per-pixel-lit one (mirrors Task
+        # 1102's BasicEffect test exactly).
+        cna_easygl_test(cna_test_easygl_skinnedeffect_preferperpixellighting
+                        examples/easygl_skinnedeffect_preferperpixellighting_test.cpp)
+        add_test(NAME EasyGL_SkinnedEffect_PreferPerPixelLighting
+                 COMMAND cna_test_easygl_skinnedeffect_preferperpixellighting)
+        set_tests_properties(EasyGL_SkinnedEffect_PreferPerPixelLighting PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 895: SkinnedEffect WeightsPerVertex real GPU enforcement
         cna_easygl_test(cna_test_easygl_skinnedeffect_weightspervertex
                         examples/easygl_skinnedeffect_weightspervertex_test.cpp)

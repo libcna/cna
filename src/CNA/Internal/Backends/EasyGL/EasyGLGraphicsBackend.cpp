@@ -1408,6 +1408,7 @@ void main()
         prog_dual_textured_colored_.reset_no_gl();
         prog_env_mapped_.reset_no_gl();
         prog_skinned_.reset_no_gl();
+        prog_skinned_vertexlit_.reset_no_gl();
         default_white_texture_.reset_handle_no_gl();
         default_white_texture_ready_ = false;
 
@@ -3116,6 +3117,136 @@ void main()
         CNA_RENDER_LOG("skinned3D ready loc_wvp=" << p.loc_wvp << " loc_bones=" << p.loc_bones);
     }
 
+    // Task 1102b (plan_graphics.md Phase 80 / plan_dx9.md Divergence 1): SkinnedEffect's own
+    // per-vertex-lit sibling, mirroring Task 1102's EnsureLit3DVertexLitProgram() for BasicEffect
+    // exactly -- same technique (move FNA's Lighting.fxh ComputeLights() Blinn-Phong math from the
+    // fragment stage into the vertex stage, Gouraud-interpolate the result via varyings, keep the
+    // fragment stage's non-lighting math -- texture sample, alpha test, fog -- structurally
+    // identical), applied to EnsureSkinnedProgram() above (the PreferPerPixelLighting=true family)
+    // instead of EnsureLit3DProgram(). The skinning itself is unchanged -- only WHERE lighting is
+    // evaluated moves, exactly like Task 1102's own BasicEffect case. Selected by SelectProgram()
+    // when params.skinned && params.lightingEnabled && !params.preferPerPixelLighting (XNA's own
+    // default). No separate uAmbientColor uniform here, matching EnsureSkinnedProgram()'s own
+    // shape: SkinnedEffect::FillGpuDrawParams() already pre-folds ambient into emissiveColor
+    // (verified at that call site), so BindDrawParams()'s existing "p.loc_ambient < 0" gating
+    // (which already distinguishes the ambient-having BasicEffect programs from the
+    // ambient-less EnvironmentMapEffect/SkinnedEffect ones) correctly routes this new program's
+    // light/specular uniform uploads too, with zero BindDrawParams() changes needed -- identical to
+    // Task 1102's own finding for BasicEffect.
+    void EasyGLGraphicsBackend::EnsureSkinnedVertexLitProgram()
+    {
+        if (prog_skinned_vertexlit_.ready) return;
+
+        static const char* vsrc =
+"#version 300 es\n"
+"precision highp float;\n"
+"layout(location=0) in vec3 aPos;\n"
+"layout(location=1) in vec3 aNormal;\n"
+"layout(location=2) in vec2 aUV;\n"
+"layout(location=3) in vec4 aBoneWeights;\n"
+"layout(location=4) in uvec4 aBoneIndices;\n"
+"uniform mat4 uWVP;\n"
+"uniform mat4 uWorld;\n"
+"uniform mat4 uBones[72];\n"
+"uniform int uWeightsPerVertex;\n"
+"uniform float uFogEnabled;\n"
+"uniform float uFogStart;\n"
+"uniform float uFogEnd;\n"
+// uDiffuseColor is read by BOTH stages here (vertex needs .rgb for vLitRGB, fragment needs .a) --
+// same GLSL ES "matching precision qualifier across stages" requirement Task 1102 already found
+// and fixed for BasicEffect's own vertex-lit shader -- qualified explicitly and identically in
+// both declarations here too, not assumed safe by analogy.
+"uniform highp vec4 uDiffuseColor;\n"
+"uniform vec3 uEmissiveColor;\n"
+"uniform vec3 uLight0Dir;\n"
+"uniform vec3 uLight0Diffuse;\n"
+"uniform vec3 uLight1Dir;\n"
+"uniform vec3 uLight1Diffuse;\n"
+"uniform vec3 uLight2Dir;\n"
+"uniform vec3 uLight2Diffuse;\n"
+"uniform vec3 uLight0Specular;\n"
+"uniform vec3 uLight1Specular;\n"
+"uniform vec3 uLight2Specular;\n"
+"uniform vec3 uSpecularColor;\n"
+"uniform float uSpecularPower;\n"
+"uniform vec3 uEyePosition;\n"
+"out vec2 vUV;\n"
+"out float vFogFactor;\n"
+"out vec3 vLitRGB;\n"
+"out vec3 vSpecularRGB;\n"
+"void main(){\n"
+"    mat4 skinMat=uBones[aBoneIndices.x]*aBoneWeights.x;\n"
+"    if(uWeightsPerVertex>=2) skinMat+=uBones[aBoneIndices.y]*aBoneWeights.y;\n"
+"    if(uWeightsPerVertex>=4) skinMat+=uBones[aBoneIndices.z]*aBoneWeights.z+uBones[aBoneIndices.w]*aBoneWeights.w;\n"
+"    vec4 skinnedPos=skinMat*vec4(aPos,1.0);\n"
+"    gl_Position=uWVP*skinnedPos;\n"
+"    vUV=aUV;\n"
+"    vFogFactor=(uFogEnabled>0.5)?clamp((uFogEnd-aPos.z)/max(uFogEnd-uFogStart,1e-6),0.0,1.0):1.0;\n"
+"    vec3 worldPos=(uWorld*skinnedPos).xyz;\n"
+"    vec3 N=normalize(mat3(skinMat)*aNormal);\n"
+"    vec3 E=normalize(uEyePosition-worldPos);\n"
+"    float dotL0=dot(N,-uLight0Dir); float zeroL0=step(0.0,dotL0); float NdotL0=max(dotL0,0.0);\n"
+"    float dotL1=dot(N,-uLight1Dir); float zeroL1=step(0.0,dotL1); float NdotL1=max(dotL1,0.0);\n"
+"    float dotL2=dot(N,-uLight2Dir); float zeroL2=step(0.0,dotL2); float NdotL2=max(dotL2,0.0);\n"
+"    vec3 lightSum=uLight0Diffuse*NdotL0+uLight1Diffuse*NdotL1+uLight2Diffuse*NdotL2;\n"
+"    vLitRGB=(uEmissiveColor+lightSum)*uDiffuseColor.rgb;\n"
+"    vec3 h0=normalize(E-uLight0Dir); float spec0=pow(max(dot(h0,N),0.0)*zeroL0,uSpecularPower);\n"
+"    vec3 h1=normalize(E-uLight1Dir); float spec1=pow(max(dot(h1,N),0.0)*zeroL1,uSpecularPower);\n"
+"    vec3 h2=normalize(E-uLight2Dir); float spec2=pow(max(dot(h2,N),0.0)*zeroL2,uSpecularPower);\n"
+"    vSpecularRGB=(spec0*uLight0Specular+spec1*uLight1Specular+spec2*uLight2Specular)*uSpecularColor;\n"
+"}\n";
+
+        static const char* fsrc =
+"#version 300 es\n"
+"precision mediump float;\n"
+"in vec2 vUV;\n"
+"in float vFogFactor;\n"
+"in vec3 vLitRGB;\n"
+"in vec3 vSpecularRGB;\n"
+"uniform sampler2D uTexture;\n"
+"uniform highp vec4 uDiffuseColor;\n"
+"uniform vec4 uAlphaTest;\n"
+"uniform vec3 uFogColor;\n"
+"out vec4 FragColor;\n"
+"void main(){\n"
+"    vec4 texColor=texture(uTexture,vUV);\n"
+"    FragColor=vec4(vLitRGB*texColor.rgb,uDiffuseColor.a*texColor.a);\n"
+"    FragColor.rgb+=vSpecularRGB*FragColor.a;\n"
+"    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
+"    if(_at<0.0)discard;\n"
+"    FragColor.rgb=mix(uFogColor,FragColor.rgb,vFogFactor);\n"
+"}\n";
+
+        CompileAndLink(prog_skinned_vertexlit_.prog, vsrc, fsrc, "skinned (vertex-lit)");
+        auto& p = prog_skinned_vertexlit_;
+        p.loc_wvp       = p.prog.uniform_location("uWVP");
+        p.loc_world     = p.prog.uniform_location("uWorld");
+        p.loc_bones     = p.prog.uniform_location("uBones[0]");
+        p.loc_weightsPerVertex = p.prog.uniform_location("uWeightsPerVertex");
+        p.loc_texture   = p.prog.uniform_location("uTexture");
+        p.loc_diffuse   = p.prog.uniform_location("uDiffuseColor");
+        p.loc_emissive  = p.prog.uniform_location("uEmissiveColor");
+        p.loc_l0dir     = p.prog.uniform_location("uLight0Dir");
+        p.loc_l0diff    = p.prog.uniform_location("uLight0Diffuse");
+        p.loc_l1dir     = p.prog.uniform_location("uLight1Dir");
+        p.loc_l1diff    = p.prog.uniform_location("uLight1Diffuse");
+        p.loc_l2dir     = p.prog.uniform_location("uLight2Dir");
+        p.loc_l2diff    = p.prog.uniform_location("uLight2Diffuse");
+        p.loc_l0spec    = p.prog.uniform_location("uLight0Specular");
+        p.loc_l1spec    = p.prog.uniform_location("uLight1Specular");
+        p.loc_l2spec    = p.prog.uniform_location("uLight2Specular");
+        p.loc_specularcolor = p.prog.uniform_location("uSpecularColor");
+        p.loc_specularpower = p.prog.uniform_location("uSpecularPower");
+        p.loc_eyepos    = p.prog.uniform_location("uEyePosition");
+        p.loc_alphatest = p.prog.uniform_location("uAlphaTest");
+        p.loc_fog_enabled = p.prog.uniform_location("uFogEnabled");
+        p.loc_fog_color   = p.prog.uniform_location("uFogColor");
+        p.loc_fog_start   = p.prog.uniform_location("uFogStart");
+        p.loc_fog_end     = p.prog.uniform_location("uFogEnd");
+        p.ready         = true;
+        CNA_RENDER_LOG("skinned3D (vertex-lit) ready loc_wvp=" << p.loc_wvp << " loc_bones=" << p.loc_bones);
+    }
+
     void EasyGLGraphicsBackend::EnsureDefaultWhiteTexture()
     {
         if (default_white_texture_ready_) return;
@@ -3130,6 +3261,15 @@ void main()
     {
         if (params.skinned)
         {
+            // Task 1102b (plan_dx9.md Divergence 1): real XNA's SkinnedEffect defaults
+            // PreferPerPixelLighting=false too, same as BasicEffect (Task 1102). Only
+            // meaningfully distinct while lighting is actually on, same reasoning as Task 1102's
+            // own stride-32 gate.
+            if (params.lightingEnabled && !params.preferPerPixelLighting)
+            {
+                EnsureSkinnedVertexLitProgram();
+                return prog_skinned_vertexlit_;
+            }
             EnsureSkinnedProgram();
             return prog_skinned_;
         }

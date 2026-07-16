@@ -433,7 +433,8 @@ namespace CNA::Internal::Backends::EasyGL
         Prog3D prog_dual_textured_;  ///< stride=20: aPos + aUV, two samplers (DualTextureEffect)
         Prog3D prog_dual_textured_colored_;  ///< stride=24: aPos + aColor + aUV, two samplers (DualTextureEffect, Task 889)
         Prog3D prog_env_mapped_;     ///< stride=32: aPos + aNormal + aUV, cube map (EnvironmentMapEffect)
-        Prog3D prog_skinned_;        ///< stride=52: aPos + aNormal + aUV + weights + indices (SkinnedEffect)
+        Prog3D prog_skinned_;        ///< stride=52: aPos + aNormal + aUV + weights + indices (SkinnedEffect, PreferPerPixelLighting=true: per-pixel Blinn-Phong)
+        Prog3D prog_skinned_vertexlit_;  ///< stride=52: aPos + aNormal + aUV + weights + indices (SkinnedEffect, PreferPerPixelLighting=false, XNA's own default: per-vertex/Gouraud-shaded Blinn-Phong, Task 1102b)
 
         ::easygl::Texture default_white_texture_;
         bool default_white_texture_ready_ = false;
@@ -476,6 +477,7 @@ namespace CNA::Internal::Backends::EasyGL
         void EnsureDualTexturedColored3DProgram();
         void EnsureEnvMapped3DProgram();
         void EnsureSkinnedProgram();
+        void EnsureSkinnedVertexLitProgram();
         void EnsureDefaultWhiteTexture();
         Prog3D& SelectProgram(std::size_t stride, const GpuDrawParams& params);
         void BindDrawParams(Prog3D& p, const Matrix& world, const Matrix& view,
