@@ -103,7 +103,7 @@
 
 | Milestone | Reached after | Definition of "done" |
 |---|---|---|
-| M1 - binary protocol | XNB-17F | An uncompressed, externally-produced test `.xnb` loads end-to-end through `ContentManager` using only the Phase B test-only reader. No graphics, audio, or Lua involved. |
+| M1 - binary protocol | XNB-17F | ✅ **Reached 2026-07-16.** An uncompressed, externally-produced test `.xnb` loads end-to-end through `ContentManager` using only the Phase B test-only reader. No graphics, audio, or Lua involved. |
 | M2 - real texture | XNB-26 | A real uncompressed XNA 4.0 `Texture2D` `.xnb` loads and uploads through the backend-neutral `GraphicsDevice` path. |
 | M3 - common XNA 2D content | end of Phase E | Compressed `Texture2D`, `SpriteFont`, and at least one supported `SoundEffect` variant from the XNB-33 matrix all load correctly. |
 | M4 - standard model | XNB-41 | A real multi-mesh, multi-bone XNA `Model` `.xnb` loads with shared resources resolved and native CNA stock effects attached. |
@@ -261,12 +261,27 @@ entirely the second one.
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| XNB-17B | `ContentManager` `.xnb` extension resolution/dispatch, coexisting with existing loose-file loaders (no behavior change to existing `.model.json`/`.shader.json`/`FromStream` paths) | ⬜ | Resolution order (2026-07-16 decision): `<name>.xnb` is tried **first**, ahead of even the literal caller-given path; then the literal path; then `<name>.cnb` (`cnb.md`'s existing rule); then the reader's native extensions. See `cnb.md`'s "Core rule" for the full four-tier order |
-| XNB-17C | Asset-path normalization + basic cache-identity handling for `.xnb` assets (same identity rules the loose-file loaders already use) | ⬜ | |
-| XNB-17D | `ContentLoadException`-equivalent propagation from the Phase B container/registry errors up through `ContentManager.Load<T>()` | ⬜ | |
-| XNB-17E | `Unload()` behavior for `.xnb`-sourced assets | ⬜ | |
-| XNB-17F | End-to-end milestone: `auto value = content.Load<TestValue>("fixture");` using only the Phase B test-only reader | ⬜ | First real proof the pipeline fits CNA's existing `ContentManager` API, not just a standalone parser |
-| XNB-17G | Confirm `ContentReader`, per-file reader instances (XNB-14A), shared-resource fixups (XNB-15), and decompression state (Phase D) contain no global mutable state, so different `.xnb` files can be loaded concurrently without cross-talk | ⬜ | Per follow-up review point 10 — cheap to guarantee now, expensive to retrofit once an async loader exists; does not require actually building an async loader yet |
+| XNB-17B | `ContentManager` `.xnb` extension resolution/dispatch, coexisting with existing loose-file loaders (no behavior change to existing `.model.json`/`.shader.json`/`FromStream` paths) | ✅ | **Implemented 2026-07-16**: `ContentManager::Load<T>()`/`LoadXnbAsset<T>()` (`include/Microsoft/Xna/Framework/Content/ContentManager.hpp`) — `<name>.xnb` checked first (ahead of the literal path/`.cnb`/native extensions), needing no per-T reader registered on `ContentManager` at all (dispatch is driven by the file's own type-reader table via the global `ContentTypeReaderManager` registry). LZX-compressed files rejected with a clear error (Phase D not yet implemented). Real design bug found and fixed along the way: see the `std::optional<T>` note on `ContentTypeReader<T>::Read()` below |
+| XNB-17C | Asset-path normalization + basic cache-identity handling for `.xnb` assets (same identity rules the loose-file loaders already use) | ✅ | **Free by construction**: `.xnb` results are cached through the exact same `AssetCacheKey`/`loadedAssets_` mechanism loose-file assets already use, no new code needed |
+| XNB-17D | `ContentLoadException`-equivalent propagation from the Phase B container/registry errors up through `ContentManager.Load<T>()` | ✅ | **Free by construction**: `ParseXnbHeader`/`ContentTypeReaderManager`/`ContentReader` already throw `ContentLoadException`; `Load<T>()` never intercepts it |
+| XNB-17E | `Unload()` behavior for `.xnb`-sourced assets | ✅ | **Free by construction**: `Unload()` already clears `loadedAssets_`, which `.xnb` results are stored in identically to loose-file assets. Tested explicitly (`ContentManagerXnbTest.UnloadClearsXnbCachedAssets`) |
+| XNB-17F | End-to-end milestone: `auto value = content.Load<TestValue>("fixture");` using only the Phase B test-only reader | ✅ | **Reached 2026-07-16**: `ContentManagerXnbTest.LoadFindsAndDeserializesARealXnbFile` — first real proof the pipeline fits CNA's existing `ContentManager` API, not just a standalone parser. Also tested: `.xnb` wins over a same-named `.cnb` (`XnbWinsOverCnbAndNativeExtensionForTheSameName`), confirming the 2026-07-16 resolution-order decision end-to-end |
+| XNB-17G | Confirm `ContentReader`, per-file reader instances (XNB-14A), shared-resource fixups (XNB-15), and decompression state (Phase D) contain no global mutable state, so different `.xnb` files can be loaded concurrently without cross-talk | ✅ | **Confirmed by inspection 2026-07-16**: `ContentTypeReaderManager`'s static `typeCreators_` is write-once-then-read-only in practice (registered at startup, never mutated during loads); all per-file state (`typeReaders_`, `sharedResources_`, `sharedResourceFixups_`) lives on the `ContentReader` instance `LoadXnbAsset<T>()` constructs fresh per call. Decompression state doesn't exist yet (Phase D deferred) |
+
+> **Design note found while closing XNB-17B (2026-07-16):** `ContentTypeReader<T>::Read()`'s
+> `existingInstance` parameter is `std::optional<T>`, not a bare `T` as FNA's literal signature
+> reads. C#'s `default(T)` is free for a reference type (`null`, no construction) but real
+> zero-init for a value type -- a distinction C++ has no uniform way to express when `T` is a
+> value-semantics type with no default constructor (e.g. `SpriteFont`, which always needs real
+> construction arguments). Forcing `T{}` eagerly (the first attempt) broke every existing
+> `Load<SpriteFont>()` call site the moment `ContentManager.hpp` started including
+> `ContentReader.hpp`, since C++ templates instantiate every reachable code path regardless of
+> which branch actually runs at runtime. `std::nullopt` now represents FNA's null/`default(T)`
+> uniformly; `ContentReader::InnerReadObject<T>()` still falls back to `T{}` when `T` **is**
+> default-constructible (matching FNA, which never fails for a null root/nested object), and only
+> throws `ContentLoadException` for the genuinely unrepresentable case. **Every future reader
+> (Phase C's `Texture2DReader` onward) must declare `Read(ContentReader&, std::optional<T>)`, not
+> `Read(ContentReader&, T)`.**
 
 ---
 
