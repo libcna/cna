@@ -461,12 +461,27 @@ namespace CNA::Internal::Backends::WebGPU
             int textureFilter = 0;
             int addressU = 1;
             int addressV = 1;
+            /// Task 1105 (plan_graphics.md Phase 80): true selects the per-vertex-lit sibling
+            /// pipeline/shader (XNA's real BasicEffect.PreferPerPixelLighting==false default);
+            /// false keeps the existing per-pixel-lit one. Computed once at queue time from
+            /// GpuDrawParams::lightingEnabled/preferPerPixelLighting -- irrelevant when lighting
+            /// is disabled (both pipelines render the identical unlit result in that case).
+            bool preferVertexLit = false;
         };
         void CreateLitTexturedResources();
         void DestroyLitTexturedResources();
         [[nodiscard]] WGPURenderPipeline GetOrCreatePipelineLitTextured3D(WGPUPrimitiveTopology topology,
                                                                            bool depthTest, bool depthWrite,
                                                                            int depthFunc);
+        /// Task 1105: real per-vertex-lit sibling to GetOrCreatePipelineLitTextured3D above --
+        /// identical Blinn-Phong math (FNA's Lighting.fxh ComputeLights()), moved into the vertex
+        /// stage and passed to the fragment shader as litRGB/specularRGB varyings instead of being
+        /// recomputed per fragment. Reuses litBindGroupLayout_/litPipelineLayout_/
+        /// texturedBindGroupLayout_ unchanged (identical UBO/binding shape to the per-pixel-lit
+        /// shader) -- only a new shader module and a new pipeline cache are needed.
+        [[nodiscard]] WGPURenderPipeline GetOrCreatePipelineLitTextured3DVertexLit(WGPUPrimitiveTopology topology,
+                                                                                    bool depthTest, bool depthWrite,
+                                                                                    int depthFunc);
         void QueueLitTexturedDraw(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
                                   const Matrix& world, const Matrix& view, const Matrix& projection,
                                   PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
@@ -477,6 +492,11 @@ namespace CNA::Internal::Backends::WebGPU
         WGPUPipelineLayout litPipelineLayout_ = nullptr;     ///< group 0 (lit UBOs) + group 1 (texture, texturedBindGroupLayout_ reused)
         std::unordered_map<int, WGPURenderPipeline> litTexturedPipelines_;
         std::vector<LitTexturedDrawCommand> litTexturedDrawCommands_;
+        /// Task 1105: real per-vertex-lit sibling shader module + its own pipeline cache, keyed
+        /// identically to litTexturedPipelines_ above. Shares litBindGroupLayout_/litPipelineLayout_
+        /// with the per-pixel-lit shader (same UBO/binding shape).
+        WGPUShaderModule litTexturedVertexLitShader_ = nullptr;
+        std::unordered_map<int, WGPURenderPipeline> litTexturedVertexLitPipelines_;
 
         // WEBGPU-23/34/72: alpha_test3d.wgsl -- AlphaTestEffect's per-pixel alpha discard, matching
         // VulkanGraphicsBackend's alpha_test3d.{vert,frag}.glsl / alpha_test_colored3d.vert.glsl.
