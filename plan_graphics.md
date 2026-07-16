@@ -1191,3 +1191,25 @@ Pipeline tooling available in this project.
 | #    | Task | Status | Notes |
 | ---- | ---- | ------ | ----- |
 | 1110 | Decide scope: which `SurfaceFormat` values justify oracle coverage, and whether `Texture2D`'s own API needs new construction/`SetData` paths for any of them before the oracle scene format can even describe one. | ⬜ | Project-owner decision needed before any implementation task is scoped further — see this phase's own intro. Not started. |
+
+---
+
+## Phase 82 — Two real EasyGL bugs found by running the D3D9 XNA-oracle corpus against EasyGL (`plan_dx9.md` D9-A6, 2026-07-16)
+
+> **Logged per the project owner's request 2026-07-16 — not fixed here.** `plan_dx9.md`'s `D9-A6`
+> task ran the D3D9 backend's 31-scene XNA-oracle corpus (built for Phase D9-A, pixel-perfect
+> against real XNA 4.0 on D3D9) against EasyGL too, via a new `cna_oracle_render_easygl` target and
+> `scripts/run-oracle-corpus-diff-easygl.sh` (both already committed, `2a5acdb7`). Result: 10/31
+> pixel-perfect, 21/31 diverge in three evidenced patterns (see `docs/d3d9-divergence-report.md`'s
+> own "Cross-backend measurement (D9-A6)" section for the full record) — 17 are a systemic
+> rasterization-boundary/fill-rule difference (not tracked as a bug here, a separate, larger
+> question), 2 are ordinary floating-point rounding noise, and **2 are genuine, evidenced EasyGL
+> bugs**, listed below. Both are confirmed EasyGL-local: the identical scene, identical scene file,
+> renders pixel-perfect (`0/65536` diff) on D3D9 against real XNA, so the divergence is not a
+> shared `GpuDrawParams`/cross-cutting gap — it is specific to `EasyGLGraphicsBackend`'s own shader
+> code.
+
+| #    | Task | Status | Notes |
+| ---- | ---- | ------ | ----- |
+| 1111 | EasyGL: `fog_gradient_quad` renders the entire quad solid black (fully fogged) instead of the intended linear white→black gradient, even at the near (`z=0`, should be near-white) edge. | ⬜ | 23,716/65,536 pixels differ from real XNA, most by a large margin. Reproduce with `FogStart=0`/`FogEnd=-1` (deliberately negative — see `tools/xna-oracle/scenes/fog_gradient_quad.scene`'s own derivation comment). Best-guess root cause (not yet confirmed by reading the actual shader): EasyGL's fog-factor computation likely mishandles this `FogEnd < FogStart` configuration and saturates to "fully fogged" everywhere rather than computing `fogFactor = z*scale + fogStart*scale` per `EffectHelpers.SetFogVector`/`Common.fxh` (D3D9 renders this exact scene/values correctly, proving the configuration itself is valid and correctly specified). |
+| 1112 | EasyGL: `EnvironmentMapEffect`'s per-vertex Fresnel term does not Gouraud-interpolate correctly across a triangle — most of the surface reads close to one vertex's Fresnel value instead of a smooth gradient. | ⬜ | 23,263/65,536 pixels differ from real XNA. Reproduce with `tools/xna-oracle/scenes/envmap_fresnel_quad.scene` (deliberately assigns different per-vertex normals top/bottom edge to force a spatial Fresnel gradient — real XNA: `(196,98,49)`→`(72,36,18)` along `x=128`; EasyGL: nearly the whole quad reads close to the bright top-edge value, `~(198,99,49)`–`(200,100,50)`, with only a narrow dip near the triangle-pair's shared diagonal seam). Best-guess root cause (not yet confirmed): the Fresnel term may be evaluated per-fragment from an interpolated normal rather than interpolating an already-computed per-vertex scalar, or a flat/qualifier issue on the varying carrying it. Consistent with, and a concrete confirmation of, `plan_dx9.md`'s own design-decision-8 prediction (CNA branches at runtime where XNA branched at compile time) — this is the one scene in the whole corpus actually shaped to expose that class of gap. D3D9 renders this exact scene correctly (`0/65536`), confirming this is EasyGL-local. |
