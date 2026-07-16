@@ -1957,6 +1957,43 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 947: Distort.fx's Distort technique (no-blur variant).
+        cna_easygl_test(cna_test_easygl_distort_shader
+                        examples/easygl_distort_shader_test.cpp)
+        add_test(NAME EasyGL_Distort_Shader
+                 COMMAND cna_test_easygl_distort_shader)
+        set_tests_properties(EasyGL_Distort_Shader PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 947: Distorters.fx's DisplacementMapped technique.
+        cna_easygl_test(cna_test_easygl_distorters_displacementmapped_shader
+                        examples/easygl_distorters_displacementmapped_shader_test.cpp)
+        add_test(NAME EasyGL_Distorters_DisplacementMapped_Shader
+                 COMMAND cna_test_easygl_distorters_displacementmapped_shader)
+        set_tests_properties(EasyGL_Distorters_DisplacementMapped_Shader PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 947: Distorters.fx's HeatHaze technique.
+        cna_easygl_test(cna_test_easygl_distorters_heathaze_shader
+                        examples/easygl_distorters_heathaze_shader_test.cpp)
+        add_test(NAME EasyGL_Distorters_HeatHaze_Shader
+                 COMMAND cna_test_easygl_distorters_heathaze_shader)
+        set_tests_properties(EasyGL_Distorters_HeatHaze_Shader PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 947: Distorters.fx's PullIn technique -- with this, Distorters.fx's own 3
+        # actually-used techniques (DisplacementMapped/HeatHaze/PullIn) are all ported.
+        cna_easygl_test(cna_test_easygl_distorters_pullin_shader
+                        examples/easygl_distorters_pullin_shader_test.cpp)
+        add_test(NAME EasyGL_Distorters_PullIn_Shader
+                 COMMAND cna_test_easygl_distorters_pullin_shader)
+        set_tests_properties(EasyGL_Distorters_PullIn_Shader PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 133: DualTextureEffect — magenta×yellow→red pixel readback
         cna_easygl_test(cna_test_easygl_dual_texture
                         examples/easygl_dual_texture_test.cpp)
