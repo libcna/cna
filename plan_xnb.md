@@ -2,8 +2,9 @@
 
 > **Status: 🔄 PARTIALLY UN-FROZEN 2026-07-16 — MVP scope (Phase 0/A/B/B2/B3/C) complete; Phase D
 > (LZX decompression) fully complete; Phase E (`SpriteFont`, stock effects, `SoundEffect`/`Song`,
-> `ReadExternalReference<T>()`) fully complete; Phase F (`Model`) fully complete; everything after
-> Phase F stays frozen.** CNA's owner decided `.xnb` becomes a real, additional runtime format
+> `ReadExternalReference<T>()`) fully complete; Phase F (`Model`) fully complete; Phase D3
+> (`Texture3DReader`/`TextureCubeReader`) fully complete; everything after Phase D3/F stays frozen.**
+> CNA's owner decided `.xnb` becomes a real, additional runtime format
 > again, ranked **above** `.cnb` in `ContentManager`'s resolution order (see [`cnb.md`](cnb.md)'s
 > "Core rule": `.xnb` → literal caller-given path → `.cnb` → native-by-extension). The MVP scope
 > through the end of Phase C (container parsing, binary primitives, uncompressed-only, a first real
@@ -145,22 +146,35 @@
 > (a real, pre-existing read-write-property gap; only the getter existed) and
 > `ContentReader::ReadObject()` (a non-template overload for type-erased `Tag` fields). Phase F now
 > has no open tasks. Phase D3/G onward remain frozen pending a future decision.
+>
+> **Revised an eleventh time (2026-07-16)** after CNA's owner explicitly requested Phase D3 next:
+> `Texture3DReader`/`TextureCubeReader` (XNB-25) are done, same scope as `Texture2DReader`
+> (Color/Dxt1/Dxt3/Dxt5 only). Found and fixed a real gap in `Texture3D` along the way: it had
+> neither a copy nor a move constructor at all, so it could not be returned by value in any C++ code
+> path -- fixed by adding real move semantics, matching `VertexBuffer`/`IndexBuffer`/`TextureCube`'s
+> own precedent. Also found and fixed a real gap in `ContentManager::Load<TextureCube>()`'s
+> pre-existing specialisation: it predated `.xnb` `TextureCube` support and never checked for a
+> `.xnb` file at all, unlike the `Texture2D`/`SoundEffect` specialisations -- fixed to match those
+> two. `TextureCubeReader` is verified against a real, externally-produced MonoGame fixture;
+> `Texture3DReader` has no real fixture available anywhere in the library, so it is verified via a
+> hand-constructed stream instead (see Phase D3's own note). Phase D3 now has no open tasks. Phase G
+> onward remains frozen pending a future decision.
 
 ## Execution-order mandate for autonomous work
 
 > Read this before starting any task in this file.
 
 - Implement strictly in phase order, and only through the current active scope (Phase
-  0/A/B/B2/B3/C, Phase D, Phase E, and Phase F — all explicitly un-frozen and requested by CNA's
-  owner, see the status banner above). Do not begin Phase D3, Phase G, or anything sequenced after
-  Phase F until a future decision explicitly resumes them. Do not begin Phase I while any mandatory
+  0/A/B/B2/B3/C, Phase D, Phase E, Phase F, and Phase D3 — all explicitly un-frozen and requested by
+  CNA's owner, see the status banner above). Do not begin Phase G or anything sequenced after Phase
+  D3/F until a future decision explicitly resumes them. Do not begin Phase I while any mandatory
   task in Phase A-C remains incomplete (Phase B3's XNB-61a/XNB-65/66/67 tasks are the one
   deliberate exception — see their own rows; XNB-61b can now start since Phase D's decompressor
   exists, but has not been picked up yet).
 - Phase H (Lua-scripted custom readers) is cancelled outright — do not implement it in any form,
   and do not treat it as merely "later". Custom `.xnb` readers stay native C++ only, registered
-  through Phase G's plain registration API (deferred along with the rest of Phase D onward under
-  the current MVP scope).
+  through Phase G's plain registration API (deferred along with the rest of Phase G onward under
+  the current scope).
 - Work sequentially from the first incomplete task in the current phase. Prioritize finishing the
   current phase and reaching its milestone (below) over starting later, easier-looking tasks.
 - Do not skip a blocked/hard task silently by jumping ahead to a later phase to avoid it.
@@ -186,8 +200,9 @@
 > (XNB-28/29) and re-verification of real fixtures in compressed form (XNB-30B) are done, plus a
 > genuine hardening fix found during the port (part of XNB-30). XNB-27 (a dedicated
 > `XnbCompression` enum) and XNB-30A (fuzzing/differential testing) remain open by design — see
-> their rows in Phase D. `XNB-25` (`Texture3DReader`/`TextureCubeReader`) remains correctly deferred
-> in Phase D3 (never part of Phase C itself). CNA's owner then explicitly requested M3 next:
+> their rows in Phase D. `XNB-25` (`Texture3DReader`/`TextureCubeReader`) is now complete, see Phase
+> D3's own section below (never part of Phase C itself). CNA's owner then explicitly requested M3
+> next:
 > `SpriteFontReader` (XNB-31) and a `SoundEffectReader` covering at least one real variant
 > (XNB-33/XNB-33A) are both done and real-fixture-verified, reaching M3's own Definition of Done.
 > Asked to continue the same day, the rest of Phase E followed: `ReadExternalReference<T>()`
@@ -203,8 +218,15 @@
 > own erased type from `std::shared_ptr<ConcreteEffectType>` to the common `std::shared_ptr<Effect>`
 > base (a real bug in Phase E's own work, only exposed once `ModelReader`'s
 > `ReadSharedResource<Effect>()` actually exercised polymorphic effect dispatch) -- see XNB-40's own
-> note. **Phase F is now fully complete**, every task `⬜ → ✅`. M5/Phase D3/Phase G onward remain
-> frozen until a future decision explicitly resumes them.
+> note. **Phase F is now fully complete**, every task `⬜ → ✅`. CNA's owner then explicitly
+> requested Phase D3 next: `Texture3DReader`/`TextureCubeReader` (XNB-25) are done, same scope as
+> `Texture2DReader`. This also **fixed** two real gaps found along the way: `Texture3D` had neither
+> a copy nor a move constructor at all (added real move semantics, matching
+> `VertexBuffer`/`IndexBuffer`/`TextureCube`'s own precedent), and
+> `ContentManager::Load<TextureCube>()`'s pre-existing specialisation never checked for a `.xnb`
+> file at all (fixed to match the `Texture2D`/`SoundEffect` specialisations). **Phase D3 is now
+> fully complete**, every task `⬜ → ✅`. M5/Phase G onward remain frozen until a future decision
+> explicitly resumes them.
 
 ## Scope
 
@@ -459,11 +481,11 @@ entirely the second one.
 > physically inside Phase C, which could mislead an autonomous agent into implementing it too early.
 > This phase makes that ordering unambiguous by relocating the task itself.
 >
-> **Deferred under the current MVP scope (2026-07-16)** — not started; depends on Phase D.
+> **Fully complete 2026-07-16** — un-frozen the same day CNA's owner explicitly requested it.
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| XNB-25 | `Texture3DReader`/`TextureCubeReader`/base `TextureReader` | ⬜ | Same shape as `Texture2DReader` (XNB-23/24), extra dimension/face handling; deliberately sequenced after Phase D so compressed fixtures already work before adding these |
+| XNB-25 | `Texture3DReader`/`TextureCubeReader`/base `TextureReader` | ✅ | **Implemented 2026-07-16**: `CNA::Internal::Xnb::Texture3DReader`/`TextureCubeReader` (`include`/`src`/`CNA/Internal/Xnb/Texture3DContentTypeReader.*`, `TextureCubeContentTypeReader.*`), same scope as `Texture2DReader` (XNB-23/24): `SurfaceFormat.Color` uploads raw bytes, `Dxt1`/`Dxt3`/`Dxt5` are software-decompressed to `Color` via the existing `DxtUtil`, any other format throws `ContentLoadException`. `Texture3DReader` targets `std::shared_ptr<Texture3D>` — `Texture3D` previously had **neither a copy nor a move constructor at all** (a `unique_ptr` backend member blocked the implicit copy, a user-declared destructor suppressed the implicit move), meaning it could not be returned by value in any C++ code path; fixed by adding real move semantics to `Texture3D` itself, matching `VertexBuffer`/`IndexBuffer`/`TextureCube`'s own already-established pattern, rather than working around it with `shared_ptr`-only tricks. `TextureCubeReader` targets a bare `TextureCube` (already move-only, reusing the existing move-only-type `ContentTypeReader<T>` support). Verified `TextureCubeReader` end-to-end against a real, externally-produced MonoGame fixture (`SampleCube64DXT1Mips.xnb` — 6 faces, full DXT1 mip chain 64→32→16→8→4→2→1, including the sub-4×4 block-rounding edge cases at 2×2/1×1); no `Texture3DReader` fixture was found anywhere in the available library (volume textures are rare in real XNA content), so it is instead verified via a hand-constructed stream, field-by-field against FNA's own `Texture3DReader.cs` byte order. Also found and fixed a real gap surfaced along the way: `ContentManager::Load<TextureCube>()`'s pre-existing specialisation (added before `.xnb` `TextureCube` support existed) did not check for a `.xnb` file at all, unlike the `Texture2D`/`SoundEffect` specialisations — fixed to check `xnbCandidate` first, same as those two |
 
 ---
 
