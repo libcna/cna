@@ -308,6 +308,11 @@ namespace CNA::Internal::Backends::EasyGL
         void SetVertexDeclaration(const std::vector<VertexElement>& elements) override;
         int GetVertexCount() const override { return vertex_count; }
         [[nodiscard]] std::size_t GetStride() const { return stride_in_bytes_; }
+        /// Task 1082: exposes this buffer's own declaration elements so a hardware-instancing
+        /// draw can bind a *second* (per-instance) buffer's attributes into the same VAO,
+        /// continuing at locations right after this buffer's own (see
+        /// DrawInstancedPrimitivesEx's custom-effect branch).
+        [[nodiscard]] const std::vector<VertexElement>& GetDeclarationElements() const { return declarationElements_; }
 
         void release_gl_handle_only() override;
         void recreate_gl_resource() override;

@@ -2168,6 +2168,17 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 947 (final sample) + Task 1082: InstancedModel.fx's HardwareInstancing technique --
+        # proves real GPU hardware instancing (glVertexAttribDivisor-based per-instance vertex
+        # stream through a custom ShaderEffect), completing Task 947 at 13/13.
+        cna_easygl_test(cna_test_easygl_instancedmodel_shader
+                        examples/easygl_instancedmodel_shader_test.cpp)
+        add_test(NAME EasyGL_InstancedModel_Shader
+                 COMMAND cna_test_easygl_instancedmodel_shader)
+        set_tests_properties(EasyGL_InstancedModel_Shader PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 133: DualTextureEffect — magenta×yellow→red pixel readback
         cna_easygl_test(cna_test_easygl_dual_texture
                         examples/easygl_dual_texture_test.cpp)

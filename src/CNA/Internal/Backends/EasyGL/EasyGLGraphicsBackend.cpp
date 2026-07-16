@@ -3724,13 +3724,80 @@ void main()
         if (metagl::IsContextLost()) return;
         const auto& vb  = static_cast<const EasyGLVertexBufferBackend&>(vb_in);
         const auto& ib  = static_cast<const EasyGLIndexBufferBackend&>(ib_in);
-        Prog3D& p = SelectProgram(vb.GetStride(), params);
-        p.prog.use();
-        BindDrawParams(p, world, view, projection, params);
 
         const int index_count = VertexCountForPrimitives(primitive, primitiveCount);
         const auto idxType = ib.thirtyTwoBit ? ::easygl::DataType::UnsignedInt
                                              : ::easygl::DataType::UnsignedShort;
+
+        if (params.customEffectBackend)
+        {
+            // Task 1082: hardware instancing with a custom ShaderEffect. The per-vertex mesh
+            // buffer's own attributes are already bound (via ApplyLayout, at SetData time) into
+            // vb's own VAO; bind the *second*, per-instance buffer's own attributes into that
+            // same VAO here, continuing at locations right after the mesh buffer's own, each
+            // with a divisor of 1 (advance once per instance -- InstancedModel.fx's own
+            // `instanceTransform : BLENDWEIGHT` case, XNA's most common instancing pattern; a
+            // non-1 `VertexBufferBinding.InstanceFrequency` is a documented, deliberate scope
+            // reduction, not threaded through -- see this task's own plan_graphics.md write-up).
+            BindCustomEffectMatrices(*params.customEffectBackend, world, view, projection);
+
+            // vb_in/vb are const (matching the interface's own signature), but attribute-config
+            // calls below mutate GPU-side VAO state only, not C++ object state -- the same
+            // category easy-gl's own bind()/unbind() are already marked const for; this const_cast
+            // is a local workaround for that inconsistency, not a real constness violation.
+            auto& vao = const_cast<::easygl::VertexArray&>(vb.vao);
+
+            vao.bind();
+
+            if (params.instanceVb)
+            {
+                const auto& instVb = static_cast<const EasyGLVertexBufferBackend&>(*params.instanceVb);
+                const auto& meshDecl = vb.GetDeclarationElements();
+                const auto& instDecl = instVb.GetDeclarationElements();
+                const auto baseLocation = static_cast<unsigned int>(meshDecl.size());
+                const int instStride = static_cast<int>(instVb.GetStride());
+
+                instVb.vbo.bind(::easygl::BufferTarget::Array);
+                for (std::size_t i = 0; i < instDecl.size(); ++i)
+                {
+                    const VertexElement& element = instDecl[i];
+                    const VertexAttribFormat desc =
+                        DescribeVertexElementFormat(element.getVertexElementFormatProperty());
+                    const auto location = baseLocation + static_cast<unsigned int>(i);
+                    const void* offset = reinterpret_cast<void*>(
+                        static_cast<std::uintptr_t>(element.getOffsetProperty()));
+                    vao.enable_attribute(location);
+                    if (desc.isInteger)
+                        vao.set_attribute_i_pointer(location, desc.componentCount, desc.type,
+                                                    instStride, offset);
+                    else
+                        vao.set_attribute_pointer(location, desc.componentCount, desc.type,
+                                                  desc.normalized, instStride, offset);
+                    vao.set_attribute_divisor(location, 1);
+                }
+            }
+
+            ib.ibo.bind(::easygl::BufferTarget::ElementArray);
+            device.draw_elements_instanced(ToEasyGl(primitive), index_count, idxType,
+                                           nullptr, instanceCount);
+
+            if (params.instanceVb)
+            {
+                const auto& instVb = static_cast<const EasyGLVertexBufferBackend&>(*params.instanceVb);
+                const auto& meshDecl = vb.GetDeclarationElements();
+                const auto& instDecl = instVb.GetDeclarationElements();
+                const auto baseLocation = static_cast<unsigned int>(meshDecl.size());
+                for (std::size_t i = 0; i < instDecl.size(); ++i)
+                    vao.disable_attribute(baseLocation + static_cast<unsigned int>(i));
+            }
+
+            vao.unbind();
+            return;
+        }
+
+        Prog3D& p = SelectProgram(vb.GetStride(), params);
+        p.prog.use();
+        BindDrawParams(p, world, view, projection, params);
 
         vb.vao.bind();
         ib.ibo.bind(::easygl::BufferTarget::ElementArray);
