@@ -2095,11 +2095,83 @@ void main()
         // Attribute layout is configured lazily in ApplyLayout() once stride is known.
     }
 
+    namespace
+    {
+        struct VertexAttribFormat
+        {
+            int componentCount;
+            ::easygl::DataType type;
+            bool normalized;
+            bool isInteger;
+        };
+
+        // Task 1080: maps XNA's VertexElementFormat to the GL attribute shape needed to bind it
+        // -- component count, GL scalar type, whether values are normalized to [0,1]/[-1,1], and
+        // whether the attribute must be read as a true integer (glVertexAttribIPointer) rather
+        // than converted to float (glVertexAttribPointer). Byte4 is the one format needing the
+        // integer path -- XNA's own format for BLENDINDICES-style semantics (read as int4 in
+        // HLSL), matching the existing skinned-vertex BlendIndices precedent below (offset 48,
+        // case 52) that this table generalizes to arbitrary declarations.
+        VertexAttribFormat DescribeVertexElementFormat(VertexElementFormat format)
+        {
+            switch (format)
+            {
+            case VertexElementFormat::Single:          return { 1, ::easygl::DataType::Float,        false, false };
+            case VertexElementFormat::Vector2:         return { 2, ::easygl::DataType::Float,        false, false };
+            case VertexElementFormat::Vector3:         return { 3, ::easygl::DataType::Float,        false, false };
+            case VertexElementFormat::Vector4:         return { 4, ::easygl::DataType::Float,        false, false };
+            case VertexElementFormat::Color:           return { 4, ::easygl::DataType::UnsignedByte, true,  false };
+            case VertexElementFormat::Byte4:           return { 4, ::easygl::DataType::UnsignedByte, false, true  };
+            case VertexElementFormat::Short2:          return { 2, ::easygl::DataType::Short,        false, false };
+            case VertexElementFormat::Short4:          return { 4, ::easygl::DataType::Short,        false, false };
+            case VertexElementFormat::NormalizedShort2:return { 2, ::easygl::DataType::Short,        true,  false };
+            case VertexElementFormat::NormalizedShort4:return { 4, ::easygl::DataType::Short,        true,  false };
+            case VertexElementFormat::HalfVector2:     return { 2, ::easygl::DataType::HalfFloat,    false, false };
+            case VertexElementFormat::HalfVector4:     return { 4, ::easygl::DataType::HalfFloat,    false, false };
+            }
+            return { 3, ::easygl::DataType::Float, false, false };
+        }
+    }
+
+    void EasyGLVertexBufferBackend::SetVertexDeclaration(const std::vector<VertexElement>& elements)
+    {
+        declarationElements_ = elements;
+    }
+
     void EasyGLVertexBufferBackend::ApplyLayout(std::size_t stride)
     {
         const int s = static_cast<int>(stride);
         vao.bind();
         vbo.bind(::easygl::BufferTarget::Array);
+
+        if (!declarationElements_.empty())
+        {
+            // Task 1080: generic layout binding driven by the caller's own VertexDeclaration.
+            // Attribute location = the element's own index within the declaration's element
+            // list, matching this project's established "layout(location=N) == Nth field of the
+            // ported HLSL input struct" convention used by every hand-ported .fx vertex shader
+            // this session -- not a fixed byte-stride dispatch, so this covers genuinely custom
+            // layouts (e.g. NormalMapping.fx's Position+Normal+Tangent+TexCoord) that don't match
+            // any of the built-in strides the switch below recognizes.
+            for (std::size_t i = 0; i < declarationElements_.size(); ++i)
+            {
+                const VertexElement& element = declarationElements_[i];
+                const VertexAttribFormat desc =
+                    DescribeVertexElementFormat(element.getVertexElementFormatProperty());
+                const auto location = static_cast<unsigned int>(i);
+                const void* offset = reinterpret_cast<void*>(
+                    static_cast<std::uintptr_t>(element.getOffsetProperty()));
+                vao.enable_attribute(location);
+                if (desc.isInteger)
+                    vao.set_attribute_i_pointer(location, desc.componentCount, desc.type, s, offset);
+                else
+                    vao.set_attribute_pointer(location, desc.componentCount, desc.type,
+                                              desc.normalized, s, offset);
+            }
+            vao.unbind();
+            return;
+        }
+
         switch (stride)
         {
         case 16:

@@ -5,6 +5,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SpriteEffects.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SetDataOptions.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
@@ -13,6 +14,7 @@
 #include <string>
 #include <memory>
 #include <unordered_map>
+#include <vector>
 #include "CNA/Internal/Graphics/ImageData.hpp"
 
 struct SDL_Window;
@@ -32,6 +34,7 @@ namespace CNA::Internal::Backends
     using Effect = Microsoft::Xna::Framework::Graphics::Effect;
     using ImageData = CNA::Internal::Graphics::ImageData;
     using SetDataOptions = Microsoft::Xna::Framework::Graphics::SetDataOptions;
+    using VertexElement = Microsoft::Xna::Framework::Graphics::VertexElement;
 
     /**
      * @brief Backend handle for a vertex buffer.
@@ -79,6 +82,23 @@ namespace CNA::Internal::Backends
         {
             SetData(data, vertex_count, stride_in_bytes);
         }
+
+        /**
+         * @brief Task 1080: supplies the caller's own `VertexElement` list (offset/format/usage
+         * per attribute) so a backend can bind genuinely custom vertex layouts generically,
+         * instead of only the fixed set of byte-strides its 3D draw path otherwise recognizes.
+         *
+         * Default is a no-op — backends that don't support arbitrary layouts (or don't yet need
+         * to) simply ignore it and keep behaving exactly as before. Called by
+         * `VertexBuffer::SetDataRaw()` immediately before `SetData()`, so a backend that does
+         * override this may rely on the declaration being current by the time `SetData()`/
+         * `SetDataWithOptions()` runs.
+         *
+         * @param elements The vertex declaration's element list, in declaration order. An empty
+         *                 list means "no explicit declaration was supplied" — implementations
+         *                 should fall back to their own pre-existing stride-based behavior.
+         */
+        virtual void SetVertexDeclaration(const std::vector<VertexElement>& elements) {}
 
         [[nodiscard]] virtual int GetVertexCount() const = 0;
     };

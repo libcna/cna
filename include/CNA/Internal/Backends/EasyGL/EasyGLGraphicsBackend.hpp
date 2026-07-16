@@ -301,6 +301,10 @@ namespace CNA::Internal::Backends::EasyGL
         void SetData(const void* data, int vertex_count, std::size_t stride_in_bytes) override;
         void SetDataWithOptions(const void* data, int vertex_count, std::size_t stride_in_bytes,
                                 SetDataOptions options) override;
+        // Task 1080: stores the caller's own VertexElement list so ApplyLayout() can bind
+        // genuinely custom vertex formats generically instead of only the fixed byte-strides
+        // the switch below recognizes. Empty (the default) means "keep using that switch".
+        void SetVertexDeclaration(const std::vector<VertexElement>& elements) override;
         int GetVertexCount() const override { return vertex_count; }
         [[nodiscard]] std::size_t GetStride() const { return stride_in_bytes_; }
 
@@ -315,6 +319,7 @@ namespace CNA::Internal::Backends::EasyGL
         std::vector<uint8_t> cpu_data_;
         std::size_t stride_in_bytes_ = 0;
         bool gpu_allocated_ = false;
+        std::vector<VertexElement> declarationElements_;
     };
 
     /**
