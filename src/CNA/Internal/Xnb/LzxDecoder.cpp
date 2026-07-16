@@ -460,6 +460,14 @@ namespace CNA::Internal::Xnb
                                     R2 = R0; R0 = static_cast<uint32_t>(match_offset);
                                 }
 
+                                // plan_xnb.md XNB-30 hardening: FNA's own C# port relies on the
+                                // CLR's automatic bounds-checked array access to turn a corrupt
+                                // match_offset into a catchable IndexOutOfRangeException; a
+                                // direct C++ port using std::vector::operator[] would instead be
+                                // undefined behavior (a potential out-of-bounds read) on the same
+                                // malicious/corrupt input. Reject it explicitly instead.
+                                if (match_offset <= 0 || match_offset > static_cast<int>(window_size)) return -1;
+
                                 rundest = static_cast<int>(window_posn);
                                 this_run -= match_length;
 
@@ -567,6 +575,14 @@ namespace CNA::Internal::Xnb
                                     match_offset = static_cast<int>(R2);
                                     R2 = R0; R0 = static_cast<uint32_t>(match_offset);
                                 }
+
+                                // plan_xnb.md XNB-30 hardening: FNA's own C# port relies on the
+                                // CLR's automatic bounds-checked array access to turn a corrupt
+                                // match_offset into a catchable IndexOutOfRangeException; a
+                                // direct C++ port using std::vector::operator[] would instead be
+                                // undefined behavior (a potential out-of-bounds read) on the same
+                                // malicious/corrupt input. Reject it explicitly instead.
+                                if (match_offset <= 0 || match_offset > static_cast<int>(window_size)) return -1;
 
                                 rundest = static_cast<int>(window_posn);
                                 this_run -= match_length;
