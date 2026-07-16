@@ -1,0 +1,62 @@
+if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
+   AND CNA_GRAPHICS_BACKEND STREQUAL "DX3")
+
+    enable_testing()
+
+    macro(cna_dx3_test target src)
+        add_executable(${target} ${src})
+        if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
+            target_link_libraries(${target} PRIVATE
+                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                SHARP_RUNTIME)
+        else()
+            target_link_libraries(${target} PRIVATE CNA SHARP_RUNTIME)
+        endif()
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(${target} PRIVATE SDL3::SDL3main)
+        endif()
+    endmacro()
+
+    cna_dx3_test(cna_test_dx3_smoke examples/dx3_smoke_test.cpp)
+    cna_register_backend_test(NAME Dx3_Smoke COMMAND cna_test_dx3_smoke
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=dummy" LABELS "DX3")
+
+    # plan_dx3.md Phase X3 (DX3-20..DX3-28): texture/render-target backend CTest.
+    cna_dx3_test(cna_test_dx3_texture_rendertarget examples/dx3_texture_rendertarget_test.cpp)
+    cna_register_backend_test(NAME Dx3_TextureRenderTarget COMMAND cna_test_dx3_texture_rendertarget
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=dummy" LABELS "DX3")
+
+    # plan_dx3.md Phase X4 (DX3-30..DX3-39): CPU compositor / SpriteBatch draw path CTest.
+    cna_dx3_test(cna_test_dx3_spritebatch examples/dx3_spritebatch_test.cpp)
+    cna_register_backend_test(NAME Dx3_SpriteBatch COMMAND cna_test_dx3_spritebatch
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=dummy" LABELS "DX3")
+
+    # plan_dx3.md Phase X5 (DX3-40..DX3-44): blend-mode compositing math CTest.
+    cna_dx3_test(cna_test_dx3_blend examples/dx3_blend_test.cpp)
+    cna_register_backend_test(NAME Dx3_Blend COMMAND cna_test_dx3_blend
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=dummy" LABELS "DX3")
+
+    # plan_dx3.md Phase X5 (DX3-45/DX3-46): TextureFilter + TextureAddressMode sampling CTest.
+    cna_dx3_test(cna_test_dx3_sampling examples/dx3_sampling_test.cpp)
+    cna_register_backend_test(NAME Dx3_AddressMode COMMAND cna_test_dx3_sampling
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=dummy" LABELS "DX3")
+
+    # plan_dx3.md Phase X6 (DX3-50..DX3-54): SpriteFont / DrawString CTest.
+    cna_dx3_test(cna_test_dx3_spritefont examples/dx3_spritefont_test.cpp)
+    cna_register_backend_test(NAME Dx3_SpriteFont COMMAND cna_test_dx3_spritefont
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=dummy" LABELS "DX3")
+
+    # plan_dx3.md Phase X7 (DX3-60..DX3-67, DX3-69): ThrowNo3D wiring / remaining-defaults CTest.
+    cna_dx3_test(cna_test_dx3_no3d examples/dx3_no3d_test.cpp)
+    cna_register_backend_test(NAME Dx3_No3D COMMAND cna_test_dx3_no3d
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=dummy" LABELS "DX3")
+
+    # plan_dx3.md Phase X7 (DX3-68): logical/window coordinate transform CTest. Note:
+    # SDL_VIDEODRIVER=dummy reports a fixed 1024x768 "window" size (no real display to query), so
+    # this test's letterbox-invariant checks run against that fixed size rather than whatever a
+    # real display would report -- still a genuine, non-trivial letterbox (1024x768 vs 64x64
+    # logical) and still verified correct, just no longer dependent on the host's actual screen.
+    cna_dx3_test(cna_test_dx3_logical_transform examples/dx3_logical_transform_test.cpp)
+    cna_register_backend_test(NAME Dx3_LogicalTransform COMMAND cna_test_dx3_logical_transform
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=dummy" LABELS "DX3")
+endif()

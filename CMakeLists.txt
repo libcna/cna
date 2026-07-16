@@ -5318,238 +5318,18 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
 
 endif()
 
-if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
-   AND CNA_GRAPHICS_BACKEND STREQUAL "WEBGPU")
-    enable_testing()
-    if(TARGET cna_demo_2d)
-        cna_register_backend_test(NAME WebGPU_Native2D_Smoke COMMAND ${CMAKE_COMMAND} -DCNA_WEBGPU_DEMO=$<TARGET_FILE:cna_demo_2d> -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/WebGPUNativeSmokeTest.cmake
-            TIMEOUT 70 LABELS "GraphicsSmoke;WebGPU" SKIP_REGULAR_EXPRESSION "\\[SKIP\\] CNA WebGPU native smoke")
-    else()
-        message(WARNING "CNA WebGPU: native smoke test requires CNA_BUILD_EXAMPLES=ON")
-    endif()
-
-    # WEBGPU-91/92: pixel-asserted readback coverage -- registered the same way as
-    # WebGPU_Native2D_Smoke (SKIP_REGULAR_EXPRESSION for a headless/no-display environment),
-    # since ReadBackbuffer() needs a real GPU-backed surface exactly like the smoke test does.
-    macro(cna_webgpu_test target src)
-        add_executable(${target} ${src})
-        if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
-            target_link_libraries(${target} PRIVATE
-                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
-                SHARP_RUNTIME)
-        else()
-            target_link_libraries(${target} PRIVATE CNA SHARP_RUNTIME)
-        endif()
-        if(TARGET SDL3::SDL3main)
-            target_link_libraries(${target} PRIVATE SDL3::SDL3main)
-        endif()
-        if(CNA_WEBGPU_RUNTIME_LIBRARY)
-            add_custom_command(TARGET ${target} POST_BUILD
-                    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                    "${CNA_WEBGPU_RUNTIME_LIBRARY}" "$<TARGET_FILE_DIR:${target}>"
-                    COMMENT "Copying wgpu-native runtime next to ${target}")
-            if(UNIX AND NOT APPLE)
-                set_property(TARGET ${target} APPEND PROPERTY BUILD_RPATH "$ORIGIN")
-            endif()
-        endif()
-    endmacro()
-
-    cna_webgpu_test(cna_test_webgpu_clear_readback examples/webgpu_clear_readback_test.cpp)
-    cna_register_backend_test(NAME WebGPU_Clear_Readback COMMAND cna_test_webgpu_clear_readback
-        TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
-
-    # Phase 57/63 vertical slice: DrawColoredPrimitives/DrawIndexedColoredPrimitives.
-    cna_webgpu_test(cna_test_webgpu_colored3d examples/webgpu_colored3d_test.cpp)
-    cna_register_backend_test(NAME WebGPU_Colored3D COMMAND cna_test_webgpu_colored3d
-        TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
-
-    # Phase 63: DrawPrimitivesEx/DrawIndexedPrimitivesEx real GpuDrawParams dispatch (stride 16).
-    cna_webgpu_test(cna_test_webgpu_drawprimitivesex examples/webgpu_drawprimitivesex_test.cpp)
-    cna_register_backend_test(NAME WebGPU_DrawPrimitivesEx COMMAND cna_test_webgpu_drawprimitivesex
-        TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
-
-    # Phase 58/59/63: textured3d.wgsl / GetOrCreatePipelineTextured3D / stride-20 dispatch.
-    cna_webgpu_test(cna_test_webgpu_textured3d examples/webgpu_textured3d_test.cpp)
-    cna_register_backend_test(NAME WebGPU_Textured3D COMMAND cna_test_webgpu_textured3d
-        TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
-
-    # Phase 58/59/63: colored_textured3d.wgsl / GetOrCreatePipelineColoredTextured3D / stride-24.
-    cna_webgpu_test(cna_test_webgpu_coloredtextured3d examples/webgpu_coloredtextured3d_test.cpp)
-    cna_register_backend_test(NAME WebGPU_ColoredTextured3D COMMAND cna_test_webgpu_coloredtextured3d
-        TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
-
-    # WEBGPU-22: lit_textured3d.wgsl / GetOrCreatePipelineLitTextured3D / stride-32 dispatch,
-    # real Blinn-Phong lighting.
-    cna_webgpu_test(cna_test_webgpu_littextured3d examples/webgpu_littextured3d_test.cpp)
-    cna_register_backend_test(NAME WebGPU_LitTextured3D COMMAND cna_test_webgpu_littextured3d
-        TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
-
-    # Task 1105 (plan_graphics.md Phase 80): GetOrCreatePipelineLitTextured3DVertexLit /
-    # BasicEffect.PreferPerPixelLighting real dispatch.
-    cna_webgpu_test(cna_test_webgpu_basiceffect_preferperpixellighting examples/webgpu_basiceffect_preferperpixellighting_test.cpp)
-    cna_register_backend_test(NAME WebGPU_BasicEffect_PreferPerPixelLighting COMMAND cna_test_webgpu_basiceffect_preferperpixellighting
-        TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
-
-    # WEBGPU-23/34/72: alpha_test3d.wgsl / GetOrCreatePipelineAlphaTest3D / AlphaTestEffect
-    # per-pixel discard, strides 20/24/32.
-    cna_webgpu_test(cna_test_webgpu_alphatest3d examples/webgpu_alphatest3d_test.cpp)
-    cna_register_backend_test(NAME WebGPU_AlphaTest3D COMMAND cna_test_webgpu_alphatest3d
-        TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
-
-    # WEBGPU-24: dual_texture3d.wgsl / GetOrCreatePipelineDualTexture3D / DualTextureEffect,
-    # strides 20/24, second texture bind group.
-    cna_webgpu_test(cna_test_webgpu_dualtexture3d examples/webgpu_dualtexture3d_test.cpp)
-    cna_register_backend_test(NAME WebGPU_DualTexture3D COMMAND cna_test_webgpu_dualtexture3d
-        TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
-endif()
+include(cmake/Tests/WebGpuTests.cmake)
 
 # plan_headless.md: Headless (no GPU/window) graphics backend tests. Deliberately no
 # SDL_VIDEODRIVER/DISPLAY environment -- the entire point of this backend is running with neither.
-if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "HEADLESS")
-    enable_testing()
-
-    macro(cna_headless_test target src)
-        add_executable(${target} ${src})
-        if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
-            target_link_libraries(${target} PRIVATE
-                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
-                SHARP_RUNTIME SDL3::SDL3)
-        else()
-            target_link_libraries(${target} PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
-        endif()
-        if(TARGET SDL3::SDL3main)
-            target_link_libraries(${target} PRIVATE SDL3::SDL3main)
-        endif()
-    endmacro()
-
-    cna_headless_test(cna_test_headless_smoke examples/headless_smoke_test.cpp)
-    cna_register_backend_test(NAME Headless_Smoke COMMAND cna_test_headless_smoke
-        TIMEOUT 30 LABELS "Headless")
-
-    cna_headless_test(cna_test_headless_resource_backends examples/headless_resource_backends_test.cpp)
-    cna_register_backend_test(NAME Headless_ResourceBackends COMMAND cna_test_headless_resource_backends
-        TIMEOUT 30 LABELS "Headless")
-
-    cna_headless_test(cna_test_headless_validation_extras examples/headless_validation_extras_test.cpp)
-    cna_register_backend_test(NAME Headless_ValidationExtras COMMAND cna_test_headless_validation_extras
-        TIMEOUT 30 LABELS "Headless")
-
-    cna_headless_test(cna_test_headless_coverage_gaps examples/headless_coverage_gaps_test.cpp)
-    cna_register_backend_test(NAME Headless_CoverageGaps COMMAND cna_test_headless_coverage_gaps
-        TIMEOUT 30 LABELS "Headless")
-
-    cna_headless_test(cna_test_headless_effects examples/headless_effects_test.cpp)
-    cna_register_backend_test(NAME Headless_Effects COMMAND cna_test_headless_effects
-        TIMEOUT 30 LABELS "Headless")
-
-    cna_headless_test(cna_test_headless_mode_dial examples/headless_mode_dial_test.cpp)
-    cna_register_backend_test(NAME Headless_ModeDial COMMAND cna_test_headless_mode_dial
-        TIMEOUT 30 LABELS "Headless")
-
-    cna_headless_test(cna_test_headless_trace_diff examples/headless_trace_diff_test.cpp)
-    cna_register_backend_test(NAME Headless_TraceDiff COMMAND cna_test_headless_trace_diff
-        TIMEOUT 30 LABELS "Headless")
-endif()
+include(cmake/Tests/HeadlessTests.cmake)
 
 # plan_software.md: Software (CPU rasterizer) graphics backend tests. Deliberately no
 # SDL_VIDEODRIVER/DISPLAY environment -- like HEADLESS, this backend never needs either.
-if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SOFTWARE")
-    enable_testing()
-
-    macro(cna_software_test target src)
-        add_executable(${target} ${src})
-        if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
-            target_link_libraries(${target} PRIVATE
-                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
-                SHARP_RUNTIME SDL3::SDL3)
-        else()
-            target_link_libraries(${target} PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
-        endif()
-        if(TARGET SDL3::SDL3main)
-            target_link_libraries(${target} PRIVATE SDL3::SDL3main)
-        endif()
-    endmacro()
-
-    cna_software_test(cna_test_software_smoke examples/software_smoke_test.cpp)
-    cna_register_backend_test(NAME Software_Smoke COMMAND cna_test_software_smoke
-        TIMEOUT 30 LABELS "Software")
-
-    cna_software_test(cna_test_software_rasterizer examples/software_rasterizer_test.cpp)
-    cna_register_backend_test(NAME Software_Rasterizer COMMAND cna_test_software_rasterizer
-        TIMEOUT 30 LABELS "Software")
-
-    cna_software_test(cna_test_software_effects examples/software_effects_test.cpp)
-    cna_register_backend_test(NAME Software_Effects COMMAND cna_test_software_effects
-        TIMEOUT 30 LABELS "Software")
-
-    cna_software_test(cna_test_software_culling examples/software_culling_test.cpp)
-    cna_register_backend_test(NAME Software_Culling COMMAND cna_test_software_culling
-        TIMEOUT 30 LABELS "Software")
-
-    cna_software_test(cna_test_software_clipping examples/software_clipping_test.cpp)
-    cna_register_backend_test(NAME Software_Clipping COMMAND cna_test_software_clipping
-        TIMEOUT 30 LABELS "Software")
-
-    cna_software_test(cna_test_software_dual_envmap_skinned examples/software_dual_envmap_skinned_test.cpp)
-    cna_register_backend_test(NAME Software_DualEnvmapSkinned COMMAND cna_test_software_dual_envmap_skinned
-        TIMEOUT 30 LABELS "Software")
-
-    # plan_software.md SOFTWARE-61/84: this backend's half of the cross-backend diagnostic dump --
-    # not registered as a ctest (see cna_diag_compare's own comment above), just a plain
-    # executable a developer/script runs by hand.
-    cna_software_test(cna_diag_software examples/cross_backend_diagnostic_scene.cpp)
-endif()
+include(cmake/Tests/SoftwareTests.cmake)
 
 # plan_ascii.md Phase G2+: ASCII (SDL-windowed glyph-grid) backend test registration.
-if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
-   AND CNA_GRAPHICS_BACKEND STREQUAL "ASCII")
-
-    enable_testing()
-
-    macro(cna_ascii_test target src)
-        add_executable(${target} ${src})
-        if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
-            target_link_libraries(${target} PRIVATE
-                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
-                SHARP_RUNTIME)
-        else()
-            target_link_libraries(${target} PRIVATE CNA SHARP_RUNTIME)
-        endif()
-        if(TARGET SDL3::SDL3main)
-            target_link_libraries(${target} PRIVATE SDL3::SDL3main)
-        endif()
-    endmacro()
-
-    # Phase G2 (ASCII-10/11): hand-authored glyph-density font atlas smoke test.
-    cna_ascii_test(cna_test_ascii_fontatlas examples/ascii_fontatlas_test.cpp)
-    cna_register_backend_test(NAME Ascii_FontAtlas COMMAND cna_test_ascii_fontatlas
-        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
-
-    # Phase G3 (ASCII-20/21): offscreen gameTarget_ + SetRenderTarget(nullptr) redirect.
-    cna_ascii_test(cna_test_ascii_offscreentarget examples/ascii_offscreentarget_test.cpp)
-    cna_register_backend_test(NAME Ascii_OffscreenTarget COMMAND cna_test_ascii_offscreentarget
-        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
-
-    # Phase G4 (ASCII-30..33): quantizer -- pure function, no GraphicsDevice/window needed.
-    cna_ascii_test(cna_test_ascii_quantizer examples/ascii_quantizer_test.cpp)
-    cna_register_backend_test(NAME Ascii_Quantizer COMMAND cna_test_ascii_quantizer
-        TIMEOUT 30)
-
-    # Phase G5 (ASCII-40/41): Present() draws the quantized grid into the real window.
-    cna_ascii_test(cna_test_ascii_present examples/ascii_present_test.cpp)
-    cna_register_backend_test(NAME Ascii_Present COMMAND cna_test_ascii_present
-        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
-
-    # Phase G6 (ASCII-50/51): Mouse/Keyboard/GamePad need zero new code against a real window.
-    cna_ascii_test(cna_test_ascii_input examples/ascii_input_test.cpp)
-    cna_register_backend_test(NAME Ascii_Input COMMAND cna_test_ascii_input
-        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
-
-    # Phase G7 (ASCII-60): confirm ThrowNo3D reuse via the wrapped SdlGraphicsBackend.
-    cna_ascii_test(cna_test_ascii_throwno3d examples/ascii_throwno3d_test.cpp)
-    cna_register_backend_test(NAME Ascii_ThrowNo3D COMMAND cna_test_ascii_throwno3d
-        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
-endif()
+include(cmake/Tests/AsciiTests.cmake)
 
 # plan_dx3.md Phase X2/X8 (DX3-18/DX3-80): DX3 (DirectDraw via free-direct) CTest registration.
 # Unlike SDL_RENDERER's own window-based ctests, these do NOT need a real/virtual X11 display:
@@ -5562,68 +5342,7 @@ endif()
 # SDL_VIDEODRIVER=x11 registration (copy-pasted from SDL_RENDERER's own pattern, which genuinely
 # does need a real display) made every one of these 8 ctests fail outright in any environment
 # without a live DISPLAY, even though the underlying binaries themselves were always correct.
-if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
-   AND CNA_GRAPHICS_BACKEND STREQUAL "DX3")
-
-    enable_testing()
-
-    macro(cna_dx3_test target src)
-        add_executable(${target} ${src})
-        if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
-            target_link_libraries(${target} PRIVATE
-                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
-                SHARP_RUNTIME)
-        else()
-            target_link_libraries(${target} PRIVATE CNA SHARP_RUNTIME)
-        endif()
-        if(TARGET SDL3::SDL3main)
-            target_link_libraries(${target} PRIVATE SDL3::SDL3main)
-        endif()
-    endmacro()
-
-    cna_dx3_test(cna_test_dx3_smoke examples/dx3_smoke_test.cpp)
-    cna_register_backend_test(NAME Dx3_Smoke COMMAND cna_test_dx3_smoke
-        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=dummy" LABELS "DX3")
-
-    # plan_dx3.md Phase X3 (DX3-20..DX3-28): texture/render-target backend CTest.
-    cna_dx3_test(cna_test_dx3_texture_rendertarget examples/dx3_texture_rendertarget_test.cpp)
-    cna_register_backend_test(NAME Dx3_TextureRenderTarget COMMAND cna_test_dx3_texture_rendertarget
-        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=dummy" LABELS "DX3")
-
-    # plan_dx3.md Phase X4 (DX3-30..DX3-39): CPU compositor / SpriteBatch draw path CTest.
-    cna_dx3_test(cna_test_dx3_spritebatch examples/dx3_spritebatch_test.cpp)
-    cna_register_backend_test(NAME Dx3_SpriteBatch COMMAND cna_test_dx3_spritebatch
-        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=dummy" LABELS "DX3")
-
-    # plan_dx3.md Phase X5 (DX3-40..DX3-44): blend-mode compositing math CTest.
-    cna_dx3_test(cna_test_dx3_blend examples/dx3_blend_test.cpp)
-    cna_register_backend_test(NAME Dx3_Blend COMMAND cna_test_dx3_blend
-        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=dummy" LABELS "DX3")
-
-    # plan_dx3.md Phase X5 (DX3-45/DX3-46): TextureFilter + TextureAddressMode sampling CTest.
-    cna_dx3_test(cna_test_dx3_sampling examples/dx3_sampling_test.cpp)
-    cna_register_backend_test(NAME Dx3_AddressMode COMMAND cna_test_dx3_sampling
-        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=dummy" LABELS "DX3")
-
-    # plan_dx3.md Phase X6 (DX3-50..DX3-54): SpriteFont / DrawString CTest.
-    cna_dx3_test(cna_test_dx3_spritefont examples/dx3_spritefont_test.cpp)
-    cna_register_backend_test(NAME Dx3_SpriteFont COMMAND cna_test_dx3_spritefont
-        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=dummy" LABELS "DX3")
-
-    # plan_dx3.md Phase X7 (DX3-60..DX3-67, DX3-69): ThrowNo3D wiring / remaining-defaults CTest.
-    cna_dx3_test(cna_test_dx3_no3d examples/dx3_no3d_test.cpp)
-    cna_register_backend_test(NAME Dx3_No3D COMMAND cna_test_dx3_no3d
-        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=dummy" LABELS "DX3")
-
-    # plan_dx3.md Phase X7 (DX3-68): logical/window coordinate transform CTest. Note:
-    # SDL_VIDEODRIVER=dummy reports a fixed 1024x768 "window" size (no real display to query), so
-    # this test's letterbox-invariant checks run against that fixed size rather than whatever a
-    # real display would report -- still a genuine, non-trivial letterbox (1024x768 vs 64x64
-    # logical) and still verified correct, just no longer dependent on the host's actual screen.
-    cna_dx3_test(cna_test_dx3_logical_transform examples/dx3_logical_transform_test.cpp)
-    cna_register_backend_test(NAME Dx3_LogicalTransform COMMAND cna_test_dx3_logical_transform
-        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=dummy" LABELS "DX3")
-endif()
+include(cmake/Tests/Dx3Tests.cmake)
 
 # plan_dx.md DX-80: D3D11 CTest registration. When cross-compiled from Linux (this backend is
 # Windows-only, design decision 2), CTest itself still runs on the Linux host, so the test COMMAND
@@ -5632,115 +5351,13 @@ endif()
 # .exe directly (see .github/workflows/d3d-windows-ci.yml, added specifically to exercise this
 # path for real; it only covers MSVC-compile/unit-test/shader-generation-check, not a substitute
 # for plan_dx.md DX-90's real swap-chain/tearing/device-lost/driver-parity items).
-if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D11")
-    enable_testing()
-
-    macro(cna_d3d11_test target src)
-        add_executable(${target} ${src})
-        target_link_libraries(${target} PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
-        if(TARGET SDL3::SDL3main)
-            target_link_libraries(${target} PRIVATE SDL3::SDL3main)
-        endif()
-        if(MINGW)
-            target_link_options(${target} PRIVATE -static-libgcc -static-libstdc++)
-            # Same known mingw-w64/GCC PE-COFF toolchain limitation CnaTests already works around
-            # (std::type_info::operator== emitted as vague linkage the linker fails to fold) --
-            # see this file's own CnaTests MINGW block for the full explanation.
-            target_link_options(${target} PRIVATE -Wl,--allow-multiple-definition)
-            cna_copy_mingw_runtime(${target})
-            cna_copy_sdl_runtime(${target})
-        endif()
-    endmacro()
-
-    macro(cna_d3d11_ctest_command out_var target_name)
-        if(CMAKE_CROSSCOMPILING)
-            set(${out_var} ${CMAKE_SOURCE_DIR}/scripts/run-wine-dxvk.sh $<TARGET_FILE:${target_name}>)
-        else()
-            set(${out_var} $<TARGET_FILE:${target_name}>)
-        endif()
-    endmacro()
-
-    cna_d3d11_test(cna_test_d3d11_smoke examples/d3d11_smoke_test.cpp)
-    cna_d3d11_ctest_command(_d3d11_smoke_cmd cna_test_d3d11_smoke)
-    cna_register_backend_test(NAME D3D11_Smoke COMMAND ${_d3d11_smoke_cmd}
-        TIMEOUT 60 LABELS "D3D11")
-
-    # Phase DX3: pure-function checks for D3DCommon's format/state/vertex-layout mapping tables --
-    # no device/window/GPU needed.
-    cna_d3d11_test(cna_test_d3d11_common examples/d3d11_common_test.cpp)
-    cna_d3d11_ctest_command(_d3d11_common_cmd cna_test_d3d11_common)
-    # DX-85: this binary never creates a D3D11 device (pure-function mapping-table checks
-    # only), so it legitimately never prints a "DXVK: <version>" line -- tell the wrapper's
-    # DXVK-engagement gate not to misreport that as a WineD3D fallback. Harmless no-op when
-    # CMAKE_CROSSCOMPILING is false (native MSVC run, no wrapper script involved at all).
-    cna_register_backend_test(NAME D3D11_Common COMMAND ${_d3d11_common_cmd}
-        TIMEOUT 30 LABELS "D3D11" ENVIRONMENT "CNA_D3D11_SKIP_DXVK_GATE=1")
-
-    # DX-82: state-object pixel-behaviour tests, reusing the same backend-agnostic EasyGL-authored
-    # sources Vulkan already reuses verbatim (they only touch the public GraphicsDevice/BasicEffect
-    # API, nothing EasyGL-specific) -- real behavioural proof through the full public draw path,
-    # not just "the D3D11 state object was created/bound" (Phase DX7's own, narrower bar).
-    cna_d3d11_test(cna_test_d3d11_blendstate_opaque examples/easygl_blendstate_opaque_test.cpp)
-    cna_d3d11_ctest_command(_d3d11_blend_opaque_cmd cna_test_d3d11_blendstate_opaque)
-    cna_register_backend_test(NAME D3D11_BlendState_Opaque COMMAND ${_d3d11_blend_opaque_cmd}
-        TIMEOUT 60 LABELS "D3D11")
-
-    cna_d3d11_test(cna_test_d3d11_blendstate_alphablend examples/easygl_blendstate_alphablend_test.cpp)
-    cna_d3d11_ctest_command(_d3d11_blend_alpha_cmd cna_test_d3d11_blendstate_alphablend)
-    cna_register_backend_test(NAME D3D11_BlendState_AlphaBlend COMMAND ${_d3d11_blend_alpha_cmd}
-        TIMEOUT 60 LABELS "D3D11")
-
-    cna_d3d11_test(cna_test_d3d11_depthstencilstate_stencil_enable examples/easygl_depthstencilstate_stencil_enable_test.cpp)
-    cna_d3d11_ctest_command(_d3d11_ds_stencil_cmd cna_test_d3d11_depthstencilstate_stencil_enable)
-    cna_register_backend_test(NAME D3D11_DepthStencilState_StencilEnable COMMAND ${_d3d11_ds_stencil_cmd}
-        TIMEOUT 60 LABELS "D3D11")
-
-    cna_d3d11_test(cna_test_d3d11_rasterizerstate_cullmode examples/easygl_rasterizerstate_cullmode_test.cpp)
-    cna_d3d11_ctest_command(_d3d11_rast_cullmode_cmd cna_test_d3d11_rasterizerstate_cullmode)
-    cna_register_backend_test(NAME D3D11_RasterizerState_CullMode COMMAND ${_d3d11_rast_cullmode_cmd}
-        TIMEOUT 60 LABELS "D3D11")
-endif()
+include(cmake/Tests/D3D11Tests.cmake)
 
 # plan_dx.md DX-102/103/104/105: D3D12 CTest registration, mirroring DX-80's own D3D11 macro
 # exactly, including the CMAKE_CROSSCOMPILING-aware command selection above (native MSVC runs the
 # .exe directly; a Linux-hosted cross-compile wraps it with scripts/run-wine-vkd3d.sh, DX-100's own
 # Wine+vkd3d-proton dev loop, a distinct Wine prefix from D3D11's DXVK one).
-if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D12")
-    enable_testing()
-
-    macro(cna_d3d12_test target src)
-        add_executable(${target} ${src})
-        target_link_libraries(${target} PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
-        if(TARGET SDL3::SDL3main)
-            target_link_libraries(${target} PRIVATE SDL3::SDL3main)
-        endif()
-        if(MINGW)
-            target_link_options(${target} PRIVATE -static-libgcc -static-libstdc++)
-            target_link_options(${target} PRIVATE -Wl,--allow-multiple-definition)
-            cna_copy_mingw_runtime(${target})
-            cna_copy_sdl_runtime(${target})
-        endif()
-    endmacro()
-
-    # DX-102/103/104/105: off-screen device/queue/heap/command-list/fence proof -- deliberately
-    # never constructs a window/swap chain (see examples/d3d12_smoke_test.cpp's own header comment
-    # for why), so this stays genuinely green on this Wine+vkd3d-proton dev loop.
-    cna_d3d12_test(cna_test_d3d12_smoke examples/d3d12_smoke_test.cpp)
-    if(CMAKE_CROSSCOMPILING)
-        set(_d3d12_smoke_cmd ${CMAKE_SOURCE_DIR}/scripts/run-wine-vkd3d.sh $<TARGET_FILE:cna_test_d3d12_smoke>)
-    else()
-        set(_d3d12_smoke_cmd cna_test_d3d12_smoke)
-    endif()
-    cna_register_backend_test(NAME D3D12_Smoke COMMAND ${_d3d12_smoke_cmd}
-        TIMEOUT 60 LABELS "D3D12")
-
-    # plan_dx.md DX-102: real (window-attached) swap-chain diagnostic -- deliberately NOT
-    # registered as a CTest (mirrors cna_diag_software's own "real executable, not a ctest"
-    # precedent above), since DX-100's own spike already found this crashes under vanilla Wine's
-    # dxgi.dll; a permanently-registered, always-crashing CTest would just be noise. Built so a
-    # developer/script can still run it by hand for a real, up-to-date reading.
-    cna_d3d12_test(cna_diag_d3d12_swapchain examples/d3d12_swapchain_diag.cpp)
-endif()
+include(cmake/Tests/D3D12Tests.cmake)
 
 # plan_canvas.md CANVAS-15: structural smoke-test build for the CANVAS (HTML Canvas 2D) backend.
 # Deliberately NOT registered as a CTest (mirrors cna_diag_software's/d3d12_swapchain_diag's own
@@ -5749,10 +5366,7 @@ endif()
 # before any Canvas-specific code even runs. This target only proves the smoke test configures and
 # links here; it needs a real browser (e.g. `emrun`) against a page with a real <canvas> element to
 # actually produce a PASS/FAIL (Design decision 9).
-if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "CANVAS")
-    add_executable(cna_test_canvas_smoke examples/canvas_smoke_test.cpp)
-    target_link_libraries(cna_test_canvas_smoke PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
-endif()
+include(cmake/Tests/CanvasTests.cmake)
 
 # plan_dx9.md D9-23: D3D9 CTest registration, mirroring D3D11's/D3D12's own cna_d3d11_test/
 # cna_d3d12_test macros (design decision: mirror the shape, don't invent a new pattern). Uses the
@@ -5944,115 +5558,7 @@ endif()
 # plan_sdlgpu.md SDLGPU-12: first end-to-end proof for the SDL_GPU graphics backend -- a real
 # window, a real SDL_GPUDevice, and a 60-frame Clear()+Present() loop. Needs a real
 # display/GPU, same as the Vulkan/Bgfx/D3D11 CTest entries above -- run with a real DISPLAY.
-if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SDL_GPU")
-    enable_testing()
-
-    macro(cna_sdlgpu_test target src)
-        add_executable(${target} ${src})
-        if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
-            target_link_libraries(${target} PRIVATE
-                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
-                SHARP_RUNTIME SDL3::SDL3)
-        else()
-            target_link_libraries(${target} PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
-        endif()
-        if(TARGET SDL3::SDL3main)
-            target_link_libraries(${target} PRIVATE SDL3::SDL3main)
-        endif()
-    endmacro()
-
-    cna_sdlgpu_test(cna_test_sdlgpu_smoke examples/sdlgpu_smoke_test.cpp)
-    cna_register_backend_test(NAME SdlGpu_Smoke COMMAND cna_test_sdlgpu_smoke
-        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
-
-    # plan_sdlgpu.md SDLGPU-22..25: 2D vertical slice -- real Texture2D + SpriteBatch.
-    cna_sdlgpu_test(cna_test_sdlgpu_2d examples/sdlgpu_2d_test.cpp)
-    cna_register_backend_test(NAME SdlGpu_2D COMMAND cna_test_sdlgpu_2d
-        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
-
-    # Ad-hoc manual diagnostic (not a CTest) -- see the file's own header comment.
-    cna_sdlgpu_test(cna_diag_sdlgpu_single_sprite examples/sdlgpu_diag_single_sprite.cpp)
-
-    # plan_sdlgpu.md SDLGPU-26..30: core 3D vertex formats and BasicEffect.
-    cna_sdlgpu_test(cna_test_sdlgpu_3d examples/sdlgpu_3d_test.cpp)
-    cna_register_backend_test(NAME SdlGpu_3D COMMAND cna_test_sdlgpu_3d
-        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
-
-    # plan_sdlgpu.md SDLGPU-31/32: AlphaTestEffect and DualTextureEffect.
-    cna_sdlgpu_test(cna_test_sdlgpu_effects examples/sdlgpu_effects_test.cpp)
-    cna_register_backend_test(NAME SdlGpu_Effects COMMAND cna_test_sdlgpu_effects
-        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
-
-    # plan_sdlgpu.md SDLGPU-35: RenderTarget2D.
-    cna_sdlgpu_test(cna_test_sdlgpu_rendertarget2d examples/sdlgpu_rendertarget2d_test.cpp)
-    cna_register_backend_test(NAME SdlGpu_RenderTarget2D COMMAND cna_test_sdlgpu_rendertarget2d
-        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
-
-    # plan_sdlgpu.md SDLGPU-36: RenderTargetCube.
-    cna_sdlgpu_test(cna_test_sdlgpu_rendertargetcube examples/sdlgpu_rendertargetcube_test.cpp)
-    cna_register_backend_test(NAME SdlGpu_RenderTargetCube COMMAND cna_test_sdlgpu_rendertargetcube
-        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
-
-    # plan_sdlgpu.md SDLGPU-37: Multiple Render Targets (MRT).
-    cna_sdlgpu_test(cna_test_sdlgpu_mrt examples/sdlgpu_mrt_test.cpp)
-    cna_register_backend_test(NAME SdlGpu_MRT COMMAND cna_test_sdlgpu_mrt
-        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
-
-    # plan_sdlgpu.md SDLGPU-38: RenderTarget2D MSAA.
-    cna_sdlgpu_test(cna_test_sdlgpu_rendertarget2d_msaa examples/sdlgpu_rendertarget2d_msaa_test.cpp)
-    cna_register_backend_test(NAME SdlGpu_RenderTarget2DMSAA COMMAND cna_test_sdlgpu_rendertarget2d_msaa
-        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
-
-    # plan_sdlgpu.md SDLGPU-40/41: Texture3D + mipmaps.
-    cna_sdlgpu_test(cna_test_sdlgpu_texture3d examples/sdlgpu_texture3d_test.cpp)
-    cna_register_backend_test(NAME SdlGpu_Texture3D COMMAND cna_test_sdlgpu_texture3d
-        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
-
-    # plan_sdlgpu.md SDLGPU-51: plain, non-render-target TextureCube.
-    cna_sdlgpu_test(cna_test_sdlgpu_texturecube examples/sdlgpu_texturecube_test.cpp)
-    cna_register_backend_test(NAME SdlGpu_TextureCube COMMAND cna_test_sdlgpu_texturecube
-        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
-
-    # plan_sdlgpu.md SDLGPU-33: EnvironmentMapEffect.
-    cna_sdlgpu_test(cna_test_sdlgpu_envmap examples/sdlgpu_envmap_test.cpp)
-    cna_register_backend_test(NAME SdlGpu_EnvMap COMMAND cna_test_sdlgpu_envmap
-        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
-
-    # plan_sdlgpu.md SDLGPU-34: SkinnedEffect.
-    cna_sdlgpu_test(cna_test_sdlgpu_skinned examples/sdlgpu_skinned_test.cpp)
-    cna_register_backend_test(NAME SdlGpu_Skinned COMMAND cna_test_sdlgpu_skinned
-        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
-
-    # plan_sdlgpu.md SDLGPU-42/43: custom ShaderEffect (runtime GLSL->SPIR-V via libshaderc).
-    cna_sdlgpu_test(cna_test_sdlgpu_shadereffect examples/sdlgpu_shadereffect_test.cpp)
-    cna_register_backend_test(NAME SdlGpu_ShaderEffect COMMAND cna_test_sdlgpu_shadereffect
-        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
-
-    # plan_sdlgpu.md SDLGPU-18/19/20: dynamic BlendState/DepthStencilState/RasterizerState.
-    cna_sdlgpu_test(cna_test_sdlgpu_renderstate examples/sdlgpu_renderstate_test.cpp)
-    cna_register_backend_test(NAME SdlGpu_RenderState COMMAND cna_test_sdlgpu_renderstate
-        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
-
-    # plan_sdlgpu.md SDLGPU-21: dynamic SamplerState for direct 3D draws.
-    cna_sdlgpu_test(cna_test_sdlgpu_samplerstate examples/sdlgpu_samplerstate_test.cpp)
-    cna_register_backend_test(NAME SdlGpu_SamplerState COMMAND cna_test_sdlgpu_samplerstate
-        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
-
-    # plan_sdlgpu.md: real chronological draw-order proof (adversarial-review finding #4).
-    cna_sdlgpu_test(cna_test_sdlgpu_draworder examples/sdlgpu_draworder_test.cpp)
-    cna_register_backend_test(NAME SdlGpu_DrawOrder COMMAND cna_test_sdlgpu_draworder
-        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
-
-    # plan_sdlgpu.md SDLGPU-11: hard swapchain-acquisition-failure recovery proof.
-    cna_sdlgpu_test(cna_test_sdlgpu_swapchain_recovery examples/sdlgpu_swapchain_recovery_test.cpp)
-    cna_register_backend_test(NAME SdlGpu_SwapchainRecovery COMMAND cna_test_sdlgpu_swapchain_recovery
-        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
-
-    # plan_sdlgpu.md: render-target-destroyed-before-flush use-after-free regression proof.
-    cna_sdlgpu_test(cna_test_sdlgpu_rt_lifetime examples/sdlgpu_rendertarget_lifetime_test.cpp)
-    cna_register_backend_test(NAME SdlGpu_RenderTargetLifetime COMMAND cna_test_sdlgpu_rt_lifetime
-        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
-endif()
+include(cmake/Tests/SdlGpuTests.cmake)
 
 # --- Task 6.1: real two-process ENet loopback test harness ---
 # A tiny standalone (non-GTest) executable playing "host" or "client", spawned twice as
