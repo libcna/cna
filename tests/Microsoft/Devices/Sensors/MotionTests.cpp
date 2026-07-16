@@ -48,13 +48,14 @@ namespace
         int SetSampleIntervalCallCount = 0;
         System::TimeSpan LastSetSampleInterval;
         ReadingCallback CapturedOnReading;
+        CalibrationCallback CapturedOnCalibrationNeeded;
 
         [[nodiscard]] bool IsSupported() override
         {
             return SupportedResult;
         }
 
-        bool Start(const System::TimeSpan&, ReadingCallback onReading) override
+        bool Start(const System::TimeSpan&, ReadingCallback onReading, CalibrationCallback onCalibrationNeeded) override
         {
             ++StartCallCount;
             if (!StartResult)
@@ -62,6 +63,7 @@ namespace
                 return false;
             }
             CapturedOnReading = std::move(onReading);
+            CapturedOnCalibrationNeeded = std::move(onCalibrationNeeded);
             return true;
         }
 
@@ -308,12 +310,11 @@ TEST(MotionTests, CurrentValueChangedSubscriptionDoesNotThrow)
     EXPECT_THROW(m.Start(), SensorFailedException);
 }
 
-// Task P3-8: Calibrate subscription. Motion.Calibrate is never raised by
-// this implementation on any platform — Detail::IMotionBackend has no
-// calibration callback at all (unlike ICompassBackend), since
-// AndroidMotionBackend never detects a calibration-needed condition itself
-// (docs/devices-native-backend-design.md) — so this only confirms
-// subscribing doesn't crash, on every platform, not just this one.
+// Task P3-8: Calibrate subscription. On this (non-Android) platform, Motion
+// has no backend at all, so Calibrate can never fire here regardless of
+// Task MOTION-011's fix — this only confirms subscribing doesn't crash. See
+// CalibrateFiresFromBackendCalibrationCallback below for the
+// backend-delivers-a-real-calibration-event case.
 TEST(MotionTests, CalibrateSubscriptionDoesNotThrow)
 {
     Motion m;
@@ -325,6 +326,27 @@ TEST(MotionTests, CalibrateSubscriptionDoesNotThrow)
     (void)invoked;
 
     EXPECT_THROW(m.Start(), SensorFailedException);
+}
+
+// Task MOTION-011 (2026-07-16): confirms Calibrate actually fires when the
+// backend invokes its calibration-needed callback — proves the delegation
+// path (IMotionBackend's CalibrationCallback -> Motion::Calibrate.Raise()),
+// mirroring CompassTests.CalibrateFiresFromBackendCalibrationCallback.
+TEST(MotionTests, CalibrateFiresFromBackendCalibrationCallback)
+{
+    Motion m;
+    auto fakeOwned = std::make_unique<FakeMotionBackend>();
+    FakeMotionBackend* fake = fakeOwned.get();
+    m.SetBackendForTesting(std::move(fakeOwned));
+    m.Start();
+
+    bool invoked = false;
+    m.Calibrate += [&invoked](System::Object*, const CalibrationEventArgs&) { invoked = true; };
+
+    ASSERT_TRUE(static_cast<bool>(fake->CapturedOnCalibrationNeeded));
+    fake->CapturedOnCalibrationNeeded();
+
+    EXPECT_TRUE(invoked);
 }
 
 // Task DEVICES-0113: with a supported fake backend injected, Start() must
@@ -633,6 +655,43 @@ TEST(MotionTests, ConcurrentStartStopFromMultipleThreadsDoesNotCrash)
 
                 m.Stop();
                 (void)m.getStateProperty();
+            }
+        });
+    }
+
+    for (std::thread& thread : threads)
+    {
+        thread.join();
+    }
+}
+
+// Task DEV-AUD-006 (2026-07-16, external audit `audit_devices.md`): mirrors
+// CompassTests.ConcurrentSetTimeBetweenUpdatesAndSetBackendForTestingDoesNotCrash
+// -- see that test for the full rationale.
+TEST(MotionTests, ConcurrentSetTimeBetweenUpdatesAndSetBackendForTestingDoesNotCrash)
+{
+    Motion m;
+
+    constexpr int ThreadCount = 8;
+    constexpr int IterationsPerThread = 20;
+
+    std::vector<std::thread> threads;
+    threads.reserve(ThreadCount);
+
+    for (int t = 0; t < ThreadCount; ++t)
+    {
+        threads.emplace_back([&m, t]()
+        {
+            for (int i = 0; i < IterationsPerThread; ++i)
+            {
+                if (t % 2 == 0)
+                {
+                    m.setTimeBetweenUpdatesProperty(TimeSpan::FromMilliseconds(1.0 + static_cast<double>(i)));
+                }
+                else
+                {
+                    m.SetBackendForTesting(std::make_unique<FakeMotionBackend>());
+                }
             }
         });
     }

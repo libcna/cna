@@ -58,13 +58,17 @@ namespace Microsoft::Devices::Sensors
         state_ = supported ? SensorState::Initializing : SensorState::NotSupported;
         setIsSupportedProperty(supported);
 
-        // Task ANDROID-BRIDGE-002: see Compass::Compass()'s identical fix
-        // for the full rationale.
+        // Task ANDROID-BRIDGE-002/DEV-AUD-006: see Compass::Compass()'s
+        // identical fix for the full rationale (captures the new interval
+        // before locking mutex_, closing a race between this handler and
+        // SetBackendForTesting() on the shared backend_ pointer).
         TimeBetweenUpdatesChanged += [this](System::Object*, const System::EventArgs&)
         {
+            const System::TimeSpan newInterval = getTimeBetweenUpdatesProperty();
+            std::lock_guard<std::mutex> lock(mutex_);
             if (backend_)
             {
-                backend_->SetSampleInterval(getTimeBetweenUpdatesProperty());
+                backend_->SetSampleInterval(newInterval);
             }
         };
     }
@@ -99,6 +103,14 @@ namespace Microsoft::Devices::Sensors
                 {
                     setIsDataValidProperty(true);
                     setCurrentValueProperty(reading);
+                },
+                [this]()
+                {
+                    if (!Calibrate.Empty())
+                    {
+                        CalibrationEventArgs args;
+                        Calibrate.Raise(static_cast<System::Object*>(this), args);
+                    }
                 });
 
             if (started)

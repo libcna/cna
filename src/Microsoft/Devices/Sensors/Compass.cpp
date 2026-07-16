@@ -65,11 +65,24 @@ namespace Microsoft::Devices::Sensors
         // still reaches a backend swapped in later via
         // SetBackendForTesting(). A safe no-op if not currently started —
         // ICompassBackend::SetSampleInterval()'s own contract.
+        //
+        // Task DEV-AUD-006 (2026-07-16, external audit `audit_devices.md`):
+        // previously read backend_ here without holding mutex_, while
+        // SetBackendForTesting() replaces the same unique_ptr under
+        // mutex_ -- a concurrent setTimeBetweenUpdatesProperty() call and
+        // the NOXNA test seam could race on the pointer. The new interval
+        // is captured first (getTimeBetweenUpdatesProperty() takes its own,
+        // separate SensorBase<T>::mutex_, already released by the time this
+        // lambda runs -- see that method's own doc comment), then mutex_ is
+        // locked before touching backend_, matching Start()/Stop()/
+        // SetBackendForTesting()'s existing discipline exactly.
         TimeBetweenUpdatesChanged += [this](System::Object*, const System::EventArgs&)
         {
+            const System::TimeSpan newInterval = getTimeBetweenUpdatesProperty();
+            std::lock_guard<std::mutex> lock(mutex_);
             if (backend_)
             {
-                backend_->SetSampleInterval(getTimeBetweenUpdatesProperty());
+                backend_->SetSampleInterval(newInterval);
             }
         };
     }

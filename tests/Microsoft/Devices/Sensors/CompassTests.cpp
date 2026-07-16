@@ -671,3 +671,44 @@ TEST(CompassTests, ConcurrentStartStopFromMultipleThreadsDoesNotCrash)
         thread.join();
     }
 }
+
+// Task DEV-AUD-006 (2026-07-16, external audit `audit_devices.md`):
+// TimeBetweenUpdatesChanged's handler previously read backend_ without
+// mutex_, while SetBackendForTesting() replaces the same unique_ptr under
+// mutex_ -- a real data race even with nothing ever Start()ed (so
+// SetBackendForTesting() never throws here). This stress test exists
+// specifically to let devices-tsan confirm the fix empirically, mirroring
+// ConcurrentStartStopFromMultipleThreadsDoesNotCrash's own precedent.
+TEST(CompassTests, ConcurrentSetTimeBetweenUpdatesAndSetBackendForTestingDoesNotCrash)
+{
+    Compass c;
+
+    constexpr int ThreadCount = 8;
+    constexpr int IterationsPerThread = 20;
+
+    std::vector<std::thread> threads;
+    threads.reserve(ThreadCount);
+
+    for (int t = 0; t < ThreadCount; ++t)
+    {
+        threads.emplace_back([&c, t]()
+        {
+            for (int i = 0; i < IterationsPerThread; ++i)
+            {
+                if (t % 2 == 0)
+                {
+                    c.setTimeBetweenUpdatesProperty(TimeSpan::FromMilliseconds(1.0 + static_cast<double>(i)));
+                }
+                else
+                {
+                    c.SetBackendForTesting(std::make_unique<FakeCompassBackend>());
+                }
+            }
+        });
+    }
+
+    for (std::thread& thread : threads)
+    {
+        thread.join();
+    }
+}
