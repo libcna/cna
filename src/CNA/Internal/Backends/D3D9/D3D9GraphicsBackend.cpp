@@ -3,6 +3,11 @@
 // own constructor unconditionally pushes BlendState/DepthStencilState/RasterizerState defaults, so
 // none of those methods could stay throwing stubs once a real device exists (see ApplyBlendState's
 // own comment in the header for the full explanation).
+// CNA/Logger.hpp (via LogLevel.hpp/LogCategory.hpp) must be included before
+// D3D9GraphicsBackend.hpp -- the latter drags in d3d9.h -> windows.h, which #defines a plain
+// macro ERROR (wingdi.h) that collides with LogLevel::ERROR/LogCategory::ERROR's own enumerator
+// names if windows.h is parsed first.
+#include "CNA/Logger.hpp"
 #include "CNA/Internal/Backends/D3D9/D3D9GraphicsBackend.hpp"
 #include "CNA/Internal/Backends/Common/NotYetImplemented.hpp"
 #include "CNA/Internal/Backends/D3D9/D3D9Buffers.hpp"
@@ -240,9 +245,10 @@ namespace CNA::Internal::Backends::D3D9
         const bool sizeChanged = (w != width_ || h != height_);
         if (!sizeChanged && !presentationDirty_) return;
 
+        const int previousWidth = width_;
+        const int previousHeight = height_;
         width_ = w;
         height_ = h;
-        presentationDirty_ = false;
 
         // D9-53 fix (found while wiring up render targets): Reset() genuinely fails/misbehaves if
         // any D3DPOOL_DEFAULT resource (a dynamic vertex/index buffer, a render target) is still
@@ -264,7 +270,26 @@ namespace CNA::Internal::Backends::D3D9
         D3DPRESENT_PARAMETERS pp = BuildPresentParameters();
         HRESULT hr = device_->Reset(&pp);
         if (FAILED(hr))
-            throw std::runtime_error("D3D9 Reset (resize) failed, hr=" + FormatHr(hr));
+        {
+            // Mirrors PerformResetRecovery()'s own D9-34 resilience: a transient/spurious size
+            // observation (e.g. a window manager briefly reporting the full monitor resolution
+            // while mapping/animating a brand-new window -- observed for real under Wine here,
+            // see this file's own git history) can make Reset() genuinely fail. D3D11's DXGI
+            // swapchain absorbs the exact same noise silently (VK_SUBOPTIMAL_KHR -> recreate);
+            // D3D9 has no such automatic recovery, so this must do it explicitly. Stay on the
+            // previous (last successfully-applied) size and retry on the next natural
+            // EnsureDeviceSize() call (every Present()) instead of crashing the whole game --
+            // matches XNA's own resilience, same bar as the device-lost path above.
+            width_ = previousWidth;
+            height_ = previousHeight;
+            presentationDirty_ = true;
+            CNA::Logger::Warn(
+                "D3D9 Reset (resize to " + std::to_string(w) + "x" + std::to_string(h) +
+                    ") failed, hr=" + FormatHr(hr) + " -- keeping previous size, retrying next frame",
+                CNA::LogCategory::RENDER);
+            return;
+        }
+        presentationDirty_ = false;
 
         // Reset() invalidates the device's own render-state defaults (e.g. the viewport) --
         // restore what GraphicsDevice itself does not proactively re-push after a resize.
@@ -924,9 +949,18 @@ namespace CNA::Internal::Backends::D3D9
         return backend;
     }
 
-    void D3D9GraphicsBackend::SetSwapInterval(int)
+    void D3D9GraphicsBackend::SetSwapInterval(int interval)
     {
-        NotYetImplemented("D3D9", "SetSwapInterval (see plan_dx9.md D9-30)");
+        // Unlike D3D11/D3D12 (DXGI's Present() takes a sync-interval argument directly, applied
+        // ad hoc per frame), D3D9 has no such per-Present() knob -- PresentationInterval only
+        // exists as a D3DPRESENT_PARAMETERS field, settable solely through CreateDevice/Reset().
+        // So this must go through the same presentationDirty_/EnsureDeviceSize() reset path as
+        // UpdatePresentationFormatEXT() above, including its D9-64 "apply immediately, don't defer
+        // to the next Present()" reasoning: a game may Clear()/draw before ever presenting.
+        if (interval == swapInterval_) return;
+        swapInterval_ = interval;
+        presentationDirty_ = true;
+        EnsureDeviceSize();
     }
 
     void D3D9GraphicsBackend::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
