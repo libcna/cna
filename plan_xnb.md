@@ -1,18 +1,22 @@
 # XNB binary content pipeline: task plan
 
-> **Status: 🔄 PARTIALLY UN-FROZEN 2026-07-16 — MVP scope (Phase 0/A/B/B2/B3/C) active; Phase D
-> onward stays frozen.** CNA's owner decided `.xnb` becomes a real, additional runtime format again,
-> ranked **above** `.cnb` in `ContentManager`'s resolution order (see [`cnb.md`](cnb.md)'s "Core
-> rule": `.xnb` → literal caller-given path → `.cnb` → native-by-extension). Only the tasks through
-> the end of Phase C (container parsing, binary primitives, uncompressed-only, a first real
-> `Texture2D` reader — this plan's own M1/M2 milestones) are actually being executed now. Phase D
-> (LZX) and everything after it (`SpriteFont`, stock effects, audio, `Model`, top-quality hardening)
-> remain frozen/deferred exactly as before, pending a future decision to resume them — do not start
-> those tasks. **Phase H (Lua-scripted custom readers) is cancelled outright, not deferred** — see
-> that phase's own section below; custom `.xnb` readers stay a plain C++ registration API (Phase G),
-> matching `.cnb`'s existing `RegisterCnbLoader<T>`. Phase B3 has also grown new scope: a
-> `ContentManager` startup content-manifest scan (internal perf cache + a public introspection API +
-> the `.xnb` reader-name inventory), see that phase below.
+> **Status: 🔄 PARTIALLY UN-FROZEN 2026-07-16 — MVP scope (Phase 0/A/B/B2/B3/C) complete; Phase D
+> (LZX decompression) also un-frozen and mostly done; Phase D3 onward stays frozen.** CNA's owner
+> decided `.xnb` becomes a real, additional runtime format again, ranked **above** `.cnb` in
+> `ContentManager`'s resolution order (see [`cnb.md`](cnb.md)'s "Core rule": `.xnb` → literal
+> caller-given path → `.cnb` → native-by-extension). The MVP scope through the end of Phase C
+> (container parsing, binary primitives, uncompressed-only, a first real `Texture2D` reader — this
+> plan's own M1/M2 milestones) is fully done. CNA's owner explicitly requested Phase D (LZX
+> decompression) next; it is now implemented and real-fixture-verified (XNB-28/29/30/30B ✅), with
+> XNB-27 (a dedicated `XnbCompression` enum) deliberately left open pending XNB-30C's research and
+> XNB-30A (fuzzing/differential testing) still open — see Phase D's own section for exact scope.
+> Everything sequenced after Phase D (`SpriteFont`, stock effects, audio, `Model`, top-quality
+> hardening, Phase D3 onward) remains frozen/deferred, pending a future decision to resume it — do
+> not start those tasks without checking in first. **Phase H (Lua-scripted custom readers) is
+> cancelled outright, not deferred** — see that phase's own section below; custom `.xnb` readers
+> stay a plain C++ registration API (Phase G), matching `.cnb`'s existing `RegisterCnbLoader<T>`.
+> Phase B3 has also grown new scope: a `ContentManager` startup content-manifest scan (internal perf
+> cache + a public introspection API + the `.xnb` reader-name inventory), see that phase below.
 
 > Companion task list to [`xnb.md`](xnb.md) (the narrative research/design document — read that
 > first for *why* each phase is shaped this way). This file turns that plan into concrete,
@@ -77,16 +81,25 @@
 > (perf cache, public introspection API, `.xnb` reader-name inventory) into Phase B3
 > (`XNB-65`–`XNB-67`); and fixed the `ContentManager` resolution order to rank `.xnb` above both the
 > literal caller-given path and `.cnb` (`XNB-17B`).
+>
+> **Revised a sixth time (2026-07-16)** after CNA's owner explicitly requested Phase D next: LZX
+> decompression (XNB-28/29), the block-framing loop wired into `ContentManager::LoadXnbAsset<T>()`,
+> and re-verification of the M2-era fixtures in compressed form (XNB-30B) are done, plus a real
+> hardening fix for an LZX `match_offset` bounds gap found during the port (part of XNB-30). XNB-27
+> (a dedicated `XnbCompression` enum) was deliberately left open — see that row's note — and XNB-30A
+> (fuzzing/differential testing) remains open. Phase D3 onward is still frozen pending a future
+> decision.
 
 ## Execution-order mandate for autonomous work
 
 > Read this before starting any task in this file.
 
-- Implement strictly in phase order, and only through the current MVP scope (Phase 0/A/B/B2/B3/C —
-  see the status banner above). Do not begin Phase D or anything sequenced after it until a future
-  decision explicitly resumes them. Do not begin Phase I while any mandatory task in Phase A-C
-  remains incomplete (Phase B3's XNB-61a/XNB-65/66/67 tasks are the one deliberate exception — see
-  their own rows; XNB-61b still cannot start before Phase D exists and is deferred along with it).
+- Implement strictly in phase order, and only through the current active scope (Phase
+  0/A/B/B2/B3/C, plus Phase D which CNA's owner explicitly un-froze and requested — see the status
+  banner above). Do not begin Phase D3 or anything sequenced after it until a future decision
+  explicitly resumes them. Do not begin Phase I while any mandatory task in Phase A-C remains
+  incomplete (Phase B3's XNB-61a/XNB-65/66/67 tasks are the one deliberate exception — see their own
+  rows; XNB-61b can now start since Phase D's decompressor exists, but has not been picked up yet).
 - Phase H (Lua-scripted custom readers) is cancelled outright — do not implement it in any form,
   and do not treat it as merely "later". Custom `.xnb` readers stay native C++ only, registered
   through Phase G's plain registration API (deferred along with the rest of Phase D onward under
@@ -111,10 +124,14 @@
 
 > **Current active scope (2026-07-16):** M1 and M2 have both been **reached**, and — as of the
 > same day, once `XNB-18B`/`XNB-18C`/`XNB-20`/`XNB-21`/`XNB-22` were picked back up and closed —
-> **the entire current MVP scope (Phase 0/A/B/B2/B3/C) is now fully complete**, every task
-> `⬜ → ✅`, not just its two named milestones. `XNB-25` (`Texture3DReader`/`TextureCubeReader`)
-> remains correctly deferred in Phase D3 (sequenced after Phase D, never part of Phase C itself).
-> M3–M5 and Phase D onward remain frozen until a future decision explicitly resumes them.
+> **the entire MVP scope (Phase 0/A/B/B2/B3/C) is fully complete**, every task `⬜ → ✅`, not just
+> its two named milestones. CNA's owner then explicitly requested Phase D next: LZX decompression
+> (XNB-28/29) and re-verification of real fixtures in compressed form (XNB-30B) are done, plus a
+> genuine hardening fix found during the port (part of XNB-30). XNB-27 (a dedicated
+> `XnbCompression` enum) and XNB-30A (fuzzing/differential testing) remain open by design — see
+> their rows in Phase D. `XNB-25` (`Texture3DReader`/`TextureCubeReader`) remains correctly deferred
+> in Phase D3 (never part of Phase C itself), and M3–M5/Phase D3 onward remain frozen until a
+> future decision explicitly resumes them.
 
 ## Scope
 
@@ -264,12 +281,12 @@ entirely the second one.
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| XNB-17B | `ContentManager` `.xnb` extension resolution/dispatch, coexisting with existing loose-file loaders (no behavior change to existing `.model.json`/`.shader.json`/`FromStream` paths) | ✅ | **Implemented 2026-07-16**: `ContentManager::Load<T>()`/`LoadXnbAsset<T>()` (`include/Microsoft/Xna/Framework/Content/ContentManager.hpp`) — `<name>.xnb` checked first (ahead of the literal path/`.cnb`/native extensions), needing no per-T reader registered on `ContentManager` at all (dispatch is driven by the file's own type-reader table via the global `ContentTypeReaderManager` registry). LZX-compressed files rejected with a clear error (Phase D not yet implemented). Real design bug found and fixed along the way: see the `std::optional<T>` note on `ContentTypeReader<T>::Read()` below |
+| XNB-17B | `ContentManager` `.xnb` extension resolution/dispatch, coexisting with existing loose-file loaders (no behavior change to existing `.model.json`/`.shader.json`/`FromStream` paths) | ✅ | **Implemented 2026-07-16**: `ContentManager::Load<T>()`/`LoadXnbAsset<T>()` (`include/Microsoft/Xna/Framework/Content/ContentManager.hpp`) — `<name>.xnb` checked first (ahead of the literal path/`.cnb`/native extensions), needing no per-T reader registered on `ContentManager` at all (dispatch is driven by the file's own type-reader table via the global `ContentTypeReaderManager` registry). LZX-compressed files now decompress and load through the same path since Phase D landed (2026-07-16). Real design bug found and fixed along the way: see the `std::optional<T>` note on `ContentTypeReader<T>::Read()` below |
 | XNB-17C | Asset-path normalization + basic cache-identity handling for `.xnb` assets (same identity rules the loose-file loaders already use) | ✅ | **Free by construction**: `.xnb` results are cached through the exact same `AssetCacheKey`/`loadedAssets_` mechanism loose-file assets already use, no new code needed |
 | XNB-17D | `ContentLoadException`-equivalent propagation from the Phase B container/registry errors up through `ContentManager.Load<T>()` | ✅ | **Free by construction**: `ParseXnbHeader`/`ContentTypeReaderManager`/`ContentReader` already throw `ContentLoadException`; `Load<T>()` never intercepts it |
 | XNB-17E | `Unload()` behavior for `.xnb`-sourced assets | ✅ | **Free by construction**: `Unload()` already clears `loadedAssets_`, which `.xnb` results are stored in identically to loose-file assets. Tested explicitly (`ContentManagerXnbTest.UnloadClearsXnbCachedAssets`) |
 | XNB-17F | End-to-end milestone: `auto value = content.Load<TestValue>("fixture");` using only the Phase B test-only reader | ✅ | **Reached 2026-07-16**: `ContentManagerXnbTest.LoadFindsAndDeserializesARealXnbFile` — first real proof the pipeline fits CNA's existing `ContentManager` API, not just a standalone parser. Also tested: `.xnb` wins over a same-named `.cnb` (`XnbWinsOverCnbAndNativeExtensionForTheSameName`), confirming the 2026-07-16 resolution-order decision end-to-end |
-| XNB-17G | Confirm `ContentReader`, per-file reader instances (XNB-14A), shared-resource fixups (XNB-15), and decompression state (Phase D) contain no global mutable state, so different `.xnb` files can be loaded concurrently without cross-talk | ✅ | **Confirmed by inspection 2026-07-16**: `ContentTypeReaderManager`'s static `typeCreators_` is write-once-then-read-only in practice (registered at startup, never mutated during loads); all per-file state (`typeReaders_`, `sharedResources_`, `sharedResourceFixups_`) lives on the `ContentReader` instance `LoadXnbAsset<T>()` constructs fresh per call. Decompression state doesn't exist yet (Phase D deferred) |
+| XNB-17G | Confirm `ContentReader`, per-file reader instances (XNB-14A), shared-resource fixups (XNB-15), and decompression state (Phase D) contain no global mutable state, so different `.xnb` files can be loaded concurrently without cross-talk | ✅ | **Confirmed by inspection 2026-07-16**: `ContentTypeReaderManager`'s static `typeCreators_` is write-once-then-read-only in practice (registered at startup, never mutated during loads); all per-file state (`typeReaders_`, `sharedResources_`, `sharedResourceFixups_`) lives on the `ContentReader` instance `LoadXnbAsset<T>()` constructs fresh per call. Decompression state (`CNA::Internal::Xnb::LzxDecoder`'s `LzxState`) similarly lives entirely on the local `LzxDecoder` instance `DecompressXnbPayload()` constructs fresh per call — no static/global state either |
 
 > **Design note found while closing XNB-17B (2026-07-16):** `ContentTypeReader<T>::Read()`'s
 > `existingInstance` parameter is `std::optional<T>`, not a bare `T` as FNA's literal signature
@@ -321,7 +338,7 @@ entirely the second one.
 | XNB-66 | Public `NOXNA` introspection API exposing the manifest (e.g. `std::vector<ContentManifestEntry> GetContentManifest() const`, `ContentManifestEntry{relativePath, extension, hasXnb, hasCnb}`) | ✅ | **Implemented 2026-07-16**: `ContentManager::GetContentManifest()` + `ContentManifestEntry` (`include/Microsoft/Xna/Framework/Content/ContentManifestEntry.hpp`) — one entry per logical asset name, `nativeExtensions` as a list (not a single `extension` field, since a name can have several native-extension siblings at once) |
 | XNB-61a | Reader-name-only scan, **uncompressed `.xnb` files only**, folded into the XNB-65 manifest pass: for every `.xnb` file the manifest scan finds, read the header and type-reader table (no object-graph deserialization) and list every type-reader name referenced | ✅ | **Implemented 2026-07-16**: `ContentManager::ScanXnbReaderNames()`, reusing `ParseXnbHeader`/`ParseXnbTypeReaderTable` from Phase B directly. A malformed `.xnb` doesn't abort the scan — just leaves that entry's `xnbReaderNames` empty (tested) |
 | XNB-67 | Aggregate the XNB-61a reader-name inventory into the same public manifest API (XNB-66): which reader names are referenced, how many `.xnb` files reference each, and whether CNA currently has a registered reader for that name | ✅ | **Implemented 2026-07-16**: `ContentManager::GetXnbReaderUsageSummary()` + `ContentManifestReaderUsage`, using a new query-only `ContentTypeReaderManager::IsRegistered()` (no construction side effect, unlike `CreateReader()`) |
-| XNB-61b | Extend the XNB-61a scan to **LZX-compressed** XNA `.xnb` files, using CNA's own decompressor (Phase D) — decompress the payload sequentially from the start until the type-reader table has been fully read (for a first implementation, decompressing the entire payload is acceptable; do not prematurely optimize this into a partial-decompression short-circuit); do not continue into the root object. Verify that a compressed fixture and its uncompressed equivalent produce the same reader-name inventory | ⬜ | Sequenced after Phase D (needs a real LZX decoder to exist) — deferred along with the rest of Phase D under the current MVP scope; do not attempt it earlier. `ScanXnbReaderNames()` already checks `header.compressed` and returns an empty inventory for now, ready to extend once Phase D lands |
+| XNB-61b | Extend the XNB-61a scan to **LZX-compressed** XNA `.xnb` files, using CNA's own decompressor (Phase D) — decompress the payload sequentially from the start until the type-reader table has been fully read (for a first implementation, decompressing the entire payload is acceptable; do not prematurely optimize this into a partial-decompression short-circuit); do not continue into the root object. Verify that a compressed fixture and its uncompressed equivalent produce the same reader-name inventory | ⬜ | **Unblocked 2026-07-16** — Phase D's decompressor (`DecompressXnbPayload`) now exists, so this task is no longer waiting on a dependency, but it has not been picked up yet. `ScanXnbReaderNames()` (`src/Microsoft/Xna/Framework/Content/ContentManager.cpp`) still just checks `header.compressed` and returns an empty inventory early for compressed files — that early-return is the exact spot to replace with a real decompress-then-scan call |
 
 ---
 
@@ -349,12 +366,12 @@ entirely the second one.
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| XNB-27 | Header-level compression enum, not a boolean: `enum class XnbCompression{None, Lzx, Lz4, Unknown}` parsed from the flags byte — do **not** hardcode `compressed == true → LZX` anywhere in the architecture | ⬜ | Needed because Phase G (XNB-44) targets MonoGame variants too, which use different compression |
-| XNB-28 | Phase D1 — Port FNA's `LzxDecoder.cs` (~750 lines, self-contained, no external deps) to C++ for the real XNA `Lzx` case | ⬜ | Large standalone subtask — do not fold into Phase B |
-| XNB-29 | Block-framing loop (2-byte block size, occasional 5-byte extended form) wired into the Phase B header's compressed-payload path | ⬜ | |
-| XNB-30 | Malformed/truncated/adversarial-input hardening for the decompressor: bounds checks, integer-overflow guards on decompressed-size fields, decompression-bomb output-size limits, no OOB reads on corrupt input | ⬜ | Explicitly flagged in `xnb.md` as often bigger than the happy path — first real "quality" hardening item |
-| XNB-30A | Fuzz tests + differential tests against a reference LZX implementation for the decompressor | ⬜ | |
-| XNB-30B | Re-run every Phase B/C fixture through its compressed form and confirm identical results | ⬜ | Goal line from `xnb.md` Phase D |
+| XNB-27 | Header-level compression enum, not a boolean: `enum class XnbCompression{None, Lzx, Lz4, Unknown}` parsed from the flags byte — do **not** hardcode `compressed == true → LZX` anywhere in the architecture | ⬜ | **Still open, deliberately not done 2026-07-16**: introducing this enum now would be premature — CNA doesn't yet know what bit-level signal MonoGame's own alternate compression variants actually use (that research is XNB-30C's job, itself deferred to Phase G), so the enum's non-LZX values would just be guesses. Real XNA content's `flags & 0x80` bit means exactly one thing (LZX) today; keeping `XnbHeader::compressed` a plain `bool` until XNB-30C's research exists is the less-speculative choice, consistent with not designing for a requirement that isn't understood yet |
+| XNB-28 | Phase D1 — Port FNA's `LzxDecoder.cs` (~750 lines, self-contained, no external deps) to C++ for the real XNA `Lzx` case | ✅ | **Implemented 2026-07-16**: `CNA::Internal::Xnb::LzxDecoder` (`include`/`src`/`CNA/Internal/Xnb/LzxDecoder.*`), a line-by-line port preserving FNA's own control flow (including its `goto case` fallthrough, translated to native C++ switch-fallthrough) and error-as-return-code style, so it can be diffed against the original directly |
+| XNB-29 | Block-framing loop (2-byte block size, occasional 5-byte extended form) wired into the Phase B header's compressed-payload path | ✅ | **Implemented 2026-07-16**: `CNA::Internal::Xnb::DecompressXnbPayload()` (`include`/`src`/`CNA/Internal/Xnb/XnbDecompression.*`), matching FNA's own block-framing loop in `ContentManager.GetContentReaderFromXnb` byte-for-byte; wired into `ContentManager::LoadXnbAsset<T>()` so compressed files load exactly like uncompressed ones |
+| XNB-30 | Malformed/truncated/adversarial-input hardening for the decompressor: bounds checks, integer-overflow guards on decompressed-size fields, decompression-bomb output-size limits, no OOB reads on corrupt input | ✅ | **Narrowed scope, implemented 2026-07-16**: `XnbReadLimits` consulted on both compressed and decompressed sizes before any allocation (decompression-bomb guard); an out-of-range LZX `match_offset` is now explicitly rejected rather than causing undefined behavior (FNA's own C# port gets this safety for free from the CLR's bounds-checked arrays — a direct `std::vector::operator[]` port does not). A full audit of every array access in the port (e.g. `MakeDecodeTable`'s long-code table-growth path, which has a similar theoretical risk) remains open — genuinely XNB-30A's scope, not attempted here |
+| XNB-30A | Fuzz tests + differential tests against a reference LZX implementation for the decompressor | ⬜ | **Still open**: no fuzzing infrastructure or reference LZX implementation was set up this session. This is the natural place for the fuller array-access audit XNB-30 didn't finish (see that row) |
+| XNB-30B | Re-run every Phase B/C fixture through its compressed form and confirm identical results | ✅ | **Implemented 2026-07-16, with a scope note**: verified against 2 *real, externally-produced* LZX-compressed fixtures (MonoGame's own `Explosion.xnb`/`FontCalibri14.xnb`, `tests/assets/xnb/monogame/windows/lzx/`) rather than re-compressing the existing synthetic Phase B/C test fixtures — CNA has no LZX *encoder* (by design; writing `.xnb` is permanently out of scope) to compress them with, and real external fixtures are stronger evidence of true format compatibility than self-compressed ones would be anyway. `Explosion.xnb` verifies a single-block decode end-to-end through `content.Load<Texture2D>()` with real non-uniform pixel data; `FontCalibri14.xnb` verifies multi-block state persistence and recovers the exact reader set (including nested generic names) a real `SpriteFont` needs |
 | XNB-30C | Phase D2 — investigate/implement MonoGame-supported alternative compression variants under the `XnbCompression` enum from XNB-27 | ⏸ | Deferred until broad MonoGame compatibility work (Phase G/XNB-44); explicitly optional for the first working loader and not required by any milestone M1-M5 — the enum from XNB-27 just needs to not preclude it later |
 
 ---

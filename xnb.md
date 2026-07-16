@@ -1,15 +1,19 @@
 # XNB binary content pipeline: implementation plan for CNA
 
-> **Status: 🔄 PARTIALLY UN-FROZEN 2026-07-16 — MVP scope active, broad coverage still deferred.**
-> CNA's owner decided `.xnb` should become a real, additional runtime format again, alongside the
-> already-implemented [`cnb.md`](cnb.md)/[`plan_cnb.md`](plan_cnb.md) `.cnb` strategy — not a
-> replacement for it. `ContentManager`'s resolution order now ranks `.xnb` **above** both the
-> literal caller-given path and `.cnb` (see `cnb.md`'s "Core rule"). The scope actually being
-> executed is intentionally narrow: [`plan_xnb.md`](plan_xnb.md)'s Phase 0/A/B/B2/B3/C only
+> **Status: 🔄 PARTIALLY UN-FROZEN 2026-07-16 — MVP scope complete, Phase D (LZX) mostly done too,
+> broad coverage past that still deferred.** CNA's owner decided `.xnb` should become a real,
+> additional runtime format again, alongside the already-implemented
+> [`cnb.md`](cnb.md)/[`plan_cnb.md`](plan_cnb.md) `.cnb` strategy — not a replacement for it.
+> `ContentManager`'s resolution order now ranks `.xnb` **above** both the literal caller-given path
+> and `.cnb` (see `cnb.md`'s "Core rule"). [`plan_xnb.md`](plan_xnb.md)'s Phase 0/A/B/B2/B3/C
 > (container parsing, binary primitives, the uncompressed-only case, and a first real `Texture2D`
-> reader — this plan's own M1/M2 milestones). Phase D (LZX) onward — `SpriteFont`, stock effects,
-> audio, `Model`, and the top-quality hardening pass — remain frozen/deferred pending a future
-> decision to resume them; nothing there is started. **Phase H (Lua-scripted custom
+> reader — this plan's own M1/M2 milestones) is fully complete. CNA's owner then explicitly
+> requested Phase D (LZX decompression) next: it is now implemented and verified against real
+> compressed fixtures, with a dedicated `XnbCompression` enum (XNB-27) and fuzz/differential
+> testing (XNB-30A) deliberately left open — see `plan_xnb.md`'s Phase D section for exact scope.
+> Phase D3 onward — `SpriteFont`, stock effects, audio, `Model`, and the top-quality hardening pass
+> — remain frozen/deferred pending a future decision to resume them; nothing there is started.
+> **Phase H (Lua-scripted custom
 > `ContentTypeReader` support) is rejected outright, not merely deferred** — see `plan_xnb.md`'s own
 > note; custom readers stay a plain C++ registration API (this document's own Phase G), the same
 > shape `.cnb`'s `RegisterCnbLoader<T>` already uses. A new content-manifest feature (`ContentManager`
@@ -404,11 +408,13 @@ like FNA's own loose-extension fallbacks, coexisting with `Texture2D::FromStream
 
 > Superseded in part 2026-07-16: the MVP slice (Phase 0/A/B/B2/B3/C — container, primitives,
 > uncompressed `Texture2D`, the content manifest) is now active, per the status banner at the top
-> of this file. The reasoning below still applies to everything past that point (Phase D onward).
+> of this file. Superseded a second time the same day: Phase D (LZX decompression) was also
+> explicitly requested and is now done. The reasoning below still applies to everything past that
+> point (Phase D3 onward).
 
-- **Phase D (LZX) and a general reader registry covering all ~40 FNA reader types are both real,
-  standalone engineering efforts**, not quick additions to an existing file — see their own
-  sections above.
+- **A general reader registry covering all ~40 FNA reader types is a real, standalone engineering
+  effort**, not a quick addition to an existing file — see its own section above. (Phase D itself
+  is no longer an example of this — it's done; see `plan_xnb.md`'s Phase D section.)
 - **The practical benefit beyond the MVP slice is real but narrow**: broad `.xnb` coverage lets CNA
   load asset files originally compiled for a real XNA/FNA game — valuable for reusing an existing
   game's *compiled* content without re-exporting it, but `docs/migration-guide.md` already tells a
