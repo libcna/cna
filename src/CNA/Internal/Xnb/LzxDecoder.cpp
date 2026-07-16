@@ -189,6 +189,16 @@ namespace CNA::Internal::Xnb
                         leaf = pos >> 16;
                         for (fill = 0; fill < static_cast<uint32_t>(bit_num) - nbits; fill++)
                         {
+                            // plan_xnb.md XNB-30A hardening: FNA's own C# port relies on the CLR's
+                            // automatic bounds-checked array access here (an adversarial/corrupt
+                            // Huffman code-length table can grow next_symbol/leaf past this
+                            // table's allocated room); a direct std::vector::operator[] port has
+                            // no equivalent safety net. Reject it explicitly instead of writing
+                            // out of bounds (found by the XNB-30A fuzz test).
+                            if (leaf >= table.size() || (static_cast<std::size_t>(next_symbol) << 1) + 1 >= table.size())
+                            {
+                                return 1;
+                            }
                             if (table[leaf] == 0)
                             {
                                 table[next_symbol << 1] = 0;
@@ -198,6 +208,7 @@ namespace CNA::Internal::Xnb
                             leaf = static_cast<uint32_t>(table[leaf]) << 1;
                             if (((pos >> (15 - fill)) & 1) == 1) leaf++;
                         }
+                        if (leaf >= table.size()) return 1;
                         table[leaf] = sym;
 
                         if ((pos += bit_mask) > table_mask) return 1;
