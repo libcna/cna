@@ -1,0 +1,70 @@
+{
+  "producer": "MonoGame content pipeline (mgcb)",
+  "sourceRepo": "https://github.com/MonoGame/MonoGame",
+  "sourcePath": "Tests/Assets/Models/BlenderDefaultCube.xnb",
+  "sourceLicense": "Ms-PL (same license as CNA itself)",
+  "platform": "w",
+  "version": 5,
+  "compressed": false,
+  "totalLength": 1802,
+  "rootReader": "Microsoft.Xna.Framework.Content.ModelReader",
+  "expectedType": "Model",
+  "sharedResourceCount": 3,
+  "typeReaderTable": [
+    "Microsoft.Xna.Framework.Content.ModelReader",
+    "Microsoft.Xna.Framework.Content.StringReader",
+    "Microsoft.Xna.Framework.Content.VertexBufferReader",
+    "Microsoft.Xna.Framework.Content.VertexDeclarationReader",
+    "Microsoft.Xna.Framework.Content.IndexBufferReader",
+    "Microsoft.Xna.Framework.Content.BasicEffectReader"
+  ],
+  "notes": "Originally vendored for plan_xnb.md XNB-32's BasicEffectReader tests (byte-offset slice only, ModelReader didn't exist yet). Now also the real end-to-end fixture for XNB-41 (Phase F, ModelReader) -- content.Load<Model>() loads this file completely: 2 bones (RootNode -> Cube), 1 mesh ('Cube', parent bone 'Cube', BoundingSphere radius sqrt(3) matching a unit cube's half-diagonal), 1 mesh part (24 vertices/12 primitives, Position+Normal vertex layout, 16-bit index buffer), and the BasicEffect material documented below. Fully parsed field-by-field with an independent Python script before writing the C++ reader (not assumed from FNA's source alone).",
+  "basicEffectSharedResourceByteRange": {
+    "typeReaderIndexOffset": 1755,
+    "fieldsOffset": 1756,
+    "fieldsLength": 46,
+    "expectedFields": {
+      "textureReference": "",
+      "diffuseColor": [0.64000004529953, 0.64000004529953, 0.64000004529953],
+      "emissiveColor": [0.0, 0.0, 0.0],
+      "specularColor": [0.25, 0.25, 0.25],
+      "specularPower": 9.607843399047852,
+      "alpha": 1.0,
+      "vertexColorEnabled": false
+    }
+  },
+  "modelStructure": {
+    "boneCount": 2,
+    "bones": [
+      {"index": 0, "name": "RootNode", "parent": -1, "children": [1]},
+      {"index": 1, "name": "Cube", "parent": 0, "children": []}
+    ],
+    "rootBoneIndex": 0,
+    "meshCount": 1,
+    "meshes": [
+      {
+        "name": "Cube",
+        "parentBoneIndex": 1,
+        "boundingSphereCenter": [-1.4901161193847656e-07, -1.1920928955078125e-07, 0.0],
+        "boundingSphereRadius": 1.732050895690918,
+        "partCount": 1,
+        "parts": [
+          {
+            "vertexOffset": 0,
+            "numVertices": 24,
+            "startIndex": 0,
+            "primitiveCount": 12,
+            "vertexDeclaration": {
+              "stride": 24,
+              "elements": [
+                {"offset": 0, "format": "Vector3", "usage": "Position", "usageIndex": 0},
+                {"offset": 12, "format": "Vector3", "usage": "Normal", "usageIndex": 0}
+              ]
+            },
+            "indexBuffer": {"sixteenBits": true, "dataSizeBytes": 72, "indexCount": 36}
+          }
+        ]
+      }
+    ]
+  }
+}

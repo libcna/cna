@@ -56,6 +56,8 @@ namespace Microsoft::Xna::Framework::Graphics
 
         texture_  = src.texture_;
         texture2_ = src.texture2_;
+        ownedTexture_  = src.ownedTexture_;
+        ownedTexture2_ = src.ownedTexture2_;
     }
 
     Effect* DualTextureEffect::Clone()
@@ -151,9 +153,19 @@ namespace Microsoft::Xna::Framework::Graphics
 
     Texture2D* DualTextureEffect::getTextureProperty() const       { return texture_; }
     void       DualTextureEffect::setTextureProperty(Texture2D* v) { texture_ = v; }
+    void DualTextureEffect::SetOwnedTexture(std::shared_ptr<Texture2D> texture)
+    {
+        ownedTexture_ = std::move(texture);
+        texture_ = ownedTexture_.get();
+    }
 
     Texture2D* DualTextureEffect::getTexture2Property() const       { return texture2_; }
     void       DualTextureEffect::setTexture2Property(Texture2D* v) { texture2_ = v; }
+    void DualTextureEffect::SetOwnedTexture2(std::shared_ptr<Texture2D> texture)
+    {
+        ownedTexture2_ = std::move(texture);
+        texture2_ = ownedTexture2_.get();
+    }
 
     bool DualTextureEffect::getVertexColorEnabledProperty() const { return vertexColorEnabled_; }
     void DualTextureEffect::setVertexColorEnabledProperty(bool v)

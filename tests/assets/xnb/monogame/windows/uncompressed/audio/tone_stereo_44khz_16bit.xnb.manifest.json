@@ -1,0 +1,23 @@
+{
+  "producer": "MonoGame content pipeline (mgcb)",
+  "sourceRepo": "https://github.com/MonoGame/MonoGame",
+  "sourcePath": "Tests/Assets/Audio/tone_stereo_44khz_16bit.xnb",
+  "sourceLicense": "Ms-PL (same license as CNA itself)",
+  "platform": "d",
+  "version": 5,
+  "compressed": false,
+  "totalLength": 88305,
+  "rootReader": "Microsoft.Xna.Framework.Content.SoundEffectReader",
+  "expectedType": "SoundEffect",
+  "sharedResourceCount": 0,
+  "expectedFields": {
+    "formatLength": 18,
+    "wFormatTag": 1,
+    "wFormatTagName": "WAVE_FORMAT_PCM",
+    "nChannels": 2,
+    "nSamplesPerSec": 44100,
+    "wBitsPerSample": 16
+  },
+  "supportMatrixStatus": "supported",
+  "notes": "plan_xnb.md XNB-33 support-matrix entry: 16-bit PCM stereo, confirming AudioChannels::Stereo (nChannels=2) is handled the same as mono."
+}

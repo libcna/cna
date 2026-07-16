@@ -52,6 +52,8 @@ namespace Microsoft::Xna::Framework::Graphics
 #endif
 
     Texture3D::~Texture3D() = default;
+    Texture3D::Texture3D(Texture3D&&) noexcept = default;
+    Texture3D& Texture3D::operator=(Texture3D&&) noexcept = default;
 
     Texture3D::Texture3D(GraphicsDevice& device, int width, int height, int depth, bool mipMap, SurfaceFormat format)
         : GraphicsResource(&device)

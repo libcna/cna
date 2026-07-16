@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include <memory>
+
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DirectionalLight.hpp"
@@ -272,6 +274,24 @@ namespace Microsoft::Xna::Framework::Graphics
         void setEnvironmentMapProperty(TextureCube* value);
 
         /**
+         * @brief Gives this effect shared ownership of its diffuse texture, keeping it alive for
+         *        as long as the effect exists -- matching real XNA's GC-tracked `Effect.Texture`
+         *        reference. See `BasicEffect::SetOwnedTexture()`'s own docs for why this exists
+         *        alongside the non-owning `setTextureProperty(Texture2D*)`.
+         *
+         * @param texture The texture to take shared ownership of; also becomes the diffuse texture.
+         */
+        NOXNA void SetOwnedTexture(std::shared_ptr<Texture2D> texture);
+
+        /**
+         * @brief Gives this effect shared ownership of its environment cube map, keeping it alive
+         *        for as long as the effect exists. See `SetOwnedTexture()`'s own docs.
+         *
+         * @param cubeMap The cube map to take shared ownership of; also becomes the environment map.
+         */
+        NOXNA void SetOwnedEnvironmentMap(std::shared_ptr<TextureCube> cubeMap);
+
+        /**
          * @brief Gets the amount of environment map to blend, in the range [0, 1].
          *
          * @return The environment map blend amount.
@@ -338,6 +358,8 @@ namespace Microsoft::Xna::Framework::Graphics
         // Textures stored directly (Texture2D/TextureCube do not inherit from Texture)
         Texture2D*   texture_        = nullptr;
         TextureCube* environmentMap_ = nullptr;
+        std::shared_ptr<Texture2D>   ownedTexture_;        // see SetOwnedTexture()
+        std::shared_ptr<TextureCube> ownedEnvironmentMap_; // see SetOwnedEnvironmentMap()
 
         EffectParameter* environmentMapAmountParam_   = nullptr;
         EffectParameter* environmentMapSpecularParam_ = nullptr;

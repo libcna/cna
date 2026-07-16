@@ -21,7 +21,7 @@
 > `EffectTypeReader`, and `ModelTypeReader` all migrated from their old bespoke extensions
 > (`.font.json`/`.shader.json`/`.model.json`) to `.cnb`; and `RegisterCnbLoader<T>` lets a game
 > register several differently-named `.cnb` `"type"`s that all produce the same C++ type, for
-> data with no dedicated `ContentTypeReader<T>` at all. `SkinnedModelTypeReader`/`.skinnedmodel.json`
+> data with no dedicated `LooseFileContentTypeReader<T>` at all. `SkinnedModelTypeReader`/`.skinnedmodel.json`
 > (Avatar, `NOXNA`) was deliberately **kept separate, not migrated** — see `plan_cnb.md` `CNB-22`
 > for the full reasoning (real cross-language tooling depends on that extension name, it already
 > has the most mature test coverage of any of the four readers, and it's explicitly a distinct
@@ -36,6 +36,11 @@
 > task-by-task implementation record — this document remains the design reference; that one is the
 > log of what actually landed and why. See also "Relationship to `xnb.md`/`plan_xnb.md`" below for
 > how the two binary-vs-JSON strategies compare and that plan's own adoption status.
+>
+> **2026-07-16 update:** the title's "(alternative to XNB)" framing is now only half true — see
+> "Update 2026-07-16: `.xnb` is back, ranked above `.cnb` (MVP scope)" further down this document.
+> Everything above about `.cnb` itself is unchanged; `.xnb` support was added *alongside* it, not
+> instead of it.
 
 ## Why this alternative exists
 
@@ -67,48 +72,82 @@ actually requires" below for how large that cost really is in practice.
 ## The core rule
 
 For any asset CNA is asked to load by logical name (e.g. `"Textures/player"`), resolve it as
-follows — **`.cnb` is checked first, native extensions are the fallback**:
+follows — **`.xnb` is checked first (2026-07-16), then the literal caller-given path, then `.cnb`,
+with native extensions as the final fallback**:
 
 ```text
-1. If "<name>.cnb" exists, load it as a .cnb JSON document. The "type" field
-   inside the JSON is cross-checked against the requested C++ type T, then
-   either:
+1. If "<name>.xnb" exists, load it through CNA's own (MVP-scoped) binary .xnb
+   reader. A recognized-but-not-yet-implemented reader name, or malformed/
+   unsupported content, is a hard ContentLoadException -- it does NOT fall
+   through to steps 2-4 below. See xnb.md/plan_xnb.md for what is actually
+   implemented at any given time.
+
+2. Otherwise, if the literal asset name/path as given by the caller (with
+   whatever extension it already has, if any) exists, load it directly with
+   that extension's reader. This is the rare case where the caller already
+   passed a full filename.
+
+3. Otherwise, if "<name>.cnb" exists, load it as a .cnb JSON document. The
+   "type" field inside the JSON is cross-checked against the requested C++
+   type T, then either:
      a. the document is self-contained (all data inline or via type-specific
         fields, e.g. SpriteFont/Model/Effect today) -- built from that, or
      b. the document has a "sourceFile" field -- that referenced file is
-        loaded through step 2 below (recursively, through the same
+        loaded through step 4 below (recursively, through the same
         ContentManager), and the .cnb's own fields are applied on top as
         metadata/overrides (see "`.cnb` as metadata for a native sibling
         file" below).
 
-2. Otherwise, if a file with that name AND a recognized native extension
+4. Otherwise, if a file with that name AND a recognized native extension
    exists (e.g. "player.png", "player.jpg", "player.wav"), load it directly
-   with the reader selected by that extension. No .cnb file is involved.
+   with the reader selected by that extension. No .cnb or .xnb file is
+   involved.
 
-3. Otherwise: asset not found -- same failure behavior as today's
+5. Otherwise: asset not found -- same failure behavior as today's
    ContentManager for a missing file.
 ```
 
-This order (`.cnb` first) matters for one reason: it lets `.cnb` act as an *optional enrichment
-layer* over an otherwise-ordinary native file, not just as a mutually-exclusive alternative to one.
-`Content/Textures/ahoj.png` can exist entirely on its own (loads exactly as it does today, zero
-`.cnb` involved, zero behavior change) — or it can be joined by `Content/Textures/ahoj.cnb` that adds
-metadata the PNG format itself can't carry (color-key transparency, a sprite-sheet sub-rect, a hint
-that the "real" pixel data is actually in some other, non-self-describing file). Checking native
-extensions first would make that impossible: whichever native file exists would always win, and a
-sibling `.cnb` could never be consulted for an asset a native loader already claims. Checking `.cnb`
-first costs one extra failed file-exists check per load when no `.cnb` is present — negligible.
+Two separate reasons drive this ordering, one per tier:
 
-Restated: **`.cnb`, when present, always has final say over how an asset name resolves; failing
-that, the file extension picks the reader.** This still mirrors how `ContentManager.Load<T>()`
-resolves a logical asset name to a file today (`ResolveAssetPath` already tries a list of candidate
-paths in order) — it just means `.cnb` needs to be the *first* candidate tried for every registered
-type, not appended after that type's own native extensions.
+- **`.xnb` ranks above everything**, including a literal caller-given path, because it represents
+  an authentic, externally-produced compiled asset — if one is genuinely present, it should win
+  over CNA's own conveniences rather than be silently shadowed by them. This is a deliberate
+  reversal from before `.xnb` support existed; see the "Update 2026-07-16" section above.
+- **`.cnb` still ranks above native extensions** (below `.xnb`) for the original reason: it lets
+  `.cnb` act as an *optional enrichment layer* over an otherwise-ordinary native file, not just as a
+  mutually-exclusive alternative to one. `Content/Textures/ahoj.png` can exist entirely on its own
+  (loads exactly as it does today, zero `.cnb`/`.xnb` involved) — or it can be joined by
+  `Content/Textures/ahoj.cnb` that adds metadata the PNG format itself can't carry (color-key
+  transparency, a sprite-sheet sub-rect, a hint that the "real" pixel data lives in some other,
+  non-self-describing file). Checking native extensions first would make that impossible: whichever
+  native file exists would always win, and a sibling `.cnb` could never be consulted for an asset a
+  native loader already claims. Checking `.cnb` before native extensions costs one extra failed
+  file-exists check per load when no `.cnb` is present — negligible, and now serviced by the
+  content-manifest cache (see `xnb.md`'s "Content manifest" section) rather than a raw stat call.
+
+Restated: **`.xnb`, when present, always wins outright; failing that, `.cnb`, when present, has
+final say over how an asset name resolves; failing that, the file extension picks the reader.**
+This still mirrors how `ContentManager.Load<T>()` resolves a logical asset name to a file today
+(`ResolveAssetPath` already tries a list of candidate paths in order) — it just means `.xnb` and
+`.cnb` are the first two candidates tried for every registered type, not appended after that type's
+own native extensions.
 
 ```cpp
 // Sketch only -- illustrates the dispatch rule, not a proposed final API.
 std::shared_ptr<void> ContentManager::Load(const std::string& assetName)
 {
+    const auto xnbPath = assetName + ".xnb";
+    if (FileExists(xnbPath))
+    {
+        return LoadXnb(xnbPath);               // binary container + type-reader
+                                                 // table dispatch (MVP-scoped).
+    }
+
+    if (FileExists(assetName))
+    {
+        return LoadByExtension(assetName);     // caller already gave a full path
+    }
+
     const auto cnbPath = assetName + ".cnb";
     if (FileExists(cnbPath))
     {
@@ -369,7 +408,7 @@ no change to `Load<T>()`'s own dispatch was needed. That generic reader parses t
 up the `.cnb`'s `"type"` in the table, and invokes whichever factory matches. This only applies to
 a `T` with **no existing reader already registered** (built-in or otherwise) — `RegisterCnbLoader`
 throws immediately if one already exists for `T`, since that reader would never consult this table.
-No `ContentTypeReader<T>` subclass or CNA core change is needed per game-specific `.cnb` `type` —
+No `LooseFileContentTypeReader<T>` subclass or CNA core change is needed per game-specific `.cnb` `type` —
 same "don't grow CNA core for one game's data" principle already used for the plain
 game-specific-`type` row in the table above, just now with the dispatch key coming from the `.cnb`
 file itself instead of requiring the caller to already know which of several shapes it's asking
@@ -475,24 +514,33 @@ None of this is free, but it is a **bounded, one-time cost per game/asset pack**
 
 ## Relationship to `xnb.md`/`plan_xnb.md`
 
+> **Update 2026-07-16:** the table below and the "freeze" recommendation after it describe the
+> *original* either/or framing (adopt `.cnb` and freeze `.xnb`, or adopt `.xnb` instead of `.cnb`).
+> That framing has since been superseded — see "Update 2026-07-16" near the top of this document.
+> CNA now does **both**: `.cnb` stays exactly as implemented below, and an MVP-scoped `.xnb` binary
+> reader sits above it in resolution order. The comparison table is kept because its per-row
+> tradeoffs remain accurate descriptions of each format's own properties (a `.xnb` file still can't
+> handle unknown future variants unless someone implements that; `.cnb` still can't offer drop-in
+> compatibility with an unconverted original asset) — only the "pick one" conclusion no longer
+> holds, and the Lua row below has been updated to reflect the 2026-07-16 rejection.
+
 This document does **not** retroactively invalidate `xnb.md`/`plan_xnb.md` — both remain accurate
-records of what a full binary `.xnb` reader would cost and how it should be sequenced *if* CNA ever
-decides to build one. This document exists so that choice can be made explicitly, by comparing:
+records of what a full binary `.xnb` reader costs and how it is sequenced. This document exists so
+that choice could be made explicitly, by comparing:
 
 | | Binary `.xnb` reader (`xnb.md`/`plan_xnb.md`) | `.cnb` JSON + native-by-extension (this document) |
 |---|---|---|
 | End-user experience | Drop original `.xnb` next to the game, it just loads | Must run a one-time migration/export step first |
-| CNA maintenance surface | Permanent: binary protocol, LZX, reader registry, forever | Minimal: a JSON envelope + per-type field conventions CNA fully controls |
-| Implementation cost | Very large (`xnb.md`'s own credit estimate: hundreds to low thousands of credits for broad coverage) | Small (a resolver + a handful of per-type (de)serializers; native-extension loading for PNG/JPEG/WAV already exists today) |
-| Handles unknown/future `.xnb` variants | Only if explicitly implemented (MonoGame vs. FNA vs. platform variants — `plan_xnb.md`'s XNB-27/XNB-30C) | Not applicable — CNA never reads `.xnb` at all under this strategy |
+| CNA maintenance surface | Large for broad coverage: binary protocol, LZX, ~40-reader registry | Minimal: a JSON envelope + per-type field conventions CNA fully controls |
+| Implementation cost | Large for broad coverage (`xnb.md`'s own estimate); an MVP slice (container + primitives + `Texture2D`, uncompressed only) is active now | Small (a resolver + a handful of per-type (de)serializers; native-extension loading for PNG/JPEG/WAV already exists today) |
+| Handles unknown/future `.xnb` variants | Only if explicitly implemented (MonoGame vs. FNA vs. platform variants — `plan_xnb.md`'s XNB-27/XNB-30C, both still deferred) | Not applicable — `.cnb` never reads `.xnb` itself |
 | General custom `.fx` effects | Explicitly unsupported either way (`plan_xnb.md` XNB-32A) | Explicitly unsupported either way (same shader-porting problem) |
-| Game-specific custom readers | Ported to Lua at runtime (`plan_xnb.md` Phase H) | Ported to a one-time export-tool plugin (this document) |
+| Game-specific custom readers | Native C++ registration (`plan_xnb.md` Phase G); a sandboxed-Lua alternative (former Phase H) was proposed and then **rejected outright** 2026-07-16 | Ported to a one-time export-tool plugin, or `RegisterCnbLoader<T>` at runtime (this document) |
 
-**If this strategy is adopted, the recommendation is to formally freeze `xnb.md`/`plan_xnb.md` as
-"researched, not adopted" rather than deleting them** — the phase breakdown and cost analysis inside
-them remain useful reference material if the decision is ever revisited, and several of their
-protocol-accuracy findings (e.g. the true difficulty of the general `EffectReader`/compiled-shader
-problem, or the FBX/model-importer cost on the writer side) apply identically here.
+Both formats are active at once, ranked by `ContentManager`'s resolution order (`.xnb` above
+`.cnb` above native) — see "The core rule" above for the mechanics, and `xnb.md`/`plan_xnb.md`'s own
+status banners for exactly which `.xnb` phases are implemented versus still frozen at any given
+time.
 
 ## Implementation record
 
@@ -518,3 +566,36 @@ Genuinely new `.cnb` types with no existing reader today (e.g. `AnimationClip` f
 further game-specific custom data) remain a natural, open-ended follow-up — `RegisterCnbLoader<T>`
 already supports them for game-specific data without any CNA core change; a first-party
 `AnimationClip` reader would be new scope beyond what `plan_cnb.md` covered.
+
+## Update 2026-07-16: `.xnb` is back, ranked above `.cnb` (MVP scope)
+
+CNA's owner decided `.xnb` should become a real, additional runtime format again — **not** a
+replacement for `.cnb`, which keeps everything described in this document exactly as implemented.
+See [`xnb.md`](xnb.md)'s and [`plan_xnb.md`](plan_xnb.md)'s own status banners for the full
+decision; summarized here because it changes "The core rule" below:
+
+- `ContentManager`'s resolution order gains a new top tier: `<name>.xnb`, checked **before** even
+  the literal caller-given path. If a real, externally-produced `.xnb` file is present, it wins
+  over both `.cnb` and any native file — see the revised "The core rule" section below.
+- Only an MVP slice of `plan_xnb.md` is actually active (container parsing, binary primitives, the
+  uncompressed case, a first real `Texture2D` reader — that plan's own M1/M2 milestones). LZX
+  decompression, `SpriteFont`, stock effects, audio, `Model`, and top-quality hardening remain
+  frozen/deferred. An unsupported/not-yet-implemented `.xnb` reader name fails with a clear error
+  rather than silently falling through to `.cnb`/native — a present-but-unreadable `.xnb` is a hard
+  error, not treated the same as an absent one.
+- `plan_xnb.md`'s former Phase H (a sandboxed-Lua custom-reader host) was rejected outright as
+  disproportionate complexity — custom `.xnb` readers stay native C++ only, registered the same way
+  `RegisterCnbLoader<T>` already works for custom `.cnb` types.
+- `ContentManager` also gains a startup content-manifest scan (`plan_xnb.md` Phase B3): an internal
+  performance cache, a public `NOXNA` introspection API, and — for any `.xnb` files found — a
+  reader-name inventory. This is orthogonal to `.cnb` itself but shares the same `ContentManager`.
+- Writing/producing `.xnb` files remains permanently out of scope, exactly as `plan_xnb.md`'s own
+  "Scope" section already stated — CNA only ever consumes `.xnb` files built by real XNA/MonoGame/
+  FNA tooling.
+- **Renamed:** the `.cnb`/loose-file loader interface described throughout this document as
+  `ContentTypeReader<T>` is now `LooseFileContentTypeReader<T>`
+  (`include/Microsoft/Xna/Framework/Content/LooseFileContentTypeReader.hpp`) — freeing the real
+  name for FNA's actual `Microsoft.Xna.Framework.Content.ContentTypeReader`/`ContentTypeReader<T>`
+  (`Read(ContentReader&, T)`), which this interface's shape (`Read(const std::string&,
+  ContentManager&)`) never matched. Purely a rename — `RegisterTypeReader<T>`,
+  `RegisterCnbLoader<T>`, and every existing `.cnb` reader keep their exact same behavior.

@@ -183,6 +183,32 @@ TEST_F(SkinnedEffectDefaultsTest, TextureDefaultsToNull)
     EXPECT_EQ(fx.getTextureProperty(), nullptr);
 }
 
+// plan_xnb.md XNB-32: SetOwnedTexture() -- content-pipeline-loaded effects need to keep their own
+// texture reference alive (matching real XNA's GC-tracked Effect.Texture), unlike
+// setTextureProperty(Texture2D*)'s non-owning pointer used by Model's shared texture pool.
+
+TEST_F(SkinnedEffectDefaultsTest, SetOwnedTextureKeepsTextureAliveAndVisibleThroughGetter)
+{
+    auto owned = std::make_shared<Texture2D>(gd, 2, 2);
+    Texture2D* raw = owned.get();
+
+    fx.SetOwnedTexture(owned);
+
+    EXPECT_EQ(fx.getTextureProperty(), raw);
+}
+
+TEST_F(SkinnedEffectDefaultsTest, CloneSharesOwnedTextureOwnership)
+{
+    fx.SetOwnedTexture(std::make_shared<Texture2D>(gd, 2, 2));
+    Texture2D* originalTexturePtr = fx.getTextureProperty();
+
+    std::unique_ptr<Microsoft::Xna::Framework::Graphics::Effect> cloned(fx.Clone());
+    auto* clone = dynamic_cast<SkinnedEffect*>(cloned.get());
+    ASSERT_NE(clone, nullptr);
+
+    EXPECT_EQ(clone->getTextureProperty(), originalTexturePtr);
+}
+
 // -----------------------------------------------------------------------
 // Skinning — FNA: MaxBones=72 (constant), WeightsPerVertex=4, constructor
 // initializes all 72 bone slots to Matrix.Identity via SetBoneTransforms.

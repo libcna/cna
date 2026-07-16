@@ -1,5 +1,17 @@
 # Model loading and content pipeline: support and limitations
 
+> **Update (plan_xnb.md Phase F, 2026-07-16):** a second, genuinely real binary `.xnb` `ModelReader`
+> now exists (`CNA::Internal::Xnb::ModelReader`), wire-compatible with real XNA/MonoGame/FNA-produced
+> `Model` assets — full bone hierarchy, per-mesh `ParentBone`, `BoundingSphere`, shared-resource
+> (`VertexBuffer`/`IndexBuffer`/`Effect`) resolution, all real. Per `cnb.md`'s "Core rule", `.xnb`
+> always wins first in `ContentManager::Load<Model>()`'s resolution order, ahead of the
+> `.model.json` path this document describes. **Everything below this note describes only the
+> older, CNA-original `.model.json` loose-file loader** (`ModelTypeReader`) — see
+> `docs/xnb-content-pipeline-support.md` for the real binary `.xnb` `ModelReader` this note
+> refers to. The gaps documented below (no multi-bone hierarchy, no `ParentBone`/`BoundingSphere`/
+> `Tag`, no resource sharing) are specific to the `.model.json` path and do **not** apply to the
+> real `.xnb` `ModelReader`.
+
 Covers `Microsoft::Xna::Framework::Graphics::Model` (and its `ModelMesh`/`ModelMeshPart`/
 `ModelBone`/collection types) plus its content-pipeline loader, `ModelTypeReader`
 (`src/Microsoft/Xna/Framework/Content/ContentManager.cpp`). Written as the closing documentation

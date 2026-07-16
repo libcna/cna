@@ -1,0 +1,40 @@
+{
+  "producer": "MonoGame content pipeline (mgcb)",
+  "sourceRepo": "https://github.com/MonoGame/MonoGame",
+  "sourcePath": "Tests/Assets/Fonts/Default.xnb",
+  "sourceLicense": "Ms-PL (same license as CNA itself)",
+  "platform": "w",
+  "version": 5,
+  "compressed": false,
+  "totalLength": 21678,
+  "rootReader": "Microsoft.Xna.Framework.Content.SpriteFontReader",
+  "expectedType": "SpriteFont",
+  "sharedResourceCount": 0,
+  "typeReaderTable": [
+    "Microsoft.Xna.Framework.Content.SpriteFontReader",
+    "Microsoft.Xna.Framework.Content.Texture2DReader",
+    "Microsoft.Xna.Framework.Content.ListReader`1[[Microsoft.Xna.Framework.Rectangle]]",
+    "Microsoft.Xna.Framework.Content.RectangleReader",
+    "Microsoft.Xna.Framework.Content.ListReader`1[[System.Char]]",
+    "Microsoft.Xna.Framework.Content.CharReader",
+    "Microsoft.Xna.Framework.Content.ListReader`1[[Microsoft.Xna.Framework.Vector3]]",
+    "Microsoft.Xna.Framework.Content.Vector3Reader"
+  ],
+  "expectedFields": {
+    "glyphAtlasSurfaceFormat": 5,
+    "glyphAtlasSurfaceFormatName": "Dxt3",
+    "glyphAtlasWidth": 128,
+    "glyphAtlasHeight": 128,
+    "glyphAtlasMipLevelCount": 1,
+    "glyphCount": 95,
+    "croppingCount": 95,
+    "characterCount": 95,
+    "firstCharacter": " ",
+    "lastCharacter": "~",
+    "lineSpacing": 19,
+    "spacing": 0.0,
+    "kerningCount": 95,
+    "hasDefaultCharacter": false
+  },
+  "notes": "First real, externally-produced, uncompressed SpriteFont .xnb fixture (plan_xnb.md XNB-31/M3). Glyph atlas is Dxt3-compressed (already handled by the existing Texture2DReader from the M2 milestone), so this fixture also exercises Texture2DReader's compressed-format path via a nested ReadObject<Texture2D>() call, not just the uncompressed Color path white-1.xnb covers. Verified field-by-field with an independent Python parser before writing the C++ reader, not assumed from FNA's source alone."
+}

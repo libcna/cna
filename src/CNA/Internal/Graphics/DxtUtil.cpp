@@ -118,9 +118,23 @@ namespace CNA::Internal::Graphics
     std::vector<uint8_t> DxtUtil::DecompressDxt1(const uint8_t* data, std::size_t dataSize,
                                                    int width, int height)
     {
-        std::vector<uint8_t> out(static_cast<std::size_t>(width * height * 4), 0);
         const int blockCountX = (width  + 3) / 4;
         const int blockCountY = (height + 3) / 4;
+        // DXT1 is 8 bytes/block (2x uint16 endpoint color + 1x uint32 index lookup). Reject a
+        // too-small dataSize up front, before any block read -- Read8/16/32 do not themselves
+        // bounds-check pos against dataSize, so an under-sized buffer (e.g. from a truncated or
+        // adversarial .xnb whose declared byteCount doesn't match its own width/height) would
+        // otherwise read past the end of data.
+        const std::size_t requiredBytes = static_cast<std::size_t>(blockCountX) * blockCountY * 8;
+        if (dataSize < requiredBytes)
+        {
+            throw std::out_of_range(
+                "DxtUtil::DecompressDxt1: dataSize (" + std::to_string(dataSize) +
+                ") is smaller than the " + std::to_string(requiredBytes) +
+                " bytes " + std::to_string(width) + "x" + std::to_string(height) + " requires.");
+        }
+
+        std::vector<uint8_t> out(static_cast<std::size_t>(width * height * 4), 0);
         std::size_t pos = 0;
         for (int y = 0; y < blockCountY; ++y)
             for (int x = 0; x < blockCountX; ++x)
@@ -196,9 +210,20 @@ namespace CNA::Internal::Graphics
     std::vector<uint8_t> DxtUtil::DecompressDxt3(const uint8_t* data, std::size_t dataSize,
                                                    int width, int height)
     {
-        std::vector<uint8_t> out(static_cast<std::size_t>(width * height * 4), 0);
         const int blockCountX = (width  + 3) / 4;
         const int blockCountY = (height + 3) / 4;
+        // DXT3 is 16 bytes/block (8 explicit alpha + 2x uint16 endpoint color + 1x uint32 index
+        // lookup) -- see DecompressDxt1's own note on why this upfront check exists.
+        const std::size_t requiredBytes = static_cast<std::size_t>(blockCountX) * blockCountY * 16;
+        if (dataSize < requiredBytes)
+        {
+            throw std::out_of_range(
+                "DxtUtil::DecompressDxt3: dataSize (" + std::to_string(dataSize) +
+                ") is smaller than the " + std::to_string(requiredBytes) +
+                " bytes " + std::to_string(width) + "x" + std::to_string(height) + " requires.");
+        }
+
+        std::vector<uint8_t> out(static_cast<std::size_t>(width * height * 4), 0);
         std::size_t pos = 0;
         for (int y = 0; y < blockCountY; ++y)
             for (int x = 0; x < blockCountX; ++x)
@@ -288,9 +313,21 @@ namespace CNA::Internal::Graphics
     std::vector<uint8_t> DxtUtil::DecompressDxt5(const uint8_t* data, std::size_t dataSize,
                                                    int width, int height)
     {
-        std::vector<uint8_t> out(static_cast<std::size_t>(width * height * 4), 0);
         const int blockCountX = (width  + 3) / 4;
         const int blockCountY = (height + 3) / 4;
+        // DXT5 is 16 bytes/block (2x uint8 alpha endpoint + 6x uint8 alpha index mask + 2x uint16
+        // endpoint color + 1x uint32 index lookup) -- see DecompressDxt1's own note on why this
+        // upfront check exists.
+        const std::size_t requiredBytes = static_cast<std::size_t>(blockCountX) * blockCountY * 16;
+        if (dataSize < requiredBytes)
+        {
+            throw std::out_of_range(
+                "DxtUtil::DecompressDxt5: dataSize (" + std::to_string(dataSize) +
+                ") is smaller than the " + std::to_string(requiredBytes) +
+                " bytes " + std::to_string(width) + "x" + std::to_string(height) + " requires.");
+        }
+
+        std::vector<uint8_t> out(static_cast<std::size_t>(width * height * 4), 0);
         std::size_t pos = 0;
         for (int y = 0; y < blockCountY; ++y)
             for (int x = 0; x < blockCountX; ++x)

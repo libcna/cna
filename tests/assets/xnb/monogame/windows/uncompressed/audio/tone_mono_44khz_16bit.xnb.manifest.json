@@ -1,0 +1,27 @@
+{
+  "producer": "MonoGame content pipeline (mgcb)",
+  "sourceRepo": "https://github.com/MonoGame/MonoGame",
+  "sourcePath": "Tests/Assets/Audio/tone_mono_44khz_16bit.xnb",
+  "sourceLicense": "Ms-PL (same license as CNA itself)",
+  "platform": "d",
+  "version": 5,
+  "compressed": false,
+  "totalLength": 44205,
+  "rootReader": "Microsoft.Xna.Framework.Content.SoundEffectReader",
+  "expectedType": "SoundEffect",
+  "sharedResourceCount": 0,
+  "expectedFields": {
+    "formatLength": 18,
+    "wFormatTag": 1,
+    "wFormatTagName": "WAVE_FORMAT_PCM",
+    "nChannels": 1,
+    "nSamplesPerSec": 44100,
+    "wBitsPerSample": 16,
+    "waveDataLength": 44100,
+    "loopStart": 0,
+    "loopLength": 22050,
+    "durationMs": 500
+  },
+  "supportMatrixStatus": "supported",
+  "notes": "plan_xnb.md XNB-33 support-matrix entry: 16-bit PCM mono, the primary supported SoundEffect variant (maps directly onto SoundEffect's existing SDL_AUDIO_S16LE-only PCM constructors). Platform byte 'd' (DesktopGL) -- already among FNA's own accepted XNB platform bytes."
+}

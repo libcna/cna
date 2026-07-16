@@ -1,0 +1,49 @@
+// SPDX-License-Identifier: MS-PL
+#pragma once
+
+#include "Microsoft/Xna/Framework/Content/ContentReader.hpp"
+#include "Microsoft/Xna/Framework/Content/ContentTypeReader.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+
+// plan_xnb.md XNB-23/24: the first real Graphics .xnb reader -- see PrimitiveContentTypeReaders.hpp's
+// own note on why this lives in CNA::Internal::Xnb (FNA's Texture2DReader is `internal class`
+// too, never subclassed by game code).
+
+namespace CNA::Internal::Xnb
+{
+    /**
+     * @brief FNA's real `Microsoft.Xna.Framework.Content.Texture2DReader`
+     *        (`src/Content/ContentReaders/Texture2DReader.cs`), implemented strictly against
+     *        CNA's backend-neutral `Texture2D`/`GraphicsDevice` API (plan_xnb.md XNB-23) --
+     *        never against any one backend's internals directly.
+     *
+     * **Current coverage** (first pass, scoped to reach the M2 milestone): `SurfaceFormat.Color`
+     * uploads raw bytes directly; `Dxt1`/`Dxt3`/`Dxt5` are always software-decompressed to
+     * `Color` via the existing `CNA::Internal::Graphics::DxtUtil` (reused, not reimplemented) --
+     * unlike FNA, which only decompresses when the active backend's hardware lacks native
+     * DXT/S3TC support. CNA's own per-backend "does this backend accept compressed data
+     * natively" capability query is plan_xnb.md XNB-24's fuller scope, deferred; always
+     * decompressing is always correct, just not always the most efficient path. Every other
+     * `SurfaceFormat` (`Bgr565`, `Bgra5551`, `Bgra4444`, `NormalizedByte2/4`, `Rgba1010102`,
+     * `Rg32`, `Rgba64`, `Alpha8`, `Single`, `Vector2`, `Vector4`, `HalfSingle`, `HalfVector2/4`,
+     * `HdrBlendable`) is not yet implemented and throws a clear
+     * `Microsoft::Xna::Framework::Content::ContentLoadException` naming the format, rather than
+     * silently uploading garbage pixels.
+     */
+    class Texture2DReader
+        : public Microsoft::Xna::Framework::Content::ContentTypeReader<Microsoft::Xna::Framework::Graphics::Texture2D>
+    {
+    public:
+        Texture2DReader()
+            : Microsoft::Xna::Framework::Content::ContentTypeReader<Microsoft::Xna::Framework::Graphics::Texture2D>(
+                  "Microsoft.Xna.Framework.Graphics.Texture2D") {}
+
+    protected:
+        Microsoft::Xna::Framework::Graphics::Texture2D Read(
+            Microsoft::Xna::Framework::Content::ContentReader& input,
+            std::optional<Microsoft::Xna::Framework::Graphics::Texture2D> existingInstance) override;
+    };
+
+    /** @brief Registers Texture2DReader under its real FNA canonical name. Idempotent. */
+    void RegisterTexture2DXnbReader();
+}

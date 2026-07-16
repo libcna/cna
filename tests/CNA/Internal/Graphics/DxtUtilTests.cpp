@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
+#include <stdexcept>
 #include "CNA/Internal/Graphics/DxtUtil.hpp"
 
 using CNA::Internal::Graphics::DxtUtil;
@@ -132,4 +133,33 @@ TEST(DxtUtil, DecompressDxt1_NonSquare_Width8_Height4)
             EXPECT_EQ(pixels[off + 0],   0u) << "R at (" << x << "," << y << ")";
             EXPECT_EQ(pixels[off + 1], 255u) << "G at (" << x << "," << y << ")";
         }
+}
+
+// plan_xnb.md XNB-43/47: a dataSize too small for the requested width/height must be rejected
+// before any block read, not discovered mid-decode -- found via a whole-container fuzz test that
+// mutated a real .xnb's own declared byteCount field, confirmed as a real heap-buffer-overflow
+// under -DCNA_SANITIZE=address,undefined (Read8/16/32 never themselves bounds-checked pos against
+// dataSize).
+
+TEST(DxtUtil, DecompressDxt1_DataSizeTooSmall_ThrowsOutOfRange)
+{
+    // 8x4 needs 2 DXT1 blocks = 16 bytes; only provide 8.
+    EXPECT_THROW(DxtUtil::DecompressDxt1(kSolidRedDxt1, 8, 8, 4), std::out_of_range);
+}
+
+TEST(DxtUtil, DecompressDxt3_DataSizeTooSmall_ThrowsOutOfRange)
+{
+    // 8x4 needs 2 DXT3 blocks = 32 bytes; only provide 16.
+    EXPECT_THROW(DxtUtil::DecompressDxt3(kSolidRedDxt3, 16, 8, 4), std::out_of_range);
+}
+
+TEST(DxtUtil, DecompressDxt5_DataSizeTooSmall_ThrowsOutOfRange)
+{
+    // 8x4 needs 2 DXT5 blocks = 32 bytes; only provide 16.
+    EXPECT_THROW(DxtUtil::DecompressDxt5(kSolidRedDxt5, 16, 8, 4), std::out_of_range);
+}
+
+TEST(DxtUtil, DecompressDxt1_ExactlyEnoughData_DoesNotThrow)
+{
+    EXPECT_NO_THROW(DxtUtil::DecompressDxt1(kSolidRedDxt1, sizeof(kSolidRedDxt1), 4, 4));
 }

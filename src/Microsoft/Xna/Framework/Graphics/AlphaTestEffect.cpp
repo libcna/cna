@@ -54,6 +54,8 @@ namespace Microsoft::Xna::Framework::Graphics
         if (fogColorParam_) fogColorParam_->SetValue(src.getFogColorProperty());
         alphaFunction_      = src.alphaFunction_;
         referenceAlpha_     = src.referenceAlpha_;
+        texture_            = src.texture_;
+        ownedTexture_       = src.ownedTexture_;
     }
 
     Effect* AlphaTestEffect::Clone()
@@ -151,6 +153,11 @@ namespace Microsoft::Xna::Framework::Graphics
 
     Texture2D* AlphaTestEffect::getTextureProperty() const { return texture_; }
     void       AlphaTestEffect::setTextureProperty(Texture2D* v) { texture_ = v; }
+    void AlphaTestEffect::SetOwnedTexture(std::shared_ptr<Texture2D> texture)
+    {
+        ownedTexture_ = std::move(texture);
+        texture_ = ownedTexture_.get();
+    }
 
     bool AlphaTestEffect::getVertexColorEnabledProperty() const { return vertexColorEnabled_; }
     void AlphaTestEffect::setVertexColorEnabledProperty(bool v)

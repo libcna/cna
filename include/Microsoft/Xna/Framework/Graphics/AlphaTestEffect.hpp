@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include <memory>
+
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CompareFunction.hpp"
@@ -179,6 +181,17 @@ namespace Microsoft::Xna::Framework::Graphics
         void setTextureProperty(Texture2D* value);
 
         /**
+         * @brief Gives this effect shared ownership of a texture, keeping it alive for as long as
+         *        the effect exists -- matching real XNA's GC-tracked `Effect.Texture` reference.
+         *        See `BasicEffect::SetOwnedTexture()`'s own docs for why this exists alongside
+         *        the non-owning `setTextureProperty(Texture2D*)`.
+         *
+         * @param texture The texture to take shared ownership of; also becomes the effect's
+         *                current texture (as if passed to `setTextureProperty()`).
+         */
+        NOXNA void SetOwnedTexture(std::shared_ptr<Texture2D> texture);
+
+        /**
          * @brief Gets whether per-vertex color is used for rendering.
          *
          * @return True if vertex color is enabled.
@@ -243,6 +256,7 @@ namespace Microsoft::Xna::Framework::Graphics
         void CacheEffectParameters();
 
         Texture2D*       texture_            = nullptr;
+        std::shared_ptr<Texture2D> ownedTexture_; // see SetOwnedTexture()
         EffectParameter* diffuseColorParam_ = nullptr;
         EffectParameter* alphaTestParam_    = nullptr;
         EffectParameter* fogColorParam_     = nullptr;

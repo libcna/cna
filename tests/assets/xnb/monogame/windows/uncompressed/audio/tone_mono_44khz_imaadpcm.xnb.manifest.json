@@ -1,0 +1,20 @@
+{
+  "producer": "MonoGame content pipeline (mgcb)",
+  "sourceRepo": "https://github.com/MonoGame/MonoGame",
+  "sourcePath": "Tests/Assets/Audio/tone_mono_44khz_imaadpcm.xnb",
+  "sourceLicense": "Ms-PL (same license as CNA itself)",
+  "platform": "d",
+  "version": 5,
+  "compressed": false,
+  "totalLength": 13417,
+  "rootReader": "Microsoft.Xna.Framework.Content.SoundEffectReader",
+  "expectedType": "SoundEffect",
+  "sharedResourceCount": 0,
+  "expectedFields": {
+    "wFormatTag": 17,
+    "wFormatTagName": "WAVE_FORMAT_IMA_ADPCM (0x11)",
+    "wBitsPerSample": 4
+  },
+  "supportMatrixStatus": "rejected",
+  "notes": "plan_xnb.md XNB-33 support-matrix entry: IMA-ADPCM parses correctly but is rejected -- CNA has no IMA-ADPCM decoder yet."
+}

@@ -1,0 +1,122 @@
+// SPDX-License-Identifier: MS-PL
+//
+// plan_xnb.md XNB-14/XNB-14A/XNB-14B: unit tests for ContentTypeReaderManager's registration
+// surface. Does not call ReadUntyped()/Read() on any reader -- that needs a real ContentReader&
+// (plan_xnb.md XNB-15/16), out of scope for this task; these tests cover only registration,
+// per-call instance freshness, and the known-unsupported placeholder's identity.
+
+#include <gtest/gtest.h>
+
+#include "Microsoft/Xna/Framework/Content/ContentTypeReader.hpp"
+#include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
+#include "Microsoft/Xna/Framework/Content/KnownUnsupportedContentTypeReader.hpp"
+
+using Microsoft::Xna::Framework::Content::ContentReader;
+using Microsoft::Xna::Framework::Content::ContentTypeReader;
+using Microsoft::Xna::Framework::Content::ContentTypeReaderBase;
+using Microsoft::Xna::Framework::Content::ContentTypeReaderManager;
+using Microsoft::Xna::Framework::Content::KnownUnsupportedContentTypeReader;
+using Microsoft::Xna::Framework::Content::RegisterKnownUnsupportedXnbReaders;
+
+namespace
+{
+    // Minimal concrete reader for registry-mechanics tests. Its Read() body is never invoked --
+    // only the registry's ability to construct instances of the right concrete type is tested.
+    class TestOnlyInt32Reader : public ContentTypeReader<int32_t>
+    {
+    public:
+        TestOnlyInt32Reader() : ContentTypeReader<int32_t>("CNA.Test.Int32") {}
+
+    protected:
+        int32_t Read(ContentReader& /*input*/, std::optional<int32_t> existingInstance) override
+        {
+            return existingInstance.value_or(0);
+        }
+    };
+
+    class ContentTypeReaderManagerTest : public ::testing::Test
+    {
+    protected:
+        void TearDown() override { ContentTypeReaderManager::ClearTypeCreators(); }
+    };
+}
+
+TEST_F(ContentTypeReaderManagerTest, CreateReaderReturnsNullForUnregisteredName)
+{
+    EXPECT_EQ(ContentTypeReaderManager::CreateReader("Nothing.Registered.Here"), nullptr);
+}
+
+TEST_F(ContentTypeReaderManagerTest, RegisteredFactoryProducesTheRightConcreteType)
+{
+    ContentTypeReaderManager::AddTypeCreator(
+        "CNA.Test.Int32Reader", [] { return std::make_unique<TestOnlyInt32Reader>(); });
+
+    auto reader = ContentTypeReaderManager::CreateReader("CNA.Test.Int32Reader");
+
+    ASSERT_NE(reader, nullptr);
+    EXPECT_NE(dynamic_cast<TestOnlyInt32Reader*>(reader.get()), nullptr);
+    EXPECT_EQ(reader->getTargetTypeNameProperty(), "CNA.Test.Int32");
+}
+
+TEST_F(ContentTypeReaderManagerTest, EachCreateReaderCallReturnsAFreshInstance)
+{
+    ContentTypeReaderManager::AddTypeCreator(
+        "CNA.Test.Int32Reader", [] { return std::make_unique<TestOnlyInt32Reader>(); });
+
+    auto first = ContentTypeReaderManager::CreateReader("CNA.Test.Int32Reader");
+    auto second = ContentTypeReaderManager::CreateReader("CNA.Test.Int32Reader");
+
+    ASSERT_NE(first, nullptr);
+    ASSERT_NE(second, nullptr);
+    EXPECT_NE(first.get(), second.get());
+}
+
+TEST_F(ContentTypeReaderManagerTest, RepeatRegistrationOfSameNameIsIgnoredNotReplaced)
+{
+    bool firstFactoryCalled = false;
+    bool secondFactoryCalled = false;
+
+    ContentTypeReaderManager::AddTypeCreator("CNA.Test.Int32Reader", [&] {
+        firstFactoryCalled = true;
+        return std::make_unique<TestOnlyInt32Reader>();
+    });
+    ContentTypeReaderManager::AddTypeCreator("CNA.Test.Int32Reader", [&] {
+        secondFactoryCalled = true;
+        return std::make_unique<TestOnlyInt32Reader>();
+    });
+
+    auto reader = ContentTypeReaderManager::CreateReader("CNA.Test.Int32Reader");
+
+    EXPECT_TRUE(firstFactoryCalled);
+    EXPECT_FALSE(secondFactoryCalled);
+    ASSERT_NE(reader, nullptr);
+}
+
+TEST_F(ContentTypeReaderManagerTest, ClearTypeCreatorsRemovesRegistration)
+{
+    ContentTypeReaderManager::AddTypeCreator(
+        "CNA.Test.Int32Reader", [] { return std::make_unique<TestOnlyInt32Reader>(); });
+    ContentTypeReaderManager::ClearTypeCreators();
+
+    EXPECT_EQ(ContentTypeReaderManager::CreateReader("CNA.Test.Int32Reader"), nullptr);
+}
+
+TEST_F(ContentTypeReaderManagerTest, RegisterKnownUnsupportedXnbReadersRegistersEffectReaderPlaceholder)
+{
+    RegisterKnownUnsupportedXnbReaders();
+
+    auto reader = ContentTypeReaderManager::CreateReader("Microsoft.Xna.Framework.Content.EffectReader");
+
+    ASSERT_NE(reader, nullptr);
+    EXPECT_NE(dynamic_cast<KnownUnsupportedContentTypeReader*>(reader.get()), nullptr);
+    EXPECT_EQ(reader->getTargetTypeNameProperty(), "Microsoft.Xna.Framework.Graphics.Effect");
+}
+
+TEST_F(ContentTypeReaderManagerTest, RegisterKnownUnsupportedXnbReadersIsIdempotent)
+{
+    RegisterKnownUnsupportedXnbReaders();
+    RegisterKnownUnsupportedXnbReaders(); // must not throw or replace the first registration
+
+    auto reader = ContentTypeReaderManager::CreateReader("Microsoft.Xna.Framework.Content.EffectReader");
+    ASSERT_NE(reader, nullptr);
+}

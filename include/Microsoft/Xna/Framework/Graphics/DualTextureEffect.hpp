@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include <memory>
+
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
@@ -192,6 +194,24 @@ namespace Microsoft::Xna::Framework::Graphics
         void setTexture2Property(Texture2D* value);
 
         /**
+         * @brief Gives this effect shared ownership of its first texture, keeping it alive for as
+         *        long as the effect exists -- matching real XNA's GC-tracked `Effect.Texture`
+         *        reference. See `BasicEffect::SetOwnedTexture()`'s own docs for why this exists
+         *        alongside the non-owning `setTextureProperty(Texture2D*)`.
+         *
+         * @param texture The texture to take shared ownership of; also becomes texture layer 0.
+         */
+        NOXNA void SetOwnedTexture(std::shared_ptr<Texture2D> texture);
+
+        /**
+         * @brief Gives this effect shared ownership of its second texture, keeping it alive for
+         *        as long as the effect exists. See `SetOwnedTexture()`'s own docs.
+         *
+         * @param texture The texture to take shared ownership of; also becomes texture layer 1.
+         */
+        NOXNA void SetOwnedTexture2(std::shared_ptr<Texture2D> texture);
+
+        /**
          * @brief Gets whether per-vertex color is used for rendering.
          *
          * @return True if vertex color is enabled.
@@ -229,6 +249,8 @@ namespace Microsoft::Xna::Framework::Graphics
         // Textures stored directly (Texture2D does not inherit from Texture in CNA)
         Texture2D* texture_  = nullptr;
         Texture2D* texture2_ = nullptr;
+        std::shared_ptr<Texture2D> ownedTexture_;  // see SetOwnedTexture()
+        std::shared_ptr<Texture2D> ownedTexture2_; // see SetOwnedTexture2()
 
         EffectParameter* diffuseColorParam_  = nullptr;
         EffectParameter* fogColorParam_      = nullptr;

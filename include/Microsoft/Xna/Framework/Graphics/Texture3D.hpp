@@ -35,6 +35,32 @@ namespace Microsoft::Xna::Framework::Graphics
         /** @brief Destructor. */
         NOXNA ~Texture3D() override;
 
+        /**
+         * @brief Copying is not allowed.
+         *
+         * NOXNA, explicit for clarity: `backend_`'s `std::unique_ptr` member already makes this
+         * implicit, but plan_xnb.md XNB-25 needed a real move path added (see below) and every
+         * other similarly-shaped GPU-resource class in this codebase (`VertexBuffer`,
+         * `IndexBuffer`, `TextureCube`) already declares both explicitly rather than relying on
+         * what the compiler happens to imply.
+         */
+        NOXNA Texture3D(const Texture3D&) = delete;
+        /** @brief Copy-assignment is not allowed. */
+        NOXNA Texture3D& operator=(const Texture3D&) = delete;
+        /**
+         * @brief Move-constructs a Texture3D, transferring GPU handle ownership.
+         *
+         * NOXNA: this class had no move path at all until plan_xnb.md XNB-25's `Texture3DReader`
+         * needed one -- a user-declared destructor already suppressed the implicit move
+         * constructor the compiler would otherwise have generated, and the pre-existing
+         * `std::unique_ptr` member independently blocks the implicit copy constructor, so this
+         * type could not previously be returned by value at all (not even via NRVO, which the
+         * standard never guarantees).
+         */
+        NOXNA Texture3D(Texture3D&&) noexcept;
+        /** @brief Move-assigns a Texture3D, transferring GPU handle ownership. */
+        NOXNA Texture3D& operator=(Texture3D&&) noexcept;
+
         /** @brief Returns the fully qualified .NET type name. */
         NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
 

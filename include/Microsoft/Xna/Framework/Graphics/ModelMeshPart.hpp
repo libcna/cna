@@ -94,6 +94,52 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         void setTagProperty(System::Object* value);
 
+        /**
+         * @brief Sets the offset in vertices from the top of the vertex buffer.
+         *
+         * NOXNA: real XNA's `ModelMeshPart.VertexOffset` setter is content-pipeline-only
+         * (`internal set`) rather than a public game-facing API; the content pipeline is the only
+         * real caller (plan_xnb.md XNB-38's `ModelReader`), so this stays a NOXNA-marked method
+         * rather than a bare public setter.
+         * @param value The new vertex offset.
+         */
+        NOXNA void SetVertexOffset(int value);
+
+        /**
+         * @brief Sets the number of vertices used during a draw call. See `SetVertexOffset()`'s
+         *        own note on why this is NOXNA rather than a bare public setter.
+         * @param value The new vertex count.
+         */
+        NOXNA void SetNumVertices(int value);
+
+        /**
+         * @brief Sets the location in the index buffer at which to start reading. See
+         *        `SetVertexOffset()`'s own note on why this is NOXNA rather than a bare public setter.
+         * @param value The new start index.
+         */
+        NOXNA void SetStartIndex(int value);
+
+        /**
+         * @brief Sets the number of primitives to render. See `SetVertexOffset()`'s own note on
+         *        why this is NOXNA rather than a bare public setter.
+         * @param value The new primitive count.
+         */
+        NOXNA void SetPrimitiveCount(int value);
+
+        /**
+         * @brief Sets the vertex buffer for this mesh part. See `SetVertexOffset()`'s own note on
+         *        why this is NOXNA rather than a bare public setter.
+         * @param value Pointer to the new VertexBuffer.
+         */
+        NOXNA void SetVertexBuffer(VertexBuffer* value);
+
+        /**
+         * @brief Sets the index buffer for this mesh part. See `SetVertexOffset()`'s own note on
+         *        why this is NOXNA rather than a bare public setter.
+         * @param value Pointer to the new IndexBuffer.
+         */
+        NOXNA void SetIndexBuffer(IndexBuffer* value);
+
     private:
         int numVertices_    = 0;
         int primitiveCount_ = 0;

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include <memory>
+
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
@@ -265,6 +267,20 @@ namespace Microsoft::Xna::Framework::Graphics
          */
         void setTextureProperty(Texture2D* value);
 
+        /**
+         * @brief Gives this effect shared ownership of a texture, keeping it alive for as long as
+         *        the effect exists -- matching real XNA's GC-tracked `Effect.Texture` reference.
+         *
+         * `setTextureProperty(Texture2D*)` stores a non-owning pointer (used by, e.g., a `Model`
+         * that owns a shared texture pool across multiple mesh parts); a standalone content-loaded
+         * effect (`content.Load<BasicEffect>()`, plan_xnb.md XNB-32) has no such external owner,
+         * so it must keep its own texture reference alive instead.
+         *
+         * @param texture The texture to take shared ownership of; also becomes the effect's
+         *                current texture (as if passed to `setTextureProperty()`).
+         */
+        NOXNA void SetOwnedTexture(std::shared_ptr<Texture2D> texture);
+
         // IEffectFog
 
         /**
@@ -352,6 +368,7 @@ namespace Microsoft::Xna::Framework::Graphics
         bool    preferPerPixelLighting_ = false;
         bool    textureEnabled_         = false;
         Texture2D* texture_             = nullptr;
+        std::shared_ptr<Texture2D> ownedTexture_; // see SetOwnedTexture()
         bool    fogEnabled_             = false;
         Vector3 fogColor_               = Vector3::Zero;
         float   fogStart_               = 0.0f;
