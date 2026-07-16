@@ -347,6 +347,19 @@ namespace CNA::Internal::Backends::EasyGL
         ::metagl::glActiveTexture(::metagl::TextureUnit::Texture0);
     }
 
+    // Task 1081: same shape as BindTexture(), but for a samplerCube -- ITextureCubeBackend is
+    // its own interface (not a subtype of ITextureBackend), so this can't just overload/reuse
+    // BindTexture() at the call site.
+    void EasyGLEffectBackend::BindTextureCube(int unit, ITextureCubeBackend* texture)
+    {
+        if (!texture) return;
+        const auto textureUnit = static_cast<::metagl::TextureUnit>(
+            static_cast<GLenum>(::metagl::TextureUnit::Texture0) + unit);
+        ::metagl::glActiveTexture(textureUnit);
+        texture->BindGL();
+        ::metagl::glActiveTexture(::metagl::TextureUnit::Texture0);
+    }
+
     // --- EasyGLOcclusionQueryBackend ---
 
     EasyGLOcclusionQueryBackend::EasyGLOcclusionQueryBackend(::easygl::ResourceRegistry* registry)
@@ -2097,11 +2110,83 @@ void main()
         // Attribute layout is configured lazily in ApplyLayout() once stride is known.
     }
 
+    namespace
+    {
+        struct VertexAttribFormat
+        {
+            int componentCount;
+            ::easygl::DataType type;
+            bool normalized;
+            bool isInteger;
+        };
+
+        // Task 1080: maps XNA's VertexElementFormat to the GL attribute shape needed to bind it
+        // -- component count, GL scalar type, whether values are normalized to [0,1]/[-1,1], and
+        // whether the attribute must be read as a true integer (glVertexAttribIPointer) rather
+        // than converted to float (glVertexAttribPointer). Byte4 is the one format needing the
+        // integer path -- XNA's own format for BLENDINDICES-style semantics (read as int4 in
+        // HLSL), matching the existing skinned-vertex BlendIndices precedent below (offset 48,
+        // case 52) that this table generalizes to arbitrary declarations.
+        VertexAttribFormat DescribeVertexElementFormat(VertexElementFormat format)
+        {
+            switch (format)
+            {
+            case VertexElementFormat::Single:          return { 1, ::easygl::DataType::Float,        false, false };
+            case VertexElementFormat::Vector2:         return { 2, ::easygl::DataType::Float,        false, false };
+            case VertexElementFormat::Vector3:         return { 3, ::easygl::DataType::Float,        false, false };
+            case VertexElementFormat::Vector4:         return { 4, ::easygl::DataType::Float,        false, false };
+            case VertexElementFormat::Color:           return { 4, ::easygl::DataType::UnsignedByte, true,  false };
+            case VertexElementFormat::Byte4:           return { 4, ::easygl::DataType::UnsignedByte, false, true  };
+            case VertexElementFormat::Short2:          return { 2, ::easygl::DataType::Short,        false, false };
+            case VertexElementFormat::Short4:          return { 4, ::easygl::DataType::Short,        false, false };
+            case VertexElementFormat::NormalizedShort2:return { 2, ::easygl::DataType::Short,        true,  false };
+            case VertexElementFormat::NormalizedShort4:return { 4, ::easygl::DataType::Short,        true,  false };
+            case VertexElementFormat::HalfVector2:     return { 2, ::easygl::DataType::HalfFloat,    false, false };
+            case VertexElementFormat::HalfVector4:     return { 4, ::easygl::DataType::HalfFloat,    false, false };
+            }
+            return { 3, ::easygl::DataType::Float, false, false };
+        }
+    }
+
+    void EasyGLVertexBufferBackend::SetVertexDeclaration(const std::vector<VertexElement>& elements)
+    {
+        declarationElements_ = elements;
+    }
+
     void EasyGLVertexBufferBackend::ApplyLayout(std::size_t stride)
     {
         const int s = static_cast<int>(stride);
         vao.bind();
         vbo.bind(::easygl::BufferTarget::Array);
+
+        if (!declarationElements_.empty())
+        {
+            // Task 1080: generic layout binding driven by the caller's own VertexDeclaration.
+            // Attribute location = the element's own index within the declaration's element
+            // list, matching this project's established "layout(location=N) == Nth field of the
+            // ported HLSL input struct" convention used by every hand-ported .fx vertex shader
+            // this session -- not a fixed byte-stride dispatch, so this covers genuinely custom
+            // layouts (e.g. NormalMapping.fx's Position+Normal+Tangent+TexCoord) that don't match
+            // any of the built-in strides the switch below recognizes.
+            for (std::size_t i = 0; i < declarationElements_.size(); ++i)
+            {
+                const VertexElement& element = declarationElements_[i];
+                const VertexAttribFormat desc =
+                    DescribeVertexElementFormat(element.getVertexElementFormatProperty());
+                const auto location = static_cast<unsigned int>(i);
+                const void* offset = reinterpret_cast<void*>(
+                    static_cast<std::uintptr_t>(element.getOffsetProperty()));
+                vao.enable_attribute(location);
+                if (desc.isInteger)
+                    vao.set_attribute_i_pointer(location, desc.componentCount, desc.type, s, offset);
+                else
+                    vao.set_attribute_pointer(location, desc.componentCount, desc.type,
+                                              desc.normalized, s, offset);
+            }
+            vao.unbind();
+            return;
+        }
+
         switch (stride)
         {
         case 16:
@@ -3784,6 +3869,25 @@ void main()
         vb.vao.unbind();
     }
 
+    namespace
+    {
+        // Task 1079: binds a ShaderEffect's own compiled program (bypassing the built-in
+        // stride-dispatched shaders) and its World/View/Projection uniforms, matching the exact
+        // uniform names every original XNA sample's own .fx source already declares.
+        void BindCustomEffectMatrices(IEffectBackend& backend,
+                                      const Matrix& world, const Matrix& view, const Matrix& projection)
+        {
+            backend.Bind();
+            float worldCM[16], viewCM[16], projCM[16];
+            world.ToColumnMajor(worldCM);
+            view.ToColumnMajor(viewCM);
+            projection.ToColumnMajor(projCM);
+            backend.SetUniformMat4("World", worldCM);
+            backend.SetUniformMat4("View", viewCM);
+            backend.SetUniformMat4("Projection", projCM);
+        }
+    }
+
     void EasyGLGraphicsBackend::DrawPrimitivesEx(const IVertexBufferBackend& vb_in,
                                                  const Matrix& world,
                                                  const Matrix& view,
@@ -3794,6 +3898,17 @@ void main()
     {
         if (metagl::IsContextLost()) return;
         const auto& vb  = static_cast<const EasyGLVertexBufferBackend&>(vb_in);
+
+        if (params.customEffectBackend)
+        {
+            BindCustomEffectMatrices(*params.customEffectBackend, world, view, projection);
+            const int vertex_count = VertexCountForPrimitives(primitive, primitiveCount);
+            vb.vao.bind();
+            device.draw_arrays(ToEasyGl(primitive), params.vertexStart, vertex_count);
+            vb.vao.unbind();
+            return;
+        }
+
         Prog3D& p = SelectProgram(vb.GetStride(), params);
         p.prog.use();
         BindDrawParams(p, world, view, projection, params);
@@ -3823,6 +3938,28 @@ void main()
         if (metagl::IsContextLost()) return;
         const auto& vb  = static_cast<const EasyGLVertexBufferBackend&>(vb_in);
         const auto& ib  = static_cast<const EasyGLIndexBufferBackend&>(ib_in);
+
+        if (params.customEffectBackend)
+        {
+            BindCustomEffectMatrices(*params.customEffectBackend, world, view, projection);
+            const int index_count = VertexCountForPrimitives(primitive, primitiveCount);
+            vb.vao.bind();
+            ib.ibo.bind(::easygl::BufferTarget::ElementArray);
+            const auto idxTypeCustom = ib.thirtyTwoBit ? ::easygl::DataType::UnsignedInt
+                                                        : ::easygl::DataType::UnsignedShort;
+            const int indexSizeCustom = ib.thirtyTwoBit ? 4 : 2;
+            const void* indexOffsetCustom = reinterpret_cast<const void*>(
+                static_cast<std::uintptr_t>(params.startIndex) * static_cast<std::uintptr_t>(indexSizeCustom));
+            if (params.baseVertex == 0) {
+                device.draw_elements(ToEasyGl(primitive), index_count, idxTypeCustom, indexOffsetCustom);
+            } else {
+                ::metagl::glDrawElementsBaseVertex(ToEasyGl(primitive), index_count, idxTypeCustom,
+                                                   indexOffsetCustom, params.baseVertex);
+            }
+            vb.vao.unbind();
+            return;
+        }
+
         Prog3D& p = SelectProgram(vb.GetStride(), params);
         p.prog.use();
         BindDrawParams(p, world, view, projection, params);
@@ -3864,13 +4001,80 @@ void main()
         if (metagl::IsContextLost()) return;
         const auto& vb  = static_cast<const EasyGLVertexBufferBackend&>(vb_in);
         const auto& ib  = static_cast<const EasyGLIndexBufferBackend&>(ib_in);
-        Prog3D& p = SelectProgram(vb.GetStride(), params);
-        p.prog.use();
-        BindDrawParams(p, world, view, projection, params);
 
         const int index_count = VertexCountForPrimitives(primitive, primitiveCount);
         const auto idxType = ib.thirtyTwoBit ? ::easygl::DataType::UnsignedInt
                                              : ::easygl::DataType::UnsignedShort;
+
+        if (params.customEffectBackend)
+        {
+            // Task 1082: hardware instancing with a custom ShaderEffect. The per-vertex mesh
+            // buffer's own attributes are already bound (via ApplyLayout, at SetData time) into
+            // vb's own VAO; bind the *second*, per-instance buffer's own attributes into that
+            // same VAO here, continuing at locations right after the mesh buffer's own, each
+            // with a divisor of 1 (advance once per instance -- InstancedModel.fx's own
+            // `instanceTransform : BLENDWEIGHT` case, XNA's most common instancing pattern; a
+            // non-1 `VertexBufferBinding.InstanceFrequency` is a documented, deliberate scope
+            // reduction, not threaded through -- see this task's own plan_graphics.md write-up).
+            BindCustomEffectMatrices(*params.customEffectBackend, world, view, projection);
+
+            // vb_in/vb are const (matching the interface's own signature), but attribute-config
+            // calls below mutate GPU-side VAO state only, not C++ object state -- the same
+            // category easy-gl's own bind()/unbind() are already marked const for; this const_cast
+            // is a local workaround for that inconsistency, not a real constness violation.
+            auto& vao = const_cast<::easygl::VertexArray&>(vb.vao);
+
+            vao.bind();
+
+            if (params.instanceVb)
+            {
+                const auto& instVb = static_cast<const EasyGLVertexBufferBackend&>(*params.instanceVb);
+                const auto& meshDecl = vb.GetDeclarationElements();
+                const auto& instDecl = instVb.GetDeclarationElements();
+                const auto baseLocation = static_cast<unsigned int>(meshDecl.size());
+                const int instStride = static_cast<int>(instVb.GetStride());
+
+                instVb.vbo.bind(::easygl::BufferTarget::Array);
+                for (std::size_t i = 0; i < instDecl.size(); ++i)
+                {
+                    const VertexElement& element = instDecl[i];
+                    const VertexAttribFormat desc =
+                        DescribeVertexElementFormat(element.getVertexElementFormatProperty());
+                    const auto location = baseLocation + static_cast<unsigned int>(i);
+                    const void* offset = reinterpret_cast<void*>(
+                        static_cast<std::uintptr_t>(element.getOffsetProperty()));
+                    vao.enable_attribute(location);
+                    if (desc.isInteger)
+                        vao.set_attribute_i_pointer(location, desc.componentCount, desc.type,
+                                                    instStride, offset);
+                    else
+                        vao.set_attribute_pointer(location, desc.componentCount, desc.type,
+                                                  desc.normalized, instStride, offset);
+                    vao.set_attribute_divisor(location, 1);
+                }
+            }
+
+            ib.ibo.bind(::easygl::BufferTarget::ElementArray);
+            device.draw_elements_instanced(ToEasyGl(primitive), index_count, idxType,
+                                           nullptr, instanceCount);
+
+            if (params.instanceVb)
+            {
+                const auto& instVb = static_cast<const EasyGLVertexBufferBackend&>(*params.instanceVb);
+                const auto& meshDecl = vb.GetDeclarationElements();
+                const auto& instDecl = instVb.GetDeclarationElements();
+                const auto baseLocation = static_cast<unsigned int>(meshDecl.size());
+                for (std::size_t i = 0; i < instDecl.size(); ++i)
+                    vao.disable_attribute(baseLocation + static_cast<unsigned int>(i));
+            }
+
+            vao.unbind();
+            return;
+        }
+
+        Prog3D& p = SelectProgram(vb.GetStride(), params);
+        p.prog.use();
+        BindDrawParams(p, world, view, projection, params);
 
         vb.vao.bind();
         ib.ibo.bind(::easygl::BufferTarget::ElementArray);

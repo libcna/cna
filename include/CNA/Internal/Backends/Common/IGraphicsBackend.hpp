@@ -5,6 +5,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SpriteEffects.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SetDataOptions.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
@@ -14,6 +15,7 @@
 #include <string>
 #include <memory>
 #include <unordered_map>
+#include <vector>
 #include "CNA/Internal/Graphics/ImageData.hpp"
 
 struct SDL_Window;
@@ -33,6 +35,7 @@ namespace CNA::Internal::Backends
     using Effect = Microsoft::Xna::Framework::Graphics::Effect;
     using ImageData = CNA::Internal::Graphics::ImageData;
     using SetDataOptions = Microsoft::Xna::Framework::Graphics::SetDataOptions;
+    using VertexElement = Microsoft::Xna::Framework::Graphics::VertexElement;
 
     /**
      * @brief Backend handle for a vertex buffer.
@@ -80,6 +83,23 @@ namespace CNA::Internal::Backends
         {
             SetData(data, vertex_count, stride_in_bytes);
         }
+
+        /**
+         * @brief Task 1080: supplies the caller's own `VertexElement` list (offset/format/usage
+         * per attribute) so a backend can bind genuinely custom vertex layouts generically,
+         * instead of only the fixed set of byte-strides its 3D draw path otherwise recognizes.
+         *
+         * Default is a no-op — backends that don't support arbitrary layouts (or don't yet need
+         * to) simply ignore it and keep behaving exactly as before. Called by
+         * `VertexBuffer::SetDataRaw()` immediately before `SetData()`, so a backend that does
+         * override this may rely on the declaration being current by the time `SetData()`/
+         * `SetDataWithOptions()` runs.
+         *
+         * @param elements The vertex declaration's element list, in declaration order. An empty
+         *                 list means "no explicit declaration was supplied" — implementations
+         *                 should fall back to their own pre-existing stride-based behavior.
+         */
+        virtual void SetVertexDeclaration(const std::vector<VertexElement>& elements) {}
 
         [[nodiscard]] virtual int GetVertexCount() const = 0;
     };
@@ -274,6 +294,13 @@ namespace CNA::Internal::Backends
         /// Unit 0 is normally driven by the caller (e.g. SpriteBatch); this is for additional
         /// units a custom shader samples directly (e.g. a second blend-source texture).
         virtual void BindTexture(int unit, ITextureBackend* texture) {}
+        /// Task 1081: binds a cube texture to the given sampler unit (0-based), for a custom
+        /// shader that declares a `samplerCube` uniform (e.g. a reflection map). Separate from
+        /// `BindTexture()` since `ITextureCubeBackend` is its own interface, not a subtype of
+        /// `ITextureBackend` -- GL itself allows a 2D and a cube texture bound to the same unit
+        /// simultaneously, since they occupy distinct binding targets; the shader's own sampler
+        /// type (`sampler2D` vs `samplerCube`) determines which one is actually sampled.
+        virtual void BindTextureCube(int unit, ITextureCubeBackend* texture) {}
     };
 
     class ISpriteBatchBackend
@@ -426,6 +453,14 @@ namespace CNA::Internal::Backends
         int startIndex  = 0;
         /// Value added to each index before vertex fetch (maps to glDrawElementsBaseVertex / vkCmdDrawIndexed `vertexOffset`).
         int baseVertex  = 0;
+        /// Task 1079: when non-null, a `ShaderEffect`-compiled custom program is currently bound
+        /// (`Effect::GetEffectBackendPtr()`) and the backend should bind/draw with it directly
+        /// instead of selecting one of its own built-in stride-dispatched shaders. Null for every
+        /// stock effect (`BasicEffect`/`AlphaTestEffect`/`DualTextureEffect`/`EnvironmentMapEffect`/
+        /// `SkinnedEffect`) and for no-effect draws. Backends that don't implement this (non-EasyGL)
+        /// safely ignore it, matching the established accepted-and-ignored pattern for other
+        /// not-yet-backend-supported `GpuDrawParams` fields.
+        IEffectBackend* customEffectBackend = nullptr;
     };
 
     class IGraphicsBackend

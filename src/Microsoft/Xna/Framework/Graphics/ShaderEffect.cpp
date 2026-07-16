@@ -2,6 +2,7 @@
 #include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "CNA/Logger.hpp"
 #include <iostream>
@@ -73,6 +74,11 @@ namespace Microsoft::Xna::Framework::Graphics
         if (effectBackend_) effectBackend_->BindTexture(unit, &texture.GetBackend());
     }
 
+    void ShaderEffect::SetTexture(int unit, TextureCube& texture)
+    {
+        if (effectBackend_) effectBackend_->BindTextureCube(unit, &texture.GetBackend());
+    }
+
     ShaderEffect::~ShaderEffect() = default;
 
     const std::string& ShaderEffect::getVertexSourceProperty() const { return vertSrc_; }
@@ -91,6 +97,11 @@ namespace Microsoft::Xna::Framework::Graphics
     CNA::Internal::Backends::IEffectBackend* ShaderEffect::GetEffectBackendPtr() const
     {
         return effectBackend_.get();
+    }
+
+    void ShaderEffect::FillGpuDrawParams(CNA::Internal::Backends::GpuDrawParams& params) const
+    {
+        params.customEffectBackend = effectBackend_.get();
     }
 
     const std::string& ShaderEffect::GetTypeName() const

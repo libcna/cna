@@ -184,6 +184,7 @@ namespace CNA::Internal::Backends::EasyGL
         void SetUniformFloatArray(const char* name, const float* values, int count) override;
         void SetUniformVec2Array(const char* name, const float* values, int count) override;
         void BindTexture(int unit, ITextureBackend* texture) override;
+        void BindTextureCube(int unit, ITextureCubeBackend* texture) override;
 
         /// Returns the underlying compiled program, so a backend (e.g. SpriteBatch) can bind
         /// the SAME program this ShaderEffect's SetUniformXxx() calls actually write to.
@@ -301,8 +302,17 @@ namespace CNA::Internal::Backends::EasyGL
         void SetData(const void* data, int vertex_count, std::size_t stride_in_bytes) override;
         void SetDataWithOptions(const void* data, int vertex_count, std::size_t stride_in_bytes,
                                 SetDataOptions options) override;
+        // Task 1080: stores the caller's own VertexElement list so ApplyLayout() can bind
+        // genuinely custom vertex formats generically instead of only the fixed byte-strides
+        // the switch below recognizes. Empty (the default) means "keep using that switch".
+        void SetVertexDeclaration(const std::vector<VertexElement>& elements) override;
         int GetVertexCount() const override { return vertex_count; }
         [[nodiscard]] std::size_t GetStride() const { return stride_in_bytes_; }
+        /// Task 1082: exposes this buffer's own declaration elements so a hardware-instancing
+        /// draw can bind a *second* (per-instance) buffer's attributes into the same VAO,
+        /// continuing at locations right after this buffer's own (see
+        /// DrawInstancedPrimitivesEx's custom-effect branch).
+        [[nodiscard]] const std::vector<VertexElement>& GetDeclarationElements() const { return declarationElements_; }
 
         void release_gl_handle_only() override;
         void recreate_gl_resource() override;
@@ -315,6 +325,7 @@ namespace CNA::Internal::Backends::EasyGL
         std::vector<uint8_t> cpu_data_;
         std::size_t stride_in_bytes_ = 0;
         bool gpu_allocated_ = false;
+        std::vector<VertexElement> declarationElements_;
     };
 
     /**

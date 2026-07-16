@@ -21,6 +21,31 @@
 
 ---
 
+> **Separate, unrelated track — `plan_graphics.md` Phase 78 (DEFERRED.md item #11, HLSL→GLSL sample
+> shader conversion) is now FULLY COMPLETE, as of 2026-07-16 (EasyGL only).** This is completely
+> independent of the D3D work above — it unblocks samples catalogued in `plan_samples.md`
+> (`../cna-samples`' own 153-sample re-audit), not `plan_dx.md`. **Task 945 decided** (project
+> owner, 2026-07-16): manual line-by-line HLSL→GLSL porting, no `SPIRV-Cross`/`dxc` pipeline — every
+> HLSL construct hit across every shader ported turned out to be a mechanical 1:1 substitution.
+> **Task 947 is now 13/13 — every sample originally blocked purely by DEFERRED.md #11 has its
+> shader(s) ported and pixel-verified**: `NetRumble`, `PerPixelLighting`, `VertexLighting`,
+> `DistortionSample`, `NonPhotoRealistic`, `ShadowMapping`, `NormalMapping`, `BillboardSample`,
+> `ShatterEffect`, `Particles3D`, `XmlParticles`, `ShipGame`, `InstancedModel` (`BloomSample`, the
+> 14th sample under the same DEFERRED.md #11 umbrella, was already closed earlier via Task 946).
+> Along the way, 4 new backend capabilities were added and closed, all EasyGL-only, all additive
+> (Vulkan/Bgfx/SDL_Renderer untouched): **Task 1079** (wires `ShaderEffect` into `GraphicsDevice`'s
+> 3D draw path, not just `SpriteBatch`), **Task 1080** (genuinely custom vertex layouts for that
+> path, not just the 5 fixed byte-strides), **Task 1081** (`TextureCube` sampling for custom
+> shaders), **Task 1082** (real GPU hardware instancing — `glVertexAttribDivisor`-driven per-instance
+> vertex streams). **What remains is explicitly NOT `cna_graphics` scope**: the actual sample ports
+> (`.cpp`/`.hpp`/`Content/` under `../cna-samples/samples/<Name>/`) for these 13 (now-unblocked)
+> samples still need to be written in the sibling `../cna-samples` repo, tracked in that repo's own
+> plan file, not here or in `plan_graphics.md`/`plan_samples.md`. `plan_samples.md` also still has
+> ~88 other `⬜` rows unrelated to this shader-conversion track (re-verification passes, other
+> DEFERRED.md items, etc.) — untouched by this work, standing backlog. Full detail: `plan_graphics.md`
+> Task 947's own row (chronological per-shader history, discriminating-power mutation testing for
+> every one) and Tasks 1079–1082's own rows; `plan_samples.md` for the per-sample CNA-gap tracking.
+
 ## 1. Project summary
 
 **CNA** is a C++23 reimplementation of the XNA 4.0 programming model
@@ -1418,6 +1443,7 @@ Most recent first. Full detail lives in `plan_dx9.md` — this is a short index.
 | `09121309` | **Phase D9-0 fully closed** (`D9-2`–`D9-5`): confirmed `d3d9`-alone link set (no `dxguid`); a real Wine+DXVK D3D9 device/swap-chain/`Clear`/`Present`/`GetRenderTargetData`/`LockRect` round-trip with an exact pixel match plus a full `D3DCAPS9` dump (`vs_3_0`/`ps_3_0`, `NumSimultaneousRTs=4`, 16384 max texture size, DXVK reports unconditional NPOT support — flagged as provisional/synthetic, not an authentic XNA-era driver's caps); confirmed `D3DPOOL_MANAGED` textures are genuinely `LockRect`-readable and survive `Reset()` with no re-upload (so `Texture2D::GetData()` can be a plain `LockRect` later, `D9-52`); and a new `scripts/run-wine-dxvk9.sh` (mirrors `run-wine-dxvk.sh`'s DXVK-marker gate under new `CNA_D3D9_*` env-var names), proven both ways — passes against the real `~/.wine-cna-d3d11` DXVK prefix, and correctly fails (exit 3) against a freshly-initialized, DXVK-less prefix that silently fell back to WineD3D. |
 | `59a35d4c` | Recorded the project owner's two 2026-07-14 decisions in `plan_dx9.md`: implementation authorized through Phase D9-13, and the `IGraphicsBackend` boundary problem resolved via an approved additive extension. |
 | `d1ae928f` | Added `plan_dx9.md` and the proven Phase D9-0 spike artifacts (`dx9-spike/`: shader compiler, `.fxb` bytecode oracle, real XNA 4.0 reference renderer) to the `feature/dx9` worktree. |
+| many, see `plan_graphics.md` (2026-07-16) | **`plan_graphics.md` Phase 78 (HLSL→GLSL sample shader conversion, DEFERRED.md #11) fully closed — unrelated to the D3D work below, see this file's own top banner.** Task 945 decided (manual line-by-line porting). Task 947 went 0→**13/13**: `NetRumble` (`Clouds.fx` + the bloom trio), `PerPixelLighting`/`VertexLighting` (5 effect/technique combinations), `DistortionSample` (`Distort.fx` + `Distorters.fx`, 5 techniques), `NonPhotoRealistic` (`CartoonEffect.Fx` + `PostprocessEffect.Fx`, 8 techniques), `ShadowMapping`, `NormalMapping`, `BillboardSample`, `ShatterEffect`, `Particles3D`/`XmlParticles`, `ShipGame` (4 distinct shaders: `AnimSprite.fx`/`Blur.fx`/`NormalMapping.fx`/`Particle.fx`, incl. real GPU point sprites), `InstancedModel` (`InstancedModel.fx`, incl. real GPU hardware instancing). 4 new EasyGL-only backend capabilities landed along the way as their own tasks: **1079** (`ShaderEffect` into the 3D draw path), **1080** (custom vertex layouts for that path), **1081** (`TextureCube` sampling for custom shaders), **1082** (real GPU hardware instancing via `glVertexAttribDivisor`). `ctest -R "EasyGL_"` grew from ~190 to **231/233** across the whole campaign, same 2 pre-existing unrelated failures throughout, every task individually mutation-tested and committed separately. Full chronological detail (exact expected pixel values, discriminating-power mutation testing per shader) is in `plan_graphics.md`'s own Task 947/1079–1082 rows, not duplicated here. `plan_samples.md` updated per-sample (13 rows now say "No longer CNA-blocked"). **Not done**: the actual sample ports themselves in `../cna-samples` — out of `cna_graphics` scope. |
 
 ---
 
@@ -1620,6 +1646,12 @@ for real once culling-sensitive scenes are drawn.
 See `plan_dx9.md`'s "CNA's divergences from XNA 4.0" for the six pre-existing, cross-cutting
 CNA-vs-XNA fidelity gaps this plan will measure (not fix) once Phase D9-A's oracle is complete.
 
+**Two standing, project-wide architecture-decision items, unrelated to D3D9** (not this plan's to
+decide — see `plan_graphics.md` for full detail): `Texture3D`/`TextureCube` inherit
+`GraphicsResource` directly instead of `Texture` (Task 863); `GraphicsDevice` stores state objects
+by value instead of FNA's reference-type aliasing (Task 869). Both need a project-owner direction
+before any backend acts on them — see §9.
+
 ---
 
 ## 6. Architecture notes
@@ -1760,6 +1792,22 @@ actually still needs, if anything:
 
 See `plan_dx9.md`'s "Execution order" table for the full sequence beyond this.
 
+**Other standing backlog, unrelated to D3D9** (full history: `plan_dx.md` for the now-fully-closed
+D3D11/D3D12 work, this file's own top banner for Phase 78):
+- **`plan_samples.md` standing queue** (formerly Phase 79, `plan_graphics.md` Tasks 957–1076,
+  moved+renumbered `SAMPLE-1`–`SAMPLE-120` on 2026-07-16): a full re-audit of all 153
+  `../cna-samples`-catalogued samples, one row per sample. **13 rows** (`SAMPLE-32`/`33`/`34`/`35`/
+  `36`/`38`/`39`/`40`/`42`/`43`/`45`/`62`/`66`) now say "No longer CNA-blocked" thanks to Phase 78
+  — their own CNA-side shader gap is closed, but they're still `⬜` in `plan_samples.md` because
+  **the actual sample port itself** (`.cpp`/`.hpp`/`Content/` under `../cna-samples/samples/<Name>/`)
+  hasn't been written yet — that's a different repo, out of `cna_graphics` scope, tracked in
+  `../cna-samples`'s own plan file. The other ~88 `⬜` rows in `plan_samples.md` are unrelated to
+  shaders (re-verification passes, other DEFERRED.md items) — pick any of those, or any of the 13
+  above if the sibling repo's own plan calls for it. Do not touch `⛔` rows (structural/permanent,
+  no CNA action possible).
+- Task 952 (`RenderTargetCube` depth-gating bug on Bgfx) remains **DEFERRED**, not a next task —
+  see §9.
+
 ---
 
 ## 9. Do not do yet
@@ -1778,6 +1826,40 @@ See `plan_dx9.md`'s "Execution order" table for the full sequence beyond this.
 - **Do not touch `IGraphicsBackend.hpp` beyond the approved additive extension** (new
   `GraphicsBackendCreateArgs` fields + the one device-event channel) — nothing else, no drive-by
   refactors.
+- **`plan_dx.md` is entirely closed for both D3D11 and D3D12, through Phase DX16** (2026-07-15) —
+  nothing left to authorize or implement there on this Debian machine. Only `DX-27`/`DX-90`/`DX-91`
+  (D3D11) and `DX-110`/`DX-114` (D3D12) remain, all `needs_human` — a real Windows machine with a
+  real GPU, or a real device-removed trigger neither backend can induce under Wine. **Do not open a
+  "Phase DX17" or similar speculatively** — if the project owner wants more D3D work, they'll say so
+  (e.g. the same way Phase DX16 itself started from an explicit percentage-audit request). Don't
+  invent new gaps to close just because the plan file is open-ended in principle.
+- **When working Phase DX12, do not merge D3D11 and D3D12 into one shared device/backend class**
+  "for less duplication" — `plan_dx.md` design decision 4 already scoped what's genuinely shared
+  (`D3DCommon`); forcing the actual device/command/resource logic to share code across two
+  structurally different APIs is exactly the kind of premature abstraction `CLAUDE.md` warns
+  against.
+- **Do not assume D3D12 swap-chain/`Present()` support works locally under Wine "since D3D11's
+  DXVK path worked"** — `DX-100`'s real spike found the opposite for presentation specifically
+  (`CreateSwapChainForHwnd` crashes/fails under vanilla Wine's `dxgi.dll` + vkd3d-proton, even
+  though the device/queue/command-list path itself is genuinely solid). Build `DX-102` onward
+  around off-screen/readback proof and re-verify swap-chain support explicitly before relying on
+  it, rather than inheriting D3D11's own assumption by analogy.
+- **Do not resume Task 952** (Bgfx `RenderTargetCube` depth-gating bug) without explicit
+  instruction — explicitly marked **DEFERRED** by the project owner after 2 full investigation
+  rounds found no root cause.
+- **Do not attempt Task 863 or Task 869** (the two architecture-decision items in §5) without the
+  project owner picking a direction first.
+- **Phase 78's `cna_graphics`-side shader-conversion work (Tasks 945/946/947/1079–1082) is DONE**
+  (2026-07-16, explicit project-owner direction) — do not re-port any of the 13+1 already-closed
+  shaders, and do not re-litigate Task 945's own decision (manual porting). What's still off-limits
+  without new instruction: writing the actual sample ports themselves in the sibling `../cna-samples`
+  repo — that's a different repo with its own plan file (not opened this session), genuinely outside
+  `cna_graphics` scope, not merely "not yet started."
+- **Do not chase `cna_demo_xact`'s build failure** — missing example asset directory, not a CNA bug.
+- **Do not attempt `EasyGL_MRT_TwoAttachments`** opportunistically — pre-existing, off-limits
+  without a dedicated task.
+- **Do not run more than one backend's `ctest`/`CnaTests` suite concurrently** — causes spurious
+  `Subprocess aborted` failures from resource contention, not real bugs.
 - **Do not bundle multiple task numbers into one commit** — one task per commit, staged by explicit
   filename (never `git add -A`/`.`).
 - **Do not claim indistinguishability from Wine+DXVK results alone** — `D3DCAPS9` under DXVK is
@@ -1798,8 +1880,12 @@ Implementation is authorized through Phase D9-13. The IGraphicsBackend boundary 
 D9-11 (custom ShaderEffect) still needs an explicit ask before starting. Phase D9-14 needs real
 Windows hardware, out of reach here.
 
-Pick exactly one task from Sec.8 "Next smallest tasks" (default to the first one unless told
-otherwise). Inspect only the files that task names.
+Pick exactly one task from §8 "Next smallest tasks" (default to the first one unless told
+otherwise; the D3D9 punch list is exhausted down to `needs_human` rows, so also consider the
+"Other standing backlog, unrelated to D3D9" items at the end of that section). Inspect only the
+files that task names -- do not go exploring unrelated modules, and do not refactor anything you
+find along the way that isn't directly required for this task. See §9 for what stays off-limits
+generally.
 
 Make one small, verified improvement:
 1. Investigate/reproduce first (run the exact command named in the task).

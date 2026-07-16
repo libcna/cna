@@ -381,6 +381,11 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         if (getIsDisposedProperty())
             throw System::ObjectDisposedException("VertexBuffer");
+        // Task 1080: push this buffer's own VertexDeclaration (if any) down to the backend
+        // before uploading, so backends that support arbitrary layouts (see
+        // IVertexBufferBackend::SetVertexDeclaration) can bind genuinely custom vertex formats
+        // instead of only recognizing a fixed set of byte-strides.
+        backend_->SetVertexDeclaration(vertexDeclaration_.GetVertexElements());
         backend_->SetData(data, count, static_cast<std::size_t>(stride));
     }
 

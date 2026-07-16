@@ -1986,6 +1986,317 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 947 (Phase 78 rollout): Clouds.fx HLSL->GLSL conversion proof -- clears NetRumble's
+        # shader blocker (the bloom trio above already proved the other 3 of its 4 shaders).
+        cna_easygl_test(cna_test_easygl_clouds_shader
+                        examples/easygl_clouds_shader_test.cpp)
+        add_test(NAME EasyGL_Clouds_Shader
+                 COMMAND cna_test_easygl_clouds_shader)
+        set_tests_properties(EasyGL_Clouds_Shader PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 1079: ShaderEffect can now drive a real 3D DrawIndexedPrimitives() call, not just
+        # SpriteBatch -- verifies World/View/Projection + attribute wiring for stride-32 vertices.
+        cna_easygl_test(cna_test_easygl_shadereffect_3d
+                        examples/easygl_shadereffect_3d_test.cpp)
+        add_test(NAME EasyGL_ShaderEffect_3D
+                 COMMAND cna_test_easygl_shadereffect_3d)
+        set_tests_properties(EasyGL_ShaderEffect_3D PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 947 (Phase 78 rollout): PerPixelLighting.fx's PerPixelDiffuseAndPhong technique --
+        # first real 3D shader conversion, using Task 1079's new 3D ShaderEffect capability.
+        cna_easygl_test(cna_test_easygl_perpixellighting_shader
+                        examples/easygl_perpixellighting_shader_test.cpp)
+        add_test(NAME EasyGL_PerPixelLighting_Shader
+                 COMMAND cna_test_easygl_perpixellighting_shader)
+        set_tests_properties(EasyGL_PerPixelLighting_Shader PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 947: PerPixelLighting.fx's PerPixelDiffuse technique (diffuse-only, no specular).
+        cna_easygl_test(cna_test_easygl_perpixellighting_diffuseonly_shader
+                        examples/easygl_perpixellighting_diffuseonly_shader_test.cpp)
+        add_test(NAME EasyGL_PerPixelLighting_DiffuseOnly_Shader
+                 COMMAND cna_test_easygl_perpixellighting_diffuseonly_shader)
+        set_tests_properties(EasyGL_PerPixelLighting_DiffuseOnly_Shader PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 947: PerPixelLighting.fx's PerVertexDiffuseAndPerPixelPhong technique (diffuse per
+        # vertex, specular per pixel).
+        cna_easygl_test(cna_test_easygl_perpixellighting_vertexdiffuse_pixelphong_shader
+                        examples/easygl_perpixellighting_vertexdiffuse_pixelphong_shader_test.cpp)
+        add_test(NAME EasyGL_PerPixelLighting_VertexDiffusePixelPhong_Shader
+                 COMMAND cna_test_easygl_perpixellighting_vertexdiffuse_pixelphong_shader)
+        set_tests_properties(EasyGL_PerPixelLighting_VertexDiffusePixelPhong_Shader PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 947: VertexLighting.fx's PerVertexDiffuse technique (diffuse-only, fully per vertex).
+        cna_easygl_test(cna_test_easygl_vertexlighting_diffuse_shader
+                        examples/easygl_vertexlighting_diffuse_shader_test.cpp)
+        add_test(NAME EasyGL_VertexLighting_Diffuse_Shader
+                 COMMAND cna_test_easygl_vertexlighting_diffuse_shader)
+        set_tests_properties(EasyGL_VertexLighting_Diffuse_Shader PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 947: VertexLighting.fx's PerVertexDiffuseAndPhong technique (diffuse+specular, fully
+        # per vertex) -- with this one, all 5 of PerPixelLighting sample's effect/technique
+        # combinations are ported.
+        cna_easygl_test(cna_test_easygl_vertexlighting_diffusephong_shader
+                        examples/easygl_vertexlighting_diffusephong_shader_test.cpp)
+        add_test(NAME EasyGL_VertexLighting_DiffusePhong_Shader
+                 COMMAND cna_test_easygl_vertexlighting_diffusephong_shader)
+        set_tests_properties(EasyGL_VertexLighting_DiffusePhong_Shader PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 947: VertexLightingSample's OWN VertexLighting.fx (directional light -- distinct
+        # from the same-named file already ported for the PerPixelLighting sample).
+        cna_easygl_test(cna_test_easygl_vertexlighting_directional_shader
+                        examples/easygl_vertexlighting_directional_shader_test.cpp)
+        add_test(NAME EasyGL_VertexLighting_Directional_Shader
+                 COMMAND cna_test_easygl_vertexlighting_directional_shader)
+        set_tests_properties(EasyGL_VertexLighting_Directional_Shader PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 947: VertexLightingSample's FlatShaded.fx -- with this and the row above,
+        # VertexLighting sample's shader blocker is fully cleared.
+        cna_easygl_test(cna_test_easygl_flatshaded_shader
+                        examples/easygl_flatshaded_shader_test.cpp)
+        add_test(NAME EasyGL_FlatShaded_Shader
+                 COMMAND cna_test_easygl_flatshaded_shader)
+        set_tests_properties(EasyGL_FlatShaded_Shader PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 947: Distort.fx's Distort technique (no-blur variant).
+        cna_easygl_test(cna_test_easygl_distort_shader
+                        examples/easygl_distort_shader_test.cpp)
+        add_test(NAME EasyGL_Distort_Shader
+                 COMMAND cna_test_easygl_distort_shader)
+        set_tests_properties(EasyGL_Distort_Shader PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 947: Distorters.fx's DisplacementMapped technique.
+        cna_easygl_test(cna_test_easygl_distorters_displacementmapped_shader
+                        examples/easygl_distorters_displacementmapped_shader_test.cpp)
+        add_test(NAME EasyGL_Distorters_DisplacementMapped_Shader
+                 COMMAND cna_test_easygl_distorters_displacementmapped_shader)
+        set_tests_properties(EasyGL_Distorters_DisplacementMapped_Shader PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 947: Distorters.fx's HeatHaze technique.
+        cna_easygl_test(cna_test_easygl_distorters_heathaze_shader
+                        examples/easygl_distorters_heathaze_shader_test.cpp)
+        add_test(NAME EasyGL_Distorters_HeatHaze_Shader
+                 COMMAND cna_test_easygl_distorters_heathaze_shader)
+        set_tests_properties(EasyGL_Distorters_HeatHaze_Shader PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 947: Distorters.fx's PullIn technique -- with this, Distorters.fx's own 3
+        # actually-used techniques (DisplacementMapped/HeatHaze/PullIn) are all ported.
+        cna_easygl_test(cna_test_easygl_distorters_pullin_shader
+                        examples/easygl_distorters_pullin_shader_test.cpp)
+        add_test(NAME EasyGL_Distorters_PullIn_Shader
+                 COMMAND cna_test_easygl_distorters_pullin_shader)
+        set_tests_properties(EasyGL_Distorters_PullIn_Shader PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 947: Distort.fx's DistortBlur technique -- with this, DistortionSample's shader
+        # blocker is fully cleared.
+        cna_easygl_test(cna_test_easygl_distortblur_shader
+                        examples/easygl_distortblur_shader_test.cpp)
+        add_test(NAME EasyGL_DistortBlur_Shader
+                 COMMAND cna_test_easygl_distortblur_shader)
+        set_tests_properties(EasyGL_DistortBlur_Shader PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 947: CartoonEffect.Fx's Lambert technique.
+        cna_easygl_test(cna_test_easygl_cartooneffect_lambert_shader
+                        examples/easygl_cartooneffect_lambert_shader_test.cpp)
+        add_test(NAME EasyGL_CartoonEffect_Lambert_Shader
+                 COMMAND cna_test_easygl_cartooneffect_lambert_shader)
+        set_tests_properties(EasyGL_CartoonEffect_Lambert_Shader PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 947: CartoonEffect.Fx's Toon technique.
+        cna_easygl_test(cna_test_easygl_cartooneffect_toon_shader
+                        examples/easygl_cartooneffect_toon_shader_test.cpp)
+        add_test(NAME EasyGL_CartoonEffect_Toon_Shader
+                 COMMAND cna_test_easygl_cartooneffect_toon_shader)
+        set_tests_properties(EasyGL_CartoonEffect_Toon_Shader PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 947: CartoonEffect.Fx's NormalDepth technique -- with this, all 3 of
+        # CartoonEffect.Fx's techniques are ported.
+        cna_easygl_test(cna_test_easygl_cartooneffect_normaldepth_shader
+                        examples/easygl_cartooneffect_normaldepth_shader_test.cpp)
+        add_test(NAME EasyGL_CartoonEffect_NormalDepth_Shader
+                 COMMAND cna_test_easygl_cartooneffect_normaldepth_shader)
+        set_tests_properties(EasyGL_CartoonEffect_NormalDepth_Shader PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 947: PostprocessEffect.Fx's 5 techniques -- with this, NonPhotoRealistic sample's
+        # shader blocker is fully cleared.
+        cna_easygl_test(cna_test_easygl_postprocesseffect_shader
+                        examples/easygl_postprocesseffect_shader_test.cpp)
+        add_test(NAME EasyGL_PostprocessEffect_Shader
+                 COMMAND cna_test_easygl_postprocesseffect_shader)
+        set_tests_properties(EasyGL_PostprocessEffect_Shader PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 947: DrawModel.fx's CreateShadowMap technique (ShadowMappingSample_4_0).
+        cna_easygl_test(cna_test_easygl_shadowmapping_createshadowmap_shader
+                        examples/easygl_shadowmapping_createshadowmap_shader_test.cpp)
+        add_test(NAME EasyGL_ShadowMapping_CreateShadowMap_Shader
+                 COMMAND cna_test_easygl_shadowmapping_createshadowmap_shader)
+        set_tests_properties(EasyGL_ShadowMapping_CreateShadowMap_Shader PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 947: DrawModel.fx's DrawWithShadowMap technique -- with this, ShadowMapping
+        # sample's shader blocker is fully cleared.
+        cna_easygl_test(cna_test_easygl_shadowmapping_drawwithshadowmap_shader
+                        examples/easygl_shadowmapping_drawwithshadowmap_shader_test.cpp)
+        add_test(NAME EasyGL_ShadowMapping_DrawWithShadowMap_Shader
+                 COMMAND cna_test_easygl_shadowmapping_drawwithshadowmap_shader)
+        set_tests_properties(EasyGL_ShadowMapping_DrawWithShadowMap_Shader PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 1080: genuinely custom vertex-layout support for the 3D ShaderEffect draw path
+        # (a 48-byte stride/5-element declaration matching none of the 5 built-in strides).
+        cna_easygl_test(cna_test_easygl_shadereffect_custom_vertex_layout
+                        examples/easygl_shadereffect_custom_vertex_layout_test.cpp)
+        add_test(NAME EasyGL_ShaderEffect_CustomVertexLayout
+                 COMMAND cna_test_easygl_shadereffect_custom_vertex_layout)
+        set_tests_properties(EasyGL_ShaderEffect_CustomVertexLayout PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 947: NormalMapping.fx (tangent-space normal mapping + Phong specular) -- with
+        # this, NormalMapping sample's shader blocker is fully cleared. Uses Task 1080's custom
+        # vertex layout (Position+TexCoord+Normal+Binormal+Tangent, stride 56).
+        cna_easygl_test(cna_test_easygl_normalmapping_shader
+                        examples/easygl_normalmapping_shader_test.cpp)
+        add_test(NAME EasyGL_NormalMapping_Shader
+                 COMMAND cna_test_easygl_normalmapping_shader)
+        set_tests_properties(EasyGL_NormalMapping_Shader PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 947: Billboard.fx (view-facing billboard expansion + wind sway + alpha-tested
+        # diffuse lighting) -- with this, BillboardSample's shader blocker is fully cleared.
+        # Uses Task 1080's custom vertex layout (Position+Normal+TexCoord+Random, stride 36).
+        cna_easygl_test(cna_test_easygl_billboard_shader
+                        examples/easygl_billboard_shader_test.cpp)
+        add_test(NAME EasyGL_Billboard_Shader
+                 COMMAND cna_test_easygl_billboard_shader)
+        set_tests_properties(EasyGL_Billboard_Shader PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 947: ShatterEffect.fx (per-triangle rotation-and-fall shatter animation + Phong
+        # lighting) -- with this, ShatterEffect sample's shader blocker is fully cleared. Uses
+        # Task 1080's custom vertex layout (Position+Normal+TexCoords+TriangleCenter+
+        # RotationalVelocity, stride 56).
+        cna_easygl_test(cna_test_easygl_shattereffect_shader
+                        examples/easygl_shattereffect_shader_test.cpp)
+        add_test(NAME EasyGL_ShatterEffect_Shader
+                 COMMAND cna_test_easygl_shattereffect_shader)
+        set_tests_properties(EasyGL_ShatterEffect_Shader PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 947: ParticleEffect.fx (GPU-animated billboarded particles) -- shared verbatim by
+        # Particles3DSample and XmlParticles, so this clears both samples' shader blockers at
+        # once. Uses Task 1080's custom vertex layout (Corner+Position+Velocity+Random+Time,
+        # stride 52).
+        cna_easygl_test(cna_test_easygl_particleeffect_shader
+                        examples/easygl_particleeffect_shader_test.cpp)
+        add_test(NAME EasyGL_ParticleEffect_Shader
+                 COMMAND cna_test_easygl_particleeffect_shader)
+        set_tests_properties(EasyGL_ParticleEffect_Shader PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 947: ShipGame's AnimSprite.fx (sprite-sheet frame cross-fade), 1 of ShipGame's 4
+        # distinct custom shaders. Uses VertexPositionTexture (stride 20, already supported).
+        cna_easygl_test(cna_test_easygl_animsprite_shader
+                        examples/easygl_animsprite_shader_test.cpp)
+        add_test(NAME EasyGL_AnimSprite_Shader
+                 COMMAND cna_test_easygl_animsprite_shader)
+        set_tests_properties(EasyGL_AnimSprite_Shader PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 947: ShipGame's Blur.fx (5-technique box blur / colour / colour-texture), 2 of
+        # ShipGame's 4 distinct custom shaders now ported.
+        cna_easygl_test(cna_test_easygl_blur_shader
+                        examples/easygl_blur_shader_test.cpp)
+        add_test(NAME EasyGL_ShipGame_Blur_Shader
+                 COMMAND cna_test_easygl_blur_shader)
+        set_tests_properties(EasyGL_ShipGame_Blur_Shader PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 1081: TextureCube sampling support for custom ShaderEffect shaders (needed for
+        # ShipGame's own NormalMapping.fx reflection map).
+        cna_easygl_test(cna_test_easygl_shadereffect_texturecube
+                        examples/easygl_shadereffect_texturecube_test.cpp)
+        add_test(NAME EasyGL_ShaderEffect_TextureCube
+                 COMMAND cna_test_easygl_shadereffect_texturecube)
+        set_tests_properties(EasyGL_ShaderEffect_TextureCube PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 947: ShipGame's own NormalMapping.fx (3 techniques: PlainMapping/NormalMapping/
+        # ViewMapping) -- 3 of ShipGame's 4 distinct custom shaders now ported. Uses Task 1081's
+        # TextureCube capability.
+        cna_easygl_test(cna_test_easygl_shipgame_normalmapping_shader
+                        examples/easygl_shipgame_normalmapping_shader_test.cpp)
+        add_test(NAME EasyGL_ShipGame_NormalMapping_Shader
+                 COMMAND cna_test_easygl_shipgame_normalmapping_shader)
+        set_tests_properties(EasyGL_ShipGame_NormalMapping_Shader PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 947: ShipGame's own Particle.fx (real GPU point sprites via PSIZE/gl_PointSize) --
+        # the 4th and final ShipGame custom shader, fully clearing ShipGame's shader blocker.
+        cna_easygl_test(cna_test_easygl_shipgame_particle_shader
+                        examples/easygl_shipgame_particle_shader_test.cpp)
+        add_test(NAME EasyGL_ShipGame_Particle_Shader
+                 COMMAND cna_test_easygl_shipgame_particle_shader)
+        set_tests_properties(EasyGL_ShipGame_Particle_Shader PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 947 (final sample) + Task 1082: InstancedModel.fx's HardwareInstancing technique --
+        # proves real GPU hardware instancing (glVertexAttribDivisor-based per-instance vertex
+        # stream through a custom ShaderEffect), completing Task 947 at 13/13.
+        cna_easygl_test(cna_test_easygl_instancedmodel_shader
+                        examples/easygl_instancedmodel_shader_test.cpp)
+        add_test(NAME EasyGL_InstancedModel_Shader
+                 COMMAND cna_test_easygl_instancedmodel_shader)
+        set_tests_properties(EasyGL_InstancedModel_Shader PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 133: DualTextureEffect — magenta×yellow→red pixel readback
         cna_easygl_test(cna_test_easygl_dual_texture
                         examples/easygl_dual_texture_test.cpp)
