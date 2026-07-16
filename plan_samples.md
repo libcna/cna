@@ -157,7 +157,7 @@
 | #    | Sample (PLAN.md #) | Status | CNA-side action needed |
 | ---- | ------------------- | ------ | ----------------------- |
 | SAMPLE-61 | MarbleMaze (061) | ⬜ | Re-verify; no known CNA gap (confirmed a 2nd `assimp`-export winding-inversion quirk — asset-tooling, not CNA). |
-| SAMPLE-62 | NetRumble (062) | ⬜ | Blocked on custom shader (#11, Phase 78 Task 947); networking itself already unblocked. |
+| SAMPLE-62 | NetRumble (062) | ⬜ | **No longer CNA-blocked (2026-07-16)** — its shader gap (#11) is now fully cleared: the bloom trio was proven by Task 946, and its 4th and last blocking shader, `Clouds.fx`, was proven by Task 947 (`EasyGL_Clouds_Shader`). Networking was already unblocked. Only the sample port itself remains (no `src/`/`CMakeLists.txt` yet in `../cna-samples/samples/NetRumble` — tracked there, not here). |
 | SAMPLE-63 | HoneycombRush (063) | ⬜ | Re-verify; no known CNA gap. |
 | SAMPLE-64 | HoneycombRushTrainingKit (064) | ⛔ | Redundant multi-exercise variant of already-ported `HoneycombRush` (063) — structural, no CNA gap. No revisit trigger. |
 | SAMPLE-65 | NinjAcademy (065) | ⬜ | Re-verify; no known CNA gap. |
