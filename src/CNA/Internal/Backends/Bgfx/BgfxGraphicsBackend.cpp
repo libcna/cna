@@ -1085,6 +1085,10 @@ namespace CNA::Internal::Backends::Bgfx
                                                              "vs_lit_textured3d",
                                                              "fs_lit_textured3d",
                                                              "lit_textured3d");
+                litTextured3DVertexLitProgram_ = tryCreateProgram(kLitTextured3dVertexLitShaders,
+                                                             "vs_lit_textured3d_vertexlit",
+                                                             "fs_lit_textured3d_vertexlit",
+                                                             "lit_textured3d_vertexlit");
                 alphaTest3DProgram_       = tryCreateProgram(kAlphaTest3dShaders,
                                                              "vs_alpha_test3d",
                                                              "fs_alpha_test3d",
@@ -1105,6 +1109,10 @@ namespace CNA::Internal::Backends::Bgfx
                                                              "vs_skinned3d",
                                                              "fs_skinned3d",
                                                              "skinned3d");
+                skinned3DVertexLitProgram_ = tryCreateProgram(kSkinned3dVertexLitShaders,
+                                                             "vs_skinned3d_vertexlit",
+                                                             "fs_skinned3d_vertexlit",
+                                                             "skinned3d_vertexlit");
                 instanced3DProgram_       = tryCreateProgram(kInstanced3dShaders,
                                                              "vs_instanced3d",
                                                              "fs_instanced3d",
@@ -1247,11 +1255,13 @@ namespace CNA::Internal::Backends::Bgfx
         destroyP(textured3DProgram_);
         destroyP(coloredTextured3DProgram_);
         destroyP(litTextured3DProgram_);
+        destroyP(litTextured3DVertexLitProgram_);
         destroyP(alphaTest3DProgram_);
         destroyP(alphaTestColoredTextured3DProgram_);
         destroyP(dualTexture3DProgram_);
         destroyP(dualTextureColored3DProgram_);
         destroyP(skinned3DProgram_);
+        destroyP(skinned3DVertexLitProgram_);
         destroyP(instanced3DProgram_);
         destroyP(envMap3DProgram_);
         if (bgfx::isValid(mrtFbo_))         { bgfx::destroy(mrtFbo_);         mrtFbo_         = BGFX_INVALID_HANDLE; }
@@ -2377,7 +2387,11 @@ namespace CNA::Internal::Backends::Bgfx
                     bgfx::setTexture(0, texColor3DSampler_, defaultWhiteTexture3D_, samplerFlags_[0]);
                 }
             }
-            SubmitViewProgram(skinned3DProgram_);
+            // Task 1104: XNA's real SkinnedEffect default is per-vertex lighting
+            // (PreferPerPixelLighting=false); fall back to the per-pixel-lit program only if the
+            // vertex-lit sibling failed to compile on this renderer.
+            SubmitViewProgram((!params.preferPerPixelLighting && bgfx::isValid(skinned3DVertexLitProgram_))
+                ? skinned3DVertexLitProgram_ : skinned3DProgram_);
         }
         else if (params.envMapping && bgfx::isValid(envMap3DProgram_))
         {
@@ -2547,7 +2561,11 @@ namespace CNA::Internal::Backends::Bgfx
                     bgfx::setTexture(0, texColor3DSampler_, defaultWhiteTexture3D_, samplerFlags_[0]);
                 }
             }
-            SubmitViewProgram(litTextured3DProgram_);
+            // Task 1104: XNA's real BasicEffect default is per-vertex lighting
+            // (PreferPerPixelLighting=false); fall back to the per-pixel-lit program only if the
+            // vertex-lit sibling failed to compile on this renderer.
+            SubmitViewProgram((!params.preferPerPixelLighting && bgfx::isValid(litTextured3DVertexLitProgram_))
+                ? litTextured3DVertexLitProgram_ : litTextured3DProgram_);
         }
         else if (params.textureEnabled && params.vertexColorEnabled
                  && bgfx::isValid(coloredTextured3DProgram_))
@@ -2793,7 +2811,11 @@ namespace CNA::Internal::Backends::Bgfx
                     bgfx::setTexture(0, texColor3DSampler_, defaultWhiteTexture3D_, samplerFlags_[0]);
                 }
             }
-            SubmitViewProgram(skinned3DProgram_);
+            // Task 1104: XNA's real SkinnedEffect default is per-vertex lighting
+            // (PreferPerPixelLighting=false); fall back to the per-pixel-lit program only if the
+            // vertex-lit sibling failed to compile on this renderer.
+            SubmitViewProgram((!params.preferPerPixelLighting && bgfx::isValid(skinned3DVertexLitProgram_))
+                ? skinned3DVertexLitProgram_ : skinned3DProgram_);
         }
         else if (params.envMapping && bgfx::isValid(envMap3DProgram_))
         {
@@ -2963,7 +2985,11 @@ namespace CNA::Internal::Backends::Bgfx
                     bgfx::setTexture(0, texColor3DSampler_, defaultWhiteTexture3D_, samplerFlags_[0]);
                 }
             }
-            SubmitViewProgram(litTextured3DProgram_);
+            // Task 1104: XNA's real BasicEffect default is per-vertex lighting
+            // (PreferPerPixelLighting=false); fall back to the per-pixel-lit program only if the
+            // vertex-lit sibling failed to compile on this renderer.
+            SubmitViewProgram((!params.preferPerPixelLighting && bgfx::isValid(litTextured3DVertexLitProgram_))
+                ? litTextured3DVertexLitProgram_ : litTextured3DProgram_);
         }
         else if (params.textureEnabled && params.vertexColorEnabled
                  && bgfx::isValid(coloredTextured3DProgram_))

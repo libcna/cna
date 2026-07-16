@@ -1,15 +1,26 @@
 // SPDX-License-Identifier: MS-PL
-// Task 894: SkinnedEffect pixel test — real specular highlights (Bgfx backend). See
-// examples/easygl_basiceffect_specular_test.cpp for the full FNA-reference half-vector
-// Blinn-Phong derivation (Lighting.fxh's ComputeLights) — SkinnedEffect uses the exact same
-// formula and (with an identity bone palette + identity World) the exact same expected numbers.
+// Task 1104 (plan_graphics.md Phase 80 / plan_dx9.md Divergence 1): SkinnedEffect pixel test --
+// PreferPerPixelLighting genuinely selects between two different lighting evaluations (Bgfx
+// backend), mirroring the BasicEffect test exactly.
 //
-// Before this task, SkinnedEffect had zero specular infrastructure: no SpecularColor/SpecularPower
-// forwarding, no per-light SpecularColor forwarding, no EyePosition/world-position plumbing in any
-// backend's skinned shader at all.
+// Real XNA 4.0 default: PreferPerPixelLighting=false -> lighting is computed ONCE per vertex
+// (VSSkinnedVertexLighting*) and Gouraud-interpolated across the triangle. true -> lighting is
+// re-evaluated per fragment. Before this task, this backend's SkinnedEffect path always evaluated
+// per pixel regardless of this flag's value (the same gap this task already fixed for
+// BasicEffect).
 //
-// Uses an identity bone palette (weight=1 on bone 0, which defaults to Identity), isolating
-// skinning from the specular formula under test.
+// Reuses the EXACT scene from bgfx_skinnedeffect_specular_test.cpp's own "(a) eye straight on"
+// case: same 2-triangle quad, same shared vertex normal, same light/material setup, same centre-
+// pixel sample point (sitting exactly on the diagonal seam between the two triangles). A single
+// Identity bone at 100% weight keeps skinning a mathematical no-op, isolating the lighting-mode
+// difference under test.
+//
+// 3 checks:
+//   (a) Default (PreferPerPixelLighting left at its real XNA default, false): expect the
+//       vertex-lit/Gouraud value.
+//   (b) PreferPerPixelLighting=true: expect the pixel-lit value -- the OLD, pre-Task-1104 value
+//       this backend always produced regardless of the flag.
+//   (c) (a) != (b): proves the flag is a genuine, live dispatch selector, not a decorative no-op.
 //
 // Exit code 0 = PASS, 1 = FAIL.
 
@@ -32,13 +43,15 @@
 #include <cstdio>
 #include <cstdlib>
 #include <memory>
+#include <vector>
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
 
 static constexpr int kSize = 64;
 
-// GPU-compact skinned vertex: matches the EasyGL stride-52 layout (Task 123's own convention).
+// GPU-compact skinned vertex: matches this backend's stride-52 layout (same convention
+// bgfx_skinnedeffect_specular_test.cpp already established).
 struct SkinnedGpuVertex
 {
     float px, py, pz;
@@ -60,21 +73,14 @@ static constexpr float kSpecularPower = 32.0f;
 static const Vector3 kLightDirRaw(0.5f, 0.0f, -1.0f);
 static const float kNx = 0.0f, kNy = 0.0f, kNz = 1.0f;
 static const Vector3 kEyeStraightOn(0.0f, 0.0f, 3.0f);
-static const Vector3 kEyeOffAxis(3.0f, 0.0f, 1.0f);
 
-// Precisely computed offline (Python) from the exact FNA half-vector Blinn-Phong formula --
-// identical numbers to BasicEffect's own specular test (same shared Lighting.fxh formula).
-// Task 1104: updated forward from 155 (the OLD, pre-Task-1104 always-pixel-lit value, dotH=0.9732
-// spec=0.4199) to 126 -- this scene never sets PreferPerPixelLighting, so it now genuinely
-// exercises the real XNA default (per-vertex/Gouraud-interpolated specular). See
-// bgfx_skinnedeffect_preferperpixellighting_test.cpp for the dedicated test proving BOTH values
-// are real, live-selected results, not a silent regression.
-static const Color kExpectedStraightOn(126, 126, 126, 255);
-static const Color kExpectedOffAxisEye(68, 68, 68, 255);       // dotH=0.9239, spec=0.0794
-static const Color kExpectedNoSpecular(48, 48, 48, 255);       // diffuse+ambient only
-static const Color kExpectedLightDisabled(2, 2, 2, 255);       // ambient only
+// Same values EasyGL/Vulkan measured for this identical scene (Tasks 1102/1103); confirmed
+// against this backend's own real render before being accepted (see this task's own commit
+// message for the actual measured numbers).
+static const Color kExpectedVertexLit(125, 125, 125, 255);
+static const Color kExpectedPixelLit(155, 155, 155, 255);
 
-class BgfxSkinnedEffectSpecularTest : public Game
+class BgfxSkinnedEffectPreferPerPixelLightingTest : public Game
 {
     std::unique_ptr<GraphicsDeviceManager> gdm_;
     int  pass_ = 0;
@@ -113,29 +119,33 @@ class BgfxSkinnedEffectSpecularTest : public Game
         return px;
     }
 
-    Color renderWith(GraphicsDevice& dev, Texture2D& tex, const Vector3& eyePos,
-                      const Vector3& specularColor, bool lightEnabled)
+    Color renderWith(GraphicsDevice& dev, Texture2D& tex, bool preferPerPixelLighting)
     {
         Vector3 lightDir = kLightDirRaw;
         lightDir.Normalize();
 
         SkinnedEffect fx(dev);
         fx.setTextureProperty(&tex);
+        fx.setPreferPerPixelLightingProperty(preferPerPixelLighting);
         fx.setAmbientLightColorProperty(kAmbient);
         fx.setDiffuseColorProperty(kMaterialDiffuse);
         fx.setEmissiveColorProperty(kZero);
-        fx.setSpecularColorProperty(specularColor);
+        fx.setSpecularColorProperty(kSpecularColor);
         fx.setSpecularPowerProperty(kSpecularPower);
 
-        fx.DirectionalLight0.setEnabledProperty(lightEnabled);
+        fx.DirectionalLight0.setEnabledProperty(true);
         fx.DirectionalLight0.setDirectionProperty(lightDir);
         fx.DirectionalLight0.setDiffuseColorProperty(kLightDiffuse);
         fx.DirectionalLight0.setSpecularColorProperty(kLightSpecular);
         fx.DirectionalLight1.setEnabledProperty(false);
         fx.DirectionalLight2.setEnabledProperty(false);
 
+        // Single Identity bone at 100% weight -- skinning is a mathematical no-op, isolating the
+        // lighting-mode difference under test.
+        fx.SetBoneTransforms(std::vector<Matrix>{ Matrix::getIdentityProperty() });
+
         fx.setWorldProperty(Matrix::getIdentityProperty());
-        fx.setViewProperty(Matrix::CreateLookAt(eyePos, Vector3::Zero, Vector3(0.0f, 1.0f, 0.0f)));
+        fx.setViewProperty(Matrix::CreateLookAt(kEyeStraightOn, Vector3::Zero, Vector3(0.0f, 1.0f, 0.0f)));
         fx.setProjectionProperty(Matrix::CreatePerspectiveFieldOfView(MathHelper::PiOver4, 1.0f, 0.1f, 100.0f));
         fx.Apply();
 
@@ -173,30 +183,26 @@ protected:
         Texture2D tex(dev, 1, 1);
         tex.SetData(&kWhite, 1);
 
-        const Color a = renderWith(dev, tex, kEyeStraightOn, kSpecularColor, true);
-        check(matches(a, kExpectedStraightOn),
-              "(a) Eye straight on (0,0,3): diffuse+strong specular", a, "(155,155,155)");
+        const Color vertexLit = renderWith(dev, tex, false);
+        check(matches(vertexLit, kExpectedVertexLit),
+              "(a) PreferPerPixelLighting=false (XNA's real default): Gouraud-interpolated specular",
+              vertexLit, "(125,125,125)");
 
-        const Color b = renderWith(dev, tex, kEyeOffAxis, kSpecularColor, true);
-        check(matches(b, kExpectedOffAxisEye),
-              "(b) Eye off-axis (3,0,1): weaker specular, proves EyePosition dependence", b, "(68,68,68)");
-        check(!matches(b, a), "(b) differs from (a) -- specular is not a hardcoded constant", b, "!= (155,155,155)");
+        const Color pixelLit = renderWith(dev, tex, true);
+        check(matches(pixelLit, kExpectedPixelLit),
+              "(b) PreferPerPixelLighting=true: fresh per-fragment specular",
+              pixelLit, "(155,155,155)");
 
-        const Color c = renderWith(dev, tex, kEyeStraightOn, kZero, true);
-        check(matches(c, kExpectedNoSpecular),
-              "(c) SpecularColor=(0,0,0): pure diffuse+ambient baseline, no specular", c, "(48,48,48)");
-
-        const Color d = renderWith(dev, tex, kEyeStraightOn, kSpecularColor, false);
-        check(matches(d, kExpectedLightDisabled),
-              "(d) DirectionalLight0.Enabled=false: ambient-only (specular also zeroed, not just diffuse)",
-              d, "(2,2,2)");
+        check(!matches(vertexLit, pixelLit),
+              "(c) (a) differs from (b) -- PreferPerPixelLighting is a real dispatch selector",
+              vertexLit, "!= (155,155,155)");
 
         std::printf("\nResult: %d/%d PASS\n", pass_, pass_ + fail_);
         Exit();
     }
 
 public:
-    BgfxSkinnedEffectSpecularTest()
+    BgfxSkinnedEffectPreferPerPixelLightingTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
         gdm_->setPreferredBackBufferWidthProperty(kSize);
@@ -208,7 +214,7 @@ public:
 
 int main()
 {
-    BgfxSkinnedEffectSpecularTest game;
+    BgfxSkinnedEffectPreferPerPixelLightingTest game;
     game.Run();
     return game.getResult();
 }

@@ -1,14 +1,30 @@
 // SPDX-License-Identifier: MS-PL
-// Task 886: BasicEffect pixel test — real specular highlights (Bgfx backend).
+// Task 1104 (plan_graphics.md Phase 80 / plan_dx9.md Divergence 1): BasicEffect pixel test --
+// PreferPerPixelLighting genuinely selects between two different lighting evaluations (Bgfx
+// backend).
 //
-// See examples/easygl_basiceffect_specular_test.cpp for the full FNA-derived half-vector
-// Blinn-Phong formula derivation and the 4 checks' precise expected-value computation.
+// Real XNA 4.0 default: PreferPerPixelLighting=false -> lighting is computed ONCE per vertex
+// (VSBasicVertexLighting*) and Gouraud-interpolated across the triangle. true -> lighting is
+// re-evaluated per fragment (VSBasicPixelLighting*/PSBasicPixelLighting*). Before this task, this
+// backend always evaluated per pixel regardless of this flag's value -- the opposite of XNA's own
+// default -- and GpuDrawParams didn't even carry the flag at all until Task 1100.
 //
-// Per Task 364's finding (tracked as Task 896, not fixed there or here): Bgfx's default
-// RasterizerState cull state (`BGFX_STATE_CULL_CCW`) is the only one of the 3 backends that
-// actually matches FNA's real `CullCounterClockwiseFace` default, so it silently culls the
-// standard NDC quad winding used throughout this pixel-test family unless `RasterizerState::
-// CullNone` is set explicitly — worked around here identically to Tasks 364-886's own Bgfx tests.
+// Reuses the exact scene from bgfx_basiceffect_specular_test.cpp's own "(a) eye straight on" case
+// (same discriminating-seam reasoning as easygl/vulkan's own Task 1102/1103 tests): a single
+// shared vertex normal makes DIFFUSE spatially constant, but SPECULAR still varies across the
+// surface (the view vector depends on position), and the sampled centre pixel sits exactly on the
+// diagonal seam between this quad's two triangles -- PreferPerPixelLighting=false reads the
+// Gouraud-interpolated AVERAGE of the two shared vertices' own per-vertex specular terms; =true
+// reads a FRESH per-fragment evaluation at the origin itself. EasyGL/Vulkan (identical scene)
+// measured vertex-lit ~127, pixel-lit ~155 -- confirmed against this backend's own real render
+// below before being accepted (small per-backend rounding is expected, not a bug).
+//
+// 3 checks:
+//   (a) Default (PreferPerPixelLighting left at its real XNA default, false): expect the
+//       vertex-lit/Gouraud value.
+//   (b) PreferPerPixelLighting=true: expect the pixel-lit value -- the OLD, pre-Task-1104 value
+//       this backend always produced regardless of the flag.
+//   (c) (a) != (b): proves the flag is a genuine, live dispatch selector, not a decorative no-op.
 //
 // Exit code 0 = PASS, 1 = FAIL.
 
@@ -43,25 +59,18 @@ static const Vector3 kMaterialDiffuse(0.4f, 0.4f, 0.4f);
 static const Vector3 kLightDiffuse(0.5f, 0.5f, 0.5f);
 static const Vector3 kLightSpecular(1.0f, 1.0f, 1.0f);
 static const Vector3 kSpecularColor(1.0f, 1.0f, 1.0f);
-static const Vector3 kZero(0.0f, 0.0f, 0.0f);
 static constexpr float kSpecularPower = 32.0f;
 static const Vector3 kLightDirRaw(0.5f, 0.0f, -1.0f);
 static const Vector3 kNormal(0.0f, 0.0f, 1.0f);
 static const Vector3 kEyeStraightOn(0.0f, 0.0f, 3.0f);
-static const Vector3 kEyeOffAxis(3.0f, 0.0f, 1.0f);
 
-// Task 1104: updated forward from 155 (the OLD, pre-Task-1104 always-pixel-lit value) to 127 --
-// this scene never sets PreferPerPixelLighting, so it now genuinely exercises the real XNA
-// default (per-vertex/Gouraud-interpolated specular), which this exact quad/seam sample point is
-// deliberately shaped to distinguish from the old per-pixel value (see
-// bgfx_basiceffect_preferperpixellighting_test.cpp for the dedicated test proving BOTH values are
-// real, live-selected results, not a silent regression).
-static const Color kExpectedStraightOn(127, 127, 127, 255);
-static const Color kExpectedOffAxisEye(68, 68, 68, 255);
-static const Color kExpectedNoSpecular(48, 48, 48, 255);
-static const Color kExpectedLightDisabled(2, 2, 2, 255);
+// Same values EasyGL/Vulkan measured for this identical scene (Tasks 1102/1103); confirmed
+// against this backend's own real render before being accepted (see this task's own commit
+// message for the actual measured numbers).
+static const Color kExpectedVertexLit(127, 127, 127, 255);
+static const Color kExpectedPixelLit(155, 155, 155, 255);
 
-class BasicEffectSpecularTest : public Game
+class BgfxBasicEffectPreferPerPixelLightingTest : public Game
 {
     std::unique_ptr<GraphicsDeviceManager> gdm_;
     int  pass_ = 0;
@@ -100,8 +109,7 @@ class BasicEffectSpecularTest : public Game
         return px;
     }
 
-    Color renderWith(GraphicsDevice& dev, Texture2D& tex, const Vector3& eyePos,
-                      const Vector3& specularColor, bool lightEnabled)
+    Color renderWith(GraphicsDevice& dev, Texture2D& tex, bool preferPerPixelLighting)
     {
         Vector3 lightDir = kLightDirRaw;
         lightDir.Normalize();
@@ -110,19 +118,20 @@ class BasicEffectSpecularTest : public Game
         fx.setTextureEnabledProperty(true);
         fx.setTextureProperty(&tex);
         fx.setLightingEnabledProperty(true);
+        fx.setPreferPerPixelLightingProperty(preferPerPixelLighting);
         fx.setAmbientLightColorProperty(kAmbient);
         fx.setDiffuseColorProperty(kMaterialDiffuse);
-        fx.setEmissiveColorProperty(kZero);
-        fx.setSpecularColorProperty(specularColor);
+        fx.setEmissiveColorProperty(Vector3::Zero);
+        fx.setSpecularColorProperty(kSpecularColor);
         fx.setSpecularPowerProperty(kSpecularPower);
 
-        fx.DirectionalLight0.setEnabledProperty(lightEnabled);
+        fx.DirectionalLight0.setEnabledProperty(true);
         fx.DirectionalLight0.setDirectionProperty(lightDir);
         fx.DirectionalLight0.setDiffuseColorProperty(kLightDiffuse);
         fx.DirectionalLight0.setSpecularColorProperty(kLightSpecular);
 
         fx.setWorldProperty(Matrix::getIdentityProperty());
-        fx.setViewProperty(Matrix::CreateLookAt(eyePos, Vector3::Zero, Vector3(0.0f, 1.0f, 0.0f)));
+        fx.setViewProperty(Matrix::CreateLookAt(kEyeStraightOn, Vector3::Zero, Vector3(0.0f, 1.0f, 0.0f)));
         fx.setProjectionProperty(Matrix::CreatePerspectiveFieldOfView(MathHelper::PiOver4, 1.0f, 0.1f, 100.0f));
 
         const VertexPositionNormalTexture quad[6] = {
@@ -139,7 +148,8 @@ class BasicEffectSpecularTest : public Game
         {
             dev.Clear(Color(0, 0, 0, 255));
             dev.setBlendStateProperty(BlendState::Opaque);
-            // See Task 364/896 finding: Bgfx's default cull state culls this quad's winding.
+            // Task 364/896 finding: Bgfx's default CullCounterClockwiseFace-matching cull state
+            // culls this quad's winding unless explicitly disabled.
             dev.setRasterizerStateProperty(RasterizerState::CullNone);
             fx.Apply();
             dev.DrawUserPrimitives(PrimitiveType::TriangleList, quad, 0, 2);
@@ -158,30 +168,26 @@ protected:
         Texture2D tex(dev, 1, 1);
         tex.SetData(&kWhite, 1);
 
-        const Color a = renderWith(dev, tex, kEyeStraightOn, kSpecularColor, true);
-        check(matches(a, kExpectedStraightOn),
-              "(a) Eye straight on (0,0,3): diffuse+strong specular", a, "(155,155,155)");
+        const Color vertexLit = renderWith(dev, tex, false);
+        check(matches(vertexLit, kExpectedVertexLit),
+              "(a) PreferPerPixelLighting=false (XNA's real default): Gouraud-interpolated specular",
+              vertexLit, "(127,127,127)");
 
-        const Color b = renderWith(dev, tex, kEyeOffAxis, kSpecularColor, true);
-        check(matches(b, kExpectedOffAxisEye),
-              "(b) Eye off-axis (3,0,1): weaker specular, proves EyePosition dependence", b, "(68,68,68)");
-        check(!matches(b, a), "(b) differs from (a) -- specular is not a hardcoded constant", b, "!= (155,155,155)");
+        const Color pixelLit = renderWith(dev, tex, true);
+        check(matches(pixelLit, kExpectedPixelLit),
+              "(b) PreferPerPixelLighting=true: fresh per-fragment specular",
+              pixelLit, "(155,155,155)");
 
-        const Color c = renderWith(dev, tex, kEyeStraightOn, kZero, true);
-        check(matches(c, kExpectedNoSpecular),
-              "(c) SpecularColor=(0,0,0): pure diffuse+ambient baseline, no specular", c, "(48,48,48)");
-
-        const Color d = renderWith(dev, tex, kEyeStraightOn, kSpecularColor, false);
-        check(matches(d, kExpectedLightDisabled),
-              "(d) DirectionalLight0.Enabled=false: ambient-only (specular also zeroed, not just diffuse)",
-              d, "(2,2,2)");
+        check(!matches(vertexLit, pixelLit),
+              "(c) (a) differs from (b) -- PreferPerPixelLighting is a real dispatch selector",
+              vertexLit, "!= (155,155,155)");
 
         std::printf("\nResult: %d/%d PASS\n", pass_, pass_ + fail_);
         Exit();
     }
 
 public:
-    BasicEffectSpecularTest()
+    BgfxBasicEffectPreferPerPixelLightingTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
         gdm_->setPreferredBackBufferWidthProperty(kSize);
@@ -193,7 +199,7 @@ public:
 
 int main()
 {
-    BasicEffectSpecularTest game;
+    BgfxBasicEffectPreferPerPixelLightingTest game;
     game.Run();
     return game.getResult();
 }

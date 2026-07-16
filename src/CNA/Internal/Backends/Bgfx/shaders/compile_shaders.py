@@ -43,6 +43,12 @@ SHADER_PAIRS = [
         ("vs_lit_textured3d",     "vertex",   "vs_lit_textured3d.sc"),
         ("fs_lit_textured3d",     "fragment", "fs_lit_textured3d.sc"),
     ]),
+    ("kLitTextured3dVertexLitShaders", [
+        # Task 1104: real per-vertex-lit sibling, selected when GpuDrawParams::
+        # preferPerPixelLighting is false (XNA's real BasicEffect default).
+        ("vs_lit_textured3d_vertexlit", "vertex",   "vs_lit_textured3d_vertexlit.sc"),
+        ("fs_lit_textured3d_vertexlit", "fragment", "fs_lit_textured3d_vertexlit.sc"),
+    ]),
     ("kAlphaTest3dShaders", [
         ("vs_alpha_test3d",       "vertex",   "vs_alpha_test3d.sc"),
         ("fs_alpha_test3d",       "fragment", "fs_alpha_test3d.sc"),
@@ -60,6 +66,12 @@ SHADER_PAIRS = [
     ("kSkinned3dShaders", [
         ("vs_skinned3d",          "vertex",   "vs_skinned3d.sc"),
         ("fs_skinned3d",          "fragment", "fs_skinned3d.sc"),
+    ]),
+    ("kSkinned3dVertexLitShaders", [
+        # Task 1104: real per-vertex-lit sibling, selected when GpuDrawParams::
+        # preferPerPixelLighting is false (XNA's real SkinnedEffect default).
+        ("vs_skinned3d_vertexlit", "vertex",   "vs_skinned3d_vertexlit.sc"),
+        ("fs_skinned3d_vertexlit", "fragment", "fs_skinned3d_vertexlit.sc"),
     ]),
     ("kEnvMap3dShaders", [
         ("vs_env_map3d",          "vertex",   "vs_env_map3d.sc"),

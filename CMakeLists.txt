@@ -5738,6 +5738,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Task 1104: BasicEffect PreferPerPixelLighting real dispatch selector
+    cna_bgfx_test(cna_test_bgfx_basiceffect_preferperpixellighting
+                  examples/bgfx_basiceffect_preferperpixellighting_test.cpp)
+    add_test(NAME Bgfx_BasicEffect_PreferPerPixelLighting
+             COMMAND cna_test_bgfx_basiceffect_preferperpixellighting)
+    set_tests_properties(Bgfx_BasicEffect_PreferPerPixelLighting PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # Task 887: AlphaTestEffect.VertexColorEnabled fix verification
     cna_bgfx_test(cna_test_bgfx_alphatest_vertexcolor
                   examples/bgfx_alphatest_vertexcolor_test.cpp)
@@ -5933,6 +5942,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     add_test(NAME Bgfx_SkinnedEffect_Specular
              COMMAND cna_test_bgfx_skinnedeffect_specular)
     set_tests_properties(Bgfx_SkinnedEffect_Specular PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 1104: SkinnedEffect PreferPerPixelLighting real dispatch selector
+    cna_bgfx_test(cna_test_bgfx_skinnedeffect_preferperpixellighting
+                  examples/bgfx_skinnedeffect_preferperpixellighting_test.cpp)
+    add_test(NAME Bgfx_SkinnedEffect_PreferPerPixelLighting
+             COMMAND cna_test_bgfx_skinnedeffect_preferperpixellighting)
+    set_tests_properties(Bgfx_SkinnedEffect_PreferPerPixelLighting PROPERTIES
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
