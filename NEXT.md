@@ -1719,16 +1719,36 @@ is now closed (verified just now: `D9-A6`, the last one, is done above; the only
 in the whole plan are `D9-A5`/`D9-84`, both deliberately-ongoing "growing with the plan" 🟨 rows with
 their own documented remaining scope, not blocked-and-unstarted work).
 
-The `D9-A5`/`D9-84` scene-corpus-growth candidates remain exhausted for the same reasons recorded
-earlier this session, with one update: `SpriteBatch`, all 4 `PrimitiveType` values, `GraphicsProfile`,
-and every currently-drawable Stock Effect bucket are closed; **render targets are no longer blocked
-on a crash (§4's own blocker is RESOLVED 2026-07-16) — a render-target-as-texture oracle scene can
-now safely be re-attempted, it just hasn't been yet**; a `SurfaceFormat` sweep needs new CNA
-`Texture2D` API surface; `EnvironmentMapEffect` specular/`PreferPerPixelLighting` are blocked on
-`D9-81`'s cross-cutting `GpuDrawParams` gaps (§9 forbids fixing this from inside this branch —
-measure/report/propose only); hardware-instancing's HiDef gate and NPOT-wrap-on-`Reach` are Phase
-D9-10's own last named follow-ups, both needing real reference behavior this project has no way to
-verify (FNA implements neither).
+**Readiness re-audit, 2026-07-16 — accurate current punch list** (replaces this section's own prior
+paragraph, which had gone stale: it still said "`EnvironmentMapEffect` specular/
+`PreferPerPixelLighting` are blocked on `D9-81`'s cross-cutting `GpuDrawParams` gaps," contradicting
+this very section's own "RESOLVED 2026-07-16" paragraph above it — that gap is fixed, not still
+blocking). Every non-`✅` row in `plan_dx9.md` was re-read individually; here is what each one
+actually still needs, if anything:
+
+- **`D9-21`/`D9-62` — the one real, actionable, unstarted gap.** The `D3DCULL` winding mapping and
+  `RasterizerState.DepthBias`/`SlopeScaleDepthBias` were both implemented early (`D9-21`/`D9-62`,
+  2026-07-14) but neither has ever been pixel-proven against the real XNA oracle — no scene in the
+  `D9-A5` corpus isolates culling or depth-bias specifically (every existing scene either resets
+  `CullMode::None` or doesn't touch depth bias at all). This is the next candidate — about to be
+  picked up.
+- **`SurfaceFormat` sweep** (`plan_graphics.md` Phase 81) — scoped, not decided: needs a project-
+  owner call on which formats justify the effort, and `Texture2D`'s own API needs new construction/
+  `SetData` paths for non-`Color` formats before the oracle can even describe one. Not started.
+- **`D9-A6` extended to Vulkan/D3D11** — offered, deferred by the project owner (2026-07-16). The
+  same recipe already proven for EasyGL (a `cna_*_test`-style CMake registration + a
+  `run-oracle-corpus-diff-<backend>.sh` twin script) is the natural next step whenever picked up.
+- **Permanently blocked, not further actionable without new, larger, out-of-scope work**:
+  `D9-73`'s 5th `PixelLighting` variant (untextured `VSBasicPixelLighting` — needs a Position-only
+  vertex layout that doesn't exist); `D9-84`'s own full closure (blocked by the `SurfaceFormat`
+  sweep above, plus `SpriteSortMode.Immediate`/`.Texture`, already confirmed out of scope for good
+  reasons, not silently dropped); NPOT-wrap-on-`Reach` and hardware-instancing's `HiDef`-only gate
+  (both need real XNA reference behavior this project has no way to verify — FNA implements
+  neither; do not guess).
+- **`D9-140` (real Windows hardware)** — the only item in the entire plan that is `needs_human`,
+  out of reach in this dev environment entirely.
+- A render-target-as-texture oracle scene can now safely be re-attempted (the crash blocking it is
+  fixed, §4) but isn't itself a named remaining task — it would be new `D9-A5` growth, not a gap.
 
 See `plan_dx9.md`'s "Execution order" table for the full sequence beyond this.
 
