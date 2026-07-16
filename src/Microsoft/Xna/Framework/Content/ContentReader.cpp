@@ -10,6 +10,7 @@
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
+#include "System/IO/EndOfStreamException.hpp"
 
 namespace Microsoft::Xna::Framework::Content
 {
@@ -147,6 +148,34 @@ namespace Microsoft::Xna::Framework::Content
         const Vector3 center = ReadVector3();
         const float radius = ReadSingle();
         return BoundingSphere(center, radius);
+    }
+
+    void ContentReader::CheckCollectionElementCount(int64_t count, const std::string& readerName) const
+    {
+        if (count < 0 || count > limits_.maxCollectionElementCount)
+        {
+            throw ContentLoadException(
+                "'" + assetName_ + "': " + readerName + " declares an invalid element count (" +
+                std::to_string(count) + ").");
+        }
+    }
+
+    std::vector<uint8_t> ContentReader::ReadBytesExactOrThrow(int32_t count, const std::string& readerName)
+    {
+        if (count < 0)
+        {
+            throw ContentLoadException(
+                "'" + assetName_ + "': " + readerName + " declares a negative byte count (" +
+                std::to_string(count) + ").");
+        }
+        std::vector<uint8_t> data = ReadBytes(count);
+        if (data.size() != static_cast<std::size_t>(count))
+        {
+            throw System::IO::EndOfStreamException(
+                "'" + assetName_ + "': " + readerName + " declared " + std::to_string(count) +
+                " bytes but the stream ended after " + std::to_string(data.size()) + ".");
+        }
+        return data;
     }
 
     void ContentReader::InitializeTypeReaders()

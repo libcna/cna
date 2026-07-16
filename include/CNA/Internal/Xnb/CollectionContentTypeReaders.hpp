@@ -92,6 +92,7 @@ namespace CNA::Internal::Xnb
         std::vector<T> Read(ContentReader& input, std::optional<std::vector<T>> existingInstance) override
         {
             const uint32_t count = input.ReadUInt32();
+            input.CheckCollectionElementCount(count, this->getTargetTypeNameProperty());
             std::vector<T> array = existingInstance.value_or(std::vector<T>(count));
             if (array.size() != count) array.resize(count);
 
@@ -145,6 +146,7 @@ namespace CNA::Internal::Xnb
         std::vector<T> Read(ContentReader& input, std::optional<std::vector<T>> existingInstance) override
         {
             const int32_t count = input.ReadInt32();
+            input.CheckCollectionElementCount(count, this->getTargetTypeNameProperty());
             std::vector<T> list = existingInstance.value_or(std::vector<T>{});
             list.reserve(list.size() + static_cast<std::size_t>(count));
 
@@ -199,6 +201,7 @@ namespace CNA::Internal::Xnb
             ContentReader& input, std::optional<std::unordered_map<TKey, TValue>> existingInstance) override
         {
             const int32_t count = input.ReadInt32();
+            input.CheckCollectionElementCount(count, this->getTargetTypeNameProperty());
             std::unordered_map<TKey, TValue> dictionary = existingInstance.value_or(std::unordered_map<TKey, TValue>{});
             dictionary.clear();
 

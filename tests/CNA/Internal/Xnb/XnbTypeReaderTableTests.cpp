@@ -108,3 +108,22 @@ TEST(XnbTypeReaderTableTest, RealMonoGameFixturePreservesRawNameAlongsideNormali
     EXPECT_EQ(table[0].normalizedName, "Microsoft.Xna.Framework.Content.Texture2DReader");
     EXPECT_EQ(table[0].version, 0);
 }
+
+// plan_xnb.md XNB-43: a malformed generic-argument name (XnbTypeName's own std::invalid_argument)
+// must surface as this pipeline's one consistent malformed-input error type, not leak the
+// lower-level exception a caller catching ContentLoadException around Load<T>() would miss.
+TEST(XnbTypeReaderTableTest, MalformedGenericTypeNameThrowsContentLoadExceptionNotInvalidArgument)
+{
+    System::IO::MemoryStream ms;
+    System::IO::BinaryWriter writer(&ms, true);
+    writer.Write7BitEncodedInt(1);
+    // Unbalanced bracket: opens a generic argument list but never closes it.
+    writer.Write(std::string("Microsoft.Xna.Framework.Content.ListReader`1[[Microsoft.Xna.Framework.Vector3"));
+    writer.Write((int32_t)0);
+    writer.Flush();
+    auto buf = ms.ToArray();
+    System::IO::MemoryStream ms2(buf.data(), (int32_t)buf.size());
+    System::IO::BinaryReader reader(&ms2, true);
+
+    EXPECT_THROW(ParseXnbTypeReaderTable(reader, "test.xnb"), ContentLoadException);
+}

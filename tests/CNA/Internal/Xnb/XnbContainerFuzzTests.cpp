@@ -1,0 +1,180 @@
+// SPDX-License-Identifier: MS-PL
+//
+// plan_xnb.md XNB-43 (Phase G): deterministic, whole-container fuzz test -- unlike XNB-30A's
+// LzxDecoderFuzzTests.cpp (which only exercised the LZX decompressor in isolation), this mutates
+// a real, externally-produced, uncompressed .xnb file's ENTIRE byte stream (10-byte header, the
+// type-reader table, the shared-resource region, and the root object body) and loads it through
+// the exact same path a real game uses -- ContentManager::Load<T>() -- exercising header parsing,
+// type-reader-table parsing, root-object dispatch, shared-resource fixups, and every reader
+// BlenderDefaultCube.xnb's real content touches (Model, math, VertexBuffer/IndexBuffer,
+// BasicEffect) together. Asserts every mutated input either loads successfully or fails with one
+// of a small set of expected, clean exception types -- never crashes, hangs, or corrupts memory.
+// The mutation stream is deterministic (fixed seed, no wall clock/std::random_device) so it is
+// reproducible. Also run under an ASan+UBSan build (-DCNA_SANITIZE=address,undefined) as the real
+// net for memory-safety/UB issues a plain exception-type check cannot detect on its own.
+
+#include <cstring>
+#include <filesystem>
+#include <fstream>
+#include <gtest/gtest.h>
+#include <sstream>
+
+#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/Xnb/XnbBuiltInReaders.hpp"
+#include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
+#include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
+#include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Model.hpp"
+#include "System/IO/EndOfStreamException.hpp"
+
+using Microsoft::Xna::Framework::Content::ContentLoadException;
+using Microsoft::Xna::Framework::Content::ContentManager;
+using Microsoft::Xna::Framework::Content::ContentTypeReaderManager;
+using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+using Microsoft::Xna::Framework::Graphics::Model;
+
+namespace
+{
+    struct Rng
+    {
+        std::uint64_t state;
+        explicit Rng(std::uint64_t seed) : state(seed) {}
+        std::uint32_t next()
+        {
+            state = state * 6364136223846793005ULL + 1442695040888963407ULL;
+            return static_cast<std::uint32_t>(state >> 33);
+        }
+        std::uint32_t below(std::uint32_t n) { return next() % n; }
+    };
+
+    std::vector<uint8_t> ReadWholeFile(const std::string& path)
+    {
+        std::ifstream file(path, std::ios::binary);
+        std::ostringstream ss;
+        ss << file.rdbuf();
+        const std::string s = ss.str();
+        return std::vector<uint8_t>(s.begin(), s.end());
+    }
+
+    void WriteBytes(const std::filesystem::path& path, const std::vector<uint8_t>& bytes)
+    {
+        std::ofstream f(path, std::ios::binary);
+        f.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+    }
+
+    // Byte flips, truncation, byte insertion, and random-value overwrites -- covering both
+    // "corrupt an existing field" and "shift every later field's alignment" mutation classes.
+    void Mutate(Rng& rng, std::vector<uint8_t>& bytes)
+    {
+        if (bytes.empty()) return;
+
+        const uint32_t mutationCount = 1 + rng.below(6);
+        for (uint32_t m = 0; m < mutationCount; ++m)
+        {
+            if (bytes.empty()) return;
+            switch (rng.below(4))
+            {
+                case 0: // flip a random bit in a random byte
+                    bytes[rng.below(static_cast<uint32_t>(bytes.size()))] ^= static_cast<uint8_t>(1u << rng.below(8));
+                    break;
+                case 1: // truncate to a random shorter length
+                    if (bytes.size() > 1)
+                    {
+                        bytes.resize(1 + rng.below(static_cast<uint32_t>(bytes.size()) - 1));
+                    }
+                    break;
+                case 2: // overwrite a random byte with a random value
+                    bytes[rng.below(static_cast<uint32_t>(bytes.size()))] = static_cast<uint8_t>(rng.below(256));
+                    break;
+                case 3: // insert a random byte at a random position (shifts everything after it)
+                    bytes.insert(bytes.begin() + rng.below(static_cast<uint32_t>(bytes.size()) + 1),
+                                 static_cast<uint8_t>(rng.below(256)));
+                    break;
+                default: break;
+            }
+        }
+    }
+
+    class XnbContainerFuzzTest : public ::testing::Test
+    {
+    protected:
+        void SetUp() override
+        {
+            ContentTypeReaderManager::ClearTypeCreators();
+            CNA::Internal::Xnb::RegisterAllBuiltInXnbReaders();
+        }
+
+        void TearDown() override { ContentTypeReaderManager::ClearTypeCreators(); }
+
+        GraphicsDevice gd;
+    };
+}
+
+TEST_F(XnbContainerFuzzTest, MutatedRealModelFixtureNeverCrashesAndOnlyFailsCleanly)
+{
+    const std::vector<uint8_t> seed = ReadWholeFile("tests/assets/xnb/monogame/windows/uncompressed/BlenderDefaultCube.xnb");
+    ASSERT_FALSE(seed.empty()) << "Real fixture not found relative to CWD";
+
+    const std::filesystem::path root = std::filesystem::temp_directory_path()
+        / ("cna_xnb_container_fuzz_" + std::to_string(reinterpret_cast<std::uintptr_t>(this)));
+    std::filesystem::create_directories(root);
+
+    Rng rng(0x584E42ULL); // "XNB" in hex-ish, arbitrary fixed seed
+    int completed = 0;
+    int cleanlyRejected = 0;
+
+    constexpr int kIterations = 1500;
+    for (int i = 0; i < kIterations; ++i)
+    {
+        std::vector<uint8_t> mutated = seed;
+        Mutate(rng, mutated);
+        WriteBytes(root / "fixture.xnb", mutated);
+
+        try
+        {
+            ContentManager cm(nullptr, root.string());
+            cm.setGraphicsDevice(gd);
+            Model model = cm.Load<Model>("fixture");
+            (void)model;
+            ++completed;
+        }
+        catch (const ContentLoadException&)
+        {
+            ++cleanlyRejected;
+        }
+        catch (const System::IO::EndOfStreamException&)
+        {
+            ++cleanlyRejected;
+        }
+        catch (const std::bad_any_cast&)
+        {
+            ++cleanlyRejected; // a mutated type-reader-table/dispatch index resolved to the wrong type
+        }
+        catch (const std::out_of_range&)
+        {
+            ++cleanlyRejected; // e.g. a bad bone-reference/shared-resource index caught by .at()
+        }
+        catch (const std::length_error&)
+        {
+            ++cleanlyRejected; // a container construction request that std:: itself refused
+        }
+        catch (const std::invalid_argument&)
+        {
+            ++cleanlyRejected; // e.g. XnbTypeName's generic-argument parser rejecting malformed brackets
+        }
+        catch (const std::bad_alloc&)
+        {
+            ADD_FAILURE() << "iteration #" << i
+                           << ": std::bad_alloc surfaced instead of a clean ContentLoadException -- "
+                              "an allocation-bomb guard gap, not an acceptable outcome";
+        }
+        // Any other exception type, or a crash/hang, fails this test (uncaught exception aborts
+        // it; a crash is caught by the process exit code / a sanitizer run, not by this catch list).
+    }
+
+    std::error_code ec;
+    std::filesystem::remove_all(root, ec);
+
+    EXPECT_EQ(completed + cleanlyRejected, kIterations);
+}

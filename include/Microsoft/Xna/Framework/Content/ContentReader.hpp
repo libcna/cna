@@ -280,6 +280,45 @@ namespace Microsoft::Xna::Framework::Content
         /** @brief FNA's internal `BoundingSphere ReadBoundingSphere()`. */
         [[nodiscard]] BoundingSphere ReadBoundingSphere();
 
+        /**
+         * @brief NOXNA bounds check for a collection reader's (`ArrayReader<T>`/`ListReader<T>`/
+         *        `DictionaryReader<TKey,TValue>`) declared element count against
+         *        `XnbReadLimits::maxCollectionElementCount` (plan_xnb.md XNB-43), called before
+         *        any collection allocation/reservation is attempted -- a corrupt or adversarial
+         *        count (e.g. `0xFFFFFFFF` from a `uint32`, or a negative `int32` reinterpreted as
+         *        an enormous `size_t` by `std::vector::reserve`) could otherwise trigger a huge
+         *        allocation attempt, or an effectively unbounded read loop, before the
+         *        underlying stream's own truncation would naturally be detected.
+         *
+         * @param count      The declared element count, as read from the file (widened to
+         *                   `int64_t` so both `uint32_t` and `int32_t` callers can pass it
+         *                   through without their own overflow/sign concerns).
+         * @param readerName Canonical reader name, used only for the exception message.
+         * @throws ContentLoadException if @p count is negative or exceeds the configured limit.
+         */
+        NOXNA void CheckCollectionElementCount(int64_t count, const std::string& readerName) const;
+
+        /**
+         * @brief NOXNA hardened counterpart of `BinaryReader::ReadBytes(int)` for `.xnb` readers
+         *        that read a declared-length raw byte blob (texture pixel data, audio data,
+         *        vertex/index buffer data) and require getting back *exactly* that many bytes
+         *        (plan_xnb.md XNB-43).
+         *
+         * `BinaryReader::ReadBytes(int)` itself silently trims its result on a truncated stream
+         * (matching real .NET's own non-throwing `ReadBytes(int)` contract) -- correct for that
+         * primitive, but dangerous for a caller that assumes the returned vector is always
+         * exactly the requested length and then passes the ORIGINAL requested length (not the
+         * vector's actual size) to a raw pointer+count API afterward: a truncated/corrupt file
+         * would silently produce an out-of-bounds read at that point instead of a clean error.
+         *
+         * @param count      The number of bytes required.
+         * @param readerName Canonical reader name, used only for the exception message.
+         * @return Exactly @p count bytes.
+         * @throws ContentLoadException if @p count is negative.
+         * @throws System::IO::EndOfStreamException if fewer than @p count bytes were available.
+         */
+        NOXNA [[nodiscard]] std::vector<uint8_t> ReadBytesExactOrThrow(int32_t count, const std::string& readerName);
+
     private:
         /**
          * @brief Type-erased counterpart of InnerReadObject<T>(), used only by

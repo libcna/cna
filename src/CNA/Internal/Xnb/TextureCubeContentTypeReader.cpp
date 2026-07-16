@@ -66,7 +66,7 @@ namespace CNA::Internal::Xnb
             for (int32_t level = 0; level < levels; ++level)
             {
                 const int32_t byteCount = input.ReadInt32();
-                std::vector<uint8_t> bytes = input.ReadBytes(byteCount);
+                std::vector<uint8_t> bytes = input.ReadBytesExactOrThrow(byteCount, "TextureCubeReader");
 
                 if (IsCompressed(surfaceFormat))
                 {

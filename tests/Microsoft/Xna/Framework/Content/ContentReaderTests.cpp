@@ -12,6 +12,7 @@
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
 #include "CNA/Internal/Xnb/XnbHeader.hpp"
 #include "System/IO/BinaryWriter.hpp"
+#include "System/IO/EndOfStreamException.hpp"
 #include "System/IO/MemoryStream.hpp"
 
 using Microsoft::Xna::Framework::Content::ContentLoadException;
@@ -330,4 +331,47 @@ TEST_F(ContentReaderTest, RealMonoGameFixtureLoadsEndToEndThroughGenericDispatch
     EXPECT_EQ(result.width, 1);
     EXPECT_EQ(result.height, 1);
     EXPECT_EQ(result.mipLevelCount, 1);
+}
+
+// plan_xnb.md XNB-43: ReadBytesExactOrThrow() must reject a negative count, throw a clean
+// EndOfStreamException instead of silently returning a short/mismatched buffer when the stream
+// is truncated, and otherwise behave exactly like a normal full-length read.
+
+TEST_F(ContentReaderTest, ReadBytesExactOrThrowReturnsExactlyTheRequestedBytesOnSuccess)
+{
+    System::IO::MemoryStream ms;
+    System::IO::BinaryWriter writer(&ms, true);
+    writer.Write((uint8_t)1); writer.Write((uint8_t)2); writer.Write((uint8_t)3);
+    writer.Flush();
+    auto buf = ms.ToArray();
+    System::IO::MemoryStream body(buf.data(), (int32_t)buf.size());
+    ContentReader reader(nullptr, &body, "test", 5, 'w');
+
+    const auto result = reader.ReadBytesExactOrThrow(3, "TestReader");
+
+    ASSERT_EQ(result.size(), 3u);
+    EXPECT_EQ(result[0], 1);
+    EXPECT_EQ(result[1], 2);
+    EXPECT_EQ(result[2], 3);
+}
+
+TEST_F(ContentReaderTest, ReadBytesExactOrThrowThrowsEndOfStreamExceptionWhenStreamIsTruncated)
+{
+    System::IO::MemoryStream ms;
+    System::IO::BinaryWriter writer(&ms, true);
+    writer.Write((uint8_t)1); // only 1 byte available
+    writer.Flush();
+    auto buf = ms.ToArray();
+    System::IO::MemoryStream body(buf.data(), (int32_t)buf.size());
+    ContentReader reader(nullptr, &body, "test", 5, 'w');
+
+    EXPECT_THROW(reader.ReadBytesExactOrThrow(10, "TestReader"), System::IO::EndOfStreamException);
+}
+
+TEST_F(ContentReaderTest, ReadBytesExactOrThrowRejectsANegativeCount)
+{
+    System::IO::MemoryStream ms;
+    ContentReader reader(nullptr, &ms, "test", 5, 'w');
+
+    EXPECT_THROW(reader.ReadBytesExactOrThrow(-1, "TestReader"), ContentLoadException);
 }

@@ -83,7 +83,7 @@ namespace CNA::Internal::Xnb
         for (int32_t level = 0; level < levelCount; ++level)
         {
             const int32_t byteCount = input.ReadInt32();
-            std::vector<uint8_t> bytes = input.ReadBytes(byteCount);
+            std::vector<uint8_t> bytes = input.ReadBytesExactOrThrow(byteCount, "Texture2DReader");
 
             const int32_t levelWidth = std::max(1, width >> level);
             const int32_t levelHeight = std::max(1, height >> level);

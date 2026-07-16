@@ -184,3 +184,55 @@ TEST_F(CollectionReaderTest, ArrayReaderThrowsWhenElementReaderIsUnregistered)
 
     EXPECT_THROW(reader.ReadUntyped(*contentReader, std::any{}), ContentLoadException);
 }
+
+// plan_xnb.md XNB-43: an adversarial/corrupt declared element count must be rejected before any
+// collection allocation is attempted, not discovered only once the stream itself runs out (which
+// would already have triggered a huge allocation attempt for e.g. std::vector<T>(0xFFFFFFFF)).
+
+TEST_F(CollectionReaderTest, ArrayReaderRejectsAnAdversarialElementCountBeforeAllocating)
+{
+    CNA::Internal::Xnb::ArrayReader<int32_t> reader(
+        "System.Int32[]", "Microsoft.Xna.Framework.Content.Int32Reader");
+
+    auto contentReader = MakeReader([](auto& w) { w.Write((uint32_t)0xFFFFFFFFu); });
+
+    EXPECT_THROW(reader.ReadUntyped(*contentReader, std::any{}), ContentLoadException);
+}
+
+TEST_F(CollectionReaderTest, ListReaderRejectsANegativeElementCountBeforeReserving)
+{
+    CNA::Internal::Xnb::ListReader<Vector3> reader(
+        "System.Collections.Generic.List`1[[Microsoft.Xna.Framework.Vector3]]",
+        "Microsoft.Xna.Framework.Content.Vector3Reader");
+
+    // A negative int32 count, if cast unchecked to size_t for vector::reserve(), would become an
+    // enormous allocation request instead of a clean, catchable error.
+    auto contentReader = MakeReader([](auto& w) { w.Write((int32_t)-1); });
+
+    EXPECT_THROW(reader.ReadUntyped(*contentReader, std::any{}), ContentLoadException);
+}
+
+TEST_F(CollectionReaderTest, ListReaderRejectsAnElementCountAboveTheConfiguredLimit)
+{
+    CNA::Internal::Xnb::ListReader<Vector3> reader(
+        "System.Collections.Generic.List`1[[Microsoft.Xna.Framework.Vector3]]",
+        "Microsoft.Xna.Framework.Content.Vector3Reader");
+
+    auto contentReader = MakeReader([](auto& w) {
+        w.Write((int32_t)(CNA::Internal::Xnb::DefaultXnbReadLimits().maxCollectionElementCount + 1));
+    });
+
+    EXPECT_THROW(reader.ReadUntyped(*contentReader, std::any{}), ContentLoadException);
+}
+
+TEST_F(CollectionReaderTest, DictionaryReaderRejectsANegativeElementCount)
+{
+    CNA::Internal::Xnb::DictionaryReader<int32_t, int32_t> reader(
+        "System.Collections.Generic.Dictionary`2[[System.Int32],[System.Int32]]",
+        "Microsoft.Xna.Framework.Content.Int32Reader",
+        "Microsoft.Xna.Framework.Content.Int32Reader");
+
+    auto contentReader = MakeReader([](auto& w) { w.Write((int32_t)-1); });
+
+    EXPECT_THROW(reader.ReadUntyped(*contentReader, std::any{}), ContentLoadException);
+}

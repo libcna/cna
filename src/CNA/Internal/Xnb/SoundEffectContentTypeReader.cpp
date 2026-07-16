@@ -68,15 +68,29 @@ namespace CNA::Internal::Xnb
                 input.ReadByte();
                 input.ReadByte();
                 input.ReadUInt16();
-                input.ReadBytes(static_cast<int32_t>(formatLength - 18 - 34));
+                const int64_t skip = static_cast<int64_t>(formatLength) - 18 - 34;
+                if (skip < 0)
+                {
+                    throw ContentLoadException(
+                        "'" + input.getAssetNameProperty() + "': SoundEffectReader formatLength too "
+                        "small for its XMA2 extension.");
+                }
+                input.ReadBytesExactOrThrow(static_cast<int32_t>(skip), "SoundEffectReader");
             }
             else
             {
-                input.ReadBytes(static_cast<int32_t>(formatLength - 18));
+                const int64_t skip = static_cast<int64_t>(formatLength) - 18;
+                if (skip < 0)
+                {
+                    throw ContentLoadException(
+                        "'" + input.getAssetNameProperty() + "': SoundEffectReader formatLength too "
+                        "small for its format extension.");
+                }
+                input.ReadBytesExactOrThrow(static_cast<int32_t>(skip), "SoundEffectReader");
             }
         }
 
-        std::vector<uint8_t> data = input.ReadBytes(input.ReadInt32());
+        std::vector<uint8_t> data = input.ReadBytesExactOrThrow(input.ReadInt32(), "SoundEffectReader");
 
         const int32_t loopStart = input.ReadInt32();
         const int32_t loopLength = input.ReadInt32();

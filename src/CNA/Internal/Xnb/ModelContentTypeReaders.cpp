@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Xnb/ModelContentTypeReaders.hpp"
 
+#include <limits>
+
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
@@ -134,7 +136,17 @@ namespace CNA::Internal::Xnb
             throw ContentLoadException("VertexBufferReader: invalid vertex count.");
         }
         const int32_t stride = declaration.getVertexStrideProperty();
-        std::vector<uint8_t> data = input.ReadBytes(vertexCount * stride);
+        // Widen to int64_t before multiplying: vertexCount can be as large as INT32_MAX (from an
+        // adversarial file), and vertexCount * stride overflowing a 32-bit int would silently
+        // wrap to a small/negative byte count, defeating ReadBytesExactOrThrow()'s own mismatch
+        // check below and letting SetDataRaw() read past the (much shorter) actual buffer.
+        const int64_t byteCount64 = static_cast<int64_t>(vertexCount) * static_cast<int64_t>(stride);
+        if (stride < 0 || byteCount64 < 0 || byteCount64 > std::numeric_limits<int32_t>::max())
+        {
+            throw ContentLoadException("VertexBufferReader: vertex count/stride overflow the byte count.");
+        }
+        std::vector<uint8_t> data =
+            input.ReadBytesExactOrThrow(static_cast<int32_t>(byteCount64), "VertexBufferReader");
 
         GraphicsDevice& device = RequireGraphicsDevice(input, "VertexBufferReader");
         auto buffer = std::make_shared<VertexBuffer>(device, declaration, vertexCount, BufferUsage::None);
@@ -151,7 +163,7 @@ namespace CNA::Internal::Xnb
         {
             throw ContentLoadException("IndexBufferReader: invalid data size.");
         }
-        std::vector<uint8_t> data = input.ReadBytes(dataSize);
+        std::vector<uint8_t> data = input.ReadBytesExactOrThrow(dataSize, "IndexBufferReader");
 
         std::shared_ptr<IndexBuffer> indexBuffer = existingInstance.value_or(nullptr);
         if (!indexBuffer)

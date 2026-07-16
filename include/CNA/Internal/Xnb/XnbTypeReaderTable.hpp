@@ -38,7 +38,11 @@ namespace CNA::Internal::Xnb
      * @return The parsed table, in file order (index 0 is table entry 1 in the 1-based dispatch
      *         protocol used by XNB-16's root/object dispatch).
      * @throws Microsoft::Xna::Framework::Content::ContentLoadException if the encoded count is
-     *         negative or exceeds @p limits.maxTypeReaderCount.
+     *         negative or exceeds @p limits.maxTypeReaderCount, or an entry's name is not a
+     *         well-formed (possibly generic) .NET type name (plan_xnb.md XNB-43) -- matching every
+     *         other malformed-input case in this pipeline, a caller only ever needs to catch this
+     *         one exception type for "this .xnb file is malformed", never
+     *         `XnbTypeName`'s own lower-level `std::invalid_argument`.
      */
     inline std::vector<XnbTypeReaderTableEntry> ParseXnbTypeReaderTable(
         System::IO::BinaryReader& reader,
@@ -61,7 +65,16 @@ namespace CNA::Internal::Xnb
         {
             XnbTypeReaderTableEntry entry;
             entry.rawName = reader.ReadString();
-            entry.normalizedName = NormalizeXnbTypeReaderName(entry.rawName);
+            try
+            {
+                entry.normalizedName = NormalizeXnbTypeReaderName(entry.rawName);
+            }
+            catch (const std::invalid_argument& ex)
+            {
+                throw ContentLoadException(
+                    "'" + path + "' has a malformed type-reader name '" + entry.rawName + "': " +
+                    ex.what());
+            }
             entry.version = reader.ReadInt32();
             table.push_back(std::move(entry));
         }
