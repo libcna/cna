@@ -1,0 +1,442 @@
+if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
+   AND CNA_GRAPHICS_BACKEND STREQUAL "SDL_RENDERER")
+
+    enable_testing()
+
+    # --- helper macro: build a headless SDL_Renderer test exe --------------------
+    macro(cna_sdl_test target src)
+        add_executable(${target} ${src})
+        if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
+            target_link_libraries(${target} PRIVATE
+                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                SHARP_RUNTIME)
+        else()
+            target_link_libraries(${target} PRIVATE CNA SHARP_RUNTIME)
+        endif()
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(${target} PRIVATE SDL3::SDL3main)
+        endif()
+    endmacro()
+
+    # Task 915: GetBackBufferData readback -- foundational prerequisite for the whole
+    # SDL_Renderer pixel-test audit phase (Tasks 666-861).
+    cna_sdl_test(cna_test_sdl_readback
+                 examples/sdlrenderer_readback_test.cpp)
+    cna_register_backend_test(NAME SDL_Renderer_Readback COMMAND cna_test_sdl_readback
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 666: audit all SpriteBatch::Draw overloads through SDL_Renderer
+    cna_sdl_test(cna_test_sdl_spritebatch_overloads
+                 examples/sdlrenderer_spritebatch_overloads_test.cpp)
+    cna_register_backend_test(NAME SDL_Renderer_SpriteBatch_Overloads COMMAND cna_test_sdl_spritebatch_overloads
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 671: rotation around origin -- found and fixed a real SDL_RenderTextureRotated
+    # pivot-offset bug while writing this test.
+    cna_sdl_test(cna_test_sdl_spritebatch_rotation
+                 examples/sdlrenderer_spritebatch_rotation_test.cpp)
+    cna_register_backend_test(NAME SDL_Renderer_SpriteBatch_Rotation COMMAND cna_test_sdl_spritebatch_rotation
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 669: SpriteSortMode::FrontToBack layerDepth ordering on SDL_Renderer -- direct port of
+    # Task 420's EasyGL test (PresentationMode::NativeBackBuffer required for exact-pixel readback,
+    # see Task 915).
+    cna_sdl_test(cna_test_sdl_spritebatch_layerdepth
+                 examples/sdlrenderer_spritebatch_layerdepth_test.cpp)
+    cna_register_backend_test(NAME SDL_Renderer_SpriteBatch_LayerDepth COMMAND cna_test_sdl_spritebatch_layerdepth
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 667: SpriteSortMode::Deferred submission-order pixel test on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_spritebatch_deferred_order
+                 examples/sdlrenderer_spritebatch_deferred_order_test.cpp)
+    cna_register_backend_test(NAME SDL_Renderer_SpriteBatch_DeferredOrder COMMAND cna_test_sdl_spritebatch_deferred_order
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 668: SpriteSortMode::Texture grouping pixel test on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_spritebatch_texture_sort
+                 examples/sdlrenderer_spritebatch_texture_sort_test.cpp)
+    cna_register_backend_test(NAME SDL_Renderer_SpriteBatch_TextureSort COMMAND cna_test_sdl_spritebatch_texture_sort
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 670: SpriteSortMode::Immediate per-draw flush pixel test on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_spritebatch_immediate_flush
+                 examples/sdlrenderer_spritebatch_immediate_flush_test.cpp)
+    cna_register_backend_test(NAME SDL_Renderer_SpriteBatch_ImmediateFlush COMMAND cna_test_sdl_spritebatch_immediate_flush
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 672: scalar/Vector2 scale overload pixel test on SDL_Renderer -- direct port of
+    # Task 418's EasyGL test.
+    cna_sdl_test(cna_test_sdl_spritebatch_scale
+                 examples/sdlrenderer_spritebatch_scale_test.cpp)
+    cna_register_backend_test(NAME SDL_Renderer_SpriteBatch_Scale COMMAND cna_test_sdl_spritebatch_scale
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 673: source rectangle cropping pixel test on SDL_Renderer -- direct port of
+    # Task 419's EasyGL test.
+    cna_sdl_test(cna_test_sdl_spritebatch_sourcerect
+                 examples/sdlrenderer_spritebatch_sourcerect_test.cpp)
+    cna_register_backend_test(NAME SDL_Renderer_SpriteBatch_SourceRect COMMAND cna_test_sdl_spritebatch_sourcerect
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 674: SpriteEffects::FlipHorizontally/FlipVertically pixel test on SDL_Renderer --
+    # direct port of Task 167's EasyGL test.
+    cna_sdl_test(cna_test_sdl_sprite_effects
+                 examples/sdlrenderer_sprite_effects_test.cpp)
+    cna_register_backend_test(NAME SDL_Renderer_SpriteEffects COMMAND cna_test_sdl_sprite_effects
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 675: transformMatrix in SpriteBatch::Begin pixel test on SDL_Renderer -- direct port
+    # of Task 168's EasyGL test.
+    cna_sdl_test(cna_test_sdl_transform_matrix
+                 examples/sdlrenderer_transform_matrix_test.cpp)
+    cna_register_backend_test(NAME SDL_Renderer_TransformMatrix COMMAND cna_test_sdl_transform_matrix
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 676: SpriteBatch::Begin(effect) custom-Effect behavior decision -- must throw
+    # (no programmable shader stage exists on SDL_Renderer to apply a custom Effect with).
+    cna_sdl_test(cna_test_sdl_custom_effect_throws
+                 examples/sdlrenderer_custom_effect_throws_test.cpp)
+    cna_register_backend_test(NAME SDL_Renderer_CustomEffectThrows COMMAND cna_test_sdl_custom_effect_throws
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 677: SpriteBatch Begin/End sequencing guard end-to-end integration test on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_spritebatch_begin_end_guard
+                 examples/sdlrenderer_spritebatch_begin_end_guard_test.cpp)
+    cna_register_backend_test(NAME SDL_Renderer_SpriteBatch_BeginEndGuard COMMAND cna_test_sdl_spritebatch_begin_end_guard
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 678: Texture2D::SetData/GetData full-array round-trip audit on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_texture2d_setdata_getdata
+                 examples/sdlrenderer_texture2d_setdata_getdata_test.cpp)
+    cna_register_backend_test(NAME SDL_Renderer_Texture2D_SetDataGetData COMMAND cna_test_sdl_texture2d_setdata_getdata
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 679: Texture2D::SetData partial-rectangle region pixel test on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_texture2d_partial_rect
+                 examples/sdlrenderer_texture2d_partial_rect_test.cpp)
+    cna_register_backend_test(NAME SDL_Renderer_Texture2D_PartialRect COMMAND cna_test_sdl_texture2d_partial_rect
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 680: Texture2D::SetData startIndex/elementCount slice pixel test on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_texture2d_startindex
+                 examples/sdlrenderer_texture2d_startindex_test.cpp)
+    cna_register_backend_test(NAME SDL_Renderer_Texture2D_StartIndex COMMAND cna_test_sdl_texture2d_startindex
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 681: Texture2D mip-level SetData/GetData decision test on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_texture2d_miplevel_throws
+                 examples/sdlrenderer_texture2d_miplevel_throws_test.cpp)
+    cna_register_backend_test(NAME SDL_Renderer_Texture2D_MipLevelThrows COMMAND cna_test_sdl_texture2d_miplevel_throws
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 682: Texture2D::FromStream round-trip real-render pixel test on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_texture2d_fromstream
+                 examples/sdlrenderer_texture2d_fromstream_test.cpp)
+    cna_register_backend_test(NAME SDL_Renderer_Texture2D_FromStream COMMAND cna_test_sdl_texture2d_fromstream
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 683: SaveAsPng/SaveAsJpeg round-trip real-render pixel test on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_texture2d_saveas_roundtrip
+                 examples/sdlrenderer_texture2d_saveas_roundtrip_test.cpp)
+    cna_register_backend_test(NAME SDL_Renderer_Texture2D_SaveAsRoundTrip COMMAND cna_test_sdl_texture2d_saveas_roundtrip
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 684: NPOT (3x5, 7x11) texture upload+sample pixel test on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_npot_texture
+                 examples/sdlrenderer_npot_texture_test.cpp)
+    cna_register_backend_test(NAME SDL_Renderer_NpotTexture COMMAND cna_test_sdl_npot_texture
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 685: TextureAddressMode::Clamp via SpriteBatch pixel test on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_texture_address_mode_clamp
+                 examples/sdlrenderer_texture_address_mode_clamp_test.cpp)
+    cna_register_backend_test(NAME SDL_Renderer_TextureAddressModeClamp COMMAND cna_test_sdl_texture_address_mode_clamp
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 688: TextureFilter::Point vs Linear via SDL_ScaleMode pixel test on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_texture_filter_point_vs_linear
+                 examples/sdlrenderer_texture_filter_point_vs_linear_test.cpp)
+    cna_register_backend_test(NAME SDL_Renderer_TextureFilterPointVsLinear COMMAND cna_test_sdl_texture_filter_point_vs_linear
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 689: Texture2D::Dispose double-free/lifetime verification on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_texture2d_dispose
+                 examples/sdlrenderer_texture2d_dispose_test.cpp)
+    cna_register_backend_test(NAME SDL_Renderer_Texture2D_Dispose COMMAND cna_test_sdl_texture2d_dispose
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 690: SpriteFont single-glyph-at-known-position pixel test on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_spritefont_single_glyph
+                 examples/sdlrenderer_spritefont_single_glyph_test.cpp)
+    cna_register_backend_test(NAME SDL_Renderer_SpriteFont_SingleGlyph COMMAND cna_test_sdl_spritefont_single_glyph
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 691: SpriteFont multiple-glyphs-with-spacing pixel test on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_spritefont_multiglyph_spacing
+                 examples/sdlrenderer_spritefont_multiglyph_spacing_test.cpp)
+    cna_register_backend_test(NAME SDL_Renderer_SpriteFont_MultiGlyphSpacing COMMAND cna_test_sdl_spritefont_multiglyph_spacing
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 692: SpriteFont newline-advances-by-lineSpacing pixel test on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_spritefont_newline
+                 examples/sdlrenderer_spritefont_newline_test.cpp)
+    cna_register_backend_test(NAME SDL_Renderer_SpriteFont_Newline COMMAND cna_test_sdl_spritefont_newline
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 693: SpriteFont default-character-fallback pixel test on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_spritefont_default_char
+                 examples/sdlrenderer_spritefont_default_char_test.cpp)
+    cna_register_backend_test(NAME SDL_Renderer_SpriteFont_DefaultChar COMMAND cna_test_sdl_spritefont_default_char
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 694: SpriteFont SpriteEffects flip + rotation/origin/scale pixel test on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_spritefont_effects
+                 examples/sdlrenderer_spritefont_effects_test.cpp)
+    cna_register_backend_test(NAME SDL_Renderer_SpriteFont_Effects COMMAND cna_test_sdl_spritefont_effects
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 695: BlendState -> SDL_BlendMode mapping audit pixel test on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_blendstate_audit
+                 examples/sdlrenderer_blendstate_audit_test.cpp)
+    cna_register_backend_test(NAME SDL_Renderer_BlendState_Audit COMMAND cna_test_sdl_blendstate_audit
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 696: BlendState::Opaque pixel test on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_blendstate_opaque
+                 examples/sdlrenderer_blendstate_opaque_test.cpp)
+    cna_register_backend_test(NAME SDL_Renderer_BlendState_Opaque COMMAND cna_test_sdl_blendstate_opaque
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 697: BlendState::AlphaBlend premultiplied alpha pixel test on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_blendstate_alphablend
+                 examples/sdlrenderer_blendstate_alphablend_test.cpp)
+    cna_register_backend_test(NAME SDL_Renderer_BlendState_AlphaBlend COMMAND cna_test_sdl_blendstate_alphablend
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 698: BlendState::NonPremultiplied pixel test on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_blendstate_nonpremultiplied
+                 examples/sdlrenderer_blendstate_nonpremultiplied_test.cpp)
+    cna_register_backend_test(NAME SDL_Renderer_BlendState_NonPremultiplied COMMAND cna_test_sdl_blendstate_nonpremultiplied
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 699: BlendState::Additive saturation behavior pixel test on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_blendstate_additive
+                 examples/sdlrenderer_blendstate_additive_test.cpp)
+    cna_register_backend_test(NAME SDL_Renderer_BlendState_Additive COMMAND cna_test_sdl_blendstate_additive
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 700: custom (non-preset) BlendState combination decision/verification on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_blendstate_custom
+                 examples/sdlrenderer_blendstate_custom_test.cpp)
+    cna_register_backend_test(NAME SDL_Renderer_BlendState_Custom COMMAND cna_test_sdl_blendstate_custom
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 701: SamplerState -> SDL_ScaleMode + address-mode mapping audit pixel test on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_samplerstate_filter_audit
+                 examples/sdlrenderer_samplerstate_filter_audit_test.cpp)
+    cna_register_backend_test(NAME SDL_Renderer_SamplerState_FilterAudit COMMAND cna_test_sdl_samplerstate_filter_audit
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 702: default SamplerState (LinearClamp) verification pixel test on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_samplerstate_default
+                 examples/sdlrenderer_samplerstate_default_test.cpp)
+    cna_register_backend_test(NAME SDL_Renderer_SamplerState_Default COMMAND cna_test_sdl_samplerstate_default
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 703: per-draw SamplerState changes take effect on the next SpriteBatch::Begin pixel test on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_samplerstate_perdraw_switch
+                 examples/sdlrenderer_samplerstate_perdraw_switch_test.cpp)
+    cna_register_backend_test(NAME SDL_Renderer_SamplerState_PerDrawSwitch COMMAND cna_test_sdl_samplerstate_perdraw_switch
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 704: RenderTarget2D construction audit (property wiring + bind/draw/unbind isolation) on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_rendertarget2d_construction
+                 examples/sdlrenderer_rendertarget2d_construction_test.cpp)
+    cna_register_backend_test(NAME SDL_Renderer_RenderTarget2D_Construction COMMAND cna_test_sdl_rendertarget2d_construction
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 705: RenderTarget2D sampled as Texture2D via SpriteBatch after unbinding on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_rendertarget2d_sample
+                 examples/sdlrenderer_rendertarget2d_sample_test.cpp)
+    cna_register_backend_test(NAME SDL_Renderer_RenderTarget2D_SampleAfterUnbind COMMAND cna_test_sdl_rendertarget2d_sample
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 706: RenderTargetUsage::DiscardContents vs PreserveContents on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_rendertarget_usage
+                 examples/sdlrenderer_rendertarget_usage_test.cpp)
+    cna_register_backend_test(NAME SDL_Renderer_RenderTargetUsage COMMAND cna_test_sdl_rendertarget_usage
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 707: GetBackBufferData reads correct pixels after SetRenderTarget(nullptr) restores the backbuffer on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_getbackbufferdata_after_rt_unbind
+                 examples/sdlrenderer_getbackbufferdata_after_rt_unbind_test.cpp)
+    cna_register_backend_test(NAME SDL_Renderer_GetBackBufferData_AfterRtUnbind COMMAND cna_test_sdl_getbackbufferdata_after_rt_unbind
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 708: render-target depth-buffer behavior decision (silently ignore DepthFormat) on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_rendertarget_depth_decision
+                 examples/sdlrenderer_rendertarget_depth_decision_test.cpp)
+    cna_register_backend_test(NAME SDL_Renderer_RenderTarget_DepthDecision COMMAND cna_test_sdl_rendertarget_depth_decision
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 709: MRT (SetRenderTargets with 2+ bindings) throws clearly on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_rendertargets_mrt_throws
+                 examples/sdlrenderer_rendertargets_mrt_throws_test.cpp)
+    cna_register_backend_test(NAME SDL_Renderer_RenderTargets_MrtThrows COMMAND cna_test_sdl_rendertargets_mrt_throws
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 710: Viewport get/set round-trip and Project/Unproject math (2D orthographic case) on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_viewport_project_unproject
+                 examples/sdlrenderer_viewport_project_unproject_test.cpp)
+    cna_register_backend_test(NAME SDL_Renderer_Viewport_ProjectUnproject COMMAND cna_test_sdl_viewport_project_unproject
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 711: backbuffer resize through PresentationParameters on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_presentationparameters_resize
+                 examples/sdlrenderer_presentationparameters_resize_test.cpp)
+    cna_register_backend_test(NAME SDL_Renderer_PresentationParameters_Resize COMMAND cna_test_sdl_presentationparameters_resize
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 712: fullscreen toggle on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_fullscreen_toggle
+                 examples/sdlrenderer_fullscreen_toggle_test.cpp)
+    cna_register_backend_test(NAME SDL_Renderer_FullscreenToggle COMMAND cna_test_sdl_fullscreen_toggle
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 713: PresentInterval (vsync) mapping to SDL_SetRenderVSync on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_presentinterval
+                 examples/sdlrenderer_presentinterval_test.cpp)
+    cna_register_backend_test(NAME SDL_Renderer_PresentInterval COMMAND cna_test_sdl_presentinterval
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 714: MultiSampleCount decision (accept-and-ignore-with-log) on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_multisamplecount_decision
+                 examples/sdlrenderer_multisamplecount_decision_test.cpp)
+    cna_register_backend_test(NAME SDL_Renderer_MultiSampleCount_Decision COMMAND cna_test_sdl_multisamplecount_decision
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 715: DeviceResetting/DeviceReset events fire correctly on SDL_Renderer backbuffer resize.
+    cna_sdl_test(cna_test_sdl_devicereset_events
+                 examples/sdlrenderer_devicereset_events_test.cpp)
+    cna_register_backend_test(NAME SDL_Renderer_DeviceReset_Events COMMAND cna_test_sdl_devicereset_events
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 716: GraphicsDevice::Clear (all ClearOptions combinations) on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_clearoptions_audit
+                 examples/sdlrenderer_clearoptions_audit_test.cpp)
+    cna_register_backend_test(NAME SDL_Renderer_ClearOptions_Audit COMMAND cna_test_sdl_clearoptions_audit
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 717: disposed-resource guards throw ObjectDisposedException consistently on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_disposed_guards
+                 examples/sdlrenderer_disposed_guards_test.cpp)
+    cna_register_backend_test(NAME SDL_Renderer_DisposedGuards COMMAND cna_test_sdl_disposed_guards
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 718: double-Dispose is safe for every SDL_Renderer-backed resource type.
+    cna_sdl_test(cna_test_sdl_double_dispose
+                 examples/sdlrenderer_double_dispose_test.cpp)
+    cna_register_backend_test(NAME SDL_Renderer_DoubleDispose COMMAND cna_test_sdl_double_dispose
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 719: leak-check -- create/dispose 80 SDL_Renderer textures/render-targets,
+    # verify GetTrackedResourceCount returns to baseline. Mirrors Task 219.
+    cna_sdl_test(cna_test_sdl_resource_leak
+                 examples/sdlrenderer_resource_leak_test.cpp)
+    cna_register_backend_test(NAME SDL_Renderer_ResourceLeak COMMAND cna_test_sdl_resource_leak
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 720: DrawPrimitives/DrawIndexedPrimitives/DrawInstancedPrimitives throw the
+    # correct exception type+message on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_drawprimitives_throws
+                 examples/sdlrenderer_drawprimitives_throws_test.cpp)
+    cna_register_backend_test(NAME SDL_Renderer_DrawPrimitivesThrows COMMAND cna_test_sdl_drawprimitives_throws
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 721: all 5 DrawUserPrimitives typed + VertexDeclaration overloads throw the
+    # correct exception type+message on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_drawuserprimitives_throws
+                 examples/sdlrenderer_drawuserprimitives_throws_test.cpp)
+    cna_register_backend_test(NAME SDL_Renderer_DrawUserPrimitivesThrows COMMAND cna_test_sdl_drawuserprimitives_throws
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 722: all 10 DrawUserIndexedPrimitives typed + VertexDeclaration overloads throw the
+    # correct exception type+message on SDL_Renderer.
+    cna_sdl_test(cna_test_sdl_drawuserindexedprimitives_throws
+                 examples/sdlrenderer_drawuserindexedprimitives_throws_test.cpp)
+    cna_register_backend_test(NAME SDL_Renderer_DrawUserIndexedPrimitivesThrows COMMAND cna_test_sdl_drawuserindexedprimitives_throws
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 723: re-verify CreateVertexBuffer/CreateIndexBuffer/Dynamic variants throw correctly
+    # on SDL_Renderer, covering every construction overload plus zero/negative-count edge cases.
+    cna_sdl_test(cna_test_sdl_buffer_construction_throws
+                 examples/sdlrenderer_buffer_construction_throws_test.cpp)
+    cna_register_backend_test(NAME SDL_Renderer_BufferConstructionThrows COMMAND cna_test_sdl_buffer_construction_throws
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 724: VertexDeclaration construction does NOT throw on SDL_Renderer -- pure data,
+    # no backend touch; only an actual draw call using it should throw.
+    cna_sdl_test(cna_test_sdl_vertexdeclaration_construction
+                 examples/sdlrenderer_vertexdeclaration_construction_test.cpp)
+    cna_register_backend_test(NAME SDL_Renderer_VertexDeclarationConstruction COMMAND cna_test_sdl_vertexdeclaration_construction
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 726: all 5 stock 3D effects' Apply()+property setters do NOT throw on SDL_Renderer,
+    # but drawing with them does.
+    cna_sdl_test(cna_test_sdl_stock3deffects_apply
+                 examples/sdlrenderer_stock3deffects_apply_test.cpp)
+    cna_register_backend_test(NAME SDL_Renderer_Stock3DEffectsApply COMMAND cna_test_sdl_stock3deffects_apply
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 727: OcclusionQuery::Begin/End throw correctly on SDL_Renderer -- construction now
+    # throws (fixed a real silent-no-op gap; the only inconsistent 3D-only entry point).
+    cna_sdl_test(cna_test_sdl_occlusionquery_throws
+                 examples/sdlrenderer_occlusionquery_throws_test.cpp)
+    cna_register_backend_test(NAME SDL_Renderer_OcclusionQueryThrows COMMAND cna_test_sdl_occlusionquery_throws
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 728: Model::Draw throws correctly on SDL_Renderer (requires 3D primitives).
+    cna_sdl_test(cna_test_sdl_model_draw_throws
+                 examples/sdlrenderer_model_draw_throws_test.cpp)
+    cna_register_backend_test(NAME SDL_Renderer_ModelDrawThrows COMMAND cna_test_sdl_model_draw_throws
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 729: RasterizerState/DepthStencilState construction and assignment do NOT throw on
+    # SDL_Renderer -- pure data, mirrors Task 724's VertexDeclaration pattern.
+    cna_sdl_test(cna_test_sdl_rasterizer_depthstencil_construction
+                 examples/sdlrenderer_rasterizer_depthstencil_construction_test.cpp)
+    cna_register_backend_test(NAME SDL_Renderer_RasterizerDepthStencilConstruction COMMAND cna_test_sdl_rasterizer_depthstencil_construction
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 730: port and run 5 minimal 2D-only FNA/XNA samples specifically targeting
+    # SDL_Renderer -- real compatibility proof for the 2D-only backend, not EasyGL.
+    # Sample 1/5: the existing cross-backend cna_demo_2d, already smoke-tested on Vulkan/Bgfx
+    # (Tasks 88/89) but never on SDL_Renderer -- a genuine gap, closed here.
+    cna_register_backend_test(NAME SDL_Renderer_Demo2D_SmokeTest COMMAND cna_demo_2d --smoke 3
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}" LABELS "GraphicsSmoke")
+
+    # Sample 2/5: bouncing sprite -- real multi-frame Update()+Draw() physics/bounce loop.
+    cna_sdl_test(cna_test_sdl_sample_bouncing_sprite
+                 examples/sdlrenderer_sample_bouncing_sprite_test.cpp)
+    cna_register_backend_test(NAME SDL_Renderer_Sample_BouncingSprite COMMAND cna_test_sdl_sample_bouncing_sprite
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Sample 3/5: keyboard-driven sprite -- Keyboard::GetState()-driven Update() logic.
+    cna_sdl_test(cna_test_sdl_sample_keyboard_sprite
+                 examples/sdlrenderer_sample_keyboard_sprite_test.cpp)
+    cna_register_backend_test(NAME SDL_Renderer_Sample_KeyboardSprite COMMAND cna_test_sdl_sample_keyboard_sprite
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Sample 4/5: SpriteFont text display -- genuine multi-glyph string layout ("HI").
+    cna_sdl_test(cna_test_sdl_sample_spritefont_text
+                 examples/sdlrenderer_sample_spritefont_text_test.cpp)
+    cna_register_backend_test(NAME SDL_Renderer_Sample_SpriteFontText COMMAND cna_test_sdl_sample_spritefont_text
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Sample 5/5: animated spritesheet -- Update()-driven sourceRectangle frame selection.
+    cna_sdl_test(cna_test_sdl_sample_animated_spritesheet
+                 examples/sdlrenderer_sample_animated_spritesheet_test.cpp)
+    cna_register_backend_test(NAME SDL_Renderer_Sample_AnimatedSpritesheet COMMAND cna_test_sdl_sample_animated_spritesheet
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+endif()
