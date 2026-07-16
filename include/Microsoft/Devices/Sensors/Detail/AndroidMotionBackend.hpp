@@ -41,6 +41,16 @@ namespace Microsoft::Devices::Sensors::Detail
      * combining raw accelerometer+magnetometer) in this bridge — always
      * consumes Android's own OS-fused rotation-vector/game-rotation-vector
      * output directly (Task DEVICES-0119's gate).
+     *
+     * Task MOTION-011 (2026-07-16): also independently registers
+     * `TYPE_MAGNETIC_FIELD`, purely to monitor its accuracy status and
+     * drive `IMotionBackend::CalibrationCallback` — reusing
+     * `Detail::ShouldRaiseCalibrateForAccuracyStatus()`, the same accuracy
+     * policy `AndroidCompassBackend` already uses. This is best-effort and
+     * optional: `IsSupported()`/`Start()`'s overall success never depends
+     * on the magnetic-field sensor being available, since `MotionReading`
+     * has no magnetometer field to expose and calibration is an additional
+     * signal, not part of Motion's core reading data.
      */
     class AndroidMotionBackend final : public IMotionBackend
     {
@@ -53,7 +63,10 @@ namespace Microsoft::Devices::Sensors::Detail
 
         [[nodiscard]] bool IsSupported() override;
 
-        bool Start(const System::TimeSpan& timeBetweenUpdates, ReadingCallback onReading) override;
+        bool Start(
+            const System::TimeSpan& timeBetweenUpdates,
+            ReadingCallback onReading,
+            CalibrationCallback onCalibrationNeeded) override;
 
         void Stop() override;
 
@@ -64,6 +77,7 @@ namespace Microsoft::Devices::Sensors::Detail
         void HandleGravitySample(const AndroidSensorSample& sample);
         void HandleLinearAccelerationSample(const AndroidSensorSample& sample);
         void HandleGyroscopeSample(const AndroidSensorSample& sample);
+        void HandleMagneticFieldSample(const AndroidSensorSample& sample);
         void PublishReading();
 
         AndroidSensorBridge rotationVectorBridge_;
@@ -71,6 +85,9 @@ namespace Microsoft::Devices::Sensors::Detail
         AndroidSensorBridge gravityBridge_;
         AndroidSensorBridge linearAccelerationBridge_;
         AndroidSensorBridge gyroscopeBridge_;
+
+        /** @brief Task MOTION-011: calibration-only -- never exposed through MotionReading, see this class's own doc comment. */
+        AndroidSensorBridge magneticFieldBridge_;
 
         /** @brief Set once Start() picks which of rotationVectorBridge_/gameRotationVectorBridge_ is actually in use. */
         bool usingGameRotationVector_ = false;
@@ -113,6 +130,9 @@ namespace Microsoft::Devices::Sensors::Detail
         static const System::TimeSpan MaxFusionAgeWindow;
 
         ReadingCallback onReading_;
+
+        /** @brief Task MOTION-011: invoked from HandleMagneticFieldSample(), guarded by stateMutex_ same as onReading_. */
+        CalibrationCallback onCalibrationNeeded_;
     };
 } // namespace Microsoft::Devices::Sensors::Detail
 

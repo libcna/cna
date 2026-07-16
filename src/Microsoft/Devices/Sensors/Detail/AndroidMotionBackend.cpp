@@ -8,7 +8,11 @@
 
 #include <android/sensor.h>
 
+#include <SDL3/SDL.h>
+
+#include "Microsoft/Devices/Sensors/Detail/AndroidCompassMath.hpp"
 #include "Microsoft/Devices/Sensors/Detail/AndroidMotionMath.hpp"
+#include "Microsoft/Devices/Sensors/Detail/AndroidSensorOrientation.hpp"
 
 namespace Microsoft::Devices::Sensors::Detail
 {
@@ -28,7 +32,8 @@ namespace Microsoft::Devices::Sensors::Detail
           gameRotationVectorBridge_(ASENSOR_TYPE_GAME_ROTATION_VECTOR),
           gravityBridge_(ASENSOR_TYPE_GRAVITY),
           linearAccelerationBridge_(ASENSOR_TYPE_LINEAR_ACCELERATION),
-          gyroscopeBridge_(ASENSOR_TYPE_GYROSCOPE)
+          gyroscopeBridge_(ASENSOR_TYPE_GYROSCOPE),
+          magneticFieldBridge_(ASENSOR_TYPE_MAGNETIC_FIELD)
     {
     }
 
@@ -46,7 +51,10 @@ namespace Microsoft::Devices::Sensors::Detail
             && gyroscopeBridge_.IsAvailable();
     }
 
-    bool AndroidMotionBackend::Start(const System::TimeSpan& timeBetweenUpdates, ReadingCallback onReading)
+    bool AndroidMotionBackend::Start(
+        const System::TimeSpan& timeBetweenUpdates,
+        ReadingCallback onReading,
+        CalibrationCallback onCalibrationNeeded)
     {
         if (!IsSupported())
         {
@@ -56,6 +64,7 @@ namespace Microsoft::Devices::Sensors::Detail
         {
             std::lock_guard<std::mutex> lock(stateMutex_);
             onReading_ = std::move(onReading);
+            onCalibrationNeeded_ = std::move(onCalibrationNeeded);
             hasAttitudeSample_ = false;
             hasGravitySample_ = false;
             hasLinearAccelerationSample_ = false;
@@ -86,6 +95,15 @@ namespace Microsoft::Devices::Sensors::Detail
         const bool gyroscopeStarted = gyroscopeBridge_.Start(
             timeBetweenUpdates, [this](const AndroidSensorSample& sample) { HandleGyroscopeSample(sample); });
 
+        // Task MOTION-011: best-effort, optional -- unlike the four bridges
+        // above, a failure (or plain unavailability) here does not fail
+        // this Start() call at all. MotionReading has no magnetometer field
+        // to expose; this bridge exists purely to drive Calibrate, an
+        // additional signal, not part of Motion's core reading data. Its
+        // own return value is deliberately ignored.
+        (void)magneticFieldBridge_.Start(
+            timeBetweenUpdates, [this](const AndroidSensorSample& sample) { HandleMagneticFieldSample(sample); });
+
         if (!attitudeStarted || !gravityStarted || !linearAccelerationStarted || !gyroscopeStarted)
         {
             Stop();
@@ -102,11 +120,12 @@ namespace Microsoft::Devices::Sensors::Detail
         gravityBridge_.Stop();
         linearAccelerationBridge_.Stop();
         gyroscopeBridge_.Stop();
+        magneticFieldBridge_.Stop();
     }
 
     void AndroidMotionBackend::SetSampleInterval(const System::TimeSpan& timeBetweenUpdates)
     {
-        // All five bridges — AndroidSensorBridge::SetSampleInterval() itself
+        // All six bridges — AndroidSensorBridge::SetSampleInterval() itself
         // is a safe no-op on whichever ones, if any, are not currently
         // started (Task ANDROID-BRIDGE-002). Simpler and equally correct to
         // call it on both attitude bridges unconditionally rather than
@@ -117,6 +136,7 @@ namespace Microsoft::Devices::Sensors::Detail
         gravityBridge_.SetSampleInterval(timeBetweenUpdates);
         linearAccelerationBridge_.SetSampleInterval(timeBetweenUpdates);
         gyroscopeBridge_.SetSampleInterval(timeBetweenUpdates);
+        magneticFieldBridge_.SetSampleInterval(timeBetweenUpdates);
     }
 
     void AndroidMotionBackend::HandleAttitudeSample(const AndroidSensorSample& sample)
@@ -161,16 +181,58 @@ namespace Microsoft::Devices::Sensors::Detail
         // DeviceAcceleration's documented unit and with a physically sensible
         // "vector of magnitude ~1 at rest" reading.
         constexpr float StandardGravity = 9.80665f;
+
+        // Task MOTION-012 (2026-07-16): applies the exact same landscape
+        // remap Accelerometer.cpp/Gyroscope.cpp already use to
+        // Gravity/DeviceAcceleration/DeviceRotationRate, respecting the
+        // shared ACCEL-008 opt-out. This was left unresolved by ACCEL-008
+        // itself pending confirmation that Android's TYPE_GRAVITY/
+        // TYPE_LINEAR_ACCELERATION/TYPE_GYROSCOPE report in the same raw,
+        // device-fixed frame as TYPE_ACCELEROMETER -- now confirmed via
+        // Android's own public developer documentation (not requiring
+        // real hardware, since this is a documented OS API contract, not
+        // an implementation detail that could vary by device):
+        // developer.android.com/guide/topics/sensors/sensors_motion states,
+        // verbatim, for both the gravity and linear-acceleration sensors,
+        // "The sensor coordinate system is the same as the one used by the
+        // acceleration sensor", and identically for the gyroscope, "The
+        // sensor's coordinate system is the same as the one used for the
+        // acceleration sensor." developer.android.com/guide/topics/sensors/
+        // sensors_overview further confirms that shared coordinate system
+        // "never changes as the device moves" -- i.e. it is fixed to the
+        // device's natural orientation, never pre-corrected by the OS for
+        // the current display rotation, so there is no risk of
+        // double-applying an orientation correction the platform already
+        // performed. `Motion.Attitude` (the quaternion) is explicitly
+        // out of scope for this remap -- a quaternion is not a plain
+        // vector, and any fix there is `MOTION-002`'s own open question.
+        Vector3 ApplyLandscapeRemapIfEnabled(const Vector3& raw)
+        {
+            if (!IsAndroidLandscapeRemapEnabled())
+            {
+                return raw;
+            }
+
+            const SDL_DisplayOrientation orient = SDL_GetCurrentDisplayOrientation(SDL_GetPrimaryDisplay());
+            const AndroidSensorLandscapeOrientation mappedOrientation =
+                (orient == SDL_ORIENTATION_LANDSCAPE_FLIPPED)
+                    ? AndroidSensorLandscapeOrientation::Rotation270
+                    : AndroidSensorLandscapeOrientation::Rotation90;
+
+            return ConvertAndroidPortraitToXnaLandscape(raw.X, raw.Y, raw.Z, mappedOrientation);
+        }
     }
 
     void AndroidMotionBackend::HandleGravitySample(const AndroidSensorSample& sample)
     {
+        const Vector3 converted = ApplyLandscapeRemapIfEnabled(Vector3(
+            sample.Values[0] / StandardGravity,
+            sample.Values[1] / StandardGravity,
+            sample.Values[2] / StandardGravity));
+
         {
             std::lock_guard<std::mutex> lock(stateMutex_);
-            gravity_ = Vector3(
-                sample.Values[0] / StandardGravity,
-                sample.Values[1] / StandardGravity,
-                sample.Values[2] / StandardGravity);
+            gravity_ = converted;
             gravityTimestamp_ = sample.Timestamp;
             hasGravitySample_ = true;
         }
@@ -179,12 +241,14 @@ namespace Microsoft::Devices::Sensors::Detail
 
     void AndroidMotionBackend::HandleLinearAccelerationSample(const AndroidSensorSample& sample)
     {
+        const Vector3 converted = ApplyLandscapeRemapIfEnabled(Vector3(
+            sample.Values[0] / StandardGravity,
+            sample.Values[1] / StandardGravity,
+            sample.Values[2] / StandardGravity));
+
         {
             std::lock_guard<std::mutex> lock(stateMutex_);
-            deviceAcceleration_ = Vector3(
-                sample.Values[0] / StandardGravity,
-                sample.Values[1] / StandardGravity,
-                sample.Values[2] / StandardGravity);
+            deviceAcceleration_ = converted;
             linearAccelerationTimestamp_ = sample.Timestamp;
             hasLinearAccelerationSample_ = true;
         }
@@ -197,16 +261,48 @@ namespace Microsoft::Devices::Sensors::Detail
     // GYRO-002), and the real WP7 MotionReading.DeviceRotationRate is
     // documented identically: "Gets the rotational velocity of the device,
     // in radians per second" (archived MSDN hh312728(v=vs.105)). Both sides
-    // already agree, so a straight pass-through is correct.
+    // already agree, so a straight pass-through is correct. Task MOTION-012:
+    // the landscape remap is still applied (see ApplyLandscapeRemapIfEnabled()'s
+    // own doc comment) -- units and axis convention are independent concerns.
     void AndroidMotionBackend::HandleGyroscopeSample(const AndroidSensorSample& sample)
     {
+        const Vector3 converted =
+            ApplyLandscapeRemapIfEnabled(Vector3(sample.Values[0], sample.Values[1], sample.Values[2]));
+
         {
             std::lock_guard<std::mutex> lock(stateMutex_);
-            deviceRotationRate_ = Vector3(sample.Values[0], sample.Values[1], sample.Values[2]);
+            deviceRotationRate_ = converted;
             gyroscopeTimestamp_ = sample.Timestamp;
             hasGyroscopeSample_ = true;
         }
         PublishReading();
+    }
+
+    // Task MOTION-011 (2026-07-16): calibration-only -- reuses
+    // AndroidCompassBackend's own accuracy-status policy
+    // (ShouldRaiseCalibrateForAccuracyStatus()) so Motion.Calibrate fires
+    // under the exact same condition Compass.Calibrate already does, rather
+    // than inventing an independent threshold. Deliberately does not store
+    // the magnetic-field vector or its accuracy anywhere -- MotionReading
+    // has no field for either, and none is added here (out of scope for
+    // this task, see AndroidMotionBackend.hpp's own doc comment).
+    void AndroidMotionBackend::HandleMagneticFieldSample(const AndroidSensorSample& sample)
+    {
+        const auto status = static_cast<AndroidSensorAccuracyStatus>(sample.Status);
+
+        CalibrationCallback calibrationCallback;
+        {
+            std::lock_guard<std::mutex> lock(stateMutex_);
+            if (ShouldRaiseCalibrateForAccuracyStatus(status))
+            {
+                calibrationCallback = onCalibrationNeeded_;
+            }
+        }
+
+        if (calibrationCallback)
+        {
+            calibrationCallback();
+        }
     }
 
     void AndroidMotionBackend::PublishReading()

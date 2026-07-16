@@ -395,19 +395,27 @@ basis between Android's world frame and XNA's. Whether this needs the same kind 
 remap `Detail::ConvertAndroidPortraitToXnaLandscape()` applies to
 `Accelerometer`/`Gyroscope` is genuinely unknown until tested on a real device.
 
-**Cross-reference (2026-07-07, Task `ACCEL-008` → new Task `MOTION-012`):** `ACCEL-008`
-decided to keep (and now explicitly document + make opt-out-able) the landscape remap for
-`Accelerometer`/`Gyroscope`. `Motion.Gravity`/`DeviceAcceleration`/`DeviceRotationRate` are
-plain device-frame vectors of the same shape (gravity/linear-acceleration/angular-rate),
-so the same remap likely applies to them for consistency — but this was deliberately
-**not** implemented as part of `ACCEL-008` itself: it needs its own fresh verification that
-these particular Android sensor outputs are genuinely portrait-frame-fixed the same way
-the raw accelerometer/gyroscope are (not already partially orientation-corrected by
-Android's own sensor fusion), before blindly reusing the same formula. `Motion.Attitude`
-(the quaternion) is a separate, harder question — a quaternion isn't a plain vector, so
-the same sign-flip remap does not apply to it at all; any fix there needs a real change-
-of-basis derivation, tracked as part of the same open question above, not this checklist
-item. See `plan_devices.md` Task `MOTION-012` for the tracked follow-up.
+**Cross-reference (2026-07-07, Task `ACCEL-008` → `MOTION-012`; resolved 2026-07-16):**
+`ACCEL-008` decided to keep (and document + make opt-out-able) the landscape remap for
+`Accelerometer`/`Gyroscope`. `MOTION-012` (`../audit_devices.md` `DEV-AUD-003`) has now
+confirmed, via Android's own public developer documentation (`developer.android.com/guide/
+topics/sensors/sensors_motion`: gravity/linear-acceleration/gyroscope sensors each
+"use... the same [coordinate system as]... the acceleration sensor"; `sensors_overview`:
+that coordinate system "never changes as the device moves") that `TYPE_GRAVITY`/
+`TYPE_LINEAR_ACCELERATION`/`TYPE_GYROSCOPE` report in the exact same raw, device-fixed,
+natural-orientation frame as `TYPE_ACCELEROMETER` — not already partially
+orientation-corrected by Android's own sensor fusion, so there is no double-correction
+risk. `AndroidMotionBackend.cpp` now applies the same
+`Detail::ConvertAndroidPortraitToXnaLandscape()` remap (respecting the shared
+`Detail::IsAndroidLandscapeRemapEnabled()` opt-out) to `Gravity`/`DeviceAcceleration`/
+`DeviceRotationRate`, mirroring `Accelerometer.cpp`/`Gyroscope.cpp`'s own call sites.
+**What remains unverified is the same thing Sections 1/2 already flag for
+`Accelerometer`/`Gyroscope` themselves: the remap's *sign/axis* correctness on real
+hardware**, not whether a remap should exist at all (that question is now closed).
+`Motion.Attitude` (the quaternion) remains explicitly out of scope for this remap — a
+quaternion isn't a plain vector, so the same sign-flip logic does not apply to it; any
+fix there needs a real change-of-basis derivation, still `MOTION-002`'s own open
+question.
 
 **Steps:**
 1. On a real Android device, run a game/demo using `Motion`, holding the device flat and
@@ -431,6 +439,15 @@ item. See `plan_devices.md` Task `MOTION-012` for the tracked follow-up.
    `TYPE_GAME_ROTATION_VECTOR` (yaw will drift slowly over time with no true-north
    correction — expected, not a bug, per this backend's own documented drift-difference
    note) rather than failing entirely.
+7. **(Task `MOTION-012`, 2026-07-16)** Confirm steps 3-5 above still hold with the device
+   physically rotated between the two supported landscape orientations (matching Section
+   1's `Accelerometer` steps) — `Gravity`/`DeviceAcceleration`/`DeviceRotationRate` are now
+   remapped the same way `Acceleration`/`RotationRate` already are. Also confirm
+   `Detail::SetAndroidLandscapeRemapEnabled(false)` makes all three report Android's raw,
+   unremapped portrait-frame axes instead, matching Section 1's equivalent opt-out check.
+8. **(Task `MOTION-011`, 2026-07-16)** Cover the magnetometer with a hand or move to a
+   location with magnetic interference; confirm `Motion.Calibrate` fires, matching
+   `Compass.Calibrate`'s own already-verified-on-emulator-only behavior (Section 7).
 
 If any step reveals a wrong sign/axis, the fix belongs in `ConvertRotationVectorToXnaQuaternion()`
 (or `AndroidMotionBackend`'s vector handling for `Gravity`/`DeviceAcceleration`/
