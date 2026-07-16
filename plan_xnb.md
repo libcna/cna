@@ -666,3 +666,75 @@ entirely the second one.
 - See the "Execution-order mandate" and "Milestones" sections near the top of this file — they are
   the primary agent-facing guardrails for a long autonomous run and should be re-read whenever this
   plan is revised.
+
+---
+
+## Handoff notes for a future session (2026-07-16)
+
+> Written at the point Phase G was just closed out, specifically so a **fresh agent with no memory
+> of the conversation that did this work** can pick this plan back up correctly. Read this section
+> first if you are starting cold on `plan_xnb.md`.
+
+### Where things stand right now
+
+Every phase through **Phase G is fully complete** (every task in Phase 0/A/B/B2/B3/C/D/D3/E/F/G is
+`✅`), on branch `feature/xnb`, most recently at commit `6501c456` ("docs(Task XNB-47): mark Phase G
+complete in plan_xnb.md"). The full test suite passes clean: **4637 tests, 0 failures** (2 unrelated
+environment-gated skips: `Accelerometer`/`GyroscopeTests`). `.xnb` loading is a real, hardened,
+documented, wire-compatible content format now — see `docs/xnb-content-pipeline-support.md` for the
+complete supported-readers/compression/platform/audio matrices and known limitations, and this
+file's own status banner + Phase G section for the full history of how it got there.
+
+**Only two things remain in this plan, and neither should be started without the project owner
+explicitly asking for it by name** — every phase transition in this plan's entire history happened
+that way (never inferred from context or "seems like the natural next step"):
+
+- **Phase H** — cancelled outright, not deferred. There is nothing to do here, ever, under the
+  current design (native C++ custom readers only, via `ContentTypeReaderManager::AddTypeCreator()` —
+  already implemented, XNB-42). Do not resurrect it unless the project owner explicitly reverses
+  that decision.
+- **Phase I** — official XNA 4.0 sample compatibility inventory (XNB-61 through XNB-64). Genuinely
+  useful future work, but deliberately gated behind an explicit request (see Phase I's own banner
+  and the execution-order mandate above) — Phase G's completion satisfies its former *dependency*,
+  not its go-ahead.
+
+### If the project owner asks "what's left" or "what should we do next"
+
+Offer, in order of how directly related they are to this plan:
+
+1. **Phase I** (this plan's own remaining phase) — real official-sample compatibility numbers,
+   replacing the hand-picked fixture corpus's implicit claims with an actual inventory + smoke tests.
+2. A **real, confirmed, currently-unfixed bug outside this plan's scope**, found incidentally during
+   this work and only ever *documented*, never fixed: `NetworkSession::Dispose()` is not idempotent
+   (missing an `isDisposed_` guard other `Dispose()` methods in this codebase have) — a genuine
+   heap-use-after-free when called twice. Full root cause, a concrete fix, and test guidance are
+   already written up in [`plan_net.md`](plan_net.md)'s **Phase 12** (`Task 12.1`,
+   `src/Microsoft/Xna/Framework/Net/NetworkSession.cpp:278-294`). This is unrelated to `.xnb` and
+   belongs to that plan file, not this one — mentioned here only so a fresh session doesn't have to
+   rediscover that it exists.
+3. Anything else the project owner has in mind that isn't reflected in either plan file yet.
+
+Do not start any of the above speculatively — surface the options and let the project owner choose.
+
+### Working conventions this plan's history has consistently followed
+
+If continuing work in this plan (Phase I, or a future revision), keep doing what got every prior
+phase here to a clean, verified state — see `CLAUDE.md` for the full, authoritative project rules,
+but the specific habits this plan's own history leaned on hardest:
+
+- Real, externally-produced fixtures only for "does this reader work" claims — never a fixture CNA
+  itself generated. When no real fixture exists anywhere in the available library (this happened for
+  `Texture3DReader`, for instance), say so explicitly rather than presenting a hand-built stream as
+  equivalent.
+- Build and run the *full* test suite (`grep -c "FAILED"` on the untruncated output, never just the
+  tail) before every commit, not just the tests for the file just touched.
+- One task = one commit, explicit `git add <files>` (never `-A`), commit message references the task
+  ID and explains *why*, not just what.
+- Update this plan file's status markers (`⬜ → ✅`) in a **separate** commit immediately after the
+  implementation commit, once the implementation is actually verified — not bundled into the same
+  commit, and not deferred to "later".
+- When a fuzz/hardening pass finds a real crash, treat it as a first-class deliverable, not a
+  distraction from the task at hand — Phase G's XNB-43 and XNB-47 rows both ended up finding and
+  fixing real heap-buffer-overflows this way, confirmed under `-DCNA_SANITIZE=address,undefined`
+  (`cmake -S . -B cmake-build-asan -DCMAKE_BUILD_TYPE=Debug -DCNA_SANITIZE=address,undefined`) before
+  being considered actually fixed, not just "probably fixed".
