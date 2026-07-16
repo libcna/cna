@@ -1898,6 +1898,45 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 947: PerPixelLighting.fx's PerPixelDiffuse technique (diffuse-only, no specular).
+        cna_easygl_test(cna_test_easygl_perpixellighting_diffuseonly_shader
+                        examples/easygl_perpixellighting_diffuseonly_shader_test.cpp)
+        add_test(NAME EasyGL_PerPixelLighting_DiffuseOnly_Shader
+                 COMMAND cna_test_easygl_perpixellighting_diffuseonly_shader)
+        set_tests_properties(EasyGL_PerPixelLighting_DiffuseOnly_Shader PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 947: PerPixelLighting.fx's PerVertexDiffuseAndPerPixelPhong technique (diffuse per
+        # vertex, specular per pixel).
+        cna_easygl_test(cna_test_easygl_perpixellighting_vertexdiffuse_pixelphong_shader
+                        examples/easygl_perpixellighting_vertexdiffuse_pixelphong_shader_test.cpp)
+        add_test(NAME EasyGL_PerPixelLighting_VertexDiffusePixelPhong_Shader
+                 COMMAND cna_test_easygl_perpixellighting_vertexdiffuse_pixelphong_shader)
+        set_tests_properties(EasyGL_PerPixelLighting_VertexDiffusePixelPhong_Shader PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 947: VertexLighting.fx's PerVertexDiffuse technique (diffuse-only, fully per vertex).
+        cna_easygl_test(cna_test_easygl_vertexlighting_diffuse_shader
+                        examples/easygl_vertexlighting_diffuse_shader_test.cpp)
+        add_test(NAME EasyGL_VertexLighting_Diffuse_Shader
+                 COMMAND cna_test_easygl_vertexlighting_diffuse_shader)
+        set_tests_properties(EasyGL_VertexLighting_Diffuse_Shader PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 947: VertexLighting.fx's PerVertexDiffuseAndPhong technique (diffuse+specular, fully
+        # per vertex) -- with this one, all 5 of PerPixelLighting sample's effect/technique
+        # combinations are ported.
+        cna_easygl_test(cna_test_easygl_vertexlighting_diffusephong_shader
+                        examples/easygl_vertexlighting_diffusephong_shader_test.cpp)
+        add_test(NAME EasyGL_VertexLighting_DiffusePhong_Shader
+                 COMMAND cna_test_easygl_vertexlighting_diffusephong_shader)
+        set_tests_properties(EasyGL_VertexLighting_DiffusePhong_Shader PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 133: DualTextureEffect — magenta×yellow→red pixel readback
         cna_easygl_test(cna_test_easygl_dual_texture
                         examples/easygl_dual_texture_test.cpp)
