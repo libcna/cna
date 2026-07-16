@@ -1937,6 +1937,26 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 947: VertexLightingSample's OWN VertexLighting.fx (directional light -- distinct
+        # from the same-named file already ported for the PerPixelLighting sample).
+        cna_easygl_test(cna_test_easygl_vertexlighting_directional_shader
+                        examples/easygl_vertexlighting_directional_shader_test.cpp)
+        add_test(NAME EasyGL_VertexLighting_Directional_Shader
+                 COMMAND cna_test_easygl_vertexlighting_directional_shader)
+        set_tests_properties(EasyGL_VertexLighting_Directional_Shader PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 947: VertexLightingSample's FlatShaded.fx -- with this and the row above,
+        # VertexLighting sample's shader blocker is fully cleared.
+        cna_easygl_test(cna_test_easygl_flatshaded_shader
+                        examples/easygl_flatshaded_shader_test.cpp)
+        add_test(NAME EasyGL_FlatShaded_Shader
+                 COMMAND cna_test_easygl_flatshaded_shader)
+        set_tests_properties(EasyGL_FlatShaded_Shader PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 133: DualTextureEffect — magenta×yellow→red pixel readback
         cna_easygl_test(cna_test_easygl_dual_texture
                         examples/easygl_dual_texture_test.cpp)
