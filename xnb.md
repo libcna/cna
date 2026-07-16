@@ -1,9 +1,9 @@
 # XNB binary content pipeline: implementation plan for CNA
 
-> **Status: 🔄 PARTIALLY UN-FROZEN 2026-07-16 — MVP scope complete, Phase D (LZX) mostly done, the
-> M3 milestone (real `SpriteFont` + one supported `SoundEffect` variant) reached too; broad
-> coverage past that still deferred.** CNA's owner decided `.xnb` should become a real,
-> additional runtime format again, alongside the already-implemented
+> **Status: 🔄 PARTIALLY UN-FROZEN 2026-07-16 — MVP scope complete, Phase D (LZX) mostly done,
+> Phase E (`SpriteFont`, stock effects, `SoundEffect`/`Song`, `ReadExternalReference<T>()`) fully
+> complete; broad coverage past that still deferred.** CNA's owner decided `.xnb` should become a
+> real, additional runtime format again, alongside the already-implemented
 > [`cnb.md`](cnb.md)/[`plan_cnb.md`](plan_cnb.md) `.cnb` strategy — not a replacement for it.
 > `ContentManager`'s resolution order now ranks `.xnb` **above** both the literal caller-given path
 > and `.cnb` (see `cnb.md`'s "Core rule"). [`plan_xnb.md`](plan_xnb.md)'s Phase 0/A/B/B2/B3/C
@@ -13,12 +13,12 @@
 > compressed fixtures, with XNB-27 (a dedicated `XnbCompression` enum) and XNB-30A (fuzz/
 > differential testing) deliberately left open — see `plan_xnb.md`'s Phase D section for exact
 > scope. CNA's owner then explicitly requested M3 next: `SpriteFontReader` and a `SoundEffectReader`
-> covering at least one real wave-format variant are both done and real-fixture-verified, reaching
-> M3's own Definition of Done -- but not the rest of Phase E (stock effects, `Song`,
-> `ReadExternalReference<T>()`), which weren't required by it and remain open; see `plan_xnb.md`'s
-> Phase E section for exact scope. Phase D3/F onward — stock effects' remaining scope aside,
-> `Model`, and the top-quality hardening pass — remain frozen/deferred pending a future decision to
-> resume them; nothing there is started. **Phase H (Lua-scripted custom
+> covering at least one real wave-format variant, reaching M3's own Definition of Done; asked to
+> continue the same day, the rest of Phase E followed too -- `ReadExternalReference<T>()`, the 5
+> stock-effect readers, the general `EffectReader`'s diagnostic path, and `SongReader` -- so Phase E
+> now has no open tasks left; see `plan_xnb.md`'s Phase E section for exactly what each task
+> required. Phase D3/F onward — `Model` and the top-quality hardening pass — remain frozen/deferred
+> pending a future decision to resume them; nothing there is started. **Phase H (Lua-scripted custom
 > `ContentTypeReader` support) is rejected outright, not merely deferred** — see `plan_xnb.md`'s own
 > note; custom readers stay a plain C++ registration API (this document's own Phase G), the same
 > shape `.cnb`'s `RegisterCnbLoader<T>` already uses. A new content-manifest feature (`ContentManager`
@@ -414,8 +414,10 @@ like FNA's own loose-extension fallbacks, coexisting with `Texture2D::FromStream
 > Superseded in part 2026-07-16: the MVP slice (Phase 0/A/B/B2/B3/C — container, primitives,
 > uncompressed `Texture2D`, the content manifest) is now active, per the status banner at the top
 > of this file. Superseded a second time the same day: Phase D (LZX decompression) was also
-> explicitly requested and is now done. The reasoning below still applies to everything past that
-> point (Phase D3 onward).
+> explicitly requested and is now done. Superseded a third time the same day: Phase E (`SpriteFont`,
+> stock effects, `SoundEffect`/`Song`, `ReadExternalReference<T>()`) was requested too and is now
+> fully complete. The reasoning below still applies to everything past that point (Phase D3/F
+> onward).
 
 - **A general reader registry covering all ~40 FNA reader types is a real, standalone engineering
   effort**, not a quick addition to an existing file — see its own section above. (Phase D itself

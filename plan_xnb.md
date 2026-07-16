@@ -1,8 +1,8 @@
 # XNB binary content pipeline: task plan
 
 > **Status: 🔄 PARTIALLY UN-FROZEN 2026-07-16 — MVP scope (Phase 0/A/B/B2/B3/C) complete; Phase D
-> (LZX decompression) mostly done; the M3 milestone (real `SpriteFont` + one supported
-> `SoundEffect` variant) reached; the rest of Phase E and everything after stays frozen.** CNA's
+> (LZX decompression) mostly done; Phase E (`SpriteFont`, stock effects, `SoundEffect`/`Song`,
+> `ReadExternalReference<T>()`) fully complete; everything after Phase E stays frozen.** CNA's
 > owner decided `.xnb` becomes a real, additional runtime format again, ranked **above** `.cnb` in
 > `ContentManager`'s resolution order (see [`cnb.md`](cnb.md)'s "Core rule": `.xnb` → literal
 > caller-given path → `.cnb` → native-by-extension). The MVP scope through the end of Phase C
@@ -13,13 +13,14 @@
 > XNB-30A (fuzzing/differential testing) still open — see Phase D's own section for exact scope.
 > CNA's owner then explicitly requested M3 next: `SpriteFontReader` (XNB-31) and a real-fixture-
 > verified `SoundEffectReader` covering at least one supported wave format (XNB-33/33A) are both
-> done, reaching M3's own Definition of Done. Stock effects (XNB-32), the general `EffectReader`'s
-> diagnostic path (XNB-32A), `Song` (XNB-34), and `ReadExternalReference<T>()` (XNB-35) are the
-> rest of Phase E and were not required by M3 — they remain open. Everything sequenced after that
-> (`Model`, top-quality hardening, Phase D3/F onward) remains frozen/deferred, pending a future
-> decision to resume it — do not start those tasks without checking in first. **Phase H
-> (Lua-scripted custom readers) is cancelled outright, not deferred** — see that phase's own
-> section below; custom `.xnb` readers
+> done, reaching M3's own Definition of Done. Asked to continue the same day, the rest of Phase E
+> followed: `ReadExternalReference<T>()` (XNB-35), the 5 stock-effect readers (XNB-32), the general
+> `EffectReader`'s diagnostic path (XNB-32A, already implemented back in Phase B and now also
+> test-covered), and `SongReader` (XNB-34) are all done too — Phase E has no open tasks left.
+> Everything sequenced after Phase E (`Model`, top-quality hardening, Phase D3/F onward) remains
+> frozen/deferred, pending a future decision to resume it — do not start those tasks without
+> checking in first. **Phase H (Lua-scripted custom readers) is cancelled outright, not deferred**
+> — see that phase's own section below; custom `.xnb` readers
 > stay a plain C++ registration API (Phase G), matching `.cnb`'s existing `RegisterCnbLoader<T>`.
 > Phase B3 has also grown new scope: a `ContentManager` startup content-manifest scan (internal perf
 > cache + a public introspection API + the `.xnb` reader-name inventory), see that phase below.
@@ -104,18 +105,29 @@
 > Phase E's own section. XNB-32/32A/34/35 (the rest of Phase E) were not required by M3's narrower
 > definition and remain open; XNB-35 in particular blocks both XNB-32 and XNB-34 and would need to
 > be picked up first. Phase F onward is still frozen pending a future decision.
+>
+> **Revised an eighth time (2026-07-16)** after CNA's owner asked to continue past M3 the same day:
+> `ReadExternalReference<T>()` (XNB-35) is done, refined mid-implementation to return
+> `std::optional<T>` instead of a bare `T` (see Phase E's own design note for why). The 5
+> stock-effect readers (XNB-32) are done, requiring `SetOwnedTexture()`/`SetOwnedTexture2()`/
+> `SetOwnedEnvironmentMap()` additions to all 5 effect classes and a `std::shared_ptr<T>` reader
+> target instead of a bare `T` (another real, necessary architecture decision -- see that row's
+> note). The general `EffectReader`'s diagnostic path (XNB-32A) turned out to already exist from
+> Phase B, just untested at the `ReadUntyped()` level; added that test. `SongReader` (XNB-34) is
+> done, verified against a real fixture plus its real companion audio file. Phase E is now fully
+> complete with no open tasks. Phase F onward remains frozen pending a future decision.
 
 ## Execution-order mandate for autonomous work
 
 > Read this before starting any task in this file.
 
 - Implement strictly in phase order, and only through the current active scope (Phase
-  0/A/B/B2/B3/C, Phase D, and the M3-critical slice of Phase E (XNB-31/33/33A) — all explicitly
-  un-frozen and requested by CNA's owner, see the status banner above). Do not begin Phase D3, the
-  rest of Phase E (XNB-32/32A/34/35), or anything sequenced after them until a future decision
-  explicitly resumes them. Do not begin Phase I while any mandatory task in Phase A-C remains
-  incomplete (Phase B3's XNB-61a/XNB-65/66/67 tasks are the one deliberate exception — see their own
-  rows; XNB-61b can now start since Phase D's decompressor exists, but has not been picked up yet).
+  0/A/B/B2/B3/C, Phase D, and all of Phase E — all explicitly un-frozen and requested by CNA's
+  owner, see the status banner above). Do not begin Phase D3, Phase F, or anything sequenced after
+  Phase E until a future decision explicitly resumes them. Do not begin Phase I while any mandatory
+  task in Phase A-C remains incomplete (Phase B3's XNB-61a/XNB-65/66/67 tasks are the one
+  deliberate exception — see their own rows; XNB-61b can now start since Phase D's decompressor
+  exists, but has not been picked up yet).
 - Phase H (Lua-scripted custom readers) is cancelled outright — do not implement it in any form,
   and do not treat it as merely "later". Custom `.xnb` readers stay native C++ only, registered
   through Phase G's plain registration API (deferred along with the rest of Phase D onward under
@@ -134,7 +146,7 @@
 |---|---|---|
 | M1 - binary protocol | XNB-17F | ✅ **Reached 2026-07-16.** An uncompressed, externally-produced test `.xnb` loads end-to-end through `ContentManager` using only the Phase B test-only reader. No graphics, audio, or Lua involved. |
 | M2 - real texture | XNB-26 | ✅ **Reached 2026-07-16.** A real uncompressed XNA 4.0 `Texture2D` `.xnb` loads and uploads through the backend-neutral `GraphicsDevice` path. |
-| M3 - common XNA 2D content | end of Phase E | ✅ **Reached 2026-07-16** (its own Definition of Done, not literally "end of Phase E" -- see the note below the table). Compressed `Texture2D`, `SpriteFont`, and at least one supported `SoundEffect` variant from the XNB-33 matrix all load correctly. |
+| M3 - common XNA 2D content | end of Phase E | ✅ **Reached 2026-07-16** -- initially against its own narrower Definition of Done, then against the literal "end of Phase E" too once the rest of Phase E was picked up the same day (see the note below the table). Compressed `Texture2D`, `SpriteFont`, and at least one supported `SoundEffect` variant from the XNB-33 matrix all load correctly. |
 | M4 - standard model | XNB-41 | A real multi-mesh, multi-bone XNA `Model` `.xnb` loads with shared resources resolved and native CNA stock effects attached. |
 | M5 - release-quality native loader | XNB-47 | Native `.xnb` support is documented (XNB-45), hardened (XNB-43), and fully usable without Lua. |
 
@@ -148,12 +160,16 @@
 > their rows in Phase D. `XNB-25` (`Texture3DReader`/`TextureCubeReader`) remains correctly deferred
 > in Phase D3 (never part of Phase C itself). CNA's owner then explicitly requested M3 next:
 > `SpriteFontReader` (XNB-31) and a `SoundEffectReader` covering at least one real variant
-> (XNB-33/XNB-33A) are both done and real-fixture-verified, reaching M3's own Definition of Done —
-> but **not** the literal "end of Phase E" the milestone table's "Reached after" column names,
-> since stock effects (XNB-32), the general `EffectReader`'s diagnostic path (XNB-32A), `Song`
-> (XNB-34), and `ReadExternalReference<T>()` (XNB-35, itself a prerequisite for both XNB-32 and
-> XNB-34) were outside M3's own narrower requirement and remain open. M4/M5/Phase D3/Phase F onward
-> remain frozen until a future decision explicitly resumes them.
+> (XNB-33/XNB-33A) are both done and real-fixture-verified, reaching M3's own Definition of Done.
+> Asked to continue the same day, the rest of Phase E followed: `ReadExternalReference<T>()`
+> (XNB-35, returning `std::optional<T>` -- see that row's note for why), the 5 stock-effect readers
+> (XNB-32, each targeting `std::shared_ptr<T>` and needing new `SetOwnedTexture()`-family methods
+> on all 5 effect classes -- see that row's note), the general `EffectReader`'s diagnostic path
+> (XNB-32A, already implemented in Phase B, now also test-covered), and `SongReader` (XNB-34,
+> real-fixture-verified) are all done too. **Phase E is now fully complete**, every task `⬜ → ✅`,
+> matching the milestone table's literal "end of Phase E" for M3, not just its own narrower
+> Definition of Done. M4/M5/Phase D3/Phase F onward remain frozen until a future decision
+> explicitly resumes them.
 
 ## Scope
 
@@ -415,22 +431,24 @@ entirely the second one.
 
 ## Phase E — `SpriteFont`, stock effects, `SoundEffect`/`Song`
 
-> **Partially un-frozen 2026-07-16**, same day as Phase D: CNA's owner explicitly requested the
-> M3 milestone next. M3's own Definition of Done (compressed `Texture2D` -- already done in Phase
-> D -- plus a real `SpriteFont` plus at least one supported `SoundEffect` variant) is now
-> **reached**; see XNB-31/XNB-33/XNB-33A below. The rest of this phase (stock effects, the general
-> `EffectReader`'s diagnostic path, `Song`, and `ReadExternalReference<T>()`) was not required by
-> M3's narrower definition and remains open -- see each row's own note for why.
+> **Fully complete 2026-07-16**, un-frozen the same day as Phase D across two rounds of
+> CNA-owner-requested work: first the M3-critical slice (`SpriteFontReader` XNB-31,
+> `SoundEffectReader` XNB-33/33A), reaching M3's own Definition of Done (compressed `Texture2D` --
+> already done in Phase D -- plus a real `SpriteFont` plus at least one supported `SoundEffect`
+> variant); then, requested again the same day, the rest of the phase (`ReadExternalReference<T>()`
+> XNB-35, the 5 stock-effect readers XNB-32, the general `EffectReader`'s diagnostic path XNB-32A,
+> `SongReader` XNB-34) closing out every remaining task. See each row's own note for what was
+> actually implemented and any scope narrowing.
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
 | XNB-31 | `SpriteFontReader` (glyph atlas `Texture2D` + rects + character map + kerning + optional default char via `NullableReader`) | ✅ | **Implemented 2026-07-16**: `CNA::Internal::Xnb::SpriteFontReader` (`include`/`src`/`CNA/Internal/Xnb/SpriteFontContentTypeReader.*`), plus concrete `ListReader<Rectangle>`/`ListReader<char16_t>`/`ListReader<Vector3>` registrations it depends on. Verified against 2 real, externally-produced fixtures: MonoGame's uncompressed `Default.xnb` (whose glyph atlas happens to be Dxt3-compressed, exercising Texture2DReader's compressed path too) and the already-vendored LZX-compressed `FontCalibri14.xnb` (ties Phase D and Phase E together end-to-end for the first time). The `existingInstance`-provided reload path is FNA's own dead code (`CanDeserializeIntoExistingObject` defaults false, never overridden) and throws a documented `NotImplementedException` instead of adding a SpriteFont mutator that would serve no other purpose. Uncovered a real architecture gap while wiring this up: see the `std::any`/move-only-type note below |
-| XNB-32 | Stock-effect readers: `BasicEffectReader`/`AlphaTestEffectReader`/`DualTextureEffectReader`/`EnvironmentMapEffectReader`/`SkinnedEffectReader` — deserialize the exact stock-effect fields stored by each corresponding XNA reader (colors, texture references, lighting flags, fog parameters, etc.) and construct CNA's own native stock-effect implementation from them; do **not** route the object through the general `EffectReader`'s compiled-bytecode path at all | ⬜ | Reworded per follow-up review point 8 — these readers serialize the *parameters needed to reconstruct the stock effect*, not a generic bytecode blob that gets "ignored"; deliberate scope-narrowing decision from `xnb.md`, avoids any dependency on `plan_graphics.md` Phase 74. **Not part of M3's own Definition of Done** (see the milestone table) — genuinely blocked on XNB-35 first, since every one of FNA's stock-effect readers reads its texture via `ReadExternalReference<Texture>()` |
-| XNB-32A | Implement the actual detection/failure path for the general `Microsoft.Xna.Framework.Content.EffectReader` (compiled platform shader bytecode, distinct from the stock-effect readers in XNB-32): precise, documented exception message until real compiled-FX support exists (see `plan_graphics.md` Phase 74) | ⬜ | The name is already reserved as known-unsupported in Phase B (XNB-14B) so an early fixture never produces a bare "unknown content reader"; this task adds the detailed message/diagnostics and any later compiled-FX hookup. Not part of M3 |
+| XNB-32 | Stock-effect readers: `BasicEffectReader`/`AlphaTestEffectReader`/`DualTextureEffectReader`/`EnvironmentMapEffectReader`/`SkinnedEffectReader` — deserialize the exact stock-effect fields stored by each corresponding XNA reader (colors, texture references, lighting flags, fog parameters, etc.) and construct CNA's own native stock-effect implementation from them; do **not** route the object through the general `EffectReader`'s compiled-bytecode path at all | ✅ | **Implemented 2026-07-16**: `CNA::Internal::Xnb::{BasicEffect,AlphaTestEffect,DualTextureEffect,EnvironmentMapEffect,SkinnedEffect}Reader` (`include`/`src`/`CNA/Internal/Xnb/StockEffectContentTypeReaders.*`), each targeting `std::shared_ptr<T>` rather than a bare `T` (CNA's stock effect classes have a private clone-only copy constructor and no move constructor, so a bare-value `ContentTypeReader<T>` cannot compile a `Read()` returning `T` -- matches an existing CNA convention already used for GC-tracked `Effect` references elsewhere). Added `SetOwnedTexture()`/`SetOwnedTexture2()`/`SetOwnedEnvironmentMap()` (NOXNA) to all 5 effect classes so a standalone content-loaded effect can keep its own texture reference alive, matching real XNA's GC-tracked `Effect.Texture` (the existing `setTextureProperty(Texture2D*)` stays a non-owning pointer, used by `Model`'s shared texture pool, unchanged). `BasicEffectReader` verified against a real fixture slice (MonoGame's `BlenderDefaultCube.xnb`, byte-located and confirmed by direct inspection since `ModelReader`/Phase F doesn't exist yet); the other 4 use hand-constructed streams verified field-by-field against FNA's own source (no real fixture found in the available library for any of them) |
+| XNB-32A | Implement the actual detection/failure path for the general `Microsoft.Xna.Framework.Content.EffectReader` (compiled platform shader bytecode, distinct from the stock-effect readers in XNB-32): precise, documented exception message until real compiled-FX support exists (see `plan_graphics.md` Phase 74) | ✅ | **Already implemented in Phase B (XNB-14B)**, pre-emptively, before Phase E existed; confirmed complete 2026-07-16 by adding the one thing that was actually missing -- a test that dispatches through a real `ContentReader` and asserts `ReadUntyped()`'s `ContentLoadException` message names both the target type and the reason (`tests/Microsoft/Xna/Framework/Content/KnownUnsupportedContentTypeReaderTests.cpp`); previously only registration was tested |
 | XNB-33 | Audio-fixture survey task (run *before* writing `SoundEffectReader`): collect real fixtures for XNA-Windows PCM, XNA-Windows ADPCM/other supported compressed form, MonoGame DesktopGL, and an FNA-compatible build; produce a support matrix (`XNA Windows PCM SoundEffect` / `XNA Windows compressed SoundEffect` / `Song as external file` / `platform-specific codec` → supported / converted / explicitly rejected) | ✅ | **Implemented 2026-07-16**: 6 real MonoGame `tone_*.xnb` fixtures (`tests/assets/xnb/monogame/windows/uncompressed/audio/`) covering PCM 16-bit mono/stereo, PCM 8-bit, IEEE float, MS-ADPCM, and IMA-ADPCM, each with a manifest recording its exact WAVEFORMATEX fields and `supportMatrixStatus`. Matrix: 16-bit PCM → supported (CNA's `SoundEffect` PCM constructors are `SDL_AUDIO_S16LE`-only); 8-bit PCM/float/MS-ADPCM/IMA-ADPCM/XMA2 → explicitly rejected, no conversion path yet. `Song`-as-external-file and platform-specific codecs are XNB-34's own scope, not surveyed here |
 | XNB-33A | `SoundEffectReader` (wave format, PCM vs. compressed data, loop region, duration → CNA audio backend), scoped to the matrix from XNB-33 | ✅ | **Implemented 2026-07-16**: `CNA::Internal::Xnb::SoundEffectReader` (`include`/`src`/`CNA/Internal/Xnb/SoundEffectContentTypeReader.*`), a line-by-line port of FNA's own `SoundEffectReader.cs` (including its Xbox-only endian-swap helpers and XMA2 extra-field parsing, both dead code on every real fixture used here but ported rather than dropped, matching this plan's precedent for the LZX decoder's Intel E8 path). Rejects anything outside XNB-33's "supported" row with a documented `ContentLoadException` instead of silently constructing a `SoundEffect` that would play back as noise |
-| XNB-34 | `SongReader`, scoped to the matrix from XNB-33 (external-file case in particular) | ⬜ | Not part of M3's own Definition of Done |
-| XNB-35 | `ContentReader::ReadExternalReference<T>()` (not a standalone `ExternalReferenceReader` type): read the referenced asset name/path, resolve it relative to the current asset, load it through the owning `ContentManager`, detect dependency cycles, preserve cache identity when the same asset is referenced more than once, and perform a type check against `T` | ⬜ | Reframed per review — this is a `ContentReader` operation, not a production `ContentTypeReader`. Must also cover: relative-path normalization across separators, and (mode-dependent) rejecting paths that escape the content root. **Genuinely blocks XNB-32/34** (every stock-effect reader and `SongReader` needs it) but is not itself required by M3 |
+| XNB-34 | `SongReader`, scoped to the matrix from XNB-33 (external-file case in particular) | ✅ | **Implemented 2026-07-16**: `CNA::Internal::Xnb::SongReader` (`include`/`src`/`CNA/Internal/Xnb/SongContentTypeReader.*`), a line-by-line port of FNA's `SongReader.cs` (path resolution + strip-last-4-characters-then-reprobe `.ogg`/`.oga`/`.qoa` extension normalization). Verified against a real fixture (MonoGame's `one_two_three.xnb`) together with its real companion `.ogg` file, vendored alongside it, so the extension-probing actually finds a real file on disk. Found a real, pre-existing CNA behavior (not a bug in this reader): unlike FNA, which defers a still-unresolved path's failure to actual playback, CNA's own `Song` constructor eagerly validates with `std::filesystem::exists()` and throws immediately -- documented, not worked around |
+| XNB-35 | `ContentReader::ReadExternalReference<T>()` (not a standalone `ExternalReferenceReader` type): read the referenced asset name/path, resolve it relative to the current asset, load it through the owning `ContentManager`, detect dependency cycles, preserve cache identity when the same asset is referenced more than once, and perform a type check against `T` | ✅ | **Implemented 2026-07-16**, then refined the same day once XNB-32 surfaced a real gap: returns `std::optional<T>` rather than FNA's literal bare `T` (a bare `T` can't express "no reference was present" for CNA's value-type assets the way C#'s reference-type `null` does -- matches the `std::optional<T>` idiom already used for `existingInstance`). Path resolution mirrors FNA's `FileHelpers.ResolveRelativePath` via `std::filesystem::path`'s segment-collapsing; a path that escapes the content root is rejected outright (hardening beyond FNA, which just lets the OS fail to find it). Solves a real circular-include problem (`ContentReader.hpp`/`ContentManager.hpp` can't include each other) via explicit template instantiation in `ContentReader.cpp`, for `Texture2D` and `TextureCube` (the two concrete types XNB-32 needs) |
 
 > **Design note found while closing XNB-31/XNB-33A (2026-07-16):** `std::any` (the type-erased
 > transport `ContentTypeReaderBase::ReadUntyped()` uses, see XNB-16A's decision above) requires its
