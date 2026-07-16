@@ -339,6 +339,10 @@ namespace Microsoft::Xna::Framework::Audio
         , Pan_(other.Pan_)
         , Pitch_(other.Pitch_)
         , is3D_(other.is3D_)
+        // AUDIO-001: persisted spatial state, same move-along-with-is3D_ rationale.
+        , attenuation_(other.attenuation_)
+        , dopplerFactor_(other.dopplerFactor_)
+        , spatialPan_(other.spatialPan_)
         // filterState_ is heap-owned; moving the unique_ptr transfers ownership without moving
         // the FilterState object's address, so the callback registered on `track_` (also just
         // transferred, unchanged) stays valid with no re-registration needed (T-4C).
@@ -389,6 +393,10 @@ namespace Microsoft::Xna::Framework::Audio
             Pan_         = other.Pan_;
             Pitch_       = other.Pitch_;
             is3D_        = other.is3D_;
+            // AUDIO-001: persisted spatial state, same move-along-with-is3D_ rationale.
+            attenuation_   = other.attenuation_;
+            dopplerFactor_ = other.dopplerFactor_;
+            spatialPan_    = other.spatialPan_;
             // See the move constructor's identical rationale for why no callback
             // re-registration is needed here (T-4C).
             filterState_ = std::move(other.filterState_);
@@ -490,8 +498,10 @@ namespace Microsoft::Xna::Framework::Audio
             return;
         }
 
-        EnsureTrackDspState(); // P11-PAN-001: must exist before ApplyTrackProperties writes pan
-        ApplyTrackProperties(track, filterState_.get(), Volume_, Pan_, Pitch_);
+        // AUDIO-001: was `ApplyTrackProperties(track, filterState_.get(), Volume_, Pan_, Pitch_)`
+        // -- a plain re-Play() after Apply3D() must reapply the persisted spatial attenuation/
+        // pan/Doppler too, not just Volume_/Pan_/Pitch_ (see INTERNAL_applyComposedTrackProperties).
+        INTERNAL_applyComposedTrackProperties();
 
         SDL_PropertiesID props = SDL_CreateProperties();
         if (props == 0)
@@ -847,6 +857,18 @@ namespace Microsoft::Xna::Framework::Audio
 #endif
     }
 
+    void SoundEffectInstance::INTERNAL_applyComposedTrackProperties()
+    {
+#ifdef SOUND_ENABLED
+        MIX_Track* track = AsTrack(track_);
+        if (!track) return;
+
+        EnsureTrackDspState(); // must exist before ApplyTrackProperties writes pan
+        const float pan = is3D_ ? spatialPan_ : Pan_;
+        ApplyTrackProperties(track, filterState_.get(), Volume_ * attenuation_, pan, Pitch_, dopplerFactor_);
+#endif
+    }
+
     void SoundEffectInstance::ProcessFilterSamplesForTest(float* pcm, int channels, int samples)
     {
 #ifdef SOUND_ENABLED
@@ -960,19 +982,21 @@ namespace Microsoft::Xna::Framework::Audio
                   emitter.getVelocityProperty()) * globalDopplerScale
             : 1.0f;
 
+        // AUDIO-001: persist the derived spatial state (was applied directly and only here,
+        // "one-shot" -- lost entirely on the very next Play()/Volume/Pitch call, and silently
+        // dropped altogether if there was no live track yet for this call to write into). Matches
+        // FNA's own persistent dspSettings/is3D state (SoundEffectInstance.cs), which Play() and
+        // UpdatePitch() both read back from on every later call, not just the Apply3D() call that
+        // first computed it. Combined multiplicatively with Volume_/Pitch_ by
+        // INTERNAL_applyComposedTrackProperties(), the same routine Play()/the setters now share,
+        // so this survives every one of those calls instead of being overwritten by whichever
+        // runs next.
+        attenuation_   = atten;
+        dopplerFactor_ = doppler;
+        spatialPan_    = pan;
+
 #ifdef SOUND_ENABLED
-        // Applied directly to the underlying track, not through setVolumeProperty()/
-        // setPanProperty()/setPitchProperty(): FNA computes a separate 3D output matrix
-        // (dspSettings) that combines multiplicatively with the voice's own Volume/Pitch at the
-        // audio-engine level and never touches INTERNAL_volume/INTERNAL_pan/INTERNAL_pitch, so
-        // Volume/Pan/Pitch continue to report exactly what the caller last set via the setters,
-        // unaffected by 3D positioning. One-shot at this call, like atten/pan above -- not
-        // persisted and reapplied by later setVolumeProperty()/setPitchProperty() calls, matching
-        // how those setters already overwrite the 3D-adjusted track gain/ratio outright (a real
-        // game calls Apply3D() every frame to keep 3D properties fresh, the same assumption
-        // atten/pan already rely on).
-        EnsureTrackDspState(); // P11-PAN-001: must exist before ApplyTrackProperties writes pan
-        ApplyTrackProperties(AsTrack(track_), filterState_.get(), atten * Volume_, pan, Pitch_, doppler);
+        INTERNAL_applyComposedTrackProperties();
 #endif
     }
 
@@ -1005,13 +1029,11 @@ namespace Microsoft::Xna::Framework::Audio
     {
         Volume_ = volume; // FNA passes the value straight through, without clamping
 
-#ifdef SOUND_ENABLED
-        MIX_Track* track = AsTrack(track_);
-        if (track)
-        {
-            MIX_SetTrackGain(track, Volume_);
-        }
-#endif
+        // AUDIO-001: was a direct `MIX_SetTrackGain(track, Volume_)`, which erased any spatial
+        // attenuation Apply3D had established (FNA's Volume setter never touches the separate
+        // output-matrix voice stage that attenuation lives in; SDL3_mixer has only one gain
+        // scalar, so CNA must recompose the two explicitly on every write instead).
+        INTERNAL_applyComposedTrackProperties();
     }
 
     void SoundEffectInstance::setVolumeProperty(float&& volume)
@@ -1045,20 +1067,11 @@ namespace Microsoft::Xna::Framework::Audio
             return;
         }
 
-#ifdef SOUND_ENABLED
-        // P11-PAN-001 (RFC-1): unlike the old direct MIX_SetTrackStereo call this replaces, pan
-        // is written into the shared cooked-callback DSP state instead -- SDL3_mixer's own stereo
-        // gain was already fixed to unity by Play()/Apply3D's ApplyTrackProperties call, which
-        // also guarantees filterState_ is non-null for any track that's actually playing.
-        MIX_Track* track = AsTrack(track_);
-        if (track && filterState_)
-        {
-            MIX_Mixer* mixer = CNA::Internal::Audio::GetMixer();
-            MIX_LockMixer(mixer);
-            filterState_->pan = Pan_;
-            MIX_UnlockMixer(mixer);
-        }
-#endif
+        // AUDIO-001: routed through the same shared composition routine Play()/Apply3D()/the
+        // Volume/Pitch setters use (was a standalone `filterState_->pan = Pan_` write) -- since
+        // is3D_ is false on this path, INTERNAL_applyComposedTrackProperties() picks Pan_ for the
+        // live pan exactly as this used to write directly, just via one canonical call site.
+        INTERNAL_applyComposedTrackProperties();
     }
 
     void SoundEffectInstance::setPanProperty(float&& pan)
@@ -1075,14 +1088,12 @@ namespace Microsoft::Xna::Framework::Audio
     {
         Pitch_ = (pitch < -1.0f) ? -1.0f : ((pitch > 1.0f) ? 1.0f : pitch);
 
-#ifdef SOUND_ENABLED
-        MIX_Track* track = AsTrack(track_);
-        if (track)
-        {
-            const float ratio = INTERNAL_calculatePitchRatio(Pitch_);
-            MIX_SetTrackFrequencyRatio(track, ratio < 0.01f ? 0.01f : ratio);
-        }
-#endif
+        // AUDIO-001: was a direct ratio write with no Doppler term, which erased any Doppler
+        // shift Apply3D had established (FNA's UpdatePitch() always recombines pitch with the
+        // last-computed Doppler factor, matching FAudio's single combined frequency-ratio voice
+        // stage -- SDL3_mixer's ratio call is the same single combined stage, so CNA must
+        // recompose the two explicitly on every write instead).
+        INTERNAL_applyComposedTrackProperties();
     }
 
     void SoundEffectInstance::setPitchProperty(float&& pitch)

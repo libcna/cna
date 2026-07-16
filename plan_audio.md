@@ -5233,3 +5233,122 @@ context-free agents, explicitly instructed not to modify any files):
   `CHECKLIST.md`'s already-accurate corresponding row exactly: thrown for real at the point of
   failure; only `AudioEngine`'s own constructor never throws it (a real, narrower, still-accepted
   deviation, `XA-9`). Docs-only, no code/test change, no build needed.
+
+# Phase 13 — External audit fixes: Apply3D persistence, mixer lifecycle, stale docs (2026-07-16)
+
+User-provided, external audit (`audit_audio.md`, dated 2026-07-16, reviewed against repository
+revision `5146c9d1`) delivered as a standalone file alongside this repository, not authored by a
+fork of this branch. Findings AUDIO-001/002/003, independently re-verified line-by-line against
+the actual current source (and against `SoundEffectInstance.cs`/`Cue.cs` in the local FNA
+reference tree) before any fix was written, per this branch's established practice of not trusting
+an audit's claims without cross-checking them against the real code first.
+
+* [x] P13-3D-001 (AUDIO-001): `SoundEffectInstance::Apply3D`'s computed attenuation/pan/Doppler was
+  applied directly to the live track and nowhere else -- the source's own removed comment called
+  it "one-shot." Any of `Play()`, `setVolumeProperty()`, or `setPitchProperty()` running afterward
+  silently discarded it (and a call before the very first `Play()` was lost outright, since there
+  was no live track yet to write to).
+  *Status:* Fixed. Independently re-read FNA's real `SoundEffectInstance.cs` first (`Apply3D`,
+  `Play`, `Volume`/`Pitch` setters, `UpdatePitch`, `SetPanMatrixCoefficients`) to confirm the exact
+  reference behavior before touching any code: FNA's `Volume` setter only calls
+  `FAudioVoice_SetVolume` (a voice stage entirely separate from the output matrix `Apply3D`
+  writes via `FAudioVoice_SetOutputMatrix`), so a plain `Volume` change never needs to "know
+  about" attenuation at all in FNA -- it lives on a different multiplicative stage of the same
+  voice. `Pitch`'s setter calls `UpdatePitch()`, which always recombines `INTERNAL_pitch` with the
+  *retained* `dspSettings.DopplerFactor` (defaulting to `1.0f`, matching `InitDSPSettings`) since
+  pitch and Doppler share FAudio's one frequency-ratio stage. SDL3_mixer has neither of FAudio's
+  separate stages (`MIX_SetTrackGain` is a single scalar; `MIX_SetTrackFrequencyRatio` is a single
+  ratio) -- this is a real CNA-layer architecture gap versus the backend, not something copying
+  FNA's literal call sequence would fix by itself.
+  Added three persisted `SoundEffectInstance` members mirroring FNA's `dspSettings`/`is3D`:
+  `attenuation_`/`dopplerFactor_` (both default `1.0f`, neutral) and `spatialPan_` (default
+  `0.0f`), plus one new shared routine, `INTERNAL_applyComposedTrackProperties()`, that recomputes
+  `MIX_SetTrackGain(track, Volume_ * attenuation_)`, `filterState->pan = (is3D_ ? spatialPan_ :
+  Pan_)`, and `MIX_SetTrackFrequencyRatio(track, pow(2,Pitch_) * dopplerFactor_)` together in one
+  place. `Apply3D()` now stores its computed `atten`/`pan`/`doppler` into those three members
+  (unconditionally, even without `SOUND_ENABLED`, matching how `Volume_`/`Pan_`/`Pitch_` are
+  always updated regardless of a live track) before calling the shared routine, instead of
+  building one throwaway `ApplyTrackProperties()` call inline. `Play()`, `setVolumeProperty()`,
+  `setPitchProperty()`, and `setPanProperty()`'s non-`is3D_` branch now all call the same shared
+  routine instead of each doing their own partial, uncomposed SDL3_mixer write -- "one composition
+  routine for every track update," per the audit's own recommended fix. Since `attenuation_`/
+  `dopplerFactor_` default to the neutral `1.0f` and are only ever written by `Apply3D()`, an
+  instance that never calls `Apply3D()` computes byte-for-byte the same gain/frequency-ratio as
+  before this fix (`Volume_ * 1.0f == Volume_`, etc.) -- confirmed by the full pre-existing
+  audio-scoped suite passing unchanged (see Verification below).
+  Also fixed the same gap one level up: `Cue::Apply3D()` only ever forwarded to `active_` (already-
+  playing) instances (audit's observable failure #4) -- a cue `Apply3D()`'d before its first
+  `Play()` has an empty `active_`, so the call reached nothing at all. Added `Cue::has3D_`/
+  `pending3DListener_`/`pending3DEmitter_` (by-value `AudioListener`/`AudioEmitter` copies, both
+  simple `Vector3`-only value types -- `Cue.hpp` now includes their full headers instead of just
+  forward-declaring them), latched the same way `SoundEffectInstance::is3D_` is (set `true`, never
+  reset). `Cue::Play()`'s per-wave-reference loop now calls `inst->Apply3D(pending3DListener_,
+  pending3DEmitter_)` right after `inst->Play()` when `has3D_` is set, seeding every newly created
+  instance with the cue's last-known 3D state -- matching real FACT, where `Apply3D`'s result lives
+  on the cue's own native handle (existing and persistent from the moment the C# `Cue` object is
+  constructed) rather than on a per-voice object that may not exist yet.
+  *Tests:* 5 new. `SoundEffectInstanceTests.cpp`: `Apply3DBeforePlayPersistsSpatialStateOntoLiveTrack`
+  (audit failure #1 -- `Apply3D()` before the first `Play()`, verified via real
+  `MIX_GetTrackGain`/`SoundEffectInstanceTestAccess::GetPanState` once the track exists),
+  `SetVolumeAfterApply3DPreservesDistanceAttenuation`/`SetPitchAfterApply3DPreservesDopplerFactor`
+  (audit failure #2, both axes, verified via `MIX_GetTrackGain`/`MIX_GetTrackFrequencyRatio`),
+  `StopThenReplayReappliesLastApply3DState` (a `Stop()`/`Play()` replay cycle with no fresh
+  `Apply3D()` call, matching FNA's `dspSettings` surviving a `Stop()`/`Play()` cycle -- only
+  `Dispose()` releases it). `CueTests.cpp`: `Apply3DBeforePlaySeedsSpatialStateOntoNewlyCreatedInstance`
+  (audit failure #4, using the existing `SharedApply3DBank()`/`Apply3DCue` real-`WaveBank`-backed
+  fixture, verified via `MIX_GetTrackGain` on the freshly created instance's real track). `git
+  stash`-verified: stashing all four production files (`SoundEffectInstance.hpp/.cpp`,
+  `Cue.hpp/.cpp`) while keeping the new tests reproduces the exact failures these tests target --
+  all 5 fail against the pre-fix code, none were false confirmations. Full audio-scoped suite
+  541/541 pass post-fix (was 536/536 pre-existing; +5 new tests, zero regressions). Also reran the
+  entire whole-repo `CnaTests` suite (not just the audio-scoped subset), since `Cue.hpp` changed
+  two of its includes from forward declarations to full headers: 4640/4642 pass, same 2
+  pre-existing hardware-only skips (`Accelerometer`/`GyroscopeTests`), zero regressions anywhere
+  else in the codebase.
+  *Scope note:* while tracing exactly why `Volume`/`Pitch`/`Pan`/`Apply3D` reach the live track at
+  all, found (but did **not** fix, see P13-DYNAMIC-001 below) that `DynamicSoundEffectInstance`
+  never overrides any of those four -- they operate on the base class's protected `track_`, which
+  a dynamic instance never populates (it manages its own separate `dynamicTrack_` instead, the
+  exact same root cause `CP-15` already fixed for `Pause`/`Resume`/`Stop`/`getStateProperty`, just
+  never extended to these four). Out of scope for this pass; see that entry for why.
+
+* [ ] P13-DYNAMIC-001 (self-found while investigating P13-3D-001, **not fixed this pass**):
+  `DynamicSoundEffectInstance` never overrides `setVolumeProperty()`/`setPitchProperty()`/
+  `setPanProperty()`/`Apply3D()` -- all four are inherited unchanged from `SoundEffectInstance` and
+  operate on the protected `track_` member, but `DynamicSoundEffectInstance` never populates
+  `track_` at all; it manages its own, entirely separate `dynamicTrack_` field instead (`Play()`/
+  `Stop()`/`StopInternal()` all read/write `dynamicTrack_` exclusively). Calling any of `Volume`/
+  `Pitch`/`Pan`/`Apply3D` on a live, playing `DynamicSoundEffectInstance` today is a complete,
+  silent no-op on the real track -- confirmed by reading `DynamicSoundEffectInstance.cpp` end to
+  end (no reference to `track_` anywhere in the file) and confirming no existing test in
+  `DynamicSoundEffectInstanceTests.cpp` exercises any of these four (a genuine, previously
+  untested-and-undiscovered gap, not a re-confirmation of something already known).
+  This is the *exact same root cause* `CP-15` already names and fixed for `Pause()`/`Resume()` (see
+  that fix's own comment in `DynamicSoundEffectInstance.cpp`: "the base `SoundEffectInstance::
+  Pause()` operates on the protected `track_` member, which a dynamic instance never populates ...
+  without this override, `Pause()`/`Resume()` were silent no-ops on every `DynamicSoundEffectInstance`")
+  -- `CP-15` fixed two of the six affected methods and missed these other four. Real FNA has no
+  such split at all: `DynamicSoundEffectInstance` shares the exact same single native `handle`
+  field as every other `SoundEffectInstance`, so `Volume`/`Pitch`/`Pan`/`Apply3D` already work
+  correctly there with zero overrides needed -- CNA's `dynamicTrack_` split (whose own original
+  purpose predates this investigation and wasn't re-derived here) is what actually created this
+  entire class of bug, `CP-15`'s two fixes included.
+  **Not fixed in this pass, deliberately.** A correct, non-superficial fix has two shapes, and
+  both are meaningfully larger than this pass's scope (the three findings from an external audit
+  plus their own direct, narrow follow-ups):
+  (a) override all four methods on `DynamicSoundEffectInstance` to operate on `dynamicTrack_`
+  instead, which -- for real FNA-level fidelity, not a half-fix -- means re-deriving the entire
+  crossfeed-pan/DSP-callback mechanism `P11-PAN-001`/`INTERNAL_applyComposedTrackProperties()`
+  (this pass's own P13-3D-001) already built for `track_`, a second time, against a different
+  member; or
+  (b) the more likely actually-correct root-cause fix -- stop introducing a second, separate
+  `dynamicTrack_` field at all, and have `DynamicSoundEffectInstance` reuse the inherited `track_`
+  the way the base class's own comment ("These members are protected so `DynamicSoundEffectInstance`
+  can manage its own state") implies was the original intent -- which touches a currently
+  fully-passing, previously-audited subsystem (`Phase 10.7`) in a way that needs its own dedicated,
+  careful, line-by-line pass (every one of `Play`/`Stop`/`StopInternal`/`Pause`/`Resume`/
+  `getStateProperty`'s ~10 `dynamicTrack_` call sites), not a rushed side-fix bolted onto an
+  unrelated task.
+  Recorded here, left unchecked, as a real, verified, previously-undocumented gap for its own
+  future task -- not silently dropped, and not force-fit into this pass at lower quality just to
+  close the checkbox.

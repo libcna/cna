@@ -72,14 +72,18 @@ framework/runtime, not a game.
 
 ## 2. Current status
 
-- **Build:** clean, rebuilt and reverified this pass (`P12-BANK-001`, on top of `P11-PAN-002`,
-  `P12-VAR-001`, `P12-CATEGORY-001`, `P12-PAUSE-001`, `P12-DOC-001`, `P12-PITCH-001`, `P11-PAN-001`,
+- **Build:** clean, rebuilt and reverified this pass (`P13-3D-001`/`P13-MIXER-001`/`P13-DOC-001`,
+  a user-provided external audit's fixes, on top of `P12-BANK-001`, `P11-PAN-002`, `P12-VAR-001`,
+  `P12-CATEGORY-001`, `P12-PAUSE-001`, `P12-DOC-001`, `P12-PITCH-001`, `P11-PAN-001`,
   `P11-XACT-003/004/002`, `P11-DISPATCH-001`, `P11-XACT-001`, `P11-TEST-001`,
   `P11-CHECKLIST-001`, and everything in Phase 10). EasyGL backend (Linux default),
   `SOUND_ENABLED` on, SDL3_mixer linked. `cna_demo_sound`/`cna_demo_2d` example targets not
-  rebuilt this pass (no Audio *public XNA* API surface touched -- `P12-BANK-001`'s changes are
-  all to `SoundBank`/`WaveBank`/`Cue`'s private cue-tracking internals).
-- **Tests:** `CnaTests` whole-suite count is **3400 / 3402 pass** (2 skipped:
+  rebuilt this pass (no Audio *public XNA* API surface touched -- `P13-3D-001`'s new persisted
+  spatial-state members are private, and `Cue.hpp`'s forward-decl-to-full-include swap for
+  `AudioListener`/`AudioEmitter` doesn't change either class's own public surface).
+- **Tests:** `CnaTests` whole-suite count is **4640 / 4642 pass** (2 skipped, same as before --
+  see below; +5 new tests from `P13-3D-001`, zero regressions, reverified via a full whole-repo
+  run, not just the audio-scoped subset). Prior sync's count was **3400 / 3402 pass** (2 skipped:
   `AccelerometerTests`/`GyroscopeTests`' `GetCurrentValuePropertyDoesNotThrowWhenSupported`,
   hardware-dependent, expected — not Audio; the 3-test increase since the last sync is
   `P12-BANK-001`'s new force-stop-cascade coverage, see §3). Prior sync's 1-test increase was
@@ -115,20 +119,59 @@ framework/runtime, not a game.
   targeting); `Microphone` (real SDL3 capture). See `docs/xna-4-api-coverage.md` for the full
   implemented/approximate/unsupported breakdown.
 - **What does not work / remains incomplete:** everything open is a deliberate, documented
-  `CHECKLIST.md` accepted deviation (no reverb, no true 3D HRTF/elevation, stereo hard-pan instead
-  of crossfeed, DSP-preset RPC targeting unsupported [no DSP preset system exists at all], etc.),
-  not a bug — see §5 for the full table. `CHECKLIST.md` itself has not been re-synced against the
-  most recent Phase 10 landings (P10-RPC-002/003/004, P10-FILTER-002/003/004/006) -- its
-  `AttackTime`/`ReleaseTime`/filter-frequency/Q rows are now stale; deferred to P10-AUDIT-002/003
-  rather than piecemeal-edited per task, per established practice this pass.
+  `CHECKLIST.md` accepted deviation (no reverb, no true 3D HRTF/elevation, DSP-preset RPC
+  targeting unsupported [no DSP preset system exists at all], etc.), not a bug — see §5 for the
+  full table. Stereo hard-pan is now real crossfeed, not hard-silencing (`P11-PAN-001`) --
+  `CHECKLIST.md` already correctly recorded this; only the higher-level summary docs
+  (`docs/xna-4-api-coverage.md`, `AUDIT.md`) had gone stale on it, fixed by `P13-DOC-001` (see §3).
+  `CHECKLIST.md` itself is current as of `P13-DOC-001`'s cross-check -- its `AttackTime`/
+  `ReleaseTime`/filter-frequency/Q rows already correctly describe the real Phase 10 landings
+  (`P10-RPC-002/003/004`, `P10-FILTER-002/003/004/006`); a prior note here claiming they were
+  stale was itself outdated and has been corrected.
 
 ---
 
 ## 3. Recent changes
 
 Newest first. Full rationale, FNA/FAudio line citations, and `git stash` verification notes for
-every item are in `plan_audio.md`'s "Phase 9"/"Phase 10"/"Phase 11"/"Phase 12" sections.
+every item are in `plan_audio.md`'s "Phase 9"/"Phase 10"/"Phase 11"/"Phase 12"/"Phase 13" sections.
 
+- **Phase 13** (`P13-3D-001`/`P13-MIXER-001`/`P13-DOC-001`) — user-provided **external** audit
+  (`audit_audio.md`, dated 2026-07-16, delivered as a standalone file alongside the repo, not a
+  fork of this branch), with three findings, all independently re-verified against the real
+  current source (and FNA's `SoundEffectInstance.cs`/`Cue.cs`) before any fix was written.
+  **`P13-3D-001`** (high severity): `SoundEffectInstance::Apply3D`'s computed attenuation/pan/
+  Doppler was "one-shot" -- the very next `Play()`/`setVolumeProperty()`/`setPitchProperty()` call
+  silently discarded it (and a call before the first `Play()` was lost outright, no track yet to
+  write to). Added persisted `attenuation_`/`dopplerFactor_`/`spatialPan_` members (default
+  `1.0f`/`1.0f`/`0.0f`, neutral) and one shared `INTERNAL_applyComposedTrackProperties()` routine
+  that `Play()`/`setVolumeProperty()`/`setPitchProperty()`/`setPanProperty()`/`Apply3D()` now all
+  route through, instead of each doing its own partial, uncomposed SDL3_mixer write. Same root
+  cause one level up: `Cue::Apply3D()` only ever forwarded to already-`active_` instances, so a
+  cue `Apply3D()`'d before its first `Play()` reached nothing -- added `Cue::has3D_`/
+  `pending3DListener_`/`pending3DEmitter_`, seeded onto every newly created `PlaybackInstance` in
+  `Cue::Play()`'s per-wave-reference loop. 5 new tests (4 `SoundEffectInstanceTests.cpp`, 1
+  `CueTests.cpp`), `git stash`-verified (all 5 fail pre-fix, confirming no false confirmations).
+  **Self-found while tracing this, not fixed this pass:** `DynamicSoundEffectInstance` never
+  overrides `Volume`/`Pitch`/`Pan`/`Apply3D` -- all four silently no-op on a live dynamic track
+  (same root cause `CP-15` already fixed for `Pause`/`Resume`, just never extended to these four).
+  Recorded as `P13-DYNAMIC-001` (unchecked, deliberately deferred -- see `plan_audio.md` for why).
+  **`P13-MIXER-001`** (medium severity): `CNA::Internal::Audio::GetMixer()`'s lazy-init
+  check-then-create had no synchronization at all (two concurrent first callers could both race
+  through `MIX_Init()`/`MIX_CreateMixerDevice()`); `DestroyMixer()` (still uncalled anywhere) had
+  none either. Fixed with a single `std::mutex` held for each function's entire body -- no
+  unlocked window between "check" and "create/destroy/return." Deliberately a plain mutex, not
+  `std::once_flag` (a flag can't cleanly express "destroyed, then later re-created"). No new test
+  (the race only manifests under genuine concurrent first use, which every existing fixture avoids
+  by construction; the fix itself is a textbook single-mutex critical section, not a novel
+  algorithm). **`P13-DOC-001`** (low severity): fixed five stale "stereo hard-pan eliminates the
+  opposite channel" claims in `docs/xna-4-api-coverage.md` (all predate `P11-PAN-001`'s real
+  crossfeed fix), one internally-contradictory stale "no AttackTime/ReleaseTime tracking" claim in
+  the same file (contradicted by its own `Implemented` bucket a few lines above), and `AUDIT.md`'s
+  stale "last synchronized 2026-07-06" banner (Phase 11/12 both landed after that date).
+  `CHECKLIST.md` needed no changes -- confirmed already accurate. Full audio-scoped suite
+  541/541 pass (was 536/536 pre-existing; +5 new tests, zero regressions); full whole-repo
+  `CnaTests` suite also reverified green (see §2's exact count).
 - **`P12-BANK-001`** — implemented the real force-stop cascade for `SoundBank`/
   `WaveBank::Dispose()`, user-greenlit ("Implementovat force-stop cascade", alongside
   `P11-PAN-002`'s confirmation). `SoundBank` gained its own `activeCues_`/`RegisterCue()`/
@@ -744,19 +787,35 @@ ls /rv/data/library/github.com/FNA-XNA/FNA/src/Audio
 
 ## 8. Next smallest tasks
 
-**Phase 11 and Phase 12 are both fully closed.** Phase 11's one deliberate follow-up
-(`P11-PAN-002`, user-greenlit 2026-07-07) and Phase 12's fresh logic-correctness audit (all 5
-audit groups plus all 6 follow-up tasks: `P12-PITCH-001`, `P12-DOC-001`, `P12-CATEGORY-001`,
-`P12-VAR-001`, `P12-PAUSE-001`, `P12-BANK-001`) are all `[x]` in `plan_audio.md`. `P10-HRTF-002`'s
-RFC-2 (optional FAudio/FACT backend) was explicitly **rejected** by the user the same day --
-staying on SDL3_mixer (see §9). `P12-PAUSE-001` was investigated and found to be a **false
-positive** -- `Cue::state_` already stays `Playing` throughout a pause (the independent `paused_`
-bool, `P9-LIFECYCLE-013`); a new passing regression test locks in the already-correct behavior
-with zero code change. Everything else was a real bug, fixed for real -- see §3 for each.
+**Phase 11, Phase 12, and Phase 13 are all closed** (Phase 13's `P13-3D-001`/`P13-MIXER-001`/
+`P13-DOC-001` -- see §3). Phase 11's one deliberate follow-up (`P11-PAN-002`, user-greenlit
+2026-07-07) and Phase 12's fresh logic-correctness audit (all 5 audit groups plus all 6 follow-up
+tasks: `P12-PITCH-001`, `P12-DOC-001`, `P12-CATEGORY-001`, `P12-VAR-001`, `P12-PAUSE-001`,
+`P12-BANK-001`) are all `[x]` in `plan_audio.md`. `P10-HRTF-002`'s RFC-2 (optional FAudio/FACT
+backend) was explicitly **rejected** by the user the same day -- staying on SDL3_mixer (see §9).
+`P12-PAUSE-001` was investigated and found to be a **false positive** -- `Cue::state_` already
+stays `Playing` throughout a pause (the independent `paused_` bool, `P9-LIFECYCLE-013`); a new
+passing regression test locks in the already-correct behavior with zero code change. Everything
+else was a real bug, fixed for real -- see §3 for each.
 
-**There is currently no open, scoped Audio task on this branch.** Whoever resumes next needs a
-fresh instruction from the user (a new phase, a specific bug report, or explicit permission to run
-another audit pass) -- see §9 for what not to self-start without asking.
+**One deliberately-deferred item remains open: `P13-DYNAMIC-001`** (not `[x]` in `plan_audio.md`).
+`DynamicSoundEffectInstance` never overrides `setVolumeProperty()`/`setPitchProperty()`/
+`setPanProperty()`/`Apply3D()` -- all four silently no-op on a live dynamic track, since it manages
+its own separate `dynamicTrack_` field instead of the base class's `track_` those four methods
+actually touch (the exact root cause `CP-15` already fixed for `Pause`/`Resume`, just never
+extended to these four). A real, verified, previously-undiscovered gap -- but a correct fix is
+either (a) duplicating the entire `P13-3D-001`/`P11-PAN-001` crossfeed-pan/composed-properties
+machinery a second time against `dynamicTrack_`, or (b) the more likely actually-right fix,
+removing the `track_`/`dynamicTrack_` split entirely so `DynamicSoundEffectInstance` reuses the
+inherited member the way FNA's own single-`handle` model does -- both meaningfully larger than a
+narrow bug-fix task and each touching a previously-audited, fully-passing subsystem (`Phase 10.7`).
+**Needs its own scoped task and the user's go-ahead before starting** (see `plan_audio.md`'s
+`P13-DYNAMIC-001` entry for the full writeup) -- do not self-start either fix shape without asking.
+
+**Otherwise, there is currently no open, scoped Audio task on this branch.** Whoever resumes next
+needs a fresh instruction from the user (approval for `P13-DYNAMIC-001`, a new phase, a specific
+bug report, or explicit permission to run another audit pass) -- see §9 for what not to self-start
+without asking.
 
 ---
 
@@ -789,10 +848,13 @@ another audit pass) -- see §9 for what not to self-start without asking.
 
 ```
 Read NEXT.md first. Do not assume anything is complete beyond what NEXT.md §2/§4 state. Phases
-9, 10, 11, and 12 are all fully closed (plan_audio.md) -- every task ID in every one of those
-phases is checked [x] with a concrete, cited status. There is currently NO open, scoped Audio task
-on this branch (§8) -- do not self-start a new phase or audit pass; wait for the user to name a
-specific task, report a bug, or explicitly authorize another audit round (§9).
+9, 10, 11, 12, and 13 are all closed (plan_audio.md) -- every task ID in every one of those phases
+is checked [x] with a concrete, cited status, EXCEPT P13-DYNAMIC-001, which is a real, verified,
+deliberately-deferred gap (DynamicSoundEffectInstance's Volume/Pitch/Pan/Apply3D silently no-op on
+a live track) needing its own scoped task and user go-ahead, not a self-start. There is otherwise
+NO open, scoped Audio task on this branch (§8) -- do not self-start a new phase or audit pass;
+wait for the user to name a specific task, report a bug, approve P13-DYNAMIC-001, or explicitly
+authorize another audit round (§9).
 
 1. If the user names a specific task, inspect only the files needed for it -- do not refactor
    unrelated code. Confirm scope/approach with the user first if it's real feature work rather

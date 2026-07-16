@@ -73,6 +73,18 @@ namespace Microsoft::Xna::Framework::Audio
         // again. Never reset back to false once set (matches FNA: is3D is only ever set to true).
         bool  is3D_         = false;
 
+        // AUDIO-001: Apply3D's derived attenuation/pan/Doppler must survive later Play()/Volume/
+        // Pitch calls, and a call made before this instance has ever had a track (no track yet to
+        // write to) -- matches FNA's own persistent per-instance dspSettings/is3D state
+        // (SoundEffectInstance.cs), which Play() and UpdatePitch() both read back from on every
+        // subsequent call, not just the one Apply3D() itself made. Defaults are the neutral no-op
+        // values, so an instance that never calls Apply3D computes byte-for-byte the same gain/
+        // pan/frequency-ratio as before this fix (Volume_ * 1.0f == Volume_, etc). Never reset
+        // once Apply3D has run, matching is3D_'s own latch semantics above.
+        float attenuation_   = 1.0f;
+        float dopplerFactor_ = 1.0f;
+        float spatialPan_    = 0.0f;
+
         // Heap-allocated (not inline) so its address is stable across a move of *this* -- the
         // SDL3_mixer callback holds a raw pointer to it as userdata, and a unique_ptr move
         // transfers ownership without changing that address, so no callback re-registration is
@@ -150,6 +162,16 @@ namespace Microsoft::Xna::Framework::Audio
         // MIX_SetTrackCookedCallback's own documented "may be called... at any time" contract.
         // No-op if track_ hasn't been created yet.
         void EnsureTrackDspState();
+
+        // AUDIO-001: recomposes and writes this instance's full set of live track properties
+        // (gain, pan, frequency ratio) from Volume_/Pan_/Pitch_ together with the persisted
+        // spatial state (attenuation_/dopplerFactor_/spatialPan_) above -- the single call site
+        // Play(), setVolumeProperty(), setPitchProperty(), setPanProperty(), and Apply3D() all now
+        // share, so a spatial attenuation/pan/Doppler value set by Apply3D survives every one of
+        // those calls instead of being overwritten by whichever runs next. Pan uses spatialPan_
+        // once is3D_ has latched, otherwise the plain Pan_ property, matching CP-20. No-op if
+        // there is no live track yet (matches every INTERNAL_apply*'s existing null-track guard).
+        void INTERNAL_applyComposedTrackProperties();
 
         // Pure conversion helpers (P9-XACT-011), split out of INTERNAL_applyXactTrackFilter so
         // they're independently unit-testable without a real SDL3_mixer device driving the

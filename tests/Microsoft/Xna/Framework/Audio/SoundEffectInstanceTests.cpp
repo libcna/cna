@@ -804,6 +804,114 @@ TEST_F(SoundEffectInstanceTest, SetPanAfterApply3DDoesNotClearIs3DLatch)
     EXPECT_TRUE(SoundEffectInstanceTestAccess::Is3D(inst));
 }
 
+// ===================== AUDIO-001: persistent spatial state =====================
+//
+// Before this fix, Apply3D()'s computed attenuation/pan/Doppler were applied directly to the
+// live track and nowhere else -- "one-shot" per the removed source comment. The four sequences
+// below were each a real, previously-untested gap (the pre-existing Apply3D tests above only ever
+// call Apply3D() AFTER Play(), and never call Play()/setVolumeProperty()/setPitchProperty() again
+// afterward).
+
+// Scenario 1 (AUDIO-001 observable failure #1): Apply3D() called before the very first Play()
+// had nothing to write to yet (track_ was still null, so EnsureTrackDspState() no-op'd) and
+// nothing was persisted to reapply once Play() actually created the track -- the whole call was
+// silently lost.
+TEST_F(SoundEffectInstanceTest, Apply3DBeforePlayPersistsSpatialStateOntoLiveTrack)
+{
+    REQUIRE_DEVICE();
+    DistanceScaleGuard guard;
+    SoundEffect::setDistanceScaleProperty(10.0f);
+
+    SoundEffectInstance inst = instance();
+    ASSERT_EQ(SoundEffectInstanceTestAccess::GetTrack(inst), nullptr); // no Play() yet
+
+    AudioListener listener;
+    AudioEmitter emitter;
+    emitter.setPositionProperty({20.0f, 0.0f, 0.0f}); // 2x DistanceScale -> atten == 0.5
+    inst.Apply3D(listener, emitter);
+
+    inst.Play();
+
+    MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(inst);
+    ASSERT_NE(track, nullptr);
+    EXPECT_NEAR(MIX_GetTrackGain(track), 0.5f, 1e-5f);
+    EXPECT_NEAR(SoundEffectInstanceTestAccess::GetPanState(inst), 1.0f, 1e-5f); // hard right
+}
+
+// Scenario 2 (AUDIO-001 observable failure #2, Volume): setVolumeProperty() used to write
+// MIX_SetTrackGain(track, Volume_) directly, discarding whatever distance attenuation the last
+// Apply3D() call had established.
+TEST_F(SoundEffectInstanceTest, SetVolumeAfterApply3DPreservesDistanceAttenuation)
+{
+    REQUIRE_DEVICE();
+    DistanceScaleGuard guard;
+    SoundEffect::setDistanceScaleProperty(10.0f);
+
+    SoundEffectInstance inst = instance();
+    inst.Play();
+
+    AudioListener listener;
+    AudioEmitter emitter;
+    emitter.setPositionProperty({20.0f, 0.0f, 0.0f}); // atten == 0.5
+    inst.Apply3D(listener, emitter);
+
+    MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(inst);
+    ASSERT_NE(track, nullptr);
+    ASSERT_NEAR(MIX_GetTrackGain(track), 0.5f, 1e-5f);
+
+    inst.setVolumeProperty(0.4f);
+    EXPECT_NEAR(MIX_GetTrackGain(track), 0.2f, 1e-5f); // 0.4 * 0.5, not a bare 0.4
+}
+
+// Scenario 2 (AUDIO-001 observable failure #2, Pitch): setPitchProperty() used to write
+// MIX_SetTrackFrequencyRatio(track, pow(2, Pitch_)) directly, with no Doppler term at all,
+// discarding whatever Doppler shift the last Apply3D() call had established.
+TEST_F(SoundEffectInstanceTest, SetPitchAfterApply3DPreservesDopplerFactor)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    inst.Play();
+
+    AudioListener listener;
+    AudioEmitter emitter;
+    emitter.setPositionProperty({10.0f, 0.0f, 0.0f});
+    emitter.setVelocityProperty({171.75f, 0.0f, 0.0f}); // receding -> doppler == 2/3
+    inst.Apply3D(listener, emitter);
+
+    MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(inst);
+    ASSERT_NE(track, nullptr);
+    ASSERT_NEAR(MIX_GetTrackFrequencyRatio(track), 2.0f / 3.0f, 1e-4f);
+
+    inst.setPitchProperty(0.5f);
+    EXPECT_NEAR(MIX_GetTrackFrequencyRatio(track), std::pow(2.0f, 0.5f) * (2.0f / 3.0f), 1e-4f);
+}
+
+// Related to observable failure #3 (Pan already retains its own latch via is3D_/CP-20, see
+// SetPanAfterApply3DDoesNotClearIs3DLatch above) -- this instead covers a Stop()/replay cycle:
+// FNA's dspSettings/is3D persist on the instance across a Stop()->Play() cycle (only Dispose()
+// releases them), so a replay with no fresh Apply3D() call must still reapply the last one.
+TEST_F(SoundEffectInstanceTest, StopThenReplayReappliesLastApply3DState)
+{
+    REQUIRE_DEVICE();
+    DistanceScaleGuard guard;
+    SoundEffect::setDistanceScaleProperty(10.0f);
+
+    SoundEffectInstance inst = instance();
+    inst.Play();
+
+    AudioListener listener;
+    AudioEmitter emitter;
+    emitter.setPositionProperty({20.0f, 0.0f, 0.0f}); // atten == 0.5
+    inst.Apply3D(listener, emitter);
+
+    inst.Stop();
+    inst.Play(); // replay -- no new Apply3D() call
+
+    MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(inst);
+    ASSERT_NE(track, nullptr);
+    EXPECT_NEAR(MIX_GetTrackGain(track), 0.5f, 1e-5f);
+}
+
 TEST_F(SoundEffectInstanceTest, Apply3DAfterDisposeThrows)
 {
     REQUIRE_DEVICE();

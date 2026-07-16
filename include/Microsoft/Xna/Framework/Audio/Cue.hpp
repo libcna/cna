@@ -9,6 +9,8 @@
 
 #include "CNA/CNAHelper.hpp"
 #include "CNA/Internal/Audio/XactTypes.hpp"
+#include "Microsoft/Xna/Framework/Audio/AudioEmitter.hpp"
+#include "Microsoft/Xna/Framework/Audio/AudioListener.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioStopOptions.hpp"
 #include "System/EventArgs.hpp"
 #include "System/EventHandler.hpp"
@@ -17,8 +19,6 @@
 
 namespace Microsoft::Xna::Framework::Audio
 {
-    class AudioEmitter;
-    class AudioListener;
     class SoundBank;
     class SoundEffectInstance;
     class WaveBank;
@@ -225,6 +225,20 @@ namespace Microsoft::Xna::Framework::Audio
             float effectPitchCentsDelta  = 0.0f;  // cents
         };
         std::vector<PlaybackInstance> active_;
+
+        // AUDIO-001 finding 4: retained so a wave reference that only starts playing AFTER this
+        // cue's last Apply3D() call (a brand new PlaybackInstance a later Play()/effect-variation
+        // trigger creates) starts with the same spatial state already-active instances got,
+        // instead of silently missing it -- Apply3D() below only ever forwards to active_ at the
+        // moment it runs, so with nothing cached here a cue Apply3D()'d before its first Play()
+        // (active_ still empty) would lose the call entirely. Matches real FACT, where Apply3D's
+        // result lives on the cue's own native handle (created and persistent from the moment the
+        // C# Cue object is constructed, independent of whether any wave has actually started
+        // playing yet), not on a per-voice object that may not exist yet. Never reset back to
+        // false once set, matching SoundEffectInstance::is3D_'s own latch semantics.
+        bool has3D_ = false;
+        AudioListener pending3DListener_;
+        AudioEmitter  pending3DEmitter_;
 
         // WaveBanks this cue has registered with (see WaveBank::RegisterCue), so their
         // IsInUse can see this cue while it is playing; unregistered in StopInternal.

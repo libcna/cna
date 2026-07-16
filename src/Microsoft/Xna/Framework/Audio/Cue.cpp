@@ -789,6 +789,13 @@ namespace Microsoft::Xna::Framework::Audio
         for (auto& pi : active_)
             if (pi.instance) pi.instance->Apply3D(listener, emitter);
 
+        // AUDIO-001 finding 4: cache for Play()'s per-wave-reference loop to seed onto any
+        // PlaybackInstance created after this call (see has3D_'s own comment in Cue.hpp) --
+        // additional to, not instead of, the immediate forward to already-active instances above.
+        has3D_             = true;
+        pending3DListener_ = listener;
+        pending3DEmitter_  = emitter;
+
         // P10-RPC-002: matches FAudio's FACT3DApply (FACT3D.c), which unconditionally writes
         // these three built-in variables from its own F3DAudioCalculate output on every Apply3D
         // call, regardless of whether a voice is currently active -- so an RPC curve bound to
@@ -1082,6 +1089,13 @@ namespace Microsoft::Xna::Framework::Audio
                 CentsToPitch(rpc.pitchCentsBeforeConversion + effect.pitchCentsDelta));
             inst->setIsLoopedProperty(waveRef.loopCount > 0);
             inst->Play();
+
+            // AUDIO-001 finding 4: seed this brand-new instance with the last Apply3D() this cue
+            // received, if any -- otherwise a wave reference triggered after Apply3D() (e.g. this
+            // cue's very first Play(), or a later PlayWaveEffectVariation-family retrigger) would
+            // start with no spatial state at all until the next real Apply3D() call, unlike an
+            // instance that was already active when Apply3D() ran (see the for loop above).
+            if (has3D_) inst->Apply3D(pending3DListener_, pending3DEmitter_);
 
             // P9-XACT-011/P11-XACT-003: wire the track's real filter into the real SDL3_mixer
             // filter callback -- effect variation's randomized frequency/Q, when authored,

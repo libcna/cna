@@ -2646,6 +2646,49 @@ TEST(CueTest, Apply3DAttenuatesActiveInstanceTrackGainWithDistance)
     }
 }
 
+// AUDIO-001 finding 4: Cue::Apply3D() called BEFORE the cue's first Play() has nothing in
+// active_ to forward to yet, so without Cue's own pending-3D cache this would be silently lost
+// -- Play() would create a brand-new instance with no spatial state at all until the next real
+// Apply3D() call.
+TEST(CueTest, Apply3DBeforePlaySeedsSpatialStateOntoNewlyCreatedInstance)
+{
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+
+    try
+    {
+        std::unique_ptr<Cue> cue(SharedApply3DBank().GetCue("Apply3DCue"));
+
+        AudioListener listener; // default position: origin
+        AudioEmitter farEmitter;
+        farEmitter.setPositionProperty({10000.0f, 0.0f, 0.0f}); // far -> strong attenuation
+        cue->Apply3D(listener, farEmitter);
+
+        cue->Play();
+
+        SoundEffectInstance* inst = CueTestAccess::ActiveInstance(*cue, 0);
+        if (!inst)
+        {
+            GTEST_SKIP() << "no audio device (dummy driver unavailable); "
+                            "could not create a real SoundEffectInstance";
+        }
+        MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(*inst);
+        ASSERT_NE(track, nullptr);
+
+        // The wave's authored volume clamps to a full-scale 1.0f gain with no Apply3D() in play
+        // (same fixture as AttenuatesActiveInstanceTrackGainWithDistance above) -- so a gain
+        // measurably below 1.0f here proves the pre-Play() Apply3D() call actually reached this
+        // brand-new instance's track, not just that Play() itself succeeded.
+        EXPECT_LT(MIX_GetTrackGain(track), 1.0f);
+
+        cue->Stop(AudioStopOptions::Immediate);
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable); "
+                        "could not exercise real playback";
+    }
+}
+
 // XA-6: Stop(AsAuthored) must let the track keep playing (SoundEffectInstance::Stop(false) just
 // exits any loop) instead of hard-stopping it -- the old code called active_.clear() right after
 // pi.instance->Stop(immediate) unconditionally, destroying every instance (and thus hard-stopping
