@@ -122,7 +122,7 @@
 | SAMPLE-39 | BillboardSample (039) | ⬜ | **No longer CNA-blocked (2026-07-16)** — its shader gap (#11) is now fully cleared: `Billboard.fx` (view-facing billboard expansion + wind sway + alpha-tested diffuse lighting) is ported and pixel-verified (`EasyGL_Billboard_Shader`), using Task 1080's custom-vertex-layout capability (Position+Normal+TexCoord+Random, stride 36). Only the sample port itself remains (no `src/`/`CMakeLists.txt` yet in `../cna-samples/samples/BillboardSample` — tracked there, not here). |
 | SAMPLE-40 | InstancedModel (040) | ⬜ | Blocked on custom shader (#11, Phase 78 Task 947). |
 | SAMPLE-41 | LensFlare (041) | ⬜ | Re-verify; cosmetic gap open (DEFERRED #22, EasyGL ignores `BlendState.ColorWriteChannels`, not started) — confirm still non-blocking. |
-| SAMPLE-42 | ShatterEffect (042) | ⬜ | Blocked on custom shader (#11, Phase 78 Task 947). |
+| SAMPLE-42 | ShatterEffect (042) | ⬜ | **No longer CNA-blocked (2026-07-16)** — its shader gap (#11) is now fully cleared: `ShatterEffect.fx` (per-triangle rotation-and-fall shatter animation + Phong lighting) is ported and pixel-verified (`EasyGL_ShatterEffect_Shader`), using Task 1080's custom-vertex-layout capability (Position+Normal+TexCoords+TriangleCenter+RotationalVelocity, stride 56). Only the sample port itself remains (no `src/`/`CMakeLists.txt` yet in `../cna-samples/samples/ShatterEffect` — tracked there, not here). |
 | SAMPLE-43 | Particles3D (043) | ⬜ | Blocked on custom shader (#11, Phase 78 Task 947). |
 | SAMPLE-44 | Particles2DPipeline (044) | ⬜ | Re-verify; no known CNA gap. |
 | SAMPLE-45 | XmlParticles (045) | ⬜ | Blocked on custom shader (#11, Phase 78 Task 947). |

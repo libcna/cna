@@ -2093,6 +2093,18 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 947: ShatterEffect.fx (per-triangle rotation-and-fall shatter animation + Phong
+        # lighting) -- with this, ShatterEffect sample's shader blocker is fully cleared. Uses
+        # Task 1080's custom vertex layout (Position+Normal+TexCoords+TriangleCenter+
+        # RotationalVelocity, stride 56).
+        cna_easygl_test(cna_test_easygl_shattereffect_shader
+                        examples/easygl_shattereffect_shader_test.cpp)
+        add_test(NAME EasyGL_ShatterEffect_Shader
+                 COMMAND cna_test_easygl_shattereffect_shader)
+        set_tests_properties(EasyGL_ShatterEffect_Shader PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 133: DualTextureEffect — magenta×yellow→red pixel readback
         cna_easygl_test(cna_test_easygl_dual_texture
                         examples/easygl_dual_texture_test.cpp)
