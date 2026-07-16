@@ -188,6 +188,7 @@ namespace Microsoft::Xna::Framework::Graphics
         ValidateFormat(fmt);
         format_     = fmt;
         levelCount_ = lvlCount;
+        gpuOnlyContent_ = true;
     }
 
     Texture2D::~Texture2D() = default;
@@ -333,7 +334,29 @@ namespace Microsoft::Xna::Framework::Graphics
             throw std::out_of_range("Texture2D::GetData: startIndex must be >= 0");
         Texture::ValidateGetDataFormat(format_, 4);
         if (!cpuPixels_ || cpuPixels_->empty())
+        {
+            // No CPU-side shadow. For a RenderTarget2D (gpuOnlyContent_), that's normal -- its
+            // content comes from GPU rendering, not SetData() -- so fall back to a real backend
+            // readback for the common full-texture-read case, matching TextureCube::GetData's own
+            // always-ask-the-backend convention; backends without real support leave `data`
+            // untouched (the interface's default no-op) rather than fabricate content. For a plain
+            // Texture2D, an empty shadow means it was freed because context recovery is disabled
+            // (MaybeFreeCpuPixels) -- that must still throw below, not silently read back whatever
+            // the backend's GPU texture currently holds.
+            const int total = width * height;
+            if (gpuOnlyContent_ && backend_ && startIndex == 0 && elementCount == total && total > 0)
+            {
+                std::vector<uint8_t> pixels(static_cast<std::size_t>(total) * 4, 0);
+                backend_->GetData(0, 0, 0, width, height, pixels.data(), static_cast<int>(pixels.size()));
+                for (int i = 0; i < elementCount; ++i)
+                {
+                    const int src = i * 4;
+                    data[i] = Color(pixels[src + 0], pixels[src + 1], pixels[src + 2], pixels[src + 3]);
+                }
+                return;
+            }
             throw std::runtime_error("Texture2D::GetData: no CPU-side pixel data available");
+        }
 
         int total = width * height;
         if (startIndex + elementCount > total)
@@ -363,14 +386,43 @@ namespace Microsoft::Xna::Framework::Graphics
             throw std::out_of_range("Texture2D::GetData: level must be >= 0");
         Texture::ValidateGetDataFormat(format_, 4);
 
-        const std::vector<uint8_t>* buf = getMipBufferConst(level);
-        if (!buf)
-            throw std::runtime_error("Texture2D::GetData: no CPU-side pixel data for requested mip level");
-
+        // Delegate before touching the CPU-side mip shadow at all -- the 3-arg overload has its
+        // own complete bounds checking and (for a RenderTarget2D with no shadow) backend fallback.
         if (level == 0 && rect == nullptr)
         {
             GetData(data, startIndex, elementCount);
             return;
+        }
+
+        const std::vector<uint8_t>* buf = getMipBufferConst(level);
+        if (!buf)
+        {
+            // No CPU-side shadow for this mip level. As above, only fall back to a real backend
+            // readback for a RenderTarget2D (gpuOnlyContent_); a plain Texture2D with a freed
+            // shadow must still throw, matching the 3-arg overload's own gpuOnlyContent_ gate.
+            if (gpuOnlyContent_ && backend_)
+            {
+                const int levelW = mipDim(width, level);
+                const int levelH = mipDim(height, level);
+                int x = 0, y = 0, w = levelW, h = levelH;
+                if (rect) { x = rect->X; y = rect->Y; w = rect->Width; h = rect->Height; }
+                if (x < 0 || y < 0 || w <= 0 || h <= 0 || x + w > levelW || y + h > levelH)
+                    throw std::out_of_range("Texture2D::GetData: rectangle out of texture bounds");
+                if (elementCount < w * h)
+                    throw std::out_of_range("Texture2D::GetData: elementCount is less than the number of pixels in the requested region");
+
+                std::vector<uint8_t> pixels(static_cast<std::size_t>(w) * h * 4, 0);
+                backend_->GetData(level, x, y, w, h, pixels.data(), static_cast<int>(pixels.size()));
+                for (int row = 0; row < h; ++row)
+                    for (int col = 0; col < w; ++col)
+                    {
+                        const int src = (row * w + col) * 4;
+                        const int dst = startIndex + row * w + col;
+                        data[dst] = Color(pixels[src + 0], pixels[src + 1], pixels[src + 2], pixels[src + 3]);
+                    }
+                return;
+            }
+            throw std::runtime_error("Texture2D::GetData: no CPU-side pixel data for requested mip level");
         }
 
         const int levelW = mipDim(width,  level);

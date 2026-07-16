@@ -47,6 +47,17 @@ TEST(GraphicsBackendCompileDefinitionsTest, ExactlyOneGraphicsBackendIsSelected)
 #ifdef CNA_BACKEND_DX3
     ++enabled;
 #endif
+    // A genuine, previously-uncaught gap in the D3D9 branch (feature/dx9): no commit in this
+    // file's own history ever added a D3D9 entry here (found 2026-07-16 while merging
+    // feature/sdlgpu). The full unfiltered CnaTests suite was never run under
+    // CNA_GRAPHICS_BACKEND=D3D9 (NEXT.md's own D9-123 note says as much), so this would have
+    // silently failed EXPECT_EQ(enabled, 1) the first time anyone actually did.
+#ifdef CNA_BACKEND_D3D9
+    ++enabled;
+#endif
+#ifdef CNA_BACKEND_SDL_GPU
+    ++enabled;
+#endif
 
     EXPECT_EQ(enabled, 1);
 }

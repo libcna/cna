@@ -315,6 +315,11 @@ namespace Microsoft::Xna::Framework::Graphics
         std::shared_ptr<std::vector<uint8_t>> cpuPixels_;
         std::shared_ptr<std::vector<std::vector<uint8_t>>> extraMipLevels_;
 
+        /// True only for instances built via the RenderTarget2D-exclusive protected constructor
+        /// above -- their content genuinely comes from GPU rendering, never SetData(), so an empty
+        /// CPU shadow means "ask the backend", not "the shadow was freed" (see GetData()'s fallback).
+        bool gpuOnlyContent_ = false;
+
         /// Frees cpuPixels_ when context recovery is disabled, saving ~1x texture RAM.
         void MaybeFreeCpuPixels();
 

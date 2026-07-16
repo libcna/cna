@@ -178,6 +178,13 @@ namespace CNA::Internal::Backends
         /// The backend stores this reference for OpenGL context-loss restoration instead
         /// of keeping its own duplicate copy of the pixel data.
         virtual void ShareCpuPixels(std::shared_ptr<std::vector<uint8_t>> /*pixels*/) {}
+        /// Reads back raw RGBA8 pixels from a sub-rectangle of the given mip level. No-op by
+        /// default (matches ITextureCubeBackend::GetData's own convention). Texture2D::GetData()
+        /// only calls this when its own CPU-side pixel shadow is unavailable (i.e. for a
+        /// RenderTarget2D, whose content comes from GPU rendering rather than SetData()) --
+        /// plain, SetData()-populated textures never reach this path.
+        virtual void GetData(int level, int x, int y, int w, int h,
+                             void* data, int dataLength) const {}
     };
 
     /// Backend handle for a 2D render target (off-screen FBO on EasyGL).

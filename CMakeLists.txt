@@ -91,8 +91,8 @@ if(EMSCRIPTEN OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
 else()
     set(_cna_default_backend "SDL_RENDERER")
 endif()
-set(CNA_GRAPHICS_BACKEND "${_cna_default_backend}" CACHE STRING "Graphics backend to use (SDL_RENDERER, EASYGL, BGFX, VULKAN, WEBGPU, HEADLESS, SOFTWARE, D3D11, D3D12, CANVAS, ASCII, DX3, or D3D9)")
-set_property(CACHE CNA_GRAPHICS_BACKEND PROPERTY STRINGS "SDL_RENDERER" "EASYGL" "BGFX" "VULKAN" "WEBGPU" "HEADLESS" "SOFTWARE" "D3D11" "D3D12" "CANVAS" "ASCII" "DX3" "D3D9")
+set(CNA_GRAPHICS_BACKEND "${_cna_default_backend}" CACHE STRING "Graphics backend to use (SDL_RENDERER, EASYGL, BGFX, VULKAN, WEBGPU, HEADLESS, SOFTWARE, D3D11, D3D12, CANVAS, ASCII, DX3, D3D9, or SDL_GPU)")
+set_property(CACHE CNA_GRAPHICS_BACKEND PROPERTY STRINGS "SDL_RENDERER" "EASYGL" "BGFX" "VULKAN" "WEBGPU" "HEADLESS" "SOFTWARE" "D3D11" "D3D12" "CANVAS" "ASCII" "DX3" "D3D9" "SDL_GPU")
 
 option(CNA_BACKEND_SDL_RENDERER "Enable SDL_Renderer graphics backend" OFF)
 option(CNA_BACKEND_EASY_GL "Enable easy-gl graphics backend" OFF)
@@ -112,9 +112,10 @@ option(CNA_BACKEND_CANVAS "Enable HTML Canvas 2D graphics backend (Emscripten on
 option(CNA_BACKEND_ASCII "Enable ASCII (SDL-windowed glyph-grid) graphics backend" OFF)
 option(CNA_BACKEND_DX3 "Enable DirectX 3 (DirectDraw, via the ../free-direct sibling) graphics backend" OFF)
 option(CNA_BACKEND_D3D9 "Enable Direct3D 9 graphics backend (Windows only)" OFF)
+option(CNA_BACKEND_SDL_GPU "Enable SDL_gpu graphics backend" OFF)
 
 set(_cna_explicit_backend_selection OFF)
-if(CNA_BACKEND_SDL_RENDERER OR CNA_BACKEND_EASY_GL OR CNA_BACKEND_BGFX OR CNA_BACKEND_VULKAN OR CNA_BACKEND_WEBGPU OR CNA_BACKEND_HEADLESS OR CNA_BACKEND_SOFTWARE OR CNA_BACKEND_D3D11 OR CNA_BACKEND_D3D12 OR CNA_BACKEND_CANVAS OR CNA_BACKEND_ASCII OR CNA_BACKEND_DX3 OR CNA_BACKEND_D3D9)
+if(CNA_BACKEND_SDL_RENDERER OR CNA_BACKEND_EASY_GL OR CNA_BACKEND_BGFX OR CNA_BACKEND_VULKAN OR CNA_BACKEND_WEBGPU OR CNA_BACKEND_HEADLESS OR CNA_BACKEND_SOFTWARE OR CNA_BACKEND_D3D11 OR CNA_BACKEND_D3D12 OR CNA_BACKEND_CANVAS OR CNA_BACKEND_ASCII OR CNA_BACKEND_DX3 OR CNA_BACKEND_D3D9 OR CNA_BACKEND_SDL_GPU)
     set(_cna_explicit_backend_selection ON)
 endif()
 
@@ -158,6 +159,9 @@ if(_cna_explicit_backend_selection)
     endif()
     if(CNA_BACKEND_D3D9)
         list(APPEND _cna_enabled_backends "D3D9")
+    endif()
+    if(CNA_BACKEND_SDL_GPU)
+        list(APPEND _cna_enabled_backends "SDL_GPU")
     endif()
 
     list(LENGTH _cna_enabled_backends _cna_enabled_backends_count)
@@ -322,6 +326,11 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "D3D9")
     set(BACKEND_DIR "src/CNA/Internal/Backends/D3D9")
     set(BACKEND_TARGET "cna_backend_graphics_d3d9")
     add_compile_definitions(CNA_BACKEND_D3D9)
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "SDL_GPU")
+    message(STATUS "CNA: Using SDL_GPU graphics backend")
+    set(BACKEND_DIR "src/CNA/Internal/Backends/SdlGpu")
+    set(BACKEND_TARGET "cna_backend_graphics_sdl_gpu")
+    add_compile_definitions(CNA_BACKEND_SDL_GPU)
 else()
 
     message(FATAL_ERROR "CNA: Unknown graphics backend: ${CNA_GRAPHICS_BACKEND}")
@@ -464,6 +473,35 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "D3D9")
     # design decision 9/16 keep the stock pipeline dependency-free; it will only be added, later, to
     # a custom-ShaderEffect-only target if Phase D9-11 is authorized (ask-first per its own row).
     target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 d3d9)
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "SDL_GPU")
+    # plan_sdlgpu.md SDLGPU-1: SDL_gpu.h is part of SDL3 itself (SDL_gpu.c is already compiled
+    # into the same SDL3 library every other backend links against) -- no separate find_package
+    # or FetchContent is needed, unlike VULKAN/WEBGPU/BGFX above.
+    target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3)
+
+    # plan_sdlgpu.md SDLGPU-42/43: SdlGpuEffectBackend needs a REAL runtime GLSL->SPIR-V compile
+    # for arbitrary user ShaderEffect source (SDL_gpu only accepts precompiled bytecode) -- unlike
+    # D3D11/D3D12's d3dcompiler, this environment has no libshaderc-dev package (no unversioned
+    # .so symlink, no headers), only the runtime libshaderc1 package's versioned .so.1. Prefer a
+    # normal find_library() first (works if a dev package IS present, e.g. other machines/CI), and
+    # fall back to globbing standard library directories for the exact versioned file otherwise --
+    # mirrors compile_shaders.py's own ctypes loader fallback list.
+    find_library(CNA_SHADERC_LIBRARY NAMES shaderc_shared shaderc)
+    if(NOT CNA_SHADERC_LIBRARY)
+        file(GLOB CNA_SHADERC_CANDIDATES
+            /usr/lib/*/libshaderc.so*
+            /usr/lib/libshaderc.so*
+            /usr/local/lib/libshaderc.so*
+        )
+        if(CNA_SHADERC_CANDIDATES)
+            list(GET CNA_SHADERC_CANDIDATES 0 CNA_SHADERC_LIBRARY)
+        endif()
+    endif()
+    if(NOT CNA_SHADERC_LIBRARY)
+        message(FATAL_ERROR "CNA: libshaderc not found (required for SDL_GPU's runtime ShaderEffect GLSL compile, SDLGPU-42/43) -- install libshaderc1 or libshaderc-dev")
+    endif()
+    message(STATUS "CNA: using libshaderc at ${CNA_SHADERC_LIBRARY}")
+    target_link_libraries(${BACKEND_TARGET} PRIVATE "${CNA_SHADERC_LIBRARY}")
 endif()
 
 file(GLOB_RECURSE CNA_SOURCES CONFIGURE_DEPENDS
@@ -529,7 +567,16 @@ target_link_libraries(CNA
 # SpriteBatch::Begin(effect)'s custom-Effect path, the same genuine circular dependency D3D11/D3D12
 # already have. (D9-10's own original note said "add D3D9 here when D9-112 actually needs it" --
 # this is that task.)
-if(CNA_GRAPHICS_BACKEND STREQUAL "D3D11" OR CNA_GRAPHICS_BACKEND STREQUAL "D3D12" OR CNA_GRAPHICS_BACKEND STREQUAL "D3D9")
+#
+# plan_sdlgpu.md: the SDL_GPU backend (SdlGpuGraphicsBackend.cpp) calls CNA::Logger::Warn (a
+# CNA-defined symbol) for its own real, non-fatal capability-gap warnings -- the exact same
+# single-pass archive-scanning problem under GNU ld, not just MinGW: any executable linking the
+# plain CNA target without --start-group/--end-group (cna_reference_dump, cna_demo_xact) hit a
+# real "undefined reference to CNA::Logger::Warn" at link time, because libCNA.a (which contains
+# Logger.cpp.o) is fully scanned before libcna_backend_graphics_sdl_gpu.a creates the need. Only
+# the SDL_GPU CTest targets (cna_sdlgpu_test's own --start-group/--end-group wrapping) avoided
+# this; every other SDL_GPU-backend executable did not. Fixed the same way as D3D11/D3D12.
+if(CNA_GRAPHICS_BACKEND STREQUAL "D3D11" OR CNA_GRAPHICS_BACKEND STREQUAL "D3D12" OR CNA_GRAPHICS_BACKEND STREQUAL "D3D9" OR CNA_GRAPHICS_BACKEND STREQUAL "SDL_GPU")
     target_link_libraries(${BACKEND_TARGET} PRIVATE CNA)
 endif()
 
@@ -7364,6 +7411,173 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D9")
             LABELS "D3D9"
             ENVIRONMENT "CNA_D3D9_WINEPREFIX=$ENV{HOME}/.wine-cna-d3d9-spike")
     endif()
+endif()
+
+# plan_sdlgpu.md SDLGPU-12: first end-to-end proof for the SDL_GPU graphics backend -- a real
+# window, a real SDL_GPUDevice, and a 60-frame Clear()+Present() loop. Needs a real
+# display/GPU, same as the Vulkan/Bgfx/D3D11 CTest entries above -- run with a real DISPLAY.
+if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SDL_GPU")
+    enable_testing()
+
+    macro(cna_sdlgpu_test target src)
+        add_executable(${target} ${src})
+        if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
+            target_link_libraries(${target} PRIVATE
+                -Wl,--start-group CNA ${BACKEND_TARGET} -Wl,--end-group
+                SHARP_RUNTIME SDL3::SDL3)
+        else()
+            target_link_libraries(${target} PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+        endif()
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(${target} PRIVATE SDL3::SDL3main)
+        endif()
+    endmacro()
+
+    cna_sdlgpu_test(cna_test_sdlgpu_smoke examples/sdlgpu_smoke_test.cpp)
+    add_test(NAME SdlGpu_Smoke COMMAND cna_test_sdlgpu_smoke)
+    set_tests_properties(SdlGpu_Smoke PROPERTIES
+        TIMEOUT 60
+        LABELS "SdlGpu"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_sdlgpu.md SDLGPU-22..25: 2D vertical slice -- real Texture2D + SpriteBatch.
+    cna_sdlgpu_test(cna_test_sdlgpu_2d examples/sdlgpu_2d_test.cpp)
+    add_test(NAME SdlGpu_2D COMMAND cna_test_sdlgpu_2d)
+    set_tests_properties(SdlGpu_2D PROPERTIES
+        TIMEOUT 60
+        LABELS "SdlGpu"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Ad-hoc manual diagnostic (not a CTest) -- see the file's own header comment.
+    cna_sdlgpu_test(cna_diag_sdlgpu_single_sprite examples/sdlgpu_diag_single_sprite.cpp)
+
+    # plan_sdlgpu.md SDLGPU-26..30: core 3D vertex formats and BasicEffect.
+    cna_sdlgpu_test(cna_test_sdlgpu_3d examples/sdlgpu_3d_test.cpp)
+    add_test(NAME SdlGpu_3D COMMAND cna_test_sdlgpu_3d)
+    set_tests_properties(SdlGpu_3D PROPERTIES
+        TIMEOUT 60
+        LABELS "SdlGpu"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_sdlgpu.md SDLGPU-31/32: AlphaTestEffect and DualTextureEffect.
+    cna_sdlgpu_test(cna_test_sdlgpu_effects examples/sdlgpu_effects_test.cpp)
+    add_test(NAME SdlGpu_Effects COMMAND cna_test_sdlgpu_effects)
+    set_tests_properties(SdlGpu_Effects PROPERTIES
+        TIMEOUT 60
+        LABELS "SdlGpu"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_sdlgpu.md SDLGPU-35: RenderTarget2D.
+    cna_sdlgpu_test(cna_test_sdlgpu_rendertarget2d examples/sdlgpu_rendertarget2d_test.cpp)
+    add_test(NAME SdlGpu_RenderTarget2D COMMAND cna_test_sdlgpu_rendertarget2d)
+    set_tests_properties(SdlGpu_RenderTarget2D PROPERTIES
+        TIMEOUT 60
+        LABELS "SdlGpu"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_sdlgpu.md SDLGPU-36: RenderTargetCube.
+    cna_sdlgpu_test(cna_test_sdlgpu_rendertargetcube examples/sdlgpu_rendertargetcube_test.cpp)
+    add_test(NAME SdlGpu_RenderTargetCube COMMAND cna_test_sdlgpu_rendertargetcube)
+    set_tests_properties(SdlGpu_RenderTargetCube PROPERTIES
+        TIMEOUT 60
+        LABELS "SdlGpu"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_sdlgpu.md SDLGPU-37: Multiple Render Targets (MRT).
+    cna_sdlgpu_test(cna_test_sdlgpu_mrt examples/sdlgpu_mrt_test.cpp)
+    add_test(NAME SdlGpu_MRT COMMAND cna_test_sdlgpu_mrt)
+    set_tests_properties(SdlGpu_MRT PROPERTIES
+        TIMEOUT 60
+        LABELS "SdlGpu"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_sdlgpu.md SDLGPU-38: RenderTarget2D MSAA.
+    cna_sdlgpu_test(cna_test_sdlgpu_rendertarget2d_msaa examples/sdlgpu_rendertarget2d_msaa_test.cpp)
+    add_test(NAME SdlGpu_RenderTarget2DMSAA COMMAND cna_test_sdlgpu_rendertarget2d_msaa)
+    set_tests_properties(SdlGpu_RenderTarget2DMSAA PROPERTIES
+        TIMEOUT 60
+        LABELS "SdlGpu"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_sdlgpu.md SDLGPU-40/41: Texture3D + mipmaps.
+    cna_sdlgpu_test(cna_test_sdlgpu_texture3d examples/sdlgpu_texture3d_test.cpp)
+    add_test(NAME SdlGpu_Texture3D COMMAND cna_test_sdlgpu_texture3d)
+    set_tests_properties(SdlGpu_Texture3D PROPERTIES
+        TIMEOUT 60
+        LABELS "SdlGpu"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_sdlgpu.md SDLGPU-51: plain, non-render-target TextureCube.
+    cna_sdlgpu_test(cna_test_sdlgpu_texturecube examples/sdlgpu_texturecube_test.cpp)
+    add_test(NAME SdlGpu_TextureCube COMMAND cna_test_sdlgpu_texturecube)
+    set_tests_properties(SdlGpu_TextureCube PROPERTIES
+        TIMEOUT 60
+        LABELS "SdlGpu"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_sdlgpu.md SDLGPU-33: EnvironmentMapEffect.
+    cna_sdlgpu_test(cna_test_sdlgpu_envmap examples/sdlgpu_envmap_test.cpp)
+    add_test(NAME SdlGpu_EnvMap COMMAND cna_test_sdlgpu_envmap)
+    set_tests_properties(SdlGpu_EnvMap PROPERTIES
+        TIMEOUT 60
+        LABELS "SdlGpu"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_sdlgpu.md SDLGPU-34: SkinnedEffect.
+    cna_sdlgpu_test(cna_test_sdlgpu_skinned examples/sdlgpu_skinned_test.cpp)
+    add_test(NAME SdlGpu_Skinned COMMAND cna_test_sdlgpu_skinned)
+    set_tests_properties(SdlGpu_Skinned PROPERTIES
+        TIMEOUT 60
+        LABELS "SdlGpu"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_sdlgpu.md SDLGPU-42/43: custom ShaderEffect (runtime GLSL->SPIR-V via libshaderc).
+    cna_sdlgpu_test(cna_test_sdlgpu_shadereffect examples/sdlgpu_shadereffect_test.cpp)
+    add_test(NAME SdlGpu_ShaderEffect COMMAND cna_test_sdlgpu_shadereffect)
+    set_tests_properties(SdlGpu_ShaderEffect PROPERTIES
+        TIMEOUT 60
+        LABELS "SdlGpu"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_sdlgpu.md SDLGPU-18/19/20: dynamic BlendState/DepthStencilState/RasterizerState.
+    cna_sdlgpu_test(cna_test_sdlgpu_renderstate examples/sdlgpu_renderstate_test.cpp)
+    add_test(NAME SdlGpu_RenderState COMMAND cna_test_sdlgpu_renderstate)
+    set_tests_properties(SdlGpu_RenderState PROPERTIES
+        TIMEOUT 60
+        LABELS "SdlGpu"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_sdlgpu.md SDLGPU-21: dynamic SamplerState for direct 3D draws.
+    cna_sdlgpu_test(cna_test_sdlgpu_samplerstate examples/sdlgpu_samplerstate_test.cpp)
+    add_test(NAME SdlGpu_SamplerState COMMAND cna_test_sdlgpu_samplerstate)
+    set_tests_properties(SdlGpu_SamplerState PROPERTIES
+        TIMEOUT 60
+        LABELS "SdlGpu"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_sdlgpu.md: real chronological draw-order proof (adversarial-review finding #4).
+    cna_sdlgpu_test(cna_test_sdlgpu_draworder examples/sdlgpu_draworder_test.cpp)
+    add_test(NAME SdlGpu_DrawOrder COMMAND cna_test_sdlgpu_draworder)
+    set_tests_properties(SdlGpu_DrawOrder PROPERTIES
+        TIMEOUT 60
+        LABELS "SdlGpu"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_sdlgpu.md SDLGPU-11: hard swapchain-acquisition-failure recovery proof.
+    cna_sdlgpu_test(cna_test_sdlgpu_swapchain_recovery examples/sdlgpu_swapchain_recovery_test.cpp)
+    add_test(NAME SdlGpu_SwapchainRecovery COMMAND cna_test_sdlgpu_swapchain_recovery)
+    set_tests_properties(SdlGpu_SwapchainRecovery PROPERTIES
+        TIMEOUT 60
+        LABELS "SdlGpu"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_sdlgpu.md: render-target-destroyed-before-flush use-after-free regression proof.
+    cna_sdlgpu_test(cna_test_sdlgpu_rt_lifetime examples/sdlgpu_rendertarget_lifetime_test.cpp)
+    add_test(NAME SdlGpu_RenderTargetLifetime COMMAND cna_test_sdlgpu_rt_lifetime)
+    set_tests_properties(SdlGpu_RenderTargetLifetime PROPERTIES
+        TIMEOUT 60
+        LABELS "SdlGpu"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()
 
 # --- Task 6.1: real two-process ENet loopback test harness ---
