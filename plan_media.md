@@ -218,19 +218,19 @@ free to override a row — the tasks that depend on it are cited so the blast ra
 
 ### Phase 0 — Test infrastructure and fixture assets
 
-- [ ] **MEDIA-1 — Set up Media test infrastructure.** Create `tests/Microsoft/Xna/Framework/Media/`
+- [x] **MEDIA-1 — Set up Media test infrastructure.** Create `tests/Microsoft/Xna/Framework/Media/`
   (+ `Video/` subfolder) with a first skeleton test file.
   *Accept:* `cmake --build cmake-build-debug --target CnaTests` picks it up via the existing GLOB with
   no `CMakeLists.txt` change, and it runs.
 
-- [ ] **MEDIA-2 — Test-access scaffolding for the new library backend.** Add a
+- [x] **MEDIA-2 — Test-access scaffolding for the new library backend.** Add a
   `MediaLibraryTestAccess.hpp` shared test header (same pattern as Audio's
   `SoundEffectInstanceTestAccess.hpp`/`CueTestAccess.hpp`) exposing whatever private scan-result state
   Phase 4's tests will need to inspect (e.g. the resolved music/picture roots, raw scan counts) without
   widening the public XNA API surface.
   *Accept:* compiles; not yet used until Phase 3/4/6 land (placeholder is fine at this point).
 
-- [ ] **MEDIA-3 — Fixture: Music tree.** Author/vendor a small, real, checked-in
+- [x] **MEDIA-3 — Fixture: Music tree.** Author/vendor a small, real, checked-in
   `tests/assets/media/music/` tree with ≥2 artists, ≥2 albums per artist, ≥2 genres, using real
   `.ogg` (Vorbis-comment tagged), `.mp3` (ID3v2.3- and ID3v2.4-tagged), and `.wav` (untagged, to
   exercise the filename/folder-heuristic fallback) files with genuinely embedded metadata, not just
@@ -239,25 +239,25 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   *Accept:* fixture tree checked in; every file's expected tag values documented alongside it (e.g. a
   small fixture manifest) for tests to assert against.
 
-- [ ] **MEDIA-4 — Fixture: Pictures tree.** Author/vendor `tests/assets/media/pictures/` with ≥2
+- [x] **MEDIA-4 — Fixture: Pictures tree.** Author/vendor `tests/assets/media/pictures/` with ≥2
   nested subfolders (to exercise `PictureAlbum` parent/child tree depth), real `.png`/`.jpg` images of
   known dimensions, and at least one `cover.jpg`/`folder.jpg` per an album-art-bearing music
   subdirectory (for MEDIA-65's `HasArt`/`GetAlbumArt` coverage).
   *Accept:* fixture tree checked in with documented expected dimensions/paths.
 
-- [ ] **MEDIA-5 — Fixture: Playlists.** Author `.m3u` and `.m3u8` fixture files referencing MEDIA-3's
+- [x] **MEDIA-5 — Fixture: Playlists.** Author `.m3u` and `.m3u8` fixture files referencing MEDIA-3's
   fixture songs, including one entry pointing at a nonexistent file (for MEDIA-24's skip-not-fatal
   behavior) and at least one non-ASCII filename/title to exercise MEDIA-58's UTF-8 handling.
   *Accept:* fixtures checked in with documented expected resolved `Song` sequences.
 
-- [ ] **MEDIA-6 — Fixture: Video corpus, chroma subsampling.** Source or encode short (a few seconds)
+- [x] **MEDIA-6 — Fixture: Video corpus, chroma subsampling.** Source or encode short (a few seconds)
   video clips covering 4:2:0 (baseline, likely already covered by any existing video test asset — if
   one already exists it's fine to reuse instead of re-encoding), 4:2:2, and 4:4:4 8-bit chroma
   subsampling, small enough to keep the repo lean.
   *Accept:* 3 fixture clips checked in (or an existing 4:2:0 one confirmed reusable), each with known
   correct-color reference frames for MEDIA-91's assertions.
 
-- [ ] **MEDIA-7 — Fixture: Video corpus, bit depth, EOS-audio-tail, and corrupt file.** Add: a 10-bit
+- [x] **MEDIA-7 — Fixture: Video corpus, bit depth, EOS-audio-tail, and corrupt file.** Add: a 10-bit
   and a 12-bit clip (for MEDIA-36/92); a clip whose audio track runs measurably longer than its video
   track (for MEDIA-41's audio-drain-at-EOS test); a deliberately truncated/corrupted file (for
   MEDIA-40/94's error-handling tests); a clip with a mismatched declared-vs-actual dimension/fps (for
@@ -266,7 +266,7 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   a valid fixture's bytes at test runtime rather than storing a second binary) with documented expected
   behavior per fixture.
 
-- [ ] **MEDIA-8 — Fixture provenance and license audit.** Confirm every binary fixture added by
+- [x] **MEDIA-8 — Fixture provenance and license audit.** Confirm every binary fixture added by
   MEDIA-3/4/6/7 is either self-authored/synthetic (preferred, no note needed) or has clear license terms
   compatible with this repo, recorded in `NOTICE.md`/`THIRD_PARTY_NOTICES.md` alongside the existing
   `Song`/XNB fixture entries.
