@@ -120,6 +120,24 @@ TEST(XnbHeaderTest, UnrecognizedPlatformThrowsContentLoadException)
     EXPECT_THROW(ParseBytes(bytes), ContentLoadException);
 }
 
+// plan_xnb.md XNB-44: 'b' (WebAssembly/Bridge.NET) is a real platform identifier MonoGame's own
+// ContentWriter.targetPlatformIdentifiers accepts, added after FNA's fork point -- FNA's own
+// targetPlatformIdentifiers (src/Content/ContentManager.cs) never gained it. CNA's
+// XnbAcceptedPlatforms() deliberately matches FNA, not MonoGame's expanded list, so a real
+// MonoGame-for-WebAssembly-produced .xnb is correctly rejected rather than silently mishandled --
+// confirmed empirically against a real, independently-produced 'b'-platform fixture during this
+// session's compatibility sweep (not vendored here: no reader-logic path is actually exercised by
+// a rejected platform byte, so a hand-crafted header is equally conclusive and avoids a large,
+// low-marginal-value binary in the repo).
+TEST(XnbHeaderTest, MonoGameWebAssemblyPlatformIsNotAcceptedMatchingFnaExactly)
+{
+    const std::vector<uint8_t> bytes{
+        'X', 'N', 'B', 'b', 0x05, 0x00, 0x0a, 0x00, 0x00, 0x00
+    };
+
+    EXPECT_THROW(ParseBytes(bytes), ContentLoadException);
+}
+
 TEST(XnbHeaderTest, InvalidVersionThrowsContentLoadException)
 {
     const std::vector<uint8_t> bytes{
