@@ -5312,6 +5312,47 @@ an audit's claims without cross-checking them against the real code first.
   exact same root cause `CP-15` already fixed for `Pause`/`Resume`/`Stop`/`getStateProperty`, just
   never extended to these four). Out of scope for this pass; see that entry for why.
 
+* [x] P13-MIXER-001 (AUDIO-002): `CNA::Internal::Audio::GetMixer()`'s lazy-init check-then-create
+  sequence had no synchronization at all -- two concurrent first callers could both observe
+  `g_mixer == nullptr` and both race through `MIX_Init()`/`MIX_CreateMixerDevice()`; `DestroyMixer()`
+  had no caller anywhere and no synchronization against a concurrent `GetMixer()` either.
+  *Status:* Fixed. Added a single `std::mutex g_mixerMutex` held for the entire body of both
+  `GetMixer()` and `DestroyMixer()` (not just around the null check) -- there is no unlocked
+  window between "check `g_mixer`" and "create/destroy/return it" for a second thread to slip
+  into. Deliberately a plain mutex over `std::once_flag`: a flag can't be reset without a fresh
+  `once_flag` object, so it can't cleanly express "destroyed, then later re-created" the way a
+  real future `DestroyMixer()` caller (e.g. a `Game` dispose path) would need; a single mutex
+  around the existing check-then-create/check-then-destroy bodies gives exactly the same
+  concurrent-first-caller safety while also naturally supporting a full destroy-then-recreate
+  cycle (the very next `GetMixer()` call after a `DestroyMixer()` just reinitializes from scratch,
+  same as the first call ever made). On a creation failure, the exception still propagates and
+  `g_mixer` stays null, so a later call (any thread) still retries from scratch -- unchanged from
+  the pre-existing single-threaded retry behavior, now just thread-safe.
+  Per the audit's own observation that "shutdown must be serialised with all tracks and callbacks;
+  it must not destroy the mixer while a live `SoundEffectInstance`/dynamic stream/microphone still
+  depends on SDL audio" -- this fix only serializes the mixer *pointer* itself; it has no way to
+  know about, wait on, or reference-count every higher-level audio object's lifetime, and building
+  that (a project-wide audio-object shutdown/reference-counting system reaching into
+  `SoundEffectInstance`/`DynamicSoundEffectInstance`/`Microphone`/`AudioEngine`/`Cue`/`SoundBank`/
+  `WaveBank` alike) is a substantially larger, separate architectural task, not a narrow
+  thread-safety fix to this one file -- documented as the caller's own responsibility in both
+  `AudioMixer.hpp`'s updated doc comments and here, matching the header's own pre-existing framing
+  ("a future caller wiring real shutdown ... should know this isn't already hooked up anywhere").
+  `DestroyMixer()` still has no caller anywhere in this codebase today -- this task made it safe to
+  call, it did not wire it into any shutdown path (out of scope; no shutdown path was identified in
+  the audit or by this fix as needing one yet).
+  *Tests:* none added -- the actual race this fixes only manifests under genuine concurrent first
+  use, which every existing test avoids by construction (each test fixture's `SetUp()`/shared
+  fixture accessor already serializes through `SoundEffect`'s own construction path on the test
+  runner's single thread; the mixer is already alive by the time any test body runs). A
+  multi-threaded stress test that reliably exercises the pre-fix race would need to defeat this
+  same single-thread-by-construction property across every existing fixture, which is a bigger
+  change than this fix's own risk profile justifies; the fix itself is a textbook, minimal
+  correct-by-construction critical-section pattern (hold one mutex for a function's entire body),
+  not a novel algorithm needing its own dedicated test to gain confidence in. Verified via the
+  full audio-scoped suite (541/541 pass, zero regressions -- `GetMixer()`/`DestroyMixer()` are
+  exercised indirectly by every single audio test that touches a real track).
+
 * [ ] P13-DYNAMIC-001 (self-found while investigating P13-3D-001, **not fixed this pass**):
   `DynamicSoundEffectInstance` never overrides `setVolumeProperty()`/`setPitchProperty()`/
   `setPanProperty()`/`Apply3D()` -- all four are inherited unchanged from `SoundEffectInstance` and
