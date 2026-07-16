@@ -1510,6 +1510,25 @@ namespace Microsoft::Xna::Framework::Content
             textureCache_.erase(cacheIt);
         }
 
+        // .xnb always wins first (cnb.md's "Core rule", 2026-07-16 decision) -- same reasoning
+        // as the generic Load<T>() template; this specialization needs its own copy since it
+        // doesn't call that template body at all (weak-cache semantics require a bespoke
+        // implementation here).
+        const std::string xnbCandidate = BuildAssetPath(assetName) + ".xnb";
+        if (std::filesystem::exists(xnbCandidate))
+        {
+            Graphics::Texture2D result = LoadXnbAsset<Graphics::Texture2D>(xnbCandidate, assetName);
+
+            WeakTextureEntry entry;
+            entry.backend    = result.GetBackendWeak();
+            entry.cpuPixels  = result.GetCpuPixelsWeak();
+            entry.fmt        = result.getFormatProperty();
+            entry.levelCount = result.getLevelCountProperty();
+            textureCache_[key] = std::move(entry);
+
+            return result;
+        }
+
         // Load fresh from disk.
         auto readerIt = typeReaders_.find(std::type_index(typeid(Graphics::Texture2D)));
         if (readerIt == typeReaders_.end())
