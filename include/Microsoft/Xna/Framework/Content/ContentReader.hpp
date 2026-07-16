@@ -291,13 +291,30 @@ namespace Microsoft::Xna::Framework::Content
                     "'" + assetName_ + "' has an incorrect type reader index.");
             }
             ContentTypeReaderBase& typeReader = *typeReaders_[static_cast<std::size_t>(typeReaderIndex - 1)];
-            std::any existingAny = existingInstance.has_value()
-                ? std::any(std::move(*existingInstance))
-                : std::any{};
-            std::any resultAny = typeReader.ReadUntyped(*this, std::move(existingAny));
-            T result = std::any_cast<T>(std::move(resultAny));
-            RecordDisposable(result);
-            return result;
+
+            // See ContentTypeReader<T>::ReadUntyped()'s own docs: a move-only T (no CopyConstructible,
+            // e.g. SoundEffect) is boxed as std::shared_ptr<T> instead of a bare T, since std::any
+            // requires CopyConstructible unconditionally.
+            if constexpr (std::is_copy_constructible_v<T>)
+            {
+                std::any existingAny = existingInstance.has_value()
+                    ? std::any(std::move(*existingInstance))
+                    : std::any{};
+                std::any resultAny = typeReader.ReadUntyped(*this, std::move(existingAny));
+                T result = std::any_cast<T>(std::move(resultAny));
+                RecordDisposable(result);
+                return result;
+            }
+            else
+            {
+                std::any existingAny = existingInstance.has_value()
+                    ? std::any(std::make_shared<T>(std::move(*existingInstance)))
+                    : std::any{};
+                std::any resultAny = typeReader.ReadUntyped(*this, std::move(existingAny));
+                T result = std::move(*std::any_cast<std::shared_ptr<T>>(std::move(resultAny)));
+                RecordDisposable(result);
+                return result;
+            }
         }
 
         template <typename T>

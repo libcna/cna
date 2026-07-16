@@ -1,0 +1,20 @@
+{
+  "producer": "MonoGame content pipeline (mgcb)",
+  "sourceRepo": "https://github.com/MonoGame/MonoGame",
+  "sourcePath": "Tests/Assets/Audio/tone_mono_44khz_8bit.xnb",
+  "sourceLicense": "Ms-PL (same license as CNA itself)",
+  "platform": "d",
+  "version": 5,
+  "compressed": false,
+  "totalLength": 22155,
+  "rootReader": "Microsoft.Xna.Framework.Content.SoundEffectReader",
+  "expectedType": "SoundEffect",
+  "sharedResourceCount": 0,
+  "expectedFields": {
+    "wFormatTag": 1,
+    "wFormatTagName": "WAVE_FORMAT_PCM",
+    "wBitsPerSample": 8
+  },
+  "supportMatrixStatus": "rejected",
+  "notes": "plan_xnb.md XNB-33 support-matrix entry: 8-bit PCM parses correctly (same WAVEFORMATEX layout) but is rejected by SoundEffectReader -- CNA's SoundEffect PCM constructors always assume 16-bit signed samples (SDL_AUDIO_S16LE), with no 8-to-16-bit upconversion path yet."
+}

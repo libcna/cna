@@ -1,0 +1,20 @@
+{
+  "producer": "MonoGame content pipeline (mgcb)",
+  "sourceRepo": "https://github.com/MonoGame/MonoGame",
+  "sourcePath": "Tests/Assets/Audio/tone_mono_44khz_float.xnb",
+  "sourceLicense": "Ms-PL (same license as CNA itself)",
+  "platform": "d",
+  "version": 5,
+  "compressed": false,
+  "totalLength": 88305,
+  "rootReader": "Microsoft.Xna.Framework.Content.SoundEffectReader",
+  "expectedType": "SoundEffect",
+  "sharedResourceCount": 0,
+  "expectedFields": {
+    "wFormatTag": 3,
+    "wFormatTagName": "WAVE_FORMAT_IEEE_FLOAT",
+    "wBitsPerSample": 32
+  },
+  "supportMatrixStatus": "rejected",
+  "notes": "plan_xnb.md XNB-33 support-matrix entry: 32-bit IEEE float parses correctly but is rejected -- CNA's SoundEffect has no float-to-PCM16 conversion path yet."
+}

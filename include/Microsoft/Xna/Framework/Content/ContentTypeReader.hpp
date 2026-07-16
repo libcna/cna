@@ -2,8 +2,10 @@
 #pragma once
 
 #include <any>
+#include <memory>
 #include <optional>
 #include <string>
+#include <type_traits>
 #include <utility>
 
 #include "CNA/CNAHelper.hpp"
@@ -128,15 +130,34 @@ namespace Microsoft::Xna::Framework::Content
          *        @p existingInstance (if non-empty) to `T`, delegates to the typed Read(), then
          *        re-boxes the result -- the C++ counterpart of .NET's object-boxing glue.
          *
-         * @throws std::bad_any_cast if @p existingInstance is non-empty but does not hold a `T`.
+         * `std::any` requires its held type to be `CopyConstructible`, which a handful of real
+         * XNA reference types don't satisfy in CNA (e.g. `SoundEffect`'s move-only, per-owner
+         * Dispose-cascade design, T-3G) -- for those, the boxed/unboxed value is a
+         * `std::shared_ptr<T>` instead of a bare `T`, chosen at compile time via `if constexpr`
+         * rather than always paying the extra indirection. `InnerReadObject<T>()` unwraps it
+         * back out symmetrically.
+         *
+         * @throws std::bad_any_cast if @p existingInstance is non-empty but does not hold the
+         *         expected boxed representation of `T`.
          */
         std::any ReadUntyped(ContentReader& input, std::any existingInstance) override
         {
-            std::optional<T> existing = existingInstance.has_value()
-                ? std::optional<T>(std::any_cast<T>(std::move(existingInstance)))
-                : std::nullopt;
-            T result = Read(input, std::move(existing));
-            return std::any(std::move(result));
+            if constexpr (std::is_copy_constructible_v<T>)
+            {
+                std::optional<T> existing = existingInstance.has_value()
+                    ? std::optional<T>(std::any_cast<T>(std::move(existingInstance)))
+                    : std::nullopt;
+                T result = Read(input, std::move(existing));
+                return std::any(std::move(result));
+            }
+            else
+            {
+                std::optional<T> existing = existingInstance.has_value()
+                    ? std::optional<T>(std::move(*std::any_cast<std::shared_ptr<T>>(std::move(existingInstance))))
+                    : std::nullopt;
+                T result = Read(input, std::move(existing));
+                return std::any(std::make_shared<T>(std::move(result)));
+            }
         }
     };
 }
