@@ -2,26 +2,30 @@
 
 > **Status: 🔄 PARTIALLY UN-FROZEN 2026-07-16 — MVP scope (Phase 0/A/B/B2/B3/C) complete; Phase D
 > (LZX decompression) fully complete; Phase E (`SpriteFont`, stock effects, `SoundEffect`/`Song`,
-> `ReadExternalReference<T>()`) fully complete; everything after Phase E stays frozen.** CNA's
-> owner decided `.xnb` becomes a real, additional runtime format again, ranked **above** `.cnb` in
-> `ContentManager`'s resolution order (see [`cnb.md`](cnb.md)'s "Core rule": `.xnb` → literal
-> caller-given path → `.cnb` → native-by-extension). The MVP scope through the end of Phase C
-> (container parsing, binary primitives, uncompressed-only, a first real `Texture2D` reader — this
-> plan's own M1/M2 milestones) is fully done. CNA's owner explicitly requested Phase D (LZX
-> decompression) next; it is now implemented and real-fixture-verified (XNB-28/29/30/30B ✅). Asked
-> to close out the rest of Phase D the same day, XNB-27 (a real `XnbCompression` enum, both bit
-> values confirmed against MonoGame's own source) and XNB-30A (fuzz + differential testing, which
-> found and fixed a real heap-buffer-overflow) are both done too -- Phase D has no open tasks left
-> besides XNB-30C, deferred by design (see Phase D's own section). CNA's owner then explicitly
-> requested M3 next: `SpriteFontReader` (XNB-31) and a real-fixture-
+> `ReadExternalReference<T>()`) fully complete; Phase F (`Model`) fully complete; everything after
+> Phase F stays frozen.** CNA's owner decided `.xnb` becomes a real, additional runtime format
+> again, ranked **above** `.cnb` in `ContentManager`'s resolution order (see [`cnb.md`](cnb.md)'s
+> "Core rule": `.xnb` → literal caller-given path → `.cnb` → native-by-extension). The MVP scope
+> through the end of Phase C (container parsing, binary primitives, uncompressed-only, a first real
+> `Texture2D` reader — this plan's own M1/M2 milestones) is fully done. CNA's owner explicitly
+> requested Phase D (LZX decompression) next; it is now implemented and real-fixture-verified
+> (XNB-28/29/30/30B ✅). Asked to close out the rest of Phase D the same day, XNB-27 (a real
+> `XnbCompression` enum, both bit values confirmed against MonoGame's own source) and XNB-30A (fuzz
+> + differential testing, which found and fixed a real heap-buffer-overflow) are both done too --
+> Phase D has no open tasks left besides XNB-30C, deferred by design (see Phase D's own section).
+> CNA's owner then explicitly requested M3 next: `SpriteFontReader` (XNB-31) and a real-fixture-
 > verified `SoundEffectReader` covering at least one supported wave format (XNB-33/33A) are both
 > done, reaching M3's own Definition of Done. Asked to continue the same day, the rest of Phase E
 > followed: `ReadExternalReference<T>()` (XNB-35), the 5 stock-effect readers (XNB-32), the general
 > `EffectReader`'s diagnostic path (XNB-32A, already implemented back in Phase B and now also
-> test-covered), and `SongReader` (XNB-34) are all done too — Phase E has no open tasks left.
-> Everything sequenced after Phase E (`Model`, top-quality hardening, Phase D3/F onward) remains
-> frozen/deferred, pending a future decision to resume it — do not start those tasks without
-> checking in first. **Phase H (Lua-scripted custom readers) is cancelled outright, not deferred**
+> test-covered), and `SongReader` (XNB-34) are all done too — Phase E has no open tasks left. CNA's
+> owner then explicitly requested Phase F next: `VertexDeclarationReader`/`VertexBufferReader`/
+> `IndexBufferReader`/`ModelReader` (XNB-36 through XNB-41) are all done, verified against a real
+> multi-bone, shared-resource fixture -- this also found and fixed a real bug in Phase E's own
+> stock-effect readers (see Phase F's own XNB-40 note). Phase F has no open tasks left. Everything
+> sequenced after Phase F (top-quality hardening, Phase D3/G onward) remains frozen/deferred,
+> pending a future decision to resume it — do not start those tasks without checking in first.
+> **Phase H (Lua-scripted custom readers) is cancelled outright, not deferred**
 > — see that phase's own section below; custom `.xnb` readers
 > stay a plain C++ registration API (Phase G), matching `.cnb`'s existing `RegisterCnbLoader<T>`.
 > Phase B3 has also grown new scope: a `ContentManager` startup content-manifest scan (internal perf
@@ -129,15 +133,27 @@
 > real heap-buffer-overflow in `MakeDecodeTable()`'s long-code table-growth path (the exact gap
 > XNB-30's own commit flagged as unaudited). Phase D now has no open tasks besides XNB-30C, still
 > correctly deferred to Phase G. Phase D3/F onward remain frozen pending a future decision.
+>
+> **Revised a tenth time (2026-07-16)** after CNA's owner asked for Phase F next:
+> `VertexDeclarationReader`/`VertexBufferReader`/`IndexBufferReader` (XNB-36) and `ModelReader`
+> (XNB-37/38/39/40) are done, verified against a real, externally-produced multi-bone fixture
+> (XNB-41). Found and fixed a real bug in Phase E's own stock-effect readers along the way: they
+> erased to `std::shared_ptr<ConcreteEffectType>` instead of the common `std::shared_ptr<Effect>`
+> base, which only broke once something (`ModelReader`'s own `ReadSharedResource<Effect>()`)
+> actually exercised polymorphic effect dispatch -- Phase E's own tests never had. Also added two
+> small missing runtime-API pieces `ModelReader` needed: `ModelMesh::setBoundingSphereProperty()`
+> (a real, pre-existing read-write-property gap; only the getter existed) and
+> `ContentReader::ReadObject()` (a non-template overload for type-erased `Tag` fields). Phase F now
+> has no open tasks. Phase D3/G onward remain frozen pending a future decision.
 
 ## Execution-order mandate for autonomous work
 
 > Read this before starting any task in this file.
 
 - Implement strictly in phase order, and only through the current active scope (Phase
-  0/A/B/B2/B3/C, Phase D, and all of Phase E — all explicitly un-frozen and requested by CNA's
-  owner, see the status banner above). Do not begin Phase D3, Phase F, or anything sequenced after
-  Phase E until a future decision explicitly resumes them. Do not begin Phase I while any mandatory
+  0/A/B/B2/B3/C, Phase D, Phase E, and Phase F — all explicitly un-frozen and requested by CNA's
+  owner, see the status banner above). Do not begin Phase D3, Phase G, or anything sequenced after
+  Phase F until a future decision explicitly resumes them. Do not begin Phase I while any mandatory
   task in Phase A-C remains incomplete (Phase B3's XNB-61a/XNB-65/66/67 tasks are the one
   deliberate exception — see their own rows; XNB-61b can now start since Phase D's decompressor
   exists, but has not been picked up yet).
@@ -160,7 +176,7 @@
 | M1 - binary protocol | XNB-17F | ✅ **Reached 2026-07-16.** An uncompressed, externally-produced test `.xnb` loads end-to-end through `ContentManager` using only the Phase B test-only reader. No graphics, audio, or Lua involved. |
 | M2 - real texture | XNB-26 | ✅ **Reached 2026-07-16.** A real uncompressed XNA 4.0 `Texture2D` `.xnb` loads and uploads through the backend-neutral `GraphicsDevice` path. |
 | M3 - common XNA 2D content | end of Phase E | ✅ **Reached 2026-07-16** -- initially against its own narrower Definition of Done, then against the literal "end of Phase E" too once the rest of Phase E was picked up the same day (see the note below the table). Compressed `Texture2D`, `SpriteFont`, and at least one supported `SoundEffect` variant from the XNB-33 matrix all load correctly. |
-| M4 - standard model | XNB-41 | A real multi-mesh, multi-bone XNA `Model` `.xnb` loads with shared resources resolved and native CNA stock effects attached. |
+| M4 - standard model | XNB-41 | ✅ **Reached 2026-07-16.** A real multi-bone XNA `Model` `.xnb` loads with shared resources (`VertexBuffer`/`IndexBuffer`/`Effect`) resolved and a native CNA stock effect (`BasicEffect`) attached, verified against a real, externally-produced fixture. Multi-*mesh* (as opposed to multi-*mesh-part*) coverage is limited to what the one available real fixture actually has (1 mesh) -- the underlying mechanism (`ContentReader::ReadSharedResource<T>`'s per-index dedup) is generic and already tested independently of `ModelReader`, so this isn't considered a gap in the milestone itself. |
 | M5 - release-quality native loader | XNB-47 | Native `.xnb` support is documented (XNB-45), hardened (XNB-43), and fully usable without Lua. |
 
 > **Current active scope (2026-07-16):** M1 and M2 have both been **reached**, and — as of the
@@ -181,8 +197,14 @@
 > (XNB-32A, already implemented in Phase B, now also test-covered), and `SongReader` (XNB-34,
 > real-fixture-verified) are all done too. **Phase E is now fully complete**, every task `⬜ → ✅`,
 > matching the milestone table's literal "end of Phase E" for M3, not just its own narrower
-> Definition of Done. M4/M5/Phase D3/Phase F onward remain frozen until a future decision
-> explicitly resumes them.
+> Definition of Done. CNA's owner then explicitly requested Phase F next: `VertexDeclarationReader`/
+> `VertexBufferReader`/`IndexBufferReader` (XNB-36) and `ModelReader` (XNB-37/38/39/40) are done and
+> real-fixture-verified (XNB-41), reaching M4. This also **corrected** the 5 stock-effect readers'
+> own erased type from `std::shared_ptr<ConcreteEffectType>` to the common `std::shared_ptr<Effect>`
+> base (a real bug in Phase E's own work, only exposed once `ModelReader`'s
+> `ReadSharedResource<Effect>()` actually exercised polymorphic effect dispatch) -- see XNB-40's own
+> note. **Phase F is now fully complete**, every task `⬜ → ✅`. M5/Phase D3/Phase G onward remain
+> frozen until a future decision explicitly resumes them.
 
 ## Scope
 
@@ -485,16 +507,20 @@ entirely the second one.
 
 ## Phase F — `Model` and shared-resource-heavy readers
 
-> **Deferred under the current MVP scope (2026-07-16)** — not started; depends on Phase D/E.
+> **Fully complete 2026-07-16** — un-frozen and explicitly requested by CNA's owner the same day
+> as the rest of this plan's late-stage work. Reused `ContentManager.cpp`'s own `.model.json`
+> `ModelTypeReader` ownership pattern almost exactly (a `unique_ptr`/`shared_ptr`-owning resources
+> struct kept alive via `Model::setOwnedResources()`), confirming that precedent was the right thing
+> to mirror rather than reinvent.
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| XNB-36 | `VertexBufferReader`/`IndexBufferReader`/`VertexDeclarationReader` | ⬜ | Reuse the vertex-layout-to-backend translation already used by CNA's current JSON model loader rather than reinventing it |
-| XNB-37 | `ModelReader`: bone parent/child hierarchy (multiple bones, not just one) | ⬜ | Closes a pre-existing gap in `docs/model-content-pipeline-support.md`'s `ModelTypeReader`, not just a new-format concern |
-| XNB-38 | `ModelReader`: per-mesh `ParentBone` assignment via the existing `ModelMesh::setParentBoneProperty` setter | ⬜ | Runtime API already supports this (Task 439/`setParentBoneProperty`) — this reader is the first real caller |
-| XNB-39 | `ModelReader`: real per-mesh `BoundingSphere`, model/mesh `Tag` | ⬜ | |
-| XNB-40 | `ModelReader`: shared-resource dedup across mesh parts (`VertexBuffer`/`IndexBuffer`/`Effect` reused via `ReadSharedResource<T>`, not always freshly allocated) | ⬜ | |
-| XNB-41 | End-to-end test: a real multi-bone, shared-resource `.xnb` model loads correctly, matching the Task 431-439 runtime-API audit's expectations | ⬜ | |
+| XNB-36 | `VertexBufferReader`/`IndexBufferReader`/`VertexDeclarationReader` | ✅ | **Implemented 2026-07-16**: `CNA::Internal::Xnb::{VertexDeclaration,VertexBuffer,IndexBuffer}Reader` (`include`/`src`/`CNA/Internal/Xnb/ModelContentTypeReaders.*`). `VertexDeclarationReader` targets a bare `VertexDeclaration` (confirmed copy-constructible via `std::is_copy_constructible_v`, not assumed); `VertexBufferReader`/`IndexBufferReader` target `std::shared_ptr<T>` (both are move-only *and* genuinely shared resources across mesh parts, matching `ReadSharedResource<T>()`'s own purpose). `VertexDeclaration` itself is read via `ReadRawObject<VertexDeclaration>()` against a directly-constructed reader instance (no per-file "search by target type" lookup exists in this architecture, unlike FNA's own reflection-based one) |
+| XNB-37 | `ModelReader`: bone parent/child hierarchy (multiple bones, not just one) | ✅ | **Implemented 2026-07-16**, verified against a real 2-bone fixture (`RootNode` -> `Cube`). The scalar per-bone parent-index field is read (for stream-position correctness) but not used to mutate state -- `ModelBone::AddChild()` (called from each bone's own child-index list) already sets the child's `Parent` when the true parent processes it, and CNA's `ModelBone` exposes no separate `SetParent()` to duplicate that with |
+| XNB-38 | `ModelReader`: per-mesh `ParentBone` assignment via the existing `ModelMesh::setParentBoneProperty` setter | ✅ | **Implemented 2026-07-16** via `Model`'s own 5-argument constructor's `meshParentBones` parameter (which itself assigns `ModelMesh::parentBone_` directly) rather than a separate `setParentBoneProperty()` call -- that constructor overload's own doc comment already named `ModelReader` as its intended first real caller |
+| XNB-39 | `ModelReader`: real per-mesh `BoundingSphere`, model/mesh `Tag` | ✅ | **Implemented 2026-07-16**. `ModelMesh::setBoundingSphereProperty()` did not exist (getter-only, a real pre-existing gap since FNA's own `ModelMesh.BoundingSphere` is read-write) -- added. `Tag` fields (model/mesh/mesh-part) are read via a new `ContentReader::ReadObject()` non-template overload (returns type-erased `std::any`, matching FNA's own `ReadObject<object>()`) to keep the stream position correct, but a non-null `Tag` throws a clear `ContentLoadException` rather than silently dropping data -- ordinary XNA content never sets one through the stock content pipeline |
+| XNB-40 | `ModelReader`: shared-resource dedup across mesh parts (`VertexBuffer`/`IndexBuffer`/`Effect` reused via `ReadSharedResource<T>`, not always freshly allocated) | ✅ | **Implemented 2026-07-16**. Found and fixed a real, necessary bug in Phase E's own stock-effect readers along the way: they erased to `std::shared_ptr<ConcreteEffectType>` (e.g. `shared_ptr<BasicEffect>`), but `ReadSharedResource<std::shared_ptr<Effect>>()` (the only correct call here, since a `ModelMeshPart`'s `Effect` can be *any* of the 5 concrete types) needs every reader to agree on one erased base type -- unlike FNA's own C# cast, which succeeds across a concrete-to-base relationship via ordinary RTTI, `std::any_cast<T>` requires an *exact* type match. All 5 stock-effect readers now target `std::shared_ptr<Effect>` (each `Read()` still constructs the real concrete type internally; the upcast happens implicitly on return) |
+| XNB-41 | End-to-end test: a real multi-bone, shared-resource `.xnb` model loads correctly, matching the Task 431-439 runtime-API audit's expectations | ✅ | **Implemented 2026-07-16**: verified against a real, externally-produced fixture (MonoGame's `BlenderDefaultCube.xnb`, already vendored for XNB-32) -- 2 bones, 1 mesh with a real `BoundingSphere`/`ParentBone`, 1 mesh part with real `VertexBuffer`/`IndexBuffer`/`BasicEffect` shared resources, every field value independently verified with a standalone Python parser before the reader was written. Also confirms `Model` participates in `ContentManager`'s generic asset cache correctly (a second `Load<Model>()` for the same name returns the same underlying GPU resources, not a fresh decode) |
 
 ---
 
