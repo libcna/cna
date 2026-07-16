@@ -15,6 +15,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteFont.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Input/TextInputEXT.hpp"
 #include "Microsoft/Xna/Framework/PlayerIndex.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
@@ -130,32 +131,172 @@ TEST(GuideTest, IsScreenSaverEnabledGetSet) {
     SDL_QuitSubSystem(SDL_INIT_VIDEO);
 }
 
-TEST(GuideTest, BeginEndShowKeyboardInput) {
+// --- Guide keyboard input capture (Task 3.2) ---
+//
+// Unlike the message box, real typed text arrives through TextInputEXT::TextInput, which already
+// fires automatically via the engine's own event pump - no separate render/pump entry point is
+// needed. Tests simulate typing/Enter/Backspace directly via
+// Microsoft::Xna::Framework::Input::TextInputEXT::INTERNAL_OnTextInput, exactly as the plan calls
+// for. pendingKeyboardInput_ is process-wide static state, so every test guards cleanup via
+// KeyboardInputGuard to avoid stranding the single-pending-request guard (and any leftover
+// TextInputEXT subscription) for every later test in this binary.
+namespace {
+    struct KeyboardInputGuard {
+        ~KeyboardInputGuard() { Guide::ResetPendingKeyboardInputForTestingEXT(); }
+    };
+
+    void TypeUtf16(const std::u16string& text) {
+        for (char16_t c : text) {
+            Microsoft::Xna::Framework::Input::TextInputEXT::INTERNAL_OnTextInput(
+                static_cast<SharpRuntime::charcs>(c));
+        }
+    }
+
+    void PressEnter() {
+        Microsoft::Xna::Framework::Input::TextInputEXT::INTERNAL_OnTextInput(
+            static_cast<SharpRuntime::charcs>(u'\r'));
+    }
+}
+
+TEST(GuideTest, BeginShowKeyboardInputDoesNotCompleteSynchronously) {
+    KeyboardInputGuard guard;
     System::IAsyncResult* result = Guide::BeginShowKeyboardInput(
         PlayerIndex::One, "title", "description", "default", System::AsyncCallback{}, std::any{}
     );
     ASSERT_NE(nullptr, result);
-    EXPECT_TRUE(result->getIsCompletedProperty());
+    EXPECT_FALSE(result->getIsCompletedProperty());
     EXPECT_FALSE(result->getCompletedSynchronouslyProperty());
-    EXPECT_EQ("", Guide::EndShowKeyboardInput(result));
-    delete result;
-}
-
-TEST(GuideTest, BeginEndShowKeyboardInputWithPasswordModeOverload) {
-    System::IAsyncResult* result = Guide::BeginShowKeyboardInput(
-        PlayerIndex::Two, "title", "description", "default", System::AsyncCallback{}, std::any{}, true
-    );
-    ASSERT_NE(nullptr, result);
+    PressEnter();
     EXPECT_TRUE(result->getIsCompletedProperty());
-    EXPECT_EQ("", Guide::EndShowKeyboardInput(result));
     delete result;
 }
 
-// audit_net.md High finding: GuideAction stored its AsyncCallback but never invoked it, despite
-// this action already completing synchronously (getIsCompletedProperty() == true) right after
-// BeginShowKeyboardInput returns. Confirms the callback now fires exactly once with the correct
-// IAsyncResult identity and AsyncState.
-TEST(GuideTest, BeginShowKeyboardInputInvokesCallbackExactlyOnceWithCorrectIdentity) {
+TEST(GuideTest, TypedTextIsReturnedExactlyAfterEnter) {
+    KeyboardInputGuard guard;
+    System::IAsyncResult* result = Guide::BeginShowKeyboardInput(
+        PlayerIndex::One, "title", "description", "", System::AsyncCallback{}, std::any{}
+    );
+    TypeUtf16(u"Hello");
+    EXPECT_FALSE(result->getIsCompletedProperty());
+    PressEnter();
+    ASSERT_TRUE(result->getIsCompletedProperty());
+    EXPECT_EQ(Guide::EndShowKeyboardInput(result), "Hello");
+    delete result;
+}
+
+TEST(GuideTest, PasswordModeOverloadCompletesTheSameWayAsNonPasswordOverload) {
+    KeyboardInputGuard guard;
+    System::IAsyncResult* result = Guide::BeginShowKeyboardInput(
+        PlayerIndex::Two, "title", "description", "", System::AsyncCallback{}, std::any{}, true
+    );
+    TypeUtf16(u"secret");
+    PressEnter();
+    ASSERT_TRUE(result->getIsCompletedProperty());
+    EXPECT_EQ(Guide::EndShowKeyboardInput(result), "secret");
+    delete result;
+}
+
+// Plan checklist: "confirm defaultText pre-seeds correctly" / "a user who presses Enter
+// immediately gets the default, matching real XNA semantics."
+TEST(GuideTest, DefaultTextPreSeedsAndIsReturnedIfEnterPressedImmediately) {
+    KeyboardInputGuard guard;
+    System::IAsyncResult* result = Guide::BeginShowKeyboardInput(
+        PlayerIndex::One, "title", "description", "default text", System::AsyncCallback{}, std::any{}
+    );
+    PressEnter();
+    EXPECT_EQ(Guide::EndShowKeyboardInput(result), "default text");
+    delete result;
+}
+
+TEST(GuideTest, DefaultTextIsEditableBeforeConfirming) {
+    KeyboardInputGuard guard;
+    System::IAsyncResult* result = Guide::BeginShowKeyboardInput(
+        PlayerIndex::One, "title", "description", "abc", System::AsyncCallback{}, std::any{}
+    );
+    TypeUtf16(u"def");
+    PressEnter();
+    EXPECT_EQ(Guide::EndShowKeyboardInput(result), "abcdef");
+    delete result;
+}
+
+// Plan checklist: "confirm a surrogate pair (an emoji) round-trips correctly."
+TEST(GuideTest, SurrogatePairEmojiRoundTripsCorrectly) {
+    KeyboardInputGuard guard;
+    System::IAsyncResult* result = Guide::BeginShowKeyboardInput(
+        PlayerIndex::One, "title", "description", "", System::AsyncCallback{}, std::any{}
+    );
+    // U+1F600 GRINNING FACE = surrogate pair D83D DE00, delivered as two separate TextInput calls
+    // exactly as real typing would (SDL emits a code point above U+FFFF as high-then-low
+    // surrogate, per TextInputEXT::TextInput's own documented UTF-16 contract).
+    TypeUtf16(u"Hi \U0001F600!");
+    PressEnter();
+    EXPECT_EQ(Guide::EndShowKeyboardInput(result), "Hi \xF0\x9F\x98\x80!");
+    delete result;
+}
+
+// Backspace after an emoji must delete the whole code point (both surrogate halves), not just
+// the low surrogate.
+TEST(GuideTest, BackspaceAfterEmojiRemovesTheWholeSurrogatePair) {
+    KeyboardInputGuard guard;
+    System::IAsyncResult* result = Guide::BeginShowKeyboardInput(
+        PlayerIndex::One, "title", "description", "", System::AsyncCallback{}, std::any{}
+    );
+    TypeUtf16(u"a\U0001F600");
+    Microsoft::Xna::Framework::Input::TextInputEXT::INTERNAL_OnTextInput(static_cast<SharpRuntime::charcs>(u'\b'));
+    PressEnter();
+    EXPECT_EQ(Guide::EndShowKeyboardInput(result), "a");
+    delete result;
+}
+
+TEST(GuideTest, BackspaceRemovesLastTypedCharacter) {
+    KeyboardInputGuard guard;
+    System::IAsyncResult* result = Guide::BeginShowKeyboardInput(
+        PlayerIndex::One, "title", "description", "", System::AsyncCallback{}, std::any{}
+    );
+    TypeUtf16(u"Hellp");
+    Microsoft::Xna::Framework::Input::TextInputEXT::INTERNAL_OnTextInput(static_cast<SharpRuntime::charcs>(u'\b'));
+    TypeUtf16(u"o");
+    PressEnter();
+    EXPECT_EQ(Guide::EndShowKeyboardInput(result), "Hello");
+    delete result;
+}
+
+TEST(GuideTest, EndShowKeyboardInputThrowsIfCalledTooEarly) {
+    KeyboardInputGuard guard;
+    System::IAsyncResult* result = Guide::BeginShowKeyboardInput(
+        PlayerIndex::One, "title", "description", "", System::AsyncCallback{}, std::any{}
+    );
+    TypeUtf16(u"partial");
+    EXPECT_THROW(Guide::EndShowKeyboardInput(result), System::InvalidOperationException);
+    PressEnter();
+    EXPECT_NO_THROW(Guide::EndShowKeyboardInput(result));
+    delete result;
+}
+
+TEST(GuideTest, EndShowKeyboardInputThrowsForMismatchedResult) {
+    EXPECT_THROW(Guide::EndShowKeyboardInput(nullptr), System::ArgumentException);
+}
+
+TEST(GuideTest, BeginShowKeyboardInputThrowsWhileAnotherIsPending) {
+    KeyboardInputGuard guard;
+    System::IAsyncResult* first = Guide::BeginShowKeyboardInput(
+        PlayerIndex::One, "title", "description", "", System::AsyncCallback{}, std::any{}
+    );
+    EXPECT_THROW(
+        Guide::BeginShowKeyboardInput(
+            PlayerIndex::Two, "title2", "description2", "", System::AsyncCallback{}, std::any{}
+        ),
+        System::InvalidOperationException
+    );
+    PressEnter();
+    delete first;
+}
+
+// audit_net.md High finding: GuideAction stored its AsyncCallback but never invoked it. Confirms
+// the callback now fires exactly once, on Enter (not at Begin*, since this action no longer
+// completes synchronously), with the correct IAsyncResult identity and AsyncState.
+TEST(GuideTest, BeginShowKeyboardInputInvokesCallbackExactlyOnceOnEnterWithCorrectIdentity) {
+    KeyboardInputGuard guard;
     int callCount = 0;
     System::IAsyncResult* observedResult = nullptr;
     std::any state = 7;
@@ -168,6 +309,11 @@ TEST(GuideTest, BeginShowKeyboardInputInvokesCallbackExactlyOnceWithCorrectIdent
         },
         state
     );
+
+    EXPECT_EQ(callCount, 0);
+    TypeUtf16(u"x");
+    EXPECT_EQ(callCount, 0);
+    PressEnter();
 
     EXPECT_EQ(callCount, 1);
     EXPECT_EQ(observedResult, result);

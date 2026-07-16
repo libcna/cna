@@ -382,51 +382,88 @@ codebase to reuse — this needed a small new one.
   failures); the previously-crashing render test re-run 3x in isolation after the whitePixel fix,
   deterministic pass every time; `cna_demo_guide_overlay_console --auto` runs clean.
 
-### Task 3.2 — Guide.BeginShowKeyboardInput: real captured text
+### Task 3.2 — Guide.BeginShowKeyboardInput: real captured text ✅ complete
 
-Current state (`Guide.cpp:81-113`): both overloads call `TextInputEXT::StartTextInput()`, then
+Original state (`Guide.cpp:81-113`): both overloads called `TextInputEXT::StartTextInput()`, then
 **immediately** set `isCompleted_ = true` on the returned `GuideAction` — a fully synchronous
-fake-async completion, matching `AvatarDescription::BeginGetFromGamer`'s documented pattern
-(`AvatarDescription.hpp:97`). `EndShowKeyboardInput` (`Guide.cpp:107-110`) calls
-`TextInputEXT::StopTextInput()` and unconditionally returns `""` — the callback is invoked
-correctly (per `GuideAction`'s normal machinery) but the captured text itself is always empty,
-regardless of what the user actually types.
+fake-async completion. `EndShowKeyboardInput` called `TextInputEXT::StopTextInput()` and
+unconditionally returned `""` regardless of what the user actually typed.
 
-`TextInputEXT` (`include/Microsoft/Xna/Framework/Input/TextInputEXT.hpp`) already has everything
-needed: `TextInput` is a `std::function<void(charcs)>` fired per UTF-16 code unit as the user
-types (already SDL-backed, already used elsewhere).
+**Key discovery during investigation, which simplified the "architecture problem" below**: unlike
+the message box (Task 3.1), this needed **no separate pump/render entry point at all**. Reading
+`src/CNA/Internal/Input/SdlInputBridge.cpp` (`handle_text_input_key_down`, `kTextInputCharacters`)
+showed FNA/CNA's own SDL bridge already synthesizes Enter as a `TextInputEXT::TextInput` code unit
+(char code 13, since SDL itself never delivers a real `TEXT_INPUT` event for control keys) — along
+with Backspace (8), Tab (9), Home (2), End (3), Delete (127), and Ctrl+V-paste (22). Since
+`TextInputEXT::TextInput` already fires automatically through the engine's own event pump
+(`Game::PollEvents()`, per that class's own threading doc), a plain subscription for the duration
+of one pending request is sufficient — no `Keyboard::GetState()`/`Keys::Enter` polling, and no new
+"pump this every frame" API, satisfying "do not invent a second, parallel input system" via the
+simplest possible route.
 
-**Architecture problem to solve**: real typed text can't be known at `Begin*` call time — it
-accumulates over an unknown number of frames until the user finishes typing. The current
-"complete synchronously at Begin" model is fundamentally incompatible with real capture. This
-needs a real state machine:
-
-- [ ] Add an internal (non-`Begin*`-signature-visible) accumulation buffer that subscribes to
-  `TextInputEXT::TextInput` for the duration between `BeginShowKeyboardInput` and completion,
-  appending each code unit (handling the documented UTF-16 surrogate-pair case, i.e. don't split
-  surrogate pairs when converting to the returned `std::string`).
-- [ ] Define a completion trigger — real XNA/Xbox 360 keyboard input completes when the user
-  presses Enter/confirms on the virtual keyboard. Given this is a native SDL text-input session,
-  the most faithful analog is completing on an Enter keypress. Needs a hook into CNA's existing
-  keyboard-state or SDL event pump — investigate whether `Keyboard`/`Keys::Enter` polling from
-  inside `TextInputEXT` machinery (or a new small internal poll called from `Game.Update`/`Draw`)
-  is the right layer; do not invent a second, parallel input system.
-  `defaultText` (already a parameter) pre-seeds the buffer so a user who presses Enter immediately
-  gets the default, matching real XNA semantics.
-- [ ] `isCompleted_` only flips to `true` once Enter is detected (or, for the `usePasswordMode`
-  overload, same trigger — password mode only affects on-screen masking, not completion timing,
-  matching real XNA).
-- [ ] `EndShowKeyboardInput` returns the actual accumulated string instead of `""`; still calls
-  `StopTextInput()`.
-- [ ] Add tests: simulate `TextInputEXT::TextInput` firing several code units then an Enter
-  signal, confirm `EndShowKeyboardInput` returns exactly what was typed; confirm `defaultText`
-  pre-seeds correctly; confirm a surrogate pair (an emoji) round-trips correctly, matching the
-  existing UTF-16 documentation on `TextInputEXT`; confirm `IsCompleted` stays false until Enter;
-  confirm calling `End*` before completion throws (matching the Begin/End-pair convention used
-  elsewhere — check what the existing pattern throws, e.g. `InvalidOperationException`).
-- [ ] Update any demo/doc that assumed the old always-empty-string behavior.
+- [x] Added an internal accumulation buffer: `GuideKeyboardInputAction : public GuideAction`
+  (mirrors `GuideMessageBoxAction`'s own pattern) holds a `std::u16string Buffer` (raw UTF-16 code
+  units, so surrogate pairs are never split) and a `System::MulticastAction<charcs>::Token`
+  identifying its `TextInputEXT::TextInput` subscription (added via `Add()`, removed via
+  `Remove(token)` on completion — the existing multicast delegate's own designed-for-this
+  mechanism, not a new one). `defaultText` (UTF-8) is decoded to UTF-16 and pre-seeds `Buffer`
+  before subscribing.
+- [x] Completion trigger: the subscribed handler checks for `\r`/`\n` and calls
+  `CompletePendingKeyboardInput()` (removes the subscription, calls `StopTextInput()` immediately
+  — not deferred to `EndShowKeyboardInput`, so real OS-level capture stops the instant Enter is
+  pressed — sets `isCompleted_`, invokes the callback with the same reentrancy-safe
+  capture-before-invoke shape as `CompletePendingMessageBox`/`NetworkSession`'s Phase 13 fix).
+  Backspace (`\b`) removes the last code unit, respecting surrogate pairs (removing a low surrogate
+  also removes its preceding high surrogate, so one Backspace after an emoji deletes the whole
+  code point). The other five synthesized control codes (Home/End/Tab/Delete/Ctrl+V) are
+  deliberately ignored — cursor repositioning and clipboard paste are out of scope for this
+  minimal, append/backspace-at-end capture model; appending their raw control-character codes as
+  literal text would be worse than ignoring them. Both overloads share identical completion
+  timing; `usePasswordMode` is stored but has no behavioral effect (there is no on-screen keyboard
+  widget rendered by this platform to mask - masking is inherently out of scope until Phase 3.1's
+  overlay approach is extended to keyboard input, if ever).
+- [x] A second concurrent `BeginShowKeyboardInput` while one is pending throws
+  `InvalidOperationException` — genuinely required, not just a consistency choice: SDL only
+  supports one global text-input session, so two overlapping requests would both subscribe to the
+  same `TextInputEXT::TextInput` stream and silently corrupt each other's buffers.
+- [x] `EndShowKeyboardInput` returns the actual accumulated string (UTF-16 buffer re-encoded to
+  UTF-8, correctly reassembling surrogate pairs into one 4-byte sequence rather than encoding each
+  half independently); throws `ArgumentException` for a foreign/null `result` and
+  `InvalidOperationException` if called before Enter.
+- [x] UTF-8↔UTF-16 conversion: no existing sharp-runtime utility fit (`UnicodeEncoding` is
+  byte-array-oriented, not `char16_t`-code-unit-oriented) — added small self-contained
+  `DecodeUtf8ToUtf16`/`EncodeUtf16ToUtf8` helpers in `Guide.cpp`, explicitly modeled on and
+  justified by `SdlInputBridge.cpp`'s own precedent (`decode_utf8_to_utf16`, whose comment already
+  documents the identical reasoning: "internal ... plumbing" tied directly to `TextInputEXT`'s
+  `charcs` stream, not a generalizable `.NET Encoding` operation) rather than force-fitting through
+  sharp-runtime.
+- [x] Added `Guide::ResetPendingKeyboardInputForTestingEXT()` (test-only): `pendingKeyboardInput_`
+  is process-wide static state, same test-isolation hazard as `pendingMessageBox_` in Task 3.1.
+- [x] Added 12 tests to `GamerServicesServiceTests.cpp` (replacing the 3 that assumed the old
+  always-synchronous/always-empty behavior): does not complete synchronously; typed text returned
+  exactly after Enter; password-mode overload completes identically; `defaultText` pre-seeds and
+  is returned verbatim if Enter is pressed immediately; `defaultText` is editable (typed text
+  appends after it) before confirming; a surrogate-pair emoji (U+1F600) round-trips correctly
+  through `TextInputEXT::INTERNAL_OnTextInput`'s existing high/low-surrogate two-call contract;
+  Backspace after an emoji removes the whole surrogate pair, not just half; plain Backspace removes
+  the last typed character; `EndShowKeyboardInput` throws both too-early and for a foreign/null
+  result; a second concurrent `BeginShowKeyboardInput` throws; the callback fires exactly once, on
+  Enter (not at `Begin*`), with correct `IAsyncResult`/`AsyncState` identity. Tests simulate typing
+  directly via `TextInputEXT::INTERNAL_OnTextInput` (an existing public NOXNA test/simulation hook
+  on `TextInputEXT` itself — no new Guide-level "simulate typing" API was needed).
+- [x] Updated `examples/demo_guide_overlay_console`'s `MenuKeyboardInput()`: this demo is
+  deliberately console-only/no-window (same constraint as Task 3.1's message box), so it drives
+  the same `TextInputEXT::INTERNAL_OnTextInput` event stream a real keystroke would produce
+  (typing `" overridden"` then Enter) rather than real SDL input, and confirms
+  `EndShowKeyboardInput` now returns `"default text overridden"` instead of always `""`.
+- [x] **Verified**: 32/32 `GuideTest` tests pass (12 new keyboard tests + the 20 from Task 3.1 and
+  earlier); full suite 4669/4671 (2 expected skips, 0 failures); `cna_demo_guide_overlay_console
+  --auto` runs clean and prints the expected accumulated text.
 
 ---
+
+**Phase 3 complete — 2/2.** Both Guide overlay tasks (real message-box, real keyboard capture) are
+implemented, tested, and verified.
 
 ## Phase 4 — Achievements/leaderboards: disk persistence
 

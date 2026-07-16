@@ -106,14 +106,22 @@ namespace Microsoft::Xna::Framework::GamerServices
         /**
          * @brief Begins showing the on-screen keyboard for text input.
          *
+         * Task 3.2: real captured text - accumulates each UTF-16 code unit
+         * Microsoft::Xna::Framework::Input::TextInputEXT::TextInput fires (surrogate-pair safe)
+         * into defaultText, and completes on Enter, matching real XNA/Xbox 360 on-screen keyboard
+         * semantics. Does **not** complete synchronously, unlike this class's other Begin* methods.
+         *
          * @param player      The player requesting input.
          * @param title       The input dialog title.
          * @param description The input dialog description.
-         * @param defaultText The initial text value.
+         * @param defaultText The initial text value; pre-seeds the buffer, so pressing Enter
+         *        immediately returns this text unchanged.
          * @param callback    Invoked when the operation completes.
          * @param state       User-defined state passed through to the callback.
-         * @return An IAsyncResult already marked complete; caller owns it and must delete it
+         * @return An IAsyncResult that completes on Enter; caller owns it and must delete it
          *         after EndShowKeyboardInput.
+         * @throws System::InvalidOperationException if a keyboard input request is already
+         *         pending.
          */
         [[nodiscard]] static System::IAsyncResult* BeginShowKeyboardInput(
             Microsoft::Xna::Framework::PlayerIndex player,
@@ -127,15 +135,21 @@ namespace Microsoft::Xna::Framework::GamerServices
         /**
          * @brief Begins showing the on-screen keyboard for text input.
          *
+         * See the non-password overload above. usePasswordMode only affects on-screen masking
+         * (out of scope - no on-screen keyboard widget is rendered by this platform), not
+         * completion timing, matching real XNA: both overloads complete on Enter identically.
+         *
          * @param player          The player requesting input.
          * @param title           The input dialog title.
          * @param description     The input dialog description.
-         * @param defaultText     The initial text value.
+         * @param defaultText     The initial text value; pre-seeds the buffer.
          * @param callback        Invoked when the operation completes.
          * @param state           User-defined state passed through to the callback.
-         * @param usePasswordMode Whether to mask entered characters.
-         * @return An IAsyncResult already marked complete; caller owns it and must delete it
+         * @param usePasswordMode Whether entered characters would be masked on-screen.
+         * @return An IAsyncResult that completes on Enter; caller owns it and must delete it
          *         after EndShowKeyboardInput.
+         * @throws System::InvalidOperationException if a keyboard input request is already
+         *         pending.
          */
         [[nodiscard]] static System::IAsyncResult* BeginShowKeyboardInput(
             Microsoft::Xna::Framework::PlayerIndex player,
@@ -151,9 +165,24 @@ namespace Microsoft::Xna::Framework::GamerServices
          * @brief Completes an asynchronous BeginShowKeyboardInput request.
          *
          * @param result The result returned by BeginShowKeyboardInput.
-         * @return Always an empty string in this platform's implementation.
+         * @return The text the user actually typed (or defaultText, if Enter was pressed
+         *         immediately with no further input).
+         * @throws System::ArgumentException if result was not returned by BeginShowKeyboardInput.
+         * @throws System::InvalidOperationException if the operation has not completed yet (the
+         *         user has not pressed Enter).
          */
         [[nodiscard]] static std::string EndShowKeyboardInput(System::IAsyncResult* result);
+
+        /**
+         * @brief NOXNA/test-only: clears any currently-pending keyboard input request without
+         * completing it or invoking its callback, and unsubscribes from
+         * Microsoft::Xna::Framework::Input::TextInputEXT::TextInput - so a test/demo that creates
+         * one and doesn't resolve it cannot strand the single-pending-request guard, or leave a
+         * dangling subscriber reacting to unrelated future TextInputEXT activity, for every later
+         * test in the same process. Does not delete the pending action object - the caller who
+         * received it from BeginShowKeyboardInput still owns and must delete it.
+         */
+        NOXNA static void ResetPendingKeyboardInputForTestingEXT();
 
         /**
          * @brief Begins showing a system message box.

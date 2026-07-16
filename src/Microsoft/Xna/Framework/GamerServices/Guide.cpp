@@ -123,6 +123,173 @@ namespace Microsoft::Xna::Framework::GamerServices
             }
         }
 
+        // Task 3.2: mirrors CNA::Internal::Input's own file-local decode_utf8_to_utf16 in
+        // SdlInputBridge.cpp (same reasoning documented there: UTF-16-code-unit granularity,
+        // which sharp-runtime's byte-oriented Encoding classes don't directly expose - this is
+        // internal Guide plumbing tied directly to TextInputEXT's charcs stream, the same
+        // category of file-local translation helper). Malformed sequences substitute U+FFFD,
+        // matching Encoding.UTF8's own behavior (same choice SdlInputBridge.cpp makes).
+        std::u16string DecodeUtf8ToUtf16(const std::string& text)
+        {
+            std::u16string result;
+            const auto* s = reinterpret_cast<const unsigned char*>(text.c_str());
+            while (*s != 0)
+            {
+                const unsigned char b0 = s[0];
+                std::uint32_t cp;
+                int len;
+                std::uint32_t minCp;
+                if (b0 < 0x80)                { cp = b0;        len = 1; minCp = 0x0; }
+                else if ((b0 & 0xE0) == 0xC0) { cp = b0 & 0x1F; len = 2; minCp = 0x80; }
+                else if ((b0 & 0xF0) == 0xE0) { cp = b0 & 0x0F; len = 3; minCp = 0x800; }
+                else if ((b0 & 0xF8) == 0xF0) { cp = b0 & 0x07; len = 4; minCp = 0x10000; }
+                else
+                {
+                    result.push_back(u'�');
+                    ++s;
+                    continue;
+                }
+
+                int i = 1;
+                for (; i < len; ++i)
+                {
+                    if ((s[i] & 0xC0) != 0x80) break;
+                    cp = (cp << 6) | (s[i] & 0x3F);
+                }
+                if (i != len)
+                {
+                    result.push_back(u'�');
+                    s += i;
+                    continue;
+                }
+                s += len;
+
+                if (cp < minCp || (cp >= 0xD800 && cp <= 0xDFFF) || cp > 0x10FFFF)
+                {
+                    result.push_back(u'�');
+                    continue;
+                }
+
+                if (cp <= 0xFFFF)
+                {
+                    result.push_back(static_cast<char16_t>(cp));
+                }
+                else
+                {
+                    cp -= 0x10000;
+                    result.push_back(static_cast<char16_t>(0xD800 + (cp >> 10)));
+                    result.push_back(static_cast<char16_t>(0xDC00 + (cp & 0x3FF)));
+                }
+            }
+            return result;
+        }
+
+        // Inverse of DecodeUtf8ToUtf16 above - reassembles a well-formed surrogate pair into one
+        // 4-byte UTF-8 sequence rather than encoding each half independently.
+        std::string EncodeUtf16ToUtf8(const std::u16string& text)
+        {
+            std::string result;
+            for (std::size_t i = 0; i < text.size();)
+            {
+                std::uint32_t cp = text[i];
+                if (cp >= 0xD800 && cp <= 0xDBFF && i + 1 < text.size()
+                    && text[i + 1] >= 0xDC00 && text[i + 1] <= 0xDFFF)
+                {
+                    cp = 0x10000 + ((cp - 0xD800) << 10) + (static_cast<std::uint32_t>(text[i + 1]) - 0xDC00);
+                    i += 2;
+                }
+                else
+                {
+                    ++i;
+                }
+
+                if (cp <= 0x7F)
+                {
+                    result.push_back(static_cast<char>(cp));
+                }
+                else if (cp <= 0x7FF)
+                {
+                    result.push_back(static_cast<char>(0xC0 | (cp >> 6)));
+                    result.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
+                }
+                else if (cp <= 0xFFFF)
+                {
+                    result.push_back(static_cast<char>(0xE0 | (cp >> 12)));
+                    result.push_back(static_cast<char>(0x80 | ((cp >> 6) & 0x3F)));
+                    result.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
+                }
+                else
+                {
+                    result.push_back(static_cast<char>(0xF0 | (cp >> 18)));
+                    result.push_back(static_cast<char>(0x80 | ((cp >> 12) & 0x3F)));
+                    result.push_back(static_cast<char>(0x80 | ((cp >> 6) & 0x3F)));
+                    result.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
+                }
+            }
+            return result;
+        }
+
+        // Task 3.2: BeginShowKeyboardInput's completion can't be known synchronously - unlike
+        // GuideAction's other use (the message box, which needs an explicit per-frame render/pump
+        // call since Guide has no automatic hook into a game's draw loop), real typed text arrives
+        // through TextInputEXT::TextInput, which already fires automatically via the engine's own
+        // event pump (Game::PollEvents(), per that class's own threading note) - so this needs no
+        // separate pump entry point of its own, just a subscription for as long as one request is
+        // pending.
+        class GuideKeyboardInputAction : public GuideAction
+        {
+        public:
+            GuideKeyboardInputAction(std::any state, System::AsyncCallback callback, bool usePasswordMode)
+                : GuideAction(std::move(state), std::move(callback))
+                , UsePasswordMode(usePasswordMode)
+            {
+            }
+
+            const bool UsePasswordMode;
+            std::u16string Buffer;
+            System::MulticastAction<Input::charcs>::Token SubscriptionToken =
+                System::MulticastAction<Input::charcs>::InvalidToken;
+        };
+
+        GuideKeyboardInputAction* pendingKeyboardInput_ = nullptr;
+
+        // Removes the last-typed code unit for Backspace, respecting surrogate pairs (removing a
+        // low surrogate also removes its preceding high surrogate, so a single Backspace after
+        // typing an emoji deletes the whole code point, not just half of it).
+        void RemoveLastCodeUnit(std::u16string& buffer)
+        {
+            if (buffer.empty())
+            {
+                return;
+            }
+            const char16_t last = buffer.back();
+            buffer.pop_back();
+            if (last >= 0xDC00 && last <= 0xDFFF && !buffer.empty())
+            {
+                const char16_t prev = buffer.back();
+                if (prev >= 0xD800 && prev <= 0xDBFF)
+                {
+                    buffer.pop_back();
+                }
+            }
+        }
+
+        // Same reentrancy-safe shape as CompletePendingMessageBox: captured and cleared *before*
+        // invoking the callback, and unsubscribes from TextInputEXT::TextInput here (not in
+        // EndShowKeyboardInput) so real OS-level text capture stops the instant Enter is pressed,
+        // not whenever the game later gets around to calling End*.
+        void CompletePendingKeyboardInput()
+        {
+            GuideKeyboardInputAction* action = pendingKeyboardInput_;
+            Input::TextInputEXT::TextInput.Remove(action->SubscriptionToken);
+            Microsoft::Xna::Framework::Input::TextInputEXT::StopTextInput();
+            pendingKeyboardInput_ = nullptr;
+            action->setIsCompletedProperty(true);
+            if (action->Callback)
+            {
+                action->Callback(*action);
+            }
+        }
     }
 
     bool Guide::isTrialMode_ = false;
@@ -176,28 +343,82 @@ namespace Microsoft::Xna::Framework::GamerServices
         Microsoft::Xna::Framework::PlayerIndex /*player*/,
         const std::string& /*title*/,
         const std::string& /*description*/,
-        const std::string& /*defaultText*/,
+        const std::string& defaultText,
         System::AsyncCallback callback,
         std::any state,
-        bool /*usePasswordMode*/
+        bool usePasswordMode
     ) {
-        Microsoft::Xna::Framework::Input::TextInputEXT::StartTextInput();
-        auto* action = new GuideAction(std::move(state), std::move(callback));
-        action->setIsCompletedProperty(true);
-        // audit_net.md High finding: the callback used to only be stored, never invoked, despite
-        // this action already completing synchronously right above - matching
-        // AvatarDescription::BeginGetFromGamer's existing invoke-after-complete pattern.
-        if (action->Callback)
+        if (pendingKeyboardInput_ != nullptr)
         {
-            action->Callback(*action);
+            throw System::InvalidOperationException("A keyboard input request is already pending.");
         }
+
+        Microsoft::Xna::Framework::Input::TextInputEXT::StartTextInput();
+
+        auto* action = new GuideKeyboardInputAction(std::move(state), std::move(callback), usePasswordMode);
+        action->Buffer = DecodeUtf8ToUtf16(defaultText);
+        pendingKeyboardInput_ = action;
+
+        action->SubscriptionToken = Microsoft::Xna::Framework::Input::TextInputEXT::TextInput.Add(
+            [](Input::charcs c)
+            {
+                if (pendingKeyboardInput_ == nullptr)
+                {
+                    return;
+                }
+                // Enter/Return - FNA/CNA's SDL bridge synthesizes this as char code 13 on
+                // KEY_DOWN (SDL doesn't deliver a real TEXT_INPUT event for it) - the most
+                // faithful analog to a real Xbox 360 on-screen keyboard's "confirm" action.
+                if (c == u'\r' || c == u'\n')
+                {
+                    CompletePendingKeyboardInput();
+                    return;
+                }
+                // Backspace - synthesized the same way (char code 8). Needed for genuinely usable
+                // real capture (fixing a typo before confirming); everything else the SDL bridge
+                // can synthesize this way (Home=2, End=3, Tab=9, Delete=127, Ctrl+V paste=22) is
+                // deliberately not handled - cursor repositioning/clipboard paste are out of scope
+                // for this minimal, append/backspace-at-end capture model, and appending their
+                // raw control-character codes as literal text would be worse than ignoring them.
+                if (c == u'\b')
+                {
+                    RemoveLastCodeUnit(pendingKeyboardInput_->Buffer);
+                    return;
+                }
+                if (c == 0x02 || c == 0x03 || c == 0x09 || c == 0x16 || c == 0x7F)
+                {
+                    return;
+                }
+                pendingKeyboardInput_->Buffer.push_back(c);
+            }
+        );
         return action;
     }
 
-    std::string Guide::EndShowKeyboardInput(System::IAsyncResult* /*result*/)
+    std::string Guide::EndShowKeyboardInput(System::IAsyncResult* result)
     {
-        Microsoft::Xna::Framework::Input::TextInputEXT::StopTextInput();
-        return "";
+        auto* action = dynamic_cast<GuideKeyboardInputAction*>(result);
+        if (action == nullptr)
+        {
+            throw System::ArgumentException("result was not returned by a call to BeginShowKeyboardInput.", "result");
+        }
+        if (!action->getIsCompletedProperty())
+        {
+            throw System::InvalidOperationException(
+                "The keyboard input has not been confirmed yet - it completes when the user "
+                "presses Enter (or via a test's simulated TextInputEXT::INTERNAL_OnTextInput(u'\\r'))."
+            );
+        }
+        return EncodeUtf16ToUtf8(action->Buffer);
+    }
+
+    void Guide::ResetPendingKeyboardInputForTestingEXT()
+    {
+        if (pendingKeyboardInput_ != nullptr)
+        {
+            Microsoft::Xna::Framework::Input::TextInputEXT::TextInput.Remove(pendingKeyboardInput_->SubscriptionToken);
+            pendingKeyboardInput_ = nullptr;
+        }
     }
 
     System::IAsyncResult* Guide::BeginShowMessageBox(
