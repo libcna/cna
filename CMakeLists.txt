@@ -2004,6 +2004,34 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 947: CartoonEffect.Fx's Lambert technique.
+        cna_easygl_test(cna_test_easygl_cartooneffect_lambert_shader
+                        examples/easygl_cartooneffect_lambert_shader_test.cpp)
+        add_test(NAME EasyGL_CartoonEffect_Lambert_Shader
+                 COMMAND cna_test_easygl_cartooneffect_lambert_shader)
+        set_tests_properties(EasyGL_CartoonEffect_Lambert_Shader PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 947: CartoonEffect.Fx's Toon technique.
+        cna_easygl_test(cna_test_easygl_cartooneffect_toon_shader
+                        examples/easygl_cartooneffect_toon_shader_test.cpp)
+        add_test(NAME EasyGL_CartoonEffect_Toon_Shader
+                 COMMAND cna_test_easygl_cartooneffect_toon_shader)
+        set_tests_properties(EasyGL_CartoonEffect_Toon_Shader PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 947: CartoonEffect.Fx's NormalDepth technique -- with this, all 3 of
+        # CartoonEffect.Fx's techniques are ported.
+        cna_easygl_test(cna_test_easygl_cartooneffect_normaldepth_shader
+                        examples/easygl_cartooneffect_normaldepth_shader_test.cpp)
+        add_test(NAME EasyGL_CartoonEffect_NormalDepth_Shader
+                 COMMAND cna_test_easygl_cartooneffect_normaldepth_shader)
+        set_tests_properties(EasyGL_CartoonEffect_NormalDepth_Shader PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 133: DualTextureEffect — magenta×yellow→red pixel readback
         cna_easygl_test(cna_test_easygl_dual_texture
                         examples/easygl_dual_texture_test.cpp)
