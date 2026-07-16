@@ -1,9 +1,11 @@
 // plan_dx9.md Phase D9-A (D9-A3): scene-driven CNA renderer -- the "CNA" half of the D9-A4 diff
 // harness. Reads the SAME ".scene" file format tools/xna-oracle/Oracle.cs reads (see that file's
 // own header comment) and renders it through CNA's real public Game/GraphicsDeviceManager/
-// GraphicsDevice/BasicEffect API on whichever backend this binary was built against
-// (CNA_GRAPHICS_BACKEND=D3D9 in this branch), saving the result as a PNG. Do not hand-transcribe
-// scene data here -- every scene lives in tools/xna-oracle/scenes/*.scene, or the harness drifts.
+// GraphicsDevice/BasicEffect API on whichever backend this binary was built against (originally
+// CNA_GRAPHICS_BACKEND=D3D9; D9-A6 additionally builds this SAME file, unmodified in substance,
+// under EASYGL -- see OracleBackendName() below), saving the result as a PNG. Do not
+// hand-transcribe scene data here -- every scene lives in tools/xna-oracle/scenes/*.scene, or the
+// harness drifts.
 //
 // Usage: cna_oracle_render.exe <scene-file> <output-png>
 //
@@ -79,6 +81,37 @@ namespace
         if (start == std::string::npos) return "";
         const std::size_t end = s.find_last_not_of(" \t\r\n");
         return s.substr(start, end - start + 1);
+    }
+
+    // D9-A6: the "backend=..." tag in this tool's own stdout line below was hardcoded to "D3D9"
+    // (D9-A3's original, single-backend assumption) -- now derived from whichever of CMakeLists.txt's
+    // own add_compile_definitions(CNA_BACKEND_*) macros is actually active, so the same stdout line
+    // stays accurate as this file is built against additional backends (EASYGL first, D9-A6).
+    const char* OracleBackendName()
+    {
+#if defined(CNA_BACKEND_D3D9)
+        return "D3D9";
+#elif defined(CNA_BACKEND_EASYGL)
+        return "EASYGL";
+#elif defined(CNA_BACKEND_VULKAN)
+        return "VULKAN";
+#elif defined(CNA_BACKEND_D3D11)
+        return "D3D11";
+#elif defined(CNA_BACKEND_D3D12)
+        return "D3D12";
+#elif defined(CNA_BACKEND_BGFX)
+        return "BGFX";
+#elif defined(CNA_BACKEND_WEBGPU)
+        return "WEBGPU";
+#elif defined(CNA_BACKEND_SOFTWARE)
+        return "SOFTWARE";
+#elif defined(CNA_BACKEND_HEADLESS)
+        return "HEADLESS";
+#elif defined(CNA_BACKEND_SDL_RENDERER)
+        return "SDL_RENDERER";
+#else
+        return "UNKNOWN";
+#endif
     }
 
     enum class SceneVertexFormat { PositionColor, PositionTexture, PositionNormalTexture, PositionDualTexture, PositionNormalTextureWeights };
@@ -584,7 +617,7 @@ protected:
             out.SetData(pixels.data(), pixelCount);
             out.SaveAsPng(outputPath_);
 
-            std::printf("CNA-XNA-ORACLE-OK backend=D3D9 out=%s\n", outputPath_.c_str());
+            std::printf("CNA-XNA-ORACLE-OK backend=%s out=%s\n", OracleBackendName(), outputPath_.c_str());
             Exit();
             return;
         }
@@ -790,7 +823,7 @@ protected:
         out.SetData(pixels.data(), pixelCount);
         out.SaveAsPng(outputPath_);
 
-        std::printf("CNA-XNA-ORACLE-OK backend=D3D9 out=%s\n", outputPath_.c_str());
+        std::printf("CNA-XNA-ORACLE-OK backend=%s out=%s\n", OracleBackendName(), outputPath_.c_str());
         Exit();
     }
 

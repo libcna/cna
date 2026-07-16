@@ -1486,6 +1486,19 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         # hand alongside SOFTWARE's own cna_diag_software and cna_diag_compare.
         cna_easygl_test(cna_diag_easygl examples/cross_backend_diagnostic_scene.cpp)
 
+        # plan_dx9.md D9-A6: builds the SAME tools/xna-oracle/CnaOracleRender.cpp (D9-A3's own
+        # scene-driven renderer, already backend-agnostic -- real public Game/GraphicsDeviceManager/
+        # GraphicsDevice/BasicEffect/SpriteBatch API throughout, no EasyGL- or D3D9-specific code)
+        # natively under the EasyGL backend, so the checked-in 31-scene XNA-oracle corpus can be
+        # measured against EasyGL too -- no Wine/cross-compilation needed here, unlike the
+        # D3D9-branch's own cna_oracle_render registration (this file's D3D9 CTest section) which
+        # this target deliberately does not touch or duplicate. Not registered as a ctest, same
+        # "it's a comparison tool with no pass/fail assertion of its own" precedent as
+        # cna_diag_easygl just above and D9-A3's own cna_oracle_render -- xna-diff.py (invoked by
+        # a script) is what judges this binary's PNG output against the checked-in reference
+        # images.
+        cna_easygl_test(cna_oracle_render_easygl tools/xna-oracle/CnaOracleRender.cpp)
+
         # Task 461: canary proving the new shared PixelTestGame helper (examples/common/) works
         cna_easygl_test(cna_test_easygl_pixeltestgame_smoke
                         examples/easygl_pixeltestgame_smoke_test.cpp)

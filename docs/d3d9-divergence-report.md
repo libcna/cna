@@ -157,3 +157,167 @@ own size and the six project-wide divergences above (four of them unmeasured or 
 measured on this backend, one now closed here specifically, one resolved for dispatch purposes
 only) — not a claim that D3D9 is finished. `D9-84`/`D9-A5` (grow the corpus further) and `D9-140`
 (real hardware) are what would narrow that boundary next.
+
+## Cross-backend measurement (D9-A6)
+
+**Status: 2026-07-16. Same 31-scene corpus, same `tools/xna-oracle/CnaOracleRender.cpp`, same
+`tools/xna-oracle/reference/*.png`, same `xna-diff.py --tolerance 0` — now also run through the
+EasyGL backend. Result: 10/31 pixel-perfect, 21/31 diverge.**
+
+`plan_dx9.md`'s own `D9-A6` row calls this "free": the D3D9 half of the corpus already exists
+(`D9-A3`/`D9-A5`), and `CnaOracleRender.cpp` was already backend-agnostic (verified before touching
+anything — a grep for D3D9-specific code found only two cosmetic `printf` strings and one comment,
+all now parameterized/updated; see "What was built" below). The only genuinely new work was a
+purely-additive CMake registration and a non-Wine driver script; the measurement itself just runs
+the existing tool against the existing reference images through a different backend. Unlike the
+D3D9 side, this is **not** promoted to a CTest (`D9-A6`'s own task text: "record the deltas", not
+"add a new permanently-enforced gate") — EasyGL is not expected to be pixel-identical to real XNA
+the way CNA/D3D9-over-DXVK is (both the D3D9 oracle comparison and the real XNA reference render go
+through the *same* DXVK D3D9-over-Vulkan implementation; EasyGL goes through an entirely different
+GPU API and driver stack — Mesa OpenGL ES/RADV on this machine — so any diff here conflates real
+rendering differences with GPU/driver-stack differences, exactly the confound the D3D9 report's own
+"How this was measured" section is careful to rule out for the D3D9 numbers above).
+
+### What was built
+
+- `CMakeLists.txt`: one new `cna_easygl_test(cna_oracle_render_easygl tools/xna-oracle/CnaOracleRender.cpp)`
+  call inside the existing `CNA_GRAPHICS_BACKEND STREQUAL "EASYGL"` test section (same section that
+  already builds `cna_diag_easygl`), building the exact same source file as a plain native
+  executable — no Wine, no cross-compilation, not registered as a CTest. The existing D3D9
+  `cna_oracle_render` registration (`cna_d3d9_test(...)`, D3D9 CTest section) is untouched.
+- `tools/xna-oracle/CnaOracleRender.cpp`: added a small `OracleBackendName()` helper selecting a
+  string from whichever `CNA_BACKEND_*` compile definition (`CMakeLists.txt`'s own
+  `add_compile_definitions(CNA_BACKEND_*)`, one per backend) is active, and pointed both
+  `CNA-XNA-ORACLE-OK backend=...` `printf`s at it instead of the hardcoded `"D3D9"` literal. No
+  other line changed — confirmed before starting that the file has no `#ifdef CNA_BACKEND_D3D9`,
+  no raw D3D9 casts, and no other backend-specific code path; it already only calls the public
+  `Game`/`GraphicsDeviceManager`/`GraphicsDevice`/effect/`SpriteBatch`/`Texture2D` API.
+- `scripts/run-oracle-corpus-diff-easygl.sh`: a new, non-Wine twin of
+  `scripts/run-oracle-corpus-diff.sh` — same scene loop, same `xna-diff.py --tolerance 0` call, same
+  pass/fail accounting, but invokes the renderer directly (no `run-wine-dxvk9.sh` wrapper) with
+  `SDL_VIDEODRIVER=x11`/`DISPLAY` set (the same environment every other EasyGL CTest in
+  `CMakeLists.txt` already needs for its real X11 window). The original D3D9 script is untouched.
+
+Build verified clean (`cmake --build cmake-build-debug --target cna_oracle_render_easygl`, EasyGL
+build dir) and the binary was run against all 31 scenes with a real X11 `DISPLAY` on this machine.
+
+### Result: 10/31 pixel-perfect
+
+Passing at `tolerance=0`, identically to the D3D9 corpus: `alphatest_never_quad` and all 9
+`sprite_*` scenes (`sprite_basic_quad`, `sprite_flipped_quad`, `sprite_mirror_quad`,
+`sprite_multitexture_quad`, `sprite_rotated_quad`, `sprite_sortmode_backtofront_quad`,
+`sprite_sortmode_deferred_quad`, `sprite_sortmode_fronttoback_quad`, `sprite_wrap_quad`) — i.e. the
+entire `SpriteBatch` slice of the corpus, plus the one `AlphaTestEffect` scene whose entire quad is
+discarded (nothing to rasterize wrong). `0/65536` on every one of these, both backends.
+
+### 21/31 diverge — three distinct patterns, not one bug
+
+Per-scene pixel counts were histogrammed into "small" (`<=3` per-channel delta — visually
+imperceptible) vs "large" (`>3`) differing pixels, plus the location/values of the single largest
+delta, to distinguish genuinely different root causes rather than reporting one flat "21 fail"
+number. **None of these were investigated further or fixed, per this task's own explicit rule** —
+each is logged here with its observed evidence and a best-guess cause for whoever picks up the
+matching `plan_graphics.md` item next.
+
+**Pattern A — boundary/edge-only divergence, 17 scenes.** Every differing pixel sits in a thin band
+at a primitive's silhouette edge; the interior is bit-exact in every one of these. Values toggle
+between the primitive's fully-covered color and the clear color (or, for the two `AlphaTestEffect`
+compare-boundary cases, between two different texel colors), consistent with a rasterization
+fill-rule / pixel-center / edge-coverage convention difference between EasyGL's OpenGL/Mesa
+rasterizer and the D3D9-over-DXVK rasterizer both the CNA/D3D9 oracle side and the real-XNA
+reference side render through — i.e. likely a genuine EasyGL-vs-D3D9 rasterization-boundary
+convention gap, not a shading/math bug:
+
+| Scene | Differing px | Max Δ | Example (loc: ref → cna) |
+|---|---|---|---|
+| `textured_quad` | 459/65536 | 255 | (128,52): `(255,0,0,255)` → `(255,255,255,255)` |
+| `alphatest_quad` | 382/65536 | 255 | (52,128): `(255,0,0,255)` → `(255,255,255,255)` |
+| `alphatest_always_quad` | 459/65536 | 255 | (128,52): `(255,0,0,255)` → `(255,255,255,1)` |
+| `alphatest_greaterequal_quad` | 382/65536 | 255 | (52,128): `(255,0,0,128)` → `(255,255,255,129)` |
+| `alphatest_lessequal_quad` | 382/65536 | 255 | (128,52): `(255,0,0,128)` → `(255,255,255,127)` |
+| `alphatest_less_quad` | 153/65536 | 254 | (128,51): clear → `(255,255,255,1)` |
+| `alphatest_equal_quad` | 305/65536 | 237 | (51,51): clear → `(255,0,0,128)` |
+| `alphatest_notequal_quad` | 306/65536 | 155 | (128,51): clear → `(255,255,255,127)` |
+| `lit_textured_quad` | 459/65536 | 237 | (51,51): clear → `(128,0,0,255)` |
+| `dualtexture_quad` | 307/65536 | 217 | (51,51): clear → `(100,60,20,255)` |
+| `envmap_quad` | 307/65536 | 148 | (51,51): clear → `(164,114,89,255)` |
+| `multilight_textured_quad` | 307/65536 | 109 | (51,51): clear → `(128,128,128,255)` |
+| `skinned_quad` | 307/65536 | 109 | (51,51): clear → `(128,128,128,255)` |
+| `skinned_twobone_quad` | 306/65536 | 109 | (77,51): clear → `(128,128,128,255)` |
+| `skinned_fourbone_quad` | 306/65536 | 109 | (67,47): clear → `(128,128,128,255)` |
+| `colored_linestrip_quad` | 308/65536 | 237 | (25,51): clear → `(255,0,0,255)` |
+| `colored_linelist_quad` | 816/65536 | 237 | (26,63): clear → `(255,0,0,255)` |
+
+The five "lit/skinned/multilight/dualtexture/envmap" rows here are the interesting negative result:
+`plan_dx9.md`'s own prediction for `D9-A6` was that the `PreferPerPixelLighting` gap (design
+decision 8: CNA always lights per-pixel, XNA defaults per-vertex) would produce "at least one
+guaranteed hit" — but these five scenes all use a spatially **uniform** normal/light direction
+across every vertex (by their own scene-file design, e.g. `lit_textured_quad`'s comment: "every
+vertex faces the camera"), so per-vertex and per-pixel evaluation are mathematically identical for
+them and structurally incapable of detecting that divergence — the exact same "structurally
+incapable of detecting X" trap this document's own `D9-91` half-pixel-offset finding already named
+for a different scene. Their divergence here is boundary-only, same as the unlit scenes.
+
+**Pattern B — whole-primitive but imperceptible, plus the same boundary effect, 2 scenes.**
+`colored3d` (12,859/65,536 differing; 12,693 of those `<=3` delta, only 166 `>3`) and
+`colored_trianglestrip_quad` (23,716/65,536; 23,409 `<=3`, only 307 `>3`) both interpolate raw
+vertex color (Gouraud) across the whole primitive with no effect math involved. Sampled interior
+points differ by 1-2 per channel almost everywhere (e.g. `colored3d` at (128,150):
+`(85,84,85,255)` vs `(85,83,87,255)`) — consistent with ordinary GPU/driver floating-point rounding
+differences between Mesa/RADV (EasyGL) and DXVK (the D3D9 side both reference images were produced
+through), not a rendering bug; `xna-diff.py --diff-out`'s own visualization draws *any* nonzero
+delta as full-red regardless of magnitude, so a diff image of either of these scenes reads as "the
+whole shape is wrong" when 99%+ of that area is a 1-2-value rounding difference. The remaining
+166/307 `>3` pixels are the same Pattern-A edge-coverage effect, at the triangle's/quad's own
+silhouette (`colored3d`'s single largest delta, 237, sits at (127,39) — clear color vs the top
+vertex's near-pure color — right at the sharp apex tip).
+
+**Pattern C — real, large, whole-primitive divergence, 2 scenes.** These are not edge noise or
+rounding — the two are genuinely, visibly wrong across nearly the entire primitive, and are the
+real, concrete "opens a `plan_graphics.md` bug" result this task's own notes predicted:
+
+- **`fog_gradient_quad`** (23,716/65,536 differing; 23,410 of those `>3`). The scene is deliberately
+  built (`FogStart=0`, `FogEnd=-1`, negative on purpose — see the scene file's own extensive
+  derivation comment) to produce a linear white-to-black gradient from the near edge (`z=0`) to the
+  far edge (`z=1`). Real XNA renders exactly that gradient (sampled along `x=128`: `(249,249,249)`
+  at `y=55` fading smoothly to `(10,10,10)` at `y=199`). **EasyGL renders the entire quad as solid
+  black — `(0,0,0,255)` — at every one of those same sample points, including right at the near
+  (`z=0`) edge that should be nearly white.** Best-guess root cause: EasyGL's fog-factor computation
+  mishandles this `FogEnd < FogStart` (negative-`FogEnd`) configuration and saturates to "fully
+  fogged" everywhere, rather than reproducing the `fogFactor = z * scale + fogStart * scale` formula
+  `EffectHelpers.SetFogVector`/`Common.fxh` implement (and which D3D9 — this exact scene, these exact
+  `FogStart`/`FogEnd` values — already renders correctly, 0/65536 diff, per the main report above).
+  Because the D3D9 side already proves this exact configuration is *correctly specified*, this looks
+  like an EasyGL-backend-local shader/uniform bug, not one of the six project-wide `GpuDrawParams`
+  divergences this plan tracks.
+- **`envmap_fresnel_quad`** (23,263/65,536 differing; 20,511 of those `>3`). The scene assigns
+  different per-vertex normals to its top edge (`fresnelFactor=1` exactly) and bottom edge
+  (`fresnelFactor≈0.29289`) specifically to force a genuine spatial gradient in a lighting-adjacent,
+  per-vertex-computed quantity — the one scene in the whole corpus actually capable of exposing the
+  `PreferPerPixelLighting`-class gap (unlike the five Pattern-A "lit" scenes above). Real XNA
+  produces the intended smooth linear gradient (sampled along `x=128`: `(196,98,49)` at `y=55` fading
+  to `(72,36,18)` at `y=190`). **EasyGL instead renders almost the entire quad at close to the
+  top edge's bright value (`~(198,99,49)`–`(200,100,50)`) regardless of `y`**, with only a narrow dip
+  near the diagonal seam between the quad's two triangles (`(171,86,43)` at `y=130`) — i.e. the
+  intended Gouraud gradient is essentially absent; most of the surface reads as if only the bright
+  vertex's Fresnel value applies. Best-guess root cause: EasyGL evaluates `EnvironmentMapEffect`'s
+  Fresnel term in a way that doesn't correctly Gouraud-interpolate the per-vertex-computed scalar
+  across the primitive (possibly evaluating it from an interpolated per-fragment normal instead of
+  interpolating the already-computed per-vertex Fresnel value, or a flat/qualifier issue on the
+  varying that carries it) — consistent with, and a concrete confirmation of, `plan_dx9.md`'s own
+  design-decision-8 prediction, in the one scene actually shaped to detect it. Same caveat as
+  `fog_gradient_quad`: D3D9 already renders this exact scene correctly (0/65536), so this is
+  EasyGL-backend-local, not a shared cross-backend `GpuDrawParams` gap.
+
+### Verdict
+
+This measurement cost nothing beyond reusing existing tooling, and it did exactly what `D9-A6`'s own
+notes predicted: it converted a standing assumption ("EasyGL is probably close to XNA-correct,
+nobody has actually measured it") into a real number (10/31 pixel-perfect, three named, evidenced
+divergence patterns for the rest) and surfaced two concrete, previously-unmeasured `plan_graphics.md`
+candidates (`fog_gradient_quad`'s negative-`FogEnd` handling, `envmap_fresnel_quad`'s Fresnel
+interpolation) plus one systemic rasterization-boundary gap (Pattern A, 17 scenes) — all **logged
+here, not fixed**, per this task's own explicit scope boundary. `Vulkan`/`D3D11` remain unmeasured by
+this exercise; repeating this same recipe (new `cna_*_test`-style CMake registration +
+`run-oracle-corpus-diff-<backend>.sh` twin) against them is the natural next step, not attempted here
+to keep this task to its own stated scope.
