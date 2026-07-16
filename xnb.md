@@ -1,7 +1,8 @@
 # XNB binary content pipeline: implementation plan for CNA
 
-> **Status: 🔄 PARTIALLY UN-FROZEN 2026-07-16 — MVP scope complete, Phase D (LZX) mostly done too,
-> broad coverage past that still deferred.** CNA's owner decided `.xnb` should become a real,
+> **Status: 🔄 PARTIALLY UN-FROZEN 2026-07-16 — MVP scope complete, Phase D (LZX) mostly done, the
+> M3 milestone (real `SpriteFont` + one supported `SoundEffect` variant) reached too; broad
+> coverage past that still deferred.** CNA's owner decided `.xnb` should become a real,
 > additional runtime format again, alongside the already-implemented
 > [`cnb.md`](cnb.md)/[`plan_cnb.md`](plan_cnb.md) `.cnb` strategy — not a replacement for it.
 > `ContentManager`'s resolution order now ranks `.xnb` **above** both the literal caller-given path
@@ -9,11 +10,15 @@
 > (container parsing, binary primitives, the uncompressed-only case, and a first real `Texture2D`
 > reader — this plan's own M1/M2 milestones) is fully complete. CNA's owner then explicitly
 > requested Phase D (LZX decompression) next: it is now implemented and verified against real
-> compressed fixtures, with a dedicated `XnbCompression` enum (XNB-27) and fuzz/differential
-> testing (XNB-30A) deliberately left open — see `plan_xnb.md`'s Phase D section for exact scope.
-> Phase D3 onward — `SpriteFont`, stock effects, audio, `Model`, and the top-quality hardening pass
-> — remain frozen/deferred pending a future decision to resume them; nothing there is started.
-> **Phase H (Lua-scripted custom
+> compressed fixtures, with XNB-27 (a dedicated `XnbCompression` enum) and XNB-30A (fuzz/
+> differential testing) deliberately left open — see `plan_xnb.md`'s Phase D section for exact
+> scope. CNA's owner then explicitly requested M3 next: `SpriteFontReader` and a `SoundEffectReader`
+> covering at least one real wave-format variant are both done and real-fixture-verified, reaching
+> M3's own Definition of Done -- but not the rest of Phase E (stock effects, `Song`,
+> `ReadExternalReference<T>()`), which weren't required by it and remain open; see `plan_xnb.md`'s
+> Phase E section for exact scope. Phase D3/F onward — stock effects' remaining scope aside,
+> `Model`, and the top-quality hardening pass — remain frozen/deferred pending a future decision to
+> resume them; nothing there is started. **Phase H (Lua-scripted custom
 > `ContentTypeReader` support) is rejected outright, not merely deferred** — see `plan_xnb.md`'s own
 > note; custom readers stay a plain C++ registration API (this document's own Phase G), the same
 > shape `.cnb`'s `RegisterCnbLoader<T>` already uses. A new content-manifest feature (`ContentManager`
