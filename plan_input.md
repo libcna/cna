@@ -14201,7 +14201,7 @@ tests.` on all 5 repeats, zero `FAILED` in the full output. `tests/CNA/Input/Inp
 
 ---
 
-## P13-006 — Reconcile stale Input documentation and evidence `[ ]`
+## P13-006 — Reconcile stale Input documentation and evidence `[x]`
 **Goal:** `audit_input.md` found two documentation-freshness problems independent of the four confirmed
 defects: (a) regenerating `tools/input_parity/check_input_test_coverage.py` without any repository
 change does not match the committed `docs/input-test-coverage.md` (the committed doc claims no gaps;
@@ -14238,7 +14238,48 @@ and present earlier work as completed against a plan that has since been reset.
 **Notes:** Run this last, after P13-002 through P13-005 land, so the regenerated coverage doc reflects
 the final test set rather than an intermediate one.
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-16. **Step 1/2 (coverage doc):** ran `check_input_test_coverage.py` against HEAD
+(after P13-002..005) — confirmed the exact 7-row discrepancy audit_input.md reported. Investigated all
+7: every one has a real, dedicated fake-backend-driven test suite (`ISdlHapticBackend` →
+`SdlHapticBackendTests.cpp`'s `FakeHapticTest` via `FakeSdlHapticBackend`; `ISdlJoystickBackend` →
+`SdlJoystickBackendTests.cpp`'s `FakeJoystickTest`; `ISystemDeviceBackend` →
+`InputDevicesTests.cpp`'s `CnaInputDevicesTest` + the new `TouchCapabilitiesEnumerationTest`;
+`ISystemKeyboardBackend` → `KeyboardModStateTests.cpp`'s `KeyboardModStateEXTTest`;
+`ISystemMouseBackend` → `MouseGlobalTests.cpp`'s `MouseGlobalEXTTest`; `ISystemPowerBackend` →
+`PowerTests.cpp`'s `CnaInputPowerTest`; `ISystemSensorBackend` → `SensorsTests.cpp`'s
+`CnaInputSensorsTest`) — all heuristic false positives: the script's `suite_re` requires a suite
+literally prefixed with the interface's own "I"-prefixed name, but each is exercised through a
+same-file `Fake*`/`CnaInput*`-named suite instead (same pattern already accepted for
+`ISdlGamepadBackend`). Added all 7 to `KNOWN_COVERED_ELSEWHERE` in
+`tools/input_parity/check_input_test_coverage.py` (verifying the real coverage first, not just adding
+an exemption) and regenerated `docs/input-test-coverage.md` — summary line is back to "None — every
+Input type has a dedicated suite or a documented sibling-suite cover", now backed by a verified
+exemption list rather than a stale claim. Also regenerated `docs/input-member-parity-matrix.md` (its
+own generator, `gen_input_parity_matrix.py`) — it was independently stale (missing ~29 EXT/NOXNA
+members added since it was last generated: GamePad/Keyboard/Mouse/TextInputEXT/TouchLocation
+extensions); regeneration still reports 0 STRICT/EXT gaps, so this was pure staleness, not an API
+compliance issue. **Step 3 (Phase-I sweep):** swept `docs/*input*`; found no misleading *current-plan*
+completion claims (`docs/input-pre-merge-checklist.md`'s "code-complete" text defines a checklist
+tier, not a status report) but found `docs/input-backend.md`'s own existing task-number disclaimer
+(INPUT-AUDIT-004) was itself stale — it named the `INPUT-*` scheme as "the current, authoritative
+input backlog", not accounting for the 2026-07-07 reset to `plan_input.md`'s `P0-013` scheme. Rewrote
+that disclaimer to name all three numbering generations and state explicitly that legacy `Phase I*`/
+`task NNN` citations elsewhere in the doc-set are provenance only and do not imply any current `P#-###`
+task is complete. Also updated `docs/input-build-and-test.md`'s "Test counts (authoritative baseline)"
+table, stale since 2026-07-06 (**314→496** passed for the canonical input filter; **3303/2
+skipped→4623 passed/20 failed/2 skipped** for the full suite — the 20 new failures are the same
+pre-existing SDL_RENDERER-3D-unsupported gap recorded in [[P13-001]], confirmed unrelated to Input by
+re-running under `xvfb-run … SDL_VIDEODRIVER=x11`, the doc's own documented methodology). Verified the
+doc's existing "Headless run inventory" dummy-vs-x11 skip/fail table is *still* accurate (re-ran under
+real `SDL_VIDEODRIVER=dummy`: same 5 skipped + 3 failed `MouseCursor`/`Mouse` test names, unchanged).
+Files changed: `tools/input_parity/check_input_test_coverage.py`, `docs/input-test-coverage.md`,
+`docs/input-member-parity-matrix.md`, `docs/input-backend.md`, `docs/input-build-and-test.md`. Did not
+touch `docs/input-public-api-frozen.md` (hand-maintained, paired with a compile-time freeze test —
+auditing its lock-step accuracy is Phase 1/10 scope, not this defect-remediation pass) or
+`plan_input.md`'s own Phase 0 baseline record, per step 4. Remaining risk: none identified for the
+items actually swept; a full line-by-line audit of every `docs/*input*` file's every historical
+citation was not performed (would be disproportionate for a documentation-freshness task) — this
+Result records what was checked and what was intentionally left out of scope.
 
 ---
 

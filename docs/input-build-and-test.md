@@ -81,8 +81,11 @@ ctest --test-dir cmake-build-input-easygl -L input --output-on-failure
 
 ## Test counts (authoritative baseline)
 
-Recorded **2026-07-06** in this checkout: Debian 13, g++ 14.2.0, CMake 3.31.6, Ninja 1.12.1. Input is
-backend-agnostic — the input-filter count is identical on EasyGL / Vulkan / bgfx / SDL_RENDERER.
+Recorded **2026-07-16** (updated from the 2026-07-06 baseline as part of `plan_input.md` P13-006, the
+Input subsystem grew substantially in between — including the `feature/xnb` merge and the
+`audit_input.md` Phase 13 defect-remediation pass) in this checkout: Debian 13, g++ 14.2.0, CMake
+3.31.6, Ninja 1.12.1. Input is backend-agnostic — the input-filter count is identical on EasyGL /
+Vulkan / bgfx / SDL_RENDERER.
 
 **Pinned versions (INPUT-DOC-014 / INP-0196).** Reference toolchain as above (g++ 14.2.0 / CMake 3.31.6 /
 Ninja 1.12.1, Debian 13).
@@ -155,15 +158,24 @@ option to pick another backend). Verified in `cmake/ThirdPartySDL.cmake` and `CM
 
 | Metric | Count |
 |--------|-------|
-| Full `CnaTests` suite | **3303 passed / 2 skipped** |
-| Canonical input filter (the filter above) | **314 passed** |
+| Full `CnaTests` suite | **4623 passed / 20 failed / 2 skipped** (4645 ran) |
+| Canonical input filter (the filter above) | **496 passed**, 0 failed, 5x `--gtest_shuffle --gtest_repeat` clean |
 
 Notes:
 - The 2 skipped tests are Devices sensor tests (`AccelerometerTests` / `GyroscopeTests`
   `GetCurrentValuePropertyDoesNotThrowWhenSupported`) — **not** input.
+- **The 20 full-suite failures are pre-existing and unrelated to Input.** All 20 are in the
+  XNB/Content/Model/Effect/Texture3D pipeline (`EffectApplyTest`, `CnbEffectTest`, `CnbModelTest`,
+  `ModelContentTypeReaderTest`, `Texture3DTextureCubeContentTypeReaderTest`,
+  `SkinnedModelEXTPartTest`, `XnbContainerFuzzTest`, `XnbBuiltInReaderRegistrationTest`,
+  `ContentManagerSkinnedModelTest`); the sampled failures are
+  `"SDL_Renderer does not support 3D: CreateVertexBuffer"` — a known, documented `SDL_RENDERER`
+  backend limitation (2D-only, no VertexBuffer/3D support; see `docs/sdl-renderer-2d-completeness.md`
+  Task 725), not an input regression. The canonical **input filter** is unaffected and fully green.
 - The canonical filter's last four tokens (`*ButtonState*:*KeyState*:*Buttons*:*PublicApiInput*`) were
   added 2026-07-05 to catch the pure-enum value suites and the public-API header-hygiene suite that the
-  older filter missed; without them the same run reports **294**.
+  older filter missed; without them the same run reports **294** (as of 2026-07-06 — this token-drop
+  count was not re-measured on 2026-07-16).
 - **This table is the single source of truth for input test counts.** Other docs reference it rather than
   restating numbers. Re-run and update it whenever input tests are added.
 

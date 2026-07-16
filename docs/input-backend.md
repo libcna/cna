@@ -6,12 +6,18 @@ Describes how CNA wires SDL3 input events to the `Microsoft::Xna::Framework::Inp
 `Input::Touch`) public API. Reference implementation: `feature/input` branch, `plan_input.md`
 (Phases I1–I6, legacy tasks 700–777). FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Input`.
 
-> **Task-number scheme (INPUT-AUDIT-004).** Bare 3-digit numbers in this doc-set (e.g. "task 734",
-> "tasks 700–777") are the **legacy pre-`INPUT-*` input numbering** and are historical provenance only —
-> the current, authoritative input backlog uses the `INPUT-*` scheme in `plan_input.md`. These legacy
-> numbers are **not** related to the identically-numbered items in the Graphics track (`GRAPHICS_TASKS.md`,
-> e.g. tasks 710–717 or 868–872 there mean SDL_Renderer / DepthStencil work, not input). When a doc needs
-> to point at Graphics work it names `GRAPHICS_TASKS.md` explicitly; a bare number here always means input.
+> **Task-number scheme (INPUT-AUDIT-004, updated 2026-07-16).** This doc-set accumulated three
+> generations of task numbering as `plan_input.md` was revised: bare 3-digit numbers (e.g. "task 734",
+> "tasks 700–777"), the `Phase I*`/`INPUT-*` scheme (e.g. "Phase I12", "Phase I13/I14"), and — since the
+> **2026-07-07 plan reset** — the current, sole authoritative scheme, `P0-001`–`P13-006` in
+> `plan_input.md`. **None of the earlier two schemes are tracked in the current plan** and their task
+> IDs do **not** correspond to any `P#-###` task; a "Phase I12" or "task 734" citation elsewhere in this
+> doc-set is historical provenance for *when a specific behavior was fixed*, not evidence that any
+> current-plan task is complete. Do not infer current-plan status from a legacy citation — check
+> `plan_input.md` itself. These legacy numbers are also **not** related to the identically-numbered
+> items in the Graphics track (`GRAPHICS_TASKS.md`, e.g. tasks 710–717 or 868–872 there mean
+> SDL_Renderer / DepthStencil work, not input). When a doc needs to point at Graphics work it names
+> `GRAPHICS_TASKS.md` explicitly; a bare number here always means input.
 
 ---
 
