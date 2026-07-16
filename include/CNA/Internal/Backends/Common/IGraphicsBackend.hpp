@@ -366,6 +366,23 @@ namespace CNA::Internal::Backends
         bool fresnelEnabled = false;
         /// EnvironmentMapEffect: exponent for the Fresnel edge-weighting term above.
         float fresnelFactor = 1.0f;
+        /// BasicEffect/SkinnedEffect: real XNA `PreferPerPixelLighting` value (plan_dx9.md
+        /// Divergence 1 / D9-81 item 1). When true, XNA selects a per-pixel-lit shader
+        /// (`VSBasicPixelLighting*`/`PSBasicPixelLighting*`); when false (XNA's own default),
+        /// it selects a per-vertex-lit shader instead. Every backend except D3D9 currently has
+        /// no per-vertex lighting shader at all and ignores this field, always rendering
+        /// per-pixel regardless of its value -- a known, tracked divergence from XNA's default,
+        /// not fixed by adding this field alone. Only meaningful when `lightingEnabled` is true.
+        bool preferPerPixelLighting = false;
+        /// EnvironmentMapEffect: real XNA `specularEnabled` value (plan_dx9.md Divergence 1 /
+        /// D9-81 item 4) -- true when `SpecularColor` is non-black, selecting a distinct
+        /// compiled shader in real XNA rather than a uniform toggle. `envMapSpecular` above
+        /// already carries the specular color itself; this field additionally carries whether
+        /// XNA would have compiled the specular-enabled shader variant, since a specular color
+        /// that is legitimately black-but-enabled is not losslessly recoverable from the RGB
+        /// value alone (unlike BasicEffect's `oneLight`/AlphaTestEffect's `isEqNe`, D9-81's
+        /// other two findings). No backend currently reads this field.
+        bool specularEnabled = false;
         /// SkinnedEffect: column-major mat4 per bone (72 × 16 floats), zero-initialised.
         float boneTransforms[72 * 16] = {};
         /// SkinnedEffect: number of valid entries in boneTransforms (0 = none).

@@ -1088,3 +1088,70 @@ Pipeline tooling available in this project.
 | 1074 | Third-party/community kits | Riemers Tutorials, XNA-4-Racing-Game-Kit, Movipa (3) | ⛔ | Not official Microsoft samples — outside this repo's stated scope (the official XNA Game Studio 4.0 collection). No revisit trigger. |
 | 1075 | Unversioned/incomplete starter kit | UnitConverterStarterKit (1) | ⛔ | Directory contains only a license file and an empty stub subfolder — no real sample content to port. No revisit trigger. |
 | 1076 | Misc/non-code | XNA XNB Format (docs), SoundLab (standalone tool) (2) | ⛔ | Documentation-only or a standalone authoring tool, not an XNA game sample. No revisit trigger. |
+
+---
+
+## Phase 80 — `PreferPerPixelLighting`/`specularEnabled`: real per-vertex lighting on every backend (`plan_dx9.md` Divergence 1/4, 2026-07-16)
+
+> **Cross-cutting, project-owner-approved 2026-07-16.** `plan_dx9.md`'s own "CNA's divergences
+> from XNA 4.0" section found, while building the D3D9 backend, that `BasicEffect`/`SkinnedEffect`
+> declare and store a real `PreferPerPixelLighting` property (default `false`, matching XNA) but
+> `FillGpuDrawParams()` never forwarded it to any backend, and every backend's only lit shader
+> computes lighting in the fragment stage unconditionally — **CNA renders per-pixel lighting
+> always, on all 9 backends, which is the exact opposite of XNA's own default (per-vertex/Gouraud),
+> and no per-vertex lighting shader exists anywhere in this codebase.** A second, narrower gap of
+> the same shape: `EnvironmentMapEffect.specularEnabled` is tracked internally but never forwarded
+> either (no lossless recovery from `envMapSpecular`'s RGB value alone, unlike `BasicEffect`'s
+> `oneLight`/`AlphaTestEffect`'s `isEqNe`, which `plan_dx9.md` `D9-81` found ARE losslessly
+> recoverable and needed no struct change). `plan_dx9.md`'s own Boundaries explicitly forbade
+> fixing this from inside that backend's plan — a change touching `GpuDrawParams` and requiring a
+> new shader variant on 7 of the other 9 backends is exactly the kind of decision that plan
+> reserves for the project owner. Presented to the project owner 2026-07-16 with three options
+> (a small additive-only struct change unblocking D3D9 alone; the full fix on every backend; leave
+> it as a documented, permanent divergence) — **the project owner chose the full fix, sequenced one
+> backend at a time**, not all at once.
+>
+> **Scope per backend.** `GpuDrawParams` gains 2 bool fields (Task 1100, done — see its own row).
+> D3D9 needs no new shader (Microsoft's own `.fx` sources already contain both the
+> `VSBasic{Vertex,OneLight}*`/`VSBasicPixelLighting*` families and their `EnvironmentMapEffect`/
+> `SkinnedEffect` equivalents) — it only needs its dispatch to stop hardcoding the flags `false`
+> and to complete `D9-73`'s own outstanding obligation (prove the 5 divergent `PixelLighting`
+> vertex-shader variants byte-equivalent against the `D9-A` oracle). The other 7 rendering backends
+> (`SdlRenderer` is 2D-only and never reaches this code path at all; `Headless` renders no real
+> pixels) each need a genuinely new per-vertex-lit shader variant, ported from FNA's own
+> `Lighting.fxh`/`BasicEffect.fx`/`SkinnedEffect.fx` (the same Blinn-Phong math already used, moved
+> from the fragment stage into the vertex stage with Gouraud interpolation across the triangle —
+> not a different lighting model, a different *stage*) plus the dispatch/pipeline-state wiring to
+> select it when `preferPerPixelLighting == false`:
+>
+> | Backend | Shader language | New shader needed? |
+> |---|---|---|
+> | D3D9 | (vendored HLSL SM2, already compiled) | No — dispatch/flag-wiring only |
+> | EasyGL | GLSL | Yes |
+> | Vulkan | GLSL → SPIR-V | Yes |
+> | Bgfx | own shaderc toolchain | Yes |
+> | WebGPU | WGSL | Yes |
+> | D3D11 | HLSL SM5 | Yes |
+> | D3D12 | HLSL SM5 (may share D3D11's) | Yes |
+> | Software | CPU rasterizer per-vertex path | Yes |
+>
+> **Known, accepted cost, stated up front (per `plan_dx9.md`'s own "Consequences of fixing these"
+> section) — do not "fix" this away when it happens:** once a backend's dispatch honors
+> `preferPerPixelLighting`'s real default (`false` = per-vertex), every existing lit-scene pixel
+> test on that backend will very likely start producing different (correct) pixels — flatter,
+> faceted on low-poly geometry, weaker/rounder specular lost to Gouraud interpolation — and its
+> baseline needs regenerating, not reverting. `AlphaTestEffect`/`DualTextureEffect` have no
+> lighting concept and are entirely unaffected.
+
+| #    | Task | Status | Notes |
+| ---- | ---- | ------ | ----- |
+| 1100 | Add `preferPerPixelLighting`/`specularEnabled` bool fields to `GpuDrawParams` (`IGraphicsBackend.hpp`); wire `BasicEffect`/`SkinnedEffect::FillGpuDrawParams()` to forward the real `preferPerPixelLighting_` value and `EnvironmentMapEffect::FillGpuDrawParams()` to forward the real `specularEnabled_` value. | ✅ | **CLOSED 2026-07-16.** Purely additive: both new fields default `false`, and no backend reads either yet, so this is a zero-behavior-change commit for all 9 backends — confirmed by rebuilding both the default (EasyGL) target and the D3D9 target clean, and re-running `BasicEffectDefaultsTest`/`SkinnedEffectDefaultsTest`/`EnvironmentMapEffectDefaultsTest` (123/123 PASS) plus the full D3D9 `ctest -L D3D9` suite (17/17 PASS) with zero new failures. Unblocks Task 1101 (D3D9) and each per-backend shader task below — none of which can start meaningfully until a real value reaches `GpuDrawParams` at all. |
+| 1101 | D3D9: read `preferPerPixelLighting`/`specularEnabled` from `GpuDrawParams` instead of hardcoding `false` in `ComputeBasicEffectShaderIndex`/`ComputeSkinnedEffectShaderIndex`/`ComputeEnvironmentMapEffectShaderIndex`'s call sites (`D3D9EffectDraw.cpp`); verify against the real XNA oracle; complete `plan_dx9.md` `D9-73`'s outstanding obligation (prove the 5 divergent `PixelLighting` vertex-shader variants byte-equivalent, per-shader, against `D9-A`); advance `D9-84`. | ⬜ | Belongs to `plan_dx9.md` (task-numbered there, e.g. as a `D9-8x` follow-up) as well as here — cross-reference both when closed. Needs care: confirm which of `BasicEffect`'s currently-undrawable `ShaderIndex` values (`D9-82b`'s own "10 of 32 drawable" finding) actually become reachable once the flag is real (some `PixelLighting` buckets may already share a vertex layout an existing bucket uses), and which stay blocked by the vertex-layout gap regardless (unrelated to this task). |
+| 1102 | EasyGL: real per-vertex-lit GLSL shader variant + dispatch. | ⬜ | Next backend after 1101, per the project owner's own "one backend at a time" sequencing (2026-07-16) — do not start until asked. |
+| 1103 | Vulkan: real per-vertex-lit GLSL→SPIR-V shader variant + dispatch. | ⬜ | Same sequencing note as 1102. |
+| 1104 | Bgfx: real per-vertex-lit shader variant (own shaderc toolchain) + dispatch. | ⬜ | Same sequencing note as 1102. |
+| 1105 | WebGPU: real per-vertex-lit WGSL shader variant + dispatch. | ⬜ | Same sequencing note as 1102. |
+| 1106 | D3D11: real per-vertex-lit HLSL SM5 shader variant + dispatch. | ⬜ | Same sequencing note as 1102. |
+| 1107 | D3D12: real per-vertex-lit HLSL SM5 shader variant + dispatch (may reuse D3D11's compiled shader if the byte layout matches). | ⬜ | Same sequencing note as 1102. |
+| 1108 | Software: real per-vertex-lit CPU rasterizer path. | ⬜ | Same sequencing note as 1102. |
+| 1109 | Regenerate/update every existing lit-scene pixel-test baseline across all touched backends once their own dispatch honors the real default; update `docs/graphics-backend-feature-matrix.md`. | ⬜ | Do this per-backend as each of 1102–1108 closes, not as one giant deferred sweep — matches this project's own "one task = one commit" discipline. |

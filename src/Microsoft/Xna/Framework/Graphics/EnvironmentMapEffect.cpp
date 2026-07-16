@@ -399,6 +399,7 @@ namespace Microsoft::Xna::Framework::Graphics
         p.envMapSpecular[0] = environmentMapSpecular_.X;
         p.envMapSpecular[1] = environmentMapSpecular_.Y;
         p.envMapSpecular[2] = environmentMapSpecular_.Z;
+        p.specularEnabled   = specularEnabled_;
         p.fresnelEnabled    = fresnelEnabled_;
         p.fresnelFactor     = fresnelFactor_;
 
