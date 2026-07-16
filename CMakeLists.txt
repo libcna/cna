@@ -49,6 +49,8 @@ set(CNA_TEST_DISPLAY ":0" CACHE STRING "DISPLAY value used by GPU/window-creatin
 include(cmake/ThirdPartySDL.cmake)
 cna_configure_vendored_sdl()
 
+include(cmake/TestHelpers.cmake)
+
 if(CNA_ENABLE_NET)
     include(cmake/ThirdPartyENet.cmake)
     cna_configure_vendored_enet()
@@ -7108,46 +7110,32 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "HEADLESS")
     endmacro()
 
     cna_headless_test(cna_test_headless_smoke examples/headless_smoke_test.cpp)
-    add_test(NAME Headless_Smoke COMMAND cna_test_headless_smoke)
-    set_tests_properties(Headless_Smoke PROPERTIES
-        TIMEOUT 30
-        LABELS "Headless")
+    cna_register_backend_test(NAME Headless_Smoke COMMAND cna_test_headless_smoke
+        TIMEOUT 30 LABELS "Headless")
 
     cna_headless_test(cna_test_headless_resource_backends examples/headless_resource_backends_test.cpp)
-    add_test(NAME Headless_ResourceBackends COMMAND cna_test_headless_resource_backends)
-    set_tests_properties(Headless_ResourceBackends PROPERTIES
-        TIMEOUT 30
-        LABELS "Headless")
+    cna_register_backend_test(NAME Headless_ResourceBackends COMMAND cna_test_headless_resource_backends
+        TIMEOUT 30 LABELS "Headless")
 
     cna_headless_test(cna_test_headless_validation_extras examples/headless_validation_extras_test.cpp)
-    add_test(NAME Headless_ValidationExtras COMMAND cna_test_headless_validation_extras)
-    set_tests_properties(Headless_ValidationExtras PROPERTIES
-        TIMEOUT 30
-        LABELS "Headless")
+    cna_register_backend_test(NAME Headless_ValidationExtras COMMAND cna_test_headless_validation_extras
+        TIMEOUT 30 LABELS "Headless")
 
     cna_headless_test(cna_test_headless_coverage_gaps examples/headless_coverage_gaps_test.cpp)
-    add_test(NAME Headless_CoverageGaps COMMAND cna_test_headless_coverage_gaps)
-    set_tests_properties(Headless_CoverageGaps PROPERTIES
-        TIMEOUT 30
-        LABELS "Headless")
+    cna_register_backend_test(NAME Headless_CoverageGaps COMMAND cna_test_headless_coverage_gaps
+        TIMEOUT 30 LABELS "Headless")
 
     cna_headless_test(cna_test_headless_effects examples/headless_effects_test.cpp)
-    add_test(NAME Headless_Effects COMMAND cna_test_headless_effects)
-    set_tests_properties(Headless_Effects PROPERTIES
-        TIMEOUT 30
-        LABELS "Headless")
+    cna_register_backend_test(NAME Headless_Effects COMMAND cna_test_headless_effects
+        TIMEOUT 30 LABELS "Headless")
 
     cna_headless_test(cna_test_headless_mode_dial examples/headless_mode_dial_test.cpp)
-    add_test(NAME Headless_ModeDial COMMAND cna_test_headless_mode_dial)
-    set_tests_properties(Headless_ModeDial PROPERTIES
-        TIMEOUT 30
-        LABELS "Headless")
+    cna_register_backend_test(NAME Headless_ModeDial COMMAND cna_test_headless_mode_dial
+        TIMEOUT 30 LABELS "Headless")
 
     cna_headless_test(cna_test_headless_trace_diff examples/headless_trace_diff_test.cpp)
-    add_test(NAME Headless_TraceDiff COMMAND cna_test_headless_trace_diff)
-    set_tests_properties(Headless_TraceDiff PROPERTIES
-        TIMEOUT 30
-        LABELS "Headless")
+    cna_register_backend_test(NAME Headless_TraceDiff COMMAND cna_test_headless_trace_diff
+        TIMEOUT 30 LABELS "Headless")
 endif()
 
 # plan_software.md: Software (CPU rasterizer) graphics backend tests. Deliberately no
