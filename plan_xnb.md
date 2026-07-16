@@ -1,10 +1,18 @@
 # XNB binary content pipeline: task plan
 
-> **Status: 🧊 FROZEN 2026-07-15 — researched, not adopted; kept as reference only.** See
-> [`xnb.md`](xnb.md)'s own status banner and [`cnb.md`](cnb.md)'s "Relationship to `xnb.md`/
-> `plan_xnb.md`" section — CNA adopted `.cnb` instead (implemented in full, see `plan_cnb.md`).
-> None of the tasks below are planned to be started under the current strategy; every `⬜` in this
-> file stays `⬜` indefinitely, not as an oversight.
+> **Status: 🔄 PARTIALLY UN-FROZEN 2026-07-16 — MVP scope (Phase 0/A/B/B2/B3/C) active; Phase D
+> onward stays frozen.** CNA's owner decided `.xnb` becomes a real, additional runtime format again,
+> ranked **above** `.cnb` in `ContentManager`'s resolution order (see [`cnb.md`](cnb.md)'s "Core
+> rule": `.xnb` → literal caller-given path → `.cnb` → native-by-extension). Only the tasks through
+> the end of Phase C (container parsing, binary primitives, uncompressed-only, a first real
+> `Texture2D` reader — this plan's own M1/M2 milestones) are actually being executed now. Phase D
+> (LZX) and everything after it (`SpriteFont`, stock effects, audio, `Model`, top-quality hardening)
+> remain frozen/deferred exactly as before, pending a future decision to resume them — do not start
+> those tasks. **Phase H (Lua-scripted custom readers) is cancelled outright, not deferred** — see
+> that phase's own section below; custom `.xnb` readers stay a plain C++ registration API (Phase G),
+> matching `.cnb`'s existing `RegisterCnbLoader<T>`. Phase B3 has also grown new scope: a
+> `ContentManager` startup content-manifest scan (internal perf cache + a public introspection API +
+> the `.xnb` reader-name inventory), see that phase below.
 
 > Companion task list to [`xnb.md`](xnb.md) (the narrative research/design document — read that
 > first for *why* each phase is shaped this way). This file turns that plan into concrete,
@@ -61,16 +69,28 @@
 > not milestone-blocking) vs. `⛔` (blocked by an external dependency) and re-marked XNB-30C `⏸`
 > accordingly, since the execution-order mandate's "do not skip a task" rule only ever applied to
 > mandatory (`⬜`) tasks.
+>
+> **Revised a fifth time (2026-07-16)** to reflect CNA's owner's decision to partially un-freeze
+> this plan: MVP scope only (Phase 0/A/B/B2/B3/C) is active; Phase D onward remains frozen. Also:
+> cancelled Phase H (Lua custom readers) entirely rather than merely deferring it — see that
+> phase's section for the reasoning; folded a new `ContentManager` startup content-manifest feature
+> (perf cache, public introspection API, `.xnb` reader-name inventory) into Phase B3
+> (`XNB-65`–`XNB-67`); and fixed the `ContentManager` resolution order to rank `.xnb` above both the
+> literal caller-given path and `.cnb` (`XNB-17B`).
 
 ## Execution-order mandate for autonomous work
 
 > Read this before starting any task in this file.
 
-- Implement strictly in phase order. Do not begin Phase H or Phase I while any mandatory task in
-  Phase A-G remains incomplete (Phase B3's XNB-61a/XNB-61b scanners are the one deliberate
-  exception - see their own rows; note XNB-61b still cannot start before Phase D exists).
-- Do not use Lua (Phase H) as a shortcut for a missing native standard reader - standard readers
-  stay native C++ permanently (see Phase H's own intro).
+- Implement strictly in phase order, and only through the current MVP scope (Phase 0/A/B/B2/B3/C —
+  see the status banner above). Do not begin Phase D or anything sequenced after it until a future
+  decision explicitly resumes them. Do not begin Phase I while any mandatory task in Phase A-C
+  remains incomplete (Phase B3's XNB-61a/XNB-65/66/67 tasks are the one deliberate exception — see
+  their own rows; XNB-61b still cannot start before Phase D exists and is deferred along with it).
+- Phase H (Lua-scripted custom readers) is cancelled outright — do not implement it in any form,
+  and do not treat it as merely "later". Custom `.xnb` readers stay native C++ only, registered
+  through Phase G's plain registration API (deferred along with the rest of Phase D onward under
+  the current MVP scope).
 - Work sequentially from the first incomplete task in the current phase. Prioritize finishing the
   current phase and reaching its milestone (below) over starting later, easier-looking tasks.
 - Do not skip a blocked/hard task silently by jumping ahead to a later phase to avoid it.
@@ -88,6 +108,10 @@
 | M3 - common XNA 2D content | end of Phase E | Compressed `Texture2D`, `SpriteFont`, and at least one supported `SoundEffect` variant from the XNB-33 matrix all load correctly. |
 | M4 - standard model | XNB-41 | A real multi-mesh, multi-bone XNA `Model` `.xnb` loads with shared resources resolved and native CNA stock effects attached. |
 | M5 - release-quality native loader | XNB-47 | Native `.xnb` support is documented (XNB-45), hardened (XNB-43), and fully usable without Lua. |
+
+> **Current active scope (2026-07-16):** only M1 and M2 are being pursued right now, plus the new
+> content-manifest tasks folded into Phase B3 (`XNB-65`–`XNB-67`). M3–M5 remain frozen until a
+> future decision explicitly resumes Phase D onward.
 
 ## Scope
 
@@ -189,7 +213,7 @@ entirely the second one.
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| XNB-17B | `ContentManager` `.xnb` extension resolution/dispatch, coexisting with existing loose-file loaders (no behavior change to existing `.model.json`/`.shader.json`/`FromStream` paths) | ⬜ | |
+| XNB-17B | `ContentManager` `.xnb` extension resolution/dispatch, coexisting with existing loose-file loaders (no behavior change to existing `.model.json`/`.shader.json`/`FromStream` paths) | ⬜ | Resolution order (2026-07-16 decision): `<name>.xnb` is tried **first**, ahead of even the literal caller-given path; then the literal path; then `<name>.cnb` (`cnb.md`'s existing rule); then the reader's native extensions. See `cnb.md`'s "Core rule" for the full four-tier order |
 | XNB-17C | Asset-path normalization + basic cache-identity handling for `.xnb` assets (same identity rules the loose-file loaders already use) | ⬜ | |
 | XNB-17D | `ContentLoadException`-equivalent propagation from the Phase B container/registry errors up through `ContentManager.Load<T>()` | ⬜ | |
 | XNB-17E | `Unload()` behavior for `.xnb`-sourced assets | ⬜ | |
@@ -198,18 +222,25 @@ entirely the second one.
 
 ---
 
-## Phase B3 — Early reader-name inventory scanner (payload-agnostic, does not block on Phase G)
+## Phase B3 — `ContentManager` startup content manifest + reader-name inventory scanner
 
-> New phase, per second follow-up review point 5: the full official-sample compatibility work
-> (Phase I) can stay last, but a **payload-agnostic** scanner that only reads the header and the
-> type-reader-name table (XNB-11/XNB-12/XNB-13) — never the actual object payload — has no
-> dependency on any production reader existing yet. Running it early can show, for example, that a
-> reader planned for Phase F is used by only one sample while a reader not yet in this plan at all
-> is used by twenty.
+> Originally scoped as a standalone, payload-agnostic offline scanner (per second follow-up review
+> point 5): a scan of the header + type-reader-name table only, with no dependency on any
+> production reader existing yet — running it early can show, for example, that a reader planned
+> for Phase F is used by only one sample while a reader not yet in this plan at all is used by
+> twenty.
 >
-> **Correction from the final review:** this phase originally tried to cover compressed `.xnb`
-> files too ("decompress just enough of the header/type-reader-table region if compressed"), but
-> that is not actually possible before Phase D exists — a compressed `.xnb`'s type-reader table
+> **Revised 2026-07-16:** CNA's owner asked for this to become a real `ContentManager` runtime
+> feature, not just a one-off tool — `ContentManager` now scans its `Content` root once (at
+> construction, or lazily before the first `Load<T>()` if `RootDirectory` is set afterward) and
+> keeps an in-memory manifest of every file found. That manifest serves three purposes at once: an
+> internal performance cache for `ResolveAssetPath` (replacing repeated
+> `std::filesystem::exists()` stat calls with a single upfront scan), a public `NOXNA`
+> introspection API for game/tooling code, and — specifically for any `.xnb` files the scan finds —
+> the original reader-name inventory idea, run automatically as part of the same pass rather than
+> as a separate manual step.
+>
+> **Correction from the final review (still applies):** a compressed `.xnb`'s type-reader table
 > lives *inside* the LZX payload, and block-based LZX has no addressable random-access offset to
 > "just" the table; the decompressor must process the stream sequentially from its start. XNB-61a
 > below is therefore scoped to **uncompressed** files only, right after Phase B. The compressed
@@ -219,8 +250,12 @@ entirely the second one.
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| XNB-61a | Reader-name-only scanner, **uncompressed `.xnb` files only**: open each available uncompressed `.xnb`, read the header and type-reader table, list every type-reader name referenced, and aggregate counts across all available files — no object-graph deserialization required | ⬜ | Depends only on Phase B (XNB-11/12/13), not on any Phase C+ reader or on Phase D; the full runtime-compatibility matrix and smoke-test selection stay in Phase I (XNB-61-64) and still wait until Phase G is solid |
-| XNB-61b | Extend the XNB-61a scanner to **LZX-compressed** XNA `.xnb` files, using CNA's own decompressor (Phase D) — decompress the payload sequentially from the start until the type-reader table has been fully read (for a first implementation, decompressing the entire payload is acceptable; do not prematurely optimize this into a partial-decompression short-circuit); do not continue into the root object. Verify that a compressed fixture and its uncompressed equivalent produce the same reader-name inventory | ⬜ | Sequenced after Phase D (needs a real LZX decoder to exist) — this is the one part of Phase B3 that is *not* available right after Phase B; do not attempt it earlier |
+| XNB-65 | `ContentManager` startup manifest scan: walk the `Content` root once (`std::filesystem::recursive_directory_iterator`, bounded by `XnbReadLimits`-style limits on file/entry count) and cache each relative path's existence/extension in memory; `ResolveAssetPath` consults this cache instead of calling `std::filesystem::exists()` per candidate | ⬜ | Pure filesystem work — no dependency on Phase A/B, but grouped here since XNB-61a/61b reuse the same walk |
+| XNB-65A | Manifest snapshot/staleness policy: document that the manifest is a point-in-time snapshot (files added after the scan are not found until refreshed) and add an explicit `NOXNA RefreshContentManifest()` method that re-scans on demand — no automatic filesystem-watch/hot-reload is in scope here | ⬜ | Avoids silently surprising a game that adds content files mid-session |
+| XNB-66 | Public `NOXNA` introspection API exposing the manifest (e.g. `std::vector<ContentManifestEntry> GetContentManifest() const`, `ContentManifestEntry{relativePath, extension, hasXnb, hasCnb}`) | ⬜ | For tooling (asset validators, an editor's "what's in Content" view) — not part of the XNA 4.0 `ContentManager` API surface, must be `NOXNA` |
+| XNB-61a | Reader-name-only scan, **uncompressed `.xnb` files only**, folded into the XNB-65 manifest pass: for every `.xnb` file the manifest scan finds, read the header and type-reader table (no object-graph deserialization) and list every type-reader name referenced | ⬜ | Depends only on Phase B (XNB-11/12/13), not on any Phase C+ reader or on Phase D |
+| XNB-67 | Aggregate the XNB-61a reader-name inventory into the same public manifest API (XNB-66): which reader names are referenced, how many `.xnb` files reference each, and whether CNA currently has a registered reader for that name | ⬜ | Turns "which readers does CNA still need" from a manual audit into something the running game/tooling can query directly |
+| XNB-61b | Extend the XNB-61a scan to **LZX-compressed** XNA `.xnb` files, using CNA's own decompressor (Phase D) — decompress the payload sequentially from the start until the type-reader table has been fully read (for a first implementation, decompressing the entire payload is acceptable; do not prematurely optimize this into a partial-decompression short-circuit); do not continue into the root object. Verify that a compressed fixture and its uncompressed equivalent produce the same reader-name inventory | ⬜ | Sequenced after Phase D (needs a real LZX decoder to exist) — deferred along with the rest of Phase D under the current MVP scope; do not attempt it earlier |
 
 ---
 
@@ -243,6 +278,9 @@ entirely the second one.
 
 ## Phase D — LZX decompression
 
+> **Deferred under the current MVP scope (2026-07-16)** — not started; see the status banner at
+> the top of this file. Do not begin any task below until a future decision explicitly resumes it.
+
 | # | Task | Status | Notes |
 |---|------|--------|-------|
 | XNB-27 | Header-level compression enum, not a boolean: `enum class XnbCompression{None, Lzx, Lz4, Unknown}` parsed from the flags byte — do **not** hardcode `compressed == true → LZX` anywhere in the architecture | ⬜ | Needed because Phase G (XNB-44) targets MonoGame variants too, which use different compression |
@@ -261,6 +299,8 @@ entirely the second one.
 > `TextureCubeReader` were "deferred until after Phase D" while the task row itself still sat
 > physically inside Phase C, which could mislead an autonomous agent into implementing it too early.
 > This phase makes that ordering unambiguous by relocating the task itself.
+>
+> **Deferred under the current MVP scope (2026-07-16)** — not started; depends on Phase D.
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
@@ -269,6 +309,8 @@ entirely the second one.
 ---
 
 ## Phase E — `SpriteFont`, stock effects, `SoundEffect`/`Song`
+
+> **Deferred under the current MVP scope (2026-07-16)** — not started; depends on Phase D.
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
@@ -283,6 +325,8 @@ entirely the second one.
 ---
 
 ## Phase F — `Model` and shared-resource-heavy readers
+
+> **Deferred under the current MVP scope (2026-07-16)** — not started; depends on Phase D/E.
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
@@ -299,6 +343,8 @@ entirely the second one.
 
 > This is where "špičková kvalita" (top-tier quality) actually lives — not attempted before every
 > earlier phase is solid, per `xnb.md`'s own "why this is still not urgent" framing.
+>
+> **Deferred under the current MVP scope (2026-07-16)** — not started; depends on Phase D/E/F.
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
@@ -321,40 +367,19 @@ entirely the second one.
 
 ---
 
-## Phase H — Lua-scripted custom `ContentTypeReader` support (strictly after Phase A–G are solid)
+## Phase H — Lua-scripted custom `ContentTypeReader` support — **CANCELLED 2026-07-16**
 
-> New phase, per the issue's follow-up discussion on custom readers. Lua is a good fit for
-> **game/sample-specific data readers** (`SkinningDataReader`, `ParticleSettingsReader`,
-> `LevelReader`, ...), letting a portable/sample-specific `.xnb` custom reader be shipped as a
-> script instead of requiring a CNA recompile — but it must not become the primary implementation
-> path for standard readers, and it must not exist before the native reader framework (Phase A–G)
-> is itself correct, since the Lua binding surface would otherwise have to be redesigned repeatedly.
-> Standard readers (`Texture2DReader`, `SpriteFontReader`, `ModelReader`, buffer readers, stock
-> effects, `ListReader`/`DictionaryReader`, ...) **stay in native C++ permanently** — performance,
-> GPU-resource ownership, and validation robustness all argue against moving them to Lua.
->
-> An automatic, general-purpose C# `ContentTypeReader` → Lua converter is **not** a realistic goal
-> (reflection, `Activator.CreateInstance`, LINQ, delegates, private-member access, and calls into
-> arbitrary managed libraries cannot be mechanically translated). The realistic framing is
-> **AI-assisted porting** of custom readers to hand-reviewed Lua scripts, verified against a real
-> fixture, not a guaranteed-correct automatic translation.
-
-| # | Task | Status | Notes |
-|---|------|--------|-------|
-| XNB-48 | Define `ILuaContentReaderHost` abstraction (`ContentObject read(const LuaReaderDescriptor&, ContentReader&, const ContentObject& existing)`) | ⬜ | Keeps the Lua integration behind one seam, so the native reader framework from Phase A–G does not need to know Lua exists |
-| XNB-49 | Add a sandboxed Lua state dedicated to content readers: only expose `base`/`math`/`string`/`table` subsets plus the `CNA.Content`/`CNA.Math` tables — no `os`/`io`/`package`/`debug` | ⬜ | Reader scripts are executable code, not data; must not be able to touch the filesystem, spawn processes, or introspect arbitrary CNA internals |
-| XNB-50 | Bind primitive `ContentReader` operations to Lua (`read_bool`/`read_byte`/`read_int16/32/64`/`read_single`/`read_double`/`read_string`/`read_bytes(count)`) | ⬜ | Thin wrappers over the Phase A primitives already implemented in C++ |
-| XNB-51 | Bind XNA math reads and value-type constructors to Lua (`read_vector2/3/4`, `read_matrix`, `read_quaternion`, `read_color`, `read_rectangle`, `read_bounding_sphere`, `CNA.Vector3.new(...)`, etc.) | ⬜ | Reuses the Phase C math readers/structs — no new binary-protocol logic |
-| XNB-52 | Add a Lua reader descriptor/manifest format (`{xnbName, script, resultType, versions}` in JSON, per-directory), with explicit manifest lookup preferred over filename-guessing fallback | ⬜ | Explicit manifest avoids silently loading the wrong script for an ambiguous/renamed reader name |
-| XNB-53 | Allow `ContentTypeReaderRegistry` (XNB-14/XNB-14A) to register Lua-backed readers alongside native C++ factories, resolved through the same normalized-name lookup from XNB-13 | ⬜ | Must not require two different registries/lookup paths from the caller's perspective |
-| XNB-54 | Add typed `ContentObject` factories for custom game data returned from Lua (`CNA.ContentObject.new("MyGame.LevelData", {...})` or explicit typed constructors), never a bare untyped Lua table returned as-is | ⬜ | Mirrors the XNB-16A type-safety requirement — a Lua table alone must not be silently treated as any CNA object |
-| XNB-55 | Add bulk array-read bindings (`read_float_array(count)`, `read_vector3_array(count)`, `read_int32_array(count)`, `read_blob(count)`) to avoid per-element Lua call overhead on large payloads | ⬜ | Per-element Lua calls for e.g. large vertex counts would be a real performance problem; large GPU payloads should still prefer a native C++ reader entirely |
-| XNB-56 | Add safe shared-resource references for Lua readers: prefer a deferred `read_shared_resource_ref("Texture2D")` handle resolved automatically by C++ after all shared resources are read, over holding a raw Lua closure/callback across the whole read | ⬜ | Holding arbitrary Lua closures alive across `ReadSharedResource` risks lifetime/GC-safety bugs; a resolved-handle model is safer from the C++ side |
-| XNB-57 | Add external-reference support for Lua readers, delegating to the native `ContentReader::ReadExternalReference<T>()` from XNB-35 | ⬜ | Do not reimplement path resolution/cycle detection in Lua |
-| XNB-58 | Add memory and instruction-count limits to the reader sandbox (custom Lua allocator with a byte budget; instruction-count hook with a hard cap) | ⬜ | Prevents a malicious or buggy custom reader script from hanging or exhausting memory during content load |
-| XNB-58A | Lua reader error-context translation: every error surfaced from a Lua reader must preserve the script path, the normalized reader name, the `.xnb` asset path, the Lua stack trace, the current binary offset, and the current object-nesting path (e.g. `Root.Tag.AnimationClips[3]`) | ⬜ | Per second follow-up review point 3 — without this, debugging a faulty Lua reader degrades to guessing; a bare Lua error message alone is not acceptable diagnostics |
-| XNB-59 | Port one real custom reader from an official XNA sample to Lua as the first end-to-end proof (`SkinningDataReader` recommended — exercises dictionary/list/matrix/nested-object/custom-runtime-type all at once) | ⬜ | Must be verified against a real externally-produced fixture, per the Phase C+ Definition of Done, not a hand-crafted one |
-| XNB-60 | Document the AI-assisted C# `ContentTypeReader` → Lua porting workflow (what a human must still review/verify; explicitly not a guaranteed-correct automatic translation) | ⬜ | Sets expectations correctly — mirrors XNB-45's documentation style |
+> This phase is cancelled outright, not merely deferred. CNA's owner reviewed the sandboxed-Lua
+> design (a dedicated Lua state, custom allocator/instruction-count limits, ~13 binding tasks
+> formerly numbered `XNB-48`–`XNB-60`) and rejected it as disproportionate complexity for a niche
+> need. Custom `.xnb` `ContentTypeReader`s remain **native C++ only**, registered through Phase G's
+> plain `registry.Register("MyGame.Content.LevelReader", ...)` API — the same shape `.cnb`'s
+> `RegisterCnbLoader<T>` already uses for game-specific JSON data. No Lua sandbox, binding layer, or
+> script-based reader host will be built for `.xnb` custom readers. The task rows that used to live
+> here (`ILuaContentReaderHost`, a sandboxed Lua state, primitive/math bindings, a reader
+> descriptor/manifest format, shared-resource/external-reference handles, memory/instruction limits,
+> error-context translation, a ported `SkinningDataReader` sample, and a porting-workflow doc) are
+> removed, not just marked `⏸` — they are not planned to ever be implemented.
 
 ---
 
@@ -366,11 +391,13 @@ entirely the second one.
 > happened much earlier as XNB-61a/XNB-61b (Phase B3) — this phase reuses that inventory and adds
 > the parts that genuinely do need Phase G's finished reader set: the compatibility classification
 > and the smoke-test selection below.
+>
+> **Deferred under the current MVP scope (2026-07-16)** — not started; depends on Phase G.
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
 | XNB-61 | Re-run/refresh the XNB-61a/XNB-61b (Phase B3) reader-name inventory against the final Phase G reader set if it has gone stale, rather than re-implementing the scan from scratch | ⬜ | Formerly the first scan itself; the scan now lives in Phase B3 (XNB-61a for uncompressed, XNB-61b for LZX) so it doesn't wait for Phase G |
-| XNB-62 | Produce a compatibility matrix classifying each reader name found: standard reader (Phase A–F) / custom reader (Phase H candidate) / `ReflectiveReader` (XNB-42A limitation) / general `EffectReader` (XNB-32A limitation) | ⬜ | |
+| XNB-62 | Produce a compatibility matrix classifying each reader name found: standard reader (Phase A–F) / custom reader (native C++, Phase G) / `ReflectiveReader` (XNB-42A limitation) / general `EffectReader` (XNB-32A limitation) | ⬜ | |
 | XNB-63 | Select a representative smoke-test set covering: plain 2D texture, `SpriteFont`, audio, a stock-effect model, one custom-reader sample, one custom-`.fx` sample | ⬜ | Small enough to run routinely, broad enough to catch regressions across phases |
 | XNB-64 | Track "`.xnb` loads successfully" compatibility separately from "full sample runs correctly at runtime" compatibility — the two are different claims and must not be conflated in `docs/xnb-content-pipeline-support.md` (XNB-45) | ⬜ | A `.xnb` can deserialize successfully while the sample still fails at runtime for unrelated reasons (input, gamerservices, etc.) — keep the claims separate and honest |
 
@@ -387,13 +414,13 @@ entirely the second one.
 - [`docs/model-content-pipeline-support.md`](docs/model-content-pipeline-support.md) — the existing,
   already-documented gaps in CNA's current (non-`.xnb`) `ModelTypeReader` that Phase F (XNB-37 to
   XNB-40) closes as part of building the real `.xnb` `ModelReader`.
-- Phase H (Lua custom readers) and Phase I (official-sample inventory) are both explicitly
-  sequenced *after* Phase A–G — neither should start before the native reader framework and its
-  hardening pass are solid. Phase B3 is the one deliberate exception: XNB-61a (uncompressed files)
-  is a payload-agnostic reader-*name* scanner that only depends on Phase B and may run at any point
-  once Phase B exists; XNB-61b (LZX-compressed files) is the same scanner extended once Phase D's
-  decompressor exists — it cannot run any earlier than that, regardless of the Phase B3/Phase I
-  split.
+- Phase H (Lua custom readers) is cancelled (see that phase's own section) — it is no longer part
+  of any execution order. Phase I (official-sample inventory) remains sequenced *after* Phase A–C
+  under the current MVP scope, since it depends on a reasonably complete reader set to be useful.
+  Phase B3 is the one deliberate exception: XNB-65/XNB-61a (the startup manifest scan and its
+  uncompressed reader-name inventory) only depend on Phase B and may run at any point once Phase B
+  exists; XNB-61b (LZX-compressed files) is the same scan extended once Phase D's decompressor
+  exists — deferred along with the rest of Phase D under the current MVP scope.
 - See the "Execution-order mandate" and "Milestones" sections near the top of this file — they are
   the primary agent-facing guardrails for a long autonomous run and should be re-read whenever this
   plan is revised.

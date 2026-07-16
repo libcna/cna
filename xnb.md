@@ -1,14 +1,24 @@
 # XNB binary content pipeline: implementation plan for CNA
 
-> **Status: 🧊 FROZEN 2026-07-15 — researched, not adopted.** CNA adopted the alternative strategy
-> instead: [`cnb.md`](cnb.md)'s `.cnb` JSON envelope + native-by-extension loading, fully
-> implemented per [`plan_cnb.md`](plan_cnb.md) (`CNB-1`–`CNB-27`, all closed). Per `cnb.md`'s own
-> "Relationship to `xnb.md`/`plan_xnb.md`" section, this document and `plan_xnb.md` are kept as
-> reference material, not deleted — the phase breakdown and protocol-accuracy findings inside them
-> (e.g. the true difficulty of the general `EffectReader`/compiled-shader problem, the FBX/model-
-> importer cost on the writer side) remain useful if a real binary `.xnb` reader is ever revisited.
-> Nothing below this point has been implemented and none of it is planned to be, under the current
-> strategy.
+> **Status: 🔄 PARTIALLY UN-FROZEN 2026-07-16 — MVP scope active, broad coverage still deferred.**
+> CNA's owner decided `.xnb` should become a real, additional runtime format again, alongside the
+> already-implemented [`cnb.md`](cnb.md)/[`plan_cnb.md`](plan_cnb.md) `.cnb` strategy — not a
+> replacement for it. `ContentManager`'s resolution order now ranks `.xnb` **above** both the
+> literal caller-given path and `.cnb` (see `cnb.md`'s "Core rule"). The scope actually being
+> executed is intentionally narrow: [`plan_xnb.md`](plan_xnb.md)'s Phase 0/A/B/B2/B3/C only
+> (container parsing, binary primitives, the uncompressed-only case, and a first real `Texture2D`
+> reader — this plan's own M1/M2 milestones). Phase D (LZX) onward — `SpriteFont`, stock effects,
+> audio, `Model`, and the top-quality hardening pass — remain frozen/deferred pending a future
+> decision to resume them; nothing there is started. **Phase H (Lua-scripted custom
+> `ContentTypeReader` support) is rejected outright, not merely deferred** — see `plan_xnb.md`'s own
+> note; custom readers stay a plain C++ registration API (this document's own Phase G), the same
+> shape `.cnb`'s `RegisterCnbLoader<T>` already uses. A new content-manifest feature (`ContentManager`
+> scans the `Content` root once — internal perf cache + a public introspection API + the `.xnb`
+> reader-name inventory) is now part of the active scope too, folded into `plan_xnb.md`'s Phase B3.
+> See `plan_xnb.md`'s own top-of-file note for the complete list of what changed in this revision.
+> Writing/producing `.xnb` files remains permanently out of scope either way — see "Scope" in
+> `plan_xnb.md`; CNA only ever needs to consume `.xnb` files produced by real XNA/MonoGame/FNA
+> tooling.
 
 **Status: planning document only. Nothing described here is implemented yet.** This document
 replaces the previous "analysis only, low priority" version of `xnb.md` with an actual phased
@@ -351,6 +361,32 @@ approved for scheduling — this document only defines the shape and ordering, n
 - Public API for a CNA game to register its own `ContentTypeReader` (see snippet above).
 - Documentation for porting a real third-party XNA game's custom readers to C++.
 - No fixed scope — success is measured per adopting game, not as a CNA-internal completion state.
+- This stays plain C++ permanently. `plan_xnb.md` briefly explored a sandboxed-Lua alternative
+  (its former Phase H) for game-specific custom readers; that idea was rejected outright on
+  2026-07-16 as disproportionate complexity for a niche need — see `plan_xnb.md`'s own note.
+
+## Content manifest: startup `Content`-root scan (new, 2026-07-16)
+
+Alongside un-freezing the MVP scope above, `ContentManager` gains a startup manifest feature,
+folded into `plan_xnb.md`'s Phase B3 (`XNB-65`–`XNB-67`): it scans its `Content` root once (at
+construction, or lazily before the first `Load<T>()` if `RootDirectory` is set afterward) and keeps
+an in-memory index of every file found. This single scan serves three purposes:
+
+1. **An internal performance cache.** `ResolveAssetPath` today calls `std::filesystem::exists()`
+   once per candidate extension, per `Load<T>()` call. The manifest replaces that with a single
+   upfront directory walk, consulted in memory afterward.
+2. **A public `NOXNA` introspection API** (`ContentManager::GetContentManifest()`) so game/tooling
+   code can enumerate what assets actually exist under `Content`, without its own filesystem code.
+3. **The `.xnb` reader-name inventory** originally proposed as a standalone offline scanner
+   (`plan_xnb.md`'s former "Phase B3" scanner): for every `.xnb` file the manifest scan finds, read
+   just its header and type-reader table (never the object payload) and record which reader names
+   are referenced. Surfaced through the same public API, this turns "which standard readers does
+   CNA still need to implement for this game's content" from a manual audit into something the
+   running game/tooling can query directly.
+
+The manifest is a point-in-time snapshot — a file added to `Content` after the scan is not found
+until an explicit `RefreshContentManifest()` rescan. No filesystem-watch/hot-reload mechanism is
+part of this feature. See `plan_xnb.md`'s Phase B3 for the concrete task breakdown.
 
 ## Relationship to CNA's existing content approach
 
@@ -361,17 +397,21 @@ that existing scheme — `.xnb` loading is a new, additional path, selected by f
 like FNA's own loose-extension fallbacks, coexisting with `Texture2D::FromStream`, `.model.json`,
 `.shader.json`, etc.
 
-## Why this is still not a "do it now" item
+## Why broad coverage is still not a "do it now" item
 
-- **No known CNA consumer needs it today.** Every existing CNA example/test/demo uses CNA's own
-  loose-file content scheme; no task in `plan_graphics.md` is currently blocked on `.xnb` support.
-- **Phase D (LZX) and Phase B's reflection-free registry are both real, standalone engineering
-  efforts**, not quick additions to an existing file — see their own sections above.
-- **The practical benefit is real but narrow**: it lets CNA load asset files originally compiled
-  for a real XNA/FNA game — valuable for reusing an existing game's *compiled* content without
-  re-exporting it, but `docs/migration-guide.md` already tells a migrating developer to expect to
-  re-export/rewrite their content pipeline rather than assume `.xnb` compatibility.
+> Superseded in part 2026-07-16: the MVP slice (Phase 0/A/B/B2/B3/C — container, primitives,
+> uncompressed `Texture2D`, the content manifest) is now active, per the status banner at the top
+> of this file. The reasoning below still applies to everything past that point (Phase D onward).
 
-This plan exists so that, if/when this work is picked up, it can be scheduled as ordered,
-independently-completable phases (A through F above) rather than as one large, unscoped
-"implement XNB" task. No implementation is planned as part of writing this document.
+- **Phase D (LZX) and a general reader registry covering all ~40 FNA reader types are both real,
+  standalone engineering efforts**, not quick additions to an existing file — see their own
+  sections above.
+- **The practical benefit beyond the MVP slice is real but narrow**: broad `.xnb` coverage lets CNA
+  load asset files originally compiled for a real XNA/FNA game — valuable for reusing an existing
+  game's *compiled* content without re-exporting it, but `docs/migration-guide.md` already tells a
+  migrating developer to expect to re-export/rewrite their content pipeline rather than assume full
+  `.xnb` compatibility.
+
+`plan_xnb.md` schedules this work as ordered, independently-completable phases (A through I) rather
+than as one large, unscoped "implement XNB" task, specifically so a future decision to resume
+Phase D onward doesn't have to re-derive that breakdown from scratch.
