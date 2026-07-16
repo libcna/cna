@@ -233,20 +233,29 @@ namespace Microsoft::Devices::Sensors::Detail
          * @return true if sensor delivery genuinely started (the platform
          * sensor queue was created and enabled); false if this sensor type
          * is unavailable, if delivery could not actually be started, or if
-         * this bridge was already started.
+         * this bridge was already started (including a prior worker that is
+         * still in the process of stopping — see Task ANDROID-BRIDGE-005
+         * below).
          *
-         * @note Thread safety: the "already started" check, the worker
-         * thread's setup (callback/interval fields, spawning the thread
-         * itself), and Stop()'s matching "is a worker currently running"
-         * check are all guarded by one internal mutex, so two threads
-         * calling Start() concurrently (or one calling Start() while
-         * another calls Stop()) cannot corrupt this bridge's internal
-         * `std::thread` handle. That mutex is never held across this
-         * method's own bounded wait for the worker's startup handshake, so
-         * it cannot deadlock against Stop(). Two or more *external*
-         * (non-worker) threads calling `Stop()` concurrently on the same
-         * bridge is now also safe and synchronous for every caller (Task
+         * @note Thread safety: the "already started" check is guarded by one
+         * internal mutex, so two threads calling Start() concurrently (or
+         * one calling Start() while another calls Stop()) cannot corrupt
+         * this bridge's internal `std::thread` handle. That mutex is never
+         * held across this method's own bounded wait for the worker's
+         * startup handshake, so it cannot deadlock against Stop(). Two or
+         * more *external* (non-worker) threads calling `Stop()` concurrently
+         * on the same bridge is safe and synchronous for every caller (Task
          * ANDROID-BRIDGE-003, 2026-07-06) — see `Stop()`'s own note for how.
+         *
+         * **Fixed (Task ANDROID-BRIDGE-005, 2026-07-16):** the "already
+         * started" gate no longer keys off `std::thread::joinable()`, which
+         * a reentrant self-stop's `detach()` clears immediately even though
+         * the worker's OS thread is still executing. This method now rejects
+         * a new `Start()` for as long as a prior worker's `Run()` has not
+         * genuinely finished (confirmed by the worker itself, not inferred
+         * from the `std::thread` object's own reclaim state) — closing a
+         * real bug where a self-stopped-then-immediately-restarted bridge
+         * could end up with two workers concurrently sharing one `Impl`.
          */
         bool Start(const System::TimeSpan& timeBetweenUpdates, SampleCallback callback);
 
@@ -270,16 +279,31 @@ namespace Microsoft::Devices::Sensors::Detail
          * cannot deadlock against it. **Fixed (Task ANDROID-BRIDGE-003,
          * 2026-07-06), previously unsupported:** two or more distinct
          * *external* (non-worker) threads calling `Stop()` concurrently on
-         * the same bridge. Only the first such caller actually calls
-         * `join()` on the worker thread (claiming that right under the
-         * same internal mutex); every other concurrent external caller
-         * instead waits for that first caller's `join()` to complete
-         * before its own `Stop()` call returns — mirroring
+         * the same bridge. Only the first caller to claim it actually calls
+         * `join()` (if external) or `detach()` (if this is a reentrant
+         * self-stop) on the worker thread; every other concurrent caller
+         * touches the underlying `std::thread` object at all — mirroring
          * `SensorBase<T>`'s own `ClaimDisposalOnce()`/
          * `WaitForDisposalToComplete()` pattern for the analogous
-         * concurrent-`Dispose()` case. Every caller's `Stop()` is therefore
-         * synchronous (the worker is guaranteed joined once any `Stop()`
-         * call returns), not just the winner's.
+         * concurrent-`Dispose()` case. Every *external* caller's `Stop()` is
+         * synchronous: it does not return until the worker's `Run()` has
+         * genuinely finished, not merely until the `std::thread` object has
+         * been reclaimed. A reentrant self-stop never waits for that (it
+         * cannot — `Run()`, several stack frames below the callback that
+         * called `Stop()`, cannot finish until this very call returns).
+         *
+         * **Fixed (Task ANDROID-BRIDGE-005, 2026-07-16), previously a real
+         * bug:** a reentrant self-stop's `detach()` and a concurrent
+         * external caller's `join()` could previously race on the same
+         * `std::thread` object — one of two harmful outcomes was possible:
+         * a `join()` call on an already-detached thread (throws
+         * `std::system_error`), or both calling `detach()`/`join()`
+         * concurrently on the same object (a data race). Exactly one caller
+         * (self or external, whichever reaches the internal mutex first)
+         * now claims the sole right to touch the `std::thread` object at
+         * all for a given stop cycle; every other caller — including a
+         * second, nested reentrant self-stop — never calls `joinable()`,
+         * `join()`, or `detach()` on it.
          *
          * @note This bridge's internal worker state (the `Impl` this class
          * privately owns) is kept alive by the worker thread itself for as
