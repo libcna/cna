@@ -550,6 +550,13 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_backend_test(NAME EasyGL_EnvironmentMapEffect_Fresnel COMMAND cna_test_easygl_environmentmapeffect_fresnel
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 1112: EnvironmentMapEffect's Fresnel term must be computed per-vertex and Gouraud-
+        # interpolated, not recomputed per-fragment from a renormalized interpolated normal.
+        cna_easygl_test(cna_test_easygl_environmentmapeffect_fresnel_gradient
+                        examples/easygl_environmentmapeffect_fresnel_gradient_test.cpp)
+        cna_register_backend_test(NAME EasyGL_EnvironmentMapEffect_Fresnel_Gradient COMMAND cna_test_easygl_environmentmapeffect_fresnel_gradient
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 397: EnvironmentMapEffect reflection vector should respond to EyePosition
         cna_easygl_test(cna_test_easygl_environmentmapeffect_eyeposition
                         examples/easygl_environmentmapeffect_eyeposition_test.cpp)
