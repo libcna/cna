@@ -150,10 +150,12 @@ namespace Microsoft::Xna::Framework::Content
             System::IO::BinaryReader headerReader(&headerStream, true);
             const auto header = CNA::Internal::Xnb::ParseXnbHeader(headerReader, xnbPath.string());
 
-            if (header.compressed)
+            if (header.compression != CNA::Internal::Xnb::XnbCompression::None)
             {
-                // XNB-61b (LZX-compressed inventory) is deferred to Phase D -- an empty
-                // inventory for this one entry is not a scan failure.
+                // XNB-61b (compressed-file inventory) is unblocked now that Phase D's decompressor
+                // exists, but not yet picked up -- an empty inventory for this one entry is not a
+                // scan failure, matching the same "not implemented yet" treatment for every
+                // compression scheme (Lzx included), not just the ones CNA can't decode at all.
                 return names;
             }
 

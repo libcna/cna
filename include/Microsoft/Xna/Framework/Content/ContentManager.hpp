@@ -437,28 +437,41 @@ namespace Microsoft::Xna::Framework::Content
             System::IO::BinaryReader headerReader(&headerStream, true);
             const auto header = CNA::Internal::Xnb::ParseXnbHeader(headerReader, xnbPath);
 
-            if (header.compressed)
+            switch (header.compression)
             {
-                System::IO::MemoryStream sizeStream(
-                    reinterpret_cast<const uint8_t*>(bytes.data()) + 10, 4);
-                System::IO::BinaryReader sizeReader(&sizeStream, true);
-                const int32_t decompressedSize = sizeReader.ReadInt32();
-                const int32_t compressedSize = header.totalLength - 14;
+                case CNA::Internal::Xnb::XnbCompression::None:
+                {
+                    System::IO::MemoryStream bodyStream(
+                        reinterpret_cast<const uint8_t*>(bytes.data()) + 10,
+                        static_cast<int32_t>(bytes.size()) - 10);
+                    ContentReader contentReader(this, &bodyStream, assetName, header.version, header.platform);
+                    return contentReader.ReadAsset<T>();
+                }
+                case CNA::Internal::Xnb::XnbCompression::Lzx:
+                {
+                    System::IO::MemoryStream sizeStream(
+                        reinterpret_cast<const uint8_t*>(bytes.data()) + 10, 4);
+                    System::IO::BinaryReader sizeReader(&sizeStream, true);
+                    const int32_t decompressedSize = sizeReader.ReadInt32();
+                    const int32_t compressedSize = header.totalLength - 14;
 
-                const auto decompressed = CNA::Internal::Xnb::DecompressXnbPayload(
-                    reinterpret_cast<const uint8_t*>(bytes.data()) + 14,
-                    compressedSize, decompressedSize, xnbPath);
+                    const auto decompressed = CNA::Internal::Xnb::DecompressXnbPayload(
+                        reinterpret_cast<const uint8_t*>(bytes.data()) + 14,
+                        compressedSize, decompressedSize, xnbPath);
 
-                System::IO::MemoryStream bodyStream(decompressed.data(), static_cast<int32_t>(decompressed.size()));
-                ContentReader contentReader(this, &bodyStream, assetName, header.version, header.platform);
-                return contentReader.ReadAsset<T>();
+                    System::IO::MemoryStream bodyStream(decompressed.data(), static_cast<int32_t>(decompressed.size()));
+                    ContentReader contentReader(this, &bodyStream, assetName, header.version, header.platform);
+                    return contentReader.ReadAsset<T>();
+                }
+                case CNA::Internal::Xnb::XnbCompression::Lz4:
+                    throw ContentLoadException(
+                        "'" + xnbPath + "' uses MonoGame's Lz4 compression, which CNA does not yet "
+                        "support (plan_xnb.md XNB-30C).");
+                case CNA::Internal::Xnb::XnbCompression::Unknown:
+                default:
+                    throw ContentLoadException(
+                        "'" + xnbPath + "' has an unrecognized compression flag combination.");
             }
-
-            System::IO::MemoryStream bodyStream(
-                reinterpret_cast<const uint8_t*>(bytes.data()) + 10,
-                static_cast<int32_t>(bytes.size()) - 10);
-            ContentReader contentReader(this, &bodyStream, assetName, header.version, header.platform);
-            return contentReader.ReadAsset<T>();
         }
 
         /**

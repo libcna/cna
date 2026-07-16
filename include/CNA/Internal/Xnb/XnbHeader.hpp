@@ -11,12 +11,34 @@
 namespace CNA::Internal::Xnb
 {
     /**
+     * @brief Compression scheme signaled by a `.xnb` header's flags byte (plan_xnb.md XNB-27).
+     *
+     * Both bit values are real, confirmed against MonoGame's own `ContentManager.cs`
+     * (`ContentCompressedLzx = 0x80`, `ContentCompressedLz4 = 0x40`) -- FNA itself only ever
+     * produces/reads `Lzx`/`None` (it has no LZ4 decoder), but MonoGame's content pipeline can
+     * emit either. Deliberately a real enum rather than a bool so the rest of the architecture
+     * (`ContentManager::LoadXnbAsset<T>()`, `ScanXnbReaderNames()`) branches on the actual scheme
+     * instead of assuming `compressed == true` always means LZX.
+     */
+    enum class XnbCompression
+    {
+        /** @brief Neither compression bit is set; the payload follows the header as-is. */
+        None,
+        /** @brief Flags bit `0x80` -- FNA's own decoder, implemented (plan_xnb.md XNB-28/29). */
+        Lzx,
+        /** @brief Flags bit `0x40` -- a MonoGame-specific scheme, not yet implemented (plan_xnb.md XNB-30C). */
+        Lz4,
+        /** @brief Both compression bits set simultaneously -- not a real scheme either format defines. */
+        Unknown,
+    };
+
+    /**
      * @brief Parsed fields of a real `.xnb` binary container header (plan_xnb.md XNB-11).
      *
      * Layout, confirmed against FNA's `ContentManager.GetContentReaderFromXnb`
      * (`src/Content/ContentManager.cs`): 3 magic bytes `'X'`, `'N'`, `'B'`; 1 platform
-     * identifier byte; 1 version byte (4 or 5); 1 flags byte (bit `0x80` = LZX-compressed
-     * payload); a 4-byte little-endian total file length. 10 bytes total.
+     * identifier byte; 1 version byte (4 or 5); 1 flags byte (compression bits, see
+     * @ref XnbCompression); a 4-byte little-endian total file length. 10 bytes total.
      */
     struct XnbHeader
     {
@@ -26,8 +48,8 @@ namespace CNA::Internal::Xnb
         /** @brief The container version, always 4 or 5 -- ParseXnbHeader() rejects any other value. */
         int version = 0;
 
-        /** @brief True if the payload following this header is LZX-compressed (flags bit `0x80`). */
-        bool compressed = false;
+        /** @brief Compression scheme signaled by the flags byte -- see @ref XnbCompression. */
+        XnbCompression compression = XnbCompression::None;
 
         /** @brief Total length of the `.xnb` file in bytes, as recorded in the header itself. */
         int32_t totalLength = 0;
@@ -111,7 +133,24 @@ namespace CNA::Internal::Xnb
         }
 
         const auto flags = reader.ReadByte();
-        header.compressed = (flags & 0x80u) != 0;
+        const bool lzxBit = (flags & 0x80u) != 0;
+        const bool lz4Bit = (flags & 0x40u) != 0;
+        if (lzxBit && lz4Bit)
+        {
+            header.compression = XnbCompression::Unknown;
+        }
+        else if (lzxBit)
+        {
+            header.compression = XnbCompression::Lzx;
+        }
+        else if (lz4Bit)
+        {
+            header.compression = XnbCompression::Lz4;
+        }
+        else
+        {
+            header.compression = XnbCompression::None;
+        }
         header.totalLength = reader.ReadInt32();
 
         return header;

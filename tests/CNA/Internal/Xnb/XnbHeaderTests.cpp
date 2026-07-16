@@ -12,6 +12,7 @@
 #include "System/IO/MemoryStream.hpp"
 
 using CNA::Internal::Xnb::ParseXnbHeader;
+using CNA::Internal::Xnb::XnbCompression;
 using CNA::Internal::Xnb::XnbHeader;
 using Microsoft::Xna::Framework::Content::ContentLoadException;
 
@@ -37,11 +38,11 @@ TEST(XnbHeaderTest, RealMonoGameFixtureHeaderParsesCorrectly)
 
     EXPECT_EQ(header.platform, 'w');
     EXPECT_EQ(header.version, 5);
-    EXPECT_FALSE(header.compressed);
+    EXPECT_EQ(header.compression, XnbCompression::None);
     EXPECT_EQ(header.totalLength, 191);
 }
 
-TEST(XnbHeaderTest, CompressedFlagBitIsDetected)
+TEST(XnbHeaderTest, LzxCompressedFlagBitIsDetected)
 {
     const std::vector<uint8_t> bytes{
         'X', 'N', 'B', 'w', 0x05, 0x80, 0x10, 0x00, 0x00, 0x00
@@ -49,7 +50,32 @@ TEST(XnbHeaderTest, CompressedFlagBitIsDetected)
 
     const XnbHeader header = ParseBytes(bytes);
 
-    EXPECT_TRUE(header.compressed);
+    EXPECT_EQ(header.compression, XnbCompression::Lzx);
+}
+
+TEST(XnbHeaderTest, Lz4CompressedFlagBitIsDetected)
+{
+    // plan_xnb.md XNB-27: flags bit 0x40, confirmed against MonoGame's own ContentManager.cs
+    // (ContentCompressedLz4 = 0x40) -- FNA itself never produces this, but MonoGame's content
+    // pipeline can.
+    const std::vector<uint8_t> bytes{
+        'X', 'N', 'B', 'd', 0x05, 0x40, 0x10, 0x00, 0x00, 0x00
+    };
+
+    const XnbHeader header = ParseBytes(bytes);
+
+    EXPECT_EQ(header.compression, XnbCompression::Lz4);
+}
+
+TEST(XnbHeaderTest, BothCompressionBitsSetIsUnknown)
+{
+    const std::vector<uint8_t> bytes{
+        'X', 'N', 'B', 'w', 0x05, 0xC0, 0x10, 0x00, 0x00, 0x00
+    };
+
+    const XnbHeader header = ParseBytes(bytes);
+
+    EXPECT_EQ(header.compression, XnbCompression::Unknown);
 }
 
 TEST(XnbHeaderTest, Version4IsAccepted)

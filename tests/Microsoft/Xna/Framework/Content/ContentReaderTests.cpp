@@ -317,7 +317,7 @@ TEST_F(ContentReaderTest, RealMonoGameFixtureLoadsEndToEndThroughGenericDispatch
     const auto header = CNA::Internal::Xnb::ParseXnbHeader(headerReader, "white-1.xnb");
     EXPECT_EQ(header.platform, 'w');
     EXPECT_EQ(header.version, 5);
-    EXPECT_FALSE(header.compressed);
+    EXPECT_EQ(header.compression, CNA::Internal::Xnb::XnbCompression::None);
 
     // ContentReader takes over immediately after the 10-byte container header.
     System::IO::MemoryStream bodyStream(

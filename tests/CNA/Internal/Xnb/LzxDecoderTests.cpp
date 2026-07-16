@@ -44,7 +44,7 @@ TEST(LzxDecoderTest, RealCompressedMonoGameFixtureDecompressesToAValidTypeReader
     System::IO::BinaryReader headerReader(&headerStream, true);
     const auto header = CNA::Internal::Xnb::ParseXnbHeader(headerReader, "Explosion.xnb");
 
-    ASSERT_TRUE(header.compressed);
+    ASSERT_EQ(header.compression, CNA::Internal::Xnb::XnbCompression::Lzx);
     EXPECT_EQ(header.version, 5);
     EXPECT_EQ(header.platform, 'w');
 
@@ -111,7 +111,7 @@ TEST(LzxDecoderTest, MultiBlockRealFixtureDecompressesCorrectlyAcrossBlockBounda
         reinterpret_cast<const uint8_t*>(fileBytes.data()), (int32_t)fileBytes.size());
     System::IO::BinaryReader headerReader(&headerStream, true);
     const auto header = CNA::Internal::Xnb::ParseXnbHeader(headerReader, "FontCalibri14.xnb");
-    ASSERT_TRUE(header.compressed);
+    ASSERT_EQ(header.compression, CNA::Internal::Xnb::XnbCompression::Lzx);
 
     System::IO::MemoryStream sizeStream(reinterpret_cast<const uint8_t*>(fileBytes.data()) + 10, 4);
     System::IO::BinaryReader sizeReader(&sizeStream, true);
