@@ -8,6 +8,7 @@
 #include "Microsoft/Xna/Framework/Graphics/AlphaTestEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DualTextureEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EnvironmentMapEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp"
 
@@ -22,6 +23,15 @@
 // content pipeline (ContentManager.cpp's own EffectTypeReader for .cnb custom effects returns
 // std::shared_ptr<Effect>), these readers target std::shared_ptr<T> instead of a bare T.
 //
+// Target the common std::shared_ptr<Effect> base, not std::shared_ptr<ConcreteEffectType>: unlike
+// FNA (where ReadSharedResource<Effect>()'s C# cast succeeds via ordinary RTTI regardless of which
+// concrete effect type a reader's own generic parameter names), CNA's std::any_cast<T> requires an
+// *exact* type match -- plan_xnb.md XNB-40 (a ModelMeshPart's Effect, read via
+// ReadSharedResource<std::shared_ptr<Effect>>()) cannot know which of the 5 concrete effect types a
+// given file actually used, so every reader must erase to the same base type for that dispatch to
+// ever work. Each Read() still constructs the real concrete type internally; the upcast to
+// shared_ptr<Effect> happens implicitly on return.
+//
 // Each stock effect's texture field(s) are read via ContentReader::ReadExternalReference<T>()
 // (plan_xnb.md XNB-35) and given to the effect via SetOwnedTexture()/SetOwnedTexture2()/
 // SetOwnedEnvironmentMap() -- NOXNA additions that let the effect keep its own texture reference
@@ -35,67 +45,68 @@ namespace CNA::Internal::Xnb
     using Microsoft::Xna::Framework::Graphics::AlphaTestEffect;
     using Microsoft::Xna::Framework::Graphics::BasicEffect;
     using Microsoft::Xna::Framework::Graphics::DualTextureEffect;
+    using Microsoft::Xna::Framework::Graphics::Effect;
     using Microsoft::Xna::Framework::Graphics::EnvironmentMapEffect;
     using Microsoft::Xna::Framework::Graphics::SkinnedEffect;
 
     /** @brief FNA's real `Microsoft.Xna.Framework.Content.BasicEffectReader`. */
-    class BasicEffectReader : public ContentTypeReader<std::shared_ptr<BasicEffect>>
+    class BasicEffectReader : public ContentTypeReader<std::shared_ptr<Effect>>
     {
     public:
         BasicEffectReader()
-            : ContentTypeReader<std::shared_ptr<BasicEffect>>("Microsoft.Xna.Framework.Graphics.BasicEffect") {}
+            : ContentTypeReader<std::shared_ptr<Effect>>("Microsoft.Xna.Framework.Graphics.BasicEffect") {}
 
     protected:
-        std::shared_ptr<BasicEffect> Read(
-            ContentReader& input, std::optional<std::shared_ptr<BasicEffect>> existingInstance) override;
+        std::shared_ptr<Effect> Read(
+            ContentReader& input, std::optional<std::shared_ptr<Effect>> existingInstance) override;
     };
 
     /** @brief FNA's real `Microsoft.Xna.Framework.Content.AlphaTestEffectReader`. */
-    class AlphaTestEffectReader : public ContentTypeReader<std::shared_ptr<AlphaTestEffect>>
+    class AlphaTestEffectReader : public ContentTypeReader<std::shared_ptr<Effect>>
     {
     public:
         AlphaTestEffectReader()
-            : ContentTypeReader<std::shared_ptr<AlphaTestEffect>>("Microsoft.Xna.Framework.Graphics.AlphaTestEffect") {}
+            : ContentTypeReader<std::shared_ptr<Effect>>("Microsoft.Xna.Framework.Graphics.AlphaTestEffect") {}
 
     protected:
-        std::shared_ptr<AlphaTestEffect> Read(
-            ContentReader& input, std::optional<std::shared_ptr<AlphaTestEffect>> existingInstance) override;
+        std::shared_ptr<Effect> Read(
+            ContentReader& input, std::optional<std::shared_ptr<Effect>> existingInstance) override;
     };
 
     /** @brief FNA's real `Microsoft.Xna.Framework.Content.DualTextureEffectReader`. */
-    class DualTextureEffectReader : public ContentTypeReader<std::shared_ptr<DualTextureEffect>>
+    class DualTextureEffectReader : public ContentTypeReader<std::shared_ptr<Effect>>
     {
     public:
         DualTextureEffectReader()
-            : ContentTypeReader<std::shared_ptr<DualTextureEffect>>("Microsoft.Xna.Framework.Graphics.DualTextureEffect") {}
+            : ContentTypeReader<std::shared_ptr<Effect>>("Microsoft.Xna.Framework.Graphics.DualTextureEffect") {}
 
     protected:
-        std::shared_ptr<DualTextureEffect> Read(
-            ContentReader& input, std::optional<std::shared_ptr<DualTextureEffect>> existingInstance) override;
+        std::shared_ptr<Effect> Read(
+            ContentReader& input, std::optional<std::shared_ptr<Effect>> existingInstance) override;
     };
 
     /** @brief FNA's real `Microsoft.Xna.Framework.Content.EnvironmentMapEffectReader`. */
-    class EnvironmentMapEffectReader : public ContentTypeReader<std::shared_ptr<EnvironmentMapEffect>>
+    class EnvironmentMapEffectReader : public ContentTypeReader<std::shared_ptr<Effect>>
     {
     public:
         EnvironmentMapEffectReader()
-            : ContentTypeReader<std::shared_ptr<EnvironmentMapEffect>>("Microsoft.Xna.Framework.Graphics.EnvironmentMapEffect") {}
+            : ContentTypeReader<std::shared_ptr<Effect>>("Microsoft.Xna.Framework.Graphics.EnvironmentMapEffect") {}
 
     protected:
-        std::shared_ptr<EnvironmentMapEffect> Read(
-            ContentReader& input, std::optional<std::shared_ptr<EnvironmentMapEffect>> existingInstance) override;
+        std::shared_ptr<Effect> Read(
+            ContentReader& input, std::optional<std::shared_ptr<Effect>> existingInstance) override;
     };
 
     /** @brief FNA's real `Microsoft.Xna.Framework.Content.SkinnedEffectReader`. */
-    class SkinnedEffectReader : public ContentTypeReader<std::shared_ptr<SkinnedEffect>>
+    class SkinnedEffectReader : public ContentTypeReader<std::shared_ptr<Effect>>
     {
     public:
         SkinnedEffectReader()
-            : ContentTypeReader<std::shared_ptr<SkinnedEffect>>("Microsoft.Xna.Framework.Graphics.SkinnedEffect") {}
+            : ContentTypeReader<std::shared_ptr<Effect>>("Microsoft.Xna.Framework.Graphics.SkinnedEffect") {}
 
     protected:
-        std::shared_ptr<SkinnedEffect> Read(
-            ContentReader& input, std::optional<std::shared_ptr<SkinnedEffect>> existingInstance) override;
+        std::shared_ptr<Effect> Read(
+            ContentReader& input, std::optional<std::shared_ptr<Effect>> existingInstance) override;
     };
 
     /** @brief Registers all 5 stock-effect readers above under their real FNA canonical names. Idempotent. */

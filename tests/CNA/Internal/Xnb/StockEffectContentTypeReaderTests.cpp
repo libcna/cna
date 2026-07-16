@@ -31,6 +31,7 @@ using Microsoft::Xna::Framework::Graphics::AlphaTestEffect;
 using Microsoft::Xna::Framework::Graphics::BasicEffect;
 using Microsoft::Xna::Framework::Graphics::CompareFunction;
 using Microsoft::Xna::Framework::Graphics::DualTextureEffect;
+using Microsoft::Xna::Framework::Graphics::Effect;
 using Microsoft::Xna::Framework::Graphics::EnvironmentMapEffect;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::SkinnedEffect;
@@ -65,6 +66,11 @@ namespace
 
         void TearDown() override { ContentTypeReaderManager::ClearTypeCreators(); }
 
+        // Every stock-effect reader erases to std::shared_ptr<Effect> (the common base), not
+        // std::shared_ptr<ConcreteEffectType> -- see StockEffectContentTypeReaders.hpp's own note
+        // on why (ReadSharedResource<std::shared_ptr<Effect>>() needs every reader to agree on one
+        // erased type regardless of which concrete effect a given file actually used). Downcast
+        // here to get back the concrete type these tests assert fields on.
         template <typename T>
         std::shared_ptr<T> ReadViaReader(const std::string& readerName, const std::string& fieldBytes)
         {
@@ -75,7 +81,8 @@ namespace
             auto typeReader = ContentTypeReaderManager::CreateReader(readerName);
             if (!typeReader) return nullptr;
             std::any resultAny = typeReader->ReadUntyped(reader, std::any{});
-            return std::any_cast<std::shared_ptr<T>>(resultAny);
+            std::shared_ptr<Effect> effect = std::any_cast<std::shared_ptr<Effect>>(resultAny);
+            return std::dynamic_pointer_cast<T>(effect);
         }
 
         GraphicsDevice gd;

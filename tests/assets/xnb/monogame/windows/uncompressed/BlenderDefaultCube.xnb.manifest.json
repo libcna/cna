@@ -18,7 +18,7 @@
     "Microsoft.Xna.Framework.Content.IndexBufferReader",
     "Microsoft.Xna.Framework.Content.BasicEffectReader"
   ],
-  "notes": "Not loadable end-to-end yet (ModelReader is Phase F, not implemented) -- vendored now for plan_xnb.md XNB-32's BasicEffectReader tests, which verify the reader directly against a byte-offset slice of this real file rather than a full ContentManager.Load<Model> round trip. Independently verified by direct byte inspection (not assumption): BasicEffect is this file's 3rd (last) shared resource and its serialized object (type-reader-index byte + fields) occupies exactly bytes [1755, 1802) -- ends precisely at EOF, confirming the slice boundary is correct rather than guessed. The real field values found there (Blender's default cube material: diffuse (0.64, 0.64, 0.64), emissive (0,0,0), specular (0.25, 0.25, 0.25), specularPower ~9.6078, alpha 1.0, no texture reference, vertexColorEnabled false) are used verbatim in StockEffectContentTypeReaderTests.cpp. XNB-41's own future end-to-end Model test can reuse this exact fixture once ModelReader exists.",
+  "notes": "Originally vendored for plan_xnb.md XNB-32's BasicEffectReader tests (byte-offset slice only, ModelReader didn't exist yet). Now also the real end-to-end fixture for XNB-41 (Phase F, ModelReader) -- content.Load<Model>() loads this file completely: 2 bones (RootNode -> Cube), 1 mesh ('Cube', parent bone 'Cube', BoundingSphere radius sqrt(3) matching a unit cube's half-diagonal), 1 mesh part (24 vertices/12 primitives, Position+Normal vertex layout, 16-bit index buffer), and the BasicEffect material documented below. Fully parsed field-by-field with an independent Python script before writing the C++ reader (not assumed from FNA's source alone).",
   "basicEffectSharedResourceByteRange": {
     "typeReaderIndexOffset": 1755,
     "fieldsOffset": 1756,
@@ -32,5 +32,39 @@
       "alpha": 1.0,
       "vertexColorEnabled": false
     }
+  },
+  "modelStructure": {
+    "boneCount": 2,
+    "bones": [
+      {"index": 0, "name": "RootNode", "parent": -1, "children": [1]},
+      {"index": 1, "name": "Cube", "parent": 0, "children": []}
+    ],
+    "rootBoneIndex": 0,
+    "meshCount": 1,
+    "meshes": [
+      {
+        "name": "Cube",
+        "parentBoneIndex": 1,
+        "boundingSphereCenter": [-1.4901161193847656e-07, -1.1920928955078125e-07, 0.0],
+        "boundingSphereRadius": 1.732050895690918,
+        "partCount": 1,
+        "parts": [
+          {
+            "vertexOffset": 0,
+            "numVertices": 24,
+            "startIndex": 0,
+            "primitiveCount": 12,
+            "vertexDeclaration": {
+              "stride": 24,
+              "elements": [
+                {"offset": 0, "format": "Vector3", "usage": "Position", "usageIndex": 0},
+                {"offset": 12, "format": "Vector3", "usage": "Normal", "usageIndex": 0}
+              ]
+            },
+            "indexBuffer": {"sixteenBits": true, "dataSizeBytes": 72, "indexCount": 36}
+          }
+        ]
+      }
+    ]
   }
 }

@@ -28,6 +28,7 @@ namespace Microsoft::Xna::Framework::Graphics
     }
 
     BoundingSphere ModelMesh::getBoundingSphereProperty() const { return boundingSphere_; }
+    void ModelMesh::setBoundingSphereProperty(const BoundingSphere& value) { boundingSphere_ = value; }
     const ModelEffectCollection& ModelMesh::getEffectsProperty()        const { return effects_; }
     ModelEffectCollection&       ModelMesh::getEffectsPropertyMutable()       { return effects_; }
     const ModelMeshPartCollection& ModelMesh::getMeshPartsProperty()    const { return meshParts_; }

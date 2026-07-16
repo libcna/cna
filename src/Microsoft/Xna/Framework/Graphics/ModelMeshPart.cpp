@@ -61,4 +61,11 @@ namespace Microsoft::Xna::Framework::Graphics
 
     System::Object* ModelMeshPart::getTagProperty() const { return tag_; }
     void ModelMeshPart::setTagProperty(System::Object* value) { tag_ = value; }
+
+    void ModelMeshPart::SetVertexOffset(int value) { vertexOffset_ = value; }
+    void ModelMeshPart::SetNumVertices(int value) { numVertices_ = value; }
+    void ModelMeshPart::SetStartIndex(int value) { startIndex_ = value; }
+    void ModelMeshPart::SetPrimitiveCount(int value) { primitiveCount_ = value; }
+    void ModelMeshPart::SetVertexBuffer(VertexBuffer* value) { vertexBuffer_ = value; }
+    void ModelMeshPart::SetIndexBuffer(IndexBuffer* value) { indexBuffer_ = value; }
 }

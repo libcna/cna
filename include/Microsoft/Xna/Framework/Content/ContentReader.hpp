@@ -160,6 +160,24 @@ namespace Microsoft::Xna::Framework::Content
             return InnerReadObject<T>(std::nullopt);
         }
 
+        /**
+         * @brief FNA's `object ReadObject<object>()`: reads the next object via the 1-based
+         *        dispatch protocol without knowing its static type ahead of time (used for
+         *        `Tag` fields, e.g. `ModelReader`'s per-model/per-mesh `object Tag`).
+         *
+         * A non-template overload rather than a `ReadObject<T>()` call with `T = std::any`:
+         * `std::any_cast<std::any>` isn't a meaningful operation (the generic path expects the
+         * boxed type to match `T` exactly), so this reuses the same type-erased path
+         * `ReadSharedResources()` already relies on instead.
+         *
+         * @return The deserialized object, type-erased as `std::any`; empty if the underlying
+         *         reference was null (matching FNA's `null` for an unset `Tag`).
+         */
+        std::any ReadObject()
+        {
+            return InnerReadObjectAny();
+        }
+
         /** @brief FNA's `T ReadObject<T>(T existingInstance)`: as ReadObject<T>(), deserializing into @p existingInstance. */
         template <typename T>
         T ReadObject(T existingInstance)

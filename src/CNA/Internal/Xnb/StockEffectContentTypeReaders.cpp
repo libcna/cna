@@ -31,8 +31,8 @@ namespace CNA::Internal::Xnb
         }
     }
 
-    std::shared_ptr<BasicEffect> BasicEffectReader::Read(
-        ContentReader& input, std::optional<std::shared_ptr<BasicEffect>> existingInstance)
+    std::shared_ptr<Effect> BasicEffectReader::Read(
+        ContentReader& input, std::optional<std::shared_ptr<Effect>> existingInstance)
     {
         (void)existingInstance; // never provided: CanDeserializeIntoExistingObject defaults false, matching FNA
 
@@ -53,8 +53,8 @@ namespace CNA::Internal::Xnb
         return effect;
     }
 
-    std::shared_ptr<AlphaTestEffect> AlphaTestEffectReader::Read(
-        ContentReader& input, std::optional<std::shared_ptr<AlphaTestEffect>> existingInstance)
+    std::shared_ptr<Effect> AlphaTestEffectReader::Read(
+        ContentReader& input, std::optional<std::shared_ptr<Effect>> existingInstance)
     {
         (void)existingInstance;
 
@@ -73,8 +73,8 @@ namespace CNA::Internal::Xnb
         return effect;
     }
 
-    std::shared_ptr<DualTextureEffect> DualTextureEffectReader::Read(
-        ContentReader& input, std::optional<std::shared_ptr<DualTextureEffect>> existingInstance)
+    std::shared_ptr<Effect> DualTextureEffectReader::Read(
+        ContentReader& input, std::optional<std::shared_ptr<Effect>> existingInstance)
     {
         (void)existingInstance;
 
@@ -96,8 +96,8 @@ namespace CNA::Internal::Xnb
         return effect;
     }
 
-    std::shared_ptr<EnvironmentMapEffect> EnvironmentMapEffectReader::Read(
-        ContentReader& input, std::optional<std::shared_ptr<EnvironmentMapEffect>> existingInstance)
+    std::shared_ptr<Effect> EnvironmentMapEffectReader::Read(
+        ContentReader& input, std::optional<std::shared_ptr<Effect>> existingInstance)
     {
         (void)existingInstance;
 
@@ -122,8 +122,8 @@ namespace CNA::Internal::Xnb
         return effect;
     }
 
-    std::shared_ptr<SkinnedEffect> SkinnedEffectReader::Read(
-        ContentReader& input, std::optional<std::shared_ptr<SkinnedEffect>> existingInstance)
+    std::shared_ptr<Effect> SkinnedEffectReader::Read(
+        ContentReader& input, std::optional<std::shared_ptr<Effect>> existingInstance)
     {
         (void)existingInstance;
 
