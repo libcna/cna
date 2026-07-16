@@ -93,6 +93,11 @@ namespace Microsoft::Xna::Framework::Graphics
         return effectBackend_.get();
     }
 
+    void ShaderEffect::FillGpuDrawParams(CNA::Internal::Backends::GpuDrawParams& params) const
+    {
+        params.customEffectBackend = effectBackend_.get();
+    }
+
     const std::string& ShaderEffect::GetTypeName() const
     {
         static const std::string name = "CNA.ShaderEffect";

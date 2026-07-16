@@ -1878,6 +1878,16 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 1079: ShaderEffect can now drive a real 3D DrawIndexedPrimitives() call, not just
+        # SpriteBatch -- verifies World/View/Projection + attribute wiring for stride-32 vertices.
+        cna_easygl_test(cna_test_easygl_shadereffect_3d
+                        examples/easygl_shadereffect_3d_test.cpp)
+        add_test(NAME EasyGL_ShaderEffect_3D
+                 COMMAND cna_test_easygl_shadereffect_3d)
+        set_tests_properties(EasyGL_ShaderEffect_3D PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 133: DualTextureEffect — magenta×yellow→red pixel readback
         cna_easygl_test(cna_test_easygl_dual_texture
                         examples/easygl_dual_texture_test.cpp)

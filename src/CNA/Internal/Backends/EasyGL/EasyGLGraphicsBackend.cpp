@@ -3507,6 +3507,25 @@ void main()
         vb.vao.unbind();
     }
 
+    namespace
+    {
+        // Task 1079: binds a ShaderEffect's own compiled program (bypassing the built-in
+        // stride-dispatched shaders) and its World/View/Projection uniforms, matching the exact
+        // uniform names every original XNA sample's own .fx source already declares.
+        void BindCustomEffectMatrices(IEffectBackend& backend,
+                                      const Matrix& world, const Matrix& view, const Matrix& projection)
+        {
+            backend.Bind();
+            float worldCM[16], viewCM[16], projCM[16];
+            world.ToColumnMajor(worldCM);
+            view.ToColumnMajor(viewCM);
+            projection.ToColumnMajor(projCM);
+            backend.SetUniformMat4("World", worldCM);
+            backend.SetUniformMat4("View", viewCM);
+            backend.SetUniformMat4("Projection", projCM);
+        }
+    }
+
     void EasyGLGraphicsBackend::DrawPrimitivesEx(const IVertexBufferBackend& vb_in,
                                                  const Matrix& world,
                                                  const Matrix& view,
@@ -3517,6 +3536,17 @@ void main()
     {
         if (metagl::IsContextLost()) return;
         const auto& vb  = static_cast<const EasyGLVertexBufferBackend&>(vb_in);
+
+        if (params.customEffectBackend)
+        {
+            BindCustomEffectMatrices(*params.customEffectBackend, world, view, projection);
+            const int vertex_count = VertexCountForPrimitives(primitive, primitiveCount);
+            vb.vao.bind();
+            device.draw_arrays(ToEasyGl(primitive), params.vertexStart, vertex_count);
+            vb.vao.unbind();
+            return;
+        }
+
         Prog3D& p = SelectProgram(vb.GetStride(), params);
         p.prog.use();
         BindDrawParams(p, world, view, projection, params);
@@ -3546,6 +3576,28 @@ void main()
         if (metagl::IsContextLost()) return;
         const auto& vb  = static_cast<const EasyGLVertexBufferBackend&>(vb_in);
         const auto& ib  = static_cast<const EasyGLIndexBufferBackend&>(ib_in);
+
+        if (params.customEffectBackend)
+        {
+            BindCustomEffectMatrices(*params.customEffectBackend, world, view, projection);
+            const int index_count = VertexCountForPrimitives(primitive, primitiveCount);
+            vb.vao.bind();
+            ib.ibo.bind(::easygl::BufferTarget::ElementArray);
+            const auto idxTypeCustom = ib.thirtyTwoBit ? ::easygl::DataType::UnsignedInt
+                                                        : ::easygl::DataType::UnsignedShort;
+            const int indexSizeCustom = ib.thirtyTwoBit ? 4 : 2;
+            const void* indexOffsetCustom = reinterpret_cast<const void*>(
+                static_cast<std::uintptr_t>(params.startIndex) * static_cast<std::uintptr_t>(indexSizeCustom));
+            if (params.baseVertex == 0) {
+                device.draw_elements(ToEasyGl(primitive), index_count, idxTypeCustom, indexOffsetCustom);
+            } else {
+                ::metagl::glDrawElementsBaseVertex(ToEasyGl(primitive), index_count, idxTypeCustom,
+                                                   indexOffsetCustom, params.baseVertex);
+            }
+            vb.vao.unbind();
+            return;
+        }
+
         Prog3D& p = SelectProgram(vb.GetStride(), params);
         p.prog.use();
         BindDrawParams(p, world, view, projection, params);

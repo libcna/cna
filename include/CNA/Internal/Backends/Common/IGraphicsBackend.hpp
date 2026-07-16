@@ -401,6 +401,14 @@ namespace CNA::Internal::Backends
         int startIndex  = 0;
         /// Value added to each index before vertex fetch (maps to glDrawElementsBaseVertex / vkCmdDrawIndexed `vertexOffset`).
         int baseVertex  = 0;
+        /// Task 1079: when non-null, a `ShaderEffect`-compiled custom program is currently bound
+        /// (`Effect::GetEffectBackendPtr()`) and the backend should bind/draw with it directly
+        /// instead of selecting one of its own built-in stride-dispatched shaders. Null for every
+        /// stock effect (`BasicEffect`/`AlphaTestEffect`/`DualTextureEffect`/`EnvironmentMapEffect`/
+        /// `SkinnedEffect`) and for no-effect draws. Backends that don't implement this (non-EasyGL)
+        /// safely ignore it, matching the established accepted-and-ignored pattern for other
+        /// not-yet-backend-supported `GpuDrawParams` fields.
+        IEffectBackend* customEffectBackend = nullptr;
     };
 
     class IGraphicsBackend
