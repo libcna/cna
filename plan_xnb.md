@@ -3,7 +3,8 @@
 > **Status: 🔄 PARTIALLY UN-FROZEN 2026-07-16 — MVP scope (Phase 0/A/B/B2/B3/C) complete; Phase D
 > (LZX decompression) fully complete; Phase E (`SpriteFont`, stock effects, `SoundEffect`/`Song`,
 > `ReadExternalReference<T>()`) fully complete; Phase F (`Model`) fully complete; Phase D3
-> (`Texture3DReader`/`TextureCubeReader`) fully complete; everything after Phase D3/F stays frozen.**
+> (`Texture3DReader`/`TextureCubeReader`) fully complete; Phase G (top-quality hardening + custom
+> reader ergonomics) fully complete; only Phase H (cancelled) and Phase I (still deferred) remain.**
 > CNA's owner decided `.xnb` becomes a real, additional runtime format
 > again, ranked **above** `.cnb` in `ContentManager`'s resolution order (see [`cnb.md`](cnb.md)'s
 > "Core rule": `.xnb` → literal caller-given path → `.cnb` → native-by-extension). The MVP scope
@@ -159,22 +160,34 @@
 > `Texture3DReader` has no real fixture available anywhere in the library, so it is verified via a
 > hand-constructed stream instead (see Phase D3's own note). Phase D3 now has no open tasks. Phase G
 > onward remains frozen pending a future decision.
+>
+> **Revised a twelfth time (2026-07-16)** after CNA's owner explicitly requested Phase G next: all
+> seven tasks (XNB-42/42A/43/44/45/46/47) are done — see Phase G's own section for full detail.
+> Highlights: XNB-42 needed no new API (`ContentTypeReaderManager::AddTypeCreator()` was already the
+> extension point); XNB-46's `RegisterAllBuiltInXnbReaders()` closed a real gap where no single call
+> site to register every built-in reader had ever existed; XNB-43's whole-container fuzz test found
+> and fixed a real heap-buffer-overflow (declared-vs-actual byte count mismatch after a truncated
+> read) plus two related allocation-bomb gaps; XNB-47's own final compliance sweep broadened that
+> fuzzer to `Texture2D`/`SoundEffect` directly and found **three more real heap-buffer-overflows**
+> (texture dimension/byteCount cross-validation, `DxtUtil`'s dead `dataSize` bound, an unvalidated
+> `totalLength` header field), all fixed and re-verified clean under ASan+UBSan. **Phase G is now
+> fully complete**, every task `⬜ → ✅`, reaching M5. Only Phase H (cancelled outright) and Phase I
+> (still deferred) remain in this plan.
 
 ## Execution-order mandate for autonomous work
 
 > Read this before starting any task in this file.
 
 - Implement strictly in phase order, and only through the current active scope (Phase
-  0/A/B/B2/B3/C, Phase D, Phase E, Phase F, and Phase D3 — all explicitly un-frozen and requested by
-  CNA's owner, see the status banner above). Do not begin Phase G or anything sequenced after Phase
-  D3/F until a future decision explicitly resumes them. Do not begin Phase I while any mandatory
-  task in Phase A-C remains incomplete (Phase B3's XNB-61a/XNB-65/66/67 tasks are the one
-  deliberate exception — see their own rows; XNB-61b can now start since Phase D's decompressor
-  exists, but has not been picked up yet).
+  0/A/B/B2/B3/C, Phase D, Phase E, Phase F, Phase D3, and Phase G — all explicitly un-frozen and
+  requested by CNA's owner, see the status banner above). Phase H is cancelled outright (see its
+  own row below). Do not begin Phase I until CNA's owner explicitly requests it by name — Phase G's
+  completion satisfies Phase I's former blocking *dependency*, but is not itself the go-ahead; see
+  Phase I's own banner.
 - Phase H (Lua-scripted custom readers) is cancelled outright — do not implement it in any form,
   and do not treat it as merely "later". Custom `.xnb` readers stay native C++ only, registered
-  through Phase G's plain registration API (deferred along with the rest of Phase G onward under
-  the current scope).
+  through `ContentTypeReaderManager::AddTypeCreator()` (Phase G's XNB-42, already implemented — see
+  that row's note and `docs/xnb-content-pipeline-support.md`'s "Custom readers" section).
 - Work sequentially from the first incomplete task in the current phase. Prioritize finishing the
   current phase and reaching its milestone (below) over starting later, easier-looking tasks.
 - Do not skip a blocked/hard task silently by jumping ahead to a later phase to avoid it.
@@ -191,7 +204,7 @@
 | M2 - real texture | XNB-26 | ✅ **Reached 2026-07-16.** A real uncompressed XNA 4.0 `Texture2D` `.xnb` loads and uploads through the backend-neutral `GraphicsDevice` path. |
 | M3 - common XNA 2D content | end of Phase E | ✅ **Reached 2026-07-16** -- initially against its own narrower Definition of Done, then against the literal "end of Phase E" too once the rest of Phase E was picked up the same day (see the note below the table). Compressed `Texture2D`, `SpriteFont`, and at least one supported `SoundEffect` variant from the XNB-33 matrix all load correctly. |
 | M4 - standard model | XNB-41 | ✅ **Reached 2026-07-16.** A real multi-bone XNA `Model` `.xnb` loads with shared resources (`VertexBuffer`/`IndexBuffer`/`Effect`) resolved and a native CNA stock effect (`BasicEffect`) attached, verified against a real, externally-produced fixture. Multi-*mesh* (as opposed to multi-*mesh-part*) coverage is limited to what the one available real fixture actually has (1 mesh) -- the underlying mechanism (`ContentReader::ReadSharedResource<T>`'s per-index dedup) is generic and already tested independently of `ModelReader`, so this isn't considered a gap in the milestone itself. |
-| M5 - release-quality native loader | XNB-47 | Native `.xnb` support is documented (XNB-45), hardened (XNB-43), and fully usable without Lua. |
+| M5 - release-quality native loader | XNB-47 | ✅ **Reached 2026-07-16.** Native `.xnb` support is documented (XNB-45), hardened (XNB-43, plus 3 more real heap-buffer-overflows found and fixed by XNB-47's own broadened compliance sweep), and fully usable without Lua (custom readers register through XNB-42's plain `AddTypeCreator()` extension point instead). |
 
 > **Current active scope (2026-07-16):** M1 and M2 have both been **reached**, and — as of the
 > same day, once `XNB-18B`/`XNB-18C`/`XNB-20`/`XNB-21`/`XNB-22` were picked back up and closed —
@@ -225,8 +238,24 @@
 > `VertexBuffer`/`IndexBuffer`/`TextureCube`'s own precedent), and
 > `ContentManager::Load<TextureCube>()`'s pre-existing specialisation never checked for a `.xnb`
 > file at all (fixed to match the `Texture2D`/`SoundEffect` specialisations). **Phase D3 is now
-> fully complete**, every task `⬜ → ✅`. M5/Phase G onward remain frozen until a future decision
-> explicitly resumes them.
+> fully complete**, every task `⬜ → ✅`. CNA's owner then explicitly requested Phase G next:
+> XNB-42/42A (the custom-reader extension point, already `AddTypeCreator()`, plus the
+> `ReflectiveReader<T>` decision), XNB-46 (`RegisterAllBuiltInXnbReaders()`, the single call site
+> that never existed before), XNB-44 (real-world compatibility verified against two independent
+> third-party sources), and XNB-45 (`docs/xnb-content-pipeline-support.md`) are all done. XNB-43's
+> whole-container fuzz test found and fixed a real heap-buffer-overflow (`ReadBytesExactOrThrow()`,
+> now used everywhere a reader trusts a declared byte count) plus two related allocation-bomb gaps
+> (`CheckCollectionElementCount()`, and a `sharp-runtime` `BinaryReader` hardening fix). XNB-47's own
+> final compliance sweep broadened that same fuzzer to target `Texture2D`/`SoundEffect` directly
+> (not just `Model`) and found **three more real heap-buffer-overflows**: `Texture2D`/`3D`/`Cube`
+> readers never cross-checked declared byteCount against width/height/depth (plus fixed an
+> always-broken, unrelated compressed-volume-texture slicing bug in `Texture3DReader` found along
+> the way), `DxtUtil::DecompressDxt1/3/5` never actually bounds-checked their own `dataSize`
+> parameter, and `ContentManager::LoadXnbAsset<T>()`'s Lzx branch trusted an unvalidated
+> file-declared `totalLength`. All fixed and re-verified clean under
+> `-DCNA_SANITIZE=address,undefined`. **Phase G is now fully complete**, every task `⬜ → ✅`,
+> reaching M5. Only Phase H (cancelled outright) and Phase I (still deferred pending a future
+> decision) remain.
 
 ## Scope
 
@@ -551,17 +580,20 @@ entirely the second one.
 > This is where "špičková kvalita" (top-tier quality) actually lives — not attempted before every
 > earlier phase is solid, per `xnb.md`'s own "why this is still not urgent" framing.
 >
-> **Deferred under the current MVP scope (2026-07-16)** — not started; depends on Phase D/E/F.
+> **Fully complete 2026-07-16** — un-frozen the same day CNA's owner explicitly requested it.
+> XNB-47's own compliance sweep (broadening the fuzz coverage from XNB-43 to also target
+> `Texture2D`/`SoundEffect` directly, not just `Model`) found and fixed three more real
+> heap-buffer-overflows beyond XNB-43's own findings — see that row's note.
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| XNB-42 | Public API for a CNA game to register its own custom `ContentTypeReader` (`registry.Register("MyGame.Content.LevelReader", ...)`) | ⬜ | Permanent, explicit limitation of the format itself — not "fixable", just needs a clean extension point |
-| XNB-42A | `ReflectiveReader<T>` compatibility decision: CNA will support only manually registered, explicit C++ `ContentTypeReader`s for custom content (no generalized C++ reflection-driven reader) — document this decision and what a game author must do instead when their `.xnb` was built with an implicit `ReflectiveReader` | ⬜ | Per review: not automatically implementing this limits "broad real-world compatibility", so the limitation must be an explicit, documented decision, not a silent gap |
-| XNB-43 | Malformed/adversarial-file robustness pass across the *entire* pipeline (not just LZX from Phase D) — truncated tables, bad shared-resource indices, reader-version mismatches | ⬜ | |
-| XNB-44 | Broad compatibility test corpus: real files from real XNA 4.0 Windows, MonoGame, and FNA-produced `.xnb` variants, documenting any behavioral differences found | ⬜ | Corpus skeleton itself already exists from XNB-17A; this task is about filling and expanding it |
-| XNB-45 | Full developer documentation (`docs/xnb-content-pipeline-support.md`) covering exactly what is/isn't supported, mirroring the style of `docs/model-content-pipeline-support.md` | ⬜ | |
-| XNB-46 | Register every Phase A-F reader that ended up implemented into the single `ContentTypeReaderRegistry` first stood up in Phase B2, alongside the existing loose-file loaders | ⬜ | This is now a small "finish populating the registry" task, not the first integration point — that already happened in Phase B2 |
-| XNB-47 | Final compliance audit against the per-reader checklist below: exact serialized layout confirmed from an authoritative implementation; ≥ 1 real externally-produced fixture; success test; truncated-input test; invalid-count/size test; wrong-reader-version test; asset ownership/unload verified; backend-independent behavior verified; supported producer/platform variants documented | ⬜ | Per follow-up review point 11 — this checklist is **not** retroactive-only: it is the continuous Definition of Done for every reader task starting in Phase C (see the callout above Phase C). This task is the final confirmation sweep, not the first time the checklist is applied |
+| XNB-42 | Public API for a CNA game to register its own custom `ContentTypeReader` (`registry.Register("MyGame.Content.LevelReader", ...)`) | ✅ | **Implemented 2026-07-16**: no new API needed — `ContentTypeReaderManager::AddTypeCreator()` (XNB-14/14A) is already the public, generic extension point, matching FNA's own real internal method of the same name/shape. `CustomContentTypeReaderTests.cpp` proves it end-to-end with a fully game-defined type/reader, and confirms the design against a real, independent third-party custom reader (`prime31/Nez`'s `BitmapFontReader`, correctly rejected as unregistered) |
+| XNB-42A | `ReflectiveReader<T>` compatibility decision: CNA will support only manually registered, explicit C++ `ContentTypeReader`s for custom content (no generalized C++ reflection-driven reader) — document this decision and what a game author must do instead when their `.xnb` was built with an implicit `ReflectiveReader` | ✅ | **Documented 2026-07-16** in `docs/xnb-content-pipeline-support.md`'s own "ReflectiveReader<T>" section: explicit decision plus the concrete workaround (rebuild with an explicit `ContentTypeWriter`/reader pair, then register the C++ equivalent) |
+| XNB-43 | Malformed/adversarial-file robustness pass across the *entire* pipeline (not just LZX from Phase D) — truncated tables, bad shared-resource indices, reader-version mismatches | ✅ | **Implemented 2026-07-16**: a whole-container deterministic fuzz test (`XnbContainerFuzzTests.cpp`, mutating a real Model fixture's entire byte stream through the real `ContentManager::Load<T>()` path) found a real heap-buffer-overflow — `VertexBufferReader`/`IndexBufferReader` (and by the same pattern `Texture2D`/`Texture3D`/`TextureCube`/`SoundEffect`'s raw-byte-blob reads) trusted `ReadBytes()`'s *requested* length instead of its *actual returned* length (which silently trims on EOF, matching real .NET). Fixed via `ContentReader::ReadBytesExactOrThrow()`, now used by all 8 such call sites. Also fixed: `ArrayReader<T>`/`ListReader<T>`/`DictionaryReader<TKey,TValue>` had no bound on their declared element count before allocating (`ContentReader::CheckCollectionElementCount()`, wiring up the previously-dead `XnbReadLimits::maxCollectionElementCount`); a malformed generic type name leaked `XnbTypeName`'s own `std::invalid_argument` instead of the pipeline's one consistent `ContentLoadException`. Also hardened `sharp-runtime`'s `BinaryReader::ReadString()`/`ReadBytes(int)` against an allocation-bomb from an attacker-controlled length prefix (a seekable stream's own remaining length now bounds the allocation) |
+| XNB-44 | Broad compatibility test corpus: real files from real XNA 4.0 Windows, MonoGame, and FNA-produced `.xnb` variants, documenting any behavioral differences found | ✅ | **Implemented 2026-07-16**: verified against two independent real-world sources beyond MonoGame's own test assets — `prime31/Nez` (MIT-licensed; its MacOSX-platform `'X'` texture loads correctly, its custom `BitmapFontReader`-based font is correctly rejected) and `openeggbert/speedyblupi.com` (its WebAssembly-platform `'b'` files are correctly rejected, matching FNA's real `targetPlatformIdentifiers` exactly — MonoGame added `'b'` after FNA's fork point). Neither large binary was vendored into the repo; the platform-acceptance finding is captured as a small hand-crafted header test instead (`XnbHeaderTests.cpp`'s `MonoGameWebAssemblyPlatformIsNotAcceptedMatchingFnaExactly`) |
+| XNB-45 | Full developer documentation (`docs/xnb-content-pipeline-support.md`) covering exactly what is/isn't supported, mirroring the style of `docs/model-content-pipeline-support.md` | ✅ | **Implemented 2026-07-16**: supported-readers table, compression/platform/audio support matrices, the XNB-42 custom-reader extension point with a runnable example, the XNB-42A decision, the XNB-43 hardening summary, and the XNB-44 compatibility findings. Also corrected `docs/model-content-pipeline-support.md`, which had gone stale since Phase F added a real binary `ModelReader` (that doc only ever covered the older `.model.json` loose-file path) |
+| XNB-46 | Register every Phase A-F reader that ended up implemented into the single `ContentTypeReaderRegistry` first stood up in Phase B2, alongside the existing loose-file loaders | ✅ | **Implemented 2026-07-16**: `CNA::Internal::Xnb::RegisterAllBuiltInXnbReaders()` — before this, no single call site existed anywhere, even in production code, to register every built-in reader; a real game would have had to discover and call all thirteen individual `Register*XnbReader()` functions itself. Deliberately not auto-invoked from `ContentManager`'s constructor (would defeat many existing tests' `ClearTypeCreators()`-based isolation) |
+| XNB-47 | Final compliance audit against the per-reader checklist below: exact serialized layout confirmed from an authoritative implementation; ≥ 1 real externally-produced fixture; success test; truncated-input test; invalid-count/size test; wrong-reader-version test; asset ownership/unload verified; backend-independent behavior verified; supported producer/platform variants documented | ✅ | **Implemented 2026-07-16**: confirmed backend-independence by inspection (zero backend-specific references anywhere under `CNA::Internal::Xnb`); confirmed `Texture2D`'s own weak-cache `Unload()` path specifically (a different code path from the generic asset cache XNB-17D already covered) with a new dedicated test; broadened `XnbContainerFuzzTests.cpp` to fuzz `Texture2D` and `SoundEffect` directly as root dispatch targets, not just `Model` — this found and fixed **three more real heap-buffer-overflows**: `Texture2D`/`3D`/`CubeReader` never cross-checked their declared byteCount against width/height/depth (plus an always-broken, never-exercised bug in `Texture3DReader`'s compressed-volume-texture path, which decompressed a whole multi-slice level as one 2D image); `DxtUtil::DecompressDxt1/3/5` accepted a `dataSize` parameter but never actually bounds-checked against it; `ContentManager::LoadXnbAsset<T>()`'s Lzx branch used the file's own unvalidated `totalLength` header field to size a read from the just-read file buffer. All three confirmed fixed under `-DCNA_SANITIZE=address,undefined` |
 
 > **Definition of Done for every reader task from Phase C onward:** a reader task may only be
 > marked ✅ once all of the following hold — do not wait until XNB-47 to check these for the first
@@ -599,7 +631,10 @@ entirely the second one.
 > the parts that genuinely do need Phase G's finished reader set: the compatibility classification
 > and the smoke-test selection below.
 >
-> **Deferred under the current MVP scope (2026-07-16)** — not started; depends on Phase G.
+> **Deferred (2026-07-16)** — not started. Phase G (its former blocking dependency) is now
+> complete, but this phase still requires its own explicit go-ahead before starting, matching every
+> other phase transition in this plan (each one only began once CNA's owner explicitly requested it
+> by name) — do not treat Phase G's completion as an implicit green light to begin Phase I.
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
