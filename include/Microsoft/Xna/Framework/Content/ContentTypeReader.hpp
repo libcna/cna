@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
-#include <memory>
+#include <any>
 #include <string>
+#include <utility>
 
 #include "CNA/CNAHelper.hpp"
 
@@ -23,8 +24,12 @@ namespace Microsoft::Xna::Framework::Content
      *
      * `TargetType` is represented as a canonical XNA type name string (e.g.
      * `"Microsoft.Xna.Framework.Graphics.Texture2D"`) rather than a real `System::Type`/`Type`
-     * object, since CNA has no runtime reflection -- see plan_xnb.md XNB-16A/16C for the
-     * `RuntimeTypeId` layered on top of this same string for fast dispatch/type-checking.
+     * object, since CNA has no runtime reflection. FNA's boxed `object` (used for both
+     * `TargetType`-erased dispatch and `existingInstance`) becomes `std::any` here rather than
+     * `std::shared_ptr<void>`: `std::any` is self-describing and `std::any_cast<T>()` throws
+     * `std::bad_any_cast` on a type mismatch, the same safety `object`'s checked unboxing cast
+     * gives C# -- a bare `shared_ptr<void>` would need a hand-rolled parallel type tag to get
+     * that same guarantee instead of silently reinterpreting the wrong type.
      */
     class NOXNA ContentTypeReaderBase
     {
@@ -54,11 +59,11 @@ namespace Microsoft::Xna::Framework::Content
          *        ContentReader, object)`.
          *
          * @param input            The reader positioned at this object's serialized data.
-         * @param existingInstance An existing instance to deserialize into, or null for a new one.
-         * @return The deserialized object, type-erased as `std::shared_ptr<void>`.
+         * @param existingInstance An existing instance to deserialize into, or an empty
+         *                         `std::any` for a new one (matching a null `object`).
+         * @return The deserialized object, type-erased as `std::any`.
          */
-        virtual std::shared_ptr<void> ReadUntyped(
-            ContentReader& input, std::shared_ptr<void> existingInstance) = 0;
+        virtual std::any ReadUntyped(ContentReader& input, std::any existingInstance) = 0;
 
     protected:
         /** @brief FNA's `protected ContentTypeReader(Type targetType)`. */
@@ -95,15 +100,16 @@ namespace Microsoft::Xna::Framework::Content
     public:
         /**
          * @brief FNA's `protected internal override object Read(ContentReader, object)`: unboxes
-         *        @p existingInstance (if non-null) to `T`, delegates to the typed Read(), then
+         *        @p existingInstance (if non-empty) to `T`, delegates to the typed Read(), then
          *        re-boxes the result -- the C++ counterpart of .NET's object-boxing glue.
+         *
+         * @throws std::bad_any_cast if @p existingInstance is non-empty but does not hold a `T`.
          */
-        std::shared_ptr<void> ReadUntyped(
-            ContentReader& input, std::shared_ptr<void> existingInstance) override
+        std::any ReadUntyped(ContentReader& input, std::any existingInstance) override
         {
-            T existing = existingInstance ? *std::static_pointer_cast<T>(existingInstance) : T{};
+            T existing = existingInstance.has_value() ? std::any_cast<T>(std::move(existingInstance)) : T{};
             T result = Read(input, std::move(existing));
-            return std::make_shared<T>(std::move(result));
+            return std::any(std::move(result));
         }
     };
 }

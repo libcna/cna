@@ -35,8 +35,7 @@ namespace Microsoft::Xna::Framework::Content
         KnownUnsupportedContentTypeReader(std::string targetTypeName, UnsupportedContentReaderReason reason);
 
         /** @brief Always throws ContentLoadException naming @ref targetTypeName and the reason. */
-        std::shared_ptr<void> ReadUntyped(
-            ContentReader& input, std::shared_ptr<void> existingInstance) override;
+        std::any ReadUntyped(ContentReader& input, std::any existingInstance) override;
 
     private:
         UnsupportedContentReaderReason reason_;

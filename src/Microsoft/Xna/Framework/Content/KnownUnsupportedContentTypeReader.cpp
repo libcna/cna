@@ -27,8 +27,8 @@ namespace Microsoft::Xna::Framework::Content
     {
     }
 
-    std::shared_ptr<void> KnownUnsupportedContentTypeReader::ReadUntyped(
-        ContentReader& /*input*/, std::shared_ptr<void> /*existingInstance*/)
+    std::any KnownUnsupportedContentTypeReader::ReadUntyped(
+        ContentReader& /*input*/, std::any /*existingInstance*/)
     {
         throw ContentLoadException(
             "The '" + getTargetTypeNameProperty() + "' content type reader is recognized but not "
