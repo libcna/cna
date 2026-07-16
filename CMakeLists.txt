@@ -1994,6 +1994,16 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 947: Distort.fx's DistortBlur technique -- with this, DistortionSample's shader
+        # blocker is fully cleared.
+        cna_easygl_test(cna_test_easygl_distortblur_shader
+                        examples/easygl_distortblur_shader_test.cpp)
+        add_test(NAME EasyGL_DistortBlur_Shader
+                 COMMAND cna_test_easygl_distortblur_shader)
+        set_tests_properties(EasyGL_DistortBlur_Shader PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 133: DualTextureEffect — magenta×yellow→red pixel readback
         cna_easygl_test(cna_test_easygl_dual_texture
                         examples/easygl_dual_texture_test.cpp)
