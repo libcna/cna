@@ -307,37 +307,80 @@ verified via revert-verify-restore.
 
 ## Phase 3 — Guide: real message-box overlay + real keyboard capture
 
-### Task 3.1 — Guide.BeginShowMessageBox: real CNA overlay
+### Task 3.1 — Guide.BeginShowMessageBox: real CNA overlay ✅ complete
 
-Current state: both overloads (`src/Microsoft/Xna/Framework/GamerServices/Guide.cpp:116-140`)
+Original state: both overloads (`src/Microsoft/Xna/Framework/GamerServices/Guide.cpp:116-140`)
 unconditionally `throw System::NotSupportedException()`. `EndShowMessageBox` (`Guide.cpp:142`)
-also always throws. No existing SpriteBatch/SpriteFont-based UI helper was found anywhere in the
-codebase to reuse — this needs a small new one.
+also always threw. No existing SpriteBatch/SpriteFont-based UI helper existed anywhere in the
+codebase to reuse — this needed a small new one.
 
-- [ ] Design a minimal `NOXNA` message-box overlay: a static-ish rendering + input helper that
-  the game's own draw loop calls (matching how the F1 help overlays in Phase 2's plan area work —
-  no automatic hook into `Game.Draw()`, since `Guide` has no access to the game's own
-  `SpriteBatch`/`GraphicsDevice` today). Reuse the exact same visual language as the F1 overlay
-  (translucent white rectangle, black text) for consistency, per decision 5d's spirit.
-- [ ] `BeginShowMessageBox` stores the requested title/text/buttons/icon and returns a real
-  `IAsyncResult` (the existing `GuideAction`-style pattern already used by
-  `BeginShowKeyboardInput`, `Guide.cpp:14-42`), but — unlike today's other Guide `Begin*`
-  fake-syncs — must **not** synchronously complete, since a message box needs a real user click.
-  Completes when the game explicitly renders the overlay and the user selects a button (needs a
-  small public "pump/render" entry point on the overlay helper that a game's `Draw()` calls).
-- [ ] `EndShowMessageBox` returns the selected button index (`std::optional<int>`, matching the
-  existing signature) instead of always throwing; throws `System::InvalidOperationException` (not
-  `NotSupportedException`) only if called before the async op completes, matching real
-  Begin/End-pair semantics used elsewhere in this codebase.
-- [ ] Add tests: both `BeginShowMessageBox` overloads no longer throw and return a valid
-  `IAsyncResult`; `EndShowMessageBox` throws if called too early; a full synthetic
-  "render frame → simulate click → End" cycle returns the right button index; `focusButton`
-  parameter is honored as the initial default selection; empty `buttons` vector is rejected
-  (matches FNA's own validation if FNA validates this — check first).
-- [ ] Wire the new overlay into at least `examples/demo_guide_overlay_console` (the demo whose
-  name literally suggests this is its purpose — check its current content first, since it may
-  already assume the old no-op/NotSupportedException behavior and need updating, not just
-  extending).
+- [x] Designed a minimal `NOXNA` message-box overlay: `Guide::RenderPendingMessageBoxEXT(device,
+  spriteBatch, font, whitePixel)`, a pump/render entry point the game's own `Draw()` calls after
+  drawing its own scene (no automatic hook into `Game.Draw()`, matching the plan's own reasoning —
+  `Guide` has no access to a game's `SpriteBatch`/`GraphicsDevice` on any real platform). Visual
+  language matches the F1 overlay per decision 5d: translucent white rectangle (`Color(255,255,255,220)`),
+  black text, plus a light-blue highlight on the focused button. State lives in a new
+  translation-unit-private `GuideMessageBoxAction : public GuideAction` (mirrors
+  `NetworkSessionAction`'s own pattern of an action object carrying its own request/response data
+  as fields) with `Title`/`Text`/`Buttons`/`FocusButton`/`Icon` (request) and `SelectedButton`
+  (response); a single file-scope `pendingMessageBox_` pointer enforces one-pending-box-at-a-time
+  (matching `NetworkSession::activeAction_`/`SignedInGamer::statReceiveAction_`'s established
+  single-active-action convention — no explicit user spec for concurrent boxes existed, so this is
+  a conservative default, documented here rather than silently assumed).
+  **Real bug found and fixed during implementation**: the first version created the required
+  white-pixel background texture *inside* `RenderPendingMessageBoxEXT` as a local variable.
+  `SpriteBatch::Draw()`'s default deferred sort mode only stores a raw `Texture2D*` per sprite,
+  resolved later at `End()` (`SpriteBatch.cpp`'s `pushSprite`/`flushBatch`) — a texture destroyed
+  before the caller's own `End()` runs is a dangling pointer, causing a real, reproducible segfault
+  (confirmed via 3 repeated isolated runs, non-deterministic-looking at first: the crash surfaced
+  either immediately mid-render or later at process exit depending on which GL context/window the
+  dangling pointer happened to still resolve into). Fixed by making the white-pixel texture a
+  **caller-supplied parameter**, `Texture2D& whitePixel`, matching how `SpriteFont` was already
+  caller-owned — the caller's own `Game` subclass already keeps a persistent `whitePixel_`/`font_`
+  pair in the established demo convention (`RosterGame.cpp` and 10 other demos per Task 8.1's own
+  inventory), so this adds no new asset-management burden.
+- [x] `BeginShowMessageBox` stores the request and returns a real `IAsyncResult`
+  (`GuideMessageBoxAction*`) that does **not** complete synchronously — unlike every other Guide
+  `Begin*`. Completes only via `RenderPendingMessageBoxEXT` detecting a real left-mouse-button
+  down-edge inside a button's laid-out rectangle, or via the new headless
+  `SimulateMessageBoxClickEXT(int buttonIndex)` entry point. Rejects an empty `buttons` vector with
+  `ArgumentException` and a second concurrent `BeginShowMessageBox` with
+  `InvalidOperationException` — **CNA-original decisions, not FNA fidelity**: FNA's own
+  `BeginShowMessageBox` is a permanent `NotSupportedException` stub ("FIXME: Surely they don't want
+  us doing this"), so no real reference validation behavior exists to match; these are documented,
+  conservative defaults instead.
+- [x] `EndShowMessageBox` returns `std::optional<int>` (always has a value in this
+  implementation); throws `ArgumentException` for a `result` not returned by `BeginShowMessageBox`
+  (matching `NetworkSession`'s own End* convention) and `InvalidOperationException` if called
+  before completion.
+- [x] Added `Guide::getHasPendingMessageBoxEXTProperty()`,
+  `Guide::GetPendingMessageBoxFocusButtonForTestingEXT()` (test-only, confirms `focusButton`
+  round-trips without needing pixel readback), and
+  `Guide::ResetPendingMessageBoxForTestingEXT()` (test-only cleanup - `pendingMessageBox_` is
+  process-wide static state, so a test that creates a box without resolving it could otherwise
+  strand the single-pending-box guard for every later test in the same binary; every new test
+  guards this via an RAII `MessageBoxGuard`).
+- [x] Added 17 tests to `GamerServicesServiceTests.cpp`: both `BeginShowMessageBox` overloads
+  return a real, not-yet-completed result; empty-buttons and concurrent-pending rejection;
+  `EndShowMessageBox` throws both too-early and for a foreign/null result; a real
+  `RenderPendingMessageBoxEXT` call (real headless `GraphicsDevice`/`SpriteBatch`/`SpriteFont`,
+  same proven-safe pattern as `AlphaTestEffectTests.cpp`'s `GraphicsDevice gd;`) confirms rendering
+  alone never resolves the box, followed by `SimulateMessageBoxClickEXT` + `EndShowMessageBox`
+  returning exactly the clicked index (the "render frame → simulate click → End" cycle this task
+  called for); `focusButton` round-trip; `RenderPendingMessageBoxEXT` is a safe no-op when nothing
+  is pending; a reentrancy test (a callback that calls `BeginShowMessageBox` again from within
+  itself sees `pendingMessageBox_` already cleared, same class of fix as Phase 13's
+  `NetworkSession` reentrancy bug).
+- [x] Wired into `examples/demo_guide_overlay_console`: `MenuMessageBox()` now exercises the real
+  `BeginShowMessageBox` → `SimulateMessageBoxClickEXT` → `EndShowMessageBox` cycle (this demo is
+  deliberately console-only/no-window per its own top-of-file comment, so it uses the headless
+  simulate-click path rather than `RenderPendingMessageBoxEXT`, which needs a real
+  `SpriteBatch`/`GraphicsDevice`) and confirms `EndShowMessageBox(nullptr)` now throws
+  `ArgumentException` instead of the old `NotSupportedException`. Manually run via `--auto`:
+  produces the expected `selected button 1 ("Cancel")` output, no crash.
+- [x] **Verified**: 23/23 `GuideTest` tests pass; full suite 4660/4662 (2 expected skips, 0
+  failures); the previously-crashing render test re-run 3x in isolation after the whitePixel fix,
+  deterministic pass every time; `cna_demo_guide_overlay_console --auto` runs clean.
 
 ### Task 3.2 — Guide.BeginShowKeyboardInput: real captured text
 

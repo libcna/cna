@@ -12,6 +12,14 @@
 #include <string>
 #include <vector>
 
+namespace Microsoft::Xna::Framework::Graphics
+{
+    class GraphicsDevice;
+    class SpriteBatch;
+    class SpriteFont;
+    class Texture2D;
+}
+
 namespace Microsoft::Xna::Framework::GamerServices
 {
     class Gamer;
@@ -150,14 +158,22 @@ namespace Microsoft::Xna::Framework::GamerServices
         /**
          * @brief Begins showing a system message box.
          *
+         * Task 3.1: unlike this class's other Begin* methods, this does **not** complete
+         * synchronously — a message box needs a real user response. Completes once the game's
+         * own Draw() loop calls RenderPendingMessageBoxEXT() and the user selects a button (or
+         * a test/headless caller calls SimulateMessageBoxClickEXT()).
+         *
          * @param title       The message box title.
          * @param text        The message box body text.
-         * @param buttons     The button labels to display.
+         * @param buttons     The button labels to display; must contain at least one entry.
          * @param focusButton The index of the initially focused button.
          * @param icon        The icon to display.
          * @param callback    Invoked when the operation completes.
          * @param state       User-defined state passed through to the callback.
-         * @return Never returns; always throws in this platform's implementation.
+         * @return An IAsyncResult that completes once a button is selected; caller owns it and
+         *         must delete it after EndShowMessageBox.
+         * @throws System::ArgumentException if buttons is empty.
+         * @throws System::InvalidOperationException if another message box is already pending.
          */
         [[nodiscard]] static System::IAsyncResult* BeginShowMessageBox(
             const std::string& title,
@@ -172,15 +188,21 @@ namespace Microsoft::Xna::Framework::GamerServices
         /**
          * @brief Begins showing a system message box for a specific player.
          *
+         * See the player-less overload above; player is accepted for API parity but not
+         * otherwise used, matching this platform's single-active-message-box model.
+         *
          * @param player      The player the message box is shown to.
          * @param title       The message box title.
          * @param text        The message box body text.
-         * @param buttons     The button labels to display.
+         * @param buttons     The button labels to display; must contain at least one entry.
          * @param focusButton The index of the initially focused button.
          * @param icon        The icon to display.
          * @param callback    Invoked when the operation completes.
          * @param state       User-defined state passed through to the callback.
-         * @return Never returns; always throws in this platform's implementation.
+         * @return An IAsyncResult that completes once a button is selected; caller owns it and
+         *         must delete it after EndShowMessageBox.
+         * @throws System::ArgumentException if buttons is empty.
+         * @throws System::InvalidOperationException if another message box is already pending.
          */
         [[nodiscard]] static System::IAsyncResult* BeginShowMessageBox(
             Microsoft::Xna::Framework::PlayerIndex player,
@@ -197,9 +219,80 @@ namespace Microsoft::Xna::Framework::GamerServices
          * @brief Completes an asynchronous BeginShowMessageBox request.
          *
          * @param result The result returned by BeginShowMessageBox.
-         * @return Never returns; always throws in this platform's implementation.
+         * @return The zero-based index of the selected button, or empty if the box was
+         *         dismissed without a selection (never happens in this implementation - always
+         *         has a value).
+         * @throws System::ArgumentException if result was not returned by BeginShowMessageBox.
+         * @throws System::InvalidOperationException if the operation has not completed yet.
          */
         [[nodiscard]] static std::optional<int> EndShowMessageBox(System::IAsyncResult* result);
+
+        /**
+         * @brief NOXNA/EXT: gets whether a message box is currently pending (shown via
+         * BeginShowMessageBox and not yet completed). Not part of the real XNA 4.0 Guide API,
+         * which has no local rendering concept to be "pending" against.
+         *
+         * @return true if a message box is currently awaiting a button selection.
+         */
+        NOXNA [[nodiscard]] static bool getHasPendingMessageBoxEXTProperty();
+
+        /**
+         * @brief NOXNA/EXT: renders the currently pending message box (if any) and checks real
+         * mouse input for a button click, completing the pending BeginShowMessageBox operation
+         * when one is detected. A game's own Draw() calls this once per frame, after drawing its
+         * own scene, so the overlay renders on top. No-op if no message box is pending.
+         *
+         * Not part of the real XNA 4.0 Guide API - Guide has no access to a game's own
+         * GraphicsDevice/SpriteBatch on any real platform, so this needs an explicit pump/render
+         * entry point instead of an automatic hook.
+         *
+         * @param device      The graphics device backing spriteBatch, used to size/center the box.
+         * @param spriteBatch An open-and-ready-to-draw-into SpriteBatch (between Begin()/End()).
+         * @param font        The font used to render the title/body/button text.
+         * @param whitePixel  A caller-owned opaque white 1x1 (or larger) Texture2D used to draw
+         *        the box/button background rectangles. Caller-supplied (matching font above)
+         *        rather than created internally: SpriteBatch's default deferred sort mode only
+         *        stores a pointer to each Draw() call's texture, resolved at End() - a texture
+         *        created and destroyed within this call alone would already be a dangling
+         *        pointer by the time the caller's own End() runs.
+         */
+        NOXNA static void RenderPendingMessageBoxEXT(
+            Graphics::GraphicsDevice& device,
+            Graphics::SpriteBatch& spriteBatch,
+            Graphics::SpriteFont& font,
+            Graphics::Texture2D& whitePixel
+        );
+
+        /**
+         * @brief NOXNA/EXT: completes the currently pending message box as if the user clicked
+         * the button at buttonIndex, without requiring real mouse input. Intended for headless
+         * demos/tests that cannot drive a real window's mouse input.
+         *
+         * @param buttonIndex The zero-based index of the button to select.
+         * @throws System::InvalidOperationException if no message box is currently pending.
+         * @throws System::ArgumentOutOfRangeException if buttonIndex is out of range for the
+         *         pending message box's button list.
+         */
+        NOXNA static void SimulateMessageBoxClickEXT(int buttonIndex);
+
+        /**
+         * @brief NOXNA/test-only: clears any currently-pending message box without completing
+         * it or invoking its callback, so a test/demo that creates one and doesn't resolve it
+         * (e.g. one that only checks BeginShowMessageBox's validation) cannot strand the
+         * single-pending-message-box guard for every later Begin* call in the same process. Does
+         * not delete the pending action object - the caller who received it from
+         * BeginShowMessageBox still owns and must delete it, per that method's own contract.
+         */
+        NOXNA static void ResetPendingMessageBoxForTestingEXT();
+
+        /**
+         * @brief NOXNA/test-only: gets the focusButton the currently pending message box was
+         * created with, without needing pixel readback to confirm it round-tripped correctly.
+         *
+         * @return The pending box's focusButton index.
+         * @throws System::InvalidOperationException if no message box is currently pending.
+         */
+        NOXNA [[nodiscard]] static int GetPendingMessageBoxFocusButtonForTestingEXT();
 
         /**
          * @brief Delays gamer notification toasts by the given duration.
