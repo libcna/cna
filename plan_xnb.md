@@ -215,11 +215,31 @@ entirely the second one.
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| XNB-11 | `ContentReader`/XNB header parse: magic `'XNB'` + platform char, version byte (accept `4`/`5` only), flags byte, total-length int32 | ⬜ | Reject unknown platform/version with a `ContentLoadException`-equivalent, matching FNA's own validation |
+| XNB-11 | `ContentReader`/XNB header parse: magic `'XNB'` + platform char, version byte (accept `4`/`5` only), flags byte, total-length int32 | ✅ | **Implemented 2026-07-16**: `CNA::Internal::Xnb::ParseXnbHeader()` (`include/CNA/Internal/Xnb/XnbHeader.hpp`), verified against a real MonoGame-produced fixture (`white-1.xnb`) plus hand-crafted negative cases (bad magic/platform/version, truncated header). This is currently `CNA::Internal`-scoped, not yet the public `Microsoft::Xna::Framework::Content::ContentReader` — see the naming-collision note added near XNB-14 |
 | XNB-12 | Type-reader table parse (7-bit count, then per-entry 7-bit string + int32 reader version) | ⬜ | |
 | XNB-13 | Reader-name normalization step: a real assembly-qualified-name parser (not `substr(0, name.find(','))`), correctly handling commas nested inside generic-argument brackets (`ListReader\`1[[Microsoft.Xna.Framework.Vector3, Microsoft.Xna.Framework, Version=...]], ...`); produces the canonical key decided in XNB-5 | ⬜ | Naive comma-split truncation breaks on every generic reader name — needs its own mini type-name parser (`struct TypeName{namespaceAndName; genericArguments;}`) |
 | XNB-13A | Unit tests for XNB-13 covering: plain reader name, one level of generic nesting (`ListReader<Vector3>`), and at least one doubly-nested generic (`DictionaryReader<K, ListReader<V>>`) | ⬜ | Standalone mini-milestone per review — do not fold silently into XNB-13's own task row |
-| XNB-14 | `ContentTypeReader` base class + `ContentTypeReaderRegistry` (register/create by normalized name) — registry starts empty, no readers registered yet | ⬜ | Matches the sketch in `xnb.md` |
+> **Naming-collision finding (2026-07-16), blocking XNB-14 until resolved:** real FNA's
+> `ContentReader`, `ContentTypeReaderManager`, and `ContentTypeReader`/`ContentTypeReader<T>` are
+> all **public** XNA API classes (`Microsoft.Xna.Framework.Content.*`), so per this project's own
+> CLAUDE.md ("Original XNA types must stay in the matching XNA namespace... do not move original
+> XNA API types into the CNA namespace") they belong in `Microsoft::Xna::Framework::Content`, not
+> `CNA::Internal`. But CNA **already has** a `Microsoft::Xna::Framework::Content::ContentTypeReader<T>`
+> — the `.cnb`/native-loader interface (`Read(const std::string& path, ContentManager&)`), a
+> CNA-original shape that does not match FNA's real `ContentTypeReader<T>`
+> (`Read(ContentReader input, T existingInstance)`) at all. The two cannot coexist under the same
+> name in the same namespace. Options: (a) rename CNA's existing loose-file reader interface to
+> free up the real name — a wide-reaching refactor touching every existing `.cnb` reader
+> (`SpriteFontTypeReader`/`EffectTypeReader`/`ModelTypeReader`/`SkinnedModelTypeReader`,
+> `RegisterCnbLoader<T>`, `RegisterTypeReader<T>`) and `ContentManager.hpp`/`.cpp` itself; (b) keep
+> the real-protocol classes under `CNA::Internal::Xnb` as an implementation detail for now,
+> deferring the public-namespace move to a later, explicitly-scoped task; (c) some other resolution.
+> XNB-11 (header parse), XNB-12/XNB-13 (type-reader table + name normalization) do not depend on
+> this decision and were implemented first (see their own rows) — this blocks specifically XNB-14
+> onward (the registry/base-class/dispatch machinery that a real `ContentTypeReader<T>` would
+> anchor). Not resolved as of this writing — see the task/conversation record for the outcome.
+
+| XNB-14 | `ContentTypeReader` base class + `ContentTypeReaderRegistry` (register/create by normalized name) — registry starts empty, no readers registered yet | ⬜ | Matches the sketch in `xnb.md`. **Blocked on the naming-collision finding above** — do not start until resolved |
 | XNB-14A | Separate global reader **factories** (registered once, process-wide) from per-`.xnb`-file reader **instances**: parsing a given file's type-reader table creates one initialized reader instance per table entry, scoped to that `ContentReader`'s lifetime; no reader instance is shared across files | ⬜ | Per follow-up review point 4 — prevents a stateful reader accidentally leaking state between unrelated files and keeps the registry thread-safe-by-construction (factories are stateless, instances are not shared) |
 | XNB-14B | Register a `KnownUnsupportedContentTypeReader` placeholder mechanism in the registry, and pre-register the general `Microsoft.Xna.Framework.Content.EffectReader` name under it with `UnsupportedReason::CompiledPlatformShaderBytecode` | ⬜ | Per follow-up review point 9 — if a fixture references the general `EffectReader` before Phase E exists, the error should already read "recognized but unsupported" instead of a generic "unknown content reader"; XNB-32A (Phase E) implements the detailed failure message and any later compiled-FX path, this task only reserves the name early |
 | XNB-15 | Shared-resource fixup mechanism: parse shared-resource count; read root object; then read each shared resource *in serialized order*, resolving each pending fixup no earlier than when its referenced resource becomes available; guarantee that **all** pending fixups are resolved before the root asset is returned; fail if a required shared resource index is invalid or resolves to the wrong runtime type | ⬜ | Per second follow-up review point 1 — the requirement is the observable *result* (forward references work, no fixup ever runs before its resource is loaded, fixup order is deterministic, a fixup's exception propagates correctly), not one specific implementation strategy; do not lock the architecture into "read all shared resources, only then resolve fixups" if a per-resource-as-available strategy is simpler to get right. Register a `PendingSharedResource{resourceIndex, fixup, expectedType}` callback for forward references. Test: index 0 = null, out-of-range index, multiple fixups on one resource, wrong runtime type |
