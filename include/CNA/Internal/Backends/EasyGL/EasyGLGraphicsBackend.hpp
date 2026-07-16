@@ -428,7 +428,8 @@ namespace CNA::Internal::Backends::EasyGL
         Prog3D prog_colored_;        ///< stride=16: aPos + aColor
         Prog3D prog_textured_;       ///< stride=20: aPos + aUV
         Prog3D prog_col_textured_;   ///< stride=24: aPos + aColor + aUV
-        Prog3D prog_lit_textured_;   ///< stride=32: aPos + aNormal + aUV
+        Prog3D prog_lit_textured_;   ///< stride=32: aPos + aNormal + aUV (PreferPerPixelLighting=true: per-pixel Blinn-Phong)
+        Prog3D prog_lit_textured_vertexlit_;  ///< stride=32: aPos + aNormal + aUV (PreferPerPixelLighting=false, XNA's own default: per-vertex/Gouraud-shaded Blinn-Phong, Task 1102)
         Prog3D prog_dual_textured_;  ///< stride=20: aPos + aUV, two samplers (DualTextureEffect)
         Prog3D prog_dual_textured_colored_;  ///< stride=24: aPos + aColor + aUV, two samplers (DualTextureEffect, Task 889)
         Prog3D prog_env_mapped_;     ///< stride=32: aPos + aNormal + aUV, cube map (EnvironmentMapEffect)
@@ -470,6 +471,7 @@ namespace CNA::Internal::Backends::EasyGL
         void EnsureTextured3DProgram();
         void EnsureColoredTextured3DProgram();
         void EnsureLit3DProgram();
+        void EnsureLit3DVertexLitProgram();
         void EnsureDualTextured3DProgram();
         void EnsureDualTexturedColored3DProgram();
         void EnsureEnvMapped3DProgram();

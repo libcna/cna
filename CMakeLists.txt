@@ -2232,6 +2232,16 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 1102: BasicEffect pixel test — PreferPerPixelLighting genuinely selects between
+        # a real per-vertex-lit shader variant and the existing per-pixel-lit one.
+        cna_easygl_test(cna_test_easygl_basiceffect_preferperpixellighting
+                        examples/easygl_basiceffect_preferperpixellighting_test.cpp)
+        add_test(NAME EasyGL_BasicEffect_PreferPerPixelLighting
+                 COMMAND cna_test_easygl_basiceffect_preferperpixellighting)
+        set_tests_properties(EasyGL_BasicEffect_PreferPerPixelLighting PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 168: transformMatrix in SpriteBatch::Begin — translation pixel readback
         cna_easygl_test(cna_test_easygl_transform_matrix
                         examples/easygl_transform_matrix_test.cpp)

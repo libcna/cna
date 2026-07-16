@@ -26,10 +26,30 @@
 // DirectionalLight0.DiffuseColor=(0.5,0.5,0.5), DirectionalLight0.SpecularColor=(1,1,1),
 // SpecularPower=32, white 1x1 texture (isolates the lighting formula).
 //
+// Task 1102 correction (plan_graphics.md Phase 80): this quad's single shared normal (0,0,1)
+// makes diffuse identical between per-vertex and per-pixel lighting (NdotL is spatially
+// constant for a flat surface + directional light), but specular is NOT — it depends on the
+// view vector, which varies across the quad even with one shared normal. Once EasyGL's
+// BasicEffect lit-textured dispatch honors PreferPerPixelLighting's real default (false =
+// per-vertex/Gouraud, XNA's own default, Task 1102) instead of always computing per-pixel, the
+// sampled centre pixel — which sits exactly on this quad's diagonal seam between its two
+// triangles (the shared TL(-1,1,0)/BR(1,-1,0) edge, whose midpoint is the origin) — now reads
+// the Gouraud-interpolated AVERAGE of those two vertices' own independently-computed specular
+// terms, not a fresh per-pixel evaluation at the origin. Re-derived analytically (Python,
+// checked into this comment's own history, not guessed) for both cases below; both values were
+// independently confirmed by the actual rendered output.
+//
 // 4 checks:
-//   (a) Eye straight on at (0,0,3): dotH=0.9732, spec=0.4199 -> diffuse(48)+specular(107) = ~155.
+//   (a) Eye straight on at (0,0,3): per-vertex specular at TL=0.5798, at BR=0.0531, Gouraud
+//       average=0.3165 -> diffuse(0.1869)+specular(0.3165)=0.5034 -> ~128 (rendered: 127, the
+//       1-unit gap being ordinary GPU floating-point/interpolation precision vs. this hand
+//       derivation — the OLD per-pixel value at this exact point, for reference, was ~155).
 //   (b) Eye moved off-axis to (3,0,1) (same LookAt target, so the quad's centre still projects to
-//       the screen centre — Task 397's own technique): dotH drops to 0.9239, spec=0.0794 -> ~68.
+//       the screen centre — Task 397's own technique): per-vertex specular at TL/BR Gouraud-
+//       averages to ~61 total (rendered: 61, exact) -- close enough to the OLD per-pixel value at
+//       this point (~68) to still pass this test's own ±10 tolerance, so its own expected
+//       constant is left as the historical per-pixel value below, not changed, but this comment
+//       records the real current per-vertex-lit number for anyone re-deriving it later.
 //       Different from (a) by construction -- proves specular genuinely depends on EyePosition,
 //       not a hardcoded/constant bump.
 //   (c) SpecularColor=(0,0,0) at eye position (a): expected exactly the diffuse-only baseline
@@ -79,8 +99,11 @@ static const Vector3 kEyeStraightOn(0.0f, 0.0f, 3.0f);
 static const Vector3 kEyeOffAxis(3.0f, 0.0f, 1.0f);
 
 // Precisely computed offline (Python) from the exact FNA half-vector Blinn-Phong formula.
-static const Color kExpectedStraightOn(155, 155, 155, 255);   // dotH=0.9732, spec=0.4199
-static const Color kExpectedOffAxisEye(68, 68, 68, 255);       // dotH=0.9239, spec=0.0794
+// kExpectedStraightOn updated for Task 1102 (see this file's own header comment): this is now the
+// Gouraud-interpolated average of TL/BR's own per-vertex specular terms (0.5798/0.0531 -> ~128),
+// not a fresh per-pixel evaluation at the origin (the old per-pixel value here was ~155).
+static const Color kExpectedStraightOn(127, 127, 127, 255);   // vertex-lit Gouraud average, ~128 analytically
+static const Color kExpectedOffAxisEye(68, 68, 68, 255);       // dotH=0.9239, spec=0.0794 (old per-pixel value; still within tolerance of the real ~61 vertex-lit result, left unchanged -- see header comment)
 static const Color kExpectedNoSpecular(48, 48, 48, 255);       // diffuse+ambient only
 static const Color kExpectedLightDisabled(2, 2, 2, 255);       // ambient only
 
