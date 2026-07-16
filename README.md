@@ -30,6 +30,7 @@ ctest --test-dir build --output-on-failure
 - **`VULKAN` backend:** Real, working 3D rendering (all 5 stock effects, render targets, depth/stencil state, `BlendState`, `OcclusionQuery`) — second-most mature backend; the one remaining named gap is an isolated `RasterizerState.DepthBias` sub-case. See `docs/xna-4-api-coverage.md`'s per-backend table for current detail.
 - **`BGFX` backend:** Broad 2D+3D functionality, largely pixel-verified parity with EasyGL/Vulkan as of this project's Phase 72 — but not unqualified full parity: known real limitations remain, including a `Depth24Stencil8`-attached `RenderTargetCube` face producing no colour output (Task 952, deferred, root cause not yet found), `DrawIndexedPrimitivesEx` silently discarding `startIndex`/`baseVertex` on a sub-range indexed draw (Task 954), and occlusion-query pixel-count correctness that can't be verified under this project's own sandbox's software GL driver. See `NEXT.md` §5 for the current, complete list.
 - **`WEBGPU` backend:** Experimental fifth backend using native `wgpu-native`. The current baseline covers device/surface setup, clear/present, RGBA8 `Texture2D`, vertex/index uploads and WGSL SpriteBatch rendering. It is not yet a 3D-parity replacement for EasyGL/Vulkan/Bgfx; see [`docs/webgpu-backend.md`](docs/webgpu-backend.md) and `plan_webgpu.md`.
+- **`D3D9` backend:** Windows-only native Direct3D 9 backend targeting real **XNA 4.0 pixel authenticity**, not just feature parity — it runs Microsoft's own vendored Stock Effects HLSL bytecode, cross-compiled via MinGW-w64 and verified through Wine+DXVK on a real GPU (14 CTest binaries). A checked-in 31-scene oracle corpus diffs CNA's render against the **real XNA 4.0 runtime's own render** of the same scene at `--tolerance 0`: **0/31 scenes currently diverge.** `GraphicsProfile.Reach`/`.HiDef` enforcement is real (the only CNA backend where it is). Render targets sampled as textures, non-`Color` `SurfaceFormat`, and real-Windows hardware verification are still open. See [`docs/d3d9-backend.md`](docs/d3d9-backend.md), [`docs/d3d9-divergence-report.md`](docs/d3d9-divergence-report.md), and `plan_dx9.md`.
 - **`D3D11` backend:** Windows-only native Direct3D 11 backend, cross-compiled via MinGW-w64 and verified through Wine+DXVK on a real GPU (6 CTest binaries, 96+ checks) — all 10 stock HLSL shader variants (`BasicEffect`/`AlphaTestEffect`/`DualTextureEffect`/`EnvironmentMapEffect`/`SkinnedEffect`), textures/render targets (MRT/MSAA/occlusion queries), state objects, SpriteBatch, and a runtime-`D3DCompile()` custom `ShaderEffect` path are real and pixel-verified. Real-Windows hardware verification (device-lost recovery, WARP fallback, driver-specific parity) is still open. See [`docs/d3d11-backend.md`](docs/d3d11-backend.md) and `plan_dx.md`.
 - **`D3D12` backend:** Windows-only native Direct3D 12 backend, cross-compiled via MinGW-w64 and verified through Wine+vkd3d-proton on a real GPU, **off-screen only** (`D3D12_Smoke` CTest, 80/80 checks) — device/queue/heaps/command-lists/fences/barriers/PSOs/root-signatures are real, all 10 stock HLSL shader variants (same DXBC as `D3D11`) and a real `SpriteBatch` are pixel-verified off-screen, and device-removed recovery is real and functionally proven. Swap-chain presentation is a known, real, unresolved gap on this dev loop (genuine Wine/vkd3d-proton `dxgi.dll` architecture mismatch, not a CNA bug); runtime-settable blend/depth-stencil/rasterizer state, per-slot `SamplerState`, render targets, `Texture3D`, occlusion queries, and real-Windows hardware verification are all still open. See [`docs/d3d12-backend.md`](docs/d3d12-backend.md) and `plan_dx.md`.
 - **`CANVAS` backend:** Emscripten-only HTML Canvas 2D backend (`SpriteBatch`/`Texture2D`/`SpriteFont`/`RenderTarget2D` only, 2D-only by design like `SDL_RENDERER`) — `SpriteBatch` (incl. rotation/origin/flip/tint/transform), textures/render targets, `BlendState`/`SamplerState` mapping, and `SpriteFont` are all implemented and structurally reviewed, verified via a real `emcmake`/`emcc` 6.0.2 configure+build (`CnaTests` links and a backend-agnostic GTest suite genuinely passes under `node`). **Not yet pixel-verified in a real browser** — this dev loop has no DOM/`CanvasRenderingContext2D` at all (`node` has none; `SDL_Init(SDL_INIT_VIDEO)` itself throws under Emscripten/`node`). See [`docs/canvas-backend.md`](docs/canvas-backend.md) (incl. a manual browser verification checklist) and `plan_canvas.md`.
@@ -319,6 +320,34 @@ cmake -S . -B build -DCNA_GRAPHICS_BACKEND=BGFX
 cmake -S . -B build -DCNA_GRAPHICS_BACKEND=VULKAN
 ```
 
+### Build (Windows cross-compilation — D3D9 backend)
+
+A native Direct3D 9 backend, Windows-only (hard-`FATAL_ERROR`-gated at configure time, same as
+`D3D11`/`D3D12`), targeting real XNA 4.0 pixel authenticity rather than just feature parity —
+see [`docs/d3d9-backend.md`](docs/d3d9-backend.md) for what that means and why. Developed and
+verified on this repo's own Debian dev machine via the same MinGW-w64 cross toolchain the other
+Windows backends use, tested locally through Wine + DXVK (`scripts/run-wine-dxvk9.sh`). See
+[`docs/d3d9-backend.md`](docs/d3d9-backend.md) and [`plan_dx9.md`](plan_dx9.md) for full detail.
+
+```bash
+# Install cross toolchain (same package D3D11/D3D12/SDL_RENDERER's own Windows cross-build uses)
+sudo apt install mingw-w64
+
+git submodule update --init --recursive
+cmake -S . -B cmake-build-d3d9 \
+      -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64.cmake \
+      -DCNA_GRAPHICS_BACKEND=D3D9 \
+      -DCNA_BUILD_TESTS=ON
+cmake --build cmake-build-d3d9 --target CNA
+```
+
+Running the resulting `.exe`s needs a Wine + DXVK dev-loop, in a prefix separate from D3D11's own
+(`docs/d3d9-backend.md` has full setup steps); CTest wires this in automatically:
+
+```bash
+ctest --test-dir cmake-build-d3d9 -L D3D9 --output-on-failure
+```
+
 ### Build (Windows cross-compilation — D3D11 backend)
 
 A native Direct3D 11 backend, Windows-only (hard-`FATAL_ERROR`-gated at configure time on any other
@@ -395,6 +424,7 @@ cmake --build build --target hello-triangle-sdl
 | Windows x86_64 | MSVC 2022 | SDL_RENDERER | planned |
 | Windows x86_64 (native) | MinGW-w64 | SDL_RENDERER | planned |
 | Linux → Windows (cross) | MinGW-w64 | SDL_RENDERER | ✅ verified building + full test suite under Wine |
+| Linux → Windows (cross) | MinGW-w64 | D3D9 | ✅ verified building + `D3D9` CTest suite (14 tests) under Wine+DXVK on a real GPU — 0/31 oracle scenes diverge from real XNA 4.0 at `--tolerance 0`; real Windows hardware verification still open, see `docs/d3d9-backend.md` |
 | Linux → Windows (cross) | MinGW-w64 | D3D11 | ✅ verified building + `D3D11` CTest suite (6 tests, 96+ checks) under Wine+DXVK on a real GPU — real Windows hardware verification still open, see `docs/d3d11-backend.md` |
 | Linux → Windows (cross) | MinGW-w64 | D3D12 | ✅ verified building + `D3D12` CTest suite (1 test, 80/80 checks, off-screen only) under Wine+vkd3d-proton on a real GPU — swap-chain presentation and real Windows hardware verification both still open, see `docs/d3d12-backend.md` |
 | Web (Emscripten) | emcc/Clang (emsdk) | EASYGL | ✅ verified building + running under Node.js |

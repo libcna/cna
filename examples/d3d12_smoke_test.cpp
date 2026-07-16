@@ -1283,6 +1283,116 @@ int main()
         backend.UnbindOffscreenColorTargetEXT();
     }
 
+    // ---- Check O3 (Task 1107, plan_graphics.md Phase 80): PreferPerPixelLighting genuinely
+    // selects between two different lit_textured3d dispatch variants (vertex-lit vs pixel-lit).
+    // Reuses the exact scene/analytically-derived values already independently verified in
+    // examples/easygl_basiceffect_preferperpixellighting_test.cpp (Task 1102) and
+    // examples/d3d11_smoke_test.cpp's own Check R2 (Task 1106): a flat quad, single shared normal
+    // (0,0,1), makes DIFFUSE spatially constant but SPECULAR still varies across the surface
+    // because the eye vector depends on position -- Gouraud-interpolating each vertex's own
+    // independently-computed specular term (vertex-lit) genuinely differs from re-evaluating it
+    // fresh at the sampled fragment (pixel-lit). Sampled exactly at the viewport centre, which
+    // sits on the diagonal seam between the quad's two triangles. Expected: ~127 vertex-lit,
+    // ~155 pixel-lit. ----
+    {
+        constexpr int kRtWidth = 64;
+        constexpr int kRtHeight = 64;
+
+        D3D12_HEAP_PROPERTIES heapProps{};
+        heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
+
+        D3D12_RESOURCE_DESC rtDesc{};
+        rtDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+        rtDesc.Width = kRtWidth;
+        rtDesc.Height = kRtHeight;
+        rtDesc.DepthOrArraySize = 1;
+        rtDesc.MipLevels = 1;
+        rtDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        rtDesc.SampleDesc.Count = 1;
+        rtDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+        rtDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+
+        Microsoft::WRL::ComPtr<ID3D12Resource> rt;
+        HRESULT hrRt = backend.GetDeviceEXT()->CreateCommittedResource(
+            &heapProps, D3D12_HEAP_FLAG_NONE, &rtDesc,
+            D3D12_RESOURCE_STATE_RENDER_TARGET, nullptr, IID_PPV_ARGS(rt.GetAddressOf()));
+        Check(SUCCEEDED(hrRt) && rt != nullptr, "O3-0: real off-screen RGBA8 render-target resource created");
+        backend.GetResourceStateTrackerEXT().TrackResource(rt.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET);
+
+        D3D12_CPU_DESCRIPTOR_HANDLE rtv = backend.AllocateRtvDescriptorEXT();
+        backend.GetDeviceEXT()->CreateRenderTargetView(rt.Get(), nullptr, rtv);
+        backend.BindOffscreenColorTargetEXT(rt.Get(), rtv, DXGI_FORMAT_R8G8B8A8_UNORM, kRtWidth, kRtHeight);
+
+        auto pixelAt = [&](const std::vector<uint8_t>& buf, int x, int y) -> std::array<uint8_t, 4>
+        {
+            const std::size_t idx = (static_cast<std::size_t>(y) * kRtWidth + static_cast<std::size_t>(x)) * 4;
+            return {buf[idx + 0], buf[idx + 1], buf[idx + 2], buf[idx + 3]};
+        };
+        auto closeTo = [](int a, int b, int tol) { return std::abs(a - b) <= tol; };
+
+        struct VPNT { float x, y, z; float nx, ny, nz; float u, v; };
+        static const VPNT kQuad[6] = {
+            {-1.0f,  1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f},
+            {-1.0f, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f},
+            { 1.0f, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f},
+            {-1.0f,  1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f},
+            { 1.0f, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f},
+            { 1.0f,  1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f},
+        };
+        D3D12VertexBufferBackend vbPPL(&backend, 6);
+        vbPPL.SetData(kQuad, 6, sizeof(VPNT));
+
+        ImageData whiteImg;
+        whiteImg.width = 1; whiteImg.height = 1; whiteImg.mipLevels = 1;
+        whiteImg.pixels = {255, 255, 255, 255};
+        D3D12TextureBackend whiteTex(&backend, whiteImg);
+
+        GpuDrawParams pplP;
+        pplP.texture0 = &whiteTex;
+        pplP.textureEnabled = true;
+        pplP.lightingEnabled = true;
+        pplP.ambientColor[0] = 0.02f; pplP.ambientColor[1] = 0.02f; pplP.ambientColor[2] = 0.02f;
+        pplP.diffuseColor[0] = 0.4f; pplP.diffuseColor[1] = 0.4f; pplP.diffuseColor[2] = 0.4f; pplP.diffuseColor[3] = 1.0f;
+        Microsoft::Xna::Framework::Vector3 lightDir(0.5f, 0.0f, -1.0f);
+        lightDir.Normalize();
+        pplP.light0Dir[0] = lightDir.X; pplP.light0Dir[1] = lightDir.Y; pplP.light0Dir[2] = lightDir.Z;
+        pplP.light0Diffuse[0] = 0.5f; pplP.light0Diffuse[1] = 0.5f; pplP.light0Diffuse[2] = 0.5f;
+        pplP.light0Specular[0] = 1.0f; pplP.light0Specular[1] = 1.0f; pplP.light0Specular[2] = 1.0f;
+        pplP.specularColor[0] = 1.0f; pplP.specularColor[1] = 1.0f; pplP.specularColor[2] = 1.0f;
+        pplP.specularPower = 32.0f;
+        pplP.eyePositionWorld[0] = 0.0f; pplP.eyePositionWorld[1] = 0.0f; pplP.eyePositionWorld[2] = 3.0f;
+
+        const Matrix pplView = Matrix::CreateLookAt(Microsoft::Xna::Framework::Vector3(0.0f, 0.0f, 3.0f), Microsoft::Xna::Framework::Vector3::Zero, Microsoft::Xna::Framework::Vector3(0.0f, 1.0f, 0.0f));
+        const Matrix pplProj = Matrix::CreatePerspectiveFieldOfView(0.78539816339744830962f /* MathHelper::PiOver4 */, 1.0f, 0.1f, 100.0f);
+
+        pplP.preferPerPixelLighting = false;
+        backend.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+        backend.DrawPrimitivesEx(vbPPL, Matrix::getIdentityProperty(), pplView, pplProj,
+                                 PrimitiveType::TriangleList, 2, pplP);
+        auto vertexLitResult = ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight);
+        const auto vertexLitPixel = pixelAt(vertexLitResult, kRtWidth / 2, kRtHeight / 2);
+        Check(closeTo(vertexLitPixel[0], 127, 10) && closeTo(vertexLitPixel[1], 127, 10) && closeTo(vertexLitPixel[2], 127, 10),
+              "O3-1: DrawPrimitivesEx() preferPerPixelLighting=false (XNA's real default) genuinely "
+              "computes the Gouraud-averaged specular result, ~127 (Task 1107, plan_graphics.md Phase 80)");
+
+        pplP.preferPerPixelLighting = true;
+        backend.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+        backend.DrawPrimitivesEx(vbPPL, Matrix::getIdentityProperty(), pplView, pplProj,
+                                 PrimitiveType::TriangleList, 2, pplP);
+        auto pixelLitResult = ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight);
+        const auto pixelLitPixel = pixelAt(pixelLitResult, kRtWidth / 2, kRtHeight / 2);
+        Check(closeTo(pixelLitPixel[0], 155, 10) && closeTo(pixelLitPixel[1], 155, 10) && closeTo(pixelLitPixel[2], 155, 10),
+              "O3-2: DrawPrimitivesEx() preferPerPixelLighting=true genuinely computes a fresh "
+              "per-fragment specular result, ~155 (Task 1107, plan_graphics.md Phase 80)");
+
+        Check(vertexLitPixel[0] != pixelLitPixel[0],
+              "O3-3: DrawPrimitivesEx() preferPerPixelLighting is a real dispatch selector, not a "
+              "decorative no-op -- the two draws above produce genuinely different pixel values "
+              "(Task 1107, plan_graphics.md Phase 80)");
+
+        backend.UnbindOffscreenColorTargetEXT();
+    }
+
     // ---- Check EE (plan_dx.md DX-138): lit_textured3d -- DirectionalLight1/DirectionalLight2/
     // EmissiveColor each independently and exactly contribute, not just Light0 (already proven by
     // Check O). All 3 sub-checks use a plain white 1x1-solid texture so the shader's tex-multiply
@@ -1472,6 +1582,15 @@ int main()
         sp.eyePositionWorld[0] = 0.0f; sp.eyePositionWorld[1] = 0.0f; sp.eyePositionWorld[2] = -10.0f;
         sp.specularColor[0] = 1.0f; sp.specularColor[1] = 1.0f; sp.specularColor[2] = 1.0f;
         sp.specularPower = 16.0f;
+        // Task 1107 (plan_graphics.md Phase 80): this check's own dot(H,N)=1 exactness only holds
+        // AT THE SAMPLED FRAGMENT under a fresh per-fragment evaluation -- the eye vector E is
+        // position-dependent (eye at a finite (0,0,-10), not infinitely far away), so this
+        // triangle's 3 vertices each see a slightly different E than the sampled centre pixel
+        // does, and Gouraud-interpolating their own independently-computed specular terms (now
+        // XNA's real default, preferPerPixelLighting=false) would NOT reproduce the exact
+        // dot(H,N)=1 coincidence this check is specifically designed to prove. Force per-pixel
+        // explicitly so this check keeps testing exactly what it always tested.
+        sp.preferPerPixelLighting = true;
 
         backend.Clear(0.0f, 0.0f, 0.0f, 1.0f);
         backend.DrawPrimitivesEx(vbFF, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
@@ -2493,6 +2612,116 @@ int main()
               "RR2: the SAME geometry/light with material SpecularColor zeroed produces exact black -- "
               "proves RR1's white came genuinely from the specular term, not diffuse/ambient "
               "(plan_dx.md DX-151)");
+
+        backend.UnbindOffscreenColorTargetEXT();
+    }
+
+    // ---- Check S2 (Task 1107, plan_graphics.md Phase 80): same PreferPerPixelLighting
+    // discriminator as Check O3 above, but for skinned3d -- a single Identity bone at 100% weight
+    // keeps skinning a mathematical no-op, isolating the vertex-lit-vs-pixel-lit dispatch
+    // difference exactly like Check O3 does. Same scene/values as
+    // examples/easygl_skinnedeffect_preferperpixellighting_test.cpp (Task 1102b) and D3D11's own
+    // Check V2 (Task 1106): ~127 vertex-lit, ~155 pixel-lit. ----
+    {
+        constexpr int kRtWidth = 64;
+        constexpr int kRtHeight = 64;
+
+        D3D12_HEAP_PROPERTIES heapProps{};
+        heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
+
+        D3D12_RESOURCE_DESC rtDesc{};
+        rtDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+        rtDesc.Width = kRtWidth;
+        rtDesc.Height = kRtHeight;
+        rtDesc.DepthOrArraySize = 1;
+        rtDesc.MipLevels = 1;
+        rtDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        rtDesc.SampleDesc.Count = 1;
+        rtDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+        rtDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+
+        Microsoft::WRL::ComPtr<ID3D12Resource> rt;
+        HRESULT hrRt = backend.GetDeviceEXT()->CreateCommittedResource(
+            &heapProps, D3D12_HEAP_FLAG_NONE, &rtDesc,
+            D3D12_RESOURCE_STATE_RENDER_TARGET, nullptr, IID_PPV_ARGS(rt.GetAddressOf()));
+        Check(SUCCEEDED(hrRt) && rt != nullptr, "S2-0: real off-screen RGBA8 render-target resource created");
+        backend.GetResourceStateTrackerEXT().TrackResource(rt.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET);
+
+        D3D12_CPU_DESCRIPTOR_HANDLE rtv = backend.AllocateRtvDescriptorEXT();
+        backend.GetDeviceEXT()->CreateRenderTargetView(rt.Get(), nullptr, rtv);
+        backend.BindOffscreenColorTargetEXT(rt.Get(), rtv, DXGI_FORMAT_R8G8B8A8_UNORM, kRtWidth, kRtHeight);
+
+        auto pixelAt = [&](const std::vector<uint8_t>& buf, int x, int y) -> std::array<uint8_t, 4>
+        {
+            const std::size_t idx = (static_cast<std::size_t>(y) * kRtWidth + static_cast<std::size_t>(x)) * 4;
+            return {buf[idx + 0], buf[idx + 1], buf[idx + 2], buf[idx + 3]};
+        };
+        auto closeTo = [](int a, int b, int tol) { return std::abs(a - b) <= tol; };
+
+        struct VPNTS { float x, y, z; float nx, ny, nz; float u, v;
+                      float bw0, bw1, bw2, bw3; uint8_t bi0, bi1, bi2, bi3; };
+        static const VPNTS kSkinQuad[6] = {
+            {-1.0f,  1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0},
+            {-1.0f, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0},
+            { 1.0f, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0},
+            {-1.0f,  1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0},
+            { 1.0f, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0},
+            { 1.0f,  1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0},
+        };
+        D3D12VertexBufferBackend vbSkinPPL(&backend, 6);
+        vbSkinPPL.SetData(kSkinQuad, 6, sizeof(VPNTS));
+
+        ImageData whiteImg2;
+        whiteImg2.width = 1; whiteImg2.height = 1; whiteImg2.mipLevels = 1;
+        whiteImg2.pixels = {255, 255, 255, 255};
+        D3D12TextureBackend whiteTex2(&backend, whiteImg2);
+
+        GpuDrawParams skPplP;
+        skPplP.texture0 = &whiteTex2;
+        skPplP.textureEnabled = true;
+        skPplP.lightingEnabled = true;
+        skPplP.skinned = true;
+        skPplP.boneCount = 1;
+        skPplP.weightsPerVertex = 1;
+        Matrix::getIdentityProperty().ToColumnMajor(skPplP.boneTransforms);
+        skPplP.ambientColor[0] = 0.02f; skPplP.ambientColor[1] = 0.02f; skPplP.ambientColor[2] = 0.02f;
+        skPplP.diffuseColor[0] = 0.4f; skPplP.diffuseColor[1] = 0.4f; skPplP.diffuseColor[2] = 0.4f; skPplP.diffuseColor[3] = 1.0f;
+        Microsoft::Xna::Framework::Vector3 skLightDir(0.5f, 0.0f, -1.0f);
+        skLightDir.Normalize();
+        skPplP.light0Dir[0] = skLightDir.X; skPplP.light0Dir[1] = skLightDir.Y; skPplP.light0Dir[2] = skLightDir.Z;
+        skPplP.light0Diffuse[0] = 0.5f; skPplP.light0Diffuse[1] = 0.5f; skPplP.light0Diffuse[2] = 0.5f;
+        skPplP.light0Specular[0] = 1.0f; skPplP.light0Specular[1] = 1.0f; skPplP.light0Specular[2] = 1.0f;
+        skPplP.specularColor[0] = 1.0f; skPplP.specularColor[1] = 1.0f; skPplP.specularColor[2] = 1.0f;
+        skPplP.specularPower = 32.0f;
+        skPplP.eyePositionWorld[0] = 0.0f; skPplP.eyePositionWorld[1] = 0.0f; skPplP.eyePositionWorld[2] = 3.0f;
+
+        const Matrix skPplView = Matrix::CreateLookAt(Microsoft::Xna::Framework::Vector3(0.0f, 0.0f, 3.0f), Microsoft::Xna::Framework::Vector3::Zero, Microsoft::Xna::Framework::Vector3(0.0f, 1.0f, 0.0f));
+        const Matrix skPplProj = Matrix::CreatePerspectiveFieldOfView(0.78539816339744830962f /* MathHelper::PiOver4 */, 1.0f, 0.1f, 100.0f);
+
+        skPplP.preferPerPixelLighting = false;
+        backend.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+        backend.DrawPrimitivesEx(vbSkinPPL, Matrix::getIdentityProperty(), skPplView, skPplProj,
+                                 PrimitiveType::TriangleList, 2, skPplP);
+        auto skVertexLitResult = ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight);
+        const auto skVertexLitPixel = pixelAt(skVertexLitResult, kRtWidth / 2, kRtHeight / 2);
+        Check(closeTo(skVertexLitPixel[0], 127, 10) && closeTo(skVertexLitPixel[1], 127, 10) && closeTo(skVertexLitPixel[2], 127, 10),
+              "S2-1: DrawPrimitivesEx() skinned3d preferPerPixelLighting=false (XNA's real default) "
+              "genuinely computes the Gouraud-averaged specular result, ~127 (Task 1107, "
+              "plan_graphics.md Phase 80)");
+
+        skPplP.preferPerPixelLighting = true;
+        backend.Clear(0.0f, 0.0f, 0.0f, 1.0f);
+        backend.DrawPrimitivesEx(vbSkinPPL, Matrix::getIdentityProperty(), skPplView, skPplProj,
+                                 PrimitiveType::TriangleList, 2, skPplP);
+        auto skPixelLitResult = ReadBackRenderTargetFull(backend, rt.Get(), kRtWidth, kRtHeight);
+        const auto skPixelLitPixel = pixelAt(skPixelLitResult, kRtWidth / 2, kRtHeight / 2);
+        Check(closeTo(skPixelLitPixel[0], 155, 10) && closeTo(skPixelLitPixel[1], 155, 10) && closeTo(skPixelLitPixel[2], 155, 10),
+              "S2-2: DrawPrimitivesEx() skinned3d preferPerPixelLighting=true genuinely computes a "
+              "fresh per-fragment specular result, ~155 (Task 1107, plan_graphics.md Phase 80)");
+
+        Check(skVertexLitPixel[0] != skPixelLitPixel[0],
+              "S2-3: DrawPrimitivesEx() skinned3d preferPerPixelLighting is a real dispatch "
+              "selector, not a decorative no-op (Task 1107, plan_graphics.md Phase 80)");
 
         backend.UnbindOffscreenColorTargetEXT();
     }

@@ -1301,6 +1301,89 @@ protected:
             }
         }
 
+        // Check R2 (Task 1106, plan_graphics.md Phase 80): PreferPerPixelLighting genuinely
+        // selects between two different lit_textured3d dispatch variants (vertex-lit vs
+        // pixel-lit). Reuses the exact scene/values already independently derived and verified in
+        // examples/easygl_basiceffect_preferperpixellighting_test.cpp (Task 1102): a flat quad,
+        // single shared normal (0,0,1), makes DIFFUSE spatially constant (useless for
+        // discriminating diffuse alone) but SPECULAR still varies across the surface because the
+        // eye vector depends on position -- Gouraud-interpolating each vertex's own
+        // independently-computed specular term (vertex-lit) genuinely differs from re-evaluating
+        // it fresh at the sampled fragment (pixel-lit). Sampled exactly at the viewport centre,
+        // which sits on the diagonal seam between the quad's two triangles. Analytically-derived
+        // expected values (same offline Blinn-Phong re-derivation as the EasyGL test): ~127
+        // vertex-lit, ~155 pixel-lit.
+        {
+            struct VPNT { float x, y, z; float nx, ny, nz; float u, v; };
+            static const VPNT kQuad[6] = {
+                {-1.0f,  1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f},
+                {-1.0f, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f},
+                { 1.0f, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f},
+                {-1.0f,  1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f},
+                { 1.0f, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f},
+                { 1.0f,  1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f},
+            };
+            auto vbPPL = backend.CreateVertexBuffer(6);
+            vbPPL->SetData(kQuad, 6, sizeof(VPNT));
+
+            ImageData whiteImg;
+            whiteImg.width = 1; whiteImg.height = 1; whiteImg.mipLevels = 1;
+            whiteImg.pixels = {255, 255, 255, 255};
+            auto whiteTex = backend.CreateTexture(whiteImg);
+
+            GpuDrawParams pplP;
+            pplP.texture0 = whiteTex.get();
+            pplP.textureEnabled = true;
+            pplP.lightingEnabled = true;
+            pplP.ambientColor[0] = 0.02f; pplP.ambientColor[1] = 0.02f; pplP.ambientColor[2] = 0.02f;
+            pplP.diffuseColor[0] = 0.4f; pplP.diffuseColor[1] = 0.4f; pplP.diffuseColor[2] = 0.4f; pplP.diffuseColor[3] = 1.0f;
+            Vector3 lightDir(0.5f, 0.0f, -1.0f);
+            lightDir.Normalize();
+            pplP.light0Dir[0] = lightDir.X; pplP.light0Dir[1] = lightDir.Y; pplP.light0Dir[2] = lightDir.Z;
+            pplP.light0Diffuse[0] = 0.5f; pplP.light0Diffuse[1] = 0.5f; pplP.light0Diffuse[2] = 0.5f;
+            pplP.light0Specular[0] = 1.0f; pplP.light0Specular[1] = 1.0f; pplP.light0Specular[2] = 1.0f;
+            pplP.specularColor[0] = 1.0f; pplP.specularColor[1] = 1.0f; pplP.specularColor[2] = 1.0f;
+            pplP.specularPower = 32.0f;
+            pplP.eyePositionWorld[0] = 0.0f; pplP.eyePositionWorld[1] = 0.0f; pplP.eyePositionWorld[2] = 3.0f;
+
+            const Matrix pplView = Matrix::CreateLookAt(Vector3(0.0f, 0.0f, 3.0f), Vector3::Zero, Vector3(0.0f, 1.0f, 0.0f));
+            const Matrix pplProj = Matrix::CreatePerspectiveFieldOfView(MathHelper::PiOver4, 1.0f, 0.1f, 100.0f);
+            const Microsoft::Xna::Framework::Rectangle centerPixel(32, 32, 1, 1);
+
+            pplP.preferPerPixelLighting = false;
+            dev.Clear(Color(0, 0, 0, 255));
+            backend.DrawPrimitivesEx(*vbPPL, Matrix::getIdentityProperty(), pplView, pplProj,
+                                     PrimitiveType::TriangleList, 2, pplP);
+            Color vertexLit(0, 0, 0, 0);
+            dev.GetBackBufferData(&centerPixel, &vertexLit, 0, 1);
+            const bool vertexLitOk = std::abs(vertexLit.getRProperty() - 127) <= 10 &&
+                                     std::abs(vertexLit.getGProperty() - 127) <= 10 &&
+                                     std::abs(vertexLit.getBProperty() - 127) <= 10;
+            check(vertexLitOk,
+                  "D3D11GraphicsBackend::DrawPrimitivesEx(): preferPerPixelLighting=false (XNA's "
+                  "real default) genuinely computes the Gouraud-averaged specular result, ~127 "
+                  "(Task 1106, plan_graphics.md Phase 80)");
+
+            pplP.preferPerPixelLighting = true;
+            dev.Clear(Color(0, 0, 0, 255));
+            backend.DrawPrimitivesEx(*vbPPL, Matrix::getIdentityProperty(), pplView, pplProj,
+                                     PrimitiveType::TriangleList, 2, pplP);
+            Color pixelLit(0, 0, 0, 0);
+            dev.GetBackBufferData(&centerPixel, &pixelLit, 0, 1);
+            const bool pixelLitOk = std::abs(pixelLit.getRProperty() - 155) <= 10 &&
+                                    std::abs(pixelLit.getGProperty() - 155) <= 10 &&
+                                    std::abs(pixelLit.getBProperty() - 155) <= 10;
+            check(pixelLitOk,
+                  "D3D11GraphicsBackend::DrawPrimitivesEx(): preferPerPixelLighting=true genuinely "
+                  "computes a fresh per-fragment specular result, ~155 (Task 1106, plan_graphics.md "
+                  "Phase 80)");
+
+            check(vertexLit.getRProperty() != pixelLit.getRProperty(),
+                  "D3D11GraphicsBackend::DrawPrimitivesEx(): preferPerPixelLighting is a real "
+                  "dispatch selector, not a decorative no-op -- the two draws above produce "
+                  "genuinely different pixel values (Task 1106, plan_graphics.md Phase 80)");
+        }
+
         // Check S (DX-64): alpha_test3d. A failing alpha genuinely discards (Clear() background
         // survives); a passing alpha draws the exact texture color, including its own alpha byte.
         {
@@ -1987,6 +2070,89 @@ protected:
                       "D3D11GraphicsBackend::DrawPrimitivesEx(): real skinned3d -- DirectionalLight2 "
                       "alone contributes the exact expected green, independent of Light0/Light1 (plan_dx.md DX-150)");
             }
+        }
+
+        // Check V2 (Task 1107, plan_graphics.md Phase 80): same PreferPerPixelLighting
+        // discriminator as Check R2 above, but for skinned3d -- a single Identity bone at 100%
+        // weight keeps skinning a mathematical no-op, isolating the vertex-lit-vs-pixel-lit
+        // dispatch difference exactly like Check R2 does. Same scene/values as
+        // examples/easygl_skinnedeffect_preferperpixellighting_test.cpp (Task 1102b): ~127
+        // vertex-lit, ~155 pixel-lit (a few units of backend-specific rounding is expected and
+        // fine, per every other backend's own equivalent task).
+        {
+            struct VPNTS { float x, y, z; float nx, ny, nz; float u, v;
+                          float bw0, bw1, bw2, bw3; uint8_t bi0, bi1, bi2, bi3; };
+            static const VPNTS kSkinQuad[6] = {
+                {-1.0f,  1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0},
+                {-1.0f, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0},
+                { 1.0f, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0},
+                {-1.0f,  1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0},
+                { 1.0f, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0},
+                { 1.0f,  1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0},
+            };
+            auto vbSkinPPL = backend.CreateVertexBuffer(6);
+            vbSkinPPL->SetData(kSkinQuad, 6, sizeof(VPNTS));
+
+            ImageData whiteImg2;
+            whiteImg2.width = 1; whiteImg2.height = 1; whiteImg2.mipLevels = 1;
+            whiteImg2.pixels = {255, 255, 255, 255};
+            auto whiteTex2 = backend.CreateTexture(whiteImg2);
+
+            GpuDrawParams skPplP;
+            skPplP.texture0 = whiteTex2.get();
+            skPplP.textureEnabled = true;
+            skPplP.lightingEnabled = true;
+            skPplP.skinned = true;
+            skPplP.boneCount = 1;
+            skPplP.weightsPerVertex = 1;
+            Matrix::getIdentityProperty().ToColumnMajor(skPplP.boneTransforms);
+            skPplP.ambientColor[0] = 0.02f; skPplP.ambientColor[1] = 0.02f; skPplP.ambientColor[2] = 0.02f;
+            skPplP.diffuseColor[0] = 0.4f; skPplP.diffuseColor[1] = 0.4f; skPplP.diffuseColor[2] = 0.4f; skPplP.diffuseColor[3] = 1.0f;
+            Vector3 skLightDir(0.5f, 0.0f, -1.0f);
+            skLightDir.Normalize();
+            skPplP.light0Dir[0] = skLightDir.X; skPplP.light0Dir[1] = skLightDir.Y; skPplP.light0Dir[2] = skLightDir.Z;
+            skPplP.light0Diffuse[0] = 0.5f; skPplP.light0Diffuse[1] = 0.5f; skPplP.light0Diffuse[2] = 0.5f;
+            skPplP.light0Specular[0] = 1.0f; skPplP.light0Specular[1] = 1.0f; skPplP.light0Specular[2] = 1.0f;
+            skPplP.specularColor[0] = 1.0f; skPplP.specularColor[1] = 1.0f; skPplP.specularColor[2] = 1.0f;
+            skPplP.specularPower = 32.0f;
+            skPplP.eyePositionWorld[0] = 0.0f; skPplP.eyePositionWorld[1] = 0.0f; skPplP.eyePositionWorld[2] = 3.0f;
+
+            const Matrix skPplView = Matrix::CreateLookAt(Vector3(0.0f, 0.0f, 3.0f), Vector3::Zero, Vector3(0.0f, 1.0f, 0.0f));
+            const Matrix skPplProj = Matrix::CreatePerspectiveFieldOfView(MathHelper::PiOver4, 1.0f, 0.1f, 100.0f);
+            const Microsoft::Xna::Framework::Rectangle skCenterPixel(32, 32, 1, 1);
+
+            skPplP.preferPerPixelLighting = false;
+            dev.Clear(Color(0, 0, 0, 255));
+            backend.DrawPrimitivesEx(*vbSkinPPL, Matrix::getIdentityProperty(), skPplView, skPplProj,
+                                     PrimitiveType::TriangleList, 2, skPplP);
+            Color skVertexLit(0, 0, 0, 0);
+            dev.GetBackBufferData(&skCenterPixel, &skVertexLit, 0, 1);
+            const bool skVertexLitOk = std::abs(skVertexLit.getRProperty() - 127) <= 10 &&
+                                       std::abs(skVertexLit.getGProperty() - 127) <= 10 &&
+                                       std::abs(skVertexLit.getBProperty() - 127) <= 10;
+            check(skVertexLitOk,
+                  "D3D11GraphicsBackend::DrawPrimitivesEx(): skinned3d preferPerPixelLighting=false "
+                  "(XNA's real default) genuinely computes the Gouraud-averaged specular result, "
+                  "~127 (Task 1107, plan_graphics.md Phase 80)");
+
+            skPplP.preferPerPixelLighting = true;
+            dev.Clear(Color(0, 0, 0, 255));
+            backend.DrawPrimitivesEx(*vbSkinPPL, Matrix::getIdentityProperty(), skPplView, skPplProj,
+                                     PrimitiveType::TriangleList, 2, skPplP);
+            Color skPixelLit(0, 0, 0, 0);
+            dev.GetBackBufferData(&skCenterPixel, &skPixelLit, 0, 1);
+            const bool skPixelLitOk = std::abs(skPixelLit.getRProperty() - 155) <= 10 &&
+                                      std::abs(skPixelLit.getGProperty() - 155) <= 10 &&
+                                      std::abs(skPixelLit.getBProperty() - 155) <= 10;
+            check(skPixelLitOk,
+                  "D3D11GraphicsBackend::DrawPrimitivesEx(): skinned3d preferPerPixelLighting=true "
+                  "genuinely computes a fresh per-fragment specular result, ~155 (Task 1107, "
+                  "plan_graphics.md Phase 80)");
+
+            check(skVertexLit.getRProperty() != skPixelLit.getRProperty(),
+                  "D3D11GraphicsBackend::DrawPrimitivesEx(): skinned3d preferPerPixelLighting is a "
+                  "real dispatch selector, not a decorative no-op (Task 1107, plan_graphics.md "
+                  "Phase 80)");
         }
 
         // Check W (DX-68): instanced3d. DrawInstancedPrimitivesEx() with one identity-transform
@@ -3408,7 +3574,9 @@ protected:
                                 + 2 /* DX-151 skinned3d specular discrimination */
                                 + 1 /* DX-152 RenderTargetCube MSAA */
                                 + 1 /* DX-153 RenderTargetCube mip non-face-0 */
-                                + 2 /* DX-155 Model root-bone-index flexibility */;
+                                + 2 /* DX-155 Model root-bone-index flexibility */
+                                + 3 /* Task 1106 BasicEffect PreferPerPixelLighting */
+                                + 3 /* Task 1107 SkinnedEffect PreferPerPixelLighting */;
         std::printf("=== %d/%d PASS ===\n", passCount_, totalChecks);
         result_ = (passCount_ == totalChecks) ? 0 : 1;
         Exit();

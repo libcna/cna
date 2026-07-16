@@ -64,7 +64,12 @@ static const Vector3 kEyeOffAxis(3.0f, 0.0f, 1.0f);
 
 // Precisely computed offline (Python) from the exact FNA half-vector Blinn-Phong formula --
 // identical numbers to BasicEffect's own specular test (same shared Lighting.fxh formula).
-static const Color kExpectedStraightOn(155, 155, 155, 255);   // dotH=0.9732, spec=0.4199
+// Task 1104: updated forward from 155 (the OLD, pre-Task-1104 always-pixel-lit value, dotH=0.9732
+// spec=0.4199) to 126 -- this scene never sets PreferPerPixelLighting, so it now genuinely
+// exercises the real XNA default (per-vertex/Gouraud-interpolated specular). See
+// bgfx_skinnedeffect_preferperpixellighting_test.cpp for the dedicated test proving BOTH values
+// are real, live-selected results, not a silent regression.
+static const Color kExpectedStraightOn(126, 126, 126, 255);
 static const Color kExpectedOffAxisEye(68, 68, 68, 255);       // dotH=0.9239, spec=0.0794
 static const Color kExpectedNoSpecular(48, 48, 48, 255);       // diffuse+ambient only
 static const Color kExpectedLightDisabled(2, 2, 2, 255);       // ambient only

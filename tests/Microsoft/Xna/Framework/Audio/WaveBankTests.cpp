@@ -7,6 +7,7 @@
 #include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
 #include "Microsoft/Xna/Framework/Audio/WaveBank.hpp"
 #include "System/ArgumentNullException.hpp"
+#include "System/Environment.hpp"
 #include "System/EventArgs.hpp"
 #include "System/IO/FileNotFoundException.hpp"
 #include "System/Object.hpp"

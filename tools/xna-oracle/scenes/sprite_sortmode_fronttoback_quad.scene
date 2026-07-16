@@ -1,0 +1,22 @@
+# plan_dx9.md D9-A5 scene corpus: sprite_sortmode_fronttoback_quad
+# D9-93: the SpriteSortMode.FrontToBack counterpart of sprite_sortmode_deferred_quad.scene /
+# sprite_sortmode_backtofront_quad.scene -- see the Deferred scene's own header comment for the
+# full design rationale. This scene deliberately uses the OPPOSITE API insertion order from those
+# two (GREEN depth=1.0 drawn FIRST, RED depth=0.0 drawn SECOND) specifically so FrontToBack's own
+# ascending (near-to-far) reorder is genuinely discriminating: if FrontToBack correctly reorders
+# to RED-then-GREEN (ascending by depth) before drawing, GREEN ends up on top again, producing
+# the SAME final blend as sprite_sortmode_deferred_quad.scene (green-dominant) despite the
+# REVERSED insertion order and a DIFFERENT sort mode -- proving the reorder actually happened. A
+# broken/no-op FrontToBack (one that merely kept insertion order) would instead leave RED on top
+# (red-dominant), distinguishably wrong.
+width=256
+height=256
+profile=HiDef
+clearcolor=0,0,0,255
+spritebatchmode=true
+texturewidth=1
+textureheight=1
+texturepixel=255,255,255,255
+spritesortmode=FrontToBack
+spritedraw=88,88,80,80,0,255,0,128,1.0
+spritedraw=88,88,80,80,255,0,0,128,0.0

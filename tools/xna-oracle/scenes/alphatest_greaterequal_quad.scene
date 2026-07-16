@@ -1,0 +1,43 @@
+# plan_dx9.md D9-A5 scene corpus: alphatest_greaterequal_quad
+# The first scene to exercise AlphaFunction=GreaterEqual, which shares the SAME PSAlphaTestLtGt
+# shader bucket as Greater/Less (confirmed against FNA's own AlphaTestEffect.cs) but differs from
+# plain Greater specifically at the EXACT boundary value: `alphaTest.X = reference - threshold`
+# (vs. Greater's `reference + threshold`), so a texel whose alpha exactly equals ReferenceAlpha
+# passes under GreaterEqual but would be discarded under plain Greater (AlphaTestEffect.cs:
+# GreaterEqual case, lines ~356-361, vs. the Greater case immediately below it).
+#
+# Reuses alphatest_equal_quad.scene's exact texture (alpha=128,127,129,1) and ReferenceAlpha=128
+# specifically because it already has a texel at the EXACT boundary -- alphatest_quad.scene's own
+# texture (alpha=255,1,255,64) never lands exactly on 128, so it could not distinguish Greater
+# from GreaterEqual at all. Under GreaterEqual: alpha=128 (exact match) now PASSES (unlike plain
+# Greater, where it would fail); alpha=129 (above) PASSES; alpha=127/1 (below) FAIL. A backend
+# that silently treated GreaterEqual identically to Greater would incorrectly discard the
+# alpha=128 texel here -- this scene exists specifically to close that verification gap.
+width=256
+height=256
+profile=HiDef
+clearcolor=100,149,237,255
+effect=AlphaTestEffect
+vertexformat=PositionTexture
+vertexcolor=false
+texture=true
+texturewidth=2
+textureheight=2
+texturefilter=Point
+alphafunction=GreaterEqual
+referencealpha=128
+primitive=TriangleList
+# Row-major, top row first: (red,a=128 EXACT MATCH -> PASSES under GreaterEqual) /
+# (white,a=127 -> FAILS) ; (white,a=129 -> PASSES) / (blue,a=1 -> FAILS).
+texturepixel=255,0,0,128
+texturepixel=255,255,255,127
+texturepixel=255,255,255,129
+texturepixel=0,0,255,1
+# UV (0,0) is the texture's top-left (red, alpha=128, passes under GreaterEqual but would fail
+# under plain Greater -- the whole point of this scene).
+vertex=-0.6,0.6,0,0,0
+vertex=0.6,0.6,0,1,0
+vertex=-0.6,-0.6,0,0,1
+vertex=0.6,0.6,0,1,0
+vertex=0.6,-0.6,0,1,1
+vertex=-0.6,-0.6,0,0,1

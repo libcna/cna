@@ -63,7 +63,17 @@ static const Vector3 kNormal(0.0f, 0.0f, 1.0f);
 static const Vector3 kEyeStraightOn(0.0f, 0.0f, 3.0f);
 static const Vector3 kEyeOffAxis(3.0f, 0.0f, 1.0f);
 
-static const Color kExpectedStraightOn(155, 155, 155, 255);
+// Task 1103 (plan_graphics.md Phase 80): PreferPerPixelLighting now really defaults to false
+// (XNA's own default, per-vertex/Gouraud lighting) instead of always rendering per-pixel. This
+// scene never sets PreferPerPixelLighting=true, so it now genuinely exercises the vertex-lit
+// path -- Gouraud-interpolating the Blinn-Phong specular term across the quad's two triangles
+// (linear in the specular VALUE) differs from evaluating pow(dot(H,N),power) fresh at each
+// fragment (non-linear), even though every vertex shares one constant normal. 127 is the new,
+// correct value for this specific eye/light/quad configuration (confirmed against the identical
+// scene's own independently-derived value on EasyGL, easygl_basiceffect_specular_test.cpp's own
+// Task 1102 update) -- 155 (below, in the check's own printed label and check (b)'s comparison
+// target) was the OLD, always-per-pixel value this scene incorrectly asserted before this fix.
+static const Color kExpectedStraightOn(127, 127, 127, 255);
 static const Color kExpectedOffAxisEye(68, 68, 68, 255);
 static const Color kExpectedNoSpecular(48, 48, 48, 255);
 static const Color kExpectedLightDisabled(2, 2, 2, 255);
@@ -166,12 +176,12 @@ protected:
 
         const Color a = renderWith(dev, tex, kEyeStraightOn, kSpecularColor, true);
         check(matches(a, kExpectedStraightOn),
-              "(a) Eye straight on (0,0,3): diffuse+strong specular", a, "(155,155,155)");
+              "(a) Eye straight on (0,0,3): diffuse+strong specular", a, "(127,127,127)");
 
         const Color b = renderWith(dev, tex, kEyeOffAxis, kSpecularColor, true);
         check(matches(b, kExpectedOffAxisEye),
               "(b) Eye off-axis (3,0,1): weaker specular, proves EyePosition dependence", b, "(68,68,68)");
-        check(!matches(b, a), "(b) differs from (a) -- specular is not a hardcoded constant", b, "!= (155,155,155)");
+        check(!matches(b, a), "(b) differs from (a) -- specular is not a hardcoded constant", b, "!= (127,127,127)");
 
         const Color c = renderWith(dev, tex, kEyeStraightOn, kZero, true);
         check(matches(c, kExpectedNoSpecular),

@@ -1504,14 +1504,21 @@ namespace CNA::Internal::Backends::D3D12
         }
         else if (needsSkinned)
         {
-            variant = D3DShaderVariant::Skinned3d;
+            // plan_graphics.md Phase 80 (Task 1107): real XNA renders SkinnedEffect's lit path
+            // per-vertex by default (PreferPerPixelLighting == false), not per-pixel.
+            variant = (params.lightingEnabled && !params.preferPerPixelLighting)
+                    ? D3DShaderVariant::Skinned3dVertexLit
+                    : D3DShaderVariant::Skinned3d;
             hasTexture = true;
             numCbvs = 3; // PerDraw (b0) + BoneBlock (b1) + skinned3d's own FogParams-equivalent (b2).
             numSrvs = 1;
         }
         else if (needsLitTextured)
         {
-            variant = D3DShaderVariant::LitTextured3d;
+            // Same real-default fix for BasicEffect's lit-textured bucket.
+            variant = (params.lightingEnabled && !params.preferPerPixelLighting)
+                    ? D3DShaderVariant::LitTextured3dVertexLit
+                    : D3DShaderVariant::LitTextured3d;
             hasTexture = true;
             numCbvs = 2; // PerDraw (b0) + LitLightParams (b1).
             numSrvs = 1;

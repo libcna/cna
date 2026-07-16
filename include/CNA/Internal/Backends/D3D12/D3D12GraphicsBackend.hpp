@@ -506,6 +506,10 @@ namespace CNA::Internal::Backends::D3D12
         // task's own new cube render target was allocated. Same fixed-bump-allocator simplification,
         // sized generously (not just to the exact observed demand) to leave headroom for DX-153's
         // own follow-up cube allocation landing right after this in the same phase.
+        // Task 1107 (plan_graphics.md Phase 80, merged from a branch that raised this same constant
+        // 32->40 from an older baseline): Check O3/S2's own 2 new RTV-allocating blocks are already
+        // comfortably covered by the 64 this history independently arrived at -- no further raise
+        // needed.
         static constexpr UINT kRtvHeapCapacity = 64;
         static constexpr UINT kDsvHeapCapacity = 8;
         static constexpr UINT kCbvSrvUavHeapCapacity = 64;

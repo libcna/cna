@@ -12,6 +12,7 @@
 #include "SoundBankTestAccess.hpp"
 #include "SoundEffectInstanceTestAccess.hpp"
 #include "System/ArgumentNullException.hpp"
+#include "System/Environment.hpp"
 #include "System/EventArgs.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/IO/FileNotFoundException.hpp"

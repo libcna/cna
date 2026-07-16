@@ -20,6 +20,16 @@
 #include "CNA/Internal/Backends/Bgfx/BgfxGraphicsBackend.hpp"
 #endif
 
+// plan_dx9.md Phase D9-10 (D9-103 follow-up): GraphicsProfile.Reach's own MaxRenderTargets=1
+// ceiling, real on this backend only -- matches Texture2D.cpp's own #ifdef CNA_BACKEND_D3D9
+// convention exactly. Distinct from MAX_RENDERTARGET_BINDINGS below (XNA's own general 4-target
+// ceiling, backend-agnostic) and from D9-54's own NumSimultaneousRTs hardware-cap enforcement
+// inside D3D9GraphicsBackend::SetRenderTargets() -- this is the profile's own, separately lower,
+// software-imposed ceiling.
+#ifdef CNA_BACKEND_D3D9
+#include "CNA/Internal/Backends/D3D9/D3D9ProfileCapabilities.hpp"
+#endif
+
 #include <SDL3/SDL.h>
 
 #include <algorithm>
@@ -30,6 +40,7 @@
 
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/InvalidOperationException.hpp"
+#include "System/NotSupportedException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
 namespace Microsoft::Xna::Framework::Graphics
@@ -412,6 +423,15 @@ namespace Microsoft::Xna::Framework::Graphics
             // IGraphicsBackend::SetSwapInterval() on any backend. Matches SetPresentationParameters()'s
             // own forwarding exactly.
             backend_->SetSwapInterval(toSwapInterval(presentationParameters_.getPresentationIntervalProperty()));
+
+            // plan_dx9.md D9-30/D9-33: same "actually reach the backend" rationale as
+            // ApplyMultiSampleCount above, for back-buffer/depth-stencil format and fullscreen --
+            // needed because Game commonly constructs this GraphicsDevice (and its backend) with
+            // default PresentationParameters before GraphicsDeviceManager.ApplyChanges() ever runs.
+            backend_->UpdatePresentationFormatEXT(
+                static_cast<int>(presentationParameters_.getBackBufferFormatProperty()),
+                static_cast<int>(presentationParameters_.getDepthStencilFormatProperty()),
+                presentationParameters_.getIsFullScreenProperty());
         }
 
         UpdateViewportFromWindow();
@@ -484,6 +504,11 @@ namespace Microsoft::Xna::Framework::Graphics
     void GraphicsDevice::SetDepthWriteEnabled(bool enabled)
     {
         if (backend_ != nullptr) backend_->SetDepthWriteEnabled(enabled);
+    }
+
+    void GraphicsDevice::SetGraphicsProfileEXT(GraphicsProfile profile)
+    {
+        graphicsProfile_ = profile;
     }
 
     void GraphicsDevice::SetVertexBuffer(const VertexBuffer* vertexBuffer)
@@ -1420,6 +1445,32 @@ namespace Microsoft::Xna::Framework::Graphics
         args.contextRecoveryEnabled = contextRecoveryEnabled_;
         args.multiSampleCount = presentationParameters_.getMultiSampleCountProperty();
         args.swapInterval = toSwapInterval(presentationParameters_.getPresentationIntervalProperty());
+        // plan_dx9.md D9-30: real presentation-parameter fidelity for backends that need it (D3D9);
+        // every other backend continues to ignore these exactly as before the fields existed.
+        args.backBufferFormat = static_cast<int>(presentationParameters_.getBackBufferFormatProperty());
+        args.depthStencilFormat = static_cast<int>(presentationParameters_.getDepthStencilFormatProperty());
+        args.isFullScreen = presentationParameters_.getIsFullScreenProperty();
+        args.graphicsProfile = static_cast<int>(graphicsProfile_);
+        // plan_dx9.md D9-34: forward a REAL, backend-detected device-lost/reset event to this
+        // GraphicsDevice's own public XNA events. Nine of the ten backends never call this.
+        args.deviceEventCallback = [this](CNA::Internal::Backends::BackendDeviceEvent event)
+        {
+            switch (event)
+            {
+                case CNA::Internal::Backends::BackendDeviceEvent::Lost:
+                    deviceStatus_ = GraphicsDeviceStatus::Lost;
+                    DeviceLost.Raise(this, System::EventArgs::Empty);
+                    break;
+                case CNA::Internal::Backends::BackendDeviceEvent::Resetting:
+                    deviceStatus_ = GraphicsDeviceStatus::NotReset;
+                    DeviceResetting.Raise(this, System::EventArgs::Empty);
+                    break;
+                case CNA::Internal::Backends::BackendDeviceEvent::Reset:
+                    deviceStatus_ = GraphicsDeviceStatus::Normal;
+                    DeviceReset.Raise(this, System::EventArgs::Empty);
+                    break;
+            }
+        };
 
         backend_ = CreateGraphicsBackend(args);
 
@@ -1583,7 +1634,11 @@ namespace Microsoft::Xna::Framework::Graphics
 
     GraphicsDeviceStatus GraphicsDevice::getGraphicsDeviceStatusProperty() const
     {
-        return GraphicsDeviceStatus::Normal;
+        // plan_dx9.md D9-34: tracks the real backend-reported status via deviceStatus_ (updated by
+        // the deviceEventCallback lambda in createBackend()). Every backend except D3D9 never calls
+        // that callback, so this stays Normal for them -- identical behavior to before this field
+        // existed.
+        return deviceStatus_;
     }
 
     DisplayMode GraphicsDevice::getDisplayModeProperty() const
@@ -1823,6 +1878,25 @@ namespace Microsoft::Xna::Framework::Graphics
         if (renderTargets.size() > MAX_RENDERTARGET_BINDINGS)
             throw std::invalid_argument("SetRenderTargets: at most " +
                 std::to_string(MAX_RENDERTARGET_BINDINGS) + " render targets may be bound at once.");
+
+#ifdef CNA_BACKEND_D3D9
+        // D9-103 follow-up: GraphicsProfile.Reach's own MaxRenderTargets=1 ceiling (D9-100's own
+        // table) -- a SEPARATE, lower, software-imposed limit from MAX_RENDERTARGET_BINDINGS
+        // above (XNA's own general 4-target ceiling) and from D9-54's own hardware-cap
+        // enforcement inside the backend (NumSimultaneousRTs, which could be higher).
+        {
+            const int profile = static_cast<int>(graphicsProfile_);
+            const int maxForProfile = CNA::Internal::Backends::D3D9::MaxRenderTargetsForProfileEXT(profile);
+            if (static_cast<int>(renderTargets.size()) > maxForProfile)
+            {
+                throw System::NotSupportedException(
+                    "SetRenderTargets: " + std::to_string(renderTargets.size()) +
+                    " render targets exceeds GraphicsProfile." +
+                    (profile == 1 ? std::string("HiDef") : std::string("Reach")) +
+                    "'s own maximum of " + std::to_string(maxForProfile));
+            }
+        }
+#endif
 
         // Task 717 finding: SetRenderTarget(RenderTarget2D*) (singular) already guards against a
         // disposed target -- this plural overload didn't, letting a disposed RenderTarget2D reach

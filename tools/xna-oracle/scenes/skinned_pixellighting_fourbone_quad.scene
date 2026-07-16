@@ -1,0 +1,44 @@
+# plan_dx9.md D9-A5 scene corpus: skinned_pixellighting_fourbone_quad
+# Third D9-73 oracle-proof scene for SkinnedEffect.PreferPerPixelLighting=true (see
+# skinned_pixellighting_quad.scene's own header for the full split-normal discriminator
+# rationale) -- this one selects VSSkinnedPixelLightingFourBones/PSSkinnedPixelLighting, the last
+# of the 5 D9-73-divergent shader variants that is actually reachable given this backend's current
+# vertex-layout constraints (VSBasicPixelLighting, the untextured bucket, remains permanently
+# blocked by the same missing Position-only vertex layout gap D9-82b's own "10 of 32 ShaderIndex
+# values" finding already documents -- unrelated to PreferPerPixelLighting itself). Reuses
+# skinned_fourbone_quad.scene's own real, non-degenerate 4-bone blend (all four bones pure
+# translations, so the normal is unaffected by skinning, keeping the split-normal discriminator
+# meaningful): Bone 0 Identity (weight 0.4), Bone 1 Translate(0.4,0,0) (weight 0.3), Bone 2
+# Translate(0,0.2,0) (weight 0.2), Bone 3 Translate(0,-0.1,0) (weight 0.1).
+width=256
+height=256
+profile=HiDef
+clearcolor=100,149,237,255
+effect=SkinnedEffect
+vertexformat=PositionNormalTextureWeights
+lighting=true
+preferpixellighting=true
+ambientcolor=0,0,0
+light0enabled=true
+light0diffuse=0.8,0.8,0.8
+light0direction=0,0,-1
+texture=true
+texturewidth=1
+textureheight=1
+texturefilter=Point
+weightspervertex=4
+bone1translate=0.4,0,0
+bone2translate=0,0.2,0
+bone3translate=0,-0.1,0
+primitive=TriangleList
+texturepixel=255,255,255,255
+# x,y,z,nx,ny,nz,u,v,boneindex0,boneweight0,boneindex1,boneweight1,boneindex2,boneweight2,
+# boneindex3,boneweight3 -- left-edge vertices face the light (0,0,1), right-edge vertices tilt
+# away (0.7071,0,-0.7071), same split as skinned_pixellighting_quad.scene; all four bones weighted
+# per skinned_fourbone_quad.scene's own convention.
+vertex=-0.6,0.6,0,0,0,1,0,0,0,0.4,1,0.3,2,0.2,3,0.1
+vertex=0.6,0.6,0,0.7071,0,-0.7071,1,0,0,0.4,1,0.3,2,0.2,3,0.1
+vertex=-0.6,-0.6,0,0,0,1,0,1,0,0.4,1,0.3,2,0.2,3,0.1
+vertex=0.6,0.6,0,0.7071,0,-0.7071,1,0,0,0.4,1,0.3,2,0.2,3,0.1
+vertex=0.6,-0.6,0,0.7071,0,-0.7071,1,1,0,0.4,1,0.3,2,0.2,3,0.1
+vertex=-0.6,-0.6,0,0,0,1,0,1,0,0.4,1,0.3,2,0.2,3,0.1

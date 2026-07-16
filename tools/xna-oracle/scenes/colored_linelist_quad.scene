@@ -1,0 +1,30 @@
+# plan_dx9.md D9-A5 scene corpus: colored_linelist_quad
+# The second never-before-exercised PrimitiveType in the corpus (after colored_trianglestrip_quad,
+# which closed TriangleStrip): every scene before that one used TriangleList exclusively.
+# PrimitiveType.LineList draws N/2 independent 2-vertex line segments -- genuinely different from
+# LineStrip (a single connected polyline) and from every triangle-based topology already covered.
+# No code changes needed: GraphicsDevice::PrimitiveVerts()/ToD3D9Topology() already handle
+# LineList unconditionally, and the scene format has supported it since D9-A3's own original
+# design.
+#
+# Two SEPARATE, non-touching horizontal line segments at clean, exactly-pixel-centered Y rows
+# (avoids the half-pixel/AA boundary ambiguity D9-91 already taught this corpus to watch for --
+# horizontal lines at integer-mapped Y coordinates have no diagonal antialiasing edge case). RED
+# at y=0.5 (screen y=64), GREEN at y=-0.5 (screen y=192), same X range for both. Sampling the
+# midpoint of each line proves each segment paints its own color; sampling the row exactly between
+# them (screen y=128, background CornflowerBlue) proves LineList draws two INDEPENDENT segments,
+# not a single connected 4-vertex polyline (which LineStrip would instead produce from the same
+# vertex data) -- a broken vertex-count<->primitiveCount conversion for LineList (e.g. treating 4
+# vertices as primitiveCount=4 instead of 2, or as a single continuous strip) would show up as
+# missing color, a connecting line between the two rows, or a shifted/degenerate segment.
+width=256
+height=256
+profile=HiDef
+clearcolor=100,149,237,255
+vertexcolor=true
+lighting=false
+primitive=LineList
+vertex=-0.8,0.5,0,255,0,0,255
+vertex=0.8,0.5,0,255,0,0,255
+vertex=-0.8,-0.5,0,0,255,0,255
+vertex=0.8,-0.5,0,0,255,0,255

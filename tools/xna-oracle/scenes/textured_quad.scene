@@ -1,0 +1,29 @@
+# plan_dx9.md D9-A5 scene corpus: textured_quad
+# A single BasicEffect (TextureEnabled=true, VertexColorEnabled=false, LightingEnabled=false) quad
+# (2 triangles) over a CornflowerBlue clear, sampling a tiny procedural 2x2 checkerboard texture
+# with point filtering (deterministic across implementations -- no filtering interpolation to
+# possibly disagree on) and clamp addressing. World/View/Projection all Identity.
+width=256
+height=256
+profile=HiDef
+clearcolor=100,149,237,255
+vertexformat=PositionTexture
+vertexcolor=false
+lighting=false
+texture=true
+texturewidth=2
+textureheight=2
+texturefilter=Point
+primitive=TriangleList
+# Row-major, top row first (matches Texture2D.SetData's own row-major layout): red,white / white,blue.
+texturepixel=255,0,0,255
+texturepixel=255,255,255,255
+texturepixel=255,255,255,255
+texturepixel=0,0,255,255
+# UV (0,0) is the texture's top-left (red texel); UV (1,1) is the bottom-right (blue texel).
+vertex=-0.6,0.6,0,0,0
+vertex=0.6,0.6,0,1,0
+vertex=-0.6,-0.6,0,0,1
+vertex=0.6,0.6,0,1,0
+vertex=0.6,-0.6,0,1,1
+vertex=-0.6,-0.6,0,0,1

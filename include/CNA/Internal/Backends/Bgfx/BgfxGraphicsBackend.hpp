@@ -471,11 +471,15 @@ namespace CNA::Internal::Backends::Bgfx
         bgfx::ProgramHandle textured3DProgram_        = BGFX_INVALID_HANDLE;
         bgfx::ProgramHandle coloredTextured3DProgram_ = BGFX_INVALID_HANDLE;
         bgfx::ProgramHandle litTextured3DProgram_     = BGFX_INVALID_HANDLE;
+        // Task 1104: real per-vertex-lit sibling of litTextured3DProgram_/skinned3DProgram_,
+        // selected when GpuDrawParams::preferPerPixelLighting is false (XNA's real default).
+        bgfx::ProgramHandle litTextured3DVertexLitProgram_ = BGFX_INVALID_HANDLE;
         bgfx::ProgramHandle alphaTest3DProgram_       = BGFX_INVALID_HANDLE;
         bgfx::ProgramHandle alphaTestColoredTextured3DProgram_ = BGFX_INVALID_HANDLE; // Task 887
         bgfx::ProgramHandle dualTexture3DProgram_     = BGFX_INVALID_HANDLE;
         bgfx::ProgramHandle dualTextureColored3DProgram_ = BGFX_INVALID_HANDLE; // Task 889
         bgfx::ProgramHandle skinned3DProgram_         = BGFX_INVALID_HANDLE;
+        bgfx::ProgramHandle skinned3DVertexLitProgram_ = BGFX_INVALID_HANDLE; // Task 1104
         bgfx::ProgramHandle instanced3DProgram_       = BGFX_INVALID_HANDLE;
         bgfx::ProgramHandle envMap3DProgram_          = BGFX_INVALID_HANDLE;
         // Uniforms shared across 3D draw calls

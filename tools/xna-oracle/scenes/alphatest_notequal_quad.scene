@@ -1,0 +1,41 @@
+# plan_dx9.md D9-A5 scene corpus: alphatest_notequal_quad
+# The first scene to exercise AlphaFunction=NotEqual, the negation of alphatest_equal_quad.scene
+# within the SAME PSAlphaTestEqNe shader bucket (confirmed against FNA's own AlphaTestEffect.cs:
+# NotEqual uses the identical `abs(a - x) < y` comparison as Equal, just with the pass/fail branch
+# targets (AlphaTest.z/AlphaTest.w) swapped -- see AlphaTestEffect.cs:379-386). Reuses the exact
+# same texture and ReferenceAlpha=128 threshold as alphatest_equal_quad.scene, only AlphaFunction
+# changes -- this deliberately FLIPS every texel's pass/fail relative to that scene:
+#   Equal (alphatest_equal_quad.scene):    alpha=128 (exact match) PASSES; 127/129/1 all FAIL.
+#   NotEqual (this scene):                 alpha=128 (exact match) FAILS; 127/129/1 all PASS.
+# A backend that silently ignored the Equal/NotEqual distinction (e.g. always using Equal's
+# branch targets) would still pass alphatest_equal_quad.scene but fail this one -- this scene
+# exists specifically to close that verification gap, completing coverage of both
+# AlphaTestEffect compare-function directions (Greater/Less on PSAlphaTestLtGt,
+# Equal/NotEqual on PSAlphaTestEqNe).
+width=256
+height=256
+profile=HiDef
+clearcolor=100,149,237,255
+effect=AlphaTestEffect
+vertexformat=PositionTexture
+vertexcolor=false
+texture=true
+texturewidth=2
+textureheight=2
+texturefilter=Point
+alphafunction=NotEqual
+referencealpha=128
+primitive=TriangleList
+# Row-major, top row first: (red,a=128 EXACT MATCH -> now FAILS) / (white,a=127 -> now PASSES) ;
+# (white,a=129 -> now PASSES) / (blue,a=1 -> now PASSES).
+texturepixel=255,0,0,128
+texturepixel=255,255,255,127
+texturepixel=255,255,255,129
+texturepixel=0,0,255,1
+# UV (0,0) is the texture's top-left (red, alpha=128, the only texel now discarded).
+vertex=-0.6,0.6,0,0,0
+vertex=0.6,0.6,0,1,0
+vertex=-0.6,-0.6,0,0,1
+vertex=0.6,0.6,0,1,0
+vertex=0.6,-0.6,0,1,1
+vertex=-0.6,-0.6,0,0,1

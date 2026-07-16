@@ -9,6 +9,7 @@
 #include "Microsoft/Xna/Framework/Audio/AudioChannels.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundState.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
+#include "System/Environment.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/ObjectDisposedException.hpp"
 #include "System/EventArgs.hpp"

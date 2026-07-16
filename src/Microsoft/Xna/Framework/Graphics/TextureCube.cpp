@@ -13,6 +13,13 @@
 #include <stdexcept>
 #include <vector>
 
+// plan_dx9.md Phase D9-10 (D9-103 follow-up): GraphicsProfile.Reach/HiDef cube-texture-size
+// ceilings, real on this backend only -- matches Texture2D.cpp's own #ifdef CNA_BACKEND_D3D9
+// convention exactly.
+#ifdef CNA_BACKEND_D3D9
+#include "CNA/Internal/Backends/D3D9/D3D9ProfileCapabilities.hpp"
+#endif
+
 namespace Microsoft::Xna::Framework::Graphics
 {
     // Mirrors FNA's Texture.CalculateMipLevels(size) — TextureCube faces are square, so both
@@ -29,6 +36,23 @@ namespace Microsoft::Xna::Framework::Graphics
         return std::max(1, base >> level);
     }
 
+#ifdef CNA_BACKEND_D3D9
+    // D9-103 follow-up: same profile-CEILING enforcement Texture2D.cpp already established
+    // (D9-100's own table: Reach=512, HiDef=4096), checked BEFORE the backend is created.
+    static void ValidateCubeSizeForProfileEXT(const GraphicsDevice& device, int size)
+    {
+        const int profile = static_cast<int>(device.getGraphicsProfileProperty());
+        const int maxSize = CNA::Internal::Backends::D3D9::MaxCubeSizeForProfileEXT(profile);
+        if (size > maxSize)
+        {
+            throw System::NotSupportedException(
+                "TextureCube: size " + std::to_string(size) + " exceeds GraphicsProfile." +
+                (profile == 1 ? std::string("HiDef") : std::string("Reach")) +
+                "'s own maximum cube size of " + std::to_string(maxSize));
+        }
+    }
+#endif
+
     TextureCube::~TextureCube() = default;
 
     TextureCube::TextureCube(GraphicsDevice& device, int size, bool mipMap, SurfaceFormat format)
@@ -38,6 +62,9 @@ namespace Microsoft::Xna::Framework::Graphics
         , levelCount_(mipMap ? CalculateMipLevels(size, size) : 1)
         , backend_(nullptr)
     {
+#ifdef CNA_BACKEND_D3D9
+        ValidateCubeSizeForProfileEXT(device, size);
+#endif
         Texture::ValidateFormat(format);
         backend_ = device.GetBackend().CreateTextureCube(size, mipMap, static_cast<int>(format));
     }

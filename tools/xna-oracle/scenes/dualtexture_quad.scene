@@ -1,0 +1,37 @@
+# plan_dx9.md D9-A5 scene corpus: dualtexture_quad
+# The second non-BasicEffect Stock Effect in the corpus: DualTextureEffect (VertexColorEnabled=
+# false), on a NEW custom vertex format (Position+TexCoord0+TexCoord1, stride 28 -- VSInputTx2,
+# D9-82d's own new D3D9-only vertex declaration; real XNA has no built-in dual-UV vertex struct
+# either, so both sides define their own IVertexType/VertexDeclaration, exactly as a real XNA game
+# using DualTextureEffect would have to).
+#
+# texture0 = solid white (255,255,255,255), texture1 = solid (100,60,20,255), DiffuseColor=
+# (0.5,0.5,0.5). Real formula (verified live against D9-82d's own D3D9_DrawEx check): result =
+# texture0 * texture1 * 2 * DiffuseColor -- the "*2*0.5" cancels out, so the expected quad color is
+# exactly texture1's own color, (100,60,20,255). 1x1 textures deliberately avoid any point-filter
+# tie-break ambiguity (textured_quad.scene's own concern) entirely, since there is only one texel.
+width=256
+height=256
+profile=HiDef
+clearcolor=100,149,237,255
+effect=DualTextureEffect
+vertexformat=PositionDualTexture
+vertexcolor=false
+texture=true
+texturewidth=1
+textureheight=1
+texturefilter=Point
+texture2=true
+texture2width=1
+texture2height=1
+diffusecolor=0.5,0.5,0.5
+primitive=TriangleList
+texturepixel=255,255,255,255
+texture2pixel=100,60,20,255
+# x,y,z,u0,v0,u1,v1 -- both UV sets identical since each texture is a single texel.
+vertex=-0.6,0.6,0,0,0,0,0
+vertex=0.6,0.6,0,1,0,1,0
+vertex=-0.6,-0.6,0,0,1,0,1
+vertex=0.6,0.6,0,1,0,1,0
+vertex=0.6,-0.6,0,1,1,1,1
+vertex=-0.6,-0.6,0,0,1,0,1

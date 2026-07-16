@@ -1,0 +1,57 @@
+# plan_dx9.md D9-A5 scene corpus: lit_textured_quad_pixellighting
+# First scene to exercise BasicEffect.PreferPerPixelLighting=true (plan_dx9.md D9-81 item 1,
+# resolved 2026-07-16 -- GpuDrawParams now carries a real preferPerPixelLighting field, and this
+# backend's dispatch selects BasicEffect.fx's own VSBasicPixelLightingTx/PSBasicPixelLightingTx --
+# one of the 5 shader variants D9-73 found do NOT byte-match Microsoft's shipped .fxb (a compiler-
+# version difference, not a flag), so this scene is also D9-73's own outstanding oracle-proof
+# obligation for that specific variant.
+#
+# A flat, single-normal quad would NOT discriminate this bucket at all: per-vertex lighting
+# (Gouraud-interpolating an already-clamped, already-lit per-vertex color) and per-pixel lighting
+# (interpolating the raw normal, then computing lit color per pixel) produce IDENTICAL output when
+# every vertex shares one normal -- dot(light,N) is linear in a CONSTANT N, so there is nothing to
+# interpolate differently. A scene built that way would "pass" even if this backend's dispatch had
+# a bug that silently kept selecting the vertex-lit shader regardless of the flag -- exactly the
+# kind of degenerate, proves-nothing scene this corpus has hit before (see fog_gradient_quad.scene's
+# own 1st draft, envmap_quad.scene's own accidental-fresnel finding).
+#
+# So this scene deliberately gives the quad's LEFT-edge vertices a normal facing the light
+# (0,0,1), and its RIGHT-edge vertices a normal tilted away from it (0.7071,0,-0.7071,
+# dot(-lightDir,N) = -0.7071, NEGATIVE -- clamped to zero by BasicEffect's own max(0,dot) lighting
+# math), so BOTH triangles have genuine within-triangle normal variation. Per-vertex lighting
+# Gouraud-interpolates the two ALREADY-CLAMPED per-vertex colors (lit white on the left down to
+# clamped-zero on the right) -- a LINEAR ramp. Per-pixel lighting instead interpolates the RAW
+# normal vector across each triangle, renormalizes it, and clamps AFTER the dot product -- a
+# differently-shaped (non-linear, differently-positioned clamp boundary) falloff. The two methods
+# are confirmed (empirically, via a scratch, uncommitted vertex-lit twin of this exact scene,
+# rendered through the real XNA oracle and diffed against this scene's own real-XNA render) to
+# produce genuinely different pixels -- this is not a hand-waved claim.
+#
+# Solid white 1x1 texture and DiffuseColor left at its BasicEffect default (1,1,1) so the final
+# color is exactly the light contribution itself, with no texture/tint interaction to disentangle.
+width=256
+height=256
+profile=HiDef
+clearcolor=100,149,237,255
+vertexformat=PositionNormalTexture
+vertexcolor=false
+lighting=true
+preferpixellighting=true
+texture=true
+texturewidth=1
+textureheight=1
+texturefilter=Point
+ambientcolor=0,0,0
+light0enabled=true
+light0diffuse=0.8,0.8,0.8
+light0direction=0,0,-1
+primitive=TriangleList
+texturepixel=255,255,255,255
+# x,y,z,nx,ny,nz,u,v -- left-edge vertices face the light (0,0,1); right-edge vertices tilt away
+# (0.7071,0,-0.7071), genuinely varying WITHIN each of the 2 triangles below.
+vertex=-0.6,0.6,0,0,0,1,0,0
+vertex=0.6,0.6,0,0.7071,0,-0.7071,1,0
+vertex=-0.6,-0.6,0,0,0,1,0,1
+vertex=0.6,0.6,0,0.7071,0,-0.7071,1,0
+vertex=0.6,-0.6,0,0.7071,0,-0.7071,1,1
+vertex=-0.6,-0.6,0,0,0,1,0,1

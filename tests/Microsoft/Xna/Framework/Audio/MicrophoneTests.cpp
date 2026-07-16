@@ -5,6 +5,7 @@
 #include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
 #include "System/ArgumentException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
+#include "System/Environment.hpp"
 #include "System/TimeSpan.hpp"
 
 #include <chrono>

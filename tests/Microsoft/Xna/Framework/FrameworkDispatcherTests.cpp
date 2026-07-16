@@ -4,6 +4,7 @@
 #include "Microsoft/Xna/Framework/FrameworkDispatcher.hpp"
 #include "Microsoft/Xna/Framework/Audio/DynamicSoundEffectInstance.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioChannels.hpp"
+#include "System/Environment.hpp"
 #include "System/EventArgs.hpp"
 #include "System/Object.hpp"
 

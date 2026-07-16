@@ -1,0 +1,21 @@
+# plan_dx9.md D9-A5 scene corpus: sprite_flipped_quad
+# The third SpriteBatch scene, proving D9-90's SpriteEffects.FlipHorizontally handling. Reuses
+# sprite_rotated_quad.scene's exact 2x2 four-color texture (top-left=RED, top-right=GREEN,
+# bottom-left=BLUE, bottom-right=YELLOW) but with NO rotation and spriteeffects=FlipHorizontally
+# instead -- the horizontal texel order should swap (RED/GREEN -> GREEN/RED on top,
+# BLUE/YELLOW -> YELLOW/BLUE on bottom), independently verifiable by sampling each destination
+# quadrant.
+width=256
+height=256
+profile=HiDef
+clearcolor=100,149,237,255
+spritebatchmode=true
+texturewidth=2
+textureheight=2
+texturepixel=255,0,0,255
+texturepixel=0,255,0,255
+texturepixel=0,0,255,255
+texturepixel=255,255,0,255
+spritedestrect=88,88,80,80
+spritecolor=255,255,255,255
+spriteeffects=FlipHorizontally

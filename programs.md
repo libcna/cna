@@ -262,6 +262,38 @@ unless no real GPU is available). If DXVK's DLL override isn't actually in effec
 calls would instead go through Wine's own built-in `WineD3D` — which also runs without crashing, so
 a missing/absent DXVK log file (not an error!) is the actual tell, not a visible failure.
 
+### D3D9 backend: three separate Wine prefixes (`plan_dx9.md`, `D9-130`)
+
+The `D3D9` backend (`plan_dx9.md`) needs the same `dxvk-wine64` package as above, but uses **three
+separate Wine prefixes** for three different jobs — using the wrong one wastes real time, since a
+prefix missing the right DLL still runs, just silently wrong (see `plan_dx9.md`'s own "The Wine
+prefixes already exist" note):
+
+- **`~/.wine-cna-d3d9-spike`** (or `~/.wine-cna-d3d11`, the default `CNA_D3D9_WINEPREFIX` falls
+  back to if unset) — the normal CNA-side D3D9 dev-loop prefix, DXVK-enabled the same way as §9
+  above. This is what `scripts/run-wine-dxvk9.sh` and every `D3D9`-labeled CTest actually run
+  against.
+- **`~/.wine-cna-d3d9-spike`** specifically — also has the **real Microsoft `d3dcompiler_47.dll`**
+  (not Wine's builtin, which cannot compile SM2/SM3 shaders at all). Needed for any task that
+  compiles HLSL, not just runs already-compiled shaders.
+- **`~/.wine-cna-xna40`** — has the **real XNA 4.0 runtime** installed (win32, .NET Framework 4.0,
+  the full GAC, an in-prefix `csc.exe`) plus DXVK, so the oracle's XNA-side render goes through the
+  same Direct3D-9-over-Vulkan path as the CNA-side render. Only needed for *regenerating* the
+  checked-in `tools/xna-oracle/reference/*.png` files (`D9-A`) — not needed to run the already-
+  checked-in `D3D9_XNA_Diff` CTest, which only diffs against those PNGs.
+
+```bash
+export WINEPREFIX=~/.wine-cna-d3d9-spike
+wineboot --init
+dxvk-setup install
+# then install the real d3dcompiler_47.dll and, for ~/.wine-cna-xna40, the XNA 4.0 GAC —
+# see dx9-spike/README.md for exactly what is in each prefix and how they were built.
+```
+
+`CNA_D3D9_WINEPREFIX` (env var) selects which prefix `scripts/run-wine-dxvk9.sh` targets; the
+script fails loudly (exit 3) if a run silently fell back to `WineD3D` instead of DXVK, same
+verification discipline as §9 above.
+
 ## 10. Out of scope here: Android (NDK)
 
 Android cross-compilation needs the Android NDK (not an apt package — a separate SDK/NDK download

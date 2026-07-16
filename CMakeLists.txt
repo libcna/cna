@@ -91,8 +91,8 @@ if(EMSCRIPTEN OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
 else()
     set(_cna_default_backend "SDL_RENDERER")
 endif()
-set(CNA_GRAPHICS_BACKEND "${_cna_default_backend}" CACHE STRING "Graphics backend to use (SDL_RENDERER, EASYGL, BGFX, VULKAN, WEBGPU, HEADLESS, SOFTWARE, D3D11, D3D12, CANVAS, ASCII, or DX3)")
-set_property(CACHE CNA_GRAPHICS_BACKEND PROPERTY STRINGS "SDL_RENDERER" "EASYGL" "BGFX" "VULKAN" "WEBGPU" "HEADLESS" "SOFTWARE" "D3D11" "D3D12" "CANVAS" "ASCII" "DX3")
+set(CNA_GRAPHICS_BACKEND "${_cna_default_backend}" CACHE STRING "Graphics backend to use (SDL_RENDERER, EASYGL, BGFX, VULKAN, WEBGPU, HEADLESS, SOFTWARE, D3D11, D3D12, CANVAS, ASCII, DX3, or D3D9)")
+set_property(CACHE CNA_GRAPHICS_BACKEND PROPERTY STRINGS "SDL_RENDERER" "EASYGL" "BGFX" "VULKAN" "WEBGPU" "HEADLESS" "SOFTWARE" "D3D11" "D3D12" "CANVAS" "ASCII" "DX3" "D3D9")
 
 option(CNA_BACKEND_SDL_RENDERER "Enable SDL_Renderer graphics backend" OFF)
 option(CNA_BACKEND_EASY_GL "Enable easy-gl graphics backend" OFF)
@@ -111,9 +111,10 @@ option(CNA_BACKEND_CANVAS "Enable HTML Canvas 2D graphics backend (Emscripten on
 # library below), not a real terminal/TTY backend.
 option(CNA_BACKEND_ASCII "Enable ASCII (SDL-windowed glyph-grid) graphics backend" OFF)
 option(CNA_BACKEND_DX3 "Enable DirectX 3 (DirectDraw, via the ../free-direct sibling) graphics backend" OFF)
+option(CNA_BACKEND_D3D9 "Enable Direct3D 9 graphics backend (Windows only)" OFF)
 
 set(_cna_explicit_backend_selection OFF)
-if(CNA_BACKEND_SDL_RENDERER OR CNA_BACKEND_EASY_GL OR CNA_BACKEND_BGFX OR CNA_BACKEND_VULKAN OR CNA_BACKEND_WEBGPU OR CNA_BACKEND_HEADLESS OR CNA_BACKEND_SOFTWARE OR CNA_BACKEND_D3D11 OR CNA_BACKEND_D3D12 OR CNA_BACKEND_CANVAS OR CNA_BACKEND_ASCII OR CNA_BACKEND_DX3)
+if(CNA_BACKEND_SDL_RENDERER OR CNA_BACKEND_EASY_GL OR CNA_BACKEND_BGFX OR CNA_BACKEND_VULKAN OR CNA_BACKEND_WEBGPU OR CNA_BACKEND_HEADLESS OR CNA_BACKEND_SOFTWARE OR CNA_BACKEND_D3D11 OR CNA_BACKEND_D3D12 OR CNA_BACKEND_CANVAS OR CNA_BACKEND_ASCII OR CNA_BACKEND_DX3 OR CNA_BACKEND_D3D9)
     set(_cna_explicit_backend_selection ON)
 endif()
 
@@ -155,6 +156,9 @@ if(_cna_explicit_backend_selection)
     if(CNA_BACKEND_DX3)
         list(APPEND _cna_enabled_backends "DX3")
     endif()
+    if(CNA_BACKEND_D3D9)
+        list(APPEND _cna_enabled_backends "D3D9")
+    endif()
 
     list(LENGTH _cna_enabled_backends _cna_enabled_backends_count)
     if(NOT _cna_enabled_backends_count EQUAL 1)
@@ -166,8 +170,9 @@ endif()
 
 # plan_dx.md design decision 2: D3D11/D3D12 genuinely cannot build anywhere but Windows (native or
 # MinGW/MSVC cross-compile) -- d3d11.h/d3d12.h/dxgi.h do not exist elsewhere. Unlike BGFX's soft
-# WARNING-only platform check below, this is a hard FATAL_ERROR.
-if((CNA_GRAPHICS_BACKEND STREQUAL "D3D11" OR CNA_GRAPHICS_BACKEND STREQUAL "D3D12")
+# WARNING-only platform check below, this is a hard FATAL_ERROR. plan_dx9.md design decision 1
+# extends this same gate to D3D9 (d3d9.h is equally Windows-only).
+if((CNA_GRAPHICS_BACKEND STREQUAL "D3D11" OR CNA_GRAPHICS_BACKEND STREQUAL "D3D12" OR CNA_GRAPHICS_BACKEND STREQUAL "D3D9")
         AND NOT CMAKE_SYSTEM_NAME STREQUAL "Windows")
     message(FATAL_ERROR
         "CNA: ${CNA_GRAPHICS_BACKEND} backend only builds when targeting Windows. Either build "
@@ -312,6 +317,11 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "DX3")
     set(BACKEND_DIR "src/CNA/Internal/Backends/Dx3")
     set(BACKEND_TARGET "cna_backend_graphics_dx3")
     add_compile_definitions(CNA_BACKEND_DX3)
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "D3D9")
+    message(STATUS "CNA: Using D3D9 graphics backend")
+    set(BACKEND_DIR "src/CNA/Internal/Backends/D3D9")
+    set(BACKEND_TARGET "cna_backend_graphics_d3d9")
+    add_compile_definitions(CNA_BACKEND_D3D9)
 else()
 
     message(FATAL_ERROR "CNA: Unknown graphics backend: ${CNA_GRAPHICS_BACKEND}")
@@ -347,6 +357,9 @@ target_include_directories(cna_backend_graphics_common INTERFACE
 # plan_dx.md design decision 4: D3DCommon shared core, consumed by cna_backend_graphics_d3d11 (and,
 # once Phase DX12 is authorized, cna_backend_graphics_d3d12). Only built when actually needed --
 # same discipline as every other on-demand backend dependency in this file.
+# plan_dx9.md design decision 12: D3D9 deliberately does NOT join this condition. D3DFORMAT is a
+# different enum space from DXGI_FORMAT and D3D9 has no state objects at all -- D3D9 gets its own
+# D3D9FormatMapping/D3D9StateMapping/D3D9VertexDeclarations instead of expanding this shared core.
 if(CNA_GRAPHICS_BACKEND STREQUAL "D3D11" OR CNA_GRAPHICS_BACKEND STREQUAL "D3D12")
     file(GLOB D3DCOMMON_SOURCES "src/CNA/Internal/Backends/D3DCommon/*.cpp")
     add_library(cna_backend_graphics_d3dcommon STATIC ${D3DCOMMON_SOURCES})
@@ -372,6 +385,32 @@ endif()
 
 # Backend target
 file(GLOB BACKEND_SOURCES "${BACKEND_DIR}/*.cpp")
+
+# plan_dx9.md Phase D9-11 (D9-110/D9-111), design decision 16: D3D9EffectBackend.cpp calls
+# D3DCompile() (the custom-ShaderEffect runtime compile path), which needs d3dcompiler -- but the
+# stock D3D9 pipeline must stay d3dcompiler-free (unlike D3D11/D3D12, which link it into their
+# whole backend target unconditionally, DX-58/DX-121). Excluded from the main glob and built as its
+# own isolated static library instead, with d3dcompiler linked ONLY there (D9-111's own "on this
+# target only"). D3D9ConstantTable.cpp (D9-110's CTAB parser) moves here too -- it has no consumer
+# outside D3D9EffectBackend.cpp, and leaving it in the main glob while D3D9EffectBackend.cpp moved
+# out created a genuine link-order circular dependency between the two targets (this effect target
+# calling ParseConstantTableEXT() while ALSO needing to be linked INTO the main backend target for
+# D3D9GraphicsBackend::CreateEffectBackend() to construct one) -- found empirically via a real
+# "undefined reference to ParseConstantTableEXT" link failure across every D3D9 test binary, not
+# assumed in advance. ${BACKEND_TARGET} links this target (D9-112) so
+# D3D9GraphicsBackend::CreateEffectBackend() can construct one.
+set(D3D9_EFFECT_BACKEND_SOURCES
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/CNA/Internal/Backends/D3D9/D3D9EffectBackend.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/CNA/Internal/Backends/D3D9/D3D9ConstantTable.cpp"
+)
+if(CNA_GRAPHICS_BACKEND STREQUAL "D3D9" AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/CNA/Internal/Backends/D3D9/D3D9EffectBackend.cpp")
+    list(REMOVE_ITEM BACKEND_SOURCES ${D3D9_EFFECT_BACKEND_SOURCES})
+    add_library(cna_backend_graphics_d3d9_effect STATIC ${D3D9_EFFECT_BACKEND_SOURCES})
+    target_link_libraries(cna_backend_graphics_d3d9_effect PUBLIC cna_backend_graphics_common SHARP_RUNTIME)
+    target_link_libraries(cna_backend_graphics_d3d9_effect PRIVATE d3d9 d3dcompiler)
+    target_include_directories(cna_backend_graphics_d3d9_effect PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+endif()
+
 add_library(${BACKEND_TARGET} STATIC ${BACKEND_SOURCES})
 target_link_libraries(${BACKEND_TARGET} PUBLIC cna_backend_graphics_common SHARP_RUNTIME)
 target_include_directories(${BACKEND_TARGET} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
@@ -418,6 +457,13 @@ elseif(CNA_GRAPHICS_BACKEND STREQUAL "CANVAS")
     target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3)
 elseif(CNA_GRAPHICS_BACKEND STREQUAL "ASCII")
     target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 cna_backend_graphics_sdl_renderer_core)
+elseif(CNA_GRAPHICS_BACKEND STREQUAL "D3D9")
+    # plan_dx9.md design decision 16 / D9-2: d3d9 alone was confirmed sufficient (no dxguid, no
+    # dxgi -- D3D9 predates DXGI) by D9-2's own spike. No cna_backend_graphics_d3dcommon (design
+    # decision 12 -- D3D9 does not share D3DCommon). d3dcompiler is deliberately NOT linked here --
+    # design decision 9/16 keep the stock pipeline dependency-free; it will only be added, later, to
+    # a custom-ShaderEffect-only target if Phase D9-11 is authorized (ask-first per its own row).
+    target_link_libraries(${BACKEND_TARGET} PRIVATE SDL3::SDL3 d3d9)
 endif()
 
 file(GLOB_RECURSE CNA_SOURCES CONFIGURE_DEPENDS
@@ -478,8 +524,20 @@ target_link_libraries(CNA
 # because libCNA.a is fully scanned before libcna_backend_graphics_d3d11.a creates the need.
 # CMake's documented static-library-cycle support (see LINK_INTERFACE_MULTIPLICITY) resolves this
 # by repeating the archives on the final link line once this cycle is declared.
-if(CNA_GRAPHICS_BACKEND STREQUAL "D3D11" OR CNA_GRAPHICS_BACKEND STREQUAL "D3D12")
+# plan_dx9.md D9-112 (Phase D9-11, authorized 2026-07-15): D3D9 now joins this condition too --
+# D3D9SpriteBatchBackend::FlushBatch() calls customEffect_->Apply() (a CNA-defined symbol) for
+# SpriteBatch::Begin(effect)'s custom-Effect path, the same genuine circular dependency D3D11/D3D12
+# already have. (D9-10's own original note said "add D3D9 here when D9-112 actually needs it" --
+# this is that task.)
+if(CNA_GRAPHICS_BACKEND STREQUAL "D3D11" OR CNA_GRAPHICS_BACKEND STREQUAL "D3D12" OR CNA_GRAPHICS_BACKEND STREQUAL "D3D9")
     target_link_libraries(${BACKEND_TARGET} PRIVATE CNA)
+endif()
+
+# D9-112: D3D9GraphicsBackend::CreateEffectBackend() (below) needs to construct a real
+# D3D9EffectBackend, so ${BACKEND_TARGET} now links the isolated, d3dcompiler-carrying
+# cna_backend_graphics_d3d9_effect target (D9-111, design decision 16) it didn't need before.
+if(TARGET cna_backend_graphics_d3d9_effect)
+    target_link_libraries(${BACKEND_TARGET} PRIVATE cna_backend_graphics_d3d9_effect)
 endif()
 
 if(ANDROID)
@@ -1517,6 +1575,19 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         # hand alongside SOFTWARE's own cna_diag_software and cna_diag_compare.
         cna_easygl_test(cna_diag_easygl examples/cross_backend_diagnostic_scene.cpp)
 
+        # plan_dx9.md D9-A6: builds the SAME tools/xna-oracle/CnaOracleRender.cpp (D9-A3's own
+        # scene-driven renderer, already backend-agnostic -- real public Game/GraphicsDeviceManager/
+        # GraphicsDevice/BasicEffect/SpriteBatch API throughout, no EasyGL- or D3D9-specific code)
+        # natively under the EasyGL backend, so the checked-in 31-scene XNA-oracle corpus can be
+        # measured against EasyGL too -- no Wine/cross-compilation needed here, unlike the
+        # D3D9-branch's own cna_oracle_render registration (this file's D3D9 CTest section) which
+        # this target deliberately does not touch or duplicate. Not registered as a ctest, same
+        # "it's a comparison tool with no pass/fail assertion of its own" precedent as
+        # cna_diag_easygl just above and D9-A3's own cna_oracle_render -- xna-diff.py (invoked by
+        # a script) is what judges this binary's PNG output against the checked-in reference
+        # images.
+        cna_easygl_test(cna_oracle_render_easygl tools/xna-oracle/CnaOracleRender.cpp)
+
         # Task 461: canary proving the new shared PixelTestGame helper (examples/common/) works
         cna_easygl_test(cna_test_easygl_pixeltestgame_smoke
                         examples/easygl_pixeltestgame_smoke_test.cpp)
@@ -2005,6 +2076,17 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 1102b: SkinnedEffect pixel test — PreferPerPixelLighting genuinely selects between
+        # a real per-vertex-lit shader variant and the existing per-pixel-lit one (mirrors Task
+        # 1102's BasicEffect test exactly).
+        cna_easygl_test(cna_test_easygl_skinnedeffect_preferperpixellighting
+                        examples/easygl_skinnedeffect_preferperpixellighting_test.cpp)
+        add_test(NAME EasyGL_SkinnedEffect_PreferPerPixelLighting
+                 COMMAND cna_test_easygl_skinnedeffect_preferperpixellighting)
+        set_tests_properties(EasyGL_SkinnedEffect_PreferPerPixelLighting PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 895: SkinnedEffect WeightsPerVertex real GPU enforcement
         cna_easygl_test(cna_test_easygl_skinnedeffect_weightspervertex
                         examples/easygl_skinnedeffect_weightspervertex_test.cpp)
@@ -2247,6 +2329,16 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         add_test(NAME EasyGL_BasicEffect_Specular
                  COMMAND cna_test_easygl_basiceffect_specular)
         set_tests_properties(EasyGL_BasicEffect_Specular PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 1102: BasicEffect pixel test — PreferPerPixelLighting genuinely selects between
+        # a real per-vertex-lit shader variant and the existing per-pixel-lit one.
+        cna_easygl_test(cna_test_easygl_basiceffect_preferperpixellighting
+                        examples/easygl_basiceffect_preferperpixellighting_test.cpp)
+        add_test(NAME EasyGL_BasicEffect_PreferPerPixelLighting
+                 COMMAND cna_test_easygl_basiceffect_preferperpixellighting)
+        set_tests_properties(EasyGL_BasicEffect_PreferPerPixelLighting PROPERTIES
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
@@ -4111,6 +4203,16 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 1103: BasicEffect pixel test — PreferPerPixelLighting genuinely selects between a
+        # real per-vertex-lit shader variant and the existing per-pixel-lit one.
+        cna_vulkan_test(cna_test_vulkan_basiceffect_preferperpixellighting
+                        examples/vulkan_basiceffect_preferperpixellighting_test.cpp)
+        add_test(NAME Vulkan_BasicEffect_PreferPerPixelLighting
+                 COMMAND cna_test_vulkan_basiceffect_preferperpixellighting)
+        set_tests_properties(Vulkan_BasicEffect_PreferPerPixelLighting PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 887: AlphaTestEffect.VertexColorEnabled fix verification
         cna_vulkan_test(cna_test_vulkan_alphatest_vertexcolor
                         examples/vulkan_alphatest_vertexcolor_test.cpp)
@@ -4285,6 +4387,16 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         add_test(NAME Vulkan_SkinnedEffect_Specular
                  COMMAND cna_test_vulkan_skinnedeffect_specular)
         set_tests_properties(Vulkan_SkinnedEffect_Specular PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 1103: SkinnedEffect pixel test — PreferPerPixelLighting genuinely selects between a
+        # real per-vertex-lit shader variant and the existing per-pixel-lit one.
+        cna_vulkan_test(cna_test_vulkan_skinnedeffect_preferperpixellighting
+                        examples/vulkan_skinnedeffect_preferperpixellighting_test.cpp)
+        add_test(NAME Vulkan_SkinnedEffect_PreferPerPixelLighting
+                 COMMAND cna_test_vulkan_skinnedeffect_preferperpixellighting)
+        set_tests_properties(Vulkan_SkinnedEffect_PreferPerPixelLighting PROPERTIES
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
@@ -5725,6 +5837,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Task 1104: BasicEffect PreferPerPixelLighting real dispatch selector
+    cna_bgfx_test(cna_test_bgfx_basiceffect_preferperpixellighting
+                  examples/bgfx_basiceffect_preferperpixellighting_test.cpp)
+    add_test(NAME Bgfx_BasicEffect_PreferPerPixelLighting
+             COMMAND cna_test_bgfx_basiceffect_preferperpixellighting)
+    set_tests_properties(Bgfx_BasicEffect_PreferPerPixelLighting PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # Task 887: AlphaTestEffect.VertexColorEnabled fix verification
     cna_bgfx_test(cna_test_bgfx_alphatest_vertexcolor
                   examples/bgfx_alphatest_vertexcolor_test.cpp)
@@ -5920,6 +6041,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     add_test(NAME Bgfx_SkinnedEffect_Specular
              COMMAND cna_test_bgfx_skinnedeffect_specular)
     set_tests_properties(Bgfx_SkinnedEffect_Specular PROPERTIES
+        TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # Task 1104: SkinnedEffect PreferPerPixelLighting real dispatch selector
+    cna_bgfx_test(cna_test_bgfx_skinnedeffect_preferperpixellighting
+                  examples/bgfx_skinnedeffect_preferperpixellighting_test.cpp)
+    add_test(NAME Bgfx_SkinnedEffect_PreferPerPixelLighting
+             COMMAND cna_test_bgfx_skinnedeffect_preferperpixellighting)
+    set_tests_properties(Bgfx_SkinnedEffect_PreferPerPixelLighting PROPERTIES
         TIMEOUT 30
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
@@ -6572,6 +6702,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         LABELS "WebGPU"
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # Task 1105 (plan_graphics.md Phase 80): GetOrCreatePipelineLitTextured3DVertexLit /
+    # BasicEffect.PreferPerPixelLighting real dispatch.
+    cna_webgpu_test(cna_test_webgpu_basiceffect_preferperpixellighting examples/webgpu_basiceffect_preferperpixellighting_test.cpp)
+    add_test(NAME WebGPU_BasicEffect_PreferPerPixelLighting COMMAND cna_test_webgpu_basiceffect_preferperpixellighting)
+    set_tests_properties(WebGPU_BasicEffect_PreferPerPixelLighting PROPERTIES
+        TIMEOUT 30
+        LABELS "WebGPU"
+        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # WEBGPU-23/34/72: alpha_test3d.wgsl / GetOrCreatePipelineAlphaTest3D / AlphaTestEffect
     # per-pixel discard, strides 20/24/32.
     cna_webgpu_test(cna_test_webgpu_alphatest3d examples/webgpu_alphatest3d_test.cpp)
@@ -7009,6 +7148,224 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "CANVAS")
     target_link_libraries(cna_test_canvas_smoke PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
 endif()
 
+# plan_dx9.md D9-23: D3D9 CTest registration, mirroring D3D11's/D3D12's own cna_d3d11_test/
+# cna_d3d12_test macros (design decision: mirror the shape, don't invent a new pattern). Uses the
+# new scripts/run-wine-dxvk9.sh (D9-5), not the shared run-wine-dxvk.sh (cold-start Sec.4).
+if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D9")
+    enable_testing()
+
+    macro(cna_d3d9_test target src)
+        add_executable(${target} ${src})
+        target_link_libraries(${target} PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+        if(TARGET SDL3::SDL3main)
+            target_link_libraries(${target} PRIVATE SDL3::SDL3main)
+        endif()
+        if(MINGW)
+            target_link_options(${target} PRIVATE -static-libgcc -static-libstdc++)
+            target_link_options(${target} PRIVATE -Wl,--allow-multiple-definition)
+            cna_copy_mingw_runtime(${target})
+            cna_copy_sdl_runtime(${target})
+        endif()
+    endmacro()
+
+    macro(cna_d3d9_ctest_command out_var target_name)
+        if(CMAKE_CROSSCOMPILING)
+            set(${out_var} ${CMAKE_SOURCE_DIR}/scripts/run-wine-dxvk9.sh $<TARGET_FILE:${target_name}>)
+        else()
+            set(${out_var} $<TARGET_FILE:${target_name}>)
+        endif()
+    endmacro()
+
+    # D9-20/D9-21/D9-22: pure-function checks for D3D9's own format/state/vertex-layout mapping
+    # tables -- no device/window/GPU needed.
+    cna_d3d9_test(cna_test_d3d9_common examples/d3d9_common_test.cpp)
+    cna_d3d9_ctest_command(_d3d9_common_cmd cna_test_d3d9_common)
+    add_test(NAME D3D9_Common COMMAND ${_d3d9_common_cmd})
+    set_tests_properties(D3D9_Common PROPERTIES
+        TIMEOUT 30
+        LABELS "D3D9"
+        # This binary never creates a D3D9 device (pure-function mapping-table checks only), so it
+        # legitimately never prints a "DXVK: <version>" line -- tell the wrapper's DXVK-engagement
+        # gate not to misreport that as a WineD3D fallback (mirrors D3D11_Common's own
+        # CNA_D3D11_SKIP_DXVK_GATE usage). Harmless no-op when CMAKE_CROSSCOMPILING is false.
+        ENVIRONMENT "CNA_D3D9_SKIP_DXVK_GATE=1")
+
+    # D9-80: pure-function checks for the transcribed XNA shader-permutation model
+    # (ShaderIndex/VSIndices/PSIndices) -- no device/window/GPU needed.
+    cna_d3d9_test(cna_test_d3d9_shaderdispatch examples/d3d9_shaderdispatch_test.cpp)
+    cna_d3d9_ctest_command(_d3d9_shaderdispatch_cmd cna_test_d3d9_shaderdispatch)
+    add_test(NAME D3D9_ShaderDispatch COMMAND ${_d3d9_shaderdispatch_cmd})
+    set_tests_properties(D3D9_ShaderDispatch PROPERTIES
+        TIMEOUT 30
+        LABELS "D3D9"
+        ENVIRONMENT "CNA_D3D9_SKIP_DXVK_GATE=1")
+
+    # D9-30/D9-31: real device/Clear/Present/readback smoke test -- this backend's first genuine
+    # pixel-correctness proof, through the real public Game/GraphicsDeviceManager/GraphicsDevice
+    # API (not the raw backend interface).
+    cna_d3d9_test(cna_test_d3d9_smoke examples/d3d9_smoke_test.cpp)
+    cna_d3d9_ctest_command(_d3d9_smoke_cmd cna_test_d3d9_smoke)
+    add_test(NAME D3D9_Smoke COMMAND ${_d3d9_smoke_cmd})
+    set_tests_properties(D3D9_Smoke PROPERTIES
+        TIMEOUT 60
+        LABELS "D3D9")
+
+    # D9-82: this backend's first real 3D triangle -- DrawColoredPrimitives/
+    # DrawIndexedColoredPrimitives through the real public Game/GraphicsDeviceManager API.
+    cna_d3d9_test(cna_test_d3d9_draw examples/d3d9_draw_test.cpp)
+    cna_d3d9_ctest_command(_d3d9_draw_cmd cna_test_d3d9_draw)
+    add_test(NAME D3D9_Draw COMMAND ${_d3d9_draw_cmd})
+    set_tests_properties(D3D9_Draw PROPERTIES
+        TIMEOUT 60
+        LABELS "D3D9")
+
+    # D9-82b: real effect-aware DrawPrimitivesEx/DrawIndexedPrimitivesEx dispatch (BasicEffect).
+    cna_d3d9_test(cna_test_d3d9_drawex examples/d3d9_drawex_test.cpp)
+    cna_d3d9_ctest_command(_d3d9_drawex_cmd cna_test_d3d9_drawex)
+    add_test(NAME D3D9_DrawEx COMMAND ${_d3d9_drawex_cmd})
+    set_tests_properties(D3D9_DrawEx PROPERTIES
+        TIMEOUT 60
+        LABELS "D3D9")
+
+    # D9-83: real hardware instancing via SetStreamSourceFreq (CNA's own NOXNA Instanced3D shader).
+    cna_d3d9_test(cna_test_d3d9_instanced examples/d3d9_instanced_test.cpp)
+    cna_d3d9_ctest_command(_d3d9_instanced_cmd cna_test_d3d9_instanced)
+    add_test(NAME D3D9_Instanced COMMAND ${_d3d9_instanced_cmd})
+    set_tests_properties(D3D9_Instanced PROPERTIES
+        TIMEOUT 60
+        LABELS "D3D9")
+
+    # D9-90/D9-91/D9-92: real D3D9SpriteBatchBackend driving Microsoft's own SpriteEffect, tested
+    # through the real public SpriteBatch/Texture2D API (D9-93's own explicit requirement).
+    cna_d3d9_test(cna_test_d3d9_spritebatch examples/d3d9_spritebatch_test.cpp)
+    cna_d3d9_ctest_command(_d3d9_spritebatch_cmd cna_test_d3d9_spritebatch)
+    add_test(NAME D3D9_SpriteBatch COMMAND ${_d3d9_spritebatch_cmd})
+    set_tests_properties(D3D9_SpriteBatch PROPERTIES
+        TIMEOUT 60
+        LABELS "D3D9")
+
+    # D9-100/D9-101/D9-102/D9-103: GraphicsProfile.Reach/HiDef made real (IsProfileSupported(),
+    # QueryRenderTargetFormat(), and Texture2D size enforcement), through the real public
+    # GraphicsAdapter/Game/GraphicsDeviceManager/Texture2D API.
+    cna_d3d9_test(cna_test_d3d9_graphicsprofile examples/d3d9_graphicsprofile_test.cpp)
+    cna_d3d9_ctest_command(_d3d9_graphicsprofile_cmd cna_test_d3d9_graphicsprofile)
+    add_test(NAME D3D9_GraphicsProfile COMMAND ${_d3d9_graphicsprofile_cmd})
+    set_tests_properties(D3D9_GraphicsProfile PROPERTIES
+        TIMEOUT 60
+        LABELS "D3D9")
+
+    # D9-74: D3D9ShaderCache creates all 66 embedded stock-effect shaders through a live device --
+    # needs both DXVK and the real compiler's own bytecode output at once (the compiler DLL itself
+    # is no longer needed at this step, D9-71 already embedded its output).
+    cna_d3d9_test(cna_test_d3d9_shadercache examples/d3d9_shadercache_test.cpp)
+    cna_d3d9_ctest_command(_d3d9_shadercache_cmd cna_test_d3d9_shadercache)
+    add_test(NAME D3D9_ShaderCache COMMAND ${_d3d9_shadercache_cmd})
+    set_tests_properties(D3D9_ShaderCache PROPERTIES
+        TIMEOUT 60
+        LABELS "D3D9")
+
+    # D9-64: state-object pixel-behaviour tests, reusing the same backend-agnostic EasyGL-authored
+    # sources D3D11/Vulkan already reuse verbatim (they only touch the public GraphicsDevice/
+    # BasicEffect API, nothing EasyGL-specific) -- real behavioural proof through the full public
+    # draw path, not just "the D3D9 state object was created/bound". Same 4-test subset
+    # D3D11_BlendState_Opaque/D3D11_BlendState_AlphaBlend/D3D11_DepthStencilState_StencilEnable/
+    # D3D11_RasterizerState_CullMode already established, not Vulkan's full set.
+    cna_d3d9_test(cna_test_d3d9_blendstate_opaque examples/easygl_blendstate_opaque_test.cpp)
+    cna_d3d9_ctest_command(_d3d9_blend_opaque_cmd cna_test_d3d9_blendstate_opaque)
+    add_test(NAME D3D9_BlendState_Opaque COMMAND ${_d3d9_blend_opaque_cmd})
+    set_tests_properties(D3D9_BlendState_Opaque PROPERTIES TIMEOUT 60 LABELS "D3D9")
+
+    cna_d3d9_test(cna_test_d3d9_blendstate_alphablend examples/easygl_blendstate_alphablend_test.cpp)
+    cna_d3d9_ctest_command(_d3d9_blend_alpha_cmd cna_test_d3d9_blendstate_alphablend)
+    add_test(NAME D3D9_BlendState_AlphaBlend COMMAND ${_d3d9_blend_alpha_cmd})
+    set_tests_properties(D3D9_BlendState_AlphaBlend PROPERTIES TIMEOUT 60 LABELS "D3D9")
+
+    cna_d3d9_test(cna_test_d3d9_depthstencilstate_stencil_enable examples/easygl_depthstencilstate_stencil_enable_test.cpp)
+    cna_d3d9_ctest_command(_d3d9_ds_stencil_cmd cna_test_d3d9_depthstencilstate_stencil_enable)
+    add_test(NAME D3D9_DepthStencilState_StencilEnable COMMAND ${_d3d9_ds_stencil_cmd})
+    set_tests_properties(D3D9_DepthStencilState_StencilEnable PROPERTIES TIMEOUT 60 LABELS "D3D9")
+
+    cna_d3d9_test(cna_test_d3d9_rasterizerstate_cullmode examples/easygl_rasterizerstate_cullmode_test.cpp)
+    cna_d3d9_ctest_command(_d3d9_rast_cullmode_cmd cna_test_d3d9_rasterizerstate_cullmode)
+    add_test(NAME D3D9_RasterizerState_CullMode COMMAND ${_d3d9_rast_cullmode_cmd})
+    set_tests_properties(D3D9_RasterizerState_CullMode PROPERTIES TIMEOUT 60 LABELS "D3D9")
+
+    # D9-A3: scene-driven CNA-side renderer for the XNA-oracle diff harness -- a comparison TOOL,
+    # not a CTest itself (has no pass/fail assertion of its own; D9-A4's xna-diff.py is what
+    # judges its output against tools/xna-oracle/Oracle.cs's own, or -- D9-120, below -- against
+    # the checked-in reference images). Reuses the cna_d3d9_test() macro purely for its build/link
+    # setup, deliberately without registering IT DIRECTLY via add_test().
+    cna_d3d9_test(cna_oracle_render tools/xna-oracle/CnaOracleRender.cpp)
+
+    # D9-120: promotes the D9-A oracle corpus into a REAL CTest, running every checked-in scene
+    # through cna_oracle_render.exe (above) and diffing against the checked-in real XNA 4.0
+    # reference PNG (tools/xna-oracle/reference/*.png, D9-A4's own tolerance=0) -- deliberately
+    # does NOT need the XNA Wine prefix at all, only the D3D9 one every other test here already
+    # needs. See scripts/run-oracle-corpus-diff.sh's own header comment for the full contract.
+    add_test(NAME D3D9_XNA_Diff
+        COMMAND ${CMAKE_SOURCE_DIR}/scripts/run-oracle-corpus-diff.sh $<TARGET_FILE:cna_oracle_render>)
+    set_tests_properties(D3D9_XNA_Diff PROPERTIES
+        TIMEOUT 300
+        LABELS "D3D9")
+
+    # D9-110 (Phase D9-11, ask-first, authorized 2026-07-15): validates the CTAB constant-table
+    # parser (D3D9ConstantTable.cpp, already part of CNA via BACKEND_SOURCES) against real
+    # D3DCompile()/D3DDisassemble() output. This TEST BINARY links d3dcompiler directly for its own
+    # fixture (compiling a known shader + running the disassembler as a cross-check oracle) --
+    # design decision 16 only forbids linking d3dcompiler into the shipped BACKEND_TARGET, which
+    # this test does not touch; same category as fxc_tool/disasm_tool's own standalone
+    # -ld3dcompiler linkage. Still needs Wine to run at all under cross-compilation (D3DCompile()
+    # only exists inside a Windows/Wine d3dcompiler_47.dll), so this reuses
+    # cna_d3d9_ctest_command() like every other D3D9 test here -- it is NOT a device-free binary
+    # that can skip the wrapper. Critically, it must run against ~/.wine-cna-d3d9-spike
+    # specifically: the default CNA_D3D9_WINEPREFIX (~/.wine-cna-d3d11) only has Wine's OWN builtin
+    # d3dcompiler_47.dll, which cannot compile SM2/SM3 shaders at all (docs/d3d9-backend.md) -- the
+    # real Microsoft compiler this test's whole premise depends on only lives in the spike prefix.
+    cna_d3d9_test(cna_test_d3d9_constanttable examples/d3d9_constanttable_test.cpp)
+    target_link_libraries(cna_test_d3d9_constanttable PRIVATE d3dcompiler)
+    cna_d3d9_ctest_command(_d3d9_constanttable_cmd cna_test_d3d9_constanttable)
+    add_test(NAME D3D9_ConstantTable COMMAND ${_d3d9_constanttable_cmd})
+    set_tests_properties(D3D9_ConstantTable PROPERTIES
+        TIMEOUT 30
+        LABELS "D3D9"
+        # Never creates a D3D9 device (D3DCompile()/D3DDisassemble() are pure compiler-library
+        # calls), so it legitimately never prints a "DXVK: <version>" line -- same reasoning as
+        # D3D9_Common's own ENVIRONMENT override. CNA_D3D9_WINEPREFIX pins this specific test to
+        # the real-compiler prefix regardless of whatever prefix the ambient shell/CI environment
+        # might otherwise have set for the rest of the D3D9 suite.
+        ENVIRONMENT "CNA_D3D9_SKIP_DXVK_GATE=1;CNA_D3D9_WINEPREFIX=$ENV{HOME}/.wine-cna-d3d9-spike")
+
+    # D9-111 (Phase D9-11): validates D3D9EffectBackend against a real device (compile, bind, draw,
+    # uniform-driven pixel readback). Needs BOTH d3dcompiler (via the isolated
+    # cna_backend_graphics_d3d9_effect target, design decision 16) and a real D3D9 device (unlike
+    # D3D9_ConstantTable, this genuinely opens one and draws), so it needs the real-compiler prefix
+    # (~/.wine-cna-d3d9-spike) AND is NOT exempt from the DXVK-engagement gate.
+    if(TARGET cna_backend_graphics_d3d9_effect)
+        cna_d3d9_test(cna_test_d3d9_effectbackend examples/d3d9_effectbackend_test.cpp)
+        target_link_libraries(cna_test_d3d9_effectbackend PRIVATE cna_backend_graphics_d3d9_effect)
+        cna_d3d9_ctest_command(_d3d9_effectbackend_cmd cna_test_d3d9_effectbackend)
+        add_test(NAME D3D9_EffectBackend COMMAND ${_d3d9_effectbackend_cmd})
+        set_tests_properties(D3D9_EffectBackend PROPERTIES
+            TIMEOUT 60
+            LABELS "D3D9"
+            ENVIRONMENT "CNA_D3D9_WINEPREFIX=$ENV{HOME}/.wine-cna-d3d9-spike")
+
+        # D9-112: SpriteBatch::Begin(effect) wiring, through the real public
+        # SpriteBatch/ShaderEffect API (not the raw backend), mirroring D3D11's own DX-71 test
+        # bar. CNA itself now links cna_backend_graphics_d3d9_effect (the circular-link fix
+        # above), so this needs no extra target_link_libraries beyond the standard cna_d3d9_test()
+        # macro set -- ShaderEffect's own constructor reaches D3D9GraphicsBackend::
+        # CreateEffectBackend() transitively through the real device.
+        cna_d3d9_test(cna_test_d3d9_spritebatch_customeffect examples/d3d9_spritebatch_customeffect_test.cpp)
+        cna_d3d9_ctest_command(_d3d9_sb_customeffect_cmd cna_test_d3d9_spritebatch_customeffect)
+        add_test(NAME D3D9_SpriteBatch_CustomEffect COMMAND ${_d3d9_sb_customeffect_cmd})
+        set_tests_properties(D3D9_SpriteBatch_CustomEffect PROPERTIES
+            TIMEOUT 60
+            LABELS "D3D9"
+            ENVIRONMENT "CNA_D3D9_WINEPREFIX=$ENV{HOME}/.wine-cna-d3d9-spike")
+    endif()
+endif()
+
 # --- Task 6.1: real two-process ENet loopback test harness ---
 # A tiny standalone (non-GTest) executable playing "host" or "client", spawned twice as
 # independent OS processes by tests/CNA/Internal/Net/TwoProcessLoopbackTest.cpp. See NEXT.md /
@@ -7198,22 +7555,34 @@ if(CNA_BUILD_TESTS)
         target_link_libraries(CnaTests PRIVATE easy-gl)
     endif()
 
-    # plan_dx.md DX-15 follow-up: now that CnaTests.exe genuinely builds under the D3D11/D3D12
-    # MinGW cross-targets, gtest_discover_tests(DISCOVERY_MODE PRE_TEST) below executes it
-    # directly to enumerate tests -- and any add_test(COMMAND CnaTests ...) test (e.g.
-    # CnaInputTests, further below) does the same at run time. Both need the same Wine wrapper
-    # D3D11_Smoke/D3D12_Smoke already use, or every ctest invocation in this build tree fails
-    # outright trying to exec a Windows PE natively on the Linux host. *_SKIP_*_GATE=1 because a
-    # bare --gtest_list_tests (or most individual unit tests) never creates a real graphics
-    # device, so the DXVK/vkd3d-presence gate those wrappers normally enforce would misfire here.
-    # MUST be set before gtest_discover_tests() below -- it reads this property immediately at
-    # configure time, not lazily at generate/test time.
-    if(MINGW AND CNA_GRAPHICS_BACKEND STREQUAL "D3D11")
-        set_target_properties(CnaTests PROPERTIES
-            CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_D3D11_SKIP_DXVK_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-dxvk.sh")
-    elseif(MINGW AND CNA_GRAPHICS_BACKEND STREQUAL "D3D12")
-        set_target_properties(CnaTests PROPERTIES
-            CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_D3D12_SKIP_VKD3D_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-vkd3d.sh")
+    # plan_dx.md DX-15 follow-up + plan_dx9.md D9-123 follow-up (merge-reconciled 2026-07-16):
+    # now that CnaTests.exe genuinely builds under the D3D9/D3D11/D3D12 MinGW cross-targets,
+    # gtest_discover_tests(DISCOVERY_MODE PRE_TEST) below executes it directly to enumerate tests
+    # -- and any add_test(COMMAND CnaTests ...) test (e.g. CnaInputTests, further below) does the
+    # same at run time. All three need the same Wine wrapper D3D9_Smoke/D3D11_Smoke/D3D12_Smoke
+    # already use, or every ctest invocation in this build tree fails outright trying to exec a
+    # Windows PE natively on the Linux host. *_SKIP_*_GATE=1 because a bare --gtest_list_tests (or
+    # most individual unit tests) never creates a real graphics device, so the DXVK/vkd3d-presence
+    # gate those wrappers normally enforce would misfire here. MUST be set before
+    # gtest_discover_tests() below -- it reads this property immediately at configure time, not
+    # lazily at generate/test time. `CMAKE_CROSSCOMPILING` is used as the outer guard (equivalent
+    # to `MINGW` for every real build configuration this project uses, since these three backends
+    # are only ever built via the MinGW cross-toolchain) so a D3D9 branch could be added without
+    # touching D3D11/D3D12's own already-working invocation style.
+    if(CMAKE_CROSSCOMPILING)
+        if(CNA_GRAPHICS_BACKEND STREQUAL "D3D9")
+            # D9-123: this backend's own wrapper takes a simpler `env;VAR=1;script` form (no
+            # `${CMAKE_COMMAND} -E env`/explicit `bash` prefix) -- proven end-to-end for D3D9
+            # (`ctest -L D3D9` green) and for D3D11 when reused verbatim there too (Task 1106).
+            set_target_properties(CnaTests PROPERTIES CROSSCOMPILING_EMULATOR
+                "env;CNA_D3D9_SKIP_DXVK_GATE=1;${CMAKE_SOURCE_DIR}/scripts/run-wine-dxvk9.sh")
+        elseif(CNA_GRAPHICS_BACKEND STREQUAL "D3D11")
+            set_target_properties(CnaTests PROPERTIES
+                CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_D3D11_SKIP_DXVK_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-dxvk.sh")
+        elseif(CNA_GRAPHICS_BACKEND STREQUAL "D3D12")
+            set_target_properties(CnaTests PROPERTIES
+                CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_D3D12_SKIP_VKD3D_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-vkd3d.sh")
+        endif()
     endif()
 
     include(GoogleTest)

@@ -3,11 +3,19 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "System/NotSupportedException.hpp"
 
 #include <algorithm>
 #include <cstdint>
 #include <stdexcept>
 #include <vector>
+
+// plan_dx9.md Phase D9-10 (D9-103 follow-up): GraphicsProfile.Reach/HiDef volume-texture
+// ceilings, real on this backend only -- matches Texture2D.cpp's own #ifdef CNA_BACKEND_D3D9
+// convention exactly.
+#ifdef CNA_BACKEND_D3D9
+#include "CNA/Internal/Backends/D3D9/D3D9ProfileCapabilities.hpp"
+#endif
 
 namespace Microsoft::Xna::Framework::Graphics
 {
@@ -20,6 +28,29 @@ namespace Microsoft::Xna::Framework::Graphics
         return levels;
     }
 
+#ifdef CNA_BACKEND_D3D9
+    // D9-103 follow-up: D9-100's own table -- GraphicsProfile.Reach does not support volume
+    // textures AT ALL (MaxVolumeExtentForProfileEXT returns 0), not merely a small size ceiling;
+    // GraphicsProfile.HiDef caps at 256 in any dimension. Checked BEFORE the backend is created.
+    static void ValidateVolumeSizeForProfileEXT(const GraphicsDevice& device, int width, int height, int depth)
+    {
+        const int profile = static_cast<int>(device.getGraphicsProfileProperty());
+        const int maxExtent = CNA::Internal::Backends::D3D9::MaxVolumeExtentForProfileEXT(profile);
+        if (maxExtent == 0)
+        {
+            throw System::NotSupportedException(
+                "Texture3D: GraphicsProfile.Reach does not support volume (3D) textures at all");
+        }
+        if (width > maxExtent || height > maxExtent || depth > maxExtent)
+        {
+            throw System::NotSupportedException(
+                "Texture3D: " + std::to_string(width) + "x" + std::to_string(height) + "x" +
+                std::to_string(depth) + " exceeds GraphicsProfile.HiDef's own maximum volume "
+                "extent of " + std::to_string(maxExtent) + " in any dimension");
+        }
+    }
+#endif
+
     Texture3D::~Texture3D() = default;
 
     Texture3D::Texture3D(GraphicsDevice& device, int width, int height, int depth, bool mipMap, SurfaceFormat format)
@@ -31,6 +62,9 @@ namespace Microsoft::Xna::Framework::Graphics
         , levelCount_(mipMap ? CalculateMipLevels(width, height) : 1)
         , backend_(nullptr)
     {
+#ifdef CNA_BACKEND_D3D9
+        ValidateVolumeSizeForProfileEXT(device, width, height, depth);
+#endif
         Texture::ValidateFormat(format);
         backend_ = device.GetBackend().CreateTexture3D(width, height, depth, mipMap, static_cast<int>(format));
     }

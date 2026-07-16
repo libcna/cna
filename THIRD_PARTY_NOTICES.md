@@ -22,6 +22,23 @@ no third-party binary content is currently bundled in this repository.
   (`.skeleton.bin`/`.clip.bin`) and JSON (`.skinnedmodel.json`) content is intended to ship —
   never the original Mixamo FBX files themselves.
 
+## Microsoft XNA 4.0 Stock Effects HLSL (D3D9 backend)
+
+`src/CNA/Internal/Backends/D3D9/shaders/xna/` contains 10 HLSL source files
+(`BasicEffect.fx`, `AlphaTestEffect.fx`, `DualTextureEffect.fx`, `EnvironmentMapEffect.fx`,
+`SkinnedEffect.fx`, `SpriteEffect.fx`, `Macros.fxh`, `Common.fxh`, `Lighting.fxh`,
+`Structures.fxh`) copied **verbatim, byte-for-byte**, from FNA's own
+`src/Graphics/Effect/StockEffects/HLSL/` directory, which in turn vendors them from Microsoft's
+Stock Effects sample project. Not one line has been edited (`plan_dx9.md` design decision 3);
+`scripts/verify-d3d9-stock-effects-vendored.sh` diffs them against the FNA tree and fails on any
+delta. Licensed under the Microsoft Permissive License (Ms-PL) — the full license text is also
+checked in at `src/CNA/Internal/Backends/D3D9/shaders/xna/LICENSE`.
+
+CNA compiles these sources itself (`D3DCompile`, Microsoft's own `vs_2_0`/`ps_2_0` targets) rather
+than shipping Microsoft's pre-built `.fxb` bytecode — see `plan_dx9.md`'s "CNA's divergences from
+XNA 4.0" section and design decision 4 for why, and `src/CNA/Internal/Backends/D3D9/shaders/xna/README.md`
+for the full list of compiled entry points.
+
 ## wgpu-native (optional WebGPU backend dependency)
 
 The experimental `WEBGPU` graphics backend uses `wgpu-native`, a native implementation of the

@@ -1190,6 +1190,9 @@ namespace CNA::Internal::Backends::Vulkan
         for (auto& [k, pipe] : pipelinesLitTextured3D_)
             if (pipe != VK_NULL_HANDLE) { vkDestroyPipeline(device_, pipe, nullptr); pipe = VK_NULL_HANDLE; }
         pipelinesLitTextured3D_.clear();
+        for (auto& [k, pipe] : pipelinesLitTextured3DVertexLit_)
+            if (pipe != VK_NULL_HANDLE) { vkDestroyPipeline(device_, pipe, nullptr); pipe = VK_NULL_HANDLE; }
+        pipelinesLitTextured3DVertexLit_.clear();
         for (auto& cache : litTexturedDescSets_) cache.clear(); // freed with pool below
         for (uint32_t i = 0; i < MaxFramesInFlight; ++i) {
             if (litTexturedUBO_[i]    != VK_NULL_HANDLE) { vkDestroyBuffer(device_, litTexturedUBO_[i], nullptr);    litTexturedUBO_[i]    = VK_NULL_HANDLE; }
@@ -1209,6 +1212,9 @@ namespace CNA::Internal::Backends::Vulkan
         for (auto& [k, pipe] : pipelinesSkinned3D_)
             if (pipe != VK_NULL_HANDLE) { vkDestroyPipeline(device_, pipe, nullptr); pipe = VK_NULL_HANDLE; }
         pipelinesSkinned3D_.clear();
+        for (auto& [k, pipe] : pipelinesSkinned3DVertexLit_)
+            if (pipe != VK_NULL_HANDLE) { vkDestroyPipeline(device_, pipe, nullptr); pipe = VK_NULL_HANDLE; }
+        pipelinesSkinned3DVertexLit_.clear();
         for (auto& [k, pipe] : pipelinesInstanced3D_)
             if (pipe != VK_NULL_HANDLE) { vkDestroyPipeline(device_, pipe, nullptr); pipe = VK_NULL_HANDLE; }
         pipelinesInstanced3D_.clear();
@@ -4428,6 +4434,121 @@ namespace CNA::Internal::Backends::Vulkan
         return pipe;
     }
 
+    // Task 1103: PreferPerPixelLighting=false (XNA's real default) sibling of
+    // GetOrCreatePipelineLitTextured3D above -- identical descriptor set layout/pipeline layout/
+    // vertex input state (the shader I/O contract is unchanged, only WHERE lighting is computed
+    // moves), so this reuses EnsureLitTexturedResources()/pipelineLayoutLitTextured3D_ unchanged
+    // and differs only in which shader modules get compiled into the pipeline and which cache
+    // map the result is stored in.
+    VkPipeline VulkanGraphicsBackend::GetOrCreatePipelineLitTextured3DVertexLit(
+        VkPrimitiveTopology topo,
+        bool depthTest, bool depthWrite, bool blend, int cullMode,
+        uint32_t colorAttachmentCount, bool wireframe, bool msaa,
+        const DepthStencilKeyParams& dsParams, const BlendKeyParams& blendParams, VkFormat targetDepthFmt)
+    {
+        EnsureLitTexturedResources();
+
+        constexpr std::size_t kLitStride = 32;
+        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(kLitStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams) };
+        auto it = pipelinesLitTextured3DVertexLit_.find(key);
+        if (it != pipelinesLitTextured3DVertexLit_.end()) return it->second;
+
+        using namespace Shaders;
+        VkShaderModule vert = CreateShaderModule(kLitTextured3dVertexLitVertSpv, kLitTextured3dVertexLitVertSpv_size);
+        VkShaderModule frag = CreateShaderModule(kLitTextured3dVertexLitFragSpv, kLitTextured3dVertexLitFragSpv_size);
+
+        VkVertexInputBindingDescription bind{ 0, static_cast<uint32_t>(kLitStride), VK_VERTEX_INPUT_RATE_VERTEX };
+        VkVertexInputAttributeDescription attrs[3]{};
+        attrs[0] = { 0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0  };   // aPos
+        attrs[1] = { 1, 0, VK_FORMAT_R32G32B32_SFLOAT, 12 };   // aNormal
+        attrs[2] = { 2, 0, VK_FORMAT_R32G32_SFLOAT,    24 };   // aUV
+
+        VkPipelineVertexInputStateCreateInfo vis{};
+        vis.sType                           = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+        vis.vertexBindingDescriptionCount   = 1; vis.pVertexBindingDescriptions   = &bind;
+        vis.vertexAttributeDescriptionCount = 3; vis.pVertexAttributeDescriptions = attrs;
+
+        VkPipelineShaderStageCreateInfo stages[2]{};
+        stages[0] = { VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0,
+                      VK_SHADER_STAGE_VERTEX_BIT,   vert, "main", nullptr };
+        stages[1] = { VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0,
+                      VK_SHADER_STAGE_FRAGMENT_BIT, frag, "main", nullptr };
+
+        VkPipelineInputAssemblyStateCreateInfo ias{};
+        ias.sType    = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+        ias.topology = topo;
+
+        VkPipelineViewportStateCreateInfo vpst{};
+        vpst.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+        vpst.viewportCount = 1; vpst.scissorCount = 1;
+
+        VkCullModeFlags vkCull = VK_CULL_MODE_NONE;
+        if (cullMode == 1) vkCull = VK_CULL_MODE_FRONT_BIT;
+        if (cullMode == 2) vkCull = VK_CULL_MODE_BACK_BIT;
+
+        VkPipelineRasterizationStateCreateInfo rs{};
+        rs.sType       = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+        rs.polygonMode = wireframe ? VK_POLYGON_MODE_LINE : VK_POLYGON_MODE_FILL;
+        rs.cullMode    = vkCull;
+        rs.frontFace   = VK_FRONT_FACE_CLOCKWISE;
+        rs.lineWidth   = 1.f;
+        rs.depthBiasEnable = VK_TRUE;
+
+        VkPipelineMultisampleStateCreateInfo ms{};
+        ms.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+        ms.rasterizationSamples = (msaa && colorAttachmentCount <= 1) ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
+
+        VkPipelineDepthStencilStateCreateInfo ds{};
+        ds.sType            = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+        ds.depthTestEnable  = depthTest  ? VK_TRUE : VK_FALSE;
+        ds.depthWriteEnable = depthWrite ? VK_TRUE : VK_FALSE;
+        FillDepthStencilState(ds, dsParams);
+
+        const uint32_t nColor = std::max(colorAttachmentCount, 1u);
+        std::vector<VkPipelineColorBlendAttachmentState> blendAttachments(nColor);
+        for (auto& ba : blendAttachments) {
+            ba.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT
+                              | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+            FillBlendAttachmentState(ba, blend, blendParams);
+        }
+        VkPipelineColorBlendStateCreateInfo cbs{};
+        cbs.sType           = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+        cbs.attachmentCount = nColor; cbs.pAttachments = blendAttachments.data();
+
+        constexpr VkDynamicState dynStates[6] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR,
+                                                  VK_DYNAMIC_STATE_DEPTH_BIAS,
+                                                  VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK,
+                                                  VK_DYNAMIC_STATE_STENCIL_WRITE_MASK,
+                                                  VK_DYNAMIC_STATE_STENCIL_REFERENCE };
+        VkPipelineDynamicStateCreateInfo dyn{};
+        dyn.sType             = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+        dyn.dynamicStateCount = 6; dyn.pDynamicStates = dynStates;
+
+        VkRenderPass rp = PickRTPipelineRenderPass(colorAttachmentCount, msaa, targetDepthFmt);
+
+        VkGraphicsPipelineCreateInfo pci{};
+        pci.sType               = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+        pci.stageCount          = 2; pci.pStages          = stages;
+        pci.pVertexInputState   = &vis;
+        pci.pInputAssemblyState = &ias;
+        pci.pViewportState      = &vpst;
+        pci.pRasterizationState = &rs;
+        pci.pMultisampleState   = &ms;
+        pci.pDepthStencilState  = &ds;
+        pci.pColorBlendState    = &cbs;
+        pci.pDynamicState       = &dyn;
+        pci.layout              = pipelineLayoutLitTextured3D_;
+        pci.renderPass          = rp;
+
+        VkPipeline pipe = VK_NULL_HANDLE;
+        vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pci, nullptr, &pipe);
+        pipelinesLitTextured3DVertexLit_[key] = pipe;
+
+        vkDestroyShaderModule(device_, vert, nullptr);
+        vkDestroyShaderModule(device_, frag, nullptr);
+        return pipe;
+    }
+
     // ---- BasicEffect fog bundle (Task 899): colored3d / textured3d / colored_textured3d ----
     //
     // These 3 pipelines share the exact same fully-packed 128-byte FillExtPushConst() push
@@ -5043,6 +5164,120 @@ namespace CNA::Internal::Backends::Vulkan
         return pipe;
     }
 
+    // Task 1103: PreferPerPixelLighting=false (XNA's real default) sibling of
+    // GetOrCreatePipelineSkinned3D above -- same skinning/descriptor/pipeline layout, different
+    // shader modules and pipeline cache only.
+    VkPipeline VulkanGraphicsBackend::GetOrCreatePipelineSkinned3DVertexLit(
+        VkPrimitiveTopology topo,
+        bool depthTest, bool depthWrite, bool blend, int cullMode,
+        uint32_t colorAttachmentCount, bool wireframe, bool msaa,
+        const DepthStencilKeyParams& dsParams, const BlendKeyParams& blendParams, VkFormat targetDepthFmt)
+    {
+        EnsureSkinnedResources();
+
+        constexpr std::size_t kSkinnedStride = 52;
+        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(kSkinnedStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams) };
+        auto it = pipelinesSkinned3DVertexLit_.find(key);
+        if (it != pipelinesSkinned3DVertexLit_.end()) return it->second;
+
+        using namespace Shaders;
+        VkShaderModule vert = CreateShaderModule(kSkinned3dVertexLitVertSpv, kSkinned3dVertexLitVertSpv_size);
+        VkShaderModule frag = CreateShaderModule(kSkinned3dVertexLitFragSpv, kSkinned3dVertexLitFragSpv_size);
+
+        VkVertexInputBindingDescription bind{ 0, kSkinnedStride, VK_VERTEX_INPUT_RATE_VERTEX };
+        VkVertexInputAttributeDescription attrs[5]{};
+        attrs[0] = { 0, 0, VK_FORMAT_R32G32B32_SFLOAT,    0  }; // aPos
+        attrs[1] = { 1, 0, VK_FORMAT_R32G32B32_SFLOAT,    12 }; // aNormal
+        attrs[2] = { 2, 0, VK_FORMAT_R32G32_SFLOAT,       24 }; // aUV
+        attrs[3] = { 3, 0, VK_FORMAT_R32G32B32A32_SFLOAT, 32 }; // aBoneWeights
+        attrs[4] = { 4, 0, VK_FORMAT_R8G8B8A8_UINT,       48 }; // aBoneIndices
+
+        VkPipelineVertexInputStateCreateInfo vis{};
+        vis.sType                           = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+        vis.vertexBindingDescriptionCount   = 1; vis.pVertexBindingDescriptions   = &bind;
+        vis.vertexAttributeDescriptionCount = 5; vis.pVertexAttributeDescriptions = attrs;
+
+        VkPipelineShaderStageCreateInfo stages[2]{};
+        stages[0] = { VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0,
+                      VK_SHADER_STAGE_VERTEX_BIT,   vert, "main", nullptr };
+        stages[1] = { VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0,
+                      VK_SHADER_STAGE_FRAGMENT_BIT, frag, "main", nullptr };
+
+        VkPipelineInputAssemblyStateCreateInfo ias{};
+        ias.sType    = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+        ias.topology = topo;
+
+        VkPipelineViewportStateCreateInfo vpst{};
+        vpst.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+        vpst.viewportCount = 1; vpst.scissorCount = 1;
+
+        VkCullModeFlags vkCull = VK_CULL_MODE_NONE;
+        if (cullMode == 1) vkCull = VK_CULL_MODE_FRONT_BIT;
+        if (cullMode == 2) vkCull = VK_CULL_MODE_BACK_BIT;
+
+        VkPipelineRasterizationStateCreateInfo rs{};
+        rs.sType       = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+        rs.polygonMode = wireframe ? VK_POLYGON_MODE_LINE : VK_POLYGON_MODE_FILL;
+        rs.cullMode    = vkCull;
+        rs.frontFace   = VK_FRONT_FACE_CLOCKWISE;
+        rs.lineWidth   = 1.f;
+        rs.depthBiasEnable = VK_TRUE;
+
+        VkPipelineMultisampleStateCreateInfo ms{};
+        ms.sType                = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+        ms.rasterizationSamples = (msaa && colorAttachmentCount <= 1) ? sampleCount_ : VK_SAMPLE_COUNT_1_BIT;
+
+        VkPipelineDepthStencilStateCreateInfo ds{};
+        ds.sType            = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+        ds.depthTestEnable  = depthTest  ? VK_TRUE : VK_FALSE;
+        ds.depthWriteEnable = depthWrite ? VK_TRUE : VK_FALSE;
+        FillDepthStencilState(ds, dsParams);
+
+        const uint32_t nColor = std::max(colorAttachmentCount, 1u);
+        std::vector<VkPipelineColorBlendAttachmentState> blendAttachments(nColor);
+        for (auto& ba : blendAttachments) {
+            ba.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT
+                              | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+            FillBlendAttachmentState(ba, blend, blendParams);
+        }
+        VkPipelineColorBlendStateCreateInfo cbs{};
+        cbs.sType           = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+        cbs.attachmentCount = nColor; cbs.pAttachments = blendAttachments.data();
+
+        constexpr VkDynamicState dynStates[6] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR,
+                                                  VK_DYNAMIC_STATE_DEPTH_BIAS,
+                                                  VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK,
+                                                  VK_DYNAMIC_STATE_STENCIL_WRITE_MASK,
+                                                  VK_DYNAMIC_STATE_STENCIL_REFERENCE };
+        VkPipelineDynamicStateCreateInfo dyn{};
+        dyn.sType             = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+        dyn.dynamicStateCount = 6; dyn.pDynamicStates = dynStates;
+
+        VkRenderPass rp = PickRTPipelineRenderPass(colorAttachmentCount, msaa, targetDepthFmt);
+
+        VkGraphicsPipelineCreateInfo pci{};
+        pci.sType               = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+        pci.stageCount          = 2; pci.pStages          = stages;
+        pci.pVertexInputState   = &vis;
+        pci.pInputAssemblyState = &ias;
+        pci.pViewportState      = &vpst;
+        pci.pRasterizationState = &rs;
+        pci.pMultisampleState   = &ms;
+        pci.pDepthStencilState  = &ds;
+        pci.pColorBlendState    = &cbs;
+        pci.pDynamicState       = &dyn;
+        pci.layout              = pipelineLayoutSkinned3D_;
+        pci.renderPass          = rp;
+
+        VkPipeline pipe = VK_NULL_HANDLE;
+        vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pci, nullptr, &pipe);
+        pipelinesSkinned3DVertexLit_[key] = pipe;
+
+        vkDestroyShaderModule(device_, vert, nullptr);
+        vkDestroyShaderModule(device_, frag, nullptr);
+        return pipe;
+    }
+
     VkPipeline VulkanGraphicsBackend::GetOrCreatePipelineInstanced3D(
         std::size_t pvStride, VkPrimitiveTopology topo,
         bool depthTest, bool depthWrite, bool blend, int cullMode,
@@ -5565,7 +5800,14 @@ namespace CNA::Internal::Backends::Vulkan
                                                        draw.depthTest, draw.depthWrite,
                                                        draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt);
                 } else if (draw.useSkinned) {
-                    pipe = GetOrCreatePipelineSkinned3D(draw.topology,
+                    // Task 1103: real XNA default is PreferPerPixelLighting=false (per-vertex/
+                    // Gouraud lighting) -- select that sibling pipeline unless the effect asked
+                    // for per-pixel lighting explicitly.
+                    pipe = draw.preferVertexLit
+                           ? GetOrCreatePipelineSkinned3DVertexLit(draw.topology,
+                                                        draw.depthTest, draw.depthWrite,
+                                                        draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt)
+                           : GetOrCreatePipelineSkinned3D(draw.topology,
                                                         draw.depthTest, draw.depthWrite,
                                                         draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt);
                 } else if (draw.useInstanced) {
@@ -5573,7 +5815,12 @@ namespace CNA::Internal::Backends::Vulkan
                                                           draw.depthTest, draw.depthWrite,
                                                           draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt);
                 } else if (draw.useLitTextured) {
-                    pipe = GetOrCreatePipelineLitTextured3D(draw.topology,
+                    // Task 1103: same rationale as useSkinned above.
+                    pipe = draw.preferVertexLit
+                           ? GetOrCreatePipelineLitTextured3DVertexLit(draw.topology,
+                                                            draw.depthTest, draw.depthWrite,
+                                                            draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt)
+                           : GetOrCreatePipelineLitTextured3D(draw.topology,
                                                             draw.depthTest, draw.depthWrite,
                                                             draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt);
                 } else if (draw.useFogTex3D) {
@@ -6171,9 +6418,11 @@ namespace CNA::Internal::Backends::Vulkan
         clearPipelineCache(pipelinesDualTex3D_);
         clearPipelineCache(pipelinesEnvMap3D_);
         clearPipelineCache(pipelinesLitTextured3D_);
+        clearPipelineCache(pipelinesLitTextured3DVertexLit_);
         clearPipelineCache(pipelinesFogColored3D_);
         clearPipelineCache(pipelinesFogTex3D_);
         clearPipelineCache(pipelinesSkinned3D_);
+        clearPipelineCache(pipelinesSkinned3DVertexLit_);
         clearPipelineCache(pipelinesInstanced3D_);
 
         sampleCount_ = newCount;
@@ -6474,6 +6723,9 @@ namespace CNA::Internal::Backends::Vulkan
         d.useDualTexture = needsDualTex;
         d.useSkinned     = needsSkinned;
         d.useLitTextured = needsLitTextured;
+        // Task 1103: real XNA default is PreferPerPixelLighting=false (per-vertex/
+        // Gouraud lighting) -- only meaningful while lighting is actually enabled.
+        d.preferVertexLit = params.lightingEnabled && !params.preferPerPixelLighting;
         if (needsSkinned) {
             EnsureSkinnedResources();
             const auto* vs = dynamic_cast<const IVulkanSamplable*>(params.texture0);
@@ -6673,6 +6925,9 @@ namespace CNA::Internal::Backends::Vulkan
         d.useDualTexture = needsDualTex;
         d.useSkinned     = needsSkinned;
         d.useLitTextured = needsLitTextured;
+        // Task 1103: real XNA default is PreferPerPixelLighting=false (per-vertex/
+        // Gouraud lighting) -- only meaningful while lighting is actually enabled.
+        d.preferVertexLit = params.lightingEnabled && !params.preferPerPixelLighting;
         if (needsSkinned) {
             EnsureSkinnedResources();
             const auto* vs = dynamic_cast<const IVulkanSamplable*>(params.texture0);

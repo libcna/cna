@@ -42,6 +42,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 
 #include "CNA/Internal/Backends/Headless/HeadlessGraphicsBackend.hpp"
+#include "System/Environment.hpp"
 
 #include <cstdio>
 #include <cstdlib>
@@ -74,34 +75,34 @@ namespace
     // constructed directly, and each constructor call re-reads CNA_HEADLESS_MODE fresh.
     void CheckEnvironmentModeParsing()
     {
-        setenv("CNA_HEADLESS_MODE", "Fast", 1);
+        System::Environment::SetEnvironmentVariable("CNA_HEADLESS_MODE", "Fast");
         {
             HeadlessGraphicsBackend backend(64, 64);
             Check(backend.GetMode() == HeadlessMode::Fast, "CNA_HEADLESS_MODE=Fast parses to HeadlessMode::Fast");
         }
 
-        setenv("CNA_HEADLESS_MODE", "TRACE", 1);
+        System::Environment::SetEnvironmentVariable("CNA_HEADLESS_MODE", "TRACE");
         {
             HeadlessGraphicsBackend backend(64, 64);
             Check(backend.GetMode() == HeadlessMode::Trace,
                   "CNA_HEADLESS_MODE=TRACE (uppercase) parses to HeadlessMode::Trace");
         }
 
-        setenv("CNA_HEADLESS_MODE", "validation", 1);
+        System::Environment::SetEnvironmentVariable("CNA_HEADLESS_MODE", "validation");
         {
             HeadlessGraphicsBackend backend(64, 64);
             Check(backend.GetMode() == HeadlessMode::Validation,
                   "CNA_HEADLESS_MODE=validation (lowercase) parses to HeadlessMode::Validation");
         }
 
-        setenv("CNA_HEADLESS_MODE", "bogus", 1);
+        System::Environment::SetEnvironmentVariable("CNA_HEADLESS_MODE", "bogus");
         {
             HeadlessGraphicsBackend backend(64, 64);
             Check(backend.GetMode() == HeadlessMode::Validation,
                   "an unrecognized CNA_HEADLESS_MODE value defaults to HeadlessMode::Validation");
         }
 
-        unsetenv("CNA_HEADLESS_MODE");
+        System::Environment::SetEnvironmentVariable("CNA_HEADLESS_MODE", "");
         {
             HeadlessGraphicsBackend backend(64, 64);
             Check(backend.GetMode() == HeadlessMode::Validation,

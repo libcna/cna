@@ -36,6 +36,11 @@ namespace CNA::Internal::Backends::D3DCommon
         /// gives AlphaTestEffect.VertexColorEnabled a real vertex-color attribute to multiply
         /// against, which plain AlphaTest3d (stride 20, Position+UV only) never carries.
         AlphaTestColored3d,
+        /// plan_graphics.md Phase 80 (Task 1106/1107): real per-vertex-lit siblings of
+        /// LitTextured3d/Skinned3d, selected when GpuDrawParams::preferPerPixelLighting is false
+        /// (XNA's real default) -- identical Blinn-Phong math, evaluated in the vertex stage.
+        LitTextured3dVertexLit,
+        Skinned3dVertexLit,
     };
 
     /// Returns the compiled DXBC bytecode (pointer + length) for a variant's vertex shader stage.

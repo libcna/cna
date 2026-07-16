@@ -1,0 +1,31 @@
+# plan_dx9.md D9-A5 scene corpus: sprite_mirror_quad
+# The second D9-92 scene, proving TextureAddressMode.Mirror is genuinely DIFFERENT from Wrap
+# (sprite_wrap_quad.scene), not just "some non-Clamp behavior". Same 2x1 RED/GREEN texture and
+# sourceRectangle=(0,0,4,1) (double width) as sprite_wrap_quad.scene, only spritesampler changes
+# from PointWrap to a custom Point-filtered Mirror sampler (constructed manually -- real XNA has
+# no named "PointMirror" SamplerState preset, only PointClamp/PointWrap/LinearClamp/LinearWrap/
+# AnisotropicClamp/AnisotropicWrap).
+#
+# Standard GPU mirror addressing folds U outside [0,1] as a triangle wave (period 2): for
+# u in [1,2], u_effective = 2-u. This gives a SYMMETRIC pattern around the U=1 boundary, NOT
+# Wrap's repeating one:
+#   U in [0,0.5)   -> texel0 (RED)                          [u_effective = u, in [0,0.5)]
+#   U in [0.5,1)   -> texel1 (GREEN)                         [u_effective = u, in [0.5,1)]
+#   U in [1,1.5)   -> texel1 (GREEN, MIRRORED continuation)  [u_effective = 2-u, in [0.5,1)]
+#   U in [1.5,2)   -> texel0 (RED, mirrored back)            [u_effective = 2-u, in [0,0.5)]
+# Expected screen pattern: RED,GREEN,GREEN,RED (symmetric) -- genuinely distinguishable from
+# sprite_wrap_quad.scene's own RED,GREEN,RED,GREEN (repeating) pattern using the IDENTICAL source
+# data and geometry, isolating the address-mode behavior itself as the only variable.
+width=256
+height=256
+profile=HiDef
+clearcolor=100,149,237,255
+spritebatchmode=true
+texturewidth=2
+textureheight=1
+texturepixel=255,0,0,255
+texturepixel=0,255,0,255
+spritedestrect=64,108,128,40
+spritesourcerect=0,0,4,1
+spritesampler=PointMirror
+spritecolor=255,255,255,255

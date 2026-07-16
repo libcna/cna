@@ -1,0 +1,35 @@
+# plan_dx9.md D9-A5 scene corpus: alphatest_quad
+# The first scene to use a real, non-BasicEffect Stock Effect: AlphaTestEffect
+# (VertexColorEnabled=false, AlphaFunction=Greater, ReferenceAlpha=128), on the existing stride-20
+# VertexPositionTexture vertex shape (VSInputTx, D9-82c's own "no vertex-layout gap" finding).
+# A quad sampling a 2x2 texture whose 4 texels deliberately straddle the ReferenceAlpha threshold:
+# top-left alpha=255 (passes, drawn red), top-right alpha=0 (fails, clip() discards -> background
+# shows through), bottom-left alpha=255 (passes, drawn white), bottom-right alpha=64 (fails, also
+# clipped). This directly exercises clip()'s real discard behavior end to end against the oracle,
+# not just a hand-computed expected pixel (D9-82c's own D3D9_DrawEx checks' own bar).
+width=256
+height=256
+profile=HiDef
+clearcolor=100,149,237,255
+effect=AlphaTestEffect
+vertexformat=PositionTexture
+vertexcolor=false
+texture=true
+texturewidth=2
+textureheight=2
+texturefilter=Point
+alphafunction=Greater
+referencealpha=128
+primitive=TriangleList
+# Row-major, top row first: (red,a=255),(white,a=0) / (white,a=255),(blue,a=64).
+texturepixel=255,0,0,255
+texturepixel=255,255,255,0
+texturepixel=255,255,255,255
+texturepixel=0,0,255,64
+# UV (0,0) is the texture's top-left (red, alpha=255, passes).
+vertex=-0.6,0.6,0,0,0
+vertex=0.6,0.6,0,1,0
+vertex=-0.6,-0.6,0,0,1
+vertex=0.6,0.6,0,1,0
+vertex=0.6,-0.6,0,1,1
+vertex=-0.6,-0.6,0,0,1

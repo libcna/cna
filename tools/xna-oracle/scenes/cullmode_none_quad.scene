@@ -1,0 +1,18 @@
+# plan_dx9.md D9-21 scene corpus: cullmode_none_quad
+# Reuses colored3d.scene's exact triangle (NDC signed area confirmed negative -- the "CW" winding
+# per docs/xna_culling_compatibility_audit.md's own real-XNA-4.0-hardware-verified convention:
+# negative NDC signed area survives XNA's default CullCounterClockwiseFace, is culled by
+# CullClockwiseFace). CullMode.None must never cull regardless of winding -- expect the SAME
+# visible triangle every other scene (which never sets cullmode=, defaulting to
+# CullCounterClockwiseFace) already gets.
+width=256
+height=256
+profile=HiDef
+clearcolor=100,149,237,255
+vertexcolor=true
+lighting=false
+primitive=TriangleList
+cullmode=None
+vertex=-0.6,-0.6,0,255,0,0,255
+vertex=0.0,0.7,0,0,255,0,255
+vertex=0.6,-0.6,0,0,0,255,255

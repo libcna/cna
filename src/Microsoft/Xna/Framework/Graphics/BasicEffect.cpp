@@ -54,6 +54,7 @@ namespace Microsoft::Xna::Framework::Graphics
         p.textureEnabled     = textureEnabled_;
         p.vertexColorEnabled = VertexColorEnabled;
         p.lightingEnabled    = lightingEnabled_;
+        p.preferPerPixelLighting = preferPerPixelLighting_;
 
         if (p.textureEnabled)
         {

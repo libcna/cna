@@ -8,6 +8,7 @@
 #include "Microsoft/Xna/Framework/Audio/WaveBank.hpp"
 #include "AudioEngineTestAccess.hpp"
 #include "CueTestAccess.hpp"
+#include "System/Environment.hpp"
 
 #include <chrono>
 #include <cstdint>

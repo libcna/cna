@@ -674,6 +674,20 @@ namespace Microsoft::Xna::Framework::Graphics
         /** @brief Enables or disables depth writes. */
         NOXNA void SetDepthWriteEnabled(bool enabled);
         /**
+         * @brief Task/plan_dx9.md D9-103 finding: real XNA fixes GraphicsProfile at device
+         * construction (the public GraphicsDevice.GraphicsProfile property is read-only), but
+         * CNA's own GraphicsDeviceManager architecture eagerly default-constructs Game's
+         * GraphicsDevice_ member (hardcoded GraphicsProfile::Reach) BEFORE GraphicsDeviceManager
+         * -- and therefore before a game's own GraphicsDeviceManager.GraphicsProfile request --
+         * even exists. Without this, GraphicsDeviceManager::CreateDevice()/ApplyChanges() has no
+         * way to make the FIRST real device creation honor a non-Reach request at all: a game's
+         * `graphics.GraphicsProfile = GraphicsProfile.HiDef; graphics.ApplyChanges();` would
+         * silently keep using Reach. Called once, internally, from
+         * GraphicsDeviceManager::applyToExistingBackend() right before Reset() -- not exposed as
+         * a general public runtime profile-switch (real XNA has none either).
+         */
+        NOXNA void SetGraphicsProfileEXT(GraphicsProfile profile);
+        /**
          * @brief Disables GL context-loss recovery (CPU shadow copies + ResourceRegistry).
          *
          * Must be called before the device is initialized. Safe on desktop where
@@ -769,6 +783,11 @@ namespace Microsoft::Xna::Framework::Graphics
         GraphicsProfile graphicsProfile_;
         PresentationParameters presentationParameters_;
         bool isDisposed_;
+        /// plan_dx9.md D9-34: tracks the real device-lifecycle state reported by a backend via
+        /// GraphicsBackendCreateArgs::deviceEventCallback (BackendDeviceEvent::Lost -> Lost,
+        /// Resetting -> NotReset, Reset -> Normal). Every backend except D3D9 never calls that
+        /// callback, so this stays Normal there, matching the pre-existing hardcoded behavior.
+        GraphicsDeviceStatus deviceStatus_ = GraphicsDeviceStatus::Normal;
 
         BlendState blendState_;
         DepthStencilState depthStencilState_;

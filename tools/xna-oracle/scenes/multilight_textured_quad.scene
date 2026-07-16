@@ -1,0 +1,41 @@
+# plan_dx9.md D9-A5 scene corpus: multilight_textured_quad
+# The first scene to genuinely exercise BasicEffect's MULTI-LIGHT summation formula (D9-82b's own
+# "2-light-sum" ShaderIndex bucket, a structurally DIFFERENT dispatch path from the "OneLight"
+# bucket lit_textured_quad.scene/skinned_quad.scene already exercise). Two active lights
+# (DirectionalLight0 diffuse=0.3, DirectionalLight1 diffuse=0.2, both travelling straight at the
+# surface) sum to the exact same total dimming (0.5) lit_textured_quad.scene's own single 0.5
+# light already produces -- if this scene's own result did NOT match that (256,0,0)-style halving
+# pattern exactly, it would mean the two active lights are not genuinely being summed (e.g. only
+# the last-applied light constant register actually took effect). DirectionalLight2 is explicitly
+# left DISABLED (Enabled=false) with a nonzero diffuse color that must NOT contribute, proving a
+# disabled light really contributes zero rather than being silently summed in anyway.
+width=256
+height=256
+profile=HiDef
+clearcolor=100,149,237,255
+effect=BasicEffect
+vertexformat=PositionNormalTexture
+lighting=true
+texture=true
+texturewidth=1
+textureheight=1
+texturefilter=Point
+ambientcolor=0,0,0
+light0enabled=true
+light0diffuse=0.3,0.3,0.3
+light0direction=0,0,-1
+light1enabled=true
+light1diffuse=0.2,0.2,0.2
+light1direction=0,0,-1
+light2enabled=false
+light2diffuse=0.9,0.9,0.9
+light2direction=0,0,-1
+primitive=TriangleList
+texturepixel=255,255,255,255
+# x,y,z,nx,ny,nz,u,v -- every vertex faces the camera (+Z normal), matching lit_textured_quad.scene.
+vertex=-0.6,0.6,0,0,0,1,0,0
+vertex=0.6,0.6,0,0,0,1,1,0
+vertex=-0.6,-0.6,0,0,0,1,0,1
+vertex=0.6,0.6,0,0,0,1,1,0
+vertex=0.6,-0.6,0,0,0,1,1,1
+vertex=-0.6,-0.6,0,0,0,1,0,1

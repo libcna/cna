@@ -16,6 +16,14 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "System/IO/Stream.hpp"
+#include "System/NotSupportedException.hpp"
+
+// plan_dx9.md Phase D9-10 (D9-103): GraphicsProfile.Reach/HiDef texture-size ceilings are real,
+// enforced-at-creation-time, ONLY on this backend -- the other 9 CNA backends have no profile
+// distinction to enforce (matches GraphicsAdapter.cpp's own #ifdef CNA_BACKEND_D3D9 convention).
+#ifdef CNA_BACKEND_D3D9
+#include "CNA/Internal/Backends/D3D9/D3D9ProfileCapabilities.hpp"
+#endif
 
 namespace Microsoft::Xna::Framework::Graphics
 {
@@ -25,6 +33,27 @@ namespace Microsoft::Xna::Framework::Graphics
     // -----------------------------------------------------------------------
     // Private helpers
     // -----------------------------------------------------------------------
+
+#ifdef CNA_BACKEND_D3D9
+    // D9-103: a HiDef-only size requested on a Reach device (or a size exceeding even HiDef's own
+    // 4096 ceiling) throws the XNA-correct exception (System::NotSupportedException, matching
+    // this file's own established convention for other unsupported-request cases) -- D9-100's own
+    // table, checked as a profile CEILING, not a hardware query: even if this dev environment's
+    // real device could technically allocate a larger texture, a Reach-profile game is restricted
+    // to 2048 and a HiDef-profile game to 4096, matching real XNA's own portability guarantee.
+    static void ValidateTextureSizeForProfileEXT(const GraphicsDevice& device, int w, int h)
+    {
+        const int profile = static_cast<int>(device.getGraphicsProfileProperty());
+        const int maxSize = CNA::Internal::Backends::D3D9::MaxTextureSizeForProfileEXT(profile);
+        if (w > maxSize || h > maxSize)
+        {
+            throw System::NotSupportedException(
+                "Texture2D: " + std::to_string(w) + "x" + std::to_string(h) +
+                " exceeds GraphicsProfile." + (profile == 1 ? std::string("HiDef") : std::string("Reach")) +
+                "'s own maximum texture size of " + std::to_string(maxSize));
+        }
+    }
+#endif
 
     static int mipDim(int base, int level)
     {
@@ -107,6 +136,9 @@ namespace Microsoft::Xna::Framework::Graphics
     Texture2D::Texture2D(GraphicsDevice& graphicsDevice, int w, int h)
         : Texture(&graphicsDevice), width(w), height(h)
     {
+#ifdef CNA_BACKEND_D3D9
+        ValidateTextureSizeForProfileEXT(graphicsDevice, w, h);
+#endif
         ImageData data;
         data.width  = w;
         data.height = h;
@@ -128,6 +160,9 @@ namespace Microsoft::Xna::Framework::Graphics
                          bool mipMap, SurfaceFormat format)
         : Texture(&graphicsDevice), width(w), height(h)
     {
+#ifdef CNA_BACKEND_D3D9
+        ValidateTextureSizeForProfileEXT(graphicsDevice, w, h);
+#endif
         ValidateFormat(format);
         format_     = format;
         levelCount_ = mipMap ? CalculateMipLevels(w, h) : 1;

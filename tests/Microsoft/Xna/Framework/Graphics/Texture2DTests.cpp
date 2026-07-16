@@ -14,6 +14,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
+#include "System/Environment.hpp"
 #include "System/IO/MemoryStream.hpp"
 #include "System/Environment.hpp"
 

@@ -1411,6 +1411,16 @@ struct VertexOutput {
             if (pipe != nullptr) wgpuRenderPipelineRelease(pipe);
         }
         litTexturedPipelines_.clear();
+        // Task 1105: the vertex-lit sibling's own pipeline cache + shader module, torn down
+        // alongside the per-pixel-lit one -- litBindGroupLayout_/litPipelineLayout_ are shared by
+        // both and only released once, below.
+        for (auto& [key, pipe] : litTexturedVertexLitPipelines_)
+        {
+            if (pipe != nullptr) wgpuRenderPipelineRelease(pipe);
+        }
+        litTexturedVertexLitPipelines_.clear();
+        if (litTexturedVertexLitShader_ != nullptr) wgpuShaderModuleRelease(litTexturedVertexLitShader_);
+        litTexturedVertexLitShader_ = nullptr;
         if (litPipelineLayout_ != nullptr) wgpuPipelineLayoutRelease(litPipelineLayout_);
         if (litBindGroupLayout_ != nullptr) wgpuBindGroupLayoutRelease(litBindGroupLayout_);
         if (litTexturedShader_ != nullptr) wgpuShaderModuleRelease(litTexturedShader_);
@@ -1527,6 +1537,108 @@ struct VertexOutput {
         shaderDescriptor.nextInChain = &wgsl.chain;
         litTexturedShader_ = wgpuDeviceCreateShaderModule(device_, &shaderDescriptor);
 
+        // Task 1105 (plan_graphics.md Phase 80): real per-vertex-lit sibling -- identical
+        // Blinn-Phong math to shaderSource above (FNA's Lighting.fxh ComputeLights()), moved from
+        // fs_main into vs_main and passed onward as litRGB/specularRGB varyings (WGSL naturally
+        // interpolates any @location(n) VertexOutput field across the triangle -- this alone is
+        // what gives Gouraud shading, no separate interpolation logic needed). fs_main keeps the
+        // exact same lightingEnabled<=0.5 unlit branch and non-lighting math (texture sample)
+        // unchanged, just consuming the interpolated value instead of recomputing it per fragment.
+        // Same UBO/binding layout as the per-pixel-lit shader (reuses litBindGroupLayout_/
+        // litPipelineLayout_ unchanged below), so only a new shader module is needed here.
+        static constexpr char vertexLitShaderSource[] = R"WGSL(
+struct Uniforms {
+    mvp: mat4x4f,
+    diffuseColor: vec4f,
+    ambientLighting: vec4f,
+    light0DirTexture: vec4f,
+    light0DiffuseVertexColor: vec4f,
+};
+@group(0) @binding(0) var<uniform> u: Uniforms;
+
+struct LitLightParams {
+    light1Dir: vec4f,
+    light1Diffuse: vec4f,
+    light2Dir: vec4f,
+    light2Diffuse: vec4f,
+    emissiveColor: vec4f,
+    world: mat4x4f,
+    eyePos: vec4f,
+    light0Specular: vec4f,
+    light1Specular: vec4f,
+    light2Specular: vec4f,
+    specularColorPower: vec4f,
+    normalMatrixCol0: vec4f,
+    normalMatrixCol1: vec4f,
+    normalMatrixCol2: vec4f,
+};
+@group(0) @binding(1) var<uniform> lp: LitLightParams;
+@group(1) @binding(0) var texSampler: sampler;
+@group(1) @binding(1) var tex: texture_2d<f32>;
+
+struct VertexInput {
+    @location(0) position: vec3f,
+    @location(1) normal: vec3f,
+    @location(2) uv: vec2f,
+};
+struct VertexOutput {
+    @builtin(position) position: vec4f,
+    @location(0) uv: vec2f,
+    @location(1) litRGB: vec3f,
+    @location(2) specularRGB: vec3f,
+};
+@vertex fn vs_main(input: VertexInput) -> VertexOutput {
+    var output: VertexOutput;
+    output.position = u.mvp * vec4f(input.position, 1.0);
+    output.uv = input.uv;
+    let normalMatrix = mat3x3f(lp.normalMatrixCol0.xyz, lp.normalMatrixCol1.xyz, lp.normalMatrixCol2.xyz);
+    let worldNormal = normalMatrix * input.normal;
+    let worldPos = (lp.world * vec4f(input.position, 1.0)).xyz;
+    let n = normalize(worldNormal);
+    let e = normalize(lp.eyePos.xyz - worldPos);
+    // Same disabled-light NaN guard as the per-pixel-lit shader: a disabled DirectionalLight
+    // forwards Direction=(0,0,0) (only DiffuseColor/SpecularColor are zeroed), and normalize() on
+    // a true zero vector is undefined and can poison the whole sum with NaN.
+    let dir0sq = dot(u.light0DirTexture.xyz, u.light0DirTexture.xyz);
+    let dir1sq = dot(lp.light1Dir.xyz, lp.light1Dir.xyz);
+    let dir2sq = dot(lp.light2Dir.xyz, lp.light2Dir.xyz);
+    let nl0 = select(vec3f(0.0), normalize(u.light0DirTexture.xyz), dir0sq > 0.0);
+    let nl1 = select(vec3f(0.0), normalize(lp.light1Dir.xyz), dir1sq > 0.0);
+    let nl2 = select(vec3f(0.0), normalize(lp.light2Dir.xyz), dir2sq > 0.0);
+    let dotl0 = dot(n, -nl0); let zerol0 = step(0.0, dotl0); let ndotl0 = max(dotl0, 0.0);
+    let dotl1 = dot(n, -nl1); let zerol1 = step(0.0, dotl1); let ndotl1 = max(dotl1, 0.0);
+    let dotl2 = dot(n, -nl2); let zerol2 = step(0.0, dotl2); let ndotl2 = max(dotl2, 0.0);
+    let lightSum = u.ambientLighting.xyz + ndotl0 * u.light0DiffuseVertexColor.xyz
+                   + ndotl1 * lp.light1Diffuse.xyz + ndotl2 * lp.light2Diffuse.xyz;
+    let h0 = normalize(e - nl0); let spec0 = pow(max(dot(h0, n), 0.0) * zerol0, lp.specularColorPower.w);
+    let h1 = normalize(e - nl1); let spec1 = pow(max(dot(h1, n), 0.0) * zerol1, lp.specularColorPower.w);
+    let h2 = normalize(e - nl2); let spec2 = pow(max(dot(h2, n), 0.0) * zerol2, lp.specularColorPower.w);
+    output.specularRGB = (spec0 * lp.light0Specular.xyz + spec1 * lp.light1Specular.xyz
+                          + spec2 * lp.light2Specular.xyz) * lp.specularColorPower.xyz;
+    output.litRGB = lightSum * u.diffuseColor.rgb + lp.emissiveColor.xyz;
+    return output;
+}
+@fragment fn fs_main(input: VertexOutput) -> @location(0) vec4f {
+    let textureEnabled = u.light0DirTexture.w;
+    let sampled = select(vec4f(1.0), textureSample(tex, texSampler, input.uv), textureEnabled > 0.5);
+    let lightingEnabled = u.ambientLighting.w;
+    if (lightingEnabled <= 0.5) {
+        return u.diffuseColor * sampled;
+    }
+    var color = vec4f(input.litRGB, u.diffuseColor.a) * sampled;
+    color = vec4f(color.rgb + input.specularRGB * color.a, color.a);
+    return color;
+}
+)WGSL";
+
+        WGPUShaderSourceWGSL vertexLitWgsl{};
+        vertexLitWgsl.chain.sType = WGPUSType_ShaderSourceWGSL;
+        vertexLitWgsl.code = StringView(vertexLitShaderSource);
+        WGPUShaderModuleDescriptor vertexLitShaderDescriptor{};
+        vertexLitShaderDescriptor.label = StringView("CNA WebGPU LitTextured3D VertexLit WGSL");
+        vertexLitShaderDescriptor.nextInChain = &vertexLitWgsl.chain;
+        litTexturedVertexLitShader_ = wgpuDeviceCreateShaderModule(device_, &vertexLitShaderDescriptor);
+
         std::array<WGPUBindGroupLayoutEntry, 2> layoutEntries{};
         layoutEntries[0].binding = 0;
         layoutEntries[0].visibility = WGPUShaderStage_Vertex | WGPUShaderStage_Fragment;
@@ -1549,7 +1661,8 @@ struct VertexOutput {
         pipelineLayoutDescriptor.bindGroupLayouts = groupLayouts.data();
         litPipelineLayout_ = wgpuDeviceCreatePipelineLayout(device_, &pipelineLayoutDescriptor);
 
-        if (litTexturedShader_ == nullptr || litBindGroupLayout_ == nullptr || litPipelineLayout_ == nullptr)
+        if (litTexturedShader_ == nullptr || litBindGroupLayout_ == nullptr || litPipelineLayout_ == nullptr ||
+            litTexturedVertexLitShader_ == nullptr)
             throw std::runtime_error("CNA WebGPU: failed to create LitTextured3D GPU resources");
     }
 
@@ -1612,6 +1725,67 @@ struct VertexOutput {
         if (created == nullptr)
             throw std::runtime_error("CNA WebGPU: failed to create LitTextured3D pipeline");
         litTexturedPipelines_[key] = created;
+        return created;
+    }
+
+    WGPURenderPipeline WebGPUGraphicsBackend::GetOrCreatePipelineLitTextured3DVertexLit(
+        WGPUPrimitiveTopology topology, bool depthTest, bool depthWrite, int depthFunc)
+    {
+        const int key = (static_cast<int>(topology) * 8 + depthFunc) * 4 + (depthTest ? 2 : 0) + (depthWrite ? 1 : 0);
+        if (auto it = litTexturedVertexLitPipelines_.find(key); it != litTexturedVertexLitPipelines_.end())
+            return it->second;
+
+        struct LitTexturedVertex { float x, y, z, nx, ny, nz, u, v; };
+        std::array<WGPUVertexAttribute, 3> attributes{};
+        attributes[0].format = WGPUVertexFormat_Float32x3;
+        attributes[0].offset = offsetof(LitTexturedVertex, x);
+        attributes[0].shaderLocation = 0;
+        attributes[1].format = WGPUVertexFormat_Float32x3;
+        attributes[1].offset = offsetof(LitTexturedVertex, nx);
+        attributes[1].shaderLocation = 1;
+        attributes[2].format = WGPUVertexFormat_Float32x2;
+        attributes[2].offset = offsetof(LitTexturedVertex, u);
+        attributes[2].shaderLocation = 2;
+        WGPUVertexBufferLayout vertexBufferLayout{};
+        vertexBufferLayout.arrayStride = sizeof(LitTexturedVertex);
+        vertexBufferLayout.stepMode = WGPUVertexStepMode_Vertex;
+        vertexBufferLayout.attributeCount = attributes.size();
+        vertexBufferLayout.attributes = attributes.data();
+
+        WGPUColorTargetState target{};
+        target.format = surfaceFormat_;
+        target.writeMask = WGPUColorWriteMask_All;
+        WGPUFragmentState fragment{};
+        fragment.module = litTexturedVertexLitShader_;
+        fragment.entryPoint = StringView("fs_main");
+        fragment.targetCount = 1;
+        fragment.targets = &target;
+
+        WGPURenderPipelineDescriptor pipeline{};
+        pipeline.label = StringView("CNA WebGPU LitTextured3D VertexLit Pipeline");
+        pipeline.layout = litPipelineLayout_;
+        pipeline.vertex.module = litTexturedVertexLitShader_;
+        pipeline.vertex.entryPoint = StringView("vs_main");
+        pipeline.vertex.bufferCount = 1;
+        pipeline.vertex.buffers = &vertexBufferLayout;
+        pipeline.primitive.topology = topology;
+        pipeline.primitive.frontFace = WGPUFrontFace_CCW;
+        pipeline.primitive.cullMode = WGPUCullMode_None;
+        pipeline.multisample.count = 1;
+        pipeline.multisample.mask = std::numeric_limits<std::uint32_t>::max();
+        pipeline.multisample.alphaToCoverageEnabled = false;
+        pipeline.fragment = &fragment;
+
+        WGPUDepthStencilState depthStencil = WGPU_DEPTH_STENCIL_STATE_INIT;
+        depthStencil.format = WGPUTextureFormat_Depth24PlusStencil8;
+        depthStencil.depthWriteEnabled = depthWrite ? WGPUOptionalBool_True : WGPUOptionalBool_False;
+        depthStencil.depthCompare = depthTest ? ToWGPUCompareFunction(depthFunc) : WGPUCompareFunction_Always;
+        pipeline.depthStencil = &depthStencil;
+
+        WGPURenderPipeline created = wgpuDeviceCreateRenderPipeline(device_, &pipeline);
+        if (created == nullptr)
+            throw std::runtime_error("CNA WebGPU: failed to create LitTextured3D VertexLit pipeline");
+        litTexturedVertexLitPipelines_[key] = created;
         return created;
     }
 
@@ -3005,8 +3179,11 @@ struct VertexOutput {
             texBindDescriptor.entries = texEntries.data();
             WGPUBindGroup texBindGroup = wgpuDeviceCreateBindGroup(device_, &texBindDescriptor);
 
-            WGPURenderPipeline pipe = GetOrCreatePipelineLitTextured3D(command.topology, command.depthTest,
-                                                                       command.depthWrite, command.depthFunc);
+            WGPURenderPipeline pipe = command.preferVertexLit
+                ? GetOrCreatePipelineLitTextured3DVertexLit(command.topology, command.depthTest,
+                                                             command.depthWrite, command.depthFunc)
+                : GetOrCreatePipelineLitTextured3D(command.topology, command.depthTest,
+                                                    command.depthWrite, command.depthFunc);
             wgpuRenderPassEncoderSetPipeline(pass, pipe);
             wgpuRenderPassEncoderSetBindGroup(pass, 0, uboBindGroup, 0, nullptr);
             wgpuRenderPassEncoderSetBindGroup(pass, 1, texBindGroup, 0, nullptr);
@@ -3062,6 +3239,9 @@ struct VertexOutput {
         command.depthFunc = depthCompareFunction_;
         command.depthWrite = depthWriteEnabled_;
         command.texture = static_cast<const WebGPUTextureBackend*>(params.texture0);
+        // Task 1105: XNA's real BasicEffect.PreferPerPixelLighting default is false (per-vertex),
+        // matching every other backend's own dispatch condition for this flag.
+        command.preferVertexLit = params.lightingEnabled && !params.preferPerPixelLighting;
         const Matrix wvp = world * view * projection;
         FillExtUniforms(command.uniforms, wvp, params);
         FillLitLightUniforms(command.lightUniforms, params);

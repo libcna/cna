@@ -11,6 +11,21 @@
 // Uses an identity bone palette (weight=1 on bone 0, which defaults to Identity), isolating
 // skinning from the specular formula under test.
 //
+// Task 1102b correction (plan_graphics.md Phase 80): this test never calls
+// SetPreferPerPixelLightingProperty(), so it always exercised whatever this backend's
+// SkinnedEffect dispatch treated as its default. Before Task 1102b, that default was
+// unconditionally per-pixel (the opposite of real XNA's own default, per-vertex/Gouraud) --
+// after Task 1102b, it correctly matches XNA's own PreferPerPixelLighting=false default. Case
+// (a)'s sampled centre pixel sits exactly on this quad's diagonal seam between its two triangles
+// (shared TL(-1,1,0)/BR(1,-1,0) edge), so it now reads the Gouraud-interpolated AVERAGE of those
+// two vertices' own specular terms (~127 analytically, matching
+// easygl_basiceffect_preferperpixellighting_test.cpp's own identical derivation for the same
+// scene) instead of a fresh per-pixel evaluation at the origin (the old per-pixel value here was
+// ~155). Case (b)'s off-axis eye position still passes within this test's own existing ±10
+// tolerance under the new default and was left unchanged, same precedent
+// easygl_basiceffect_specular_test.cpp's own Task 1102 update already established. Cases (c)/(d)
+// are unaffected (no specular term / light disabled, respectively).
+//
 // Exit code 0 = PASS, 1 = FAIL.
 
 #include "Microsoft/Xna/Framework/Game.hpp"
@@ -64,8 +79,11 @@ static const Vector3 kEyeOffAxis(3.0f, 0.0f, 1.0f);
 
 // Precisely computed offline (Python) from the exact FNA half-vector Blinn-Phong formula --
 // identical numbers to BasicEffect's own specular test (same shared Lighting.fxh formula).
-static const Color kExpectedStraightOn(155, 155, 155, 255);   // dotH=0.9732, spec=0.4199
-static const Color kExpectedOffAxisEye(68, 68, 68, 255);       // dotH=0.9239, spec=0.0794
+// kExpectedStraightOn updated for Task 1102b (see this file's own header comment): now the
+// Gouraud-interpolated average of TL/BR's own per-vertex specular terms (~128 analytically,
+// rendered 126), not a fresh per-pixel evaluation at the origin (old per-pixel value was ~155).
+static const Color kExpectedStraightOn(126, 126, 126, 255);   // vertex-lit Gouraud average
+static const Color kExpectedOffAxisEye(68, 68, 68, 255);       // dotH=0.9239, spec=0.0794 (old per-pixel value; still within tolerance of the vertex-lit result, left unchanged -- see header comment)
 static const Color kExpectedNoSpecular(48, 48, 48, 255);       // diffuse+ambient only
 static const Color kExpectedLightDisabled(2, 2, 2, 255);       // ambient only
 
