@@ -5379,43 +5379,57 @@ an audit's claims without cross-checking them against the real code first.
   two higher-level summary documents (`docs/xna-4-api-coverage.md`, `AUDIT.md`) had fallen behind
   it.
 
-* [ ] P13-DYNAMIC-001 (self-found while investigating P13-3D-001, **not fixed this pass**):
-  `DynamicSoundEffectInstance` never overrides `setVolumeProperty()`/`setPitchProperty()`/
-  `setPanProperty()`/`Apply3D()` -- all four are inherited unchanged from `SoundEffectInstance` and
-  operate on the protected `track_` member, but `DynamicSoundEffectInstance` never populates
-  `track_` at all; it manages its own, entirely separate `dynamicTrack_` field instead (`Play()`/
-  `Stop()`/`StopInternal()` all read/write `dynamicTrack_` exclusively). Calling any of `Volume`/
-  `Pitch`/`Pan`/`Apply3D` on a live, playing `DynamicSoundEffectInstance` today is a complete,
-  silent no-op on the real track -- confirmed by reading `DynamicSoundEffectInstance.cpp` end to
-  end (no reference to `track_` anywhere in the file) and confirming no existing test in
-  `DynamicSoundEffectInstanceTests.cpp` exercises any of these four (a genuine, previously
-  untested-and-undiscovered gap, not a re-confirmation of something already known).
-  This is the *exact same root cause* `CP-15` already names and fixed for `Pause()`/`Resume()` (see
-  that fix's own comment in `DynamicSoundEffectInstance.cpp`: "the base `SoundEffectInstance::
-  Pause()` operates on the protected `track_` member, which a dynamic instance never populates ...
-  without this override, `Pause()`/`Resume()` were silent no-ops on every `DynamicSoundEffectInstance`")
-  -- `CP-15` fixed two of the six affected methods and missed these other four. Real FNA has no
-  such split at all: `DynamicSoundEffectInstance` shares the exact same single native `handle`
-  field as every other `SoundEffectInstance`, so `Volume`/`Pitch`/`Pan`/`Apply3D` already work
-  correctly there with zero overrides needed -- CNA's `dynamicTrack_` split (whose own original
-  purpose predates this investigation and wasn't re-derived here) is what actually created this
-  entire class of bug, `CP-15`'s two fixes included.
-  **Not fixed in this pass, deliberately.** A correct, non-superficial fix has two shapes, and
-  both are meaningfully larger than this pass's scope (the three findings from an external audit
-  plus their own direct, narrow follow-ups):
-  (a) override all four methods on `DynamicSoundEffectInstance` to operate on `dynamicTrack_`
-  instead, which -- for real FNA-level fidelity, not a half-fix -- means re-deriving the entire
-  crossfeed-pan/DSP-callback mechanism `P11-PAN-001`/`INTERNAL_applyComposedTrackProperties()`
-  (this pass's own P13-3D-001) already built for `track_`, a second time, against a different
-  member; or
-  (b) the more likely actually-correct root-cause fix -- stop introducing a second, separate
-  `dynamicTrack_` field at all, and have `DynamicSoundEffectInstance` reuse the inherited `track_`
-  the way the base class's own comment ("These members are protected so `DynamicSoundEffectInstance`
-  can manage its own state") implies was the original intent -- which touches a currently
-  fully-passing, previously-audited subsystem (`Phase 10.7`) in a way that needs its own dedicated,
-  careful, line-by-line pass (every one of `Play`/`Stop`/`StopInternal`/`Pause`/`Resume`/
-  `getStateProperty`'s ~10 `dynamicTrack_` call sites), not a rushed side-fix bolted onto an
-  unrelated task.
-  Recorded here, left unchecked, as a real, verified, previously-undocumented gap for its own
-  future task -- not silently dropped, and not force-fit into this pass at lower quality just to
-  close the checkbox.
+* [x] P13-DYNAMIC-001 (self-found while investigating P13-3D-001): `DynamicSoundEffectInstance`
+  never overrode `setVolumeProperty()`/`setPitchProperty()`/`setPanProperty()`/`Apply3D()` -- all
+  four are inherited from `SoundEffectInstance` and operate on the protected `track_` member, but
+  `DynamicSoundEffectInstance` never populated `track_` at all; it managed its own, entirely
+  separate `dynamicTrack_` field instead (`Play()`/`Stop()`/`StopInternal()` all read/wrote
+  `dynamicTrack_` exclusively). Calling any of `Volume`/`Pitch`/`Pan`/`Apply3D` on a live, playing
+  `DynamicSoundEffectInstance` was a complete, silent no-op on the real track -- confirmed by
+  reading `DynamicSoundEffectInstance.cpp` end to end (no reference to `track_` anywhere in the
+  file) and confirming no existing test in `DynamicSoundEffectInstanceTests.cpp` exercised any of
+  these four (a genuine, previously untested-and-undiscovered gap, not a re-confirmation of
+  something already known). This is the *exact same root cause* `CP-15` already named and fixed for
+  `Pause()`/`Resume()` -- `CP-15` fixed two of the six affected methods and missed these other four.
+  Real FNA has no such split at all: `DynamicSoundEffectInstance` shares the exact same single
+  native `handle` field as every other `SoundEffectInstance`.
+  *Status:* Fixed, user-greenlit 2026-07-16 ("Unify track_/dynamicTrack_ (root cause)" over the
+  alternative of overriding all four methods against `dynamicTrack_` separately -- the smaller-
+  blast-radius option, but one that would leave the actual root cause in place for the next bug in
+  this family and duplicate `P13-3D-001`'s crossfeed-pan/composed-properties machinery a second
+  time). Removed `DynamicSoundEffectInstance::dynamicTrack_` entirely; every method that used to
+  read/write it (`Play()`, `Stop(bool)`, `StopInternal()`, `getStateProperty()`) now uses the
+  inherited protected `track_` instead, matching FNA's own single-`handle` model. Since
+  `Volume`/`Pitch`/`Pan`/`Apply3D`'s setters are ordinary (non-virtual) `SoundEffectInstance` member
+  functions operating on `this->track_`/`this->filterState_` regardless of the object's concrete
+  runtime type, they now work correctly on a `DynamicSoundEffectInstance` too with **zero** new
+  overrides needed -- the whole point of the root-cause fix over the alternative.
+  Also completed the parity properly rather than half-fixing it: `DynamicSoundEffectInstance::Play()`
+  used to apply only a bare `MIX_SetTrackGain(track, getVolumeProperty())`, never Pitch/Pan/Apply3D
+  state set before the first real `Play()` (when `track_` was still null) -- the same "lost before
+  Play()" class of bug `P13-3D-001` fixed for the static case. Moved
+  `INTERNAL_applyComposedTrackProperties()` from `private` to `protected` (the only member that
+  needed wider access; `Volume_`/`Pitch_`/etc. stay `private`, accessed only from within
+  `SoundEffectInstance`'s own member function bodies as always) so `DynamicSoundEffectInstance::Play()`
+  can call it too, and swapped the bare gain-only line for it.
+  Removed `DynamicSoundEffectInstance::Pause()`/`Resume()` entirely (not just renamed their field) --
+  once `track_` is shared, these two overrides are byte-for-byte functionally identical to the
+  inherited base virtuals (`Resume()`'s own `Play()` call already dispatches virtually to this
+  class's `Play()` override regardless of which class's `Resume()` body invokes it), so `CP-15`'s
+  original fix is now fully subsumed by the root-cause change rather than left as duplicate dead
+  code. `Stop(bool)`/`StopInternal()`/`getStateProperty()`/`Dispose()` remain their own overrides
+  (genuinely dynamic-specific: buffer-queue/dispatcher/stream cleanup, and `getStateProperty()`'s
+  own deliberate no-natural-completion-sync difference from the base, left unchanged/unexamined
+  since it's outside this task's actual scope).
+  *Tests:* 4 new (`DynamicSoundEffectInstanceTests.cpp`): `SetVolumeAfterPlayActuallyChangesLiveTrackGain`,
+  `SetPitchAfterPlayActuallyChangesLiveTrackFrequencyRatio` (both audit-failure-#2-style, verified
+  via real `MIX_GetTrackGain`/`MIX_GetTrackFrequencyRatio`), `SetPitchBeforePlayIsAppliedOncePlaying`
+  (audit-failure-#1-style, Pitch set before the first `Play()`), `Apply3DOnPlayingInstanceAttenuatesLiveTrackGain`.
+  `git stash`-verified: stashing the three production files (`SoundEffectInstance.hpp`,
+  `DynamicSoundEffectInstance.hpp/.cpp`) while keeping the new tests reproduces the exact failure
+  all 4 target (`ASSERT_NE(track, nullptr)` fails -- `track_` stays null pre-fix, exactly as
+  before). All existing `DynamicSoundEffectInstanceTests.cpp` tests (including the `CP-15`
+  Pause/Resume ones, now exercising the inherited base implementation instead of a removed
+  override) re-verified passing unchanged: 49/49 (was 45/45; +4 new tests, zero regressions).
+  Full audio-scoped suite 545/545 pass (was 541/541; +4 new tests). Full whole-repo `CnaTests`
+  suite also reverified green.

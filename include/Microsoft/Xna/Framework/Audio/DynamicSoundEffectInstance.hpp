@@ -98,11 +98,13 @@ namespace Microsoft::Xna::Framework::Audio
          */
         void Stop(bool immediate) override;
 
-        /** @brief Pauses playback of this instance. */
-        void Pause() override;
-
-        /** @brief Resumes a paused instance. */
-        void Resume() override;
+        // Pause()/Resume() are NOT overridden here (P13-DYNAMIC-001): now that this class shares
+        // the inherited `track_` with SoundEffectInstance instead of its own separate
+        // `dynamicTrack_`, the base class's own virtual Pause()/Resume() already operate on the
+        // right field and need no dynamic-specific override -- Resume()'s own `Play()` call
+        // dispatches virtually to this class's override regardless of which class's Resume() body
+        // runs it. Previously overridden here solely because of the old field split (CP-15); that
+        // reason no longer applies.
 
         /**
          * @brief Submits a complete 16-bit PCM byte buffer for playback.
@@ -164,7 +166,6 @@ namespace Microsoft::Xna::Framework::Audio
         bool                isFloat_ = false;
         bool                streamIsFloat_ = false; // format the live audioStream_ was created with
 
-        void* dynamicTrack_   = nullptr;
         void* audioStream_    = nullptr; // SDL_AudioStream*
 
         mutable std::mutex queueMutex_;

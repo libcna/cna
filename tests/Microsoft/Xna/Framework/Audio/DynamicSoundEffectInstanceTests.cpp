@@ -7,6 +7,8 @@
 #include "Microsoft/Xna/Framework/Audio/DynamicSoundEffectInstance.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundEffectInstance.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioChannels.hpp"
+#include "Microsoft/Xna/Framework/Audio/AudioEmitter.hpp"
+#include "Microsoft/Xna/Framework/Audio/AudioListener.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundState.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/Environment.hpp"
@@ -15,10 +17,16 @@
 #include "System/EventArgs.hpp"
 #include "System/TimeSpan.hpp"
 #include "System/Environment.hpp"
+#include "SoundEffectInstanceTestAccess.hpp"
+
+#include <SDL3_mixer/SDL_mixer.h>
 
 using Microsoft::Xna::Framework::Audio::AudioChannels;
+using Microsoft::Xna::Framework::Audio::AudioEmitter;
+using Microsoft::Xna::Framework::Audio::AudioListener;
 using Microsoft::Xna::Framework::Audio::DynamicSoundEffectInstance;
 using Microsoft::Xna::Framework::Audio::SoundEffectInstance;
+using Microsoft::Xna::Framework::Audio::SoundEffectInstanceTestAccess;
 using Microsoft::Xna::Framework::Audio::SoundState;
 
 namespace
@@ -272,7 +280,7 @@ TEST(DynamicSoundEffectInstanceTest, SubmitBufferWithNonFrameAlignedByteCountWhi
 }
 
 // P9-VALIDATION-011: without this, a caller that keeps submitting after Dispose() would grow
-// queuedBuffers_ unboundedly (the buffers can never be consumed once dynamicTrack_ is gone).
+// queuedBuffers_ unboundedly (the buffers can never be consumed once track_ is gone).
 TEST(DynamicSoundEffectInstanceTest, SubmitBufferAfterDisposeThrowsObjectDisposed)
 {
     DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
@@ -312,9 +320,11 @@ TEST(DynamicSoundEffectInstanceTest, PlayAfterDisposeThrowsObjectDisposed)
     EXPECT_THROW(d.Play(), System::ObjectDisposedException);
 }
 
-// P9-VALIDATION-010: Resume() delegates to Play() when there's no active dynamicTrack_, which is
+// P9-VALIDATION-010: Resume() delegates to Play() when there's no active track_, which is
 // also how a disposed instance surfaces this instead of silently no-op'ing -- see
 // SoundEffectInstanceTests.cpp's identical base-class test for the full FNA-matching rationale.
+// Resume() itself is the inherited SoundEffectInstance::Resume() (P13-DYNAMIC-001), whose Play()
+// call dispatches virtually to this class's own Play() override.
 TEST(DynamicSoundEffectInstanceTest, ResumeAfterDisposeThrowsObjectDisposed)
 {
     DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
@@ -463,8 +473,10 @@ TEST(DynamicSoundEffectInstanceTest, BufferNeededDoesNotFireWhenStreamHasEnoughD
 }
 
 // CP-15: Pause()/Resume() used to be silent no-ops on DynamicSoundEffectInstance -- the base
-// class's (non-virtual, pre-fix) implementation only ever touched the protected `track_` member,
-// which a dynamic instance never populates (Play()/Stop() manage their own `dynamicTrack_`).
+// class's implementation only ever touched the protected `track_` member, which a dynamic
+// instance used to never populate (it managed its own separate `dynamicTrack_` instead). Fixed
+// at the root by P13-DYNAMIC-001: DynamicSoundEffectInstance now shares `track_` directly, so the
+// inherited (no longer overridden) Pause()/Resume() operate on the right field automatically.
 TEST(DynamicSoundEffectInstanceTest, PauseThenResumeActuallyPausesAndResumesDynamicTrack)
 {
     DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
@@ -482,8 +494,10 @@ TEST(DynamicSoundEffectInstanceTest, PauseThenResumeActuallyPausesAndResumesDyna
     EXPECT_EQ(d.getStateProperty(), SoundState::Playing);
 }
 
-// Pausing via a SoundEffectInstance& base reference must resolve to the override (CP-15) --
-// confirms the fix relies on virtual dispatch, not on callers happening to use the derived type.
+// Pausing via a SoundEffectInstance& base reference must still work correctly (CP-15,
+// P13-DYNAMIC-001) -- confirms the shared-`track_` fix works through ordinary virtual dispatch to
+// the (now inherited, not overridden) base Pause()/Resume(), not just when a caller happens to
+// use the concrete DynamicSoundEffectInstance type directly.
 TEST(DynamicSoundEffectInstanceTest, PauseViaBaseRefResolvesToOverride)
 {
     DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
@@ -498,6 +512,83 @@ TEST(DynamicSoundEffectInstanceTest, PauseViaBaseRefResolvesToOverride)
 
     base.Resume();
     EXPECT_EQ(d.getStateProperty(), SoundState::Playing);
+}
+
+// ===================== P13-DYNAMIC-001: Volume/Pitch/Pan/Apply3D on a live dynamic track =====================
+//
+// Before this fix, these four were inherited unchanged from SoundEffectInstance and operated on
+// the protected `track_` member -- but DynamicSoundEffectInstance never populated `track_` at all,
+// managing its own separate `dynamicTrack_` instead (the same root cause CP-15 already fixed for
+// Pause()/Resume(), just never extended to these four). Calling any of them on a live, playing
+// DynamicSoundEffectInstance was a complete, silent no-op on the real track. Fixed by removing
+// `dynamicTrack_` entirely and sharing the inherited `track_`, matching FNA's own single-`handle`
+// model (DynamicSoundEffectInstance.cs has no such split).
+
+TEST(DynamicSoundEffectInstanceTest, SetVolumeAfterPlayActuallyChangesLiveTrackGain)
+{
+    DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
+    if (!tryStartHeadless(d))
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+
+    MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(d);
+    ASSERT_NE(track, nullptr);
+
+    d.setVolumeProperty(0.25f);
+    EXPECT_NEAR(MIX_GetTrackGain(track), 0.25f, 1e-5f);
+}
+
+TEST(DynamicSoundEffectInstanceTest, SetPitchAfterPlayActuallyChangesLiveTrackFrequencyRatio)
+{
+    DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
+    if (!tryStartHeadless(d))
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+
+    MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(d);
+    ASSERT_NE(track, nullptr);
+
+    d.setPitchProperty(1.0f); // +1 octave -> ratio 2.0
+    EXPECT_NEAR(MIX_GetTrackFrequencyRatio(track), 2.0f, 1e-4f);
+}
+
+// Pitch set BEFORE Play() (while track_ is still null) must still be applied once the track is
+// actually created -- Play() now shares SoundEffectInstance::Play()'s own composed-properties
+// application instead of only ever setting the plain volume gain.
+TEST(DynamicSoundEffectInstanceTest, SetPitchBeforePlayIsAppliedOncePlaying)
+{
+    DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
+    d.setPitchProperty(-1.0f); // -1 octave -> ratio 0.5, set before any Play() call
+
+    if (!tryStartHeadless(d))
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+
+    MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(d);
+    ASSERT_NE(track, nullptr);
+    EXPECT_NEAR(MIX_GetTrackFrequencyRatio(track), 0.5f, 1e-4f);
+}
+
+TEST(DynamicSoundEffectInstanceTest, Apply3DOnPlayingInstanceAttenuatesLiveTrackGain)
+{
+    DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
+    if (!tryStartHeadless(d))
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+
+    MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(d);
+    ASSERT_NE(track, nullptr);
+
+    AudioListener listener; // default position: origin
+    AudioEmitter farEmitter;
+    farEmitter.setPositionProperty({10000.0f, 0.0f, 0.0f}); // far -> strong attenuation
+    d.Apply3D(listener, farEmitter);
+
+    EXPECT_LT(MIX_GetTrackGain(track), 1.0f);
 }
 
 // P9-DYNAMIC-001: Pause() must not touch PendingBufferCount at all (matches FNA's Pause(), which

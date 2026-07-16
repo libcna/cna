@@ -86,7 +86,7 @@ namespace Microsoft::Xna::Framework::Audio
     SoundState DynamicSoundEffectInstance::getStateProperty() const
     {
 #ifdef SOUND_ENABLED
-        MIX_Track* track = AsTrackD(dynamicTrack_);
+        MIX_Track* track = AsTrackD(track_);
         if (!track) return SoundState::Stopped;
         if (MIX_TrackPaused(track)) return SoundState::Paused;
         if (MIX_TrackPlaying(track)) return SoundState::Playing;
@@ -132,7 +132,7 @@ namespace Microsoft::Xna::Framework::Audio
         if (current == SoundState::Paused)
         {
 #ifdef SOUND_ENABLED
-            MIX_Track* track = AsTrackD(dynamicTrack_);
+            MIX_Track* track = AsTrackD(track_);
             if (track)
             {
                 MIX_ResumeTrack(track);
@@ -156,12 +156,12 @@ namespace Microsoft::Xna::Framework::Audio
         MIX_Mixer* mixer = GetMixerOrThrowXna();
 
         // Destroy previous track if any.
-        MIX_Track* track = AsTrackD(dynamicTrack_);
+        MIX_Track* track = AsTrackD(track_);
         if (!track)
         {
             track = MIX_CreateTrack(mixer);
             if (!track) return;
-            dynamicTrack_ = track;
+            track_ = track;
         }
 
         if (!MIX_SetTrackAudioStream(track, AsStream(audioStream_)))
@@ -169,9 +169,14 @@ namespace Microsoft::Xna::Framework::Audio
             return;
         }
 
-        // CP-16: master volume is applied globally via MIX_SetMixerGain, not baked into each
-        // track's own gain (that would double-apply it -- see SoundEffect::setMasterVolumeProperty).
-        MIX_SetTrackGain(track, getVolumeProperty());
+        // P13-DYNAMIC-001: was a direct `MIX_SetTrackGain(track, getVolumeProperty())` (master
+        // volume itself is still applied globally via MIX_SetMixerGain, not baked in here -- CP-16,
+        // see SoundEffect::setMasterVolumeProperty) -- now shares the same composition routine
+        // Play()/Apply3D()/the Volume/Pitch/Pan setters use on a static SoundEffectInstance, so any
+        // Volume/Pitch/Pan/Apply3D state set on this instance before this first real Play() (e.g.
+        // before track_ existed at all) is applied now instead of silently staying unapplied until
+        // one of those setters happens to be called again afterward.
+        INTERNAL_applyComposedTrackProperties();
 
         SDL_PropertiesID props = SDL_CreateProperties();
         if (props != 0)
@@ -208,7 +213,7 @@ namespace Microsoft::Xna::Framework::Audio
         // before any Play()) -- only once playback has actually started does a non-immediate
         // Stop become a meaningful (and, for dynamic instances, invalid) request.
 #ifdef SOUND_ENABLED
-        if (!AsTrackD(dynamicTrack_))
+        if (!AsTrackD(track_))
         {
             return;
         }
@@ -236,12 +241,12 @@ namespace Microsoft::Xna::Framework::Audio
     void DynamicSoundEffectInstance::StopInternal()
     {
 #ifdef SOUND_ENABLED
-        MIX_Track* track = AsTrackD(dynamicTrack_);
+        MIX_Track* track = AsTrackD(track_);
         if (track)
         {
             MIX_StopTrack(track, 0);
             MIX_DestroyTrack(track);
-            dynamicTrack_ = nullptr;
+            track_ = nullptr;
         }
 #endif
         State_   = SoundState::Stopped;
@@ -254,43 +259,10 @@ namespace Microsoft::Xna::Framework::Audio
         streams.erase(std::remove(streams.begin(), streams.end(), this), streams.end());
     }
 
-    void DynamicSoundEffectInstance::Pause()
-    {
-#ifdef SOUND_ENABLED
-        // CP-15: the base SoundEffectInstance::Pause() operates on the protected `track_`
-        // member, which a dynamic instance never populates (Play()/Stop() above manage their
-        // own `dynamicTrack_` instead) -- without this override, Pause()/Resume() were silent
-        // no-ops on every DynamicSoundEffectInstance.
-        MIX_Track* track = AsTrackD(dynamicTrack_);
-        if (track && getStateProperty() == SoundState::Playing)
-        {
-            MIX_PauseTrack(track);
-            State_   = SoundState::Paused;
-            playing_ = false;
-        }
-#endif
-    }
-
-    void DynamicSoundEffectInstance::Resume()
-    {
-#ifdef SOUND_ENABLED
-        MIX_Track* track = AsTrackD(dynamicTrack_);
-        if (!track)
-        {
-            // P9-VALIDATION-010: same FNA-matching rationale as the base class override -- see
-            // SoundEffectInstance::Resume(). Play() is this class's own override, so this also
-            // pumps BufferNeeded/registers with FrameworkDispatcher like a direct Play() call would.
-            Play();
-            return;
-        }
-        if (getStateProperty() == SoundState::Paused)
-        {
-            MIX_ResumeTrack(track);
-            State_   = SoundState::Playing;
-            playing_ = true;
-        }
-#endif
-    }
+    // Pause()/Resume() are intentionally not defined here (P13-DYNAMIC-001) -- see the "not
+    // overridden here" comment on their declaration site (DynamicSoundEffectInstance.hpp): the
+    // inherited SoundEffectInstance::Pause()/Resume() now operate on the correct, shared `track_`
+    // and need no dynamic-specific override.
 
     void DynamicSoundEffectInstance::Dispose()
     {
@@ -298,9 +270,12 @@ namespace Microsoft::Xna::Framework::Audio
         {
             return;
         }
-        Stop();                          // stops/destroys the dynamic track and deregisters from the dispatcher
+        Stop();                          // stops/destroys track_ and deregisters from the dispatcher
         DestroyStream();                 // frees the SDL audio stream
-        SoundEffectInstance::Dispose();  // releases the base track (none) and marks the instance disposed
+        // track_ is already null by the time this runs (Stop() above nulled it via
+        // StopInternal()), so DestroyTrackSafe(track_) is a no-op here; this call's only real
+        // effect is marking the instance disposed.
+        SoundEffectInstance::Dispose();
     }
 
     // --- buffer submission ---
@@ -318,7 +293,7 @@ namespace Microsoft::Xna::Framework::Audio
     {
         // P9-VALIDATION-011: cannot queue buffers after disposal -- without this, a caller that
         // keeps submitting after Dispose() would grow queuedBuffers_ unboundedly (the buffers
-        // would never be consumed, since Dispose() nulls dynamicTrack_ and getStateProperty()
+        // would never be consumed, since Dispose() nulls track_ and getStateProperty()
         // reports Stopped, so SubmitQueuedToStream() is never reached below).
         if (getIsDisposedProperty())
         {

@@ -45,6 +45,20 @@ namespace Microsoft::Xna::Framework::Audio
         bool  hasStarted_   = false; // true once Play() has been called; never reset (gates IsLooped)
         SoundState State_   = SoundState::Stopped;
 
+        // P13-DYNAMIC-001: recomposes and writes this instance's full set of live track properties
+        // (gain, pan, frequency ratio) from Volume_/Pan_/Pitch_ together with the persisted
+        // spatial state (attenuation_/dopplerFactor_/spatialPan_, private below) -- the single call
+        // site Play(), setVolumeProperty(), setPitchProperty(), setPanProperty(), and Apply3D() all
+        // share (AUDIO-001), so a spatial attenuation/pan/Doppler value set by Apply3D survives
+        // every one of those calls instead of being overwritten by whichever runs next. Pan uses
+        // spatialPan_ once is3D_ has latched, otherwise the plain Pan_ property, matching CP-20.
+        // No-op if there is no live track yet (matches every INTERNAL_apply*'s existing null-track
+        // guard). Protected (not private) so DynamicSoundEffectInstance::Play() can call it too,
+        // now that both classes share the same `track_` (P13-DYNAMIC-001 -- previously
+        // DynamicSoundEffectInstance managed its own separate `dynamicTrack_` and never applied any
+        // of this).
+        void INTERNAL_applyComposedTrackProperties();
+
     private:
         // Keeps the sound effect's underlying audio resource alive for the lifetime of this
         // instance, independent of whether the originating SoundEffect object itself still
@@ -162,16 +176,6 @@ namespace Microsoft::Xna::Framework::Audio
         // MIX_SetTrackCookedCallback's own documented "may be called... at any time" contract.
         // No-op if track_ hasn't been created yet.
         void EnsureTrackDspState();
-
-        // AUDIO-001: recomposes and writes this instance's full set of live track properties
-        // (gain, pan, frequency ratio) from Volume_/Pan_/Pitch_ together with the persisted
-        // spatial state (attenuation_/dopplerFactor_/spatialPan_) above -- the single call site
-        // Play(), setVolumeProperty(), setPitchProperty(), setPanProperty(), and Apply3D() all now
-        // share, so a spatial attenuation/pan/Doppler value set by Apply3D survives every one of
-        // those calls instead of being overwritten by whichever runs next. Pan uses spatialPan_
-        // once is3D_ has latched, otherwise the plain Pan_ property, matching CP-20. No-op if
-        // there is no live track yet (matches every INTERNAL_apply*'s existing null-track guard).
-        void INTERNAL_applyComposedTrackProperties();
 
         // Pure conversion helpers (P9-XACT-011), split out of INTERNAL_applyXactTrackFilter so
         // they're independently unit-testable without a real SDL3_mixer device driving the
