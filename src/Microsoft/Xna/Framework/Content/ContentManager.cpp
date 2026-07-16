@@ -1616,6 +1616,16 @@ namespace Microsoft::Xna::Framework::Content
 
         log::Debug(std::string("Loading asset: ") + assetName);
 
+        // .xnb always wins first (cnb.md's "Core rule") -- same reasoning as Load<Texture2D>'s and
+        // Load<SoundEffect>'s own specialisations above; this one needs its own copy too since
+        // move-only types skip the generic Load<T>() template's any-cache body entirely
+        // (plan_xnb.md XNB-25).
+        const std::string xnbCandidate = BuildAssetPath(assetName) + ".xnb";
+        if (std::filesystem::exists(xnbCandidate))
+        {
+            return LoadXnbAsset<Graphics::TextureCube>(xnbCandidate, assetName);
+        }
+
         auto readerIt = typeReaders_.find(std::type_index(typeid(Graphics::TextureCube)));
         if (readerIt == typeReaders_.end())
             throw ContentLoadException(
