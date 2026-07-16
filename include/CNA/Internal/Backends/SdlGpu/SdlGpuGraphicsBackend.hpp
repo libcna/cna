@@ -217,6 +217,12 @@ namespace CNA::Internal::Backends::SdlGpu
         int size = 0;
         bool mipMap = false;
         SDL_GPUTexture* cubeTexture = nullptr;
+        // A single-layer SDL_GPU_TEXTURETYPE_2D texture (NOT a 6-layer array) shared across
+        // whichever face is currently the active render target, same convention as depthTexture
+        // below -- SDL_gpu's own debug validation asserts "For array textures: sample_count must be
+        // SDL_GPU_SAMPLECOUNT_1", so a real 6-layer multisampled array texture is not a valid
+        // construction at all (found 2026-07-16 via SDLGPU-6's own debug_mode wiring, which
+        // surfaced this previously-silent violation as a genuine hang, not just a warning).
         SDL_GPUTexture* msaaTexture = nullptr;
         SDL_GPUTexture* depthTexture = nullptr;
         /// Same rationale as SdlGpuRenderTarget2DState::sampleCount.
@@ -1095,6 +1101,14 @@ namespace CNA::Internal::Backends::SdlGpu
 
         /** @brief Returns the underlying `SDL_GPUDevice`. NOXNA — internal use only. */
         NOXNA [[nodiscard]] SDL_GPUDevice* Device() const { return device_; }
+        /**
+         * @brief Whether `SDL_CreateGPUDevice`'s `debug_mode` was requested for this device.
+         *
+         * Mirrors `D3D11GraphicsBackend::IsDebugLayerEnabledEXT()`'s identical `#ifndef NDEBUG`
+         * CNA-side toggle rationale (SDLGPU-6) — a debug build asks the Vulkan driver for
+         * `SDL_gpu`'s own validation layer, a release build does not. NOXNA.
+         */
+        NOXNA [[nodiscard]] bool IsDebugModeEnabledEXT() const { return debugModeEnabled_; }
 
     private:
         struct LogicalViewport
@@ -1307,6 +1321,9 @@ namespace CNA::Internal::Backends::SdlGpu
         SDL_GPUDevice* device_ = nullptr;
         SDL_GPUTexture* depthStencilTexture_ = nullptr;
         SDL_GPUTextureFormat depthStencilFormat_ = SDL_GPU_TEXTUREFORMAT_INVALID;
+        /// SDLGPU-6: whether SDL_CreateGPUDevice's debug_mode was requested (an #ifndef NDEBUG
+        /// CNA-side toggle, mirroring D3D11GraphicsBackend::debugLayerEnabled_'s identical rationale).
+        bool debugModeEnabled_ = false;
 
         SDL_GPUShader* spriteVertexShader_ = nullptr;
         SDL_GPUShader* spriteFragmentShader_ = nullptr;

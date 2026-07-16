@@ -486,7 +486,16 @@ namespace CNA::Internal::Backends::SdlGpu
         // plan_sdlgpu.md SDLGPU-6: request SPIR-V first -- the only shader format this device's
         // vendored SDL3 compiles a driver for on Linux (Vulkan). DXBC/DXIL/MSL support (Windows/
         // macOS drivers) is deferred to plan_sdlgpu.md's Phase SDLGPU-13.
-        device_ = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV, /*debug_mode=*/false, /*name=*/nullptr);
+        // debug_mode mirrors D3D11GraphicsBackend::CreateDeviceResources()'s own #ifndef NDEBUG
+        // CNA-side toggle (design decision 12: the validation/debug layer is a debug-build
+        // convenience, never a hard requirement) -- a debug build asks the Vulkan driver for
+        // SDL_gpu's own validation layer, a release build does not.
+#ifndef NDEBUG
+        debugModeEnabled_ = true;
+#else
+        debugModeEnabled_ = false;
+#endif
+        device_ = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV, debugModeEnabled_, /*name=*/nullptr);
         if (device_ == nullptr)
             throw std::runtime_error(std::string("CNA SDL_GPU: SDL_CreateGPUDevice failed: ") + SDL_GetError());
 
@@ -516,6 +525,9 @@ namespace CNA::Internal::Backends::SdlGpu
         physicalHeight_ = h;
 
         IGraphicsBackend::RegisterForWindow(window_, this);
+
+        SDL_Log("[SDL_GPU] Backend initialised (%dx%d), debug mode %s",
+                physicalWidth_, physicalHeight_, debugModeEnabled_ ? "enabled" : "disabled");
     }
 
     SdlGpuGraphicsBackend::~SdlGpuGraphicsBackend()
@@ -830,15 +842,33 @@ namespace CNA::Internal::Backends::SdlGpu
         constexpr SDL_GPUTextureFormat kRenderTargetFormat = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
 
         SDL_GPUColorTargetInfo colorTarget{};
-        colorTarget.texture = cube->msaaTexture != nullptr ? cube->msaaTexture : cube->cubeTexture;
-        colorTarget.layer_or_depth_plane = static_cast<Uint32>(face);
+        if (cube->msaaTexture != nullptr)
+        {
+            // msaaTexture is a single-layer 2D texture shared across faces (see its own doc
+            // comment on SdlGpuRenderTargetCubeState for why) -- layer_or_depth_plane 0, not face.
+            colorTarget.texture = cube->msaaTexture;
+            colorTarget.layer_or_depth_plane = 0;
+        }
+        else
+        {
+            colorTarget.texture = cube->cubeTexture;
+            colorTarget.layer_or_depth_plane = static_cast<Uint32>(face);
+        }
         colorTarget.clear_color = cube->clearColor[face];
         colorTarget.load_op = cube->clearColorPending[face] ? SDL_GPU_LOADOP_CLEAR : SDL_GPU_LOADOP_LOAD;
+        // msaaTexture is reused across every face's own pass this frame (it's a disposable scratch
+        // resource, immediately resolved away each time) -- SDL_gpu's own doc comment on this cycle
+        // flag says reusing a bound resource across passes without cycling "will produce unexpected
+        // results" (this was the real cause of a genuine Vulkan validation layout-hazard error found
+        // 2026-07-16 once SDLGPU-6 turned debug_mode on for real). cubeTexture must NEVER cycle here
+        // (whether as the direct target below or as resolve_texture above) -- cycling wipes the
+        // ENTIRE persistent 6-layer resource, including every other face already written this frame.
+        colorTarget.cycle = (cube->msaaTexture != nullptr);
         if (cube->msaaTexture != nullptr)
         {
             // Automatic render-pass-end resolve -- SDL_gpu has no multisampled cube texture type,
-            // so the MSAA color target is a plain 6-layer 2D array resolved directly into the
-            // active face of the real (single-sample) cube texture.
+            // so the (single-layer, shared) MSAA color target resolves directly into the active
+            // face of the real (single-sample, 6-layer) cube texture.
             colorTarget.resolve_texture = cube->cubeTexture;
             colorTarget.resolve_layer = static_cast<Uint32>(face);
             colorTarget.store_op = SDL_GPU_STOREOP_RESOLVE;
@@ -3512,7 +3542,15 @@ namespace CNA::Internal::Backends::SdlGpu
         SDL_GPUTextureCreateInfo createInfo{};
         createInfo.type = SDL_GPU_TEXTURETYPE_3D;
         createInfo.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
-        createInfo.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER;
+        // SDL_gpu's own debug validation requires COLOR_TARGET usage (in addition to SAMPLER) on
+        // any texture SDL_GenerateMipmapsForGPUTexture is called on ("GenerateMipmaps texture must
+        // be created with SAMPLER and COLOR_TARGET usage flags!") -- found 2026-07-16 once
+        // SDLGPU-6 wired debug_mode to a real CNA-side toggle for the first time (previously a
+        // silently-tolerated violation that produced a genuine hang under Vulkan validation, not
+        // just a warning). Only widened when mipMap is actually requested, matching this
+        // constructor's own minimal-usage convention for the common non-mipmap case.
+        createInfo.usage = mipMap_ ? (SDL_GPU_TEXTUREUSAGE_SAMPLER | SDL_GPU_TEXTUREUSAGE_COLOR_TARGET)
+                                    : SDL_GPU_TEXTUREUSAGE_SAMPLER;
         createInfo.width = static_cast<Uint32>(width);
         createInfo.height = static_cast<Uint32>(height);
         createInfo.layer_count_or_depth = static_cast<Uint32>(depth);
@@ -3673,7 +3711,12 @@ namespace CNA::Internal::Backends::SdlGpu
         SDL_GPUTextureCreateInfo createInfo{};
         createInfo.type = SDL_GPU_TEXTURETYPE_CUBE;
         createInfo.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
-        createInfo.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER;
+        // SDL_gpu's own debug validation requires COLOR_TARGET usage (in addition to SAMPLER) on
+        // any texture SDL_GenerateMipmapsForGPUTexture is called on -- see
+        // SdlGpuTexture3DBackend's own identical constructor comment for the real finding this fix
+        // came from. Only widened when mipMap is actually requested.
+        createInfo.usage = mipMap_ ? (SDL_GPU_TEXTUREUSAGE_SAMPLER | SDL_GPU_TEXTUREUSAGE_COLOR_TARGET)
+                                    : SDL_GPU_TEXTUREUSAGE_SAMPLER;
         createInfo.width = static_cast<Uint32>(size);
         createInfo.height = static_cast<Uint32>(size);
         createInfo.layer_count_or_depth = 6;
@@ -4069,17 +4112,25 @@ namespace CNA::Internal::Backends::SdlGpu
 
         if (multiSampleCount_ > 0)
         {
-            // SDL_GPU_TEXTURETYPE_CUBE has no multisampled variant -- the actual multisampled
-            // render target is a plain 6-layer 2D array, resolved into cubeTexture's active face
-            // automatically via SDL_GPUColorTargetInfo.resolve_texture/resolve_layer at render-pass
-            // end (see RenderToTargetCubeFace) -- no manual ResolveSubresource-equivalent needed.
+            // SDL_GPU_TEXTURETYPE_CUBE has no multisampled variant. The original design used a
+            // 6-layer 2D_ARRAY MSAA texture, one layer per face -- but SDL_gpu's own debug
+            // validation forbids sample_count>1 on ANY array texture ("For array textures:
+            // sample_count must be SDL_GPU_SAMPLECOUNT_1"), found 2026-07-16 once SDLGPU-6 wired
+            // debug_mode to a real CNA-side toggle for the first time (previously silently
+            // tolerated -- a genuine hang under Vulkan validation, not just a warning). Fixed to a
+            // single-layer SDL_GPU_TEXTURETYPE_2D texture instead, shared across whichever face is
+            // currently the active render target -- the exact same "one shared resource, only one
+            // face active at a time" convention depthTexture below already uses. Resolves into
+            // cubeTexture's active face via SDL_GPUColorTargetInfo.resolve_texture/resolve_layer at
+            // render-pass end (see RenderToTargetCubeFace) -- no manual ResolveSubresource-equivalent
+            // needed.
             SDL_GPUTextureCreateInfo msaaInfo{};
-            msaaInfo.type = SDL_GPU_TEXTURETYPE_2D_ARRAY;
+            msaaInfo.type = SDL_GPU_TEXTURETYPE_2D;
             msaaInfo.format = kFormat;
             msaaInfo.usage = SDL_GPU_TEXTUREUSAGE_COLOR_TARGET;
             msaaInfo.width = static_cast<Uint32>(size);
             msaaInfo.height = static_cast<Uint32>(size);
-            msaaInfo.layer_count_or_depth = 6;
+            msaaInfo.layer_count_or_depth = 1;
             msaaInfo.num_levels = 1;
             msaaInfo.sample_count = sampleCount;
             state_->msaaTexture = SDL_CreateGPUTexture(device, &msaaInfo);
