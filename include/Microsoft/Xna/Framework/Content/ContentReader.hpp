@@ -22,7 +22,6 @@
 #include "Microsoft/Xna/Framework/Vector4.hpp"
 #include "System/IDisposable.hpp"
 #include "System/IO/BinaryReader.hpp"
-#include "System/NotImplementedException.hpp"
 
 namespace Microsoft::Xna::Framework::Content
 {
@@ -43,11 +42,10 @@ namespace Microsoft::Xna::Framework::Content
      *        (`src/Content/ContentReader.cs`) -- the object-graph reader passed to every
      *        `ContentTypeReader<T>::Read()`.
      *
-     * Implements plan_xnb.md XNB-15 (shared-resource fixups) and XNB-16/16B (1-based
-     * type-reader-index root/nested-object dispatch, reader-version enforcement).
-     * `ReadExternalReference<T>()` (needs a working `ContentManager::Load<T>()` round-trip) is
-     * deliberately deferred to Phase E (XNB-35) and throws `System::NotImplementedException`
-     * until then -- this class's own `Initialize`/dispatch machinery does not depend on it.
+     * Implements plan_xnb.md XNB-15 (shared-resource fixups), XNB-16/16B (1-based
+     * type-reader-index root/nested-object dispatch, reader-version enforcement), and XNB-35
+     * (`ReadExternalReference<T>()`, which needs a working `ContentManager::Load<T>()` round-trip
+     * -- see that method's own docs).
      *
      * @p manager may be null (unlike real XNA, where it is always a real instance): this class is
      * usable standalone, ahead of `ContentManager`'s own `.xnb` integration (Phase B2, XNB-17B).
@@ -120,19 +118,32 @@ namespace Microsoft::Xna::Framework::Content
         [[nodiscard]] Color ReadColor();
 
         /**
-         * @brief FNA's `T ReadExternalReference<T>()`.
+         * @brief FNA's `T ReadExternalReference<T>()`: reads a relative-path string naming a
+         *        sibling asset and loads it through the owning `ContentManager` (plan_xnb.md
+         *        XNB-35).
          *
-         * @throws System::NotImplementedException always -- deferred to Phase E (plan_xnb.md
-         *         XNB-35), which needs a working `ContentManager::Load<T>()` round-trip this
-         *         phase does not yet provide.
+         * The path is resolved relative to this `ContentReader`'s own asset name (matching FNA's
+         * `MonoGame.Utilities.FileHelpers.ResolveRelativePath`), then loaded via
+         * `ContentManager::Load<T>()` -- so it goes through the exact same `.xnb`/`.cnb`/native
+         * resolution order a direct `Load<T>()` call would. As a hardening addition with no FNA
+         * equivalent (FNA simply lets the OS fail to find an escaping path), a reference that
+         * resolves above the content root's own logical space is rejected outright rather than
+         * attempting to load whatever happens to be there.
+         *
+         * Declared here but defined (and explicitly instantiated for the concrete asset types
+         * that use it) in `ContentReader.cpp`, not inline: this method needs `ContentManager`'s
+         * full definition to call `Load<T>()`, but `ContentManager.hpp` already includes this
+         * header, so an inline body here would create a circular include.
+         *
+         * @tparam T Requested asset type; must match (via `std::any_cast` inside `Load<T>()`)
+         *           whatever the referenced file's root type-reader actually produces.
+         * @return The loaded asset, or a default-constructed `T` if the reference string is empty
+         *         (matching FNA's `default(T)` for an empty/absent reference).
+         * @throws ContentLoadException if no `ContentManager` owns this reader, or the resolved
+         *         path escapes the content root.
          */
         template <typename T>
-        T ReadExternalReference()
-        {
-            throw System::NotImplementedException(
-                "ContentReader::ReadExternalReference<T>() is deferred to Phase E "
-                "(plan_xnb.md XNB-35).");
-        }
+        T ReadExternalReference();
 
         /** @brief FNA's `T ReadObject<T>()`: reads the next object via the 1-based dispatch protocol. */
         template <typename T>

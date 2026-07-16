@@ -1,11 +1,82 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Content/ContentReader.hpp"
 
+#include <algorithm>
+#include <filesystem>
+
 #include "CNA/Internal/Xnb/XnbTypeReaderTable.hpp"
+#include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 
 namespace Microsoft::Xna::Framework::Content
 {
+    namespace
+    {
+        // Mirrors FNA's MonoGame.Utilities.FileHelpers.ResolveRelativePath: resolves
+        // relativeFile as a sibling of filePath (i.e. relative to filePath's containing
+        // directory), then collapses "."/".." segments. Both the inputs and the result are
+        // logical asset names (forward-slash-separated, relative to ContentManager's root), not
+        // filesystem paths -- std::filesystem::path is used purely for its segment-collapsing
+        // logic, never touching the real filesystem.
+        std::string ResolveRelativeAssetPath(const std::string& filePath, const std::string& relativeFile)
+        {
+            namespace fs = std::filesystem;
+
+            auto normalizeSeparators = [](std::string s)
+            {
+                std::replace(s.begin(), s.end(), '\\', '/');
+                return s;
+            };
+
+            const fs::path base = fs::path(normalizeSeparators(filePath)).parent_path();
+            const fs::path combined = base / normalizeSeparators(relativeFile);
+            const std::string resolved = combined.lexically_normal().generic_string();
+
+            // XNB-35 hardening, no FNA equivalent (FNA just lets the OS fail to find an escaping
+            // path): reject a reference that climbs above the content root's own logical space
+            // outright, rather than attempting to load whatever happens to be there.
+            if (resolved == ".." || resolved.rfind("../", 0) == 0)
+            {
+                throw ContentLoadException(
+                    "ContentReader::ReadExternalReference(): '" + relativeFile + "' (relative to '" +
+                    filePath + "') resolves outside the content root.");
+            }
+            return resolved;
+        }
+    }
+
+    template <typename T>
+    T ContentReader::ReadExternalReference()
+    {
+        const std::string externalReference = ReadString();
+        if (!externalReference.empty())
+        {
+            if (!contentManager_)
+            {
+                throw ContentLoadException(
+                    "'" + assetName_ + "' references external asset '" + externalReference +
+                    "', but this ContentReader has no owning ContentManager to load it through.");
+            }
+            const std::string resolved = ResolveRelativeAssetPath(assetName_, externalReference);
+            return contentManager_->Load<T>(resolved);
+        }
+        if constexpr (std::is_default_constructible_v<T>)
+        {
+            return T{};
+        }
+        else
+        {
+            throw ContentLoadException(
+                "'" + assetName_ + "' has an empty external reference for a type with no default "
+                "constructor.");
+        }
+    }
+
+    template Graphics::Texture2D ContentReader::ReadExternalReference<Graphics::Texture2D>();
+    template Graphics::TextureCube ContentReader::ReadExternalReference<Graphics::TextureCube>();
+
     ContentReader::ContentReader(
         ContentManager* manager,
         System::IO::Stream* stream,
