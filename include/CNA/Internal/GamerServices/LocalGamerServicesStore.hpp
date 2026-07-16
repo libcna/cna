@@ -57,6 +57,19 @@ namespace CNA::Internal::GamerServices
      */
     std::string SanitizeStoreFileNameComponent(const std::string& raw);
 
+    /**
+     * @brief Derives the single, canonical file-name key for a leaderboard from its identity's
+     * key string and game mode - the one authoritative implementation LeaderboardWriter and
+     * LeaderboardReader both call, so they can never disagree on which file a given
+     * LeaderboardIdentity maps to.
+     *
+     * @param leaderboardKeyName The LeaderboardIdentity's key, already converted to its string
+     *        form by the caller (e.g. via a name lookup for the LeaderboardKey enum).
+     * @param gameMode The LeaderboardIdentity's game mode.
+     * @return A sanitized, unique file-name key (without extension/directory).
+     */
+    std::string MakeLeaderboardFileKeyEXT(const std::string& leaderboardKeyName, int gameMode);
+
     // --- Achievements: one JSON file per gamertag ---
 
     /**

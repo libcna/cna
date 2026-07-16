@@ -82,16 +82,22 @@ namespace Microsoft::Xna::Framework::GamerServices
         /**
          * @brief Begins an asynchronous request to advance to the next page.
          *
+         * Task 4.4 (plan_net.md Phase 4): completes synchronously (a local reslice of the
+         * already-cached entries, no disk I/O) - unlike a real networked page fetch, there is no
+         * real deferred work to wait on.
+         *
          * @param callback   Invoked when the operation completes.
          * @param asyncState User-defined state passed through to the callback.
-         * @return Never returns; always throws in this platform's implementation.
+         * @return An IAsyncResult already marked complete; pass to EndPageDown.
+         * @throws System::InvalidOperationException if getCanPageDownProperty() is false.
          */
         [[nodiscard]] System::IAsyncResult* BeginPageDown(System::AsyncCallback callback, std::any asyncState);
 
         /**
-         * @brief Completes an asynchronous PageDown request.
+         * @brief Completes an asynchronous PageDown request, advancing this reader to the next page.
          *
          * @param result The result returned by BeginPageDown.
+         * @throws System::ArgumentException if result was not returned by BeginPageDown.
          */
         void EndPageDown(System::IAsyncResult* result);
 
@@ -103,26 +109,36 @@ namespace Microsoft::Xna::Framework::GamerServices
         /**
          * @brief Begins an asynchronous request to move to the previous page.
          *
+         * Completes synchronously - see BeginPageDown's own doc comment for why.
+         *
          * @param callback   Invoked when the operation completes.
          * @param asyncState User-defined state passed through to the callback.
-         * @return Never returns; always throws in this platform's implementation.
+         * @return An IAsyncResult already marked complete; pass to EndPageUp.
+         * @throws System::InvalidOperationException if getCanPageUpProperty() is false.
          */
         [[nodiscard]] System::IAsyncResult* BeginPageUp(System::AsyncCallback callback, std::any asyncState);
 
         /**
-         * @brief Completes an asynchronous PageUp request.
+         * @brief Completes an asynchronous PageUp request, moving this reader to the previous page.
          *
          * @param result The result returned by BeginPageUp.
+         * @throws System::ArgumentException if result was not returned by BeginPageUp.
          */
         void EndPageUp(System::IAsyncResult* result);
 
         /**
          * @brief Synchronously reads a page of a leaderboard.
          *
+         * Task 4.4 (plan_net.md Phase 4): real, local-store-backed implementation. Entries are
+         * sorted by Rating descending (CNA-original default - no FNA reference behavior exists to
+         * match, since FNA's own LeaderboardReader is identically all-NotSupportedException); a
+         * persisted gamertag with no currently signed-in Gamer* match is skipped (documented
+         * limitation - LeaderboardEntry needs a real, live Gamer* to attach to).
+         *
          * @param leaderboardId The leaderboard to read.
          * @param pageStart     The index of the first entry to read.
          * @param pageSize      The number of entries per page.
-         * @return Never returns; always throws in this platform's implementation.
+         * @return The requested page of the leaderboard.
          */
         [[nodiscard]] static LeaderboardReader Read(
             const LeaderboardIdentity& leaderboardId,
@@ -133,10 +149,14 @@ namespace Microsoft::Xna::Framework::GamerServices
         /**
          * @brief Synchronously reads a page of a leaderboard centered on a gamer.
          *
+         * CNA-original default: centers the page on pivotGamer's rank
+         * (`max(0, rank - pageSize / 2)`); if pivotGamer has no entry on this leaderboard, starts
+         * at the top instead (a conservative fallback - no reference behavior exists to match).
+         *
          * @param leaderboardId The leaderboard to read.
          * @param pivotGamer    The gamer around which the page is centered.
          * @param pageSize      The number of entries per page.
-         * @return Never returns; always throws in this platform's implementation.
+         * @return The requested page of the leaderboard.
          */
         [[nodiscard]] static LeaderboardReader Read(
             const LeaderboardIdentity& leaderboardId,
@@ -147,11 +167,17 @@ namespace Microsoft::Xna::Framework::GamerServices
         /**
          * @brief Synchronously reads a page of a leaderboard restricted to a set of gamers.
          *
+         * CNA-original default: restricts the full leaderboard to only the given gamers (real
+         * XNA's "friends leaderboard" pattern), then centers on pivotGamer as the pivotGamer
+         * overload above does. Paging uses the same bounded-array math as every other reader -
+         * getCanPageDownProperty()/getCanPageUpProperty() only ever look at this reader's own
+         * cached entries, so a restricted board pages correctly with no special-casing.
+         *
          * @param leaderboardId The leaderboard to read.
          * @param gamers        The gamers to restrict the leaderboard to.
          * @param pivotGamer    The gamer around which the page is centered.
          * @param pageSize      The number of entries per page.
-         * @return Never returns; always throws in this platform's implementation.
+         * @return The requested page of the restricted leaderboard.
          */
         [[nodiscard]] static LeaderboardReader Read(
             const LeaderboardIdentity& leaderboardId,
@@ -163,12 +189,15 @@ namespace Microsoft::Xna::Framework::GamerServices
         /**
          * @brief Begins an asynchronous request to read a page of a leaderboard.
          *
+         * Completes synchronously (a local disk read - see the Read() overload's own doc comment
+         * for the real sort/matching behavior).
+         *
          * @param leaderboardId The leaderboard to read.
          * @param pageStart     The index of the first entry to read.
          * @param pageSize      The number of entries per page.
          * @param callback      Invoked when the operation completes.
          * @param asyncState    User-defined state passed through to the callback.
-         * @return Never returns; always throws in this platform's implementation.
+         * @return An IAsyncResult already marked complete; pass to EndRead.
          */
         [[nodiscard]] static System::IAsyncResult* BeginRead(
             const LeaderboardIdentity& leaderboardId,
@@ -181,12 +210,15 @@ namespace Microsoft::Xna::Framework::GamerServices
         /**
          * @brief Begins an asynchronous request to read a page of a leaderboard centered on a gamer.
          *
+         * Completes synchronously - see the pivotGamer Read() overload's own doc comment for the
+         * real centering behavior.
+         *
          * @param leaderboardId The leaderboard to read.
          * @param pivotGamer    The gamer around which the page is centered.
          * @param pageSize      The number of entries per page.
          * @param callback      Invoked when the operation completes.
          * @param asyncState    User-defined state passed through to the callback.
-         * @return Never returns; always throws in this platform's implementation.
+         * @return An IAsyncResult already marked complete; pass to EndRead.
          */
         [[nodiscard]] static System::IAsyncResult* BeginRead(
             const LeaderboardIdentity& leaderboardId,
@@ -199,13 +231,16 @@ namespace Microsoft::Xna::Framework::GamerServices
         /**
          * @brief Begins an asynchronous request to read a page of a leaderboard restricted to a set of gamers.
          *
+         * Completes synchronously - see the gamers-restricted Read() overload's own doc comment
+         * for the real restriction/centering behavior.
+         *
          * @param leaderboardId The leaderboard to read.
          * @param gamers        The gamers to restrict the leaderboard to.
          * @param pivotGamer    The gamer around which the page is centered.
          * @param pageSize      The number of entries per page.
          * @param callback      Invoked when the operation completes.
          * @param asyncState    User-defined state passed through to the callback.
-         * @return Never returns; always throws in this platform's implementation.
+         * @return An IAsyncResult already marked complete; pass to EndRead.
          */
         [[nodiscard]] static System::IAsyncResult* BeginRead(
             const LeaderboardIdentity& leaderboardId,
@@ -220,7 +255,8 @@ namespace Microsoft::Xna::Framework::GamerServices
          * @brief Completes an asynchronous Read request.
          *
          * @param result The result returned by BeginRead.
-         * @return Never returns; always throws in this platform's implementation.
+         * @return The LeaderboardReader constructed by the matching BeginRead call.
+         * @throws System::ArgumentException if result was not returned by BeginRead.
          */
         [[nodiscard]] static LeaderboardReader EndRead(System::IAsyncResult* result);
 
@@ -235,11 +271,10 @@ namespace Microsoft::Xna::Framework::GamerServices
          * calling this: passing a full, un-sliced leaderboard here (rather than the specific page
          * `[start, start + size)`) will silently produce a wrong (too-short-or-shifted) page,
          * since this constructor trusts its input completely and never re-derives the intended
-         * slice itself. Currently the only caller of this factory is test code — every real
-         * `BeginRead`/`EndRead` overload unconditionally throws `NotSupportedException` (a stub
-         * API surface, matching FNA), so this precondition has no production caller to violate
-         * today. Any future real (non-stub) leaderboard-reading implementation that populates
-         * `entries` itself must uphold it.
+         * slice itself. Task 4.4 (plan_net.md Phase 4): every real `BeginRead` overload now calls
+         * this with the *full* local leaderboard as `entries` (not pre-sliced to one page),
+         * relying on the slicing loop above to derive the actual page - the real (non-stub)
+         * implementation this precondition originally anticipated, now in place.
          *
          * @param identity The leaderboard identity being read.
          * @param start    The zero-based starting index of the page within the leaderboard.
@@ -264,6 +299,16 @@ namespace Microsoft::Xna::Framework::GamerServices
             std::vector<LeaderboardEntry> entries,
             bool friends
         );
+
+        /**
+         * @brief Rebuilds entries_ from entryCache_ using the real `[pageStart_, pageStart_ +
+         * pageSize_)` window - shared by BeginRead (Task 4.4's real implementation) and
+         * EndPageDown/EndPageUp. Deliberately not the constructor's own `i < pageSize` FNA-
+         * matching quirk (see EndPageDown's own doc comment in LeaderboardReader.cpp for why that
+         * bound is unsuitable once pageStart_ can be nonzero from real usage, not just the
+         * Task 10.6 test scenario it was originally validated for).
+         */
+        void ResliceEntriesEXT();
 
         LeaderboardIdentity leaderboardIdentity_;
         int pageStart_;

@@ -109,6 +109,11 @@ namespace CNA::Internal::GamerServices
         return result;
     }
 
+    std::string MakeLeaderboardFileKeyEXT(const std::string& leaderboardKeyName, int gameMode)
+    {
+        return SanitizeStoreFileNameComponent(leaderboardKeyName) + "_" + std::to_string(gameMode);
+    }
+
     std::vector<PersistedAchievement> LoadEarnedAchievementsEXT(const std::string& gamertag)
     {
         std::vector<PersistedAchievement> result;

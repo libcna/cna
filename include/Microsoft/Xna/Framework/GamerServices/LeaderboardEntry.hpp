@@ -2,6 +2,7 @@
 #pragma once
 #include "CNA/CNAHelper.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/PropertyDictionary.hpp"
+#include <functional>
 
 namespace Microsoft::Xna::Framework::GamerServices
 {
@@ -44,9 +45,28 @@ namespace Microsoft::Xna::Framework::GamerServices
         /**
          * @brief Sets the rating value for this entry.
          *
+         * Task 4.3 (plan_net.md Phase 4): real XNA's LeaderboardWriter has no explicit "submit"/
+         * "commit" method anywhere in its API surface (real Xbox 360 submission happened via
+         * out-of-scope Xbox LIVE session infrastructure) - setting Rating is the closest honest
+         * analog to "I'm done configuring this entry, persist it" for a writer-returned entry, so
+         * it immediately persists (Rating and whatever Columns are already set at that moment) to
+         * the local store when SetOnRatingChangedHookEXT() has installed a hook. A no-op for
+         * reader-returned entries (LeaderboardReader never installs this hook).
+         *
          * @param value The rating.
          */
         void setRatingProperty(long long value);
+
+        /**
+         * @brief NOXNA/internal: installs the callback LeaderboardWriter uses to persist this
+         * entry to the local store whenever setRatingProperty() runs. Not part of the real XNA
+         * 4.0 API - purely internal wiring between LeaderboardWriter and its own returned entries,
+         * invisible to any caller.
+         *
+         * @param hook The callback to invoke after Rating changes; pass an empty std::function to
+         *        clear it.
+         */
+        NOXNA void SetOnRatingChangedHookEXT(std::function<void()> hook);
 
         /**
          * @brief Gets the ranking of this entry on the leaderboard.
@@ -89,5 +109,6 @@ namespace Microsoft::Xna::Framework::GamerServices
         long long rating_;
         int rankingEXT_;
         PropertyDictionary columns_;
+        std::function<void()> onRatingChangedEXT_;
     };
 }

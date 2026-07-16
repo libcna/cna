@@ -511,32 +511,91 @@ path (`LeaderboardReader.cpp:86,91,106,111,155,165,176,181`; `LeaderboardWriter.
     crash/power-loss mid-write can never leave a half-written, unparseable store file; reads that
     hit a missing or unparseable file start empty rather than throwing (Task 4.7's own
     requirement).
-- [ ] **Task 4.3** — Implement real (not `NotSupportedException`) `LeaderboardWriter::Write`-path
-  behavior: persist a written leaderboard entry to the local store from Task 4.2. *(Deferred to
-  its own commit - see the open leaderboard design note below.)*
-- [ ] **Task 4.4** — Implement real `LeaderboardReader` read paths (the `BeginRead`/`EndRead`
-  pair and whatever synchronous accessors exist) sourcing from the same local store, instead of
-  every path throwing `NotSupportedException`. Preserve `NotSupportedException` only for
-  operations that are genuinely online-only in real XNA (e.g. friend-leaderboard filtering with no
-  local friends data) — do not blanket-implement everything if some paths have no honest local
-  answer; document any path that stays intentionally unsupported with a one-line reason.
-  Investigate `include/Microsoft/Xna/Framework/GamerServices/LeaderboardReader.hpp:239-241`'s own
-  doc comment (references `BeginRead`/`EndRead` being an intentional stub today) before deciding
-  scope. *(Deferred to its own commit.)*
-  **Open design note carried forward** (investigated, not yet implemented): unlike achievements
-  (inherently per-gamertag), a leaderboard is inherently multi-gamer, so the store is keyed by
-  `LeaderboardIdentity` (key + game mode), holding every local gamertag's entry that has written
-  to it. `LeaderboardEntry::getGamerProperty()` needs a real, non-owning `Gamer*` - entries are
-  matched against `Gamer::getSignedInGamersProperty()` by gamertag at read time; a persisted
-  gamertag with no currently-signed-in match is skipped (documented limitation, not fabricated via
-  a throwaway `Gamer`-derived object with unclear ownership). No FNA reference exists for sort
-  order or for `BeginRead`'s 3 overloads' exact semantics (FNA's own `LeaderboardReader.cs` is
-  identically all-`NotSupportedException`) - planned CNA-original defaults: rating-descending sort
-  with 1-based `RankingEXT`; the `pivotGamer` overload centers the page on that gamer's rank; the
-  `gamers`-restricted overload sets `friends=true` (bounded-array paging math, matching
-  `isFriendBoard_`'s existing simpler bounds check) and filters to only the given gamer list.
-  `BeginPageDown`/`EndPageDown`/`BeginPageUp`/`EndPageUp` can reslice the already-cached
-  `entryCache_` without a new disk read.
+- [x] **Task 4.3** — `LeaderboardWriter` is now a real, per-`Gamer` object (`owner_` set to the
+  owning `Gamer*` in `Gamer`'s own constructor init list) instead of a default-constructible stub.
+  `GetLeaderboard(identity)` seeds a `LeaderboardEntry` from whatever is already locally persisted
+  for that gamertag (0/no-columns if nothing yet), caches it by a `MakeLeaderboardFileKeyEXT(key,
+  gameMode)`-derived key in a `std::map<std::string, LeaderboardEntry>` (by-value, not
+  `unique_ptr` - sidesteps an incomplete-type destructor problem for free since `Gamer.hpp` only
+  forward-declares `LeaderboardEntry`), and installs a `SetOnRatingChangedHookEXT` callback on the
+  returned entry. Real XNA's `LeaderboardWriter` has no explicit "submit"/"commit" method anywhere
+  in its API surface (Xbox 360 submission happened via out-of-scope Xbox LIVE session
+  infrastructure) - `LeaderboardEntry::setRatingProperty()` firing that hook is the closest honest
+  local analog to "I'm done configuring this entry, persist it now", so every `Rating` assignment
+  persists immediately (Rating + whatever `Columns` are already set at that moment).
+- [x] **Task 4.4** — `LeaderboardReader`'s `Read`/`BeginRead` (all 3 overloads)/`PageDown`/`PageUp`
+  are real, local-store-backed implementations; `EndPageDown`/`EndPageUp`/`EndRead` actually invoke
+  their stored callback exactly once (audit_net.md's High finding precedent) instead of only
+  storing it. No FNA reference exists for any of the sort/paging/centering semantics below (FNA's
+  own `LeaderboardReader.cs` is identically all-`NotSupportedException`) - CNA-original, documented
+  defaults: `LoadFullLocalLeaderboardEXT` sorts every locally-persisted entry for the identity by
+  `Rating` descending and assigns 1-based `RankingEXT` over that full sorted order; a persisted
+  gamertag with no currently-signed-in `Gamer*` match is skipped (documented limitation -
+  `LeaderboardEntry::getGamerProperty()` needs a real, live, non-owning `Gamer*`, and none exists
+  for a gamertag that isn't signed in on this machine). The `pivotGamer` overload centers the page
+  on `max(0, rank - pageSize/2)`, falling back to the top if the pivot has no entry; the
+  `gamers`-restricted overload additionally filters to only the given gamer list before centering.
+  - **Real bug found and fixed while finishing this task, before commit**: the reader's own
+    private `CreateInternal` constructor deliberately keeps FNA's documented loop-bound quirk
+    (`for (i = pageStart; i < pageSize && i < entryCache.Count; i++)`, i.e. bounded by `pageSize`
+    alone, not `pageStart + pageSize` - see Task 10.6). That bound is only correct when
+    `pageStart_ < pageSize_`; every real `BeginRead`/`EndPageDown`/`EndPageUp` path now seeds
+    `entries_` from the *full* local leaderboard, so a nonzero `pageStart_ >= pageSize_` (any page
+    past the first, or a pivot-centered read landing past it) would otherwise silently produce a
+    permanently empty page. Fixed by adding a private `ResliceEntriesEXT()` using the correct
+    `[pageStart_, pageStart_ + pageSize_)` window, called after `CreateInternal(...)` in all 3
+    `BeginRead` overloads and in `EndPageDown`/`EndPageUp` — the constructor's own FNA-quirk bound
+    stays untouched (still exercised, and still correct, for Task 10.6's own narrow scenario).
+  - **Second real bug found while verifying the demo end-to-end, after the above was already
+    committed-ready**: `getCanPageDownProperty()`'s non-friend-board branch was
+    `pageStart_ < entryCache_.size() || entryCache_.back().getRankingEXTProperty() <
+    totalLeaderboardSize_` — the first half is true for almost the entire board (e.g. a 20-entry,
+    5-per-page board at its own last valid page, `pageStart_=15`: `15 < 20` is true, wrongly
+    claiming a 5th page existed), and the second half was dead code: `totalLeaderboardSize_` was
+    declared but never actually assigned anywhere, so it was always its default `0`. Root cause:
+    this branch was written assuming a real networked board where only a page is cached
+    client-side and a separate "true remote total" could exceed it - but in this local-only
+    implementation `entryCache_` already *is* the complete board (full or gamer-restricted) for
+    both board kinds, identical to the `isFriendBoard_` branch's own simpler bounded-array check.
+    Fixed by: (1) setting `totalLeaderboardSize_` to the real entry count in the constructor's init
+    list, reading it from the `entries` parameter before it's moved into `entryCache_`; (2)
+    collapsing both branches of `getCanPageDownProperty()`/`getCanPageUpProperty()` into one
+    unconditional bounded-array check (`(pageStart_ + pageSize_) < entryCache_.size()` /
+    `pageStart_ > 0`) - `isFriendBoard_` is still recorded (still set from the `friends`
+    constructor parameter, still part of the public-facing `CreateInternal` signature used by
+    existing tests) but no longer branches any paging math on it, since both board kinds now
+    provably behave the same way. 8 existing unit tests that had encoded the old (buggy)
+    expectations by name (`CanPageDownNonFriendBoardByRanking`, `CanPageUpNonFriendBoardByRanking`,
+    stale `CanPageUpFriendBoard`/`CanPageDownNonFriendBoardByPageStart` assertions,
+    `PropertiesFromCtor`'s `getTotalLeaderboardSizeProperty()` check) were rewritten to assert the
+    corrected behavior; one new test (`CanPageDownReflectsTotalLeaderboardSize`) was added.
+  - **Third real bug found in the same end-to-end pass, in `cna_demo_leaderboard_viewer` itself,
+    not in library code**: the demo originally populated `std::vector<SignedInGamer>
+    syntheticGamers_` via a plain `push_back(SignedInGamer::CreateInternal(tag))` loop. `Gamer`'s
+    constructor captures `this` into `leaderboardWriter_.owner_` (Task 4.3, above); neither `Gamer`
+    nor `LeaderboardWriter` declares a custom copy/move constructor, so that captured pointer is
+    copied verbatim, not re-pointed, by *any* copy or move of an already-constructed `Gamer` -
+    including the move `push_back(prvalue)` performs when it moves the temporary returned by
+    `CreateInternal()` into the vector's storage (this happens on *every* `push_back` call, not
+    only on reallocation - `reserve()` alone would not have fixed it). The result: 19 of 20
+    synthetic gamers' `LeaderboardWriter` held a dangling `owner_`, so their persist-hook's
+    `owner_->getGamertagProperty()` read undefined (but often stack-reused, hence
+    misleadingly-consistent-looking) memory instead of the real gamertag, causing 19 of the 20
+    intended upserts to collide onto the same wrong key - the demo persisted only the
+    *last*-constructed gamer's entry (`Player20`, rating 810) instead of all 20. Fixed at the
+    demo level (not by giving `Gamer` custom copy/move semantics, which would additionally need to
+    fix up every already-cached `LeaderboardEntry::gamer_` pointer inside
+    `LeaderboardWriter::entriesByLeaderboardKeyEXT_` — real but out of scope for one demo):
+    `syntheticGamers_` is now `std::vector<std::unique_ptr<SignedInGamer>>`, and each element is
+    constructed with `new SignedInGamer(SignedInGamer::CreateInternal(tag))`, not a bare
+    `push_back` of the by-value factory result — this exact spelling is what makes C++17's
+    mandatory prvalue-elision rule construct the object directly and permanently at its final heap
+    address, with no intermediate move ever touching the `Gamer` subobject. Documented the general
+    hazard on `Gamer::leaderboardWriter_`'s own declaration (`Gamer.hpp`) so future code storing
+    `Gamer`-derived objects in a by-value container doesn't reintroduce it elsewhere.
+  `BeginPageDown`/`BeginPageUp`/`BeginRead` all complete synchronously (a local disk read/reslice
+  is inherently instant, matching this codebase's established fake-async convention) and actually
+  invoke their callback exactly once.
 - [x] **Task 4.5** — `SignedInGamer::AwardAchievement`/`BeginAwardAchievement` (both - real XNA's
   own `AwardAchievement` never called `BeginAwardAchievement` internally either; kept as two
   independent stubs that now share the same real persistence call) persist immediately via
@@ -567,18 +626,48 @@ path (`LeaderboardReader.cpp:86,91,106,111,155,165,176,181`; `LeaderboardWriter.
   `"tag1"` across this file could otherwise leak state between tests - added a
   `GamerServicesStoreGuard` (redirects the store to a dedicated `"CnaTestsGamerServices"` app name
   via `StorageDevice::SetAppNameEXT`, wipes it clean before and after each test via the new
-  `ResetStoreForTestingEXT()`) and applied it to every achievement-persistence test. *(Leaderboard
-  half deferred to its own commit.)*
+  `ResetStoreForTestingEXT()`) and applied it to every achievement-persistence test.
+- [x] **Task 4.7 (leaderboard half)** — Rewrote `LeaderboardWriterTest` (5 tests:
+  `GetLeaderboardReturnsRealEntryForOwningGamer`, `GetLeaderboardReturnsTheSameEntryOnRepeatedCalls`,
+  `SettingRatingPersistsAndSurvivesAcrossFreshObjects` (the real disk-persistence proof),
+  `ColumnsPersistAlongsideRating`, `EntriesAreIsolatedPerLeaderboardIdentity`) against the real
+  implementation, replacing the old `LeaderboardWriterGetLeaderboardThrows`
+  placeholder. Rewrote the whole `LeaderboardReaderTest` suite (27 tests) covering: the FNA-quirk
+  constructor bound vs. the new `ResliceEntriesEXT()` real window (both, separately);
+  `PageDown`/`PageUp`/`BeginPageDown`/`BeginPageUp` throw-when-can't and real-page-advance cases;
+  `getCanPageDownProperty`/`getCanPageUpProperty`/`getTotalLeaderboardSizeProperty` for both board
+  kinds (rewritten again mid-task once the second real bug above was found — see Task 4.4's own
+  write-up for exactly which assertions changed and why); real sorted/pivot-centered/
+  gamers-restricted `Read()` results; all 3 `BeginRead` overloads plus `EndRead` mismatched-result
+  and exactly-once-callback checks. Added a `SignedInGamersGuard` RAII helper (publishes/restores
+  `Gamer::getSignedInGamersProperty()`) alongside the existing `GamerServicesStoreGuard`, since
+  `LoadFullLocalLeaderboardEXT` matches persisted gamertags against the *global* signed-in list.
 - [x] **Task 4.8 (achievements half)** — Updated `demo_achievement_showcase`'s `AwardTile()`/smoke-
   test-complete log lines: no longer describe `AwardAchievement`/`GetAchievements` as confirmed
   no-ops - manually verified via `--smoke 180`: `GetAchievements().getCountProperty()` now grows
   1→6 in lockstep with the demo's own locally-tracked earned count, and the real JSON file
   (`~/.local/share/game/GamerServices/achievements/<gamertag>.json`) was inspected directly to
   confirm correct content, then removed (a manual verification artifact, not something to leave
-  behind). *(`demo_leaderboard_viewer` deferred to the leaderboard commit.)*
-- [x] **Verified**: 24/24 `SignedInGamerTest` tests pass; full suite 4675/4677 (2 expected skips,
-  0 failures); `cna_demo_achievement_showcase --smoke 180` runs clean with real, growing,
-  disk-confirmed persistence.
+  behind).
+- [x] **Task 4.8 (leaderboard half)** — Rewrote `demo_leaderboard_viewer`'s `Initialize()`/`Update()`:
+  publishes 20 real `SignedInGamer` objects as signed-in, gives each a real rating through
+  `LeaderboardWriter::GetLeaderboard(...)->setRatingProperty(...)`, reads them back with a real
+  `LeaderboardReader::Read()`, and pages with the real `PageDown()`/`PageUp()` (no more
+  hand-rebuilt reader). Manually verified via `--smoke 1000` under `xvfb-run`: console output shows
+  `totalOnFirstPage=5`, then 4 real pages (`pageStart` 0/5/10/15) ending with `canPageDown=false
+  canPageUp=true` on the last page; the persisted JSON file
+  (`~/.local/share/CnaDemoLeaderboardViewer/GamerServices/leaderboards/BestScoreLifeTime_0.json`)
+  was inspected directly and confirmed to hold all 20 distinct gamertags with the expected
+  1000..810 ratings, then removed (a manual verification artifact). This end-to-end run is what
+  surfaced the second and third real bugs documented under Task 4.4 — the unit tests above did not
+  happen to exercise a >20-entry, multi-page, all-real-`Gamer*` scenario, a gap now closed by this
+  demo doubling as an integration check, not just the unit tests in isolation.
+- [x] **Verified**: 51/51 `LeaderboardReaderTest`/`LeaderboardWriterTest`/`WriteLeaderboardsEventArgsTest`
+  tests pass; full suite 4686/4688 (2 expected hardware skips, 0 failures) — grepped in full for
+  `[  FAILED  ]`, not just tail-inspected; `cna_demo_leaderboard_viewer --smoke 1000` runs clean
+  with real, correctly-paged, disk-confirmed persistence for all 20 synthetic gamers.
+
+**Phase 4 complete — 8/8** (Tasks 4.1–4.8, achievements and leaderboards halves both done).
 
 ---
 

@@ -257,6 +257,15 @@ namespace Microsoft::Xna::Framework::GamerServices
         std::string gamertag_;
         bool isDisposed_{false};
         std::any tag_;
+        // Task 4.3 (plan_net.md Phase 4): LeaderboardWriter captures `this` at construction time
+        // (see Gamer.cpp's constructor) and neither Gamer nor LeaderboardWriter declares a custom
+        // copy/move constructor, so that captured pointer is copied verbatim - not re-pointed - by
+        // any copy or move of a constructed Gamer/SignedInGamer, including an ordinary
+        // std::vector<SignedInGamer>::push_back(prvalue). Once a Gamer-derived object's
+        // LeaderboardWriter may be used, that object's address must never change again; prefer
+        // heap allocation (see cna_demo_leaderboard_viewer's own syntheticGamers_ for the pattern
+        // that keeps a batch of them at stable addresses) over by-value containers that can move
+        // or reallocate their elements.
         LeaderboardWriter leaderboardWriter_;
 
     private:

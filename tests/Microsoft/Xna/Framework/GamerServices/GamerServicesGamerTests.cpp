@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <fstream>
 
+#include "System/ArgumentException.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/NotSupportedException.hpp"
 
@@ -99,10 +100,17 @@ TEST(GamerTest, TagGetSet) {
     EXPECT_EQ(42, std::any_cast<int>(g.getTagProperty()));
 }
 
-TEST(GamerTest, LeaderboardWriterGetLeaderboardThrows) {
+// Task 4.3 (plan_net.md Phase 4): GetLeaderboard() is now a real implementation - see the
+// dedicated LeaderboardWriterTest suite below for full coverage; this confirms it's reachable and
+// non-throwing through any Gamer-derived type, not just SignedInGamer.
+TEST(GamerTest, LeaderboardWriterGetLeaderboardReturnsRealEntry) {
+    GamerServicesStoreGuard guard;
     auto g = MakeGamer();
     auto id = LeaderboardIdentity::Create(LeaderboardKey::BestScoreLifeTime);
-    EXPECT_THROW(g.getLeaderboardWriterProperty().GetLeaderboard(id), System::NotSupportedException);
+    LeaderboardEntry* entry = nullptr;
+    EXPECT_NO_THROW(entry = g.getLeaderboardWriterProperty().GetLeaderboard(id));
+    ASSERT_NE(nullptr, entry);
+    EXPECT_EQ(&g, entry->getGamerProperty());
 }
 
 TEST(GamerTest, ToStringReturnsDisplayName) {
@@ -282,12 +290,76 @@ TEST(LeaderboardEntryTest, GamerPointerRoundTrips) {
     EXPECT_EQ(&g, e.getGamerProperty());
 }
 
-// --- LeaderboardWriter ---
+// --- LeaderboardWriter (Task 4.3, plan_net.md Phase 4) ---
+//
+// LeaderboardWriter has no public constructor (matching real XNA - it's only ever obtained via
+// Gamer.LeaderboardWriter), so these are exercised through a real Gamer, not standalone.
 
-TEST(LeaderboardWriterTest, GetLeaderboardThrows) {
-    LeaderboardWriter w;
+TEST(LeaderboardWriterTest, GetLeaderboardReturnsRealEntryForOwningGamer) {
+    GamerServicesStoreGuard guard;
+    auto gamer = SignedInGamer::CreateInternal("writer_tag");
     auto id = LeaderboardIdentity::Create(LeaderboardKey::BestScoreLifeTime);
-    EXPECT_THROW(w.GetLeaderboard(id), System::NotSupportedException);
+
+    LeaderboardEntry* entry = gamer.getLeaderboardWriterProperty().GetLeaderboard(id);
+    ASSERT_NE(nullptr, entry);
+    EXPECT_EQ(0, entry->getRatingProperty());
+    EXPECT_EQ(&gamer, entry->getGamerProperty());
+}
+
+TEST(LeaderboardWriterTest, GetLeaderboardReturnsTheSameEntryOnRepeatedCalls) {
+    GamerServicesStoreGuard guard;
+    auto gamer = SignedInGamer::CreateInternal("writer_tag");
+    auto id = LeaderboardIdentity::Create(LeaderboardKey::BestScoreLifeTime);
+
+    LeaderboardEntry* first = gamer.getLeaderboardWriterProperty().GetLeaderboard(id);
+    LeaderboardEntry* second = gamer.getLeaderboardWriterProperty().GetLeaderboard(id);
+    EXPECT_EQ(first, second);
+}
+
+// Task 4.3's real "write path": no explicit commit method exists anywhere in real XNA's
+// LeaderboardWriter API surface, so setRatingProperty() is the closest honest analog to "I'm done
+// configuring this entry" and persists immediately - proven here by destroying the writing
+// SignedInGamer and obtaining a *fresh* one for the same gamertag before reading it back.
+TEST(LeaderboardWriterTest, SettingRatingPersistsAndSurvivesAcrossFreshObjects) {
+    GamerServicesStoreGuard guard;
+    auto id = LeaderboardIdentity::Create(LeaderboardKey::BestScoreLifeTime);
+    {
+        auto writer = SignedInGamer::CreateInternal("writer_tag");
+        writer.getLeaderboardWriterProperty().GetLeaderboard(id)->setRatingProperty(1500);
+    } // writer fully destroyed here
+
+    auto reader = SignedInGamer::CreateInternal("writer_tag");
+    LeaderboardEntry* entry = reader.getLeaderboardWriterProperty().GetLeaderboard(id);
+    EXPECT_EQ(1500, entry->getRatingProperty());
+}
+
+TEST(LeaderboardWriterTest, ColumnsPersistAlongsideRating) {
+    GamerServicesStoreGuard guard;
+    auto id = LeaderboardIdentity::Create(LeaderboardKey::BestScoreLifeTime);
+    {
+        auto writer = SignedInGamer::CreateInternal("writer_tag");
+        LeaderboardEntry* entry = writer.getLeaderboardWriterProperty().GetLeaderboard(id);
+        entry->getColumnsProperty().SetValue("Wins", 7);
+        entry->setRatingProperty(500); // the real persistence trigger - see its own doc comment
+    }
+
+    auto reader = SignedInGamer::CreateInternal("writer_tag");
+    LeaderboardEntry* entry = reader.getLeaderboardWriterProperty().GetLeaderboard(id);
+    EXPECT_EQ(500, entry->getRatingProperty());
+    EXPECT_EQ(7, entry->getColumnsProperty().GetValueInt32("Wins"));
+}
+
+TEST(LeaderboardWriterTest, EntriesAreIsolatedPerLeaderboardIdentity) {
+    GamerServicesStoreGuard guard;
+    auto gamer = SignedInGamer::CreateInternal("writer_tag");
+    auto idA = LeaderboardIdentity::Create(LeaderboardKey::BestScoreLifeTime);
+    auto idB = LeaderboardIdentity::Create(LeaderboardKey::BestTimeRecent);
+
+    gamer.getLeaderboardWriterProperty().GetLeaderboard(idA)->setRatingProperty(100);
+    gamer.getLeaderboardWriterProperty().GetLeaderboard(idB)->setRatingProperty(200);
+
+    EXPECT_EQ(100, gamer.getLeaderboardWriterProperty().GetLeaderboard(idA)->getRatingProperty());
+    EXPECT_EQ(200, gamer.getLeaderboardWriterProperty().GetLeaderboard(idB)->getRatingProperty());
 }
 
 // --- LeaderboardReader ---
@@ -300,7 +372,10 @@ TEST(LeaderboardReaderTest, PropertiesFromCtor) {
     cache.push_back(LeaderboardEntry::CreateInternal(nullptr, 30, 3));
     auto reader = LeaderboardReader::CreateInternal(id, 0, 2, cache, false);
     EXPECT_EQ(0, reader.getPageStartProperty());
-    EXPECT_EQ(0, reader.getTotalLeaderboardSizeProperty());
+    // Task 4.4 fix-up (plan_net.md Phase 4): totalLeaderboardSize_ used to be left at its default
+    // 0 forever (a real bug - getTotalLeaderboardSizeProperty() always lied); it now reflects
+    // entryCache_'s own size, since entryCache_ always holds this reader's complete board.
+    EXPECT_EQ(3, reader.getTotalLeaderboardSizeProperty());
     EXPECT_FALSE(reader.getIsDisposedProperty());
     EXPECT_EQ("BestScoreLifeTime", reader.getLeaderboardIdentityProperty().getKeyProperty());
     const auto entries = reader.getEntriesProperty();
@@ -341,29 +416,46 @@ TEST(LeaderboardReaderTest, CanPageDownFriendBoard) {
 }
 
 TEST(LeaderboardReaderTest, CanPageUpFriendBoard) {
+    // Task 4.4 fix-up (plan_net.md Phase 4): friend and non-friend boards now share the exact same
+    // bounded-array paging math - entryCache_ always holds this reader's complete board either
+    // way (full local board, or the gamer-restricted subset), so friends=true no longer selects a
+    // different rule (the old "(pageStart - pageSize) >= 0" full-page-only rule this test used to
+    // check is gone; see getCanPageUpProperty()'s own comment for why pageStart_ > 0 is correct
+    // for both, including a *partial* previous page from a pivot-centered read).
     auto id = LeaderboardIdentity::Create(LeaderboardKey::BestScoreLifeTime);
     std::vector<LeaderboardEntry> cache;
     cache.push_back(LeaderboardEntry::CreateInternal(nullptr, 0, 1));
-    auto reader = LeaderboardReader::CreateInternal(id, 5, 2, cache, true);
-    EXPECT_TRUE(reader.getCanPageUpProperty());     // (5-2) >= 0
-    auto reader2 = LeaderboardReader::CreateInternal(id, 1, 2, cache, true);
-    EXPECT_FALSE(reader2.getCanPageUpProperty());    // (1-2) >= 0 is false
+    auto reader = LeaderboardReader::CreateInternal(id, 1, 2, cache, true);
+    EXPECT_TRUE(reader.getCanPageUpProperty());      // pageStart(1) > 0
+    auto reader2 = LeaderboardReader::CreateInternal(id, 0, 2, cache, true);
+    EXPECT_FALSE(reader2.getCanPageUpProperty());    // pageStart(0) not > 0
 }
 
 TEST(LeaderboardReaderTest, CanPageDownNonFriendBoardByPageStart) {
+    // Task 4.4 fix-up (plan_net.md Phase 4): this test used to assert the exact off-by-one bug it
+    // is now named for catching - the old non-friend branch was `pageStart_ < entryCache_.size()`,
+    // true for almost the entire board (e.g. pageStart=0, a 1-entry, 1-per-page board: 0 < 1 was
+    // true, wrongly claiming a nonexistent second page existed). The correct bounded-array check
+    // - the same one the friend-board branch always used - is (pageStart_ + pageSize_) < size.
     auto id = LeaderboardIdentity::Create(LeaderboardKey::BestScoreLifeTime);
     std::vector<LeaderboardEntry> cache;
-    cache.push_back(LeaderboardEntry::CreateInternal(nullptr, 0, 5));
+    for (int i = 0; i < 3; ++i) cache.push_back(LeaderboardEntry::CreateInternal(nullptr, 0, i + 1));
     auto reader = LeaderboardReader::CreateInternal(id, 0, 1, cache, false);
-    EXPECT_TRUE(reader.getCanPageDownProperty());   // pageStart(0) < cache.size()(1)
+    EXPECT_TRUE(reader.getCanPageDownProperty());    // (0+1) < 3 - two more pages remain
+    auto readerAtLastPage = LeaderboardReader::CreateInternal(id, 2, 1, cache, false);
+    EXPECT_FALSE(readerAtLastPage.getCanPageDownProperty()); // (2+1) < 3 is false - on the last page
 }
 
-TEST(LeaderboardReaderTest, CanPageDownNonFriendBoardByRanking) {
+TEST(LeaderboardReaderTest, CanPageDownReflectsTotalLeaderboardSize) {
+    // Task 4.4 fix-up (plan_net.md Phase 4): getTotalLeaderboardSizeProperty() used to always
+    // return 0 (never assigned); it now equals entryCache_'s own size, matching a single-page
+    // local board where the whole board is always cached.
     auto id = LeaderboardIdentity::Create(LeaderboardKey::BestScoreLifeTime);
     std::vector<LeaderboardEntry> cache;
-    cache.push_back(LeaderboardEntry::CreateInternal(nullptr, 0, -1));
-    auto reader = LeaderboardReader::CreateInternal(id, 5, 1, cache, false);
-    EXPECT_TRUE(reader.getCanPageDownProperty());   // ranking(-1) < TotalLeaderboardSize(0)
+    for (int i = 0; i < 5; ++i) cache.push_back(LeaderboardEntry::CreateInternal(nullptr, 0, i + 1));
+    auto reader = LeaderboardReader::CreateInternal(id, 0, 1, cache, false);
+    EXPECT_EQ(5, reader.getTotalLeaderboardSizeProperty());
+    EXPECT_TRUE(reader.getCanPageDownProperty());
 }
 
 TEST(LeaderboardReaderTest, CanPageDownNonFriendBoardFalse) {
@@ -371,7 +463,7 @@ TEST(LeaderboardReaderTest, CanPageDownNonFriendBoardFalse) {
     std::vector<LeaderboardEntry> cache;
     cache.push_back(LeaderboardEntry::CreateInternal(nullptr, 0, 5));
     auto reader = LeaderboardReader::CreateInternal(id, 5, 1, cache, false);
-    EXPECT_FALSE(reader.getCanPageDownProperty());  // pageStart(5) not < 1, ranking(5) not < 0
+    EXPECT_FALSE(reader.getCanPageDownProperty());  // (5+1) not < 1
 }
 
 TEST(LeaderboardReaderTest, CanPageUpNonFriendBoardByPageStart) {
@@ -380,14 +472,6 @@ TEST(LeaderboardReaderTest, CanPageUpNonFriendBoardByPageStart) {
     cache.push_back(LeaderboardEntry::CreateInternal(nullptr, 0, 1));
     auto reader = LeaderboardReader::CreateInternal(id, 1, 1, cache, false);
     EXPECT_TRUE(reader.getCanPageUpProperty());     // pageStart(1) > 0
-}
-
-TEST(LeaderboardReaderTest, CanPageUpNonFriendBoardByRanking) {
-    auto id = LeaderboardIdentity::Create(LeaderboardKey::BestScoreLifeTime);
-    std::vector<LeaderboardEntry> cache;
-    cache.push_back(LeaderboardEntry::CreateInternal(nullptr, 0, 5));
-    auto reader = LeaderboardReader::CreateInternal(id, 0, 1, cache, false);
-    EXPECT_TRUE(reader.getCanPageUpProperty());     // ranking(5) > 1
 }
 
 TEST(LeaderboardReaderTest, CanPageUpNonFriendBoardFalse) {
@@ -405,57 +489,217 @@ TEST(LeaderboardReaderTest, Dispose) {
     EXPECT_TRUE(reader.getIsDisposedProperty());
 }
 
-TEST(LeaderboardReaderTest, PageDownThrows) {
+// Task 4.4 (plan_net.md Phase 4): PageDown/PageUp are real now - throw InvalidOperationException
+// (not NotSupportedException) only when getCanPageDownProperty()/getCanPageUpProperty() is false,
+// matching the Begin/End-pair convention used elsewhere in this codebase.
+TEST(LeaderboardReaderTest, PageDownThrowsWhenCannotPageDown) {
+    auto id = LeaderboardIdentity::Create(LeaderboardKey::BestScoreLifeTime);
+    auto reader = LeaderboardReader::CreateInternal(id, 0, 1, {}, false); // empty cache - CanPageDown is false
+    EXPECT_THROW(reader.PageDown(), System::InvalidOperationException);
+}
+
+TEST(LeaderboardReaderTest, BeginPageDownThrowsWhenCannotPageDown) {
     auto id = LeaderboardIdentity::Create(LeaderboardKey::BestScoreLifeTime);
     auto reader = LeaderboardReader::CreateInternal(id, 0, 1, {}, false);
-    EXPECT_THROW(reader.PageDown(), System::NotSupportedException);
+    EXPECT_THROW(reader.BeginPageDown(System::AsyncCallback{}, std::any{}), System::InvalidOperationException);
 }
 
-TEST(LeaderboardReaderTest, BeginEndPageDownThrow) {
+TEST(LeaderboardReaderTest, EndPageDownThrowsForMismatchedResult) {
+    auto id = LeaderboardIdentity::Create(LeaderboardKey::BestScoreLifeTime);
+    std::vector<LeaderboardEntry> cache;
+    for (int i = 0; i < 4; ++i) cache.push_back(LeaderboardEntry::CreateInternal(nullptr, 0, i + 1));
+    auto reader = LeaderboardReader::CreateInternal(id, 0, 2, cache, true);
+    EXPECT_THROW(reader.EndPageDown(nullptr), System::ArgumentException);
+}
+
+// Real page-navigation behavior: entryCache_ holds all 4 entries, page size 2 - PageDown must
+// advance from [0,2) to [2,4).
+TEST(LeaderboardReaderTest, PageDownAdvancesToTheNextPage) {
+    auto id = LeaderboardIdentity::Create(LeaderboardKey::BestScoreLifeTime);
+    std::vector<LeaderboardEntry> cache;
+    for (int i = 0; i < 4; ++i) cache.push_back(LeaderboardEntry::CreateInternal(nullptr, 0, i + 1));
+    auto reader = LeaderboardReader::CreateInternal(id, 0, 2, cache, true);
+    const auto firstPage = reader.getEntriesProperty();
+    ASSERT_EQ(2, firstPage.getCountProperty());
+    EXPECT_EQ(1, firstPage[0].getRankingEXTProperty());
+
+    reader.PageDown();
+
+    EXPECT_EQ(2, reader.getPageStartProperty());
+    const auto entries = reader.getEntriesProperty();
+    ASSERT_EQ(2, entries.getCountProperty());
+    EXPECT_EQ(3, entries[0].getRankingEXTProperty());
+    EXPECT_EQ(4, entries[1].getRankingEXTProperty());
+}
+
+TEST(LeaderboardReaderTest, PageUpThrowsWhenCannotPageUp) {
+    auto id = LeaderboardIdentity::Create(LeaderboardKey::BestScoreLifeTime);
+    auto reader = LeaderboardReader::CreateInternal(id, 0, 1, {}, false); // empty cache - CanPageUp is false
+    EXPECT_THROW(reader.PageUp(), System::InvalidOperationException);
+}
+
+TEST(LeaderboardReaderTest, BeginPageUpThrowsWhenCannotPageUp) {
     auto id = LeaderboardIdentity::Create(LeaderboardKey::BestScoreLifeTime);
     auto reader = LeaderboardReader::CreateInternal(id, 0, 1, {}, false);
-    EXPECT_THROW(reader.BeginPageDown(System::AsyncCallback{}, std::any{}), System::NotSupportedException);
-    EXPECT_THROW(reader.EndPageDown(nullptr), System::NotSupportedException);
+    EXPECT_THROW(reader.BeginPageUp(System::AsyncCallback{}, std::any{}), System::InvalidOperationException);
 }
 
-TEST(LeaderboardReaderTest, PageUpThrows) {
+TEST(LeaderboardReaderTest, EndPageUpThrowsForMismatchedResult) {
     auto id = LeaderboardIdentity::Create(LeaderboardKey::BestScoreLifeTime);
-    auto reader = LeaderboardReader::CreateInternal(id, 0, 1, {}, false);
-    EXPECT_THROW(reader.PageUp(), System::NotSupportedException);
+    std::vector<LeaderboardEntry> cache;
+    for (int i = 0; i < 4; ++i) cache.push_back(LeaderboardEntry::CreateInternal(nullptr, 0, i + 1));
+    auto reader = LeaderboardReader::CreateInternal(id, 2, 2, cache, true);
+    EXPECT_THROW(reader.EndPageUp(nullptr), System::ArgumentException);
 }
 
-TEST(LeaderboardReaderTest, BeginEndPageUpThrow) {
+TEST(LeaderboardReaderTest, PageUpMovesToThePreviousPage) {
     auto id = LeaderboardIdentity::Create(LeaderboardKey::BestScoreLifeTime);
-    auto reader = LeaderboardReader::CreateInternal(id, 0, 1, {}, false);
-    EXPECT_THROW(reader.BeginPageUp(System::AsyncCallback{}, std::any{}), System::NotSupportedException);
-    EXPECT_THROW(reader.EndPageUp(nullptr), System::NotSupportedException);
+    std::vector<LeaderboardEntry> cache;
+    for (int i = 0; i < 4; ++i) cache.push_back(LeaderboardEntry::CreateInternal(nullptr, 0, i + 1));
+    auto reader = LeaderboardReader::CreateInternal(id, 2, 2, cache, true);
+
+    reader.PageUp();
+
+    EXPECT_EQ(0, reader.getPageStartProperty());
+    const auto entries = reader.getEntriesProperty();
+    ASSERT_EQ(2, entries.getCountProperty());
+    EXPECT_EQ(1, entries[0].getRankingEXTProperty());
+    EXPECT_EQ(2, entries[1].getRankingEXTProperty());
 }
 
-TEST(LeaderboardReaderTest, ReadOverloadsThrow) {
-    auto id = LeaderboardIdentity::Create(LeaderboardKey::BestScoreLifeTime);
-    EXPECT_THROW(LeaderboardReader::Read(id, 0, 10), System::NotSupportedException);
-    EXPECT_THROW(LeaderboardReader::Read(id, nullptr, 10), System::NotSupportedException);
-    EXPECT_THROW(LeaderboardReader::Read(id, std::vector<Gamer*>{}, nullptr, 10), System::NotSupportedException);
+// --- LeaderboardReader::Read/BeginRead/EndRead (Task 4.4, real local-store-backed reads) ---
+
+namespace {
+    // LeaderboardReader::Read matches persisted records against Gamer::getSignedInGamersProperty()
+    // (a real, live Gamer* is required - see plan_net.md Task 4.4's own documented limitation),
+    // which SignedInGamer::CreateInternal alone does not populate - callers must publish their
+    // test gamers into it explicitly. Restores the previous (empty) list afterward so this doesn't
+    // leak into unrelated tests.
+    struct SignedInGamersGuard {
+        explicit SignedInGamersGuard(std::vector<SignedInGamer*> gamers) {
+            Gamer::setSignedInGamersProperty(new SignedInGamerCollection(
+                SignedInGamerCollection::CreateInternal(std::move(gamers))
+            ));
+        }
+        ~SignedInGamersGuard() {
+            Gamer::setSignedInGamersProperty(new SignedInGamerCollection(SignedInGamerCollection::CreateInternal({})));
+        }
+    };
 }
 
-TEST(LeaderboardReaderTest, BeginReadOverloadsThrow) {
+TEST(LeaderboardReaderTest, ReadReturnsEntriesSortedByRatingDescending) {
+    GamerServicesStoreGuard guard;
     auto id = LeaderboardIdentity::Create(LeaderboardKey::BestScoreLifeTime);
-    EXPECT_THROW(
-        LeaderboardReader::BeginRead(id, 0, 10, System::AsyncCallback{}, std::any{}),
-        System::NotSupportedException
+    auto low = SignedInGamer::CreateInternal("low_tag");
+    auto high = SignedInGamer::CreateInternal("high_tag");
+    SignedInGamersGuard signedIn({&low, &high});
+    low.getLeaderboardWriterProperty().GetLeaderboard(id)->setRatingProperty(10);
+    high.getLeaderboardWriterProperty().GetLeaderboard(id)->setRatingProperty(90);
+
+    LeaderboardReader reader = LeaderboardReader::Read(id, 0, 10);
+
+    const auto entries = reader.getEntriesProperty();
+    ASSERT_EQ(2, entries.getCountProperty());
+    EXPECT_EQ(90, entries[0].getRatingProperty());
+    EXPECT_EQ(1, entries[0].getRankingEXTProperty());
+    EXPECT_EQ(10, entries[1].getRatingProperty());
+    EXPECT_EQ(2, entries[1].getRankingEXTProperty());
+}
+
+// Documented limitation (plan_net.md Task 4.4): a persisted gamertag with no currently
+// signed-in Gamer* match is skipped, since LeaderboardEntry needs a real, live Gamer*.
+TEST(LeaderboardReaderTest, ReadSkipsPersistedEntriesWithNoCurrentlySignedInGamer) {
+    GamerServicesStoreGuard guard;
+    auto id = LeaderboardIdentity::Create(LeaderboardKey::BestScoreLifeTime);
+    {
+        auto ephemeral = SignedInGamer::CreateInternal("ephemeral_tag");
+        SignedInGamersGuard signedIn({&ephemeral});
+        ephemeral.getLeaderboardWriterProperty().GetLeaderboard(id)->setRatingProperty(500);
+    } // ephemeral is gone, and no longer published as signed-in either
+
+    LeaderboardReader reader = LeaderboardReader::Read(id, 0, 10);
+    EXPECT_EQ(0, reader.getEntriesProperty().getCountProperty());
+}
+
+TEST(LeaderboardReaderTest, ReadCentersOnPivotGamer) {
+    GamerServicesStoreGuard guard;
+    auto id = LeaderboardIdentity::Create(LeaderboardKey::BestScoreLifeTime);
+    auto a = SignedInGamer::CreateInternal("a_tag");
+    auto b = SignedInGamer::CreateInternal("b_tag");
+    auto c = SignedInGamer::CreateInternal("c_tag");
+    SignedInGamersGuard signedIn({&a, &b, &c});
+    a.getLeaderboardWriterProperty().GetLeaderboard(id)->setRatingProperty(300);
+    b.getLeaderboardWriterProperty().GetLeaderboard(id)->setRatingProperty(200);
+    c.getLeaderboardWriterProperty().GetLeaderboard(id)->setRatingProperty(100);
+
+    LeaderboardReader reader = LeaderboardReader::Read(id, &b, 1);
+
+    const auto entries = reader.getEntriesProperty();
+    ASSERT_EQ(1, entries.getCountProperty());
+    EXPECT_EQ(&b, entries[0].getGamerProperty());
+}
+
+TEST(LeaderboardReaderTest, ReadRestrictsToGivenGamersList) {
+    GamerServicesStoreGuard guard;
+    auto id = LeaderboardIdentity::Create(LeaderboardKey::BestScoreLifeTime);
+    auto a = SignedInGamer::CreateInternal("a_tag");
+    auto b = SignedInGamer::CreateInternal("b_tag");
+    auto c = SignedInGamer::CreateInternal("c_tag");
+    SignedInGamersGuard signedIn({&a, &b, &c});
+    a.getLeaderboardWriterProperty().GetLeaderboard(id)->setRatingProperty(300);
+    b.getLeaderboardWriterProperty().GetLeaderboard(id)->setRatingProperty(200);
+    c.getLeaderboardWriterProperty().GetLeaderboard(id)->setRatingProperty(100);
+
+    LeaderboardReader reader = LeaderboardReader::Read(id, std::vector<Gamer*>{&a, &c}, &a, 10);
+
+    const auto entries = reader.getEntriesProperty();
+    ASSERT_EQ(2, entries.getCountProperty());
+    EXPECT_EQ(&a, entries[0].getGamerProperty());
+    EXPECT_EQ(&c, entries[1].getGamerProperty());
+}
+
+TEST(LeaderboardReaderTest, BeginReadOverloadsReturnRealResults) {
+    GamerServicesStoreGuard guard;
+    auto id = LeaderboardIdentity::Create(LeaderboardKey::BestScoreLifeTime);
+
+    System::IAsyncResult* r1 = LeaderboardReader::BeginRead(id, 0, 10, System::AsyncCallback{}, std::any{});
+    ASSERT_NE(nullptr, r1);
+    EXPECT_TRUE(r1->getIsCompletedProperty());
+    LeaderboardReader::EndRead(r1);
+    delete r1;
+
+    System::IAsyncResult* r2 = LeaderboardReader::BeginRead(id, nullptr, 10, System::AsyncCallback{}, std::any{});
+    ASSERT_NE(nullptr, r2);
+    LeaderboardReader::EndRead(r2);
+    delete r2;
+
+    System::IAsyncResult* r3 = LeaderboardReader::BeginRead(
+        id, std::vector<Gamer*>{}, nullptr, 10, System::AsyncCallback{}, std::any{}
     );
-    EXPECT_THROW(
-        LeaderboardReader::BeginRead(id, nullptr, 10, System::AsyncCallback{}, std::any{}),
-        System::NotSupportedException
-    );
-    EXPECT_THROW(
-        LeaderboardReader::BeginRead(id, std::vector<Gamer*>{}, nullptr, 10, System::AsyncCallback{}, std::any{}),
-        System::NotSupportedException
-    );
+    ASSERT_NE(nullptr, r3);
+    LeaderboardReader::EndRead(r3);
+    delete r3;
 }
 
-TEST(LeaderboardReaderTest, EndReadThrows) {
-    EXPECT_THROW(LeaderboardReader::EndRead(nullptr), System::NotSupportedException);
+// audit_net.md-style callback check: every Begin* in this codebase must actually invoke its
+// callback, not just store it (Phase 13's own High finding, applied here for a newly-implemented
+// Begin* rather than a pre-existing one).
+TEST(LeaderboardReaderTest, BeginReadInvokesCallbackExactlyOnce) {
+    GamerServicesStoreGuard guard;
+    auto id = LeaderboardIdentity::Create(LeaderboardKey::BestScoreLifeTime);
+    int callCount = 0;
+    System::IAsyncResult* result = LeaderboardReader::BeginRead(
+        id, 0, 10,
+        [&callCount](System::IAsyncResult&) { ++callCount; },
+        std::any{}
+    );
+    EXPECT_EQ(callCount, 1);
+    LeaderboardReader::EndRead(result);
+    delete result;
+}
+
+TEST(LeaderboardReaderTest, EndReadThrowsForMismatchedResult) {
+    EXPECT_THROW(LeaderboardReader::EndRead(nullptr), System::ArgumentException);
 }
 
 // --- SignedInGamer ---
