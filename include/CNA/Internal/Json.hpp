@@ -2,7 +2,9 @@
 #pragma once
 
 #include <cctype>
+#include <cmath>
 #include <cstdint>
+#include <cstdio>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -76,6 +78,34 @@ namespace CNA::Internal
                 if (memberKey == key) return &memberValue;
             }
             return nullptr;
+        }
+
+        // --- Construction helpers (Task 4.2: achievement/leaderboard local persistence) ---
+
+        /** @brief Creates an empty JSON object value. */
+        [[nodiscard]] static JsonValue MakeObject() { JsonValue v; v.type = JsonType::Object; return v; }
+        /** @brief Creates an empty JSON array value. */
+        [[nodiscard]] static JsonValue MakeArray() { JsonValue v; v.type = JsonType::Array; return v; }
+        /** @brief Creates a JSON string value. */
+        [[nodiscard]] static JsonValue MakeString(std::string s) { JsonValue v; v.type = JsonType::String; v.stringValue = std::move(s); return v; }
+        /** @brief Creates a JSON number value. */
+        [[nodiscard]] static JsonValue MakeNumber(double n) { JsonValue v; v.type = JsonType::Number; v.numberValue = n; return v; }
+        /** @brief Creates a JSON boolean value. */
+        [[nodiscard]] static JsonValue MakeBool(bool b) { JsonValue v; v.type = JsonType::Boolean; v.boolValue = b; return v; }
+
+        /**
+         * @brief Sets (adds or overwrites) a member on this object value.
+         *
+         * @param key Member name.
+         * @param value Member value.
+         */
+        void Set(const std::string& key, JsonValue value)
+        {
+            for (auto& [memberKey, memberValue] : objectValue)
+            {
+                if (memberKey == key) { memberValue = std::move(value); return; }
+            }
+            objectValue.emplace_back(key, std::move(value));
         }
     };
 
@@ -446,5 +476,120 @@ namespace CNA::Internal
     {
         Detail::JsonParser parser(text);
         return parser.ParseDocument();
+    }
+
+    namespace Detail
+    {
+        inline void WriteJsonString(std::string& out, const std::string& s)
+        {
+            out += '"';
+            for (const char c : s)
+            {
+                switch (c)
+                {
+                    case '"':  out += "\\\""; break;
+                    case '\\': out += "\\\\"; break;
+                    case '\b': out += "\\b"; break;
+                    case '\f': out += "\\f"; break;
+                    case '\n': out += "\\n"; break;
+                    case '\r': out += "\\r"; break;
+                    case '\t': out += "\\t"; break;
+                    default:
+                        if (static_cast<unsigned char>(c) < 0x20)
+                        {
+                            char buf[8];
+                            std::snprintf(buf, sizeof(buf), "\\u%04x", static_cast<unsigned char>(c));
+                            out += buf;
+                        }
+                        else
+                        {
+                            out += c;
+                        }
+                }
+            }
+            out += '"';
+        }
+
+        inline void WriteJsonValue(std::string& out, const JsonValue& value)
+        {
+            switch (value.type)
+            {
+                case JsonType::Null:
+                    out += "null";
+                    break;
+                case JsonType::Boolean:
+                    out += value.boolValue ? "true" : "false";
+                    break;
+                case JsonType::Number:
+                {
+                    // Numbers used by this codebase's own local persistence are always either
+                    // exact integers (ticks, ratings, counts) or ordinary finite doubles/floats -
+                    // format as an integer when the value round-trips exactly, matching what a
+                    // human/diff would expect (no trailing ".0" on a Ticks value), falling back to
+                    // %.17g (round-trip-safe for IEEE 754 double) otherwise.
+                    char buf[64];
+                    const double n = value.numberValue;
+                    if (n == static_cast<double>(static_cast<long long>(n))
+                        && std::abs(n) < 1e18)
+                    {
+                        std::snprintf(buf, sizeof(buf), "%lld", static_cast<long long>(n));
+                    }
+                    else
+                    {
+                        std::snprintf(buf, sizeof(buf), "%.17g", n);
+                    }
+                    out += buf;
+                    break;
+                }
+                case JsonType::String:
+                    WriteJsonString(out, value.stringValue);
+                    break;
+                case JsonType::Array:
+                {
+                    out += '[';
+                    bool first = true;
+                    for (const JsonValue& element : value.arrayValue)
+                    {
+                        if (!first) out += ',';
+                        first = false;
+                        WriteJsonValue(out, element);
+                    }
+                    out += ']';
+                    break;
+                }
+                case JsonType::Object:
+                {
+                    out += '{';
+                    bool first = true;
+                    for (const auto& [memberKey, memberValue] : value.objectValue)
+                    {
+                        if (!first) out += ',';
+                        first = false;
+                        WriteJsonString(out, memberKey);
+                        out += ':';
+                        WriteJsonValue(out, memberValue);
+                    }
+                    out += '}';
+                    break;
+                }
+            }
+        }
+    }
+
+    /**
+     * @brief Serializes a JsonValue tree to compact JSON text.
+     *
+     * The inverse of ParseJson() - `ParseJson(WriteJson(v))` round-trips `v` exactly for every
+     * value this codebase's own local persistence writes (ticks-as-integers, plain strings,
+     * objects/arrays - the same "just enough of the grammar" scope ParseJson documents).
+     *
+     * @param value The value to serialize.
+     * @return Compact (no extraneous whitespace) JSON text.
+     */
+    inline std::string WriteJson(const JsonValue& value)
+    {
+        std::string out;
+        Detail::WriteJsonValue(out, value);
+        return out;
     }
 }

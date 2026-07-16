@@ -1,10 +1,13 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
 #include <any>
+#include <filesystem>
+#include <fstream>
 
 #include "System/InvalidOperationException.hpp"
 #include "System/NotSupportedException.hpp"
 
+#include "CNA/Internal/GamerServices/LocalGamerServicesStore.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Gamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/FriendGamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/GamerProfile.hpp"
@@ -15,7 +18,26 @@
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp"
 #include "Microsoft/Xna/Framework/PlayerIndex.hpp"
+#include "Microsoft/Xna/Framework/Storage/StorageDevice.hpp"
 #include "SignedInGamerTestAccess.hpp"
+
+namespace {
+    // Task 4.7 (plan_net.md Phase 4): achievement/leaderboard persistence now touches a real
+    // local store on disk, keyed only by gamertag - many unrelated tests in this file reuse
+    // gamertags like "tag1", so without isolation a persistence test could see leftover state
+    // from an earlier test (or leak state into a later one). Redirects the store to a dedicated,
+    // wiped-clean-before-and-after test app name via StorageDevice::SetAppNameEXT, rather than
+    // relying on every test using a globally-unique gamertag.
+    struct GamerServicesStoreGuard {
+        GamerServicesStoreGuard() {
+            Microsoft::Xna::Framework::Storage::StorageDevice::SetAppNameEXT("CnaTestsGamerServices");
+            CNA::Internal::GamerServices::ResetStoreForTestingEXT();
+        }
+        ~GamerServicesStoreGuard() {
+            CNA::Internal::GamerServices::ResetStoreForTestingEXT();
+        }
+    };
+}
 
 using namespace Microsoft::Xna::Framework::GamerServices;
 
@@ -508,11 +530,13 @@ TEST(SignedInGamerTest, GetFriendsIsEmpty) {
 }
 
 TEST(SignedInGamerTest, AwardAchievementDoesNotThrow) {
+    GamerServicesStoreGuard guard;
     auto gamer = SignedInGamer::CreateInternal("tag1");
     EXPECT_NO_THROW(gamer.AwardAchievement("some_key"));
 }
 
 TEST(SignedInGamerTest, BeginEndAwardAchievement) {
+    GamerServicesStoreGuard guard;
     auto gamer = SignedInGamer::CreateInternal("tag1");
     System::IAsyncResult* result = gamer.BeginAwardAchievement("key", System::AsyncCallback{}, std::any{});
     ASSERT_NE(nullptr, result);
@@ -525,6 +549,7 @@ TEST(SignedInGamerTest, BeginEndAwardAchievement) {
 // this action already completing synchronously right after BeginAwardAchievement returns.
 // Confirms the callback now fires exactly once with the correct IAsyncResult identity/AsyncState.
 TEST(SignedInGamerTest, BeginAwardAchievementInvokesCallbackExactlyOnceWithCorrectIdentity) {
+    GamerServicesStoreGuard guard;
     auto gamer = SignedInGamer::CreateInternal("tag1");
     int callCount = 0;
     System::IAsyncResult* observedResult = nullptr;
@@ -553,6 +578,7 @@ TEST(SignedInGamerTest, BeginAwardAchievementInvokesCallbackExactlyOnceWithCorre
 // BeginAwardAchievement return a stale null - EndAwardAchievement nulls statStoreAction_ as a
 // side effect, so the pointer to return must be captured before invoking the callback.
 TEST(SignedInGamerTest, BeginAwardAchievementCallbackCanReentrantlyCallEndAwardAchievement) {
+    GamerServicesStoreGuard guard;
     auto gamer = SignedInGamer::CreateInternal("tag1");
     bool ended = false;
 
@@ -570,13 +596,101 @@ TEST(SignedInGamerTest, BeginAwardAchievementCallbackCanReentrantlyCallEndAwardA
     delete result;
 }
 
-TEST(SignedInGamerTest, GetAchievementsReturnsEmptyCollection) {
+TEST(SignedInGamerTest, GetAchievementsReturnsEmptyCollectionWhenNoneEarned) {
+    GamerServicesStoreGuard guard;
     auto gamer = SignedInGamer::CreateInternal("tag1");
     auto achievements = gamer.GetAchievements();
     EXPECT_EQ(0, achievements.getCountProperty());
 }
 
+// Task 4.5/4.7 (plan_net.md Phase 4): AwardAchievement now persists to a real local store, and
+// GetAchievements() loads it back - confirms the earned key/IsEarned/EarnedDateTime round-trip
+// through disk, not just in-memory state that happens to survive within one test. Name/
+// Description/GamerScore have no local source of truth (see AwardAchievement's own doc comment)
+// so they're expected to stay at their empty/zero defaults.
+TEST(SignedInGamerTest, AwardAchievementPersistsAndGetAchievementsReflectsIt) {
+    GamerServicesStoreGuard guard;
+    auto gamer = SignedInGamer::CreateInternal("persist_tag");
+
+    gamer.AwardAchievement("first_steps");
+    auto achievements = gamer.GetAchievements();
+
+    ASSERT_EQ(1, achievements.getCountProperty());
+    EXPECT_EQ("first_steps", achievements[0].getKeyProperty());
+    EXPECT_TRUE(achievements[0].getIsEarnedProperty());
+}
+
+// The real disk-persistence proof: destroy every in-process SignedInGamer/AchievementCollection
+// object between writing and reading, and confirm the earned achievement still comes back -
+// state that only survived in memory would not.
+TEST(SignedInGamerTest, AwardedAchievementSurvivesAcrossFreshObjects) {
+    GamerServicesStoreGuard guard;
+    {
+        auto writer = SignedInGamer::CreateInternal("reload_tag");
+        writer.AwardAchievement("collector");
+    } // writer (and any in-memory-only state) is fully destroyed here
+
+    auto reader = SignedInGamer::CreateInternal("reload_tag");
+    auto achievements = reader.GetAchievements();
+    ASSERT_EQ(1, achievements.getCountProperty());
+    EXPECT_EQ("collector", achievements[0].getKeyProperty());
+}
+
+// AwardAchievement/BeginAwardAchievement are the sync/async form of the same real operation -
+// confirms BeginAwardAchievement's persistence path (not just AwardAchievement's) round-trips.
+TEST(SignedInGamerTest, BeginAwardAchievementPersistsToo) {
+    GamerServicesStoreGuard guard;
+    auto gamer = SignedInGamer::CreateInternal("begin_award_tag");
+
+    System::IAsyncResult* result = gamer.BeginAwardAchievement("speed_demon", System::AsyncCallback{}, std::any{});
+    gamer.EndAwardAchievement(result);
+    delete result;
+
+    auto achievements = gamer.GetAchievements();
+    ASSERT_EQ(1, achievements.getCountProperty());
+    EXPECT_EQ("speed_demon", achievements[0].getKeyProperty());
+}
+
+// Awarding the same key twice must not duplicate the entry (upsert, not append).
+TEST(SignedInGamerTest, AwardingTheSameAchievementTwiceDoesNotDuplicate) {
+    GamerServicesStoreGuard guard;
+    auto gamer = SignedInGamer::CreateInternal("dup_tag");
+    gamer.AwardAchievement("collector");
+    gamer.AwardAchievement("collector");
+    auto achievements = gamer.GetAchievements();
+    EXPECT_EQ(1, achievements.getCountProperty());
+}
+
+// Achievements are per-gamertag - a different gamertag's store must stay empty.
+TEST(SignedInGamerTest, AchievementsAreIsolatedPerGamertag) {
+    GamerServicesStoreGuard guard;
+    auto gamerA = SignedInGamer::CreateInternal("tagA");
+    auto gamerB = SignedInGamer::CreateInternal("tagB");
+    gamerA.AwardAchievement("first_steps");
+
+    EXPECT_EQ(1, gamerA.GetAchievements().getCountProperty());
+    EXPECT_EQ(0, gamerB.GetAchievements().getCountProperty());
+}
+
+// Task 4.7: a corrupt/missing store file must never crash - starts empty instead.
+TEST(SignedInGamerTest, GetAchievementsHandlesMissingOrCorruptStoreFileGracefully) {
+    GamerServicesStoreGuard guard;
+    const std::string root = CNA::Internal::GamerServices::GetGamerServicesStoreRootEXT();
+    const std::string path = root + "/achievements/corrupt_tag.json";
+    std::filesystem::create_directories(root + "/achievements");
+    {
+        std::ofstream corrupt(path);
+        corrupt << "{ this is not valid json";
+    }
+
+    auto gamer = SignedInGamer::CreateInternal("corrupt_tag");
+    AchievementCollection achievements{AchievementCollection::CreateInternal({})};
+    EXPECT_NO_THROW(achievements = gamer.GetAchievements());
+    EXPECT_EQ(0, achievements.getCountProperty());
+}
+
 TEST(SignedInGamerTest, BeginGetAchievementsTwiceThrows) {
+    GamerServicesStoreGuard guard;
     auto gamer = SignedInGamer::CreateInternal("tag1");
     System::IAsyncResult* result = gamer.BeginGetAchievements(System::AsyncCallback{}, std::any{});
     ASSERT_NE(nullptr, result);
@@ -596,6 +710,7 @@ TEST(SignedInGamerTest, BeginGetAchievementsTwiceThrows) {
 
 // audit_net.md High finding: same as BeginAwardAchievement above, for BeginGetAchievements.
 TEST(SignedInGamerTest, BeginGetAchievementsInvokesCallbackExactlyOnceWithCorrectIdentity) {
+    GamerServicesStoreGuard guard;
     auto gamer = SignedInGamer::CreateInternal("tag1");
     int callCount = 0;
     System::IAsyncResult* observedResult = nullptr;
@@ -622,6 +737,7 @@ TEST(SignedInGamerTest, BeginGetAchievementsInvokesCallbackExactlyOnceWithCorrec
 // BeginGetAchievements return a stale null, and that the in-progress guard (statReceiveAction_)
 // is correctly cleared by the reentrant call rather than left stale.
 TEST(SignedInGamerTest, BeginGetAchievementsCallbackCanReentrantlyCallEndGetAchievements) {
+    GamerServicesStoreGuard guard;
     auto gamer = SignedInGamer::CreateInternal("tag1");
     bool ended = false;
 

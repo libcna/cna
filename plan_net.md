@@ -474,19 +474,46 @@ no evident load/save path was found in the Phase 0 grep). `LeaderboardReader`/`L
 `LeaderboardWriter.cpp`) currently throw `System::NotSupportedException` on every real read/write
 path (`LeaderboardReader.cpp:86,91,106,111,155,165,176,181`; `LeaderboardWriter.cpp:9`).
 
-- [ ] **Task 4.1** — Re-confirm current achievement population/storage mechanism with a targeted
-  read of `AchievementCollection`'s constructor(s) and any demo that populates one (start with
-  `examples/demo_achievement_showcase`). Determine whether "earned" state is currently
-  per-process/in-memory-only (expected) or already touches disk anywhere (grep in Phase 0 found
-  none, but confirm before designing the fix).
-- [ ] **Task 4.2** — Design a small local persistence format/location for earned-achievement
-  state and leaderboard entries. Default (no user spec given): plain local JSON file(s), one per
-  gamertag, under whatever local-user-data-directory convention this codebase already uses
-  elsewhere (search for an existing "user data dir"/"save game" path helper before inventing a
-  new one — reuse it if found). Document the chosen path/format explicitly in this plan once
-  decided, since no existing convention was confirmed during Phase 0.
+- [x] **Task 4.1** — Confirmed: `AchievementCollection` is a plain `std::vector<Achievement>`
+  value-type wrapper with no persistence of its own; `demo_achievement_showcase` maintains its
+  **own** hardcoded, in-memory-only achievement catalog (`kTileDefs`/`tiles_`) entirely separate
+  from `SignedInGamer`. `SignedInGamer::AwardAchievement`/`BeginAwardAchievement` were pure
+  no-ops and `EndGetAchievements` always returned an empty collection (confirmed against FNA's own
+  reference `SignedInGamer.cs`, which is identically empty — not a CNA-only gap). No disk touching
+  anywhere, confirmed.
+- [x] **Task 4.2** — Persistence design decided and implemented:
+  - **Location**: reused this codebase's existing user-data-directory convention instead of
+    inventing a new one - `Microsoft::Xna::Framework::Storage::StorageDevice::GetStorageRootEXT()`
+    (already real, `SDL_GetPrefPath`-backed, found by searching for exactly this per Phase 0's own
+    instruction) plus a new `GamerServices` subdirectory. New internal helper module
+    `CNA::Internal::GamerServices` (`include/CNA/Internal/GamerServices/LocalGamerServicesStore.hpp`,
+    `src/CNA/Internal/GamerServices/LocalGamerServicesStore.cpp`) owns all read/write/upsert
+    logic, mirroring `CNA_Net`'s own established two-glob CMake pattern (`CNA/Internal/Net/*.cpp`
+    alongside `Microsoft/Xna/Framework/Net/*.cpp` in one library target) for
+    `CNA/Internal/GamerServices` alongside `Microsoft/Xna/Framework/GamerServices`
+    (`cmake/CnaLibrary.cmake`) - `PropertyDictionary` (a `CNA_GamerServices`-layer type) is used
+    directly by the store, so it cannot live in the base `CNA` library without a real circular
+    dependency (confirmed the hard way: an initial version linked with undefined-reference errors
+    until moved into `CNA_GamerServices`'s own glob).
+  - **Format**: JSON, one file per gamertag for achievements
+    (`<root>/GamerServices/achievements/<sanitized-gamertag>.json`) and one file per leaderboard
+    identity for leaderboards (`<root>/GamerServices/leaderboards/<sanitized-key>.json` - see
+    Task 4.3/4.4 below for why "one per leaderboard", not "one per gamertag", for this half).
+    Reused the existing `CNA::Internal::Json.hpp` `JsonValue` parser (already used for `.cnb`
+    content documents) rather than sharp-runtime's `System::Text::Json` (a closer, more
+    project-native fit for a small internal document than the latter's .NET-API-mirroring
+    surface) or a direct `nlohmann::json` dependency (only implicitly available via
+    sharp-runtime's own un-declared system-header dependency, not something CNA proper should add
+    a new direct reliance on) - extended it with a small, symmetric `WriteJson()` serializer using
+    the same `JsonValue` tree, plus `MakeObject`/`MakeArray`/`MakeString`/`MakeNumber`/`MakeBool`/
+    `Set()` construction helpers.
+  - **Corruption safety**: writes go to a `.tmp` file then rename onto the real path, so a
+    crash/power-loss mid-write can never leave a half-written, unparseable store file; reads that
+    hit a missing or unparseable file start empty rather than throwing (Task 4.7's own
+    requirement).
 - [ ] **Task 4.3** — Implement real (not `NotSupportedException`) `LeaderboardWriter::Write`-path
-  behavior: persist a written leaderboard entry to the local store from Task 4.2.
+  behavior: persist a written leaderboard entry to the local store from Task 4.2. *(Deferred to
+  its own commit - see the open leaderboard design note below.)*
 - [ ] **Task 4.4** — Implement real `LeaderboardReader` read paths (the `BeginRead`/`EndRead`
   pair and whatever synchronous accessors exist) sourcing from the same local store, instead of
   every path throwing `NotSupportedException`. Preserve `NotSupportedException` only for
@@ -495,20 +522,63 @@ path (`LeaderboardReader.cpp:86,91,106,111,155,165,176,181`; `LeaderboardWriter.
   answer; document any path that stays intentionally unsupported with a one-line reason.
   Investigate `include/Microsoft/Xna/Framework/GamerServices/LeaderboardReader.hpp:239-241`'s own
   doc comment (references `BeginRead`/`EndRead` being an intentional stub today) before deciding
-  scope.
-- [ ] **Task 4.5** — Wire achievement earning to persist to the same local store, and load
-  previously-earned state back on `SignedInGamer`/`AchievementCollection` construction for a
-  returning gamertag.
-- [ ] **Task 4.6** — `Achievement::GetPicture()` (`Achievement.cpp:51`): confirmed still throwing
-  `NotImplementedException` in Phase 0. Per the "still-open micro-decisions" note above, default
-  to **leaving this throwing** (genuine platform unavailability, not a local-persistence
-  question) — add a test locking in the throw plus a doc-comment explanation if one isn't already
-  present, rather than building a placeholder-texture system nobody asked for.
-- [ ] **Task 4.7** — Add tests: write an entry, destroy the in-process objects, re-construct, read
-  it back — proves real disk persistence, not just in-memory state that happens to survive within
-  one test. Add tests for corrupt/missing store file handling (should not crash — start empty).
-- [ ] **Task 4.8** — Update `examples/demo_leaderboard_viewer` and `demo_achievement_showcase` if
-  their current behavior assumed the old unsupported/in-memory-only state.
+  scope. *(Deferred to its own commit.)*
+  **Open design note carried forward** (investigated, not yet implemented): unlike achievements
+  (inherently per-gamertag), a leaderboard is inherently multi-gamer, so the store is keyed by
+  `LeaderboardIdentity` (key + game mode), holding every local gamertag's entry that has written
+  to it. `LeaderboardEntry::getGamerProperty()` needs a real, non-owning `Gamer*` - entries are
+  matched against `Gamer::getSignedInGamersProperty()` by gamertag at read time; a persisted
+  gamertag with no currently-signed-in match is skipped (documented limitation, not fabricated via
+  a throwaway `Gamer`-derived object with unclear ownership). No FNA reference exists for sort
+  order or for `BeginRead`'s 3 overloads' exact semantics (FNA's own `LeaderboardReader.cs` is
+  identically all-`NotSupportedException`) - planned CNA-original defaults: rating-descending sort
+  with 1-based `RankingEXT`; the `pivotGamer` overload centers the page on that gamer's rank; the
+  `gamers`-restricted overload sets `friends=true` (bounded-array paging math, matching
+  `isFriendBoard_`'s existing simpler bounds check) and filters to only the given gamer list.
+  `BeginPageDown`/`EndPageDown`/`BeginPageUp`/`EndPageUp` can reslice the already-cached
+  `entryCache_` without a new disk read.
+- [x] **Task 4.5** — `SignedInGamer::AwardAchievement`/`BeginAwardAchievement` (both - real XNA's
+  own `AwardAchievement` never called `BeginAwardAchievement` internally either; kept as two
+  independent stubs that now share the same real persistence call) persist immediately via
+  `CNA::Internal::GamerServices::SaveEarnedAchievementEXT`, keyed by `getGamertagProperty()`.
+  `SignedInGamer::EndGetAchievements` loads the gamertag's persisted records back via
+  `LoadEarnedAchievementsEXT` and returns real `Achievement` objects with real `Key`/`IsEarned`
+  (always true)/`EarnedDateTime`. **Documented, deliberate gap**: `Name`/`Description`/
+  `GamerScore`/`DisplayBeforeEarned` stay at `Achievement::CreateInternal`'s defaults
+  (empty/0/true) - real XNA's `AwardAchievement(string achievementKey)` never carries catalog
+  metadata (Xbox LIVE supplied it out-of-band from the running game), so a local implementation
+  genuinely has no source of truth for it; only the fact-of-earning and its timestamp are real
+  local data. `EarnedOnline` similarly stays at its class default (`true`) - no "was this earned
+  while connected" concept exists locally either way.
+- [x] **Task 4.6** — `Achievement::GetPicture()` (`Achievement.cpp:49`) confirmed still throwing
+  `NotImplementedException`, matching FNA's own stub exactly. Left throwing per the "still-open
+  micro-decisions" default (genuine platform unavailability - real Xbox 360 achievement artwork
+  was streamed from Xbox LIVE at request time, no local equivalent). A locking-in test already
+  existed (`GamerServicesDataTests.cpp`'s `AchievementTest.GetPictureThrows`); added a fuller
+  Doxygen explanation of why to `Achievement.hpp`.
+- [x] **Task 4.7 (achievements half)** — Added 6 new tests to `GamerServicesGamerTests.cpp`:
+  `AwardAchievementPersistsAndGetAchievementsReflectsIt`, `AwardedAchievementSurvivesAcrossFreshObjects`
+  (the real disk-persistence proof - destroys every in-process object between writing and reading),
+  `BeginAwardAchievementPersistsToo`, `AwardingTheSameAchievementTwiceDoesNotDuplicate` (upsert, not
+  append), `AchievementsAreIsolatedPerGamertag`,
+  `GetAchievementsHandlesMissingOrCorruptStoreFileGracefully` (writes deliberately malformed JSON
+  to the store file, confirms `GetAchievements()` still doesn't throw and starts empty).
+  **Test isolation**: real disk persistence keyed only by gamertag meant existing tests reusing
+  `"tag1"` across this file could otherwise leak state between tests - added a
+  `GamerServicesStoreGuard` (redirects the store to a dedicated `"CnaTestsGamerServices"` app name
+  via `StorageDevice::SetAppNameEXT`, wipes it clean before and after each test via the new
+  `ResetStoreForTestingEXT()`) and applied it to every achievement-persistence test. *(Leaderboard
+  half deferred to its own commit.)*
+- [x] **Task 4.8 (achievements half)** — Updated `demo_achievement_showcase`'s `AwardTile()`/smoke-
+  test-complete log lines: no longer describe `AwardAchievement`/`GetAchievements` as confirmed
+  no-ops - manually verified via `--smoke 180`: `GetAchievements().getCountProperty()` now grows
+  1→6 in lockstep with the demo's own locally-tracked earned count, and the real JSON file
+  (`~/.local/share/game/GamerServices/achievements/<gamertag>.json`) was inspected directly to
+  confirm correct content, then removed (a manual verification artifact, not something to leave
+  behind). *(`demo_leaderboard_viewer` deferred to the leaderboard commit.)*
+- [x] **Verified**: 24/24 `SignedInGamerTest` tests pass; full suite 4675/4677 (2 expected skips,
+  0 failures); `cna_demo_achievement_showcase --smoke 180` runs clean with real, growing,
+  disk-confirmed persistence.
 
 ---
 
