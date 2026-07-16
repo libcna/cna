@@ -174,6 +174,46 @@ TEST_F(EnvironmentMapEffectDefaultsTest, EnvironmentMapDefaultsToNull)
     EXPECT_EQ(fx.getEnvironmentMapProperty(), nullptr);
 }
 
+// plan_xnb.md XNB-32: SetOwnedTexture()/SetOwnedEnvironmentMap() -- content-pipeline-loaded
+// effects need to keep their own texture references alive (matching real XNA's GC-tracked
+// Effect.Texture), unlike setTextureProperty(Texture2D*)/setEnvironmentMapProperty(TextureCube*)'s
+// non-owning pointers used by Model's shared texture pool.
+
+TEST_F(EnvironmentMapEffectDefaultsTest, SetOwnedTextureKeepsTextureAliveAndVisibleThroughGetter)
+{
+    auto owned = std::make_shared<Texture2D>(gd, 2, 2);
+    Texture2D* raw = owned.get();
+
+    fx.SetOwnedTexture(owned);
+
+    EXPECT_EQ(fx.getTextureProperty(), raw);
+}
+
+TEST_F(EnvironmentMapEffectDefaultsTest, SetOwnedEnvironmentMapKeepsCubeAliveAndVisibleThroughGetter)
+{
+    auto owned = std::make_shared<TextureCube>(gd, 4, false, SurfaceFormat::Color);
+    TextureCube* raw = owned.get();
+
+    fx.SetOwnedEnvironmentMap(owned);
+
+    EXPECT_EQ(fx.getEnvironmentMapProperty(), raw);
+}
+
+TEST_F(EnvironmentMapEffectDefaultsTest, CloneSharesOwnedTextureOwnership)
+{
+    fx.SetOwnedTexture(std::make_shared<Texture2D>(gd, 2, 2));
+    fx.SetOwnedEnvironmentMap(std::make_shared<TextureCube>(gd, 4, false, SurfaceFormat::Color));
+    Texture2D* originalTexturePtr = fx.getTextureProperty();
+    TextureCube* originalCubePtr = fx.getEnvironmentMapProperty();
+
+    std::unique_ptr<Microsoft::Xna::Framework::Graphics::Effect> cloned(fx.Clone());
+    auto* clone = dynamic_cast<EnvironmentMapEffect*>(cloned.get());
+    ASSERT_NE(clone, nullptr);
+
+    EXPECT_EQ(clone->getTextureProperty(), originalTexturePtr);
+    EXPECT_EQ(clone->getEnvironmentMapProperty(), originalCubePtr);
+}
+
 // -----------------------------------------------------------------------
 // Environment map parameters — FNA's constructor explicitly sets these
 // (not just class-field defaults): EnvironmentMapAmount=1,

@@ -182,6 +182,36 @@ TEST_F(BasicEffectDefaultsTest, TextureDefaultsToNull)
 }
 
 // -----------------------------------------------------------------------
+// plan_xnb.md XNB-32: SetOwnedTexture() -- content-pipeline-loaded effects need to keep their own
+// texture reference alive (matching real XNA's GC-tracked Effect.Texture), unlike
+// setTextureProperty(Texture2D*)'s non-owning pointer used by Model's shared texture pool.
+
+TEST_F(BasicEffectDefaultsTest, SetOwnedTextureKeepsTextureAliveAndVisibleThroughGetter)
+{
+    auto owned = std::make_shared<Texture2D>(gd, 2, 2);
+    Texture2D* raw = owned.get();
+
+    fx.SetOwnedTexture(owned);
+
+    EXPECT_EQ(fx.getTextureProperty(), raw);
+}
+
+TEST_F(BasicEffectDefaultsTest, CloneSharesOwnedTextureOwnership)
+{
+    fx.SetOwnedTexture(std::make_shared<Texture2D>(gd, 2, 2));
+    Texture2D* originalTexturePtr = fx.getTextureProperty();
+
+    std::unique_ptr<Effect> cloned(fx.Clone());
+    auto* clone = dynamic_cast<BasicEffect*>(cloned.get());
+    ASSERT_NE(clone, nullptr);
+
+    // Clone() shares ownership of the same underlying texture (a shallow copy of the shared_ptr),
+    // not a fresh copy of the Texture2D -- matches how the raw, non-owning texture_ pointer was
+    // already shared across clones before this task.
+    EXPECT_EQ(clone->getTextureProperty(), originalTexturePtr);
+}
+
+// -----------------------------------------------------------------------
 // Task 363: EnableDefaultLighting() exact constants, cross-checked literal-
 // for-literal against FNA's Graphics/Effect/StockEffects/EffectHelpers.cs
 // (EnableDefaultLighting) and BasicEffect.cs (EnableDefaultLighting, which

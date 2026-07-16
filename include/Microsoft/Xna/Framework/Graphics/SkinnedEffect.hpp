@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include <memory>
 #include <vector>
 
 #include "Microsoft/Xna/Framework/Matrix.hpp"
@@ -305,6 +306,17 @@ namespace Microsoft::Xna::Framework::Graphics
         void setTextureProperty(Texture2D* value);
 
         /**
+         * @brief Gives this effect shared ownership of a texture, keeping it alive for as long as
+         *        the effect exists -- matching real XNA's GC-tracked `Effect.Texture` reference.
+         *        See `BasicEffect::SetOwnedTexture()`'s own docs for why this exists alongside
+         *        the non-owning `setTextureProperty(Texture2D*)`.
+         *
+         * @param texture The texture to take shared ownership of; also becomes the effect's
+         *                current texture (as if passed to `setTextureProperty()`).
+         */
+        NOXNA void SetOwnedTexture(std::shared_ptr<Texture2D> texture);
+
+        /**
          * @brief Gets the number of bone weights used per vertex (1, 2, or 4).
          *
          * @return The weights-per-vertex count.
@@ -356,6 +368,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
         // Texture stored directly (Texture2D does not inherit from Texture in CNA)
         Texture2D* texture_ = nullptr;
+        std::shared_ptr<Texture2D> ownedTexture_; // see SetOwnedTexture()
 
         EffectParameter* diffuseColorParam_          = nullptr;
         EffectParameter* emissiveColorParam_         = nullptr;

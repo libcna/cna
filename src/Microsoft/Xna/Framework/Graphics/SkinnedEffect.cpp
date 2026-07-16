@@ -78,6 +78,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
         weightsPerVertex_ = src.weightsPerVertex_;
         texture_          = src.texture_;
+        ownedTexture_     = src.ownedTexture_;
 
         DirectionalLight0 = src.DirectionalLight0;
         DirectionalLight1 = src.DirectionalLight1;
@@ -275,6 +276,11 @@ namespace Microsoft::Xna::Framework::Graphics
 
     Texture2D* SkinnedEffect::getTextureProperty() const       { return texture_; }
     void       SkinnedEffect::setTextureProperty(Texture2D* v) { texture_ = v; }
+    void SkinnedEffect::SetOwnedTexture(std::shared_ptr<Texture2D> texture)
+    {
+        ownedTexture_ = std::move(texture);
+        texture_ = ownedTexture_.get();
+    }
 
     int  SkinnedEffect::getWeightsPerVertexProperty() const { return weightsPerVertex_; }
     void SkinnedEffect::setWeightsPerVertexProperty(int v)

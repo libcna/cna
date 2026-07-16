@@ -25,6 +25,7 @@ using Microsoft::Xna::Framework::Vector3;
 using Microsoft::Xna::Framework::Graphics::AlphaTestEffect;
 using Microsoft::Xna::Framework::Graphics::CompareFunction;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+using Microsoft::Xna::Framework::Graphics::Texture2D;
 using CNA::Internal::Backends::GpuDrawParams;
 
 namespace
@@ -102,6 +103,32 @@ TEST_F(AlphaTestEffectDefaultsTest, FogColorDefaultsToZero)
 TEST_F(AlphaTestEffectDefaultsTest, TextureDefaultsToNull)
 {
     EXPECT_EQ(fx.getTextureProperty(), nullptr);
+}
+
+// plan_xnb.md XNB-32: SetOwnedTexture() -- content-pipeline-loaded effects need to keep their own
+// texture reference alive (matching real XNA's GC-tracked Effect.Texture), unlike
+// setTextureProperty(Texture2D*)'s non-owning pointer used by Model's shared texture pool.
+
+TEST_F(AlphaTestEffectDefaultsTest, SetOwnedTextureKeepsTextureAliveAndVisibleThroughGetter)
+{
+    auto owned = std::make_shared<Texture2D>(gd, 2, 2);
+    Texture2D* raw = owned.get();
+
+    fx.SetOwnedTexture(owned);
+
+    EXPECT_EQ(fx.getTextureProperty(), raw);
+}
+
+TEST_F(AlphaTestEffectDefaultsTest, CloneSharesOwnedTextureOwnership)
+{
+    fx.SetOwnedTexture(std::make_shared<Texture2D>(gd, 2, 2));
+    Texture2D* originalTexturePtr = fx.getTextureProperty();
+
+    std::unique_ptr<Microsoft::Xna::Framework::Graphics::Effect> cloned(fx.Clone());
+    auto* clone = dynamic_cast<AlphaTestEffect*>(cloned.get());
+    ASSERT_NE(clone, nullptr);
+
+    EXPECT_EQ(clone->getTextureProperty(), originalTexturePtr);
 }
 
 TEST_F(AlphaTestEffectDefaultsTest, VertexColorEnabledDefaultsToFalse)

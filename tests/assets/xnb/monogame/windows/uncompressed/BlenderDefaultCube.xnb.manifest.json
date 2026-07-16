@@ -1,0 +1,36 @@
+{
+  "producer": "MonoGame content pipeline (mgcb)",
+  "sourceRepo": "https://github.com/MonoGame/MonoGame",
+  "sourcePath": "Tests/Assets/Models/BlenderDefaultCube.xnb",
+  "sourceLicense": "Ms-PL (same license as CNA itself)",
+  "platform": "w",
+  "version": 5,
+  "compressed": false,
+  "totalLength": 1802,
+  "rootReader": "Microsoft.Xna.Framework.Content.ModelReader",
+  "expectedType": "Model",
+  "sharedResourceCount": 3,
+  "typeReaderTable": [
+    "Microsoft.Xna.Framework.Content.ModelReader",
+    "Microsoft.Xna.Framework.Content.StringReader",
+    "Microsoft.Xna.Framework.Content.VertexBufferReader",
+    "Microsoft.Xna.Framework.Content.VertexDeclarationReader",
+    "Microsoft.Xna.Framework.Content.IndexBufferReader",
+    "Microsoft.Xna.Framework.Content.BasicEffectReader"
+  ],
+  "notes": "Not loadable end-to-end yet (ModelReader is Phase F, not implemented) -- vendored now for plan_xnb.md XNB-32's BasicEffectReader tests, which verify the reader directly against a byte-offset slice of this real file rather than a full ContentManager.Load<Model> round trip. Independently verified by direct byte inspection (not assumption): BasicEffect is this file's 3rd (last) shared resource and its serialized object (type-reader-index byte + fields) occupies exactly bytes [1755, 1802) -- ends precisely at EOF, confirming the slice boundary is correct rather than guessed. The real field values found there (Blender's default cube material: diffuse (0.64, 0.64, 0.64), emissive (0,0,0), specular (0.25, 0.25, 0.25), specularPower ~9.6078, alpha 1.0, no texture reference, vertexColorEnabled false) are used verbatim in StockEffectContentTypeReaderTests.cpp. XNB-41's own future end-to-end Model test can reuse this exact fixture once ModelReader exists.",
+  "basicEffectSharedResourceByteRange": {
+    "typeReaderIndexOffset": 1755,
+    "fieldsOffset": 1756,
+    "fieldsLength": 46,
+    "expectedFields": {
+      "textureReference": "",
+      "diffuseColor": [0.64000004529953, 0.64000004529953, 0.64000004529953],
+      "emissiveColor": [0.0, 0.0, 0.0],
+      "specularColor": [0.25, 0.25, 0.25],
+      "specularPower": 9.607843399047852,
+      "alpha": 1.0,
+      "vertexColorEnabled": false
+    }
+  }
+}

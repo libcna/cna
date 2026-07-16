@@ -72,6 +72,8 @@ namespace Microsoft::Xna::Framework::Graphics
 
         texture_        = src.texture_;
         environmentMap_ = src.environmentMap_;
+        ownedTexture_        = src.ownedTexture_;
+        ownedEnvironmentMap_ = src.ownedEnvironmentMap_;
 
         DirectionalLight0 = src.DirectionalLight0;
         DirectionalLight1 = src.DirectionalLight1;
@@ -232,9 +234,19 @@ namespace Microsoft::Xna::Framework::Graphics
 
     Texture2D*   EnvironmentMapEffect::getTextureProperty() const        { return texture_; }
     void         EnvironmentMapEffect::setTextureProperty(Texture2D* v)  { texture_ = v; }
+    void EnvironmentMapEffect::SetOwnedTexture(std::shared_ptr<Texture2D> texture)
+    {
+        ownedTexture_ = std::move(texture);
+        texture_ = ownedTexture_.get();
+    }
 
     TextureCube* EnvironmentMapEffect::getEnvironmentMapProperty() const         { return environmentMap_; }
     void         EnvironmentMapEffect::setEnvironmentMapProperty(TextureCube* v) { environmentMap_ = v; }
+    void EnvironmentMapEffect::SetOwnedEnvironmentMap(std::shared_ptr<TextureCube> cubeMap)
+    {
+        ownedEnvironmentMap_ = std::move(cubeMap);
+        environmentMap_ = ownedEnvironmentMap_.get();
+    }
 
     float EnvironmentMapEffect::getEnvironmentMapAmountProperty() const { return environmentMapAmount_; }
     void  EnvironmentMapEffect::setEnvironmentMapAmountProperty(float v)

@@ -30,6 +30,7 @@ namespace Microsoft::Xna::Framework::Graphics
         , preferPerPixelLighting_(cloneSource.preferPerPixelLighting_)
         , textureEnabled_(cloneSource.textureEnabled_)
         , texture_(cloneSource.texture_)
+        , ownedTexture_(cloneSource.ownedTexture_)
         , fogEnabled_(cloneSource.fogEnabled_)
         , fogColor_(cloneSource.fogColor_)
         , fogStart_(cloneSource.fogStart_)
@@ -165,6 +166,11 @@ namespace Microsoft::Xna::Framework::Graphics
     void BasicEffect::setTextureEnabledProperty(bool v) { textureEnabled_ = v; }
     Texture2D* BasicEffect::getTextureProperty() const { return texture_; }
     void BasicEffect::setTextureProperty(Texture2D* v) { texture_ = v; }
+    void BasicEffect::SetOwnedTexture(std::shared_ptr<Texture2D> texture)
+    {
+        ownedTexture_ = std::move(texture);
+        texture_ = ownedTexture_.get();
+    }
 
     // IEffectFog
     Vector3 BasicEffect::getFogColorProperty() const { return fogColor_; }
