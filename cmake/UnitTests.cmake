@@ -152,6 +152,9 @@ if(CNA_BUILD_TESTS)
     # cursors persist for the whole binary), so a static-state leak would reintroduce order dependence;
     # running the filtered subset 5x under a fresh shuffle each iteration is the required check that
     # catches it. `ctest -L input` runs exactly this on every backend/CI job.
+    # Headless-safe audio everywhere; the video driver is left to the runner (Xvfb+x11 in CI, real
+    # display or `xvfb-run` locally) because the MouseCursor tests need real cursors (the SDL dummy
+    # driver has null cursors).
     cna_register_backend_test(NAME CnaInputTests COMMAND CnaTests --gtest_filter=${CNA_INPUT_TEST_FILTER} --gtest_shuffle --gtest_repeat=5
         LABELS "input" ENVIRONMENT "SDL_AUDIODRIVER=dummy")
 
