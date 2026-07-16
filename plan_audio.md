@@ -5353,6 +5353,32 @@ an audit's claims without cross-checking them against the real code first.
   full audio-scoped suite (541/541 pass, zero regressions -- `GetMixer()`/`DestroyMixer()` are
   exercised indirectly by every single audio test that touches a real track).
 
+* [x] P13-DOC-001 (AUDIO-003): audio documentation was stale after Phase 11/12 landed real fixes
+  the docs never caught up with.
+  *Status:* Fixed, docs-only, no code/test change, no build needed.
+  `docs/xna-4-api-coverage.md`: removed/corrected five stale "stereo hard-pan eliminates the
+  opposite channel" claims (the `Status` summary paragraph, the `Approximate`-bucket compatibility
+  table row, the `Pan` fidelity table row, the `Apply3D` "Bottom line" summary, and the dedicated
+  "Stereo panning is a 2-value gain pair" backend-limitations bullet) -- all predate `P11-PAN-001`'s
+  real 4-coefficient crossfeed matrix fix and were never updated after it landed. The backend
+  bullet specifically now explains that `MIX_SetTrackStereo` alone would have this limitation, but
+  CNA works around it with its own crossfeed matrix in the shared cooked callback, matching FNA's
+  `SetPanMatrixCoefficients` exactly -- not a remaining gap. Added a one-line "real 4-coefficient
+  stereo crossfeed pan blending" clause to the `Implemented` bucket to match. Fixed the summary
+  table's `Audio (XACT)` row, which still claimed "no AttackTime/ReleaseTime envelope tracking" as
+  an accepted gap even though both the same document's own `Implemented` bucket (a few lines above
+  it) and `CHECKLIST.md` already correctly describe it as real/continuous since `P10-RPC-002/003/
+  004` -- an internal contradiction within the same file, not just staleness against the code.
+  `AUDIT.md`: the Audio section's "Last synchronized against real code" banner still said
+  "2026-07-06 (Phase 10 audit)" despite Phase 11 (stereo crossfeed, structural/signature audit,
+  exception-text parity) and Phase 12 (pitch-ratio exponential-curve fix, category hierarchy
+  cascading, cue-level bank-dispose force-stop, `NoAudioHardwareException` doc fix) all landing
+  afterward -- updated to reference this Phase 13 pass as the new synchronization point.
+  `CHECKLIST.md` itself needed no changes -- the audit explicitly confirmed it already correctly
+  records the Phase 11 stereo crossfeed fix and the real AttackTime/ReleaseTime tracking; only the
+  two higher-level summary documents (`docs/xna-4-api-coverage.md`, `AUDIT.md`) had fallen behind
+  it.
+
 * [ ] P13-DYNAMIC-001 (self-found while investigating P13-3D-001, **not fixed this pass**):
   `DynamicSoundEffectInstance` never overrides `setVolumeProperty()`/`setPitchProperty()`/
   `setPanProperty()`/`Apply3D()` -- all four are inherited unchanged from `SoundEffectInstance` and
