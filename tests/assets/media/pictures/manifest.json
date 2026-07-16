@@ -1,0 +1,17 @@
+{
+  "producer": "ImageMagick convert, synthetic solid-color fixture authored for plan_media.md Phase 0",
+  "provenance": "100% self-generated synthetic images -- no third-party content, no NOTICE.md/THIRD_PARTY_NOTICES.md entry required (MEDIA-8)",
+  "purpose": "plan_media.md MEDIA-4: real Picture/PictureAlbum tree fixture for PictureLibraryIndex (MEDIA-56) tests",
+  "tree": [
+    { "path": "Vacation/beach.jpg", "format": "jpeg", "width": 64, "height": 48, "parentAlbumDepthFromRoot": 1 },
+    { "path": "Vacation/Day 2/sunset.png", "format": "png", "width": 32, "height": 32, "parentAlbumDepthFromRoot": 2 },
+    { "path": "Family/portrait.png", "format": "png", "width": 100, "height": 80, "parentAlbumDepthFromRoot": 1 }
+  ],
+  "expectedAlbumTree": {
+    "root": { "children": ["Vacation", "Family"] },
+    "Vacation": { "parent": "root", "children": ["Day 2"], "pictures": ["beach.jpg"] },
+    "Vacation/Day 2": { "parent": "Vacation", "children": [], "pictures": ["sunset.png"] },
+    "Family": { "parent": "root", "children": [], "pictures": ["portrait.png"] }
+  },
+  "note": "parentAlbumDepthFromRoot documents the expected number of Parent-walk steps from that picture's containing PictureAlbum back to MediaLibrary.RootPictureAlbum, for MEDIA-67's walk-depth assertion. Dimensions verified via `identify` at fixture-authoring time."
+}

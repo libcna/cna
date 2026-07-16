@@ -1,0 +1,9 @@
+#EXTM3U
+#EXTINF:2,Artist One - Sunrise
+Artist One/Album Alpha/01 - Sunrise.ogg
+#EXTINF:2,Artist One - Twilight
+Artist One/Album Beta/01 - Twilight.mp3
+#EXTINF:2,Artist Two - Daybreak
+Artist Two/Album Delta/02 - Daybreak.mp3
+#EXTINF:0,Missing Track
+Nonexistent/Missing Track.mp3
