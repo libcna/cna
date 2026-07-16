@@ -426,6 +426,28 @@ TEST(GamerCollectionEnumeratorTest, GetCurrentAfterDisposeThrows) {
     EXPECT_THROW((void) it.getCurrent(), System::ArgumentOutOfRangeException);
 }
 
+// audit_net.md Medium finding: MoveNext() previously dereferenced collection_ (via
+// collection_->size()) unconditionally, with no guard matching getCurrent()'s own - Dispose()
+// sets collection_ to nullptr, so it.Dispose(); it.MoveNext(); was an immediate null-pointer
+// dereference. Confirms MoveNext() now throws the same catchable exception getCurrent() already
+// did in this situation, both before and after any prior MoveNext() call.
+TEST(GamerCollectionEnumeratorTest, MoveNextAfterDisposeThrowsInsteadOfDereferencingNull) {
+    auto gamer = SignedInGamer::CreateInternal("tag1");
+    auto col = SignedInGamerCollection::CreateInternal({&gamer});
+    auto it = col.GetEnumerator();
+    it.Dispose();
+    EXPECT_THROW((void) it.MoveNext(), System::ArgumentOutOfRangeException);
+}
+
+TEST(GamerCollectionEnumeratorTest, MoveNextAfterMoveNextThenDisposeThrows) {
+    auto gamer = SignedInGamer::CreateInternal("tag1");
+    auto col = SignedInGamerCollection::CreateInternal({&gamer});
+    auto it = col.GetEnumerator();
+    ASSERT_TRUE(it.MoveNext());
+    it.Dispose();
+    EXPECT_THROW((void) it.MoveNext(), System::ArgumentOutOfRangeException);
+}
+
 TEST(GamerCollectionEnumeratorTest, MoveNextAndGetCurrentEnumerateInOrder) {
     auto gamerA = SignedInGamer::CreateInternal("a");
     auto gamerB = SignedInGamer::CreateInternal("b");

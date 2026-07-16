@@ -103,6 +103,13 @@ namespace Microsoft::Xna::Framework::GamerServices
         Microsoft::Xna::Framework::Input::TextInputEXT::StartTextInput();
         auto* action = new GuideAction(std::move(state), std::move(callback));
         action->setIsCompletedProperty(true);
+        // audit_net.md High finding: the callback used to only be stored, never invoked, despite
+        // this action already completing synchronously right above - matching
+        // AvatarDescription::BeginGetFromGamer's existing invoke-after-complete pattern.
+        if (action->Callback)
+        {
+            action->Callback(*action);
+        }
         return action;
     }
 

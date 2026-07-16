@@ -364,6 +364,11 @@ namespace Microsoft::Xna::Framework::Net
          * pointers, and those are only guaranteed torn down together with this session (via
          * `ENetBackend::TeardownSession`, called from here), not at an arbitrary earlier point in
          * the session's life.
+         *
+         * Task 12.1: idempotent - a second and every subsequent call is a safe no-op. All of
+         * `AllGamers`/`LocalGamers`/`RemoteGamers`/`PreviousGamers` are emptied before returning,
+         * so no caller can observe a dangling pointer into a gamer this call just freed, even
+         * without calling `Dispose()` again.
          */
         void Dispose() override;
 
@@ -881,6 +886,18 @@ namespace Microsoft::Xna::Framework::Net
 
         static NetworkSessionAction* activeAction_;
         static NetworkSession* activeSession_;
+
+        // Task 12: audit_net.md High finding - every Begin* overload used to leave activeAction_'s
+        // Callback stored but never invoked. Every Begin* already fully completes activeAction_
+        // synchronously (see NetworkSessionAction's constructor comment), so the callback is
+        // invoked once, right here, immediately after activeAction_ is assigned - never from
+        // inside NetworkSessionAction's own constructor, so a re-entrant callback (one that itself
+        // calls back into NetworkSession, e.g. a fresh Begin*/End*) always observes activeAction_
+        // already installed, never null/stale. Returns the action captured *before* invoking the
+        // callback, not activeAction_ read again afterward - a re-entrant callback that calls the
+        // matching End* nulls activeAction_ as a side effect, and the Begin* caller must still get
+        // back the real action it just created, not that now-stale null.
+        NOXNA static NetworkSessionAction* InvokeActiveActionCallback();
 
         // Task 2.15: the connect address/port BeginJoin captured from its AvailableNetworkSession
         // argument, consumed by EndJoin to actually call ENetBackend::ConnectToHost once the

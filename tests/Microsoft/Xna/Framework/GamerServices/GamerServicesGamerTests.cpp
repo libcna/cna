@@ -145,6 +145,34 @@ TEST(GamerTest, BeginEndGetProfile) {
     delete result;
 }
 
+// audit_net.md High finding: GamerAction stored its AsyncCallback but never invoked it, despite
+// this action already completing synchronously (getIsCompletedProperty() == true) right after
+// BeginGetProfile returns. Confirms the callback now fires exactly once with the correct
+// IAsyncResult identity and AsyncState.
+TEST(GamerTest, BeginGetProfileInvokesCallbackExactlyOnceWithCorrectIdentity) {
+    auto g = MakeGamer();
+    int callCount = 0;
+    System::IAsyncResult* observedResult = nullptr;
+    std::any state = 3;
+
+    System::IAsyncResult* result = g.BeginGetProfile(
+        [&callCount, &observedResult](System::IAsyncResult& ar) {
+            ++callCount;
+            observedResult = &ar;
+        },
+        state
+    );
+
+    EXPECT_EQ(callCount, 1);
+    EXPECT_EQ(observedResult, result);
+    ASSERT_TRUE(result->getIsCompletedProperty());
+    EXPECT_EQ(std::any_cast<int>(result->getAsyncStateProperty()), 3);
+
+    GamerProfile* profile = g.EndGetProfile(result);
+    delete profile;
+    delete result;
+}
+
 TEST(GamerTest, GetFromGamertagThrows) {
     EXPECT_THROW(Gamer::GetFromGamertag("someone"), System::NotSupportedException);
 }
@@ -493,6 +521,55 @@ TEST(SignedInGamerTest, BeginEndAwardAchievement) {
     delete result;
 }
 
+// audit_net.md High finding: GamerAction stored its AsyncCallback but never invoked it, despite
+// this action already completing synchronously right after BeginAwardAchievement returns.
+// Confirms the callback now fires exactly once with the correct IAsyncResult identity/AsyncState.
+TEST(SignedInGamerTest, BeginAwardAchievementInvokesCallbackExactlyOnceWithCorrectIdentity) {
+    auto gamer = SignedInGamer::CreateInternal("tag1");
+    int callCount = 0;
+    System::IAsyncResult* observedResult = nullptr;
+    std::any state = 5;
+
+    System::IAsyncResult* result = gamer.BeginAwardAchievement(
+        "key",
+        [&callCount, &observedResult](System::IAsyncResult& ar) {
+            ++callCount;
+            observedResult = &ar;
+        },
+        state
+    );
+
+    EXPECT_EQ(callCount, 1);
+    EXPECT_EQ(observedResult, result);
+    ASSERT_TRUE(result->getIsCompletedProperty());
+    EXPECT_EQ(std::any_cast<int>(result->getAsyncStateProperty()), 5);
+
+    gamer.EndAwardAchievement(result);
+    delete result;
+}
+
+// Confirms a callback that reentrantly calls the matching End* from within itself (the standard
+// APM pattern of checking IsCompleted and immediately consuming the result) does not make
+// BeginAwardAchievement return a stale null - EndAwardAchievement nulls statStoreAction_ as a
+// side effect, so the pointer to return must be captured before invoking the callback.
+TEST(SignedInGamerTest, BeginAwardAchievementCallbackCanReentrantlyCallEndAwardAchievement) {
+    auto gamer = SignedInGamer::CreateInternal("tag1");
+    bool ended = false;
+
+    System::IAsyncResult* result = gamer.BeginAwardAchievement(
+        "key",
+        [&gamer, &ended](System::IAsyncResult& ar) {
+            gamer.EndAwardAchievement(&ar);
+            ended = true;
+        },
+        std::any{}
+    );
+
+    ASSERT_NE(nullptr, result);
+    EXPECT_TRUE(ended);
+    delete result;
+}
+
 TEST(SignedInGamerTest, GetAchievementsReturnsEmptyCollection) {
     auto gamer = SignedInGamer::CreateInternal("tag1");
     auto achievements = gamer.GetAchievements();
@@ -512,6 +589,56 @@ TEST(SignedInGamerTest, BeginGetAchievementsTwiceThrows) {
     delete result;
     // After End, the in-progress guard is cleared, so a new Begin no longer throws.
     System::IAsyncResult* result2 = gamer.BeginGetAchievements(System::AsyncCallback{}, std::any{});
+    ASSERT_NE(nullptr, result2);
+    gamer.EndGetAchievements(result2);
+    delete result2;
+}
+
+// audit_net.md High finding: same as BeginAwardAchievement above, for BeginGetAchievements.
+TEST(SignedInGamerTest, BeginGetAchievementsInvokesCallbackExactlyOnceWithCorrectIdentity) {
+    auto gamer = SignedInGamer::CreateInternal("tag1");
+    int callCount = 0;
+    System::IAsyncResult* observedResult = nullptr;
+    std::any state = 9;
+
+    System::IAsyncResult* result = gamer.BeginGetAchievements(
+        [&callCount, &observedResult](System::IAsyncResult& ar) {
+            ++callCount;
+            observedResult = &ar;
+        },
+        state
+    );
+
+    EXPECT_EQ(callCount, 1);
+    EXPECT_EQ(observedResult, result);
+    ASSERT_TRUE(result->getIsCompletedProperty());
+    EXPECT_EQ(std::any_cast<int>(result->getAsyncStateProperty()), 9);
+
+    gamer.EndGetAchievements(result);
+    delete result;
+}
+
+// Confirms a callback that reentrantly calls the matching End* from within itself does not make
+// BeginGetAchievements return a stale null, and that the in-progress guard (statReceiveAction_)
+// is correctly cleared by the reentrant call rather than left stale.
+TEST(SignedInGamerTest, BeginGetAchievementsCallbackCanReentrantlyCallEndGetAchievements) {
+    auto gamer = SignedInGamer::CreateInternal("tag1");
+    bool ended = false;
+
+    System::IAsyncResult* result = gamer.BeginGetAchievements(
+        [&gamer, &ended](System::IAsyncResult& ar) {
+            (void) gamer.EndGetAchievements(&ar);
+            ended = true;
+        },
+        std::any{}
+    );
+
+    ASSERT_NE(nullptr, result);
+    EXPECT_TRUE(ended);
+    delete result;
+
+    System::IAsyncResult* result2 = nullptr;
+    EXPECT_NO_THROW(result2 = gamer.BeginGetAchievements(System::AsyncCallback{}, std::any{}));
     ASSERT_NE(nullptr, result2);
     gamer.EndGetAchievements(result2);
     delete result2;

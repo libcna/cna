@@ -73,6 +73,85 @@ TEST(NetworkSessionTest, CreateDoesNotLeakNetworkSessionAction) {
     session->Dispose();
 }
 
+// audit_net.md High finding: BeginCreate/BeginFind/BeginJoin/BeginJoinInvited stored their
+// AsyncCallback in NetworkSessionAction but never invoked it, despite NetworkSession.hpp
+// documenting that AsyncCallback runs on completion. Confirms the callback now fires exactly
+// once, synchronously (matching this action already completing at construction time), with the
+// correct IAsyncResult identity and AsyncState.
+TEST(NetworkSessionTest, BeginCreateInvokesCallbackExactlyOnceWithCorrectIdentity) {
+    SignedInGamer extraGamer = MakeSignedInGamer("CallbackTag");
+    Gamer::setSignedInGamersProperty(new SignedInGamerCollection(
+        SignedInGamerCollection::CreateInternal({&extraGamer})
+    ));
+    struct RestoreGlobalGuard {
+        ~RestoreGlobalGuard() {
+            Gamer::setSignedInGamersProperty(new SignedInGamerCollection(SignedInGamerCollection::CreateInternal({})));
+        }
+    } restoreGuard;
+
+    int callCount = 0;
+    System::IAsyncResult* observedResult = nullptr;
+    std::any state = 42;
+
+    System::IAsyncResult* result = NetworkSession::BeginCreate(
+        NetworkSessionType::Local, 1, 8,
+        [&callCount, &observedResult](System::IAsyncResult& ar) {
+            ++callCount;
+            observedResult = &ar;
+        },
+        state
+    );
+
+    EXPECT_EQ(callCount, 1);
+    EXPECT_EQ(observedResult, result);
+    ASSERT_TRUE(result->getIsCompletedProperty());
+    EXPECT_EQ(std::any_cast<int>(result->getAsyncStateProperty()), 42);
+
+    NetworkSession* session = NetworkSession::EndCreate(result);
+    session->Dispose();
+}
+
+// The most common real APM usage: a callback that immediately consumes its IAsyncResult by
+// calling the matching End* from within the callback itself. Confirms this reentrant path leaves
+// activeAction_/activeSession_ in a correct, non-stale state - a subsequent Create() must not be
+// permanently blocked by leftover state from the reentrant EndCreate call.
+TEST(NetworkSessionTest, BeginCreateCallbackCanReentrantlyCallEndCreate) {
+    SignedInGamer extraGamer = MakeSignedInGamer("ReentrantTag");
+    Gamer::setSignedInGamersProperty(new SignedInGamerCollection(
+        SignedInGamerCollection::CreateInternal({&extraGamer})
+    ));
+    struct RestoreGlobalGuard {
+        ~RestoreGlobalGuard() {
+            Gamer::setSignedInGamersProperty(new SignedInGamerCollection(SignedInGamerCollection::CreateInternal({})));
+        }
+    } restoreGuard;
+
+    NetworkSession* completedSession = nullptr;
+    NetworkSession::BeginCreate(
+        NetworkSessionType::Local, 1, 8,
+        [&completedSession](System::IAsyncResult& ar) {
+            completedSession = NetworkSession::EndCreate(&ar);
+        },
+        std::any{}
+    );
+
+    ASSERT_NE(completedSession, nullptr);
+    EXPECT_EQ(completedSession->getSessionTypeProperty(), NetworkSessionType::Local);
+    completedSession->Dispose();
+
+    // activeAction_/activeSession_ must be cleared by the reentrant EndCreate, not left stale -
+    // a fresh Create() must not throw InvalidOperationException.
+    auto gamer2 = MakeSignedInGamer("tag2");
+    NetworkSession* second = nullptr;
+    EXPECT_NO_THROW(
+        second = NetworkSession::Create(
+            NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer2}, 8, 0, NetworkSessionProperties{}
+        )
+    );
+    ASSERT_NE(second, nullptr);
+    second->Dispose();
+}
+
 // Task 3.3: no code path anywhere in this codebase ever deleted a NetworkSession* - Dispose() only
 // ever flipped isDisposed_ to true. Confirmed and documented the ownership contract instead of
 // changing Dispose() to self-delete (see the class's own doc comment for why: an enormous number
@@ -1054,4 +1133,83 @@ TEST(NetworkSessionTest, DisposeFreesEveryGamerTheSessionEverOwned) {
 
     session->Dispose();
     EXPECT_EQ(session->GetOwnedGamerCountForTesting(), 0u);
+}
+
+// audit_net.md Critical finding 1 / Task 12.1: Dispose() itself was not idempotent - a second
+// direct call re-entered the whole body and iterated localGamers_ over an already-freed gamer
+// object (ownedGamers_.clear() during the first call destroys it, but nothing pruned the raw
+// pointer out of localGamers_), a confirmed ASan heap-buffer-overflow/use-after-free. Confirms a
+// second, direct Dispose() call (no fixture/RAII wrapper involved) is a safe no-op that leaves the
+// session in the same state as a single call.
+TEST(NetworkSessionTest, DisposeCalledTwiceDirectlyIsSafeAndIdempotent) {
+    auto gamer = MakeSignedInGamer();
+    NetworkSession* session = NetworkSession::Create(
+        NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}
+    );
+    session->Update();
+
+    EXPECT_NO_THROW(session->Dispose());
+    EXPECT_TRUE(session->getIsDisposedProperty());
+    EXPECT_EQ(session->GetOwnedGamerCountForTesting(), 0u);
+
+    // The bug: this second call used to iterate localGamers_ (still populated pre-fix) and
+    // dereference the LocalNetworkGamer the first call already deleted.
+    EXPECT_NO_THROW(session->Dispose());
+    EXPECT_TRUE(session->getIsDisposedProperty());
+    EXPECT_EQ(session->GetOwnedGamerCountForTesting(), 0u);
+    EXPECT_EQ(session->getLocalGamersProperty().getCountProperty(), 0);
+    EXPECT_EQ(session->getAllGamersProperty().getCountProperty(), 0);
+}
+
+// audit_net.md Critical finding 1: "After only one disposal, callers can also obtain a collection
+// containing dangling gamer pointers, so the problem is not confined to a second call." Confirms
+// the defense-in-depth fix: PreviousGamers (populated by RemoveGamer, which moves a departing
+// gamer's raw pointer there rather than dropping it) is emptied by Dispose() too, not just
+// LocalGamers/AllGamers - a single Dispose() call must never leave a dangling pointer reachable
+// through *any* public collection property.
+TEST(NetworkSessionTest, DisposeClearsPreviousGamersSoNoDanglingPointerIsObservable) {
+    SignedInGamerCollection* previousGlobal = Gamer::getSignedInGamersProperty();
+    SignedInGamer extraGamer = MakeSignedInGamer("ExtraTag");
+    Gamer::setSignedInGamersProperty(new SignedInGamerCollection(
+        SignedInGamerCollection::CreateInternal({&extraGamer})
+    ));
+    struct RestoreGlobalGuard {
+        ~RestoreGlobalGuard() {
+            Gamer::setSignedInGamersProperty(new SignedInGamerCollection(SignedInGamerCollection::CreateInternal({})));
+        }
+    } restoreGuard;
+
+    NetworkSession* session = NetworkSession::Create(NetworkSessionType::Local, 2, 8);
+    ASSERT_EQ(session->getLocalGamersProperty().getCountProperty(), 1);
+
+    auto newGamer = MakeSignedInGamer("NewLocalPlayer");
+    session->AddLocalGamer(&newGamer);
+    NetworkGamer* leaving = session->getLocalGamersProperty()[1];
+    ASSERT_EQ(session->GetOwnedGamerCountForTesting(), 2u);
+
+    // Moves `leaving` (an owned gamer) into PreviousGamers without freeing it - only Dispose()'s
+    // ownedGamers_.clear() actually deletes the object.
+    session->RemoveGamer(leaving, NetworkSessionEndReason::Disconnected);
+    ASSERT_EQ(session->getPreviousGamersProperty().getCountProperty(), 1);
+
+    session->Dispose();
+
+    // Before the fix, this still reported 1 and getPreviousGamersProperty()[0] pointed at the
+    // just-freed `leaving` object.
+    EXPECT_EQ(session->getPreviousGamersProperty().getCountProperty(), 0);
+    EXPECT_EQ(session->getLocalGamersProperty().getCountProperty(), 0);
+    EXPECT_EQ(session->getAllGamersProperty().getCountProperty(), 0);
+    EXPECT_EQ(session->getRemoteGamersProperty().getCountProperty(), 0);
+}
+
+// audit_net.md Suggested fix: "invalidate/clear ... host_ before owned gamers are destroyed."
+TEST(NetworkSessionTest, DisposeClearsHostProperty) {
+    auto gamer = MakeSignedInGamer();
+    NetworkSession* session = NetworkSession::Create(
+        NetworkSessionType::Local, std::vector<SignedInGamer*>{&gamer}, 8, 0, NetworkSessionProperties{}
+    );
+    ASSERT_NE(session->getHostProperty(), nullptr);
+
+    session->Dispose();
+    EXPECT_EQ(session->getHostProperty(), nullptr);
 }

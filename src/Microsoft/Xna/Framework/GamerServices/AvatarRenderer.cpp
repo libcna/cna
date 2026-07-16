@@ -9,6 +9,7 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "System/ArgumentException.hpp"
+#include "System/ArgumentNullException.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
@@ -100,6 +101,14 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     void AvatarRenderer::Draw(IAvatarAnimation* animation)
     {
+        // Task 1.5: every sibling method on this class throws consistently on invalid input
+        // (ObjectDisposedException for a disposed instance) - a null animation used to
+        // unconditionally dereference here instead, undefined behavior rather than a catchable
+        // exception.
+        if (animation == nullptr)
+        {
+            throw System::ArgumentNullException("animation");
+        }
         auto boneTransforms = animation->getBoneTransformsProperty();
         std::vector<Microsoft::Xna::Framework::Matrix> bones(boneTransforms.begin(), boneTransforms.end());
         Draw(bones, animation->getExpressionProperty());
@@ -127,6 +136,15 @@ namespace Microsoft::Xna::Framework::GamerServices
         if (isDisposed_)
         {
             throw System::ObjectDisposedException("AvatarRenderer");
+        }
+        // Task 1.6: without this, a null/empty model silently succeeded here and only surfaced
+        // later, inside DrawRealEXT, as InvalidOperationException("real rendering is disabled") -
+        // a poor and misleading contract, since that exception says nothing about the null model
+        // actually passed to this call. Reject it at the call site instead, matching the
+        // ArgumentNullException convention used elsewhere in this codebase.
+        if (model == nullptr)
+        {
+            throw System::ArgumentNullException("model");
         }
         realDevice_ = &device;
         realModel_ = std::move(model);

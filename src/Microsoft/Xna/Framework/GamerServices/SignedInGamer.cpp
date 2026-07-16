@@ -78,7 +78,17 @@ namespace Microsoft::Xna::Framework::GamerServices
         // reference source's overlap guard is commented out ("FIXME: Pray...").
         statStoreAction_ = new GamerAction(std::move(state), std::move(callback));
         statStoreAction_->setIsCompletedProperty(true);
-        return statStoreAction_;
+        // audit_net.md High finding: the callback used to only be stored, never invoked, despite
+        // this action already completing synchronously right above. A re-entrant callback that
+        // itself calls EndAwardAchievement() (which nulls statStoreAction_) must not make this
+        // method return a stale null pointer, so capture the pointer to return before invoking
+        // the callback, not after.
+        GamerAction* action = statStoreAction_;
+        if (action->Callback)
+        {
+            action->Callback(*action);
+        }
+        return action;
     }
 
     void SignedInGamer::EndAwardAchievement(System::IAsyncResult* /*result*/)
@@ -116,7 +126,17 @@ namespace Microsoft::Xna::Framework::GamerServices
         // making that loop spin forever at 100% CPU for any real game. Mark it complete
         // immediately instead.
         statReceiveAction_->setIsCompletedProperty(true);
-        return statReceiveAction_;
+        // audit_net.md High finding: the callback used to only be stored, never invoked, despite
+        // this action already completing synchronously right above. A re-entrant callback that
+        // itself calls EndGetAchievements() (which nulls statReceiveAction_) must not make this
+        // method return a stale null pointer, so capture the pointer to return before invoking
+        // the callback, not after.
+        GamerAction* action = statReceiveAction_;
+        if (action->Callback)
+        {
+            action->Callback(*action);
+        }
+        return action;
     }
 
     AchievementCollection SignedInGamer::EndGetAchievements(System::IAsyncResult* /*result*/)

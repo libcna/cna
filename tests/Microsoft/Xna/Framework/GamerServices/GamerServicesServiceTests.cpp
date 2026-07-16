@@ -142,6 +142,33 @@ TEST(GuideTest, BeginEndShowKeyboardInputWithPasswordModeOverload) {
     delete result;
 }
 
+// audit_net.md High finding: GuideAction stored its AsyncCallback but never invoked it, despite
+// this action already completing synchronously (getIsCompletedProperty() == true) right after
+// BeginShowKeyboardInput returns. Confirms the callback now fires exactly once with the correct
+// IAsyncResult identity and AsyncState.
+TEST(GuideTest, BeginShowKeyboardInputInvokesCallbackExactlyOnceWithCorrectIdentity) {
+    int callCount = 0;
+    System::IAsyncResult* observedResult = nullptr;
+    std::any state = 7;
+
+    System::IAsyncResult* result = Guide::BeginShowKeyboardInput(
+        PlayerIndex::One, "title", "description", "default",
+        [&callCount, &observedResult](System::IAsyncResult& ar) {
+            ++callCount;
+            observedResult = &ar;
+        },
+        state
+    );
+
+    EXPECT_EQ(callCount, 1);
+    EXPECT_EQ(observedResult, result);
+    ASSERT_TRUE(result->getIsCompletedProperty());
+    EXPECT_EQ(std::any_cast<int>(result->getAsyncStateProperty()), 7);
+
+    Guide::EndShowKeyboardInput(result);
+    delete result;
+}
+
 TEST(GuideTest, BeginShowMessageBoxThrows) {
     EXPECT_THROW(
         Guide::BeginShowMessageBox(

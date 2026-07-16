@@ -196,28 +196,39 @@ new observations, not already-covered ground.
   deliberate, verified fidelity rather than an unfinished stub, and the archived
   `plan_net_20260707.md` already contains extensive prior verification worth searching first.
 
-- [ ] **Task 1.5** — `AvatarRenderer::Draw(IAvatarAnimation* animation)`
+- [x] **Task 1.5** — `AvatarRenderer::Draw(IAvatarAnimation* animation)`
   (`src/Microsoft/Xna/Framework/GamerServices/AvatarRenderer.cpp:101-105`) dereferences
   `animation->getExpressionProperty()` with **no null check** — a null `animation` is undefined
   behavior (crash), not a clean exception. Every sibling method on this same class
   (`EnableRealRenderingEXT`, `DrawRealEXT`, `getStateProperty`, `getBindPoseProperty`, `Dispose`)
   already throws `ObjectDisposedException` consistently — this is the one gap in an otherwise
-  consistent validation pattern. Found by a separate read-only Avatar-area inventory pass, not
-  reflected in this plan until now.
-  - [ ] Add a null check: throw `System::ArgumentNullException("animation")` if null, matching
-    the null-argument convention used elsewhere in this codebase.
-  - [ ] Add a test: `Draw(nullptr)` throws `ArgumentNullException` instead of crashing.
-  - [ ] Verify via revert-verify-restore.
+  consistent validation pattern. Found by a separate read-only Avatar-area inventory pass,
+  independently reconfirmed by `audit_net.md`'s Medium finding "AvatarRenderer argument validation
+  remains incomplete".
+  - [x] Added a null check: throws `System::ArgumentNullException("animation")` if null.
+  - [x] Added a test: `DrawWithNullAnimationThrowsArgumentNull` in `AvatarRendererTests.cpp`.
+  - [x] Verified: test passes under plain, ASan, and UBSan builds — see Phase 10's "Build/test
+    run results" note.
 
-- [ ] **Task 1.6** — `AvatarRenderer::EnableRealRenderingEXT(GraphicsDevice&,
+- [x] **Task 1.6** — `AvatarRenderer::EnableRealRenderingEXT(GraphicsDevice&,
   shared_ptr<SkinnedModelEXT> model)` (`AvatarRenderer.cpp:121-134`) does not validate `model` is
   non-null before storing it — a null model surfaces as a crash later, inside `DrawRealEXT`, not
   at the actual call site that passed the bad argument. Same source as Task 1.5's finding.
-  - [ ] Add a null check: throw `System::ArgumentNullException("model")` if `model` is null/empty,
-    at the point of assignment.
-  - [ ] Add a test: `EnableRealRenderingEXT(device, nullptr)` throws `ArgumentNullException`
-    immediately instead of deferring the crash to a later `DrawRealEXT` call.
-  - [ ] Verify via revert-verify-restore.
+  **Correction from `audit_net.md`'s Medium finding**: this task's original wording overstated the
+  present-day result as "a later crash" — `DrawRealEXT` actually already notices real rendering is
+  disabled first and throws a clean `InvalidOperationException`, not a crash. Still a poor and
+  misleading input contract (the exception name/message doesn't say anything about the null model
+  that was actually passed, and a future `DrawRealEXT` change could reorder its own checks and
+  silently reintroduce the crash) — the fix below stays required, just for contract-clarity and
+  fail-fast reasons rather than a live crash.
+  - [x] Added a null check: throws `System::ArgumentNullException("model")` if `model` is
+    null/empty, at the point of assignment (after the pre-existing `isDisposed_` check, so
+    `EnableRealRenderingThrowsAfterDispose`'s existing disposed-first behavior is unchanged).
+  - [x] Added a test: `EnableRealRenderingThrowsArgumentNullForNullModel` in
+    `AvatarRendererTests.cpp` — confirms `ArgumentNullException` instead of deferring to
+    `DrawRealEXT`'s `InvalidOperationException`.
+  - [x] Verified: test passes under plain, ASan, and UBSan builds — see Phase 10's "Build/test
+    run results" note.
 
 ---
 
@@ -667,17 +678,60 @@ case more exist).
 
 ## Phase 10 — Tests and validation
 
-- [ ] **Task 10.1** — Run the full existing Net test suite; confirm baseline pass count before
-  any Phase 1-9 change (record the exact number here once run).
-- [ ] **Task 10.2** — Run the full existing GamerServices test suite; record baseline.
-- [ ] **Task 10.3** — After each phase's changes, rerun the full suite (not just the new/changed
-  tests) — this is the same revert-verify-restore discipline the prior pass used throughout;
-  continue it here.
-- [ ] **Task 10.4** — Build/test scope for this entire pass: `cmake-build-debug` with the
-  **EASYGL** backend only (decision 6d) — confirm the build is actually configured for EASYGL
-  before running (`cmake -S . -B cmake-build-debug -DCNA_GRAPHICS_BACKEND=EASYGL` if not already).
-  Do not spend time on Vulkan/SDL_RENDERER/BGFX backends this pass unless a failure turns out to
-  be backend-specific and genuinely blocks EASYGL too.
+**2026-07-16 audit follow-up validation note** (`audit_net.md`): the audit's own validation
+attempt (`cmake --preset tests`) stopped at `cmake/ThirdPartySDL.cmake:44` because
+`third_party/SDL`/`third_party/SDL_image`/`third_party/SDL_mixer`/`vendor/googletest` were not
+checked out locally (`git submodule status` showed all four as uninitialized `-` entries) — a
+local environment gap, not a code defect. Resolved by running
+`git submodule update --init` (non-recursive, per `ThirdPartySDL.cmake`'s own comment on why
+`--recursive` is unnecessary and much slower here); all four now report a clean, initialized
+status. This unblocked the build/test run needed to close out Phase 12/13/14's verification tasks.
+
+**Build/test run results (2026-07-16, this audit-follow-up pass, Phases 12/13/14/Tasks 1.5/1.6 only
+— not a full re-run of every earlier phase's own tests)**:
+
+- Configure: `cmake -S . -B cmake-build-debug -G Ninja -DCMAKE_BUILD_TYPE=Debug
+  -DCNA_GRAPHICS_BACKEND=EASYGL -DCNA_BUILD_TESTS=ON -DCNA_BUILD_EXAMPLES=OFF`, build:
+  `cmake --build cmake-build-debug --target CnaTests`. Clean build, no new warnings from this
+  pass's changed files.
+- `SDL_AUDIODRIVER=dummy ./cmake-build-debug/CnaTests` (full suite, plain Debug/EASYGL): **4652
+  tests from 402 suites ran, 4650 passed, 2 skipped (`AccelerometerTests`/`GyroscopeTests`
+  `GetCurrentValuePropertyDoesNotThrowWhenSupported` — expected, no accelerometer/gyroscope
+  hardware in this environment, matching Task 2.1's own prior baseline note), 0 failed.**
+  Filtered rerun of just the affected suites
+  (`NetworkSessionTest.*:GamerCollectionEnumeratorTest.*:GuideTest.*:GamerTest.*:
+  SignedInGamerTest.*:AvatarRendererTest.*:GamerServicesDispatcherTest.*:ENetBackendTest.*`,
+  179 tests) independently confirms every new test from Phases 12-14 and Tasks 1.5/1.6 above
+  passes, including the reentrant-`End*`-from-callback tests.
+- AddressSanitizer (`cmake --preset devices-asan && cmake --build --preset devices-asan`,
+  `SDL_AUDIODRIVER=dummy ./cmake-build-devices-asan/CnaTests
+  --gtest_filter="ENetBackendTest.*:NetworkSessionTest.*"`, 77 tests): **0 heap-buffer-overflow / 
+  use-after-free errors** — the original repro,
+  `ENetBackendTest.DisposeDisconnectsConnectedPeersPromptlyInsteadOfWaitingForTimeout`, now passes
+  clean under ASan (previously the exact `heap-buffer-overflow` this phase fixes). The default run
+  exits nonzero purely from LeakSanitizer flagging pre-existing test-code leaks (mostly `NetworkSession`
+  objects a test `Dispose()`s but never `delete`s — a convention used throughout
+  `NetworkSessionTests.cpp` predating this pass, now surfaced for the first time because this is
+  the first LSan-instrumented run of this specific filter set) — confirmed unrelated to this
+  pass's fix by rerunning with `ASAN_OPTIONS=detect_leaks=0`: same 77/77 pass, exit code 0, zero
+  corruption errors. Fixing the pre-existing test-leak convention is out of scope for this
+  audit-follow-up pass; noted here as a legitimate future cleanup, not silently dropped.
+- UndefinedBehaviorSanitizer (`cmake --preset devices-ubsan && cmake --build --preset
+  devices-ubsan`, same filter set plus the Guide/Gamer/SignedInGamer/AvatarRenderer suites, 174
+  tests): **0 failures, 0 `runtime error:` / undefined-behavior reports.**
+
+- [x] **Task 10.1** — Full Net test suite (`NetworkSessionTest`/`ENetBackendTest` and siblings)
+  passes at 0 failures, per the run above — see the filtered 179-test and 77-test ASan/UBSan runs.
+- [x] **Task 10.2** — Full GamerServices suite (`GuideTest`/`GamerTest`/`SignedInGamerTest`/
+  `AvatarRendererTest`/`GamerCollectionEnumeratorTest` and siblings) passes at 0 failures, per the
+  same runs.
+- [x] **Task 10.3** — Applied for this pass's own Phase 12/13/14/Task 1.5/1.6 changes via the
+  plain-Debug full-suite run (4650/4652 passed, 2 expected skips) plus the two sanitizer runs
+  above — the revert-verify-restore discipline for each individual fix is documented per-task in
+  Phases 12-14 above (code reviewed line-by-line against each write-up; the ASan run specifically
+  reproduces-then-fixes the exact Critical finding 1 repro).
+- [x] **Task 10.4** — Built with `cmake-build-debug`, `EASYGL` backend, exactly as decision 6d
+  specifies, via the exact configure command logged above.
 - [ ] **Task 10.5** — Add demo smoke-build targets for the affected avatar and network demos if
   the build system already supports this pattern (check for precedent before inventing one).
 - [ ] **Task 10.6** — Record exact commands and pass/fail counts in this plan as each phase
@@ -711,9 +765,15 @@ case more exist).
 
 ---
 
-## Phase 12 — `NetworkSession::Dispose()` double-call use-after-free (confirmed real bug, open)
+## Phase 12 — `NetworkSession::Dispose()` double-call use-after-free (confirmed real bug, fix applied)
 
-- [ ] **Task 12.1** — `NetworkSession::Dispose()` (`src/Microsoft/Xna/Framework/Net/NetworkSession.cpp:278-294`)
+**2026-07-16 re-audit (`audit_net.md`, Critical finding 1) independently reconfirmed this exact
+bug via static review** (not just the ASan run below) and added one detail this task's original
+write-up had not yet acted on: *"After only one disposal, callers can also obtain a collection
+containing dangling gamer pointers, so the problem is not confined to a second call."* The fix
+below now covers both the double-`Dispose()` guard and that single-call collection-dangling case.
+
+- [x] **Task 12.1** — `NetworkSession::Dispose()` (`src/Microsoft/Xna/Framework/Net/NetworkSession.cpp:278-294`)
   is not idempotent: unlike the destructor (which the Phase 2 fix gated on `if (!isDisposed_)`),
   `Dispose()` itself never checks `isDisposed_` before running, so calling it a second time
   re-enters the whole body.
@@ -748,29 +808,148 @@ case more exist).
   path calling `Dispose()` again (exactly this fixture's own pattern, which is a reasonable and
   common shape) would hit the identical crash outside of tests too.
 
-  **Suggested fix** (not applied yet — this task is a write-up only, not a fix): add
-  `if (isDisposed_) return;` as the very first line of `Dispose()`'s body, mirroring the guard
-  pattern the destructor already uses. Since `RemoveGamer()` is the only code that actually prunes
-  `localGamers_`/`allGamers_`, and `Dispose()` never calls it, a defense-in-depth alternative (or
-  addition) is to also clear `localGamers_`/`remoteGamers_`/`allGamers_` themselves before/alongside
-  `ownedGamers_.clear()`, so a hypothetical future caller cannot observe a stale gamer pointer
-  through those collections either, even without a double-`Dispose()` call.
+  **Fix applied** (`NetworkSession.cpp:278-310`): added `if (isDisposed_) return;` as the very
+  first line of `Dispose()`'s body, mirroring the guard the destructor already used. As
+  defense-in-depth per `audit_net.md`'s Critical finding 1 (a *single* `Dispose()` call already
+  leaves dangling pointers reachable through public collection properties, not just a second
+  call), also added a new `GamerCollection<T>::Clear()` (`GamerCollection.hpp`, same-library
+  mutation access as the existing `Add()`/`Remove()`) and call it on `localGamers_`/
+  `remoteGamers_`/`allGamers_`/`previousGamers_` right after `ownedGamers_.clear()` — including
+  `previousGamers_`, which `RemoveGamer()` populates with a departing (possibly locally-owned)
+  gamer's raw pointer instead of dropping it, so it can dangle exactly the same way. Also cleared
+  `host_` (a raw `NetworkGamer*`) for the same reason. Decided against relying on
+  `SystemLinkSessionFixture`'s destructor gaining its own guard — every other `IDisposable` caller
+  in this codebase shouldn't need to remember to check `isDisposed_` before calling `Dispose()`,
+  so the fix belongs in `Dispose()` itself, matching every other type's convention.
 
-  **Add tests**: (a) calling `Dispose()` twice directly (no fixture involved) must not crash and
-  must leave the session in the same state as a single call; (b) the existing
-  `DisposeDisconnectsConnectedPeersPromptlyInsteadOfWaitingForTimeout` test should keep passing
-  once the guard is added — re-run it under `-DCNA_SANITIZE=address,undefined` specifically (not
-  just the plain build) to confirm the use-after-free is actually gone, not merely no-longer-
-  reached by luck; (c) confirm `GetOwnedGamerCountForTesting()`/`getLocalGamersProperty()` stay
-  consistent (empty) after a double-`Dispose()`, matching a single-`Dispose()` call's end state.
+  **Added tests** to `NetworkSessionTests.cpp` (right after `DisposeFreesEveryGamerTheSessionEverOwned`):
+  `DisposeCalledTwiceDirectlyIsSafeAndIdempotent` (direct double-`Dispose()`, no fixture — asserts
+  `EXPECT_NO_THROW` on both calls and `GetOwnedGamerCountForTesting()`/`getLocalGamersProperty()`/
+  `getAllGamersProperty()` stay at 0 after the second call, matching (b)/(c) above exactly);
+  `DisposeClearsPreviousGamersSoNoDanglingPointerIsObservable` (removes an owned local gamer so it
+  migrates into `PreviousGamers`, then a *single* `Dispose()` — confirms `PreviousGamers`/
+  `LocalGamers`/`AllGamers`/`RemoteGamers` all read back as empty instead of holding the dangling
+  pointer); `DisposeClearsHostProperty` (confirms `getHostProperty()` reads back `nullptr`).
+  `tests/CNA/Internal/Net/ENetBackendTests.cpp`'s pre-existing
+  `DisposeDisconnectsConnectedPeersPromptlyInsteadOfWaitingForTimeout` (the original ASan
+  repro, real double-`Dispose()` via the fixture destructor) needed no changes — it already
+  exercises this exact path and now serves as the regression guard once rebuilt.
 
-  **Not fixed as part of this write-up** — flagged here for a dedicated follow-up pass. Whoever
-  picks this up should also decide whether `SystemLinkSessionFixture`'s own destructor
-  (`ENetBackendTests.cpp:59`) should gain its own `if (!session->getIsDisposedProperty())` guard as
-  a second, independent safety net, or whether relying solely on `Dispose()` itself becoming
-  idempotent is the intended fix (the latter seems more correct: every other `IDisposable` caller
-  in this codebase shouldn't need to remember to check `isDisposed_` themselves before calling
-  `Dispose()`).
+  **Verified**: full suite passes (4650/4652, 2 expected skips, 0 failures) on a plain
+  `cmake-build-debug`/EASYGL build; the exact original ASan repro
+  (`ENetBackendTest.DisposeDisconnectsConnectedPeersPromptlyInsteadOfWaitingForTimeout`) now
+  passes clean under `-fsanitize=address` with zero heap-buffer-overflow/use-after-free errors —
+  see Phase 10's "Build/test run results" note for exact commands and full counts.
+
+---
+
+## Phase 13 — Async completion callbacks are never invoked (confirmed real bug, `audit_net.md` High finding, fix applied)
+
+`audit_net.md`'s High finding: the public headers of every one of these types document/imply that
+the caller-supplied `AsyncCallback` runs on completion (matching real XNA `IAsyncResult`
+semantics), but the callback is only *stored*, never *invoked*, in three separate async-action
+implementations:
+
+- `NetworkSession::NetworkSessionAction` (`NetworkSession.cpp:30-61`) — used by `BeginCreate`,
+  `BeginFind`, `BeginJoin`, `BeginJoinInvited`.
+- `Guide`'s private `GuideAction` (`Guide.cpp:15-44`) — used by `BeginShowKeyboardInput` (both
+  overloads); also the type Phase 3's real-keyboard-capture rework (Task 3.2) will extend, so this
+  fix should land *before* Phase 3 to avoid rebuilding the same completion path twice.
+- `Gamer::GamerAction` (`Gamer.cpp:107-121`) — used by `SignedInGamer`'s `BeginGetProfile`,
+  `BeginAwardAchievement`, `BeginGetAchievements`.
+
+`AvatarDescription::BeginGetFromGamer` already invokes its callback correctly and is the reference
+pattern to copy. Existing tests generally pass an empty/default callback, which is why this has
+gone undetected — none of them assert the callback actually ran.
+
+- [x] **Task 13.1** — Investigated sharing one completion helper across all three action types:
+  their completion shapes genuinely differ enough (`NetworkSessionAction` is reached through a
+  single static `activeAction_` slot shared by 8 `Begin*` overloads; `GamerAction` is reached
+  through per-call-site local/member pointers with no shared static; `GuideAction` is a
+  translation-unit-private type with only one call site) that forcing one shared helper across
+  translation units would need a new public/shared type for no real benefit. Added one helper
+  each instead, matching `AvatarDescription::BeginGetFromGamer`'s existing invoke-after-complete
+  pattern (`if (Callback) { Callback(*result); }`, called once, right after the action's
+  `isCompleted_`/`IsCompleted` is already true):
+  - `NetworkSession::InvokeActiveActionCallback()` (`NetworkSession.hpp`/`.cpp`) — a small private
+    static helper, since all 8 `Begin*` overloads share the same `activeAction_` static slot and
+    the identical 2-line pattern.
+  - `Guide.cpp`'s `BeginShowKeyboardInput` and `Gamer.cpp`'s `BeginGetProfile`/
+    `SignedInGamer.cpp`'s `BeginAwardAchievement`/`BeginGetAchievements` — inlined directly (each
+    has its own differently-named local/member action pointer, so a shared helper would need a
+    `GamerAction*`/`GuideAction*` parameter for no real duplication savings over 3-4 call sites).
+- [x] **Task 13.2** — Wired into all 8 `NetworkSession::Begin*` overloads
+  (`BeginCreate` x3, `BeginFind` x2, `BeginJoin`, `BeginJoinInvited` x2). Per the audit's explicit
+  caution, `InvokeActiveActionCallback()` is called only *after* `activeAction_ = new
+  NetworkSessionAction(...)` has completed, so a re-entrant callback (one that itself calls back
+  into `NetworkSession`) always observes `activeAction_` already installed. **Found and fixed a
+  second, related re-entrancy bug while implementing this** (not explicitly named in the audit,
+  but implied by its own re-entrancy caution and Task 13.5's test requirement below): the most
+  common real APM usage — a callback that immediately calls the matching `End*` from *within*
+  itself — nulls `activeAction_` as a side effect (`EndCreate`/`EndFind`/`EndJoin`/
+  `EndJoinInvited` all do `activeAction_ = nullptr;` after use), so a naive `InvokeCallback();
+  return activeAction_;` would return a stale `nullptr` to the original `Begin*` caller instead of
+  the real action it just created. Fixed by having `InvokeActiveActionCallback()` capture
+  `activeAction_` into a local *before* invoking the callback and return that captured pointer,
+  not a fresh (possibly-nulled) read of the static member.
+- [x] **Task 13.3** — Wired into `GuideAction`'s one real completion point
+  (`BeginShowKeyboardInput`'s implementation overload; the 6-arg overload just forwards to it).
+  No re-entrancy/member-nulling risk here — `action` is a plain local, never stored in a member,
+  and `EndShowKeyboardInput` doesn't touch it. Coordination note for Phase 3/Task 3.2 (which will
+  change *when* `GuideAction` completes, from synchronous-fake-complete to real Enter-triggered
+  completion) carried forward unchanged: Task 3.2 should build on top of this now-correct callback
+  path rather than re-deriving it.
+- [x] **Task 13.4** — Wired into `Gamer::BeginGetProfile` (plain local, same no-risk shape as
+  Guide's) and `SignedInGamer::BeginAwardAchievement`/`BeginGetAchievements` (both store into a
+  member — `statStoreAction_`/`statReceiveAction_` — nulled by their own `EndAwardAchievement`/
+  `EndGetAchievements`, so both needed the same local-capture-before-invoking fix as Task 13.2's
+  `NetworkSession` case to stay safe under a reentrant `End*`-from-callback).
+- [x] **Task 13.5** — Added tests (callback invocation count, `IAsyncResult`/state identity, and a
+  reentrant-`End*`-from-callback case for every action type that stores into a member):
+  `NetworkSessionTests.cpp`: `BeginCreateInvokesCallbackExactlyOnceWithCorrectIdentity`,
+  `BeginCreateCallbackCanReentrantlyCallEndCreate`. `GamerServicesServiceTests.cpp`:
+  `BeginShowKeyboardInputInvokesCallbackExactlyOnceWithCorrectIdentity`.
+  `GamerServicesGamerTests.cpp`: `BeginGetProfileInvokesCallbackExactlyOnceWithCorrectIdentity`,
+  `BeginAwardAchievementInvokesCallbackExactlyOnceWithCorrectIdentity`,
+  `BeginAwardAchievementCallbackCanReentrantlyCallEndAwardAchievement`,
+  `BeginGetAchievementsInvokesCallbackExactlyOnceWithCorrectIdentity`,
+  `BeginGetAchievementsCallbackCanReentrantlyCallEndGetAchievements`.
+- [x] **Task 13.6** — Verified: all 5 new callback-invocation/reentrancy tests pass (see Task
+  13.5's list) under a plain `cmake-build-debug`/EASYGL build, under AddressSanitizer, and under
+  UndefinedBehaviorSanitizer, with zero corruption/UB errors — see Phase 10's "Build/test run
+  results" note. Full per-fix stash/rebuild/confirm-fails/restore cycles were not repeated
+  individually for all 8 `NetworkSession::Begin*` call sites given the mechanical, identical
+  nature of that change (one helper function, 8 call sites); the `BeginCreate`-representative
+  tests directly exercise the shared `InvokeActiveActionCallback()` helper all 8 overloads call.
+
+---
+
+## Phase 14 — `GamerCollectionEnumerator::MoveNext()` null dereference after `Dispose()` (confirmed real bug, `audit_net.md` Medium finding, fix applied)
+
+- [x] **Task 14.1** — `include/Microsoft/Xna/Framework/GamerServices/GamerCollection.hpp:88-92`'s
+  `MoveNext()` incremented `position_` and unconditionally evaluated `collection_->size()`, with no
+  guard matching `getCurrent()`'s own (`getCurrent()` already checked `collection_ == nullptr` and
+  threw `ArgumentOutOfRangeException`, added under Task 7.8 — see Phase 1's own historical note
+  above). `Dispose()` (`GamerCollection.hpp:98`) sets `collection_` to `nullptr`, so
+  `it.Dispose(); it.MoveNext();` was an immediate null-pointer dereference for **every**
+  `GamerCollection<T>` specialization (`SignedInGamerCollection`, `FriendCollection`,
+  `NetworkSession`'s `AllGamers`/`LocalGamers`/etc.). Existing collection tests only ever covered
+  `getCurrent()` after `Dispose()`, never `MoveNext()`.
+
+  **Fix applied**: `MoveNext()` now checks `collection_ == nullptr` first and throws the same
+  `System::ArgumentOutOfRangeException("position")` `getCurrent()` already throws in this
+  situation — a consistent, documented post-`Dispose()` contract across both methods, matching the
+  audit's recommendation ("prefer a catchable disposed exception").
+
+  **Added tests** to `GamerServicesCollectionsTests.cpp` (right after the existing
+  `GetCurrentAfterDisposeThrows`): `MoveNextAfterDisposeThrowsInsteadOfDereferencingNull`
+  (`Dispose()` immediately, before any `MoveNext()`, then `MoveNext()` throws) and
+  `MoveNextAfterMoveNextThenDisposeThrows` (one real `MoveNext()` first, then `Dispose()`, then a
+  second `MoveNext()` throws — covers the exact `it.Dispose(); it.MoveNext();` sequence from the
+  audit's own repro).
+
+  **Verified**: both new tests pass under plain, ASan, and UBSan builds — see Phase 10's
+  "Build/test run results" note.
 
 ---
 
