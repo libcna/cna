@@ -44,6 +44,31 @@
 > summarized below is unchanged by this; full history for that lives in `plan_graphics.md`/
 > `plan_webgpu.md`/`plan_software.md` and `git log`, not duplicated here.
 
+> **Separate, unrelated track — `plan_graphics.md` Phase 78 (DEFERRED.md item #11, HLSL→GLSL sample
+> shader conversion) is now FULLY COMPLETE, as of 2026-07-16 (EasyGL only).** This is completely
+> independent of the D3D work above — it unblocks samples catalogued in `plan_samples.md`
+> (`../cna-samples`' own 153-sample re-audit), not `plan_dx.md`. **Task 945 decided** (project
+> owner, 2026-07-16): manual line-by-line HLSL→GLSL porting, no `SPIRV-Cross`/`dxc` pipeline — every
+> HLSL construct hit across every shader ported turned out to be a mechanical 1:1 substitution.
+> **Task 947 is now 13/13 — every sample originally blocked purely by DEFERRED.md #11 has its
+> shader(s) ported and pixel-verified**: `NetRumble`, `PerPixelLighting`, `VertexLighting`,
+> `DistortionSample`, `NonPhotoRealistic`, `ShadowMapping`, `NormalMapping`, `BillboardSample`,
+> `ShatterEffect`, `Particles3D`, `XmlParticles`, `ShipGame`, `InstancedModel` (`BloomSample`, the
+> 14th sample under the same DEFERRED.md #11 umbrella, was already closed earlier via Task 946).
+> Along the way, 4 new backend capabilities were added and closed, all EasyGL-only, all additive
+> (Vulkan/Bgfx/SDL_Renderer untouched): **Task 1079** (wires `ShaderEffect` into `GraphicsDevice`'s
+> 3D draw path, not just `SpriteBatch`), **Task 1080** (genuinely custom vertex layouts for that
+> path, not just the 5 fixed byte-strides), **Task 1081** (`TextureCube` sampling for custom
+> shaders), **Task 1082** (real GPU hardware instancing — `glVertexAttribDivisor`-driven per-instance
+> vertex streams). **What remains is explicitly NOT `cna_graphics` scope**: the actual sample ports
+> (`.cpp`/`.hpp`/`Content/` under `../cna-samples/samples/<Name>/`) for these 13 (now-unblocked)
+> samples still need to be written in the sibling `../cna-samples` repo, tracked in that repo's own
+> plan file, not here or in `plan_graphics.md`/`plan_samples.md`. `plan_samples.md` also still has
+> ~88 other `⬜` rows unrelated to this shader-conversion track (re-verification passes, other
+> DEFERRED.md items, etc.) — untouched by this work, standing backlog. Full detail: `plan_graphics.md`
+> Task 947's own row (chronological per-shader history, discriminating-power mutation testing for
+> every one) and Tasks 1079–1082's own rows; `plan_samples.md` for the per-sample CNA-gap tracking.
+
 ## 1. Project summary
 
 **CNA** is a C++23 reimplementation of the XNA 4.0 programming model
@@ -69,9 +94,13 @@ API-surface changes.
   here); only `DX-110`/`DX-114` (real-Windows hardware / a real device-removed trigger) remain
   `needs_human`. `D3D11_Smoke` **147/147**, `D3D12_Smoke` **212/212** checks, both real GPU-facing
   proof. With every remaining open row genuinely `needs_human`, there is no further available
-  Debian-side work on `plan_dx.md` barring new instructions. Everything else
-  (Phase 79's 153-sample `../cna-samples` re-audit, Task 945's HLSL→GLSL tooling decision, Task
-  952's deferred Bgfx bug) is unchanged standing backlog — see §5/§8/§9.
+  Debian-side work on `plan_dx.md` barring new instructions. **`plan_graphics.md` Phase 78
+  (DEFERRED.md #11, HLSL→GLSL sample shader conversion) is now also fully closed on the CNA side
+  (2026-07-16, EasyGL only) — Task 945 decided (manual porting), Task 947 13/13, Tasks 1079–1082
+  (4 new backend capabilities) all closed — see the banner at the top of this file.** What's left:
+  Phase 79's 153-sample `../cna-samples` re-audit standing queue (`plan_samples.md`, most rows
+  unrelated to shaders), the actual sample-porting work for those 13 now-unblocked samples (a
+  different repo, out of `cna_graphics` scope), and Task 952's deferred Bgfx bug — see §5/§8/§9.
 - **Key architectural decisions:**
   - Backend selection is **compile-time** via the `CNA_GRAPHICS_BACKEND` CMake option
     (`EASYGL` | `VULKAN` | `BGFX` | `SDL_RENDERER` | `WEBGPU` | `HEADLESS` | `SOFTWARE` | `D3D11`).
@@ -106,7 +135,7 @@ API-surface changes.
 
 | Build dir | Backend | Status |
 |---|---|---|
-| `cmake-build-debug` | EasyGL | Clean as of 2026-07-10 (not rebuilt this session) |
+| `cmake-build-debug` | EasyGL | Clean — rebuilt and `ctest -R "EasyGL_"` re-verified 2026-07-16 (Phase 78 sample shader-conversion work, unrelated to the D3D session this file otherwise documents) |
 | `cmake-build-vulkan` | Vulkan | Clean as of 2026-07-10 (not rebuilt this session) |
 | `cmake-build-bgfx` | Bgfx | Clean as of 2026-07-10 (not rebuilt this session) |
 | `cmake-build-sdl` | SDL_Renderer | Clean as of 2026-07-10 (not rebuilt this session) |
@@ -121,7 +150,7 @@ directory in this checkout) — cosmetic, pre-existing, not a CNA bug, do not ch
 
 | Backend | `CnaTests` (gtest) | `ctest` (integration/pixel) |
 |---|---|---|
-| EasyGL | 4371/4373 pass (2 hardware skips), as of 2026-07-11 | 190/192 pass — 2 pre-existing failures (`EasyGL_MRT_TwoAttachments`, `EasyGL_GraphicsDevice_ReferenceStencil`) |
+| EasyGL | 4371/4373 pass (2 hardware skips), as of 2026-07-11 (`CnaTests` not re-run 2026-07-16, only `ctest`) | **231/233 pass, as of 2026-07-16** — same 2 pre-existing failures (`EasyGL_MRT_TwoAttachments`, `EasyGL_GraphicsDevice_ReferenceStencil`); the higher total vs. the 2026-07-11 figure is Phase 78's own new shader/capability-proof tests, not regressions |
 | Vulkan | 4371/4373 pass (2 hardware skips), as of 2026-07-11 | 127/128 pass — 1 pre-existing failure (`Vulkan_DepthBias`) |
 | Bgfx | 4375/4377 pass (2 hardware skips), as of 2026-07-11 | 104/106 pass — 2 pre-existing failures (`Bgfx_RenderTarget2D_MsaaResolve`, `Bgfx_RenderTargetCube_DepthFormat`, DEFERRED — Task 952) |
 | Software | 4371/4373 pass, as of 2026-07-13 | 6 CTests, 29/29 checks |
@@ -225,6 +254,7 @@ Most recent first. Full detail (exact code, discriminating-power verification) i
 
 | Commit(s) | Summary |
 |---|---|
+| many, see `plan_graphics.md` (2026-07-16) | **`plan_graphics.md` Phase 78 (HLSL→GLSL sample shader conversion, DEFERRED.md #11) fully closed — unrelated to the D3D work below, see this file's own top banner.** Task 945 decided (manual line-by-line porting). Task 947 went 0→**13/13**: `NetRumble` (`Clouds.fx` + the bloom trio), `PerPixelLighting`/`VertexLighting` (5 effect/technique combinations), `DistortionSample` (`Distort.fx` + `Distorters.fx`, 5 techniques), `NonPhotoRealistic` (`CartoonEffect.Fx` + `PostprocessEffect.Fx`, 8 techniques), `ShadowMapping`, `NormalMapping`, `BillboardSample`, `ShatterEffect`, `Particles3D`/`XmlParticles`, `ShipGame` (4 distinct shaders: `AnimSprite.fx`/`Blur.fx`/`NormalMapping.fx`/`Particle.fx`, incl. real GPU point sprites), `InstancedModel` (`InstancedModel.fx`, incl. real GPU hardware instancing). 4 new EasyGL-only backend capabilities landed along the way as their own tasks: **1079** (`ShaderEffect` into the 3D draw path), **1080** (custom vertex layouts for that path), **1081** (`TextureCube` sampling for custom shaders), **1082** (real GPU hardware instancing via `glVertexAttribDivisor`). `ctest -R "EasyGL_"` grew from ~190 to **231/233** across the whole campaign, same 2 pre-existing unrelated failures throughout, every task individually mutation-tested and committed separately. Full chronological detail (exact expected pixel values, discriminating-power mutation testing per shader) is in `plan_graphics.md`'s own Task 947/1079–1082 rows, not duplicated here. `plan_samples.md` updated per-sample (13 rows now say "No longer CNA-blocked"). **Not done**: the actual sample ports themselves in `../cna-samples` — out of `cna_graphics` scope. |
 | `9fb9cd09`…`35a656ba` (2026-07-15) | **Phase DX13 completed + new Phase DX16 opened and fully closed — `plan_dx.md` now has nothing left except `needs_human` rows.** `DX-117` follow-up (`9fb9cd09`): real, device-queried `RenderTarget2D` MSAA for D3D12 (`ClampMultiSampleCount`/`ResolveMsaaEXT`, mirroring D3D11's `DX-45`), `D3D12_Smoke` 191→193/193. `DX-29` doc fix (`28d74b90`): D3D11 window resize was already closed by `DX-83`, only the row badge was stale. `DX-113` follow-up (`d7aa55c3`): closed its 2 remaining honest gaps — the state-object pixel-proof gap was already closed by `DX-118` (just needed the cross-reference fixed), and a new real GPU-load-timed fence back-pressure proof (Checks `E4`/`E4pre`/`E4a`, ~90ms load vs ~1µs control across 4 runs) plus a `DX-102` doc fix, `D3D12_Smoke` 193→196/196. **New Phase DX16** (`0e66133e`…`35a656ba`, `DX-149`–`DX-155`): opened from a real percentage audit (34 comparable EasyGL/D3D11/D3D12 feature-matrix rows, both backends started ~79%/~97%) — `EnvironmentMapEffect`/`SkinnedEffect` `DirectionalLight1`/`2` + specular tests (both backends, reusing `DX-124`/`DX-138`/`DX-125`/`DX-139`'s own methodologies), **real new `RenderTargetCube` MSAA on both D3D11 and D3D12** (`DX-152`, `fe8f3555` — reopened a previously-deliberate scope exclusion; neither backend's `TextureCube` SRV can ever be multisampled, so the MSAA resource is RTV-only with a separate resolve resource, same pattern as `DX-117`'s own 2D leg), `RenderTargetCube` mip-chain regen for a non-zero face (`DX-153`, confirming D3D11's whole-resource `GenerateMips()` and D3D12's `activeFace_`-scoped cascade are architecturally different mechanisms that both work), D3D12's 16-simultaneous-sampler-slot test (`DX-154`, porting D3D11's own `DX-142`), and `Model` root-bone-index flexibility (`DX-155`, `35a656ba` — corrected this row's own wrong premise: `rootBoneIndex` doesn't drive `Model::Draw()`, only `getRootProperty()` reflects it, found by reading `Model.cpp` before writing the test). `D3D11_Smoke` 135→**147/147**; `D3D12_Smoke` 191→**212/212**. Every task individually built, tested via real `ctest`, and committed/pushed separately (one task = one commit, per this project's own convention). |
 | `b3289ac6` + this commit | **Phase DX15: 15 of 18 rows closed** (`DX-136`/`DX-137`/`DX-144` remain open for real reasons — see `plan_dx.md`'s Phase DX15 intro; `DX-136` in particular is blocked on a cross-backend shader gap, `alpha_test3d` has no vertex-color attribute at all). The last 3 rows (`DX-132` D3D12 `SpriteFont`, `DX-148` D3D12 `Model`, `DX-140`'s `FromStream`/`SaveAsPng` half) shared one blocker: they need a real `GraphicsDevice`, which forced a real window → a real swap chain → this dev loop's D3D12 crash path. Fixed by **`PresentationParameters::HeadlessEXT`** (NOXNA): a runtime opt-in for a genuinely windowless device that skips SDL video init entirely (so it needs no display server, and works in CI). Defaults false → production behavior byte-identical. All 3 rows then landed in the **routine plain-Wine** D3D12 CTest. **Real crash bug found**: `SetDepthTestEnabled`/`SetDepthWriteEnabled`/`SetBlendEnabled` were still `NotYetImplemented()` **throws** on D3D12, so any game calling `GraphicsDevice::SetDepthTestEnabled()` crashed — caught by `DX-148`'s Model test, the first thing to ever drive the shared `GraphicsDevice` path against D3D12. `D3D12_Smoke` 159→**169/169**. |
 | `18a70bba`+ (DX-115) | **Phase DX12 fully closed — `DX-115` (docs)**: new `docs/d3d12-backend.md`, a `D3D12` column across all 7 applicable `docs/graphics-backend-feature-matrix.md` tables, and a `README.md` build section, mirroring D3D11's own `DX-95`–`DX-97`. Confirmed exact current numbers via a live run: `D3D12_Smoke` 80/80 checks. Only `DX-114` (real Windows hardware) remains open in `plan_dx.md`, `needs_human`. |
@@ -417,7 +447,7 @@ only the full `CnaTests` target was ever affected.
 | Confirmed bug, found+reverted, needs its own task | `BgfxGraphicsBackend::DrawIndexedPrimitivesEx`'s non-wireframe path silently discards `GpuDrawParams::startIndex`/`baseVertex`. Not visible in any current sample/test. | 954 |
 | Needs architecture decision | `Texture3D`/`TextureCube` inherit `GraphicsResource`, not `Texture` — no shader-sampling bind path via the generic `EffectParameter` route. Two named fix options, neither picked. | 863 |
 | Needs architecture decision | `GraphicsDevice` state objects use C++ value semantics; FNA uses reference semantics. Project-wide implication. | 869 |
-| Needs project-owner decision | HLSL→GLSL conversion approach for Phase 78 (manual port vs. `dxc`+`SPIRV-Cross`). | 945 |
+| **RESOLVED 2026-07-16** | HLSL→GLSL conversion approach for Phase 78: project owner decided manual line-by-line porting, no `dxc`+`SPIRV-Cross` pipeline. Phase 78 (Task 947) subsequently went 13/13 — see this file's own top banner. | 945 |
 | Incomplete, cross-repo | Android NDK cross-compile blocked by build regressions in sibling `sharp-runtime`. | 920 |
 | Known, cosmetic | `cna_demo_xact` example fails to build (`examples/demo_xact/Content` doesn't exist in this checkout). | — |
 | Known characteristic, not a bug | WebGPU's surface prefers an sRGB swapchain format, so raw `GetBackBufferData()` readback returns gamma-encoded, not linear, bytes. Every WebGPU 3D readback test works around it with pure 0/1 extreme expected colours. | — |
@@ -566,13 +596,21 @@ desktop session with real GPU access — re-verify before assuming either claim 
     attempt, not a proven-green result. **Next step**: project owner runs `gh workflow run
     d3d-windows-ci.yml` (or triggers via the GitHub UI) and shares the log if it fails, so the next
     session can iterate with real failure data.
-2. **Decide Task 945** (manual HLSL→GLSL port vs. `dxc`+`SPIRV-Cross` tooling for Phase 78, the
-   *unrelated* `../cna-samples` shader-conversion track) — Task 946's data point is in (manual
-   porting scaled fine for BloomSample's 3 shaders). Needs project-owner input, do not decide
-   unilaterally.
-3. **Phase 79 standing queue** (Tasks 957–1076, `plan_graphics.md`): a full re-audit of all 153
-   `../cna-samples`-catalogued samples, one task per sample. Start with Task 1006 or any `⬜` row —
-   do not touch `⛔` rows (structural/permanent, no CNA action possible).
+2. ~~Decide Task 945~~ — **RESOLVED 2026-07-16**: manual HLSL→GLSL porting, no `dxc`+`SPIRV-Cross`.
+   Phase 78 (Task 947, the *unrelated* `../cna-samples` shader-conversion track) subsequently went
+   0→**13/13**, plus 4 new backend capabilities (Tasks 1079–1082) — see this file's own top banner
+   and `plan_graphics.md`. Nothing left to decide here.
+3. **`plan_samples.md` standing queue** (formerly Phase 79, `plan_graphics.md` Tasks 957–1076,
+   moved+renumbered `SAMPLE-1`–`SAMPLE-120` on 2026-07-16): a full re-audit of all 153
+   `../cna-samples`-catalogued samples, one row per sample. **13 rows** (`SAMPLE-32`/`33`/`34`/`35`/
+   `36`/`38`/`39`/`40`/`42`/`43`/`45`/`62`/`66`) now say "No longer CNA-blocked" thanks to Phase 78
+   above — their own CNA-side shader gap is closed, but they're still `⬜` in `plan_samples.md`
+   because **the actual sample port itself** (`.cpp`/`.hpp`/`Content/` under
+   `../cna-samples/samples/<Name>/`) hasn't been written yet — that's a different repo, out of
+   `cna_graphics` scope, tracked in `../cna-samples`'s own plan file (not opened this session).
+   The other ~88 `⬜` rows in `plan_samples.md` are unrelated to shaders (re-verification passes,
+   other DEFERRED.md items) — pick any of those, or any of the 13 above if the sibling repo's own
+   plan calls for it. Do not touch `⛔` rows (structural/permanent, no CNA action possible).
 4. Task 952 (`RenderTargetCube` depth-gating bug on Bgfx) remains **DEFERRED**, not a next task —
    see §9.
 5. ~~D3D11's own honestly-flagged residual gaps (specular, multi-light, combo `Clear*`, `Model`/
@@ -609,8 +647,12 @@ desktop session with real GPU access — re-verify before assuming either claim 
   rounds found no root cause.
 - **Do not attempt Task 863 or Task 869** (the two architecture-decision items in §5) without the
   project owner picking a direction first.
-- **Do not start Phase 78's sample-porting tasks (943/944/946/947) in `../cna-samples`** without
-  explicit direction — confirmed mostly out of `cna_graphics` scope.
+- **Phase 78's `cna_graphics`-side shader-conversion work (Tasks 945/946/947/1079–1082) is DONE**
+  (2026-07-16, explicit project-owner direction) — do not re-port any of the 13+1 already-closed
+  shaders, and do not re-litigate Task 945's own decision (manual porting). What's still off-limits
+  without new instruction: writing the actual sample ports themselves in the sibling `../cna-samples`
+  repo — that's a different repo with its own plan file (not opened this session), genuinely outside
+  `cna_graphics` scope, not merely "not yet started."
 - **Do not chase `cna_demo_xact`'s build failure** — missing example asset directory, not a CNA bug.
 - **Do not attempt `EasyGL_MRT_TwoAttachments`** opportunistically — pre-existing, off-limits
   without a dedicated task.
@@ -645,8 +687,18 @@ D3D phase on your own initiative -- Phase DX16 itself only happened because the 
 a specific question (a real EasyGL-parity percentage) that produced a concrete task list; don't
 invent an equivalent prompt yourself.
 
+plan_graphics.md's Phase 78 (DEFERRED.md #11, HLSL->GLSL sample shader conversion) is ALSO now fully
+closed on the CNA side (2026-07-16, EasyGL only) -- Task 945 decided (manual porting), Task 947 went
+0->13/13, and 4 new backend capabilities (Tasks 1079-1082) landed along the way. This is a completely
+separate track from the D3D work above -- see this file's own top banner for the full list of what
+closed. Do not re-port any of those shaders. What's left in this track: (a) the actual sample ports
+themselves for those 13 samples, in the sibling ../cna-samples repo -- a different repo with its own
+plan file, out of cna_graphics scope, not started this session; (b) plan_samples.md's other ~88 open
+rows, unrelated to shaders (re-verification passes, other DEFERRED.md items) -- pick any of those.
+
 Pick exactly one task from §8 "Next smallest tasks" (default to the first non-D3D item, since item 1
-is now just a "nothing left here" notice -- see items 2-4). Inspect only the files that task names --
+is now just a "nothing left here" notice, and item 2 is also just a "resolved" notice -- see item 3
+onward). Inspect only the files that task names --
 do not go exploring unrelated modules, and do not refactor anything you find along the way that
 isn't directly required for this task. See §9 for what stays off-limits generally.
 

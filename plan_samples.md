@@ -45,13 +45,42 @@
 > workaround exists), **#18** (content-pipeline processor extensibility), **#22** (EasyGL
 > `BlendState.ColorWriteChannels` ignored), **#27** (`NetworkSession.SessionProperties` no mutable/
 > replicated accessor), **#28**/**#29** (EasyGL SpriteBatch-before-3D / `DualTextureEffect`
-> vertex-layout gaps, both already worked around in their one affected sample), and the **Phase
-> 78** shader-conversion umbrella (item #11, 14 samples). **Actual sample-porting work itself
+> vertex-layout gaps, both already worked around in their one affected sample). The **Phase
+> 78** shader-conversion umbrella (item #11, 14 samples) is now **RESOLVED on the CNA side, as of
+> 2026-07-16** — see the status block immediately below. **Actual sample-porting work itself
 > (writing/fixing `.cpp`/`.hpp`/`Content/` files under `../cna-samples/samples/<Name>/`) belongs
 > in that sibling repo, not here** (same convention as Task 938) — a row below only tracks the
 > **CNA-side** gap/re-verification; where a sample needs no CNA change at all, its row says so
 > explicitly and the only remaining work is the port itself (tracked in `../cna-samples/PLAN.md`,
 > not duplicated here).
+>
+> **Status update, 2026-07-16 — Phase 78 (DEFERRED.md item #11, HLSL→GLSL sample shader
+> conversion) is now fully CLOSED on the CNA side, EasyGL only.** All 14 samples originally
+> blocked purely by this item now have every one of their custom shaders ported to GLSL and
+> pixel-verified: `BloomSample` (Task 946, closed before this update) plus, this session, all 13
+> of `NetRumble`, `PerPixelLighting`, `VertexLighting`, `DistortionSample`, `NonPhotoRealistic`,
+> `ShadowMapping`, `NormalMapping`, `BillboardSample`, `ShatterEffect`, `Particles3D`,
+> `XmlParticles`, `ShipGame`, `InstancedModel` (`plan_graphics.md` Task 947, now 13/13 — see that
+> task's own row for the full per-shader chronology, exact expected pixel values, and
+> discriminating-power mutation testing done for every single one). Getting there required 4 new,
+> additive EasyGL-only backend capabilities, each its own closed task in `plan_graphics.md`: **Task
+> 1079** (wires `ShaderEffect` into `GraphicsDevice`'s 3D draw path, not just `SpriteBatch`),
+> **Task 1080** (genuinely custom vertex layouts for that path — needed by `NormalMapping.fx`,
+> `Billboard.fx`, `ShatterEffect.fx`, particle shaders), **Task 1081** (`TextureCube` sampling for
+> custom shaders — needed by `ShipGame`'s own `NormalMapping.fx` reflection map), **Task 1082**
+> (real GPU hardware instancing via `glVertexAttribDivisor` — needed by `InstancedModel.fx`'s
+> `HardwareInstancing` technique). Below, each of the 13 samples' own rows now says **"No longer
+> CNA-blocked"** with its own shader/test detail — they are **deliberately still marked `⬜`, not
+> `✅`**, in this file: the CNA-side gap is closed, but the actual sample port itself (the
+> `.cpp`/`.hpp`/`Content/` files under `../cna-samples/samples/<Name>/`) has not been written —
+> per this file's own established convention (see the paragraph above), that work is tracked in
+> the sibling `../cna-samples` repo's own plan file, not here, and was **not** started this
+> session (confirmed out of `cna_graphics` scope). **What remains for Phase 78 specifically**: (a)
+> the 13 actual sample ports themselves, in `../cna-samples`; (b) Vulkan/Bgfx/SDL_Renderer/D3D11
+> parity for the 4 new backend capabilities above — deliberately not attempted, EasyGL-only was
+> this session's explicit, consistent scope for every one of them, same as every other Phase 78
+> task. **This does not touch any of this file's other ~88 open `⬜` rows** — those are unrelated
+> to shaders (re-verification passes, other DEFERRED.md items) and remain exactly as they were.
 >
 > **`SimpleAnimation` (#050) is deliberately still `⬜`, not `✅`**, despite Tasks 954/955 both
 > closing real bugs this session — flagged for a **future** re-review: (a) pixel-perfect comparison
