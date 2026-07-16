@@ -130,6 +130,14 @@ namespace Microsoft::Xna::Framework::Content
          * resolves above the content root's own logical space is rejected outright rather than
          * attempting to load whatever happens to be there.
          *
+         * Returns `std::optional<T>` rather than FNA's literal bare `T`: real FNA callers check
+         * the result against C#'s reference-type `null` (`if (texture != null)`) to tell "no
+         * reference was present" apart from a real loaded value, but CNA's asset types (e.g.
+         * `Texture2D`) are value types with no uniform "null" of their own -- a default-constructed
+         * `Texture2D` is a real, distinguishable-only-by-convention value, not a sentinel. This
+         * follows the same `std::optional<T>` idiom already used throughout this reader subsystem
+         * for `existingInstance`, rather than inventing a second one.
+         *
          * Declared here but defined (and explicitly instantiated for the concrete asset types
          * that use it) in `ContentReader.cpp`, not inline: this method needs `ContentManager`'s
          * full definition to call `Load<T>()`, but `ContentManager.hpp` already includes this
@@ -137,13 +145,13 @@ namespace Microsoft::Xna::Framework::Content
          *
          * @tparam T Requested asset type; must match (via `std::any_cast` inside `Load<T>()`)
          *           whatever the referenced file's root type-reader actually produces.
-         * @return The loaded asset, or a default-constructed `T` if the reference string is empty
-         *         (matching FNA's `default(T)` for an empty/absent reference).
+         * @return The loaded asset, or `std::nullopt` if the reference string is empty (matching
+         *         FNA's `default(T)`/`null` for an empty/absent reference).
          * @throws ContentLoadException if no `ContentManager` owns this reader, or the resolved
          *         path escapes the content root.
          */
         template <typename T>
-        T ReadExternalReference();
+        std::optional<T> ReadExternalReference();
 
         /** @brief FNA's `T ReadObject<T>()`: reads the next object via the 1-based dispatch protocol. */
         template <typename T>

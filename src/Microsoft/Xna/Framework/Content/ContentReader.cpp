@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <filesystem>
 
+#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "CNA/Internal/Xnb/XnbTypeReaderTable.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
@@ -48,34 +49,25 @@ namespace Microsoft::Xna::Framework::Content
     }
 
     template <typename T>
-    T ContentReader::ReadExternalReference()
+    std::optional<T> ContentReader::ReadExternalReference()
     {
         const std::string externalReference = ReadString();
-        if (!externalReference.empty())
+        if (externalReference.empty())
         {
-            if (!contentManager_)
-            {
-                throw ContentLoadException(
-                    "'" + assetName_ + "' references external asset '" + externalReference +
-                    "', but this ContentReader has no owning ContentManager to load it through.");
-            }
-            const std::string resolved = ResolveRelativeAssetPath(assetName_, externalReference);
-            return contentManager_->Load<T>(resolved);
+            return std::nullopt;
         }
-        if constexpr (std::is_default_constructible_v<T>)
-        {
-            return T{};
-        }
-        else
+        if (!contentManager_)
         {
             throw ContentLoadException(
-                "'" + assetName_ + "' has an empty external reference for a type with no default "
-                "constructor.");
+                "'" + assetName_ + "' references external asset '" + externalReference +
+                "', but this ContentReader has no owning ContentManager to load it through.");
         }
+        const std::string resolved = ResolveRelativeAssetPath(assetName_, externalReference);
+        return contentManager_->Load<T>(resolved);
     }
 
-    template Graphics::Texture2D ContentReader::ReadExternalReference<Graphics::Texture2D>();
-    template Graphics::TextureCube ContentReader::ReadExternalReference<Graphics::TextureCube>();
+    template std::optional<Graphics::Texture2D> ContentReader::ReadExternalReference<Graphics::Texture2D>();
+    template std::optional<Graphics::TextureCube> ContentReader::ReadExternalReference<Graphics::TextureCube>();
 
     ContentReader::ContentReader(
         ContentManager* manager,

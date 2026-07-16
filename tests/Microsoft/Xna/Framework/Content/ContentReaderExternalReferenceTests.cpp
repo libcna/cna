@@ -99,13 +99,14 @@ TEST_F(ContentReaderExternalReferenceTest, ResolvesSiblingPathAndLoadsThroughCon
     auto stream = MakeReferenceStream("../textures/white-1", storage);
     ContentReader reader(&cm, stream.get(), "effects/myeffect", 5, 'w');
 
-    Texture2D texture = reader.ReadExternalReference<Texture2D>();
+    std::optional<Texture2D> texture = reader.ReadExternalReference<Texture2D>();
 
-    EXPECT_EQ(texture.getWidthProperty(), 1);
-    EXPECT_EQ(texture.getHeightProperty(), 1);
+    ASSERT_TRUE(texture.has_value());
+    EXPECT_EQ(texture->getWidthProperty(), 1);
+    EXPECT_EQ(texture->getHeightProperty(), 1);
 }
 
-TEST_F(ContentReaderExternalReferenceTest, EmptyReferenceReturnsDefaultConstructedInstance)
+TEST_F(ContentReaderExternalReferenceTest, EmptyReferenceReturnsNullopt)
 {
     ContentManager cm; // never dereferenced: the empty-reference path returns before touching it
 
@@ -113,10 +114,9 @@ TEST_F(ContentReaderExternalReferenceTest, EmptyReferenceReturnsDefaultConstruct
     auto stream = MakeReferenceStream("", storage);
     ContentReader reader(&cm, stream.get(), "effects/myeffect", 5, 'w');
 
-    Texture2D texture = reader.ReadExternalReference<Texture2D>();
+    std::optional<Texture2D> texture = reader.ReadExternalReference<Texture2D>();
 
-    EXPECT_EQ(texture.getWidthProperty(), 0);
-    EXPECT_EQ(texture.getHeightProperty(), 0);
+    EXPECT_FALSE(texture.has_value());
 }
 
 TEST_F(ContentReaderExternalReferenceTest, PathEscapingContentRootThrowsContentLoadException)
