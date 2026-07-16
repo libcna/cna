@@ -71,7 +71,8 @@ independently verified (D3D9/D3D11/D3D12 columns only, see above) · ⬜ not att
 |---|---|---|---|---|---|---|
 | BasicEffect core (MVP, lighting, texture, vertex color) | ✅ | ✅ | ✅ | ✅ real Microsoft-compiled `BasicEffect.fx` bytecode, oracle-verified 0-divergence across 8 scenes (`colored3d`, `textured_quad`, `lit_textured_quad`, `multilight_textured_quad`, `fog_gradient_quad`, 3 primitive-type scenes) | ✅ `colored3d`/`textured3d`/`colored_textured3d` all real, pixel-verified (`DX-61`/`DX-62`) | ✅ all 3 real, pixel-verified off-screen, same DXBC as D3D11 (`DX-111`, Checks M/N) |
 | BasicEffect `DirectionalLight1`/`2` + `EmissiveColor` | ✅ | ✅ | ✅ | ✅ real 2-light summation + a disabled 3rd light proven to contribute exactly zero, oracle-verified (`multilight_textured_quad`); `EmissiveColor` not separately tested | 🟨 fields present in `D3DLightingConstants`/HLSL, single-light lit-vs-unlit difference pixel-verified (`DX-63`); no dedicated multi-light/emissive discriminating test | 🟨 same single-light lit-vs-unlit proof (Check O2); no dedicated multi-light/emissive test |
-| BasicEffect real specular highlights (`SpecularColor`/`Power`) | ✅ | ✅ | ✅ | ⬜ not oracle-tested — no specular-discriminating scene in the current corpus | 🟨 implemented in HLSL; the lit pixel test deliberately zeroes specular for CPU-comparison determinism, so specular itself is unverified | 🟨 same gap — same HLSL/DXBC, same determinism-driven zeroing |
+| BasicEffect real specular highlights (`SpecularColor`/`Power`) | ✅ | ✅ | ✅ | ✅ real specular now oracle-verified via the `PreferPerPixelLighting=true` scenes (`lit_textured_quad_pixellighting`/`skinned_pixellighting_*`, Task 1101/`plan_graphics.md` Phase 80), 0-divergence | 🟨 implemented in HLSL; the lit pixel test deliberately zeroes specular for CPU-comparison determinism, so specular itself is unverified | 🟨 same gap — same HLSL/DXBC, same determinism-driven zeroing |
+| `PreferPerPixelLighting` — real per-vertex vs. per-pixel shader dispatch (`BasicEffect`/`SkinnedEffect`) | ✅ fixed (Phase 80, Tasks 1102/1102b, 2026-07-16) | ✅ fixed (Phase 80, Task 1103) | ✅ fixed (Phase 80, Task 1104) | ✅ fixed (Task 1101) — `plan_dx9.md`'s own "Divergence 1" was first DISCOVERED while building this backend: before Phase 80, every backend (D3D9 included) rendered per-pixel lighting always, the opposite of XNA's real per-vertex default. All 6 backends here now genuinely relocate the Blinn-Phong evaluation into the vertex stage (Gouraud-interpolated) when the flag is false, matching real XNA; `true` still selects the existing per-pixel shader. D3D9 additionally oracle-proved 4 of the 5 `PixelLighting` bytecode variants `D9-73` had flagged as diverging from Microsoft's own shipped bytes | ✅ fixed (Phase 80, Task 1106) | ✅ fixed (Phase 80, Task 1107, plus 2 unrelated pre-existing test regressions found and fixed along the way) |
 | AlphaTestEffect core + fog | ✅ | ✅ | ✅ | ✅ real Microsoft `clip()` discard, all 8 `CompareFunction` values oracle-verified 0-divergence (`alphatest_*_quad`, one scene per enum value); fog not tested for this specific effect variant (only BasicEffect's fog scene exists) | ✅ real `clip()` discard + pass-case exact color incl. alpha byte, both pixel-verified (`DX-64`); fog wired (`DX-69`) | 🟨 real `clip()` discard + pass-case pixel-verified off-screen (Checks P1/P2); fog constant buffer not confirmed wired for this specific variant, only `colored3d`'s bundle has a dedicated fog test (Check V, `DX-113`) |
 | AlphaTestEffect `VertexColorEnabled` | ✅ | ❌ (Task 887) | ❌ (Task 887) | ⬜ not separately tested | ⬜ not separately tested | ⬜ not separately tested |
 | DualTextureEffect core + fog | ✅ | ✅ | ✅ | 🟨 real two-texture combine, oracle-verified 0-divergence (`dualtexture_quad`); fog not tested for this variant | ✅ two real SRVs/samplers pixel-verified (`DX-65`); fog wired (`DX-69`) | 🟨 two-texture combine pixel-verified off-screen (`DX-111`, Check Q1/Q2, incl. a real descriptor-table binding bug found and fixed along the way); fog not dedicated-tested for this variant |
@@ -79,7 +80,7 @@ independently verified (D3D9/D3D11/D3D12 columns only, see above) · ⬜ not att
 | EnvironmentMapEffect core/Fresnel/reflection | ✅ | ✅ | ✅ | ✅ real `TextureCube` sampling, both the non-Fresnel and Fresnel buckets oracle-verified 0-divergence (`envmap_quad`, `envmap_fresnel_quad`) | ✅ real `TextureCube` SRV, reflection geometrically constrained into a known cube face, pixel-verified (`DX-66`) | ✅ same geometrically-constrained-reflection methodology, real `D3D12TextureCubeBackend` (new for this backend), pixel-verified off-screen (`DX-111`, Check U1) |
 | EnvironmentMapEffect `DirectionalLight1`/`2` | ✅ fixed (Task 890, 2026-07-11) | ✅ fixed (Task 890) | ✅ fixed (Task 890) | ⬜ not separately tested — no `envmap` scene enables multi-light | 🟨 shares `D3DLightingConstants` wiring with BasicEffect; no dedicated test | 🟨 same — no dedicated test |
 | EnvironmentMapEffect base-lerp alpha scaling | ✅ fixed (Task 891) | ✅ fixed (Task 891) | ✅ fixed (Task 891) | ⬜ not separately tested | ⬜ not separately tested | ⬜ not separately tested |
-| EnvironmentMapEffect real specular (`specularEnabled`) | ✅ | ✅ | ✅ | ⬜ **structurally unreachable on this backend** — `D9-82e`'s own finding: `specularEnabled` is always false in the current dispatch, confirmed at the scene-authoring stage (`envmap_quad.scene`'s own header note); same divergence family as `PreferPerPixelLighting` (Divergence 1) — see `docs/d3d9-backend.md` | ⬜ not separately tested | ⬜ not separately tested |
+| EnvironmentMapEffect real specular (`specularEnabled`) | ✅ (confirmed no change needed — this backend's shader already used the raw specular RGB unconditionally, mathematically redundant with the boolean; Phase 80) | ✅ (same finding, Phase 80 Task 1103) | ✅ (same finding, Phase 80 Task 1104) | ✅ **fixed (Task 1101, 2026-07-16)** — previously `⬜ structurally unreachable` (`D9-82e`'s own finding, `specularEnabled` always false in dispatch); `GpuDrawParams::specularEnabled` now real (Task 1100) and read by this backend's dispatch, oracle-verified (`envmap_specular_quad.scene`, 0-divergence) | ⬜ not separately tested | ⬜ not separately tested |
 | SkinnedEffect core (72-bone GPU skinning) | ✅ | ✅ | ✅ | ✅ real bone-matrix constants, oracle-verified 0-divergence across 3 scenes spanning distinct `WeightsPerVertex` counts (`skinned_quad`/`skinned_twobone_quad`/`skinned_fourbone_quad`) | ✅ real `D3DBoneConstants` populated from `GpuDrawParams::boneTransforms`, traced against `SkinnedEffect::SetBoneTransforms()` to rule out a transpose bug (`DX-67`) | ✅ real `D3DBoneConstants` populated the same way (direct, unmodified port of D3D11's own field population), single-identity-bone pixel-verified off-screen (`DX-111`, Check S1) |
 | SkinnedEffect `DirectionalLight1`/`2` | ✅ fixed (Task 893, 2026-07-11) | ✅ fixed (Task 893) | ✅ fixed (Task 893) | ⬜ not separately tested | 🟨 no dedicated test | 🟨 no dedicated test |
 | SkinnedEffect `SpecularColor`/`SpecularPower` | ✅ fixed (Task 894, 2026-07-11) | ✅ fixed (Task 894) | ✅ fixed (Task 894) | ⬜ not separately tested | 🟨 same specular-determinism gap as BasicEffect | 🟨 same gap |
@@ -344,21 +345,39 @@ backend code work.
 
 Unlike the other 6 columns, `D3D9`'s ✅ cells above are not "implemented and plausible" — they are
 each backed by a byte-identical (`--tolerance 0`) match against the real XNA 4.0 runtime for a
-checked-in oracle scene (`D9-120`, `D3D9_XNA_Diff`). The corpus currently has 0/31 scenes diverge.
-The genuine, currently-open gaps are:
+checked-in oracle scene (`D9-120`, `D3D9_XNA_Diff`). The corpus has grown to 36/36 scenes (0
+diverge) as of Task 1101 (2026-07-16), up from 31 at `D9-130`'s original 2026-07-15 writing.
+**Three of this section's original six gaps are now fixed, corrected below rather than silently
+removed** — the genuine, currently-open gaps are:
 
-- **Render targets cannot be sampled as textures at all** — a reproducible, uncaught DXVK crash,
-  not a CNA logic bug; see the `RenderTarget2D`/MSAA/mip rows above and `docs/d3d9-backend.md`.
-- **`PreferPerPixelLighting` and real specular highlights are structurally unreachable** on this
-  backend's current shader dispatch (`D9-82e`) — the same project-wide Divergence 1 every CNA
-  backend shares, not something D3D9 specifically regressed.
 - **`Texture3D` has no GPU round-trip or oracle coverage at all** — only its `GraphicsProfile`
   size-ceiling is tested; no scene in the corpus samples a `Texture3D` in a shader.
 - **`OcclusionQuery` is not built** for this backend (same gap as D3D12).
-- **`CnaTests` does not build under D3D9** (`D9-123`) — the same POSIX `::setenv()` wall `D3D11`
-  already documents.
 - **Not verified on real Windows hardware** (`D9-140`) — every result here is Wine+DXVK-on-this-
   machine, same caveat as `D3D11`/`D3D12`.
+
+Fixed since this section was originally written (2026-07-15):
+
+- ~~Render targets cannot be sampled as textures at all — a reproducible, uncaught DXVK crash~~ —
+  **fixed 2026-07-16**: a real type-confusion bug (`static_cast` between the unrelated sibling
+  classes `D3D9TextureBackend`/`D3D9RenderTargetBackend`, both implementing `ITextureBackend`),
+  not a DXVK/environment limitation. See `NEXT.md` §4 and `src/CNA/Internal/Backends/D3D9/
+  D3D9EffectDraw.cpp`'s `ResolveD3D9TextureEXT`/`ResolveD3D9TextureCubeEXT`.
+- ~~`PreferPerPixelLighting` and real specular highlights are structurally unreachable~~ — **fixed
+  2026-07-16** (`plan_graphics.md` Phase 80, Task 1101): `GpuDrawParams::preferPerPixelLighting`/
+  `specularEnabled` are now real fields (Task 1100), read by this backend's dispatch instead of
+  hardcoded `false`. 4 of the 5 `PixelLighting` bytecode variants `D9-73` had flagged as diverging
+  from Microsoft's own shipped bytes are now oracle-proven pixel-perfect; the 5th (untextured
+  `VSBasicPixelLighting`) remains permanently unreachable, blocked by the same missing Position-only
+  vertex layout as the untextured vertex-lit bucket — unrelated to this fix. This was also the
+  project-wide "Divergence 1" every other CNA backend shared; `plan_graphics.md` Phase 80 has since
+  fixed EasyGL/Vulkan/Bgfx/WebGPU(`BasicEffect`-only)/D3D11/D3D12 too — only the `Software` backend
+  remains, deferred (no lighting engine of any kind exists there yet, a larger and differently-shaped
+  gap, see Phase 80's own Task 1108 row).
+- ~~`CnaTests` does not build under D3D9~~ — **fixed** (`D9-123`, 2026-07-15, same session `D9-130`
+  was written in but not yet reflected here): all POSIX `::setenv()`/`::unsetenv()` call sites
+  replaced with `System::Environment::SetEnvironmentVariable`; `CnaTests` compiles and the
+  `gtest_discover_tests`/`CROSSCOMPILING_EMULATOR` wiring works under D3D9.
 
 See `docs/d3d9-backend.md` for the full writeup and `docs/d3d9-divergence-report.md` for the raw
 measurement this section summarizes.
