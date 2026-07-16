@@ -14,6 +14,7 @@ namespace CNA::Internal::Backends { class IEffectBackend; }
 namespace Microsoft::Xna::Framework::Graphics
 {
     class Texture2D;
+    class TextureCube;
 
     /**
      * @brief GLSL-source-based effect loaded from vertex and fragment shader strings.
@@ -71,6 +72,15 @@ namespace Microsoft::Xna::Framework::Graphics
          * @param texture Texture to bind.
          */
         NOXNA void SetTexture(int unit, Texture2D& texture);
+
+        /**
+         * @brief Task 1081: binds a cube texture to an additional sampler unit, for a custom
+         * shader that declares a `samplerCube` uniform (e.g. a reflection/environment map).
+         *
+         * @param unit    0-based sampler unit.
+         * @param texture Cube texture to bind.
+         */
+        NOXNA void SetTexture(int unit, TextureCube& texture);
 
         /**
          * @brief Task 1079: enables a `ShaderEffect` to drive a real 3D `GraphicsDevice::

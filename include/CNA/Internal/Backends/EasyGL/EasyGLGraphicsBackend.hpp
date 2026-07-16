@@ -184,6 +184,7 @@ namespace CNA::Internal::Backends::EasyGL
         void SetUniformFloatArray(const char* name, const float* values, int count) override;
         void SetUniformVec2Array(const char* name, const float* values, int count) override;
         void BindTexture(int unit, ITextureBackend* texture) override;
+        void BindTextureCube(int unit, ITextureCubeBackend* texture) override;
 
         /// Returns the underlying compiled program, so a backend (e.g. SpriteBatch) can bind
         /// the SAME program this ShaderEffect's SetUniformXxx() calls actually write to.

@@ -347,6 +347,19 @@ namespace CNA::Internal::Backends::EasyGL
         ::metagl::glActiveTexture(::metagl::TextureUnit::Texture0);
     }
 
+    // Task 1081: same shape as BindTexture(), but for a samplerCube -- ITextureCubeBackend is
+    // its own interface (not a subtype of ITextureBackend), so this can't just overload/reuse
+    // BindTexture() at the call site.
+    void EasyGLEffectBackend::BindTextureCube(int unit, ITextureCubeBackend* texture)
+    {
+        if (!texture) return;
+        const auto textureUnit = static_cast<::metagl::TextureUnit>(
+            static_cast<GLenum>(::metagl::TextureUnit::Texture0) + unit);
+        ::metagl::glActiveTexture(textureUnit);
+        texture->BindGL();
+        ::metagl::glActiveTexture(::metagl::TextureUnit::Texture0);
+    }
+
     // --- EasyGLOcclusionQueryBackend ---
 
     EasyGLOcclusionQueryBackend::EasyGLOcclusionQueryBackend(::easygl::ResourceRegistry* registry)

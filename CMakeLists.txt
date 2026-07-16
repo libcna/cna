@@ -2137,6 +2137,16 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 1081: TextureCube sampling support for custom ShaderEffect shaders (needed for
+        # ShipGame's own NormalMapping.fx reflection map).
+        cna_easygl_test(cna_test_easygl_shadereffect_texturecube
+                        examples/easygl_shadereffect_texturecube_test.cpp)
+        add_test(NAME EasyGL_ShaderEffect_TextureCube
+                 COMMAND cna_test_easygl_shadereffect_texturecube)
+        set_tests_properties(EasyGL_ShaderEffect_TextureCube PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 133: DualTextureEffect — magenta×yellow→red pixel readback
         cna_easygl_test(cna_test_easygl_dual_texture
                         examples/easygl_dual_texture_test.cpp)

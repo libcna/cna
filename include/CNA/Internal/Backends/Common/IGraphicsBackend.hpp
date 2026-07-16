@@ -286,6 +286,13 @@ namespace CNA::Internal::Backends
         /// Unit 0 is normally driven by the caller (e.g. SpriteBatch); this is for additional
         /// units a custom shader samples directly (e.g. a second blend-source texture).
         virtual void BindTexture(int unit, ITextureBackend* texture) {}
+        /// Task 1081: binds a cube texture to the given sampler unit (0-based), for a custom
+        /// shader that declares a `samplerCube` uniform (e.g. a reflection map). Separate from
+        /// `BindTexture()` since `ITextureCubeBackend` is its own interface, not a subtype of
+        /// `ITextureBackend` -- GL itself allows a 2D and a cube texture bound to the same unit
+        /// simultaneously, since they occupy distinct binding targets; the shader's own sampler
+        /// type (`sampler2D` vs `samplerCube`) determines which one is actually sampled.
+        virtual void BindTextureCube(int unit, ITextureCubeBackend* texture) {}
     };
 
     class ISpriteBatchBackend
