@@ -891,6 +891,10 @@ namespace CNA::Internal::Backends::Vulkan
         VkDescriptorPool      descriptorPoolLitTextured_      = VK_NULL_HANDLE;
         VkPipelineLayout      pipelineLayoutLitTextured3D_    = VK_NULL_HANDLE;
         std::unordered_map<PipelineKey, VkPipeline, PipelineKeyHash>             pipelinesLitTextured3D_;
+        // Task 1103: PreferPerPixelLighting=false (XNA's real default) sibling pipeline cache --
+        // same descriptor set layout/pipeline layout as pipelinesLitTextured3D_ above, different
+        // shader modules only (lighting moved into the vertex stage).
+        std::unordered_map<PipelineKey, VkPipeline, PipelineKeyHash>             pipelinesLitTextured3DVertexLit_;
         std::array<std::unordered_map<uint64_t, VkDescriptorSet>,
                    MaxFramesInFlight>                        litTexturedDescSets_;
         // Per-frame UBO ring buffer for light1/light2/emissive (5×vec4 = 80 bytes used, padded to 256)
@@ -924,6 +928,10 @@ namespace CNA::Internal::Backends::Vulkan
         VkDescriptorPool      descriptorPoolSkinned_       = VK_NULL_HANDLE;
         VkPipelineLayout      pipelineLayoutSkinned3D_     = VK_NULL_HANDLE;
         std::unordered_map<PipelineKey, VkPipeline, PipelineKeyHash>              pipelinesSkinned3D_;
+        // Task 1103: PreferPerPixelLighting=false (XNA's real default) sibling pipeline cache --
+        // same descriptor set layout/pipeline layout as pipelinesSkinned3D_ above, different
+        // shader modules only.
+        std::unordered_map<PipelineKey, VkPipeline, PipelineKeyHash>              pipelinesSkinned3DVertexLit_;
         std::array<std::unordered_map<uint64_t, VkDescriptorSet>,
                    MaxFramesInFlight>                         skinnedDescSets_;
         // Per-frame bone matrix UBO ring buffer (4608 bytes/draw × 32 draws max)
@@ -1030,6 +1038,11 @@ namespace CNA::Internal::Backends::Vulkan
             // 60 floats = 240 bytes, still under kSkinnedFogUBOStride=256.
             float                   skinnedFogUboData[60] = {};
             bool                    useLitTextured    = false; // true = LitTextured3D pipeline (Task 897)
+            // Task 1103: true = select the PreferPerPixelLighting=false (XNA's real default)
+            // per-vertex-lit pipeline sibling instead of the (historically always-selected)
+            // per-pixel-lit one, for whichever of useLitTextured/useSkinned is set. Only
+            // meaningful when lightingEnabled is also true (see the enqueue sites).
+            bool                    preferVertexLit   = false;
             // Layout (floats): [0..19]=light1/2 dir+diffuse+emissive (5 vec4, Task 897),
             // [20..35]=world mat4, [36..39]=eyePos, [40..51]=light0/1/2 specular (3 vec4),
             // [52..55]=specularColor+specularPower (Task 886/898), [56..59]=fogColor+fogEnabled,
@@ -1248,6 +1261,16 @@ namespace CNA::Internal::Backends::Vulkan
                                                  bool msaa, const DepthStencilKeyParams& dsParams = {},
                                          const BlendKeyParams& blendParams = {},
                                          VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED);
+        // Task 1103: PreferPerPixelLighting=false sibling of GetOrCreatePipelineSkinned3D above
+        // (real per-vertex/Gouraud lighting, XNA's own default) — same signature/layout, different
+        // shader modules and pipeline cache only.
+        VkPipeline GetOrCreatePipelineSkinned3DVertexLit(VkPrimitiveTopology,
+                                                 bool depthTest, bool depthWrite,
+                                                 bool blend, int cullMode,
+                                                 uint32_t colorAttachmentCount, bool wireframe,
+                                                 bool msaa, const DepthStencilKeyParams& dsParams = {},
+                                         const BlendKeyParams& blendParams = {},
+                                         VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED);
         void       EnsureDefaultWhiteTexture();
         void       FillExtPushConst(float (&pc)[32], const Matrix& wvp, const GpuDrawParams& p);
         void       FillAlphaTestPushConst(float (&pc)[32], const Matrix& wvp, const GpuDrawParams& p);
@@ -1257,6 +1280,16 @@ namespace CNA::Internal::Backends::Vulkan
         void       EnsureLitTexturedResources();
         VkDescriptorSet GetOrCreateLitTexturedDescSet(uint32_t frameIdx, VkImageView view2D);
         VkPipeline GetOrCreatePipelineLitTextured3D(VkPrimitiveTopology,
+                                                     bool depthTest, bool depthWrite,
+                                                     bool blend, int cullMode,
+                                                     uint32_t colorAttachmentCount, bool wireframe,
+                                                     bool msaa, const DepthStencilKeyParams& dsParams = {},
+                                         const BlendKeyParams& blendParams = {},
+                                         VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED);
+        // Task 1103: PreferPerPixelLighting=false sibling of GetOrCreatePipelineLitTextured3D
+        // above (real per-vertex/Gouraud lighting, XNA's own default) — same signature/layout,
+        // different shader modules and pipeline cache only.
+        VkPipeline GetOrCreatePipelineLitTextured3DVertexLit(VkPrimitiveTopology,
                                                      bool depthTest, bool depthWrite,
                                                      bool blend, int cullMode,
                                                      uint32_t colorAttachmentCount, bool wireframe,

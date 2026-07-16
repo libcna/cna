@@ -4104,6 +4104,16 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # Task 1103: BasicEffect pixel test — PreferPerPixelLighting genuinely selects between a
+        # real per-vertex-lit shader variant and the existing per-pixel-lit one.
+        cna_vulkan_test(cna_test_vulkan_basiceffect_preferperpixellighting
+                        examples/vulkan_basiceffect_preferperpixellighting_test.cpp)
+        add_test(NAME Vulkan_BasicEffect_PreferPerPixelLighting
+                 COMMAND cna_test_vulkan_basiceffect_preferperpixellighting)
+        set_tests_properties(Vulkan_BasicEffect_PreferPerPixelLighting PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 887: AlphaTestEffect.VertexColorEnabled fix verification
         cna_vulkan_test(cna_test_vulkan_alphatest_vertexcolor
                         examples/vulkan_alphatest_vertexcolor_test.cpp)
@@ -4278,6 +4288,16 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         add_test(NAME Vulkan_SkinnedEffect_Specular
                  COMMAND cna_test_vulkan_skinnedeffect_specular)
         set_tests_properties(Vulkan_SkinnedEffect_Specular PROPERTIES
+            TIMEOUT 30
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Task 1103: SkinnedEffect pixel test — PreferPerPixelLighting genuinely selects between a
+        # real per-vertex-lit shader variant and the existing per-pixel-lit one.
+        cna_vulkan_test(cna_test_vulkan_skinnedeffect_preferperpixellighting
+                        examples/vulkan_skinnedeffect_preferperpixellighting_test.cpp)
+        add_test(NAME Vulkan_SkinnedEffect_PreferPerPixelLighting
+                 COMMAND cna_test_vulkan_skinnedeffect_preferperpixellighting)
+        set_tests_properties(Vulkan_SkinnedEffect_PreferPerPixelLighting PROPERTIES
             TIMEOUT 30
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 

@@ -151,6 +151,10 @@ def main():
         # Lit+Textured 3D pipeline — stride 32 (VertexPositionNormalTexture)
         ("lit_textured3d.vert.glsl",     VERTEX_SHADER,   "kLitTextured3dVertSpv"),
         ("lit_textured3d.frag.glsl",     FRAGMENT_SHADER, "kLitTextured3dFragSpv"),
+        # Task 1103: BasicEffect PreferPerPixelLighting=false sibling (per-vertex/Gouraud lighting,
+        # XNA's real default) — same UBO/push-constant layout as lit_textured3d above.
+        ("lit_textured3d_vertexlit.vert.glsl", VERTEX_SHADER,   "kLitTextured3dVertexLitVertSpv"),
+        ("lit_textured3d_vertexlit.frag.glsl", FRAGMENT_SHADER, "kLitTextured3dVertexLitFragSpv"),
         # AlphaTestEffect pipeline — single VS handles stride 20/32 via attribute remapping
         ("alpha_test3d.vert.glsl",       VERTEX_SHADER,   "kAlphaTest3dVertSpv"),
         ("alpha_test3d.frag.glsl",       FRAGMENT_SHADER, "kAlphaTest3dFragSpv"),
@@ -171,6 +175,10 @@ def main():
         # SkinnedEffect pipeline — stride 52, bone palette in dynamic UBO (binding=1)
         ("skinned3d.vert.glsl",          VERTEX_SHADER,   "kSkinned3dVertSpv"),
         ("skinned3d.frag.glsl",          FRAGMENT_SHADER, "kSkinned3dFragSpv"),
+        # Task 1103: SkinnedEffect PreferPerPixelLighting=false sibling (per-vertex/Gouraud
+        # lighting, XNA's real default) — same UBO/push-constant layout as skinned3d above.
+        ("skinned3d_vertexlit.vert.glsl", VERTEX_SHADER,   "kSkinned3dVertexLitVertSpv"),
+        ("skinned3d_vertexlit.frag.glsl", FRAGMENT_SHADER, "kSkinned3dVertexLitFragSpv"),
         # Instanced 3D pipeline — binding=0 per-vertex (pos only), binding=1 per-instance mat4.
         # Dedicated FS (Task 899: previously reused colored3d's, but that now has a 2nd
         # descriptor binding for fog, incompatible with Instanced3D's unmodified 1-binding layout).
