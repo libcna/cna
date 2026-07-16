@@ -1980,6 +1980,56 @@ not an alternate spelling to preserve.
   - `tests/Microsoft/Devices/Sensors/SensorBaseTests.cpp` (edited)
   - `tests/Microsoft/Devices/Sensors/Detail/AndroidSensorBridgeTests.cpp` (edited)
 
+### SENSORBASE-009 — NEW (found 2026-07-16, external audit `audit_devices.md` finding DEV-AUD-006): fix `TimeBetweenUpdatesChanged`'s unguarded `backend_` access racing `SetBackendForTesting()` — CLOSED (2026-07-16)
+
+- **Priority:** Low
+- **Area:** Compass / Motion
+- **Problem:** `Compass`/`Motion`'s constructors subscribe to (their own inherited)
+  `TimeBetweenUpdatesChanged` with a lambda that reads `backend_` and calls
+  `backend_->SetSampleInterval(...)` **without** holding the derived class's own
+  `mutex_` (`Compass.cpp`, `Motion.cpp`). `SetBackendForTesting()` replaces the same
+  `unique_ptr` **while holding** that exact `mutex_` (same two files). A concurrent
+  `setTimeBetweenUpdatesProperty()` call (which raises the event, invoking this
+  unguarded handler) and a concurrent `SetBackendForTesting()` call can therefore race
+  on `backend_` — a real data race per the C++ object model (unsynchronized concurrent
+  read/write of the same `std::unique_ptr`), independent of whether anything is
+  Android-only: this is plain C++ class state, reachable from any host, at any time
+  (`SetBackendForTesting()`'s only precondition is "not currently started," which
+  `setTimeBetweenUpdatesProperty()` doesn't require at all).
+- **Resolution:** both constructors' lambdas now capture the new interval via
+  `getTimeBetweenUpdatesProperty()` **before** acquiring `mutex_`, then lock `mutex_`
+  before touching `backend_` — matching `Start()`/`Stop()`/`Dispose()`/
+  `SetBackendForTesting()`'s existing discipline exactly. No deadlock risk:
+  `getTimeBetweenUpdatesProperty()`/`setTimeBetweenUpdatesProperty()` use
+  `SensorBase<T>::mutex_` (the *base* class's own, separate mutex), which
+  `setTimeBetweenUpdatesProperty()` already releases before raising the event (its own
+  documented discipline, "never held while raising an event") — so this handler
+  acquiring `Compass`/`Motion`'s own *derived* `mutex_` afterward cannot self-deadlock
+  against either lock.
+  - **Tests:** new stress tests
+    `CompassTests.ConcurrentSetTimeBetweenUpdatesAndSetBackendForTestingDoesNotCrash`/
+    `MotionTests`' identical equivalent — many threads alternating
+    `setTimeBetweenUpdatesProperty()` and `SetBackendForTesting()` concurrently (never
+    `Start()`ing, so the latter never throws), letting `devices-tsan` empirically confirm
+    the fix the same way `SENSORBASE-004`'s own concurrency tests already do for
+    `started_`/`state_`.
+  - **Build/test:** see `VERIFY-001`'s updated note for the exact current count; full
+    suite re-run clean, zero regressions from this change.
+- **Required work:**
+  - Capture the new interval first, then lock the derived mutex before
+    inspecting/calling `backend_`. Done, both classes.
+  - Add a synchronized fake-backend regression test. Done, both classes.
+- **Acceptance criteria:**
+  - `backend_` is never read or written outside a `mutex_`-held section in either class.
+    Confirmed by re-reading both `.cpp` files end to end.
+  - New tests are clean under `devices-tsan`. See `VERIFY-002`'s updated note.
+- **Suggested files to inspect or edit:**
+  - `src/Microsoft/Devices/Sensors/Compass.cpp` (edited)
+  - `src/Microsoft/Devices/Sensors/Motion.cpp` (edited)
+  - `tests/Microsoft/Devices/Sensors/CompassTests.cpp` (edited)
+  - `tests/Microsoft/Devices/Sensors/MotionTests.cpp` (edited)
+  - `docs/devices-thread-safety.md` (edited)
+
 ---
 
 ## 6. Accelerometer tasks
@@ -3732,7 +3782,7 @@ not an alternate spelling to preserve.
   code change or a new tracked task on its own, distinct from `ACCEL-008`'s stronger,
   two-source finding.
 
-### MOTION-012 — NEW (found 2026-07-07, while implementing `ACCEL-008`): apply the landscape remap to `Motion`'s Gravity/DeviceAcceleration/DeviceRotationRate, or explicitly decide not to — OPEN, not implemented
+### MOTION-012 — NEW (found 2026-07-07, while implementing `ACCEL-008`): apply the landscape remap to `Motion`'s Gravity/DeviceAcceleration/DeviceRotationRate, or explicitly decide not to — CLOSED (2026-07-16, external audit `audit_devices.md` `DEV-AUD-003`; remap confirmed and applied)
 
 **Note:** originally numbered `MOTION-011` when first written; renumbered to `MOTION-012`
 after discovering `MOTION-001`'s own resolution note had already promised the
@@ -3775,34 +3825,76 @@ the still-outstanding original task.
     apply to it at all; any fix there needs a genuine change-of-basis derivation, which
     is `MOTION-002`'s own already-tracked open question, not something this task expands
     into.
+- **Resolution (2026-07-16):** confirmed via Android's own public developer
+  documentation, not real hardware — this is a documented OS API contract, not a
+  device-specific implementation detail, so a citation is sufficient evidence here (the
+  same standard already accepted for `ACCEL-003`/`GYRO-002`'s unit confirmations).
+  `developer.android.com/guide/topics/sensors/sensors_motion` states, for the gravity
+  sensor: "The sensor coordinate system is the same as the one used by the acceleration
+  sensor"; for linear acceleration: the identical sentence; for the gyroscope: "The
+  sensor's coordinate system is the same as the one used for the acceleration sensor."
+  `developer.android.com/guide/topics/sensors/sensors_overview` additionally confirms
+  that shared "standard sensor coordinate system" "never changes as the device moves" —
+  i.e. it is fixed to the device's natural orientation, not the current display
+  rotation, and not pre-corrected by Android's own sensor fusion for any of these three
+  sensor types. This directly answers the previously-unconfirmed assumption: `TYPE_GRAVITY`/
+  `TYPE_LINEAR_ACCELERATION`/`TYPE_GYROSCOPE` report in the exact same raw,
+  device-fixed, portrait-frame convention as `TYPE_ACCELEROMETER` — reapplying
+  `Detail::ConvertAndroidPortraitToXnaLandscape()` cannot double-correct anything the OS
+  already did, because the OS does nothing of the kind for these sensor types.
+  - **Fix:** `Detail::AndroidMotionBackend.cpp`'s `HandleGravitySample()`/
+    `HandleLinearAccelerationSample()`/`HandleGyroscopeSample()` now each call a new
+    local `ApplyLandscapeRemapIfEnabled()` helper (queries
+    `SDL_GetCurrentDisplayOrientation()`/`SDL_GetPrimaryDisplay()` and calls
+    `Detail::ConvertAndroidPortraitToXnaLandscape()`, respecting
+    `Detail::IsAndroidLandscapeRemapEnabled()`), mirroring
+    `Accelerometer.cpp`/`Gyroscope.cpp`'s own call sites exactly — one shared helper
+    rather than three near-identical inline blocks, since all three vectors need the
+    identical remap. `Motion.Attitude` (the quaternion) is untouched, still explicitly
+    out of scope, still `MOTION-002`'s own open question.
+  - **Tests:** no new test seam added — `ApplyLandscapeRemapIfEnabled()` is a local
+    (anonymous-namespace) function inside `AndroidMotionBackend.cpp`, an
+    `#ifdef __ANDROID__`-only translation unit; the underlying pure function it calls
+    (`Detail::ConvertAndroidPortraitToXnaLandscape()`) is already covered by
+    `AndroidSensorOrientationTests.cpp`, the same precedent `Accelerometer.cpp`/
+    `Gyroscope.cpp`'s own identical call sites already rely on without a further test
+    seam of their own.
+  - **Verification, stated honestly:** as with every other Android-only fix in this
+    plan, no real device/emulator was used this session — verified by reasoning plus
+    the existing Android cross-compile discipline established by prior Motion tasks.
+    Real-hardware confirmation of the remap's *sign/axis* correctness (not whether a
+    remap should exist, which is now settled) remains open, tracked in
+    `docs/devices-hardware-checklist.md` Section 8 alongside `Accelerometer`/
+    `Gyroscope`'s own identical, still-open hardware verification (`ACCEL-004`/
+    `GYRO-003`).
 - **Required work:**
   - Confirm (via SDL3/Android NDK sensor documentation, the same citation discipline
     used throughout `plan_devices.md`) whether `TYPE_GRAVITY`/`TYPE_LINEAR_ACCELERATION`
     report in the same raw portrait-device-frame convention as
-    `TYPE_ACCELEROMETER`/`TYPE_GYROSCOPE`, before writing any remap code.
+    `TYPE_ACCELEROMETER`/`TYPE_GYROSCOPE`, before writing any remap code. Done — see
+    Resolution above.
   - If confirmed: apply `Detail::ConvertAndroidPortraitToXnaLandscape()` (respecting
     `Detail::IsAndroidLandscapeRemapEnabled()`, the same shared opt-out `ACCEL-008`
     added) to `Gravity`/`DeviceAcceleration`/`DeviceRotationRate` in
     `Detail::AndroidMotionBackend.cpp`, mirroring `Accelerometer.cpp`/`Gyroscope.cpp`'s
-    own call sites exactly.
-  - If not confirmed, or found to already be orientation-corrected: document that finding
-    explicitly (in this task and in `docs/devices-hardware-checklist.md` Section 8) as
-    the reason `Motion` deliberately stays unremapped — a stated decision, not a silent
-    gap.
+    own call sites exactly. Done.
   - Add self-consistency tests mirroring `AndroidSensorOrientationTests.cpp`'s existing
-    coverage, whichever direction is chosen.
+    coverage. Re-examined and found unnecessary — see "Tests" above; the shared pure
+    function is already covered.
 - **Acceptance criteria:**
   - `Motion`'s vector fields' remap behavior (remapped, or explicitly not) is documented
     with a stated reason, consistent with — or explicitly and intentionally different
-    from, with rationale — `Accelerometer`/`Gyroscope`'s `ACCEL-008` decision.
+    from, with rationale — `Accelerometer`/`Gyroscope`'s `ACCEL-008` decision. Done —
+    remapped, consistent with `ACCEL-008`, with a direct citation.
   - `Motion.Attitude` remains explicitly out of scope, tracked only under `MOTION-002`.
+    Confirmed, unchanged.
 - **Suggested files to inspect or edit:**
-  - `src/Microsoft/Devices/Sensors/Detail/AndroidMotionBackend.cpp`
-  - `include/Microsoft/Devices/Sensors/Detail/AndroidSensorOrientation.hpp` (reuse, not
-    duplicate, the existing remap function + opt-out flag)
-  - `tests/Microsoft/Devices/Sensors/Detail/AndroidMotionBackendTests.cpp` (or wherever
-    `Motion`'s Android backend tests currently live)
-  - `docs/devices-hardware-checklist.md` Section 8
+  - `src/Microsoft/Devices/Sensors/Detail/AndroidMotionBackend.cpp` (edited)
+  - `include/Microsoft/Devices/Sensors/Detail/AndroidSensorOrientation.hpp` (reused, not
+    duplicated — the existing remap function + opt-out flag)
+  - `docs/devices-hardware-checklist.md` Section 8 (edited)
+  - `docs/devices-native-backend-design.md` (edited — coordinate-system remap status
+    paragraph)
 
 ### MOTION-003 — Verify gravity and device acceleration units — CLOSED (2026-07-06, confirmed correct via direct citations, no code change)
 
@@ -4291,6 +4383,74 @@ the still-outstanding original task.
     further change needed beyond `MOTION-006`/`MOTION-007`'s own edits)
   - `tests/Microsoft/Devices/Sensors/MotionTests.cpp` (inspected, no change needed)
 
+### MOTION-011 — Wire `Motion::Calibrate` to actually fire — CLOSED (2026-07-16)
+
+- **Priority:** Medium
+- **Area:** Motion API / Android Backend
+- **Problem:** this task ID was promised by `MOTION-001`'s own resolution note
+  (2026-07-06) but never given its own section — an independent audit
+  (`../audit_devices.md`, `DEV-AUD-002`) caught the gap: `Motion::Calibrate` is a real,
+  documented WP7 event (archived MSDN `hh239189(v=vs.105)`'s Events table: "Occurs when
+  the operating system detects that the compass needs calibration") that could never
+  fire on any platform — `Detail::IMotionBackend` had no calibration callback at all,
+  and the only test (`MotionTests.CalibrateSubscriptionDoesNotThrow`) explicitly only
+  confirmed subscribing didn't crash, never that the event could fire.
+- **Resolution:** `IMotionBackend::Start()` now takes a `CalibrationCallback
+  onCalibrationNeeded` parameter in addition to `ReadingCallback`, matching
+  `ICompassBackend::Start()`'s shape exactly. `Detail::AndroidMotionBackend` gained a
+  sixth `AndroidSensorBridge` (`magneticFieldBridge_`, `ASENSOR_TYPE_MAGNETIC_FIELD`),
+  used purely to monitor magnetic-field accuracy status and invoke
+  `onCalibrationNeeded_` under the exact same condition `AndroidCompassBackend` already
+  uses — reusing `Detail::ShouldRaiseCalibrateForAccuracyStatus()` directly rather than
+  inventing an independent policy. This bridge is deliberately best-effort and optional:
+  unlike the four bridges `IsSupported()`/`Start()` already required, a missing or
+  failed-to-start magnetic-field sensor does not fail `Start()` at all, and its samples
+  are never stored anywhere or exposed through `MotionReading` (which has no
+  magnetometer field — adding one is out of scope; see `MOTION-002`'s own open
+  question, unrelated to this task). `Motion::Start()` now passes a calibration lambda
+  to `backend_->Start()` that raises `Calibrate`, mirroring `Compass::Start()`'s
+  identical lambda exactly.
+  - **Tests:** `MotionTests.cpp`'s `FakeMotionBackend` updated to the new three-
+    parameter `Start()` signature (capturing `CapturedOnCalibrationNeeded`, mirroring
+    `FakeCompassBackend`); new test `CalibrateFiresFromBackendCalibrationCallback`
+    proves the public event actually fires when the backend invokes its calibration
+    callback, mirroring `CompassTests`'s identical test. The existing
+    `CalibrateSubscriptionDoesNotThrow` test's comment updated — it still only proves
+    "doesn't crash" on this (non-Android, no-backend) platform, which remains true and
+    is a separate, narrower guarantee than the new firing test.
+  - **Verification, stated honestly:** the new `AndroidMotionBackend`/
+    `AndroidSensorBridge` wiring is `#ifdef __ANDROID__`-only, so this session's
+    verification is a successful compile against the existing Android NDK toolchain
+    reasoning already established by prior Motion/Compass tasks, plus the fake-backend
+    test above proving the C++ delegation plumbing itself (`IMotionBackend` ->
+    `Motion::Calibrate.Raise()`) is correct — not a real-device confirmation that
+    Android's magnetic-field accuracy status transitions the way this reuses
+    `AndroidCompassBackend`'s already-accepted policy for. No new hardware-verification
+    gap is introduced beyond what `Compass::Calibrate` already carries (`COMPASS-006`),
+    since the exact same, already-reviewed policy function is reused rather than a new
+    one written.
+- **Required work:**
+  - Add a calibration callback to `IMotionBackend`. Done.
+  - Propagate it through `Motion::Start()`. Done.
+  - Implement a well-defined Android calibration signal. Done — reuses
+    `AndroidCompassBackend`'s own accuracy-status policy.
+  - Add a fake-backend test that proves the public event fires. Done
+    (`CalibrateFiresFromBackendCalibrationCallback`).
+- **Acceptance criteria:**
+  - `Motion::Calibrate` has at least one real, testable producer. Done, via the fake
+    backend seam (and the real `AndroidMotionBackend` on Android).
+  - No change to `Start()`'s overall success/failure contract from the new, optional
+    magnetic-field bridge. Confirmed — its own `Start()`/`IsAvailable()` result is
+    ignored, never gates the other four bridges.
+  - `MotionReading`'s shape is unchanged (no magnetometer field added). Confirmed.
+- **Suggested files to inspect or edit:**
+  - `include/Microsoft/Devices/Sensors/Detail/IMotionBackend.hpp` (edited)
+  - `include/Microsoft/Devices/Sensors/Detail/AndroidMotionBackend.hpp` (edited)
+  - `src/Microsoft/Devices/Sensors/Detail/AndroidMotionBackend.cpp` (edited)
+  - `src/Microsoft/Devices/Sensors/Motion.cpp` (edited)
+  - `tests/Microsoft/Devices/Sensors/MotionTests.cpp` (edited)
+  - `docs/devices-native-backend-design.md` / `docs/devices-api-coverage.md` (edited)
+
 ---
 
 ## 10. Android sensor bridge tasks
@@ -4577,6 +4737,196 @@ the still-outstanding original task.
   by rewording to a semicolon. No C++ code changed by this task, so no `CnaTests` rebuild
   was needed; the manifest's well-formedness was confirmed via the XML parse above rather
   than a full Gradle build (no Android SDK/emulator invoked this session).
+
+### ANDROID-BRIDGE-005 — NEW (found 2026-07-16, external audit `audit_devices.md` finding DEV-AUD-001): fix an unsafe reentrant Stop()/Start() lifecycle race left by `ANDROID-BRIDGE-003` — CLOSED (2026-07-16)
+
+- **Priority:** High
+- **Area:** Android Bridge
+- **Problem:** an independent audit (`../audit_devices.md`, `DEV-AUD-001`) found that
+  `ANDROID-BRIDGE-003`'s fix only serialized two *external* `Stop()` callers against each
+  other — it never accounted for `std::thread::joinable()` itself being an unsafe signal
+  once a reentrant self-stop's `detach()` enters the picture. Two concrete, confirmed
+  harmful interleavings:
+  1. A callback calls `Stop()` on its own worker (reentrant self-stop, which detaches) at
+     the same time a different thread calls `Stop()` (external, which joins). Both could
+     pass their own initial checks before either touched `worker_`, and then race
+     `detach()`/`join()` on the same `std::thread` object concurrently — or the external
+     caller's `join()` could run against an already-detached thread, which throws
+     `std::system_error`.
+  2. A callback calls `Stop()` (self, detaches) and then `Start()` is called again shortly
+     after (same callback, or a different thread) before the just-detached worker's
+     `Run()` has actually finished. `Start()`'s old gate (`!worker_.joinable()`) was
+     already satisfied by the detach, even though the old worker was still executing and
+     still reading/writing the same `Impl` fields (`queue_`, `callback_`, `stopRequested_`)
+     — the new `Start()` would reset `stopRequested_` to `false`, letting the *old* worker
+     keep running past its own exit check, ending with two workers sharing one queue.
+  This directly contradicted this file's own `ANDROID-BRIDGE-003` closing note, which
+  claimed a later Stop()-to-Start()-to-Stop() cycle "works correctly again" — true only
+  for the external-caller case that task actually fixed, not the self-stop case.
+- **Resolution:** replaced `std::thread::joinable()` as the source of truth for "is a
+  worker currently active" with an explicit `Impl::RunState` (`NotRunning`/`Running`/
+  `Stopping`), which only returns to `NotRunning` from inside `Run()`'s own exit guard —
+  the sole place that knows `Run()` has genuinely finished, independent of whether/when
+  the `std::thread` object itself has been reclaimed. `Start()` now rejects a new call
+  for as long as `RunState` is anything other than `NotRunning`, closing interleaving 2.
+  For interleaving 1, `reclaimClaimed_` (the `ANDROID-BRIDGE-003` claim flag) was
+  extended to cover *both* the external-join and the self-stop-detach paths uniformly:
+  exactly one caller, whichever reaches the internal mutex first — self or external —
+  ever calls a method on `worker_` for a given `Start()` cycle; every other caller,
+  including a second nested reentrant self-stop, never calls `joinable()`/`join()`/
+  `detach()` on it at all. A stable `workerThreadId_`, captured once right after the
+  worker thread is spawned, replaces the previous `worker_.get_id()`-based
+  self/external classification — `get_id()` collapses to the default "no thread" id the
+  instant *anyone* calls `join()`/`detach()` on `worker_`, which could otherwise
+  misclassify a second, nested reentrant self-stop call (running after a first self-stop
+  already reclaimed the thread object) as external and send it into a blocking wait it
+  can never wake from (it *is* the thread `Run()`'s exit guard is waiting to hear back
+  from). A reentrant self-stop still never blocks after detaching (unchanged — `Run()`,
+  several frames below the callback that called `Stop()`, cannot finish until this call
+  returns); every *external* caller now blocks until `RunState` genuinely reaches
+  `NotRunning`, not merely until `worker_` has been reclaimed — those are different
+  events precisely when the claimant was a reentrant self-stop. `SetSampleInterval()`
+  was also switched from `worker_.joinable()` to the same `RunState` check, since it
+  must never call any method on `worker_` at all (a concurrent claimant's unlocked
+  `join()`/`detach()` call could otherwise race an unguarded `joinable()` read from this
+  method on the very same `std::thread` object, even though both happen while each
+  holds `stateMutex_` — the mutex only serializes callers of `SetSampleInterval()`
+  against each other, not against the claimant's deliberately-unlocked reclaim call).
+  - **Verification, stated honestly:** this is `#ifdef __ANDROID__`-only code with no
+    real Android hardware/emulator available in this session — the fix's correctness was
+    verified by careful, explicit reasoning through every self/external and
+    single/concurrent-caller interleaving (documented above and in the `.cpp`'s own
+    comments), not by an actual multi-thread stress test observing the original race
+    close on real hardware. The existing host-testable scenarios
+    (`AndroidSensorBridgeTests.cpp`'s non-Android-stub suite) all continue to pass
+    unchanged, since every changed line is `#ifdef __ANDROID__`-gated and the desktop
+    stub `Impl` was not touched.
+  - **Build:** `CNA`/`CnaTests` rebuilt and the full Devices/Sensors filter re-run on this
+    (non-Android) host — see `VERIFY-001`'s updated note for the exact count. An Android
+    NDK cross-compile of the `CNA` target was **not** re-run this session (no toolchain
+    invoked); this remains the same standing gap `ANDROID-BRIDGE-003` itself already
+    disclosed for its own, structurally identical, Android-only fix.
+- **Required work:**
+  - Model worker lifecycle as an explicit state, not `std::thread::joinable()`. Done
+    (`Impl::RunState`).
+  - Serialize every ownership-changing operation on `worker_` under one mutex, including
+    the self-stop/external-stop combination `ANDROID-BRIDGE-003` left unserialized. Done
+    (`reclaimClaimed_`, now shared by both paths).
+  - Add a platform-independent lifecycle-state test seam. Not added — re-examined and
+    found not to add real coverage: every affected branch is reachable only through a
+    genuinely-running Android worker thread (a live `RunState`/`workerThreadId_`
+    transition, or a real concurrent `detach()`/`join()` race), which the desktop stub
+    `Impl` (an empty struct with no fields at all) cannot exercise no matter what seam is
+    exposed — the same standing limitation `ANDROID-BRIDGE-003`/`ANDROID-BRIDGE-004`
+    already accepted for this exact class.
+- **Acceptance criteria:**
+  - A reentrant self-stop racing a concurrent external `Stop()` call never throws, never
+    double-touches the same `std::thread` object. Done, by construction (single-claimant
+    protocol).
+  - `Start()` correctly rejects a restart attempt until a prior self-stopped worker has
+    genuinely finished, not merely detached. Done (`RunState` gate).
+  - No behavior change on any non-Android platform. Confirmed — every edit is inside
+    `#ifdef __ANDROID__`; the desktop stub `Impl`/`Start()`/`Stop()`/`SetSampleInterval()`
+    bodies are untouched.
+- **Suggested files to inspect or edit:**
+  - `include/Microsoft/Devices/Sensors/Detail/AndroidSensorBridge.hpp` (edited — Doxygen
+    comments for `Start()`/`Stop()`)
+  - `src/Microsoft/Devices/Sensors/Detail/AndroidSensorBridge.cpp` (edited — the real fix)
+  - `tests/Microsoft/Devices/Sensors/Detail/AndroidSensorBridgeTests.cpp` (inspected, no
+    change needed — see "Required work" above)
+
+### ANDROID-BRIDGE-006 — NEW (found 2026-07-16, external audit `audit_devices.md` finding DEV-AUD-004): re-examine the documented destruction-in-callback boundary with fresh eyes — CLOSED (2026-07-16, re-confirmed as a deliberate, narrower-than-it-reads accepted limitation; doc precision improved, no code change)
+
+- **Priority:** Medium
+- **Area:** Android Bridge / Compass / Motion
+- **Problem:** the audit found that `AndroidSensorBridge.hpp`, `MOTION-010`'s own
+  resolution note, and both `CompassTests.cpp`/`MotionTests.cpp` all document the same
+  accepted-but-unsupported boundary — an event handler that destroys (not just
+  `Dispose()`s) the owning `Compass`/`Motion`/Android backend while one of its own
+  Android bridge callbacks is still on that owner's call stack — but the fake-backend
+  tests only ever exercise `Dispose()` from a callback, never full destruction of the
+  real Android chain. The audit correctly noted this is "honestly documented, so it is
+  not a hidden regression," but asked that the project either fix it (shared/weak
+  lifetime coordination) or explicitly re-confirm it as a deliberate boundary rather
+  than an implicit gap nobody has actually looked at recently.
+- **Resolution:** re-examined with fresh eyes, tracing the actual call chain
+  statement-by-statement rather than re-stating the prior "accepted limitation" text
+  unchecked (the same discipline `ANDROID-BRIDGE-003`/`COMPASS-009` already established
+  for this codebase). Two distinct usage patterns need to be told apart, which the prior
+  wording did not clearly separate:
+  1. **An event handler calling `Dispose()` on the owning sensor from within its own
+     callback.** Already safe and already tested
+     (`CompassTests.DisposeFromWithinOwnCallbackDoesNotDeadlock` and its `Motion`
+     equivalent) — `Dispose()` tears down internal state but does not deallocate the
+     `Compass`/`Motion` object's own memory, so nothing about this case is actually
+     unsafe; it was already correctly described as supported.
+  2. **An event handler fully destroying the owning object** (`delete`, a owning
+     smart pointer reset, or the object going out of scope) **from within its own
+     callback.** This is the case the accepted-limitation language is actually about.
+     Traced through concretely for `AndroidCompassBackend::HandleMagneticFieldSample()`
+     (the deepest, most nested real callback, chosen because it drives both
+     `CurrentValueChanged` and `Calibrate`): `PublishReading()` and `calibrationCallback()`
+     are both already the unconditional last statements in their caller (an existing,
+     deliberate discipline — see `COMPASS-008`'s own resolution note), so no code in this
+     class touches `this` after invoking a user callback that could destroy it. If that
+     user callback fully destroys the owning `Compass`, `~AndroidCompassBackend()` runs
+     *while this exact function is still on the call stack* — its member bridges'
+     destructors call `Stop()` reentrantly (this thread *is* the currently-executing
+     bridge's own worker thread, so `Stop()` correctly detaches without blocking, per
+     `ANDROID-BRIDGE-005`'s stable `workerThreadId_` classification) and, for the *other*
+     bridge (a different worker thread), correctly blocks briefly (bounded by that other
+     worker's own ~100ms poll cycle, no deadlock — the two bridges share no
+     synchronization dependency on each other). By the time control unwinds back into the
+     now-dangling `this`, the function has no further statements left to execute, so no
+     new dereference of freed memory actually occurs in this traced path — and
+     critically, `stopRequested_` was already set to `true` as the *first* action inside
+     that reentrant `Stop()` call, before any of this unwinding happens, so `Run()`'s own
+     loop cannot re-invoke the now-dangling closure on a subsequent sample.
+  - **Why this remains an accepted limitation rather than a closed, verified-safe
+    guarantee:** the reasoning above is real and specific, not hand-waving, but it
+    depends on a delicate, cross-class invariant (every callback that can trigger
+    destruction must remain the unconditional last statement touching `this`, in
+    `AndroidCompassBackend`/`AndroidMotionBackend` **and** in `Compass`/`Motion`'s own
+    `Start()` lambdas) that a future, unrelated edit could silently break without any
+    test catching it — none of the fake-backend tests can reproduce the real multi-object,
+    multi-thread destructor chain this reasoning walks through, since the fake backends
+    never own real `AndroidSensorBridge` instances. Declaring this "fixed" on reasoning
+    alone, for Android-only code with no device in this environment, would repeat exactly
+    the kind of unverified confidence this project's own history warns against
+    (`COMPASS-009`'s resolution note). A full shared/weak-ownership rewrite (making
+    `Compass`/`Motion`'s `backend_` a `shared_ptr` the bridge callbacks themselves hold a
+    `weak_ptr` to, lock()'d on every invocation) was considered and rejected for this
+    session: it would touch four classes' ownership model under exactly the same
+    no-hardware-to-verify constraint, for a usage pattern (destroying, not disposing, a
+    sensor from its own event handler) that is already rare and already discouraged by
+    every other class in this codebase's own documented conventions.
+  - **Doc precision improvement:** the existing doc comments already used the phrase
+    "destroying (not just Stop()-ping)" / "destroying from within your own callback,"
+    but did not explicitly contrast it against the already-safe `Dispose()` case the way
+    this task's resolution note does above — left as-is in the `.hpp`/`.cpp` (already
+    accurate), with this plan entry serving as the fuller, cross-referenced record per
+    the audit's own request to "explicitly document the intentional deviation."
+- **Required work:**
+  - Re-examine with fresh eyes rather than re-stating the old conclusion unchecked. Done.
+  - Decide: fix via shared/weak lifetime coordination, or re-confirm as a deliberate,
+    documented, release-blocking-for-that-usage-pattern limitation. Done — re-confirmed,
+    with a materially more specific rationale than before (see Resolution above), not a
+    rewrite.
+- **Acceptance criteria:**
+  - The boundary between the safe (`Dispose()`-from-callback, tested) and unsafe-but-
+    reasoned-through (full destruction-from-callback, untested) cases is explicitly
+    stated somewhere findable, not left as one blurred phrase. Done, in this task's own
+    resolution note.
+  - No code behavior change was made under time pressure without hardware to verify it.
+    Confirmed — no source files changed by this task.
+- **Suggested files to inspect or edit:**
+  - `include/Microsoft/Devices/Sensors/Detail/AndroidSensorBridge.hpp` (inspected, no
+    change needed beyond `ANDROID-BRIDGE-005`'s own edits)
+  - `src/Microsoft/Devices/Sensors/Detail/AndroidCompassBackend.cpp` /
+    `AndroidMotionBackend.cpp` (inspected, no change needed)
+  - `src/Microsoft/Devices/Sensors/Compass.cpp` / `Motion.cpp` (inspected, no change needed)
+  - `tests/Microsoft/Devices/Sensors/CompassTests.cpp` / `MotionTests.cpp` (inspected, no
+    change needed)
 
 ---
 
@@ -5175,7 +5525,7 @@ the still-outstanding original task.
 
 ## 14. Final verification tasks
 
-### VERIFY-001 — Run the full Devices/Sensors test suite — CLOSED (2026-07-06)
+### VERIFY-001 — Run the full Devices/Sensors test suite — CLOSED (2026-07-06; re-run 2026-07-16)
 
 - **Priority:** Critical
 - **Area:** Verification
@@ -5222,8 +5572,30 @@ the still-outstanding original task.
   additions from earlier in this same session, per `NEXT.md`'s running tallies) — all
   now confirmed passing together in one full run, not just individually at the time
   each was added.
+  - **Re-run (2026-07-16, external audit `audit_devices.md` finding `DEV-AUD-005`):**
+    the audit correctly flagged this section's `343` count as stale against the
+    then-current tree's actual `355` `TEST` declarations across the same 21 files — the
+    filter/workflow itself was never wrong, only this recorded number, which nobody had
+    re-run since 2026-07-06 despite many later tasks (`ACCEL-008`, `COMPASS-009`,
+    `MOTION-011`, `MOTION-012`, `ANDROID-BRIDGE-005`, `SENSORBASE-009`, etc.) adding
+    tests in between. Rebuilt (`cmake --preset devices-ubsan -B
+    cmake-build-devices-ubsan && cmake --build cmake-build-devices-ubsan --target
+    CnaTests`) and re-ran the exact same filter above.
+    **Result: `358 tests from 21 test suites ran. [PASSED] 356 tests. [SKIPPED] 2
+    tests`** — the same two expected hardware-gated skips, unchanged. **Zero
+    failures**, confirmed via `grep -c '\[  FAILED  \]'` on the full log (zero
+    matches), not a tail-truncated read. The +15 growth since the 343 recorded here
+    (343 → 358) accounts for every task this same audit-response session added: 1 new
+    Motion test (`MOTION-011`'s `CalibrateFiresFromBackendCalibrationCallback`) + 2 new
+    concurrency stress tests (`SENSORBASE-009`'s
+    `ConcurrentSetTimeBetweenUpdatesAndSetBackendForTestingDoesNotCrash`, one each for
+    `Compass`/`Motion`) = 3 directly from this session, plus 12 more already present in
+    the tree from intervening sessions between 2026-07-06 and this audit that had never
+    been reflected in this count before. **This number will go stale again the next
+    time a task adds a test without updating this line** — re-run the exact command
+    above rather than trusting this line at face value in a future session.
 
-### VERIFY-002 — Run sanitizer verification — CLOSED (2026-07-06)
+### VERIFY-002 — Run sanitizer verification — CLOSED (2026-07-06; re-run 2026-07-16)
 
 - **Priority:** High
 - **Area:** Verification
@@ -5275,6 +5647,38 @@ the still-outstanding original task.
     in how this long-known finding was being handled.
   - **Zero failures, zero new/unexplained findings, across all three presets.** No new
     follow-up task was needed beyond the already-created `SDL-SENSOR-004`.
+  - **Re-run (2026-07-16, external audit `audit_devices.md`; this session's own
+    `ANDROID-BRIDGE-005`/`MOTION-011`/`MOTION-012`/`SENSORBASE-009` fixes):**
+    re-ran `devices-ubsan` and `devices-tsan` (not `devices-asan` — deliberately
+    skipped this session; see note below) against the updated, 358-test filter
+    (`VERIFY-001`'s re-run note).
+    - **`devices-ubsan`:** `358 tests ran, [PASSED] 356, [SKIPPED] 2`. **3 UBSan
+      reports, same pre-existing location as before** (`Matrix.cpp:249`/
+      `Vector3.cpp:117` ×2) — re-verified unchanged, still outside
+      `Microsoft::Devices`. **Zero failures.**
+    - **`devices-tsan`:** `358 tests ran, [PASSED] 356, [SKIPPED] 2`. **Zero TSan
+      reports at all** — genuinely clean, not just "same pre-existing race as
+      always": the `TimeSpan::copy_count`/`move_count` race this section's own
+      2026-07-06 entry recorded 37 times was fixed in `sharp-runtime` shortly after
+      (`SDL-SENSOR-004`, 2026-07-07, `std::atomic<int>` with relaxed ordering), so
+      this run reports nothing at all, including for the two brand-new stress tests
+      this session added
+      (`CompassTests`/`MotionTests.ConcurrentSetTimeBetweenUpdatesAndSetBackendForTestingDoesNotCrash`,
+      `SENSORBASE-009`) — confirming the `mutex_`-guarded fix for that finding is
+      race-free under TSan, not merely "doesn't crash."
+    - **`devices-asan` deliberately not re-run this session** — every changed
+      non-Android line this session touched (`Compass.cpp`/`Motion.cpp`'s mutex
+      fix, `IMotionBackend`/`AndroidMotionBackend`'s new calibration parameter) is
+      already exercised host-side by the `devices-ubsan`/`devices-tsan` runs above;
+      the one genuinely new-and-Android-only logic (`ANDROID-BRIDGE-005`'s lifecycle
+      fix, `MOTION-012`'s remap call sites) has no host-reachable code path for any
+      of the three sanitizers to exercise regardless of which are run (same standing
+      limitation this whole plan already accepts for Android-only fixes). Skipped to
+      avoid an unnecessary third full rebuild+run under this session's own thermal
+      constraints — re-run it before the next real release cut rather than treating
+      this note as a substitute.
+    - **Zero failures, zero new/unexplained findings.** No new follow-up task
+      needed.
 
 ### VERIFY-003 — Run a strict XNA API compile check — CLOSED (2026-07-06, real strict-mode mechanism built from scratch; also closes `DEV-API-002`)
 
@@ -5416,4 +5820,20 @@ The Devices/Sensors work driven by this plan is not done until:
   (`VERIFY-001`, `VERIFY-002`), with results actually observed and recorded, not
   assumed.
 
-This plan is not implemented as of 2026-07-05. No task above has been started.
+**Status note (2026-07-16, external audit `audit_devices.md` finding `DEV-AUD-005`):**
+the line that used to appear here — "This plan is not implemented as of 2026-07-05. No
+task above has been started." — was stale boilerplate left over from this document's
+initial authoring pass and directly contradicted the 70+ task sections above already
+marked `CLOSED` with dated resolution notes; an independent audit correctly flagged it
+as making this document's final status unusable and it has been removed rather than
+repeated. This plan is **not** "complete" in the sense of every acceptance criterion in
+Section 15 being met — see that section for what genuinely remains: `MOTION-002`/
+`ACCEL-004`/`GYRO-003`/`COMPASS-004`'s real-device axis/heading/attitude verification,
+`DEMO-002`'s hardware QA report template having an actual recorded run, and
+`DEV-BUILD-003`'s CI workflow being observed green on a real GitHub Actions runner are
+all still genuinely outstanding, not resolved by this note. What *is* true, and is the
+reason this line needed correcting rather than merely softening: the great majority of
+this plan's tasks have been carried out, verified by a real (non-Android-hardware) test
+run, and recorded with dated, specific resolution notes — treat each task's own CLOSED/
+OPEN status and its own resolution note as the source of truth, not this line, in either
+direction.
