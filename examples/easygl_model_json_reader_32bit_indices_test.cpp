@@ -126,7 +126,9 @@ protected:
                    static_cast<std::streamsize>(idxBytes.size()));
         idxf.close();
 
-        WriteFile(root / "bigquad.model.json", R"({
+        WriteFile(root / "bigquad.cnb", R"({
+  "cnbVersion": 1,
+  "type": "Model",
   "meshes": [
     {
       "name": "BigQuad",

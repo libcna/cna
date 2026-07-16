@@ -3,7 +3,10 @@
 
 #include <any>
 #include <filesystem>
+#include <fstream>
+#include <functional>
 #include <memory>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <typeindex>
@@ -12,6 +15,7 @@
 #include <vector>
 
 #include "CNA/CNAHelper.hpp"
+#include "CNA/Internal/CnbEnvelope.hpp"
 #include "CNA/Logger.hpp"
 #include "SharpRuntime/Prop.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
@@ -42,8 +46,39 @@ namespace Microsoft::Xna::Framework::Content
         System::IServiceProvider* serviceProvider_ = nullptr;
         bool disposed_ = false;
 
-        std::unordered_map<std::string, std::any> loadedAssets_;
+        // plan_cnb.md CNB-36: keyed by (T's type_index, normalized logical name), not name
+        // alone -- otherwise a second Load<T2>() for a logical name a different T1 already
+        // cached under would std::any_cast<T2> a std::any actually holding T1, throwing
+        // std::bad_any_cast (an unrelated, undocumented exception type) instead of reaching the
+        // normal .cnb envelope validation that would otherwise produce a clear
+        // ContentLoadException naming both types.
+        struct AssetCacheKey
+        {
+            std::type_index typeIndex;
+            std::string normalizedName;
+
+            bool operator==(const AssetCacheKey& other) const
+            {
+                return typeIndex == other.typeIndex && normalizedName == other.normalizedName;
+            }
+        };
+
+        struct AssetCacheKeyHash
+        {
+            std::size_t operator()(const AssetCacheKey& k) const
+            {
+                return std::hash<std::type_index>()(k.typeIndex) ^
+                       (std::hash<std::string>()(k.normalizedName) << 1);
+            }
+        };
+
+        std::unordered_map<AssetCacheKey, std::any, AssetCacheKeyHash> loadedAssets_;
         std::unordered_map<std::type_index, std::any> typeReaders_;
+
+        // plan_cnb.md CNB-24: per-C++-type table of named .cnb loaders, keyed first by the
+        // requested type T (std::type_index), then by the .cnb document's own "type" string.
+        // Populated by RegisterCnbLoader<T>(); consulted by GenericCnbTypeReader<T> below.
+        std::unordered_map<std::type_index, std::unordered_map<std::string, std::any>> cnbNamedLoaders_;
 
         struct WeakTextureEntry {
             std::weak_ptr<CNA::Internal::Backends::ITextureBackend> backend;
@@ -124,6 +159,87 @@ namespace Microsoft::Xna::Framework::Content
         }
 
         /**
+         * @brief Factory signature for a game-registered named .cnb loader (see
+         *        RegisterCnbLoader()).
+         *
+         * Receives the raw .cnb JSON document text and the owning ContentManager (for
+         * recursively loading any files it references), and returns a constructed T.
+         */
+        template <typename T>
+        NOXNA using CnbLoaderFn = std::function<T(const std::string& cnbJson, ContentManager& cm)>;
+
+        /**
+         * @brief Registers a named .cnb loader for asset type T, selected by the .cnb
+         *        document's own "type" field rather than by T alone.
+         *
+         * Unlike RegisterTypeReader<T>() (one reader per T, fixed at the Load<T>() call site),
+         * multiple differently-named .cnb "type" values can each register their own factory
+         * here, all producing the same T -- e.g. a game's "EnemyDefinition" and "LootTable" .cnb
+         * types both deserializing into the same generic data struct via two different
+         * factories (see cnb.md's "Custom loaders" section). Only applies to a T with no
+         * existing reader already registered (built-in or via RegisterTypeReader<T>()); throws
+         * immediately if one already exists, since it would never be consulted by that reader.
+         *
+         * Registration is deterministic and fails fast (plan_cnb.md CNB-37): an empty
+         * @p typeName or an empty @p factory is rejected immediately, and re-registering an
+         * already-used `(T, typeName)` pair throws rather than silently replacing the earlier
+         * factory -- two *different* `typeName`s for the same `T` remain fully supported (that
+         * is the feature's whole point); only an exact repeat is rejected.
+         *
+         * @tparam T       Asset type the factory produces.
+         * @param typeName The .cnb document's "type" string this factory handles. Must not be
+         *                 empty.
+         * @param factory  Callback invoked with the raw .cnb JSON text and this ContentManager.
+         *                 Must not be empty.
+         * @throws std::invalid_argument if @p typeName or @p factory is empty.
+         * @throws std::logic_error if a reader is already registered for T, or if @p typeName is
+         *         already registered for T.
+         */
+        template <typename T>
+        NOXNA void RegisterCnbLoader(const std::string& typeName, CnbLoaderFn<T> factory)
+        {
+            if (typeName.empty())
+            {
+                throw std::invalid_argument(
+                    "ContentManager::RegisterCnbLoader<T>(): typeName must not be empty.");
+            }
+            if (!factory)
+            {
+                throw std::invalid_argument(
+                    "ContentManager::RegisterCnbLoader<T>(): factory must not be empty.");
+            }
+
+            const auto ti = std::type_index(typeid(T));
+            const bool alreadyOwnedByAnotherReader =
+                typeReaders_.find(ti) != typeReaders_.end() &&
+                cnbNamedLoaders_.find(ti) == cnbNamedLoaders_.end();
+            if (alreadyOwnedByAnotherReader)
+            {
+                throw std::logic_error(
+                    "ContentManager::RegisterCnbLoader<T>(): a reader is already registered for "
+                    "this type; RegisterCnbLoader only applies to a type with no existing reader, "
+                    "since an existing reader would never consult this table.");
+            }
+
+            auto& innerMap = cnbNamedLoaders_[ti];
+            if (innerMap.find(typeName) != innerMap.end())
+            {
+                throw std::logic_error(
+                    "ContentManager::RegisterCnbLoader<T>(): '" + typeName + "' is already "
+                    "registered for this type; RegisterCnbLoader never silently replaces an "
+                    "existing factory.");
+            }
+
+            const bool firstForThisType = innerMap.empty();
+            innerMap[typeName] = std::move(factory);
+
+            if (firstForThisType)
+            {
+                RegisterTypeReader<T>(std::make_unique<GenericCnbTypeReader<T>>());
+            }
+        }
+
+        /**
          * @brief Loads an asset of type T from the content root.
          *
          * Results are cached — subsequent calls with the same asset name return the
@@ -144,9 +260,10 @@ namespace Microsoft::Xna::Framework::Content
             }
 
             const std::string key = NormalizeKey(assetName);
+            const AssetCacheKey cacheKey{std::type_index(typeid(T)), key};
             log::Debug(std::string("Loading asset: ") + assetName);
 
-            auto cacheIt = loadedAssets_.find(key);
+            auto cacheIt = loadedAssets_.find(cacheKey);
             if (cacheIt != loadedAssets_.end())
             {
                 return std::any_cast<T>(cacheIt->second);
@@ -172,11 +289,60 @@ namespace Microsoft::Xna::Framework::Content
             const std::string resolvedPath = ResolveAssetPath(assetName, reader);
 
             T result = reader.Read(resolvedPath, *this);
-            loadedAssets_[key] = result;
+            loadedAssets_[cacheKey] = result;
             return result;
         }
 
     private:
+        // Generic reader for game-registered .cnb "type" values that don't have a dedicated
+        // ContentTypeReader<T>. Looks up the .cnb envelope's "type" field in cnbNamedLoaders_
+        // and invokes whichever RegisterCnbLoader<T>()-registered factory matches (cnb.md's
+        // "Custom loaders" section). Auto-registered by RegisterCnbLoader<T>() the first time
+        // it's called for a T with no existing reader; never auto-registered for a T that
+        // already has a built-in or otherwise-registered reader.
+        template <typename T>
+        class GenericCnbTypeReader : public ContentTypeReader<T>
+        {
+        public:
+            [[nodiscard]] std::vector<std::string> GetExtensions() const override
+            {
+                return {".cnb"};
+            }
+
+            T Read(const std::string& path, ContentManager& cm) override
+            {
+                std::ifstream file(path, std::ios::binary);
+                if (!file.is_open())
+                {
+                    throw ContentLoadException("Cannot open file: " + path);
+                }
+                std::ostringstream ss;
+                ss << file.rdbuf();
+                const std::string json = ss.str();
+
+                const CNA::Internal::CnbEnvelope envelope = CNA::Internal::ParseCnbEnvelope(json);
+                CNA::Internal::ValidateCnbEnvelopeBaseline(envelope, path);
+
+                auto outerIt = cm.cnbNamedLoaders_.find(std::type_index(typeid(T)));
+                if (outerIt != cm.cnbNamedLoaders_.end())
+                {
+                    auto innerIt = outerIt->second.find(envelope.type);
+                    if (innerIt != outerIt->second.end())
+                    {
+                        auto* factory = std::any_cast<CnbLoaderFn<T>>(&innerIt->second);
+                        if (factory && *factory)
+                        {
+                            return (*factory)(json, cm);
+                        }
+                    }
+                }
+
+                throw ContentLoadException(
+                    "ContentManager: '" + path + "' has unrecognized .cnb type '" +
+                    envelope.type + "'.");
+            }
+        };
+
         /**
          * @brief Resolves the full filesystem path for an asset, trying reader extensions
          *        when the literal asset path does not exist.
@@ -204,6 +370,17 @@ namespace Microsoft::Xna::Framework::Content
             if (std::filesystem::exists(base))
             {
                 return base;
+            }
+
+            // .cnb is always tried before any native/reader-declared extension (cnb.md's "core
+            // rule" -- when a .cnb sidecar is present, it always has final say over how an asset
+            // name resolves, even if a native file with the same name also exists). This makes
+            // .cnb usable as an optional metadata sidecar (plan_cnb.md CNB-4), not just a
+            // mutually-exclusive alternative to a native file.
+            const std::string cnbCandidate = base + ".cnb";
+            if (std::filesystem::exists(cnbCandidate))
+            {
+                return cnbCandidate;
             }
 
             // Try each extension declared by the reader.

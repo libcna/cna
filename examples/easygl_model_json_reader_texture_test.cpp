@@ -153,7 +153,9 @@ protected:
         // Blue (clear/background), so a mis-wired "texture" field is unambiguous.
         WriteSolidColorQoi(root / "solid_red.qoi", 2, 2, 255, 0, 0, 255);
 
-        WriteFile(root / "texquad.model.json", R"({
+        WriteFile(root / "texquad.cnb", R"({
+  "cnbVersion": 1,
+  "type": "Model",
   "meshes": [
     {
       "name": "TexQuad",

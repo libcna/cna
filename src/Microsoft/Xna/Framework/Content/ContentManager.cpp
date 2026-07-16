@@ -2,6 +2,8 @@
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "System/IServiceProvider.hpp"
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+#include "CNA/Internal/CnbEnvelope.hpp"
+#include "CNA/Internal/CnbSourceFile.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/AnimationPlayer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
@@ -152,6 +154,79 @@ namespace Microsoft::Xna::Framework::Content
 
     namespace
     {
+        // Forward declaration -- defined below, alongside the other minimal JSON helpers used by
+        // .cnb/.font.json-style readers. Texture2DTypeReader needs it for the .cnb sidecar path
+        // (plan_cnb.md CNB-8), ahead of where it's textually defined.
+        std::string ReadTextFile(const std::string& path);
+
+        // plan_cnb.md CNB-34: SpriteFont/Effect/Model .cnb documents are self-contained
+        // descriptors -- unlike Texture2D/SoundEffect/TextureCube, they have no meaning for a
+        // "sourceFile" field. Reject it explicitly with a clear error instead of silently
+        // ignoring it (the previous behavior) or letting some future field-parsing change
+        // accidentally half-honor it.
+        void RejectSourceFileForSelfContainedCnb(const CNA::Internal::CnbEnvelope& envelope,
+                                                  const std::string& typeName, const std::string& path)
+        {
+            if (envelope.hasSourceFile)
+            {
+                throw ContentLoadException(
+                    "ContentManager: " + typeName + " .cnb '" + path + "' has a 'sourceFile' "
+                    "field, but " + typeName + " .cnb documents are self-contained and do not "
+                    "support 'sourceFile'.");
+            }
+        }
+
+        // Minimal "colorKey": [r, g, b] extractor for a Texture2D .cnb sidecar (CNB-8). Kept
+        // local/self-contained rather than reusing JsonIntArray4 (a 4-element parser) below, since
+        // colorKey is always exactly 3 components and duplicating this ~10-line scan is cheaper and
+        // safer than coaxing a 4-element parser into stopping after 3.
+        bool TryParseColorKeyRGB(const std::string& json, std::array<int, 3>& outRgb)
+        {
+            const std::string needle = "\"colorKey\"";
+            auto pos = json.find(needle);
+            if (pos == std::string::npos) return false;
+            pos = json.find('[', pos + needle.size());
+            if (pos == std::string::npos) return false;
+
+            ++pos;
+            for (int i = 0; i < 3; ++i)
+            {
+                while (pos < json.size() &&
+                       !std::isdigit(static_cast<unsigned char>(json[pos])) && json[pos] != '-') ++pos;
+                if (pos >= json.size()) return false;
+                outRgb[static_cast<std::size_t>(i)] = std::stoi(json.substr(pos));
+                while (pos < json.size() && json[pos] != ',' && json[pos] != ']') ++pos;
+                if (pos < json.size() && json[pos] == ',') ++pos;
+            }
+            return true;
+        }
+
+        void ApplyColorKey(Graphics::Texture2D& texture, const std::array<int, 3>& colorKey)
+        {
+            const int width = texture.getWidthProperty();
+            const int height = texture.getHeightProperty();
+            const int count = width * height;
+            if (count <= 0) return;
+
+            std::vector<Color> pixels(static_cast<std::size_t>(count), Color(0, 0, 0, 0));
+            texture.GetData(pixels.data(), count);
+
+            const auto keyR = static_cast<SharpRuntime::bytecs>(colorKey[0]);
+            const auto keyG = static_cast<SharpRuntime::bytecs>(colorKey[1]);
+            const auto keyB = static_cast<SharpRuntime::bytecs>(colorKey[2]);
+
+            for (auto& pixel : pixels)
+            {
+                if (pixel.getRProperty() == keyR && pixel.getGProperty() == keyG &&
+                    pixel.getBProperty() == keyB)
+                {
+                    pixel = Color(keyR, keyG, keyB, static_cast<SharpRuntime::bytecs>(0));
+                }
+            }
+
+            texture.SetData(pixels.data(), count);
+        }
+
         class Texture2DTypeReader : public ContentTypeReader<Graphics::Texture2D>
         {
         public:
@@ -163,7 +238,41 @@ namespace Microsoft::Xna::Framework::Content
             Graphics::Texture2D Read(const std::string& path, ContentManager& cm) override
             {
                 Graphics::GraphicsDevice& gd = cm.getGraphicsDeviceInternal();
+
+                if (std::filesystem::path(path).extension() == ".cnb")
+                {
+                    return ReadCnb(path, cm);
+                }
+
                 return Graphics::Texture2D(path, gd);
+            }
+
+        private:
+            static Graphics::Texture2D ReadCnb(const std::string& path, ContentManager& cm)
+            {
+                const std::string json = ReadTextFile(path);
+                const CNA::Internal::CnbEnvelope envelope = CNA::Internal::ParseCnbEnvelope(json);
+                CNA::Internal::ValidateCnbEnvelope(envelope, "Texture2D", path);
+
+                if (!envelope.hasSourceFile)
+                {
+                    throw ContentLoadException(
+                        "ContentManager: Texture2D .cnb '" + path + "' has no 'sourceFile' field "
+                        "(a self-contained, non-sourceFile Texture2D .cnb is not supported).");
+                }
+
+                const CNA::Internal::CnbSourceFileResult resolved =
+                    CNA::Internal::ResolveCnbSourceFileSafely(
+                        path, cm.getRootDirectoryProperty(), envelope.sourceFile);
+                Graphics::Texture2D result = cm.Load<Graphics::Texture2D>(resolved.logicalName);
+
+                std::array<int, 3> colorKey{};
+                if (TryParseColorKeyRGB(json, colorKey))
+                {
+                    ApplyColorKey(result, colorKey);
+                }
+
+                return result;
             }
         };
 
@@ -177,9 +286,35 @@ namespace Microsoft::Xna::Framework::Content
 
             Graphics::TextureCube Read(const std::string& path, ContentManager& cm) override
             {
+                if (std::filesystem::path(path).extension() == ".cnb")
+                {
+                    return ReadCnb(path, cm);
+                }
+
                 Graphics::GraphicsDevice& gd = cm.getGraphicsDeviceInternal();
                 System::IO::FileStream stream(path);
                 return Graphics::TextureCube::DDSFromStreamEXT(gd, stream);
+            }
+
+        private:
+            static Graphics::TextureCube ReadCnb(const std::string& path, ContentManager& cm)
+            {
+                const std::string json = ReadTextFile(path);
+                const CNA::Internal::CnbEnvelope envelope = CNA::Internal::ParseCnbEnvelope(json);
+                CNA::Internal::ValidateCnbEnvelope(envelope, "TextureCube", path);
+
+                if (!envelope.hasSourceFile)
+                {
+                    throw ContentLoadException(
+                        "ContentManager: TextureCube .cnb '" + path + "' has no 'sourceFile' "
+                        "field (a self-contained, non-sourceFile TextureCube .cnb is not "
+                        "supported).");
+                }
+
+                const CNA::Internal::CnbSourceFileResult resolved =
+                    CNA::Internal::ResolveCnbSourceFileSafely(
+                        path, cm.getRootDirectoryProperty(), envelope.sourceFile);
+                return cm.Load<Graphics::TextureCube>(resolved.logicalName);
             }
         };
 
@@ -191,9 +326,35 @@ namespace Microsoft::Xna::Framework::Content
                 return {".wav"};
             }
 
-            Audio::SoundEffect Read(const std::string& path, ContentManager& /*cm*/) override
+            Audio::SoundEffect Read(const std::string& path, ContentManager& cm) override
             {
+                if (std::filesystem::path(path).extension() == ".cnb")
+                {
+                    return ReadCnb(path, cm);
+                }
+
                 return Audio::SoundEffect(path);
+            }
+
+        private:
+            static Audio::SoundEffect ReadCnb(const std::string& path, ContentManager& cm)
+            {
+                const std::string json = ReadTextFile(path);
+                const CNA::Internal::CnbEnvelope envelope = CNA::Internal::ParseCnbEnvelope(json);
+                CNA::Internal::ValidateCnbEnvelope(envelope, "SoundEffect", path);
+
+                if (!envelope.hasSourceFile)
+                {
+                    throw ContentLoadException(
+                        "ContentManager: SoundEffect .cnb '" + path + "' has no 'sourceFile' "
+                        "field (a self-contained, non-sourceFile SoundEffect .cnb is not "
+                        "supported).");
+                }
+
+                const CNA::Internal::CnbSourceFileResult resolved =
+                    CNA::Internal::ResolveCnbSourceFileSafely(
+                        path, cm.getRootDirectoryProperty(), envelope.sourceFile);
+                return cm.Load<Audio::SoundEffect>(resolved.logicalName);
             }
         };
 
@@ -234,14 +395,14 @@ namespace Microsoft::Xna::Framework::Content
         public:
             [[nodiscard]] std::vector<std::string> GetExtensions() const override
             {
-                return {".shader.json"};
+                return {".cnb"};
             }
 
             std::shared_ptr<Graphics::Effect> Read(const std::string& path, ContentManager& cm) override
             {
-                // If path doesn't already end with .shader.json, append it.
+                // If path doesn't already end with .cnb, append it.
                 std::string jsonPath = path;
-                const std::string ext = ".shader.json";
+                const std::string ext = ".cnb";
                 if (jsonPath.size() < ext.size() ||
                     jsonPath.substr(jsonPath.size() - ext.size()) != ext)
                 {
@@ -249,6 +410,10 @@ namespace Microsoft::Xna::Framework::Content
                 }
 
                 const std::string jsonText = ReadTextFile(jsonPath);
+
+                const CNA::Internal::CnbEnvelope envelope = CNA::Internal::ParseCnbEnvelope(jsonText);
+                CNA::Internal::ValidateCnbEnvelope(envelope, "Effect", jsonPath);
+                RejectSourceFileForSelfContainedCnb(envelope, "Effect", jsonPath);
 
                 const std::string vertRel = ExtractJsonStringField(jsonText, "vertex");
                 const std::string fragRel = ExtractJsonStringField(jsonText, "fragment");
@@ -348,7 +513,7 @@ namespace Microsoft::Xna::Framework::Content
         public:
             [[nodiscard]] std::vector<std::string> GetExtensions() const override
             {
-                return {".font.json"};
+                return {".cnb"};
             }
 
             Graphics::SpriteFont Read(const std::string& path, ContentManager& cm) override
@@ -357,6 +522,10 @@ namespace Microsoft::Xna::Framework::Content
                 using SharpRuntime::charcs;
 
                 const std::string json = ReadTextFile(path);
+
+                const CNA::Internal::CnbEnvelope envelope = CNA::Internal::ParseCnbEnvelope(json);
+                CNA::Internal::ValidateCnbEnvelope(envelope, "SpriteFont", path);
+                RejectSourceFileForSelfContainedCnb(envelope, "SpriteFont", path);
 
                 const std::string textureName   = ExtractJsonStringField(json, "texture");
                 const int         lineSpacing    = JsonInt(json, "lineSpacing");
@@ -589,7 +758,7 @@ namespace Microsoft::Xna::Framework::Content
         public:
             [[nodiscard]] std::vector<std::string> GetExtensions() const override
             {
-                return {".model.json"};
+                return {".cnb"};
             }
 
             Graphics::Model Read(const std::string& path, ContentManager& cm) override
@@ -597,6 +766,11 @@ namespace Microsoft::Xna::Framework::Content
                 namespace fs = std::filesystem;
 
                 const std::string json = ReadTextFile(path);
+
+                const CNA::Internal::CnbEnvelope envelope = CNA::Internal::ParseCnbEnvelope(json);
+                CNA::Internal::ValidateCnbEnvelope(envelope, "Model", path);
+                RejectSourceFileForSelfContainedCnb(envelope, "Model", path);
+
                 const std::string root = cm.getRootDirectoryProperty();
                 Graphics::GraphicsDevice& device = cm.getGraphicsDeviceInternal();
 

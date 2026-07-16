@@ -1,5 +1,11 @@
 # XNB binary content pipeline: task plan
 
+> **Status: 🧊 FROZEN 2026-07-15 — researched, not adopted; kept as reference only.** See
+> [`xnb.md`](xnb.md)'s own status banner and [`cnb.md`](cnb.md)'s "Relationship to `xnb.md`/
+> `plan_xnb.md`" section — CNA adopted `.cnb` instead (implemented in full, see `plan_cnb.md`).
+> None of the tasks below are planned to be started under the current strategy; every `⬜` in this
+> file stays `⬜` indefinitely, not as an oversight.
+
 > Companion task list to [`xnb.md`](xnb.md) (the narrative research/design document — read that
 > first for *why* each phase is shaped this way). This file turns that plan into concrete,
 > numbered tasks (`XNB-1`, `XNB-2`, ...) the same way `plan_graphics.md` tracks graphics work.

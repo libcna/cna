@@ -1,5 +1,15 @@
 # XNB binary content pipeline: implementation plan for CNA
 
+> **Status: 🧊 FROZEN 2026-07-15 — researched, not adopted.** CNA adopted the alternative strategy
+> instead: [`cnb.md`](cnb.md)'s `.cnb` JSON envelope + native-by-extension loading, fully
+> implemented per [`plan_cnb.md`](plan_cnb.md) (`CNB-1`–`CNB-27`, all closed). Per `cnb.md`'s own
+> "Relationship to `xnb.md`/`plan_xnb.md`" section, this document and `plan_xnb.md` are kept as
+> reference material, not deleted — the phase breakdown and protocol-accuracy findings inside them
+> (e.g. the true difficulty of the general `EffectReader`/compiled-shader problem, the FBX/model-
+> importer cost on the writer side) remain useful if a real binary `.xnb` reader is ever revisited.
+> Nothing below this point has been implemented and none of it is planned to be, under the current
+> strategy.
+
 **Status: planning document only. Nothing described here is implemented yet.** This document
 replaces the previous "analysis only, low priority" version of `xnb.md` with an actual phased
 plan for adding real `.xnb` loading to CNA. It is a plan to be executed later, task by task — no
