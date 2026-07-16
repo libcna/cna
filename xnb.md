@@ -27,8 +27,11 @@ code changes are part of this document itself.
 
 **Numbered task breakdown: [`plan_xnb.md`](plan_xnb.md)** — turns the phases below into concrete
 `XNB-1`, `XNB-2`, ... tasks (mirroring `plan_graphics.md`'s convention), including a Phase 0 gap
-audit of what CNA is currently missing (no binary stream/reader layer, no `Curve` classes, etc.).
-Read this file first for the *why*; read `plan_xnb.md` for the *what, in order*.
+audit of what CNA was missing when this plan was first written (no binary stream/reader layer, no
+`Curve` classes, etc.) — **since revalidated 2026-07-16 (`XNB-1`): `sharp-runtime` now has a full
+`System::IO::Stream`/`MemoryStream`/`BinaryReader` layer, and `Curve`/`CurveKey`/etc. now exist as a
+runtime API; see `plan_xnb.md`'s Phase 0 for the corrected findings.** Read this file first for the
+*why*; read `plan_xnb.md` for the *what, in order*.
 
 **Changelog:** `plan_xnb.md` was revised after an independent review that flagged several XNB
 protocol inaccuracies and one implementation-strategy gap in its first draft — most importantly

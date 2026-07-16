@@ -146,9 +146,10 @@ entirely the second one.
 
 ## Phase 0 — CNA gap audit (confirms what's missing before any XNB-specific code)
 
-> Findings from this session's own audit, folded in directly so Phase A doesn't re-discover them:
-> CNA has **no `System::IO`-equivalent binary stream/reader layer at all** (no `Stream`, no
-> `BinaryReader`) — `Content::ContentTypeReader<T>` today is purely a loose-file-path interface
+> Findings from this session's own audit (original — see the XNB-1 revalidation note directly
+> below for two corrections), folded in directly so Phase A doesn't re-discover them: CNA has **no
+> `System::IO`-equivalent binary stream/reader layer at all** (no `Stream`, no `BinaryReader`) —
+> `Content::ContentTypeReader<T>` today is purely a loose-file-path interface
 > (`Read(const std::string& path, ContentManager&)`), not a binary-protocol one; there is no
 > `ContentReader`, `ContentTypeReaderManager`, or shared-resource-fixup mechanism of any kind.
 > `Curve`/`CurveKey`/`CurveContinuity`/`CurveLoopType`/`CurveTangent` do not exist anywhere in the
@@ -156,6 +157,33 @@ entirely the second one.
 > and `VertexDeclaration`/`BoundingFrustum`/`Vector2-4`/`Matrix`/`Quaternion`/`Color`/`Rectangle`/
 > `Point`/`BoundingBox`/`BoundingSphere`/`Plane`/`Ray` all already exist and match FNA — so Phase 0
 > is a short, targeted list, not a rewrite.
+>
+> **XNB-1 revalidation (2026-07-16):** re-ran this audit against the current branch. Two findings
+> above are now stale — the codebase moved on since this audit was first written, in the separate
+> `sharp-runtime` repo CNA depends on:
+> 1. `sharp-runtime` now has a full `System::IO` layer: `System::IO::Stream` (abstract base),
+>    `System::IO::MemoryStream` (in-memory, bounds-checked, position/`Seek` support, doc-commented
+>    "Status: IMPLEMENTED"), and `System::IO::BinaryReader` with `ReadByte`/`ReadSByte`/
+>    `ReadInt16/32/64`/`ReadUInt16/32/64`/`ReadSingle`/`ReadDouble`/`ReadBoolean`/`ReadBytes(count)`,
+>    `ReadString()` (7-bit-length-prefixed UTF-8, matching .NET `BinaryReader.ReadString` exactly),
+>    and `Read7BitEncodedInt()` (verified against .NET's own overflow-detection algorithm: four
+>    7-bit groups, then a bounds-checked 5th byte). All of it already has exact-byte-sequence and
+>    round-trip test coverage in `sharp-runtime`'s own suite
+>    (`tests/System/IO/IOStreamTests.cpp`, `tests/System/IO/StreamTests.cpp`). This satisfies
+>    essentially all of Phase A's binary-primitive tasks (`XNB-6`–`XNB-9`) by direct reuse — see
+>    those rows below, now marked done. The one still-open gap is `char`/string encoding
+>    (`XNB-9A`): `BinaryReader`'s own doc comment states `ReadChar`/`PeekChar`/`ReadChars` are
+>    deliberately not implemented (no character-encoding layer over `Stream`), so that task remains
+>    real, unstarted work.
+> 2. `Curve`/`CurveKey`/`CurveContinuity`/`CurveLoopType`/`CurveTangent` now exist as a full runtime
+>    API (`include/Microsoft/Xna/Framework/Curve*.hpp`, `src/Microsoft/Xna/Framework/Curve*.cpp`).
+>    `XNB-20` (Phase C) no longer needs to add the runtime classes themselves — only a `CurveReader`
+>    wrapping the existing API is left; see that row's updated note.
+>
+> Everything else in the original findings was re-confirmed unchanged: no `ContentReader`/
+> `ContentTypeReaderManager`/shared-resource registry anywhere in CNA; `ContentTypeReader<T>` is
+> still purely loose-file-path; `SurfaceFormat`/`VertexDeclaration`/all listed math structs are
+> still present and FNA-faithful.
 
 > Per follow-up review point 2: the four confirm/document rows below are already-completed audit
 > findings from an earlier session (see the block-quote above), not open work — keeping them as four
@@ -164,7 +192,7 @@ entirely the second one.
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| XNB-1 | Revalidate the recorded gap audit against the current branch and update only findings that changed since this plan was written: no `System::IO::Stream`/`BinaryReader`-equivalent; no `Content::ContentReader`/`ContentTypeReaderManager`/shared-resource registry (`ContentTypeReader<T>` is loose-file-only); no `Curve`/`CurveKey`/`CurveContinuity`/`CurveLoopType`/`CurveTangent`; `SurfaceFormat`/`VertexDeclaration`/XNA math structs already exist and are FNA-faithful | ⬜ | Formerly four separate rows (`XNB-1`–`XNB-4`); collapsed per follow-up review — do not re-run the full search from scratch unless something looks stale |
+| XNB-1 | Revalidate the recorded gap audit against the current branch and update only findings that changed since this plan was written: no `System::IO::Stream`/`BinaryReader`-equivalent; no `Content::ContentReader`/`ContentTypeReaderManager`/shared-resource registry (`ContentTypeReader<T>` is loose-file-only); no `Curve`/`CurveKey`/`CurveContinuity`/`CurveLoopType`/`CurveTangent`; `SurfaceFormat`/`VertexDeclaration`/XNA math structs already exist and are FNA-faithful | ✅ | Revalidated 2026-07-16 (see the blockquote above): two findings were stale — `sharp-runtime` now has a full `System::IO::Stream`/`MemoryStream`/`BinaryReader` layer (including `Read7BitEncodedInt`), and `Curve`/`CurveKey`/`CurveContinuity`/`CurveLoopType`/`CurveTangent` now exist as a real runtime API. The `ContentReader`/registry/`SurfaceFormat`/math-struct findings were re-confirmed unchanged |
 | XNB-5 | Decide final normalized-reader-name registry key format (bare type name vs. `Namespace.Type\`1` generic-arity-suffixed form for `ArrayReader<T>`/`ListReader<T>`/etc.) | ⬜ | Design decision blocking Phase B/C's registry; must handle MonoGame vs. real-XNA vs. FNA assembly-qualified-name differences described in `xnb.md` |
 
 ---
@@ -173,12 +201,12 @@ entirely the second one.
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| XNB-6 | Add a minimal internal binary-cursor/stream type over an in-memory byte buffer (read position, bounds-checked reads, no need for a full `System::IO::Stream` hierarchy unless one already exists) | ⬜ | Scope tightly to what XNB reading needs — do not build a general-purpose `Stream` abstraction as a side effect |
-| XNB-7 | Implement 7-bit-encoded `int` read (`Read7BitEncodedInt`, matches .NET `BinaryReader`) | ⬜ | |
-| XNB-8 | Implement 7-bit-length-prefixed string read (UTF-8, matches .NET `BinaryReader.ReadString`) | ⬜ | |
-| XNB-9 | Implement little-endian fixed-width numeric reads only: `bool`/`byte`/`sbyte`/`int16/32/64`/`uint16/32/64`/`float`/`double` | ⬜ | Audit CNA's existing binary-IO helpers first for reuse before writing new ones (per `xnb.md` Phase A note) |
-| XNB-9A | `char`/string decoding matching XNA `System.Char`/.NET `BinaryReader` behavior exactly — do **not** treat `char` as a plain little-endian `uint16_t`; decide the CNA-side representation (`char16_t` vs. a dedicated `System::Char`) and verify against real encoded bytes | ⬜ | Split out from XNB-9 per review — `.NET` chars go through an encoding, they are not a fixed-width primitive by default |
-| XNB-10 | Unit tests for all of the above against known .NET-produced byte sequences (hand-computed or extracted from a real `.xnb`) | ⬜ | No dependency on anything else in this plan |
+| XNB-6 | Add a minimal internal binary-cursor/stream type over an in-memory byte buffer (read position, bounds-checked reads, no need for a full `System::IO::Stream` hierarchy unless one already exists) | ✅ | Satisfied by reuse (2026-07-16): `sharp-runtime`'s `System::IO::Stream` (abstract) + `System::IO::MemoryStream` (in-memory, bounds-checked, position/`Seek`, "Status: IMPLEMENTED") already provide exactly this, with existing coverage in `tests/System/IO/StreamTests.cpp`. No new CNA-side type needed — the `.xnb` container reader wraps a `MemoryStream` directly |
+| XNB-7 | Implement 7-bit-encoded `int` read (`Read7BitEncodedInt`, matches .NET `BinaryReader`) | ✅ | Satisfied by reuse (2026-07-16): `System::IO::BinaryReader::Read7BitEncodedInt()` already implements .NET's exact algorithm (four 7-bit groups, then a bounds-checked 5th byte), with round-trip tests in `tests/System/IO/IOStreamTests.cpp` |
+| XNB-8 | Implement 7-bit-length-prefixed string read (UTF-8, matches .NET `BinaryReader.ReadString`) | ✅ | Satisfied by reuse (2026-07-16): `System::IO::BinaryReader::ReadString()` already reads a `Read7BitEncodedInt()`-prefixed UTF-8 byte run, matching .NET's `BinaryReader.ReadString`; tested (`WriteRead_String_Roundtrip`) |
+| XNB-9 | Implement little-endian fixed-width numeric reads only: `bool`/`byte`/`sbyte`/`int16/32/64`/`uint16/32/64`/`float`/`double` | ✅ | Satisfied by reuse (2026-07-16): `System::IO::BinaryReader` already implements `ReadByte`/`ReadSByte`/`ReadInt16/32/64`/`ReadUInt16/32/64`/`ReadSingle`/`ReadDouble`/`ReadBoolean`, all little-endian, with exact-byte-sequence tests (e.g. `WriteSingle_ProducesExactLittleEndianByteSequence`) in `tests/System/IO/IOStreamTests.cpp`. The original "audit CNA's existing binary-IO helpers first" note is now resolved — reuse, do not reimplement |
+| XNB-9A | `char`/string decoding matching XNA `System.Char`/.NET `BinaryReader` behavior exactly — do **not** treat `char` as a plain little-endian `uint16_t`; decide the CNA-side representation (`char16_t` vs. a dedicated `System::Char`) and verify against real encoded bytes | ⬜ | Split out from XNB-9 per review — `.NET` chars go through an encoding, they are not a fixed-width primitive by default. Confirmed still open 2026-07-16: `BinaryReader`'s own doc comment states `ReadChar`/`PeekChar`/`ReadChars` are deliberately not implemented (no character-encoding layer over `Stream`) |
+| XNB-10 | Unit tests for all of the above against known .NET-produced byte sequences (hand-computed or extracted from a real `.xnb`) | ✅ | Satisfied by reuse (2026-07-16) for XNB-6/7/8/9: `sharp-runtime`'s own suite (`tests/System/IO/IOStreamTests.cpp`, `tests/System/IO/StreamTests.cpp`) already covers these primitives against exact byte sequences and round-trips. Still open: tests for XNB-9A once implemented, and a supplementary CNA-side test using bytes extracted from a real external `.xnb` fixture (XNB-17) once that fixture exists, to validate the actual `.xnb` reader wiring rather than just the underlying primitives |
 | XNB-10A | Introduce `XnbReadLimits` (max file size, max decompressed size, max string bytes, max type-reader count, max shared-resource count, max collection-element count, max object-nesting depth) as part of the binary-cursor architecture itself, not bolted on later in Phase D/G | ⬜ | Per follow-up review point 3 — without this, a validly-bounds-checked reader can still be told to `std::vector<T>(0x7fffffff)` off a malicious count field; every later count-driven read (Phase C collections, Phase D decompressed size, Phase F mesh/bone counts) must consult these limits from day one |
 
 ---
@@ -267,7 +295,7 @@ entirely the second one.
 | XNB-18B | `System::Decimal` faithful representation (96-bit integer + sign + scale, matching .NET `Decimal`'s actual layout) and its reader — do **not** approximate as `double reader.readDouble()`; decide up front whether CNA implements a real `Decimal` type or only reads the raw 4×`int32` `DecimalValue` struct verbatim for round-tripping | ⬜ | Split out from XNB-18 per follow-up review point 6 — `.NET Decimal` cannot be safely mapped onto `double` without losing precision/compatibility |
 | XNB-18C | `DateTime`/`TimeSpan` faithful tick semantics: `DateTime` is ticks + `DateTimeKind` bits packed into a 64-bit value, not a plain `int64_t` timestamp; `TimeSpan` must preserve ticks exactly | ⬜ | Split out from XNB-18 per follow-up review point 6 |
 | XNB-19 | Math readers: `Vector2/3/4`, `Matrix`, `Quaternion`, `Color`, `Plane`, `Point`, `Rectangle`, `BoundingBox`, `BoundingSphere`, `BoundingFrustum`, `Ray` | ⬜ | All backing structs already exist per the Phase 0 audit (XNB-1) — pure field-order wiring |
-| XNB-20 | `Curve`/`CurveKey`/`CurveContinuity`/`CurveLoopType`/`CurveTangent`: add the missing runtime classes/enums, then `CurveReader` | ⬜ | Real new runtime API, not just a reader — flagged by the Phase 0 audit (XNB-1); check FNA's `Curve.cs` for the exact public surface needed |
+| XNB-20 | `CurveReader` for the existing `Curve`/`CurveKey`/`CurveContinuity`/`CurveLoopType`/`CurveTangent` runtime API | ⬜ | Revised 2026-07-16 (XNB-1 revalidation): the runtime classes/enums already exist (`include/Microsoft/Xna/Framework/Curve*.hpp`, `src/Microsoft/Xna/Framework/Curve*.cpp`) — no longer "real new runtime API", only the binary-deserialization reader itself is left. Verify the existing `Curve` public surface against FNA's `CurveReader.cs` field order before writing the reader |
 | XNB-21 | `ArrayReader<T>`/`ListReader<T>`/`DictionaryReader<K,V>` generic dispatch (recursively invoking another registered reader by an embedded type parameter) | ⬜ | The "generic-dispatch" problem called out in `xnb.md` |
 | XNB-22 | `NullableReader<T>` (map to `std::optional<T>` on the CNA side, per this session's audit that CNA has no `Nullable<T>` XNA class of its own) | ⬜ | |
 | XNB-23 | `Texture2DReader`, implemented strictly against CNA's **backend-neutral** `Texture2D`/`GraphicsDevice` API (`SurfaceFormat` + width/height/mip levels + per-level `SetData`) — the reader must not reference EasyGL (or any other backend) internals directly | ⬜ | Full code sketch already in `xnb.md`; correct layering is `XNB reader → CNA Texture2D API → active GraphicsDevice backend`, never `XNB reader → EasyGL internals`. Tests may target EasyGL first, but production reader code must stay backend-agnostic |
