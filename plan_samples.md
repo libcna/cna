@@ -115,7 +115,7 @@
 | SAMPLE-32 | DistortionSample (032) | ⬜ | Blocked on custom shader (#11, Phase 78 Task 947). |
 | SAMPLE-33 | NonPhotoRealistic (033) | ⬜ | Blocked on custom shader (#11, Phase 78 Task 947). |
 | SAMPLE-34 | NormalMapping (034) | ⬜ | Blocked on custom shader (#11, Phase 78 Task 947). |
-| SAMPLE-35 | PerPixelLighting (035) | ⬜ | Blocked on custom shader (#11, Phase 78 Task 947). |
+| SAMPLE-35 | PerPixelLighting (035) | ⬜ | Blocked on custom shader (#11, Phase 78 Task 947) — **partial progress 2026-07-16**: 1 of 5 effect/technique combinations this sample cycles through (`PerPixelLighting.fx`'s `PerPixelDiffuseAndPhong`) is now ported and pixel-verified (`EasyGL_PerPixelLighting_Shader`); the other 4 (`PerPixelLighting.fx`'s remaining 2 techniques + `VertexLighting.fx`'s 2 techniques) still block full unblock. |
 | SAMPLE-36 | VertexLighting (036) | ⬜ | Blocked on custom shader (#11, Phase 78 Task 947). |
 | SAMPLE-37 | RimLighting (037) | ⬜ | Re-verify; ported via a `Content.Load<TextureCube>`/`Content.Load<Model>` bypass — re-check whether items #14/#26 being since fully resolved lets this drop the bypass. |
 | SAMPLE-38 | ShadowMapping (038) | ⬜ | Blocked on custom shader (#11, Phase 78 Task 947). |
