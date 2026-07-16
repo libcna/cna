@@ -179,6 +179,7 @@ from the fake-backend unit tests above.
 | `SDL_EVENT_FINGER_CANCELED` | **Fixed (task 892):** now released like `FINGER_UP` (was unhandled → stuck touch). |
 | `GetCapabilities()` side effects | **Fixed (task 894):** now uses non-mutating `InputManager::HasAnyTouch()`; no longer consumes a touch frame. |
 | `GetState()` read-frequency dependence | **Fixed (INP-AUD-001, 2026-07-16):** `TouchPanel::GetState()`/`InputManager::GetTouchState()` are now pure reads; see below. |
+| `GetCapabilities()` SDL enumeration | **Fixed (INP-AUD-003, 2026-07-16):** now queries `system_device_backend().GetTouchDevices()` every call, matching FNA; see below. |
 | `TouchCollection::CopyTo` | **Fixed (task 902):** out-of-range index now throws `std::out_of_range` (was UB). |
 | Empty/default semantics, out-of-range indexer, `IsReadOnly=true` | Equivalent to FNA (empty vector replaces null sentinel; `out_of_range` for bad index). |
 
@@ -200,14 +201,23 @@ from the fake-backend unit tests above.
   display size is published (gestures resume). Pinned by
   `SdlInputBridgeTouchGestureTest.TouchBeforeDisplaySizeIsKnownTracksTouchButSuppressesGestures` and
   `TouchEdgeCaseTest.ScalingProducesNoGestureWhenDisplaySizeIsZero`.
-- **`GetCapabilities` connected-after-first-touch (P5-013):** `TouchPanel::GetCapabilities` reports
-  `IsConnected = false` until a touch device is actually noticed — i.e. `touchDeviceExists_` is set on the
-  first `FINGER_DOWN` (`SdlInputBridge.cpp:1428`), or `InputManager::HasAnyTouch()` sees a live touch. This
-  is **intentional and FNA-faithful**: FNA/Windows only notices a touch screen once it is touched
-  (`SDL3_FNAPlatform.cs:972`). The capability query is non-mutating (uses `HasAnyTouch()`, never
-  `GetTouchState()`), so it does not consume a frame of input. Pinned by
+- **`GetCapabilities` SDL enumeration (INP-AUD-003, fixed 2026-07-16):** `TouchPanel::GetCapabilities()`
+  now queries `CNA::Internal::Input::system_device_backend().GetTouchDevices()` on every call, matching
+  FNA's `GetTouchCapabilities()` (`SDL_GetTouchDevices()` on every query, `SDL3_FNAPlatform.cs:2265-2280`).
+  **Previously** it reported `IsConnected = false` for any touchscreen that had not yet been touched —
+  it only ever consulted the sticky `touchDeviceExists_` flag (set on the first `FINGER_DOWN`,
+  `SdlInputBridge.cpp:1428`) or the live `InputManager::HasAnyTouch()` peek, never SDL's own device
+  list. That was documented at the time as "intentional and FNA-faithful" by analogy with FNA's note
+  that *Windows* only notices a touch screen once it is touched (`SDL3_FNAPlatform.cs:972`) — but FNA's
+  own `GetTouchCapabilities()` still calls `SDL_GetTouchDevices()` unconditionally on every platform, so
+  a real enumerable-but-untouched device on any non-Windows platform was reported disconnected, which
+  was not actually FNA-faithful. The fix makes SDL enumeration the primary source; `touchDeviceExists_`
+  and `HasAnyTouch()` remain as fallbacks specifically for the Windows-style late-enumeration case.
+  Still fully non-mutating (none of the three checks call `GetTouchState()`). Pinned by
   `GetCapabilitiesIsDisconnectedBeforeAnyTouch`, `GetCapabilitiesIsConnectedOnceTouchDeviceExists`,
-  `GetCapabilitiesIsConnectedViaInputManagerFallbackWhenFlagUnset`.
+  `GetCapabilitiesIsConnectedViaInputManagerFallbackWhenFlagUnset`, and the
+  `TouchCapabilitiesEnumerationTest` fixture (fake-backend enumeration, empty-enumeration-with-sticky-
+  flag, empty-enumeration-with-live-touch, and non-mutation cases).
 - **Touch collection ordering (DEC-20, P5-012):** FNA's `TouchPanel.GetState()` iterates its fixed
   `touches[0..MAX_TOUCHES]` array (`TouchPanel.cs:97`), so its collection order is **SDL finger-array slot
   order**. CNA's event-driven fallback (`InputManager::GetTouchState`) instead orders by **ascending touch

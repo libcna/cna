@@ -10,15 +10,21 @@
 
 #include <optional>
 #include <stdexcept>
+#include <vector>
 
+#include "CNA/Input/InputDeviceInfo.hpp"
 #include "CNA/Internal/Input/GestureDetector.hpp"
 #include "CNA/Internal/Input/InputManager.hpp"
+#include "CNA/Internal/Input/SystemDeviceBackend.hpp"
 #include "Microsoft/Xna/Framework/Input/Touch/TouchLocationState.hpp"
 #include "Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 
+using CNA::Input::InputDeviceInfoEXT;
 using CNA::Internal::Input::GestureDetector;
 using CNA::Internal::Input::InputManager;
+using CNA::Internal::Input::ISystemDeviceBackend;
+using CNA::Internal::Input::SetSystemDeviceBackendForTests;
 using Microsoft::Xna::Framework::Vector2;
 using namespace Microsoft::Xna::Framework::Input::Touch;
 
@@ -420,6 +426,103 @@ TEST_F(TouchEdgeCaseTest, GetCapabilitiesReturnsToDisconnectedAfterReset)
     const TouchPanelCapabilities caps = TouchPanel::GetCapabilities();
     EXPECT_FALSE(caps.getIsConnectedProperty());
     EXPECT_EQ(caps.getMaximumTouchCountProperty(), 0);
+}
+
+// --- INP-AUD-003: GetCapabilities() consults SDL touch-device enumeration ---
+
+namespace
+{
+    // A fake device enumeration source (mirrors tests/CNA/Input/InputDevicesTests.cpp), so
+    // GetCapabilities()'s SDL-enumeration path is exercised deterministically instead of depending
+    // on whether the CI machine happens to have a touch device.
+    class FakeTouchDeviceBackend final : public ISystemDeviceBackend
+    {
+    public:
+        std::vector<InputDeviceInfoEXT> touchDevices;
+
+        std::vector<InputDeviceInfoEXT> GetMice() override { return {}; }
+        std::vector<InputDeviceInfoEXT> GetKeyboards() override { return {}; }
+        std::vector<InputDeviceInfoEXT> GetTouchDevices() override { return touchDevices; }
+    };
+
+    class TouchCapabilitiesEnumerationTest : public TouchEdgeCaseTest
+    {
+    protected:
+        FakeTouchDeviceBackend fakeBackend;
+
+        void SetUp() override
+        {
+            TouchEdgeCaseTest::SetUp();
+            SetSystemDeviceBackendForTests(&fakeBackend);
+        }
+
+        void TearDown() override
+        {
+            SetSystemDeviceBackendForTests(nullptr);
+            TouchEdgeCaseTest::TearDown();
+        }
+    };
+}
+
+TEST_F(TouchCapabilitiesEnumerationTest, ReportsConnectedFromEnumerationBeforeAnyTouchIsObserved)
+{
+    // A touchscreen SDL already enumerates, but nobody has touched it yet: touchDeviceExists_ is
+    // still false and there is no live touch in InputManager. Before the fix this reported
+    // disconnected; GetCapabilities() must now trust the enumeration.
+    fakeBackend.touchDevices = {{1, "Fake Touchscreen"}};
+
+    const TouchPanelCapabilities caps = TouchPanel::GetCapabilities();
+    EXPECT_TRUE(caps.getIsConnectedProperty());
+    EXPECT_EQ(caps.getMaximumTouchCountProperty(), 4); // DEC-09: XNA/FNA always report 4
+}
+
+TEST_F(TouchCapabilitiesEnumerationTest, ReportsDisconnectedWhenEnumerationEmptyAndNoTouchObserved)
+{
+    // No enumerable device, no sticky flag, no live touch: genuinely disconnected.
+    fakeBackend.touchDevices.clear();
+
+    const TouchPanelCapabilities caps = TouchPanel::GetCapabilities();
+    EXPECT_FALSE(caps.getIsConnectedProperty());
+    EXPECT_EQ(caps.getMaximumTouchCountProperty(), 0);
+}
+
+TEST_F(TouchCapabilitiesEnumerationTest, FallsBackToStickyFlagWhenEnumerationLagsInteractionWindowsStyle)
+{
+    // FNA notes Windows only enumerates a touch device after it has actually been touched. Model
+    // that here: enumeration stays empty, but touchDeviceExists_ was set by an earlier FINGER_DOWN.
+    fakeBackend.touchDevices.clear();
+    TouchPanel::setTouchDeviceExistsProperty(true);
+
+    const TouchPanelCapabilities caps = TouchPanel::GetCapabilities();
+    EXPECT_TRUE(caps.getIsConnectedProperty());
+    EXPECT_EQ(caps.getMaximumTouchCountProperty(), 4);
+}
+
+TEST_F(TouchCapabilitiesEnumerationTest, FallsBackToLiveTouchWhenEnumerationEmptyAndFlagUnset)
+{
+    // Same late-enumeration scenario, but observed only via a live touch in InputManager rather
+    // than the sticky TouchPanel flag (e.g. a test/backend that calls InputManager directly).
+    fakeBackend.touchDevices.clear();
+    InputManager::SetTouchState(1, TouchLocationState::Pressed, Vector2(5, 5));
+
+    const TouchPanelCapabilities caps = TouchPanel::GetCapabilities();
+    EXPECT_TRUE(caps.getIsConnectedProperty());
+    EXPECT_EQ(caps.getMaximumTouchCountProperty(), 4);
+}
+
+TEST_F(TouchCapabilitiesEnumerationTest, EnumerationQueryDoesNotMutateTouchState)
+{
+    // GetCapabilities() must remain non-mutating even with the new enumeration check added.
+    fakeBackend.touchDevices = {{1, "Fake Touchscreen"}};
+    InputManager::SetTouchState(7, TouchLocationState::Pressed, Vector2(5, 5));
+
+    (void) TouchPanel::GetCapabilities();
+    (void) TouchPanel::GetCapabilities();
+
+    const TouchCollection state = TouchPanel::GetState();
+    ASSERT_EQ(state.getCountProperty(), 1);
+    EXPECT_EQ(state[0].getStateProperty(), TouchLocationState::Pressed)
+        << "GetCapabilities() must not promote Pressed to Moved";
 }
 
 // --- Task 828: coordinate scaling in INTERNAL_onTouchEvent ---
