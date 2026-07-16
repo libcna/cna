@@ -1353,6 +1353,7 @@ Most recent first. Full detail lives in `plan_dx9.md` — this is a short index.
 
 | Commit(s) | Summary |
 |---|---|
+| *(pending)* | **RESOLVED the documented render-target-as-texture D3D9 crash from `08aba091`/§4 — a real CNA bug, not a DXVK/environment limitation.** Root cause: every `D3D9EffectDraw.cpp` texture-binding call site did `static_cast<const D3D9TextureBackend*>(params.texture0)` unconditionally, which is undefined behavior whenever `params.texture0` actually points at a `D3D9RenderTargetBackend` (a real, legal runtime type for that `const ITextureBackend*` field, since `IRenderTargetBackend : ITextureBackend`) — exactly what happens when a `RenderTarget2D` is sampled as an ordinary effect texture. `D3D11GraphicsBackend.cpp` already solves this exact problem (`GetSrvForTextureEXT`, a two-concrete-type `dynamic_cast` resolver) — `D3D9` never had the equivalent. Fixed with new `ResolveD3D9TextureEXT`/`ResolveD3D9TextureCubeEXT` helpers (mirroring D3D11's own precedent) replacing all 6 unsafe `static_cast` sites in `D3D9EffectDraw.cpp`, plus the same fix in `D3D9SpriteBatch.cpp`'s own analogous (already `dynamic_cast`-safe, non-crashing but silently-wrong) gap. **Mutation-verified**: temporarily reintroduced the exact original `static_cast`, reproduced the documented symptom verbatim (`terminate called after throwing an instance of 'dxvk::DxvkError'`); reverted, reconfirmed the fix. New `D3D9_DrawEx` Check Q (18 checks): a `D3D9RenderTargetBackend` created/bound/`Clear()`ed/unbound then sampled directly as an ordinary `BasicEffect` texture — exact readback, no crash. Full `ctest -L D3D9`: 17/17 green, zero regressions. Deliberately did not re-attempt the reverted oracle-corpus scene (`D9-A5`/`D9-84`'s own territory) as part of this fix. See §4's own updated record and `plan_dx9.md`'s `D9-84` row. |
 | *(pending)* | **`D9-A6` CLOSED — the oracle corpus run against a SECOND backend (EasyGL) for the first time ever.** Confirmed `tools/xna-oracle/CnaOracleRender.cpp` was already backend-agnostic before touching it (only two `printf` strings and one comment literally said `D3D9`) — added a small `OracleBackendName()` helper keyed off the `CNA_BACKEND_*` compile definitions, no other line changed. New, purely-additive `cna_easygl_test(cna_oracle_render_easygl ...)` CMake registration inside the existing EasyGL-tests section (not a CTest, same "comparison tool" precedent as `cna_oracle_render`); new non-Wine `scripts/run-oracle-corpus-diff-easygl.sh` twin driver script. Existing D3D9 registration/CTest/script untouched (`cmake --build cmake-build-d3d9 --target cna_oracle_render` re-verified still green after the change). **Result: 10/31 pixel-perfect (all `sprite_*` + `alphatest_never_quad`), 21/31 diverge in three evidenced patterns** — (1) 17 scenes diverge only in a thin silhouette-edge band (rasterization fill-rule/pixel-center convention gap vs. D3D9-over-DXVK, most likely), notably including 5 "lit" scenes that turn out structurally incapable of exposing the predicted `preferPerPixelLighting` gap (uniform normal/light by construction); (2) 2 scenes (`colored3d`, `colored_trianglestrip_quad`) diverge almost everywhere but by only 1-3/channel — ordinary Mesa/RADV-vs-DXVK float rounding noise, not a bug; (3) 2 real, previously-unmeasured `plan_graphics.md` candidates — `fog_gradient_quad` renders fully-fogged/black everywhere (including the near/unfogged edge) instead of the correct linear gradient (likely a negative-`FogEnd`-specific EasyGL bug), and `envmap_fresnel_quad` renders nearly the whole quad at the bright top-edge Fresnel value instead of Gouraud-interpolating to the dim bottom edge — a concrete confirmation of this plan's own predicted design-decision-8 gap, in the one scene actually shaped to detect it. All three patterns logged in `docs/d3d9-divergence-report.md`'s new "Cross-backend measurement (D9-A6)" section, **none investigated further or fixed**, per this row's own explicit rule. Vulkan/D3D11 remain unmeasured. |
 | *(pending)* | **`D9-112` CLOSED — `SpriteBatch::Begin(effect)` wiring, Phase D9-11 FULLY CLOSED.** New `D3D9SpriteBatchBackend::SetCustomEffect()` (flush-on-change, mirrors D3D11's identical pattern). `FlushBatch()` branches on a valid custom `D3D9EffectBackend`: uploads viewport size via `D9-111`'s own generic `SetUniformVec2("vpSize", ...)` (no dedicated method needed, unlike D3D11's `SetViewportSizeEXT()`), calls `Apply()` then `Bind()`, replacing the stock shader/`MatrixTransform` block — vertex declaration/texture/sampler binding stay unchanged between paths (D3D9's declaration is a decoupled device state, simpler than D3D11's shader-baked `InputLayout`). New `D3D9GraphicsBackend::CreateEffectBackend()` + the matching `CMakeLists.txt` circular-link fix (D3D9 joins the `CNA`-back-link `OR` chain, closing the gap `D9-10` deferred here). **Real bug found and fixed**: moving `D3D9EffectBackend.cpp` out of the main glob while `D3D9ConstantTable.cpp` stayed in it created a genuine link-order cycle between the two new targets (`undefined reference to ParseConstantTableEXT` on every D3D9 test binary) — root-caused and fixed by moving `D3D9ConstantTable.cpp` into the isolated effect target too (it has no other consumer). New `D3D9_SpriteBatch_CustomEffect` CTest (4/4) through the real public `SpriteBatch`/`ShaderEffect` API, mirroring D3D11's own `DX-71` test bar in real D3D9 SM2/SM3 HLSL — all 4 passed on the first successful build. Mutation-verified (forced the custom-effect branch unreachable, confirmed exactly the color-inversion discriminator failed while position/restore-to-stock checks correctly stayed green; reverted clean). Full D3D9 suite now 17/17; EasyGL/`CnaTests` regression-checked. |
 | `f69094dd` | **`D9-111` CLOSED — `D3D9EffectBackend`, real runtime `D3DCompile()` custom-ShaderEffect backend**. New `D3D9EffectBackend.{hpp,cpp}` (`IEffectBackend`): `CompileProgram()` compiles vertex+pixel source separately (`vs_2_0`/`ps_2_0` Reach, `vs_3_0`/`ps_3_0` HiDef), `SetUniform*` genuinely looks `name` up per-stage via `D9-110`'s own real register tables — not D3D11EffectBackend's own fixed-slot convention, since D3D9 registers are compiler-assigned and vary per shader. Build-isolated per design decision 16: `D3D9EffectBackend.cpp` excluded from the main backend source glob, built as its own `cna_backend_graphics_d3d9_effect` static library with `d3dcompiler` linked ONLY there — the stock D3D9 pipeline stays dependency-free, diverging from D3D11/D3D12's own simpler "link it to the whole backend" precedent. New `D3D9_EffectBackend` CTest (6/6), matching D3D11EffectBackend's own `DX-58` test bar (compile+bind+draw+uniform-driven pixel readback) on a real device — all 6 passed on the FIRST successful build. **Real finding via mutation-testing**: the original single "far-away WorldViewProj leaves background unpainted" check wasn't discriminating — a fully-disabled vertex-constant upload also leaves the register at zero, also degenerating the triangle to nothing, for a completely different reason. Fixed by splitting into a positive-case anchor (identity re-upload must still paint red) before the negative case; re-mutated and confirmed the anchor now correctly fails first. All mutations reverted (`diff`-confirmed byte-identical each time). Full D3D9 suite now 16/16; EasyGL/CNA build regression-checked. `D9-112` remains open. |
@@ -1519,6 +1520,48 @@ environment/DXVK-version limitation. Do not re-attempt the render-target oracle 
 is root-caused — a scene that "passes" by accident (e.g. by catching and silently swallowing the
 crash) would be worse than no scene at all.
 
+**RESOLVED 2026-07-16 — root-caused as a real CNA-side bug, not a DXVK/environment limitation;
+fixed, no Vulkan validation layers ultimately needed.** Root cause found by code inspection once a
+minimal repro was isolated at the `D3D9_DrawEx` CTest level (not the oracle harness — kept that
+work out of scope for this fix, see below): every `D3D9EffectDraw.cpp` texture-binding call site
+(`DrawBasicEffectEXT`/`DrawAlphaTestEffectEXT`/`DrawDualTextureEffectEXT`/
+`DrawEnvironmentMapEffectEXT`/`DrawSkinnedEffectEXT`) did
+`static_cast<const D3D9TextureBackend*>(params.texture0)` unconditionally. `GpuDrawParams::
+texture0`/`texture1`/`envMap` are declared `const ITextureBackend*`/`const ITextureCubeBackend*`,
+and `D3D9RenderTargetBackend`/`D3D9RenderTargetCubeBackend` (`IRenderTargetBackend : ITextureBackend`)
+are real, legal runtime types for that pointer whenever a game samples a `RenderTarget2D`/
+`RenderTargetCube` as an ordinary effect texture — exactly what the reverted oracle scene did. The
+`static_cast` silently reinterpreted a `D3D9RenderTargetBackend*` (an unrelated sibling class, not
+a base/derived relationship) as a `D3D9TextureBackend*`: undefined behavior that read whichever
+field sits at `D3D9TextureBackend::texture_`'s own offset in a `D3D9RenderTargetBackend`'s actual,
+different layout, handed `SetTexture()` a garbage `IDirect3DTexture9*`, and crashed later when
+DXVK's async shader-compiler thread actually tried to use it — matching the observed symptom and
+timing exactly (`SPIR-V`/shader-compile-adjacent crash, uncaught, off the main thread).
+
+This project's own `D3D11GraphicsBackend.cpp` already had to solve the identical problem
+(`GetSrvForTextureEXT`, a `dynamic_cast`-based two-concrete-type resolver) — `D3D9` simply never
+got the equivalent. Fixed with `ResolveD3D9TextureEXT`/`ResolveD3D9TextureCubeEXT` (new, anonymous-
+namespace-local helpers in `D3D9EffectDraw.cpp`, mirroring `D3D11`'s own precedent and its own
+documented "duplicated per-file rather than factored into a shared header" rationale), replacing
+all 6 unsafe `static_cast` call sites. `D3D9SpriteBatch.cpp` had the same category of gap in its
+own texture resolve (already `dynamic_cast`-based, so it silently dropped the texture instead of
+crashing) — fixed the same way for consistency, not because it was the crash's own cause.
+
+**Mutation-verified, not just "compiles and doesn't crash the one time it was run"**: temporarily
+reintroduced the exact original `static_cast` at the `DrawBasicEffectEXT` site and reran the new
+regression check below — reproduced the EXACT documented symptom verbatim (`terminate called
+after throwing an instance of 'dxvk::DxvkError'`); reverted, reconfirmed the fix passes. New
+`D3D9_DrawEx` Check Q (18 checks total now): a `D3D9RenderTargetBackend` created/bound/`Clear()`ed
+to a known color/unbound, then used directly as `params.texture0` for an ordinary unlit+textured
+`BasicEffect` draw — exact readback of the render target's real cleared content (not garbage), no
+crash. Full `ctest -L D3D9`: 17/17 green, zero regressions.
+
+**Deliberately did NOT re-attempt the reverted `rendertarget_texture_quad.scene` oracle-corpus
+addition as part of this fix** — that's `D9-A5`/`D9-84`'s own territory (a separate concern from
+root-causing and fixing the crash itself), and picking it up here would have been exactly the kind
+of scope drift this session was already corrected for once. Whoever next grows the oracle corpus
+can now safely re-add a render-target-as-texture scene; the underlying crash is gone.
+
 **Phase D9-8: `D9-80`–`D9-83` ALL CLOSED — real, verified dispatch for all 5 XNA Stock Effects plus
 hardware instancing on this backend.** The shader-dispatch tables/formulas are transcribed and
 tested, the `GpuDrawParams` audit is independently re-verified (2 of its 4 gaps turned out resolvable
@@ -1659,13 +1702,15 @@ in the whole plan are `D9-A5`/`D9-84`, both deliberately-ongoing "growing with t
 their own documented remaining scope, not blocked-and-unstarted work).
 
 The `D9-A5`/`D9-84` scene-corpus-growth candidates remain exhausted for the same reasons recorded
-earlier this session: `SpriteBatch`, all 4 `PrimitiveType` values, `GraphicsProfile`, and every
-currently-drawable Stock Effect bucket are closed; render targets are blocked on the documented
-crash (§4); a `SurfaceFormat` sweep needs new CNA `Texture2D` API surface; `EnvironmentMapEffect`
-specular/`PreferPerPixelLighting` are blocked on `D9-81`'s cross-cutting `GpuDrawParams` gaps
-(§9 forbids fixing this from inside this branch — measure/report/propose only); hardware-
-instancing's HiDef gate and NPOT-wrap-on-`Reach` are Phase D9-10's own last named follow-ups, both
-needing real reference behavior this project has no way to verify (FNA implements neither).
+earlier this session, with one update: `SpriteBatch`, all 4 `PrimitiveType` values, `GraphicsProfile`,
+and every currently-drawable Stock Effect bucket are closed; **render targets are no longer blocked
+on a crash (§4's own blocker is RESOLVED 2026-07-16) — a render-target-as-texture oracle scene can
+now safely be re-attempted, it just hasn't been yet**; a `SurfaceFormat` sweep needs new CNA
+`Texture2D` API surface; `EnvironmentMapEffect` specular/`PreferPerPixelLighting` are blocked on
+`D9-81`'s cross-cutting `GpuDrawParams` gaps (§9 forbids fixing this from inside this branch —
+measure/report/propose only); hardware-instancing's HiDef gate and NPOT-wrap-on-`Reach` are Phase
+D9-10's own last named follow-ups, both needing real reference behavior this project has no way to
+verify (FNA implements neither).
 
 See `plan_dx9.md`'s "Execution order" table for the full sequence beyond this.
 

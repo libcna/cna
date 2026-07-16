@@ -52,6 +52,21 @@
 //   readback, proving the Bones[72] register upload doesn't corrupt the draw even when trivial.
 // Check P -- SkinnedEffect, OneLight bucket: ONE active light -- exact readback, different from
 //   Check O, proving correct bucket selection.
+// Check Q -- regression for the NEXT.md-documented "RenderTarget2D sampled as an ordinary
+//   texture crashes on the next draw" bug: a D3D9RenderTargetBackend is created, bound, Clear()ed
+//   to a known color, unbound, then used directly as params.texture0 for an ordinary unlit+
+//   textured BasicEffect draw (same shape as Check A). The real root cause (found and fixed the
+//   same session): every DrawXEffectEXT() texture-binding call site did
+//   `static_cast<const D3D9TextureBackend*>(params.texture0)` unconditionally, silently
+//   reinterpreting a D3D9RenderTargetBackend* (an unrelated sibling class implementing the same
+//   ITextureBackend interface, which GpuDrawParams::texture0 is declared as) as if it were a
+//   D3D9TextureBackend* -- undefined behavior that read garbage where D3D9TextureBackend's own
+//   `texture_` field would be and handed SetTexture() a bogus IDirect3DTexture9*, which crashed
+//   later when DXVK's async shader-compiler thread tried to actually use it. Fixed with a real
+//   two-concrete-type dynamic_cast resolution (ResolveD3D9TextureEXT), mirroring
+//   D3D11GraphicsBackend.cpp's own established GetSrvForTextureEXT precedent for the identical
+//   situation. This check's exact readback (matching Check A's own color) proves the render
+//   target's REAL content is genuinely sampled, not merely "didn't crash".
 //
 // Exit code 0 = all checks PASS, 1 = any FAILs.
 
@@ -66,6 +81,7 @@
 
 #include "CNA/Internal/Backends/D3D9/D3D9GraphicsBackend.hpp"
 #include "CNA/Internal/Backends/D3D9/D3D9Textures.hpp"
+#include "CNA/Internal/Backends/D3D9/D3D9RenderTargets.hpp"
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "CNA/Internal/Graphics/ImageData.hpp"
 
@@ -546,6 +562,35 @@ protected:
             check(px.getRProperty() == 80 && px.getGProperty() == 48 && px.getBProperty() == 16 && px.getAProperty() == 255,
                   "DrawPrimitivesEx (SkinnedEffect, OneLight bucket, 1 light, Identity bone): "
                   "exact readback (80,48,16) -- different from Check O, proves correct bucket selection");
+        }
+
+        // Check Q: RenderTarget2D sampled as an ordinary texture (NEXT.md's documented crash).
+        {
+            auto rt = backend.CreateRenderTarget2D(4, 4, static_cast<int>(DepthFormat::Depth24Stencil8),
+                                                   false, false, 0);
+            backend.SetRenderTarget2D(rt.get());
+            dev.Clear(Color(200, 120, 40, 255));
+            backend.SetRenderTarget2D(nullptr);
+
+            auto vb = backend.CreateVertexBuffer(3);
+            vb->SetData(kTriTx, 3, sizeof(VPT));
+
+            GpuDrawParams params;
+            params.textureEnabled = true;
+            params.vertexColorEnabled = false; // GpuDrawParams defaults this to true
+            params.texture0 = rt.get(); // a D3D9RenderTargetBackend*, not a D3D9TextureBackend*
+            params.diffuseColor[0] = params.diffuseColor[1] = params.diffuseColor[2] = params.diffuseColor[3] = 1.0f;
+
+            dev.Clear(Color(0, 0, 255, 255));
+            backend.DrawPrimitivesEx(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                     Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, params);
+            Color px(0, 0, 0, 0);
+            ReadCenterPixel(dev, px);
+            // Same exact color Check A's own 1x1 texture uses -- proves the render target's real
+            // cleared content was sampled, not a garbage/reinterpreted pointer.
+            check(px.getRProperty() == 200 && px.getGProperty() == 120 && px.getBProperty() == 40 && px.getAProperty() == 255,
+                  "DrawPrimitivesEx (BasicEffect unlit+textured, texture0 = a RenderTarget2D's own backend): "
+                  "exact readback of the render target's real cleared content, no crash");
         }
 
         // Check F: honest-gap / not-yet-implemented reporting.

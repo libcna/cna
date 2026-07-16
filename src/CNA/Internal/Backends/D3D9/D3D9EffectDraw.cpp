@@ -40,6 +40,7 @@
 #include "CNA/Internal/Backends/D3D9/D3D9ShaderDispatch.hpp"
 #include "CNA/Internal/Backends/D3D9/D3D9Textures.hpp"
 #include "CNA/Internal/Backends/D3D9/D3D9VertexDeclarations.hpp"
+#include "CNA/Internal/Backends/D3D9/D3D9RenderTargets.hpp"
 #include "CNA/Internal/Backends/D3D9/shaders/D3D9ShaderRegisters.hpp"
 
 #include "Microsoft/Xna/Framework/Matrix.hpp"
@@ -66,6 +67,44 @@ namespace CNA::Internal::Backends::D3D9
             case PrimitiveType::LineStrip:     return D3DPT_LINESTRIP;
             }
             return D3DPT_TRIANGLELIST;
+        }
+
+        /// Real root cause of the NEXT.md-documented "RenderTarget2D sampled as an ordinary
+        /// texture crashes on the next draw" bug: GpuDrawParams::texture0/texture1 are declared as
+        /// `const ITextureBackend*`, and D3D9RenderTargetBackend (a RenderTarget2D's own backend)
+        /// implements IRenderTargetBackend : ITextureBackend -- a real, legal runtime type this
+        /// pointer can hold whenever an XNA game sets `effect.Texture = someRenderTarget2D`. Every
+        /// call site below used to do `static_cast<const D3D9TextureBackend*>(params.texture0)`
+        /// unconditionally, which silently reinterprets a D3D9RenderTargetBackend* as if it were a
+        /// D3D9TextureBackend* (an unrelated sibling class, not a base/derived relationship) --
+        /// undefined behavior that read whichever field happens to sit at D3D9TextureBackend's own
+        /// `texture_` offset in a D3D9RenderTargetBackend's actual, different layout, handed a
+        /// garbage IDirect3DTexture9* to SetTexture(), and crashed later when DXVK's async
+        /// shader-compiler thread actually tried to use it. Same two-concrete-type resolution as
+        /// D3D11GraphicsBackend.cpp's own (anonymous-namespace-local, not exported)
+        /// GetSrvForTextureEXT -- duplicated per-file rather than factored into a shared header,
+        /// matching that precedent's own documented rationale.
+        IDirect3DTexture9* ResolveD3D9TextureEXT(const ITextureBackend* tex)
+        {
+            if (tex == nullptr) return nullptr;
+            if (const auto* t = dynamic_cast<const D3D9TextureBackend*>(tex))
+                return t->GetTextureEXT();
+            if (const auto* rt = dynamic_cast<const D3D9RenderTargetBackend*>(tex))
+                return rt->GetTextureEXT();
+            return nullptr;
+        }
+
+        /// Same two-concrete-type resolution as ResolveD3D9TextureEXT above, but for
+        /// ITextureCubeBackend (EnvironmentMapEffect's cube map) -- a plain D3D9TextureCubeBackend,
+        /// or a D3D9RenderTargetCubeBackend used as a sampled cube texture.
+        IDirect3DCubeTexture9* ResolveD3D9TextureCubeEXT(const ITextureCubeBackend* tex)
+        {
+            if (tex == nullptr) return nullptr;
+            if (const auto* t = dynamic_cast<const D3D9TextureCubeBackend*>(tex))
+                return t->GetTextureEXT();
+            if (const auto* rt = dynamic_cast<const D3D9RenderTargetCubeBackend*>(tex))
+                return rt->GetTextureEXT();
+            return nullptr;
         }
 
         /// D9-72/D9-82: EffectParameter.SetValue(Matrix)'s real XNA upload convention -- register
@@ -583,8 +622,7 @@ namespace CNA::Internal::Backends::D3D9
 
         if (params.textureEnabled && params.texture0)
         {
-            const auto* tex = static_cast<const D3D9TextureBackend*>(params.texture0);
-            device_->SetTexture(0, tex->GetTextureEXT());
+            device_->SetTexture(0, ResolveD3D9TextureEXT(params.texture0));
         }
 
         device_->SetVertexDeclaration(GetOrCreateVertexDeclarationEXT(stride));
@@ -665,8 +703,7 @@ namespace CNA::Internal::Backends::D3D9
         // directly, no reconstruction needed (unlike BasicEffect's EmissiveColor).
         TryUploadPixelShaderConstantEXT(device_.Get(), regs.ps, regs.psCount, "AlphaTest", params.alphaTest);
 
-        const auto* tex = static_cast<const D3D9TextureBackend*>(params.texture0);
-        device_->SetTexture(0, tex->GetTextureEXT());
+        device_->SetTexture(0, ResolveD3D9TextureEXT(params.texture0));
 
         device_->SetVertexDeclaration(GetOrCreateVertexDeclarationEXT(stride));
         const auto& d3dVb = static_cast<const D3D9VertexBufferBackend&>(vb);
@@ -728,10 +765,8 @@ namespace CNA::Internal::Backends::D3D9
         // color.rgb *= 2; color *= SampleTex(Texture2,uv1) * pin.Diffuse -- the classic XNA
         // lightmap-doubling blend. No CPU-side computation needed here; it's entirely in the real
         // compiled pixel shader.
-        const auto* tex0 = static_cast<const D3D9TextureBackend*>(params.texture0);
-        const auto* tex1 = static_cast<const D3D9TextureBackend*>(params.texture1);
-        device_->SetTexture(0, tex0->GetTextureEXT());
-        device_->SetTexture(1, tex1->GetTextureEXT());
+        device_->SetTexture(0, ResolveD3D9TextureEXT(params.texture0));
+        device_->SetTexture(1, ResolveD3D9TextureEXT(params.texture1));
 
         device_->SetVertexDeclaration(GetOrCreateVertexDeclarationEXT(stride));
         const auto& d3dVb = static_cast<const D3D9VertexBufferBackend&>(vb);
@@ -823,10 +858,8 @@ namespace CNA::Internal::Backends::D3D9
         TryUploadVertexShaderConstantEXT(device_.Get(), regs.vs, regs.vsCount, "FogVector", fogVector.v);
         TryUploadPixelShaderConstantEXT(device_.Get(), regs.ps, regs.psCount, "FogColor", Pad3(params.fogColor).v);
 
-        const auto* tex = static_cast<const D3D9TextureBackend*>(params.texture0);
-        const auto* cube = static_cast<const D3D9TextureCubeBackend*>(params.envMap);
-        device_->SetTexture(0, tex->GetTextureEXT());
-        device_->SetTexture(1, cube->GetTextureEXT());
+        device_->SetTexture(0, ResolveD3D9TextureEXT(params.texture0));
+        device_->SetTexture(1, ResolveD3D9TextureCubeEXT(params.envMap));
 
         device_->SetVertexDeclaration(GetOrCreateVertexDeclarationEXT(stride));
         const auto& d3dVb = static_cast<const D3D9VertexBufferBackend&>(vb);
@@ -922,8 +955,7 @@ namespace CNA::Internal::Backends::D3D9
         TryUploadVertexShaderConstantEXT(device_.Get(), regs.vs, regs.vsCount, "FogVector", fogVector.v);
         TryUploadPixelShaderConstantEXT(device_.Get(), regs.ps, regs.psCount, "FogColor", Pad3(params.fogColor).v);
 
-        const auto* tex = static_cast<const D3D9TextureBackend*>(params.texture0);
-        device_->SetTexture(0, tex->GetTextureEXT());
+        device_->SetTexture(0, ResolveD3D9TextureEXT(params.texture0));
 
         device_->SetVertexDeclaration(GetOrCreateVertexDeclarationEXT(stride));
         const auto& d3dVb = static_cast<const D3D9VertexBufferBackend&>(vb);

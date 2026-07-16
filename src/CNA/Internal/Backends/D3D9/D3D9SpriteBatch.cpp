@@ -1,6 +1,7 @@
 #include "CNA/Internal/Backends/D3D9/D3D9SpriteBatch.hpp"
 #include "CNA/Internal/Backends/D3D9/D3D9GraphicsBackend.hpp"
 #include "CNA/Internal/Backends/D3D9/D3D9Textures.hpp"
+#include "CNA/Internal/Backends/D3D9/D3D9RenderTargets.hpp"
 #include "CNA/Internal/Backends/D3D9/D3D9VertexDeclarations.hpp"
 #include "CNA/Internal/Backends/D3D9/D3D9ConstantUpload.hpp"
 #include "CNA/Internal/Backends/D3D9/D3D9EffectBackend.hpp"
@@ -36,6 +37,24 @@ namespace CNA::Internal::Backends::D3D9
         D3DPRIMITIVETYPE ToD3D9Topology()
         {
             return D3DPT_TRIANGLELIST;
+        }
+
+        /// Same two-concrete-type resolution as D3D9EffectDraw.cpp's own ResolveD3D9TextureEXT
+        /// (RenderTarget2D used as a SpriteBatch texture is the same real, legal ITextureBackend
+        /// runtime type this project's D3D11 backend already handles) -- duplicated per-file
+        /// rather than factored into a shared header, matching D3D11SpriteBatch.cpp's own
+        /// documented precedent for the identical situation. Previously this call site only tried
+        /// D3D9TextureBackend and silently dropped the texture (drew untextured) for a
+        /// RenderTarget2D -- wrong, but not the crash; kept as dynamic_cast-safe here since the
+        /// crash's own root cause was the *effect*-draw path's static_cast, not this one.
+        IDirect3DTexture9* ResolveD3D9TextureEXT(const ITextureBackend* tex)
+        {
+            if (tex == nullptr) return nullptr;
+            if (const auto* t = dynamic_cast<const D3D9TextureBackend*>(tex))
+                return t->GetTextureEXT();
+            if (const auto* rt = dynamic_cast<const D3D9RenderTargetBackend*>(tex))
+                return rt->GetTextureEXT();
+            return nullptr;
         }
     }
 
@@ -216,8 +235,7 @@ namespace CNA::Internal::Backends::D3D9
                                           "MatrixTransform", regs);
         }
 
-        if (const auto* tex = dynamic_cast<const D3D9TextureBackend*>(currentTexture_))
-            device_->SetTexture(0, tex->GetTextureEXT());
+        device_->SetTexture(0, ResolveD3D9TextureEXT(currentTexture_));
 
         owner_->ApplySamplerState(0, pendingFilter_, pendingAddressU_, pendingAddressV_, 1);
 
