@@ -498,7 +498,11 @@ namespace CNA::Internal::Backends::D3D12
         // exhausted the original capacity for real the moment Check U's render target was allocated.
         // Still a fixed bump allocator, same honest simplification DX-103 already documents -- just
         // sized for real observed demand instead of an arbitrary guess.
-        static constexpr UINT kRtvHeapCapacity = 32;
+        // Task 1107 (plan_graphics.md Phase 80): raised from 32 -- Check O3/S2's own 2 new RTV-
+        // allocating blocks exhausted the previous capacity for real (a genuine
+        // "heap exhausted" throw mid-suite, not a guess); same bump-allocator discipline, just
+        // resized for the new observed demand.
+        static constexpr UINT kRtvHeapCapacity = 40;
         static constexpr UINT kDsvHeapCapacity = 8;
         static constexpr UINT kCbvSrvUavHeapCapacity = 64;
         // DX-119: one sampler slot per distinct XNA SamplerState combination actually used across a
