@@ -210,9 +210,10 @@ TEST_F(SdlInputBridgeGoldenTest, TwoFingerScriptResolvesToExactTouchSnapshots)
         EXPECT_FLOAT_EQ(s[0].getPositionProperty().X, 0.25f);
         EXPECT_FLOAT_EQ(s[0].getPositionProperty().Y, 0.25f);
     }
+    TouchPanel::Update(); // frame boundary (INP-AUD-001): A's Pressed promotes to Moved
 
-    // Finger B down at (0.75,0.75). A was snapshotted Pressed above, so it now reports Moved (same
-    // position); B is the fresh Pressed touch.
+    // Finger B down at (0.75,0.75). A was snapshotted Pressed in the prior frame, so it now reports
+    // Moved (same position); B is the fresh Pressed touch.
     SdlInputBridge::ProcessEvent(fingerEvent(SDL_EVENT_FINGER_DOWN, 9002, 0.75f, 0.75f));
     {
         const TouchCollection s = TouchPanel::GetState();
@@ -223,6 +224,7 @@ TEST_F(SdlInputBridgeGoldenTest, TwoFingerScriptResolvesToExactTouchSnapshots)
         EXPECT_FLOAT_EQ(s[1].getPositionProperty().X, 0.75f);
         EXPECT_FLOAT_EQ(s[1].getPositionProperty().Y, 0.75f);
     }
+    TouchPanel::Update(); // frame boundary: B's Pressed promotes to Moved
 
     // Finger A moves to (0.5,0.5); B lifts.
     SdlInputBridge::ProcessEvent(fingerEvent(SDL_EVENT_FINGER_MOTION, 9001, 0.5f, 0.5f, 0.25f, 0.25f));
@@ -235,8 +237,10 @@ TEST_F(SdlInputBridgeGoldenTest, TwoFingerScriptResolvesToExactTouchSnapshots)
         EXPECT_FLOAT_EQ(s[0].getPositionProperty().Y, 0.5f);
         EXPECT_EQ(s[1].getStateProperty(), TouchLocationState::Released);
     }
+    TouchPanel::Update(); // frame boundary: B (Released) is retired
 
-    // After the Released snapshot, B is gone; only A remains, still Moved at (0.5,0.5).
+    // After the frame advances past the Released snapshot, B is gone; only A remains, still Moved
+    // at (0.5,0.5).
     {
         const TouchCollection s = TouchPanel::GetState();
         ASSERT_EQ(s.getCountProperty(), 1);

@@ -287,6 +287,13 @@ namespace Microsoft::Xna::Framework::Input::Touch
     {
         previousTouches_ = touches_;
 
+        // Advance the event-driven fallback InputManager::GetTouchState() reads from (see
+        // GetState() above) by exactly one frame: promote Pressed->Moved, retire Released, and
+        // record this frame's locations as "previous" for the next snapshot. Must happen here
+        // (once per frame) rather than inside the getter, so repeated/zero reads in a frame no
+        // longer change what is reported.
+        CNA::Internal::Input::InputManager::AdvanceTouchFrame();
+
         CNA::Internal::Input::GestureDetector::OnUpdate();
     }
 

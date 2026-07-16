@@ -195,8 +195,24 @@ namespace CNA::Internal::Input
 
         /**
          * @brief Returns a snapshot of current touch state.
+         *
+         * This is a pure read: it does not advance previous-location tracking, promote a
+         * Pressed touch to Moved, or retire a Released touch. Calling it any number of times
+         * within the same frame returns identical results. See AdvanceTouchFrame() for the
+         * operation that performs those mutations once per frame.
          */
         static Microsoft::Xna::Framework::Input::Touch::TouchCollection GetTouchState();
+
+        /**
+         * @brief Advances event-driven touch state by exactly one frame.
+         *
+         * For every tracked touch: records the state/position last reported by GetTouchState()
+         * as its previous location, promotes a still-Pressed touch to Moved, then removes any
+         * touch that was Released as of the last snapshot. Must be called exactly once per game
+         * frame (from TouchPanel::Update(), which FrameworkDispatcher::Update() drives once per
+         * Game::Update() tick) — never from a getter, and never more than once per frame.
+         */
+        static void AdvanceTouchFrame();
 
         /**
          * @brief Returns whether any touch point is currently tracked, without mutating state.

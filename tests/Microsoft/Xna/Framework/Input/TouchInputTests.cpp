@@ -28,8 +28,9 @@ namespace
             );
         }
 
-        (void)TouchPanel::GetState();
-        (void)TouchPanel::GetState();
+        // GetTouchState() is a pure read; AdvanceTouchFrame() is what actually retires the
+        // Released touches just set above.
+        CNA::Internal::Input::InputManager::AdvanceTouchFrame();
     }
 }
 
@@ -47,6 +48,14 @@ TEST(TouchInputTest, GetStateReflectsCurrentTouchSnapshot)
     EXPECT_EQ(touchLocation.getStateProperty(), TouchLocationState::Pressed);
     EXPECT_FLOAT_EQ(touchLocation.getPositionProperty().X, 100.5f);
     EXPECT_FLOAT_EQ(touchLocation.getPositionProperty().Y, 200.25f);
+
+    // GetState() is a pure read (INP-AUD-001): a repeated call without an intervening frame
+    // advance must return the identical snapshot, not silently promote Pressed -> Moved.
+    const auto stillPressed = TouchPanel::GetState();
+    ASSERT_EQ(stillPressed.getCountProperty(), 1);
+    EXPECT_EQ(stillPressed[0].getStateProperty(), TouchLocationState::Pressed);
+
+    TouchPanel::Update(); // advances exactly one frame: Pressed -> Moved
 
     const auto nextState = TouchPanel::GetState();
     ASSERT_EQ(nextState.getCountProperty(), 1);
@@ -69,6 +78,13 @@ TEST(TouchInputTest, ReleasedTouchIsReturnedOnceAndThenRemoved)
     ASSERT_EQ(releasedState.getCountProperty(), 1);
     EXPECT_EQ(releasedState[0].getIdProperty(), 21);
     EXPECT_EQ(releasedState[0].getStateProperty(), TouchLocationState::Released);
+
+    // A repeated read within the same frame must still report the Released touch (pure read).
+    const auto releasedStateAgain = TouchPanel::GetState();
+    ASSERT_EQ(releasedStateAgain.getCountProperty(), 1);
+    EXPECT_EQ(releasedStateAgain[0].getStateProperty(), TouchLocationState::Released);
+
+    TouchPanel::Update(); // advances one frame: Released touches are retired
 
     const auto afterReleasedState = TouchPanel::GetState();
     EXPECT_EQ(afterReleasedState.getCountProperty(), 0);

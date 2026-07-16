@@ -178,6 +178,7 @@ from the fake-backend unit tests above.
 | `TouchLocation` `Equals`/`GetHashCode`/`==`/`!=` | **Matches FNA.** |
 | `SDL_EVENT_FINGER_CANCELED` | **Fixed (task 892):** now released like `FINGER_UP` (was unhandled → stuck touch). |
 | `GetCapabilities()` side effects | **Fixed (task 894):** now uses non-mutating `InputManager::HasAnyTouch()`; no longer consumes a touch frame. |
+| `GetState()` read-frequency dependence | **Fixed (INP-AUD-001, 2026-07-16):** `TouchPanel::GetState()`/`InputManager::GetTouchState()` are now pure reads; see below. |
 | `TouchCollection::CopyTo` | **Fixed (task 902):** out-of-range index now throws `std::out_of_range` (was UB). |
 | Empty/default semantics, out-of-range indexer, `IsReadOnly=true` | Equivalent to FNA (empty vector replaces null sentinel; `out_of_range` for bad index). |
 
@@ -223,6 +224,22 @@ from the fake-backend unit tests above.
 - `TryGetPreviousLocation` now writes the out-param on **every** path (DEC-12, fixed 2026-07-05): it
   assigns `TouchLocation(Id, prevState, prevPosition)` and returns `prevState != Invalid`, matching FNA
   exactly (on the `false` path the out-param is the Invalid previous location, not left untouched).
+- **`GetState()`/`GetTouchState()` frame-accurate read (INP-AUD-001, fixed 2026-07-16):** FNA's
+  `TouchPanel.GetState()` is a pure collection read; its frame advance (`SetFinger`-equivalent
+  polling) happens once per frame in FNA's own `Update()`, not inside the getter
+  (`TouchPanel.cs:94-105, 224-228`). CNA's event-driven `InputManager::GetTouchState()` previously
+  advanced `Pressed`→`Moved` promotion, `Released` retirement, and previous-location tracking
+  **inline on every call**, so the reported state depended on how many times application code
+  called `GetState()` per frame rather than on the frame boundary (two reads in one frame could
+  observe `Pressed` then `Moved`; zero reads in a frame silently skipped a promotion/retirement).
+  Fixed by splitting the operation: `GetTouchState()` is now a pure snapshot read, and a new
+  `InputManager::AdvanceTouchFrame()` performs the previous-state promotion/release retirement
+  exactly once per frame, called from `TouchPanel::Update()` — itself driven once per
+  `Game::Update()` tick via `FrameworkDispatcher::Update()`. Pinned by
+  `GetTouchStateIsPureAndRepeatedReadsWithinAFrameAreIdentical`,
+  `AdvanceTouchFrameWorksEvenWithoutAnIntermediateRead`, and
+  `ReleasedTouchIsVisibleForExactlyOnePostAdvanceReadRegardlessOfPriorReads`
+  (`tests/CNA/Internal/Input/TouchEdgeCaseTests.cpp`).
 
 ---
 

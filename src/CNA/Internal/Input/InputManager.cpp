@@ -415,7 +415,6 @@ namespace CNA::Internal::Input
 
         std::vector<Microsoft::Xna::Framework::Input::Touch::TouchLocation> snapshot;
         snapshot.reserve(sortedTouchIds.size());
-        std::vector<int> touchIdsToRemove;
 
         for (const int touchId : sortedTouchIds)
         {
@@ -425,10 +424,10 @@ namespace CNA::Internal::Input
                 continue;
             }
 
-            auto& touchLocation = touchLocationIterator->second;
+            const auto& touchLocation = touchLocationIterator->second;
 
             // Expose the previous-frame location for Moved/Released touches (Pressed/new touches
-            // have no previous, matching FNA). Previous is "what the last GetTouchState reported".
+            // have no previous, matching FNA). Previous is "what AdvanceTouchFrame() last recorded".
             if (touchLocation.PreviousState != TouchLocationState::Invalid)
             {
                 snapshot.emplace_back(touchLocation.Id, touchLocation.State, touchLocation.Position,
@@ -440,7 +439,20 @@ namespace CNA::Internal::Input
                 snapshot.emplace_back(touchLocation.Id, touchLocation.State, touchLocation.Position,
                                       touchLocation.Pressure);
             }
+        }
 
+        return Microsoft::Xna::Framework::Input::Touch::TouchCollection(std::move(snapshot));
+    }
+
+    void InputManager::AdvanceTouchFrame()
+    {
+        auto& touchLocations = getInternalInputState().TouchLocations;
+
+        std::vector<int> touchIdsToRemove;
+        touchIdsToRemove.reserve(touchLocations.size());
+
+        for (auto& [touchId, touchLocation] : touchLocations)
+        {
             // Record the location just reported as "previous" for the next snapshot — done before
             // the Pressed→Moved promotion below, so a promoted touch's previous is the Pressed
             // location the game actually saw, not the promoted Moved state.
@@ -463,8 +475,6 @@ namespace CNA::Internal::Input
         {
             touchLocations.erase(touchId);
         }
-
-        return Microsoft::Xna::Framework::Input::Touch::TouchCollection(std::move(snapshot));
     }
 
 

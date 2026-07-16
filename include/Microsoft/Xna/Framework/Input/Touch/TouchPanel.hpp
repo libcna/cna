@@ -175,6 +175,12 @@ namespace Microsoft::Xna::Framework::Input::Touch
 
         /**
          * @brief Advances touch panel state by one frame.
+         *
+         * Copies the SetFinger()-driven touch array to its previous-frame snapshot, advances the
+         * event-driven InputManager touch map by one frame (see InputManager::AdvanceTouchFrame —
+         * promotes Pressed to Moved, retires Released touches), and updates gesture detection.
+         * Must be called at most once per frame; GetState() itself no longer mutates state.
+         *
          * @note NOXNA — FNA declares `Update` `internal`, not part of the public XNA
          *       `TouchPanel` API. Exposed for `FrameworkDispatcher::Update()`.
          */
