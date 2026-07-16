@@ -2503,7 +2503,16 @@ void main()
 "void main(){\n"
 "    gl_Position=uWVP*vec4(aPos,1.0);\n"
 "    vColor=aColor;\n"
-"    vFogFactor=(uFogEnabled>0.5)?clamp((uFogEnd-aPos.z)/max(uFogEnd-uFogStart,1e-6),0.0,1.0):1.0;\n"
+// Task 1111: matches FNA's EffectHelpers.SetFogVector/Common.fxh ComputeFogFactor exactly
+// (fogFactor=saturate(scale*(z+fogStart)), scale=1/(fogStart-fogEnd), dotted with object-space
+// position since World=View=Identity in every CNA fog test/scene) -- NOT a naive (fogEnd-z)/
+// (fogEnd-fogStart) falloff, which silently inverts/collapses once FogEnd<FogStart (oracle
+// scene fog_gradient_quad) and was never actually equivalent to FNA even for FogStart<FogEnd.
+// EasyGL's own vFogFactor is "fraction of original color" (mix(uFogColor,color,vFogFactor)),
+// the inverse of FNA's fogFactor (lerp(color,fogColor,fogFactor)); simplifying
+// 1-saturate(scale*(z+fogStart)) with EasyGL's uFogStart/uFogEnd naming gives the form below.
+// The FogStart==FogEnd degenerate case (FNA forces fully fogged) is guarded, not sign-clamped.
+"    vFogFactor=(uFogEnabled>0.5)?((abs(uFogEnd-uFogStart)<1e-6)?0.0:clamp((aPos.z+uFogEnd)/(uFogEnd-uFogStart),0.0,1.0)):1.0;\n"
 "}\n";
         static const char* fsrc =
 "#version 300 es\n"
@@ -2554,7 +2563,16 @@ void main()
 "void main(){\n"
 "    gl_Position=uWVP*vec4(aPos,1.0);\n"
 "    vUV=aUV;\n"
-"    vFogFactor=(uFogEnabled>0.5)?clamp((uFogEnd-aPos.z)/max(uFogEnd-uFogStart,1e-6),0.0,1.0):1.0;\n"
+// Task 1111: matches FNA's EffectHelpers.SetFogVector/Common.fxh ComputeFogFactor exactly
+// (fogFactor=saturate(scale*(z+fogStart)), scale=1/(fogStart-fogEnd), dotted with object-space
+// position since World=View=Identity in every CNA fog test/scene) -- NOT a naive (fogEnd-z)/
+// (fogEnd-fogStart) falloff, which silently inverts/collapses once FogEnd<FogStart (oracle
+// scene fog_gradient_quad) and was never actually equivalent to FNA even for FogStart<FogEnd.
+// EasyGL's own vFogFactor is "fraction of original color" (mix(uFogColor,color,vFogFactor)),
+// the inverse of FNA's fogFactor (lerp(color,fogColor,fogFactor)); simplifying
+// 1-saturate(scale*(z+fogStart)) with EasyGL's uFogStart/uFogEnd naming gives the form below.
+// The FogStart==FogEnd degenerate case (FNA forces fully fogged) is guarded, not sign-clamped.
+"    vFogFactor=(uFogEnabled>0.5)?((abs(uFogEnd-uFogStart)<1e-6)?0.0:clamp((aPos.z+uFogEnd)/(uFogEnd-uFogStart),0.0,1.0)):1.0;\n"
 "}\n";
         static const char* fsrc =
 "#version 300 es\n"
@@ -2607,7 +2625,16 @@ void main()
 "    gl_Position=uWVP*vec4(aPos,1.0);\n"
 "    vColor=aColor;\n"
 "    vUV=aUV;\n"
-"    vFogFactor=(uFogEnabled>0.5)?clamp((uFogEnd-aPos.z)/max(uFogEnd-uFogStart,1e-6),0.0,1.0):1.0;\n"
+// Task 1111: matches FNA's EffectHelpers.SetFogVector/Common.fxh ComputeFogFactor exactly
+// (fogFactor=saturate(scale*(z+fogStart)), scale=1/(fogStart-fogEnd), dotted with object-space
+// position since World=View=Identity in every CNA fog test/scene) -- NOT a naive (fogEnd-z)/
+// (fogEnd-fogStart) falloff, which silently inverts/collapses once FogEnd<FogStart (oracle
+// scene fog_gradient_quad) and was never actually equivalent to FNA even for FogStart<FogEnd.
+// EasyGL's own vFogFactor is "fraction of original color" (mix(uFogColor,color,vFogFactor)),
+// the inverse of FNA's fogFactor (lerp(color,fogColor,fogFactor)); simplifying
+// 1-saturate(scale*(z+fogStart)) with EasyGL's uFogStart/uFogEnd naming gives the form below.
+// The FogStart==FogEnd degenerate case (FNA forces fully fogged) is guarded, not sign-clamped.
+"    vFogFactor=(uFogEnabled>0.5)?((abs(uFogEnd-uFogStart)<1e-6)?0.0:clamp((aPos.z+uFogEnd)/(uFogEnd-uFogStart),0.0,1.0)):1.0;\n"
 "}\n";
         static const char* fsrc =
 "#version 300 es\n"
@@ -2667,7 +2694,16 @@ void main()
 "    gl_Position=uWVP*vec4(aPos,1.0);\n"
 "    vNormal=uNormalMatrix*aNormal;\n"
 "    vUV=aUV;\n"
-"    vFogFactor=(uFogEnabled>0.5)?clamp((uFogEnd-aPos.z)/max(uFogEnd-uFogStart,1e-6),0.0,1.0):1.0;\n"
+// Task 1111: matches FNA's EffectHelpers.SetFogVector/Common.fxh ComputeFogFactor exactly
+// (fogFactor=saturate(scale*(z+fogStart)), scale=1/(fogStart-fogEnd), dotted with object-space
+// position since World=View=Identity in every CNA fog test/scene) -- NOT a naive (fogEnd-z)/
+// (fogEnd-fogStart) falloff, which silently inverts/collapses once FogEnd<FogStart (oracle
+// scene fog_gradient_quad) and was never actually equivalent to FNA even for FogStart<FogEnd.
+// EasyGL's own vFogFactor is "fraction of original color" (mix(uFogColor,color,vFogFactor)),
+// the inverse of FNA's fogFactor (lerp(color,fogColor,fogFactor)); simplifying
+// 1-saturate(scale*(z+fogStart)) with EasyGL's uFogStart/uFogEnd naming gives the form below.
+// The FogStart==FogEnd degenerate case (FNA forces fully fogged) is guarded, not sign-clamped.
+"    vFogFactor=(uFogEnabled>0.5)?((abs(uFogEnd-uFogStart)<1e-6)?0.0:clamp((aPos.z+uFogEnd)/(uFogEnd-uFogStart),0.0,1.0)):1.0;\n"
 "    vWorldPos=(uWorld*vec4(aPos,1.0)).xyz;\n"
 "}\n";
         static const char* fsrc =
@@ -2803,7 +2839,16 @@ void main()
 "void main(){\n"
 "    gl_Position=uWVP*vec4(aPos,1.0);\n"
 "    vUV=aUV;\n"
-"    vFogFactor=(uFogEnabled>0.5)?clamp((uFogEnd-aPos.z)/max(uFogEnd-uFogStart,1e-6),0.0,1.0):1.0;\n"
+// Task 1111: matches FNA's EffectHelpers.SetFogVector/Common.fxh ComputeFogFactor exactly
+// (fogFactor=saturate(scale*(z+fogStart)), scale=1/(fogStart-fogEnd), dotted with object-space
+// position since World=View=Identity in every CNA fog test/scene) -- NOT a naive (fogEnd-z)/
+// (fogEnd-fogStart) falloff, which silently inverts/collapses once FogEnd<FogStart (oracle
+// scene fog_gradient_quad) and was never actually equivalent to FNA even for FogStart<FogEnd.
+// EasyGL's own vFogFactor is "fraction of original color" (mix(uFogColor,color,vFogFactor)),
+// the inverse of FNA's fogFactor (lerp(color,fogColor,fogFactor)); simplifying
+// 1-saturate(scale*(z+fogStart)) with EasyGL's uFogStart/uFogEnd naming gives the form below.
+// The FogStart==FogEnd degenerate case (FNA forces fully fogged) is guarded, not sign-clamped.
+"    vFogFactor=(uFogEnabled>0.5)?((abs(uFogEnd-uFogStart)<1e-6)?0.0:clamp((aPos.z+uFogEnd)/(uFogEnd-uFogStart),0.0,1.0)):1.0;\n"
 "    vec3 worldPos=(uWorld*vec4(aPos,1.0)).xyz;\n"
 "    vec3 N=normalize(uNormalMatrix*aNormal);\n"
 "    vec3 E=normalize(uEyePosition-worldPos);\n"
@@ -2884,7 +2929,16 @@ void main()
 "void main(){\n"
 "    gl_Position=uWVP*vec4(aPos,1.0);\n"
 "    vUV=aUV;\n"
-"    vFogFactor=(uFogEnabled>0.5)?clamp((uFogEnd-aPos.z)/max(uFogEnd-uFogStart,1e-6),0.0,1.0):1.0;\n"
+// Task 1111: matches FNA's EffectHelpers.SetFogVector/Common.fxh ComputeFogFactor exactly
+// (fogFactor=saturate(scale*(z+fogStart)), scale=1/(fogStart-fogEnd), dotted with object-space
+// position since World=View=Identity in every CNA fog test/scene) -- NOT a naive (fogEnd-z)/
+// (fogEnd-fogStart) falloff, which silently inverts/collapses once FogEnd<FogStart (oracle
+// scene fog_gradient_quad) and was never actually equivalent to FNA even for FogStart<FogEnd.
+// EasyGL's own vFogFactor is "fraction of original color" (mix(uFogColor,color,vFogFactor)),
+// the inverse of FNA's fogFactor (lerp(color,fogColor,fogFactor)); simplifying
+// 1-saturate(scale*(z+fogStart)) with EasyGL's uFogStart/uFogEnd naming gives the form below.
+// The FogStart==FogEnd degenerate case (FNA forces fully fogged) is guarded, not sign-clamped.
+"    vFogFactor=(uFogEnabled>0.5)?((abs(uFogEnd-uFogStart)<1e-6)?0.0:clamp((aPos.z+uFogEnd)/(uFogEnd-uFogStart),0.0,1.0)):1.0;\n"
 "}\n";
         static const char* fsrc =
 "#version 300 es\n"
@@ -2944,7 +2998,16 @@ void main()
 "    gl_Position=uWVP*vec4(aPos,1.0);\n"
 "    vColor=aColor;\n"
 "    vUV=aUV;\n"
-"    vFogFactor=(uFogEnabled>0.5)?clamp((uFogEnd-aPos.z)/max(uFogEnd-uFogStart,1e-6),0.0,1.0):1.0;\n"
+// Task 1111: matches FNA's EffectHelpers.SetFogVector/Common.fxh ComputeFogFactor exactly
+// (fogFactor=saturate(scale*(z+fogStart)), scale=1/(fogStart-fogEnd), dotted with object-space
+// position since World=View=Identity in every CNA fog test/scene) -- NOT a naive (fogEnd-z)/
+// (fogEnd-fogStart) falloff, which silently inverts/collapses once FogEnd<FogStart (oracle
+// scene fog_gradient_quad) and was never actually equivalent to FNA even for FogStart<FogEnd.
+// EasyGL's own vFogFactor is "fraction of original color" (mix(uFogColor,color,vFogFactor)),
+// the inverse of FNA's fogFactor (lerp(color,fogColor,fogFactor)); simplifying
+// 1-saturate(scale*(z+fogStart)) with EasyGL's uFogStart/uFogEnd naming gives the form below.
+// The FogStart==FogEnd degenerate case (FNA forces fully fogged) is guarded, not sign-clamped.
+"    vFogFactor=(uFogEnabled>0.5)?((abs(uFogEnd-uFogStart)<1e-6)?0.0:clamp((aPos.z+uFogEnd)/(uFogEnd-uFogStart),0.0,1.0)):1.0;\n"
 "}\n";
         static const char* fsrc =
 "#version 300 es\n"
@@ -3025,7 +3088,16 @@ void main()
 "    vFresnel=(uFresnelEnabled>0.5)\n"
 "        ? pow(max(1.0-abs(viewAngle),0.0),uFresnelFactor)*uEnvMapAmount\n"
 "        : uEnvMapAmount;\n"
-"    vFogFactor=(uFogEnabled>0.5)?clamp((uFogEnd-aPos.z)/max(uFogEnd-uFogStart,1e-6),0.0,1.0):1.0;\n"
+// Task 1111: matches FNA's EffectHelpers.SetFogVector/Common.fxh ComputeFogFactor exactly
+// (fogFactor=saturate(scale*(z+fogStart)), scale=1/(fogStart-fogEnd), dotted with object-space
+// position since World=View=Identity in every CNA fog test/scene) -- NOT a naive (fogEnd-z)/
+// (fogEnd-fogStart) falloff, which silently inverts/collapses once FogEnd<FogStart (oracle
+// scene fog_gradient_quad) and was never actually equivalent to FNA even for FogStart<FogEnd.
+// EasyGL's own vFogFactor is "fraction of original color" (mix(uFogColor,color,vFogFactor)),
+// the inverse of FNA's fogFactor (lerp(color,fogColor,fogFactor)); simplifying
+// 1-saturate(scale*(z+fogStart)) with EasyGL's uFogStart/uFogEnd naming gives the form below.
+// The FogStart==FogEnd degenerate case (FNA forces fully fogged) is guarded, not sign-clamped.
+"    vFogFactor=(uFogEnabled>0.5)?((abs(uFogEnd-uFogStart)<1e-6)?0.0:clamp((aPos.z+uFogEnd)/(uFogEnd-uFogStart),0.0,1.0)):1.0;\n"
 "}\n";
         static const char* fsrc =
 "#version 300 es\n"
@@ -3133,7 +3205,16 @@ void main()
 "    vNormal=normalize(mat3(skinMat)*aNormal);\n"
 "    vUV=aUV;\n"
 "    vWorldPos=(uWorld*skinnedPos).xyz;\n"
-"    vFogFactor=(uFogEnabled>0.5)?clamp((uFogEnd-aPos.z)/max(uFogEnd-uFogStart,1e-6),0.0,1.0):1.0;\n"
+// Task 1111: matches FNA's EffectHelpers.SetFogVector/Common.fxh ComputeFogFactor exactly
+// (fogFactor=saturate(scale*(z+fogStart)), scale=1/(fogStart-fogEnd), dotted with object-space
+// position since World=View=Identity in every CNA fog test/scene) -- NOT a naive (fogEnd-z)/
+// (fogEnd-fogStart) falloff, which silently inverts/collapses once FogEnd<FogStart (oracle
+// scene fog_gradient_quad) and was never actually equivalent to FNA even for FogStart<FogEnd.
+// EasyGL's own vFogFactor is "fraction of original color" (mix(uFogColor,color,vFogFactor)),
+// the inverse of FNA's fogFactor (lerp(color,fogColor,fogFactor)); simplifying
+// 1-saturate(scale*(z+fogStart)) with EasyGL's uFogStart/uFogEnd naming gives the form below.
+// The FogStart==FogEnd degenerate case (FNA forces fully fogged) is guarded, not sign-clamped.
+"    vFogFactor=(uFogEnabled>0.5)?((abs(uFogEnd-uFogStart)<1e-6)?0.0:clamp((aPos.z+uFogEnd)/(uFogEnd-uFogStart),0.0,1.0)):1.0;\n"
 "}\n";
 
         static const char* fsrc =
@@ -3275,7 +3356,16 @@ void main()
 "    vec4 skinnedPos=skinMat*vec4(aPos,1.0);\n"
 "    gl_Position=uWVP*skinnedPos;\n"
 "    vUV=aUV;\n"
-"    vFogFactor=(uFogEnabled>0.5)?clamp((uFogEnd-aPos.z)/max(uFogEnd-uFogStart,1e-6),0.0,1.0):1.0;\n"
+// Task 1111: matches FNA's EffectHelpers.SetFogVector/Common.fxh ComputeFogFactor exactly
+// (fogFactor=saturate(scale*(z+fogStart)), scale=1/(fogStart-fogEnd), dotted with object-space
+// position since World=View=Identity in every CNA fog test/scene) -- NOT a naive (fogEnd-z)/
+// (fogEnd-fogStart) falloff, which silently inverts/collapses once FogEnd<FogStart (oracle
+// scene fog_gradient_quad) and was never actually equivalent to FNA even for FogStart<FogEnd.
+// EasyGL's own vFogFactor is "fraction of original color" (mix(uFogColor,color,vFogFactor)),
+// the inverse of FNA's fogFactor (lerp(color,fogColor,fogFactor)); simplifying
+// 1-saturate(scale*(z+fogStart)) with EasyGL's uFogStart/uFogEnd naming gives the form below.
+// The FogStart==FogEnd degenerate case (FNA forces fully fogged) is guarded, not sign-clamped.
+"    vFogFactor=(uFogEnabled>0.5)?((abs(uFogEnd-uFogStart)<1e-6)?0.0:clamp((aPos.z+uFogEnd)/(uFogEnd-uFogStart),0.0,1.0)):1.0;\n"
 "    vec3 worldPos=(uWorld*skinnedPos).xyz;\n"
 "    vec3 N=normalize(mat3(skinMat)*aNormal);\n"
 "    vec3 E=normalize(uEyePosition-worldPos);\n"

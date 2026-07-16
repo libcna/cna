@@ -7,17 +7,22 @@
 // (where the shared per-stride shader already had fog infra), `DualTextureEffect` uses its own
 // dedicated shader (`EnsureDualTextured3DProgram()`, not one of the shared per-stride programs)
 // which had **no fog uniforms at all**. Fixed on both sides: added
-// `uFogEnabled`/`uFogColor`/`uFogStart`/`uFogEnd` uniforms plus the standard
-// `vFogFactor = clamp((FogEnd-z)/(FogEnd-FogStart), 0, 1)` / `mix(FogColor, original, vFogFactor)`
-// blend (mirroring `EnsureTextured3DProgram()`'s identical pattern exactly), then forwarded the 4
-// fog fields in `FillGpuDrawParams()` (mirroring `AlphaTestEffect`'s Task 378 fix).
+// `uFogEnabled`/`uFogColor`/`uFogStart`/`uFogEnd` uniforms plus the standard fog blend (mirroring
+// `EnsureTextured3DProgram()`'s identical pattern exactly), then forwarded the 4 fog fields in
+// `FillGpuDrawParams()` (mirroring `AlphaTestEffect`'s Task 378 fix). Formula corrected under
+// Task 1111 (see plan_graphics.md): `vFogFactor = clamp((z+FogEnd)/(FogEnd-FogStart), 0, 1)` /
+// `mix(FogColor, original, vFogFactor)` — the original `(FogEnd-z)/(FogEnd-FogStart)` was never
+// actually equivalent to FNA's real fog dot product, only coincidentally right at `z=0`.
 //
 // `Texture2=gray(128,128,128)` deliberately cancels Task 383's `color.rgb *= 2` doubling factor
 // (`1(white)*2*0.502(gray)≈1.004`) so the pre-fog material color reduces to ~`DiffuseColor`
 // directly, isolating this test's own variable (fog) the same way Task 385/386 isolated theirs.
 //
-// A 3-point Z-sweep (`z=-0.9` no fog, `z=0.9` full fog, `z=0` half fog) proves the blend is a
-// genuine interpolation, not just an on/off switch — same methodology as Task 378. `World`/`View`/
+// A 3-point Z-sweep (`z=FogStart` full fog, `z=FogEnd` no fog, `z=0` half fog) proves the blend
+// is a genuine interpolation, not just an on/off switch — same methodology as Task 378. A real,
+// easy-to-miss consequence of the real formula: with `View=Identity`, `FogStart` is the FULLY
+// FOGGED boundary here, not the unfogged one the property name might suggest — see
+// `fog_gradient_quad.scene`'s own comment / Task 1111 for the full derivation. `World`/`View`/
 // `Projection` are all Identity, so raw vertex Z is `gl_Position.z` directly (must stay within
 // OpenGL's valid clip-space NDC range `[-1,1]` or the primitive gets frustum-clipped away).
 //
@@ -57,12 +62,12 @@ static const Vector3 kFogColor(0.1f, 0.6f, 0.9f);
 static constexpr float kFogStart = -0.9f;
 static constexpr float kFogEnd   =  0.9f;
 
-// Expected: mix(FogColor, MaterialColor, clamp((FogEnd-z)/(FogEnd-FogStart),0,1)), where
+// Expected: mix(FogColor, MaterialColor, clamp((z+FogEnd)/(FogEnd-FogStart),0,1)), where
 // MaterialColor ≈ white*2*gray(0.502)*DiffuseColor ≈ DiffuseColor (the *2/gray cancellation is
 // not exact -- 2*128/255=1.00392 -- so expected material color is (205,51,102), not (204,51,102)).
-static const Color kExpectedNoFog(205, 51, 102, 255);   // z=-0.9: factor=1, unblended material color
-static const Color kExpectedFullFog(26, 153, 230, 255); // z=0.9:  factor=0, pure fog color
-static const Color kExpectedHalfFog(115, 102, 166, 255);// z=0:    factor=0.5, halfway blend
+static const Color kExpectedNoFog(205, 51, 102, 255);   // z=FogEnd:   factor=1, unblended material color
+static const Color kExpectedFullFog(26, 153, 230, 255); // z=FogStart: factor=0, pure fog color
+static const Color kExpectedHalfFog(115, 102, 166, 255);// z=0:        factor=0.5, halfway blend
 
 class DualTextureFogTest : public Game
 {
@@ -150,13 +155,13 @@ protected:
         Texture2D texWhite(dev, 1, 1); texWhite.SetData(&kWhite, 1);
         Texture2D texGray(dev, 1, 1);  texGray.SetData(&kGrayHalf, 1);
 
-        const Color noFogGot = renderAtZ(dev, texWhite, texGray, kFogStart);
+        const Color noFogGot = renderAtZ(dev, texWhite, texGray, kFogEnd);
         check(matches(noFogGot, kExpectedNoFog),
-              "z=-0.9 (at FogStart): unblended material color", noFogGot, "(205,51,102)");
+              "z=0.9 (at FogEnd): unblended material color", noFogGot, "(205,51,102)");
 
-        const Color fullFogGot = renderAtZ(dev, texWhite, texGray, kFogEnd);
+        const Color fullFogGot = renderAtZ(dev, texWhite, texGray, kFogStart);
         check(matches(fullFogGot, kExpectedFullFog),
-              "z=0.9 (at FogEnd): pure fog color", fullFogGot, "(26,153,230)");
+              "z=-0.9 (at FogStart): pure fog color", fullFogGot, "(26,153,230)");
 
         const Color halfFogGot = renderAtZ(dev, texWhite, texGray, 0.0f);
         check(matches(halfFogGot, kExpectedHalfFog),
