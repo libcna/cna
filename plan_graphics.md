@@ -1155,3 +1155,39 @@ Pipeline tooling available in this project.
 | 1107 | D3D12: real per-vertex-lit HLSL SM5 shader variant + dispatch (may reuse D3D11's compiled shader if the byte layout matches). | ⬜ | Same sequencing note as 1102. |
 | 1108 | Software: real per-vertex-lit CPU rasterizer path. | ⬜ | Same sequencing note as 1102. |
 | 1109 | Regenerate/update every existing lit-scene pixel-test baseline across all touched backends once their own dispatch honors the real default; update `docs/graphics-backend-feature-matrix.md`. | ⬜ | Do this per-backend as each of 1102–1108 closes, not as one giant deferred sweep — matches this project's own "one task = one commit" discipline. |
+
+---
+
+## Phase 81 — `Texture2D` `SurfaceFormat` breadth for the D3D9 XNA-oracle corpus (`plan_dx9.md` D9-121's own gap, 2026-07-16)
+
+> **Scoped out, not implemented — plan only, per explicit project owner request 2026-07-16.**
+> `plan_dx9.md`'s own divergence report (`D9-121`, `docs/d3d9-divergence-report.md`) names
+> "every `SurfaceFormat` besides `Color`" as one of the corpus's honestly-tracked, not-yet-exercised
+> gaps: the `D9-A5` oracle scene format (`tools/xna-oracle/scenes/*.scene`) can only describe an
+> inline, procedurally-generated `SurfaceFormat.Color` texture today (`texturewidth`/
+> `textureheight`/`texturepixel` keys), so no scene has ever exercised `Bgr565`/`Bgra5551`/
+> `Bgra4444`/`Dxt1`/`Dxt3`/`Dxt5`/`NormalizedByte2`/`NormalizedByte4`/etc. against real XNA at all
+> — not a D3D9-backend gap specifically, a gap in the oracle *tooling's* own texture-authoring
+> surface.
+>
+> **Why this is bigger than "add an oracle scene key":** the oracle's `CnaOracleRender.cpp` side
+> constructs its texture via CNA's own real, public `Texture2D` API (matching `D9-A3`'s own
+> "byte-for-byte equivalent CNA app... via CNA's real public API" contract) — so testing a
+> non-`Color` format means `Texture2D` itself needs a real, working `SetData`/constructor path for
+> that format first. Some of these (`Bgr565`/`Bgra5551`/`Bgra4444`) are plain uncompressed formats
+> and likely a smaller lift; the DXT-compressed formats need real block-compressed data authored
+> by *something* (hand-encoded, mirroring the existing DXT1 cubemap fixture precedent in Task 934's
+> own test) on both the C# (`Oracle.cs`) and C++ (`CnaOracleRender.cpp`) sides, in the same format,
+> byte-for-byte — a real, nontrivial authoring task in its own right, not just a config flag.
+>
+> **Decision needed before implementation starts**: which formats are worth the effort (the full
+> Reach/HiDef whitelist `plan_dx9.md` `D9-100` already researched, or a smaller representative
+> subset — e.g. one uncompressed 16-bit format + one DXT format, enough to catch a genuine format-
+> conversion bug without authoring all 9/20 Reach/HiDef formats), and whether this belongs to the
+> D3D9 oracle specifically or should feed a more general cross-backend `SurfaceFormat` conformance
+> effort (Phase 34, already closed/archived for the pre-existing backends — this would reopen that
+> question with the oracle as a new, stronger verification method). Not decided as of this entry.
+
+| #    | Task | Status | Notes |
+| ---- | ---- | ------ | ----- |
+| 1110 | Decide scope: which `SurfaceFormat` values justify oracle coverage, and whether `Texture2D`'s own API needs new construction/`SetData` paths for any of them before the oracle scene format can even describe one. | ⬜ | Project-owner decision needed before any implementation task is scoped further — see this phase's own intro. Not started. |
