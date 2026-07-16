@@ -1144,9 +1144,16 @@ namespace CNA::Internal::Backends::D3D11
         else if (needsEnvMap)
             variant = D3DCommon::D3DShaderVariant::EnvMap3d;
         else if (needsSkinned)
-            variant = D3DCommon::D3DShaderVariant::Skinned3d;
+            // plan_graphics.md Phase 80 (Task 1106): real XNA renders SkinnedEffect's lit path
+            // per-vertex by default (PreferPerPixelLighting == false), not per-pixel.
+            variant = (params.lightingEnabled && !params.preferPerPixelLighting)
+                    ? D3DCommon::D3DShaderVariant::Skinned3dVertexLit
+                    : D3DCommon::D3DShaderVariant::Skinned3d;
         else if (needsLitTextured)
-            variant = D3DCommon::D3DShaderVariant::LitTextured3d;
+            // Same real-default fix for BasicEffect's lit-textured bucket.
+            variant = (params.lightingEnabled && !params.preferPerPixelLighting)
+                    ? D3DCommon::D3DShaderVariant::LitTextured3dVertexLit
+                    : D3DCommon::D3DShaderVariant::LitTextured3d;
         else
         {
             switch (stride)
