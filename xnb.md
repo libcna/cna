@@ -1,6 +1,6 @@
 # XNB binary content pipeline: implementation plan for CNA
 
-> **Status: 🔄 PARTIALLY UN-FROZEN 2026-07-16 — MVP scope complete, Phase D (LZX) mostly done,
+> **Status: 🔄 PARTIALLY UN-FROZEN 2026-07-16 — MVP scope complete, Phase D (LZX) fully complete,
 > Phase E (`SpriteFont`, stock effects, `SoundEffect`/`Song`, `ReadExternalReference<T>()`) fully
 > complete; broad coverage past that still deferred.** CNA's owner decided `.xnb` should become a
 > real, additional runtime format again, alongside the already-implemented
@@ -10,9 +10,13 @@
 > (container parsing, binary primitives, the uncompressed-only case, and a first real `Texture2D`
 > reader — this plan's own M1/M2 milestones) is fully complete. CNA's owner then explicitly
 > requested Phase D (LZX decompression) next: it is now implemented and verified against real
-> compressed fixtures, with XNB-27 (a dedicated `XnbCompression` enum) and XNB-30A (fuzz/
-> differential testing) deliberately left open — see `plan_xnb.md`'s Phase D section for exact
-> scope. CNA's owner then explicitly requested M3 next: `SpriteFontReader` and a `SoundEffectReader`
+> compressed fixtures. Asked to close out Phase D's own remaining gaps the same day: XNB-27 (a real
+> `XnbCompression` enum, both bit values confirmed against MonoGame's own source rather than
+> guessed) and XNB-30A (fuzz + differential testing against FNA's own reference `LzxDecoder.cs` run
+> under Mono, which found and fixed a real heap-buffer-overflow) are both done -- Phase D now has no
+> open tasks besides XNB-30C, still correctly deferred to Phase G; see `plan_xnb.md`'s Phase D
+> section for exact scope. CNA's owner then explicitly requested M3 next: `SpriteFontReader` and a
+> `SoundEffectReader`
 > covering at least one real wave-format variant, reaching M3's own Definition of Done; asked to
 > continue the same day, the rest of Phase E followed too -- `ReadExternalReference<T>()`, the 5
 > stock-effect readers, the general `EffectReader`'s diagnostic path, and `SongReader` -- so Phase E
