@@ -9,9 +9,17 @@ include_guard(GLOBAL)
 #
 # cna_register_backend_test(NAME <ctest-name> COMMAND <command...>
 #                            [TIMEOUT <seconds>] [LABELS <label...>]
-#                            [ENVIRONMENT <NAME=value;...>] [WORKING_DIRECTORY <dir>])
+#                            [ENVIRONMENT <NAME=value;...>] [WORKING_DIRECTORY <dir>]
+#                            [SKIP_REGULAR_EXPRESSION <pattern>])
+#
+# ENVIRONMENT/LABELS values routinely contain literal semicolons (e.g.
+# "SDL_VIDEODRIVER=x11;DISPLAY=:0", "GraphicsSmoke;WebGPU"). Those must be
+# \;-escaped before going into the intermediate _cna_test_props list, otherwise
+# list(APPEND) flattens them into extra list elements and the final
+# set_tests_properties(... PROPERTIES ${_cna_test_props}) call receives a
+# corrupted, unbalanced argument list.
 function(cna_register_backend_test)
-    cmake_parse_arguments(T "" "NAME;TIMEOUT;WORKING_DIRECTORY" "COMMAND;LABELS;ENVIRONMENT" ${ARGN})
+    cmake_parse_arguments(T "" "NAME;TIMEOUT;WORKING_DIRECTORY;SKIP_REGULAR_EXPRESSION" "COMMAND;LABELS;ENVIRONMENT" ${ARGN})
 
     add_test(NAME ${T_NAME} COMMAND ${T_COMMAND})
 
@@ -20,13 +28,19 @@ function(cna_register_backend_test)
         list(APPEND _cna_test_props TIMEOUT ${T_TIMEOUT})
     endif()
     if(T_LABELS)
-        list(APPEND _cna_test_props LABELS "${T_LABELS}")
+        string(REPLACE ";" "\\;" _cna_labels_escaped "${T_LABELS}")
+        list(APPEND _cna_test_props LABELS "${_cna_labels_escaped}")
     endif()
     if(T_ENVIRONMENT)
-        list(APPEND _cna_test_props ENVIRONMENT "${T_ENVIRONMENT}")
+        string(REPLACE ";" "\\;" _cna_environment_escaped "${T_ENVIRONMENT}")
+        list(APPEND _cna_test_props ENVIRONMENT "${_cna_environment_escaped}")
     endif()
     if(DEFINED T_WORKING_DIRECTORY)
         list(APPEND _cna_test_props WORKING_DIRECTORY "${T_WORKING_DIRECTORY}")
+    endif()
+    if(T_SKIP_REGULAR_EXPRESSION)
+        string(REPLACE ";" "\\;" _cna_skip_regex_escaped "${T_SKIP_REGULAR_EXPRESSION}")
+        list(APPEND _cna_test_props SKIP_REGULAR_EXPRESSION "${_cna_skip_regex_escaped}")
     endif()
     if(_cna_test_props)
         set_tests_properties(${T_NAME} PROPERTIES ${_cna_test_props})

@@ -1603,21 +1603,14 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         enable_testing()
 
         # Task 85: 3-frame smoke test
-        add_test(NAME EasyGL_House3D_SmokeTest
-                 COMMAND cna_house3d_demo --smoke 3)
-        set_tests_properties(EasyGL_House3D_SmokeTest PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
-            LABELS GraphicsSmoke)
+        cna_register_backend_test(NAME EasyGL_House3D_SmokeTest COMMAND cna_house3d_demo --smoke 3
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}" LABELS "GraphicsSmoke")
 
         # Task 86: textured quad pixel readback
         cna_easygl_test(cna_test_easygl_textured_quad
                         examples/easygl_textured_quad_test.cpp)
-        add_test(NAME EasyGL_TexturedQuad_Readback
-                 COMMAND cna_test_easygl_textured_quad)
-        set_tests_properties(EasyGL_TexturedQuad_Readback PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_TexturedQuad_Readback COMMAND cna_test_easygl_textured_quad
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # plan_software.md SOFTWARE-61/84: this backend's half of the cross-backend diagnostic
         # dump -- not registered as a ctest, just a plain executable a developer/script runs by
@@ -1640,11 +1633,8 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         # Task 461: canary proving the new shared PixelTestGame helper (examples/common/) works
         cna_easygl_test(cna_test_easygl_pixeltestgame_smoke
                         examples/easygl_pixeltestgame_smoke_test.cpp)
-        add_test(NAME EasyGL_PixelTestGame_Smoke
-                 COMMAND cna_test_easygl_pixeltestgame_smoke)
-        set_tests_properties(EasyGL_PixelTestGame_Smoke PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_PixelTestGame_Smoke COMMAND cna_test_easygl_pixeltestgame_smoke
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 463: canary proving PixelTestGame::CompareGoldenImage() (examples/common/) works.
         # WORKING_DIRECTORY is set to the repo root so the test's relative
@@ -1653,242 +1643,156 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         # CMAKE_CURRENT_BINARY_DIR, not the source tree).
         cna_easygl_test(cna_test_easygl_goldenimage_smoke
                         examples/easygl_goldenimage_smoke_test.cpp)
-        add_test(NAME EasyGL_GoldenImage_Smoke
-                 COMMAND cna_test_easygl_goldenimage_smoke)
-        set_tests_properties(EasyGL_GoldenImage_Smoke PROPERTIES
-            TIMEOUT 30
-            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_GoldenImage_Smoke COMMAND cna_test_easygl_goldenimage_smoke
+            TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 464: first real (non-canary) golden-image case, reusing Phase 42's already-
         # verified BasicEffect capstone scene (Task 370).
         cna_easygl_test(cna_test_easygl_basiceffect_golden
                         examples/easygl_basiceffect_golden_test.cpp)
-        add_test(NAME EasyGL_BasicEffect_Golden
-                 COMMAND cna_test_easygl_basiceffect_golden)
-        set_tests_properties(EasyGL_BasicEffect_Golden PROPERTIES
-            TIMEOUT 30
-            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_BasicEffect_Golden COMMAND cna_test_easygl_basiceffect_golden
+            TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 465: golden-image case reusing Phase 47's already-verified SpriteBatch
         # rotation-around-origin scene (Task 417).
         cna_easygl_test(cna_test_easygl_spritebatch_rotation_golden
                         examples/easygl_spritebatch_rotation_golden_test.cpp)
-        add_test(NAME EasyGL_SpriteBatch_Rotation_Golden
-                 COMMAND cna_test_easygl_spritebatch_rotation_golden)
-        set_tests_properties(EasyGL_SpriteBatch_Rotation_Golden PROPERTIES
-            TIMEOUT 30
-            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_SpriteBatch_Rotation_Golden COMMAND cna_test_easygl_spritebatch_rotation_golden
+            TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 466: golden-image case reusing Phase 35's already-verified texture-filter
         # magnification/Linear scene (Task 297).
         cna_easygl_test(cna_test_easygl_texture_filter_linear_golden
                         examples/easygl_texture_filter_linear_golden_test.cpp)
-        add_test(NAME EasyGL_TextureFilter_Linear_Golden
-                 COMMAND cna_test_easygl_texture_filter_linear_golden)
-        set_tests_properties(EasyGL_TextureFilter_Linear_Golden PROPERTIES
-            TIMEOUT 30
-            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_TextureFilter_Linear_Golden COMMAND cna_test_easygl_texture_filter_linear_golden
+            TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 467: golden-image case reusing Phase 36's already-verified BlendState::Additive
         # scene (Task 306).
         cna_easygl_test(cna_test_easygl_blendstate_additive_golden
                         examples/easygl_blendstate_additive_golden_test.cpp)
-        add_test(NAME EasyGL_BlendState_Additive_Golden
-                 COMMAND cna_test_easygl_blendstate_additive_golden)
-        set_tests_properties(EasyGL_BlendState_Additive_Golden PROPERTIES
-            TIMEOUT 30
-            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_BlendState_Additive_Golden COMMAND cna_test_easygl_blendstate_additive_golden
+            TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 468: golden-image cases reusing Phase 37's DepthStencilState write-enable scene
         # (Task 313) and Phase 38's RasterizerState.CullMode scene (Task 323) -- two separate
         # files, one per phase, since no existing test combines both areas.
         cna_easygl_test(cna_test_easygl_depthstencilstate_write_enable_golden
                         examples/easygl_depthstencilstate_write_enable_golden_test.cpp)
-        add_test(NAME EasyGL_DepthStencilState_WriteEnable_Golden
-                 COMMAND cna_test_easygl_depthstencilstate_write_enable_golden)
-        set_tests_properties(EasyGL_DepthStencilState_WriteEnable_Golden PROPERTIES
-            TIMEOUT 30
-            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_DepthStencilState_WriteEnable_Golden COMMAND cna_test_easygl_depthstencilstate_write_enable_golden
+            TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_rasterizerstate_cullmode_golden
                         examples/easygl_rasterizerstate_cullmode_golden_test.cpp)
-        add_test(NAME EasyGL_RasterizerState_CullMode_Golden
-                 COMMAND cna_test_easygl_rasterizerstate_cullmode_golden)
-        set_tests_properties(EasyGL_RasterizerState_CullMode_Golden PROPERTIES
-            TIMEOUT 30
-            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_RasterizerState_CullMode_Golden COMMAND cna_test_easygl_rasterizerstate_cullmode_golden
+            TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 469: golden-image cases reusing Phases 43-46's already-verified stock-effect
         # scenes (AlphaTestEffect/Task 373, DualTextureEffect/Task 389, EnvironmentMapEffect/
         # Task 399, SkinnedEffect/Task 409) -- 4 separate files, one per phase.
         cna_easygl_test(cna_test_easygl_alphatesteffect_golden
                         examples/easygl_alphatesteffect_golden_test.cpp)
-        add_test(NAME EasyGL_AlphaTestEffect_Golden
-                 COMMAND cna_test_easygl_alphatesteffect_golden)
-        set_tests_properties(EasyGL_AlphaTestEffect_Golden PROPERTIES
-            TIMEOUT 30
-            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_AlphaTestEffect_Golden COMMAND cna_test_easygl_alphatesteffect_golden
+            TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_dualtextureeffect_golden
                         examples/easygl_dualtextureeffect_golden_test.cpp)
-        add_test(NAME EasyGL_DualTextureEffect_Golden
-                 COMMAND cna_test_easygl_dualtextureeffect_golden)
-        set_tests_properties(EasyGL_DualTextureEffect_Golden PROPERTIES
-            TIMEOUT 30
-            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_DualTextureEffect_Golden COMMAND cna_test_easygl_dualtextureeffect_golden
+            TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_environmentmapeffect_golden
                         examples/easygl_environmentmapeffect_golden_test.cpp)
-        add_test(NAME EasyGL_EnvironmentMapEffect_Golden
-                 COMMAND cna_test_easygl_environmentmapeffect_golden)
-        set_tests_properties(EasyGL_EnvironmentMapEffect_Golden PROPERTIES
-            TIMEOUT 30
-            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_EnvironmentMapEffect_Golden COMMAND cna_test_easygl_environmentmapeffect_golden
+            TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_skinnedeffect_golden
                         examples/easygl_skinnedeffect_golden_test.cpp)
-        add_test(NAME EasyGL_SkinnedEffect_Golden
-                 COMMAND cna_test_easygl_skinnedeffect_golden)
-        set_tests_properties(EasyGL_SkinnedEffect_Golden PROPERTIES
-            TIMEOUT 30
-            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_SkinnedEffect_Golden COMMAND cna_test_easygl_skinnedeffect_golden
+            TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 87: RenderTarget2D → texture → readback
         cna_easygl_test(cna_test_easygl_render_target
                         examples/easygl_render_target_test.cpp)
-        add_test(NAME EasyGL_RenderTarget2D_Readback
-                 COMMAND cna_test_easygl_render_target)
-        set_tests_properties(EasyGL_RenderTarget2D_Readback PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_RenderTarget2D_Readback COMMAND cna_test_easygl_render_target
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 335: RenderTarget2D depth buffer is real and functional (not just a stored property)
         cna_easygl_test(cna_test_easygl_rendertarget2d_depth
                         examples/rendertarget2d_depth_test.cpp)
-        add_test(NAME EasyGL_RenderTarget2D_DepthBuffer
-                 COMMAND cna_test_easygl_rendertarget2d_depth)
-        set_tests_properties(EasyGL_RenderTarget2D_DepthBuffer PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_RenderTarget2D_DepthBuffer COMMAND cna_test_easygl_rendertarget2d_depth
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 336: RenderTarget2D mip chain is genuinely GL-complete after auto-generation on unbind
         cna_easygl_test(cna_test_easygl_rendertarget2d_mip
                         examples/easygl_rendertarget2d_mip_test.cpp)
-        add_test(NAME EasyGL_RenderTarget2D_MipComplete
-                 COMMAND cna_test_easygl_rendertarget2d_mip)
-        set_tests_properties(EasyGL_RenderTarget2D_MipComplete PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_RenderTarget2D_MipComplete COMMAND cna_test_easygl_rendertarget2d_mip
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 337: RenderTarget2D MSAA resolve genuinely anti-aliases (not just solid-fill safe)
         cna_easygl_test(cna_test_easygl_rendertarget2d_msaa
                         examples/easygl_rendertarget2d_msaa_test.cpp)
-        add_test(NAME EasyGL_RenderTarget2D_MsaaResolve
-                 COMMAND cna_test_easygl_rendertarget2d_msaa)
-        set_tests_properties(EasyGL_RenderTarget2D_MsaaResolve PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_RenderTarget2D_MsaaResolve COMMAND cna_test_easygl_rendertarget2d_msaa
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 338: SetRenderTarget(nullptr) resets Viewport/ScissorRectangle to the backbuffer
         cna_easygl_test(cna_test_easygl_rendertarget_viewport_scissor_reset
                         examples/rendertarget_viewport_scissor_reset_test.cpp)
-        add_test(NAME EasyGL_RenderTarget_ViewportScissorReset
-                 COMMAND cna_test_easygl_rendertarget_viewport_scissor_reset)
-        set_tests_properties(EasyGL_RenderTarget_ViewportScissorReset PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_RenderTarget_ViewportScissorReset COMMAND cna_test_easygl_rendertarget_viewport_scissor_reset
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 22: BasicEffect property tests
         cna_easygl_test(cna_test_basic_effect
                         examples/basic_effect_test.cpp)
-        add_test(NAME EasyGL_BasicEffect_Properties
-                 COMMAND cna_test_basic_effect)
-        set_tests_properties(EasyGL_BasicEffect_Properties PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_BasicEffect_Properties COMMAND cna_test_basic_effect
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 23: AlphaTestEffect property tests
         cna_easygl_test(cna_test_alpha_test_effect
                         examples/alpha_test_effect_test.cpp)
-        add_test(NAME EasyGL_AlphaTestEffect_Properties
-                 COMMAND cna_test_alpha_test_effect)
-        set_tests_properties(EasyGL_AlphaTestEffect_Properties PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_AlphaTestEffect_Properties COMMAND cna_test_alpha_test_effect
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 24: SkinnedEffect property tests
         cna_easygl_test(cna_test_skinned_effect
                         examples/skinned_effect_test.cpp)
-        add_test(NAME EasyGL_SkinnedEffect_Properties
-                 COMMAND cna_test_skinned_effect)
-        set_tests_properties(EasyGL_SkinnedEffect_Properties PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_SkinnedEffect_Properties COMMAND cna_test_skinned_effect
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 27: SpriteFont property and MeasureString tests
         cna_easygl_test(cna_test_sprite_font
                         examples/sprite_font_test.cpp)
-        add_test(NAME EasyGL_SpriteFont_Properties
-                 COMMAND cna_test_sprite_font)
-        set_tests_properties(EasyGL_SpriteFont_Properties PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_SpriteFont_Properties COMMAND cna_test_sprite_font
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 35: OcclusionQuery begin/end/IsComplete integration test
         cna_easygl_test(cna_test_occlusion_query
                         examples/occlusion_query_test.cpp)
-        add_test(NAME EasyGL_OcclusionQuery_Cycle
-                 COMMAND cna_test_occlusion_query)
-        set_tests_properties(EasyGL_OcclusionQuery_Cycle PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_OcclusionQuery_Cycle COMMAND cna_test_occlusion_query
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 445: Pixel/query test -- fully visible quad returns a positive occlusion-query pixel count.
         cna_easygl_test(cna_test_easygl_occlusion_query_visible_quad
                         examples/easygl_occlusion_query_visible_quad_test.cpp)
-        add_test(NAME EasyGL_OcclusionQuery_VisibleQuad
-                 COMMAND cna_test_easygl_occlusion_query_visible_quad)
-        set_tests_properties(EasyGL_OcclusionQuery_VisibleQuad PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_OcclusionQuery_VisibleQuad COMMAND cna_test_easygl_occlusion_query_visible_quad
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 446: Pixel/query test -- fully occluded quad returns a zero occlusion-query pixel count.
         cna_easygl_test(cna_test_easygl_occlusion_query_occluded_quad
                         examples/easygl_occlusion_query_occluded_quad_test.cpp)
-        add_test(NAME EasyGL_OcclusionQuery_OccludedQuad
-                 COMMAND cna_test_easygl_occlusion_query_occluded_quad)
-        set_tests_properties(EasyGL_OcclusionQuery_OccludedQuad PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_OcclusionQuery_OccludedQuad COMMAND cna_test_easygl_occlusion_query_occluded_quad
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 122: AlphaTestEffect GPU alpha cutout + pixel readback
         cna_easygl_test(cna_test_alpha_test_integration
                         examples/alpha_test_integration_test.cpp)
-        add_test(NAME EasyGL_AlphaTestEffect_AlphaCutout
-                 COMMAND cna_test_alpha_test_integration)
-        set_tests_properties(EasyGL_AlphaTestEffect_AlphaCutout PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_AlphaTestEffect_AlphaCutout COMMAND cna_test_alpha_test_integration
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 123: SkinnedEffect 2-bone GPU transform + mesh deformation
         cna_easygl_test(cna_test_skinned_integration
                         examples/skinned_effect_integration_test.cpp)
-        add_test(NAME EasyGL_SkinnedEffect_BoneDeformation
-                 COMMAND cna_test_skinned_integration)
-        set_tests_properties(EasyGL_SkinnedEffect_BoneDeformation PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_SkinnedEffect_BoneDeformation COMMAND cna_test_skinned_integration
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 10.14: AvatarRenderer::EnableRealRenderingEXT/DrawRealEXT real GPU-skinned
         # rendering (Phase 10 — Avatar real-rendering NOXNA/EXT extension). Needs
@@ -1898,320 +1802,221 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             cna_easygl_test(cna_test_avatar_real_render
                             examples/avatar_real_render_integration_test.cpp)
             target_link_libraries(cna_test_avatar_real_render PRIVATE CNA_GamerServices)
-            add_test(NAME EasyGL_AvatarRenderer_RealRender
-                     COMMAND cna_test_avatar_real_render)
-            set_tests_properties(EasyGL_AvatarRenderer_RealRender PROPERTIES
-                TIMEOUT 30
-                ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+            cna_register_backend_test(NAME EasyGL_AvatarRenderer_RealRender COMMAND cna_test_avatar_real_render
+                TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
             # Task 11.21: SkinnedModelEXT::AttachPartEXT runtime wardrobe-attach real render.
             cna_easygl_test(cna_test_avatar_attach_part
                             examples/avatar_attach_part_integration_test.cpp)
             target_link_libraries(cna_test_avatar_attach_part PRIVATE CNA_GamerServices)
-            add_test(NAME EasyGL_AvatarRenderer_AttachPart
-                     COMMAND cna_test_avatar_attach_part)
-            set_tests_properties(EasyGL_AvatarRenderer_AttachPart PROPERTIES
-                TIMEOUT 30
-                ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+            cna_register_backend_test(NAME EasyGL_AvatarRenderer_AttachPart COMMAND cna_test_avatar_attach_part
+                TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
             # Task 11.24: AvatarRenderer::PartTintEXT per-part tint routing regression test.
             cna_easygl_test(cna_test_avatar_tint_routing
                             examples/avatar_tint_routing_integration_test.cpp)
             target_link_libraries(cna_test_avatar_tint_routing PRIVATE CNA_GamerServices)
-            add_test(NAME EasyGL_AvatarRenderer_TintRouting
-                     COMMAND cna_test_avatar_tint_routing)
-            set_tests_properties(EasyGL_AvatarRenderer_TintRouting PROPERTIES
-                TIMEOUT 30
-                ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+            cna_register_backend_test(NAME EasyGL_AvatarRenderer_TintRouting COMMAND cna_test_avatar_tint_routing
+                TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
         endif()
 
         # Task 125: DXT1 texture loaded via FromStream, rendered, pixel readback
         cna_easygl_test(cna_test_dxt1_texture
                         examples/dxt1_texture_test.cpp)
-        add_test(NAME EasyGL_DXT1_FromStream_Readback
-                 COMMAND cna_test_dxt1_texture)
-        set_tests_properties(EasyGL_DXT1_FromStream_Readback PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_DXT1_FromStream_Readback COMMAND cna_test_dxt1_texture
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 132: ShaderEffect (GLSL) with SpriteBatch — red-tint over green background
         cna_easygl_test(cna_test_easygl_shader_effect
                         examples/easygl_shader_effect_test.cpp)
-        add_test(NAME EasyGL_ShaderEffect_GLSL
-                 COMMAND cna_test_easygl_shader_effect)
-        set_tests_properties(EasyGL_ShaderEffect_GLSL PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_ShaderEffect_GLSL COMMAND cna_test_easygl_shader_effect
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 1077: ShaderEffect::SetUniformXxx() must reach the real draw via SpriteBatch
         cna_easygl_test(cna_test_easygl_shader_effect_spritebatch_uniform
                         examples/easygl_shader_effect_spritebatch_uniform_test.cpp)
-        add_test(NAME EasyGL_ShaderEffect_SpriteBatch_Uniform
-                 COMMAND cna_test_easygl_shader_effect_spritebatch_uniform)
-        set_tests_properties(EasyGL_ShaderEffect_SpriteBatch_Uniform PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_ShaderEffect_SpriteBatch_Uniform COMMAND cna_test_easygl_shader_effect_spritebatch_uniform
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 946: BloomExtract.fx HLSL->GLSL conversion proof + .shader.json ContentManager round-trip
         cna_easygl_test(cna_test_easygl_bloom_extract
                         examples/easygl_bloom_extract_test.cpp)
-        add_test(NAME EasyGL_Bloom_Extract
-                 COMMAND cna_test_easygl_bloom_extract)
-        set_tests_properties(EasyGL_Bloom_Extract PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_Bloom_Extract COMMAND cna_test_easygl_bloom_extract
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 946: GaussianBlur.fx HLSL->GLSL conversion proof (array uniforms)
         cna_easygl_test(cna_test_easygl_bloom_gaussianblur
                         examples/easygl_bloom_gaussianblur_test.cpp)
-        add_test(NAME EasyGL_Bloom_GaussianBlur
-                 COMMAND cna_test_easygl_bloom_gaussianblur)
-        set_tests_properties(EasyGL_Bloom_GaussianBlur PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_Bloom_GaussianBlur COMMAND cna_test_easygl_bloom_gaussianblur
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 946: BloomCombine.fx HLSL->GLSL conversion proof (2nd texture unit)
         cna_easygl_test(cna_test_easygl_bloom_combine
                         examples/easygl_bloom_combine_test.cpp)
-        add_test(NAME EasyGL_Bloom_Combine
-                 COMMAND cna_test_easygl_bloom_combine)
-        set_tests_properties(EasyGL_Bloom_Combine PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_Bloom_Combine COMMAND cna_test_easygl_bloom_combine
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 946: full 4-pass BloomSample pipeline end-to-end proof (extract->blurH->blurV->combine)
         cna_easygl_test(cna_test_easygl_bloom_pipeline
                         examples/easygl_bloom_pipeline_test.cpp)
-        add_test(NAME EasyGL_Bloom_Pipeline
-                 COMMAND cna_test_easygl_bloom_pipeline)
-        set_tests_properties(EasyGL_Bloom_Pipeline PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_Bloom_Pipeline COMMAND cna_test_easygl_bloom_pipeline
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 947 (Phase 78 rollout): Clouds.fx HLSL->GLSL conversion proof -- clears NetRumble's
         # shader blocker (the bloom trio above already proved the other 3 of its 4 shaders).
         cna_easygl_test(cna_test_easygl_clouds_shader
                         examples/easygl_clouds_shader_test.cpp)
-        add_test(NAME EasyGL_Clouds_Shader
-                 COMMAND cna_test_easygl_clouds_shader)
-        set_tests_properties(EasyGL_Clouds_Shader PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_Clouds_Shader COMMAND cna_test_easygl_clouds_shader
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 1079: ShaderEffect can now drive a real 3D DrawIndexedPrimitives() call, not just
         # SpriteBatch -- verifies World/View/Projection + attribute wiring for stride-32 vertices.
         cna_easygl_test(cna_test_easygl_shadereffect_3d
                         examples/easygl_shadereffect_3d_test.cpp)
-        add_test(NAME EasyGL_ShaderEffect_3D
-                 COMMAND cna_test_easygl_shadereffect_3d)
-        set_tests_properties(EasyGL_ShaderEffect_3D PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_ShaderEffect_3D COMMAND cna_test_easygl_shadereffect_3d
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 947 (Phase 78 rollout): PerPixelLighting.fx's PerPixelDiffuseAndPhong technique --
         # first real 3D shader conversion, using Task 1079's new 3D ShaderEffect capability.
         cna_easygl_test(cna_test_easygl_perpixellighting_shader
                         examples/easygl_perpixellighting_shader_test.cpp)
-        add_test(NAME EasyGL_PerPixelLighting_Shader
-                 COMMAND cna_test_easygl_perpixellighting_shader)
-        set_tests_properties(EasyGL_PerPixelLighting_Shader PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_PerPixelLighting_Shader COMMAND cna_test_easygl_perpixellighting_shader
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 947: PerPixelLighting.fx's PerPixelDiffuse technique (diffuse-only, no specular).
         cna_easygl_test(cna_test_easygl_perpixellighting_diffuseonly_shader
                         examples/easygl_perpixellighting_diffuseonly_shader_test.cpp)
-        add_test(NAME EasyGL_PerPixelLighting_DiffuseOnly_Shader
-                 COMMAND cna_test_easygl_perpixellighting_diffuseonly_shader)
-        set_tests_properties(EasyGL_PerPixelLighting_DiffuseOnly_Shader PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_PerPixelLighting_DiffuseOnly_Shader COMMAND cna_test_easygl_perpixellighting_diffuseonly_shader
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 947: PerPixelLighting.fx's PerVertexDiffuseAndPerPixelPhong technique (diffuse per
         # vertex, specular per pixel).
         cna_easygl_test(cna_test_easygl_perpixellighting_vertexdiffuse_pixelphong_shader
                         examples/easygl_perpixellighting_vertexdiffuse_pixelphong_shader_test.cpp)
-        add_test(NAME EasyGL_PerPixelLighting_VertexDiffusePixelPhong_Shader
-                 COMMAND cna_test_easygl_perpixellighting_vertexdiffuse_pixelphong_shader)
-        set_tests_properties(EasyGL_PerPixelLighting_VertexDiffusePixelPhong_Shader PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_PerPixelLighting_VertexDiffusePixelPhong_Shader COMMAND cna_test_easygl_perpixellighting_vertexdiffuse_pixelphong_shader
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 947: VertexLighting.fx's PerVertexDiffuse technique (diffuse-only, fully per vertex).
         cna_easygl_test(cna_test_easygl_vertexlighting_diffuse_shader
                         examples/easygl_vertexlighting_diffuse_shader_test.cpp)
-        add_test(NAME EasyGL_VertexLighting_Diffuse_Shader
-                 COMMAND cna_test_easygl_vertexlighting_diffuse_shader)
-        set_tests_properties(EasyGL_VertexLighting_Diffuse_Shader PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_VertexLighting_Diffuse_Shader COMMAND cna_test_easygl_vertexlighting_diffuse_shader
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 947: VertexLighting.fx's PerVertexDiffuseAndPhong technique (diffuse+specular, fully
         # per vertex) -- with this one, all 5 of PerPixelLighting sample's effect/technique
         # combinations are ported.
         cna_easygl_test(cna_test_easygl_vertexlighting_diffusephong_shader
                         examples/easygl_vertexlighting_diffusephong_shader_test.cpp)
-        add_test(NAME EasyGL_VertexLighting_DiffusePhong_Shader
-                 COMMAND cna_test_easygl_vertexlighting_diffusephong_shader)
-        set_tests_properties(EasyGL_VertexLighting_DiffusePhong_Shader PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_VertexLighting_DiffusePhong_Shader COMMAND cna_test_easygl_vertexlighting_diffusephong_shader
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 947: VertexLightingSample's OWN VertexLighting.fx (directional light -- distinct
         # from the same-named file already ported for the PerPixelLighting sample).
         cna_easygl_test(cna_test_easygl_vertexlighting_directional_shader
                         examples/easygl_vertexlighting_directional_shader_test.cpp)
-        add_test(NAME EasyGL_VertexLighting_Directional_Shader
-                 COMMAND cna_test_easygl_vertexlighting_directional_shader)
-        set_tests_properties(EasyGL_VertexLighting_Directional_Shader PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_VertexLighting_Directional_Shader COMMAND cna_test_easygl_vertexlighting_directional_shader
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 947: VertexLightingSample's FlatShaded.fx -- with this and the row above,
         # VertexLighting sample's shader blocker is fully cleared.
         cna_easygl_test(cna_test_easygl_flatshaded_shader
                         examples/easygl_flatshaded_shader_test.cpp)
-        add_test(NAME EasyGL_FlatShaded_Shader
-                 COMMAND cna_test_easygl_flatshaded_shader)
-        set_tests_properties(EasyGL_FlatShaded_Shader PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_FlatShaded_Shader COMMAND cna_test_easygl_flatshaded_shader
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 947: Distort.fx's Distort technique (no-blur variant).
         cna_easygl_test(cna_test_easygl_distort_shader
                         examples/easygl_distort_shader_test.cpp)
-        add_test(NAME EasyGL_Distort_Shader
-                 COMMAND cna_test_easygl_distort_shader)
-        set_tests_properties(EasyGL_Distort_Shader PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_Distort_Shader COMMAND cna_test_easygl_distort_shader
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 947: Distorters.fx's DisplacementMapped technique.
         cna_easygl_test(cna_test_easygl_distorters_displacementmapped_shader
                         examples/easygl_distorters_displacementmapped_shader_test.cpp)
-        add_test(NAME EasyGL_Distorters_DisplacementMapped_Shader
-                 COMMAND cna_test_easygl_distorters_displacementmapped_shader)
-        set_tests_properties(EasyGL_Distorters_DisplacementMapped_Shader PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_Distorters_DisplacementMapped_Shader COMMAND cna_test_easygl_distorters_displacementmapped_shader
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 947: Distorters.fx's HeatHaze technique.
         cna_easygl_test(cna_test_easygl_distorters_heathaze_shader
                         examples/easygl_distorters_heathaze_shader_test.cpp)
-        add_test(NAME EasyGL_Distorters_HeatHaze_Shader
-                 COMMAND cna_test_easygl_distorters_heathaze_shader)
-        set_tests_properties(EasyGL_Distorters_HeatHaze_Shader PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_Distorters_HeatHaze_Shader COMMAND cna_test_easygl_distorters_heathaze_shader
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 947: Distorters.fx's PullIn technique -- with this, Distorters.fx's own 3
         # actually-used techniques (DisplacementMapped/HeatHaze/PullIn) are all ported.
         cna_easygl_test(cna_test_easygl_distorters_pullin_shader
                         examples/easygl_distorters_pullin_shader_test.cpp)
-        add_test(NAME EasyGL_Distorters_PullIn_Shader
-                 COMMAND cna_test_easygl_distorters_pullin_shader)
-        set_tests_properties(EasyGL_Distorters_PullIn_Shader PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_Distorters_PullIn_Shader COMMAND cna_test_easygl_distorters_pullin_shader
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 947: Distort.fx's DistortBlur technique -- with this, DistortionSample's shader
         # blocker is fully cleared.
         cna_easygl_test(cna_test_easygl_distortblur_shader
                         examples/easygl_distortblur_shader_test.cpp)
-        add_test(NAME EasyGL_DistortBlur_Shader
-                 COMMAND cna_test_easygl_distortblur_shader)
-        set_tests_properties(EasyGL_DistortBlur_Shader PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_DistortBlur_Shader COMMAND cna_test_easygl_distortblur_shader
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 947: CartoonEffect.Fx's Lambert technique.
         cna_easygl_test(cna_test_easygl_cartooneffect_lambert_shader
                         examples/easygl_cartooneffect_lambert_shader_test.cpp)
-        add_test(NAME EasyGL_CartoonEffect_Lambert_Shader
-                 COMMAND cna_test_easygl_cartooneffect_lambert_shader)
-        set_tests_properties(EasyGL_CartoonEffect_Lambert_Shader PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_CartoonEffect_Lambert_Shader COMMAND cna_test_easygl_cartooneffect_lambert_shader
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 947: CartoonEffect.Fx's Toon technique.
         cna_easygl_test(cna_test_easygl_cartooneffect_toon_shader
                         examples/easygl_cartooneffect_toon_shader_test.cpp)
-        add_test(NAME EasyGL_CartoonEffect_Toon_Shader
-                 COMMAND cna_test_easygl_cartooneffect_toon_shader)
-        set_tests_properties(EasyGL_CartoonEffect_Toon_Shader PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_CartoonEffect_Toon_Shader COMMAND cna_test_easygl_cartooneffect_toon_shader
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 947: CartoonEffect.Fx's NormalDepth technique -- with this, all 3 of
         # CartoonEffect.Fx's techniques are ported.
         cna_easygl_test(cna_test_easygl_cartooneffect_normaldepth_shader
                         examples/easygl_cartooneffect_normaldepth_shader_test.cpp)
-        add_test(NAME EasyGL_CartoonEffect_NormalDepth_Shader
-                 COMMAND cna_test_easygl_cartooneffect_normaldepth_shader)
-        set_tests_properties(EasyGL_CartoonEffect_NormalDepth_Shader PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_CartoonEffect_NormalDepth_Shader COMMAND cna_test_easygl_cartooneffect_normaldepth_shader
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 947: PostprocessEffect.Fx's 5 techniques -- with this, NonPhotoRealistic sample's
         # shader blocker is fully cleared.
         cna_easygl_test(cna_test_easygl_postprocesseffect_shader
                         examples/easygl_postprocesseffect_shader_test.cpp)
-        add_test(NAME EasyGL_PostprocessEffect_Shader
-                 COMMAND cna_test_easygl_postprocesseffect_shader)
-        set_tests_properties(EasyGL_PostprocessEffect_Shader PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_PostprocessEffect_Shader COMMAND cna_test_easygl_postprocesseffect_shader
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 947: DrawModel.fx's CreateShadowMap technique (ShadowMappingSample_4_0).
         cna_easygl_test(cna_test_easygl_shadowmapping_createshadowmap_shader
                         examples/easygl_shadowmapping_createshadowmap_shader_test.cpp)
-        add_test(NAME EasyGL_ShadowMapping_CreateShadowMap_Shader
-                 COMMAND cna_test_easygl_shadowmapping_createshadowmap_shader)
-        set_tests_properties(EasyGL_ShadowMapping_CreateShadowMap_Shader PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_ShadowMapping_CreateShadowMap_Shader COMMAND cna_test_easygl_shadowmapping_createshadowmap_shader
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 947: DrawModel.fx's DrawWithShadowMap technique -- with this, ShadowMapping
         # sample's shader blocker is fully cleared.
         cna_easygl_test(cna_test_easygl_shadowmapping_drawwithshadowmap_shader
                         examples/easygl_shadowmapping_drawwithshadowmap_shader_test.cpp)
-        add_test(NAME EasyGL_ShadowMapping_DrawWithShadowMap_Shader
-                 COMMAND cna_test_easygl_shadowmapping_drawwithshadowmap_shader)
-        set_tests_properties(EasyGL_ShadowMapping_DrawWithShadowMap_Shader PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_ShadowMapping_DrawWithShadowMap_Shader COMMAND cna_test_easygl_shadowmapping_drawwithshadowmap_shader
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 1080: genuinely custom vertex-layout support for the 3D ShaderEffect draw path
         # (a 48-byte stride/5-element declaration matching none of the 5 built-in strides).
         cna_easygl_test(cna_test_easygl_shadereffect_custom_vertex_layout
                         examples/easygl_shadereffect_custom_vertex_layout_test.cpp)
-        add_test(NAME EasyGL_ShaderEffect_CustomVertexLayout
-                 COMMAND cna_test_easygl_shadereffect_custom_vertex_layout)
-        set_tests_properties(EasyGL_ShaderEffect_CustomVertexLayout PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_ShaderEffect_CustomVertexLayout COMMAND cna_test_easygl_shadereffect_custom_vertex_layout
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 947: NormalMapping.fx (tangent-space normal mapping + Phong specular) -- with
         # this, NormalMapping sample's shader blocker is fully cleared. Uses Task 1080's custom
         # vertex layout (Position+TexCoord+Normal+Binormal+Tangent, stride 56).
         cna_easygl_test(cna_test_easygl_normalmapping_shader
                         examples/easygl_normalmapping_shader_test.cpp)
-        add_test(NAME EasyGL_NormalMapping_Shader
-                 COMMAND cna_test_easygl_normalmapping_shader)
-        set_tests_properties(EasyGL_NormalMapping_Shader PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_NormalMapping_Shader COMMAND cna_test_easygl_normalmapping_shader
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 947: Billboard.fx (view-facing billboard expansion + wind sway + alpha-tested
         # diffuse lighting) -- with this, BillboardSample's shader blocker is fully cleared.
         # Uses Task 1080's custom vertex layout (Position+Normal+TexCoord+Random, stride 36).
         cna_easygl_test(cna_test_easygl_billboard_shader
                         examples/easygl_billboard_shader_test.cpp)
-        add_test(NAME EasyGL_Billboard_Shader
-                 COMMAND cna_test_easygl_billboard_shader)
-        set_tests_properties(EasyGL_Billboard_Shader PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_Billboard_Shader COMMAND cna_test_easygl_billboard_shader
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 947: ShatterEffect.fx (per-triangle rotation-and-fall shatter animation + Phong
         # lighting) -- with this, ShatterEffect sample's shader blocker is fully cleared. Uses
@@ -2219,11 +2024,8 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         # RotationalVelocity, stride 56).
         cna_easygl_test(cna_test_easygl_shattereffect_shader
                         examples/easygl_shattereffect_shader_test.cpp)
-        add_test(NAME EasyGL_ShatterEffect_Shader
-                 COMMAND cna_test_easygl_shattereffect_shader)
-        set_tests_properties(EasyGL_ShatterEffect_Shader PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_ShatterEffect_Shader COMMAND cna_test_easygl_shattereffect_shader
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 947: ParticleEffect.fx (GPU-animated billboarded particles) -- shared verbatim by
         # Particles3DSample and XmlParticles, so this clears both samples' shader blockers at
@@ -2231,293 +2033,200 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         # stride 52).
         cna_easygl_test(cna_test_easygl_particleeffect_shader
                         examples/easygl_particleeffect_shader_test.cpp)
-        add_test(NAME EasyGL_ParticleEffect_Shader
-                 COMMAND cna_test_easygl_particleeffect_shader)
-        set_tests_properties(EasyGL_ParticleEffect_Shader PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_ParticleEffect_Shader COMMAND cna_test_easygl_particleeffect_shader
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 947: ShipGame's AnimSprite.fx (sprite-sheet frame cross-fade), 1 of ShipGame's 4
         # distinct custom shaders. Uses VertexPositionTexture (stride 20, already supported).
         cna_easygl_test(cna_test_easygl_animsprite_shader
                         examples/easygl_animsprite_shader_test.cpp)
-        add_test(NAME EasyGL_AnimSprite_Shader
-                 COMMAND cna_test_easygl_animsprite_shader)
-        set_tests_properties(EasyGL_AnimSprite_Shader PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_AnimSprite_Shader COMMAND cna_test_easygl_animsprite_shader
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 947: ShipGame's Blur.fx (5-technique box blur / colour / colour-texture), 2 of
         # ShipGame's 4 distinct custom shaders now ported.
         cna_easygl_test(cna_test_easygl_blur_shader
                         examples/easygl_blur_shader_test.cpp)
-        add_test(NAME EasyGL_ShipGame_Blur_Shader
-                 COMMAND cna_test_easygl_blur_shader)
-        set_tests_properties(EasyGL_ShipGame_Blur_Shader PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_ShipGame_Blur_Shader COMMAND cna_test_easygl_blur_shader
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 1081: TextureCube sampling support for custom ShaderEffect shaders (needed for
         # ShipGame's own NormalMapping.fx reflection map).
         cna_easygl_test(cna_test_easygl_shadereffect_texturecube
                         examples/easygl_shadereffect_texturecube_test.cpp)
-        add_test(NAME EasyGL_ShaderEffect_TextureCube
-                 COMMAND cna_test_easygl_shadereffect_texturecube)
-        set_tests_properties(EasyGL_ShaderEffect_TextureCube PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_ShaderEffect_TextureCube COMMAND cna_test_easygl_shadereffect_texturecube
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 947: ShipGame's own NormalMapping.fx (3 techniques: PlainMapping/NormalMapping/
         # ViewMapping) -- 3 of ShipGame's 4 distinct custom shaders now ported. Uses Task 1081's
         # TextureCube capability.
         cna_easygl_test(cna_test_easygl_shipgame_normalmapping_shader
                         examples/easygl_shipgame_normalmapping_shader_test.cpp)
-        add_test(NAME EasyGL_ShipGame_NormalMapping_Shader
-                 COMMAND cna_test_easygl_shipgame_normalmapping_shader)
-        set_tests_properties(EasyGL_ShipGame_NormalMapping_Shader PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_ShipGame_NormalMapping_Shader COMMAND cna_test_easygl_shipgame_normalmapping_shader
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 947: ShipGame's own Particle.fx (real GPU point sprites via PSIZE/gl_PointSize) --
         # the 4th and final ShipGame custom shader, fully clearing ShipGame's shader blocker.
         cna_easygl_test(cna_test_easygl_shipgame_particle_shader
                         examples/easygl_shipgame_particle_shader_test.cpp)
-        add_test(NAME EasyGL_ShipGame_Particle_Shader
-                 COMMAND cna_test_easygl_shipgame_particle_shader)
-        set_tests_properties(EasyGL_ShipGame_Particle_Shader PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_ShipGame_Particle_Shader COMMAND cna_test_easygl_shipgame_particle_shader
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 947 (final sample) + Task 1082: InstancedModel.fx's HardwareInstancing technique --
         # proves real GPU hardware instancing (glVertexAttribDivisor-based per-instance vertex
         # stream through a custom ShaderEffect), completing Task 947 at 13/13.
         cna_easygl_test(cna_test_easygl_instancedmodel_shader
                         examples/easygl_instancedmodel_shader_test.cpp)
-        add_test(NAME EasyGL_InstancedModel_Shader
-                 COMMAND cna_test_easygl_instancedmodel_shader)
-        set_tests_properties(EasyGL_InstancedModel_Shader PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_InstancedModel_Shader COMMAND cna_test_easygl_instancedmodel_shader
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 133: DualTextureEffect — magenta×yellow→red pixel readback
         cna_easygl_test(cna_test_easygl_dual_texture
                         examples/easygl_dual_texture_test.cpp)
-        add_test(NAME EasyGL_DualTextureEffect_Blend
-                 COMMAND cna_test_easygl_dual_texture)
-        set_tests_properties(EasyGL_DualTextureEffect_Blend PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_DualTextureEffect_Blend COMMAND cna_test_easygl_dual_texture
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 134: EnvironmentMapEffect — emissive red, envAmount=0, pixel readback
         cna_easygl_test(cna_test_easygl_env_map
                         examples/easygl_env_map_test.cpp)
-        add_test(NAME EasyGL_EnvironmentMapEffect_Readback
-                 COMMAND cna_test_easygl_env_map)
-        set_tests_properties(EasyGL_EnvironmentMapEffect_Readback PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_EnvironmentMapEffect_Readback COMMAND cna_test_easygl_env_map
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 393: EnvironmentMapEffect EnvironmentMapAmount=0 should ignore the cube map
         cna_easygl_test(cna_test_easygl_environmentmapeffect_amount_zero
                         examples/easygl_environmentmapeffect_amount_zero_test.cpp)
-        add_test(NAME EasyGL_EnvironmentMapEffect_AmountZero
-                 COMMAND cna_test_easygl_environmentmapeffect_amount_zero)
-        set_tests_properties(EasyGL_EnvironmentMapEffect_AmountZero PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_EnvironmentMapEffect_AmountZero COMMAND cna_test_easygl_environmentmapeffect_amount_zero
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 900: EnvironmentMapEffect fog fix verification
         cna_easygl_test(cna_test_easygl_environmentmapeffect_fog
                         examples/easygl_environmentmapeffect_fog_test.cpp)
-        add_test(NAME EasyGL_EnvironmentMapEffect_Fog
-                 COMMAND cna_test_easygl_environmentmapeffect_fog)
-        set_tests_properties(EasyGL_EnvironmentMapEffect_Fog PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_EnvironmentMapEffect_Fog COMMAND cna_test_easygl_environmentmapeffect_fog
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 394: EnvironmentMapEffect EnvironmentMapAmount=1 should fully replace lit color
         cna_easygl_test(cna_test_easygl_environmentmapeffect_amount_one
                         examples/easygl_environmentmapeffect_amount_one_test.cpp)
-        add_test(NAME EasyGL_EnvironmentMapEffect_AmountOne
-                 COMMAND cna_test_easygl_environmentmapeffect_amount_one)
-        set_tests_properties(EasyGL_EnvironmentMapEffect_AmountOne PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_EnvironmentMapEffect_AmountOne COMMAND cna_test_easygl_environmentmapeffect_amount_one
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 395: EnvironmentMapEffect EnvironmentMapSpecular should scale by cubemap alpha
         cna_easygl_test(cna_test_easygl_environmentmapeffect_specular
                         examples/easygl_environmentmapeffect_specular_test.cpp)
-        add_test(NAME EasyGL_EnvironmentMapEffect_Specular
-                 COMMAND cna_test_easygl_environmentmapeffect_specular)
-        set_tests_properties(EasyGL_EnvironmentMapEffect_Specular PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_EnvironmentMapEffect_Specular COMMAND cna_test_easygl_environmentmapeffect_specular
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 891: EnvironmentMapEffect's base cube-map lerp target must be scaled by the
         # combined texture x diffuse alpha -- verbatim reuse of the shared backend-agnostic
         # source, registered on all 3 backends.
         cna_easygl_test(cna_test_easygl_environmentmapeffect_alphascaledlerp
                         examples/environmentmapeffect_alphascaledlerp_test.cpp)
-        add_test(NAME EasyGL_EnvironmentMapEffect_AlphaScaledLerp
-                 COMMAND cna_test_easygl_environmentmapeffect_alphascaledlerp)
-        set_tests_properties(EasyGL_EnvironmentMapEffect_AlphaScaledLerp PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_EnvironmentMapEffect_AlphaScaledLerp COMMAND cna_test_easygl_environmentmapeffect_alphascaledlerp
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 396: EnvironmentMapEffect Fresnel edge-weighting should suppress head-on reflections
         cna_easygl_test(cna_test_easygl_environmentmapeffect_fresnel
                         examples/easygl_environmentmapeffect_fresnel_test.cpp)
-        add_test(NAME EasyGL_EnvironmentMapEffect_Fresnel
-                 COMMAND cna_test_easygl_environmentmapeffect_fresnel)
-        set_tests_properties(EasyGL_EnvironmentMapEffect_Fresnel PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_EnvironmentMapEffect_Fresnel COMMAND cna_test_easygl_environmentmapeffect_fresnel
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 397: EnvironmentMapEffect reflection vector should respond to EyePosition
         cna_easygl_test(cna_test_easygl_environmentmapeffect_eyeposition
                         examples/easygl_environmentmapeffect_eyeposition_test.cpp)
-        add_test(NAME EasyGL_EnvironmentMapEffect_EyePosition
-                 COMMAND cna_test_easygl_environmentmapeffect_eyeposition)
-        set_tests_properties(EasyGL_EnvironmentMapEffect_EyePosition PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_EnvironmentMapEffect_EyePosition COMMAND cna_test_easygl_environmentmapeffect_eyeposition
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 398: EnvironmentMapEffect normal transform should use inverse-transpose of World
         cna_easygl_test(cna_test_easygl_environmentmapeffect_worldtransform
                         examples/easygl_environmentmapeffect_worldtransform_test.cpp)
-        add_test(NAME EasyGL_EnvironmentMapEffect_WorldTransform
-                 COMMAND cna_test_easygl_environmentmapeffect_worldtransform)
-        set_tests_properties(EasyGL_EnvironmentMapEffect_WorldTransform PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_EnvironmentMapEffect_WorldTransform COMMAND cna_test_easygl_environmentmapeffect_worldtransform
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 399: cross-backend EnvironmentMapEffect capstone (Tasks 393-398 combined)
         cna_easygl_test(cna_test_easygl_environmentmapeffect_combined
                         examples/easygl_environmentmapeffect_combined_test.cpp)
-        add_test(NAME EasyGL_EnvironmentMapEffect_Combined
-                 COMMAND cna_test_easygl_environmentmapeffect_combined)
-        set_tests_properties(EasyGL_EnvironmentMapEffect_Combined PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_EnvironmentMapEffect_Combined COMMAND cna_test_easygl_environmentmapeffect_combined
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 890: EnvironmentMapEffect DirectionalLight1/DirectionalLight2 forwarding
         cna_easygl_test(cna_test_easygl_environmentmapeffect_multilight
                         examples/easygl_environmentmapeffect_multilight_test.cpp)
-        add_test(NAME EasyGL_EnvironmentMapEffect_MultiLight
-                 COMMAND cna_test_easygl_environmentmapeffect_multilight)
-        set_tests_properties(EasyGL_EnvironmentMapEffect_MultiLight PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_EnvironmentMapEffect_MultiLight COMMAND cna_test_easygl_environmentmapeffect_multilight
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 900: SkinnedEffect fog fix verification
         cna_easygl_test(cna_test_easygl_skinnedeffect_fog
                         examples/easygl_skinnedeffect_fog_test.cpp)
-        add_test(NAME EasyGL_SkinnedEffect_Fog
-                 COMMAND cna_test_easygl_skinnedeffect_fog)
-        set_tests_properties(EasyGL_SkinnedEffect_Fog PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_SkinnedEffect_Fog COMMAND cna_test_easygl_skinnedeffect_fog
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 893: SkinnedEffect DirectionalLight1/DirectionalLight2 forwarding
         cna_easygl_test(cna_test_easygl_skinnedeffect_multilight
                         examples/easygl_skinnedeffect_multilight_test.cpp)
-        add_test(NAME EasyGL_SkinnedEffect_MultiLight
-                 COMMAND cna_test_easygl_skinnedeffect_multilight)
-        set_tests_properties(EasyGL_SkinnedEffect_MultiLight PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_SkinnedEffect_MultiLight COMMAND cna_test_easygl_skinnedeffect_multilight
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 894: SkinnedEffect real specular highlights
         cna_easygl_test(cna_test_easygl_skinnedeffect_specular
                         examples/easygl_skinnedeffect_specular_test.cpp)
-        add_test(NAME EasyGL_SkinnedEffect_Specular
-                 COMMAND cna_test_easygl_skinnedeffect_specular)
-        set_tests_properties(EasyGL_SkinnedEffect_Specular PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_SkinnedEffect_Specular COMMAND cna_test_easygl_skinnedeffect_specular
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 1102b: SkinnedEffect pixel test — PreferPerPixelLighting genuinely selects between
         # a real per-vertex-lit shader variant and the existing per-pixel-lit one (mirrors Task
         # 1102's BasicEffect test exactly).
         cna_easygl_test(cna_test_easygl_skinnedeffect_preferperpixellighting
                         examples/easygl_skinnedeffect_preferperpixellighting_test.cpp)
-        add_test(NAME EasyGL_SkinnedEffect_PreferPerPixelLighting
-                 COMMAND cna_test_easygl_skinnedeffect_preferperpixellighting)
-        set_tests_properties(EasyGL_SkinnedEffect_PreferPerPixelLighting PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_SkinnedEffect_PreferPerPixelLighting COMMAND cna_test_easygl_skinnedeffect_preferperpixellighting
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 895: SkinnedEffect WeightsPerVertex real GPU enforcement
         cna_easygl_test(cna_test_easygl_skinnedeffect_weightspervertex
                         examples/easygl_skinnedeffect_weightspervertex_test.cpp)
-        add_test(NAME EasyGL_SkinnedEffect_WeightsPerVertex
-                 COMMAND cna_test_easygl_skinnedeffect_weightspervertex)
-        set_tests_properties(EasyGL_SkinnedEffect_WeightsPerVertex PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_SkinnedEffect_WeightsPerVertex COMMAND cna_test_easygl_skinnedeffect_weightspervertex
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 406: SkinnedEffect identity bone palette should produce zero deformation
         cna_easygl_test(cna_test_easygl_skinnedeffect_identity_bones
                         examples/easygl_skinnedeffect_identity_bones_test.cpp)
-        add_test(NAME EasyGL_SkinnedEffect_IdentityBones
-                 COMMAND cna_test_easygl_skinnedeffect_identity_bones)
-        set_tests_properties(EasyGL_SkinnedEffect_IdentityBones PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_SkinnedEffect_IdentityBones COMMAND cna_test_easygl_skinnedeffect_identity_bones
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 407: SkinnedEffect single translation bone should shift the mesh
         cna_easygl_test(cna_test_easygl_skinnedeffect_translation_bone
                         examples/easygl_skinnedeffect_translation_bone_test.cpp)
-        add_test(NAME EasyGL_SkinnedEffect_TranslationBone
-                 COMMAND cna_test_easygl_skinnedeffect_translation_bone)
-        set_tests_properties(EasyGL_SkinnedEffect_TranslationBone PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_SkinnedEffect_TranslationBone COMMAND cna_test_easygl_skinnedeffect_translation_bone
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 408: SkinnedEffect two-bone weighted blend should produce midpoint deformation
         cna_easygl_test(cna_test_easygl_skinnedeffect_twobone_blend
                         examples/easygl_skinnedeffect_twobone_blend_test.cpp)
-        add_test(NAME EasyGL_SkinnedEffect_TwoBoneBlend
-                 COMMAND cna_test_easygl_skinnedeffect_twobone_blend)
-        set_tests_properties(EasyGL_SkinnedEffect_TwoBoneBlend PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_SkinnedEffect_TwoBoneBlend COMMAND cna_test_easygl_skinnedeffect_twobone_blend
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 409: cross-backend SkinnedEffect capstone (identity + single-bone + two-bone blend)
         cna_easygl_test(cna_test_easygl_skinnedeffect_combined
                         examples/easygl_skinnedeffect_combined_test.cpp)
-        add_test(NAME EasyGL_SkinnedEffect_Combined
-                 COMMAND cna_test_easygl_skinnedeffect_combined)
-        set_tests_properties(EasyGL_SkinnedEffect_Combined PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_SkinnedEffect_Combined COMMAND cna_test_easygl_skinnedeffect_combined
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 334: RenderTargetCube sampled as TextureCube via EnvironmentMapEffect after unbinding
         cna_easygl_test(cna_test_easygl_rendertargetcube_sample
                         examples/easygl_rendertargetcube_sample_test.cpp)
-        add_test(NAME EasyGL_RenderTargetCube_SampleAfterUnbind
-                 COMMAND cna_test_easygl_rendertargetcube_sample)
-        set_tests_properties(EasyGL_RenderTargetCube_SampleAfterUnbind PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_RenderTargetCube_SampleAfterUnbind COMMAND cna_test_easygl_rendertargetcube_sample
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 877: RenderTargetCube honors its exact requested DepthFormat (None vs Depth24Stencil8)
         cna_easygl_test(cna_test_easygl_rendertargetcube_depthformat
                         examples/easygl_rendertargetcube_depthformat_test.cpp)
-        add_test(NAME EasyGL_RenderTargetCube_DepthFormat
-                 COMMAND cna_test_easygl_rendertargetcube_depthformat)
-        set_tests_properties(EasyGL_RenderTargetCube_DepthFormat PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_RenderTargetCube_DepthFormat COMMAND cna_test_easygl_rendertargetcube_depthformat
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 144: Model.Draw — 2-bone model, BasicEffect VertexColor, red quad, pixel readback
         cna_easygl_test(cna_test_easygl_model_draw
                         examples/easygl_model_draw_test.cpp)
-        add_test(NAME EasyGL_ModelDraw_RedQuad
-                 COMMAND cna_test_easygl_model_draw)
-        set_tests_properties(EasyGL_ModelDraw_RedQuad PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_ModelDraw_RedQuad COMMAND cna_test_easygl_model_draw
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 927: Content.Load<Model>() via a real .model.json + binary vertex/index file
         # fixture -- exercises ModelTypeReader::Read() itself (the vertex-stride/vtable-size
@@ -2525,1151 +2234,764 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         # model above.
         cna_easygl_test(cna_test_easygl_model_json_reader
                         examples/easygl_model_json_reader_test.cpp)
-        add_test(NAME EasyGL_ModelJsonReader_Quad
-                 COMMAND cna_test_easygl_model_json_reader)
-        set_tests_properties(EasyGL_ModelJsonReader_Quad PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_ModelJsonReader_Quad COMMAND cna_test_easygl_model_json_reader
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 931: ModelTypeReader::Read() auto-selecting 32-bit indices once a mesh exceeds
         # 65535 vertices, mirroring real XNA's stock ModelProcessor.
         cna_easygl_test(cna_test_easygl_model_json_reader_32bit_indices
                         examples/easygl_model_json_reader_32bit_indices_test.cpp)
-        add_test(NAME EasyGL_ModelJsonReader_32BitIndices
-                 COMMAND cna_test_easygl_model_json_reader_32bit_indices)
-        set_tests_properties(EasyGL_ModelJsonReader_32BitIndices PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_ModelJsonReader_32BitIndices COMMAND cna_test_easygl_model_json_reader_32bit_indices
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 932: ModelTypeReader::Read() binding a per-mesh "texture" field to BasicEffect.
         cna_easygl_test(cna_test_easygl_model_json_reader_texture
                         examples/easygl_model_json_reader_texture_test.cpp)
-        add_test(NAME EasyGL_ModelJsonReader_Texture
-                 COMMAND cna_test_easygl_model_json_reader_texture)
-        set_tests_properties(EasyGL_ModelJsonReader_Texture PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_ModelJsonReader_Texture COMMAND cna_test_easygl_model_json_reader_texture
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 934: Content.Load<TextureCube>() via a real .dds cubemap file fixture --
         # exercises the new TextureCubeTypeReader (ContentManager.cpp).
         cna_easygl_test(cna_test_easygl_texturecube_content_load
                         examples/easygl_texturecube_content_load_test.cpp)
-        add_test(NAME EasyGL_TextureCube_ContentLoad
-                 COMMAND cna_test_easygl_texturecube_content_load)
-        set_tests_properties(EasyGL_TextureCube_ContentLoad PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_TextureCube_ContentLoad COMMAND cna_test_easygl_texturecube_content_load
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 937: ModelTypeReader::Read() gives each mesh its own real ModelBone (a child of
         # Root, named after the mesh) instead of leaving ParentBone null. Pure structural test,
         # no rendering.
         cna_easygl_test(cna_test_easygl_model_json_reader_bone_hierarchy
                         examples/easygl_model_json_reader_bone_hierarchy_test.cpp)
-        add_test(NAME EasyGL_ModelJsonReader_BoneHierarchy
-                 COMMAND cna_test_easygl_model_json_reader_bone_hierarchy)
-        set_tests_properties(EasyGL_ModelJsonReader_BoneHierarchy PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_ModelJsonReader_BoneHierarchy COMMAND cna_test_easygl_model_json_reader_bone_hierarchy
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 941: ModelTypeReader::Read() parses .model.json's new "skeleton"/"animations"
         # fields into a SkinningData attached to Model.Tag, and honors a mesh's "effect":
         # "SkinnedEffect" + "texture" field. Pure structural test, no rendering.
         cna_easygl_test(cna_test_easygl_model_json_reader_skeleton
                         examples/easygl_model_json_reader_skeleton_test.cpp)
-        add_test(NAME EasyGL_ModelJsonReader_Skeleton
-                 COMMAND cna_test_easygl_model_json_reader_skeleton)
-        set_tests_properties(EasyGL_ModelJsonReader_Skeleton PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_ModelJsonReader_Skeleton COMMAND cna_test_easygl_model_json_reader_skeleton
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 942: Pixel test -- AnimationPlayer::GetSkinTransforms() fed into a real, Content.
         # Load<Model>()-loaded mesh's SkinnedEffect::SetBoneTransforms() before Model.Draw()
         # actually deforms the rendered mesh as the clip advances.
         cna_easygl_test(cna_test_easygl_model_skinned_animation_playback
                         examples/easygl_model_skinned_animation_playback_test.cpp)
-        add_test(NAME EasyGL_Model_SkinnedAnimationPlayback
-                 COMMAND cna_test_easygl_model_skinned_animation_playback)
-        set_tests_properties(EasyGL_Model_SkinnedAnimationPlayback PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_Model_SkinnedAnimationPlayback COMMAND cna_test_easygl_model_skinned_animation_playback
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 438: Pixel test -- Model with two meshes, each using its own distinct Effect.
         cna_easygl_test(cna_test_easygl_model_two_meshes_effects
                         examples/easygl_model_two_meshes_effects_test.cpp)
-        add_test(NAME EasyGL_Model_TwoMeshesEffects
-                 COMMAND cna_test_easygl_model_two_meshes_effects)
-        set_tests_properties(EasyGL_Model_TwoMeshesEffects PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_Model_TwoMeshesEffects COMMAND cna_test_easygl_model_two_meshes_effects
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 439: Pixel test -- a child mesh's ParentBone's absolute transform actually moves it.
         cna_easygl_test(cna_test_easygl_model_hierarchy_child_mesh
                         examples/easygl_model_hierarchy_child_mesh_test.cpp)
-        add_test(NAME EasyGL_Model_HierarchyChildMesh
-                 COMMAND cna_test_easygl_model_hierarchy_child_mesh)
-        set_tests_properties(EasyGL_Model_HierarchyChildMesh PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_Model_HierarchyChildMesh COMMAND cna_test_easygl_model_hierarchy_child_mesh
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 145: MRT — SetRenderTargets({rt0,rt1}), draw green to attachment0, verify left=green right=blue
         cna_easygl_test(cna_test_easygl_mrt
                         examples/easygl_mrt_test.cpp)
-        add_test(NAME EasyGL_MRT_TwoAttachments
-                 COMMAND cna_test_easygl_mrt)
-        set_tests_properties(EasyGL_MRT_TwoAttachments PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_MRT_TwoAttachments COMMAND cna_test_easygl_mrt
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 146: MSAA 4× — multisampled renderbuffer + resolve on Present
         cna_easygl_test(cna_test_easygl_msaa
                         examples/easygl_msaa_test.cpp)
-        add_test(NAME EasyGL_MSAA_4x_Readback
-                 COMMAND cna_test_easygl_msaa)
-        set_tests_properties(EasyGL_MSAA_4x_Readback PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_MSAA_4x_Readback COMMAND cna_test_easygl_msaa
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 167: SpriteEffects — FlipHorizontally, FlipVertically, FlipHV pixel readback
         cna_easygl_test(cna_test_easygl_sprite_effects
                         examples/easygl_sprite_effects_test.cpp)
-        add_test(NAME EasyGL_SpriteEffects_Flip
-                 COMMAND cna_test_easygl_sprite_effects)
-        set_tests_properties(EasyGL_SpriteEffects_Flip PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_SpriteEffects_Flip COMMAND cna_test_easygl_sprite_effects
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 417: SpriteBatch Draw rotation must pivot around the specified origin
         cna_easygl_test(cna_test_easygl_spritebatch_rotation
                         examples/easygl_spritebatch_rotation_test.cpp)
-        add_test(NAME EasyGL_SpriteBatch_RotationAroundOrigin
-                 COMMAND cna_test_easygl_spritebatch_rotation)
-        set_tests_properties(EasyGL_SpriteBatch_RotationAroundOrigin PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_SpriteBatch_RotationAroundOrigin COMMAND cna_test_easygl_spritebatch_rotation
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 418: SpriteBatch Draw scalar/Vector2 scale overloads produce expected size
         cna_easygl_test(cna_test_easygl_spritebatch_scale
                         examples/easygl_spritebatch_scale_test.cpp)
-        add_test(NAME EasyGL_SpriteBatch_ScaleOverloads
-                 COMMAND cna_test_easygl_spritebatch_scale)
-        set_tests_properties(EasyGL_SpriteBatch_ScaleOverloads PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_SpriteBatch_ScaleOverloads COMMAND cna_test_easygl_spritebatch_scale
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 419: SpriteBatch Draw sourceRectangle must crop, not stretch the whole texture
         cna_easygl_test(cna_test_easygl_spritebatch_sourcerect
                         examples/easygl_spritebatch_sourcerect_test.cpp)
-        add_test(NAME EasyGL_SpriteBatch_SourceRectangleCropping
-                 COMMAND cna_test_easygl_spritebatch_sourcerect)
-        set_tests_properties(EasyGL_SpriteBatch_SourceRectangleCropping PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_SpriteBatch_SourceRectangleCropping COMMAND cna_test_easygl_spritebatch_sourcerect
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 420: layerDepth must affect on-screen draw order under FrontToBack
         cna_easygl_test(cna_test_easygl_spritebatch_layerdepth
                         examples/easygl_spritebatch_layerdepth_test.cpp)
-        add_test(NAME EasyGL_SpriteBatch_LayerDepthOrder
-                 COMMAND cna_test_easygl_spritebatch_layerdepth)
-        set_tests_properties(EasyGL_SpriteBatch_LayerDepthOrder PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_SpriteBatch_LayerDepthOrder COMMAND cna_test_easygl_spritebatch_layerdepth
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 885: BasicEffect pixel test — DirectionalLight1/2 + EmissiveColor on the lit path
         cna_easygl_test(cna_test_easygl_basiceffect_multilight_emissive
                         examples/easygl_basiceffect_multilight_emissive_test.cpp)
-        add_test(NAME EasyGL_BasicEffect_MultiLightEmissive
-                 COMMAND cna_test_easygl_basiceffect_multilight_emissive)
-        set_tests_properties(EasyGL_BasicEffect_MultiLightEmissive PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_BasicEffect_MultiLightEmissive COMMAND cna_test_easygl_basiceffect_multilight_emissive
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 886: BasicEffect pixel test — real specular highlights
         cna_easygl_test(cna_test_easygl_basiceffect_specular
                         examples/easygl_basiceffect_specular_test.cpp)
-        add_test(NAME EasyGL_BasicEffect_Specular
-                 COMMAND cna_test_easygl_basiceffect_specular)
-        set_tests_properties(EasyGL_BasicEffect_Specular PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_BasicEffect_Specular COMMAND cna_test_easygl_basiceffect_specular
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 1102: BasicEffect pixel test — PreferPerPixelLighting genuinely selects between
         # a real per-vertex-lit shader variant and the existing per-pixel-lit one.
         cna_easygl_test(cna_test_easygl_basiceffect_preferperpixellighting
                         examples/easygl_basiceffect_preferperpixellighting_test.cpp)
-        add_test(NAME EasyGL_BasicEffect_PreferPerPixelLighting
-                 COMMAND cna_test_easygl_basiceffect_preferperpixellighting)
-        set_tests_properties(EasyGL_BasicEffect_PreferPerPixelLighting PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_BasicEffect_PreferPerPixelLighting COMMAND cna_test_easygl_basiceffect_preferperpixellighting
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 168: transformMatrix in SpriteBatch::Begin — translation pixel readback
         cna_easygl_test(cna_test_easygl_transform_matrix
                         examples/easygl_transform_matrix_test.cpp)
-        add_test(NAME EasyGL_TransformMatrix_Translation
-                 COMMAND cna_test_easygl_transform_matrix)
-        set_tests_properties(EasyGL_TransformMatrix_Translation PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_TransformMatrix_Translation COMMAND cna_test_easygl_transform_matrix
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 169: Texture2D SetData/GetData partial rectangle round-trip
         cna_easygl_test(cna_test_easygl_texture2d_partial_rect
                         examples/easygl_texture2d_partial_rect_test.cpp)
-        add_test(NAME EasyGL_Texture2D_PartialRect_RoundTrip
-                 COMMAND cna_test_easygl_texture2d_partial_rect)
-        set_tests_properties(EasyGL_Texture2D_PartialRect_RoundTrip PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_Texture2D_PartialRect_RoundTrip COMMAND cna_test_easygl_texture2d_partial_rect
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 171: Texture2D mip-level SetData/GetData round-trip
         cna_easygl_test(cna_test_easygl_texture2d_mip
                         examples/easygl_texture2d_mip_test.cpp)
-        add_test(NAME EasyGL_Texture2D_Mip_RoundTrip
-                 COMMAND cna_test_easygl_texture2d_mip)
-        set_tests_properties(EasyGL_Texture2D_Mip_RoundTrip PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_Texture2D_Mip_RoundTrip COMMAND cna_test_easygl_texture2d_mip
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 172: TextureCube per-face SetData/GetData round-trip
         cna_easygl_test(cna_test_easygl_texturecube_faces
                         examples/easygl_texturecube_faces_test.cpp)
-        add_test(NAME EasyGL_TextureCube_Faces_RoundTrip
-                 COMMAND cna_test_easygl_texturecube_faces)
-        set_tests_properties(EasyGL_TextureCube_Faces_RoundTrip PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_TextureCube_Faces_RoundTrip COMMAND cna_test_easygl_texturecube_faces
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 276: TextureCube mip-level SetData/GetData round-trip, all six faces
         cna_easygl_test(cna_test_easygl_texturecube_mip
                         examples/easygl_texturecube_mip_test.cpp)
-        add_test(NAME EasyGL_TextureCube_Mip_RoundTrip
-                 COMMAND cna_test_easygl_texturecube_mip)
-        set_tests_properties(EasyGL_TextureCube_Mip_RoundTrip PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_TextureCube_Mip_RoundTrip COMMAND cna_test_easygl_texturecube_mip
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 275: TextureCube partial rect + startIndex, all six faces
         cna_easygl_test(cna_test_easygl_texturecube_partial_rect
                         examples/easygl_texturecube_partial_rect_test.cpp)
-        add_test(NAME EasyGL_TextureCube_PartialRect_RoundTrip
-                 COMMAND cna_test_easygl_texturecube_partial_rect)
-        set_tests_properties(EasyGL_TextureCube_PartialRect_RoundTrip PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_TextureCube_PartialRect_RoundTrip COMMAND cna_test_easygl_texturecube_partial_rect
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 173: Texture3D z-slice SetData/GetData round-trip
         cna_easygl_test(cna_test_easygl_texture3d_slices
                         examples/easygl_texture3d_slices_test.cpp)
-        add_test(NAME EasyGL_Texture3D_Slices_RoundTrip
-                 COMMAND cna_test_easygl_texture3d_slices)
-        set_tests_properties(EasyGL_Texture3D_Slices_RoundTrip PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_Texture3D_Slices_RoundTrip COMMAND cna_test_easygl_texture3d_slices
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 862: Texture3D mip-level SetData/GetData round-trip
         cna_easygl_test(cna_test_easygl_texture3d_mip
                         examples/easygl_texture3d_mip_test.cpp)
-        add_test(NAME EasyGL_Texture3D_Mip_RoundTrip
-                 COMMAND cna_test_easygl_texture3d_mip)
-        set_tests_properties(EasyGL_Texture3D_Mip_RoundTrip PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_Texture3D_Mip_RoundTrip COMMAND cna_test_easygl_texture3d_mip
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 273: Texture3D partial box (x/y/z region) SetData/GetData round-trip
         cna_easygl_test(cna_test_easygl_texture3d_partial_box
                         examples/easygl_texture3d_partial_box_test.cpp)
-        add_test(NAME EasyGL_Texture3D_PartialBox_RoundTrip
-                 COMMAND cna_test_easygl_texture3d_partial_box)
-        set_tests_properties(EasyGL_Texture3D_PartialBox_RoundTrip PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_Texture3D_PartialBox_RoundTrip COMMAND cna_test_easygl_texture3d_partial_box
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 274: Texture3D partial box (x/y/z region) GetData readback
         cna_easygl_test(cna_test_easygl_texture3d_partial_box_readback
                         examples/easygl_texture3d_partial_box_readback_test.cpp)
-        add_test(NAME EasyGL_Texture3D_PartialBox_Readback
-                 COMMAND cna_test_easygl_texture3d_partial_box_readback)
-        set_tests_properties(EasyGL_Texture3D_PartialBox_Readback PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_Texture3D_PartialBox_Readback COMMAND cna_test_easygl_texture3d_partial_box_readback
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 176: SurfaceFormat validation — unsupported formats throw
         cna_easygl_test(cna_test_easygl_surface_format_throws
                         examples/easygl_surface_format_throws_test.cpp)
-        add_test(NAME EasyGL_SurfaceFormat_Throws
-                 COMMAND cna_test_easygl_surface_format_throws)
-        set_tests_properties(EasyGL_SurfaceFormat_Throws PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_SurfaceFormat_Throws COMMAND cna_test_easygl_surface_format_throws
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 177: RenderTargetUsage DiscardContents vs PreserveContents
         cna_easygl_test(cna_test_easygl_render_target_usage
                         examples/easygl_render_target_usage_test.cpp)
-        add_test(NAME EasyGL_RenderTargetUsage
-                 COMMAND cna_test_easygl_render_target_usage)
-        set_tests_properties(EasyGL_RenderTargetUsage PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_RenderTargetUsage COMMAND cna_test_easygl_render_target_usage
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 180: backbuffer → RT → backbuffer → RT → backbuffer round-trip
         cna_easygl_test(cna_test_easygl_rt_roundtrip
                         examples/easygl_rt_roundtrip_test.cpp)
-        add_test(NAME EasyGL_RT_Roundtrip
-                 COMMAND cna_test_easygl_rt_roundtrip)
-        set_tests_properties(EasyGL_RT_Roundtrip PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_RT_Roundtrip COMMAND cna_test_easygl_rt_roundtrip
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 182: PresentationParameters round-trip via GraphicsDeviceManager
         cna_easygl_test(cna_test_easygl_presentation_parameters
                         examples/easygl_presentation_parameters_test.cpp)
-        add_test(NAME EasyGL_PresentationParameters
-                 COMMAND cna_test_easygl_presentation_parameters)
-        set_tests_properties(EasyGL_PresentationParameters PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_PresentationParameters COMMAND cna_test_easygl_presentation_parameters
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_device_reset_events
                         examples/easygl_device_reset_events_test.cpp)
-        add_test(NAME EasyGL_DeviceResetEvents
-                 COMMAND cna_test_easygl_device_reset_events)
-        set_tests_properties(EasyGL_DeviceResetEvents PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_DeviceResetEvents COMMAND cna_test_easygl_device_reset_events
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_device_validation
                         examples/easygl_device_validation_test.cpp)
-        add_test(NAME EasyGL_DeviceValidation
-                 COMMAND cna_test_easygl_device_validation)
-        set_tests_properties(EasyGL_DeviceValidation PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_DeviceValidation COMMAND cna_test_easygl_device_validation
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_draw_novertexbuffer
                         examples/easygl_draw_novertexbuffer_test.cpp)
-        add_test(NAME EasyGL_DrawNoVertexBuffer
-                 COMMAND cna_test_easygl_draw_novertexbuffer)
-        set_tests_properties(EasyGL_DrawNoVertexBuffer PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_DrawNoVertexBuffer COMMAND cna_test_easygl_draw_novertexbuffer
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_draw_noindexbuffer
                         examples/easygl_draw_noindexbuffer_test.cpp)
-        add_test(NAME EasyGL_DrawNoIndexBuffer
-                 COMMAND cna_test_easygl_draw_noindexbuffer)
-        set_tests_properties(EasyGL_DrawNoIndexBuffer PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_DrawNoIndexBuffer COMMAND cna_test_easygl_draw_noindexbuffer
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_draw_range_validation
                         examples/easygl_draw_range_validation_test.cpp)
-        add_test(NAME EasyGL_DrawRangeValidation
-                 COMMAND cna_test_easygl_draw_range_validation)
-        set_tests_properties(EasyGL_DrawRangeValidation PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_DrawRangeValidation COMMAND cna_test_easygl_draw_range_validation
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_primitivetype_validation
                         examples/easygl_primitivetype_validation_test.cpp)
-        add_test(NAME EasyGL_PrimitiveTypeValidation
-                 COMMAND cna_test_easygl_primitivetype_validation)
-        set_tests_properties(EasyGL_PrimitiveTypeValidation PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_PrimitiveTypeValidation COMMAND cna_test_easygl_primitivetype_validation
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_clear_overloads
                         examples/easygl_clear_overloads_test.cpp)
-        add_test(NAME EasyGL_ClearOverloads
-                 COMMAND cna_test_easygl_clear_overloads)
-        set_tests_properties(EasyGL_ClearOverloads PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_ClearOverloads COMMAND cna_test_easygl_clear_overloads
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_viewport_state
                         examples/easygl_viewport_state_test.cpp)
-        add_test(NAME EasyGL_ViewportState
-                 COMMAND cna_test_easygl_viewport_state)
-        set_tests_properties(EasyGL_ViewportState PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_ViewportState COMMAND cna_test_easygl_viewport_state
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_scissor
                         examples/easygl_scissor_test.cpp)
-        add_test(NAME EasyGL_Scissor
-                 COMMAND cna_test_easygl_scissor)
-        set_tests_properties(EasyGL_Scissor PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_Scissor COMMAND cna_test_easygl_scissor
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 880: Viewport sub-region (split-screen) GPU wiring
         cna_easygl_test(cna_test_easygl_viewport_subregion
                         examples/easygl_viewport_subregion_test.cpp)
-        add_test(NAME EasyGL_Viewport_Subregion
-                 COMMAND cna_test_easygl_viewport_subregion)
-        set_tests_properties(EasyGL_Viewport_Subregion PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_Viewport_Subregion COMMAND cna_test_easygl_viewport_subregion
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_disposed_resource
                         examples/easygl_disposed_resource_test.cpp)
-        add_test(NAME EasyGL_DisposedResource
-                 COMMAND cna_test_easygl_disposed_resource)
-        set_tests_properties(EasyGL_DisposedResource PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_DisposedResource COMMAND cna_test_easygl_disposed_resource
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_double_dispose
                         examples/easygl_double_dispose_test.cpp)
-        add_test(NAME EasyGL_DoubleDispose
-                 COMMAND cna_test_easygl_double_dispose)
-        set_tests_properties(EasyGL_DoubleDispose PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_DoubleDispose COMMAND cna_test_easygl_double_dispose
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_bound_resource_dispose
                         examples/easygl_bound_resource_dispose_test.cpp)
-        add_test(NAME EasyGL_BoundResourceDispose
-                 COMMAND cna_test_easygl_bound_resource_dispose)
-        set_tests_properties(EasyGL_BoundResourceDispose PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_BoundResourceDispose COMMAND cna_test_easygl_bound_resource_dispose
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_handle_release
                         examples/easygl_handle_release_test.cpp)
-        add_test(NAME EasyGL_HandleRelease
-                 COMMAND cna_test_easygl_handle_release)
-        set_tests_properties(EasyGL_HandleRelease PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_HandleRelease COMMAND cna_test_easygl_handle_release
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_move_semantics
                         examples/easygl_move_semantics_test.cpp)
-        add_test(NAME EasyGL_MoveSemantics
-                 COMMAND cna_test_easygl_move_semantics)
-        set_tests_properties(EasyGL_MoveSemantics PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_MoveSemantics COMMAND cna_test_easygl_move_semantics
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_resource_events
                         examples/easygl_resource_events_test.cpp)
-        add_test(NAME EasyGL_ResourceEvents
-                 COMMAND cna_test_easygl_resource_events)
-        set_tests_properties(EasyGL_ResourceEvents PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_ResourceEvents COMMAND cna_test_easygl_resource_events
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_device_dispose_order
                         examples/easygl_device_dispose_order_test.cpp)
-        add_test(NAME EasyGL_DeviceDisposeOrder
-                 COMMAND cna_test_easygl_device_dispose_order)
-        set_tests_properties(EasyGL_DeviceDisposeOrder PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_DeviceDisposeOrder COMMAND cna_test_easygl_device_dispose_order
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_resource_leak
                         examples/easygl_resource_leak_test.cpp)
-        add_test(NAME EasyGL_ResourceLeak
-                 COMMAND cna_test_easygl_resource_leak)
-        set_tests_properties(EasyGL_ResourceLeak PROPERTIES
-            TIMEOUT 60
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_ResourceLeak COMMAND cna_test_easygl_resource_leak
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_present_interval
                         examples/easygl_present_interval_test.cpp)
-        add_test(NAME EasyGL_PresentInterval
-                 COMMAND cna_test_easygl_present_interval)
-        set_tests_properties(EasyGL_PresentInterval PROPERTIES
-            TIMEOUT 60
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_PresentInterval COMMAND cna_test_easygl_present_interval
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_fullscreen_field
                         examples/easygl_fullscreen_field_test.cpp)
-        add_test(NAME EasyGL_FullScreenField
-                 COMMAND cna_test_easygl_fullscreen_field)
-        set_tests_properties(EasyGL_FullScreenField PROPERTIES
-            TIMEOUT 60
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_FullScreenField COMMAND cna_test_easygl_fullscreen_field
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_backbuffer_resize
                         examples/easygl_backbuffer_resize_test.cpp)
-        add_test(NAME EasyGL_BackbufferResize
-                 COMMAND cna_test_easygl_backbuffer_resize)
-        set_tests_properties(EasyGL_BackbufferResize PROPERTIES
-            TIMEOUT 60
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_BackbufferResize COMMAND cna_test_easygl_backbuffer_resize
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_real_window_resize
                         examples/easygl_real_window_resize_test.cpp)
-        add_test(NAME EasyGL_RealWindowResize
-                 COMMAND cna_test_easygl_real_window_resize)
-        set_tests_properties(EasyGL_RealWindowResize PROPERTIES
-            TIMEOUT 60
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_RealWindowResize COMMAND cna_test_easygl_real_window_resize
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 349: custom Viewport survives Present() with no resize, resets after a real one.
         cna_easygl_test(cna_test_easygl_viewport_reset_after_resize
                         examples/viewport_reset_after_resize_test.cpp)
-        add_test(NAME EasyGL_ViewportResetAfterResize
-                 COMMAND cna_test_easygl_viewport_reset_after_resize)
-        set_tests_properties(EasyGL_ViewportResetAfterResize PROPERTIES
-            TIMEOUT 60
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_ViewportResetAfterResize COMMAND cna_test_easygl_viewport_reset_after_resize
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_depth_format
                         examples/easygl_depth_format_test.cpp)
-        add_test(NAME EasyGL_DepthFormat
-                 COMMAND cna_test_easygl_depth_format)
-        set_tests_properties(EasyGL_DepthFormat PROPERTIES
-            TIMEOUT 60
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_DepthFormat COMMAND cna_test_easygl_depth_format
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_msaa_change
                         examples/easygl_msaa_change_test.cpp)
-        add_test(NAME EasyGL_MsaaChange
-                 COMMAND cna_test_easygl_msaa_change)
-        set_tests_properties(EasyGL_MsaaChange PROPERTIES
-            TIMEOUT 60
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_MsaaChange COMMAND cna_test_easygl_msaa_change
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_vertexbuffer_setdata
                         examples/easygl_vertexbuffer_setdata_test.cpp)
-        add_test(NAME EasyGL_VbSetData
-                 COMMAND cna_test_easygl_vertexbuffer_setdata)
-        set_tests_properties(EasyGL_VbSetData PROPERTIES
-            TIMEOUT 60
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_VbSetData COMMAND cna_test_easygl_vertexbuffer_setdata
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_dynamic_buffer_stress
                         examples/easygl_dynamic_buffer_stress_test.cpp)
-        add_test(NAME EasyGL_DynamicBufferStress
-                 COMMAND cna_test_easygl_dynamic_buffer_stress)
-        set_tests_properties(EasyGL_DynamicBufferStress PROPERTIES
-            TIMEOUT 60
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_DynamicBufferStress COMMAND cna_test_easygl_dynamic_buffer_stress
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_buffer_usage
                         examples/easygl_buffer_usage_test.cpp)
-        add_test(NAME EasyGL_BufferUsage
-                 COMMAND cna_test_easygl_buffer_usage)
-        set_tests_properties(EasyGL_BufferUsage PROPERTIES
-            TIMEOUT 60
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_BufferUsage COMMAND cna_test_easygl_buffer_usage
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_disposed_buffer
                         examples/easygl_disposed_buffer_test.cpp)
-        add_test(NAME EasyGL_DisposedBuffer
-                 COMMAND cna_test_easygl_disposed_buffer)
-        set_tests_properties(EasyGL_DisposedBuffer PROPERTIES
-            TIMEOUT 60
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_DisposedBuffer COMMAND cna_test_easygl_disposed_buffer
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_vertexbuffer_indexbuffer_getdata
                         examples/easygl_vertexbuffer_indexbuffer_getdata_test.cpp)
-        add_test(NAME EasyGL_VertexBufferIndexBufferGetData
-                 COMMAND cna_test_easygl_vertexbuffer_indexbuffer_getdata)
-        set_tests_properties(EasyGL_VertexBufferIndexBufferGetData PROPERTIES
-            TIMEOUT 60
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_VertexBufferIndexBufferGetData COMMAND cna_test_easygl_vertexbuffer_indexbuffer_getdata
+            TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_effect_clone
                         examples/easygl_effect_clone_test.cpp)
-        add_test(NAME EasyGL_EffectClone
-                 COMMAND cna_test_easygl_effect_clone)
-        set_tests_properties(EasyGL_EffectClone PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_EffectClone COMMAND cna_test_easygl_effect_clone
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_effect_current_technique
                         examples/easygl_effect_current_technique_test.cpp)
-        add_test(NAME EasyGL_EffectCurrentTechnique
-                 COMMAND cna_test_easygl_effect_current_technique)
-        set_tests_properties(EasyGL_EffectCurrentTechnique PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_EffectCurrentTechnique COMMAND cna_test_easygl_effect_current_technique
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_basiceffect_combinations
                         examples/easygl_basiceffect_combinations_test.cpp)
-        add_test(NAME EasyGL_BasicEffectCombinations
-                 COMMAND cna_test_easygl_basiceffect_combinations)
-        set_tests_properties(EasyGL_BasicEffectCombinations PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_BasicEffectCombinations COMMAND cna_test_easygl_basiceffect_combinations
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 364: BasicEffect pixel test — VertexColorEnabled=false, no texture, diffuse color only
         cna_easygl_test(cna_test_easygl_basiceffect_vertexcolor_disabled
                         examples/easygl_basiceffect_vertexcolor_disabled_test.cpp)
-        add_test(NAME EasyGL_BasicEffect_VertexColorDisabled
-                 COMMAND cna_test_easygl_basiceffect_vertexcolor_disabled)
-        set_tests_properties(EasyGL_BasicEffect_VertexColorDisabled PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_BasicEffect_VertexColorDisabled COMMAND cna_test_easygl_basiceffect_vertexcolor_disabled
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 365: BasicEffect pixel test — VertexColorEnabled=true, no texture, vertex color multiplication
         cna_easygl_test(cna_test_easygl_basiceffect_vertexcolor_enabled
                         examples/easygl_basiceffect_vertexcolor_enabled_test.cpp)
-        add_test(NAME EasyGL_BasicEffect_VertexColorEnabled
-                 COMMAND cna_test_easygl_basiceffect_vertexcolor_enabled)
-        set_tests_properties(EasyGL_BasicEffect_VertexColorEnabled PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_BasicEffect_VertexColorEnabled COMMAND cna_test_easygl_basiceffect_vertexcolor_enabled
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 366: BasicEffect pixel test — TextureEnabled=true, no vertex color
         cna_easygl_test(cna_test_easygl_basiceffect_texture_enabled
                         examples/easygl_basiceffect_texture_enabled_test.cpp)
-        add_test(NAME EasyGL_BasicEffect_TextureEnabled
-                 COMMAND cna_test_easygl_basiceffect_texture_enabled)
-        set_tests_properties(EasyGL_BasicEffect_TextureEnabled PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_BasicEffect_TextureEnabled COMMAND cna_test_easygl_basiceffect_texture_enabled
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 367: BasicEffect pixel test — TextureEnabled=true AND VertexColorEnabled=true
         cna_easygl_test(cna_test_easygl_basiceffect_texture_vertexcolor_enabled
                         examples/easygl_basiceffect_texture_vertexcolor_enabled_test.cpp)
-        add_test(NAME EasyGL_BasicEffect_TextureVertexColorEnabled
-                 COMMAND cna_test_easygl_basiceffect_texture_vertexcolor_enabled)
-        set_tests_properties(EasyGL_BasicEffect_TextureVertexColorEnabled PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_BasicEffect_TextureVertexColorEnabled COMMAND cna_test_easygl_basiceffect_texture_vertexcolor_enabled
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 368: BasicEffect pixel test — LightingEnabled=true, one DirectionalLight
         cna_easygl_test(cna_test_easygl_basiceffect_one_light
                         examples/easygl_basiceffect_one_light_test.cpp)
-        add_test(NAME EasyGL_BasicEffect_OneLight
-                 COMMAND cna_test_easygl_basiceffect_one_light)
-        set_tests_properties(EasyGL_BasicEffect_OneLight PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_BasicEffect_OneLight COMMAND cna_test_easygl_basiceffect_one_light
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 369: BasicEffect pixel test — DiffuseColor+EmissiveColor, LightingEnabled=false
         cna_easygl_test(cna_test_easygl_basiceffect_emissive
                         examples/easygl_basiceffect_emissive_test.cpp)
-        add_test(NAME EasyGL_BasicEffect_Emissive
-                 COMMAND cna_test_easygl_basiceffect_emissive)
-        set_tests_properties(EasyGL_BasicEffect_Emissive PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_BasicEffect_Emissive COMMAND cna_test_easygl_basiceffect_emissive
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 370: BasicEffect cross-backend image comparison suite — closes Phase 42
         cna_easygl_test(cna_test_easygl_basiceffect_combined
                         examples/easygl_basiceffect_combined_test.cpp)
-        add_test(NAME EasyGL_BasicEffect_Combined
-                 COMMAND cna_test_easygl_basiceffect_combined)
-        set_tests_properties(EasyGL_BasicEffect_Combined PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_BasicEffect_Combined COMMAND cna_test_easygl_basiceffect_combined
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_alphatest_modes
                         examples/easygl_alphatest_modes_test.cpp)
-        add_test(NAME EasyGL_AlphaTestModes
-                 COMMAND cna_test_easygl_alphatest_modes)
-        set_tests_properties(EasyGL_AlphaTestModes PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_AlphaTestModes COMMAND cna_test_easygl_alphatest_modes
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 373: AlphaTestEffect all CompareFunction modes — threshold sweep (below/at/above)
         cna_easygl_test(cna_test_easygl_alphatest_comparefunction_sweep
                         examples/easygl_alphatest_comparefunction_sweep_test.cpp)
-        add_test(NAME EasyGL_AlphaTest_CompareFunctionSweep
-                 COMMAND cna_test_easygl_alphatest_comparefunction_sweep)
-        set_tests_properties(EasyGL_AlphaTest_CompareFunctionSweep PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_AlphaTest_CompareFunctionSweep COMMAND cna_test_easygl_alphatest_comparefunction_sweep
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 377: AlphaTestEffect vertex color x diffuse color interaction
         cna_easygl_test(cna_test_easygl_alphatest_vertexcolor_diffuse
                         examples/easygl_alphatest_vertexcolor_diffuse_test.cpp)
-        add_test(NAME EasyGL_AlphaTest_VertexColorDiffuse
-                 COMMAND cna_test_easygl_alphatest_vertexcolor_diffuse)
-        set_tests_properties(EasyGL_AlphaTest_VertexColorDiffuse PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_AlphaTest_VertexColorDiffuse COMMAND cna_test_easygl_alphatest_vertexcolor_diffuse
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 378: AlphaTestEffect fog behavior
         cna_easygl_test(cna_test_easygl_alphatest_fog
                         examples/easygl_alphatest_fog_test.cpp)
-        add_test(NAME EasyGL_AlphaTest_Fog
-                 COMMAND cna_test_easygl_alphatest_fog)
-        set_tests_properties(EasyGL_AlphaTest_Fog PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_AlphaTest_Fog COMMAND cna_test_easygl_alphatest_fog
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 379: AlphaTestEffect null/no-texture behavior
         cna_easygl_test(cna_test_easygl_alphatest_null_texture
                         examples/easygl_alphatest_null_texture_test.cpp)
-        add_test(NAME EasyGL_AlphaTest_NullTexture
-                 COMMAND cna_test_easygl_alphatest_null_texture)
-        set_tests_properties(EasyGL_AlphaTest_NullTexture PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_AlphaTest_NullTexture COMMAND cna_test_easygl_alphatest_null_texture
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 383: DualTextureEffect two-texture blend formula, including FNA's color.rgb*=2
         cna_easygl_test(cna_test_easygl_dualtextureeffect_doubling
                         examples/easygl_dualtextureeffect_doubling_test.cpp)
-        add_test(NAME EasyGL_DualTextureEffect_Doubling
-                 COMMAND cna_test_easygl_dualtextureeffect_doubling)
-        set_tests_properties(EasyGL_DualTextureEffect_Doubling PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_DualTextureEffect_Doubling COMMAND cna_test_easygl_dualtextureeffect_doubling
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 385: DualTextureEffect Alpha premultiplication, verified via real AlphaBlend
         cna_easygl_test(cna_test_easygl_dualtextureeffect_alpha
                         examples/easygl_dualtextureeffect_alpha_test.cpp)
-        add_test(NAME EasyGL_DualTextureEffect_Alpha
-                 COMMAND cna_test_easygl_dualtextureeffect_alpha)
-        set_tests_properties(EasyGL_DualTextureEffect_Alpha PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_DualTextureEffect_Alpha COMMAND cna_test_easygl_dualtextureeffect_alpha
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 386: DualTextureEffect first texture (Texture, slot 0) null behavior
         cna_easygl_test(cna_test_easygl_dualtextureeffect_null_texture0
                         examples/easygl_dualtextureeffect_null_texture0_test.cpp)
-        add_test(NAME EasyGL_DualTextureEffect_NullTexture0
-                 COMMAND cna_test_easygl_dualtextureeffect_null_texture0)
-        set_tests_properties(EasyGL_DualTextureEffect_NullTexture0 PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_DualTextureEffect_NullTexture0 COMMAND cna_test_easygl_dualtextureeffect_null_texture0
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 387: DualTextureEffect second texture (Texture2, slot 1) null behavior
         cna_easygl_test(cna_test_easygl_dualtextureeffect_null_texture2
                         examples/easygl_dualtextureeffect_null_texture2_test.cpp)
-        add_test(NAME EasyGL_DualTextureEffect_NullTexture2
-                 COMMAND cna_test_easygl_dualtextureeffect_null_texture2)
-        set_tests_properties(EasyGL_DualTextureEffect_NullTexture2 PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_DualTextureEffect_NullTexture2 COMMAND cna_test_easygl_dualtextureeffect_null_texture2
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 388: DualTextureEffect fog behavior
         cna_easygl_test(cna_test_easygl_dualtextureeffect_fog
                         examples/easygl_dualtextureeffect_fog_test.cpp)
-        add_test(NAME EasyGL_DualTextureEffect_Fog
-                 COMMAND cna_test_easygl_dualtextureeffect_fog)
-        set_tests_properties(EasyGL_DualTextureEffect_Fog PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_DualTextureEffect_Fog COMMAND cna_test_easygl_dualtextureeffect_fog
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 389: DualTextureEffect cross-backend image comparison suite (closes Phase 44 pixel work)
         cna_easygl_test(cna_test_easygl_dualtextureeffect_combined
                         examples/easygl_dualtextureeffect_combined_test.cpp)
-        add_test(NAME EasyGL_DualTextureEffect_Combined
-                 COMMAND cna_test_easygl_dualtextureeffect_combined)
-        set_tests_properties(EasyGL_DualTextureEffect_Combined PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_DualTextureEffect_Combined COMMAND cna_test_easygl_dualtextureeffect_combined
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_dualtexture
                         examples/easygl_dualtexture_test.cpp)
-        add_test(NAME EasyGL_DualTexture
-                 COMMAND cna_test_easygl_dualtexture)
-        set_tests_properties(EasyGL_DualTexture PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_DualTexture COMMAND cna_test_easygl_dualtexture
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_skinned_effect_bones
                         examples/easygl_skinned_effect_bones_test.cpp)
-        add_test(NAME EasyGL_SkinnedBones
-                 COMMAND cna_test_easygl_skinned_effect_bones)
-        set_tests_properties(EasyGL_SkinnedBones PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_SkinnedBones COMMAND cna_test_easygl_skinned_effect_bones
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_basiceffect_default_lighting
                         examples/easygl_basiceffect_default_lighting_test.cpp)
-        add_test(NAME EasyGL_BasicEffectDefaultLighting
-                 COMMAND cna_test_easygl_basiceffect_default_lighting)
-        set_tests_properties(EasyGL_BasicEffectDefaultLighting PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_BasicEffectDefaultLighting COMMAND cna_test_easygl_basiceffect_default_lighting
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_easygl_test(cna_test_easygl_basiceffect_fog
                         examples/easygl_basiceffect_fog_test.cpp)
-        add_test(NAME EasyGL_BasicEffectFog
-                 COMMAND cna_test_easygl_basiceffect_fog)
-        set_tests_properties(EasyGL_BasicEffectFog PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_BasicEffectFog COMMAND cna_test_easygl_basiceffect_fog
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 247: draw quad with each supported VertexElementFormat via VertexBuffer
         cna_easygl_test(cna_test_easygl_vertex_formats
                         examples/easygl_vertex_formats_test.cpp)
-        add_test(NAME EasyGL_VertexFormats_AllStrides
-                 COMMAND cna_test_easygl_vertex_formats)
-        set_tests_properties(EasyGL_VertexFormats_AllStrides PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_VertexFormats_AllStrides COMMAND cna_test_easygl_vertex_formats
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 255: DrawUserPrimitives<VertexPositionColor> pixel-readback
         cna_easygl_test(cna_test_easygl_draw_user_primitives_vpc
                         examples/easygl_draw_user_primitives_vpc_test.cpp)
-        add_test(NAME EasyGL_DrawUserPrimitives_VPC
-                 COMMAND cna_test_easygl_draw_user_primitives_vpc)
-        set_tests_properties(EasyGL_DrawUserPrimitives_VPC PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_DrawUserPrimitives_VPC COMMAND cna_test_easygl_draw_user_primitives_vpc
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 256: DrawUserPrimitives with explicit VertexDeclaration pixel-readback
         cna_easygl_test(cna_test_easygl_draw_user_primitives_custom
                         examples/easygl_draw_user_primitives_custom_test.cpp)
-        add_test(NAME EasyGL_DrawUserPrimitives_CustomVD
-                 COMMAND cna_test_easygl_draw_user_primitives_custom)
-        set_tests_properties(EasyGL_DrawUserPrimitives_CustomVD PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_DrawUserPrimitives_CustomVD COMMAND cna_test_easygl_draw_user_primitives_custom
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 257: DrawUserIndexedPrimitives<VertexPositionColor> (16-bit indices) pixel-readback
         cna_easygl_test(cna_test_easygl_draw_user_indexed_primitives_vpc
                         examples/easygl_draw_user_indexed_primitives_vpc_test.cpp)
-        add_test(NAME EasyGL_DrawUserIndexedPrimitives_VPC
-                 COMMAND cna_test_easygl_draw_user_indexed_primitives_vpc)
-        set_tests_properties(EasyGL_DrawUserIndexedPrimitives_VPC PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_DrawUserIndexedPrimitives_VPC COMMAND cna_test_easygl_draw_user_indexed_primitives_vpc
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 258: DrawUserIndexedPrimitives<VertexPositionColor> (32-bit indices) pixel-readback
         cna_easygl_test(cna_test_easygl_draw_user_indexed_primitives_32
                         examples/easygl_draw_user_indexed_primitives_32_test.cpp)
-        add_test(NAME EasyGL_DrawUserIndexedPrimitives_32
-                 COMMAND cna_test_easygl_draw_user_indexed_primitives_32)
-        set_tests_properties(EasyGL_DrawUserIndexedPrimitives_32 PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_DrawUserIndexedPrimitives_32 COMMAND cna_test_easygl_draw_user_indexed_primitives_32
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 268: non-power-of-two (3x5) texture upload + GPU-sampled pixel-readback
         cna_easygl_test(cna_test_easygl_npot_texture
                         examples/easygl_npot_texture_test.cpp)
-        add_test(NAME EasyGL_NpotTexture
-                 COMMAND cna_test_easygl_npot_texture)
-        set_tests_properties(EasyGL_NpotTexture PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_NpotTexture COMMAND cna_test_easygl_npot_texture
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 269: SpriteBatch TextureAddressMode (Wrap vs Clamp) edge-sampling pixel-readback
         cna_easygl_test(cna_test_easygl_texture_address_mode
                         examples/easygl_texture_address_mode_test.cpp)
-        add_test(NAME EasyGL_TextureAddressMode
-                 COMMAND cna_test_easygl_texture_address_mode)
-        set_tests_properties(EasyGL_TextureAddressMode PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_TextureAddressMode COMMAND cna_test_easygl_texture_address_mode
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 737: SpriteBatch TextureAddressMode::Mirror edge-sampling pixel-readback -- Task 269
         # only independently verified Wrap/Clamp; Mirror is fixed by the same code path but was
         # never verified on its own until now.
         cna_easygl_test(cna_test_easygl_texture_address_mode_mirror
                         examples/easygl_texture_address_mode_mirror_test.cpp)
-        add_test(NAME EasyGL_TextureAddressMode_Mirror
-                 COMMAND cna_test_easygl_texture_address_mode_mirror)
-        set_tests_properties(EasyGL_TextureAddressMode_Mirror PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_TextureAddressMode_Mirror COMMAND cna_test_easygl_texture_address_mode_mirror
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 424: Pixel test -- draw a single SpriteFont glyph at a known position on EasyGL.
         cna_easygl_test(cna_test_easygl_spritefont_single_glyph
                         examples/easygl_spritefont_single_glyph_test.cpp)
-        add_test(NAME EasyGL_SpriteFont_SingleGlyph
-                 COMMAND cna_test_easygl_spritefont_single_glyph)
-        set_tests_properties(EasyGL_SpriteFont_SingleGlyph PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_SpriteFont_SingleGlyph COMMAND cna_test_easygl_spritefont_single_glyph
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 425: Pixel test -- draw multiple SpriteFont glyphs with spacing on EasyGL.
         cna_easygl_test(cna_test_easygl_spritefont_multiglyph_spacing
                         examples/easygl_spritefont_multiglyph_spacing_test.cpp)
-        add_test(NAME EasyGL_SpriteFont_MultiGlyphSpacing
-                 COMMAND cna_test_easygl_spritefont_multiglyph_spacing)
-        set_tests_properties(EasyGL_SpriteFont_MultiGlyphSpacing PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_SpriteFont_MultiGlyphSpacing COMMAND cna_test_easygl_spritefont_multiglyph_spacing
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 426: Pixel test -- SpriteFont newline advances by line spacing on EasyGL.
         cna_easygl_test(cna_test_easygl_spritefont_newline
                         examples/easygl_spritefont_newline_test.cpp)
-        add_test(NAME EasyGL_SpriteFont_Newline
-                 COMMAND cna_test_easygl_spritefont_newline)
-        set_tests_properties(EasyGL_SpriteFont_Newline PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_SpriteFont_Newline COMMAND cna_test_easygl_spritefont_newline
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 427: Pixel test -- SpriteFont default character fallback renders the expected
         # glyph on EasyGL.
         cna_easygl_test(cna_test_easygl_spritefont_default_char
                         examples/easygl_spritefont_default_char_test.cpp)
-        add_test(NAME EasyGL_SpriteFont_DefaultChar
-                 COMMAND cna_test_easygl_spritefont_default_char)
-        set_tests_properties(EasyGL_SpriteFont_DefaultChar PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_SpriteFont_DefaultChar COMMAND cna_test_easygl_spritefont_default_char
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 428: Verify SpriteEffects (flip) with DrawString on EasyGL.
         cna_easygl_test(cna_test_easygl_spritefont_effects_flip
                         examples/easygl_spritefont_effects_flip_test.cpp)
-        add_test(NAME EasyGL_SpriteFont_EffectsFlip
-                 COMMAND cna_test_easygl_spritefont_effects_flip)
-        set_tests_properties(EasyGL_SpriteFont_EffectsFlip PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_SpriteFont_EffectsFlip COMMAND cna_test_easygl_spritefont_effects_flip
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 429: Verify rotation/origin/scale with DrawString on EasyGL.
         cna_easygl_test(cna_test_easygl_spritefont_effects_rotation_scale
                         examples/easygl_spritefont_effects_rotation_scale_test.cpp)
-        add_test(NAME EasyGL_SpriteFont_EffectsRotationScale
-                 COMMAND cna_test_easygl_spritefont_effects_rotation_scale)
-        set_tests_properties(EasyGL_SpriteFont_EffectsRotationScale PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_SpriteFont_EffectsRotationScale COMMAND cna_test_easygl_spritefont_effects_rotation_scale
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 293: DualTextureEffect (3D stock effect) honors GraphicsDevice.SamplerStates[0]
         cna_easygl_test(cna_test_easygl_sampler_state_effect
                         examples/easygl_sampler_state_effect_test.cpp)
-        add_test(NAME EasyGL_SamplerState_DualTextureEffect
-                 COMMAND cna_test_easygl_sampler_state_effect)
-        set_tests_properties(EasyGL_SamplerState_DualTextureEffect PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_SamplerState_DualTextureEffect COMMAND cna_test_easygl_sampler_state_effect
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 294: TextureAddressMode::Clamp on a 3D stock effect (DualTextureEffect)
         cna_easygl_test(cna_test_easygl_texture_address_mode_clamp_effect
                         examples/easygl_texture_address_mode_clamp_effect_test.cpp)
-        add_test(NAME EasyGL_TextureAddressMode_Clamp_DualTextureEffect
-                 COMMAND cna_test_easygl_texture_address_mode_clamp_effect)
-        set_tests_properties(EasyGL_TextureAddressMode_Clamp_DualTextureEffect PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_TextureAddressMode_Clamp_DualTextureEffect COMMAND cna_test_easygl_texture_address_mode_clamp_effect
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 296: TextureAddressMode::Mirror on a 3D stock effect (DualTextureEffect)
         cna_easygl_test(cna_test_easygl_texture_address_mode_mirror_effect
                         examples/easygl_texture_address_mode_mirror_effect_test.cpp)
-        add_test(NAME EasyGL_TextureAddressMode_Mirror_DualTextureEffect
-                 COMMAND cna_test_easygl_texture_address_mode_mirror_effect)
-        set_tests_properties(EasyGL_TextureAddressMode_Mirror_DualTextureEffect PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_TextureAddressMode_Mirror_DualTextureEffect COMMAND cna_test_easygl_texture_address_mode_mirror_effect
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 297: TextureFilter::Point vs Linear, magnification and minification
         cna_easygl_test(cna_test_easygl_texture_filter_point_vs_linear
                         examples/easygl_texture_filter_point_vs_linear_test.cpp)
-        add_test(NAME EasyGL_TextureFilter_PointVsLinear
-                 COMMAND cna_test_easygl_texture_filter_point_vs_linear)
-        set_tests_properties(EasyGL_TextureFilter_PointVsLinear PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_TextureFilter_PointVsLinear COMMAND cna_test_easygl_texture_filter_point_vs_linear
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 298: mipmap filter behavior (LinearMipPoint selects the correct mip; Point does not)
         cna_easygl_test(cna_test_easygl_texture_mip_filter_effect
                         examples/easygl_texture_mip_filter_effect_test.cpp)
-        add_test(NAME EasyGL_TextureMipFilter_DualTextureEffect
-                 COMMAND cna_test_easygl_texture_mip_filter_effect)
-        set_tests_properties(EasyGL_TextureMipFilter_DualTextureEffect PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_TextureMipFilter_DualTextureEffect COMMAND cna_test_easygl_texture_mip_filter_effect
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 299: anisotropic filtering caps and fallback (extreme MaxAnisotropy must not crash)
         cna_easygl_test(cna_test_easygl_texture_anisotropic_effect
                         examples/easygl_texture_anisotropic_effect_test.cpp)
-        add_test(NAME EasyGL_TextureAnisotropic_DualTextureEffect
-                 COMMAND cna_test_easygl_texture_anisotropic_effect)
-        set_tests_properties(EasyGL_TextureAnisotropic_DualTextureEffect PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_TextureAnisotropic_DualTextureEffect COMMAND cna_test_easygl_texture_anisotropic_effect
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 924 (split from Task 867): a single-level Texture2D sampled with a mipmap-requiring
         # TextureFilter (Anisotropic) must not render solid black (GL_TEXTURE_MAX_LEVEL now
         # clamped to the real level count instead of GL's own default of 1000).
         cna_easygl_test(cna_test_easygl_texture2d_anisotropic_singlelevel
                         examples/easygl_texture2d_anisotropic_singlelevel_test.cpp)
-        add_test(NAME EasyGL_Texture2D_AnisotropicSingleLevel
-                 COMMAND cna_test_easygl_texture2d_anisotropic_singlelevel)
-        set_tests_properties(EasyGL_Texture2D_AnisotropicSingleLevel PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_Texture2D_AnisotropicSingleLevel COMMAND cna_test_easygl_texture2d_anisotropic_singlelevel
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 918: real GL_EXT_texture_filter_anisotropic wiring, verified directly against
         # easy-gl's own Sampler API rather than trusting the capability-dump log alone.
         cna_easygl_test(cna_test_easygl_anisotropic_gl_state
                         examples/easygl_anisotropic_gl_state_test.cpp)
         target_link_libraries(cna_test_easygl_anisotropic_gl_state PRIVATE easy-gl)
-        add_test(NAME EasyGL_Anisotropic_GlState
-                 COMMAND cna_test_easygl_anisotropic_gl_state)
-        set_tests_properties(EasyGL_Anisotropic_GlState PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_Anisotropic_GlState COMMAND cna_test_easygl_anisotropic_gl_state
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 303: BlendState::Opaque discards destination + source alpha entirely
         cna_easygl_test(cna_test_easygl_blendstate_opaque
                         examples/easygl_blendstate_opaque_test.cpp)
-        add_test(NAME EasyGL_BlendState_Opaque
-                 COMMAND cna_test_easygl_blendstate_opaque)
-        set_tests_properties(EasyGL_BlendState_Opaque PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_BlendState_Opaque COMMAND cna_test_easygl_blendstate_opaque
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 304: BlendState::AlphaBlend expects premultiplied source colour
         cna_easygl_test(cna_test_easygl_blendstate_alphablend
                         examples/easygl_blendstate_alphablend_test.cpp)
-        add_test(NAME EasyGL_BlendState_AlphaBlend
-                 COMMAND cna_test_easygl_blendstate_alphablend)
-        set_tests_properties(EasyGL_BlendState_AlphaBlend PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_BlendState_AlphaBlend COMMAND cna_test_easygl_blendstate_alphablend
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 305: BlendState::NonPremultiplied expects a raw (non-premultiplied) source colour
         cna_easygl_test(cna_test_easygl_blendstate_nonpremultiplied
                         examples/easygl_blendstate_nonpremultiplied_test.cpp)
-        add_test(NAME EasyGL_BlendState_NonPremultiplied
-                 COMMAND cna_test_easygl_blendstate_nonpremultiplied)
-        set_tests_properties(EasyGL_BlendState_NonPremultiplied PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_BlendState_NonPremultiplied COMMAND cna_test_easygl_blendstate_nonpremultiplied
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 306: BlendState::Additive saturation + full-destination-add behaviour
         cna_easygl_test(cna_test_easygl_blendstate_additive
                         examples/easygl_blendstate_additive_test.cpp)
-        add_test(NAME EasyGL_BlendState_Additive
-                 COMMAND cna_test_easygl_blendstate_additive)
-        set_tests_properties(EasyGL_BlendState_Additive PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_BlendState_Additive COMMAND cna_test_easygl_blendstate_additive
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 307: ColorBlendFunction/AlphaBlendFunction operate independently
         cna_easygl_test(cna_test_easygl_blendstate_separate_functions
                         examples/easygl_blendstate_separate_functions_test.cpp)
-        add_test(NAME EasyGL_BlendState_SeparateFunctions
-                 COMMAND cna_test_easygl_blendstate_separate_functions)
-        set_tests_properties(EasyGL_BlendState_SeparateFunctions PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_BlendState_SeparateFunctions COMMAND cna_test_easygl_blendstate_separate_functions
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 308: ColorSourceBlend/ColorDestinationBlend operate independently from Alpha*Blend
         cna_easygl_test(cna_test_easygl_blendstate_separate_factors
                         examples/easygl_blendstate_separate_factors_test.cpp)
-        add_test(NAME EasyGL_BlendState_SeparateFactors
-                 COMMAND cna_test_easygl_blendstate_separate_factors)
-        set_tests_properties(EasyGL_BlendState_SeparateFactors PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_BlendState_SeparateFactors COMMAND cna_test_easygl_blendstate_separate_factors
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 309: BlendState.BlendFactor propagates via GraphicsDevice.setBlendStateProperty alone
         cna_easygl_test(cna_test_easygl_blendstate_blendfactor
                         examples/easygl_blendstate_blendfactor_test.cpp)
-        add_test(NAME EasyGL_BlendState_BlendFactor
-                 COMMAND cna_test_easygl_blendstate_blendfactor)
-        set_tests_properties(EasyGL_BlendState_BlendFactor PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_BlendState_BlendFactor COMMAND cna_test_easygl_blendstate_blendfactor
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 313: DepthStencilState.DepthBufferWriteEnable actually gates depth-buffer writes
         cna_easygl_test(cna_test_easygl_depthstencilstate_write_enable
                         examples/easygl_depthstencilstate_write_enable_test.cpp)
-        add_test(NAME EasyGL_DepthStencilState_WriteEnable
-                 COMMAND cna_test_easygl_depthstencilstate_write_enable)
-        set_tests_properties(EasyGL_DepthStencilState_WriteEnable PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_DepthStencilState_WriteEnable COMMAND cna_test_easygl_depthstencilstate_write_enable
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 314: DepthStencilState.DepthBufferFunction (Always/Never/Less/LessEqual/Greater)
         cna_easygl_test(cna_test_easygl_depthstencilstate_compare_function
                         examples/easygl_depthstencilstate_compare_function_test.cpp)
-        add_test(NAME EasyGL_DepthStencilState_CompareFunction
-                 COMMAND cna_test_easygl_depthstencilstate_compare_function)
-        set_tests_properties(EasyGL_DepthStencilState_CompareFunction PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_DepthStencilState_CompareFunction COMMAND cna_test_easygl_depthstencilstate_compare_function
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 315: DepthStencilState.StencilEnable actually gates the stencil test
         cna_easygl_test(cna_test_easygl_depthstencilstate_stencil_enable
                         examples/easygl_depthstencilstate_stencil_enable_test.cpp)
-        add_test(NAME EasyGL_DepthStencilState_StencilEnable
-                 COMMAND cna_test_easygl_depthstencilstate_stencil_enable)
-        set_tests_properties(EasyGL_DepthStencilState_StencilEnable PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_DepthStencilState_StencilEnable COMMAND cna_test_easygl_depthstencilstate_stencil_enable
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 316: DepthStencilState.StencilMask / StencilWriteMask
         cna_easygl_test(cna_test_easygl_depthstencilstate_stencil_mask
                         examples/easygl_depthstencilstate_stencil_mask_test.cpp)
-        add_test(NAME EasyGL_DepthStencilState_StencilMask
-                 COMMAND cna_test_easygl_depthstencilstate_stencil_mask)
-        set_tests_properties(EasyGL_DepthStencilState_StencilMask PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_DepthStencilState_StencilMask COMMAND cna_test_easygl_depthstencilstate_stencil_mask
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 317: DepthStencilState front-face stencil operations (StencilFail/
         # StencilDepthBufferFail/StencilPass)
         cna_easygl_test(cna_test_easygl_depthstencilstate_stencil_ops
                         examples/easygl_depthstencilstate_stencil_ops_test.cpp)
-        add_test(NAME EasyGL_DepthStencilState_StencilOps
-                 COMMAND cna_test_easygl_depthstencilstate_stencil_ops)
-        set_tests_properties(EasyGL_DepthStencilState_StencilOps PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_DepthStencilState_StencilOps COMMAND cna_test_easygl_depthstencilstate_stencil_ops
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 318: DepthStencilState.TwoSidedStencilMode / back-face (CCW) stencil ops
         cna_easygl_test(cna_test_easygl_depthstencilstate_stencil_twosided
                         examples/easygl_depthstencilstate_stencil_twosided_test.cpp)
-        add_test(NAME EasyGL_DepthStencilState_StencilTwoSided
-                 COMMAND cna_test_easygl_depthstencilstate_stencil_twosided)
-        set_tests_properties(EasyGL_DepthStencilState_StencilTwoSided PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_DepthStencilState_StencilTwoSided COMMAND cna_test_easygl_depthstencilstate_stencil_twosided
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 319: GraphicsDevice.ReferenceStencil independent-override behavior (Task 872 -
         # confirmed a universal, not-Vulkan-specific gap; registered as a documented known failure)
         cna_easygl_test(cna_test_easygl_graphicsdevice_reference_stencil
                         examples/easygl_graphicsdevice_reference_stencil_test.cpp)
-        add_test(NAME EasyGL_GraphicsDevice_ReferenceStencil
-                 COMMAND cna_test_easygl_graphicsdevice_reference_stencil)
-        set_tests_properties(EasyGL_GraphicsDevice_ReferenceStencil PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_GraphicsDevice_ReferenceStencil COMMAND cna_test_easygl_graphicsdevice_reference_stencil
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 871: GraphicsDevice::Clear() now actually clears the stencil buffer to the
         # requested value on ClearOptions combinations that include ClearOptions::Stencil.
         cna_easygl_test(cna_test_easygl_graphicsdevice_clear_stencil
                         examples/easygl_graphicsdevice_clear_stencil_test.cpp)
-        add_test(NAME EasyGL_GraphicsDevice_ClearStencil
-                 COMMAND cna_test_easygl_graphicsdevice_clear_stencil)
-        set_tests_properties(EasyGL_GraphicsDevice_ClearStencil PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_GraphicsDevice_ClearStencil COMMAND cna_test_easygl_graphicsdevice_clear_stencil
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 950: GraphicsDevice::Clear()'s depth parameter -- EasyGL already forwarded it
         # correctly (unlike Vulkan/Bgfx); registered here too as a regression guard.
         cna_easygl_test(cna_test_easygl_graphicsdevice_clear_depth
                         examples/graphicsdevice_clear_depth_test.cpp)
-        add_test(NAME EasyGL_GraphicsDevice_ClearDepth
-                 COMMAND cna_test_easygl_graphicsdevice_clear_depth)
-        set_tests_properties(EasyGL_GraphicsDevice_ClearDepth PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_GraphicsDevice_ClearDepth COMMAND cna_test_easygl_graphicsdevice_clear_depth
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 955: a freshly-constructed GraphicsDevice's own default state (no game code ever
         # explicitly setting BlendState/DepthStencilState/RasterizerState, exactly like
         # ../cna-samples SimpleAnimation's Tank.hpp) must produce correct opaque depth occlusion.
         cna_easygl_test(cna_test_easygl_graphicsdevice_default_state_occlusion
                         examples/graphicsdevice_default_state_occlusion_test.cpp)
-        add_test(NAME EasyGL_GraphicsDevice_DefaultStateOcclusion
-                 COMMAND cna_test_easygl_graphicsdevice_default_state_occlusion)
-        set_tests_properties(EasyGL_GraphicsDevice_DefaultStateOcclusion PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_GraphicsDevice_DefaultStateOcclusion COMMAND cna_test_easygl_graphicsdevice_default_state_occlusion
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 889: DualTextureEffect.VertexColorEnabled -- verbatim reuse of the shared
         # backend-agnostic source, registered on all 3 backends.
         cna_easygl_test(cna_test_easygl_dualtextureeffect_vertexcolor
                         examples/dualtextureeffect_vertexcolor_test.cpp)
-        add_test(NAME EasyGL_DualTextureEffect_VertexColor
-                 COMMAND cna_test_easygl_dualtextureeffect_vertexcolor)
-        set_tests_properties(EasyGL_DualTextureEffect_VertexColor PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_DualTextureEffect_VertexColor COMMAND cna_test_easygl_dualtextureeffect_vertexcolor
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 323 (+ 324/325 coverage): RasterizerState.CullMode — None/CullClockwiseFace/
         # CullCounterClockwiseFace, contrast-checked with front- and back-winding quads
         cna_easygl_test(cna_test_easygl_rasterizerstate_cullmode
                         examples/easygl_rasterizerstate_cullmode_test.cpp)
-        add_test(NAME EasyGL_RasterizerState_CullMode
-                 COMMAND cna_test_easygl_rasterizerstate_cullmode)
-        set_tests_properties(EasyGL_RasterizerState_CullMode PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_RasterizerState_CullMode COMMAND cna_test_easygl_rasterizerstate_cullmode
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # XNA culling-compatibility audit (docs/xna_culling_compatibility_audit.md): extends the
         # identity-only CullMode test above with a real Matrix::CreateLookAt camera and
@@ -3677,11 +2999,8 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         # source, registered on all 3 backends.
         cna_easygl_test(cna_test_easygl_rasterizerstate_cullmode_camera
                         examples/rasterizerstate_cullmode_camera_test.cpp)
-        add_test(NAME EasyGL_RasterizerState_CullMode_Camera
-                 COMMAND cna_test_easygl_rasterizerstate_cullmode_camera)
-        set_tests_properties(EasyGL_RasterizerState_CullMode_Camera PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_RasterizerState_CullMode_Camera COMMAND cna_test_easygl_rasterizerstate_cullmode_camera
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # XNA culling-compatibility audit: same real-camera reproducer, but through
         # GraphicsDevice::DrawIndexedPrimitives with a real VertexBuffer/IndexBuffer/BasicEffect
@@ -3689,48 +3008,33 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         # separate DrawColoredPrimitives dispatch. Verbatim reuse of the shared source.
         cna_easygl_test(cna_test_easygl_rasterizerstate_cullmode_indexed_basiceffect
                         examples/rasterizerstate_cullmode_indexed_basiceffect_test.cpp)
-        add_test(NAME EasyGL_RasterizerState_CullMode_IndexedBasicEffect
-                 COMMAND cna_test_easygl_rasterizerstate_cullmode_indexed_basiceffect)
-        set_tests_properties(EasyGL_RasterizerState_CullMode_IndexedBasicEffect PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_RasterizerState_CullMode_IndexedBasicEffect COMMAND cna_test_easygl_rasterizerstate_cullmode_indexed_basiceffect
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 326: FillMode::Solid baseline on EasyGL (reuses Task 327's backend-agnostic Vulkan
         # source — its Solid sub-tests 1/3 previously only ran on Vulkan).
         cna_easygl_test(cna_test_easygl_fill_mode
                         examples/vulkan_fill_mode_test.cpp)
-        add_test(NAME EasyGL_FillMode_Solid
-                 COMMAND cna_test_easygl_fill_mode)
-        set_tests_properties(EasyGL_FillMode_Solid PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_FillMode_Solid COMMAND cna_test_easygl_fill_mode
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 767: depth bias / slope-scale depth bias via real glPolygonOffset.
         cna_easygl_test(cna_test_easygl_depth_bias
                         examples/easygl_depth_bias_test.cpp)
-        add_test(NAME EasyGL_DepthBias
-                 COMMAND cna_test_easygl_depth_bias)
-        set_tests_properties(EasyGL_DepthBias PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_DepthBias COMMAND cna_test_easygl_depth_bias
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 331: RenderTarget2D constructor/property audit against FNA.
         cna_easygl_test(cna_test_easygl_rendertarget2d_properties
                         examples/easygl_rendertarget2d_properties_test.cpp)
-        add_test(NAME EasyGL_RenderTarget2D_Properties
-                 COMMAND cna_test_easygl_rendertarget2d_properties)
-        set_tests_properties(EasyGL_RenderTarget2D_Properties PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_RenderTarget2D_Properties COMMAND cna_test_easygl_rendertarget2d_properties
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 332: RenderTargetCube constructor/property audit against FNA.
         cna_easygl_test(cna_test_easygl_rendertargetcube_properties
                         examples/easygl_rendertargetcube_properties_test.cpp)
-        add_test(NAME EasyGL_RenderTargetCube_Properties
-                 COMMAND cna_test_easygl_rendertargetcube_properties)
-        set_tests_properties(EasyGL_RenderTargetCube_Properties PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_RenderTargetCube_Properties COMMAND cna_test_easygl_rendertargetcube_properties
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 498: build and run at least 5 small FNA/XNA sample ports on CNA as real
         # compatibility proof -- EasyGL is the primary/most-mature backend, so most of this
@@ -3738,68 +3042,46 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         # compatibility via SDL_Renderer's own 5 samples).
         # Sample 1/5: reuse cna_demo_2d, closing the exact same kind of gap Task 730 closed for
         # SDL_Renderer (already smoke-tested on Vulkan/Bgfx via Tasks 88/89, never on EasyGL).
-        add_test(NAME EasyGL_Demo2D_SmokeTest
-                 COMMAND cna_demo_2d --smoke 3)
-        set_tests_properties(EasyGL_Demo2D_SmokeTest PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
-            LABELS GraphicsSmoke)
+        cna_register_backend_test(NAME EasyGL_Demo2D_SmokeTest COMMAND cna_demo_2d --smoke 3
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}" LABELS "GraphicsSmoke")
 
         # Sample 2/5: moving 3D object -- Update()-driven World-space translation, BasicEffect.
         cna_easygl_test(cna_test_easygl_sample_moving_quad3d
                         examples/easygl_sample_moving_quad3d_test.cpp)
-        add_test(NAME EasyGL_Sample_MovingQuad3D
-                 COMMAND cna_test_easygl_sample_moving_quad3d)
-        set_tests_properties(EasyGL_Sample_MovingQuad3D PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_Sample_MovingQuad3D COMMAND cna_test_easygl_sample_moving_quad3d
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Sample 3/5: reactive material swap -- Update()-driven DualTextureEffect.Texture2 swap.
         cna_easygl_test(cna_test_easygl_sample_dualtexture_swap
                         examples/easygl_sample_dualtexture_swap_test.cpp)
-        add_test(NAME EasyGL_Sample_DualTextureSwap
-                 COMMAND cna_test_easygl_sample_dualtexture_swap)
-        set_tests_properties(EasyGL_Sample_DualTextureSwap PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_Sample_DualTextureSwap COMMAND cna_test_easygl_sample_dualtexture_swap
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Sample 4/5: keyboard-driven 3D object -- the 3D counterpart to Task 730's keyboard
         # sprite sample, using the same InputManager::SetKeyState injection seam.
         cna_easygl_test(cna_test_easygl_sample_keyboard_cube3d
                         examples/easygl_sample_keyboard_cube3d_test.cpp)
-        add_test(NAME EasyGL_Sample_KeyboardCube3D
-                 COMMAND cna_test_easygl_sample_keyboard_cube3d)
-        set_tests_properties(EasyGL_Sample_KeyboardCube3D PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_Sample_KeyboardCube3D COMMAND cna_test_easygl_sample_keyboard_cube3d
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Sample 5/5: layered UI fade -- Update()-driven SpriteBatch alpha-blend compositing.
         cna_easygl_test(cna_test_easygl_sample_layered_blend
                         examples/easygl_sample_layered_blend_test.cpp)
-        add_test(NAME EasyGL_Sample_LayeredBlend
-                 COMMAND cna_test_easygl_sample_layered_blend)
-        set_tests_properties(EasyGL_Sample_LayeredBlend PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_Sample_LayeredBlend COMMAND cna_test_easygl_sample_layered_blend
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 956: SpriteBatch's blend state must not leak a hardcoded value into a following 3D draw.
         cna_easygl_test(cna_test_easygl_spritebatch_blendstate_leak
                         examples/easygl_spritebatch_blendstate_leak_test.cpp)
-        add_test(NAME EasyGL_SpriteBatch_BlendStateLeak
-                 COMMAND cna_test_easygl_spritebatch_blendstate_leak)
-        set_tests_properties(EasyGL_SpriteBatch_BlendStateLeak PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_SpriteBatch_BlendStateLeak COMMAND cna_test_easygl_spritebatch_blendstate_leak
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # GraphicsDeviceManager.SynchronizeWithVerticalRetrace/ApplyChanges() must actually reach
         # IGraphicsBackend::SetSwapInterval() -- backend-independent fix in GraphicsDevice::Reset().
         cna_easygl_test(cna_test_easygl_graphicsdevicemanager_vsync
                         examples/easygl_graphicsdevicemanager_vsync_test.cpp)
-        add_test(NAME EasyGL_GraphicsDeviceManager_Vsync
-                 COMMAND cna_test_easygl_graphicsdevicemanager_vsync)
-        set_tests_properties(EasyGL_GraphicsDeviceManager_Vsync PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME EasyGL_GraphicsDeviceManager_Vsync COMMAND cna_test_easygl_graphicsdevicemanager_vsync
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     endif()
 
@@ -3825,88 +3107,60 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         enable_testing()
 
         # Task 88: 3-frame smoke test for the Vulkan backend
-        add_test(NAME Vulkan_Demo2D_SmokeTest
-                 COMMAND cna_demo_2d --smoke 3)
-        set_tests_properties(Vulkan_Demo2D_SmokeTest PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
-            LABELS GraphicsSmoke)
+        cna_register_backend_test(NAME Vulkan_Demo2D_SmokeTest COMMAND cna_demo_2d --smoke 3
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}" LABELS "GraphicsSmoke")
 
         # Task 124: DrawInstancedPrimitives — 3 instances at different X positions
         cna_vulkan_test(cna_test_vulkan_instanced
                         examples/vulkan_instanced_test.cpp)
-        add_test(NAME Vulkan_DrawInstanced_3Instances
-                 COMMAND cna_test_vulkan_instanced)
-        set_tests_properties(Vulkan_DrawInstanced_3Instances PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_DrawInstanced_3Instances COMMAND cna_test_vulkan_instanced
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 119: ShaderEffect with SPIR-V — SpriteBatch tint via custom push constants
         cna_vulkan_test(cna_test_vulkan_shader_effect
                         examples/vulkan_shader_effect_test.cpp)
-        add_test(NAME Vulkan_ShaderEffect_SpirV
-                 COMMAND cna_test_vulkan_shader_effect)
-        set_tests_properties(Vulkan_ShaderEffect_SpirV PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_ShaderEffect_SpirV COMMAND cna_test_vulkan_shader_effect
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 284: Texture2D Color format mapping — linear vs. sRGB decode on Vulkan
         cna_vulkan_test(cna_test_vulkan_texture_srgb
                         examples/vulkan_texture_srgb_test.cpp)
-        add_test(NAME Vulkan_Texture2D_ColorFormat_Linear
-                 COMMAND cna_test_vulkan_texture_srgb)
-        set_tests_properties(Vulkan_Texture2D_ColorFormat_Linear PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_Texture2D_ColorFormat_Linear COMMAND cna_test_vulkan_texture_srgb
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 135: DualTextureEffect — magenta×yellow→red pixel readback on Vulkan
         cna_vulkan_test(cna_test_vulkan_dual_texture
                         examples/vulkan_dual_texture_test.cpp)
-        add_test(NAME Vulkan_DualTextureEffect_Blend
-                 COMMAND cna_test_vulkan_dual_texture)
-        set_tests_properties(Vulkan_DualTextureEffect_Blend PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_DualTextureEffect_Blend COMMAND cna_test_vulkan_dual_texture
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 293: DualTextureEffect (3D stock effect) honors GraphicsDevice.SamplerStates[0] on
         # Vulkan too — reuses the backend-agnostic EasyGL test source (public XNA API only).
         cna_vulkan_test(cna_test_vulkan_sampler_state_effect
                         examples/easygl_sampler_state_effect_test.cpp)
-        add_test(NAME Vulkan_SamplerState_DualTextureEffect
-                 COMMAND cna_test_vulkan_sampler_state_effect)
-        set_tests_properties(Vulkan_SamplerState_DualTextureEffect PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_SamplerState_DualTextureEffect COMMAND cna_test_vulkan_sampler_state_effect
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 294: TextureAddressMode::Clamp on a 3D stock effect on Vulkan too (reuses the
         # backend-agnostic EasyGL test source).
         cna_vulkan_test(cna_test_vulkan_texture_address_mode_clamp_effect
                         examples/easygl_texture_address_mode_clamp_effect_test.cpp)
-        add_test(NAME Vulkan_TextureAddressMode_Clamp_DualTextureEffect
-                 COMMAND cna_test_vulkan_texture_address_mode_clamp_effect)
-        set_tests_properties(Vulkan_TextureAddressMode_Clamp_DualTextureEffect PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_TextureAddressMode_Clamp_DualTextureEffect COMMAND cna_test_vulkan_texture_address_mode_clamp_effect
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 296: TextureAddressMode::Mirror on a 3D stock effect on Vulkan too (reuses the
         # backend-agnostic EasyGL test source).
         cna_vulkan_test(cna_test_vulkan_texture_address_mode_mirror_effect
                         examples/easygl_texture_address_mode_mirror_effect_test.cpp)
-        add_test(NAME Vulkan_TextureAddressMode_Mirror_DualTextureEffect
-                 COMMAND cna_test_vulkan_texture_address_mode_mirror_effect)
-        set_tests_properties(Vulkan_TextureAddressMode_Mirror_DualTextureEffect PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_TextureAddressMode_Mirror_DualTextureEffect COMMAND cna_test_vulkan_texture_address_mode_mirror_effect
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 297: TextureFilter::Point vs Linear on Vulkan too (reuses the backend-agnostic
         # EasyGL test source).
         cna_vulkan_test(cna_test_vulkan_texture_filter_point_vs_linear
                         examples/easygl_texture_filter_point_vs_linear_test.cpp)
-        add_test(NAME Vulkan_TextureFilter_PointVsLinear
-                 COMMAND cna_test_vulkan_texture_filter_point_vs_linear)
-        set_tests_properties(Vulkan_TextureFilter_PointVsLinear PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_TextureFilter_PointVsLinear COMMAND cna_test_vulkan_texture_filter_point_vs_linear
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 298: now registered on Vulkan too -- a Vulkan-specific adaptation of the EasyGL
         # source (can't reuse it verbatim: Vulkan's TextureFilter::Point mapping has always been
@@ -3916,83 +3170,59 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         # UpdatePixelsLevel never overridden; mipLevels/levelCount were also both hardcoded to 1).
         cna_vulkan_test(cna_test_vulkan_texture_mip_filter_effect
                         examples/vulkan_texture_mip_filter_effect_test.cpp)
-        add_test(NAME Vulkan_TextureMipFilter_DualTextureEffect
-                 COMMAND cna_test_vulkan_texture_mip_filter_effect)
-        set_tests_properties(Vulkan_TextureMipFilter_DualTextureEffect PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_TextureMipFilter_DualTextureEffect COMMAND cna_test_vulkan_texture_mip_filter_effect
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 299: anisotropic filtering caps and fallback on Vulkan too (reuses the
         # backend-agnostic EasyGL test source). This is the one backend where MaxAnisotropy is
         # actually respected (queried/clamped to the real device cap).
         cna_vulkan_test(cna_test_vulkan_texture_anisotropic_effect
                         examples/easygl_texture_anisotropic_effect_test.cpp)
-        add_test(NAME Vulkan_TextureAnisotropic_DualTextureEffect
-                 COMMAND cna_test_vulkan_texture_anisotropic_effect)
-        set_tests_properties(Vulkan_TextureAnisotropic_DualTextureEffect PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_TextureAnisotropic_DualTextureEffect COMMAND cna_test_vulkan_texture_anisotropic_effect
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 303: BlendState::Opaque on Vulkan too (reuses the backend-agnostic EasyGL source)
         cna_vulkan_test(cna_test_vulkan_blendstate_opaque
                         examples/easygl_blendstate_opaque_test.cpp)
-        add_test(NAME Vulkan_BlendState_Opaque
-                 COMMAND cna_test_vulkan_blendstate_opaque)
-        set_tests_properties(Vulkan_BlendState_Opaque PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_BlendState_Opaque COMMAND cna_test_vulkan_blendstate_opaque
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 304: BlendState::AlphaBlend on Vulkan too (reuses the backend-agnostic EasyGL source)
         cna_vulkan_test(cna_test_vulkan_blendstate_alphablend
                         examples/easygl_blendstate_alphablend_test.cpp)
-        add_test(NAME Vulkan_BlendState_AlphaBlend
-                 COMMAND cna_test_vulkan_blendstate_alphablend)
-        set_tests_properties(Vulkan_BlendState_AlphaBlend PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_BlendState_AlphaBlend COMMAND cna_test_vulkan_blendstate_alphablend
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 305: BlendState::NonPremultiplied on Vulkan too (reuses the backend-agnostic
         # EasyGL source). NOTE: a passing result here does NOT mean Task 868 is fixed — see the
         # test source's file-header comment for why.
         cna_vulkan_test(cna_test_vulkan_blendstate_nonpremultiplied
                         examples/easygl_blendstate_nonpremultiplied_test.cpp)
-        add_test(NAME Vulkan_BlendState_NonPremultiplied
-                 COMMAND cna_test_vulkan_blendstate_nonpremultiplied)
-        set_tests_properties(Vulkan_BlendState_NonPremultiplied PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_BlendState_NonPremultiplied COMMAND cna_test_vulkan_blendstate_nonpremultiplied
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 306: BlendState::Additive on Vulkan too (reuses the backend-agnostic EasyGL source).
         # NOTE: expected to genuinely re-expose Task 868 here, unlike Task 305's coincidental pass.
         cna_vulkan_test(cna_test_vulkan_blendstate_additive
                         examples/easygl_blendstate_additive_test.cpp)
-        add_test(NAME Vulkan_BlendState_Additive
-                 COMMAND cna_test_vulkan_blendstate_additive)
-        set_tests_properties(Vulkan_BlendState_Additive PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_BlendState_Additive COMMAND cna_test_vulkan_blendstate_additive
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 307: ColorBlendFunction/AlphaBlendFunction independence on Vulkan too (reuses the
         # backend-agnostic EasyGL source). NOTE: expect Check A (Subtract) to fail per Task 868 -
         # Vulkan always hardcodes VK_BLEND_OP_ADD.
         cna_vulkan_test(cna_test_vulkan_blendstate_separate_functions
                         examples/easygl_blendstate_separate_functions_test.cpp)
-        add_test(NAME Vulkan_BlendState_SeparateFunctions
-                 COMMAND cna_test_vulkan_blendstate_separate_functions)
-        set_tests_properties(Vulkan_BlendState_SeparateFunctions PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_BlendState_SeparateFunctions COMMAND cna_test_vulkan_blendstate_separate_functions
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 308: ColorSourceBlend/ColorDestinationBlend independence on Vulkan too (reuses the
         # backend-agnostic EasyGL source). NOTE: expect Check A to coincidentally pass and Check B
         # to fail per Task 868 - Vulkan always hardcodes SourceAlpha/InverseSourceAlpha for colour.
         cna_vulkan_test(cna_test_vulkan_blendstate_separate_factors
                         examples/easygl_blendstate_separate_factors_test.cpp)
-        add_test(NAME Vulkan_BlendState_SeparateFactors
-                 COMMAND cna_test_vulkan_blendstate_separate_factors)
-        set_tests_properties(Vulkan_BlendState_SeparateFactors PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_BlendState_SeparateFactors COMMAND cna_test_vulkan_blendstate_separate_factors
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 309: BlendState.BlendFactor propagation (reuses the backend-agnostic EasyGL source).
         # NOTE: expected to FAIL on Vulkan per Task 868 - ApplyBlendState hardcodes a single blend
@@ -4001,813 +3231,552 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         # confirmation of Task 868, not a new bug.
         cna_vulkan_test(cna_test_vulkan_blendstate_blendfactor
                         examples/easygl_blendstate_blendfactor_test.cpp)
-        add_test(NAME Vulkan_BlendState_BlendFactor
-                 COMMAND cna_test_vulkan_blendstate_blendfactor)
-        set_tests_properties(Vulkan_BlendState_BlendFactor PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_BlendState_BlendFactor COMMAND cna_test_vulkan_blendstate_blendfactor
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 313: DepthStencilState.DepthBufferWriteEnable on Vulkan (reuses the backend-agnostic
         # EasyGL source).
         cna_vulkan_test(cna_test_vulkan_depthstencilstate_write_enable
                         examples/easygl_depthstencilstate_write_enable_test.cpp)
-        add_test(NAME Vulkan_DepthStencilState_WriteEnable
-                 COMMAND cna_test_vulkan_depthstencilstate_write_enable)
-        set_tests_properties(Vulkan_DepthStencilState_WriteEnable PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_DepthStencilState_WriteEnable COMMAND cna_test_vulkan_depthstencilstate_write_enable
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 314: DepthStencilState.DepthBufferFunction on Vulkan (reuses the backend-agnostic
         # EasyGL source). NOTE: expected to FAIL some/all checks per Task 870 - Vulkan hardcodes
         # depthCompareOp per pipeline, ignoring DepthBufferFunction entirely.
         cna_vulkan_test(cna_test_vulkan_depthstencilstate_compare_function
                         examples/easygl_depthstencilstate_compare_function_test.cpp)
-        add_test(NAME Vulkan_DepthStencilState_CompareFunction
-                 COMMAND cna_test_vulkan_depthstencilstate_compare_function)
-        set_tests_properties(Vulkan_DepthStencilState_CompareFunction PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_DepthStencilState_CompareFunction COMMAND cna_test_vulkan_depthstencilstate_compare_function
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 315: DepthStencilState.StencilEnable on Vulkan (reuses the backend-agnostic EasyGL
         # source). NOTE: expected to FAIL Check A per Task 870 - stencil testing is completely
         # non-functional on Vulkan (stencilTestEnable never set), so no gating ever happens.
         cna_vulkan_test(cna_test_vulkan_depthstencilstate_stencil_enable
                         examples/easygl_depthstencilstate_stencil_enable_test.cpp)
-        add_test(NAME Vulkan_DepthStencilState_StencilEnable
-                 COMMAND cna_test_vulkan_depthstencilstate_stencil_enable)
-        set_tests_properties(Vulkan_DepthStencilState_StencilEnable PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_DepthStencilState_StencilEnable COMMAND cna_test_vulkan_depthstencilstate_stencil_enable
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 316: DepthStencilState.StencilMask/StencilWriteMask on Vulkan (reuses the
         # backend-agnostic EasyGL source). NOTE: expected to partially fail per Task 870 - stencil
         # testing never gates on Vulkan, so 2 of 4 checks pass only by coincidence.
         cna_vulkan_test(cna_test_vulkan_depthstencilstate_stencil_mask
                         examples/easygl_depthstencilstate_stencil_mask_test.cpp)
-        add_test(NAME Vulkan_DepthStencilState_StencilMask
-                 COMMAND cna_test_vulkan_depthstencilstate_stencil_mask)
-        set_tests_properties(Vulkan_DepthStencilState_StencilMask PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_DepthStencilState_StencilMask COMMAND cna_test_vulkan_depthstencilstate_stencil_mask
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 317: DepthStencilState front-face stencil operations on Vulkan (reuses the
         # backend-agnostic EasyGL source). NOTE: expected to FAIL all 3 checks per Task 870 -
         # stencil testing never gates on Vulkan, so no operation ever fires.
         cna_vulkan_test(cna_test_vulkan_depthstencilstate_stencil_ops
                         examples/easygl_depthstencilstate_stencil_ops_test.cpp)
-        add_test(NAME Vulkan_DepthStencilState_StencilOps
-                 COMMAND cna_test_vulkan_depthstencilstate_stencil_ops)
-        set_tests_properties(Vulkan_DepthStencilState_StencilOps PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_DepthStencilState_StencilOps COMMAND cna_test_vulkan_depthstencilstate_stencil_ops
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 318: DepthStencilState.TwoSidedStencilMode on Vulkan (reuses the backend-agnostic
         # EasyGL source). NOTE: expected to FAIL the contrast check per Task 870 - stencil testing
         # never gates on Vulkan.
         cna_vulkan_test(cna_test_vulkan_depthstencilstate_stencil_twosided
                         examples/easygl_depthstencilstate_stencil_twosided_test.cpp)
-        add_test(NAME Vulkan_DepthStencilState_StencilTwoSided
-                 COMMAND cna_test_vulkan_depthstencilstate_stencil_twosided)
-        set_tests_properties(Vulkan_DepthStencilState_StencilTwoSided PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_DepthStencilState_StencilTwoSided COMMAND cna_test_vulkan_depthstencilstate_stencil_twosided
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 319: GraphicsDevice.ReferenceStencil independent-override behavior on Vulkan (Task
         # 872, universal gap, reuses the backend-agnostic EasyGL source).
         cna_vulkan_test(cna_test_vulkan_graphicsdevice_reference_stencil
                         examples/easygl_graphicsdevice_reference_stencil_test.cpp)
-        add_test(NAME Vulkan_GraphicsDevice_ReferenceStencil
-                 COMMAND cna_test_vulkan_graphicsdevice_reference_stencil)
-        set_tests_properties(Vulkan_GraphicsDevice_ReferenceStencil PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_GraphicsDevice_ReferenceStencil COMMAND cna_test_vulkan_graphicsdevice_reference_stencil
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 871: GraphicsDevice::Clear() stencil-clearing fix is in SHARED code
         # (GraphicsDevice.cpp) -- verbatim reuse of the EasyGL source.
         cna_vulkan_test(cna_test_vulkan_graphicsdevice_clear_stencil
                         examples/easygl_graphicsdevice_clear_stencil_test.cpp)
-        add_test(NAME Vulkan_GraphicsDevice_ClearStencil
-                 COMMAND cna_test_vulkan_graphicsdevice_clear_stencil)
-        set_tests_properties(Vulkan_GraphicsDevice_ClearStencil PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_GraphicsDevice_ClearStencil COMMAND cna_test_vulkan_graphicsdevice_clear_stencil
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 950: VulkanGraphicsBackend::ClearColorAndDepth/ClearColorDepthAndStencil now
         # actually thread their `depth` parameter into VkClearValue.depthStencil.depth instead of
         # hardcoding 1.0f -- verbatim reuse of the shared backend-agnostic source.
         cna_vulkan_test(cna_test_vulkan_graphicsdevice_clear_depth
                         examples/graphicsdevice_clear_depth_test.cpp)
-        add_test(NAME Vulkan_GraphicsDevice_ClearDepth
-                 COMMAND cna_test_vulkan_graphicsdevice_clear_depth)
-        set_tests_properties(Vulkan_GraphicsDevice_ClearDepth PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_GraphicsDevice_ClearDepth COMMAND cna_test_vulkan_graphicsdevice_clear_depth
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 955: a freshly-constructed GraphicsDevice's own default state (no game code ever
         # explicitly setting BlendState/DepthStencilState/RasterizerState, exactly like
         # ../cna-samples SimpleAnimation's Tank.hpp) must produce correct opaque depth occlusion.
         cna_vulkan_test(cna_test_vulkan_graphicsdevice_default_state_occlusion
                         examples/graphicsdevice_default_state_occlusion_test.cpp)
-        add_test(NAME Vulkan_GraphicsDevice_DefaultStateOcclusion
-                 COMMAND cna_test_vulkan_graphicsdevice_default_state_occlusion)
-        set_tests_properties(Vulkan_GraphicsDevice_DefaultStateOcclusion PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_GraphicsDevice_DefaultStateOcclusion COMMAND cna_test_vulkan_graphicsdevice_default_state_occlusion
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 889: DualTextureEffect.VertexColorEnabled -- verbatim reuse of the shared
         # backend-agnostic source, registered on all 3 backends.
         cna_vulkan_test(cna_test_vulkan_dualtextureeffect_vertexcolor
                         examples/dualtextureeffect_vertexcolor_test.cpp)
-        add_test(NAME Vulkan_DualTextureEffect_VertexColor
-                 COMMAND cna_test_vulkan_dualtextureeffect_vertexcolor)
-        set_tests_properties(Vulkan_DualTextureEffect_VertexColor PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_DualTextureEffect_VertexColor COMMAND cna_test_vulkan_dualtextureeffect_vertexcolor
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 323 (+ 324/325 coverage): RasterizerState.CullMode on Vulkan (reuses the
         # backend-agnostic EasyGL source).
         cna_vulkan_test(cna_test_vulkan_rasterizerstate_cullmode
                         examples/easygl_rasterizerstate_cullmode_test.cpp)
-        add_test(NAME Vulkan_RasterizerState_CullMode
-                 COMMAND cna_test_vulkan_rasterizerstate_cullmode)
-        set_tests_properties(Vulkan_RasterizerState_CullMode PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_RasterizerState_CullMode COMMAND cna_test_vulkan_rasterizerstate_cullmode
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # XNA culling-compatibility audit: real-camera CullMode reproducer, verbatim reuse of the
         # shared backend-agnostic source.
         cna_vulkan_test(cna_test_vulkan_rasterizerstate_cullmode_camera
                         examples/rasterizerstate_cullmode_camera_test.cpp)
-        add_test(NAME Vulkan_RasterizerState_CullMode_Camera
-                 COMMAND cna_test_vulkan_rasterizerstate_cullmode_camera)
-        set_tests_properties(Vulkan_RasterizerState_CullMode_Camera PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_RasterizerState_CullMode_Camera COMMAND cna_test_vulkan_rasterizerstate_cullmode_camera
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_vulkan_test(cna_test_vulkan_rasterizerstate_cullmode_indexed_basiceffect
                         examples/rasterizerstate_cullmode_indexed_basiceffect_test.cpp)
-        add_test(NAME Vulkan_RasterizerState_CullMode_IndexedBasicEffect
-                 COMMAND cna_test_vulkan_rasterizerstate_cullmode_indexed_basiceffect)
-        set_tests_properties(Vulkan_RasterizerState_CullMode_IndexedBasicEffect PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_RasterizerState_CullMode_IndexedBasicEffect COMMAND cna_test_vulkan_rasterizerstate_cullmode_indexed_basiceffect
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 136: EnvironmentMapEffect — emissive=(1,0,0), envAmount=0 → red pixel on Vulkan
         cna_vulkan_test(cna_test_vulkan_env_map
                         examples/vulkan_env_map_test.cpp)
-        add_test(NAME Vulkan_EnvironmentMapEffect_Readback
-                 COMMAND cna_test_vulkan_env_map)
-        set_tests_properties(Vulkan_EnvironmentMapEffect_Readback PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_EnvironmentMapEffect_Readback COMMAND cna_test_vulkan_env_map
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 393: EnvironmentMapEffect EnvironmentMapAmount=0 should ignore the cube map
         cna_vulkan_test(cna_test_vulkan_environmentmapeffect_amount_zero
                         examples/vulkan_environmentmapeffect_amount_zero_test.cpp)
-        add_test(NAME Vulkan_EnvironmentMapEffect_AmountZero
-                 COMMAND cna_test_vulkan_environmentmapeffect_amount_zero)
-        set_tests_properties(Vulkan_EnvironmentMapEffect_AmountZero PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_EnvironmentMapEffect_AmountZero COMMAND cna_test_vulkan_environmentmapeffect_amount_zero
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 890: EnvironmentMapEffect DirectionalLight1/DirectionalLight2 forwarding
         cna_vulkan_test(cna_test_vulkan_environmentmapeffect_multilight
                         examples/vulkan_environmentmapeffect_multilight_test.cpp)
-        add_test(NAME Vulkan_EnvironmentMapEffect_MultiLight
-                 COMMAND cna_test_vulkan_environmentmapeffect_multilight)
-        set_tests_properties(Vulkan_EnvironmentMapEffect_MultiLight PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_EnvironmentMapEffect_MultiLight COMMAND cna_test_vulkan_environmentmapeffect_multilight
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 394: EnvironmentMapEffect EnvironmentMapAmount=1 should fully replace lit color
         cna_vulkan_test(cna_test_vulkan_environmentmapeffect_amount_one
                         examples/vulkan_environmentmapeffect_amount_one_test.cpp)
-        add_test(NAME Vulkan_EnvironmentMapEffect_AmountOne
-                 COMMAND cna_test_vulkan_environmentmapeffect_amount_one)
-        set_tests_properties(Vulkan_EnvironmentMapEffect_AmountOne PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_EnvironmentMapEffect_AmountOne COMMAND cna_test_vulkan_environmentmapeffect_amount_one
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 395: EnvironmentMapEffect EnvironmentMapSpecular should scale by cubemap alpha
         cna_vulkan_test(cna_test_vulkan_environmentmapeffect_specular
                         examples/vulkan_environmentmapeffect_specular_test.cpp)
-        add_test(NAME Vulkan_EnvironmentMapEffect_Specular
-                 COMMAND cna_test_vulkan_environmentmapeffect_specular)
-        set_tests_properties(Vulkan_EnvironmentMapEffect_Specular PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_EnvironmentMapEffect_Specular COMMAND cna_test_vulkan_environmentmapeffect_specular
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 891: EnvironmentMapEffect's base cube-map lerp target must be scaled by the
         # combined texture x diffuse alpha -- verbatim reuse of the shared backend-agnostic
         # source, registered on all 3 backends.
         cna_vulkan_test(cna_test_vulkan_environmentmapeffect_alphascaledlerp
                         examples/environmentmapeffect_alphascaledlerp_test.cpp)
-        add_test(NAME Vulkan_EnvironmentMapEffect_AlphaScaledLerp
-                 COMMAND cna_test_vulkan_environmentmapeffect_alphascaledlerp)
-        set_tests_properties(Vulkan_EnvironmentMapEffect_AlphaScaledLerp PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_EnvironmentMapEffect_AlphaScaledLerp COMMAND cna_test_vulkan_environmentmapeffect_alphascaledlerp
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 396: EnvironmentMapEffect Fresnel edge-weighting should suppress head-on reflections
         cna_vulkan_test(cna_test_vulkan_environmentmapeffect_fresnel
                         examples/vulkan_environmentmapeffect_fresnel_test.cpp)
-        add_test(NAME Vulkan_EnvironmentMapEffect_Fresnel
-                 COMMAND cna_test_vulkan_environmentmapeffect_fresnel)
-        set_tests_properties(Vulkan_EnvironmentMapEffect_Fresnel PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_EnvironmentMapEffect_Fresnel COMMAND cna_test_vulkan_environmentmapeffect_fresnel
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 397: EnvironmentMapEffect reflection vector should respond to EyePosition
         cna_vulkan_test(cna_test_vulkan_environmentmapeffect_eyeposition
                         examples/vulkan_environmentmapeffect_eyeposition_test.cpp)
-        add_test(NAME Vulkan_EnvironmentMapEffect_EyePosition
-                 COMMAND cna_test_vulkan_environmentmapeffect_eyeposition)
-        set_tests_properties(Vulkan_EnvironmentMapEffect_EyePosition PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_EnvironmentMapEffect_EyePosition COMMAND cna_test_vulkan_environmentmapeffect_eyeposition
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 398: EnvironmentMapEffect normal transform should use inverse-transpose of World
         cna_vulkan_test(cna_test_vulkan_environmentmapeffect_worldtransform
                         examples/vulkan_environmentmapeffect_worldtransform_test.cpp)
-        add_test(NAME Vulkan_EnvironmentMapEffect_WorldTransform
-                 COMMAND cna_test_vulkan_environmentmapeffect_worldtransform)
-        set_tests_properties(Vulkan_EnvironmentMapEffect_WorldTransform PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_EnvironmentMapEffect_WorldTransform COMMAND cna_test_vulkan_environmentmapeffect_worldtransform
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 399: cross-backend EnvironmentMapEffect capstone (Tasks 393-398 combined)
         cna_vulkan_test(cna_test_vulkan_environmentmapeffect_combined
                         examples/vulkan_environmentmapeffect_combined_test.cpp)
-        add_test(NAME Vulkan_EnvironmentMapEffect_Combined
-                 COMMAND cna_test_vulkan_environmentmapeffect_combined)
-        set_tests_properties(Vulkan_EnvironmentMapEffect_Combined PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_EnvironmentMapEffect_Combined COMMAND cna_test_vulkan_environmentmapeffect_combined
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 406: SkinnedEffect identity bone palette should produce zero deformation
         cna_vulkan_test(cna_test_vulkan_skinnedeffect_identity_bones
                         examples/vulkan_skinnedeffect_identity_bones_test.cpp)
-        add_test(NAME Vulkan_SkinnedEffect_IdentityBones
-                 COMMAND cna_test_vulkan_skinnedeffect_identity_bones)
-        set_tests_properties(Vulkan_SkinnedEffect_IdentityBones PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_SkinnedEffect_IdentityBones COMMAND cna_test_vulkan_skinnedeffect_identity_bones
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 407: SkinnedEffect single translation bone should shift the mesh
         cna_vulkan_test(cna_test_vulkan_skinnedeffect_translation_bone
                         examples/vulkan_skinnedeffect_translation_bone_test.cpp)
-        add_test(NAME Vulkan_SkinnedEffect_TranslationBone
-                 COMMAND cna_test_vulkan_skinnedeffect_translation_bone)
-        set_tests_properties(Vulkan_SkinnedEffect_TranslationBone PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_SkinnedEffect_TranslationBone COMMAND cna_test_vulkan_skinnedeffect_translation_bone
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 408: SkinnedEffect two-bone weighted blend should produce midpoint deformation
         cna_vulkan_test(cna_test_vulkan_skinnedeffect_twobone_blend
                         examples/vulkan_skinnedeffect_twobone_blend_test.cpp)
-        add_test(NAME Vulkan_SkinnedEffect_TwoBoneBlend
-                 COMMAND cna_test_vulkan_skinnedeffect_twobone_blend)
-        set_tests_properties(Vulkan_SkinnedEffect_TwoBoneBlend PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_SkinnedEffect_TwoBoneBlend COMMAND cna_test_vulkan_skinnedeffect_twobone_blend
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 409: cross-backend SkinnedEffect capstone (identity + single-bone + two-bone blend)
         cna_vulkan_test(cna_test_vulkan_skinnedeffect_combined
                         examples/vulkan_skinnedeffect_combined_test.cpp)
-        add_test(NAME Vulkan_SkinnedEffect_Combined
-                 COMMAND cna_test_vulkan_skinnedeffect_combined)
-        set_tests_properties(Vulkan_SkinnedEffect_Combined PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_SkinnedEffect_Combined COMMAND cna_test_vulkan_skinnedeffect_combined
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 334: RenderTargetCube sampled as TextureCube via EnvironmentMapEffect after unbinding
         cna_vulkan_test(cna_test_vulkan_rendertargetcube_sample
                         examples/vulkan_rendertargetcube_sample_test.cpp)
-        add_test(NAME Vulkan_RenderTargetCube_SampleAfterUnbind
-                 COMMAND cna_test_vulkan_rendertargetcube_sample)
-        set_tests_properties(Vulkan_RenderTargetCube_SampleAfterUnbind PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_RenderTargetCube_SampleAfterUnbind COMMAND cna_test_vulkan_rendertargetcube_sample
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 907: RenderTargetCube mip chains are genuinely generated per-face
         # (vkCmdBlitImage cascade), split out of Task 878's original combined scope.
         cna_vulkan_test(cna_test_vulkan_rendertargetcube_mip
                         examples/vulkan_rendertargetcube_mip_test.cpp)
-        add_test(NAME Vulkan_RenderTargetCube_MipChain
-                 COMMAND cna_test_vulkan_rendertargetcube_mip)
-        set_tests_properties(Vulkan_RenderTargetCube_MipChain PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_RenderTargetCube_MipChain COMMAND cna_test_vulkan_rendertargetcube_mip
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 903: RenderTargetCube MSAA is genuinely generated per-face (shared MSAA colour
         # image + promoted MSAA depth + 3-attachment render pass), split out of Task 878/879's
         # original RenderTarget2D-only scope.
         cna_vulkan_test(cna_test_vulkan_rendertargetcube_msaa
                         examples/vulkan_rendertargetcube_msaa_test.cpp)
-        add_test(NAME Vulkan_RenderTargetCube_MsaaResolve
-                 COMMAND cna_test_vulkan_rendertargetcube_msaa)
-        set_tests_properties(Vulkan_RenderTargetCube_MsaaResolve PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_RenderTargetCube_MsaaResolve COMMAND cna_test_vulkan_rendertargetcube_msaa
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 148: RenderTarget2D full cycle — red quad into RT, blit to backbuffer
         cna_vulkan_test(cna_test_vulkan_rt2d
                         examples/vulkan_rt2d_test.cpp)
-        add_test(NAME Vulkan_RenderTarget2D_FullCycle
-                 COMMAND cna_test_vulkan_rt2d)
-        set_tests_properties(Vulkan_RenderTarget2D_FullCycle PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_RenderTarget2D_FullCycle COMMAND cna_test_vulkan_rt2d
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 875: Clear()-only render target (no draw call) actually records a render pass
         cna_vulkan_test(cna_test_vulkan_rt_roundtrip
                         examples/vulkan_rt_roundtrip_test.cpp)
-        add_test(NAME Vulkan_RenderTarget2D_ClearOnlyRoundtrip
-                 COMMAND cna_test_vulkan_rt_roundtrip)
-        set_tests_properties(Vulkan_RenderTarget2D_ClearOnlyRoundtrip PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_RenderTarget2D_ClearOnlyRoundtrip COMMAND cna_test_vulkan_rt_roundtrip
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 335: RenderTarget2D depth buffer is real and functional (not just a stored property)
         cna_vulkan_test(cna_test_vulkan_rendertarget2d_depth
                         examples/rendertarget2d_depth_test.cpp)
-        add_test(NAME Vulkan_RenderTarget2D_DepthBuffer
-                 COMMAND cna_test_vulkan_rendertarget2d_depth)
-        set_tests_properties(Vulkan_RenderTarget2D_DepthBuffer PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_RenderTarget2D_DepthBuffer COMMAND cna_test_vulkan_rendertarget2d_depth
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 865: Texture3D::GetData is now real on Vulkan -- shared with EasyGL's registration
         # of the same backend-agnostic file (Task 173).
         cna_vulkan_test(cna_test_vulkan_texture3d_slices
                         examples/easygl_texture3d_slices_test.cpp)
-        add_test(NAME Vulkan_Texture3D_Slices_RoundTrip
-                 COMMAND cna_test_vulkan_texture3d_slices)
-        set_tests_properties(Vulkan_Texture3D_Slices_RoundTrip PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_Texture3D_Slices_RoundTrip COMMAND cna_test_vulkan_texture3d_slices
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 865: TextureCube::GetData is now real on Vulkan -- shared with EasyGL's
         # registration of the same backend-agnostic file (Task 275).
         cna_vulkan_test(cna_test_vulkan_texturecube_partial_rect
                         examples/easygl_texturecube_partial_rect_test.cpp)
-        add_test(NAME Vulkan_TextureCube_PartialRect_RoundTrip
-                 COMMAND cna_test_vulkan_texturecube_partial_rect)
-        set_tests_properties(Vulkan_TextureCube_PartialRect_RoundTrip PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_TextureCube_PartialRect_RoundTrip COMMAND cna_test_vulkan_texturecube_partial_rect
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 864: Texture3D mip-level allocation is now real on Vulkan -- shared with EasyGL's
         # registration of the same backend-agnostic file (Task 862).
         cna_vulkan_test(cna_test_vulkan_texture3d_mip
                         examples/easygl_texture3d_mip_test.cpp)
-        add_test(NAME Vulkan_Texture3D_Mip_RoundTrip
-                 COMMAND cna_test_vulkan_texture3d_mip)
-        set_tests_properties(Vulkan_Texture3D_Mip_RoundTrip PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_Texture3D_Mip_RoundTrip COMMAND cna_test_vulkan_texture3d_mip
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 864: TextureCube mip-level allocation is now real on Vulkan -- shared with EasyGL's
         # registration of the same backend-agnostic file (Task 276).
         cna_vulkan_test(cna_test_vulkan_texturecube_mip
                         examples/easygl_texturecube_mip_test.cpp)
-        add_test(NAME Vulkan_TextureCube_Mip_RoundTrip
-                 COMMAND cna_test_vulkan_texturecube_mip)
-        set_tests_properties(Vulkan_TextureCube_Mip_RoundTrip PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_TextureCube_Mip_RoundTrip COMMAND cna_test_vulkan_texturecube_mip
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 178: RenderTargetUsage DiscardContents vs PreserveContents
         cna_vulkan_test(cna_test_vulkan_render_target_usage
                         examples/vulkan_render_target_usage_test.cpp)
-        add_test(NAME Vulkan_RenderTargetUsage
-                 COMMAND cna_test_vulkan_render_target_usage)
-        set_tests_properties(Vulkan_RenderTargetUsage PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_RenderTargetUsage COMMAND cna_test_vulkan_render_target_usage
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 142: RenderTargetCube — 6-face per-face render passes
         cna_vulkan_test(cna_test_vulkan_rtcube
                         examples/vulkan_rtcube_test.cpp)
-        add_test(NAME Vulkan_RenderTargetCube_PerFace
-                 COMMAND cna_test_vulkan_rtcube)
-        set_tests_properties(Vulkan_RenderTargetCube_PerFace PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_RenderTargetCube_PerFace COMMAND cna_test_vulkan_rtcube
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 147: MSAA 4× — multisampled swapchain + subpass resolve
         cna_vulkan_test(cna_test_vulkan_msaa
                         examples/vulkan_msaa_test.cpp)
-        add_test(NAME Vulkan_MSAA_4x_Readback
-                 COMMAND cna_test_vulkan_msaa)
-        set_tests_properties(Vulkan_MSAA_4x_Readback PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_MSAA_4x_Readback COMMAND cna_test_vulkan_msaa
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_vulkan_test(cna_test_vulkan_vertex_format
                         examples/vulkan_vertex_format_test.cpp)
-        add_test(NAME Vulkan_VertexFormat_AllStrides
-                 COMMAND cna_test_vulkan_vertex_format)
-        set_tests_properties(Vulkan_VertexFormat_AllStrides PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_VertexFormat_AllStrides COMMAND cna_test_vulkan_vertex_format
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_vulkan_test(cna_test_vulkan_fill_mode
                         examples/vulkan_fill_mode_test.cpp)
-        add_test(NAME Vulkan_FillMode_WireFrame
-                 COMMAND cna_test_vulkan_fill_mode)
-        set_tests_properties(Vulkan_FillMode_WireFrame PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_FillMode_WireFrame COMMAND cna_test_vulkan_fill_mode
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_vulkan_test(cna_test_vulkan_depth_bias
                         examples/vulkan_depth_bias_test.cpp)
-        add_test(NAME Vulkan_DepthBias
-                 COMMAND cna_test_vulkan_depth_bias)
-        set_tests_properties(Vulkan_DepthBias PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_DepthBias COMMAND cna_test_vulkan_depth_bias
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 329: ScissorTestEnable + ScissorRectangle pixel-readback test
         cna_vulkan_test(cna_test_vulkan_scissor
                         examples/vulkan_scissor_test.cpp)
-        add_test(NAME Vulkan_ScissorTest
-                 COMMAND cna_test_vulkan_scissor)
-        set_tests_properties(Vulkan_ScissorTest PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_ScissorTest COMMAND cna_test_vulkan_scissor
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 664: SpriteBatch multiple Begin()/End() cycles per frame must all render
         cna_vulkan_test(cna_test_vulkan_spritebatch_multi_begin_end
                         examples/vulkan_spritebatch_multi_begin_end_test.cpp)
-        add_test(NAME Vulkan_SpriteBatch_MultiBeginEnd
-                 COMMAND cna_test_vulkan_spritebatch_multi_begin_end)
-        set_tests_properties(Vulkan_SpriteBatch_MultiBeginEnd PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_SpriteBatch_MultiBeginEnd COMMAND cna_test_vulkan_spritebatch_multi_begin_end
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 665: SpriteBatch Begin()'s SamplerState (TextureAddressMode) must take effect
         cna_vulkan_test(cna_test_vulkan_texture_address_mode
                         examples/vulkan_texture_address_mode_test.cpp)
-        add_test(NAME Vulkan_TextureAddressMode
-                 COMMAND cna_test_vulkan_texture_address_mode)
-        set_tests_properties(Vulkan_TextureAddressMode PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_TextureAddressMode COMMAND cna_test_vulkan_texture_address_mode
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 338: SetRenderTarget(nullptr) resets Viewport/ScissorRectangle to the backbuffer
         cna_vulkan_test(cna_test_vulkan_rendertarget_viewport_scissor_reset
                         examples/rendertarget_viewport_scissor_reset_test.cpp)
-        add_test(NAME Vulkan_RenderTarget_ViewportScissorReset
-                 COMMAND cna_test_vulkan_rendertarget_viewport_scissor_reset)
-        set_tests_properties(Vulkan_RenderTarget_ViewportScissorReset PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_RenderTarget_ViewportScissorReset COMMAND cna_test_vulkan_rendertarget_viewport_scissor_reset
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 349: custom Viewport survives Present() with no resize, resets after a real one.
         cna_vulkan_test(cna_test_vulkan_viewport_reset_after_resize
                         examples/viewport_reset_after_resize_test.cpp)
-        add_test(NAME Vulkan_ViewportResetAfterResize
-                 COMMAND cna_test_vulkan_viewport_reset_after_resize)
-        set_tests_properties(Vulkan_ViewportResetAfterResize PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_ViewportResetAfterResize COMMAND cna_test_vulkan_viewport_reset_after_resize
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 331: RenderTarget2D constructor/property audit against FNA.
         cna_vulkan_test(cna_test_vulkan_rendertarget2d_properties
                         examples/easygl_rendertarget2d_properties_test.cpp)
-        add_test(NAME Vulkan_RenderTarget2D_Properties
-                 COMMAND cna_test_vulkan_rendertarget2d_properties)
-        set_tests_properties(Vulkan_RenderTarget2D_Properties PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_RenderTarget2D_Properties COMMAND cna_test_vulkan_rendertarget2d_properties
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 332: RenderTargetCube constructor/property audit against FNA.
         cna_vulkan_test(cna_test_vulkan_rendertargetcube_properties
                         examples/easygl_rendertargetcube_properties_test.cpp)
-        add_test(NAME Vulkan_RenderTargetCube_Properties
-                 COMMAND cna_test_vulkan_rendertargetcube_properties)
-        set_tests_properties(Vulkan_RenderTargetCube_Properties PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_RenderTargetCube_Properties COMMAND cna_test_vulkan_rendertargetcube_properties
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 364: BasicEffect pixel test — VertexColorEnabled=false, no texture, diffuse color only
         cna_vulkan_test(cna_test_vulkan_basiceffect_vertexcolor_disabled
                         examples/vulkan_basiceffect_vertexcolor_disabled_test.cpp)
-        add_test(NAME Vulkan_BasicEffect_VertexColorDisabled
-                 COMMAND cna_test_vulkan_basiceffect_vertexcolor_disabled)
-        set_tests_properties(Vulkan_BasicEffect_VertexColorDisabled PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_BasicEffect_VertexColorDisabled COMMAND cna_test_vulkan_basiceffect_vertexcolor_disabled
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 365: BasicEffect pixel test — VertexColorEnabled=true, no texture, vertex color multiplication
         cna_vulkan_test(cna_test_vulkan_basiceffect_vertexcolor_enabled
                         examples/vulkan_basiceffect_vertexcolor_enabled_test.cpp)
-        add_test(NAME Vulkan_BasicEffect_VertexColorEnabled
-                 COMMAND cna_test_vulkan_basiceffect_vertexcolor_enabled)
-        set_tests_properties(Vulkan_BasicEffect_VertexColorEnabled PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_BasicEffect_VertexColorEnabled COMMAND cna_test_vulkan_basiceffect_vertexcolor_enabled
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 366: BasicEffect pixel test — TextureEnabled=true, no vertex color
         cna_vulkan_test(cna_test_vulkan_basiceffect_texture_enabled
                         examples/vulkan_basiceffect_texture_enabled_test.cpp)
-        add_test(NAME Vulkan_BasicEffect_TextureEnabled
-                 COMMAND cna_test_vulkan_basiceffect_texture_enabled)
-        set_tests_properties(Vulkan_BasicEffect_TextureEnabled PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_BasicEffect_TextureEnabled COMMAND cna_test_vulkan_basiceffect_texture_enabled
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 904: GetOrCreatePipelineFogTex3D's missing msaa-aware render-pass check.
         cna_vulkan_test(cna_test_vulkan_basiceffect_textured_msaa
                         examples/vulkan_basiceffect_textured_msaa_test.cpp)
-        add_test(NAME Vulkan_BasicEffect_TexturedMsaa
-                 COMMAND cna_test_vulkan_basiceffect_textured_msaa)
-        set_tests_properties(Vulkan_BasicEffect_TexturedMsaa PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_BasicEffect_TexturedMsaa COMMAND cna_test_vulkan_basiceffect_textured_msaa
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 367: BasicEffect pixel test — TextureEnabled=true AND VertexColorEnabled=true
         cna_vulkan_test(cna_test_vulkan_basiceffect_texture_vertexcolor_enabled
                         examples/vulkan_basiceffect_texture_vertexcolor_enabled_test.cpp)
-        add_test(NAME Vulkan_BasicEffect_TextureVertexColorEnabled
-                 COMMAND cna_test_vulkan_basiceffect_texture_vertexcolor_enabled)
-        set_tests_properties(Vulkan_BasicEffect_TextureVertexColorEnabled PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_BasicEffect_TextureVertexColorEnabled COMMAND cna_test_vulkan_basiceffect_texture_vertexcolor_enabled
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 368: BasicEffect pixel test — LightingEnabled=true, one DirectionalLight
         cna_vulkan_test(cna_test_vulkan_basiceffect_one_light
                         examples/vulkan_basiceffect_one_light_test.cpp)
-        add_test(NAME Vulkan_BasicEffect_OneLight
-                 COMMAND cna_test_vulkan_basiceffect_one_light)
-        set_tests_properties(Vulkan_BasicEffect_OneLight PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_BasicEffect_OneLight COMMAND cna_test_vulkan_basiceffect_one_light
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 897: BasicEffect pixel test — DirectionalLight1/2 + EmissiveColor on the lit path
         cna_vulkan_test(cna_test_vulkan_basiceffect_multilight_emissive
                         examples/vulkan_basiceffect_multilight_emissive_test.cpp)
-        add_test(NAME Vulkan_BasicEffect_MultiLightEmissive
-                 COMMAND cna_test_vulkan_basiceffect_multilight_emissive)
-        set_tests_properties(Vulkan_BasicEffect_MultiLightEmissive PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_BasicEffect_MultiLightEmissive COMMAND cna_test_vulkan_basiceffect_multilight_emissive
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 886: BasicEffect pixel test — real specular highlights
         cna_vulkan_test(cna_test_vulkan_basiceffect_specular
                         examples/vulkan_basiceffect_specular_test.cpp)
-        add_test(NAME Vulkan_BasicEffect_Specular
-                 COMMAND cna_test_vulkan_basiceffect_specular)
-        set_tests_properties(Vulkan_BasicEffect_Specular PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_BasicEffect_Specular COMMAND cna_test_vulkan_basiceffect_specular
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 1103: BasicEffect pixel test — PreferPerPixelLighting genuinely selects between a
         # real per-vertex-lit shader variant and the existing per-pixel-lit one.
         cna_vulkan_test(cna_test_vulkan_basiceffect_preferperpixellighting
                         examples/vulkan_basiceffect_preferperpixellighting_test.cpp)
-        add_test(NAME Vulkan_BasicEffect_PreferPerPixelLighting
-                 COMMAND cna_test_vulkan_basiceffect_preferperpixellighting)
-        set_tests_properties(Vulkan_BasicEffect_PreferPerPixelLighting PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_BasicEffect_PreferPerPixelLighting COMMAND cna_test_vulkan_basiceffect_preferperpixellighting
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 887: AlphaTestEffect.VertexColorEnabled fix verification
         cna_vulkan_test(cna_test_vulkan_alphatest_vertexcolor
                         examples/vulkan_alphatest_vertexcolor_test.cpp)
-        add_test(NAME Vulkan_AlphaTest_VertexColor
-                 COMMAND cna_test_vulkan_alphatest_vertexcolor)
-        set_tests_properties(Vulkan_AlphaTest_VertexColor PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_AlphaTest_VertexColor COMMAND cna_test_vulkan_alphatest_vertexcolor
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 888: BasicEffect fog on the lit_textured3d (stride-32) pipeline
         cna_vulkan_test(cna_test_vulkan_basiceffect_fog
                         examples/vulkan_basiceffect_fog_test.cpp)
-        add_test(NAME Vulkan_BasicEffect_Fog
-                 COMMAND cna_test_vulkan_basiceffect_fog)
-        set_tests_properties(Vulkan_BasicEffect_Fog PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_BasicEffect_Fog COMMAND cna_test_vulkan_basiceffect_fog
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 888: AlphaTestEffect fog on the alpha_test3d pipeline
         cna_vulkan_test(cna_test_vulkan_alphatest_fog
                         examples/vulkan_alphatest_fog_test.cpp)
-        add_test(NAME Vulkan_AlphaTest_Fog
-                 COMMAND cna_test_vulkan_alphatest_fog)
-        set_tests_properties(Vulkan_AlphaTest_Fog PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_AlphaTest_Fog COMMAND cna_test_vulkan_alphatest_fog
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 369: BasicEffect pixel test — DiffuseColor+EmissiveColor, LightingEnabled=false
         cna_vulkan_test(cna_test_vulkan_basiceffect_emissive
                         examples/vulkan_basiceffect_emissive_test.cpp)
-        add_test(NAME Vulkan_BasicEffect_Emissive
-                 COMMAND cna_test_vulkan_basiceffect_emissive)
-        set_tests_properties(Vulkan_BasicEffect_Emissive PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_BasicEffect_Emissive COMMAND cna_test_vulkan_basiceffect_emissive
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 370: BasicEffect cross-backend image comparison suite — closes Phase 42
         cna_vulkan_test(cna_test_vulkan_basiceffect_combined
                         examples/vulkan_basiceffect_combined_test.cpp)
-        add_test(NAME Vulkan_BasicEffect_Combined
-                 COMMAND cna_test_vulkan_basiceffect_combined)
-        set_tests_properties(Vulkan_BasicEffect_Combined PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_BasicEffect_Combined COMMAND cna_test_vulkan_basiceffect_combined
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 374: AlphaTestEffect all CompareFunction modes — threshold sweep
         cna_vulkan_test(cna_test_vulkan_alphatest_comparefunction_sweep
                         examples/vulkan_alphatest_comparefunction_sweep_test.cpp)
-        add_test(NAME Vulkan_AlphaTest_CompareFunctionSweep
-                 COMMAND cna_test_vulkan_alphatest_comparefunction_sweep)
-        set_tests_properties(Vulkan_AlphaTest_CompareFunctionSweep PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_AlphaTest_CompareFunctionSweep COMMAND cna_test_vulkan_alphatest_comparefunction_sweep
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 379: AlphaTestEffect null/no-texture behavior
         cna_vulkan_test(cna_test_vulkan_alphatest_null_texture
                         examples/vulkan_alphatest_null_texture_test.cpp)
-        add_test(NAME Vulkan_AlphaTest_NullTexture
-                 COMMAND cna_test_vulkan_alphatest_null_texture)
-        set_tests_properties(Vulkan_AlphaTest_NullTexture PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_AlphaTest_NullTexture COMMAND cna_test_vulkan_alphatest_null_texture
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 383: DualTextureEffect two-texture blend formula, including FNA's color.rgb*=2
         cna_vulkan_test(cna_test_vulkan_dualtextureeffect_doubling
                         examples/vulkan_dualtextureeffect_doubling_test.cpp)
-        add_test(NAME Vulkan_DualTextureEffect_Doubling
-                 COMMAND cna_test_vulkan_dualtextureeffect_doubling)
-        set_tests_properties(Vulkan_DualTextureEffect_Doubling PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_DualTextureEffect_Doubling COMMAND cna_test_vulkan_dualtextureeffect_doubling
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 385: DualTextureEffect Alpha forwarding, alpha-channel-only (see file header for
         # why the full RGB-premultiplication check is deliberately not done on Vulkan)
         cna_vulkan_test(cna_test_vulkan_dualtextureeffect_alpha
                         examples/vulkan_dualtextureeffect_alpha_test.cpp)
-        add_test(NAME Vulkan_DualTextureEffect_Alpha
-                 COMMAND cna_test_vulkan_dualtextureeffect_alpha)
-        set_tests_properties(Vulkan_DualTextureEffect_Alpha PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_DualTextureEffect_Alpha COMMAND cna_test_vulkan_dualtextureeffect_alpha
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 386: DualTextureEffect first texture (Texture, slot 0) null behavior
         cna_vulkan_test(cna_test_vulkan_dualtextureeffect_null_texture0
                         examples/vulkan_dualtextureeffect_null_texture0_test.cpp)
-        add_test(NAME Vulkan_DualTextureEffect_NullTexture0
-                 COMMAND cna_test_vulkan_dualtextureeffect_null_texture0)
-        set_tests_properties(Vulkan_DualTextureEffect_NullTexture0 PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_DualTextureEffect_NullTexture0 COMMAND cna_test_vulkan_dualtextureeffect_null_texture0
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 387: DualTextureEffect second texture (Texture2, slot 1) null behavior
         cna_vulkan_test(cna_test_vulkan_dualtextureeffect_null_texture2
                         examples/vulkan_dualtextureeffect_null_texture2_test.cpp)
-        add_test(NAME Vulkan_DualTextureEffect_NullTexture2
-                 COMMAND cna_test_vulkan_dualtextureeffect_null_texture2)
-        set_tests_properties(Vulkan_DualTextureEffect_NullTexture2 PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_DualTextureEffect_NullTexture2 COMMAND cna_test_vulkan_dualtextureeffect_null_texture2
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 389: DualTextureEffect cross-backend image comparison suite (closes Phase 44 pixel work)
         cna_vulkan_test(cna_test_vulkan_dualtextureeffect_combined
                         examples/vulkan_dualtextureeffect_combined_test.cpp)
-        add_test(NAME Vulkan_DualTextureEffect_Combined
-                 COMMAND cna_test_vulkan_dualtextureeffect_combined)
-        set_tests_properties(Vulkan_DualTextureEffect_Combined PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_DualTextureEffect_Combined COMMAND cna_test_vulkan_dualtextureeffect_combined
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 880: GraphicsDevice.Viewport GPU wiring — sub-region viewport pixel-readback test
         cna_vulkan_test(cna_test_vulkan_viewport_subregion
                         examples/vulkan_viewport_subregion_test.cpp)
-        add_test(NAME Vulkan_Viewport_Subregion
-                 COMMAND cna_test_vulkan_viewport_subregion)
-        set_tests_properties(Vulkan_Viewport_Subregion PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_Viewport_Subregion COMMAND cna_test_vulkan_viewport_subregion
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 899: fog on colored3d/textured3d/colored_textured3d/dual_texture3d/skinned3d
         cna_vulkan_test(cna_test_vulkan_basiceffect_colored3d_fog
                         examples/vulkan_basiceffect_colored3d_fog_test.cpp)
-        add_test(NAME Vulkan_BasicEffect_Colored3D_Fog
-                 COMMAND cna_test_vulkan_basiceffect_colored3d_fog)
-        set_tests_properties(Vulkan_BasicEffect_Colored3D_Fog PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_BasicEffect_Colored3D_Fog COMMAND cna_test_vulkan_basiceffect_colored3d_fog
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_vulkan_test(cna_test_vulkan_basiceffect_textured3d_fog
                         examples/vulkan_basiceffect_textured3d_fog_test.cpp)
-        add_test(NAME Vulkan_BasicEffect_Textured3D_Fog
-                 COMMAND cna_test_vulkan_basiceffect_textured3d_fog)
-        set_tests_properties(Vulkan_BasicEffect_Textured3D_Fog PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_BasicEffect_Textured3D_Fog COMMAND cna_test_vulkan_basiceffect_textured3d_fog
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_vulkan_test(cna_test_vulkan_basiceffect_coloredtextured3d_fog
                         examples/vulkan_basiceffect_coloredtextured3d_fog_test.cpp)
-        add_test(NAME Vulkan_BasicEffect_ColoredTextured3D_Fog
-                 COMMAND cna_test_vulkan_basiceffect_coloredtextured3d_fog)
-        set_tests_properties(Vulkan_BasicEffect_ColoredTextured3D_Fog PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_BasicEffect_ColoredTextured3D_Fog COMMAND cna_test_vulkan_basiceffect_coloredtextured3d_fog
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_vulkan_test(cna_test_vulkan_dualtextureeffect_fog
                         examples/vulkan_dualtextureeffect_fog_test.cpp)
-        add_test(NAME Vulkan_DualTextureEffect_Fog
-                 COMMAND cna_test_vulkan_dualtextureeffect_fog)
-        set_tests_properties(Vulkan_DualTextureEffect_Fog PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_DualTextureEffect_Fog COMMAND cna_test_vulkan_dualtextureeffect_fog
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_vulkan_test(cna_test_vulkan_skinnedeffect_fog
                         examples/vulkan_skinnedeffect_fog_test.cpp)
-        add_test(NAME Vulkan_SkinnedEffect_Fog
-                 COMMAND cna_test_vulkan_skinnedeffect_fog)
-        set_tests_properties(Vulkan_SkinnedEffect_Fog PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_SkinnedEffect_Fog COMMAND cna_test_vulkan_skinnedeffect_fog
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 893: SkinnedEffect DirectionalLight1/DirectionalLight2 forwarding
         cna_vulkan_test(cna_test_vulkan_skinnedeffect_multilight
                         examples/vulkan_skinnedeffect_multilight_test.cpp)
-        add_test(NAME Vulkan_SkinnedEffect_MultiLight
-                 COMMAND cna_test_vulkan_skinnedeffect_multilight)
-        set_tests_properties(Vulkan_SkinnedEffect_MultiLight PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_SkinnedEffect_MultiLight COMMAND cna_test_vulkan_skinnedeffect_multilight
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 894: SkinnedEffect real specular highlights
         cna_vulkan_test(cna_test_vulkan_skinnedeffect_specular
                         examples/vulkan_skinnedeffect_specular_test.cpp)
-        add_test(NAME Vulkan_SkinnedEffect_Specular
-                 COMMAND cna_test_vulkan_skinnedeffect_specular)
-        set_tests_properties(Vulkan_SkinnedEffect_Specular PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_SkinnedEffect_Specular COMMAND cna_test_vulkan_skinnedeffect_specular
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 1103: SkinnedEffect pixel test — PreferPerPixelLighting genuinely selects between a
         # real per-vertex-lit shader variant and the existing per-pixel-lit one.
         cna_vulkan_test(cna_test_vulkan_skinnedeffect_preferperpixellighting
                         examples/vulkan_skinnedeffect_preferperpixellighting_test.cpp)
-        add_test(NAME Vulkan_SkinnedEffect_PreferPerPixelLighting
-                 COMMAND cna_test_vulkan_skinnedeffect_preferperpixellighting)
-        set_tests_properties(Vulkan_SkinnedEffect_PreferPerPixelLighting PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_SkinnedEffect_PreferPerPixelLighting COMMAND cna_test_vulkan_skinnedeffect_preferperpixellighting
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 895: SkinnedEffect WeightsPerVertex real GPU enforcement
         cna_vulkan_test(cna_test_vulkan_skinnedeffect_weightspervertex
                         examples/vulkan_skinnedeffect_weightspervertex_test.cpp)
-        add_test(NAME Vulkan_SkinnedEffect_WeightsPerVertex
-                 COMMAND cna_test_vulkan_skinnedeffect_weightspervertex)
-        set_tests_properties(Vulkan_SkinnedEffect_WeightsPerVertex PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_SkinnedEffect_WeightsPerVertex COMMAND cna_test_vulkan_skinnedeffect_weightspervertex
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 899's own noted cheap leftover: env_map3d fog packed into EnvMapParams' spare bytes
         cna_vulkan_test(cna_test_vulkan_environmentmapeffect_fog
                         examples/vulkan_environmentmapeffect_fog_test.cpp)
-        add_test(NAME Vulkan_EnvironmentMapEffect_Fog
-                 COMMAND cna_test_vulkan_environmentmapeffect_fog)
-        set_tests_properties(Vulkan_EnvironmentMapEffect_Fog PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_EnvironmentMapEffect_Fog COMMAND cna_test_vulkan_environmentmapeffect_fog
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 878/879: RenderTarget2D MSAA resolve genuinely anti-aliases on Vulkan (piggybacks
         # on the backend's own backbuffer sampleCount_ -- requires PreferMultiSampling=true).
         cna_vulkan_test(cna_test_vulkan_rendertarget2d_msaa
                         examples/vulkan_rendertarget2d_msaa_test.cpp)
-        add_test(NAME Vulkan_RenderTarget2D_MsaaResolve
-                 COMMAND cna_test_vulkan_rendertarget2d_msaa)
-        set_tests_properties(Vulkan_RenderTarget2D_MsaaResolve PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_RenderTarget2D_MsaaResolve COMMAND cna_test_vulkan_rendertarget2d_msaa
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 878: RenderTarget2D mip chains are genuinely generated (vkCmdBlitImage cascade),
         # not just present-but-undefined storage.
         cna_vulkan_test(cna_test_vulkan_rendertarget2d_mip
                         examples/vulkan_rendertarget2d_mip_test.cpp)
-        add_test(NAME Vulkan_RenderTarget2D_MipChain
-                 COMMAND cna_test_vulkan_rendertarget2d_mip)
-        set_tests_properties(Vulkan_RenderTarget2D_MipChain PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_RenderTarget2D_MipChain COMMAND cna_test_vulkan_rendertarget2d_mip
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 911: RenderTarget2D per-instance DepthStencilFormat fidelity -- DepthFormat::None
         # genuinely has no depth buffer, Depth24Stencil8/Depth16 genuinely do (each with its own
         # render pass), all three coexisting correctly in a single frame.
         cna_vulkan_test(cna_test_vulkan_rendertarget_depthformat_fidelity
                         examples/vulkan_rendertarget_depthformat_fidelity_test.cpp)
-        add_test(NAME Vulkan_RenderTarget2D_DepthFormatFidelity
-                 COMMAND cna_test_vulkan_rendertarget_depthformat_fidelity)
-        set_tests_properties(Vulkan_RenderTarget2D_DepthFormatFidelity PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_RenderTarget2D_DepthFormatFidelity COMMAND cna_test_vulkan_rendertarget_depthformat_fidelity
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 13.6: the same 3 avatar-rendering GPU integration tests already registered for
         # EasyGL above, reusing the exact same backend-agnostic source files (public
@@ -4818,29 +3787,20 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
             cna_vulkan_test(cna_test_vulkan_avatar_real_render
                             examples/avatar_real_render_integration_test.cpp)
             target_link_libraries(cna_test_vulkan_avatar_real_render PRIVATE CNA_GamerServices)
-            add_test(NAME Vulkan_AvatarRenderer_RealRender
-                     COMMAND cna_test_vulkan_avatar_real_render)
-            set_tests_properties(Vulkan_AvatarRenderer_RealRender PROPERTIES
-                TIMEOUT 30
-                ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+            cna_register_backend_test(NAME Vulkan_AvatarRenderer_RealRender COMMAND cna_test_vulkan_avatar_real_render
+                TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
             cna_vulkan_test(cna_test_vulkan_avatar_attach_part
                             examples/avatar_attach_part_integration_test.cpp)
             target_link_libraries(cna_test_vulkan_avatar_attach_part PRIVATE CNA_GamerServices)
-            add_test(NAME Vulkan_AvatarRenderer_AttachPart
-                     COMMAND cna_test_vulkan_avatar_attach_part)
-            set_tests_properties(Vulkan_AvatarRenderer_AttachPart PROPERTIES
-                TIMEOUT 30
-                ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+            cna_register_backend_test(NAME Vulkan_AvatarRenderer_AttachPart COMMAND cna_test_vulkan_avatar_attach_part
+                TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
             cna_vulkan_test(cna_test_vulkan_avatar_tint_routing
                             examples/avatar_tint_routing_integration_test.cpp)
             target_link_libraries(cna_test_vulkan_avatar_tint_routing PRIVATE CNA_GamerServices)
-            add_test(NAME Vulkan_AvatarRenderer_TintRouting
-                     COMMAND cna_test_vulkan_avatar_tint_routing)
-            set_tests_properties(Vulkan_AvatarRenderer_TintRouting PROPERTIES
-                TIMEOUT 30
-                ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+            cna_register_backend_test(NAME Vulkan_AvatarRenderer_TintRouting COMMAND cna_test_vulkan_avatar_tint_routing
+                TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
         endif()
 
         # Task 842 (Phase 73 Vulkan gap closure): verify MRT with mixed formats is rejected or
@@ -4851,103 +3811,70 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         # also holds on Vulkan.
         cna_vulkan_test(cna_test_vulkan_mrt_mixed_formats
                         examples/bgfx_mrt_mixed_formats_test.cpp)
-        add_test(NAME Vulkan_MRT_MixedFormats
-                 COMMAND cna_test_vulkan_mrt_mixed_formats)
-        set_tests_properties(Vulkan_MRT_MixedFormats PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_MRT_MixedFormats COMMAND cna_test_vulkan_mrt_mixed_formats
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 842 (verbatim reuse): Task 176's own SurfaceFormat-validation contract, confirmed
         # backend-agnostic -- reused unmodified from EasyGL to directly confirm the same
         # Color-only constraint holds on Vulkan too.
         cna_vulkan_test(cna_test_vulkan_surface_format_throws
                         examples/easygl_surface_format_throws_test.cpp)
-        add_test(NAME Vulkan_SurfaceFormat_Throws
-                 COMMAND cna_test_vulkan_surface_format_throws)
-        set_tests_properties(Vulkan_SurfaceFormat_Throws PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_SurfaceFormat_Throws COMMAND cna_test_vulkan_surface_format_throws
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 850 (Phase 73 Vulkan gap closure): SpriteSortMode ordering pixel test on Vulkan --
         # verbatim reuse of the shared EasyGL source (Task 420); no Vulkan-specific restructuring
         # needed (Vulkan has no Bgfx-style "first GetBackBufferData read per frame" quirk).
         cna_vulkan_test(cna_test_vulkan_spritebatch_layerdepth
                         examples/easygl_spritebatch_layerdepth_test.cpp)
-        add_test(NAME Vulkan_SpriteBatch_LayerDepthOrder
-                 COMMAND cna_test_vulkan_spritebatch_layerdepth)
-        set_tests_properties(Vulkan_SpriteBatch_LayerDepthOrder PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_SpriteBatch_LayerDepthOrder COMMAND cna_test_vulkan_spritebatch_layerdepth
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 851 (Phase 73 Vulkan gap closure): SpriteBatch rotation/scale/source-rectangle-
         # cropping/SpriteEffects flip on Vulkan -- verbatim reuse of the shared EasyGL sources
         # (Tasks 417/418/419/167).
         cna_vulkan_test(cna_test_vulkan_spritebatch_rotation
                         examples/easygl_spritebatch_rotation_test.cpp)
-        add_test(NAME Vulkan_SpriteBatch_Rotation
-                 COMMAND cna_test_vulkan_spritebatch_rotation)
-        set_tests_properties(Vulkan_SpriteBatch_Rotation PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_SpriteBatch_Rotation COMMAND cna_test_vulkan_spritebatch_rotation
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_vulkan_test(cna_test_vulkan_spritebatch_scale
                         examples/easygl_spritebatch_scale_test.cpp)
-        add_test(NAME Vulkan_SpriteBatch_Scale
-                 COMMAND cna_test_vulkan_spritebatch_scale)
-        set_tests_properties(Vulkan_SpriteBatch_Scale PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_SpriteBatch_Scale COMMAND cna_test_vulkan_spritebatch_scale
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_vulkan_test(cna_test_vulkan_spritebatch_sourcerect
                         examples/easygl_spritebatch_sourcerect_test.cpp)
-        add_test(NAME Vulkan_SpriteBatch_SourceRectangleCropping
-                 COMMAND cna_test_vulkan_spritebatch_sourcerect)
-        set_tests_properties(Vulkan_SpriteBatch_SourceRectangleCropping PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_SpriteBatch_SourceRectangleCropping COMMAND cna_test_vulkan_spritebatch_sourcerect
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_vulkan_test(cna_test_vulkan_sprite_effects
                         examples/easygl_sprite_effects_test.cpp)
-        add_test(NAME Vulkan_SpriteEffects_Flip
-                 COMMAND cna_test_vulkan_sprite_effects)
-        set_tests_properties(Vulkan_SpriteEffects_Flip PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_SpriteEffects_Flip COMMAND cna_test_vulkan_sprite_effects
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 852 (Phase 73 Vulkan gap closure): SpriteFont single-glyph placement, multi-glyph
         # spacing + newline, and default-character fallback on Vulkan -- verbatim reuse of the
         # shared EasyGL sources (Tasks 424/425/426/427).
         cna_vulkan_test(cna_test_vulkan_spritefont_single_glyph
                         examples/easygl_spritefont_single_glyph_test.cpp)
-        add_test(NAME Vulkan_SpriteFont_SingleGlyph
-                 COMMAND cna_test_vulkan_spritefont_single_glyph)
-        set_tests_properties(Vulkan_SpriteFont_SingleGlyph PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_SpriteFont_SingleGlyph COMMAND cna_test_vulkan_spritefont_single_glyph
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_vulkan_test(cna_test_vulkan_spritefont_multiglyph_spacing
                         examples/easygl_spritefont_multiglyph_spacing_test.cpp)
-        add_test(NAME Vulkan_SpriteFont_MultiGlyphSpacing
-                 COMMAND cna_test_vulkan_spritefont_multiglyph_spacing)
-        set_tests_properties(Vulkan_SpriteFont_MultiGlyphSpacing PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_SpriteFont_MultiGlyphSpacing COMMAND cna_test_vulkan_spritefont_multiglyph_spacing
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_vulkan_test(cna_test_vulkan_spritefont_newline
                         examples/easygl_spritefont_newline_test.cpp)
-        add_test(NAME Vulkan_SpriteFont_Newline
-                 COMMAND cna_test_vulkan_spritefont_newline)
-        set_tests_properties(Vulkan_SpriteFont_Newline PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_SpriteFont_Newline COMMAND cna_test_vulkan_spritefont_newline
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_vulkan_test(cna_test_vulkan_spritefont_default_char
                         examples/easygl_spritefont_default_char_test.cpp)
-        add_test(NAME Vulkan_SpriteFont_DefaultCharacterFallback
-                 COMMAND cna_test_vulkan_spritefont_default_char)
-        set_tests_properties(Vulkan_SpriteFont_DefaultCharacterFallback PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_SpriteFont_DefaultCharacterFallback COMMAND cna_test_vulkan_spritefont_default_char
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 853 (Phase 73 Vulkan gap closure): Model with two meshes and distinct per-mesh
         # Effects, and Model hierarchy transform propagation, on Vulkan -- verbatim reuse of the
@@ -4955,101 +3882,71 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         # working method (unlike Bgfx's throwing stub), so no substitution is needed at all.
         cna_vulkan_test(cna_test_vulkan_model_two_meshes_effects
                         examples/easygl_model_two_meshes_effects_test.cpp)
-        add_test(NAME Vulkan_Model_TwoMeshesEffects
-                 COMMAND cna_test_vulkan_model_two_meshes_effects)
-        set_tests_properties(Vulkan_Model_TwoMeshesEffects PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_Model_TwoMeshesEffects COMMAND cna_test_vulkan_model_two_meshes_effects
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_vulkan_test(cna_test_vulkan_model_hierarchy_child_mesh
                         examples/easygl_model_hierarchy_child_mesh_test.cpp)
-        add_test(NAME Vulkan_Model_HierarchyChildMesh
-                 COMMAND cna_test_vulkan_model_hierarchy_child_mesh)
-        set_tests_properties(Vulkan_Model_HierarchyChildMesh PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_Model_HierarchyChildMesh COMMAND cna_test_vulkan_model_hierarchy_child_mesh
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 927: ModelTypeReader::Read()'s vertex-stride/vtable-size corruption fix is in
         # SHARED code (ContentManager.cpp) -- verbatim reuse of the EasyGL source.
         cna_vulkan_test(cna_test_vulkan_model_json_reader
                         examples/easygl_model_json_reader_test.cpp)
-        add_test(NAME Vulkan_ModelJsonReader_Quad
-                 COMMAND cna_test_vulkan_model_json_reader)
-        set_tests_properties(Vulkan_ModelJsonReader_Quad PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_ModelJsonReader_Quad COMMAND cna_test_vulkan_model_json_reader
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 931: ModelTypeReader::Read()'s 32-bit index auto-selection fix is in SHARED code
         # (ContentManager.cpp) -- verbatim reuse of the EasyGL source.
         cna_vulkan_test(cna_test_vulkan_model_json_reader_32bit_indices
                         examples/easygl_model_json_reader_32bit_indices_test.cpp)
-        add_test(NAME Vulkan_ModelJsonReader_32BitIndices
-                 COMMAND cna_test_vulkan_model_json_reader_32bit_indices)
-        set_tests_properties(Vulkan_ModelJsonReader_32BitIndices PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_ModelJsonReader_32BitIndices COMMAND cna_test_vulkan_model_json_reader_32bit_indices
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 932: ModelTypeReader::Read()'s per-mesh texture-binding fix is in SHARED code
         # (ContentManager.cpp) -- verbatim reuse of the EasyGL source.
         cna_vulkan_test(cna_test_vulkan_model_json_reader_texture
                         examples/easygl_model_json_reader_texture_test.cpp)
-        add_test(NAME Vulkan_ModelJsonReader_Texture
-                 COMMAND cna_test_vulkan_model_json_reader_texture)
-        set_tests_properties(Vulkan_ModelJsonReader_Texture PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_ModelJsonReader_Texture COMMAND cna_test_vulkan_model_json_reader_texture
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 934: TextureCubeTypeReader / Content.Load<TextureCube>() fix is in SHARED code
         # (ContentManager.cpp/.hpp) -- verbatim reuse of the EasyGL source.
         cna_vulkan_test(cna_test_vulkan_texturecube_content_load
                         examples/easygl_texturecube_content_load_test.cpp)
-        add_test(NAME Vulkan_TextureCube_ContentLoad
-                 COMMAND cna_test_vulkan_texturecube_content_load)
-        set_tests_properties(Vulkan_TextureCube_ContentLoad PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_TextureCube_ContentLoad COMMAND cna_test_vulkan_texturecube_content_load
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 937: ModelTypeReader::Read()'s per-mesh-bone fix is in SHARED code
         # (ContentManager.cpp) -- verbatim reuse of the EasyGL source (pure structural test).
         cna_vulkan_test(cna_test_vulkan_model_json_reader_bone_hierarchy
                         examples/easygl_model_json_reader_bone_hierarchy_test.cpp)
-        add_test(NAME Vulkan_ModelJsonReader_BoneHierarchy
-                 COMMAND cna_test_vulkan_model_json_reader_bone_hierarchy)
-        set_tests_properties(Vulkan_ModelJsonReader_BoneHierarchy PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_ModelJsonReader_BoneHierarchy COMMAND cna_test_vulkan_model_json_reader_bone_hierarchy
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 941: ModelTypeReader::Read()'s "skeleton"/"animations"/SkinnedEffect support is in
         # SHARED code (ContentManager.cpp) -- verbatim reuse of the EasyGL source (pure
         # structural test).
         cna_vulkan_test(cna_test_vulkan_model_json_reader_skeleton
                         examples/easygl_model_json_reader_skeleton_test.cpp)
-        add_test(NAME Vulkan_ModelJsonReader_Skeleton
-                 COMMAND cna_test_vulkan_model_json_reader_skeleton)
-        set_tests_properties(Vulkan_ModelJsonReader_Skeleton PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_ModelJsonReader_Skeleton COMMAND cna_test_vulkan_model_json_reader_skeleton
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 942: AnimationPlayer -> SkinnedEffect -> Model.Draw() wiring is in SHARED code
         # (ContentManager.cpp/AnimationPlayer.cpp/SkinnedEffect) -- verbatim reuse of the EasyGL
         # source (pixel test).
         cna_vulkan_test(cna_test_vulkan_model_skinned_animation_playback
                         examples/easygl_model_skinned_animation_playback_test.cpp)
-        add_test(NAME Vulkan_Model_SkinnedAnimationPlayback
-                 COMMAND cna_test_vulkan_model_skinned_animation_playback)
-        set_tests_properties(Vulkan_Model_SkinnedAnimationPlayback PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_Model_SkinnedAnimationPlayback COMMAND cna_test_vulkan_model_skinned_animation_playback
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 930: VertexBuffer/IndexBuffer::GetData() is a CPU-side shadow buffer in SHARED
         # code (VertexBuffer.cpp/IndexBuffer.cpp) -- verbatim reuse of the EasyGL source.
         cna_vulkan_test(cna_test_vulkan_vertexbuffer_indexbuffer_getdata
                         examples/easygl_vertexbuffer_indexbuffer_getdata_test.cpp)
-        add_test(NAME Vulkan_VertexBufferIndexBufferGetData
-                 COMMAND cna_test_vulkan_vertexbuffer_indexbuffer_getdata)
-        set_tests_properties(Vulkan_VertexBufferIndexBufferGetData PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_VertexBufferIndexBufferGetData COMMAND cna_test_vulkan_vertexbuffer_indexbuffer_getdata
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 855 (Phase 73 Vulkan gap closure): Texture2D SetData/GetData partial-rectangle +
         # startIndex/elementCount + mip-level on Vulkan -- verbatim reuse of the shared EasyGL
@@ -5057,40 +3954,28 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         # buffer (Texture2D.cpp), no GPU readback involved at all.
         cna_vulkan_test(cna_test_vulkan_texture2d_partial_rect
                         examples/easygl_texture2d_partial_rect_test.cpp)
-        add_test(NAME Vulkan_Texture2D_PartialRect_RoundTrip
-                 COMMAND cna_test_vulkan_texture2d_partial_rect)
-        set_tests_properties(Vulkan_Texture2D_PartialRect_RoundTrip PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_Texture2D_PartialRect_RoundTrip COMMAND cna_test_vulkan_texture2d_partial_rect
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         cna_vulkan_test(cna_test_vulkan_texture2d_mip
                         examples/easygl_texture2d_mip_test.cpp)
-        add_test(NAME Vulkan_Texture2D_Mip_RoundTrip
-                 COMMAND cna_test_vulkan_texture2d_mip)
-        set_tests_properties(Vulkan_Texture2D_Mip_RoundTrip PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_Texture2D_Mip_RoundTrip COMMAND cna_test_vulkan_texture2d_mip
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 857 (Phase 73 Vulkan gap closure): NPOT texture upload+sample on Vulkan --
         # verbatim reuse of the shared EasyGL source (Task 268).
         cna_vulkan_test(cna_test_vulkan_npot_texture
                         examples/easygl_npot_texture_test.cpp)
-        add_test(NAME Vulkan_NpotTexture
-                 COMMAND cna_test_vulkan_npot_texture)
-        set_tests_properties(Vulkan_NpotTexture PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_NpotTexture COMMAND cna_test_vulkan_npot_texture
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Task 858 (Phase 73 Vulkan gap closure): Texture3D box-region SetData/GetData pixel
         # correctness on Vulkan -- verbatim reuse of the shared EasyGL source (Task 274). Vulkan's
         # Texture3D::GetData already has a real per-backend GPU round-trip (Task 865).
         cna_vulkan_test(cna_test_vulkan_texture3d_partial_box_readback
                         examples/easygl_texture3d_partial_box_readback_test.cpp)
-        add_test(NAME Vulkan_Texture3D_PartialBox_Readback
-                 COMMAND cna_test_vulkan_texture3d_partial_box_readback)
-        set_tests_properties(Vulkan_Texture3D_PartialBox_Readback PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_Texture3D_PartialBox_Readback COMMAND cna_test_vulkan_texture3d_partial_box_readback
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
         # Tasks 447/854 (Phase 73 Vulkan gap closure): real per-draw-call OcclusionQuery
         # correlation -- previously entirely-stubbed Begin()/End() (always returned PixelCount=0).
@@ -5099,11 +3984,8 @@ if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_BACKEND STREQUAL "EASYGL" OR CNA_GRAPHIC
         # pair with correct per-frame vkCmdResetQueryPool sequencing.
         cna_vulkan_test(cna_test_vulkan_occlusionquery_pixelcount
                         examples/vulkan_occlusionquery_pixelcount_test.cpp)
-        add_test(NAME Vulkan_OcclusionQuery_PixelCount
-                 COMMAND cna_test_vulkan_occlusionquery_pixelcount)
-        set_tests_properties(Vulkan_OcclusionQuery_PixelCount PROPERTIES
-            TIMEOUT 30
-            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+        cna_register_backend_test(NAME Vulkan_OcclusionQuery_PixelCount COMMAND cna_test_vulkan_occlusionquery_pixelcount
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     endif()
 
@@ -5134,624 +4016,422 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # SDL_Renderer pixel-test audit phase (Tasks 666-861).
     cna_sdl_test(cna_test_sdl_readback
                  examples/sdlrenderer_readback_test.cpp)
-    add_test(NAME SDL_Renderer_Readback
-             COMMAND cna_test_sdl_readback)
-    set_tests_properties(SDL_Renderer_Readback PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SDL_Renderer_Readback COMMAND cna_test_sdl_readback
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 666: audit all SpriteBatch::Draw overloads through SDL_Renderer
     cna_sdl_test(cna_test_sdl_spritebatch_overloads
                  examples/sdlrenderer_spritebatch_overloads_test.cpp)
-    add_test(NAME SDL_Renderer_SpriteBatch_Overloads
-             COMMAND cna_test_sdl_spritebatch_overloads)
-    set_tests_properties(SDL_Renderer_SpriteBatch_Overloads PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SDL_Renderer_SpriteBatch_Overloads COMMAND cna_test_sdl_spritebatch_overloads
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 671: rotation around origin -- found and fixed a real SDL_RenderTextureRotated
     # pivot-offset bug while writing this test.
     cna_sdl_test(cna_test_sdl_spritebatch_rotation
                  examples/sdlrenderer_spritebatch_rotation_test.cpp)
-    add_test(NAME SDL_Renderer_SpriteBatch_Rotation
-             COMMAND cna_test_sdl_spritebatch_rotation)
-    set_tests_properties(SDL_Renderer_SpriteBatch_Rotation PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SDL_Renderer_SpriteBatch_Rotation COMMAND cna_test_sdl_spritebatch_rotation
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 669: SpriteSortMode::FrontToBack layerDepth ordering on SDL_Renderer -- direct port of
     # Task 420's EasyGL test (PresentationMode::NativeBackBuffer required for exact-pixel readback,
     # see Task 915).
     cna_sdl_test(cna_test_sdl_spritebatch_layerdepth
                  examples/sdlrenderer_spritebatch_layerdepth_test.cpp)
-    add_test(NAME SDL_Renderer_SpriteBatch_LayerDepth
-             COMMAND cna_test_sdl_spritebatch_layerdepth)
-    set_tests_properties(SDL_Renderer_SpriteBatch_LayerDepth PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SDL_Renderer_SpriteBatch_LayerDepth COMMAND cna_test_sdl_spritebatch_layerdepth
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 667: SpriteSortMode::Deferred submission-order pixel test on SDL_Renderer.
     cna_sdl_test(cna_test_sdl_spritebatch_deferred_order
                  examples/sdlrenderer_spritebatch_deferred_order_test.cpp)
-    add_test(NAME SDL_Renderer_SpriteBatch_DeferredOrder
-             COMMAND cna_test_sdl_spritebatch_deferred_order)
-    set_tests_properties(SDL_Renderer_SpriteBatch_DeferredOrder PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SDL_Renderer_SpriteBatch_DeferredOrder COMMAND cna_test_sdl_spritebatch_deferred_order
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 668: SpriteSortMode::Texture grouping pixel test on SDL_Renderer.
     cna_sdl_test(cna_test_sdl_spritebatch_texture_sort
                  examples/sdlrenderer_spritebatch_texture_sort_test.cpp)
-    add_test(NAME SDL_Renderer_SpriteBatch_TextureSort
-             COMMAND cna_test_sdl_spritebatch_texture_sort)
-    set_tests_properties(SDL_Renderer_SpriteBatch_TextureSort PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SDL_Renderer_SpriteBatch_TextureSort COMMAND cna_test_sdl_spritebatch_texture_sort
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 670: SpriteSortMode::Immediate per-draw flush pixel test on SDL_Renderer.
     cna_sdl_test(cna_test_sdl_spritebatch_immediate_flush
                  examples/sdlrenderer_spritebatch_immediate_flush_test.cpp)
-    add_test(NAME SDL_Renderer_SpriteBatch_ImmediateFlush
-             COMMAND cna_test_sdl_spritebatch_immediate_flush)
-    set_tests_properties(SDL_Renderer_SpriteBatch_ImmediateFlush PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SDL_Renderer_SpriteBatch_ImmediateFlush COMMAND cna_test_sdl_spritebatch_immediate_flush
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 672: scalar/Vector2 scale overload pixel test on SDL_Renderer -- direct port of
     # Task 418's EasyGL test.
     cna_sdl_test(cna_test_sdl_spritebatch_scale
                  examples/sdlrenderer_spritebatch_scale_test.cpp)
-    add_test(NAME SDL_Renderer_SpriteBatch_Scale
-             COMMAND cna_test_sdl_spritebatch_scale)
-    set_tests_properties(SDL_Renderer_SpriteBatch_Scale PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SDL_Renderer_SpriteBatch_Scale COMMAND cna_test_sdl_spritebatch_scale
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 673: source rectangle cropping pixel test on SDL_Renderer -- direct port of
     # Task 419's EasyGL test.
     cna_sdl_test(cna_test_sdl_spritebatch_sourcerect
                  examples/sdlrenderer_spritebatch_sourcerect_test.cpp)
-    add_test(NAME SDL_Renderer_SpriteBatch_SourceRect
-             COMMAND cna_test_sdl_spritebatch_sourcerect)
-    set_tests_properties(SDL_Renderer_SpriteBatch_SourceRect PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SDL_Renderer_SpriteBatch_SourceRect COMMAND cna_test_sdl_spritebatch_sourcerect
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 674: SpriteEffects::FlipHorizontally/FlipVertically pixel test on SDL_Renderer --
     # direct port of Task 167's EasyGL test.
     cna_sdl_test(cna_test_sdl_sprite_effects
                  examples/sdlrenderer_sprite_effects_test.cpp)
-    add_test(NAME SDL_Renderer_SpriteEffects
-             COMMAND cna_test_sdl_sprite_effects)
-    set_tests_properties(SDL_Renderer_SpriteEffects PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SDL_Renderer_SpriteEffects COMMAND cna_test_sdl_sprite_effects
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 675: transformMatrix in SpriteBatch::Begin pixel test on SDL_Renderer -- direct port
     # of Task 168's EasyGL test.
     cna_sdl_test(cna_test_sdl_transform_matrix
                  examples/sdlrenderer_transform_matrix_test.cpp)
-    add_test(NAME SDL_Renderer_TransformMatrix
-             COMMAND cna_test_sdl_transform_matrix)
-    set_tests_properties(SDL_Renderer_TransformMatrix PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SDL_Renderer_TransformMatrix COMMAND cna_test_sdl_transform_matrix
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 676: SpriteBatch::Begin(effect) custom-Effect behavior decision -- must throw
     # (no programmable shader stage exists on SDL_Renderer to apply a custom Effect with).
     cna_sdl_test(cna_test_sdl_custom_effect_throws
                  examples/sdlrenderer_custom_effect_throws_test.cpp)
-    add_test(NAME SDL_Renderer_CustomEffectThrows
-             COMMAND cna_test_sdl_custom_effect_throws)
-    set_tests_properties(SDL_Renderer_CustomEffectThrows PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SDL_Renderer_CustomEffectThrows COMMAND cna_test_sdl_custom_effect_throws
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 677: SpriteBatch Begin/End sequencing guard end-to-end integration test on SDL_Renderer.
     cna_sdl_test(cna_test_sdl_spritebatch_begin_end_guard
                  examples/sdlrenderer_spritebatch_begin_end_guard_test.cpp)
-    add_test(NAME SDL_Renderer_SpriteBatch_BeginEndGuard
-             COMMAND cna_test_sdl_spritebatch_begin_end_guard)
-    set_tests_properties(SDL_Renderer_SpriteBatch_BeginEndGuard PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SDL_Renderer_SpriteBatch_BeginEndGuard COMMAND cna_test_sdl_spritebatch_begin_end_guard
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 678: Texture2D::SetData/GetData full-array round-trip audit on SDL_Renderer.
     cna_sdl_test(cna_test_sdl_texture2d_setdata_getdata
                  examples/sdlrenderer_texture2d_setdata_getdata_test.cpp)
-    add_test(NAME SDL_Renderer_Texture2D_SetDataGetData
-             COMMAND cna_test_sdl_texture2d_setdata_getdata)
-    set_tests_properties(SDL_Renderer_Texture2D_SetDataGetData PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SDL_Renderer_Texture2D_SetDataGetData COMMAND cna_test_sdl_texture2d_setdata_getdata
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 679: Texture2D::SetData partial-rectangle region pixel test on SDL_Renderer.
     cna_sdl_test(cna_test_sdl_texture2d_partial_rect
                  examples/sdlrenderer_texture2d_partial_rect_test.cpp)
-    add_test(NAME SDL_Renderer_Texture2D_PartialRect
-             COMMAND cna_test_sdl_texture2d_partial_rect)
-    set_tests_properties(SDL_Renderer_Texture2D_PartialRect PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SDL_Renderer_Texture2D_PartialRect COMMAND cna_test_sdl_texture2d_partial_rect
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 680: Texture2D::SetData startIndex/elementCount slice pixel test on SDL_Renderer.
     cna_sdl_test(cna_test_sdl_texture2d_startindex
                  examples/sdlrenderer_texture2d_startindex_test.cpp)
-    add_test(NAME SDL_Renderer_Texture2D_StartIndex
-             COMMAND cna_test_sdl_texture2d_startindex)
-    set_tests_properties(SDL_Renderer_Texture2D_StartIndex PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SDL_Renderer_Texture2D_StartIndex COMMAND cna_test_sdl_texture2d_startindex
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 681: Texture2D mip-level SetData/GetData decision test on SDL_Renderer.
     cna_sdl_test(cna_test_sdl_texture2d_miplevel_throws
                  examples/sdlrenderer_texture2d_miplevel_throws_test.cpp)
-    add_test(NAME SDL_Renderer_Texture2D_MipLevelThrows
-             COMMAND cna_test_sdl_texture2d_miplevel_throws)
-    set_tests_properties(SDL_Renderer_Texture2D_MipLevelThrows PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SDL_Renderer_Texture2D_MipLevelThrows COMMAND cna_test_sdl_texture2d_miplevel_throws
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 682: Texture2D::FromStream round-trip real-render pixel test on SDL_Renderer.
     cna_sdl_test(cna_test_sdl_texture2d_fromstream
                  examples/sdlrenderer_texture2d_fromstream_test.cpp)
-    add_test(NAME SDL_Renderer_Texture2D_FromStream
-             COMMAND cna_test_sdl_texture2d_fromstream)
-    set_tests_properties(SDL_Renderer_Texture2D_FromStream PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SDL_Renderer_Texture2D_FromStream COMMAND cna_test_sdl_texture2d_fromstream
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 683: SaveAsPng/SaveAsJpeg round-trip real-render pixel test on SDL_Renderer.
     cna_sdl_test(cna_test_sdl_texture2d_saveas_roundtrip
                  examples/sdlrenderer_texture2d_saveas_roundtrip_test.cpp)
-    add_test(NAME SDL_Renderer_Texture2D_SaveAsRoundTrip
-             COMMAND cna_test_sdl_texture2d_saveas_roundtrip)
-    set_tests_properties(SDL_Renderer_Texture2D_SaveAsRoundTrip PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SDL_Renderer_Texture2D_SaveAsRoundTrip COMMAND cna_test_sdl_texture2d_saveas_roundtrip
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 684: NPOT (3x5, 7x11) texture upload+sample pixel test on SDL_Renderer.
     cna_sdl_test(cna_test_sdl_npot_texture
                  examples/sdlrenderer_npot_texture_test.cpp)
-    add_test(NAME SDL_Renderer_NpotTexture
-             COMMAND cna_test_sdl_npot_texture)
-    set_tests_properties(SDL_Renderer_NpotTexture PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SDL_Renderer_NpotTexture COMMAND cna_test_sdl_npot_texture
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 685: TextureAddressMode::Clamp via SpriteBatch pixel test on SDL_Renderer.
     cna_sdl_test(cna_test_sdl_texture_address_mode_clamp
                  examples/sdlrenderer_texture_address_mode_clamp_test.cpp)
-    add_test(NAME SDL_Renderer_TextureAddressModeClamp
-             COMMAND cna_test_sdl_texture_address_mode_clamp)
-    set_tests_properties(SDL_Renderer_TextureAddressModeClamp PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SDL_Renderer_TextureAddressModeClamp COMMAND cna_test_sdl_texture_address_mode_clamp
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 688: TextureFilter::Point vs Linear via SDL_ScaleMode pixel test on SDL_Renderer.
     cna_sdl_test(cna_test_sdl_texture_filter_point_vs_linear
                  examples/sdlrenderer_texture_filter_point_vs_linear_test.cpp)
-    add_test(NAME SDL_Renderer_TextureFilterPointVsLinear
-             COMMAND cna_test_sdl_texture_filter_point_vs_linear)
-    set_tests_properties(SDL_Renderer_TextureFilterPointVsLinear PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SDL_Renderer_TextureFilterPointVsLinear COMMAND cna_test_sdl_texture_filter_point_vs_linear
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 689: Texture2D::Dispose double-free/lifetime verification on SDL_Renderer.
     cna_sdl_test(cna_test_sdl_texture2d_dispose
                  examples/sdlrenderer_texture2d_dispose_test.cpp)
-    add_test(NAME SDL_Renderer_Texture2D_Dispose
-             COMMAND cna_test_sdl_texture2d_dispose)
-    set_tests_properties(SDL_Renderer_Texture2D_Dispose PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SDL_Renderer_Texture2D_Dispose COMMAND cna_test_sdl_texture2d_dispose
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 690: SpriteFont single-glyph-at-known-position pixel test on SDL_Renderer.
     cna_sdl_test(cna_test_sdl_spritefont_single_glyph
                  examples/sdlrenderer_spritefont_single_glyph_test.cpp)
-    add_test(NAME SDL_Renderer_SpriteFont_SingleGlyph
-             COMMAND cna_test_sdl_spritefont_single_glyph)
-    set_tests_properties(SDL_Renderer_SpriteFont_SingleGlyph PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SDL_Renderer_SpriteFont_SingleGlyph COMMAND cna_test_sdl_spritefont_single_glyph
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 691: SpriteFont multiple-glyphs-with-spacing pixel test on SDL_Renderer.
     cna_sdl_test(cna_test_sdl_spritefont_multiglyph_spacing
                  examples/sdlrenderer_spritefont_multiglyph_spacing_test.cpp)
-    add_test(NAME SDL_Renderer_SpriteFont_MultiGlyphSpacing
-             COMMAND cna_test_sdl_spritefont_multiglyph_spacing)
-    set_tests_properties(SDL_Renderer_SpriteFont_MultiGlyphSpacing PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SDL_Renderer_SpriteFont_MultiGlyphSpacing COMMAND cna_test_sdl_spritefont_multiglyph_spacing
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 692: SpriteFont newline-advances-by-lineSpacing pixel test on SDL_Renderer.
     cna_sdl_test(cna_test_sdl_spritefont_newline
                  examples/sdlrenderer_spritefont_newline_test.cpp)
-    add_test(NAME SDL_Renderer_SpriteFont_Newline
-             COMMAND cna_test_sdl_spritefont_newline)
-    set_tests_properties(SDL_Renderer_SpriteFont_Newline PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SDL_Renderer_SpriteFont_Newline COMMAND cna_test_sdl_spritefont_newline
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 693: SpriteFont default-character-fallback pixel test on SDL_Renderer.
     cna_sdl_test(cna_test_sdl_spritefont_default_char
                  examples/sdlrenderer_spritefont_default_char_test.cpp)
-    add_test(NAME SDL_Renderer_SpriteFont_DefaultChar
-             COMMAND cna_test_sdl_spritefont_default_char)
-    set_tests_properties(SDL_Renderer_SpriteFont_DefaultChar PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SDL_Renderer_SpriteFont_DefaultChar COMMAND cna_test_sdl_spritefont_default_char
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 694: SpriteFont SpriteEffects flip + rotation/origin/scale pixel test on SDL_Renderer.
     cna_sdl_test(cna_test_sdl_spritefont_effects
                  examples/sdlrenderer_spritefont_effects_test.cpp)
-    add_test(NAME SDL_Renderer_SpriteFont_Effects
-             COMMAND cna_test_sdl_spritefont_effects)
-    set_tests_properties(SDL_Renderer_SpriteFont_Effects PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SDL_Renderer_SpriteFont_Effects COMMAND cna_test_sdl_spritefont_effects
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 695: BlendState -> SDL_BlendMode mapping audit pixel test on SDL_Renderer.
     cna_sdl_test(cna_test_sdl_blendstate_audit
                  examples/sdlrenderer_blendstate_audit_test.cpp)
-    add_test(NAME SDL_Renderer_BlendState_Audit
-             COMMAND cna_test_sdl_blendstate_audit)
-    set_tests_properties(SDL_Renderer_BlendState_Audit PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SDL_Renderer_BlendState_Audit COMMAND cna_test_sdl_blendstate_audit
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 696: BlendState::Opaque pixel test on SDL_Renderer.
     cna_sdl_test(cna_test_sdl_blendstate_opaque
                  examples/sdlrenderer_blendstate_opaque_test.cpp)
-    add_test(NAME SDL_Renderer_BlendState_Opaque
-             COMMAND cna_test_sdl_blendstate_opaque)
-    set_tests_properties(SDL_Renderer_BlendState_Opaque PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SDL_Renderer_BlendState_Opaque COMMAND cna_test_sdl_blendstate_opaque
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 697: BlendState::AlphaBlend premultiplied alpha pixel test on SDL_Renderer.
     cna_sdl_test(cna_test_sdl_blendstate_alphablend
                  examples/sdlrenderer_blendstate_alphablend_test.cpp)
-    add_test(NAME SDL_Renderer_BlendState_AlphaBlend
-             COMMAND cna_test_sdl_blendstate_alphablend)
-    set_tests_properties(SDL_Renderer_BlendState_AlphaBlend PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SDL_Renderer_BlendState_AlphaBlend COMMAND cna_test_sdl_blendstate_alphablend
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 698: BlendState::NonPremultiplied pixel test on SDL_Renderer.
     cna_sdl_test(cna_test_sdl_blendstate_nonpremultiplied
                  examples/sdlrenderer_blendstate_nonpremultiplied_test.cpp)
-    add_test(NAME SDL_Renderer_BlendState_NonPremultiplied
-             COMMAND cna_test_sdl_blendstate_nonpremultiplied)
-    set_tests_properties(SDL_Renderer_BlendState_NonPremultiplied PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SDL_Renderer_BlendState_NonPremultiplied COMMAND cna_test_sdl_blendstate_nonpremultiplied
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 699: BlendState::Additive saturation behavior pixel test on SDL_Renderer.
     cna_sdl_test(cna_test_sdl_blendstate_additive
                  examples/sdlrenderer_blendstate_additive_test.cpp)
-    add_test(NAME SDL_Renderer_BlendState_Additive
-             COMMAND cna_test_sdl_blendstate_additive)
-    set_tests_properties(SDL_Renderer_BlendState_Additive PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SDL_Renderer_BlendState_Additive COMMAND cna_test_sdl_blendstate_additive
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 700: custom (non-preset) BlendState combination decision/verification on SDL_Renderer.
     cna_sdl_test(cna_test_sdl_blendstate_custom
                  examples/sdlrenderer_blendstate_custom_test.cpp)
-    add_test(NAME SDL_Renderer_BlendState_Custom
-             COMMAND cna_test_sdl_blendstate_custom)
-    set_tests_properties(SDL_Renderer_BlendState_Custom PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SDL_Renderer_BlendState_Custom COMMAND cna_test_sdl_blendstate_custom
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 701: SamplerState -> SDL_ScaleMode + address-mode mapping audit pixel test on SDL_Renderer.
     cna_sdl_test(cna_test_sdl_samplerstate_filter_audit
                  examples/sdlrenderer_samplerstate_filter_audit_test.cpp)
-    add_test(NAME SDL_Renderer_SamplerState_FilterAudit
-             COMMAND cna_test_sdl_samplerstate_filter_audit)
-    set_tests_properties(SDL_Renderer_SamplerState_FilterAudit PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SDL_Renderer_SamplerState_FilterAudit COMMAND cna_test_sdl_samplerstate_filter_audit
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 702: default SamplerState (LinearClamp) verification pixel test on SDL_Renderer.
     cna_sdl_test(cna_test_sdl_samplerstate_default
                  examples/sdlrenderer_samplerstate_default_test.cpp)
-    add_test(NAME SDL_Renderer_SamplerState_Default
-             COMMAND cna_test_sdl_samplerstate_default)
-    set_tests_properties(SDL_Renderer_SamplerState_Default PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SDL_Renderer_SamplerState_Default COMMAND cna_test_sdl_samplerstate_default
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 703: per-draw SamplerState changes take effect on the next SpriteBatch::Begin pixel test on SDL_Renderer.
     cna_sdl_test(cna_test_sdl_samplerstate_perdraw_switch
                  examples/sdlrenderer_samplerstate_perdraw_switch_test.cpp)
-    add_test(NAME SDL_Renderer_SamplerState_PerDrawSwitch
-             COMMAND cna_test_sdl_samplerstate_perdraw_switch)
-    set_tests_properties(SDL_Renderer_SamplerState_PerDrawSwitch PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SDL_Renderer_SamplerState_PerDrawSwitch COMMAND cna_test_sdl_samplerstate_perdraw_switch
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 704: RenderTarget2D construction audit (property wiring + bind/draw/unbind isolation) on SDL_Renderer.
     cna_sdl_test(cna_test_sdl_rendertarget2d_construction
                  examples/sdlrenderer_rendertarget2d_construction_test.cpp)
-    add_test(NAME SDL_Renderer_RenderTarget2D_Construction
-             COMMAND cna_test_sdl_rendertarget2d_construction)
-    set_tests_properties(SDL_Renderer_RenderTarget2D_Construction PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SDL_Renderer_RenderTarget2D_Construction COMMAND cna_test_sdl_rendertarget2d_construction
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 705: RenderTarget2D sampled as Texture2D via SpriteBatch after unbinding on SDL_Renderer.
     cna_sdl_test(cna_test_sdl_rendertarget2d_sample
                  examples/sdlrenderer_rendertarget2d_sample_test.cpp)
-    add_test(NAME SDL_Renderer_RenderTarget2D_SampleAfterUnbind
-             COMMAND cna_test_sdl_rendertarget2d_sample)
-    set_tests_properties(SDL_Renderer_RenderTarget2D_SampleAfterUnbind PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SDL_Renderer_RenderTarget2D_SampleAfterUnbind COMMAND cna_test_sdl_rendertarget2d_sample
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 706: RenderTargetUsage::DiscardContents vs PreserveContents on SDL_Renderer.
     cna_sdl_test(cna_test_sdl_rendertarget_usage
                  examples/sdlrenderer_rendertarget_usage_test.cpp)
-    add_test(NAME SDL_Renderer_RenderTargetUsage
-             COMMAND cna_test_sdl_rendertarget_usage)
-    set_tests_properties(SDL_Renderer_RenderTargetUsage PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SDL_Renderer_RenderTargetUsage COMMAND cna_test_sdl_rendertarget_usage
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 707: GetBackBufferData reads correct pixels after SetRenderTarget(nullptr) restores the backbuffer on SDL_Renderer.
     cna_sdl_test(cna_test_sdl_getbackbufferdata_after_rt_unbind
                  examples/sdlrenderer_getbackbufferdata_after_rt_unbind_test.cpp)
-    add_test(NAME SDL_Renderer_GetBackBufferData_AfterRtUnbind
-             COMMAND cna_test_sdl_getbackbufferdata_after_rt_unbind)
-    set_tests_properties(SDL_Renderer_GetBackBufferData_AfterRtUnbind PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SDL_Renderer_GetBackBufferData_AfterRtUnbind COMMAND cna_test_sdl_getbackbufferdata_after_rt_unbind
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 708: render-target depth-buffer behavior decision (silently ignore DepthFormat) on SDL_Renderer.
     cna_sdl_test(cna_test_sdl_rendertarget_depth_decision
                  examples/sdlrenderer_rendertarget_depth_decision_test.cpp)
-    add_test(NAME SDL_Renderer_RenderTarget_DepthDecision
-             COMMAND cna_test_sdl_rendertarget_depth_decision)
-    set_tests_properties(SDL_Renderer_RenderTarget_DepthDecision PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SDL_Renderer_RenderTarget_DepthDecision COMMAND cna_test_sdl_rendertarget_depth_decision
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 709: MRT (SetRenderTargets with 2+ bindings) throws clearly on SDL_Renderer.
     cna_sdl_test(cna_test_sdl_rendertargets_mrt_throws
                  examples/sdlrenderer_rendertargets_mrt_throws_test.cpp)
-    add_test(NAME SDL_Renderer_RenderTargets_MrtThrows
-             COMMAND cna_test_sdl_rendertargets_mrt_throws)
-    set_tests_properties(SDL_Renderer_RenderTargets_MrtThrows PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SDL_Renderer_RenderTargets_MrtThrows COMMAND cna_test_sdl_rendertargets_mrt_throws
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 710: Viewport get/set round-trip and Project/Unproject math (2D orthographic case) on SDL_Renderer.
     cna_sdl_test(cna_test_sdl_viewport_project_unproject
                  examples/sdlrenderer_viewport_project_unproject_test.cpp)
-    add_test(NAME SDL_Renderer_Viewport_ProjectUnproject
-             COMMAND cna_test_sdl_viewport_project_unproject)
-    set_tests_properties(SDL_Renderer_Viewport_ProjectUnproject PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SDL_Renderer_Viewport_ProjectUnproject COMMAND cna_test_sdl_viewport_project_unproject
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 711: backbuffer resize through PresentationParameters on SDL_Renderer.
     cna_sdl_test(cna_test_sdl_presentationparameters_resize
                  examples/sdlrenderer_presentationparameters_resize_test.cpp)
-    add_test(NAME SDL_Renderer_PresentationParameters_Resize
-             COMMAND cna_test_sdl_presentationparameters_resize)
-    set_tests_properties(SDL_Renderer_PresentationParameters_Resize PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SDL_Renderer_PresentationParameters_Resize COMMAND cna_test_sdl_presentationparameters_resize
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 712: fullscreen toggle on SDL_Renderer.
     cna_sdl_test(cna_test_sdl_fullscreen_toggle
                  examples/sdlrenderer_fullscreen_toggle_test.cpp)
-    add_test(NAME SDL_Renderer_FullscreenToggle
-             COMMAND cna_test_sdl_fullscreen_toggle)
-    set_tests_properties(SDL_Renderer_FullscreenToggle PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SDL_Renderer_FullscreenToggle COMMAND cna_test_sdl_fullscreen_toggle
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 713: PresentInterval (vsync) mapping to SDL_SetRenderVSync on SDL_Renderer.
     cna_sdl_test(cna_test_sdl_presentinterval
                  examples/sdlrenderer_presentinterval_test.cpp)
-    add_test(NAME SDL_Renderer_PresentInterval
-             COMMAND cna_test_sdl_presentinterval)
-    set_tests_properties(SDL_Renderer_PresentInterval PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SDL_Renderer_PresentInterval COMMAND cna_test_sdl_presentinterval
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 714: MultiSampleCount decision (accept-and-ignore-with-log) on SDL_Renderer.
     cna_sdl_test(cna_test_sdl_multisamplecount_decision
                  examples/sdlrenderer_multisamplecount_decision_test.cpp)
-    add_test(NAME SDL_Renderer_MultiSampleCount_Decision
-             COMMAND cna_test_sdl_multisamplecount_decision)
-    set_tests_properties(SDL_Renderer_MultiSampleCount_Decision PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SDL_Renderer_MultiSampleCount_Decision COMMAND cna_test_sdl_multisamplecount_decision
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 715: DeviceResetting/DeviceReset events fire correctly on SDL_Renderer backbuffer resize.
     cna_sdl_test(cna_test_sdl_devicereset_events
                  examples/sdlrenderer_devicereset_events_test.cpp)
-    add_test(NAME SDL_Renderer_DeviceReset_Events
-             COMMAND cna_test_sdl_devicereset_events)
-    set_tests_properties(SDL_Renderer_DeviceReset_Events PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SDL_Renderer_DeviceReset_Events COMMAND cna_test_sdl_devicereset_events
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 716: GraphicsDevice::Clear (all ClearOptions combinations) on SDL_Renderer.
     cna_sdl_test(cna_test_sdl_clearoptions_audit
                  examples/sdlrenderer_clearoptions_audit_test.cpp)
-    add_test(NAME SDL_Renderer_ClearOptions_Audit
-             COMMAND cna_test_sdl_clearoptions_audit)
-    set_tests_properties(SDL_Renderer_ClearOptions_Audit PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SDL_Renderer_ClearOptions_Audit COMMAND cna_test_sdl_clearoptions_audit
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 717: disposed-resource guards throw ObjectDisposedException consistently on SDL_Renderer.
     cna_sdl_test(cna_test_sdl_disposed_guards
                  examples/sdlrenderer_disposed_guards_test.cpp)
-    add_test(NAME SDL_Renderer_DisposedGuards
-             COMMAND cna_test_sdl_disposed_guards)
-    set_tests_properties(SDL_Renderer_DisposedGuards PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SDL_Renderer_DisposedGuards COMMAND cna_test_sdl_disposed_guards
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 718: double-Dispose is safe for every SDL_Renderer-backed resource type.
     cna_sdl_test(cna_test_sdl_double_dispose
                  examples/sdlrenderer_double_dispose_test.cpp)
-    add_test(NAME SDL_Renderer_DoubleDispose
-             COMMAND cna_test_sdl_double_dispose)
-    set_tests_properties(SDL_Renderer_DoubleDispose PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SDL_Renderer_DoubleDispose COMMAND cna_test_sdl_double_dispose
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 719: leak-check -- create/dispose 80 SDL_Renderer textures/render-targets,
     # verify GetTrackedResourceCount returns to baseline. Mirrors Task 219.
     cna_sdl_test(cna_test_sdl_resource_leak
                  examples/sdlrenderer_resource_leak_test.cpp)
-    add_test(NAME SDL_Renderer_ResourceLeak
-             COMMAND cna_test_sdl_resource_leak)
-    set_tests_properties(SDL_Renderer_ResourceLeak PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SDL_Renderer_ResourceLeak COMMAND cna_test_sdl_resource_leak
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 720: DrawPrimitives/DrawIndexedPrimitives/DrawInstancedPrimitives throw the
     # correct exception type+message on SDL_Renderer.
     cna_sdl_test(cna_test_sdl_drawprimitives_throws
                  examples/sdlrenderer_drawprimitives_throws_test.cpp)
-    add_test(NAME SDL_Renderer_DrawPrimitivesThrows
-             COMMAND cna_test_sdl_drawprimitives_throws)
-    set_tests_properties(SDL_Renderer_DrawPrimitivesThrows PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SDL_Renderer_DrawPrimitivesThrows COMMAND cna_test_sdl_drawprimitives_throws
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 721: all 5 DrawUserPrimitives typed + VertexDeclaration overloads throw the
     # correct exception type+message on SDL_Renderer.
     cna_sdl_test(cna_test_sdl_drawuserprimitives_throws
                  examples/sdlrenderer_drawuserprimitives_throws_test.cpp)
-    add_test(NAME SDL_Renderer_DrawUserPrimitivesThrows
-             COMMAND cna_test_sdl_drawuserprimitives_throws)
-    set_tests_properties(SDL_Renderer_DrawUserPrimitivesThrows PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SDL_Renderer_DrawUserPrimitivesThrows COMMAND cna_test_sdl_drawuserprimitives_throws
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 722: all 10 DrawUserIndexedPrimitives typed + VertexDeclaration overloads throw the
     # correct exception type+message on SDL_Renderer.
     cna_sdl_test(cna_test_sdl_drawuserindexedprimitives_throws
                  examples/sdlrenderer_drawuserindexedprimitives_throws_test.cpp)
-    add_test(NAME SDL_Renderer_DrawUserIndexedPrimitivesThrows
-             COMMAND cna_test_sdl_drawuserindexedprimitives_throws)
-    set_tests_properties(SDL_Renderer_DrawUserIndexedPrimitivesThrows PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SDL_Renderer_DrawUserIndexedPrimitivesThrows COMMAND cna_test_sdl_drawuserindexedprimitives_throws
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 723: re-verify CreateVertexBuffer/CreateIndexBuffer/Dynamic variants throw correctly
     # on SDL_Renderer, covering every construction overload plus zero/negative-count edge cases.
     cna_sdl_test(cna_test_sdl_buffer_construction_throws
                  examples/sdlrenderer_buffer_construction_throws_test.cpp)
-    add_test(NAME SDL_Renderer_BufferConstructionThrows
-             COMMAND cna_test_sdl_buffer_construction_throws)
-    set_tests_properties(SDL_Renderer_BufferConstructionThrows PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SDL_Renderer_BufferConstructionThrows COMMAND cna_test_sdl_buffer_construction_throws
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 724: VertexDeclaration construction does NOT throw on SDL_Renderer -- pure data,
     # no backend touch; only an actual draw call using it should throw.
     cna_sdl_test(cna_test_sdl_vertexdeclaration_construction
                  examples/sdlrenderer_vertexdeclaration_construction_test.cpp)
-    add_test(NAME SDL_Renderer_VertexDeclarationConstruction
-             COMMAND cna_test_sdl_vertexdeclaration_construction)
-    set_tests_properties(SDL_Renderer_VertexDeclarationConstruction PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SDL_Renderer_VertexDeclarationConstruction COMMAND cna_test_sdl_vertexdeclaration_construction
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 726: all 5 stock 3D effects' Apply()+property setters do NOT throw on SDL_Renderer,
     # but drawing with them does.
     cna_sdl_test(cna_test_sdl_stock3deffects_apply
                  examples/sdlrenderer_stock3deffects_apply_test.cpp)
-    add_test(NAME SDL_Renderer_Stock3DEffectsApply
-             COMMAND cna_test_sdl_stock3deffects_apply)
-    set_tests_properties(SDL_Renderer_Stock3DEffectsApply PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SDL_Renderer_Stock3DEffectsApply COMMAND cna_test_sdl_stock3deffects_apply
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 727: OcclusionQuery::Begin/End throw correctly on SDL_Renderer -- construction now
     # throws (fixed a real silent-no-op gap; the only inconsistent 3D-only entry point).
     cna_sdl_test(cna_test_sdl_occlusionquery_throws
                  examples/sdlrenderer_occlusionquery_throws_test.cpp)
-    add_test(NAME SDL_Renderer_OcclusionQueryThrows
-             COMMAND cna_test_sdl_occlusionquery_throws)
-    set_tests_properties(SDL_Renderer_OcclusionQueryThrows PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SDL_Renderer_OcclusionQueryThrows COMMAND cna_test_sdl_occlusionquery_throws
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 728: Model::Draw throws correctly on SDL_Renderer (requires 3D primitives).
     cna_sdl_test(cna_test_sdl_model_draw_throws
                  examples/sdlrenderer_model_draw_throws_test.cpp)
-    add_test(NAME SDL_Renderer_ModelDrawThrows
-             COMMAND cna_test_sdl_model_draw_throws)
-    set_tests_properties(SDL_Renderer_ModelDrawThrows PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SDL_Renderer_ModelDrawThrows COMMAND cna_test_sdl_model_draw_throws
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 729: RasterizerState/DepthStencilState construction and assignment do NOT throw on
     # SDL_Renderer -- pure data, mirrors Task 724's VertexDeclaration pattern.
     cna_sdl_test(cna_test_sdl_rasterizer_depthstencil_construction
                  examples/sdlrenderer_rasterizer_depthstencil_construction_test.cpp)
-    add_test(NAME SDL_Renderer_RasterizerDepthStencilConstruction
-             COMMAND cna_test_sdl_rasterizer_depthstencil_construction)
-    set_tests_properties(SDL_Renderer_RasterizerDepthStencilConstruction PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SDL_Renderer_RasterizerDepthStencilConstruction COMMAND cna_test_sdl_rasterizer_depthstencil_construction
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 730: port and run 5 minimal 2D-only FNA/XNA samples specifically targeting
     # SDL_Renderer -- real compatibility proof for the 2D-only backend, not EasyGL.
     # Sample 1/5: the existing cross-backend cna_demo_2d, already smoke-tested on Vulkan/Bgfx
     # (Tasks 88/89) but never on SDL_Renderer -- a genuine gap, closed here.
-    add_test(NAME SDL_Renderer_Demo2D_SmokeTest
-             COMMAND cna_demo_2d --smoke 3)
-    set_tests_properties(SDL_Renderer_Demo2D_SmokeTest PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
-        LABELS GraphicsSmoke)
+    cna_register_backend_test(NAME SDL_Renderer_Demo2D_SmokeTest COMMAND cna_demo_2d --smoke 3
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}" LABELS "GraphicsSmoke")
 
     # Sample 2/5: bouncing sprite -- real multi-frame Update()+Draw() physics/bounce loop.
     cna_sdl_test(cna_test_sdl_sample_bouncing_sprite
                  examples/sdlrenderer_sample_bouncing_sprite_test.cpp)
-    add_test(NAME SDL_Renderer_Sample_BouncingSprite
-             COMMAND cna_test_sdl_sample_bouncing_sprite)
-    set_tests_properties(SDL_Renderer_Sample_BouncingSprite PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SDL_Renderer_Sample_BouncingSprite COMMAND cna_test_sdl_sample_bouncing_sprite
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Sample 3/5: keyboard-driven sprite -- Keyboard::GetState()-driven Update() logic.
     cna_sdl_test(cna_test_sdl_sample_keyboard_sprite
                  examples/sdlrenderer_sample_keyboard_sprite_test.cpp)
-    add_test(NAME SDL_Renderer_Sample_KeyboardSprite
-             COMMAND cna_test_sdl_sample_keyboard_sprite)
-    set_tests_properties(SDL_Renderer_Sample_KeyboardSprite PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SDL_Renderer_Sample_KeyboardSprite COMMAND cna_test_sdl_sample_keyboard_sprite
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Sample 4/5: SpriteFont text display -- genuine multi-glyph string layout ("HI").
     cna_sdl_test(cna_test_sdl_sample_spritefont_text
                  examples/sdlrenderer_sample_spritefont_text_test.cpp)
-    add_test(NAME SDL_Renderer_Sample_SpriteFontText
-             COMMAND cna_test_sdl_sample_spritefont_text)
-    set_tests_properties(SDL_Renderer_Sample_SpriteFontText PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SDL_Renderer_Sample_SpriteFontText COMMAND cna_test_sdl_sample_spritefont_text
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Sample 5/5: animated spritesheet -- Update()-driven sourceRectangle frame selection.
     cna_sdl_test(cna_test_sdl_sample_animated_spritesheet
                  examples/sdlrenderer_sample_animated_spritesheet_test.cpp)
-    add_test(NAME SDL_Renderer_Sample_AnimatedSpritesheet
-             COMMAND cna_test_sdl_sample_animated_spritesheet)
-    set_tests_properties(SDL_Renderer_Sample_AnimatedSpritesheet PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SDL_Renderer_Sample_AnimatedSpritesheet COMMAND cna_test_sdl_sample_animated_spritesheet
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
 endif()
 
@@ -5786,12 +4466,8 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # well beyond this test-coverage task's scope. Deferred; not attempted here.
 
     # Task 89: 3-frame smoke test for the Bgfx backend
-    add_test(NAME Bgfx_Demo2D_SmokeTest
-             COMMAND cna_demo_2d --smoke 3)
-    set_tests_properties(Bgfx_Demo2D_SmokeTest PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
-        LABELS GraphicsSmoke)
+    cna_register_backend_test(NAME Bgfx_Demo2D_SmokeTest COMMAND cna_demo_2d --smoke 3
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}" LABELS "GraphicsSmoke")
 
     # Task 817 (Phase 72 Bgfx gap closure): Texture2D SetData/GetData partial-rectangle +
     # startIndex/elementCount on Bgfx -- verbatim reuse of the shared EasyGL source (Tasks
@@ -5802,11 +4478,8 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # Bgfx-specific code and needs no restructuring, unlike the GetBackBufferData-based tests above.
     cna_bgfx_test(cna_test_bgfx_texture2d_partial_rect
                   examples/easygl_texture2d_partial_rect_test.cpp)
-    add_test(NAME Bgfx_Texture2D_PartialRect_RoundTrip
-             COMMAND cna_test_bgfx_texture2d_partial_rect)
-    set_tests_properties(Bgfx_Texture2D_PartialRect_RoundTrip PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_Texture2D_PartialRect_RoundTrip COMMAND cna_test_bgfx_texture2d_partial_rect
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 819 (Phase 72 Bgfx gap closure): Texture3D partial-box GetData bounds/offset
     # verification on Bgfx -- verbatim reuse of the shared EasyGL source (Task 274). Unlike
@@ -5818,11 +4491,8 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # all (direct texture-to-CPU readback), so no Bgfx-specific restructuring is needed either.
     cna_bgfx_test(cna_test_bgfx_texture3d_partial_box_readback
                   examples/easygl_texture3d_partial_box_readback_test.cpp)
-    add_test(NAME Bgfx_Texture3D_PartialBox_Readback
-             COMMAND cna_test_bgfx_texture3d_partial_box_readback)
-    set_tests_properties(Bgfx_Texture3D_PartialBox_Readback PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_Texture3D_PartialBox_Readback COMMAND cna_test_bgfx_texture3d_partial_box_readback
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 821 (Phase 72 Bgfx gap closure): NPOT texture upload + GPU sampling on Bgfx -- a
     # Bgfx-specific adaptation of the EasyGL source (Task 268; that file uses
@@ -5831,11 +4501,8 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # file-header comment). Closes the entire Phase 72 Texture2D/3D/Cube depth row group (817-821).
     cna_bgfx_test(cna_test_bgfx_npot_texture
                   examples/bgfx_npot_texture_test.cpp)
-    add_test(NAME Bgfx_NpotTexture
-             COMMAND cna_test_bgfx_npot_texture)
-    set_tests_properties(Bgfx_NpotTexture PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_NpotTexture COMMAND cna_test_bgfx_npot_texture
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 744 (Phase 72 Bgfx gap closure): TextureAddressMode::Clamp -- already covered by
     # Task 750's own Bgfx_TextureAddressMode test (PointWrap-vs-PointClamp comparison, both
@@ -5847,11 +4514,8 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # GetBackBufferData quirk, Task 406 -- see the test's own file-header comment).
     cna_bgfx_test(cna_test_bgfx_texture_address_mode_mirror
                   examples/bgfx_texture_address_mode_mirror_test.cpp)
-    add_test(NAME Bgfx_TextureAddressMode_Mirror
-             COMMAND cna_test_bgfx_texture_address_mode_mirror)
-    set_tests_properties(Bgfx_TextureAddressMode_Mirror PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_TextureAddressMode_Mirror COMMAND cna_test_bgfx_texture_address_mode_mirror
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 747 (Phase 72 Bgfx gap closure): TextureFilter::Point vs Linear (magnification and
     # minification) on Bgfx -- a Bgfx-specific adaptation of the EasyGL source (Task 297; that
@@ -5860,22 +4524,16 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # Task 406 -- see the test's own file-header comment).
     cna_bgfx_test(cna_test_bgfx_texture_filter_point_vs_linear
                   examples/bgfx_texture_filter_point_vs_linear_test.cpp)
-    add_test(NAME Bgfx_TextureFilter_PointVsLinear
-             COMMAND cna_test_bgfx_texture_filter_point_vs_linear)
-    set_tests_properties(Bgfx_TextureFilter_PointVsLinear PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_TextureFilter_PointVsLinear COMMAND cna_test_bgfx_texture_filter_point_vs_linear
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 749 (Phase 72 Bgfx gap closure): anisotropic filtering cap query + fallback on Bgfx --
     # a Bgfx-specific adaptation of the EasyGL source (Task 299; that file uses
     # SetDepthTestEnabled(false), which throws on Bgfx -- see the test's own file-header comment).
     cna_bgfx_test(cna_test_bgfx_texture_anisotropic_effect
                   examples/bgfx_texture_anisotropic_effect_test.cpp)
-    add_test(NAME Bgfx_TextureAnisotropicEffect
-             COMMAND cna_test_bgfx_texture_anisotropic_effect)
-    set_tests_properties(Bgfx_TextureAnisotropicEffect PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_TextureAnisotropicEffect COMMAND cna_test_bgfx_texture_anisotropic_effect
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 743 (Phase 72 Bgfx gap closure): audit SamplerState -> BGFX_SAMPLER_* flag mapping
     # completeness -- found and fixed a real, previously-undiscovered bug: BgfxGraphicsBackend::
@@ -5884,20 +4542,14 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # Closes the entire Phase 72 SamplerState/TextureAddressMode row group (743-749).
     cna_bgfx_test(cna_test_bgfx_texturefilter_split_minmag
                   examples/bgfx_texturefilter_split_minmag_test.cpp)
-    add_test(NAME Bgfx_TextureFilter_SplitMinMag
-             COMMAND cna_test_bgfx_texturefilter_split_minmag)
-    set_tests_properties(Bgfx_TextureFilter_SplitMinMag PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_TextureFilter_SplitMinMag COMMAND cna_test_bgfx_texturefilter_split_minmag
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 179: RenderTargetUsage DiscardContents/PreserveContents smoke test
     cna_bgfx_test(cna_test_bgfx_render_target_usage
                   examples/bgfx_render_target_usage_test.cpp)
-    add_test(NAME Bgfx_RenderTargetUsage
-             COMMAND cna_test_bgfx_render_target_usage)
-    set_tests_properties(Bgfx_RenderTargetUsage PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_RenderTargetUsage COMMAND cna_test_bgfx_render_target_usage
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 773 (Phase 72 Bgfx gap closure): verify SetRenderTarget(nullptr) genuinely restores the
     # real backbuffer with real pixel verification, superseding Task 179's own stale "pixel-level
@@ -5905,11 +4557,8 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # 901's EnsureViewState() fix) -- see the test's own file-header comment.
     cna_bgfx_test(cna_test_bgfx_setrendertarget_null_restore
                   examples/bgfx_setrendertarget_null_restore_test.cpp)
-    add_test(NAME Bgfx_SetRenderTarget_NullRestore
-             COMMAND cna_test_bgfx_setrendertarget_null_restore)
-    set_tests_properties(Bgfx_SetRenderTarget_NullRestore PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_SetRenderTarget_NullRestore COMMAND cna_test_bgfx_setrendertarget_null_restore
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 774 (Phase 72 Bgfx gap closure): verify MRT with mixed formats is rejected or handled
     # per XNA constraints on Bgfx -- Texture::ValidateFormat (shared code, all 4 backends) already
@@ -5917,33 +4566,24 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # rejected at bind time -- see the test's own file-header comment for the full research finding.
     cna_bgfx_test(cna_test_bgfx_mrt_mixed_formats
                   examples/bgfx_mrt_mixed_formats_test.cpp)
-    add_test(NAME Bgfx_MRT_MixedFormats
-             COMMAND cna_test_bgfx_mrt_mixed_formats)
-    set_tests_properties(Bgfx_MRT_MixedFormats PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_MRT_MixedFormats COMMAND cna_test_bgfx_mrt_mixed_formats
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 774 (verbatim reuse): Task 176's own SurfaceFormat-validation contract, confirmed
     # backend-agnostic (pure CPU-side construction, no rendering) -- reused unmodified from EasyGL
     # to directly confirm the same Color-only constraint holds on Bgfx too.
     cna_bgfx_test(cna_test_bgfx_surface_format_throws
                   examples/easygl_surface_format_throws_test.cpp)
-    add_test(NAME Bgfx_SurfaceFormat_Throws
-             COMMAND cna_test_bgfx_surface_format_throws)
-    set_tests_properties(Bgfx_SurfaceFormat_Throws PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_SurfaceFormat_Throws COMMAND cna_test_bgfx_surface_format_throws
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 757 (Phase 72 Bgfx gap closure): BlendFactor constant-color blending on Bgfx -- a
     # Bgfx-specific adaptation of the EasyGL source (Task 309; that file uses
     # SetDepthTestEnabled(false), which throws on Bgfx -- see the test's own file-header comment).
     cna_bgfx_test(cna_test_bgfx_blendstate_blendfactor
                   examples/bgfx_blendstate_blendfactor_test.cpp)
-    add_test(NAME Bgfx_BlendState_BlendFactor
-             COMMAND cna_test_bgfx_blendstate_blendfactor)
-    set_tests_properties(Bgfx_BlendState_BlendFactor PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_BlendState_BlendFactor COMMAND cna_test_bgfx_blendstate_blendfactor
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 777 (Phase 72 Bgfx gap closure): verify Viewport reset after backbuffer resize on Bgfx
     # -- verbatim reuse of the shared, 100% backend-agnostic source (Task 349, already reused
@@ -5951,476 +4591,320 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # (UpdateViewportFromWindow()/Present()), no pixel readback, no backend-specific code at all.
     cna_bgfx_test(cna_test_bgfx_viewport_reset_after_resize
                   examples/viewport_reset_after_resize_test.cpp)
-    add_test(NAME Bgfx_ViewportResetAfterResize
-             COMMAND cna_test_bgfx_viewport_reset_after_resize)
-    set_tests_properties(Bgfx_ViewportResetAfterResize PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_ViewportResetAfterResize COMMAND cna_test_bgfx_viewport_reset_after_resize
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 249: Bgfx vertex layout mapping tests — all 12 VertexElementFormat values
     cna_bgfx_test(cna_test_bgfx_vertex_format
                   examples/bgfx_vertex_format_test.cpp)
-    add_test(NAME Bgfx_VertexFormatMapping
-             COMMAND cna_test_bgfx_vertex_format)
-    set_tests_properties(Bgfx_VertexFormatMapping PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_VertexFormatMapping COMMAND cna_test_bgfx_vertex_format
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 448: real Bgfx occlusion-query pixel/query test — visible quad (PixelCount > 0) and
     # occluded quad (PixelCount <= 0), proving BgfxOcclusionQueryBackend's Begin()/End() are now
     # actually wired to bgfx's own submit(id, program, occlusionQuery, ...) overload.
     cna_bgfx_test(cna_test_bgfx_occlusion_query
                   examples/bgfx_occlusion_query_test.cpp)
-    add_test(NAME Bgfx_OcclusionQuery
-             COMMAND cna_test_bgfx_occlusion_query)
-    set_tests_properties(Bgfx_OcclusionQuery PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_OcclusionQuery COMMAND cna_test_bgfx_occlusion_query
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 278: EnvironmentMapEffect smoke test (no GPU readback available on Bgfx)
     cna_bgfx_test(cna_test_bgfx_env_map
                   examples/bgfx_env_map_test.cpp)
-    add_test(NAME Bgfx_EnvironmentMapEffect_Smoke
-             COMMAND cna_test_bgfx_env_map)
-    set_tests_properties(Bgfx_EnvironmentMapEffect_Smoke PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_EnvironmentMapEffect_Smoke COMMAND cna_test_bgfx_env_map
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 393: EnvironmentMapEffect EnvironmentMapAmount=0 should ignore the cube map
     cna_bgfx_test(cna_test_bgfx_environmentmapeffect_amount_zero
                   examples/bgfx_environmentmapeffect_amount_zero_test.cpp)
-    add_test(NAME Bgfx_EnvironmentMapEffect_AmountZero
-             COMMAND cna_test_bgfx_environmentmapeffect_amount_zero)
-    set_tests_properties(Bgfx_EnvironmentMapEffect_AmountZero PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_EnvironmentMapEffect_AmountZero COMMAND cna_test_bgfx_environmentmapeffect_amount_zero
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 890: EnvironmentMapEffect DirectionalLight1/DirectionalLight2 forwarding
     cna_bgfx_test(cna_test_bgfx_environmentmapeffect_multilight
                   examples/bgfx_environmentmapeffect_multilight_test.cpp)
-    add_test(NAME Bgfx_EnvironmentMapEffect_MultiLight
-             COMMAND cna_test_bgfx_environmentmapeffect_multilight)
-    set_tests_properties(Bgfx_EnvironmentMapEffect_MultiLight PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_EnvironmentMapEffect_MultiLight COMMAND cna_test_bgfx_environmentmapeffect_multilight
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 394: EnvironmentMapEffect EnvironmentMapAmount=1 should fully replace lit color
     cna_bgfx_test(cna_test_bgfx_environmentmapeffect_amount_one
                   examples/bgfx_environmentmapeffect_amount_one_test.cpp)
-    add_test(NAME Bgfx_EnvironmentMapEffect_AmountOne
-             COMMAND cna_test_bgfx_environmentmapeffect_amount_one)
-    set_tests_properties(Bgfx_EnvironmentMapEffect_AmountOne PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_EnvironmentMapEffect_AmountOne COMMAND cna_test_bgfx_environmentmapeffect_amount_one
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 395: EnvironmentMapEffect EnvironmentMapSpecular should scale by cubemap alpha
     cna_bgfx_test(cna_test_bgfx_environmentmapeffect_specular
                   examples/bgfx_environmentmapeffect_specular_test.cpp)
-    add_test(NAME Bgfx_EnvironmentMapEffect_Specular
-             COMMAND cna_test_bgfx_environmentmapeffect_specular)
-    set_tests_properties(Bgfx_EnvironmentMapEffect_Specular PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_EnvironmentMapEffect_Specular COMMAND cna_test_bgfx_environmentmapeffect_specular
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 891: EnvironmentMapEffect's base cube-map lerp target must be scaled by the combined
     # texture x diffuse alpha -- verbatim reuse of the shared backend-agnostic source, registered
     # on all 3 backends.
     cna_bgfx_test(cna_test_bgfx_environmentmapeffect_alphascaledlerp
                   examples/environmentmapeffect_alphascaledlerp_test.cpp)
-    add_test(NAME Bgfx_EnvironmentMapEffect_AlphaScaledLerp
-             COMMAND cna_test_bgfx_environmentmapeffect_alphascaledlerp)
-    set_tests_properties(Bgfx_EnvironmentMapEffect_AlphaScaledLerp PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_EnvironmentMapEffect_AlphaScaledLerp COMMAND cna_test_bgfx_environmentmapeffect_alphascaledlerp
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 396: EnvironmentMapEffect Fresnel edge-weighting should suppress head-on reflections
     cna_bgfx_test(cna_test_bgfx_environmentmapeffect_fresnel
                   examples/bgfx_environmentmapeffect_fresnel_test.cpp)
-    add_test(NAME Bgfx_EnvironmentMapEffect_Fresnel
-             COMMAND cna_test_bgfx_environmentmapeffect_fresnel)
-    set_tests_properties(Bgfx_EnvironmentMapEffect_Fresnel PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_EnvironmentMapEffect_Fresnel COMMAND cna_test_bgfx_environmentmapeffect_fresnel
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 397: EnvironmentMapEffect reflection vector should respond to EyePosition
     cna_bgfx_test(cna_test_bgfx_environmentmapeffect_eyeposition
                   examples/bgfx_environmentmapeffect_eyeposition_test.cpp)
-    add_test(NAME Bgfx_EnvironmentMapEffect_EyePosition
-             COMMAND cna_test_bgfx_environmentmapeffect_eyeposition)
-    set_tests_properties(Bgfx_EnvironmentMapEffect_EyePosition PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_EnvironmentMapEffect_EyePosition COMMAND cna_test_bgfx_environmentmapeffect_eyeposition
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 398: EnvironmentMapEffect normal transform should use inverse-transpose of World
     cna_bgfx_test(cna_test_bgfx_environmentmapeffect_worldtransform
                   examples/bgfx_environmentmapeffect_worldtransform_test.cpp)
-    add_test(NAME Bgfx_EnvironmentMapEffect_WorldTransform
-             COMMAND cna_test_bgfx_environmentmapeffect_worldtransform)
-    set_tests_properties(Bgfx_EnvironmentMapEffect_WorldTransform PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_EnvironmentMapEffect_WorldTransform COMMAND cna_test_bgfx_environmentmapeffect_worldtransform
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 399: cross-backend EnvironmentMapEffect capstone (Tasks 393-398 combined)
     cna_bgfx_test(cna_test_bgfx_environmentmapeffect_combined
                   examples/bgfx_environmentmapeffect_combined_test.cpp)
-    add_test(NAME Bgfx_EnvironmentMapEffect_Combined
-             COMMAND cna_test_bgfx_environmentmapeffect_combined)
-    set_tests_properties(Bgfx_EnvironmentMapEffect_Combined PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_EnvironmentMapEffect_Combined COMMAND cna_test_bgfx_environmentmapeffect_combined
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 406: SkinnedEffect identity bone palette should produce zero deformation
     cna_bgfx_test(cna_test_bgfx_skinnedeffect_identity_bones
                   examples/bgfx_skinnedeffect_identity_bones_test.cpp)
-    add_test(NAME Bgfx_SkinnedEffect_IdentityBones
-             COMMAND cna_test_bgfx_skinnedeffect_identity_bones)
-    set_tests_properties(Bgfx_SkinnedEffect_IdentityBones PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_SkinnedEffect_IdentityBones COMMAND cna_test_bgfx_skinnedeffect_identity_bones
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 407: SkinnedEffect single translation bone should shift the mesh
     cna_bgfx_test(cna_test_bgfx_skinnedeffect_translation_bone
                   examples/bgfx_skinnedeffect_translation_bone_test.cpp)
-    add_test(NAME Bgfx_SkinnedEffect_TranslationBone
-             COMMAND cna_test_bgfx_skinnedeffect_translation_bone)
-    set_tests_properties(Bgfx_SkinnedEffect_TranslationBone PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_SkinnedEffect_TranslationBone COMMAND cna_test_bgfx_skinnedeffect_translation_bone
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 408: SkinnedEffect two-bone weighted blend should produce midpoint deformation
     cna_bgfx_test(cna_test_bgfx_skinnedeffect_twobone_blend
                   examples/bgfx_skinnedeffect_twobone_blend_test.cpp)
-    add_test(NAME Bgfx_SkinnedEffect_TwoBoneBlend
-             COMMAND cna_test_bgfx_skinnedeffect_twobone_blend)
-    set_tests_properties(Bgfx_SkinnedEffect_TwoBoneBlend PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_SkinnedEffect_TwoBoneBlend COMMAND cna_test_bgfx_skinnedeffect_twobone_blend
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 409: cross-backend SkinnedEffect capstone (identity + single-bone + two-bone blend)
     cna_bgfx_test(cna_test_bgfx_skinnedeffect_combined
                   examples/bgfx_skinnedeffect_combined_test.cpp)
-    add_test(NAME Bgfx_SkinnedEffect_Combined
-             COMMAND cna_test_bgfx_skinnedeffect_combined)
-    set_tests_properties(Bgfx_SkinnedEffect_Combined PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_SkinnedEffect_Combined COMMAND cna_test_bgfx_skinnedeffect_combined
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 333: RenderTarget2D sampled as Texture2D via SpriteBatch after unbinding (Bgfx)
     cna_bgfx_test(cna_test_bgfx_render_target_sample
                   examples/bgfx_render_target_sample_test.cpp)
-    add_test(NAME Bgfx_RenderTarget2D_SampleAfterUnbind
-             COMMAND cna_test_bgfx_render_target_sample)
-    set_tests_properties(Bgfx_RenderTarget2D_SampleAfterUnbind PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_RenderTarget2D_SampleAfterUnbind COMMAND cna_test_bgfx_render_target_sample
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 335/912: RenderTarget2D depth buffer is real and functional (Bgfx) -- shared with
     # EasyGL/Vulkan's registrations of the same file; needed the retry-until-non-black convention
     # added to the shared test first (see that file's header comment).
     cna_bgfx_test(cna_test_bgfx_rendertarget2d_depth
                   examples/rendertarget2d_depth_test.cpp)
-    add_test(NAME Bgfx_RenderTarget2D_DepthBuffer
-             COMMAND cna_test_bgfx_rendertarget2d_depth)
-    set_tests_properties(Bgfx_RenderTarget2D_DepthBuffer PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_RenderTarget2D_DepthBuffer COMMAND cna_test_bgfx_rendertarget2d_depth
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 334: RenderTargetCube sampled as TextureCube via EnvironmentMapEffect after unbinding (Bgfx)
     cna_bgfx_test(cna_test_bgfx_render_target_cube_sample
                   examples/bgfx_render_target_cube_sample_test.cpp)
-    add_test(NAME Bgfx_RenderTargetCube_SampleAfterUnbind
-             COMMAND cna_test_bgfx_render_target_cube_sample)
-    set_tests_properties(Bgfx_RenderTargetCube_SampleAfterUnbind PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_RenderTargetCube_SampleAfterUnbind COMMAND cna_test_bgfx_render_target_cube_sample
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 364: BasicEffect pixel test — VertexColorEnabled=false, no texture, diffuse color only
     cna_bgfx_test(cna_test_bgfx_basiceffect_vertexcolor_disabled
                   examples/bgfx_basiceffect_vertexcolor_disabled_test.cpp)
-    add_test(NAME Bgfx_BasicEffect_VertexColorDisabled
-             COMMAND cna_test_bgfx_basiceffect_vertexcolor_disabled)
-    set_tests_properties(Bgfx_BasicEffect_VertexColorDisabled PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_BasicEffect_VertexColorDisabled COMMAND cna_test_bgfx_basiceffect_vertexcolor_disabled
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 365: BasicEffect pixel test — VertexColorEnabled=true, no texture, vertex color multiplication
     cna_bgfx_test(cna_test_bgfx_basiceffect_vertexcolor_enabled
                   examples/bgfx_basiceffect_vertexcolor_enabled_test.cpp)
-    add_test(NAME Bgfx_BasicEffect_VertexColorEnabled
-             COMMAND cna_test_bgfx_basiceffect_vertexcolor_enabled)
-    set_tests_properties(Bgfx_BasicEffect_VertexColorEnabled PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_BasicEffect_VertexColorEnabled COMMAND cna_test_bgfx_basiceffect_vertexcolor_enabled
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 366: BasicEffect pixel test — TextureEnabled=true, no vertex color
     cna_bgfx_test(cna_test_bgfx_basiceffect_texture_enabled
                   examples/bgfx_basiceffect_texture_enabled_test.cpp)
-    add_test(NAME Bgfx_BasicEffect_TextureEnabled
-             COMMAND cna_test_bgfx_basiceffect_texture_enabled)
-    set_tests_properties(Bgfx_BasicEffect_TextureEnabled PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_BasicEffect_TextureEnabled COMMAND cna_test_bgfx_basiceffect_texture_enabled
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 367: BasicEffect pixel test — TextureEnabled=true AND VertexColorEnabled=true
     cna_bgfx_test(cna_test_bgfx_basiceffect_texture_vertexcolor_enabled
                   examples/bgfx_basiceffect_texture_vertexcolor_enabled_test.cpp)
-    add_test(NAME Bgfx_BasicEffect_TextureVertexColorEnabled
-             COMMAND cna_test_bgfx_basiceffect_texture_vertexcolor_enabled)
-    set_tests_properties(Bgfx_BasicEffect_TextureVertexColorEnabled PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_BasicEffect_TextureVertexColorEnabled COMMAND cna_test_bgfx_basiceffect_texture_vertexcolor_enabled
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 368: BasicEffect pixel test — LightingEnabled=true, one DirectionalLight
     cna_bgfx_test(cna_test_bgfx_basiceffect_one_light
                   examples/bgfx_basiceffect_one_light_test.cpp)
-    add_test(NAME Bgfx_BasicEffect_OneLight
-             COMMAND cna_test_bgfx_basiceffect_one_light)
-    set_tests_properties(Bgfx_BasicEffect_OneLight PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_BasicEffect_OneLight COMMAND cna_test_bgfx_basiceffect_one_light
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 885: BasicEffect pixel test — DirectionalLight1/2 + EmissiveColor on the lit path
     cna_bgfx_test(cna_test_bgfx_basiceffect_multilight_emissive
                   examples/bgfx_basiceffect_multilight_emissive_test.cpp)
-    add_test(NAME Bgfx_BasicEffect_MultiLightEmissive
-             COMMAND cna_test_bgfx_basiceffect_multilight_emissive)
-    set_tests_properties(Bgfx_BasicEffect_MultiLightEmissive PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_BasicEffect_MultiLightEmissive COMMAND cna_test_bgfx_basiceffect_multilight_emissive
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 886: BasicEffect pixel test — real specular highlights
     cna_bgfx_test(cna_test_bgfx_basiceffect_specular
                   examples/bgfx_basiceffect_specular_test.cpp)
-    add_test(NAME Bgfx_BasicEffect_Specular
-             COMMAND cna_test_bgfx_basiceffect_specular)
-    set_tests_properties(Bgfx_BasicEffect_Specular PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_BasicEffect_Specular COMMAND cna_test_bgfx_basiceffect_specular
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 1104: BasicEffect PreferPerPixelLighting real dispatch selector
     cna_bgfx_test(cna_test_bgfx_basiceffect_preferperpixellighting
                   examples/bgfx_basiceffect_preferperpixellighting_test.cpp)
-    add_test(NAME Bgfx_BasicEffect_PreferPerPixelLighting
-             COMMAND cna_test_bgfx_basiceffect_preferperpixellighting)
-    set_tests_properties(Bgfx_BasicEffect_PreferPerPixelLighting PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_BasicEffect_PreferPerPixelLighting COMMAND cna_test_bgfx_basiceffect_preferperpixellighting
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 887: AlphaTestEffect.VertexColorEnabled fix verification
     cna_bgfx_test(cna_test_bgfx_alphatest_vertexcolor
                   examples/bgfx_alphatest_vertexcolor_test.cpp)
-    add_test(NAME Bgfx_AlphaTest_VertexColor
-             COMMAND cna_test_bgfx_alphatest_vertexcolor)
-    set_tests_properties(Bgfx_AlphaTest_VertexColor PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_AlphaTest_VertexColor COMMAND cna_test_bgfx_alphatest_vertexcolor
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 888: BasicEffect fog on the colored3d (stride-16) pipeline
     cna_bgfx_test(cna_test_bgfx_basiceffect_fog
                   examples/bgfx_basiceffect_fog_test.cpp)
-    add_test(NAME Bgfx_BasicEffect_Fog
-             COMMAND cna_test_bgfx_basiceffect_fog)
-    set_tests_properties(Bgfx_BasicEffect_Fog PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_BasicEffect_Fog COMMAND cna_test_bgfx_basiceffect_fog
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 888: BasicEffect fog on the lit_textured3d (stride-32) pipeline
     cna_bgfx_test(cna_test_bgfx_basiceffect_lit_fog
                   examples/bgfx_basiceffect_lit_fog_test.cpp)
-    add_test(NAME Bgfx_BasicEffect_LitFog
-             COMMAND cna_test_bgfx_basiceffect_lit_fog)
-    set_tests_properties(Bgfx_BasicEffect_LitFog PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_BasicEffect_LitFog COMMAND cna_test_bgfx_basiceffect_lit_fog
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 888: AlphaTestEffect fog on the alpha_test3d pipeline
     cna_bgfx_test(cna_test_bgfx_alphatest_fog
                   examples/bgfx_alphatest_fog_test.cpp)
-    add_test(NAME Bgfx_AlphaTest_Fog
-             COMMAND cna_test_bgfx_alphatest_fog)
-    set_tests_properties(Bgfx_AlphaTest_Fog PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_AlphaTest_Fog COMMAND cna_test_bgfx_alphatest_fog
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 888: DualTextureEffect fog on the dual_texture3d pipeline
     cna_bgfx_test(cna_test_bgfx_dualtextureeffect_fog
                   examples/bgfx_dualtextureeffect_fog_test.cpp)
-    add_test(NAME Bgfx_DualTextureEffect_Fog
-             COMMAND cna_test_bgfx_dualtextureeffect_fog)
-    set_tests_properties(Bgfx_DualTextureEffect_Fog PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_DualTextureEffect_Fog COMMAND cna_test_bgfx_dualtextureeffect_fog
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 892: BasicEffect lit-textured normal transform under a real camera (Bgfx)
     cna_bgfx_test(cna_test_bgfx_basiceffect_normaltransform
                   examples/bgfx_basiceffect_normaltransform_test.cpp)
-    add_test(NAME Bgfx_BasicEffect_NormalTransform
-             COMMAND cna_test_bgfx_basiceffect_normaltransform)
-    set_tests_properties(Bgfx_BasicEffect_NormalTransform PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_BasicEffect_NormalTransform COMMAND cna_test_bgfx_basiceffect_normaltransform
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 369: BasicEffect pixel test — DiffuseColor+EmissiveColor, LightingEnabled=false
     cna_bgfx_test(cna_test_bgfx_basiceffect_emissive
                   examples/bgfx_basiceffect_emissive_test.cpp)
-    add_test(NAME Bgfx_BasicEffect_Emissive
-             COMMAND cna_test_bgfx_basiceffect_emissive)
-    set_tests_properties(Bgfx_BasicEffect_Emissive PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_BasicEffect_Emissive COMMAND cna_test_bgfx_basiceffect_emissive
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 370: BasicEffect cross-backend image comparison suite — closes Phase 42
     cna_bgfx_test(cna_test_bgfx_basiceffect_combined
                   examples/bgfx_basiceffect_combined_test.cpp)
-    add_test(NAME Bgfx_BasicEffect_Combined
-             COMMAND cna_test_bgfx_basiceffect_combined)
-    set_tests_properties(Bgfx_BasicEffect_Combined PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_BasicEffect_Combined COMMAND cna_test_bgfx_basiceffect_combined
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 375: AlphaTestEffect all CompareFunction modes — threshold sweep
     cna_bgfx_test(cna_test_bgfx_alphatest_comparefunction_sweep
                   examples/bgfx_alphatest_comparefunction_sweep_test.cpp)
-    add_test(NAME Bgfx_AlphaTest_CompareFunctionSweep
-             COMMAND cna_test_bgfx_alphatest_comparefunction_sweep)
-    set_tests_properties(Bgfx_AlphaTest_CompareFunctionSweep PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_AlphaTest_CompareFunctionSweep COMMAND cna_test_bgfx_alphatest_comparefunction_sweep
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 379: AlphaTestEffect null/no-texture behavior
     cna_bgfx_test(cna_test_bgfx_alphatest_null_texture
                   examples/bgfx_alphatest_null_texture_test.cpp)
-    add_test(NAME Bgfx_AlphaTest_NullTexture
-             COMMAND cna_test_bgfx_alphatest_null_texture)
-    set_tests_properties(Bgfx_AlphaTest_NullTexture PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_AlphaTest_NullTexture COMMAND cna_test_bgfx_alphatest_null_texture
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 383: DualTextureEffect two-texture blend formula, including FNA's color.rgb*=2.
     # Also the first-ever Bgfx pixel-integration test for DualTextureEffect.
     cna_bgfx_test(cna_test_bgfx_dualtextureeffect_doubling
                   examples/bgfx_dualtextureeffect_doubling_test.cpp)
-    add_test(NAME Bgfx_DualTextureEffect_Doubling
-             COMMAND cna_test_bgfx_dualtextureeffect_doubling)
-    set_tests_properties(Bgfx_DualTextureEffect_Doubling PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_DualTextureEffect_Doubling COMMAND cna_test_bgfx_dualtextureeffect_doubling
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 384: DualTextureEffect magenta × yellow = red (mirrors Task 133/135 EasyGL/Vulkan)
     cna_bgfx_test(cna_test_bgfx_dual_texture
                   examples/bgfx_dual_texture_test.cpp)
-    add_test(NAME Bgfx_DualTextureEffect_Blend
-             COMMAND cna_test_bgfx_dual_texture)
-    set_tests_properties(Bgfx_DualTextureEffect_Blend PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_DualTextureEffect_Blend COMMAND cna_test_bgfx_dual_texture
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 385: DualTextureEffect Alpha premultiplication, verified via real AlphaBlend
     cna_bgfx_test(cna_test_bgfx_dualtextureeffect_alpha
                   examples/bgfx_dualtextureeffect_alpha_test.cpp)
-    add_test(NAME Bgfx_DualTextureEffect_Alpha
-             COMMAND cna_test_bgfx_dualtextureeffect_alpha)
-    set_tests_properties(Bgfx_DualTextureEffect_Alpha PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_DualTextureEffect_Alpha COMMAND cna_test_bgfx_dualtextureeffect_alpha
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 386: DualTextureEffect first texture (Texture, slot 0) null behavior
     cna_bgfx_test(cna_test_bgfx_dualtextureeffect_null_texture0
                   examples/bgfx_dualtextureeffect_null_texture0_test.cpp)
-    add_test(NAME Bgfx_DualTextureEffect_NullTexture0
-             COMMAND cna_test_bgfx_dualtextureeffect_null_texture0)
-    set_tests_properties(Bgfx_DualTextureEffect_NullTexture0 PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_DualTextureEffect_NullTexture0 COMMAND cna_test_bgfx_dualtextureeffect_null_texture0
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 387: DualTextureEffect second texture (Texture2, slot 1) null behavior
     cna_bgfx_test(cna_test_bgfx_dualtextureeffect_null_texture2
                   examples/bgfx_dualtextureeffect_null_texture2_test.cpp)
-    add_test(NAME Bgfx_DualTextureEffect_NullTexture2
-             COMMAND cna_test_bgfx_dualtextureeffect_null_texture2)
-    set_tests_properties(Bgfx_DualTextureEffect_NullTexture2 PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_DualTextureEffect_NullTexture2 COMMAND cna_test_bgfx_dualtextureeffect_null_texture2
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 389: DualTextureEffect cross-backend image comparison suite (closes Phase 44 pixel work)
     cna_bgfx_test(cna_test_bgfx_dualtextureeffect_combined
                   examples/bgfx_dualtextureeffect_combined_test.cpp)
-    add_test(NAME Bgfx_DualTextureEffect_Combined
-             COMMAND cna_test_bgfx_dualtextureeffect_combined)
-    set_tests_properties(Bgfx_DualTextureEffect_Combined PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_DualTextureEffect_Combined COMMAND cna_test_bgfx_dualtextureeffect_combined
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 880: GraphicsDevice.Viewport GPU wiring — sub-region viewport pixel-readback test
     cna_bgfx_test(cna_test_bgfx_viewport_subregion
                   examples/bgfx_viewport_subregion_test.cpp)
-    add_test(NAME Bgfx_Viewport_Subregion
-             COMMAND cna_test_bgfx_viewport_subregion)
-    set_tests_properties(Bgfx_Viewport_Subregion PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_Viewport_Subregion COMMAND cna_test_bgfx_viewport_subregion
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 750: SpriteBatch Begin()'s SamplerState (TextureAddressMode) must take effect
     cna_bgfx_test(cna_test_bgfx_texture_address_mode
                   examples/bgfx_texture_address_mode_test.cpp)
-    add_test(NAME Bgfx_TextureAddressMode
-             COMMAND cna_test_bgfx_texture_address_mode)
-    set_tests_properties(Bgfx_TextureAddressMode PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_TextureAddressMode COMMAND cna_test_bgfx_texture_address_mode
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 899: EnvironmentMapEffect/SkinnedEffect fog on Bgfx (opportunistic bonus scope)
     cna_bgfx_test(cna_test_bgfx_environmentmapeffect_fog
                   examples/bgfx_environmentmapeffect_fog_test.cpp)
-    add_test(NAME Bgfx_EnvironmentMapEffect_Fog
-             COMMAND cna_test_bgfx_environmentmapeffect_fog)
-    set_tests_properties(Bgfx_EnvironmentMapEffect_Fog PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_EnvironmentMapEffect_Fog COMMAND cna_test_bgfx_environmentmapeffect_fog
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     cna_bgfx_test(cna_test_bgfx_skinnedeffect_fog
                   examples/bgfx_skinnedeffect_fog_test.cpp)
-    add_test(NAME Bgfx_SkinnedEffect_Fog
-             COMMAND cna_test_bgfx_skinnedeffect_fog)
-    set_tests_properties(Bgfx_SkinnedEffect_Fog PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_SkinnedEffect_Fog COMMAND cna_test_bgfx_skinnedeffect_fog
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 893: SkinnedEffect DirectionalLight1/DirectionalLight2 forwarding
     cna_bgfx_test(cna_test_bgfx_skinnedeffect_multilight
                   examples/bgfx_skinnedeffect_multilight_test.cpp)
-    add_test(NAME Bgfx_SkinnedEffect_MultiLight
-             COMMAND cna_test_bgfx_skinnedeffect_multilight)
-    set_tests_properties(Bgfx_SkinnedEffect_MultiLight PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_SkinnedEffect_MultiLight COMMAND cna_test_bgfx_skinnedeffect_multilight
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 894: SkinnedEffect real specular highlights
     cna_bgfx_test(cna_test_bgfx_skinnedeffect_specular
                   examples/bgfx_skinnedeffect_specular_test.cpp)
-    add_test(NAME Bgfx_SkinnedEffect_Specular
-             COMMAND cna_test_bgfx_skinnedeffect_specular)
-    set_tests_properties(Bgfx_SkinnedEffect_Specular PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_SkinnedEffect_Specular COMMAND cna_test_bgfx_skinnedeffect_specular
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 1104: SkinnedEffect PreferPerPixelLighting real dispatch selector
     cna_bgfx_test(cna_test_bgfx_skinnedeffect_preferperpixellighting
                   examples/bgfx_skinnedeffect_preferperpixellighting_test.cpp)
-    add_test(NAME Bgfx_SkinnedEffect_PreferPerPixelLighting
-             COMMAND cna_test_bgfx_skinnedeffect_preferperpixellighting)
-    set_tests_properties(Bgfx_SkinnedEffect_PreferPerPixelLighting PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_SkinnedEffect_PreferPerPixelLighting COMMAND cna_test_bgfx_skinnedeffect_preferperpixellighting
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 895: SkinnedEffect WeightsPerVertex real GPU enforcement
     cna_bgfx_test(cna_test_bgfx_skinnedeffect_weightspervertex
                   examples/bgfx_skinnedeffect_weightspervertex_test.cpp)
-    add_test(NAME Bgfx_SkinnedEffect_WeightsPerVertex
-             COMMAND cna_test_bgfx_skinnedeffect_weightspervertex)
-    set_tests_properties(Bgfx_SkinnedEffect_WeightsPerVertex PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_SkinnedEffect_WeightsPerVertex COMMAND cna_test_bgfx_skinnedeffect_weightspervertex
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 878/879: RenderTarget2D MSAA resolve genuinely anti-aliases on Bgfx
     # (BGFX_TEXTURE_RT_MSAA_Xn -- also closes Task 873's SpriteBatch RT-sampling cast bug and a
@@ -6436,100 +4920,70 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # renderer with zero code changes.
     cna_bgfx_test(cna_test_bgfx_rendertarget2d_msaa
                   examples/bgfx_rendertarget2d_msaa_test.cpp)
-    add_test(NAME Bgfx_RenderTarget2D_MsaaResolve
-             COMMAND cna_test_bgfx_rendertarget2d_msaa)
-    set_tests_properties(Bgfx_RenderTarget2D_MsaaResolve PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_BGFX_RENDERER=VULKAN")
+    cna_register_backend_test(NAME Bgfx_RenderTarget2D_MsaaResolve COMMAND cna_test_bgfx_rendertarget2d_msaa
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY};CNA_BGFX_RENDERER=VULKAN")
 
     # Task 906: RenderTarget2D mip chains are genuinely generated (bgfx's own built-in
     # hasMips+BGFX_RESOLVE_AUTO_GEN_MIPS mechanism), not just present-but-undefined storage.
     cna_bgfx_test(cna_test_bgfx_rendertarget2d_mip
                   examples/bgfx_rendertarget2d_mip_test.cpp)
-    add_test(NAME Bgfx_RenderTarget2D_MipChain
-             COMMAND cna_test_bgfx_rendertarget2d_mip)
-    set_tests_properties(Bgfx_RenderTarget2D_MipChain PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_RenderTarget2D_MipChain COMMAND cna_test_bgfx_rendertarget2d_mip
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 907: RenderTargetCube mip chains (closes Task 874 as a hard prerequisite --
     # this is Bgfx's first-ever RenderTargetCube-via-EnvironmentMapEffect test).
     cna_bgfx_test(cna_test_bgfx_rendertargetcube_mip
                   examples/bgfx_rendertargetcube_mip_test.cpp)
-    add_test(NAME Bgfx_RenderTargetCube_MipChain
-             COMMAND cna_test_bgfx_rendertargetcube_mip)
-    set_tests_properties(Bgfx_RenderTargetCube_MipChain PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_RenderTargetCube_MipChain COMMAND cna_test_bgfx_rendertargetcube_mip
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 903: RenderTargetCube MSAA (property fidelity + no-corruption sanity check -- see this
     # test's own header comment for why a genuine sub-pixel AA differential isn't attempted).
     cna_bgfx_test(cna_test_bgfx_rendertargetcube_msaa
                   examples/bgfx_rendertargetcube_msaa_test.cpp)
-    add_test(NAME Bgfx_RenderTargetCube_MsaaResolve
-             COMMAND cna_test_bgfx_rendertargetcube_msaa)
-    set_tests_properties(Bgfx_RenderTargetCube_MsaaResolve PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_RenderTargetCube_MsaaResolve COMMAND cna_test_bgfx_rendertargetcube_msaa
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 877: RenderTargetCube honors its exact requested DepthFormat -- Bgfx's first-ever
     # depth-tested RenderTargetCube face (previously no depth attachment support at all).
     cna_bgfx_test(cna_test_bgfx_rendertargetcube_depthformat
                   examples/bgfx_rendertargetcube_depthformat_test.cpp)
-    add_test(NAME Bgfx_RenderTargetCube_DepthFormat
-             COMMAND cna_test_bgfx_rendertargetcube_depthformat)
-    set_tests_properties(Bgfx_RenderTargetCube_DepthFormat PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_RenderTargetCube_DepthFormat COMMAND cna_test_bgfx_rendertargetcube_depthformat
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 910: binding + filling more than one RenderTarget2D within a single un-advanced bgfx
     # frame no longer clobbers all but the last one bound -- each render target now gets its own
     # distinct bgfx view id instead of sharing one hardcoded id.
     cna_bgfx_test(cna_test_bgfx_concurrent_rendertargets
                   examples/bgfx_concurrent_rendertargets_test.cpp)
-    add_test(NAME Bgfx_ConcurrentRenderTargets
-             COMMAND cna_test_bgfx_concurrent_rendertargets)
-    set_tests_properties(Bgfx_ConcurrentRenderTargets PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_ConcurrentRenderTargets COMMAND cna_test_bgfx_concurrent_rendertargets
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 914: Texture3D/TextureCube::GetData is now real on Bgfx (blit into a temporary
     # BGFX_TEXTURE_BLIT_DST|BGFX_TEXTURE_READ_BACK texture + bgfx::readTexture()) -- shared with
     # EasyGL/Vulkan's registration of the same backend-agnostic files (Tasks 173/275/865).
     cna_bgfx_test(cna_test_bgfx_texture3d_slices
                   examples/easygl_texture3d_slices_test.cpp)
-    add_test(NAME Bgfx_Texture3D_Slices_RoundTrip
-             COMMAND cna_test_bgfx_texture3d_slices)
-    set_tests_properties(Bgfx_Texture3D_Slices_RoundTrip PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_Texture3D_Slices_RoundTrip COMMAND cna_test_bgfx_texture3d_slices
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     cna_bgfx_test(cna_test_bgfx_texturecube_partial_rect
                   examples/easygl_texturecube_partial_rect_test.cpp)
-    add_test(NAME Bgfx_TextureCube_PartialRect_RoundTrip
-             COMMAND cna_test_bgfx_texturecube_partial_rect)
-    set_tests_properties(Bgfx_TextureCube_PartialRect_RoundTrip PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_TextureCube_PartialRect_RoundTrip COMMAND cna_test_bgfx_texturecube_partial_rect
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 914: Texture3D/TextureCube mip-level allocation is now real on Bgfx (mipMap genuinely
     # threaded through createTexture3D/createTextureCube's _hasMips, previously hardcoded false) --
     # shared with EasyGL/Vulkan's registration of the same backend-agnostic files (Tasks 862/864).
     cna_bgfx_test(cna_test_bgfx_texture3d_mip
                   examples/easygl_texture3d_mip_test.cpp)
-    add_test(NAME Bgfx_Texture3D_Mip_RoundTrip
-             COMMAND cna_test_bgfx_texture3d_mip)
-    set_tests_properties(Bgfx_Texture3D_Mip_RoundTrip PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_Texture3D_Mip_RoundTrip COMMAND cna_test_bgfx_texture3d_mip
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     cna_bgfx_test(cna_test_bgfx_texturecube_mip
                   examples/easygl_texturecube_mip_test.cpp)
-    add_test(NAME Bgfx_TextureCube_Mip_RoundTrip
-             COMMAND cna_test_bgfx_texturecube_mip)
-    set_tests_properties(Bgfx_TextureCube_Mip_RoundTrip PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_TextureCube_Mip_RoundTrip COMMAND cna_test_bgfx_texturecube_mip
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 923: BlendState ColorBlendFunction/AlphaBlendFunction independence on Bgfx -- a Bgfx-
     # specific adaptation of the EasyGL source (Task 307; can't reuse it verbatim like Vulkan's
@@ -6538,11 +4992,8 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # colorBlendFunc-always-Add gap (Check A expects Subtract; failed before this task's fix).
     cna_bgfx_test(cna_test_bgfx_blendstate_separate_functions
                   examples/bgfx_blendstate_separate_functions_test.cpp)
-    add_test(NAME Bgfx_BlendState_SeparateFunctions
-             COMMAND cna_test_bgfx_blendstate_separate_functions)
-    set_tests_properties(Bgfx_BlendState_SeparateFunctions PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_BlendState_SeparateFunctions COMMAND cna_test_bgfx_blendstate_separate_functions
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 923: BlendState AlphaSourceBlend/AlphaDestinationBlend independence from the colour
     # factors -- fixed in ApplyBlendState (real BGFX_STATE_BLEND_FUNC_SEPARATE, confirmed correct
@@ -6562,11 +5013,8 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # unlike EasyGL's still-flat mapping -- see the test's own file-header comment).
     cna_bgfx_test(cna_test_bgfx_texture_mip_filter_effect
                   examples/bgfx_texture_mip_filter_effect_test.cpp)
-    add_test(NAME Bgfx_TextureMipFilter_DualTextureEffect
-             COMMAND cna_test_bgfx_texture_mip_filter_effect)
-    set_tests_properties(Bgfx_TextureMipFilter_DualTextureEffect PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_TextureMipFilter_DualTextureEffect COMMAND cna_test_bgfx_texture_mip_filter_effect
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 759 (Phase 72 Bgfx gap closure): DepthStencilState.DepthBufferWriteEnable pixel test
     # on Bgfx -- a Bgfx-specific adaptation of the EasyGL source (Task 313; already reused
@@ -6575,11 +5023,8 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # restructuring into 2 separately-read passes -- see the test's own file-header comment).
     cna_bgfx_test(cna_test_bgfx_depthstencilstate_write_enable
                   examples/bgfx_depthstencilstate_write_enable_test.cpp)
-    add_test(NAME Bgfx_DepthStencilState_WriteEnable
-             COMMAND cna_test_bgfx_depthstencilstate_write_enable)
-    set_tests_properties(Bgfx_DepthStencilState_WriteEnable PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_DepthStencilState_WriteEnable COMMAND cna_test_bgfx_depthstencilstate_write_enable
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 760 (Phase 72 Bgfx gap closure): all 8 depth CompareFunction values on Bgfx -- a
     # Bgfx-specific adaptation of the EasyGL source (Task 314; that file only covers 5 of 8 values
@@ -6587,11 +5032,8 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # doesn't support reliably -- see the test's own file-header comment).
     cna_bgfx_test(cna_test_bgfx_depthstencilstate_compare_function
                   examples/bgfx_depthstencilstate_compare_function_test.cpp)
-    add_test(NAME Bgfx_DepthStencilState_CompareFunction
-             COMMAND cna_test_bgfx_depthstencilstate_compare_function)
-    set_tests_properties(Bgfx_DepthStencilState_CompareFunction PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_DepthStencilState_CompareFunction COMMAND cna_test_bgfx_depthstencilstate_compare_function
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 761 (Phase 72 Bgfx gap closure): StencilEnable + StencilMask (read mask) +
     # StencilWriteMask on Bgfx -- a Bgfx-specific adaptation of the EasyGL sources (Tasks 315/316;
@@ -6601,11 +5043,8 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # (confirmed against bgfx/defines.h), a permanent backend limitation, not a bug in this codebase.
     cna_bgfx_test(cna_test_bgfx_depthstencilstate_stencil_mask
                   examples/bgfx_depthstencilstate_stencil_mask_test.cpp)
-    add_test(NAME Bgfx_DepthStencilState_StencilMask
-             COMMAND cna_test_bgfx_depthstencilstate_stencil_mask)
-    set_tests_properties(Bgfx_DepthStencilState_StencilMask PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_DepthStencilState_StencilMask COMMAND cna_test_bgfx_depthstencilstate_stencil_mask
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 762 (Phase 72 Bgfx gap closure): front-facing StencilFail/StencilDepthBufferFail/
     # StencilPass operation slots on Bgfx -- a Bgfx-specific adaptation of the EasyGL source (Task
@@ -6613,11 +5052,8 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # quirk, Task 406 -- see the test's own file-header comment).
     cna_bgfx_test(cna_test_bgfx_depthstencilstate_stencil_ops
                   examples/bgfx_depthstencilstate_stencil_ops_test.cpp)
-    add_test(NAME Bgfx_DepthStencilState_StencilOps
-             COMMAND cna_test_bgfx_depthstencilstate_stencil_ops)
-    set_tests_properties(Bgfx_DepthStencilState_StencilOps PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_DepthStencilState_StencilOps COMMAND cna_test_bgfx_depthstencilstate_stencil_ops
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 763 (Phase 72 Bgfx gap closure): TwoSidedStencilMode (separate CCW stencil func/ops for
     # back-facing triangles) on Bgfx -- a Bgfx-specific adaptation of the EasyGL source (Task 318;
@@ -6625,11 +5061,8 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # quirk, Task 406 -- see the test's own file-header comment).
     cna_bgfx_test(cna_test_bgfx_depthstencilstate_stencil_twosided
                   examples/bgfx_depthstencilstate_stencil_twosided_test.cpp)
-    add_test(NAME Bgfx_DepthStencilState_StencilTwoSided
-             COMMAND cna_test_bgfx_depthstencilstate_stencil_twosided)
-    set_tests_properties(Bgfx_DepthStencilState_StencilTwoSided PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_DepthStencilState_StencilTwoSided COMMAND cna_test_bgfx_depthstencilstate_stencil_twosided
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 764 (Phase 72 Bgfx gap closure): GraphicsDevice.ReferenceStencil standalone override
     # reaching Bgfx draw calls -- a Bgfx-specific adaptation of the EasyGL source (Task 319; that
@@ -6637,22 +5070,16 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # Task 406 -- see the test's own file-header comment).
     cna_bgfx_test(cna_test_bgfx_graphicsdevice_reference_stencil
                   examples/bgfx_graphicsdevice_reference_stencil_test.cpp)
-    add_test(NAME Bgfx_GraphicsDevice_ReferenceStencil
-             COMMAND cna_test_bgfx_graphicsdevice_reference_stencil)
-    set_tests_properties(Bgfx_GraphicsDevice_ReferenceStencil PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_GraphicsDevice_ReferenceStencil COMMAND cna_test_bgfx_graphicsdevice_reference_stencil
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 871: GraphicsDevice::Clear() now actually clears the stencil buffer to the requested
     # value on Bgfx too -- a Bgfx-specific adaptation of the EasyGL source (1 step per real frame,
     # since Bgfx's own per-frame view clear cannot be interleaved mid-frame with draws either).
     cna_bgfx_test(cna_test_bgfx_graphicsdevice_clear_stencil
                   examples/bgfx_graphicsdevice_clear_stencil_test.cpp)
-    add_test(NAME Bgfx_GraphicsDevice_ClearStencil
-             COMMAND cna_test_bgfx_graphicsdevice_clear_stencil)
-    set_tests_properties(Bgfx_GraphicsDevice_ClearStencil PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_GraphicsDevice_ClearStencil COMMAND cna_test_bgfx_graphicsdevice_clear_stencil
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 950: BgfxGraphicsBackend::ClearColorAndDepth/ClearColorDepthAndStencil now actually
     # thread their `depth` parameter into bgfx::setViewClear() instead of hardcoding 1.0f --
@@ -6661,32 +5088,23 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # frame).
     cna_bgfx_test(cna_test_bgfx_graphicsdevice_clear_depth
                   examples/graphicsdevice_clear_depth_test.cpp)
-    add_test(NAME Bgfx_GraphicsDevice_ClearDepth
-             COMMAND cna_test_bgfx_graphicsdevice_clear_depth)
-    set_tests_properties(Bgfx_GraphicsDevice_ClearDepth PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_GraphicsDevice_ClearDepth COMMAND cna_test_bgfx_graphicsdevice_clear_depth
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 955: a freshly-constructed GraphicsDevice's own default state (no game code ever
     # explicitly setting BlendState/DepthStencilState/RasterizerState, exactly like
     # ../cna-samples SimpleAnimation's Tank.hpp) must produce correct opaque depth occlusion.
     cna_bgfx_test(cna_test_bgfx_graphicsdevice_default_state_occlusion
                   examples/graphicsdevice_default_state_occlusion_test.cpp)
-    add_test(NAME Bgfx_GraphicsDevice_DefaultStateOcclusion
-             COMMAND cna_test_bgfx_graphicsdevice_default_state_occlusion)
-    set_tests_properties(Bgfx_GraphicsDevice_DefaultStateOcclusion PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_GraphicsDevice_DefaultStateOcclusion COMMAND cna_test_bgfx_graphicsdevice_default_state_occlusion
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 889: DualTextureEffect.VertexColorEnabled -- verbatim reuse of the shared
     # backend-agnostic source, registered on all 3 backends.
     cna_bgfx_test(cna_test_bgfx_dualtextureeffect_vertexcolor
                   examples/dualtextureeffect_vertexcolor_test.cpp)
-    add_test(NAME Bgfx_DualTextureEffect_VertexColor
-             COMMAND cna_test_bgfx_dualtextureeffect_vertexcolor)
-    set_tests_properties(Bgfx_DualTextureEffect_VertexColor PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_DualTextureEffect_VertexColor COMMAND cna_test_bgfx_dualtextureeffect_vertexcolor
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 765 (Phase 72 Bgfx gap closure): CullMode (None/CullClockwiseFace/
     # CullCounterClockwiseFace) on Bgfx -- a Bgfx-specific adaptation of the EasyGL source (Task
@@ -6694,11 +5112,8 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # GetBackBufferData quirk, Task 406 -- see the test's own file-header comment).
     cna_bgfx_test(cna_test_bgfx_rasterizerstate_cullmode
                   examples/bgfx_rasterizerstate_cullmode_test.cpp)
-    add_test(NAME Bgfx_RasterizerState_CullMode
-             COMMAND cna_test_bgfx_rasterizerstate_cullmode)
-    set_tests_properties(Bgfx_RasterizerState_CullMode PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_RasterizerState_CullMode COMMAND cna_test_bgfx_rasterizerstate_cullmode
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # XNA culling-compatibility audit: real-camera CullMode reproducer, verbatim reuse of the
     # shared backend-agnostic source (first tried on Bgfx as-is; see the audit doc for whether
@@ -6706,19 +5121,13 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # restructure here).
     cna_bgfx_test(cna_test_bgfx_rasterizerstate_cullmode_camera
                   examples/rasterizerstate_cullmode_camera_test.cpp)
-    add_test(NAME Bgfx_RasterizerState_CullMode_Camera
-             COMMAND cna_test_bgfx_rasterizerstate_cullmode_camera)
-    set_tests_properties(Bgfx_RasterizerState_CullMode_Camera PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_RasterizerState_CullMode_Camera COMMAND cna_test_bgfx_rasterizerstate_cullmode_camera
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     cna_bgfx_test(cna_test_bgfx_rasterizerstate_cullmode_indexed_basiceffect
                   examples/rasterizerstate_cullmode_indexed_basiceffect_test.cpp)
-    add_test(NAME Bgfx_RasterizerState_CullMode_IndexedBasicEffect
-             COMMAND cna_test_bgfx_rasterizerstate_cullmode_indexed_basiceffect)
-    set_tests_properties(Bgfx_RasterizerState_CullMode_IndexedBasicEffect PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_RasterizerState_CullMode_IndexedBasicEffect COMMAND cna_test_bgfx_rasterizerstate_cullmode_indexed_basiceffect
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 766 (Phase 72 Bgfx gap closure): FillMode::WireFrame on Bgfx -- adapted from
     # vulkan_fill_mode_test.cpp (Task 327; no EasyGL/shared source exists for this property, no
@@ -6727,11 +5136,8 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # emulation (bgfx has no native polygon-fill-mode toggle).
     cna_bgfx_test(cna_test_bgfx_rasterizerstate_fillmode_wireframe
                   examples/bgfx_rasterizerstate_fillmode_wireframe_test.cpp)
-    add_test(NAME Bgfx_RasterizerState_FillMode_WireFrame
-             COMMAND cna_test_bgfx_rasterizerstate_fillmode_wireframe)
-    set_tests_properties(Bgfx_RasterizerState_FillMode_WireFrame PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_RasterizerState_FillMode_WireFrame COMMAND cna_test_bgfx_rasterizerstate_fillmode_wireframe
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 767 (Phase 72 Bgfx gap closure, project-owner decision 2026-07-10): RasterizerState.
     # DepthBias on Bgfx -- bgfx has no native polygon-offset mechanism, emulated via a per-draw
@@ -6740,11 +5146,8 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # informationally only -- see the test's own file-header comment).
     cna_bgfx_test(cna_test_bgfx_rasterizerstate_depthbias
                   examples/bgfx_rasterizerstate_depthbias_test.cpp)
-    add_test(NAME Bgfx_RasterizerState_DepthBias
-             COMMAND cna_test_bgfx_rasterizerstate_depthbias)
-    set_tests_properties(Bgfx_RasterizerState_DepthBias PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_RasterizerState_DepthBias COMMAND cna_test_bgfx_rasterizerstate_depthbias
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 768 (Phase 72 Bgfx gap closure): ScissorTestEnable/ScissorRectangle interaction on Bgfx
     # -- a Bgfx-specific adaptation of the EasyGL source (Task 209; that file reads 2 columns per
@@ -6753,11 +5156,8 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # draw-dispatch functions ever called bgfx::setScissor (only the 2D SpriteBatch path did).
     cna_bgfx_test(cna_test_bgfx_scissor
                   examples/bgfx_scissor_test.cpp)
-    add_test(NAME Bgfx_Scissor
-             COMMAND cna_test_bgfx_scissor)
-    set_tests_properties(Bgfx_Scissor PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_Scissor COMMAND cna_test_bgfx_scissor
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Tasks 752-755 (Phase 72 Bgfx gap closure): BlendState::Opaque/AlphaBlend/NonPremultiplied/
     # Additive on Bgfx -- each is a Bgfx-specific copy of the backend-agnostic EasyGL source (also
@@ -6768,35 +5168,23 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # 406) does not apply -- no other restructuring needed.
     cna_bgfx_test(cna_test_bgfx_blendstate_opaque
                   examples/bgfx_blendstate_opaque_test.cpp)
-    add_test(NAME Bgfx_BlendState_Opaque
-             COMMAND cna_test_bgfx_blendstate_opaque)
-    set_tests_properties(Bgfx_BlendState_Opaque PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_BlendState_Opaque COMMAND cna_test_bgfx_blendstate_opaque
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     cna_bgfx_test(cna_test_bgfx_blendstate_alphablend
                   examples/bgfx_blendstate_alphablend_test.cpp)
-    add_test(NAME Bgfx_BlendState_AlphaBlend
-             COMMAND cna_test_bgfx_blendstate_alphablend)
-    set_tests_properties(Bgfx_BlendState_AlphaBlend PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_BlendState_AlphaBlend COMMAND cna_test_bgfx_blendstate_alphablend
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     cna_bgfx_test(cna_test_bgfx_blendstate_nonpremultiplied
                   examples/bgfx_blendstate_nonpremultiplied_test.cpp)
-    add_test(NAME Bgfx_BlendState_NonPremultiplied
-             COMMAND cna_test_bgfx_blendstate_nonpremultiplied)
-    set_tests_properties(Bgfx_BlendState_NonPremultiplied PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_BlendState_NonPremultiplied COMMAND cna_test_bgfx_blendstate_nonpremultiplied
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     cna_bgfx_test(cna_test_bgfx_blendstate_additive
                   examples/bgfx_blendstate_additive_test.cpp)
-    add_test(NAME Bgfx_BlendState_Additive
-             COMMAND cna_test_bgfx_blendstate_additive)
-    set_tests_properties(Bgfx_BlendState_Additive PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_BlendState_Additive COMMAND cna_test_bgfx_blendstate_additive
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 803 (Phase 72 Bgfx gap closure): SpriteSortMode ordering affects on-screen draw order
     # on Bgfx -- a Bgfx-specific adaptation of the EasyGL source (Task 420; that file reads back 3
@@ -6804,11 +5192,8 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # -- see the test's own file-header comment for full scope notes).
     cna_bgfx_test(cna_test_bgfx_spritebatch_layerdepth
                   examples/bgfx_spritebatch_layerdepth_test.cpp)
-    add_test(NAME Bgfx_SpriteBatch_LayerDepthOrder
-             COMMAND cna_test_bgfx_spritebatch_layerdepth)
-    set_tests_properties(Bgfx_SpriteBatch_LayerDepthOrder PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_SpriteBatch_LayerDepthOrder COMMAND cna_test_bgfx_spritebatch_layerdepth
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 804 (Phase 72 Bgfx gap closure): SpriteBatch::Draw rotation-around-origin on Bgfx -- a
     # Bgfx-specific adaptation of the EasyGL source (Task 417; that file reads back 3 regions from
@@ -6816,11 +5201,8 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # test's own file-header comment).
     cna_bgfx_test(cna_test_bgfx_spritebatch_rotation
                   examples/bgfx_spritebatch_rotation_test.cpp)
-    add_test(NAME Bgfx_SpriteBatch_Rotation
-             COMMAND cna_test_bgfx_spritebatch_rotation)
-    set_tests_properties(Bgfx_SpriteBatch_Rotation PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_SpriteBatch_Rotation COMMAND cna_test_bgfx_spritebatch_rotation
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 805 (Phase 72 Bgfx gap closure): SpriteBatch::Draw scalar/Vector2 scale overloads on
     # Bgfx -- a Bgfx-specific adaptation of the EasyGL source (Task 418; that file reads back 5
@@ -6828,11 +5210,8 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # -- see the test's own file-header comment).
     cna_bgfx_test(cna_test_bgfx_spritebatch_scale
                   examples/bgfx_spritebatch_scale_test.cpp)
-    add_test(NAME Bgfx_SpriteBatch_Scale
-             COMMAND cna_test_bgfx_spritebatch_scale)
-    set_tests_properties(Bgfx_SpriteBatch_Scale PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_SpriteBatch_Scale COMMAND cna_test_bgfx_spritebatch_scale
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 806 (Phase 72 Bgfx gap closure): SpriteBatch::Draw sourceRectangle cropping on Bgfx --
     # a Bgfx-specific adaptation of the EasyGL source (Task 419; that file reads back 3 regions
@@ -6840,11 +5219,8 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # the test's own file-header comment).
     cna_bgfx_test(cna_test_bgfx_spritebatch_sourcerect
                   examples/bgfx_spritebatch_sourcerect_test.cpp)
-    add_test(NAME Bgfx_SpriteBatch_SourceRectangleCropping
-             COMMAND cna_test_bgfx_spritebatch_sourcerect)
-    set_tests_properties(Bgfx_SpriteBatch_SourceRectangleCropping PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_SpriteBatch_SourceRectangleCropping COMMAND cna_test_bgfx_spritebatch_sourcerect
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 807 (Phase 72 Bgfx gap closure): SpriteEffects::FlipHorizontally/FlipVertically on
     # Bgfx (mirrors Task 167) -- a Bgfx-specific adaptation of the EasyGL source (that file reads
@@ -6852,11 +5228,8 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # GetBackBufferData quirk, Task 406 -- see the test's own file-header comment).
     cna_bgfx_test(cna_test_bgfx_sprite_effects
                   examples/bgfx_sprite_effects_test.cpp)
-    add_test(NAME Bgfx_SpriteEffects_Flip
-             COMMAND cna_test_bgfx_sprite_effects)
-    set_tests_properties(Bgfx_SpriteEffects_Flip PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_SpriteEffects_Flip COMMAND cna_test_bgfx_sprite_effects
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 808 (Phase 72 Bgfx gap closure): SpriteBatch::Begin's transformMatrix parameter on
     # Bgfx (mirrors Task 168) -- a Bgfx-specific adaptation of the EasyGL source (that file reads
@@ -6864,11 +5237,8 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # Task 406 -- see the test's own file-header comment).
     cna_bgfx_test(cna_test_bgfx_transform_matrix
                   examples/bgfx_transform_matrix_test.cpp)
-    add_test(NAME Bgfx_SpriteBatch_TransformMatrix
-             COMMAND cna_test_bgfx_transform_matrix)
-    set_tests_properties(Bgfx_SpriteBatch_TransformMatrix PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_SpriteBatch_TransformMatrix COMMAND cna_test_bgfx_transform_matrix
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 809 (Phase 72 Bgfx gap closure): SpriteFont single-glyph placement on Bgfx -- a
     # Bgfx-specific adaptation of the EasyGL source (Task 424; that file reads back 5 regions from
@@ -6876,11 +5246,8 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # test's own file-header comment).
     cna_bgfx_test(cna_test_bgfx_spritefont_single_glyph
                   examples/bgfx_spritefont_single_glyph_test.cpp)
-    add_test(NAME Bgfx_SpriteFont_SingleGlyph
-             COMMAND cna_test_bgfx_spritefont_single_glyph)
-    set_tests_properties(Bgfx_SpriteFont_SingleGlyph PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_SpriteFont_SingleGlyph COMMAND cna_test_bgfx_spritefont_single_glyph
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 810 (Phase 72 Bgfx gap closure): SpriteFont multi-glyph spacing + newline advance on
     # Bgfx -- a Bgfx-specific adaptation combining the EasyGL sources (Tasks 425/426; those files
@@ -6888,11 +5255,8 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # GetBackBufferData quirk, Task 406 -- see the test's own file-header comment).
     cna_bgfx_test(cna_test_bgfx_spritefont_multiglyph_newline
                   examples/bgfx_spritefont_multiglyph_newline_test.cpp)
-    add_test(NAME Bgfx_SpriteFont_MultiGlyphSpacingNewline
-             COMMAND cna_test_bgfx_spritefont_multiglyph_newline)
-    set_tests_properties(Bgfx_SpriteFont_MultiGlyphSpacingNewline PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_SpriteFont_MultiGlyphSpacingNewline COMMAND cna_test_bgfx_spritefont_multiglyph_newline
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 811 (Phase 72 Bgfx gap closure): SpriteFont default-character fallback on Bgfx -- a
     # Bgfx-specific adaptation of the EasyGL source (Task 427; that file reads back 3 regions from
@@ -6900,11 +5264,8 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # test's own file-header comment). Closes the entire Phase 72 SpriteFont row group (809-811).
     cna_bgfx_test(cna_test_bgfx_spritefont_default_char
                   examples/bgfx_spritefont_default_char_test.cpp)
-    add_test(NAME Bgfx_SpriteFont_DefaultCharacterFallback
-             COMMAND cna_test_bgfx_spritefont_default_char)
-    set_tests_properties(Bgfx_SpriteFont_DefaultCharacterFallback PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_SpriteFont_DefaultCharacterFallback COMMAND cna_test_bgfx_spritefont_default_char
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 812 (Phase 72 Bgfx gap closure): Model with two meshes, each using its own distinct
     # Effect, on Bgfx -- a Bgfx-specific adaptation of the EasyGL source (Task 438; that file uses
@@ -6913,11 +5274,8 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # file-header comment).
     cna_bgfx_test(cna_test_bgfx_model_two_meshes_effects
                   examples/bgfx_model_two_meshes_effects_test.cpp)
-    add_test(NAME Bgfx_Model_TwoMeshesEffects
-             COMMAND cna_test_bgfx_model_two_meshes_effects)
-    set_tests_properties(Bgfx_Model_TwoMeshesEffects PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_Model_TwoMeshesEffects COMMAND cna_test_bgfx_model_two_meshes_effects
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 927: ModelTypeReader::Read()'s vertex-stride/vtable-size corruption fix is in SHARED
     # code (ContentManager.cpp) -- a Bgfx-specific adaptation of the EasyGL source, restructured
@@ -6925,11 +5283,8 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # quirk (Task 406).
     cna_bgfx_test(cna_test_bgfx_model_json_reader
                   examples/bgfx_model_json_reader_test.cpp)
-    add_test(NAME Bgfx_ModelJsonReader_Quad
-             COMMAND cna_test_bgfx_model_json_reader)
-    set_tests_properties(Bgfx_ModelJsonReader_Quad PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_ModelJsonReader_Quad COMMAND cna_test_bgfx_model_json_reader
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 813 (Phase 72 Bgfx gap closure): Model hierarchy transform propagation (child mesh's
     # own ParentBone) on Bgfx -- a Bgfx-specific adaptation of the EasyGL source (Task 439; same
@@ -6937,11 +5292,8 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # Phase 72 Model row group (812-813).
     cna_bgfx_test(cna_test_bgfx_model_hierarchy_child_mesh
                   examples/bgfx_model_hierarchy_child_mesh_test.cpp)
-    add_test(NAME Bgfx_Model_HierarchyChildMesh
-             COMMAND cna_test_bgfx_model_hierarchy_child_mesh)
-    set_tests_properties(Bgfx_Model_HierarchyChildMesh PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_Model_HierarchyChildMesh COMMAND cna_test_bgfx_model_hierarchy_child_mesh
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Tasks 814/815 (Phase 72 Bgfx gap closure): OcclusionQuery visible/occluded pixel counts on
     # Bgfx -- Bgfx-specific counterpart of the EasyGL sources (Tasks 445/446), combined into one
@@ -6952,11 +5304,8 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # software GL renderer (same class of limitation as Task 448/923).
     cna_bgfx_test(cna_test_bgfx_occlusionquery_pixelcount
                   examples/bgfx_occlusionquery_pixelcount_test.cpp)
-    add_test(NAME Bgfx_OcclusionQuery_PixelCount
-             COMMAND cna_test_bgfx_occlusionquery_pixelcount)
-    set_tests_properties(Bgfx_OcclusionQuery_PixelCount PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_OcclusionQuery_PixelCount COMMAND cna_test_bgfx_occlusionquery_pixelcount
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 816 (Phase 72 Bgfx gap closure): explicit Dispose() on an ACTIVE OcclusionQuery is safe
     # on Bgfx -- distinct from Task 449's own EasyGL-only occlusion_query_test.cpp, which covers
@@ -6964,11 +5313,8 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # comment). Closes the entire Phase 72 OcclusionQuery row group (814-816).
     cna_bgfx_test(cna_test_bgfx_occlusionquery_dispose_active
                   examples/bgfx_occlusionquery_dispose_active_test.cpp)
-    add_test(NAME Bgfx_OcclusionQuery_DisposeActive
-             COMMAND cna_test_bgfx_occlusionquery_dispose_active)
-    set_tests_properties(Bgfx_OcclusionQuery_DisposeActive PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Bgfx_OcclusionQuery_DisposeActive COMMAND cna_test_bgfx_occlusionquery_dispose_active
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
 endif()
 
@@ -6976,14 +5322,8 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
    AND CNA_GRAPHICS_BACKEND STREQUAL "WEBGPU")
     enable_testing()
     if(TARGET cna_demo_2d)
-        add_test(NAME WebGPU_Native2D_Smoke
-                 COMMAND ${CMAKE_COMMAND}
-                    -DCNA_WEBGPU_DEMO=$<TARGET_FILE:cna_demo_2d>
-                    -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/WebGPUNativeSmokeTest.cmake)
-        set_tests_properties(WebGPU_Native2D_Smoke PROPERTIES
-            TIMEOUT 70
-            LABELS "GraphicsSmoke;WebGPU"
-            SKIP_REGULAR_EXPRESSION "\\[SKIP\\] CNA WebGPU native smoke")
+        cna_register_backend_test(NAME WebGPU_Native2D_Smoke COMMAND ${CMAKE_COMMAND} -DCNA_WEBGPU_DEMO=$<TARGET_FILE:cna_demo_2d> -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/WebGPUNativeSmokeTest.cmake
+            TIMEOUT 70 LABELS "GraphicsSmoke;WebGPU" SKIP_REGULAR_EXPRESSION "\\[SKIP\\] CNA WebGPU native smoke")
     else()
         message(WARNING "CNA WebGPU: native smoke test requires CNA_BUILD_EXAMPLES=ON")
     endif()
@@ -7015,79 +5355,52 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     endmacro()
 
     cna_webgpu_test(cna_test_webgpu_clear_readback examples/webgpu_clear_readback_test.cpp)
-    add_test(NAME WebGPU_Clear_Readback COMMAND cna_test_webgpu_clear_readback)
-    set_tests_properties(WebGPU_Clear_Readback PROPERTIES
-        TIMEOUT 30
-        LABELS "WebGPU"
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME WebGPU_Clear_Readback COMMAND cna_test_webgpu_clear_readback
+        TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Phase 57/63 vertical slice: DrawColoredPrimitives/DrawIndexedColoredPrimitives.
     cna_webgpu_test(cna_test_webgpu_colored3d examples/webgpu_colored3d_test.cpp)
-    add_test(NAME WebGPU_Colored3D COMMAND cna_test_webgpu_colored3d)
-    set_tests_properties(WebGPU_Colored3D PROPERTIES
-        TIMEOUT 30
-        LABELS "WebGPU"
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME WebGPU_Colored3D COMMAND cna_test_webgpu_colored3d
+        TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Phase 63: DrawPrimitivesEx/DrawIndexedPrimitivesEx real GpuDrawParams dispatch (stride 16).
     cna_webgpu_test(cna_test_webgpu_drawprimitivesex examples/webgpu_drawprimitivesex_test.cpp)
-    add_test(NAME WebGPU_DrawPrimitivesEx COMMAND cna_test_webgpu_drawprimitivesex)
-    set_tests_properties(WebGPU_DrawPrimitivesEx PROPERTIES
-        TIMEOUT 30
-        LABELS "WebGPU"
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME WebGPU_DrawPrimitivesEx COMMAND cna_test_webgpu_drawprimitivesex
+        TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Phase 58/59/63: textured3d.wgsl / GetOrCreatePipelineTextured3D / stride-20 dispatch.
     cna_webgpu_test(cna_test_webgpu_textured3d examples/webgpu_textured3d_test.cpp)
-    add_test(NAME WebGPU_Textured3D COMMAND cna_test_webgpu_textured3d)
-    set_tests_properties(WebGPU_Textured3D PROPERTIES
-        TIMEOUT 30
-        LABELS "WebGPU"
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME WebGPU_Textured3D COMMAND cna_test_webgpu_textured3d
+        TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Phase 58/59/63: colored_textured3d.wgsl / GetOrCreatePipelineColoredTextured3D / stride-24.
     cna_webgpu_test(cna_test_webgpu_coloredtextured3d examples/webgpu_coloredtextured3d_test.cpp)
-    add_test(NAME WebGPU_ColoredTextured3D COMMAND cna_test_webgpu_coloredtextured3d)
-    set_tests_properties(WebGPU_ColoredTextured3D PROPERTIES
-        TIMEOUT 30
-        LABELS "WebGPU"
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME WebGPU_ColoredTextured3D COMMAND cna_test_webgpu_coloredtextured3d
+        TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # WEBGPU-22: lit_textured3d.wgsl / GetOrCreatePipelineLitTextured3D / stride-32 dispatch,
     # real Blinn-Phong lighting.
     cna_webgpu_test(cna_test_webgpu_littextured3d examples/webgpu_littextured3d_test.cpp)
-    add_test(NAME WebGPU_LitTextured3D COMMAND cna_test_webgpu_littextured3d)
-    set_tests_properties(WebGPU_LitTextured3D PROPERTIES
-        TIMEOUT 30
-        LABELS "WebGPU"
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME WebGPU_LitTextured3D COMMAND cna_test_webgpu_littextured3d
+        TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Task 1105 (plan_graphics.md Phase 80): GetOrCreatePipelineLitTextured3DVertexLit /
     # BasicEffect.PreferPerPixelLighting real dispatch.
     cna_webgpu_test(cna_test_webgpu_basiceffect_preferperpixellighting examples/webgpu_basiceffect_preferperpixellighting_test.cpp)
-    add_test(NAME WebGPU_BasicEffect_PreferPerPixelLighting COMMAND cna_test_webgpu_basiceffect_preferperpixellighting)
-    set_tests_properties(WebGPU_BasicEffect_PreferPerPixelLighting PROPERTIES
-        TIMEOUT 30
-        LABELS "WebGPU"
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME WebGPU_BasicEffect_PreferPerPixelLighting COMMAND cna_test_webgpu_basiceffect_preferperpixellighting
+        TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # WEBGPU-23/34/72: alpha_test3d.wgsl / GetOrCreatePipelineAlphaTest3D / AlphaTestEffect
     # per-pixel discard, strides 20/24/32.
     cna_webgpu_test(cna_test_webgpu_alphatest3d examples/webgpu_alphatest3d_test.cpp)
-    add_test(NAME WebGPU_AlphaTest3D COMMAND cna_test_webgpu_alphatest3d)
-    set_tests_properties(WebGPU_AlphaTest3D PROPERTIES
-        TIMEOUT 30
-        LABELS "WebGPU"
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME WebGPU_AlphaTest3D COMMAND cna_test_webgpu_alphatest3d
+        TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # WEBGPU-24: dual_texture3d.wgsl / GetOrCreatePipelineDualTexture3D / DualTextureEffect,
     # strides 20/24, second texture bind group.
     cna_webgpu_test(cna_test_webgpu_dualtexture3d examples/webgpu_dualtexture3d_test.cpp)
-    add_test(NAME WebGPU_DualTexture3D COMMAND cna_test_webgpu_dualtexture3d)
-    set_tests_properties(WebGPU_DualTexture3D PROPERTIES
-        TIMEOUT 30
-        LABELS "WebGPU"
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME WebGPU_DualTexture3D COMMAND cna_test_webgpu_dualtexture3d
+        TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()
 
 # plan_headless.md: Headless (no GPU/window) graphics backend tests. Deliberately no
@@ -7158,40 +5471,28 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SOFTWARE")
     endmacro()
 
     cna_software_test(cna_test_software_smoke examples/software_smoke_test.cpp)
-    add_test(NAME Software_Smoke COMMAND cna_test_software_smoke)
-    set_tests_properties(Software_Smoke PROPERTIES
-        TIMEOUT 30
-        LABELS "Software")
+    cna_register_backend_test(NAME Software_Smoke COMMAND cna_test_software_smoke
+        TIMEOUT 30 LABELS "Software")
 
     cna_software_test(cna_test_software_rasterizer examples/software_rasterizer_test.cpp)
-    add_test(NAME Software_Rasterizer COMMAND cna_test_software_rasterizer)
-    set_tests_properties(Software_Rasterizer PROPERTIES
-        TIMEOUT 30
-        LABELS "Software")
+    cna_register_backend_test(NAME Software_Rasterizer COMMAND cna_test_software_rasterizer
+        TIMEOUT 30 LABELS "Software")
 
     cna_software_test(cna_test_software_effects examples/software_effects_test.cpp)
-    add_test(NAME Software_Effects COMMAND cna_test_software_effects)
-    set_tests_properties(Software_Effects PROPERTIES
-        TIMEOUT 30
-        LABELS "Software")
+    cna_register_backend_test(NAME Software_Effects COMMAND cna_test_software_effects
+        TIMEOUT 30 LABELS "Software")
 
     cna_software_test(cna_test_software_culling examples/software_culling_test.cpp)
-    add_test(NAME Software_Culling COMMAND cna_test_software_culling)
-    set_tests_properties(Software_Culling PROPERTIES
-        TIMEOUT 30
-        LABELS "Software")
+    cna_register_backend_test(NAME Software_Culling COMMAND cna_test_software_culling
+        TIMEOUT 30 LABELS "Software")
 
     cna_software_test(cna_test_software_clipping examples/software_clipping_test.cpp)
-    add_test(NAME Software_Clipping COMMAND cna_test_software_clipping)
-    set_tests_properties(Software_Clipping PROPERTIES
-        TIMEOUT 30
-        LABELS "Software")
+    cna_register_backend_test(NAME Software_Clipping COMMAND cna_test_software_clipping
+        TIMEOUT 30 LABELS "Software")
 
     cna_software_test(cna_test_software_dual_envmap_skinned examples/software_dual_envmap_skinned_test.cpp)
-    add_test(NAME Software_DualEnvmapSkinned COMMAND cna_test_software_dual_envmap_skinned)
-    set_tests_properties(Software_DualEnvmapSkinned PROPERTIES
-        TIMEOUT 30
-        LABELS "Software")
+    cna_register_backend_test(NAME Software_DualEnvmapSkinned COMMAND cna_test_software_dual_envmap_skinned
+        TIMEOUT 30 LABELS "Software")
 
     # plan_software.md SOFTWARE-61/84: this backend's half of the cross-backend diagnostic dump --
     # not registered as a ctest (see cna_diag_compare's own comment above), just a plain
@@ -7221,43 +5522,33 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
 
     # Phase G2 (ASCII-10/11): hand-authored glyph-density font atlas smoke test.
     cna_ascii_test(cna_test_ascii_fontatlas examples/ascii_fontatlas_test.cpp)
-    add_test(NAME Ascii_FontAtlas COMMAND cna_test_ascii_fontatlas)
-    set_tests_properties(Ascii_FontAtlas PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Ascii_FontAtlas COMMAND cna_test_ascii_fontatlas
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Phase G3 (ASCII-20/21): offscreen gameTarget_ + SetRenderTarget(nullptr) redirect.
     cna_ascii_test(cna_test_ascii_offscreentarget examples/ascii_offscreentarget_test.cpp)
-    add_test(NAME Ascii_OffscreenTarget COMMAND cna_test_ascii_offscreentarget)
-    set_tests_properties(Ascii_OffscreenTarget PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Ascii_OffscreenTarget COMMAND cna_test_ascii_offscreentarget
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Phase G4 (ASCII-30..33): quantizer -- pure function, no GraphicsDevice/window needed.
     cna_ascii_test(cna_test_ascii_quantizer examples/ascii_quantizer_test.cpp)
-    add_test(NAME Ascii_Quantizer COMMAND cna_test_ascii_quantizer)
-    set_tests_properties(Ascii_Quantizer PROPERTIES TIMEOUT 30)
+    cna_register_backend_test(NAME Ascii_Quantizer COMMAND cna_test_ascii_quantizer
+        TIMEOUT 30)
 
     # Phase G5 (ASCII-40/41): Present() draws the quantized grid into the real window.
     cna_ascii_test(cna_test_ascii_present examples/ascii_present_test.cpp)
-    add_test(NAME Ascii_Present COMMAND cna_test_ascii_present)
-    set_tests_properties(Ascii_Present PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Ascii_Present COMMAND cna_test_ascii_present
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Phase G6 (ASCII-50/51): Mouse/Keyboard/GamePad need zero new code against a real window.
     cna_ascii_test(cna_test_ascii_input examples/ascii_input_test.cpp)
-    add_test(NAME Ascii_Input COMMAND cna_test_ascii_input)
-    set_tests_properties(Ascii_Input PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Ascii_Input COMMAND cna_test_ascii_input
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Phase G7 (ASCII-60): confirm ThrowNo3D reuse via the wrapped SdlGraphicsBackend.
     cna_ascii_test(cna_test_ascii_throwno3d examples/ascii_throwno3d_test.cpp)
-    add_test(NAME Ascii_ThrowNo3D COMMAND cna_test_ascii_throwno3d)
-    set_tests_properties(Ascii_ThrowNo3D PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME Ascii_ThrowNo3D COMMAND cna_test_ascii_throwno3d
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()
 
 # plan_dx3.md Phase X2/X8 (DX3-18/DX3-80): DX3 (DirectDraw via free-direct) CTest registration.
@@ -7291,59 +5582,38 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     endmacro()
 
     cna_dx3_test(cna_test_dx3_smoke examples/dx3_smoke_test.cpp)
-    add_test(NAME Dx3_Smoke COMMAND cna_test_dx3_smoke)
-    set_tests_properties(Dx3_Smoke PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=dummy"
-        LABELS "DX3")
+    cna_register_backend_test(NAME Dx3_Smoke COMMAND cna_test_dx3_smoke
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=dummy" LABELS "DX3")
 
     # plan_dx3.md Phase X3 (DX3-20..DX3-28): texture/render-target backend CTest.
     cna_dx3_test(cna_test_dx3_texture_rendertarget examples/dx3_texture_rendertarget_test.cpp)
-    add_test(NAME Dx3_TextureRenderTarget COMMAND cna_test_dx3_texture_rendertarget)
-    set_tests_properties(Dx3_TextureRenderTarget PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=dummy"
-        LABELS "DX3")
+    cna_register_backend_test(NAME Dx3_TextureRenderTarget COMMAND cna_test_dx3_texture_rendertarget
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=dummy" LABELS "DX3")
 
     # plan_dx3.md Phase X4 (DX3-30..DX3-39): CPU compositor / SpriteBatch draw path CTest.
     cna_dx3_test(cna_test_dx3_spritebatch examples/dx3_spritebatch_test.cpp)
-    add_test(NAME Dx3_SpriteBatch COMMAND cna_test_dx3_spritebatch)
-    set_tests_properties(Dx3_SpriteBatch PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=dummy"
-        LABELS "DX3")
+    cna_register_backend_test(NAME Dx3_SpriteBatch COMMAND cna_test_dx3_spritebatch
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=dummy" LABELS "DX3")
 
     # plan_dx3.md Phase X5 (DX3-40..DX3-44): blend-mode compositing math CTest.
     cna_dx3_test(cna_test_dx3_blend examples/dx3_blend_test.cpp)
-    add_test(NAME Dx3_Blend COMMAND cna_test_dx3_blend)
-    set_tests_properties(Dx3_Blend PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=dummy"
-        LABELS "DX3")
+    cna_register_backend_test(NAME Dx3_Blend COMMAND cna_test_dx3_blend
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=dummy" LABELS "DX3")
 
     # plan_dx3.md Phase X5 (DX3-45/DX3-46): TextureFilter + TextureAddressMode sampling CTest.
     cna_dx3_test(cna_test_dx3_sampling examples/dx3_sampling_test.cpp)
-    add_test(NAME Dx3_AddressMode COMMAND cna_test_dx3_sampling)
-    set_tests_properties(Dx3_AddressMode PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=dummy"
-        LABELS "DX3")
+    cna_register_backend_test(NAME Dx3_AddressMode COMMAND cna_test_dx3_sampling
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=dummy" LABELS "DX3")
 
     # plan_dx3.md Phase X6 (DX3-50..DX3-54): SpriteFont / DrawString CTest.
     cna_dx3_test(cna_test_dx3_spritefont examples/dx3_spritefont_test.cpp)
-    add_test(NAME Dx3_SpriteFont COMMAND cna_test_dx3_spritefont)
-    set_tests_properties(Dx3_SpriteFont PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=dummy"
-        LABELS "DX3")
+    cna_register_backend_test(NAME Dx3_SpriteFont COMMAND cna_test_dx3_spritefont
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=dummy" LABELS "DX3")
 
     # plan_dx3.md Phase X7 (DX3-60..DX3-67, DX3-69): ThrowNo3D wiring / remaining-defaults CTest.
     cna_dx3_test(cna_test_dx3_no3d examples/dx3_no3d_test.cpp)
-    add_test(NAME Dx3_No3D COMMAND cna_test_dx3_no3d)
-    set_tests_properties(Dx3_No3D PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=dummy"
-        LABELS "DX3")
+    cna_register_backend_test(NAME Dx3_No3D COMMAND cna_test_dx3_no3d
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=dummy" LABELS "DX3")
 
     # plan_dx3.md Phase X7 (DX3-68): logical/window coordinate transform CTest. Note:
     # SDL_VIDEODRIVER=dummy reports a fixed 1024x768 "window" size (no real display to query), so
@@ -7351,11 +5621,8 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     # real display would report -- still a genuine, non-trivial letterbox (1024x768 vs 64x64
     # logical) and still verified correct, just no longer dependent on the host's actual screen.
     cna_dx3_test(cna_test_dx3_logical_transform examples/dx3_logical_transform_test.cpp)
-    add_test(NAME Dx3_LogicalTransform COMMAND cna_test_dx3_logical_transform)
-    set_tests_properties(Dx3_LogicalTransform PROPERTIES
-        TIMEOUT 30
-        ENVIRONMENT "SDL_VIDEODRIVER=dummy"
-        LABELS "DX3")
+    cna_register_backend_test(NAME Dx3_LogicalTransform COMMAND cna_test_dx3_logical_transform
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=dummy" LABELS "DX3")
 endif()
 
 # plan_dx.md DX-80: D3D11 CTest registration. When cross-compiled from Linux (this backend is
@@ -7395,24 +5662,19 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D11")
 
     cna_d3d11_test(cna_test_d3d11_smoke examples/d3d11_smoke_test.cpp)
     cna_d3d11_ctest_command(_d3d11_smoke_cmd cna_test_d3d11_smoke)
-    add_test(NAME D3D11_Smoke COMMAND ${_d3d11_smoke_cmd})
-    set_tests_properties(D3D11_Smoke PROPERTIES
-        TIMEOUT 60
-        LABELS "D3D11")
+    cna_register_backend_test(NAME D3D11_Smoke COMMAND ${_d3d11_smoke_cmd}
+        TIMEOUT 60 LABELS "D3D11")
 
     # Phase DX3: pure-function checks for D3DCommon's format/state/vertex-layout mapping tables --
     # no device/window/GPU needed.
     cna_d3d11_test(cna_test_d3d11_common examples/d3d11_common_test.cpp)
     cna_d3d11_ctest_command(_d3d11_common_cmd cna_test_d3d11_common)
-    add_test(NAME D3D11_Common COMMAND ${_d3d11_common_cmd})
-    set_tests_properties(D3D11_Common PROPERTIES
-        TIMEOUT 30
-        LABELS "D3D11"
-        # DX-85: this binary never creates a D3D11 device (pure-function mapping-table checks
-        # only), so it legitimately never prints a "DXVK: <version>" line -- tell the wrapper's
-        # DXVK-engagement gate not to misreport that as a WineD3D fallback. Harmless no-op when
-        # CMAKE_CROSSCOMPILING is false (native MSVC run, no wrapper script involved at all).
-        ENVIRONMENT "CNA_D3D11_SKIP_DXVK_GATE=1")
+    # DX-85: this binary never creates a D3D11 device (pure-function mapping-table checks
+    # only), so it legitimately never prints a "DXVK: <version>" line -- tell the wrapper's
+    # DXVK-engagement gate not to misreport that as a WineD3D fallback. Harmless no-op when
+    # CMAKE_CROSSCOMPILING is false (native MSVC run, no wrapper script involved at all).
+    cna_register_backend_test(NAME D3D11_Common COMMAND ${_d3d11_common_cmd}
+        TIMEOUT 30 LABELS "D3D11" ENVIRONMENT "CNA_D3D11_SKIP_DXVK_GATE=1")
 
     # DX-82: state-object pixel-behaviour tests, reusing the same backend-agnostic EasyGL-authored
     # sources Vulkan already reuses verbatim (they only touch the public GraphicsDevice/BasicEffect
@@ -7420,23 +5682,23 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D11")
     # not just "the D3D11 state object was created/bound" (Phase DX7's own, narrower bar).
     cna_d3d11_test(cna_test_d3d11_blendstate_opaque examples/easygl_blendstate_opaque_test.cpp)
     cna_d3d11_ctest_command(_d3d11_blend_opaque_cmd cna_test_d3d11_blendstate_opaque)
-    add_test(NAME D3D11_BlendState_Opaque COMMAND ${_d3d11_blend_opaque_cmd})
-    set_tests_properties(D3D11_BlendState_Opaque PROPERTIES TIMEOUT 60 LABELS "D3D11")
+    cna_register_backend_test(NAME D3D11_BlendState_Opaque COMMAND ${_d3d11_blend_opaque_cmd}
+        TIMEOUT 60 LABELS "D3D11")
 
     cna_d3d11_test(cna_test_d3d11_blendstate_alphablend examples/easygl_blendstate_alphablend_test.cpp)
     cna_d3d11_ctest_command(_d3d11_blend_alpha_cmd cna_test_d3d11_blendstate_alphablend)
-    add_test(NAME D3D11_BlendState_AlphaBlend COMMAND ${_d3d11_blend_alpha_cmd})
-    set_tests_properties(D3D11_BlendState_AlphaBlend PROPERTIES TIMEOUT 60 LABELS "D3D11")
+    cna_register_backend_test(NAME D3D11_BlendState_AlphaBlend COMMAND ${_d3d11_blend_alpha_cmd}
+        TIMEOUT 60 LABELS "D3D11")
 
     cna_d3d11_test(cna_test_d3d11_depthstencilstate_stencil_enable examples/easygl_depthstencilstate_stencil_enable_test.cpp)
     cna_d3d11_ctest_command(_d3d11_ds_stencil_cmd cna_test_d3d11_depthstencilstate_stencil_enable)
-    add_test(NAME D3D11_DepthStencilState_StencilEnable COMMAND ${_d3d11_ds_stencil_cmd})
-    set_tests_properties(D3D11_DepthStencilState_StencilEnable PROPERTIES TIMEOUT 60 LABELS "D3D11")
+    cna_register_backend_test(NAME D3D11_DepthStencilState_StencilEnable COMMAND ${_d3d11_ds_stencil_cmd}
+        TIMEOUT 60 LABELS "D3D11")
 
     cna_d3d11_test(cna_test_d3d11_rasterizerstate_cullmode examples/easygl_rasterizerstate_cullmode_test.cpp)
     cna_d3d11_ctest_command(_d3d11_rast_cullmode_cmd cna_test_d3d11_rasterizerstate_cullmode)
-    add_test(NAME D3D11_RasterizerState_CullMode COMMAND ${_d3d11_rast_cullmode_cmd})
-    set_tests_properties(D3D11_RasterizerState_CullMode PROPERTIES TIMEOUT 60 LABELS "D3D11")
+    cna_register_backend_test(NAME D3D11_RasterizerState_CullMode COMMAND ${_d3d11_rast_cullmode_cmd}
+        TIMEOUT 60 LABELS "D3D11")
 endif()
 
 # plan_dx.md DX-102/103/104/105: D3D12 CTest registration, mirroring DX-80's own D3D11 macro
@@ -7465,14 +5727,12 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D12")
     # for why), so this stays genuinely green on this Wine+vkd3d-proton dev loop.
     cna_d3d12_test(cna_test_d3d12_smoke examples/d3d12_smoke_test.cpp)
     if(CMAKE_CROSSCOMPILING)
-        add_test(NAME D3D12_Smoke
-            COMMAND ${CMAKE_SOURCE_DIR}/scripts/run-wine-vkd3d.sh $<TARGET_FILE:cna_test_d3d12_smoke>)
+        set(_d3d12_smoke_cmd ${CMAKE_SOURCE_DIR}/scripts/run-wine-vkd3d.sh $<TARGET_FILE:cna_test_d3d12_smoke>)
     else()
-        add_test(NAME D3D12_Smoke COMMAND cna_test_d3d12_smoke)
+        set(_d3d12_smoke_cmd cna_test_d3d12_smoke)
     endif()
-    set_tests_properties(D3D12_Smoke PROPERTIES
-        TIMEOUT 60
-        LABELS "D3D12")
+    cna_register_backend_test(NAME D3D12_Smoke COMMAND ${_d3d12_smoke_cmd}
+        TIMEOUT 60 LABELS "D3D12")
 
     # plan_dx.md DX-102: real (window-attached) swap-chain diagnostic -- deliberately NOT
     # registered as a CTest (mirrors cna_diag_software's own "real executable, not a ctest"
@@ -7526,89 +5786,69 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D9")
     # tables -- no device/window/GPU needed.
     cna_d3d9_test(cna_test_d3d9_common examples/d3d9_common_test.cpp)
     cna_d3d9_ctest_command(_d3d9_common_cmd cna_test_d3d9_common)
-    add_test(NAME D3D9_Common COMMAND ${_d3d9_common_cmd})
-    set_tests_properties(D3D9_Common PROPERTIES
-        TIMEOUT 30
-        LABELS "D3D9"
-        # This binary never creates a D3D9 device (pure-function mapping-table checks only), so it
-        # legitimately never prints a "DXVK: <version>" line -- tell the wrapper's DXVK-engagement
-        # gate not to misreport that as a WineD3D fallback (mirrors D3D11_Common's own
-        # CNA_D3D11_SKIP_DXVK_GATE usage). Harmless no-op when CMAKE_CROSSCOMPILING is false.
-        ENVIRONMENT "CNA_D3D9_SKIP_DXVK_GATE=1")
+    # This binary never creates a D3D9 device (pure-function mapping-table checks only), so it
+    # legitimately never prints a "DXVK: <version>" line -- tell the wrapper's DXVK-engagement
+    # gate not to misreport that as a WineD3D fallback (mirrors D3D11_Common's own
+    # CNA_D3D11_SKIP_DXVK_GATE usage). Harmless no-op when CMAKE_CROSSCOMPILING is false.
+    cna_register_backend_test(NAME D3D9_Common COMMAND ${_d3d9_common_cmd}
+        TIMEOUT 30 LABELS "D3D9" ENVIRONMENT "CNA_D3D9_SKIP_DXVK_GATE=1")
 
     # D9-80: pure-function checks for the transcribed XNA shader-permutation model
     # (ShaderIndex/VSIndices/PSIndices) -- no device/window/GPU needed.
     cna_d3d9_test(cna_test_d3d9_shaderdispatch examples/d3d9_shaderdispatch_test.cpp)
     cna_d3d9_ctest_command(_d3d9_shaderdispatch_cmd cna_test_d3d9_shaderdispatch)
-    add_test(NAME D3D9_ShaderDispatch COMMAND ${_d3d9_shaderdispatch_cmd})
-    set_tests_properties(D3D9_ShaderDispatch PROPERTIES
-        TIMEOUT 30
-        LABELS "D3D9"
-        ENVIRONMENT "CNA_D3D9_SKIP_DXVK_GATE=1")
+    cna_register_backend_test(NAME D3D9_ShaderDispatch COMMAND ${_d3d9_shaderdispatch_cmd}
+        TIMEOUT 30 LABELS "D3D9" ENVIRONMENT "CNA_D3D9_SKIP_DXVK_GATE=1")
 
     # D9-30/D9-31: real device/Clear/Present/readback smoke test -- this backend's first genuine
     # pixel-correctness proof, through the real public Game/GraphicsDeviceManager/GraphicsDevice
     # API (not the raw backend interface).
     cna_d3d9_test(cna_test_d3d9_smoke examples/d3d9_smoke_test.cpp)
     cna_d3d9_ctest_command(_d3d9_smoke_cmd cna_test_d3d9_smoke)
-    add_test(NAME D3D9_Smoke COMMAND ${_d3d9_smoke_cmd})
-    set_tests_properties(D3D9_Smoke PROPERTIES
-        TIMEOUT 60
-        LABELS "D3D9")
+    cna_register_backend_test(NAME D3D9_Smoke COMMAND ${_d3d9_smoke_cmd}
+        TIMEOUT 60 LABELS "D3D9")
 
     # D9-82: this backend's first real 3D triangle -- DrawColoredPrimitives/
     # DrawIndexedColoredPrimitives through the real public Game/GraphicsDeviceManager API.
     cna_d3d9_test(cna_test_d3d9_draw examples/d3d9_draw_test.cpp)
     cna_d3d9_ctest_command(_d3d9_draw_cmd cna_test_d3d9_draw)
-    add_test(NAME D3D9_Draw COMMAND ${_d3d9_draw_cmd})
-    set_tests_properties(D3D9_Draw PROPERTIES
-        TIMEOUT 60
-        LABELS "D3D9")
+    cna_register_backend_test(NAME D3D9_Draw COMMAND ${_d3d9_draw_cmd}
+        TIMEOUT 60 LABELS "D3D9")
 
     # D9-82b: real effect-aware DrawPrimitivesEx/DrawIndexedPrimitivesEx dispatch (BasicEffect).
     cna_d3d9_test(cna_test_d3d9_drawex examples/d3d9_drawex_test.cpp)
     cna_d3d9_ctest_command(_d3d9_drawex_cmd cna_test_d3d9_drawex)
-    add_test(NAME D3D9_DrawEx COMMAND ${_d3d9_drawex_cmd})
-    set_tests_properties(D3D9_DrawEx PROPERTIES
-        TIMEOUT 60
-        LABELS "D3D9")
+    cna_register_backend_test(NAME D3D9_DrawEx COMMAND ${_d3d9_drawex_cmd}
+        TIMEOUT 60 LABELS "D3D9")
 
     # D9-83: real hardware instancing via SetStreamSourceFreq (CNA's own NOXNA Instanced3D shader).
     cna_d3d9_test(cna_test_d3d9_instanced examples/d3d9_instanced_test.cpp)
     cna_d3d9_ctest_command(_d3d9_instanced_cmd cna_test_d3d9_instanced)
-    add_test(NAME D3D9_Instanced COMMAND ${_d3d9_instanced_cmd})
-    set_tests_properties(D3D9_Instanced PROPERTIES
-        TIMEOUT 60
-        LABELS "D3D9")
+    cna_register_backend_test(NAME D3D9_Instanced COMMAND ${_d3d9_instanced_cmd}
+        TIMEOUT 60 LABELS "D3D9")
 
     # D9-90/D9-91/D9-92: real D3D9SpriteBatchBackend driving Microsoft's own SpriteEffect, tested
     # through the real public SpriteBatch/Texture2D API (D9-93's own explicit requirement).
     cna_d3d9_test(cna_test_d3d9_spritebatch examples/d3d9_spritebatch_test.cpp)
     cna_d3d9_ctest_command(_d3d9_spritebatch_cmd cna_test_d3d9_spritebatch)
-    add_test(NAME D3D9_SpriteBatch COMMAND ${_d3d9_spritebatch_cmd})
-    set_tests_properties(D3D9_SpriteBatch PROPERTIES
-        TIMEOUT 60
-        LABELS "D3D9")
+    cna_register_backend_test(NAME D3D9_SpriteBatch COMMAND ${_d3d9_spritebatch_cmd}
+        TIMEOUT 60 LABELS "D3D9")
 
     # D9-100/D9-101/D9-102/D9-103: GraphicsProfile.Reach/HiDef made real (IsProfileSupported(),
     # QueryRenderTargetFormat(), and Texture2D size enforcement), through the real public
     # GraphicsAdapter/Game/GraphicsDeviceManager/Texture2D API.
     cna_d3d9_test(cna_test_d3d9_graphicsprofile examples/d3d9_graphicsprofile_test.cpp)
     cna_d3d9_ctest_command(_d3d9_graphicsprofile_cmd cna_test_d3d9_graphicsprofile)
-    add_test(NAME D3D9_GraphicsProfile COMMAND ${_d3d9_graphicsprofile_cmd})
-    set_tests_properties(D3D9_GraphicsProfile PROPERTIES
-        TIMEOUT 60
-        LABELS "D3D9")
+    cna_register_backend_test(NAME D3D9_GraphicsProfile COMMAND ${_d3d9_graphicsprofile_cmd}
+        TIMEOUT 60 LABELS "D3D9")
 
     # D9-74: D3D9ShaderCache creates all 66 embedded stock-effect shaders through a live device --
     # needs both DXVK and the real compiler's own bytecode output at once (the compiler DLL itself
     # is no longer needed at this step, D9-71 already embedded its output).
     cna_d3d9_test(cna_test_d3d9_shadercache examples/d3d9_shadercache_test.cpp)
     cna_d3d9_ctest_command(_d3d9_shadercache_cmd cna_test_d3d9_shadercache)
-    add_test(NAME D3D9_ShaderCache COMMAND ${_d3d9_shadercache_cmd})
-    set_tests_properties(D3D9_ShaderCache PROPERTIES
-        TIMEOUT 60
-        LABELS "D3D9")
+    cna_register_backend_test(NAME D3D9_ShaderCache COMMAND ${_d3d9_shadercache_cmd}
+        TIMEOUT 60 LABELS "D3D9")
 
     # D9-64: state-object pixel-behaviour tests, reusing the same backend-agnostic EasyGL-authored
     # sources D3D11/Vulkan already reuse verbatim (they only touch the public GraphicsDevice/
@@ -7618,23 +5858,23 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D9")
     # D3D11_RasterizerState_CullMode already established, not Vulkan's full set.
     cna_d3d9_test(cna_test_d3d9_blendstate_opaque examples/easygl_blendstate_opaque_test.cpp)
     cna_d3d9_ctest_command(_d3d9_blend_opaque_cmd cna_test_d3d9_blendstate_opaque)
-    add_test(NAME D3D9_BlendState_Opaque COMMAND ${_d3d9_blend_opaque_cmd})
-    set_tests_properties(D3D9_BlendState_Opaque PROPERTIES TIMEOUT 60 LABELS "D3D9")
+    cna_register_backend_test(NAME D3D9_BlendState_Opaque COMMAND ${_d3d9_blend_opaque_cmd}
+        TIMEOUT 60 LABELS "D3D9")
 
     cna_d3d9_test(cna_test_d3d9_blendstate_alphablend examples/easygl_blendstate_alphablend_test.cpp)
     cna_d3d9_ctest_command(_d3d9_blend_alpha_cmd cna_test_d3d9_blendstate_alphablend)
-    add_test(NAME D3D9_BlendState_AlphaBlend COMMAND ${_d3d9_blend_alpha_cmd})
-    set_tests_properties(D3D9_BlendState_AlphaBlend PROPERTIES TIMEOUT 60 LABELS "D3D9")
+    cna_register_backend_test(NAME D3D9_BlendState_AlphaBlend COMMAND ${_d3d9_blend_alpha_cmd}
+        TIMEOUT 60 LABELS "D3D9")
 
     cna_d3d9_test(cna_test_d3d9_depthstencilstate_stencil_enable examples/easygl_depthstencilstate_stencil_enable_test.cpp)
     cna_d3d9_ctest_command(_d3d9_ds_stencil_cmd cna_test_d3d9_depthstencilstate_stencil_enable)
-    add_test(NAME D3D9_DepthStencilState_StencilEnable COMMAND ${_d3d9_ds_stencil_cmd})
-    set_tests_properties(D3D9_DepthStencilState_StencilEnable PROPERTIES TIMEOUT 60 LABELS "D3D9")
+    cna_register_backend_test(NAME D3D9_DepthStencilState_StencilEnable COMMAND ${_d3d9_ds_stencil_cmd}
+        TIMEOUT 60 LABELS "D3D9")
 
     cna_d3d9_test(cna_test_d3d9_rasterizerstate_cullmode examples/easygl_rasterizerstate_cullmode_test.cpp)
     cna_d3d9_ctest_command(_d3d9_rast_cullmode_cmd cna_test_d3d9_rasterizerstate_cullmode)
-    add_test(NAME D3D9_RasterizerState_CullMode COMMAND ${_d3d9_rast_cullmode_cmd})
-    set_tests_properties(D3D9_RasterizerState_CullMode PROPERTIES TIMEOUT 60 LABELS "D3D9")
+    cna_register_backend_test(NAME D3D9_RasterizerState_CullMode COMMAND ${_d3d9_rast_cullmode_cmd}
+        TIMEOUT 60 LABELS "D3D9")
 
     # D9-A3: scene-driven CNA-side renderer for the XNA-oracle diff harness -- a comparison TOOL,
     # not a CTest itself (has no pass/fail assertion of its own; D9-A4's xna-diff.py is what
@@ -7648,11 +5888,8 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D9")
     # reference PNG (tools/xna-oracle/reference/*.png, D9-A4's own tolerance=0) -- deliberately
     # does NOT need the XNA Wine prefix at all, only the D3D9 one every other test here already
     # needs. See scripts/run-oracle-corpus-diff.sh's own header comment for the full contract.
-    add_test(NAME D3D9_XNA_Diff
-        COMMAND ${CMAKE_SOURCE_DIR}/scripts/run-oracle-corpus-diff.sh $<TARGET_FILE:cna_oracle_render>)
-    set_tests_properties(D3D9_XNA_Diff PROPERTIES
-        TIMEOUT 300
-        LABELS "D3D9")
+    cna_register_backend_test(NAME D3D9_XNA_Diff COMMAND ${CMAKE_SOURCE_DIR}/scripts/run-oracle-corpus-diff.sh $<TARGET_FILE:cna_oracle_render>
+        TIMEOUT 300 LABELS "D3D9")
 
     # D9-110 (Phase D9-11, ask-first, authorized 2026-07-15): validates the CTAB constant-table
     # parser (D3D9ConstantTable.cpp, already part of CNA via BACKEND_SOURCES) against real
@@ -7670,15 +5907,13 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D9")
     cna_d3d9_test(cna_test_d3d9_constanttable examples/d3d9_constanttable_test.cpp)
     target_link_libraries(cna_test_d3d9_constanttable PRIVATE d3dcompiler)
     cna_d3d9_ctest_command(_d3d9_constanttable_cmd cna_test_d3d9_constanttable)
-    add_test(NAME D3D9_ConstantTable COMMAND ${_d3d9_constanttable_cmd})
-    set_tests_properties(D3D9_ConstantTable PROPERTIES
-        TIMEOUT 30
-        LABELS "D3D9"
-        # Never creates a D3D9 device (D3DCompile()/D3DDisassemble() are pure compiler-library
-        # calls), so it legitimately never prints a "DXVK: <version>" line -- same reasoning as
-        # D3D9_Common's own ENVIRONMENT override. CNA_D3D9_WINEPREFIX pins this specific test to
-        # the real-compiler prefix regardless of whatever prefix the ambient shell/CI environment
-        # might otherwise have set for the rest of the D3D9 suite.
+    # Never creates a D3D9 device (D3DCompile()/D3DDisassemble() are pure compiler-library
+    # calls), so it legitimately never prints a "DXVK: <version>" line -- same reasoning as
+    # D3D9_Common's own ENVIRONMENT override. CNA_D3D9_WINEPREFIX pins this specific test to
+    # the real-compiler prefix regardless of whatever prefix the ambient shell/CI environment
+    # might otherwise have set for the rest of the D3D9 suite.
+    cna_register_backend_test(NAME D3D9_ConstantTable COMMAND ${_d3d9_constanttable_cmd}
+        TIMEOUT 30 LABELS "D3D9"
         ENVIRONMENT "CNA_D3D9_SKIP_DXVK_GATE=1;CNA_D3D9_WINEPREFIX=$ENV{HOME}/.wine-cna-d3d9-spike")
 
     # D9-111 (Phase D9-11): validates D3D9EffectBackend against a real device (compile, bind, draw,
@@ -7690,11 +5925,8 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D9")
         cna_d3d9_test(cna_test_d3d9_effectbackend examples/d3d9_effectbackend_test.cpp)
         target_link_libraries(cna_test_d3d9_effectbackend PRIVATE cna_backend_graphics_d3d9_effect)
         cna_d3d9_ctest_command(_d3d9_effectbackend_cmd cna_test_d3d9_effectbackend)
-        add_test(NAME D3D9_EffectBackend COMMAND ${_d3d9_effectbackend_cmd})
-        set_tests_properties(D3D9_EffectBackend PROPERTIES
-            TIMEOUT 60
-            LABELS "D3D9"
-            ENVIRONMENT "CNA_D3D9_WINEPREFIX=$ENV{HOME}/.wine-cna-d3d9-spike")
+        cna_register_backend_test(NAME D3D9_EffectBackend COMMAND ${_d3d9_effectbackend_cmd}
+            TIMEOUT 60 LABELS "D3D9" ENVIRONMENT "CNA_D3D9_WINEPREFIX=$ENV{HOME}/.wine-cna-d3d9-spike")
 
         # D9-112: SpriteBatch::Begin(effect) wiring, through the real public
         # SpriteBatch/ShaderEffect API (not the raw backend), mirroring D3D11's own DX-71 test
@@ -7704,11 +5936,8 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D9")
         # CreateEffectBackend() transitively through the real device.
         cna_d3d9_test(cna_test_d3d9_spritebatch_customeffect examples/d3d9_spritebatch_customeffect_test.cpp)
         cna_d3d9_ctest_command(_d3d9_sb_customeffect_cmd cna_test_d3d9_spritebatch_customeffect)
-        add_test(NAME D3D9_SpriteBatch_CustomEffect COMMAND ${_d3d9_sb_customeffect_cmd})
-        set_tests_properties(D3D9_SpriteBatch_CustomEffect PROPERTIES
-            TIMEOUT 60
-            LABELS "D3D9"
-            ENVIRONMENT "CNA_D3D9_WINEPREFIX=$ENV{HOME}/.wine-cna-d3d9-spike")
+        cna_register_backend_test(NAME D3D9_SpriteBatch_CustomEffect COMMAND ${_d3d9_sb_customeffect_cmd}
+            TIMEOUT 60 LABELS "D3D9" ENVIRONMENT "CNA_D3D9_WINEPREFIX=$ENV{HOME}/.wine-cna-d3d9-spike")
     endif()
 endif()
 
@@ -7733,150 +5962,96 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SDL_GPU")
     endmacro()
 
     cna_sdlgpu_test(cna_test_sdlgpu_smoke examples/sdlgpu_smoke_test.cpp)
-    add_test(NAME SdlGpu_Smoke COMMAND cna_test_sdlgpu_smoke)
-    set_tests_properties(SdlGpu_Smoke PROPERTIES
-        TIMEOUT 60
-        LABELS "SdlGpu"
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SdlGpu_Smoke COMMAND cna_test_sdlgpu_smoke
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # plan_sdlgpu.md SDLGPU-22..25: 2D vertical slice -- real Texture2D + SpriteBatch.
     cna_sdlgpu_test(cna_test_sdlgpu_2d examples/sdlgpu_2d_test.cpp)
-    add_test(NAME SdlGpu_2D COMMAND cna_test_sdlgpu_2d)
-    set_tests_properties(SdlGpu_2D PROPERTIES
-        TIMEOUT 60
-        LABELS "SdlGpu"
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SdlGpu_2D COMMAND cna_test_sdlgpu_2d
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # Ad-hoc manual diagnostic (not a CTest) -- see the file's own header comment.
     cna_sdlgpu_test(cna_diag_sdlgpu_single_sprite examples/sdlgpu_diag_single_sprite.cpp)
 
     # plan_sdlgpu.md SDLGPU-26..30: core 3D vertex formats and BasicEffect.
     cna_sdlgpu_test(cna_test_sdlgpu_3d examples/sdlgpu_3d_test.cpp)
-    add_test(NAME SdlGpu_3D COMMAND cna_test_sdlgpu_3d)
-    set_tests_properties(SdlGpu_3D PROPERTIES
-        TIMEOUT 60
-        LABELS "SdlGpu"
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SdlGpu_3D COMMAND cna_test_sdlgpu_3d
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # plan_sdlgpu.md SDLGPU-31/32: AlphaTestEffect and DualTextureEffect.
     cna_sdlgpu_test(cna_test_sdlgpu_effects examples/sdlgpu_effects_test.cpp)
-    add_test(NAME SdlGpu_Effects COMMAND cna_test_sdlgpu_effects)
-    set_tests_properties(SdlGpu_Effects PROPERTIES
-        TIMEOUT 60
-        LABELS "SdlGpu"
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SdlGpu_Effects COMMAND cna_test_sdlgpu_effects
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # plan_sdlgpu.md SDLGPU-35: RenderTarget2D.
     cna_sdlgpu_test(cna_test_sdlgpu_rendertarget2d examples/sdlgpu_rendertarget2d_test.cpp)
-    add_test(NAME SdlGpu_RenderTarget2D COMMAND cna_test_sdlgpu_rendertarget2d)
-    set_tests_properties(SdlGpu_RenderTarget2D PROPERTIES
-        TIMEOUT 60
-        LABELS "SdlGpu"
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SdlGpu_RenderTarget2D COMMAND cna_test_sdlgpu_rendertarget2d
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # plan_sdlgpu.md SDLGPU-36: RenderTargetCube.
     cna_sdlgpu_test(cna_test_sdlgpu_rendertargetcube examples/sdlgpu_rendertargetcube_test.cpp)
-    add_test(NAME SdlGpu_RenderTargetCube COMMAND cna_test_sdlgpu_rendertargetcube)
-    set_tests_properties(SdlGpu_RenderTargetCube PROPERTIES
-        TIMEOUT 60
-        LABELS "SdlGpu"
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SdlGpu_RenderTargetCube COMMAND cna_test_sdlgpu_rendertargetcube
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # plan_sdlgpu.md SDLGPU-37: Multiple Render Targets (MRT).
     cna_sdlgpu_test(cna_test_sdlgpu_mrt examples/sdlgpu_mrt_test.cpp)
-    add_test(NAME SdlGpu_MRT COMMAND cna_test_sdlgpu_mrt)
-    set_tests_properties(SdlGpu_MRT PROPERTIES
-        TIMEOUT 60
-        LABELS "SdlGpu"
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SdlGpu_MRT COMMAND cna_test_sdlgpu_mrt
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # plan_sdlgpu.md SDLGPU-38: RenderTarget2D MSAA.
     cna_sdlgpu_test(cna_test_sdlgpu_rendertarget2d_msaa examples/sdlgpu_rendertarget2d_msaa_test.cpp)
-    add_test(NAME SdlGpu_RenderTarget2DMSAA COMMAND cna_test_sdlgpu_rendertarget2d_msaa)
-    set_tests_properties(SdlGpu_RenderTarget2DMSAA PROPERTIES
-        TIMEOUT 60
-        LABELS "SdlGpu"
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SdlGpu_RenderTarget2DMSAA COMMAND cna_test_sdlgpu_rendertarget2d_msaa
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # plan_sdlgpu.md SDLGPU-40/41: Texture3D + mipmaps.
     cna_sdlgpu_test(cna_test_sdlgpu_texture3d examples/sdlgpu_texture3d_test.cpp)
-    add_test(NAME SdlGpu_Texture3D COMMAND cna_test_sdlgpu_texture3d)
-    set_tests_properties(SdlGpu_Texture3D PROPERTIES
-        TIMEOUT 60
-        LABELS "SdlGpu"
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SdlGpu_Texture3D COMMAND cna_test_sdlgpu_texture3d
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # plan_sdlgpu.md SDLGPU-51: plain, non-render-target TextureCube.
     cna_sdlgpu_test(cna_test_sdlgpu_texturecube examples/sdlgpu_texturecube_test.cpp)
-    add_test(NAME SdlGpu_TextureCube COMMAND cna_test_sdlgpu_texturecube)
-    set_tests_properties(SdlGpu_TextureCube PROPERTIES
-        TIMEOUT 60
-        LABELS "SdlGpu"
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SdlGpu_TextureCube COMMAND cna_test_sdlgpu_texturecube
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # plan_sdlgpu.md SDLGPU-33: EnvironmentMapEffect.
     cna_sdlgpu_test(cna_test_sdlgpu_envmap examples/sdlgpu_envmap_test.cpp)
-    add_test(NAME SdlGpu_EnvMap COMMAND cna_test_sdlgpu_envmap)
-    set_tests_properties(SdlGpu_EnvMap PROPERTIES
-        TIMEOUT 60
-        LABELS "SdlGpu"
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SdlGpu_EnvMap COMMAND cna_test_sdlgpu_envmap
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # plan_sdlgpu.md SDLGPU-34: SkinnedEffect.
     cna_sdlgpu_test(cna_test_sdlgpu_skinned examples/sdlgpu_skinned_test.cpp)
-    add_test(NAME SdlGpu_Skinned COMMAND cna_test_sdlgpu_skinned)
-    set_tests_properties(SdlGpu_Skinned PROPERTIES
-        TIMEOUT 60
-        LABELS "SdlGpu"
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SdlGpu_Skinned COMMAND cna_test_sdlgpu_skinned
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # plan_sdlgpu.md SDLGPU-42/43: custom ShaderEffect (runtime GLSL->SPIR-V via libshaderc).
     cna_sdlgpu_test(cna_test_sdlgpu_shadereffect examples/sdlgpu_shadereffect_test.cpp)
-    add_test(NAME SdlGpu_ShaderEffect COMMAND cna_test_sdlgpu_shadereffect)
-    set_tests_properties(SdlGpu_ShaderEffect PROPERTIES
-        TIMEOUT 60
-        LABELS "SdlGpu"
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SdlGpu_ShaderEffect COMMAND cna_test_sdlgpu_shadereffect
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # plan_sdlgpu.md SDLGPU-18/19/20: dynamic BlendState/DepthStencilState/RasterizerState.
     cna_sdlgpu_test(cna_test_sdlgpu_renderstate examples/sdlgpu_renderstate_test.cpp)
-    add_test(NAME SdlGpu_RenderState COMMAND cna_test_sdlgpu_renderstate)
-    set_tests_properties(SdlGpu_RenderState PROPERTIES
-        TIMEOUT 60
-        LABELS "SdlGpu"
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SdlGpu_RenderState COMMAND cna_test_sdlgpu_renderstate
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # plan_sdlgpu.md SDLGPU-21: dynamic SamplerState for direct 3D draws.
     cna_sdlgpu_test(cna_test_sdlgpu_samplerstate examples/sdlgpu_samplerstate_test.cpp)
-    add_test(NAME SdlGpu_SamplerState COMMAND cna_test_sdlgpu_samplerstate)
-    set_tests_properties(SdlGpu_SamplerState PROPERTIES
-        TIMEOUT 60
-        LABELS "SdlGpu"
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SdlGpu_SamplerState COMMAND cna_test_sdlgpu_samplerstate
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # plan_sdlgpu.md: real chronological draw-order proof (adversarial-review finding #4).
     cna_sdlgpu_test(cna_test_sdlgpu_draworder examples/sdlgpu_draworder_test.cpp)
-    add_test(NAME SdlGpu_DrawOrder COMMAND cna_test_sdlgpu_draworder)
-    set_tests_properties(SdlGpu_DrawOrder PROPERTIES
-        TIMEOUT 60
-        LABELS "SdlGpu"
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SdlGpu_DrawOrder COMMAND cna_test_sdlgpu_draworder
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # plan_sdlgpu.md SDLGPU-11: hard swapchain-acquisition-failure recovery proof.
     cna_sdlgpu_test(cna_test_sdlgpu_swapchain_recovery examples/sdlgpu_swapchain_recovery_test.cpp)
-    add_test(NAME SdlGpu_SwapchainRecovery COMMAND cna_test_sdlgpu_swapchain_recovery)
-    set_tests_properties(SdlGpu_SwapchainRecovery PROPERTIES
-        TIMEOUT 60
-        LABELS "SdlGpu"
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SdlGpu_SwapchainRecovery COMMAND cna_test_sdlgpu_swapchain_recovery
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # plan_sdlgpu.md: render-target-destroyed-before-flush use-after-free regression proof.
     cna_sdlgpu_test(cna_test_sdlgpu_rt_lifetime examples/sdlgpu_rendertarget_lifetime_test.cpp)
-    add_test(NAME SdlGpu_RenderTargetLifetime COMMAND cna_test_sdlgpu_rt_lifetime)
-    set_tests_properties(SdlGpu_RenderTargetLifetime PROPERTIES
-        TIMEOUT 60
-        LABELS "SdlGpu"
-        ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+    cna_register_backend_test(NAME SdlGpu_RenderTargetLifetime COMMAND cna_test_sdlgpu_rt_lifetime
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()
 
 # --- Task 6.1: real two-process ENet loopback test harness ---
@@ -8114,14 +6289,8 @@ if(CNA_BUILD_TESTS)
     # cursors persist for the whole binary), so a static-state leak would reintroduce order dependence;
     # running the filtered subset 5x under a fresh shuffle each iteration is the required check that
     # catches it. `ctest -L input` runs exactly this on every backend/CI job.
-    add_test(NAME CnaInputTests
-             COMMAND CnaTests --gtest_filter=${CNA_INPUT_TEST_FILTER} --gtest_shuffle --gtest_repeat=5)
-    # Headless-safe audio everywhere; the video driver is left to the runner (Xvfb+x11 in CI, real
-    # display or `xvfb-run` locally) because the MouseCursor tests need real cursors (the SDL dummy
-    # driver has null cursors).
-    set_tests_properties(CnaInputTests PROPERTIES
-        LABELS input
-        ENVIRONMENT "SDL_AUDIODRIVER=dummy")
+    cna_register_backend_test(NAME CnaInputTests COMMAND CnaTests --gtest_filter=${CNA_INPUT_TEST_FILTER} --gtest_shuffle --gtest_repeat=5
+        LABELS "input" ENVIRONMENT "SDL_AUDIODRIVER=dummy")
 
     if(MINGW)
         # Statically link MinGW runtime into the test binary too, so it can
