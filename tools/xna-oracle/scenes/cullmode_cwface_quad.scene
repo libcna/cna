@@ -1,0 +1,19 @@
+# plan_dx9.md D9-21 scene corpus: cullmode_cwface_quad
+# Same triangle as cullmode_none_quad.scene/cullmode_ccwface_quad.scene (negative NDC signed area,
+# the "CW"-labeled winding per docs/xna_culling_compatibility_audit.md's real-XNA-4.0-hardware-
+# verified table). Explicitly requests CullMode.CullClockwiseFace -- the OPPOSITE of XNA's default,
+# which must cull this triangle entirely: expected result is the plain clear color everywhere, no
+# triangle visible at all. This is the scene that actually discriminates D3D9StateMapping.cpp's
+# CullModeToD3D9() mapping direction -- if CullClockwiseFace/CullCounterClockwiseFace were ever
+# swapped, this scene would show the triangle instead of the background.
+width=256
+height=256
+profile=HiDef
+clearcolor=100,149,237,255
+vertexcolor=true
+lighting=false
+primitive=TriangleList
+cullmode=CullClockwiseFace
+vertex=-0.6,-0.6,0,255,0,0,255
+vertex=0.0,0.7,0,0,255,0,255
+vertex=0.6,-0.6,0,0,0,255,255

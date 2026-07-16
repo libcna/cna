@@ -1726,12 +1726,20 @@ this very section's own "RESOLVED 2026-07-16" paragraph above it — that gap is
 blocking). Every non-`✅` row in `plan_dx9.md` was re-read individually; here is what each one
 actually still needs, if anything:
 
-- **`D9-21`/`D9-62` — the one real, actionable, unstarted gap.** The `D3DCULL` winding mapping and
-  `RasterizerState.DepthBias`/`SlopeScaleDepthBias` were both implemented early (`D9-21`/`D9-62`,
-  2026-07-14) but neither has ever been pixel-proven against the real XNA oracle — no scene in the
-  `D9-A5` corpus isolates culling or depth-bias specifically (every existing scene either resets
-  `CullMode::None` or doesn't touch depth bias at all). This is the next candidate — about to be
-  picked up.
+- **`D9-21` (`D3DCULL`) — CLOSED 2026-07-16.** 3 new oracle scenes (`cullmode_none_quad`/
+  `cullmode_ccwface_quad`/`cullmode_cwface_quad.scene`, reusing `colored3d.scene`'s own triangle,
+  a confirmed negative-NDC-signed-area winding per `docs/xna_culling_compatibility_audit.md`'s
+  real-hardware-verified table) proved `CullModeToD3D9()`'s mapping against real XNA 4.0,
+  `0/65536` each, mutation-verified (swapping the `CW`/`CCW` mapping reproduces the exact
+  predicted failure). Corpus is now 39 scenes.
+- **`D9-62` (`RasterizerState.DepthBias`/`SlopeScaleDepthBias`) — attempted, NOT closed.** A
+  discriminating scene was designed and multiple magnitudes tried (`1.0` through `±1e8`) against
+  the real XNA 4.0 oracle — none produced any observable pixel change, while a bias-free baseline
+  confirmed the underlying depth test itself works. Likely shares a root cause with this project's
+  own separate, pre-existing `Vulkan_DepthBias` CTest failure (same DXVK stack) — a suspected
+  environment/driver limitation, not a CNA-side forwarding bug (unchanged, not suspected). See
+  `D9-21`'s own plan row for the full investigation and the recommended next lead (try a real,
+  non-identity perspective `Projection` — every scene in this corpus is `Identity` today).
 - **`SurfaceFormat` sweep** (`plan_graphics.md` Phase 81) — scoped, not decided: needs a project-
   owner call on which formats justify the effort, and `Texture2D`'s own API needs new construction/
   `SetData` paths for non-`Color` formats before the oracle can even describe one. Not started.
@@ -1740,11 +1748,11 @@ actually still needs, if anything:
   `run-oracle-corpus-diff-<backend>.sh` twin script) is the natural next step whenever picked up.
 - **Permanently blocked, not further actionable without new, larger, out-of-scope work**:
   `D9-73`'s 5th `PixelLighting` variant (untextured `VSBasicPixelLighting` — needs a Position-only
-  vertex layout that doesn't exist); `D9-84`'s own full closure (blocked by the `SurfaceFormat`
-  sweep above, plus `SpriteSortMode.Immediate`/`.Texture`, already confirmed out of scope for good
-  reasons, not silently dropped); NPOT-wrap-on-`Reach` and hardware-instancing's `HiDef`-only gate
-  (both need real XNA reference behavior this project has no way to verify — FNA implements
-  neither; do not guess).
+  vertex layout that doesn't exist); `D9-84`'s own full closure (blocked by `D9-62`'s `DepthBias`
+  gap above, the `SurfaceFormat` sweep, plus `SpriteSortMode.Immediate`/`.Texture`, already
+  confirmed out of scope for good reasons, not silently dropped); NPOT-wrap-on-`Reach` and
+  hardware-instancing's `HiDef`-only gate (both need real XNA reference behavior this project has
+  no way to verify — FNA implements neither; do not guess).
 - **`D9-140` (real Windows hardware)** — the only item in the entire plan that is `needs_human`,
   out of reach in this dev environment entirely.
 - A render-target-as-texture oracle scene can now safely be re-attempted (the crash blocking it is

@@ -168,6 +168,13 @@ public class Scene
     public Vector3 Bone1Translate = Vector3.Zero;
     public Vector3 Bone2Translate = Vector3.Zero;
     public Vector3 Bone3Translate = Vector3.Zero;
+    // D9-21/D9-62: RasterizerState.CullMode/DepthBias/SlopeScaleDepthBias oracle proof.
+    // CullMode defaults to XNA's own real default (CullCounterClockwiseFace), matching
+    // RasterizerState.CullMode's own documented default -- every existing scene that never sets
+    // cullmode= already implicitly exercises this default value, unchanged by this addition.
+    public CullMode CullMode = CullMode.CullCounterClockwiseFace;
+    public float DepthBias = 0f;
+    public float SlopeScaleDepthBias = 0f;
     public PrimitiveType Primitive = PrimitiveType.TriangleList;
     public List<VertexPositionColor> ColorVertices = new List<VertexPositionColor>();
     public List<VertexPositionTexture> TextureVertices = new List<VertexPositionTexture>();
@@ -261,6 +268,13 @@ public class Scene
                 case "fogstart": scene.FogStart = float.Parse(value, CultureInfo.InvariantCulture); break;
                 case "fogend": scene.FogEnd = float.Parse(value, CultureInfo.InvariantCulture); break;
                 case "weightspervertex": scene.WeightsPerVertex = int.Parse(value, CultureInfo.InvariantCulture); break;
+                case "cullmode":
+                    scene.CullMode = value == "None" ? CullMode.None
+                                    : value == "CullClockwiseFace" ? CullMode.CullClockwiseFace
+                                    : CullMode.CullCounterClockwiseFace;
+                    break;
+                case "depthbias": scene.DepthBias = float.Parse(value, CultureInfo.InvariantCulture); break;
+                case "slopescaledepthbias": scene.SlopeScaleDepthBias = float.Parse(value, CultureInfo.InvariantCulture); break;
                 case "bone1translate": scene.Bone1Translate = ParseVector3(value); break;
                 case "bone2translate": scene.Bone2Translate = ParseVector3(value); break;
                 case "bone3translate": scene.Bone3Translate = ParseVector3(value); break;
@@ -741,6 +755,16 @@ public class Oracle : Game
             bfx.FogEnd = scene.FogEnd;
             fx = bfx;
         }
+
+        // D9-21/D9-62: real RasterizerState.CullMode/DepthBias/SlopeScaleDepthBias, applied to
+        // this scene's one 3D draw. Defaults (CullCounterClockwiseFace, 0, 0) match
+        // RasterizerState's own documented XNA defaults, so every pre-existing scene is unaffected.
+        dev.RasterizerState = new RasterizerState
+        {
+            CullMode = scene.CullMode,
+            DepthBias = scene.DepthBias,
+            SlopeScaleDepthBias = scene.SlopeScaleDepthBias,
+        };
 
         foreach (var pass in fx.CurrentTechnique.Passes)
         {

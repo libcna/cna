@@ -28,6 +28,8 @@
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CompareFunction.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CubeMapFace.hpp"
+#include "Microsoft/Xna/Framework/Graphics/CullMode.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DirectionalLight.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DualTextureEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EnvironmentMapEffect.hpp"
@@ -253,6 +255,12 @@ namespace
         Vector3 bone1Translate{0, 0, 0};
         Vector3 bone2Translate{0, 0, 0};
         Vector3 bone3Translate{0, 0, 0};
+        // D9-21/D9-62: RasterizerState.CullMode/DepthBias/SlopeScaleDepthBias oracle proof.
+        // CullMode defaults to XNA's own real default (CullCounterClockwiseFace), matching
+        // Oracle.cs's own identical default -- every pre-existing scene is unaffected.
+        CullMode cullMode = CullMode::CullCounterClockwiseFace;
+        float depthBias = 0.0f;
+        float slopeScaleDepthBias = 0.0f;
         PrimitiveType primitive = PrimitiveType::TriangleList;
         std::vector<VertexPositionColor> colorVertices;
         std::vector<VertexPositionTexture> textureVertices;
@@ -489,6 +497,14 @@ namespace
             else if (key == "fogstart") scene.fogStart = std::stof(value);
             else if (key == "fogend") scene.fogEnd = std::stof(value);
             else if (key == "weightspervertex") scene.weightsPerVertex = std::stoi(value);
+            else if (key == "cullmode")
+            {
+                if (value == "None") scene.cullMode = CullMode::None;
+                else if (value == "CullClockwiseFace") scene.cullMode = CullMode::CullClockwiseFace;
+                else scene.cullMode = CullMode::CullCounterClockwiseFace;
+            }
+            else if (key == "depthbias") scene.depthBias = std::stof(value);
+            else if (key == "slopescaledepthbias") scene.slopeScaleDepthBias = std::stof(value);
             else if (key == "bone1translate") scene.bone1Translate = ParseVector3(value);
             else if (key == "bone2translate") scene.bone2Translate = ParseVector3(value);
             else if (key == "bone3translate") scene.bone3Translate = ParseVector3(value);
@@ -814,6 +830,15 @@ protected:
             basicFx->setFogEndProperty(scene_.fogEnd);
             basicFx->Apply();
         }
+
+        // D9-21/D9-62: real RasterizerState.CullMode/DepthBias/SlopeScaleDepthBias, applied to
+        // this scene's one 3D draw. Defaults (CullCounterClockwiseFace, 0, 0) match
+        // RasterizerState's own documented XNA defaults, so every pre-existing scene is unaffected.
+        RasterizerState rs;
+        rs.setCullModeProperty(scene_.cullMode);
+        rs.setDepthBiasProperty(scene_.depthBias);
+        rs.setSlopeScaleDepthBiasProperty(scene_.slopeScaleDepthBias);
+        dev.setRasterizerStateProperty(rs);
 
         if (scene_.vertexFormat == SceneVertexFormat::PositionNormalTextureWeights)
             dev.DrawUserPrimitives(scene_.primitive, scene_.skinnedVertices.data(), 0,
