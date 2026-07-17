@@ -85,10 +85,18 @@
 > channels merged into CNA's own per-keyframe `KeyframeEXT` shape). Verified against a real official
 > Khronos `CesiumMan.glb` sample (19 bones, a real walk-cycle clip, genuine `AnimationPlayer`
 > playback) and a permanent, network-free adversarial regression test
-> (`GltfToCnjToolTests.cpp`). Full-suite regression: 4686 tests, 4684 passed, same 2 pre-existing
-> hardware skips, 0 failures. Deliberate MVP scope cuts (no material/texture extraction, single skin
-> per file, no sparse-accessor support) are documented in the tool's own file header and
-> `plan_cnj.md`'s CNB-50/51/52.
+> (`GltfToCnjToolTests.cpp`).
+>
+> **Same-day follow-up (`plan_cnj.md` `CNB-53`), at the project owner's explicit request**: the
+> three scope cuts above are closed. Sparse accessors now resolve correctly (every accessor read
+> goes through `cgltf_accessor_unpack_floats`, not the sparse-rejecting
+> `cgltf_accessor_read_float`). Each primitive's material base-color texture is extracted (embedded
+> `bufferView`, external file, or base64 `data:` URI all handled) and wired into the mesh's `.cnj`
+> `"texture"` field -- `CesiumMan.glb`'s own real 1024×1024 JPEG texture round-trips correctly. A
+> file with more than one skin now produces one `Model` `.cnj` per skin (`<baseName>_<skinName>.cnj`),
+> not just the first. Remaining, still-deliberate scope cuts: only the base-color texture (no
+> normal/metallic-roughness/emissive/occlusion maps), `CUBICSPLINE` tangents discarded. Full-suite
+> regression: 4689 tests, 4687 passed, same 2 pre-existing hardware skips, 0 failures.
 
 ## Why this alternative exists
 

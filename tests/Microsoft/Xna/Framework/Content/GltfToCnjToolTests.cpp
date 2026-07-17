@@ -21,9 +21,20 @@
 // bone's own real bind pose would produce a wrong translation, not just a missing one.
 //
 // This test was also verified against a real official Khronos glTF-Sample-Assets model
-// (CesiumMan.glb, 19 real bones, a real 2-second walk-cycle animation) during development --
-// downloading that ~430KB asset is not appropriate for an automated, network-free test, so this
-// fixture reproduces the specific hard cases in miniature instead.
+// (CesiumMan.glb, 19 real bones, a real 2-second walk-cycle animation, and a real embedded JPEG
+// base-color texture) during development -- downloading that ~430KB asset is not appropriate for
+// an automated, network-free test, so this fixture reproduces the specific hard cases in
+// miniature instead.
+//
+// Three more small fixtures below exercise capabilities added after the initial tool landed:
+//   - kSparseAccessorGltf: a POSITION accessor with no base bufferView (implicit all-zero) and a
+//     sparse override on exactly one vertex -- proves cgltf_accessor_unpack_floats (which resolves
+//     sparse data) is used throughout, not cgltf_accessor_read_float (which rejects sparse
+//     accessors outright).
+//   - kTexturedSkinnedGltf: a material with an embedded (bufferView-backed) PNG base-color
+//     texture -- proves image extraction and the mesh's "texture" .cnj field both work.
+//   - kMultiSkinGltf: two independent one-bone skins, each with its own mesh node -- proves the
+//     tool no longer silently imports only the first skin in a file.
 
 #include <cerrno>
 #include <cstring>
@@ -41,7 +52,11 @@
 #include "Microsoft/Xna/Framework/Graphics/Model.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMesh.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshCollection.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ModelMeshPart.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshPartCollection.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Vector3.hpp"
 
 extern char** environ;
 
@@ -127,6 +142,126 @@ namespace
     { "bufferView": 5, "componentType": 5126, "count": 2, "type": "MAT4" },
     { "bufferView": 6, "componentType": 5126, "count": 2, "type": "SCALAR", "min": [0.0], "max": [1.0] },
     { "bufferView": 7, "componentType": 5126, "count": 2, "type": "VEC4" }
+  ]
+})GLTF";
+
+    // POSITION accessor has no base bufferView (implicit all-zero per the glTF spec) and one
+    // sparse override on vertex index 1, setting it to (2,3,4). See file header.
+    const char* kSparseAccessorGltf = R"GLTF({
+  "asset": { "version": "2.0" },
+  "scene": 0,
+  "scenes": [ { "nodes": [0] } ],
+  "nodes": [ { "name": "MeshNode", "mesh": 0 } ],
+  "meshes": [ { "primitives": [ { "attributes": { "POSITION": 0, "NORMAL": 1, "TEXCOORD_0": 2 } } ] } ],
+  "buffers": [ {
+    "byteLength": 74,
+    "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AQAAAABAAABAQAAAgEA="
+  } ],
+  "bufferViews": [
+    { "buffer": 0, "byteOffset": 0,  "byteLength": 36 },
+    { "buffer": 0, "byteOffset": 36, "byteLength": 24 },
+    { "buffer": 0, "byteOffset": 60, "byteLength": 2 },
+    { "buffer": 0, "byteOffset": 62, "byteLength": 12 }
+  ],
+  "accessors": [
+    { "componentType": 5126, "count": 3, "type": "VEC3", "min": [0,0,0], "max": [2,3,4],
+      "sparse": { "count": 1, "indices": { "bufferView": 2, "componentType": 5123 }, "values": { "bufferView": 3 } } },
+    { "bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3" },
+    { "bufferView": 1, "componentType": 5126, "count": 3, "type": "VEC2" }
+  ]
+})GLTF";
+
+    // A single-bone skinned triangle whose material has an embedded (bufferView-backed) 1x1 PNG
+    // base-color texture. See file header.
+    const char* kTexturedSkinnedGltf = R"GLTF({
+  "asset": { "version": "2.0" },
+  "scene": 0,
+  "scenes": [ { "nodes": [0, 1] } ],
+  "nodes": [
+    { "name": "RootBone", "translation": [0, 0, 0] },
+    { "name": "MeshNode", "mesh": 0, "skin": 0 }
+  ],
+  "meshes": [ { "primitives": [ { "attributes": {
+      "POSITION": 0, "NORMAL": 1, "TEXCOORD_0": 2, "JOINTS_0": 3, "WEIGHTS_0": 4
+  }, "material": 0 } ] } ],
+  "materials": [ { "pbrMetallicRoughness": { "baseColorTexture": { "index": 0 } } } ],
+  "textures": [ { "source": 0 } ],
+  "images": [ { "bufferView": 5, "mimeType": "image/png" } ],
+  "skins": [ { "joints": [0], "inverseBindMatrices": 5 } ],
+  "buffers": [ {
+    "byteLength": 301,
+    "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAAAAAACAP4lQTkcNChoKAAAADUlIRFIAAAABAAAAAQgCAAAAkHdT3gAAAAxJREFUeJxj+M/AAAADAQEAyf6S7wAAAABJRU5ErkJggg=="
+  } ],
+  "bufferViews": [
+    { "buffer": 0, "byteOffset": 0,   "byteLength": 36 },
+    { "buffer": 0, "byteOffset": 36,  "byteLength": 36 },
+    { "buffer": 0, "byteOffset": 72,  "byteLength": 24 },
+    { "buffer": 0, "byteOffset": 96,  "byteLength": 24 },
+    { "buffer": 0, "byteOffset": 120, "byteLength": 48 },
+    { "buffer": 0, "byteOffset": 232, "byteLength": 69 },
+    { "buffer": 0, "byteOffset": 168, "byteLength": 64 }
+  ],
+  "accessors": [
+    { "bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3", "min": [0,0,0], "max": [1,1,0] },
+    { "bufferView": 1, "componentType": 5126, "count": 3, "type": "VEC3" },
+    { "bufferView": 2, "componentType": 5126, "count": 3, "type": "VEC2" },
+    { "bufferView": 3, "componentType": 5123, "count": 3, "type": "VEC4" },
+    { "bufferView": 4, "componentType": 5126, "count": 3, "type": "VEC4" },
+    { "bufferView": 6, "componentType": 5126, "count": 1, "type": "MAT4" }
+  ]
+})GLTF";
+
+    // Two independent one-bone skins ("SkinA"/"SkinB"), each with its own mesh node. See file
+    // header.
+    const char* kMultiSkinGltf = R"GLTF({
+  "asset": { "version": "2.0" },
+  "scene": 0,
+  "scenes": [ { "nodes": [0, 1, 2, 3] } ],
+  "nodes": [
+    { "name": "BoneA" },
+    { "name": "MeshNodeA", "mesh": 0, "skin": 0 },
+    { "name": "BoneB" },
+    { "name": "MeshNodeB", "mesh": 1, "skin": 1 }
+  ],
+  "meshes": [
+    { "name": "PartA", "primitives": [ { "attributes": { "POSITION":0,"NORMAL":1,"TEXCOORD_0":2,"JOINTS_0":3,"WEIGHTS_0":4 } } ] },
+    { "name": "PartB", "primitives": [ { "attributes": { "POSITION":6,"NORMAL":7,"TEXCOORD_0":8,"JOINTS_0":9,"WEIGHTS_0":10 } } ] }
+  ],
+  "skins": [
+    { "joints": [0], "inverseBindMatrices": 5, "name": "SkinA" },
+    { "joints": [2], "inverseBindMatrices": 11, "name": "SkinB" }
+  ],
+  "buffers": [ {
+    "byteLength": 464,
+    "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAAAAAACAPwAAIEEAAAAAAAAAAAAAMEEAAAAAAAAAAAAAIEEAAIA/AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAACAPwAAAAAAAAAAAACAPwAAAAAAAAAAAACAPwAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAAAAAAAAAAAAgD8="
+  } ],
+  "bufferViews": [
+    { "buffer": 0, "byteOffset": 0,   "byteLength": 36 },
+    { "buffer": 0, "byteOffset": 36,  "byteLength": 36 },
+    { "buffer": 0, "byteOffset": 72,  "byteLength": 24 },
+    { "buffer": 0, "byteOffset": 96,  "byteLength": 24 },
+    { "buffer": 0, "byteOffset": 120, "byteLength": 48 },
+    { "buffer": 0, "byteOffset": 168, "byteLength": 64 },
+    { "buffer": 0, "byteOffset": 232, "byteLength": 36 },
+    { "buffer": 0, "byteOffset": 268, "byteLength": 36 },
+    { "buffer": 0, "byteOffset": 304, "byteLength": 24 },
+    { "buffer": 0, "byteOffset": 328, "byteLength": 24 },
+    { "buffer": 0, "byteOffset": 352, "byteLength": 48 },
+    { "buffer": 0, "byteOffset": 400, "byteLength": 64 }
+  ],
+  "accessors": [
+    { "bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3", "min": [0,0,0], "max": [1,1,0] },
+    { "bufferView": 1, "componentType": 5126, "count": 3, "type": "VEC3" },
+    { "bufferView": 2, "componentType": 5126, "count": 3, "type": "VEC2" },
+    { "bufferView": 3, "componentType": 5123, "count": 3, "type": "VEC4" },
+    { "bufferView": 4, "componentType": 5126, "count": 3, "type": "VEC4" },
+    { "bufferView": 5, "componentType": 5126, "count": 1, "type": "MAT4" },
+    { "bufferView": 6, "componentType": 5126, "count": 3, "type": "VEC3", "min": [10,0,0], "max": [11,1,0] },
+    { "bufferView": 7, "componentType": 5126, "count": 3, "type": "VEC3" },
+    { "bufferView": 8, "componentType": 5126, "count": 3, "type": "VEC2" },
+    { "bufferView": 9, "componentType": 5123, "count": 3, "type": "VEC4" },
+    { "bufferView": 10, "componentType": 5126, "count": 3, "type": "VEC4" },
+    { "bufferView": 11, "componentType": 5126, "count": 1, "type": "MAT4" }
   ]
 })GLTF";
 
@@ -237,4 +372,96 @@ TEST(GltfToCnjToolTest, MissingInputFileFailsCleanly)
                                            contentRoot.path().string(), "wont_happen");
     EXPECT_NE(exitCode, 0);
     EXPECT_FALSE(std::filesystem::exists(contentRoot.path() / "wont_happen.cnj"));
+}
+
+// Vertex 1's POSITION comes entirely from a sparse override on an accessor with no base
+// bufferView -- proves cgltf_accessor_unpack_floats (sparse-safe) is used, not
+// cgltf_accessor_read_float (rejects sparse accessors outright, which would fail this conversion).
+TEST(GltfToCnjToolTest, ResolvesSparseAccessorOverride)
+{
+    ScratchDir gltfDir;
+    ScratchDir contentRoot;
+
+    const std::filesystem::path gltfPath = gltfDir.path() / "sparse.gltf";
+    WriteFile(gltfPath, kSparseAccessorGltf);
+
+    const int exitCode = RunGltfToCnjTool(gltfPath.string(), contentRoot.path().string(), "sparsetest");
+    ASSERT_EQ(exitCode, 0);
+
+    const std::filesystem::path vertsPath = contentRoot.path() / "sparsetest_mesh0_verts.bin";
+    ASSERT_TRUE(std::filesystem::exists(vertsPath));
+
+    std::ifstream f(vertsPath, std::ios::binary);
+    std::vector<char> bytes((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+    ASSERT_EQ(bytes.size(), 3u * 32u); // stride 32, unskinned
+
+    auto readVec3 = [&](std::size_t vertexIndex) {
+        float v[3];
+        std::memcpy(v, bytes.data() + vertexIndex * 32, sizeof(v));
+        return Vector3(v[0], v[1], v[2]);
+    };
+
+    EXPECT_EQ(readVec3(0), Vector3(0.0f, 0.0f, 0.0f)); // base (implicit-zero) value, unaffected
+    EXPECT_EQ(readVec3(1), Vector3(2.0f, 3.0f, 4.0f)); // sparse-overridden value
+    EXPECT_EQ(readVec3(2), Vector3(0.0f, 0.0f, 0.0f)); // base (implicit-zero) value, unaffected
+}
+
+TEST(GltfToCnjToolTest, ExtractsEmbeddedBaseColorTextureAndLoadsIt)
+{
+    ScratchDir gltfDir;
+    ScratchDir contentRoot;
+
+    const std::filesystem::path gltfPath = gltfDir.path() / "textured.gltf";
+    WriteFile(gltfPath, kTexturedSkinnedGltf);
+
+    const int exitCode = RunGltfToCnjTool(gltfPath.string(), contentRoot.path().string(), "textest");
+    ASSERT_EQ(exitCode, 0);
+    ASSERT_TRUE(std::filesystem::exists(contentRoot.path() / "textest_tex0.png"));
+
+    GraphicsDevice gd;
+    ContentManager cm(nullptr, contentRoot.path().string());
+    cm.setGraphicsDevice(gd);
+
+    Model model = cm.Load<Model>("textest");
+    ASSERT_EQ(model.getMeshesProperty().getCountProperty(), 1);
+    ModelMesh* mesh = model.getMeshesProperty()[0];
+    ASSERT_EQ(mesh->getMeshPartsProperty().getCountProperty(), 1);
+
+    auto* skinnedFx = dynamic_cast<SkinnedEffect*>(mesh->getMeshPartsProperty()[0]->getEffectProperty());
+    ASSERT_NE(skinnedFx, nullptr);
+    Texture2D* tex = skinnedFx->getTextureProperty();
+    ASSERT_NE(tex, nullptr);
+    EXPECT_EQ(tex->getWidthProperty(), 1);
+    EXPECT_EQ(tex->getHeightProperty(), 1);
+}
+
+// Two independent skins in one file must produce two separate Model .cnj outputs, not just the
+// first skin silently winning.
+TEST(GltfToCnjToolTest, ImportsAllSkinsAsSeparateModels)
+{
+    ScratchDir gltfDir;
+    ScratchDir contentRoot;
+
+    const std::filesystem::path gltfPath = gltfDir.path() / "multiskin.gltf";
+    WriteFile(gltfPath, kMultiSkinGltf);
+
+    const int exitCode = RunGltfToCnjTool(gltfPath.string(), contentRoot.path().string(), "ms");
+    ASSERT_EQ(exitCode, 0);
+
+    ASSERT_TRUE(std::filesystem::exists(contentRoot.path() / "ms_SkinA.cnj"));
+    ASSERT_TRUE(std::filesystem::exists(contentRoot.path() / "ms_SkinB.cnj"));
+
+    GraphicsDevice gd;
+    ContentManager cm(nullptr, contentRoot.path().string());
+    cm.setGraphicsDevice(gd);
+
+    Model modelA = cm.Load<Model>("ms_SkinA");
+    Model modelB = cm.Load<Model>("ms_SkinB");
+
+    auto* dataA = static_cast<SkinningData*>(modelA.getTagProperty());
+    auto* dataB = static_cast<SkinningData*>(modelB.getTagProperty());
+    ASSERT_NE(dataA, nullptr);
+    ASSERT_NE(dataB, nullptr);
+    EXPECT_EQ(dataA->BoneCount, 1);
+    EXPECT_EQ(dataB->BoneCount, 1);
 }
