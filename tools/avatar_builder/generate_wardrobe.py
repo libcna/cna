@@ -38,7 +38,9 @@ except ImportError:
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import generate_skeleton  # noqa: E402  (bpy path setup must happen first)
 import generate_materials  # noqa: E402
-import generate_clothes  # noqa: E402
+import generate_clothes_meshcraft as generate_clothes  # noqa: E402  (Task 7.6, plan_net.md
+# Phase 7: matches generate_avatar.py's own aliasing - a standalone wardrobe clothing piece
+# needs the same CSG-union fix as a full avatar's clothes, same root cause.)
 import generate_hair  # noqa: E402
 import export_gltf  # noqa: E402
 from generate_avatar import GENDER_PRESETS  # noqa: E402
