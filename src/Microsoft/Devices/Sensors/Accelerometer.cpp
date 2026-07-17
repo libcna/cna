@@ -6,6 +6,7 @@
 #include "Microsoft/Devices/Sensors/Accelerometer.hpp"
 
 #include <algorithm>
+#include <cassert>
 #include <chrono>
 #include <memory>
 #include <mutex>
@@ -375,10 +376,20 @@ namespace Microsoft::Devices::Sensors
             });
 
             --subsystem.instanceCount_;
-            if (subsystem.instanceCount_ < 0)
-            {
-                subsystem.instanceCount_ = 0;
-            }
+            // Task BASE2-007 (2026-07-17, external audit `audit_devices_2026-07-17.md`):
+            // instanceCount_ going negative would mean this instance's own
+            // Dispose(bool) cleanup ran more than once despite
+            // ClaimDisposalOnce() (see above) supposedly guaranteeing
+            // exactly one winner -- i.e. a real bug in that guarantee, not a
+            // recoverable condition. Silently clamping back to zero (the
+            // prior behavior) would mask exactly that bug instead of
+            // surfacing it. `ConcurrentDisposeFromMultipleThreadsNeverCorruptsInstanceCount`/
+            // `EleventhSimultaneousInstanceThrows`/`DisposingOneOfTenAllowsAnotherConstruction`
+            // already provide strong behavioral evidence this invariant
+            // holds today; this assert is defense-in-depth against a future
+            // regression, not a fix for a currently-reproducible defect.
+            assert(subsystem.instanceCount_ >= 0
+                && "Accelerometer::instanceCount_ underflowed -- Dispose(bool) ran more than once for one instance");
 
             // Task P7-1: SDL_CloseSensor()/SDL_QuitSubSystem() below are
             // real SDL sensor-subsystem calls — serialize them against

@@ -3,6 +3,7 @@
 #include "Microsoft/Devices/Sensors/Gyroscope.hpp"
 
 #include <algorithm>
+#include <cassert>
 #include <chrono>
 #include <memory>
 #include <mutex>
@@ -280,10 +281,10 @@ namespace Microsoft::Devices::Sensors
             });
 
             --subsystem.instanceCount_;
-            if (subsystem.instanceCount_ < 0)
-            {
-                subsystem.instanceCount_ = 0;
-            }
+            // Task BASE2-007: see Accelerometer::Dispose(bool)'s identical
+            // fix for the full rationale.
+            assert(subsystem.instanceCount_ >= 0
+                && "Gyroscope::instanceCount_ underflowed -- Dispose(bool) ran more than once for one instance");
 
             // Task P7-1: see Accelerometer::Dispose(bool)'s identical fix
             // for the full rationale.

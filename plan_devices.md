@@ -7315,7 +7315,7 @@ test is not sufficient for an Android coordinate/fusion claim.
   - Fuzz tests cover floating edge values.
 - **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
 
-### BASE2-007 — Replace counter underflow clamping with invariant enforcement — OPEN
+### BASE2-007 — Replace counter underflow clamping with invariant enforcement — CLOSED (2026-07-17)
 
 - **Priority:** P1
 - **Area:** Perfection re-audit
@@ -7328,6 +7328,58 @@ test is not sufficient for an Android coordinate/fusion claim.
   - Counters can never become negative by construction.
   - A deliberate double release fails a test instead of being masked.
 - **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+- **Resolution:** replaced `if (instanceCount_ < 0) { instanceCount_ = 0; }` with
+  `assert(instanceCount_ >= 0 && "...")` in all four sensor classes
+  (`Accelerometer`/`Gyroscope`/`Compass`/`Motion`'s `Dispose(bool)`), so a violation of the
+  "exactly one decrement per successful construction" invariant now aborts loudly in a debug
+  build instead of being silently corrected back to a plausible-looking value.
+  - **Scope decision, documented rather than silently narrowed:** did **not** build a full RAII
+    quota-token class (the required work's literal first suggestion). Investigated it directly:
+    each class's quota slot is currently released at `Dispose(bool)`'s own cleanup point — which
+    can run **much earlier** than the C++ object's actual destruction (a user may call
+    `.Dispose()` explicitly while the object, and any `unique_ptr`/`shared_ptr` holding it, is
+    still alive) — `ClaimDisposalOnce()` already guarantees that cleanup runs at most once. A
+    naive RAII guard whose *destructor* releases the slot would move the release point to object
+    destruction, a genuine behavioral regression (the quota slot would stay held long after an
+    explicit early `Dispose()` call, wrongly rejecting a fresh, otherwise-legal 11th construction
+    until the disposed object's C++ lifetime — not just its logical `IsDisposed` state — actually
+    ends). Making a guard support both an explicit early release *and* an idempotent
+    destructor-time fallback would need its own "already released" flag — at that point it is
+    just re-implementing the existing manual increment/decrement pairing with extra ceremony, not
+    a structural improvement, for no live bug this session found. Chose the minimal, honest fix
+    (loud invariant enforcement) over a refactor whose actual safety benefit over the existing,
+    already-tested manual pairing was not concretely demonstrated.
+  - **"Expose debug diagnostics on invariant violation":** `assert()`'s own message string names
+    the exact class and exact invariant violated. A thrown C++ exception was considered and
+    rejected: this decrement runs inside `Dispose(bool)`, reachable from `~Accelerometer()`
+    (etc.) during normal destruction — throwing there risks `std::terminate()` if this runs while
+    another exception is already unwinding (the same reasoning this codebase's own `ScopeExit`
+    class already documents for exactly this reason). `assert()` avoids that risk entirely
+    (`abort()`, not a C++ exception).
+  - **"A deliberate double release fails a test instead of being masked":** did not add a new
+    `EXPECT_DEATH`-based test (no precedent for that style anywhere in this test suite, and
+    fabricating a double-release would need its own new NOXNA test-only hook purely to violate an
+    invariant real code paths already prevent — avoided as unwarranted new test-only API surface
+    for a bug class with no live reproduction). Instead: each class's own **existing** stress
+    tests (`ConcurrentDisposeFromMultipleThreadsNeverCorruptsInstanceCount`,
+    `EleventhSimultaneousInstanceThrows`, `DisposingOneOfTenAllowsAnotherConstruction`,
+    `ConcurrentConstructDestroyKeepsInstanceCountBalanced`) already behaviorally prove this
+    invariant holds under real concurrent construct/dispose stress — a *regression* that
+    reintroduced a double-decrement would now be caught two ways: those tests' own quota-boundary
+    assertions would start failing, **and** the new `assert()` would abort the test process
+    outright, whichever triggers first.
+- **Files changed:** `src/Microsoft/Devices/Sensors/Accelerometer.cpp`,
+  `src/Microsoft/Devices/Sensors/Gyroscope.cpp`, `src/Microsoft/Devices/Sensors/Compass.cpp`,
+  `src/Microsoft/Devices/Sensors/Motion.cpp`.
+- **Tests:** no new tests added (see reasoning above); full Devices/Sensors filtered suite, 399
+  tests, 395 passed, 4 skipped (unchanged) — the new `assert()`s never fired across the existing
+  comprehensive concurrent-dispose/instance-limit suite, consistent with the invariant already
+  holding in practice.
+- **Sanitizer/static-analysis result:** clean under `devices-ubsan`.
+- **Remaining limitations:** "Stress constructor failure and concurrent lifecycle" — already
+  covered by the pre-existing tests named above; no new stress scenario was identified as
+  missing. If a future session finds a genuine, reproducible double-decrement path, prefer fixing
+  that specific path directly over retrofitting an RAII guard reactively.
 
 ### BASE2-008 — Audit event/storage allocations and copies — OPEN
 

@@ -2,6 +2,8 @@
 
 #include "Microsoft/Devices/Sensors/Motion.hpp"
 
+#include <cassert>
+
 #include "Microsoft/Devices/Sensors/Detail/AndroidMotionBackend.hpp"
 #include "System/ObjectDisposedException.hpp"
 
@@ -317,10 +319,10 @@ namespace Microsoft::Devices::Sensors
         {
             std::lock_guard<std::mutex> lock(instanceCountMutex_);
             --instanceCount_;
-            if (instanceCount_ < 0)
-            {
-                instanceCount_ = 0;
-            }
+            // Task BASE2-007: see Accelerometer::Dispose(bool)'s identical
+            // fix for the full rationale.
+            assert(instanceCount_ >= 0
+                && "Motion::instanceCount_ underflowed -- Dispose(bool) ran more than once for one instance");
         }
 
         SensorBase<MotionReading>::Dispose(disposing);
