@@ -1,5 +1,5 @@
-$input a_position, a_normal, a_texcoord0, a_weight, a_indices
-$output v_texcoord0, v_color0, v_fogFactor, v_litRGB, v_specularRGB
+$input a_position, a_normal, a_texcoord0, a_weight, a_indices, a_color0
+$output v_texcoord0, v_color0, v_fogFactor, v_litRGB, v_specularRGB, v_vertexColor0
 
 #include <bgfx_shader.sh>
 
@@ -48,6 +48,8 @@ void main()
                      + skinMat[2].xyz * a_normal.z);
     v_texcoord0  = a_texcoord0;
     v_color0     = u_diffuseColor;
+    // CNB-67 (Phase 13C) Bgfx port: see vs_skinned3d.sc's identical comment.
+    v_vertexColor0 = a_color0;
     vec3 worldPos = mul(u_world, skinnedPos).xyz;
 
     vec3 E = normalize(u_eyePos.xyz - worldPos);

@@ -1,4 +1,4 @@
-$input v_texcoord0, v_normal, v_color0, v_fogFactor, v_worldPos
+$input v_texcoord0, v_normal, v_color0, v_fogFactor, v_worldPos, v_vertexColor0
 
 #include <bgfx_shader.sh>
 
@@ -19,6 +19,10 @@ uniform vec4 u_light0Specular;
 uniform vec4 u_light1Specular;
 uniform vec4 u_light2Specular;
 uniform vec4 u_specularColorPower; // xyz = material SpecularColor, w = SpecularPower
+// CNB-67 (Phase 13C) Bgfx port: reuses the existing shared u_vertexColorEnabled3D uniform
+// (already set by BasicEffect's no-texture/dual-texture/alpha-test-colored paths) rather than a
+// new one -- bgfx uniforms are shared by name across every program (Task 888 precedent).
+uniform vec4 u_vertexColorEnabled3D;
 
 void main()
 {
@@ -48,8 +52,17 @@ void main()
     // matching EasyGL's already-working (uEmissiveColor+uLight0Diffuse*NdotL)*uDiffuseColor.rgb.
     vec3 lit  = u_emissiveColor.xyz + u_ambientColor.xyz + lightSum;
     vec3 finalLight = mix(vec3(1.0, 1.0, 1.0), lit, u_lightingEnabled.x);
+    // CNB-67 (Phase 13C) Bgfx port: vc is (1,1,1,1) unless VertexColorEnabled is set, matching
+    // EasyGLGraphicsBackend::EnsureSkinnedProgram()'s vc gate exactly.
+    vec4 vc = mix(vec4(1.0, 1.0, 1.0, 1.0), v_vertexColor0, u_vertexColorEnabled3D.x);
     gl_FragColor = tex * v_color0 * vec4(finalLight, 1.0);
+    gl_FragColor.a *= vc.a;
     gl_FragColor.rgb += specularRGB * gl_FragColor.a;
+    // Vertex color modulates the whole combined diffuse+specular output, not just diffuse --
+    // applied after the specular add so VertexColorEnabled=true with a black vertex color
+    // genuinely zeroes the pixel (a specular highlight added afterward would otherwise leak
+    // through unmodulated). Mirrors EnsureSkinnedProgram()'s identical ordering/comment.
+    gl_FragColor.rgb *= vc.rgb;
     // Task 899: mix toward FogColor as v_fogFactor -> 0 (matches Task 888's established formula).
     gl_FragColor.rgb = mix(u_fogColor.xyz, gl_FragColor.rgb, v_fogFactor);
 }
