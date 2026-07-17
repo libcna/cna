@@ -1,4 +1,19 @@
 if(CNA_BUILD_TESTS)
+    # Task DEVPERF-001: fail fast with an actionable message rather than
+    # CMake's own generic "add_subdirectory given source ... which is not an
+    # existing directory" if this submodule was never initialized (e.g. a
+    # plain ZIP/tarball export of this source tree, which cannot contain
+    # submodule content at all, or a clone that skipped
+    # `git submodule update --init`) -- mirrors the equivalent guard for
+    # third_party/SDL/SDL_image/SDL_mixer in cmake/ThirdPartySDL.cmake.
+    if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/vendor/googletest/CMakeLists.txt")
+        message(FATAL_ERROR
+            "Missing vendored 'googletest' in ${CMAKE_CURRENT_SOURCE_DIR}/vendor. "
+            "Run: git submodule update --init "
+            "(a plain ZIP/tarball export of this repository cannot contain "
+            "submodule content -- clone with git and initialize submodules instead)")
+    endif()
+
     add_subdirectory(vendor/googletest)
 
     enable_testing()

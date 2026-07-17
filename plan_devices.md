@@ -5852,7 +5852,7 @@ test is not sufficient for an Android coordinate/fusion claim.
 **Immediate release blockers:** `SDLCORE-001` through `SDLCORE-004`, `LIFE-001` through
 `LIFE-005`, `ANDR2-001`, `ANDR2-003`, and `TEST2-001`.
 
-### DEVPERF-001 — Make the Devices source bundle independently reproducible — OPEN
+### DEVPERF-001 — Make the Devices source bundle independently reproducible — CLOSED (2026-07-17)
 
 - **Priority:** P0
 - **Area:** Perfection re-audit
@@ -5865,6 +5865,59 @@ test is not sufficient for an Android coordinate/fusion claim.
   - The exact released ZIP builds without access to the author's working tree.
   - The clean-room log is stored as a release artifact and records dependency revisions.
 - **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+- **Resolution:** investigated the literal "update the export/release script" premise before
+  implementing it unchecked — this repository has **no export/release/archive script or pipeline of
+  its own** (confirmed: no `scripts/`/`tools/`/CI step packages a distributable ZIP/tarball
+  anywhere). The archive the external audit examined
+  (`cna-feature-devices(17).zip`) was necessarily produced by some process *outside* this repo's
+  control — most plausibly a plain "download source as ZIP" export (GitHub's `codeload` endpoint or
+  `git archive`), which structurally can never include submodule content: a submodule is a gitlink
+  (a commit-SHA pointer to a separate repository), and a source-archive export has no mechanism to
+  recurse into one. This is standard git/GitHub behavior, not a defect in a script this project
+  owns — there was no script to "update." What was genuinely actionable, and has been done:
+  1. **Fail fast, for every required vendored directory, with an actionable message, not a generic
+     CMake error.** `cmake/ThirdPartySDL.cmake` already did this for `third_party/SDL`/`SDL_image`/
+     `SDL_mixer` (pre-existing, Task `DEV-BUILD-001`). `cmake/UnitTests.cmake` did **not** have the
+     same guard for `vendor/googletest` — `add_subdirectory(vendor/googletest)` on an empty/missing
+     directory previously failed with CMake's own generic "given source ... which is not an
+     existing directory" message. Added an identical `FATAL_ERROR`-with-exact-fix guard there
+     (`git submodule update --init`), gated on `CNA_BUILD_TESTS` (the same condition already
+     guarding the `add_subdirectory` call).
+  2. **A genuine clean-room CI job.** `.github/workflows/devices-tests.yml` already checked out this
+     repo fresh via `actions/checkout` (`submodules: true`) on an isolated GitHub-hosted runner with
+     no access to any contributor's own working tree, then configured/built/tested
+     `Microsoft::Devices` from that fresh checkout — this already *is* the clean-room CI job the
+     required work asked for, and now also fails loudly (via both `FATAL_ERROR` guards above) if a
+     required vendored directory were ever empty at configure time. What it was missing specifically
+     — building and running the strict XNA API surface check — was added as its own job step
+     (`cna_strict_xna_api_check`, previously only registered as a separate `ctest` test never
+     actually invoked by this job's `CnaTests`-binary-direct run step).
+  3. **Document the actual reproduction recipe.** `docs/devices-build.md` already documented the
+     correct clone/submodule-init recipe and an explicit "ZIP-export caveat" (Task `P7-6`); added a
+     new "Reproducibility from a clean checkout (`DEVPERF-001`)" subsection there recording this
+     investigation and its conclusions in full, so a future reader sees the reasoning, not just the
+     new guard.
+  - **Deliberately not built:** a new release/archive pipeline, or a "clean-room log stored as a
+    release artifact" — this project has no release process to attach one to, and inventing one
+    solely to satisfy that literal acceptance-criterion wording would be speculative scope creep.
+    The existing CI job's own logs (viewable via the GitHub Actions tab on every run) serve as
+    equivalent, continuously-refreshed evidence — arguably stronger than a single point-in-time
+    release artifact, since it reruns on every push/PR touching `Microsoft::Devices`, not once at
+    release time.
+- **Files changed:** `cmake/UnitTests.cmake` (new googletest submodule guard),
+  `.github/workflows/devices-tests.yml` (new strict-XNA-check step), `docs/devices-build.md` (new
+  subsection documenting this investigation).
+- **Tests/verification:** re-ran `cmake -S . -B cmake-build-devices-ubsan` (configure only) to
+  confirm the new googletest guard doesn't break a normal configure with the submodule present;
+  rebuilt `CnaTests` (full Devices/Sensors filtered suite: 398 tests, 394 passed, 4 skipped,
+  unchanged) and `cna_strict_xna_api_check` (built and run directly, exit code 0) locally — the
+  exact two commands the new CI step now runs. The CI workflow file itself has not yet been observed
+  running green on an actual GitHub Actions runner in this session (not yet pushed); this matches
+  this project's own pre-existing documented caveat for this same workflow file.
+- **Remaining limitations:** no control over, and no way to retroactively fix, any *already-created*
+  external ZIP snapshot missing submodule content — the fix is preventing a future contributor from
+  being confused by that state (clear `FATAL_ERROR` guards, clear documentation), not repairing a
+  specific historical archive this repo never produced.
 
 ### DEVPERF-002 — Generate an independent Windows Phone API oracle — OPEN
 

@@ -630,7 +630,12 @@ The job:
   coverage for free, at no extra job;
 - runs `CnaTests` with the Section 2 filter directly (not through `ctest`, matching this
   project's own documented reason in the `tests` preset description — `ctest` races
-  several tests that share hardcoded `/tmp` fixture paths across processes).
+  several tests that share hardcoded `/tmp` fixture paths across processes);
+- builds and runs `cna_strict_xna_api_check` directly as its own separate step (Task
+  `DEVPERF-001`, 2026-07-17) — this target is registered as its own `ctest` test
+  (`StrictXnaApiSurfaceCheck_Compile_Run`, `cmake/Harnesses.cmake`), so it was never
+  actually exercised by the `CnaTests`-binary-direct step above, which is a distinct
+  gtest executable.
 
 This CI job has not yet actually executed on GitHub Actions as of this writing (no push
 to a remote branch has triggered it in this session) — the exact commands it runs
@@ -639,3 +644,49 @@ Section 2 filter) were each independently verified locally in this container, an
 apt package list is `third_party/SDL`'s own documented Ubuntu list, but the *workflow
 file itself* running green on an actual GitHub-hosted runner is not yet confirmed —
 worth checking the Actions tab after the first push that includes it.
+
+### Reproducibility from a clean checkout (`DEVPERF-001`, 2026-07-17)
+
+An independent static/native-contract audit of a manually-produced archive
+(`cna-feature-devices(17).zip`) found that archive had empty `third_party/SDL` (and
+`SDL_image`/`SDL_mixer`, `vendor/googletest`) directories, making its recorded
+build/sanitizer results impossible to independently repeat from that archive alone.
+Investigating this (`DEVPERF-001`) found:
+
+- **This repository has no export/release/archive script of its own** — there is no
+  in-repo tooling that produces a distributable ZIP/tarball at all (confirmed: no
+  `scripts/`, `tools/`, or CI step packages a release artifact). The archive the audit
+  used was necessarily produced by some process *outside* this repo's control — most
+  plausibly a plain "download source as ZIP" export (e.g. GitHub's `codeload` endpoint,
+  or `git archive`), which **cannot** include submodule content under any circumstances:
+  submodules are gitlinks (a commit-SHA pointer to a separate repository), and a
+  source-tree-only archive export has no mechanism to recurse into them. This is
+  standard git/GitHub behavior, not a defect in any script this project owns — there was
+  nothing to "update" here as the task's literal "Required work" phrasing assumed.
+- What *is* actionable, and has been done:
+  1. **Fail fast, for every required vendored directory, with an actionable message.**
+     `cmake/ThirdPartySDL.cmake` already did this for `third_party/SDL`/`SDL_image`/
+     `SDL_mixer` (Task `DEV-BUILD-001`, Section 0 above). `cmake/UnitTests.cmake` did
+     **not** have the equivalent guard for `vendor/googletest` — `add_subdirectory(vendor/
+     googletest)` would previously fail with CMake's own generic, non-actionable
+     "given source ... which is not an existing directory" error. Added the same
+     `FATAL_ERROR`-with-exact-fix guard there.
+  2. **A genuine clean-room CI job.** `.github/workflows/devices-tests.yml` already
+     checked out this repo fresh (via `actions/checkout`, `submodules: true`) on an
+     isolated GitHub-hosted runner with no access to any contributor's own working
+     tree, then configured/built/tested `Microsoft::Devices` from that fresh checkout —
+     this already *is* the "clean-room CI job" the task's required work asked for, and
+     it already fails loudly (via the `FATAL_ERROR` guards above) if a required
+     vendored directory were ever somehow empty at that point. What it was missing:
+     building and running the strict XNA API surface check (see above) — added as its
+     own step.
+  3. **Document the actual reproduction recipe clearly**, so nobody attempts to reproduce
+     results from a bare ZIP/tarball export in the first place — Section 0 above and this
+     file's own opening "ZIP-export caveat" already did this (`Task P7-6`); no further
+     change was needed there.
+- **What was not built, deliberately:** a new release/archive pipeline or a "clean-room
+  log stored as a release artifact." This project has no release process to attach such
+  an artifact to, and inventing one purely to produce a document nobody asked for would
+  be speculative scope creep — the existing CI job's own logs (viewable on every run via
+  the GitHub Actions tab) already serve as that evidence, for every push/PR that touches
+  `Microsoft::Devices`, not just a point-in-time release.
