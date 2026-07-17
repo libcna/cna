@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
+#include <atomic>
+#include <functional>
 #include <memory>
 #include <thread>
 #include <vector>
@@ -39,10 +41,19 @@ namespace
         bool StartResult = true;
         bool StopCalled = false;
         int StartCallCount = 0;
+        int StopCallCount = 0;
         int SetSampleIntervalCallCount = 0;
         System::TimeSpan LastSetSampleInterval;
         ReadingCallback CapturedOnReading;
         CalibrationCallback CapturedOnCalibrationNeeded;
+
+        // Task TEST2-001 (LIFE-001/LIFE-002 regression coverage): if set,
+        // invoked synchronously from within Start(), after capturing the
+        // callbacks but *before* Start() returns -- lets a test exercise
+        // "the backend delivers a sample/calibration event, or a different
+        // thread calls Stop(), before Compass::Start() itself has committed
+        // Ready," without needing a real Android bridge.
+        std::function<void()> OnStartCalledBeforeReturn;
 
         [[nodiscard]] bool IsSupported() override
         {
@@ -58,12 +69,17 @@ namespace
             }
             CapturedOnReading = std::move(onReading);
             CapturedOnCalibrationNeeded = std::move(onCalibrationNeeded);
+            if (OnStartCalledBeforeReturn)
+            {
+                OnStartCalledBeforeReturn();
+            }
             return true;
         }
 
         void Stop() override
         {
             StopCalled = true;
+            ++StopCallCount;
         }
 
         void SetSampleInterval(const System::TimeSpan& timeBetweenUpdates) override
@@ -711,4 +727,116 @@ TEST(CompassTests, ConcurrentSetTimeBetweenUpdatesAndSetBackendForTestingDoesNot
     {
         thread.join();
     }
+}
+
+// Task LIFE-002 (2026-07-17, external audit `audit_devices_2026-07-17.md`):
+// a backend that synchronously invokes its reading callback from within its
+// own Start() call -- before Start() returns and commits Ready -- must be
+// handled safely: no deadlock, no corrupted state, and the reading is
+// genuinely published. Previously Start() held mutex_ for its entire body,
+// so this exact scenario would have been merely "safe" by accident (no
+// reentrant call in the callback needed the same lock); this test exists to
+// pin the behavior down as a permanent regression test now that the lock is
+// released before calling into the backend.
+TEST(CompassTests, SynchronousReadingCallbackDuringStartIsHandledSafely)
+{
+    Compass c;
+    auto fakeOwned = std::make_unique<FakeCompassBackend>();
+    FakeCompassBackend* fake = fakeOwned.get();
+    c.SetBackendForTesting(std::move(fakeOwned));
+
+    bool invoked = false;
+    CompassReading received;
+    c.CurrentValueChanged += [&](System::Object*, const SensorReadingEventArgs<CompassReading>& args)
+    {
+        invoked = true;
+        received = args.getSensorReadingProperty();
+    };
+
+    const CompassReading synthetic(
+        5.0, 42.0, Vector3(1.0f, 2.0f, 3.0f), System::DateTimeOffset::getUtcNowProperty(), 42.0);
+    fake->OnStartCalledBeforeReturn = [fake, synthetic]()
+    {
+        fake->CapturedOnReading(synthetic);
+    };
+
+    EXPECT_NO_THROW(c.Start());
+
+    EXPECT_TRUE(invoked);
+    EXPECT_EQ(received.getMagneticHeadingProperty(), 42.0);
+    EXPECT_EQ(c.getStateProperty(), SensorState::Ready);
+}
+
+// Task LIFE-001 (2026-07-17): a concurrent Stop() call (from another thread)
+// while Start() is still inside its own backend_->Start() call must not
+// deadlock (the prior design held mutex_ across the entire backend_->Start()
+// call, so a concurrent Stop() would have blocked on that same lock for the
+// whole duration instead of proceeding independently), and must leave the
+// instance in a consistent, fully-stopped state once both calls return.
+// backend_->Stop() is called twice here (once by the superseding Stop(),
+// once by Start()'s own orphaned-attempt cleanup) -- both against the same
+// idempotent fake, mirroring the real AndroidSensorBridge/AndroidCompassBackend
+// contract that repeated Stop() calls are always safe.
+TEST(CompassTests, ConcurrentStopDuringStartDoesNotDeadlock)
+{
+    Compass c;
+    auto fakeOwned = std::make_unique<FakeCompassBackend>();
+    FakeCompassBackend* fake = fakeOwned.get();
+    c.SetBackendForTesting(std::move(fakeOwned));
+
+    fake->OnStartCalledBeforeReturn = [&c]()
+    {
+        std::thread stopper([&c]() { c.Stop(); });
+        stopper.join();
+    };
+
+    // Start() itself still reports its own genuine outcome (the fake's
+    // Start() returned true) even though a concurrent Stop() superseded it
+    // before Start() could commit Ready.
+    EXPECT_NO_THROW(c.Start());
+
+    EXPECT_EQ(fake->StopCallCount, 2);
+    EXPECT_EQ(c.getStateProperty(), SensorState::Disabled);
+}
+
+// Task LIFE-005 (2026-07-17): mirrors the exact hazard the audit found in
+// AndroidCompassBackend::HandleMagneticFieldSample() -- a CurrentValueChanged
+// handler fully destroys (not just Dispose()s) the owning Compass; a
+// *separately captured* calibration callback, invoked afterward exactly as
+// the real backend does, must not touch the destroyed object.
+TEST(CompassTests, DestroyingOwnerFromCurrentValueChangedThenFiringCalibrateDoesNotCrash)
+{
+    auto compass = std::make_unique<Compass>();
+    auto fakeOwned = std::make_unique<FakeCompassBackend>();
+    FakeCompassBackend* fake = fakeOwned.get();
+    compass->SetBackendForTesting(std::move(fakeOwned));
+    compass->Start();
+
+    bool calibrateInvoked = false;
+    compass->Calibrate += [&calibrateInvoked](System::Object*, const CalibrationEventArgs&)
+    {
+        calibrateInvoked = true;
+    };
+
+    bool handlerRan = false;
+    compass->CurrentValueChanged += [&](System::Object*, const SensorReadingEventArgs<CompassReading>&)
+    {
+        handlerRan = true;
+        compass.reset(); // full destruction, not just Dispose(), from within this callback
+    };
+
+    ASSERT_TRUE(static_cast<bool>(fake->CapturedOnReading));
+    ASSERT_TRUE(static_cast<bool>(fake->CapturedOnCalibrationNeeded));
+    const CompassReading synthetic(
+        5.0, 42.0, Vector3(1.0f, 2.0f, 3.0f), System::DateTimeOffset::getUtcNowProperty(), 42.0);
+
+    // Mirrors AndroidCompassBackend::HandleMagneticFieldSample()'s own
+    // ordering exactly: the calibration callback is captured *before* the
+    // reading callback runs, then invoked *after* it.
+    auto calibrationCallback = fake->CapturedOnCalibrationNeeded;
+    EXPECT_NO_THROW(fake->CapturedOnReading(synthetic));
+    EXPECT_TRUE(handlerRan);
+    EXPECT_NO_THROW(calibrationCallback());
+
+    EXPECT_FALSE(calibrateInvoked); // the owner was already gone before this fired
 }

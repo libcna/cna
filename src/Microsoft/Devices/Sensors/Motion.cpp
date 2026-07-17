@@ -27,7 +27,7 @@ namespace Microsoft::Devices::Sensors
     SensorState Motion::getStateProperty() const
     {
         System::ObjectDisposedException::ThrowIf(getIsDisposedProperty(), "Motion");
-        std::lock_guard<std::mutex> lock(mutex_);
+        std::lock_guard<std::mutex> lock(control_->mutex);
         return state_;
     }
 
@@ -35,6 +35,8 @@ namespace Microsoft::Devices::Sensors
         : state_(SensorState::NotSupported),
           started_(false)
     {
+        control_->owner = this;
+
         // Task P6-1: previously unguarded, a real data race between
         // concurrent constructors/Dispose() calls on this shared static
         // counter.
@@ -60,12 +62,14 @@ namespace Microsoft::Devices::Sensors
 
         // Task ANDROID-BRIDGE-002/DEV-AUD-006: see Compass::Compass()'s
         // identical fix for the full rationale (captures the new interval
-        // before locking mutex_, closing a race between this handler and
-        // SetBackendForTesting() on the shared backend_ pointer).
+        // before locking the lock, closing a race between this handler and
+        // SetBackendForTesting() on the shared backend_ pointer). Runs on
+        // `this` directly, not through the control block -- see
+        // Compass::Compass()'s identical comment for why that's safe here.
         TimeBetweenUpdatesChanged += [this](System::Object*, const System::EventArgs&)
         {
             const System::TimeSpan newInterval = getTimeBetweenUpdatesProperty();
-            std::lock_guard<std::mutex> lock(mutex_);
+            std::lock_guard<std::mutex> lock(control_->mutex);
             if (backend_)
             {
                 backend_->SetSampleInterval(newInterval);
@@ -85,59 +89,188 @@ namespace Microsoft::Devices::Sensors
     {
         System::ObjectDisposedException::ThrowIf(getIsDisposedProperty(), "Motion");
 
-        // Repeated Start/Stop safety: see Compass::Start()'s identical fix
-        // for the full rationale -- must run before touching backend_ at
-        // all.
-        std::lock_guard<std::mutex> lock(mutex_);
-
-        if (started_)
+        // Task LIFE-001/LIFE-002/LIFE-003/LIFE-005: see Compass::Start()'s
+        // identical fix for the full rationale (reserve under the lock,
+        // release before calling into backend_, generation-gated callbacks
+        // capturing control_ instead of `this`, orphaned-start cleanup,
+        // in-flight counting for SetBackendForTesting()'s benefit).
+        std::uint64_t myGeneration;
+        Detail::IMotionBackend* backendPtr;
         {
-            throw SensorFailedException("Motion is already started.");
+            std::lock_guard<std::mutex> lock(control_->mutex);
+
+            if (started_ || transitioning_)
+            {
+                throw SensorFailedException("Motion is already started.");
+            }
+
+            if (!backend_ || !backend_->IsSupported())
+            {
+                state_ = SensorState::NotSupported;
+                throw SensorFailedException("Motion is not supported on this platform.");
+            }
+
+            transitioning_ = true;
+            myGeneration = ++control_->generation;
+            backendPtr = backend_.get();
+            ++backendCallsInFlight_;
         }
 
-        if (backend_ && backend_->IsSupported())
+        bool started = false;
+        try
         {
-            const bool started = backend_->Start(
+            started = backendPtr->Start(
                 getTimeBetweenUpdatesProperty(),
-                [this](const MotionReading& reading)
+                [control = control_, myGeneration](const MotionReading& reading)
                 {
-                    setIsDataValidProperty(true);
-                    setCurrentValueProperty(reading);
+                    Motion* owner;
+                    {
+                        std::lock_guard<std::mutex> lock(control->mutex);
+                        if (control->generation != myGeneration || control->owner == nullptr)
+                        {
+                            return;
+                        }
+                        owner = control->owner;
+                    }
+                    owner->setIsDataValidProperty(true);
+                    owner->setCurrentValueProperty(reading);
                 },
-                [this]()
+                [control = control_, myGeneration]()
                 {
-                    if (!Calibrate.Empty())
+                    Motion* owner;
+                    {
+                        std::lock_guard<std::mutex> lock(control->mutex);
+                        if (control->generation != myGeneration || control->owner == nullptr)
+                        {
+                            return;
+                        }
+                        owner = control->owner;
+                    }
+                    if (!owner->Calibrate.Empty())
                     {
                         CalibrationEventArgs args;
-                        Calibrate.Raise(static_cast<System::Object*>(this), args);
+                        owner->Calibrate.Raise(static_cast<System::Object*>(owner), args);
                     }
                 });
-
-            if (started)
+        }
+        catch (...)
+        {
+            std::lock_guard<std::mutex> lock(control_->mutex);
+            --backendCallsInFlight_;
+            if (backendCallsInFlight_ == 0)
             {
+                backendQuiescent_.notify_all();
+            }
+            if (control_->generation == myGeneration)
+            {
+                transitioning_ = false;
+                state_ = SensorState::NotSupported;
+                transitionFinished_.notify_all();
+            }
+            throw;
+        }
+
+        bool orphanedStart = false;
+        {
+            std::lock_guard<std::mutex> lock(control_->mutex);
+            --backendCallsInFlight_;
+            if (backendCallsInFlight_ == 0)
+            {
+                backendQuiescent_.notify_all();
+            }
+
+            if (control_->generation != myGeneration)
+            {
+                orphanedStart = started;
+            }
+            else if (started)
+            {
+                transitioning_ = false;
                 started_ = true;
                 state_ = SensorState::Ready;
-                return;
+                transitionFinished_.notify_all();
+            }
+            else
+            {
+                transitioning_ = false;
+                state_ = SensorState::NotSupported;
+                transitionFinished_.notify_all();
             }
         }
 
-        state_ = SensorState::NotSupported;
-        throw SensorFailedException("Motion is not supported on this platform.");
+        if (orphanedStart)
+        {
+            {
+                std::lock_guard<std::mutex> lock(control_->mutex);
+                ++backendCallsInFlight_;
+            }
+            backendPtr->Stop();
+            {
+                std::lock_guard<std::mutex> lock(control_->mutex);
+                --backendCallsInFlight_;
+                if (backendCallsInFlight_ == 0)
+                {
+                    backendQuiescent_.notify_all();
+                }
+            }
+        }
+
+        if (!started)
+        {
+            throw SensorFailedException("Motion is not supported on this platform.");
+        }
     }
 
     void Motion::Stop()
     {
         System::ObjectDisposedException::ThrowIf(getIsDisposedProperty(), "Motion");
 
-        std::lock_guard<std::mutex> lock(mutex_);
-
-        if (backend_)
+        // Task LIFE-001: see Compass::Stop()'s identical fix for the full
+        // rationale.
+        Detail::IMotionBackend* backendPtr = nullptr;
         {
-            backend_->Stop();
+            std::unique_lock<std::mutex> lock(control_->mutex);
+
+            if (!started_ && !transitioning_)
+            {
+                // Nothing live to stop, but Stop()'s own established
+                // contract (matching the pre-Task-LIFE-001 implementation)
+                // still unconditionally transitions state_ to Disabled,
+                // even when Start() was never called or never succeeded.
+                state_ = SensorState::Disabled;
+                return;
+            }
+
+            if (!stopClaimed_)
+            {
+                stopClaimed_ = true;
+                transitioning_ = true;
+                ++control_->generation;
+                ++backendCallsInFlight_;
+                backendPtr = backend_.get();
+            }
+            else
+            {
+                transitionFinished_.wait(lock, [this] { return !transitioning_; });
+                return;
+            }
         }
 
-        started_ = false;
-        state_ = SensorState::Disabled;
+        backendPtr->Stop();
+
+        {
+            std::lock_guard<std::mutex> lock(control_->mutex);
+            --backendCallsInFlight_;
+            if (backendCallsInFlight_ == 0)
+            {
+                backendQuiescent_.notify_all();
+            }
+            transitioning_ = false;
+            stopClaimed_ = false;
+            started_ = false;
+            state_ = SensorState::Disabled;
+        }
+        transitionFinished_.notify_all();
     }
 
     void Motion::Dispose(bool disposing)
@@ -156,16 +289,14 @@ namespace Microsoft::Devices::Sensors
             return;
         }
 
-        bool wasStarted;
+        // Task LIFE-002/LIFE-003/LIFE-005: see Compass::Dispose(bool)'s
+        // identical fix for the full rationale.
         {
-            std::lock_guard<std::mutex> lock(mutex_);
-            wasStarted = started_;
+            std::lock_guard<std::mutex> lock(control_->mutex);
+            control_->owner = nullptr;
         }
 
-        if (wasStarted)
-        {
-            Stop();
-        }
+        Stop();
 
         {
             std::lock_guard<std::mutex> lock(instanceCountMutex_);
@@ -183,13 +314,15 @@ namespace Microsoft::Devices::Sensors
     {
         // Enforced, not just documented: see Compass::SetBackendForTesting()'s
         // identical fix for the full rationale.
-        std::lock_guard<std::mutex> lock(mutex_);
+        std::unique_lock<std::mutex> lock(control_->mutex);
 
-        if (started_)
+        if (started_ || transitioning_)
         {
             throw SensorFailedException(
                 "Cannot replace the motion backend while data acquisition is started. Call Stop() first.");
         }
+
+        backendQuiescent_.wait(lock, [this] { return backendCallsInFlight_ == 0; });
 
         backend_ = std::move(backend);
         setIsSupportedProperty(backend_ ? backend_->IsSupported() : getIsSupportedProperty());

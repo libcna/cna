@@ -5837,3 +5837,1414 @@ this plan's tasks have been carried out, verified by a real (non-Android-hardwar
 run, and recorded with dated, specific resolution notes — treat each task's own CLOSED/
 OPEN status and its own resolution note as the source of truth, not this line, in either
 direction.
+
+---
+
+## 16. Independent perfection re-audit backlog (2026-07-17)
+
+This section was added after an independent static/native-contract audit of
+`cna-feature-devices(17).zip`. It intentionally reopens any area whose earlier entry was
+marked CLOSED while still retaining a hardware-unverified or explicitly unsupported
+lifetime boundary. For this section, **CLOSED requires implementation, a regression test,
+and the platform evidence named in the acceptance criteria**. A host-only self-consistency
+test is not sufficient for an Android coordinate/fusion claim.
+
+**Immediate release blockers:** `SDLCORE-001` through `SDLCORE-004`, `LIFE-001` through
+`LIFE-005`, `ANDR2-001`, `ANDR2-003`, and `TEST2-001`.
+
+### DEVPERF-001 — Make the Devices source bundle independently reproducible — OPEN
+
+- **Priority:** P0
+- **Area:** Perfection re-audit
+- **Problem:** The delivered archive has empty required submodule directories, so none of its recorded build/sanitizer results can be independently repeated.
+- **Required work:**
+  - Update the export/release script to include initialized submodules or a deterministic dependency-fetch manifest.
+  - Add a clean-room CI job that unpacks the produced archive, configures every Devices preset, builds the Devices test target and runs the strict-XNA check.
+  - Fail the archive job if a required vendored directory is empty.
+- **Acceptance criteria:**
+  - The exact released ZIP builds without access to the author's working tree.
+  - The clean-room log is stored as a release artifact and records dependency revisions.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### DEVPERF-002 — Generate an independent Windows Phone API oracle — OPEN
+
+- **Priority:** P1
+- **Area:** Perfection re-audit
+- **Problem:** The current API matrix is extensive but mostly hand-maintained and partly based on prior audit notes.
+- **Required work:**
+  - Generate a machine-readable manifest from archived reference assemblies or reflection metadata for every public type/member/signature/visibility/obsolete attribute in scope.
+  - Generate a second manifest from CNA headers.
+  - Diff them in CI with an explicit allowlist for C++-required destructors and `NOXNA` extensions.
+- **Acceptance criteria:**
+  - A missing, extra, wrong-visibility or wrong-signature member fails CI.
+  - The oracle artifact and provenance are committed/documented.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### DEVPERF-003 — Build a behavioral compatibility oracle — OPEN
+
+- **Priority:** P1
+- **Area:** Perfection re-audit
+- **Problem:** Surface equality does not prove state, exception or event behavior.
+- **Required work:**
+  - Create a small C# Windows Phone reference harness (or preserved reference results) covering constructor limits, Start/Stop/Dispose, unsupported devices, CurrentValue before data, TimeBetweenUpdates edge values and event order.
+  - Port the same scenarios to CNA tests.
+  - Record intentional divergences explicitly as `NOXNA` policy decisions.
+- **Acceptance criteria:**
+  - Every compatibility test has a reference result and CNA result.
+  - No behavior is called exact merely because MonoGame or CNA's own tests agree with CNA.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### DEVPERF-004 — Define one normative callback/threading contract — OPEN
+
+- **Priority:** P1
+- **Area:** Perfection re-audit
+- **Problem:** Current comments alternate between unknown-thread callbacks, swallowed exceptions and unsupported destruction boundaries.
+- **Required work:**
+  - Document callback thread, ordering, reentrancy, destruction and exception semantics for all five events.
+  - Decide which details must match Windows Phone and which are CNA guarantees.
+  - Turn every guarantee into executable tests.
+- **Acceptance criteria:**
+  - No public callback behavior is left as an implicit implementation accident.
+  - Real and synthetic paths follow the same documented exception/order policy.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### DEVPERF-005 — Create a structured native error/diagnostic channel — OPEN
+
+- **Priority:** P1
+- **Area:** Perfection re-audit
+- **Problem:** Many native failures are silently converted to false/no-op and callback exceptions are swallowed.
+- **Required work:**
+  - Add an internal error record with backend, operation, native code/message, sensor/device id, timestamp and severity.
+  - Expose it through logging and an optional NOXNA diagnostic callback/counter without throwing across C callbacks.
+  - Cover SDL and Android failure paths.
+- **Acceptance criteria:**
+  - Every ignored native return value is either intentionally ignored with a metric or converted to a state/error.
+  - Tests can fault-inject and assert the exact diagnostic.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### SDLCORE-001 — Move SDL sensor and haptic init/quit to a main-thread lifecycle service — OPEN
+
+- **Priority:** P0
+- **Area:** Perfection re-audit
+- **Problem:** Serialization by mutex does not meet SDL_InitSubSystem's main-thread requirement; haptics are not thread-safe.
+- **Required work:**
+  - Introduce a process-wide SDL subsystem coordinator owned by CNA's main/platform thread.
+  - Marshal SENSOR/HAPTIC init, quit, enumeration, open and close operations according to SDL's thread contract.
+  - Define shutdown ordering relative to global/static destructors and SDL_Quit.
+- **Acceptance criteria:**
+  - No Devices call invokes SDL_InitSubSystem/SDL_QuitSubSystem from an arbitrary worker/caller thread.
+  - A thread-asserting fake proves all required calls run on the platform thread.
+  - TSan and shutdown stress are clean.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### SDLCORE-002 — Use the exact SDL_EventFilter signature and calling convention — OPEN
+
+- **Priority:** P0
+- **Area:** Perfection re-audit
+- **Problem:** The callback currently uses `void*` for the event and is forced through reinterpret_cast.
+- **Required work:**
+  - Declare `SensorEventWatch(void*, SDL_Event*)` with the exact `SDL_EventFilter` type/calling convention.
+  - Remove both reinterpret_cast operations.
+  - Add a compile-time `static_assert(std::is_same_v<...>)` or direct assignment check.
+- **Acceptance criteria:**
+  - The code compiles without a function-pointer cast.
+  - A compile check fails if the SDL callback signature changes.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### SDLCORE-003 — Handle SDL_AddEventWatch failure transactionally — OPEN
+
+- **Priority:** P0
+- **Area:** Perfection re-audit
+- **Problem:** The return value is ignored and registration is marked successful unconditionally.
+- **Required work:**
+  - Check the bool result and capture SDL_GetError on failure.
+  - Do not mark the watch registered unless installation succeeds.
+  - Rollback the just-started instance/Ready state or fail Start with the correct exception.
+- **Acceptance criteria:**
+  - Fault-injected registration failure leaves no started instance and no false Ready state.
+  - A later retry can succeed cleanly.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### SDLCORE-004 — Replace raw-pointer dispatch membership with generation-bearing registrations — OPEN
+
+- **Priority:** P0
+- **Area:** Perfection re-audit
+- **Problem:** Pointer-value revalidation permits ABA address reuse.
+- **Required work:**
+  - Represent each started registration with a stable shared control node containing object pointer, generation, active flag and in-flight count.
+  - Snapshot control nodes, not raw object addresses.
+  - Invalidate a node before object destruction and wait only on that node's in-flight callbacks.
+- **Acceptance criteria:**
+  - A deterministic allocator-reuse test cannot deliver an old event to a new object at the same address.
+  - Cross-instance disposal and self-disposal remain deadlock-free.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### SDLCORE-005 — Add SDL sensor hotplug/removal/reopen handling — OPEN
+
+- **Priority:** P1
+- **Area:** Perfection re-audit
+- **Problem:** The first opened handle and id are cached indefinitely.
+- **Required work:**
+  - Handle sensor-added/removed events or validate connection before use.
+  - On removal, stop delivery, invalidate data, transition State appropriately and attempt policy-driven reacquisition.
+  - Do not route an event from a replacement device using a stale id.
+- **Acceptance criteria:**
+  - Automated fake-device tests cover remove/re-add/default-device change.
+  - No stale SDL_Sensor handle is used after removal.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### SDLCORE-006 — Define deterministic physical sensor selection — OPEN
+
+- **Priority:** P2
+- **Area:** Perfection re-audit
+- **Problem:** The implementation opens the first matching enumerated sensor.
+- **Required work:**
+  - Document whether first/default/non-portable type is intended.
+  - Prefer stable default-device semantics and record selected id/name/type.
+  - Add a NOXNA diagnostic/device selection seam only if needed without changing strict API.
+- **Acceptance criteria:**
+  - Multiple matching devices produce deterministic, tested selection.
+  - Selection survives enumeration-order changes or explicitly documents them.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### SDLCORE-007 — Use acquisition timestamps from SDL sensor events — OPEN
+
+- **Priority:** P1
+- **Area:** Perfection re-audit
+- **Problem:** Readings are stamped at dispatch time rather than acquisition time where SDL supplies event timestamps.
+- **Required work:**
+  - Verify the exact SDL sensor timestamp unit/epoch for the pinned SDL revision.
+  - Convert it through a calibrated monotonic-to-DateTimeOffset clock bridge.
+  - Guarantee nondecreasing timestamps per sensor, including wall-clock adjustments.
+- **Acceptance criteria:**
+  - Injected delayed dispatch preserves original sample ordering/time.
+  - Long-running clock-step tests do not move sensor timestamps backward.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### SDLCORE-008 — Remove avoidable allocation and linear work from SDL event dispatch — OPEN
+
+- **Priority:** P2
+- **Area:** Perfection re-audit
+- **Problem:** Every event copies vectors and mutates/searches thread-id vectors.
+- **Required work:**
+  - Benchmark allocations and lock hold time at realistic and worst-case rates/instance counts.
+  - Use fixed/stable registration nodes and in-flight counters instead of per-callback thread-id vector push/find/erase where possible.
+  - Preallocate unavoidable snapshots or use copy-on-write registration lists.
+- **Acceptance criteria:**
+  - Steady-state dispatch performs zero heap allocations or meets a documented strict budget.
+  - p50/p95/p99 callback latency and lock contention stay below recorded budgets.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### SDLCORE-009 — Make real callback exception handling observable and consistent — OPEN
+
+- **Priority:** P1
+- **Area:** Perfection re-audit
+- **Problem:** Exceptions are silently swallowed only on native paths.
+- **Required work:**
+  - Choose propagate-to-owner-error, log-and-continue, unsubscribe-failing-handler or terminate policy; never unwind through SDL C frames.
+  - Capture exception_ptr and report through the diagnostic channel.
+  - Apply the same semantics to synthetic dispatch tests.
+- **Acceptance criteria:**
+  - A throwing handler never corrupts bookkeeping and always produces an observable result.
+  - Subsequent instances/updates behave according to the documented policy.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### SDLCORE-010 — Benchmark software throttling cost and power — OPEN
+
+- **Priority:** P2
+- **Area:** Perfection re-audit
+- **Problem:** SDL has no rate setter here, so every native event is still processed before being dropped.
+- **Required work:**
+  - Measure CPU, allocations and wakeups at native max rate for requested intervals from 2 ms to seconds.
+  - Where possible, use SDL/native hints or a backend-specific lower source rate; otherwise optimize early rejection.
+  - Record desktop/mobile power implications.
+- **Acceptance criteria:**
+  - A performance report defines supported rate/instance budgets.
+  - Dropped events do not construct reading/event objects or snapshot subscribers unnecessarily.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### SDLCORE-011 — Audit process shutdown and static destruction ordering — OPEN
+
+- **Priority:** P1
+- **Area:** Perfection re-audit
+- **Problem:** Function-local subsystem statics and VibrateController's singleton can destruct after SDL/platform teardown.
+- **Required work:**
+  - Define explicit Devices shutdown invoked before SDL_Quit.
+  - Make late destructors idempotent and avoid native calls after the coordinator is closed.
+  - Stress normal exit, exception exit and plugin/library unload where supported.
+- **Acceptance criteria:**
+  - No SDL call occurs after global SDL shutdown.
+  - ASan/TSan shutdown loops are clean.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### SDLCORE-012 — Share haptic serialization process-wide — OPEN
+
+- **Priority:** P2
+- **Area:** Perfection re-audit
+- **Problem:** SdlHapticVibrateBackend protects only itself, while SDL documents haptics as not thread-safe and test/backend replacement can overlap destruction/probes.
+- **Required work:**
+  - Route all haptic calls through the SDL lifecycle coordinator or a global haptic mutex on the correct thread.
+  - Cover joystick correlation calls that also touch joystick/haptic subsystems.
+  - Document lock order with GamePad vibration.
+- **Acceptance criteria:**
+  - Concurrent VibrateController/GamePad haptic operations do not race or deadlock.
+  - TSan/fault-injection tests cover the shared lock order.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### LIFE-001 — Never hold Compass/Motion owner mutex across backend calls — CLOSED (2026-07-17)
+
+- **Priority:** P0
+- **Area:** Perfection re-audit
+- **Problem:** Backend Start/Stop may block, spawn/join threads and invoke callbacks.
+- **Required work:**
+  - Refactor Start/Stop/Dispose/SetBackendForTesting into two-phase operations: reserve a lifecycle transition under lock, release lock, call backend, then commit/rollback under lock.
+  - Use a generation/cancellation token so callbacks from an old transition are rejected.
+  - Do not call user code while any owner lifecycle mutex is held.
+- **Acceptance criteria:**
+  - A callback that calls getState/Stop/Dispose during concurrent external Stop cannot deadlock.
+  - A backend that synchronously invokes callbacks from Start is safely handled.
+- **Resolution:** `Compass`/`Motion::Start()`/`Stop()`/`SetBackendForTesting()` rewritten as
+  two-phase operations, mirroring each other exactly. `Start()` reserves under
+  `control_->mutex` (checks `started_`/`transitioning_`, throws "already started" immediately
+  without blocking if either is true — a strict improvement over the prior single-lock design,
+  where a second caller blocked on the mutex for the entire `backend_->Start()` call before
+  reaching the same exception), captures a raw `backendPtr`, bumps a `generation`, releases the
+  lock, then calls `backendPtr->Start(...)` with **no lock held**. `Stop()` mirrors this with a
+  `stopClaimed_` flag (mirrors `Detail::AndroidSensorBridge`'s own `reclaimClaimed_` pattern,
+  Task `ANDROID-BRIDGE-005`) so concurrent `Stop()` callers serialize correctly: the first
+  claims and calls `backend_->Stop()` unlocked; every other caller waits on a condition
+  variable for the winner to finish, rather than also calling the backend concurrently. A
+  `Start()` attempt superseded by a concurrent `Stop()` while its own `backend_->Start()` call
+  was still in flight ("orphaned start") calls `backend_->Stop()` on its own captured
+  `backendPtr` afterward, so nothing it started is left running unmanaged.
+- **Evidence:** `src/Microsoft/Devices/Sensors/Compass.cpp`, `src/Microsoft/Devices/Sensors/Motion.cpp`,
+  `include/Microsoft/Devices/Sensors/Compass.hpp`, `include/Microsoft/Devices/Sensors/Motion.hpp`.
+  New regression tests `CompassTests`/`MotionTests.ConcurrentStopDuringStartDoesNotDeadlock`
+  (spawns a real thread calling `Stop()` from inside the fake backend's own `Start()`, before
+  `Start()` returns — deterministically reproduces the exact race this task closes). Full
+  Devices/Sensors suite green (see `VERIFY-001`'s own running count); `devices-tsan` run
+  requested as part of `TEST2-001`'s own evidence (see that task). Real-hardware evidence for
+  the Android-only backend call paths themselves remains outstanding — see `ANDR2-015`.
+
+### LIFE-002 — Gate callbacks until Start commits — CLOSED (2026-07-17)
+
+- **Priority:** P0
+- **Area:** Perfection re-audit
+- **Problem:** Android or injected backends can deliver before Compass/Motion Start returns and before started_/State are committed.
+- **Required work:**
+  - Create a start-generation control block with Starting/Ready/Stopping states.
+  - Buffer or discard early samples according to the verified reference behavior.
+  - Publish Ready and enable callbacks atomically from the caller's perspective.
+- **Acceptance criteria:**
+  - Tests cover synchronous reading and calibration callbacks inside backend Start.
+  - No handler observes contradictory State/started status or deadlocks by re-entering lifecycle methods.
+- **Resolution:** Closed together with `LIFE-001`/`LIFE-003` (one architectural change resolves
+  all three, per this plan's own combine-related-work guidance). Every reading/calibration
+  callback captures the owner's `generation` value by copy at `Start()` time; before touching
+  the owner, it locks the shared control block and checks `generation_ == myGeneration` —
+  a callback from a superseded (stopped, or re-started) session safely no-ops instead of
+  publishing stale data or observing a state that doesn't match its own session. Deliberately
+  **not** fully solved: exactly what public `SensorState` value a pre-commit callback observes
+  if it calls `getStateProperty()` reentrantly (a WP7 behavioral-fidelity question, not a safety
+  one) is left to `BASE2-003`'s own oracle work, not invented here.
+- **Evidence:** same files as `LIFE-001`. New regression tests
+  `CompassTests`/`MotionTests.SynchronousReadingCallbackDuringStartIsHandledSafely` (the fake
+  backend invokes its captured reading callback synchronously, before its own `Start()` returns
+  — proves the reading is genuinely published and `state_` still correctly reaches `Ready`
+  afterward). Devices/Sensors suite green; TSan requested via `TEST2-001`.
+
+### LIFE-003 — Eliminate raw owner captures from native callbacks — CLOSED (2026-07-17)
+
+- **Priority:** P0
+- **Area:** Perfection re-audit
+- **Problem:** Backend/bridge callbacks capture parent `this` across asynchronous execution.
+- **Required work:**
+  - Move callback-visible state to shared control blocks and capture weak_ptr/generation tokens.
+  - Lock the token before dispatch and abort if owner is stopping/destroyed.
+  - Drain or invalidate callbacks before destructing event objects/backend state.
+- **Acceptance criteria:**
+  - Deleting Compass/Motion from CurrentValueChanged or Calibrate is supported and ASan-clean.
+  - No callback can access a later object generation.
+- **Resolution:** New `Detail::SensorOwnerControlBlock<TOwner>`
+  (`include/Microsoft/Devices/Sensors/Detail/SensorOwnerControlBlock.hpp`) — a small,
+  separately heap-allocated, `shared_ptr`-held struct holding `mutex`/`generation`/`owner`
+  (a raw `TOwner*`, nulled by the owner's own `Dispose(true)` before any other teardown step).
+  Every `Compass`/`Motion` reading/calibration lambda captures a **copy of the `shared_ptr`**
+  (never `this`, never a raw owner pointer) plus its own `generation`; it locks the block,
+  checks `generation` and `owner != nullptr`, and only then reads the (still-valid) owner
+  pointer to call into it — after releasing the lock (Task LIFE-001's own requirement: never
+  call user code while holding this lock). A `backendCallsInFlight_` counter (also in the
+  owner, guarded by the same lock) additionally makes `SetBackendForTesting()` wait for any
+  in-flight `backend_->Start()`/`Stop()` call — including a "orphaned start" cleanup call
+  running *after* `transitioning_` has already been reset by a superseding `Stop()` — to finish
+  before it swaps or destroys the `backend_` object those calls are still using.
+  - **Documented, accepted remaining boundary (consistent with this codebase's own existing
+    `AndroidSensorBridge`-level precedent, `ANDROID-BRIDGE-006`):** a callback that has already
+    passed its generation/owner check and is *currently*, on another thread, calling into the
+    owner at the exact instant a *different* thread completes that owner's destruction remains
+    unsupported/undefined. This closes the far more common and directly-cited "callback arrives
+    after the owner decided to tear down" case (including the same-thread reentrant-destruction
+    case, which is fully solved — see `LIFE-005`), not full concurrent-destruction safety for a
+    callback already mid-flight on another thread; building that would require a further
+    in-flight-callback-drain-with-self-exemption mechanism whose cost/risk was judged
+    disproportionate to this task's own scope, matching this project's own established
+    precedent for the analogous `AndroidSensorBridge`-level question.
+- **Evidence:** `include/Microsoft/Devices/Sensors/Detail/SensorOwnerControlBlock.hpp` (new),
+  `Compass.hpp`/`.cpp`, `Motion.hpp`/`.cpp`. Same regression tests as `LIFE-001`/`LIFE-002`/`LIFE-005`.
+
+### LIFE-004 — Make Accelerometer dual-event dispatch destruction-safe — CLOSED (2026-07-17)
+
+- **Priority:** P1
+- **Area:** Perfection re-audit
+- **Problem:** CurrentValueChanged can destroy the object before ReadingChanged logic continues.
+- **Required work:**
+  - Define exact reference event order.
+  - Use a dispatch frame/control block that owns all data needed for both events and does not touch the concrete object after invoking user code, or define safe deferred destruction semantics.
+  - Test deletion, Dispose and Stop from each event and from the first event while the second is pending.
+- **Acceptance criteria:**
+  - No UAF and event order matches the oracle.
+  - Both real SDL and synthetic paths use the same implementation.
+- **Resolution:** `Accelerometer::DispatchSensorReading()` now decides *before* raising
+  `CurrentValueChanged` whether `ReadingChanged` must also fire, and takes a **local copy of
+  the `ReadingChanged` event-handler collection itself** — `System::EventHandler<T>` is a plain
+  copyable value (a `std::vector` of subscriber callbacks with no pointer back to its owner),
+  so the copy is a genuine stack-local snapshot, entirely independent of `this` from that point
+  on. `setCurrentValueProperty()` (which raises `CurrentValueChanged`) is called next; if its
+  handler destroys the `Accelerometer`, the method's remaining code touches only local
+  variables (the snapshot, the prepared `AccelerometerReadingEventArgs`, a `bool`) — never
+  `this`/`ReadingChanged`/`getIsDataValidProperty()` again, closing the exact use-after-free the
+  prior code had (it called `getIsDataValidProperty()` and read `this->ReadingChanged` *after*
+  `setCurrentValueProperty()` had already returned). The real WP7 firing order
+  (`CurrentValueChanged` always first, `ReadingChanged` second, Task `ACCEL-002`) is unchanged
+  — only how the second event survives the first potentially destroying the sender changed.
+  Both the real SDL dispatch path (`ProcessSensorUpdateEvent()`) and the synthetic test path
+  (`InjectSyntheticSensorUpdate()`) already funnel through this same `DispatchSensorReading()`,
+  so both use the identical fix with no divergence.
+- **Evidence:** `src/Microsoft/Devices/Sensors/Accelerometer.cpp`. New regression test
+  `AccelerometerTests.DestroyingOwnerFromCurrentValueChangedStillFiresReadingChangedSafely`
+  (subscribes to both events; the `CurrentValueChanged` handler fully destroys the
+  `std::unique_ptr<Accelerometer>` via `.reset()`, not just `Dispose()`s it; confirms
+  `ReadingChanged` still fires afterward without a crash). Devices/Sensors suite green.
+
+### LIFE-005 — Fix Compass reading-plus-calibration cross-callback lifetime — CLOSED (2026-07-17)
+
+- **Priority:** P0
+- **Area:** Perfection re-audit
+- **Problem:** A CurrentValueChanged handler can destroy Compass before a copied Calibrate lambda is invoked.
+- **Required work:**
+  - Represent both notifications as one owner-generation-aware dispatch batch.
+  - Before each notification, validate the owner/control token without dereferencing destroyed state.
+  - Do not solve one ordering direction by creating the reverse UAF.
+- **Acceptance criteria:**
+  - Tests cover destruction from CurrentValueChanged when calibration is also pending and vice versa.
+  - Android ASan run is clean.
+- **Resolution:** Fully closed for the concrete hazard found (`AndroidCompassBackend::
+  HandleMagneticFieldSample()`'s own reading-then-calibration ordering, same-thread reentrant
+  destruction) by `LIFE-003`'s `Detail::SensorOwnerControlBlock` mechanism: both the reading and
+  calibration lambdas passed to `ICompassBackend::Start()`/`IMotionBackend::Start()` capture the
+  **same shared control block** (a `shared_ptr` copy each, not `this`). Traced the exact
+  same-thread reentrant scenario end to end: if the reading callback's `CurrentValueChanged`
+  handler fully destroys the owning `Compass` (synchronously, same thread), `~Compass()`/
+  `Dispose(true)` nulls `control_->owner` under the lock *before* any further teardown; when
+  control eventually returns to `AndroidCompassBackend::HandleMagneticFieldSample()`'s own
+  already-captured `calibrationCallback` local variable and invokes it, that lambda touches
+  only the (still-alive, `shared_ptr`-kept-alive) control block — sees `owner == nullptr` —
+  and safely no-ops, never dereferencing the destroyed `Compass` *or* the (by then also
+  destroyed, since it's a member of `Compass`) `AndroidCompassBackend`. This does **not**
+  require `HandleMagneticFieldSample()` itself to touch anything beyond its own local
+  variables afterward, matching this codebase's own established "last touch of `this` is a
+  user callback invocation" discipline (`COMPASS-008`). The reverse ordering direction (a
+  `Calibrate` handler destroying the owner before a pending reading callback fires) is
+  symmetric and covered by the identical mechanism — not solved by re-introducing the
+  opposite-direction bug, per this task's own acceptance criteria.
+- **Evidence:** same files as `LIFE-001`/`LIFE-003`. New regression tests
+  `CompassTests`/`MotionTests.DestroyingOwnerFromCurrentValueChangedThenFiringCalibrateDoesNotCrash`
+  (constructs a `std::unique_ptr<Compass>`/`<Motion>`, subscribes both events, the
+  `CurrentValueChanged` handler calls `.reset()`, then the separately-captured calibration
+  callback is invoked afterward exactly as the real Android backend orders it — confirms no
+  crash and that `Calibrate`'s own handler correctly never fires, since the owner was already
+  gone). **Android ASan run not performed** (no Android hardware/emulator in this environment,
+  same standing limitation as every other Android-only verification in this plan) — the fix
+  itself lives entirely in host-testable `Compass`/`Motion` code, not in
+  `AndroidCompassBackend`/`AndroidMotionBackend`'s own `#ifdef __ANDROID__` bodies (which were
+  not modified by this task), so the host-side regression test exercises the identical
+  generation/owner-check logic those Android-only callers rely on.
+
+### LIFE-006 — Make disposal terminal-state publication exception-safe — OPEN
+
+- **Priority:** P1
+- **Area:** Perfection re-audit
+- **Problem:** A winning cleanup exception can strand concurrent waiters forever.
+- **Required work:**
+  - Add a scope guard that always sets disposal to Completed or Failed and notifies waiters.
+  - Make native cleanup functions noexcept where possible; capture/report failures instead of throwing from destructors.
+  - Define what concurrent losing Dispose returns/throws after failed cleanup.
+- **Acceptance criteria:**
+  - Fault injection at every cleanup step cannot hang.
+  - Destructors are noexcept and no instance-count/resource bookkeeping is skipped.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### LIFE-007 — Adopt one explicit lifecycle state machine for every sensor — OPEN
+
+- **Priority:** P1
+- **Area:** Perfection re-audit
+- **Problem:** Scattered booleans, SensorState and disposal flags permit TOCTOU and inconsistent transitions.
+- **Required work:**
+  - Model Constructed/Initializing/Ready/Stopping/Disabled/Failed/Disposing/Disposed with legal transitions.
+  - Use one guarded generation and transition helper across Start/Stop/Dispose.
+  - Map internal states to public SensorState only after behavioral-oracle verification.
+- **Acceptance criteria:**
+  - Model-based concurrent tests reject every illegal transition deterministically.
+  - No Start can race past a disposal claim and no old callback can commit a new value.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### LIFE-008 — Rollback Compass/Motion instance count on constructor failure — OPEN
+
+- **Priority:** P1
+- **Area:** Perfection re-audit
+- **Problem:** Backend allocation or IsSupported exception leaks quota.
+- **Required work:**
+  - Use an RAII quota reservation committed only after successful construction.
+  - Apply the same helper to all four classes to prevent divergence.
+  - Fault-inject allocation/probe exceptions.
+- **Acceptance criteria:**
+  - After any constructor failure, ten subsequent valid objects can still be created.
+  - Concurrent construction/destruction keeps exact count with no clamp-to-zero masking.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### LIFE-009 — Keep State and IsSupported coherent when swapping test backends — OPEN
+
+- **Priority:** P2
+- **Area:** Perfection re-audit
+- **Problem:** SetBackendForTesting updates only the base support flag.
+- **Required work:**
+  - Set State to Initializing/NotSupported consistently for a stopped object after replacement.
+  - Clear stale CurrentValue/IsDataValid only if the reference behavior requires it.
+  - Add invariant assertions in debug tests.
+- **Acceptance criteria:**
+  - State/IsSupported invariants hold after every injected backend combination.
+  - The test seam cannot create a public state impossible in production.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### LIFE-010 — Separate transient native failure from permanent NotSupported — OPEN
+
+- **Priority:** P1
+- **Area:** Perfection re-audit
+- **Problem:** Any Start failure currently tends to set NotSupported.
+- **Required work:**
+  - Classify unsupported hardware, permission denial, temporary service failure, registration failure and no-data timeout.
+  - Map to SensorState and exception/ErrorId according to reference behavior or a documented CNA extension.
+  - Allow retry where the failure is transient.
+- **Acceptance criteria:**
+  - Fault-injection tests assert the exact state and retry behavior for every class.
+  - NotSupported is never used merely as a generic error bucket.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### LIFE-011 — Guarantee Stop/Dispose callback quiescence — OPEN
+
+- **Priority:** P1
+- **Area:** Perfection re-audit
+- **Problem:** The intended meaning of Stop return differs between SDL callbacks, joined Android workers and detached self-stop.
+- **Required work:**
+  - Define whether an external Stop guarantees no further callback after return.
+  - Implement per-generation in-flight counters and cancellation.
+  - For self-stop, defer final destruction or schedule completion without detaching unsafe owner callbacks.
+- **Acceptance criteria:**
+  - A post-Stop callback counter stays unchanged under stress.
+  - Self-stop and external concurrent Stop are both deterministic and leak-free.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### ANDR2-001 — Reset pending live-rate state at every Start boundary — OPEN
+
+- **Priority:** P0
+- **Area:** Perfection re-audit
+- **Problem:** A request from a previous run can be applied to the next run.
+- **Required work:**
+  - Under stateMutex, clear `rateChangeRequested_`, initialize pending interval from the new Start interval, and version each request by run generation.
+  - Ignore a request whose generation no longer matches the active queue.
+- **Acceptance criteria:**
+  - A deterministic SetInterval/Stop/Start race test always leaves the new interval effective.
+  - TSan reports no race.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### ANDR2-002 — Synchronize and invalidate Android Probe cache — OPEN
+
+- **Priority:** P1
+- **Area:** Perfection re-audit
+- **Problem:** manager_/sensor_ caching has no single lock discipline and assumes permanence.
+- **Required work:**
+  - Guard Probe/IsAvailable with stateMutex or immutable once-initialized state.
+  - Invalidate/reacquire sensor on service/device failure and app lifecycle changes.
+  - Avoid calling Probe concurrently with queue operations without a documented NDK guarantee.
+- **Acceptance criteria:**
+  - Concurrent IsAvailable/Start/Stop stress is TSan-clean.
+  - A fake service restart re-probes successfully.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### ANDR2-003 — Make Android startup failure truly time-bounded — OPEN
+
+- **Priority:** P0
+- **Area:** Perfection re-audit
+- **Problem:** Timeout followed by unbounded join defeats the timeout.
+- **Required work:**
+  - Separate cancellation from synchronous reclamation.
+  - Use a watchdog-safe worker/control block that can be abandoned without owner UAF if an NDK call never returns, or move native calls to a long-lived service thread that is not recreated per Start.
+  - Record a fatal backend-health state for a genuinely wedged service.
+- **Acceptance criteria:**
+  - Fault-injected create/enable calls that never return do not block Start/Stop/destruction indefinitely.
+  - No leaked joinable std::thread or dangling owner callback remains.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### ANDR2-004 — Make RunExitGuard noexcept and failure-reporting — OPEN
+
+- **Priority:** P1
+- **Area:** Perfection re-audit
+- **Problem:** Its destructor directly calls a potentially throwing callable.
+- **Required work:**
+  - Declare destructor noexcept.
+  - Ensure the cleanup lambda itself uses no-throw operations where possible and catches/reports any unexpected exception.
+  - Never terminate during stack unwinding.
+- **Acceptance criteria:**
+  - A throwing injected cleanup cannot terminate or strand runExitedCv waiters.
+  - Terminal run state is always published.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### ANDR2-005 — Handle ALooper_prepare failure — OPEN
+
+- **Priority:** P1
+- **Area:** Perfection re-audit
+- **Problem:** The return value is stored and passed onward without an explicit null check.
+- **Required work:**
+  - Check null, signal startup failure and run terminal cleanup.
+  - Add fault injection for looper preparation.
+- **Acceptance criteria:**
+  - No NDK queue function receives a null looper from this bridge.
+  - Start returns the documented failure promptly.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### ANDR2-006 — Check disable/destroy/getEvents native failures — OPEN
+
+- **Priority:** P1
+- **Area:** Perfection re-audit
+- **Problem:** Cleanup and queue-drain errors are silent.
+- **Required work:**
+  - Inspect and handle every NDK return value that can fail.
+  - Transition the bridge to failed/stopping when queue reads fail persistently.
+  - Report cleanup failures without throwing from destructors.
+- **Acceptance criteria:**
+  - Fault injection covers enable, rate, poll, getEvents, disable and destroy.
+  - No failure disappears without a state or diagnostic.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### ANDR2-007 — Convert ASensorEvent timestamps to DateTimeOffset — OPEN
+
+- **Priority:** P1
+- **Area:** Perfection re-audit
+- **Problem:** Delivery-time wall clock loses acquisition time and monotonic ordering.
+- **Required work:**
+  - Maintain a calibrated boot/monotonic-to-UTC offset using stable clock samples.
+  - Convert event.timestamp with overflow checks and monotonic clamping per stream.
+  - Recalibrate safely after suspend/resume and wall-clock changes.
+- **Acceptance criteria:**
+  - Delayed queue draining preserves original sample intervals.
+  - Timestamp ordering remains monotonic through wall-clock jumps and resume.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### ANDR2-008 — Release callbacks and stale run state promptly — OPEN
+
+- **Priority:** P2
+- **Area:** Perfection re-audit
+- **Problem:** callback_ and cached fields persist after Stop, retaining captures and stale data.
+- **Required work:**
+  - Clear callback_ only after callback quiescence for the active generation.
+  - Reset queue_/sensor-run fields and pending rate requests in one terminal transition.
+  - Measure retained memory across repeated cycles.
+- **Acceptance criteria:**
+  - After external Stop returns, no user capture remains retained solely by the bridge.
+  - Leak/heap snapshots stabilize over 100k cycles.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### ANDR2-009 — Bound event draining and implement backpressure/coalescing — OPEN
+
+- **Priority:** P1
+- **Area:** Perfection re-audit
+- **Problem:** The inner loop drains until empty and can starve Stop/rate changes under continuous high-rate input.
+- **Required work:**
+  - Limit events or time per iteration.
+  - Prioritize stop/rate commands and optionally coalesce to newest sample when the public interval is slower.
+  - Track dropped/coalesced counts.
+- **Acceptance criteria:**
+  - Stop latency remains below budget under a synthetic never-empty queue.
+  - Published cadence and drop policy are deterministic.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### ANDR2-010 — Track requested and effective sample interval — OPEN
+
+- **Priority:** P1
+- **Area:** Perfection re-audit
+- **Problem:** Rate-change rejection is ignored and users cannot know the native rate differs.
+- **Required work:**
+  - Record setEventRate success/failure and effective/min-delay information where available.
+  - Continue delivery on nonfatal rejection but expose diagnostics and keep software throttling if required.
+  - Version responses by run generation.
+- **Acceptance criteria:**
+  - Tests prove a rejected live change cannot silently claim success internally.
+  - Effective cadence is measured on hardware.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### ANDR2-011 — Consolidate Android sensor bridges onto a shared looper service — OPEN
+
+- **Priority:** P1
+- **Area:** Perfection re-audit
+- **Problem:** Motion can create six threads per instance and sequential startup waits.
+- **Required work:**
+  - Design one process-wide or one-backend worker/looper with multiple event queues/sensor registrations.
+  - Multiplex callbacks using stable registration IDs and generations.
+  - Preserve independent TimeBetweenUpdates and owner lifetime.
+- **Acceptance criteria:**
+  - Ten Motion plus ten Compass instances stay within a documented small thread budget.
+  - Throughput/latency/power improve or are demonstrably no worse.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### ANDR2-012 — Integrate Android app pause/resume and sensor service recovery — OPEN
+
+- **Priority:** P1
+- **Area:** Perfection re-audit
+- **Problem:** No lifecycle hook disables/re-enables queues or recalibrates clocks.
+- **Required work:**
+  - Stop or suspend native delivery on pause according to platform policy.
+  - Reacquire sensors and reapply rates on resume.
+  - Invalidate stale fused samples and generations.
+- **Acceptance criteria:**
+  - Repeated background/foreground cycles produce no stale callbacks, leaks or timestamp jumps.
+  - Physical-device test evidence is attached.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### ANDR2-013 — Validate sensor event shape by sensor type and API level — OPEN
+
+- **Priority:** P2
+- **Area:** Perfection re-audit
+- **Problem:** The bridge copies 16 floats and assumes value counts/status layouts from numeric constants.
+- **Required work:**
+  - Use named NDK constants under Android compilation and static assertions where possible.
+  - Validate quaternion W availability/derivation rules for rotation-vector variants and API levels.
+  - Ignore/status fields only for types that define them.
+- **Acceptance criteria:**
+  - Tests cover 3/4/5-value rotation-vector forms and malformed/short samples.
+  - No uninitialized union bytes influence math.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### ANDR2-014 — Add model-based concurrent lifecycle fuzzing — OPEN
+
+- **Priority:** P1
+- **Area:** Perfection re-audit
+- **Problem:** The bridge contains a complex run/reclaim state machine with detach/join paths.
+- **Required work:**
+  - Build a platform-independent fake NDK adapter and random state-machine test for Start/Stop/SetInterval/IsAvailable/destruction/callback reentry.
+  - Run under TSan/ASan with deterministic schedules and failure injection.
+- **Acceptance criteria:**
+  - Millions of generated operations produce no invalid transition, hang, race or leak.
+  - Every previously found bridge race has a permanent regression seed.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### ANDR2-015 — Run Android-native sanitizers and instrumented tests — OPEN
+
+- **Priority:** P1
+- **Area:** Perfection re-audit
+- **Problem:** Host tests cannot execute the `#ifdef __ANDROID__` code that contains most remaining risk.
+- **Required work:**
+  - Build Android test binaries with HWASan/ASan/UBSan where device support allows and TSan-equivalent race stress via native instrumentation.
+  - Run callback-destruction, lifecycle fuzz and queue-failure tests on device/emulator.
+- **Acceptance criteria:**
+  - Logs are stored per ABI/API/device.
+  - No Android-only path is marked closed solely because host fake tests pass.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### COMP2-001 — Add timestamp/freshness alignment for Compass sources — OPEN
+
+- **Priority:** P1
+- **Area:** Perfection re-audit
+- **Problem:** Heading and magnetometer/accuracy can be fused across arbitrarily different times.
+- **Required work:**
+  - Store native timestamps for both streams.
+  - Define a maximum skew and pairing policy; drop/wait or interpolate rather than fuse indefinitely stale data.
+  - Reset freshness on Start/resume/source failure.
+- **Acceptance criteria:**
+  - A stopped source cannot keep producing apparently fresh CompassReading values.
+  - Synthetic skew tests prove pairing boundaries.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### COMP2-002 — Normalize and validate rotation quaternions before heading math — OPEN
+
+- **Priority:** P1
+- **Area:** Perfection re-audit
+- **Problem:** Current formulas assume finite unit quaternions.
+- **Required work:**
+  - Reject nonfinite/near-zero inputs, normalize valid inputs and clamp derived domains.
+  - Define last-good/no-data behavior on invalid samples.
+  - Fuzz all quaternion math with extreme floats.
+- **Acceptance criteria:**
+  - No NaN/Inf heading escapes for any finite input.
+  - Known orientation vectors remain accurate after normalization.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### COMP2-003 — Derive Android-to-Windows-Phone compass basis mathematically — OPEN
+
+- **Priority:** P1
+- **Area:** Perfection re-audit
+- **Problem:** Current flat/upright formulas are plausible and self-consistent but hardware-unverified.
+- **Required work:**
+  - Write an explicit change-of-basis derivation for Android device/world frames, WP fixed device axes and display orientation.
+  - Compare the derivation with Android reference matrix/orientation APIs.
+  - Implement from the derivation, not hand-selected matrix elements.
+- **Acceptance criteria:**
+  - Independent math tests cover cardinal headings in flat/upright/tilted poses.
+  - The derivation is reviewed and linked from code.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### COMP2-004 — Run a physical compass truth-table matrix — OPEN
+
+- **Priority:** P1
+- **Area:** Perfection re-audit
+- **Problem:** Self-consistency does not prove real heading direction/sign/offset.
+- **Required work:**
+  - Test at least N/E/S/W, flat and upright, portrait/landscape/flipped, with known reference compass and recorded raw vectors/quaternions.
+  - Use multiple Android vendors/API levels and repeat after figure-8 calibration.
+- **Acceptance criteria:**
+  - Heading error and transition behavior meet a documented tolerance.
+  - Raw logs and expected values are committed as regression fixtures where licensing/privacy permits.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### COMP2-005 — Verify MagnetometerReading units and axes on hardware — OPEN
+
+- **Priority:** P1
+- **Area:** Perfection re-audit
+- **Problem:** The vector is passed through without remap based on documentation interpretation.
+- **Required work:**
+  - Record raw Android µT values and CNA output in fixed physical poses/field direction.
+  - Compare to the Windows Phone coordinate contract.
+  - Correct sign/basis only with derivation and fixtures.
+- **Acceptance criteria:**
+  - Axis and unit behavior is proven independently, not inferred from heading tests.
+  - Tests cover display rotation changes.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### COMP2-006 — Replace arbitrary HeadingAccuracy mapping with evidence-based policy — OPEN
+
+- **Priority:** P2
+- **Area:** Perfection re-audit
+- **Problem:** 5/15/20/180-degree values are CNA choices, not native measured uncertainty.
+- **Required work:**
+  - Investigate Android sensor metadata/accuracy semantics and Windows Phone observed outputs.
+  - If exact mapping is unknowable, document it as a NOXNA backend policy and expose raw status diagnostically.
+  - Test monotonic mapping and invalid statuses.
+- **Acceptance criteria:**
+  - Every reported accuracy value has documented provenance and consistency with Calibrate policy.
+  - Unknown status cannot masquerade as precise.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### COMP2-007 — Debounce and transition-gate Calibrate — OPEN
+
+- **Priority:** P2
+- **Area:** Perfection re-audit
+- **Problem:** Unreliable samples can raise an event repeatedly at sensor rate.
+- **Required work:**
+  - Verify reference repeat behavior.
+  - If allowed, raise on threshold transition and/or cooldown while retaining current accuracy values.
+  - Reset gate after recovery/restart.
+- **Acceptance criteria:**
+  - A persistent unreliable stream does not create unbounded event spam unless the oracle requires it.
+  - Transition tests cover Low/Unreliable/High and unknown status.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### COMP2-008 — Resolve TrueHeading compatibility — OPEN
+
+- **Priority:** P1
+- **Area:** Perfection re-audit
+- **Problem:** TrueHeading currently always equals MagneticHeading.
+- **Required work:**
+  - Verify reference behavior when location/declination is unavailable.
+  - Integrate a declination provider only when valid location/time/model data exist; otherwise use the exact reference sentinel/fallback behavior.
+  - Keep provider optional and testable.
+- **Acceptance criteria:**
+  - TrueHeading is never silently presented as geographic north without declination evidence.
+  - Strict behavior is documented and tested.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### COMP2-009 — Make Compass notification batches lifetime-safe — OPEN
+
+- **Priority:** P1
+- **Area:** Perfection re-audit
+- **Problem:** Reading and calibration notifications can both arise from one sample.
+- **Required work:**
+  - Create an immutable notification batch containing reading/calibration flags, owner generation and source timestamps.
+  - Dispatch through the owner control block with validation before each event.
+  - Do not touch backend or owner state after user callbacks.
+- **Acceptance criteria:**
+  - Destruction in either event cannot invoke the other on a dead owner.
+  - Ordering matches the behavioral oracle.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### MOT2-001 — Derive the Android rotation-vector to XNA/WP attitude transform — OPEN
+
+- **Priority:** P1
+- **Area:** Perfection re-audit
+- **Problem:** Direct component copy is explicitly unverified.
+- **Required work:**
+  - Document Android world/device quaternion convention and XNA Matrix/Quaternion handedness/storage/construction semantics.
+  - Derive the change-of-basis quaternion/matrix transform.
+  - Use independent fixtures, not only round-trip through CNA's own functions.
+- **Acceptance criteria:**
+  - Cardinal yaw/pitch/roll physical poses match expected WP values on hardware.
+  - Quaternion, matrix and Euler fields remain mutually consistent.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### MOT2-002 — Harden attitude math against invalid/non-unit input — OPEN
+
+- **Priority:** P1
+- **Area:** Perfection re-audit
+- **Problem:** asin and matrix conversion assume a good quaternion.
+- **Required work:**
+  - Check finite values, reconstruct/validate W where required, normalize and reject near-zero norms.
+  - Clamp asin argument to [-1,1] and define gimbal-lock convention.
+  - Fuzz with NaN/Inf/subnormal/huge values.
+- **Acceptance criteria:**
+  - No undefined/NaN output escapes for invalid input; invalid data changes validity/state according to policy.
+  - Round-trip error bounds are documented.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### MOT2-003 — Replace latest-value Motion fusion with timestamp-aligned fusion — OPEN
+
+- **Priority:** P1
+- **Area:** Perfection re-audit
+- **Problem:** A 500ms span permits materially different physical states.
+- **Required work:**
+  - Maintain bounded per-source sample queues keyed by native timestamp.
+  - Choose an attitude sample as anchor and select/interpolate nearest gravity/linear/gyro samples within a tight, measured skew.
+  - Drop incomplete frames and expose counters.
+- **Acceptance criteria:**
+  - Every MotionReading records source skew below a documented threshold.
+  - Synthetic fast-motion fixtures show lower fusion error than latest-value logic.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### MOT2-004 — Define one Motion output cadence — OPEN
+
+- **Priority:** P2
+- **Area:** Perfection re-audit
+- **Problem:** PublishReading runs after every source update and can emit duplicates/mixed epochs.
+- **Required work:**
+  - Verify Windows Phone cadence semantics.
+  - Publish on the anchor source or a scheduler at TimeBetweenUpdates, not all four sources indiscriminately.
+  - Coalesce redundant samples.
+- **Acceptance criteria:**
+  - Output rate is bounded and stable across differing native sensor rates.
+  - TimeBetweenUpdates tests measure actual callback cadence on hardware.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### MOT2-005 — Verify rotation-vector vs game-rotation-vector fallback semantics — OPEN
+
+- **Priority:** P1
+- **Area:** Perfection re-audit
+- **Problem:** Fallback removes magnetic north and allows yaw drift.
+- **Required work:**
+  - Determine whether Motion IsSupported/Attitude on WP implies a north-referenced source.
+  - Expose fallback diagnostics and calibration semantics.
+  - Measure drift and decide whether fallback is acceptable, degraded, or unsupported.
+- **Acceptance criteria:**
+  - The application never receives an undocumented north-referenced claim from a drifting source.
+  - Fallback behavior has hardware tests and state documentation.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### MOT2-006 — Verify Motion support requirements and degraded-source failures — OPEN
+
+- **Priority:** P1
+- **Area:** Perfection re-audit
+- **Problem:** IsSupported requires attitude, gravity, linear acceleration and gyro; optional magnetometer only drives calibration.
+- **Required work:**
+  - Compare exact reference hardware prerequisites.
+  - Handle one source disappearing after Start without continuing stale fused output.
+  - Define recovery/restart and state transitions.
+- **Acceptance criteria:**
+  - Each missing-source combination has a deterministic result.
+  - A runtime source failure cannot remain silently Ready forever.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### MOT2-007 — Make Motion calibration status freshness-aware and deduplicated — OPEN
+
+- **Priority:** P2
+- **Area:** Perfection re-audit
+- **Problem:** Calibration comes from an independent optional stream with no relation to reading time.
+- **Required work:**
+  - Track status timestamp and transition state.
+  - Do not fire stale or repeated calibration events after source failure/restart.
+  - Align policy with Compass where the real API agrees.
+- **Acceptance criteria:**
+  - Calibration events carry/record fresh status and obey verified repeat behavior.
+  - Destroy/Stop from Calibrate is safe.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### MOT2-008 — Define canonical MotionReading timestamp semantics — OPEN
+
+- **Priority:** P1
+- **Area:** Perfection re-audit
+- **Problem:** The attitude timestamp is reused even when other components are offset.
+- **Required work:**
+  - Use the fused anchor acquisition timestamp and record component skew diagnostically.
+  - Verify DateTimeOffset behavior against reference readings.
+  - Guarantee monotonicity across restart/resume.
+- **Acceptance criteria:**
+  - Timestamp represents the actual fused frame, not callback delivery time.
+  - No component exceeds the allowed skew.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### MOT2-009 — Set Motion thread, latency and power budgets — OPEN
+
+- **Priority:** P1
+- **Area:** Perfection re-audit
+- **Problem:** Current design scales to six workers per instance.
+- **Required work:**
+  - Measure 1/5/10 instances on representative devices.
+  - Record threads, CPU, wakeups, memory, callback latency and battery drain.
+  - Use results to validate the shared-looper redesign.
+- **Acceptance criteria:**
+  - Release gates define maximum thread count and performance/power budgets.
+  - Budgets pass on the minimum supported Android device class.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### MOT2-010 — Run a physical Motion pose and dynamics matrix — OPEN
+
+- **Priority:** P1
+- **Area:** Perfection re-audit
+- **Problem:** No real hardware verifies attitude, gravity, linear acceleration or rotation-rate axes together.
+- **Required work:**
+  - Record stationary six-face poses, cardinal yaw, controlled pitch/roll, clockwise/counterclockwise rotations and linear movements.
+  - Compare all fields against independent references and raw Android events.
+- **Acceptance criteria:**
+  - Signs, units and orientation are proven for every field.
+  - Fixtures cover portrait/landscape/flipped and fallback attitude source.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### BASE2-001 — Verify and enforce exact TimeBetweenUpdates edge semantics — OPEN
+
+- **Priority:** P1
+- **Area:** Perfection re-audit
+- **Problem:** Negative, zero and huge values are accepted; Android silently clamps while SDL throttle treats negative as always-ready.
+- **Required work:**
+  - Use the behavioral oracle to determine setter validation/normalization and event behavior.
+  - Apply one canonical stored value across all backends.
+  - Prevent backend-specific divergence and integer/duration overflow.
+- **Acceptance criteria:**
+  - Negative/zero/max/same-value cases exactly match the oracle or are explicitly documented deviations.
+  - All four sensors produce consistent effective cadence semantics.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### BASE2-002 — Verify CurrentValue/IsDataValid lifecycle semantics — OPEN
+
+- **Priority:** P1
+- **Area:** Perfection re-audit
+- **Problem:** Current values persist and IsDataValid often remains true after Stop; exact compatibility is assumed.
+- **Required work:**
+  - Test before first sample, after Stop, failed Start, restart, source loss, permission loss and disposal against reference behavior.
+  - Update atomically with generation/state.
+- **Acceptance criteria:**
+  - No stale value is presented as valid after a failed/new generation unless the oracle requires it.
+  - Every transition has tests.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### BASE2-003 — Verify public SensorState transitions and timing — OPEN
+
+- **Priority:** P1
+- **Area:** Perfection re-audit
+- **Problem:** Only Accelerometer State is strict API; NOXNA States may still mislead users.
+- **Required work:**
+  - Record exact Accelerometer reference transitions.
+  - Define separate CNA policy for Gyroscope/Compass/Motion NOXNA State.
+  - Cover Initializing, NoData, NoPermissions and transient failures, not only Ready/Disabled/NotSupported.
+- **Acceptance criteria:**
+  - Every enum value has reachable, documented semantics or is intentionally never produced.
+  - State updates are race-free and observable in tests.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### BASE2-004 — Verify exception types, ErrorId and messages — OPEN
+
+- **Priority:** P1
+- **Area:** Perfection re-audit
+- **Problem:** Generic SensorFailedException is used for multiple native failure categories.
+- **Required work:**
+  - Generate an exception matrix from reference behavior.
+  - Map native errors without leaking unstable SDL/NDK strings into strict messages unless intended.
+  - Test constructor cap, repeated Start, unsupported, permissions, disposed access and repeated Dispose.
+- **Acceptance criteria:**
+  - Exact exception type/ErrorId behavior is covered.
+  - Message differences are classified as strict or non-strict.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### BASE2-005 — Make event ordering and mutation semantics explicit — OPEN
+
+- **Priority:** P1
+- **Area:** Perfection re-audit
+- **Problem:** CurrentValue is updated before raising events; legacy event sequencing and handler list mutation need oracle coverage.
+- **Required work:**
+  - Verify sender, args value/copy semantics, order, subscription/unsubscription during dispatch and nested updates.
+  - Ensure one handler cannot corrupt another handler's args unless the real API allows mutable args.
+- **Acceptance criteria:**
+  - Deterministic tests cover reentrant update, add/remove handler and throwing handler.
+  - Accelerometer dual events match reference order.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### BASE2-006 — Audit reading value semantics, hashing and formatting — OPEN
+
+- **Priority:** P2
+- **Area:** Perfection re-audit
+- **Problem:** C++ value helpers are NOXNA and may have float/NaN/hash corner cases.
+- **Required work:**
+  - Verify strict getters/setter visibility and default values via generated oracle.
+  - For NOXNA equality/hash/ToString, define NaN, signed zero and culture/precision behavior consistently.
+- **Acceptance criteria:**
+  - Equal values always hash equally, including signed zero policy.
+  - Fuzz tests cover floating edge values.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### BASE2-007 — Replace counter underflow clamping with invariant enforcement — OPEN
+
+- **Priority:** P1
+- **Area:** Perfection re-audit
+- **Problem:** Derived Dispose decrements then clamps negative counts to zero, hiding double-decrement bugs.
+- **Required work:**
+  - Use an RAII quota token and assertions rather than corrective clamping.
+  - Expose debug diagnostics on invariant violation.
+  - Stress constructor failure and concurrent lifecycle.
+- **Acceptance criteria:**
+  - Counters can never become negative by construction.
+  - A deliberate double release fails a test instead of being masked.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### BASE2-008 — Audit event/storage allocations and copies — OPEN
+
+- **Priority:** P2
+- **Area:** Perfection re-audit
+- **Problem:** Reading and EventArgs are copied at several layers.
+- **Required work:**
+  - Instrument copy/move counts in benchmark builds.
+  - Use immutable shared dispatch payloads internally where API value semantics permit.
+  - Avoid references that can tear under concurrent writes.
+- **Acceptance criteria:**
+  - Copy/allocation budgets are documented for each event.
+  - Optimizations preserve strict value semantics.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### VIB2-001 — Use SDL_HapticRumbleSupported for truthful capability — OPEN
+
+- **Priority:** P1
+- **Area:** Perfection re-audit
+- **Problem:** Opening a device does not prove simple rumble support.
+- **Required work:**
+  - Query SDL_HapticRumbleSupported on the temporary/open device.
+  - Define IsSupported as strict phone vibration support, and keep dual-motor capability separate if needed.
+  - Do not upload or actuate an effect during a property probe.
+- **Acceptance criteria:**
+  - A non-rumble haptic reports unsupported for Start(TimeSpan).
+  - Probe remains side-effect-free and releases temporary resources.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### VIB2-002 — Validate finite intensity and motor inputs — OPEN
+
+- **Priority:** P1
+- **Area:** Perfection re-audit
+- **Problem:** std::clamp leaves NaN unchanged and NaN-to-Uint16 conversion is not robust.
+- **Required work:**
+  - Reject or canonicalize NaN according to NOXNA API policy before calling SDL/casting.
+  - Use checked saturating conversion for magnitudes.
+  - Test NaN, infinities, subnormals and signed zero.
+- **Acceptance criteria:**
+  - No nonfinite float reaches SDL or an integer cast.
+  - Behavior is documented and deterministic.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### VIB2-003 — Handle and report every haptic operation result — OPEN
+
+- **Priority:** P2
+- **Area:** Perfection re-audit
+- **Problem:** Play/stop/run and several query results are ignored.
+- **Required work:**
+  - Check SDL_PlayHapticRumble, SDL_RunHapticEffect, stop calls and device errors.
+  - Destroy a newly uploaded effect if Run fails when appropriate.
+  - Report through the diagnostic channel while preserving strict void API behavior.
+- **Acceptance criteria:**
+  - Fault injection leaves no uploaded-effect/resource leak.
+  - Users can diagnose no-op vibration.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### VIB2-004 — Handle haptic disconnect/reconnect — OPEN
+
+- **Priority:** P1
+- **Area:** Perfection re-audit
+- **Problem:** A cached SDL_Haptic pointer can become invalid when a device disappears.
+- **Required work:**
+  - Listen for device removal or validate before each operation.
+  - Close/invalidate stale handle and retry deterministic selection.
+  - Synchronize with GamePad/joystick hotplug.
+- **Acceptance criteria:**
+  - Disconnect during vibration/Stop/IsSupported does not crash or retain stale support.
+  - Reconnect restores operation without recreating the singleton.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### VIB2-005 — Validate Android phone-vibrator behavior against a direct backend — OPEN
+
+- **Priority:** P1
+- **Area:** Perfection re-audit
+- **Problem:** The implementation assumes SDL's Android haptic device always maps correctly to phone vibration.
+- **Required work:**
+  - Test SDL haptic path across representative Android versions/vendors.
+  - Prototype a direct Android Vibrator/VibratorManager backend and compare support, duration, cancellation, amplitude and lifecycle behavior.
+  - Select the backend with the most faithful strict behavior; keep extensions separate.
+- **Acceptance criteria:**
+  - Phone vibration is proven on physical devices with no gamepad attached.
+  - Stop and 0/5-second boundary behavior match the reference policy.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### VIB2-006 — Verify zero-duration, repeated Start and intensity-zero semantics — OPEN
+
+- **Priority:** P2
+- **Area:** Perfection re-audit
+- **Problem:** NOXNA intensity and strict duration interactions are implementation choices.
+- **Required work:**
+  - Use reference tests for Start(Zero), Start while active and Stop when idle.
+  - Define whether intensity zero is silent timed effect or Stop for the extension.
+  - Test replacement between simple and left/right effects.
+- **Acceptance criteria:**
+  - All edge sequences are deterministic and leak-free.
+  - Strict Start(TimeSpan) behavior matches the oracle.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### VIB2-007 — Audit gamepad-haptic exclusion and selection cost — OPEN
+
+- **Priority:** P2
+- **Area:** Perfection re-audit
+- **Problem:** Every probe opens all joysticks to correlate haptic ids.
+- **Required work:**
+  - Benchmark and cache correlation by hotplug generation.
+  - Verify phone, mouse, steering wheel and duplicate-name devices are classified correctly.
+  - Coordinate with GamePad vibration ownership.
+- **Acceptance criteria:**
+  - Probes do not cause excessive device opens or steal effects.
+  - Selection remains correct with multiple identical controllers.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### PERF2-001 — Create a Devices microbenchmark suite — OPEN
+
+- **Priority:** P1
+- **Area:** Perfection re-audit
+- **Problem:** No repeatable latency/allocation/throughput baseline exists.
+- **Required work:**
+  - Benchmark sensor dispatch, event fanout, throttling, Start/Stop, probes, Compass fusion and Motion fusion.
+  - Report allocations, lock time, CPU and latency percentiles for 1/5/10 instances.
+- **Acceptance criteria:**
+  - CI stores benchmark baselines and flags material regressions.
+  - Results distinguish host fake paths from real devices.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### PERF2-002 — Add repeated lifecycle leak tests — OPEN
+
+- **Priority:** P1
+- **Area:** Perfection re-audit
+- **Problem:** Native resources are complex and short tests may miss refcount/closure leaks.
+- **Required work:**
+  - Run at least 100k construct/probe/Start/Stop/Dispose cycles with fault injection.
+  - Track threads, file descriptors/handles, SDL subsystem refs, haptic effects and heap snapshots.
+- **Acceptance criteria:**
+  - Resource counts return to baseline after every batch.
+  - ASan/LSan and platform tools report no leak.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### PERF2-003 — Run long-duration concurrent soak tests — OPEN
+
+- **Priority:** P1
+- **Area:** Perfection re-audit
+- **Problem:** Race windows and timestamp drift need hours, not milliseconds.
+- **Required work:**
+  - Soak all sensors with event handlers, interval changes, hotplug, pause/resume and periodic lifecycle churn for 8-24 hours.
+  - Run under normal, ASan/HWASan and race-stress configurations where practical.
+- **Acceptance criteria:**
+  - No crash, hang, increasing memory/thread count, backward timestamp or unbounded queue latency.
+  - Artifacts include metrics over time.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### PERF2-004 — Set mobile power and thermal budgets — OPEN
+
+- **Priority:** P2
+- **Area:** Perfection re-audit
+- **Problem:** High-rate native sensors and many worker threads can be functionally correct but unusable.
+- **Required work:**
+  - Measure idle, 2ms, 16ms, 100ms and 1s intervals for Compass/Motion on representative devices.
+  - Record CPU, wakeups, battery drain and thermal throttling.
+  - Use shared source rates/coalescing to meet budgets.
+- **Acceptance criteria:**
+  - Documented power budgets pass for intended gameplay profiles.
+  - TimeBetweenUpdates produces measurable power reduction where platform permits.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### PERF2-005 — Measure and reduce lock contention — OPEN
+
+- **Priority:** P2
+- **Area:** Perfection re-audit
+- **Problem:** Global SDL locks and per-class/owner locks can serialize unrelated work.
+- **Required work:**
+  - Instrument wait/hold times and lock-order traces.
+  - Keep native blocking calls and user callbacks outside owner locks.
+  - Split state/data locks only when measurements justify it.
+- **Acceptance criteria:**
+  - No lock is held across user code or blocking join.
+  - p99 lock waits meet the benchmark budget.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### TEST2-001 — Add permanent regression tests for every new P0 finding — OPEN
+
+- **Priority:** P0
+- **Area:** Perfection re-audit
+- **Problem:** The newly identified defects must not rely on comments.
+- **Required work:**
+  - Create tests for exact SDL callback type, AddEventWatch failure, main-thread dispatch, callback-before-Start, lock/join deadlock, Compass two-callback destruction, ABA reuse, stale interval and bounded timeout.
+  - Use adapters/fakes so host CI can execute the control logic.
+- **Acceptance criteria:**
+  - Each test fails against the pre-fix design and passes only with the intended fix.
+  - Tests run in normal and sanitizer presets.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### TEST2-002 — Re-run all sanitizer presets from a clean complete checkout — OPEN
+
+- **Priority:** P1
+- **Area:** Perfection re-audit
+- **Problem:** This audit could not compile the supplied archive.
+- **Required work:**
+  - Run ASan/LSan, UBSan and TSan after P0 fixes with the exact Devices filter plus lifecycle fuzz tests.
+  - Do not classify unrelated reports without linking a tracked ticket and current source line.
+- **Acceptance criteria:**
+  - Zero unexplained reports and zero test failures.
+  - Full logs and dependency revisions are attached.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### TEST2-003 — Add clang-tidy/static-analysis gates for ownership and casts — OPEN
+
+- **Priority:** P2
+- **Area:** Perfection re-audit
+- **Problem:** Several defects are statically recognizable.
+- **Required work:**
+  - Enable checks for incompatible function casts, ignored nodiscard/bool results, noexcept destructors, raw owning captures, unchecked float-to-int and lock misuse where available.
+  - Use targeted suppressions with rationale.
+- **Acceptance criteria:**
+  - The current SDL EventFilter cast and ignored AddEventWatch result would be caught.
+  - No new warning is introduced in Devices code.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### TEST2-004 — Add deterministic scheduler tests for lifecycle interleavings — OPEN
+
+- **Priority:** P1
+- **Area:** Perfection re-audit
+- **Problem:** Sleep-based stress cannot prove rare orderings.
+- **Required work:**
+  - Introduce hooks/barriers around claim, callback entry, owner lock, worker exit, join/detach and registration revalidation.
+  - Enumerate critical Start/Stop/Dispose/callback interleavings.
+- **Acceptance criteria:**
+  - Known deadlock/UAF schedules complete deterministically.
+  - No test depends on arbitrary timeouts for correctness.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### TEST2-005 — Build a native fault-injection layer — OPEN
+
+- **Priority:** P1
+- **Area:** Perfection re-audit
+- **Problem:** Most SDL/NDK failures are difficult to force with hardware.
+- **Required work:**
+  - Abstract the narrow SDL sensor/haptic and Android sensor calls used here.
+  - Inject every return failure, delay, never-return, disconnect and malformed event.
+  - Keep production overhead negligible.
+- **Acceptance criteria:**
+  - Every native branch has an executable failure test.
+  - State/resources/diagnostics are asserted after each failure.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### TEST2-006 — Add real Android hardware evidence as a release gate — OPEN
+
+- **Priority:** P1
+- **Area:** Perfection re-audit
+- **Problem:** Axis, heading, attitude, timing and vibration remain hardware-unverified.
+- **Required work:**
+  - Run the Compass/Motion/Accelerometer/Gyroscope/Vibrate matrices on at least three devices from different vendors and two API generations.
+  - Store device model, OS, sensor list, raw events, CNA readings and pass/fail tolerances.
+- **Acceptance criteria:**
+  - No hardware-unverified item remains CLOSED.
+  - Release checklist links the latest passing reports.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### TEST2-007 — Add iOS and desktop hardware matrices — OPEN
+
+- **Priority:** P2
+- **Area:** Perfection re-audit
+- **Problem:** SDL support claims are broader than Android but evidence is sparse.
+- **Required work:**
+  - Test accelerometer/gyro on iOS and any supported desktop sensor hardware; verify unsupported Compass/Motion policy.
+  - Test haptics without conflating phone vibrator and gamepad rumble.
+- **Acceptance criteria:**
+  - Each supported platform has an explicit tested matrix or is documented unsupported.
+  - Platform claims match actual CI/hardware evidence.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### TEST2-008 — Measure code and branch coverage by subsystem — OPEN
+
+- **Priority:** P2
+- **Area:** Perfection re-audit
+- **Problem:** Large test counts do not prove critical native branches are exercised.
+- **Required work:**
+  - Collect host coverage for SensorBase, SDL control logic, Compass/Motion wrappers and fake native adapters.
+  - Collect Android-native coverage where tooling permits.
+  - Set high thresholds for lifecycle/error branches.
+- **Acceptance criteria:**
+  - Every P0/P1 branch is covered or has a documented hardware-only evidence link.
+  - Coverage regression fails CI.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### TEST2-009 — Require evidence-backed task closure in plan_devices.md — OPEN
+
+- **Priority:** P2
+- **Area:** Perfection re-audit
+- **Problem:** The existing plan sometimes marks tasks closed while retaining 'hardware-only/unverified' caveats.
+- **Required work:**
+  - Define CLOSED as code + regression test + required platform evidence.
+  - Use BLOCKED/HARDWARE-VERIFY for work that cannot be run in the current environment.
+  - Add links to logs/fixtures/commits in each resolution.
+- **Acceptance criteria:**
+  - No task with an unmet acceptance criterion is marked CLOSED.
+  - A plan linter checks status/evidence fields.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+### TEST2-010 — Run strict-XNA compile checks across all supported compilers — OPEN
+
+- **Priority:** P1
+- **Area:** Perfection re-audit
+- **Problem:** The strict check is currently compiler-flag based and needs portability evidence.
+- **Required work:**
+  - Run GCC, Clang, MSVC and Android NDK Clang where applicable.
+  - Verify NOXNA marking, obsolete attributes and public declarations without relying on one warning spelling.
+- **Acceptance criteria:**
+  - Strict surface checks pass on all supported toolchains.
+  - A deliberately leaked extension fails every check.
+- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+
+
+### Perfection re-audit definition of done
+
+The `Microsoft::Devices` area may be called production-perfect only when all tasks in
+Section 16 are CLOSED with evidence and all of the following are true:
+
+- no native callback uses an incompatible function type or unchecked registration result;
+- every SDL thread-affinity/thread-safety requirement is satisfied structurally;
+- no owner lock is held across user code, native Start/Stop, blocking waits or joins;
+- destruction/Dispose/Stop from every callback is supported and sanitizer-proven;
+- old-generation events cannot reach reused object addresses or restarted sessions;
+- Android startup/teardown is bounded and no Start cycle inherits stale commands;
+- Compass and Motion use acquisition timestamps and freshness/time-aligned data;
+- Android-to-XNA axes/quaternions are mathematically derived and physically verified;
+- thread, allocation, latency, memory, power and soak budgets pass at maximum supported instance counts;
+- strict API and behavioral oracle checks pass on every supported compiler/platform;
+- the released source archive itself reproduces all host verification from a clean environment.

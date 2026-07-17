@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include <condition_variable>
 #include <memory>
 #include <mutex>
 
@@ -10,6 +11,7 @@
 #include "Microsoft/Devices/Sensors/CalibrationEventArgs.hpp"
 #include "Microsoft/Devices/Sensors/CompassReading.hpp"
 #include "Microsoft/Devices/Sensors/Detail/ICompassBackend.hpp"
+#include "Microsoft/Devices/Sensors/Detail/SensorOwnerControlBlock.hpp"
 #include "Microsoft/Devices/Sensors/SensorBase.hpp"
 #include "Microsoft/Devices/Sensors/SensorFailedException.hpp"
 #include "Microsoft/Devices/Sensors/SensorState.hpp"
@@ -43,36 +45,93 @@ namespace Microsoft::Devices::Sensors
         static constexpr SharpRuntime::bytecs MaxSensorCount = 10;
 
         /**
-         * @brief Guards state_/started_ (Task SENSORBASE-004).
+         * @brief Shared-ownership control block (Tasks LIFE-001/LIFE-002/LIFE-003/LIFE-005).
          *
-         * Confirmed missing by a real ThreadSanitizer run (not just a
-         * theoretical audit finding): `Start()`/`Stop()` write `state_`/
-         * `started_` and `getStateProperty()` reads `state_`, all previously
-         * completely unguarded — unlike `Accelerometer`/`Gyroscope`, whose
-         * equivalent fields are guarded by their shared
-         * `Detail::SdlSensorSubsystem<TSensor>::mutex_`. Held for each of
-         * `Start()`/`Stop()`/`getStateProperty()`'s entire body, including
-         * the actual `backend_->Start()`/`Stop()` call — safe to do so
-         * because neither ever synchronously re-enters `Compass` (the real
-         * `Detail::AndroidCompassBackend::Start()` only spawns worker
-         * threads and waits for a startup handshake; sample/calibration
-         * callbacks are only ever invoked later, asynchronously, from those
-         * threads — never during the `Start()`/`Stop()` call itself).
+         * `control_->mutex` is *the* lock guarding `state_`/`started_`/
+         * `transitioning_`/`stopClaimed_`/`backendCallsInFlight_`/`backend_`
+         * — replaces this class's previous plain `mutex_` member (Task
+         * SENSORBASE-004's original fix, confirmed missing by a real
+         * ThreadSanitizer run). Living in a separately heap-allocated,
+         * `shared_ptr`-held block (not a direct member) is what lets a
+         * native backend callback safely detect "the owner is gone" without
+         * ever dereferencing a possibly-destroyed `Compass` — see
+         * `Detail::SensorOwnerControlBlock`'s own doc comment for the full
+         * rationale, and `Start()`/`Stop()`/`Dispose(bool)`'s own comments
+         * for exactly how each field is used.
+         *
+         * Unlike the prior single-critical-section design, `control_->mutex`
+         * is now **never** held across a call into `backend_` (Task
+         * LIFE-001) — `Detail::AndroidCompassBackend::Start()`/`Stop()` can
+         * block (spawn/join worker threads) and, per Task LIFE-002, may
+         * synchronously invoke a reading/calibration callback before
+         * returning; holding this lock across that call previously risked a
+         * lock/join stall or deadlock if a user handler reentered a method
+         * needing the same lock.
          *
          * See `docs/devices-thread-safety.md` for the full, consolidated
          * thread-safety contract this member is part of.
          */
-        mutable std::mutex mutex_;
+        std::shared_ptr<Detail::SensorOwnerControlBlock<Compass>> control_ =
+            std::make_shared<Detail::SensorOwnerControlBlock<Compass>>();
 
         SensorState state_;
         bool started_;
+
+        /**
+         * @brief True from the moment Start()/Stop() reserves a lifecycle
+         * transition (under control_->mutex) until it commits, i.e. for the
+         * entire window a call into backend_ is in flight without the lock
+         * held (Task LIFE-001). A concurrent Start() while this is true (or
+         * while started_ is true) throws the existing "already started"
+         * exception immediately, without waiting — a strict improvement
+         * over the prior design, which let a second caller block on
+         * mutex_ for the *entire* backend_->Start() call before reaching
+         * the same exception.
+         */
+        bool transitioning_ = false;
+
+        /**
+         * @brief True once some caller has claimed the right to actually
+         * call backend_->Stop() for the current stop attempt (Task LIFE-001)
+         * — mirrors Detail::AndroidSensorBridge's own reclaimClaimed_
+         * pattern (Task ANDROID-BRIDGE-005) one layer up. Every other
+         * concurrent Stop() caller waits on transitionFinished_ instead of
+         * also calling backend_->Stop().
+         */
+        bool stopClaimed_ = false;
+
+        /**
+         * @brief Count of threads currently inside a call to `backend_`
+         * (Start/Stop), guarded by control_->mutex (Task LIFE-003).
+         *
+         * A Start() attempt superseded by a concurrent Stop() while its own
+         * backend_->Start() call was still in flight must still call
+         * backend_->Stop() on whatever it just (uselessly) started, so it
+         * doesn't leak — but by the time that cleanup call runs,
+         * transitioning_ may already have been reset to false by the
+         * superseding Stop() (which owns that flag once it wins the race).
+         * SetBackendForTesting() must not swap/destroy backend_ while that
+         * cleanup call (or any other in-flight call) is still executing on
+         * it, so it waits on backendQuiescent_ for this count to reach zero
+         * — not just for transitioning_ to be false.
+         */
+        int backendCallsInFlight_ = 0;
+
+        /** @brief Notified when transitioning_ becomes false (Task LIFE-001). */
+        std::condition_variable transitionFinished_;
+
+        /** @brief Notified when backendCallsInFlight_ reaches zero (Task LIFE-003). */
+        std::condition_variable backendQuiescent_;
 
         /**
          * @brief Native backend, selected at construction time by a
          * compile-time platform switch (docs/devices-native-backend-design.md's
          * migration plan). Null on any platform without one — Start()/Stop()
          * fall back to the permanent NotSupported stub in that case,
-         * unchanged from before this backend existed.
+         * unchanged from before this backend existed. Guarded by
+         * control_->mutex; never read/called without it (Task LIFE-001)
+         * except for the specific, captured raw pointer a single
+         * Start()/Stop() call carries across its own unlocked backend call.
          */
         std::unique_ptr<Detail::ICompassBackend> backend_;
 

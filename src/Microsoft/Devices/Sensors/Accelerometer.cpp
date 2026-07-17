@@ -607,18 +607,49 @@ namespace Microsoft::Devices::Sensors
             accelerometerReading.setTimestampProperty(System::DateTimeOffset::getUtcNowProperty());
         }
 
-        setCurrentValueProperty(accelerometerReading);
-
-        if (getIsDataValidProperty() && !ReadingChanged.Empty())
+        // Task LIFE-004 (2026-07-17, external audit `audit_devices_2026-07-17.md`):
+        // decide *before* raising CurrentValueChanged whether ReadingChanged
+        // must also fire, and take a local copy of the ReadingChanged
+        // event-handler collection itself -- System::EventHandler<T> is a
+        // plain copyable value (a std::vector of subscriber callbacks, no
+        // pointer back to its owner), so this copy is completely independent
+        // of `this` from this point on. Previously, the code below called
+        // getIsDataValidProperty() and ReadingChanged.Raise() *after*
+        // setCurrentValueProperty() (which raises CurrentValueChanged) had
+        // already returned -- if a CurrentValueChanged handler destroyed
+        // this Accelerometer, both of those calls would dereference an
+        // already-freed `this`. The real WP7 firing order (CurrentValueChanged
+        // always first, ReadingChanged second, Task ACCEL-002) is unchanged;
+        // only *how* the second event survives the first potentially
+        // destroying the sender is what changed.
+        System::EventHandler<AccelerometerReadingEventArgs> readingChangedSnapshot;
+        AccelerometerReadingEventArgs readingChangedArgs;
+        bool shouldRaiseReadingChanged = false;
+        if (valid && !ReadingChanged.Empty())
         {
+            readingChangedSnapshot = ReadingChanged;
             const Microsoft::Xna::Framework::Vector3& acceleration = accelerometerReading.getAccelerationProperty();
-            const AccelerometerReadingEventArgs eventArgs(
+            readingChangedArgs = AccelerometerReadingEventArgs(
                 acceleration.X,
                 acceleration.Y,
                 acceleration.Z,
                 accelerometerReading.getTimestampProperty());
+            shouldRaiseReadingChanged = true;
+        }
 
-            ReadingChanged.Raise(static_cast<System::Object*>(this), eventArgs);
+        setCurrentValueProperty(accelerometerReading);
+
+        if (shouldRaiseReadingChanged)
+        {
+            // Raised through the local snapshot, not `this->ReadingChanged`
+            // -- safe even if `this` no longer exists. `sender` is still
+            // `this` itself, matching the real WP7 contract that every
+            // event's sender is the raising Accelerometer instance; passing
+            // a possibly-by-now-dangling `this` as an opaque sender value is
+            // a pointer-arithmetic-only operation (no dereference) and is
+            // already the same accepted contract every other event in this
+            // codebase relies on when its own handler destroys the sender.
+            readingChangedSnapshot.Raise(static_cast<System::Object*>(this), readingChangedArgs);
         }
     }
 

@@ -593,6 +593,40 @@ TEST(AccelerometerTests, NoDispatchAfterStop)
     EXPECT_EQ(invokeCount, 1); // No new dispatch.
 }
 
+// Task LIFE-004 (2026-07-17, external audit `audit_devices_2026-07-17.md`):
+// a CurrentValueChanged handler that fully destroys (not just Dispose()s)
+// the owning Accelerometer must not crash the subsequent, already-decided
+// ReadingChanged dispatch for the same update. DispatchSensorReading() now
+// raises ReadingChanged through a local System::EventHandler<T> snapshot
+// taken *before* CurrentValueChanged fires, never through
+// `this->ReadingChanged` -- previously, the code checked
+// getIsDataValidProperty() and read ReadingChanged directly *after*
+// CurrentValueChanged had already returned, which would dereference an
+// already-freed `this` in exactly this scenario.
+TEST(AccelerometerTests, DestroyingOwnerFromCurrentValueChangedStillFiresReadingChangedSafely)
+{
+    auto a = std::make_unique<Accelerometer>();
+    a->SetSupportedForTesting(true);
+    a->SetStartedForTesting(true);
+
+    bool readingChangedInvoked = false;
+    a->ReadingChanged += [&readingChangedInvoked](System::Object*, const AccelerometerReadingEventArgs&)
+    {
+        readingChangedInvoked = true;
+    };
+
+    bool currentValueHandlerRan = false;
+    a->CurrentValueChanged += [&](System::Object*, const SensorReadingEventArgs<AccelerometerReading>&)
+    {
+        currentValueHandlerRan = true;
+        a.reset(); // full destruction, not just Dispose(), from within this callback
+    };
+
+    EXPECT_NO_THROW(a->InjectSyntheticSensorUpdate(1.0f, 0.0f, 0.0f));
+    EXPECT_TRUE(currentValueHandlerRan);
+    EXPECT_TRUE(readingChangedInvoked);
+}
+
 // Task DEVICES-0059: InjectSyntheticSensorUpdate() itself checks
 // getIsDisposedProperty() first (mirrors the real event path) — confirms no
 // dispatch AND no crash/use-after-free once disposed.

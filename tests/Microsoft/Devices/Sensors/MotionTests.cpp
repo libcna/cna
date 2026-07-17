@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
+#include <functional>
 #include <memory>
 #include <thread>
 #include <vector>
@@ -45,10 +46,15 @@ namespace
         bool StartResult = true;
         bool StopCalled = false;
         int StartCallCount = 0;
+        int StopCallCount = 0;
         int SetSampleIntervalCallCount = 0;
         System::TimeSpan LastSetSampleInterval;
         ReadingCallback CapturedOnReading;
         CalibrationCallback CapturedOnCalibrationNeeded;
+
+        // Task TEST2-001 (LIFE-001/LIFE-002 regression coverage): see
+        // FakeCompassBackend's identical hook for the full rationale.
+        std::function<void()> OnStartCalledBeforeReturn;
 
         [[nodiscard]] bool IsSupported() override
         {
@@ -64,12 +70,17 @@ namespace
             }
             CapturedOnReading = std::move(onReading);
             CapturedOnCalibrationNeeded = std::move(onCalibrationNeeded);
+            if (OnStartCalledBeforeReturn)
+            {
+                OnStartCalledBeforeReturn();
+            }
             return true;
         }
 
         void Stop() override
         {
             StopCalled = true;
+            ++StopCallCount;
         }
 
         void SetSampleInterval(const System::TimeSpan& timeBetweenUpdates) override
@@ -700,4 +711,103 @@ TEST(MotionTests, ConcurrentSetTimeBetweenUpdatesAndSetBackendForTestingDoesNotC
     {
         thread.join();
     }
+}
+
+// Task LIFE-002 (2026-07-17, external audit `audit_devices_2026-07-17.md`):
+// mirrors CompassTests.SynchronousReadingCallbackDuringStartIsHandledSafely
+// -- see that test for the full rationale.
+TEST(MotionTests, SynchronousReadingCallbackDuringStartIsHandledSafely)
+{
+    Motion m;
+    auto fakeOwned = std::make_unique<FakeMotionBackend>();
+    FakeMotionBackend* fake = fakeOwned.get();
+    m.SetBackendForTesting(std::move(fakeOwned));
+
+    bool invoked = false;
+    MotionReading received;
+    m.CurrentValueChanged += [&](System::Object*, const SensorReadingEventArgs<MotionReading>& args)
+    {
+        invoked = true;
+        received = args.getSensorReadingProperty();
+    };
+
+    const AttitudeReading attitude(
+        0.1f, 0.2f, 0.3f, Quaternion::Identity, Matrix::getIdentityProperty(),
+        System::DateTimeOffset::getUtcNowProperty());
+    const MotionReading synthetic(
+        attitude, Vector3(0.0f, 0.0f, 0.0f), Vector3(0.01f, 0.02f, 0.03f), Vector3(0.0f, -1.0f, 0.0f),
+        System::DateTimeOffset::getUtcNowProperty());
+    fake->OnStartCalledBeforeReturn = [fake, synthetic]()
+    {
+        fake->CapturedOnReading(synthetic);
+    };
+
+    EXPECT_NO_THROW(m.Start());
+
+    EXPECT_TRUE(invoked);
+    EXPECT_EQ(received.getDeviceRotationRateProperty(), Vector3(0.01f, 0.02f, 0.03f));
+    EXPECT_EQ(m.getStateProperty(), SensorState::Ready);
+}
+
+// Task LIFE-001 (2026-07-17): mirrors
+// CompassTests.ConcurrentStopDuringStartDoesNotDeadlock -- see that test for
+// the full rationale.
+TEST(MotionTests, ConcurrentStopDuringStartDoesNotDeadlock)
+{
+    Motion m;
+    auto fakeOwned = std::make_unique<FakeMotionBackend>();
+    FakeMotionBackend* fake = fakeOwned.get();
+    m.SetBackendForTesting(std::move(fakeOwned));
+
+    fake->OnStartCalledBeforeReturn = [&m]()
+    {
+        std::thread stopper([&m]() { m.Stop(); });
+        stopper.join();
+    };
+
+    EXPECT_NO_THROW(m.Start());
+
+    EXPECT_EQ(fake->StopCallCount, 2);
+    EXPECT_EQ(m.getStateProperty(), SensorState::Disabled);
+}
+
+// Task LIFE-005 (2026-07-17): mirrors
+// CompassTests.DestroyingOwnerFromCurrentValueChangedThenFiringCalibrateDoesNotCrash
+// -- see that test for the full rationale.
+TEST(MotionTests, DestroyingOwnerFromCurrentValueChangedThenFiringCalibrateDoesNotCrash)
+{
+    auto motion = std::make_unique<Motion>();
+    auto fakeOwned = std::make_unique<FakeMotionBackend>();
+    FakeMotionBackend* fake = fakeOwned.get();
+    motion->SetBackendForTesting(std::move(fakeOwned));
+    motion->Start();
+
+    bool calibrateInvoked = false;
+    motion->Calibrate += [&calibrateInvoked](System::Object*, const CalibrationEventArgs&)
+    {
+        calibrateInvoked = true;
+    };
+
+    bool handlerRan = false;
+    motion->CurrentValueChanged += [&](System::Object*, const SensorReadingEventArgs<MotionReading>&)
+    {
+        handlerRan = true;
+        motion.reset(); // full destruction, not just Dispose(), from within this callback
+    };
+
+    ASSERT_TRUE(static_cast<bool>(fake->CapturedOnReading));
+    ASSERT_TRUE(static_cast<bool>(fake->CapturedOnCalibrationNeeded));
+    const AttitudeReading attitude(
+        0.1f, 0.2f, 0.3f, Quaternion::Identity, Matrix::getIdentityProperty(),
+        System::DateTimeOffset::getUtcNowProperty());
+    const MotionReading synthetic(
+        attitude, Vector3(0.0f, 0.0f, 0.0f), Vector3(0.01f, 0.02f, 0.03f), Vector3(0.0f, -1.0f, 0.0f),
+        System::DateTimeOffset::getUtcNowProperty());
+
+    auto calibrationCallback = fake->CapturedOnCalibrationNeeded;
+    EXPECT_NO_THROW(fake->CapturedOnReading(synthetic));
+    EXPECT_TRUE(handlerRan);
+    EXPECT_NO_THROW(calibrationCallback());
+
+    EXPECT_FALSE(calibrateInvoked);
 }
