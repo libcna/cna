@@ -318,6 +318,10 @@ namespace Microsoft::Devices::Sensors
             return;
         }
 
+        // Task LIFE-006: see Accelerometer::Dispose(bool)'s identical fix
+        // for the full rationale.
+        DisposalTerminalStateGuard terminalStateGuard(*this);
+
         // Task LIFE-002/LIFE-003/LIFE-005: see Compass::Dispose(bool)'s
         // identical fix for the full rationale.
         {

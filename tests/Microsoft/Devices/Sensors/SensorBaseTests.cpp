@@ -2,6 +2,11 @@
 #include <gtest/gtest.h>
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
+#include <functional>
+#include <memory>
+#include <mutex>
+#include <stdexcept>
 #include <string>
 #include <thread>
 #include <vector>
@@ -107,6 +112,51 @@ namespace
             setIsSupportedProperty(value);
         }
 
+        // Task LIFE-006 (2026-07-17, external audit
+        // `audit_devices_2026-07-17.md`): mirrors the exact
+        // ClaimDisposalOnce()/DisposalTerminalStateGuard/base-Dispose(bool)
+        // pattern every real derived sensor class (Accelerometer/Gyroscope/
+        // Compass/Motion) uses, so DisposalTerminalStateGuard's own
+        // behavior can be tested directly against this isolated fixture --
+        // with no shared, process-global instance-count counter to
+        // accidentally pollute for every other test in the binary the way
+        // deliberately making a real Accelerometer's own cleanup throw
+        // would (it never reaches its own `--instanceCount_` decrement).
+        void Dispose(bool disposing) override
+        {
+            if (!disposing)
+            {
+                SensorBase<TestSensorReading>::Dispose(disposing);
+                return;
+            }
+
+            if (!ClaimDisposalOnce())
+            {
+                WaitForDisposalToComplete();
+                return;
+            }
+
+            DisposalTerminalStateGuard terminalStateGuard(*this);
+
+            if (disposalCleanupHookForTesting_)
+            {
+                disposalCleanupHookForTesting_();
+            }
+
+            SensorBase<TestSensorReading>::Dispose(disposing);
+        }
+
+        void SetDisposalCleanupHookForTesting(std::function<void()> hook)
+        {
+            disposalCleanupHookForTesting_ = std::move(hook);
+        }
+
+        // Declaring Dispose(bool) above hides the inherited no-argument
+        // Dispose() (System::IDisposable) by C++ name-hiding rules -- brings
+        // it back into scope, matching every real derived sensor class's
+        // own identical `using` declaration.
+        using SensorBase<TestSensorReading>::Dispose;
+
         // ShouldAcceptUpdateAt()/ResetUpdateThrottle() are protected (Task
         // SENSORBASE-001/ACCEL-005/GYRO-004), same reasoning as
         // TimeBetweenUpdatesChanged above — exercised here via a thin public
@@ -122,6 +172,9 @@ namespace
         }
 
         std::atomic<int> timeBetweenUpdatesChangedCount{0};
+
+    private:
+        std::function<void()> disposalCleanupHookForTesting_;
     };
 } // namespace
 
@@ -446,4 +499,85 @@ TEST(SensorBaseTests, ConcurrentGetSetTimeBetweenUpdatesPropertyDoesNotCrash)
     {
         thread.join();
     }
+}
+
+// Task LIFE-006 (2026-07-17, external audit `audit_devices_2026-07-17.md`):
+// previously, if the winning Dispose() caller's own cleanup threw, disposed_
+// never became true and a concurrently-racing loser (blocked in
+// WaitForDisposalToComplete()) would hang forever — WaitForDisposalToComplete()'s
+// own prior doc comment explicitly documented this as a known, accepted
+// assumption rather than something actually enforced. Uses TestSensorBase's
+// own ClaimDisposalOnce()/DisposalTerminalStateGuard-based Dispose(bool)
+// override (mirroring every real derived sensor class) with a pause-then-
+// release gate whose release action throws instead of completing normally —
+// without DisposalTerminalStateGuard, the loser thread below would never
+// return and this test would hang/timeout instead of completing. Uses this
+// isolated fixture rather than a real Accelerometer specifically so a
+// deliberately-thrown cleanup never reaches (and therefore never leaks) any
+// shared, process-global instance-count counter another test elsewhere in
+// this binary might depend on.
+TEST(SensorBaseTests, WinningCleanupExceptionStillUnblocksConcurrentLosingDispose)
+{
+    auto sensor = std::make_shared<TestSensorBase>();
+
+    std::mutex gateMutex;
+    std::condition_variable gateCv;
+    bool winnerPaused = false;
+    bool releaseWinner = false;
+
+    sensor->SetDisposalCleanupHookForTesting([&]()
+    {
+        {
+            std::lock_guard<std::mutex> lock(gateMutex);
+            winnerPaused = true;
+        }
+        gateCv.notify_all();
+
+        {
+            std::unique_lock<std::mutex> lock(gateMutex);
+            gateCv.wait(lock, [&] { return releaseWinner; });
+        }
+
+        throw std::runtime_error("deliberate winning cleanup failure");
+    });
+
+    std::thread winnerThread([sensor]()
+    {
+        EXPECT_THROW(sensor->Dispose(), std::runtime_error);
+    });
+
+    // Wait until the winner has claimed disposal and is paused inside its
+    // own cleanup, before starting the loser.
+    {
+        std::unique_lock<std::mutex> lock(gateMutex);
+        gateCv.wait(lock, [&] { return winnerPaused; });
+    }
+
+    std::atomic<bool> loserReturned{false};
+    std::thread loserThread([sensor, &loserReturned]()
+    {
+        EXPECT_NO_THROW(sensor->Dispose());
+        loserReturned.store(true);
+    });
+
+    // The loser must not have returned yet -- the winner is still paused
+    // inside cleanup (about to throw), so disposed_ must still be false.
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    EXPECT_FALSE(loserReturned.load());
+
+    // Release the winner -- it throws immediately afterward. The loser must
+    // still unblock (via DisposalTerminalStateGuard's destructor running
+    // during the winner's own stack unwinding) and return normally, not
+    // rethrow or hang, per this task's own explicit "losing Dispose() never
+    // observes the winner's specific failure" decision.
+    {
+        std::lock_guard<std::mutex> lock(gateMutex);
+        releaseWinner = true;
+    }
+    gateCv.notify_all();
+
+    winnerThread.join();
+    loserThread.join();
+
+    EXPECT_TRUE(loserReturned.load());
 }

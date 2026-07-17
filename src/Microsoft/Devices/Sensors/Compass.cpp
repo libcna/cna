@@ -414,6 +414,10 @@ namespace Microsoft::Devices::Sensors
             return;
         }
 
+        // Task LIFE-006: see Accelerometer::Dispose(bool)'s identical fix
+        // for the full rationale.
+        DisposalTerminalStateGuard terminalStateGuard(*this);
+
         // Task LIFE-002/LIFE-003/LIFE-005: null out control_->owner *before*
         // Stop() below -- see Detail::SensorOwnerControlBlock's own doc
         // comment. Any reading/calibration callback that has not yet passed

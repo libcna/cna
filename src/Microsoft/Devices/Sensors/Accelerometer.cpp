@@ -326,6 +326,13 @@ namespace Microsoft::Devices::Sensors
             return;
         }
 
+        // Task LIFE-006 (2026-07-17, external audit
+        // `audit_devices_2026-07-17.md`): see DisposalTerminalStateGuard's
+        // own doc comment -- guarantees disposed_ is published and every
+        // concurrent losing Dispose() caller's WaitForDisposalToComplete()
+        // unblocks, even if the cleanup below throws.
+        DisposalTerminalStateGuard terminalStateGuard(*this);
+
         if (disposalTestHook_)
         {
             disposalTestHook_();

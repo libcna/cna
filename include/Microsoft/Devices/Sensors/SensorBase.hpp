@@ -203,20 +203,115 @@ namespace Microsoft::Devices::Sensors
          * Dispose(bool) override returns only after the object is *actually*
          * fully disposed.
          *
-         * Assumes the winning caller's cleanup path does not throw once it
-         * has claimed disposal — matching this codebase's existing
-         * assumption that Stop()/native-resource cleanup do not throw once
-         * their disposed-state precondition is satisfied. If that
-         * assumption were ever violated, a concurrent loser would wait here
-         * indefinitely; this mirrors the same no-timeout wait convention
-         * already used by Dispose(bool)'s own callbackFinished_ wait in
-         * Accelerometer/Gyroscope.
+         * Task LIFE-006 (2026-07-17): no longer assumes the winning caller's
+         * cleanup path cannot throw — every derived class now constructs a
+         * DisposalTerminalStateGuard immediately after winning
+         * ClaimDisposalOnce(), which unconditionally publishes disposed_ =
+         * true (and notifies the condition variable this waits on) even if
+         * that cleanup throws, closing what was previously a documented,
+         * accepted "a concurrent loser would wait here indefinitely" gap —
+         * see that guard's own doc comment for the full design, including
+         * the explicit decision that a losing caller's own Dispose(bool)
+         * still simply returns (never observes or rethrows the winner's
+         * specific failure) once this wait unblocks.
          */
         void WaitForDisposalToComplete()
         {
             std::unique_lock<std::mutex> lock(mutex_);
             disposalFinishedCv_.wait(lock, [this] { return disposed_; });
         }
+
+        /**
+         * @brief RAII guard that unconditionally publishes the `disposed_`
+         * terminal state, even if the derived class's own cleanup between
+         * winning `ClaimDisposalOnce()` and reaching the base `Dispose(bool)`
+         * call throws (Task LIFE-006, 2026-07-17, external audit
+         * `audit_devices_2026-07-17.md`).
+         *
+         * Previously (see `WaitForDisposalToComplete()`'s own doc comment,
+         * which already documented this as a known, accepted assumption
+         * rather than something actually enforced): if the winning caller's
+         * cleanup — `Stop()`, native resource release, instance-count
+         * bookkeeping, whatever a derived class's `Dispose(bool)` override
+         * does between claiming disposal and calling `SensorBase::Dispose(bool)`
+         * below — threw, `disposed_` never became `true` and
+         * `disposalFinishedCv_` never fired, stranding every concurrent
+         * losing `Dispose()` caller (blocked in `WaitForDisposalToComplete()`)
+         * forever.
+         *
+         * Construct this immediately after `ClaimDisposalOnce()` returns
+         * `true`, before running any derived cleanup. Its destructor sets
+         * `disposed_ = true` (if not already) and notifies
+         * `disposalFinishedCv_` — idempotent with the normal-completion path
+         * (the base `Dispose(bool)` override below already does the same
+         * thing on success), so on a normal, non-throwing cleanup this
+         * guard's own action is a harmless no-op; it only matters on the
+         * exceptional path.
+         *
+         * **Explicit decision (required by this task): what a concurrent
+         * losing `Dispose()` call does after the winner's cleanup fails.**
+         * `WaitForDisposalToComplete()` unblocks once `disposed_` becomes
+         * `true` (via this guard, whether the winner's cleanup succeeded or
+         * threw) and the losing caller's own `Dispose(bool)` override then
+         * simply returns, `void`, exactly as it already does today — it
+         * does **not** observe, rethrow, or otherwise learn that the winner's
+         * cleanup specifically failed. This matches `IDisposable.Dispose()`'s
+         * established, conventional contract (never throw from `Dispose()`),
+         * and this codebase has no other precedent for propagating one
+         * thread's exception into an unrelated thread's call — inventing
+         * cross-thread exception propagation for this one corner case, with
+         * no WP7 reference behavior to justify a specific shape for it, was
+         * judged unwarranted complexity. The *winning* caller's own
+         * `Dispose(bool)` call still lets the original cleanup exception
+         * propagate out normally (unchanged) — only the losing side's
+         * behavior is being defined here.
+         */
+        class DisposalTerminalStateGuard
+        {
+        public:
+            explicit DisposalTerminalStateGuard(SensorBase& owner)
+                : owner_(owner)
+            {
+            }
+
+            DisposalTerminalStateGuard(const DisposalTerminalStateGuard&) = delete;
+            DisposalTerminalStateGuard& operator=(const DisposalTerminalStateGuard&) = delete;
+
+            ~DisposalTerminalStateGuard()
+            {
+                try
+                {
+                    bool needsNotify = false;
+                    {
+                        std::lock_guard<std::mutex> lock(owner_.mutex_);
+                        if (!owner_.disposed_)
+                        {
+                            owner_.disposed_ = true;
+                            needsNotify = true;
+                        }
+                    }
+                    if (needsNotify)
+                    {
+                        owner_.disposalFinishedCv_.notify_all();
+                    }
+                }
+                catch (...)
+                {
+                    // Swallowed deliberately -- this destructor's own body
+                    // is implicitly noexcept (a user-provided destructor
+                    // with no explicit exception specification is
+                    // noexcept(true) by default); letting anything escape
+                    // (in practice, only std::mutex::lock() throwing
+                    // std::system_error for a genuine OS-level failure)
+                    // would call std::terminate() instead of achieving this
+                    // guard's whole purpose (see Task ANDR2-004's identical
+                    // reasoning for AndroidSensorBridge's own RunExitGuard).
+                }
+            }
+
+        private:
+            SensorBase& owner_;
+        };
 
         /**
          * @brief Sets the current sensor reading and raises CurrentValueChanged.

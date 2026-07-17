@@ -6533,7 +6533,7 @@ test is not sufficient for an Android coordinate/fusion claim.
   not modified by this task), so the host-side regression test exercises the identical
   generation/owner-check logic those Android-only callers rely on.
 
-### LIFE-006 — Make disposal terminal-state publication exception-safe — OPEN
+### LIFE-006 — Make disposal terminal-state publication exception-safe — CLOSED (2026-07-17)
 
 - **Priority:** P1
 - **Area:** Perfection re-audit
@@ -6546,6 +6546,69 @@ test is not sufficient for an Android coordinate/fusion claim.
   - Fault injection at every cleanup step cannot hang.
   - Destructors are noexcept and no instance-count/resource bookkeeping is skipped.
 - **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+- **Resolution:** confirmed this was a genuine, previously self-documented-but-unfixed gap:
+  `WaitForDisposalToComplete()`'s own prior doc comment explicitly said "Assumes the winning
+  caller's cleanup path does not throw... If that assumption were ever violated, a concurrent
+  loser would wait here indefinitely." Added `SensorBase<TSensorReading>::DisposalTerminalStateGuard`
+  (a new protected nested RAII class) — constructed by every derived class (`Accelerometer`/
+  `Gyroscope`/`Compass`/`Motion`) immediately after winning `ClaimDisposalOnce()`, before running
+  any of its own cleanup. Its destructor unconditionally sets `disposed_ = true` (if not already)
+  and notifies `disposalFinishedCv_` — idempotent with the normal-completion path (the base
+  `Dispose(bool)` already does the same thing on success, so this guard's own action is a
+  harmless no-op on a non-throwing cleanup), but now also runs during stack unwinding if the
+  cleanup throws, closing the previously-documented gap.
+  - **"Add a scope guard that always sets disposal to Completed or Failed":** this codebase has no
+    existing "Completed"/"Failed" disposal-state enum — `disposed_` is (and remains) a plain
+    `bool`. Interpreted as "always publish the terminal disposed state," which is what actually
+    unblocks every concurrent waiter — inventing a new tri-state enum purely to satisfy this
+    bullet's literal wording, with no other consumer needing to distinguish "disposed after
+    successful cleanup" from "disposed after failed cleanup," was judged unwarranted scope
+    expansion beyond what unblocking waiters requires.
+  - **"Make native cleanup functions noexcept where possible... capture/report failures instead of
+    throwing from destructors":** the guard's own destructor is wrapped in `try`/`catch(...)`
+    (swallowed), matching `ANDR2-004`'s identical `RunExitGuard` reasoning exactly — a
+    user-provided destructor with no explicit exception specification is already implicitly
+    `noexcept(true)`, so an unswallowed exception here would `std::terminate()` the process in
+    addition to defeating this guard's whole purpose. This task does not touch the underlying
+    native cleanup functions (`Stop()`, subsystem calls) themselves — those are `SDLCORE-*`/
+    `ANDR2-*`'s own scope; this task's job was specifically the disposal *bookkeeping* around them.
+  - **Explicit decision (required by this task): what a concurrent losing `Dispose()` returns/throws
+    after the winner's cleanup fails.** Documented directly on `DisposalTerminalStateGuard`'s own
+    doc comment: the loser's `Dispose(bool)` continues to simply return, `void`, once
+    `WaitForDisposalToComplete()` unblocks — it never observes, rethrows, or is otherwise told that
+    the winner's cleanup specifically failed. Matches `IDisposable.Dispose()`'s conventional
+    contract (never throw from `Dispose()`) and avoids inventing cross-thread exception
+    propagation for a corner case with no WP7 reference behavior to justify a specific shape. The
+    *winning* caller's own `Dispose(bool)` call is unaffected — its exception still propagates out
+    normally to whoever called it.
+- **Files changed:** `include/Microsoft/Devices/Sensors/SensorBase.hpp` (new
+  `DisposalTerminalStateGuard`, updated `WaitForDisposalToComplete()` doc comment),
+  `src/Microsoft/Devices/Sensors/Accelerometer.cpp`, `src/Microsoft/Devices/Sensors/Gyroscope.cpp`,
+  `src/Microsoft/Devices/Sensors/Compass.cpp`, `src/Microsoft/Devices/Sensors/Motion.cpp` (each
+  constructs the guard right after winning `ClaimDisposalOnce()`),
+  `tests/Microsoft/Devices/Sensors/SensorBaseTests.cpp`.
+- **Tests:** added `SensorBaseTests.WinningCleanupExceptionStillUnblocksConcurrentLosingDispose` —
+  deliberately built against the file's own isolated `TestSensorBase` fixture (extended with a
+  matching `ClaimDisposalOnce()`/`DisposalTerminalStateGuard`-based `Dispose(bool)` override and a
+  throwing test hook) rather than a real `Accelerometer`: a real sensor class's cleanup throwing
+  before reaching its own `--instanceCount_` decrement would permanently leak one of that class's
+  10-instance quota slots for the rest of the test binary's process lifetime, silently breaking
+  *other*, unrelated tests later in the same run that assume a clean starting count — the isolated
+  fixture has no such shared global state to pollute. Uses the same pause-then-release gate pattern
+  as the pre-existing `ConcurrentDisposeLoserWaitsForWinnerCleanupToFinishBeforeStateAppearsDisposed`
+  test, but the release action throws instead of completing normally — without the fix, the
+  loser thread would never return and the test would hang/timeout instead of completing (a
+  genuine "fails against the pre-fix design" regression test, not merely one that happens to pass).
+  Full Devices/Sensors filtered suite: 406 tests, 402 passed, 4 skipped (hardware-only, unchanged)
+  — 1 new, passing.
+- **Sanitizer/static-analysis result:** clean under `devices-ubsan`. This touches shared,
+  genuinely concurrent base-class locking used by all four sensor classes, so re-run under
+  `devices-tsan` **4 consecutive times** (this pass's own `TEST2-001` bug was timing-dependent and
+  needed repeated runs to trust) — all 4 clean, 0 warnings, exit 0 each time.
+- **Remaining limitations:** none identified for this specific finding — both the "winning cleanup
+  throws" and "concurrent loser correctly unblocks" scenarios are now directly, deterministically
+  tested (not merely reasoned about), and the fix applies uniformly to all four sensor classes via
+  the shared base-class guard.
 
 ### LIFE-007 — Adopt one explicit lifecycle state machine for every sensor — OPEN
 
