@@ -179,6 +179,22 @@ def main():
         # lighting, XNA's real default) — same UBO/push-constant layout as skinned3d above.
         ("skinned3d_vertexlit.vert.glsl", VERTEX_SHADER,   "kSkinned3dVertexLitVertSpv"),
         ("skinned3d_vertexlit.frag.glsl", FRAGMENT_SHADER, "kSkinned3dVertexLitFragSpv"),
+        # CNB-67 companion: SkinnedEffect stride-56 (SkinnedVertex+Color) variant of skinned3d/
+        # skinned3d_vertexlit above — same descriptor set/pipeline layout, selected by vertex
+        # buffer stride (52 = no color, 56 = color) rather than a separate pipeline layout.
+        ("skinned3d_color.vert.glsl",          VERTEX_SHADER,   "kSkinned3dColorVertSpv"),
+        ("skinned3d_color.frag.glsl",          FRAGMENT_SHADER, "kSkinned3dColorFragSpv"),
+        ("skinned3d_vertexlit_color.vert.glsl", VERTEX_SHADER,   "kSkinned3dVertexLitColorVertSpv"),
+        ("skinned3d_vertexlit_color.frag.glsl", FRAGMENT_SHADER, "kSkinned3dVertexLitColorFragSpv"),
+        # PbrEffect pipeline — stride 48 (VertexPositionNormalTangentTexture), glTF metallic-
+        # roughness BRDF. 5 texture units (base color + normal + metallic-roughness + emissive +
+        # occlusion), DirectionalLight1/2 + World + EyePosition + PBR factors + fog in a dynamic UBO.
+        ("pbr3d.vert.glsl",              VERTEX_SHADER,   "kPbr3dVertSpv"),
+        ("pbr3d.frag.glsl",              FRAGMENT_SHADER, "kPbr3dFragSpv"),
+        # SkinnedPbrEffect pipeline — stride 68 (VertexPositionNormalTangentTextureSkinned): the
+        # PBR BRDF plus bone-palette skinning applied to position/normal/tangent.
+        ("pbr3d_skinned.vert.glsl",      VERTEX_SHADER,   "kPbr3dSkinnedVertSpv"),
+        ("pbr3d_skinned.frag.glsl",      FRAGMENT_SHADER, "kPbr3dSkinnedFragSpv"),
         # Instanced 3D pipeline — binding=0 per-vertex (pos only), binding=1 per-instance mat4.
         # Dedicated FS (Task 899: previously reused colored3d's, but that now has a 2nd
         # descriptor binding for fog, incompatible with Instanced3D's unmodified 1-binding layout).
