@@ -903,4 +903,44 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_backend_test(NAME Vulkan_OcclusionQuery_PixelCount COMMAND cna_test_vulkan_occlusionquery_pixelcount
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_cnj.md CNB-58/91 Vulkan port: PbrEffect/SkinnedPbrEffect real glTF metallic-
+        # roughness BRDF shader + CNB-67 SkinnedEffect.VertexColorEnabled on the stride-56 vertex
+        # layout -- verbatim reuse of the shared, backend-agnostic EasyGL sources (public XNA API
+        # only, same PixelTestGame/ExpectPixel/CompareGoldenImage harness already used by
+        # Task 293/294/296/297's own EasyGL-source reuse for Vulkan), cross-checked against the
+        # same captured golden PNGs EasyGL's own tests use.
+        # WORKING_DIRECTORY is set to the repo root (mirrors EasyGLTests.cmake's own identical
+        # requirement for every CompareGoldenImage-using test) since these 3 reused sources
+        # reference their golden PNGs by a path relative to the repo root
+        # (examples/golden/...), not to ctest's default CWD (the build directory).
+        cna_vulkan_test(cna_test_vulkan_pbreffect_golden
+                        examples/easygl_pbreffect_golden_test.cpp)
+        cna_register_backend_test(NAME Vulkan_PbrEffect_Golden COMMAND cna_test_vulkan_pbreffect_golden
+            TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        cna_vulkan_test(cna_test_vulkan_skinnedpbreffect_golden
+                        examples/easygl_skinnedpbreffect_golden_test.cpp)
+        cna_register_backend_test(NAME Vulkan_SkinnedPbrEffect_Golden COMMAND cna_test_vulkan_skinnedpbreffect_golden
+            TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        cna_vulkan_test(cna_test_vulkan_skinnedeffect_vertexcolor_reused
+                        examples/easygl_skinnedeffect_vertexcolor_test.cpp)
+        cna_register_backend_test(NAME Vulkan_SkinnedEffect_VertexColor_Reused COMMAND cna_test_vulkan_skinnedeffect_vertexcolor_reused
+            TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        # Vulkan-native counterparts (this backend's own established Game-subclass/check()
+        # pattern, e.g. vulkan_basiceffect_specular_test.cpp/vulkan_skinnedeffect_specular_test.cpp)
+        # with expected pixel values independently hand-derived from the exact glTF metallic-
+        # roughness BRDF formula (see each test's own header comment for the Python re-derivation),
+        # not just captured-and-pasted from a single run.
+        cna_vulkan_test(cna_test_vulkan_pbreffect_handderived
+                        examples/vulkan_pbreffect_handderived_test.cpp)
+        cna_register_backend_test(NAME Vulkan_PbrEffect_HandDerived COMMAND cna_test_vulkan_pbreffect_handderived
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+        cna_vulkan_test(cna_test_vulkan_skinnedeffect_vertexcolor
+                        examples/vulkan_skinnedeffect_vertexcolor_test.cpp)
+        cna_register_backend_test(NAME Vulkan_SkinnedEffect_VertexColor COMMAND cna_test_vulkan_skinnedeffect_vertexcolor
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     endif()

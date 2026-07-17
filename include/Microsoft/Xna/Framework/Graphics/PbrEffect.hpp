@@ -25,8 +25,8 @@ namespace Microsoft::Xna::Framework::Graphics
      * describes entirely; there is no FNA/XNA equivalent to mirror. Uses the real glTF 2.0 spec's
      * own reference BRDF (GGX distribution + Smith-Schlick-GGX visibility + Schlick Fresnel, see
      * EasyGLGraphicsBackend::EnsurePbrProgram()'s own doc comment), not image-based lighting (a
-     * separate, much larger feature). Only the EasyGL backend has a real shader for this effect
-     * so far (plan_cnj.md CNB-58); other backends accept a bound PbrEffect without erroring but
+     * separate, much larger feature). The EasyGL (plan_cnj.md CNB-58) and Vulkan backends have a
+     * real shader for this effect; other backends accept a bound PbrEffect without erroring but
      * currently render it as an untextured/unlit fallback (CNB-61, deliberately deferred).
      */
     class PbrEffect : public Effect, public IEffectMatrices, public IEffectFog, public IEffectLights
