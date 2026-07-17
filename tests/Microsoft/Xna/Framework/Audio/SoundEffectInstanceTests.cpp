@@ -779,6 +779,118 @@ TEST_F(SoundEffectInstanceTest, Apply3DDopplerIsNoOpWhenGlobalDopplerScaleIsZero
     EXPECT_NEAR(MIX_GetTrackFrequencyRatio(track), 1.0f, 1e-5f);
 }
 
+// AUD-09-003 (2026-07-17 deep audit): distinct from Apply3DDopplerIsNoOpWhenGlobalDopplerScaleIsZero
+// above -- this leaves DopplerScale at its real XNA default (1.0f) and instead zeroes out both
+// listener and emitter velocity. A stationary source/listener pair must never shift pitch purely
+// from being positioned in 3D space (position-only, no motion).
+TEST_F(SoundEffectInstanceTest, Apply3DZeroVelocitiesYieldNeutralDopplerRegardlessOfDefaultScale)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    inst.Play();
+
+    AudioListener listener; // velocity defaults to zero
+    AudioEmitter emitter;
+    emitter.setPositionProperty({10.0f, 5.0f, -3.0f}); // position only, no motion
+    inst.Apply3D(listener, emitter);
+
+    MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(inst);
+    ASSERT_NE(track, nullptr);
+    EXPECT_NEAR(MIX_GetTrackFrequencyRatio(track), 1.0f, 1e-5f);
+}
+
+// AUD-09-005: equal listener/emitter velocity (parallel motion, e.g. both riding the same moving
+// platform) must produce no *relative* Doppler shift -- both velocity components project onto the
+// same emitter-to-listener axis identically, so the ratio's numerator and denominator must cancel
+// to exactly 1.0 by construction (ComputeDopplerFactor's own math), not just approximately.
+TEST_F(SoundEffectInstanceTest, Apply3DEqualListenerAndEmitterVelocityYieldsNeutralDoppler)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    inst.Play();
+
+    AudioListener listener;
+    listener.setVelocityProperty({50.0f, 0.0f, 0.0f});
+    AudioEmitter emitter;
+    emitter.setPositionProperty({10.0f, 0.0f, 0.0f});
+    emitter.setVelocityProperty({50.0f, 0.0f, 0.0f}); // identical velocity -- moving together
+    inst.Apply3D(listener, emitter);
+
+    MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(inst);
+    ASSERT_NE(track, nullptr);
+    EXPECT_NEAR(MIX_GetTrackFrequencyRatio(track), 1.0f, 1e-4f);
+}
+
+// AUD-09-007: tangential motion (perpendicular to the emitter-to-listener axis) must not shift
+// pitch -- only the *radial* velocity component (along that axis) matters for Doppler. Emitter at
+// (10,0,0) moving in +Y (straight "sideways" relative to the listener at the origin) has zero
+// radial component: dot((-10,0,0),(0,100,0)) == 0.
+TEST_F(SoundEffectInstanceTest, Apply3DTangentialMotionYieldsNeutralDoppler)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    inst.Play();
+
+    AudioListener listener;
+    AudioEmitter emitter;
+    emitter.setPositionProperty({10.0f, 0.0f, 0.0f});
+    emitter.setVelocityProperty({0.0f, 100.0f, 0.0f}); // purely tangential, no radial component
+    inst.Apply3D(listener, emitter);
+
+    MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(inst);
+    ASSERT_NE(track, nullptr);
+    EXPECT_NEAR(MIX_GetTrackFrequencyRatio(track), 1.0f, 1e-4f);
+}
+
+// AUD-09-011: coincident listener/emitter positions (distance == 0) must not produce NaN/Inf --
+// ComputeDopplerFactor's own distance!=0.0f guard should leave both velocity components at zero
+// (undefined direction, matches FAudio's own div-by-zero avoidance), yielding a neutral ratio
+// rather than propagating a NaN into MIX_SetTrackFrequencyRatio.
+TEST_F(SoundEffectInstanceTest, Apply3DCoincidentPositionsDoesNotProduceNaNOrInf)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    inst.Play();
+
+    AudioListener listener;
+    listener.setVelocityProperty({100.0f, 0.0f, 0.0f});
+    AudioEmitter emitter;
+    emitter.setPositionProperty({0.0f, 0.0f, 0.0f}); // same position as the listener
+    emitter.setVelocityProperty({-100.0f, 0.0f, 0.0f});
+    inst.Apply3D(listener, emitter);
+
+    MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(inst);
+    ASSERT_NE(track, nullptr);
+    const float ratio = MIX_GetTrackFrequencyRatio(track);
+    EXPECT_FALSE(std::isnan(ratio));
+    EXPECT_FALSE(std::isinf(ratio));
+    EXPECT_NEAR(ratio, 1.0f, 1e-5f);
+}
+
+// AUD-09-011: extreme (unrealistically large) velocities must clamp, not overflow/NaN. Real
+// F3DAudio.c documents "limit the pitch shifting to 2 octaves up and 1 octave down"
+// (ComputeDopplerFactor's own clamp to [0.5, 4.0]).
+TEST_F(SoundEffectInstanceTest, Apply3DExtremeVelocityClampsToDocumentedRange)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    inst.Play();
+
+    AudioListener listener;
+    AudioEmitter emitter;
+    emitter.setPositionProperty({10.0f, 0.0f, 0.0f});
+    emitter.setVelocityProperty({-1.0e9f, 0.0f, 0.0f}); // absurdly fast approach
+    inst.Apply3D(listener, emitter);
+
+    MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(inst);
+    ASSERT_NE(track, nullptr);
+    const float ratio = MIX_GetTrackFrequencyRatio(track);
+    EXPECT_FALSE(std::isnan(ratio));
+    EXPECT_FALSE(std::isinf(ratio));
+    EXPECT_LE(ratio, 4.0f);
+    EXPECT_GE(ratio, 0.5f);
+}
+
 // CP-20: matches FNA's `is3D` latch (SoundEffectInstance.cs) -- once Apply3D has run, it (not
 // setPanProperty) should keep governing the real track output. SDL3_mixer has no stereo-pan
 // getter to directly observe the output matrix (same limitation as CP-3/T-4B's Apply3D

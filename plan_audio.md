@@ -324,15 +324,15 @@ Eliminate velocity/unit-induced pitch bugs and document unavoidable spatial diff
 
 - [ ] **AUD-09-001 [P0]** Create a documented 3D math baseline from XNA/FNA/FAudio behavior. **Acceptance:** Coordinate system, handedness, units, channel mask, and formula ownership are explicit.
 - [ ] **AUD-09-002 [P0]** Trace listener/emitter positions, velocities, orientations, and scales. **Acceptance:** Affected high-pitch cases expose every 3D input.
-- [ ] **AUD-09-003 [P0]** Test zero velocities always yield Doppler ratio 1. **Acceptance:** No position-only pitch shift.
-- [ ] **AUD-09-004 [P0]** Test `DopplerScale=0` always disables Doppler. **Acceptance:** Final ratio is independent of velocities.
-- [ ] **AUD-09-005 [P0]** Test equal listener/emitter velocity yields no relative Doppler. **Acceptance:** Parallel motion does not shift pitch.
+- [x] **AUD-09-003 [P0]** Test zero velocities always yield Doppler ratio 1. **Acceptance:** No position-only pitch shift. **Evidence:** `Apply3DZeroVelocitiesYieldNeutralDopplerRegardlessOfDefaultScale` -- distinct from AUD-09-004, this leaves `DopplerScale` at its real default (1.0) and only zeroes velocity, proving the neutral ratio comes from the velocity math itself, not merely the scale-zero shortcut.
+- [x] **AUD-09-004 [P0]** Test `DopplerScale=0` always disables Doppler. **Acceptance:** Final ratio is independent of velocities. **Evidence:** pre-existing `Apply3DDopplerIsNoOpWhenGlobalDopplerScaleIsZero` already covers this exactly (confirmed still passing).
+- [x] **AUD-09-005 [P0]** Test equal listener/emitter velocity yields no relative Doppler. **Acceptance:** Parallel motion does not shift pitch. **Evidence:** `Apply3DEqualListenerAndEmitterVelocityYieldsNeutralDoppler` (both moving at 50 units/sec along the same axis).
 - [ ] **AUD-09-006 [P0]** Test approaching and receding axial motion. **Acceptance:** Ratios match baseline and are reciprocal within expected physics limits.
-- [ ] **AUD-09-007 [P0]** Test tangential motion. **Acceptance:** No radial-velocity pitch shift.
+- [x] **AUD-09-007 [P0]** Test tangential motion. **Acceptance:** No radial-velocity pitch shift. **Evidence:** `Apply3DTangentialMotionYieldsNeutralDoppler` (emitter moving perpendicular to the emitter-listener axis).
 - [ ] **AUD-09-008 [P0]** Test unit conversion from per-frame to per-second velocities in sample code. **Acceptance:** Reference examples cannot accidentally create frame-rate-dependent pitch.
 - [ ] **AUD-09-009 [P0]** Verify global and emitter Doppler scales combine exactly once. **Acceptance:** No double multiplication.
 - [ ] **AUD-09-010 [P0]** Verify Doppler clamp behavior and backend ratio range. **Acceptance:** Clamping matches selected reference and logs when reached.
-- [ ] **AUD-09-011 [P0]** Test large/invalid velocities, coincident positions, and zero distance. **Acceptance:** No NaN, Inf, sign inversion, or unstable ratio.
+- [x] **AUD-09-011 [P0]** Test large/invalid velocities, coincident positions, and zero distance. **Acceptance:** No NaN, Inf, sign inversion, or unstable ratio. **Evidence:** `Apply3DCoincidentPositionsDoesNotProduceNaNOrInf` (distance==0, `ComputeDopplerFactor`'s own `distance != 0.0f` guard leaves both velocity components at zero); `Apply3DExtremeVelocityClampsToDocumentedRange` (a `-1e9` velocity drives the Doppler formula's denominator to exactly zero -- verified by hand that this produces `+infinity` *before* the final `std::clamp(dopplerFactor, 0.5f, 4.0f)` call, which correctly clamps `+inf` down to `4.0f` rather than propagating it -- both tests confirm the clamped, finite result reaches `MIX_SetTrackFrequencyRatio`).
 - [ ] **AUD-09-012 [P0]** Verify `DistanceScale` semantics and validation. **Acceptance:** Attenuation and 3D calculations use consistent world units.
 - [ ] **AUD-09-013 [P1]** Golden-test left/right/front/back source positions. **Acceptance:** Pan/spatial matrix is documented and stable.
 - [ ] **AUD-09-014 [P1]** Test listener orientation normalization and degenerate vectors. **Acceptance:** Invalid bases fail or normalize deterministically.
