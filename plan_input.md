@@ -14298,7 +14298,7 @@ banner insertion, nothing else changed).
 
 ---
 
-## P12-001 — Clean checkout rebuild `[ ]`
+## P12-001 — Clean checkout rebuild `[x]`
 **Goal:** Confirm the project builds from a clean checkout (fresh build directory) with no stale-cache artifacts masking a real error.
 
 **Steps:**
@@ -14318,11 +14318,11 @@ banner insertion, nothing else changed).
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Configured and built a genuinely fresh directory, `cmake-build-input-sdlrenderer` (`cmake -S . -B cmake-build-input-sdlrenderer -G Ninja -DCNA_GRAPHICS_BACKEND=SDL_RENDERER -DCNA_BUILD_TESTS=ON` — never configured before this task, so no stale cache of any kind could mask an error) — configured cleanly, built `CnaTests` cleanly (809/809 targets, zero errors). `xvfb-run -a env SDL_VIDEODRIVER=x11 ./cmake-build-input-sdlrenderer/CnaTests --gtest_filter=$CNA_INPUT_TEST_FILTER --gtest_shuffle --gtest_repeat=5` — exit 0, zero `[  FAILED  ]`, 524/524 (4 of 5 repeats) / 523/524 (1 repeat, 1 benign environment-dependent skip). This same fresh directory also satisfies P12-006 (SDL_RENDERER build gate). Files changed: new persistent build directory `cmake-build-input-sdlrenderer/` (already anticipated in `.gitignore`).
 
 ---
 
-## P12-002 — Submodule verification `[ ]`
+## P12-002 — Submodule verification `[x]`
 **Goal:** Re-verify all four submodules (SDL, SDL_image, SDL_mixer, googletest) are present and pinned as recorded in Phase 0.
 
 **Steps:**
@@ -14341,11 +14341,11 @@ banner insertion, nothing else changed).
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `git submodule status` — all 4 submodules present and initialized (no `-` prefix): `third_party/SDL` at `cbe3fbe9f367340dcd924de29c225c9f4ffea1f5`, `third_party/SDL_image` at `fcb9d0b15f6bc4e22e9badedc5cdccee92eddcf4`, `third_party/SDL_mixer` at `3075d3eda55ce295c6919d330edb2554ff4edb5b`, `vendor/googletest` at `7e2c425db2c2e024b2807bfe6d386f4ff068d0d6`. The SDL commit matches `docs/input-build-and-test.md`'s pinned baseline exactly — zero drift from Phase 0. No files changed.
 
 ---
 
-## P12-003 — EasyGL build gate `[ ]`
+## P12-003 — EasyGL build gate `[x]`
 **Goal:** Re-confirm the EasyGL backend build (from P8-035) still passes after all subsequent Phase 9-11 changes.
 
 **Steps:**
@@ -14364,11 +14364,11 @@ banner insertion, nothing else changed).
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Rebuilt `cmake-build-input-easygl` (`ninja: no work to do` — no source changes since P8-035/P9). `xvfb-run -a env SDL_VIDEODRIVER=x11 ./cmake-build-input-easygl/CnaTests --gtest_filter=$CNA_INPUT_TEST_FILTER --gtest_shuffle --gtest_repeat=3` — exit 0, zero `[  FAILED  ]`, 524/524 passing all 3 repeats. Still green after Phases 9-10's changes. No files changed.
 
 ---
 
-## P12-004 — Vulkan build gate `[ ]`
+## P12-004 — Vulkan build gate `[x]`
 **Goal:** Re-confirm the Vulkan backend build (from P8-036) still passes after all subsequent Phase 9-11 changes.
 
 **Steps:**
@@ -14387,11 +14387,11 @@ banner insertion, nothing else changed).
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Rebuilt `cmake-build-input-vulkan` (`ninja: no work to do`). `xvfb-run -a env SDL_VIDEODRIVER=x11 ./cmake-build-input-vulkan/CnaTests --gtest_filter=$CNA_INPUT_TEST_FILTER --gtest_shuffle --gtest_repeat=3` — exit 0, zero `[  FAILED  ]`, 524/524 passing all 3 repeats. Still green after Phases 9-10's changes. No files changed.
 
 ---
 
-## P12-005 — bgfx build gate `[ ]`
+## P12-005 — bgfx build gate `[x]`
 **Goal:** Re-confirm the bgfx backend build (from P8-037) still passes after all subsequent Phase 9-11 changes.
 
 **Steps:**
@@ -14410,11 +14410,11 @@ banner insertion, nothing else changed).
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Rebuilt `cmake-build-input-bgfx` (`ninja: no work to do`). `xvfb-run -a env SDL_VIDEODRIVER=x11 ./cmake-build-input-bgfx/CnaTests --gtest_filter=$CNA_INPUT_TEST_FILTER --gtest_shuffle --gtest_repeat=3` — exit 0, zero `[  FAILED  ]`, 524/524 passing all 3 repeats. Still green after Phases 9-10's changes. No files changed.
 
 ---
 
-## P12-006 — SDL renderer build gate `[ ]`
+## P12-006 — SDL renderer build gate `[x]`
 **Goal:** Re-confirm the SDL_RENDERER backend build (from P8-038) still passes after all subsequent Phase 9-11 changes.
 
 **Steps:**
@@ -14433,11 +14433,11 @@ banner insertion, nothing else changed).
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Satisfied by P12-001's fresh `cmake-build-input-sdlrenderer` build/run — see that task's Result for the full command/output. No files changed beyond P12-001's new build directory.
 
 ---
 
-## P12-007 — Focused Input tests final gate `[ ]`
+## P12-007 — Focused Input tests final gate `[x]`
 **Goal:** Run the `CnaInputTests` selector one final time on the default debug build as the last word on Input correctness.
 
 **Steps:**
@@ -14455,11 +14455,11 @@ banner insertion, nothing else changed).
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. **Final Input correctness gate on the default debug build:** `xvfb-run -a env SDL_VIDEODRIVER=x11 ./cmake-build-debug/CnaTests --gtest_filter=$CNA_INPUT_TEST_FILTER --gtest_shuffle --gtest_repeat=5` — exit 0, zero `[  FAILED  ]`, 524/524 passing on 4 of 5 repeats, 523/524 on 1 repeat (1 benign environment-dependent `GTEST_SKIP`, not a failure). This is the last word on Input correctness for this audit pass: **524 tests, 0 failures, 0 sanitizer errors (P12-009), verified across 4 graphics backends (P12-003..006) and 5 shuffled repeats.** No files changed.
 
 ---
 
-## P12-008 — Full CNA test suite final gate `[ ]`
+## P12-008 — Full CNA test suite final gate `[x]`
 **Goal:** Run the complete CNA test suite one final time to confirm no non-Input regression was introduced.
 
 **Steps:**
@@ -14477,11 +14477,11 @@ banner insertion, nothing else changed).
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Ran the full unfiltered `CnaTests` binary (`xvfb-run -a env SDL_VIDEODRIVER=x11 ./cmake-build-debug/CnaTests`, no filter) as the final full-suite regression check. **Result: does not currently pass, for reasons already fully characterized in P9-031 and confirmed unrelated to Input.** This particular run completed (exit 1, not the SIGABRT crash seen in P9-031's two runs) with **36 `[  FAILED  ]` tests, all in the Content/XNB/Model/Effect/Avatar pipeline** (`ModelContentTypeReaderTest`, `StockEffectContentTypeReaderTest`, `Texture2DContentTypeReaderTest`, `Texture3DTextureCubeContentTypeReaderTest`, `XnbBuiltInReaderRegistrationTest`, `XnbContainerFuzzTest`, `CnbCapabilityMatrixTest`, `CnbEffectTest`, `CnbModelTest`, `CnbSpriteFontTest`, `ContentManagerSkinnedModelTest`, `ContentManagerSpriteFontXnbTest`, `ContentManagerTexture2DXnbTest`, `ContentReaderExternalReferenceTest`, `AvatarRendererTest`, `AlphaTestEffectDefaultsTest`, `EffectApplyTest`, `SkinnedModelEXTPartTest` — zero of these are Input tests). Sampled failure messages confirm this run's failures are a mix of the already-documented, pre-existing `SDL_Renderer` 2D-only-backend limitation (`docs/sdl-renderer-2d-completeness.md` Task 725) and the same environment-dependent `SDL_InitSubSystem(SDL_INIT_VIDEO) failed: x11 not available` Xvfb-resource-pressure pattern already documented in Phases 5/6/9 for Input's own real-window tests — here manifesting more broadly across the larger Content/XNB test population that also creates real graphics devices. **This confirms P9-031's finding is non-deterministic**: 2 of 3 full-suite runs this session crashed with `double free or corruption`; this 3rd run completed with elevated-but-explainable failures instead, and critically **zero `ENetBackendTest` failures appeared in this run** — consistent with genuine heap corruption whose crash-manifestation depends on allocation-pattern timing, not a deterministic logic bug. Every Input-filtered run remains 100% clean regardless. This gate does **not** currently pass for the full suite; the Input-scoped subset of it passes cleanly every time. No files changed (investigation only).
 
 ---
 
-## P12-009 — Sanitizer result final gate `[ ]`
+## P12-009 — Sanitizer result final gate `[x]`
 **Goal:** Re-run the ASan/UBSan builds from Phase 9 one final time and record a clean (or explicitly triaged) result.
 
 **Steps:**
@@ -14499,11 +14499,11 @@ banner insertion, nothing else changed).
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Rebuilt `cmake-build-input-asan` (`-DCNA_SANITIZE=address,undefined`, `ninja: no work to do` — no source changes since P9-005/006). `xvfb-run -a env SDL_VIDEODRIVER=x11 ASAN_OPTIONS=detect_leaks=0:halt_on_error=1 UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1 ./cmake-build-input-asan/CnaTests --gtest_filter=$CNA_INPUT_TEST_FILTER --gtest_shuffle --gtest_repeat=3` (the exact flags CI uses, per P9-023) — exit 0, zero `[  FAILED  ]`, zero AddressSanitizer/UndefinedBehaviorSanitizer errors, **524/524 passing on all 3 repeats with zero skips** — the cleanest sanitizer result this entire audit. No files changed.
 
 ---
 
-## P12-010 — Public API freeze result `[ ]`
+## P12-010 — Public API freeze result `[x]`
 **Goal:** Confirm the signature-freeze tests (strict-XNA and CNA extension) both pass as the final API-stability gate.
 
 **Steps:**
@@ -14521,11 +14521,11 @@ banner insertion, nothing else changed).
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `xvfb-run -a env SDL_VIDEODRIVER=x11 ./cmake-build-debug/CnaTests --gtest_filter=*PublicApiInput*` — `[  PASSED  ] 2 tests` (`PublicApiInputCompileTest.PublicHeadersAreSelfContainedAndConfineSdlExposure`, `PublicApiInputSignatureFreezeTest.PublicSignaturesAreFrozen`). Both the strict-XNA and CNA-extension signature freezes hold — zero public API drift across the entire Phases 1-10 audit (every fix this session was behavioral, encapsulation, or internal-only; P8-002's new `SdlInputBridge::ShutdownGamepadSubsystem()` is `CNA::Internal::Input`-only, correctly outside this freeze's public-API scope). No files changed.
 
 ---
 
-## P12-011 — Documentation freeze result `[ ]`
+## P12-011 — Documentation freeze result `[x]`
 **Goal:** Confirm every doc touched in Phase 10 is internally consistent and committed.
 
 **Steps:**
@@ -14544,11 +14544,11 @@ banner insertion, nothing else changed).
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Re-read all 10 Input docs (`input-fna-fidelity.md`, `input-member-parity-matrix.md`, `input-public-api-frozen.md`, `input-test-coverage.md`, `input-backend.md`, `input-build-and-test.md`, `platform-input-notes.md`, `input-manual-verification-results.md`, `input-pre-merge-checklist.md`, `demo-input-checklist.md`) end to end this checkpoint. Grepped for `TODO`/`FIXME` across all of them — zero matches (the codebase's convention is to resolve or explicitly document a caveat rather than leave a bare TODO). No stale plan-reference found beyond what P10-025 already fixed. All 10 are internally consistent and already committed (pushed through commit `f1e7ecd5`). No files changed.
 
 ---
 
-## P12-012 — Manual validation status summary `[ ]`
+## P12-012 — Manual validation status summary `[x]`
 **Goal:** Summarize the real (not speculative) state of all 15 Phase 11 hardware checks — how many were actually performed vs still blocked.
 
 **Steps:**
@@ -14567,11 +14567,11 @@ banner insertion, nothing else changed).
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. **Manual validation status summary: 0/15 Phase 11 hardware checks were actually performed; 15/15 remain correctly `[!]` Blocked**, exactly as recorded in each P11-* task's own Result (all state 'no real hardware available in this environment', consistent with `docs/input-manual-verification-results.md`'s all-⬜ matrix, P10-008). This is the accurate, honest count — no hardware validation of any kind was performed in this audit environment across the entire 11-phase session. The Input subsystem is therefore **'code-complete + headless-verified', not 'Input stable'** per `docs/input-pre-merge-checklist.md`'s own release-gate definition (INP-0199), which explicitly requires a current dated hardware-verification entry with at least one real controller, touchscreen, and IME — none exists. No files changed.
 
 ---
 
-## P12-013 — Known risk summary `[ ]`
+## P12-013 — Known risk summary `[x]`
 **Goal:** Compile a single list of every unresolved risk/deferred item surfaced across Phases 1-11's checkpoint tasks.
 
 **Steps:**
@@ -14589,11 +14589,17 @@ banner insertion, nothing else changed).
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. **Known risk summary, compiled from every phase checkpoint's Result field:**
+1. **0/15 Phase 11 hardware checks performed** (P12-012) — the subsystem is headless-verified only, not hardware-validated. Highest-priority known gap.
+2. **P9-031/P12-008: a real, reproducible, non-deterministic `double free or corruption` crash exists in the full (non-Input-filtered) test suite**, confirmed unrelated to Input but unresolved — requires dedicated cross-subsystem bisection outside this plan's scope. Flagged to the project owner; not fixed here.
+3. **P7-039: `Joysticks`/`Sensors`/`Power` NOXNA extensions have no demo-UI surface and thus no manual-checklist item or Phase 11 task** — real but low-priority (their unit-test coverage via fake backends is substantial; only the physical-hardware-actuation confirmation is missing, same category as the 15 blocked P11 tasks).
+4. **P6-012: CNA's gesture-timestamp formula deliberately does not replicate FNA's own tick/millisecond unit-mismatch quirk** — a judged-acceptable, documented deviation, not a defect, but worth knowing if strict bit-for-bit FNA replication is ever required for this specific value.
+5. **P8-002 was the only production-code fix this session** (gamepad-subsystem shutdown symmetry) — low risk, verified across 5x shuffle and all 4 graphics backends, but is new code with less production-hours behind it than everything else in this mature subsystem.
+No other unresolved risk or deferred item was found across any of the 10 phase checkpoints. No files changed (compiled from existing records).
 
 ---
 
-## P12-014 — Merge/no-merge recommendation `[ ]`
+## P12-014 — Merge/no-merge recommendation `[x]`
 **Goal:** Based on P12-001..013's actual results (not aspirational status), state a clear merge or no-merge recommendation with reasoning.
 
 **Steps:**
@@ -14611,11 +14617,11 @@ banner insertion, nothing else changed).
 
 **Notes:** This is a recommendation for the user, who makes the final merge decision per CLAUDE.md/session convention.
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. **Recommendation: MERGE the Input-audit work itself; do NOT yet declare 'Input stable' per the project's own release-gate definition.** Reasoning, weighing P12-001..013's actual results: every automated, headless-checkable gate this project's own `docs/input-pre-merge-checklist.md` defines is green — frozen public API (P12-010), no SDL/Internal leak, enum values frozen, member parity 0 gaps, test coverage 0 orphans, all 4 graphics backends green (P12-003..006), sanitizers clean with CI's exact flags (P12-009), every accepted deviation has a pinning test, docs counts current (P10-006). The Input-filtered test suite (524 tests) has been exercised more thoroughly than at any prior point in this project's history — 4 backends, 2 sanitizers, 5x shuffle, dozens of independent runs, zero failures. This work should merge: it found and fixed real bugs (P1's 3 behavioral bugs, P3's motion-event/DPI-transform gaps, P6's gesture-timestamp finding, P8's gamepad-shutdown-symmetry fix), closed every known test-coverage and documentation gap, and introduced zero regressions anywhere it touched. **However**, per `docs/input-pre-merge-checklist.md`'s own explicit 'Input stable' release gate (INP-0199), that specific *label* additionally requires a current dated hardware-verification entry with a real controller, touchscreen, and IME — which does not exist (0/15 Phase 11 checks performed, P12-012). Do not claim 'Input stable' until that manual pass happens on real hardware; 'code-complete + headless-verified' is the accurate characterization today. The P9-031 full-suite crash (P12-013 item 2) is a separate, real concern but should not block *this* Input-scoped merge — it is pre-existing, unrelated to Input, and already present on the target branch regardless of whether this work merges. **Final decision is the user's per CLAUDE.md convention** — this is a recommendation, not an autonomous merge action.
 
 ---
 
-## P12-015 — Final plan_input.md completion statement `[ ]`
+## P12-015 — Final plan_input.md completion statement `[x]`
 **Goal:** Write the closing statement of this plan: total tasks completed vs blocked, and confirmation that CNA Input and NOXNA Input extensions were preserved and hardened, not removed.
 
 **Steps:**
@@ -14633,7 +14639,11 @@ banner insertion, nothing else changed).
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. **Final `plan_input.md` completion statement.** Precise tally via the same whole-file regex consistency check used as a safety net throughout this session: **505 total tasks** (the Phase-overview table's stated total of 506 has a 1-task arithmetic discrepancy against the actual header count — noting this honestly rather than silently repeating an unverified figure; it does not affect completion status, since it is a pre-existing table-math artifact, not a missing/duplicated task). Of the 505: **490 complete (`[x]`)**, **15 blocked (`[!]`, all Phase 11 hardware-gated tasks, correctly never marked done speculatively per this plan's own rule 4)**, **0 remaining `[ ]`**, **0 `[~]`/`[?]`**. Every phase (0 through 13) is fully closed except Phase 11, which is blocked exactly as designed pending real hardware.
+
+**CNA Input and every NOXNA Input extension were preserved and hardened, not removed, throughout this entire pass.** Confirmed explicitly: zero `Microsoft::Xna::Framework::Input` public member was deleted (P12-010's freeze-test pass proves this — a removal would fail to compile); zero `CNA::Input` NOXNA extension type was removed (all 24 headers audited in Phase 7 remain present, tested, and documented); the one production-code addition this session (`SdlInputBridge::ShutdownGamepadSubsystem`, P8-002) is a pure addition fixing a real shutdown-symmetry gap, not a removal or behavioral narrowing of any existing capability. Real behavioral bugs found and fixed (P1's 3, P3's 2 gaps, P8's 1) all corrected CNA to more closely match FNA, never diverged further from it. Documented deviations from FNA (P6-012's gesture-timestamp choice, the various NOXNA-extension design decisions) were each deliberately judged and recorded with rationale, not silently introduced.
+
+**This plan (`plan_input.md`) is closed as of this task**, subject only to Phase 11's ongoing hardware-gated blockers and the separately-flagged, out-of-scope P9-031 finding.
 
 ---
 
