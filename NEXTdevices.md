@@ -80,6 +80,16 @@ current rather than cumulative).
    forever; `disableSensor()`/`destroyEventQueue()` failures are now checked and
    logged (debug builds, `__android_log_print` — needed a new `liblog.so` CMake link
    dependency, added).
+8. `LIFE-006` (`de79d923`) — new `SensorBase<T>::DisposalTerminalStateGuard`, used by
+   all four sensor classes, guarantees `disposed_` is published (unblocking every
+   concurrent losing `Dispose()` waiter) even if the winning caller's own cleanup
+   throws — closes a gap `WaitForDisposalToComplete()`'s own prior doc comment
+   explicitly flagged as a known, unfixed assumption. Directly, deterministically
+   tested (not just reasoned about) via a new isolated `SensorBaseTests.cpp` fixture
+   extension (deliberately *not* a real `Accelerometer` — see its own resolution note
+   for the shared-global-counter pollution risk that would have created for other
+   tests in the same binary). Re-verified clean across 4 consecutive `devices-tsan`
+   runs (this touches shared locking used by all four sensor classes).
 
 **Pattern across `ANDR2-004`/`005`/`006`:** all three are inside `#ifdef __ANDROID__`
 code with **zero host-side test coverage possible** — verified instead via a real
@@ -94,16 +104,16 @@ link time — flag for whoever next fixes the `sharp-runtime` blocker.
 **Build:** `cmake-build-devices-ubsan` and `cmake-build-android` both still build
 clean (the latter for individual translation units only, per above).
 
-**Tests:** Devices/Sensors filtered suite — **405 tests, 401 passed, 4 skipped**
+**Tests:** Devices/Sensors filtered suite — **406 tests, 402 passed, 4 skipped**
 (hardware-only, unchanged all pass). Zero regressions across every P1 task above.
 
-**Sanitizers:** `devices-ubsan` clean on every P1 change (all are host-compiled and
-re-verified). `devices-tsan` not re-run for the P1 phase specifically — none of
-`BASE2-007`/`VIB2-*`/`LIFE-008`/`ANDR2-004/005/006` add new concurrency (they're
-exception-safety, NaN-handling, and Android-only sequential-logic fixes) — the P0
-phase's own TSan verification (`TEST2-001`) already covers the concurrent lifecycle
-code these don't touch. Re-run TSan if a future P1 task *does* touch concurrent logic
-(several `LIFE-*`/`SDLCORE-*`/`ANDR2-*` P1/P2 items remain that might).
+**Sanitizers:** `devices-ubsan` clean on every P1 change. `devices-tsan` re-run (4
+consecutive clean runs) specifically for `LIFE-006`, since that one touches shared,
+genuinely concurrent base-class locking used by all four sensor classes — the other
+7 P1 tasks this pass (`BASE2-007`/`VIB2-*`/`LIFE-008`/`ANDR2-004/005/006`) don't add
+new concurrency (exception-safety, NaN-handling, Android-only sequential-logic
+fixes), so weren't separately TSan-verified. Re-run TSan if a future P1 task touches
+concurrent logic.
 
 ---
 
@@ -200,8 +210,9 @@ tractability, same reasoning as this pass's choices):
   considering next since multiple other tasks are implicitly waiting on it.
 - `SDLCORE-005`/`007`/`009`/`011` — hotplug handling, event timestamps, callback
   exception consistency, shutdown ordering.
-- `LIFE-006`/`007`/`010`/`011` — disposal exception-safety, one explicit lifecycle
-  state machine, transient-vs-permanent failure distinction, Stop/Dispose quiescence.
+- `LIFE-007`/`010`/`011` — one explicit lifecycle state machine, transient-vs-permanent
+  failure distinction, Stop/Dispose quiescence (`LIFE-006`, disposal exception-safety,
+  is now done — see Section 2 item 8).
 - `ANDR2-002`/`007`/`009`–`012`/`014`/`015` — remaining Android-only items (several are
   real-hardware-only by nature: `014`/`015` explicitly want fuzzing/instrumented
   hardware runs).
