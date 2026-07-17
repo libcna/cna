@@ -174,6 +174,23 @@ resolution notes as the template.
     container cannot produce. Both acceptance criteria describe the undone redesign, not
     the counter — this task's acceptance criteria remain **unmet**, not just
     hardware-unverified; the least-complete task touched this pass.
+19. `MOT2-005` (`551da335`) — `AndroidMotionBackend::Start()` already picks
+    `TYPE_ROTATION_VECTOR` (north-referenced) or falls back to
+    `TYPE_GAME_ROTATION_VECTOR` (drift-prone) into `usingGameRotationVector_`, but
+    nothing exposed which was in effect. Added
+    `IMotionBackend::IsUsingNorthReferencedAttitudeSource()` and a new public
+    `Motion::getIsAttitudeNorthReferencedProperty()` (NOXNA). **Found and fixed a
+    latent data race while wiring this up**: `usingGameRotationVector_` was written by
+    `Start()` with no lock at all — harmless before this task (nothing read it), a real
+    race the instant a reader existed; now stored under `stateMutex_`.
+    **Unlike most Android-only fixes this pass, fully host-testable** — the `Motion` →
+    `IMotionBackend` delegation runs through the existing `FakeMotionBackend`, so 4 new
+    tests directly cover the no-backend default, both fake-backend outcomes, and the
+    post-dispose throw, with no Android dependency. **Left OPEN** (implementation done)
+    — whether the real backend actually selects the fallback in the expected real
+    circumstance, plus the required work's WP7-documentation-comparison and
+    drift-measurement bullets, remain unverified/unattempted. Re-verified clean under
+    `devices-tsan` (new host-buildable lock/interface change).
 
 **Pattern across `ANDR2-002`/`004`/`005`/`006`:** all inside `#ifdef __ANDROID__` code
 with **zero host-side test coverage possible** — verified instead via a real Android
@@ -188,15 +205,15 @@ confirmed to actually resolve at link time.
 `cmake-build-android` all still build clean (the last for individual translation units
 only, per above).
 
-**Tests:** Devices/Sensors filtered suite — **296 tests** (precise filter, used from
+**Tests:** Devices/Sensors filtered suite — **300 tests** (precise filter, used from
 `VIB2-003` onward: `AccelerometerTests.*:GyroscopeTests.*:CompassTests.*:MotionTests.*:
 SensorBaseTests.*:SensorSubsystemOwnershipTests.*:VibrateControllerTests.*:
-AndroidMotionMathTests.*:AndroidCompassMathTests.*`) — **292 passed, 4 skipped**
+AndroidMotionMathTests.*:AndroidCompassMathTests.*`) — **296 passed, 4 skipped**
 (hardware-only, unchanged), 0 failures across every task above. `MOT2-003` added no
-tests (Android-only, no pure-logic component to test the way `COMP2-001` had). Note: a
-broader, unscoped `*Devices*:*Sensor*:...` filter also incidentally matches
-`AccelerometerReadingTests`/`*EventArgsTests` (plain data-holder tests), one of which
-(`GetHashCodeConsistency`) trips a **pre-existing, unrelated** UBSan finding in
+tests (Android-only, no pure-logic component to test the way `COMP2-001`/`MOT2-005`
+had). Note: a broader, unscoped `*Devices*:*Sensor*:...` filter also incidentally
+matches `AccelerometerReadingTests`/`*EventArgsTests` (plain data-holder tests), one of
+which (`GetHashCodeConsistency`) trips a **pre-existing, unrelated** UBSan finding in
 `Vector3::GetHashCode()` (signed-int overflow in hash-combining) — not touched by any
 task this pass, out of scope for Devices work, not silenced, just avoid the broad
 filter and use the precise one above (or expect and ignore that one specific failure
@@ -205,10 +222,10 @@ if using a broader filter for some other reason).
 **Sanitizers:** `devices-ubsan` clean on every P1 change this pass. `devices-tsan` was
 NOT re-run for `VIB2-003`/`004`/`ANDR2-002`/`COMP2-001`/`MOT2-003` (none add new
 locking/concurrency structure beyond what already existed, or the new lock is
-Android-only and can't run under host TSan at all) but WAS re-run for `SDLCORE-009` and
-`SDLCORE-005` (both add a new, host-buildable lock-acquisition site) — 3 consecutive
-clean runs each, 0 `WARNING: ThreadSanitizer` occurrences. Re-run TSan if a future P1
-task touches concurrent *host-buildable* logic.
+Android-only and can't run under host TSan at all) but WAS re-run for `SDLCORE-009`,
+`SDLCORE-005`, and `MOT2-005` (each adds a new, host-buildable lock-acquisition site) —
+3 consecutive clean runs each, 0 `WARNING: ThreadSanitizer` occurrences. Re-run TSan if
+a future P1 task touches concurrent *host-buildable* logic.
 
 ---
 
@@ -337,10 +354,15 @@ tractability):
   `SDLCORE-005` deliberately deferred this pass).
 - `COMP2-003`/`004`/`005`/`008` — remaining Compass items (`COMP2-001` done this pass;
   `004`/`005` need physical devices).
-- `MOT2-001`/`005`/`006`/`008`/`009`/`010` — remaining Motion items (`MOT2-003` only
-  minimally progressed this pass, see Section 5 — its core redesign is still fully
-  open and would be a substantial task if picked up properly, not a quick follow-up;
-  `MOT2-010` needs physical hardware).
+- `MOT2-001`/`006`/`008`/`009`/`010` — remaining Motion items (`MOT2-003`/`005` done
+  this pass, though `MOT2-003` only minimally — its core redesign is still fully open
+  and would be a substantial task if picked up properly, not a quick follow-up.
+  `MOT2-006` was investigated: its "handle a source disappearing after Start without
+  continuing stale output" and "define recovery/restart and state transitions" bullets
+  are genuinely unimplemented today — `Motion.state_` never changes in response to a
+  mid-session backend degradation, confirmed by reading `Motion.cpp` — comparable in
+  scope to `LIFE-007`/`010`, not attempted this pass. `MOT2-010` needs physical
+  hardware.).
 - `BASE2-001`–`005` — mostly "verify against a behavioral oracle" tasks; this
   environment has no WP7 SDK/MonoGame reference — may need scoping down to "verify
   internal consistency", a decision worth making explicit if picked up.
@@ -392,18 +414,19 @@ whether a finished implementation should be marked CLOSED or left OPEN.
 ```
 Read plan_devices.md's "Section 16. Independent perfection re-audit backlog
 (2026-07-17)" first -- it is the source of truth for current work. Read this
-file (NEXTdevices.md) for what's been done: all P0 tasks are closed, and 18 P1
+file (NEXTdevices.md) for what's been done: all P0 tasks are closed, and 19 P1
 tasks are closed or progressed so far (BASE2-007, VIB2-002, VIB2-001, LIFE-008,
 ANDR2-004, ANDR2-005, ANDR2-006, LIFE-006, COMP2-009, MOT2-002, COMP2-002,
-VIB2-003, VIB2-004, ANDR2-002, SDLCORE-009, SDLCORE-005, COMP2-001, MOT2-003 --
-see Section 2 for commit hashes and a one-line summary of each). Read Section
-1's "labeling convention" note carefully before closing anything -- it
-distinguishes tasks provable by code inspection (CLOSED, e.g. SDLCORE-009)
-from tasks whose acceptance criteria name an empirical/hardware result (stays
-OPEN even once implemented, e.g. VIB2-003/004, ANDR2-002, SDLCORE-005,
-COMP2-001). MOT2-003 is a special case: only its narrowest sub-bullet was
-implemented, its acceptance criteria remain genuinely unmet (not just
-hardware-unverified) -- don't mistake it for a near-complete fix.
+VIB2-003, VIB2-004, ANDR2-002, SDLCORE-009, SDLCORE-005, COMP2-001, MOT2-003,
+MOT2-005 -- see Section 2 for commit hashes and a one-line summary of each).
+Read Section 1's "labeling convention" note carefully before closing anything
+-- it distinguishes tasks provable by code inspection (CLOSED, e.g.
+SDLCORE-009) from tasks whose acceptance criteria name an empirical/hardware
+result (stays OPEN even once implemented, e.g. VIB2-003/004, ANDR2-002,
+SDLCORE-005, COMP2-001, MOT2-005). MOT2-003 is a special case: only its
+narrowest sub-bullet was implemented, its acceptance criteria remain
+genuinely unmet (not just hardware-unverified) -- don't mistake it for a
+near-complete fix.
 
 Continue the P1 backlog (Section 8 lists untriaged candidates with rough
 tractability notes). Read each task's full plan_devices.md entry before
