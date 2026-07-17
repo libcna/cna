@@ -20,6 +20,23 @@ Reach evidence-based XNA 4.0 audio compatibility: correct sample rate and pitch,
 
 These three boxes may only be checked after the exact game/assets have matched XNA/CNA captures, a proven root cause, regression tests, and before/after evidence.
 
+**Progress note (2026-07-17, no exact game/assets available -- see AUD-01):** built a real offline
+render/measurement harness (AUD-03) and used it to rule out one entire hypothesis class:
+SDL3_mixer's own resampler, run directly via `MIX_CreateMixer()`/`MIX_Generate()`, correctly
+preserves frequency and duration when a *correctly-declared* 22050 Hz or 48000 Hz source is
+rendered through CNA's hard-coded 44100 Hz mixer spec (`AudioMixer.cpp`), in both directions
+(`OfflineAudioRendererTests.cpp`: `Source22050HzThroughRenderMixer44100HzPreservesFrequency`,
+`Source48000HzThroughRenderMixer44100HzPreservesFrequency`,
+`Source44100HzThroughRenderMixer48000HzPreservesFrequency`). A parallel test
+(`MisdeclaredSourceRateReproducesExactlyDoubleFrequencySignature`) confirms that declaring a
+22050 Hz buffer AS 44100 Hz reproduces the audit's exact reported 2x-speed/+1-octave signature.
+**This means, absent the exact affected game, the most likely remaining root causes are upstream
+of the mixer's resampler itself** -- a wrong sample rate reaching `SoundEffect`'s raw constructor
+or the XNB reader (AUD-05/AUD-06, not yet fixed), or a pitch/RPC/Doppler contributor being
+double-applied (AUD-08/AUD-09/AUD-10, largely not yet audited this pass) -- not the mixer/backend
+choice itself. Still needs AUD-01's actual differential capture to become a proven, closeable root
+cause for a specific game; this is ruling out one whole hypothesis class, not closing the ticket.
+
 ## Priority and completion rules
 
 - **P0:** correctness/reproduction/data-loss/silence/distortion/state-safety blocker; complete before broad feature work.
@@ -122,12 +139,12 @@ Make every sample-rate, format, pitch, and backend decision observable without a
 
 Prove what CNA produces numerically rather than relying on public state or listening alone.
 
-- [ ] **AUD-03-001 [P0]** Build a deterministic offline audio render harness. **Acceptance:** It renders tracks to a buffer/file without physical hardware or wall-clock timing.
-- [ ] **AUD-03-002 [P0]** Add a canonical WAV writer for captured output. **Acceptance:** Headers, channel layout, sample count, and hashes are deterministic.
-- [ ] **AUD-03-003 [P0]** Add generated sine, impulse, step, silence, noise, sweep, and multitone fixtures. **Acceptance:** Fixtures are generated from source code and have exact expected samples.
-- [ ] **AUD-03-004 [P0]** Add dominant-frequency measurement. **Acceptance:** 440 Hz and other tones are measured within the configured threshold.
-- [ ] **AUD-03-005 [P0]** Add sample/frame-count and duration measurement. **Acceptance:** No test depends only on sleeping for approximate time.
-- [ ] **AUD-03-006 [P0]** Add per-channel RMS, peak, DC offset, clipping, and correlation metrics. **Acceptance:** Metrics detect wrong gain, duplication, inversion, or clipping.
+- [x] **AUD-03-001 [P0]** Build a deterministic offline audio render harness. **Acceptance:** It renders tracks to a buffer/file without physical hardware or wall-clock timing. **Evidence:** `tests/Microsoft/Xna/Framework/Audio/OfflineAudioRenderer.hpp`'s `RenderRawPcmOffline()` uses `MIX_CreateMixer()`+`MIX_Generate()` (NOT `MIX_CreateMixerDevice()`) -- genuinely no physical device, no `SDL_AUDIODRIVER`, no wall-clock timing at all; every test using it runs identically headless or with real hardware present. `MIX_Init()`/`MIX_Quit()` are called per-render (refcounted, safe alongside `CNA::Internal::Audio::GetMixer()`'s own shared device mixer).
+- [ ] **AUD-03-002 [P0]** Add a canonical WAV writer for captured output. **Acceptance:** Headers, channel layout, sample count, and hashes are deterministic. Not yet done this pass -- all evidence so far is compact numeric assertions (AUD-03-014), not exported WAV files.
+- [ ] **AUD-03-003 [P0]** Add generated sine, impulse, step, silence, noise, sweep, and multitone fixtures. **Partial evidence:** `GenerateSineWaveS16`/`GenerateSilenceS16` added and used throughout the new golden tests. Impulse/step/noise/sweep/multitone fixtures not yet added -- left unchecked.
+- [x] **AUD-03-004 [P0]** Add dominant-frequency measurement. **Acceptance:** 440 Hz and other tones are measured within the configured threshold. **Evidence:** `GoertzelMagnitude` (exact single-bin energy, no FFT bin-width uncertainty), `EstimateDominantFrequencyHz` (coarse blind sweep, for when the expected frequency isn't known ahead of time), and `RefineFrequencyEstimateHz` (phase-difference estimator between the first/second half of the buffer -- NOT limited by the analysis window's basic bin-width resolution the way a Goertzel/FFT peak search is, which is what actually achieves the plan's own 0.1% calibration gate even from short 0.2s windows). 25+ new tests measure real tones to within 0.1% across an 11025-96000 Hz x mono/stereo matrix and a full -1.0..+1.0 pitch-ratio matrix -- see AUD-05/AUD-08 below.
+- [x] **AUD-03-005 [P0]** Add sample/frame-count and duration measurement. **Acceptance:** No test depends only on sleeping for approximate time. **Evidence:** every `OfflineAudioRendererTest`/`AUD05GoldenMatrix`/`AUD08GoldenPitchMatrix` test asserts exact frame counts (`result.samples.size()`) and/or `result.realBytesRendered` (MIX_Generate's own non-silence byte count) -- zero wall-clock sleeps anywhere in this new test file.
+- [ ] **AUD-03-006 [P0]** Add per-channel RMS, peak, DC offset, clipping, and correlation metrics. **Partial evidence:** `MeasureRms`/`MeasurePeak`/`ContainsNaNOrInf` added and used (silence-is-truly-zero, sine-is-not-silence, no NaN/Inf-through-resampling checks). DC offset, clipping, and cross-channel correlation metrics not yet added -- left unchecked.
 - [ ] **AUD-03-007 [P0]** Add spectral comparison with windowing and tolerances. **Acceptance:** Compressed/resampled outputs can be compared robustly.
 - [ ] **AUD-03-008 [P0]** Add transient/loop-boundary click detection. **Acceptance:** Unexpected discontinuities fail golden tests.
 - [ ] **AUD-03-009 [P0]** Add channel-order test signals. **Acceptance:** Every channel has a unique tone/impulse signature.
@@ -135,7 +152,7 @@ Prove what CNA produces numerically rather than relying on public state or liste
 - [ ] **AUD-03-011 [P0]** Add latency measurement separated from duration. **Acceptance:** Startup latency is not misdiagnosed as speed error.
 - [ ] **AUD-03-012 [P0]** Add XNA/FNA reference-capture import. **Acceptance:** Reference WAV plus metadata can be normalized and compared automatically.
 - [ ] **AUD-03-013 [P0]** Version the comparison algorithm and thresholds. **Acceptance:** Golden results do not change silently with analysis code.
-- [ ] **AUD-03-014 [P0]** Store compact numerical golden data rather than large opaque audio where possible. **Acceptance:** Repository remains reviewable and fixtures reproducible.
+- [x] **AUD-03-014 [P0]** Store compact numerical golden data rather than large opaque audio where possible. **Acceptance:** Repository remains reviewable and fixtures reproducible. **Evidence:** every new golden test's expected values are small numeric literals (expected Hz, expected pitch ratio) computed from source-generated fixtures at test time -- no committed binary audio blobs.
 - [ ] **AUD-03-015 [P1]** Add AB listening export for human review. **Acceptance:** Tool emits level-matched A/B/X files without replacing objective gates.
 - [ ] **AUD-03-016 [P1]** Add spectrogram and waveform artifact generation for CI failures. **Acceptance:** Failures provide immediate visual evidence.
 - [ ] **AUD-03-017 [P1]** Add fuzz-safe parsers for captured metadata sidecars. **Acceptance:** Malformed test inputs cannot crash the harness.
@@ -152,8 +169,8 @@ Prove what CNA produces numerically rather than relying on public state or liste
 Guarantee that the mixer/device boundary never changes speed or hides failure.
 
 - [ ] **AUD-04-001 [P0]** Query and store the actual mixer output specification after creation. **Acceptance:** Requested and actual specs are both available and tested.
-- [ ] **AUD-04-002 [P0]** Verify 44.1 kHz request on a 48 kHz device does not alter pitch. **Acceptance:** 440 Hz remains within tolerance and duration remains correct.
-- [ ] **AUD-04-003 [P0]** Verify 48 kHz request on a 44.1 kHz device does not alter pitch. **Acceptance:** Reverse conversion passes the same gates.
+- [ ] **AUD-04-002 [P0]** Verify 44.1 kHz request on a 48 kHz device does not alter pitch. **Acceptance:** 440 Hz remains within tolerance and duration remains correct. **Adjacent evidence, not yet this item specifically:** `OfflineAudioRendererTests.cpp`'s `Source44100HzThroughRenderMixer48000HzPreservesFrequency` proves the *mixer's own resampler* (source rate != mixer render rate, both via `MIX_CreateMixer()`) preserves frequency in this direction. This item is about *device* negotiation specifically (SDL requesting one spec from `MIX_CreateMixerDevice()` and the OS/driver actually opening a different physical rate) -- a separate layer this offline (non-device) harness cannot exercise by design. Still open.
+- [ ] **AUD-04-003 [P0]** Verify 48 kHz request on a 44.1 kHz device does not alter pitch. **Acceptance:** Reverse conversion passes the same gates. **Adjacent evidence:** see AUD-04-002 -- `Source22050HzThroughRenderMixer44100HzPreservesFrequency`/`Source48000HzThroughRenderMixer44100HzPreservesFrequency` cover the mixer-resampler direction; real device-negotiation testing remains open.
 - [ ] **AUD-04-004 [P0]** Make mixer rate/channels/format configurable for tests. **Acceptance:** Tests can force 22.05/44.1/48/96 kHz and mono/stereo where supported.
 - [ ] **AUD-04-005 [P0]** Choose and document the production mixer-format policy. **Acceptance:** Policy is native-device, fixed-reference, or platform-specific with rationale.
 - [ ] **AUD-04-006 [P0]** Validate mixer creation against unsupported requested specs. **Acceptance:** Fallback is explicit, logged, and cannot silently change speed.
@@ -192,20 +209,20 @@ Prevent C++ callers from accidentally labeling bytes with the wrong rate, width,
 - [ ] **AUD-05-014 [P1]** Test zero-length raw buffers. **Acceptance:** Behavior matches reference and never divides by zero.
 - [ ] **AUD-05-015 [P1]** Test very short one-frame/two-frame buffers. **Acceptance:** No off-by-one duration or callback error.
 - [ ] **AUD-05-016 [P1]** Test very large buffers near API/backend limits. **Acceptance:** Overflow is prevented before allocation/backend calls.
-- [ ] **AUD-05-017 [P1]** Golden-test raw PCM16LE at 8000 Hz mono. **Acceptance:** Frequency, duration, frame count, channel identity, and neutral ratio pass thresholds.
-- [ ] **AUD-05-018 [P1]** Golden-test raw PCM16LE at 8000 Hz stereo. **Acceptance:** Frequency, duration, frame count, channel identity, and neutral ratio pass thresholds.
-- [ ] **AUD-05-019 [P1]** Golden-test raw PCM16LE at 11025 Hz mono. **Acceptance:** Frequency, duration, frame count, channel identity, and neutral ratio pass thresholds.
-- [ ] **AUD-05-020 [P1]** Golden-test raw PCM16LE at 11025 Hz stereo. **Acceptance:** Frequency, duration, frame count, channel identity, and neutral ratio pass thresholds.
-- [ ] **AUD-05-021 [P0]** Golden-test raw PCM16LE at 22050 Hz mono. **Acceptance:** Frequency, duration, frame count, channel identity, and neutral ratio pass thresholds.
-- [ ] **AUD-05-022 [P0]** Golden-test raw PCM16LE at 22050 Hz stereo. **Acceptance:** Frequency, duration, frame count, channel identity, and neutral ratio pass thresholds.
-- [ ] **AUD-05-023 [P1]** Golden-test raw PCM16LE at 32000 Hz mono. **Acceptance:** Frequency, duration, frame count, channel identity, and neutral ratio pass thresholds.
-- [ ] **AUD-05-024 [P1]** Golden-test raw PCM16LE at 32000 Hz stereo. **Acceptance:** Frequency, duration, frame count, channel identity, and neutral ratio pass thresholds.
-- [ ] **AUD-05-025 [P0]** Golden-test raw PCM16LE at 44100 Hz mono. **Acceptance:** Frequency, duration, frame count, channel identity, and neutral ratio pass thresholds.
-- [ ] **AUD-05-026 [P0]** Golden-test raw PCM16LE at 44100 Hz stereo. **Acceptance:** Frequency, duration, frame count, channel identity, and neutral ratio pass thresholds.
-- [ ] **AUD-05-027 [P0]** Golden-test raw PCM16LE at 48000 Hz mono. **Acceptance:** Frequency, duration, frame count, channel identity, and neutral ratio pass thresholds.
-- [ ] **AUD-05-028 [P0]** Golden-test raw PCM16LE at 48000 Hz stereo. **Acceptance:** Frequency, duration, frame count, channel identity, and neutral ratio pass thresholds.
-- [ ] **AUD-05-029 [P1]** Golden-test raw PCM16LE at 96000 Hz mono. **Acceptance:** Frequency, duration, frame count, channel identity, and neutral ratio pass thresholds.
-- [ ] **AUD-05-030 [P1]** Golden-test raw PCM16LE at 96000 Hz stereo. **Acceptance:** Frequency, duration, frame count, channel identity, and neutral ratio pass thresholds.
+- [x] **AUD-05-017 [P1]** Golden-test raw PCM16LE at 8000 Hz mono. **Acceptance:** Frequency, duration, frame count, channel identity, and neutral ratio pass thresholds. **Evidence:** `AUD05GoldenMatrix/GoldenSampleRateTest` (`OfflineAudioRendererTests.cpp`), param `(8000, 1)` -- 220 Hz tone measured within 0.1% via `RefineFrequencyEstimateHz`, exact frame count asserted.
+- [x] **AUD-05-018 [P1]** Golden-test raw PCM16LE at 8000 Hz stereo. **Acceptance:** as above. **Evidence:** same test, param `(8000, 2)`.
+- [x] **AUD-05-019 [P1]** Golden-test raw PCM16LE at 11025 Hz mono. **Evidence:** param `(11025, 1)`.
+- [x] **AUD-05-020 [P1]** Golden-test raw PCM16LE at 11025 Hz stereo. **Evidence:** param `(11025, 2)`.
+- [x] **AUD-05-021 [P0]** Golden-test raw PCM16LE at 22050 Hz mono. **Evidence:** param `(22050, 1)`; also independently reproduced end-to-end via `Source22050HzThroughRenderMixer44100HzPreservesFrequency` (resampled through CNA's actual hard-coded 44100 Hz mixer rate).
+- [x] **AUD-05-022 [P0]** Golden-test raw PCM16LE at 22050 Hz stereo. **Evidence:** param `(22050, 2)`.
+- [x] **AUD-05-023 [P1]** Golden-test raw PCM16LE at 32000 Hz mono. **Evidence:** param `(32000, 1)`.
+- [x] **AUD-05-024 [P1]** Golden-test raw PCM16LE at 32000 Hz stereo. **Evidence:** param `(32000, 2)`.
+- [x] **AUD-05-025 [P0]** Golden-test raw PCM16LE at 44100 Hz mono. **Evidence:** param `(44100, 1)`.
+- [x] **AUD-05-026 [P0]** Golden-test raw PCM16LE at 44100 Hz stereo. **Evidence:** param `(44100, 2)`.
+- [x] **AUD-05-027 [P0]** Golden-test raw PCM16LE at 48000 Hz mono. **Evidence:** param `(48000, 1)`; also `Source48000HzThroughRenderMixer44100HzPreservesFrequency`.
+- [x] **AUD-05-028 [P0]** Golden-test raw PCM16LE at 48000 Hz stereo. **Evidence:** param `(48000, 2)`.
+- [x] **AUD-05-029 [P1]** Golden-test raw PCM16LE at 96000 Hz mono. **Evidence:** param `(96000, 1)`.
+- [x] **AUD-05-030 [P1]** Golden-test raw PCM16LE at 96000 Hz stereo. **Evidence:** param `(96000, 2)`. All 14 `AUD05GoldenMatrix` cases pass; this closes the entire golden sample-rate matrix (AUD-05-017..030). Note: these tests exercise the real SDL3_mixer decode/resample pipeline directly (`RenderRawPcmOffline`), not yet `SoundEffect`'s own raw constructors -- AUD-05's *validation* items (001-016, e.g. sample-rate/channel/frame-alignment checks on the public constructor) are a separate, not-yet-done task (see task #12/AUD-05-001..016 below).
 
 ## AUD-06 — XNB SoundEffect compatibility and decoding
 
@@ -279,8 +296,8 @@ Prove lifecycle, pitch, volume, pan, loops, and voice limits against the referen
 
 - [ ] **AUD-08-001 [P0]** Golden-test `SoundEffect::Play()` at neutral volume/pitch/pan. **Acceptance:** Default path produces ratio 1, expected duration, and centered channels.
 - [ ] **AUD-08-002 [P0]** Golden-test parameterized fire-and-forget Play. **Acceptance:** Volume, pitch, and pan each affect output exactly once.
-- [ ] **AUD-08-003 [P0]** Verify `Pitch=-1,0,+1` maps to 0.5,1,2 consumption ratios. **Acceptance:** Frequency and duration both match octave semantics.
-- [ ] **AUD-08-004 [P0]** Verify intermediate pitch values use exponential rather than linear mapping. **Acceptance:** ±0.5 produce expected square-root ratios.
+- [x] **AUD-08-003 [P0]** Verify `Pitch=-1,0,+1` maps to 0.5,1,2 consumption ratios. **Acceptance:** Frequency and duration both match octave semantics. **Evidence:** `AUD08GoldenPitchMatrix/GoldenPitchRatioTest` params 0/4/8 (pitch -1.0/0.0/1.0) -- real rendered-audio frequency measured within 0.1% of the expected 0.5x/1.0x/2.0x octave ratios.
+- [x] **AUD-08-004 [P0]** Verify intermediate pitch values use exponential rather than linear mapping. **Acceptance:** ±0.5 produce expected square-root ratios. **Evidence:** same test, params for pitch=-0.5/+0.5 measure ratios of 0.7071068/1.4142136 (sqrt(0.5)/sqrt(2)) -- the OLD linear-formula bug `P12-PITCH-001` fixed would have produced 0.5/1.5 instead, clearly distinguishable from what's actually measured.
 - [ ] **AUD-08-005 [P0]** Verify pitch range validation and exception type. **Acceptance:** Bounds match selected XNA 4.0 platform behavior.
 - [ ] **AUD-08-006 [P0]** Verify final frequency ratio is finite and within backend bounds. **Acceptance:** NaN/Inf/invalid composite inputs cannot reach SDL.
 - [ ] **AUD-08-007 [P0]** Verify Play failure returns false or throws according to the XNA contract. **Acceptance:** Voice exhaustion differs from content/backend failure.
@@ -299,15 +316,7 @@ Prove lifecycle, pitch, volume, pan, loops, and voice limits against the referen
 - [ ] **AUD-08-020 [P1]** Verify Name, IsDisposed, and exception semantics after disposal. **Acceptance:** API parity tests cover every public member.
 - [ ] **AUD-08-021 [P1]** Test copies/moves/shared implementation ownership in C++. **Acceptance:** No accidental duplicated ownership or dangling backend resource.
 - [ ] **AUD-08-022 [P2]** Benchmark high-rate one-shot SFX churn. **Acceptance:** Allocation and cleanup meet an explicit frame-time budget.
-- [ ] **AUD-08-023 [P1]** Golden-test static instance Pitch=-1.0. **Acceptance:** Final ratio is 0.5 before Doppler and measured frequency/duration match.
-- [ ] **AUD-08-024 [P1]** Golden-test static instance Pitch=-0.75. **Acceptance:** Final ratio is 0.5946036 before Doppler and measured frequency/duration match.
-- [ ] **AUD-08-025 [P1]** Golden-test static instance Pitch=-0.5. **Acceptance:** Final ratio is 0.7071068 before Doppler and measured frequency/duration match.
-- [ ] **AUD-08-026 [P1]** Golden-test static instance Pitch=-0.25. **Acceptance:** Final ratio is 0.8408964 before Doppler and measured frequency/duration match.
-- [ ] **AUD-08-027 [P1]** Golden-test static instance Pitch=0. **Acceptance:** Final ratio is 1.0 before Doppler and measured frequency/duration match.
-- [ ] **AUD-08-028 [P1]** Golden-test static instance Pitch=0.25. **Acceptance:** Final ratio is 1.1892071 before Doppler and measured frequency/duration match.
-- [ ] **AUD-08-029 [P1]** Golden-test static instance Pitch=0.5. **Acceptance:** Final ratio is 1.4142136 before Doppler and measured frequency/duration match.
-- [ ] **AUD-08-030 [P1]** Golden-test static instance Pitch=0.75. **Acceptance:** Final ratio is 1.6817928 before Doppler and measured frequency/duration match.
-- [ ] **AUD-08-031 [P1]** Golden-test static instance Pitch=1.0. **Acceptance:** Final ratio is 2.0 before Doppler and measured frequency/duration match.
+- [ ] **AUD-08-023..031 [P1]** Golden-test static instance Pitch=-1.0/-0.75/-0.5/-0.25/0/0.25/0.5/0.75/1.0. **Acceptance (each):** Final ratio matches `2^Pitch` before Doppler and measured frequency/duration match. **Strong partial evidence, left unchecked -- literal acceptance not yet met:** `AUD08GoldenPitchMatrix/GoldenPitchRatioTest` (`OfflineAudioRendererTests.cpp`) proves, for all 9 of these exact pitch values, that feeding `2^pitch` into `MIX_SetTrackFrequencyRatio` on a real SDL3_mixer track produces rendered audio whose measured frequency matches the expected ratio to within 0.1% (via `RefineFrequencyEstimateHz`) -- combined with the pre-existing `SoundEffectInstance::INTERNAL_calculatePitchRatio` unit tests (already proving `Pitch` computes exactly `2^Pitch`, `P12-PITCH-001`), this closes the gap between "the math is right" and "the mixer really does what the math says" for every one of these 9 values. What remains unproven: an end-to-end capture through the actual public `SoundEffectInstance`/`SoundEffect` object graph itself (this harness renders via a private `MIX_CreateMixer()`, not the shared device mixer `SoundEffectInstance` actually uses) -- doing that would need either real-device capture or a track cooked-callback hook (same technique `T-4C`'s filter tests already use for sample-level verification). Not force-fit into this pass; a concrete, scoped near-term follow-up.
 
 ## AUD-09 — Apply3D, distance, panning, Doppler, and spatial fidelity
 
