@@ -355,11 +355,26 @@ type + interruption is partial (task 906).
 
 ## TextInputEXT / TextEditing
 
+`TextInputEXT` (unlike most `EXT`-suffixed CNA types) is not a CNA invention — FNA itself already
+ships a `Microsoft.Xna.Framework.Input.TextInputEXT` static class (`FNA/src/Input/TextInputEXT.cs`)
+as its own beyond-XNA-4.0 extension, so it is ported as a strict FNA-parity type in the
+`Microsoft::Xna` namespace, not tagged `NOXNA` itself. FNA's baseline surface is exactly:
+`TextInput`/`TextEditing` events, `WindowHandle` property, `IsTextInputActive()`,
+`IsScreenKeyboardShown()`/`IsScreenKeyboardShown(window)`, `StartTextInput()`, `StopTextInput()`,
+`SetInputRectangle()` — every one of these is a faithful 1:1 port (P2-030). CNA layers three
+`NOXNA`-tagged members with no FNA analog on top of that baseline: `TextEditingCandidatesEXT` (IME
+candidate-list event; FNA's `TextInputEXT` has no candidates support at all),
+`StartTextInputWithTypeEXT(TextInputTypeEXT)` and the `CNA::Input::TextInputTypeEXT` enum itself
+(a 9-value mobile/on-screen-keyboard hint mirroring SDL3's `SDL_TextInputType` one-to-one — verified
+against `SDL_keyboard.h`, P2-051). Those three are the only genuine extension surface; everything
+else in this section is FNA-required behavior, not CNA scope creep.
+
 | Aspect | Status |
 |---|---|
 | `StartTextInput`/`StopTextInput`/`SetInputRectangle`/active-window | **Faithful ports** (+ null-window guards). |
 | UTF-8 → UTF-16 decode (BMP + astral surrogate pairs) | **Matches FNA** (`Encoding.UTF8.GetChars` equivalent). Exhaustively tested. |
 | `TextInput` code-unit type | `charcs`/UTF-16 code unit, matching FNA's `Action<char>` (Phase I9 task 806). |
+| Control-char synthesis (Home/End/Back/Tab/Enter/Delete/Ctrl+V) | **Matches FNA exactly**: `(char)2/3/8/9/13/127/22` via the same `TextInputBindings`/`TextInputCharacters` table as `FNAPlatform.cs:261-278` (P2-039..045). |
 
 **Intentional / documented deviations:**
 - **Multicast callbacks (DEC-06, fixed 2026-07-05):** `TextInput`/`TextEditing` are now

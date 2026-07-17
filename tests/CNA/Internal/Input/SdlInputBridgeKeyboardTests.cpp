@@ -245,6 +245,50 @@ TEST_F(SdlInputBridgeKeyboardTest, ModifierAndLockKeysMapToDistinctKeysWithoutMe
     }
 }
 
+// P2-056: every left/right modifier and lock key held down AT ONCE (not one-at-a-time as the test
+// above) must all remain independently tracked — proving pressedKeys_'s std::unordered_set<Keys>
+// correctly distinguishes all 9 simultaneously-live entries with no collision/overwrite, and that
+// releasing one leaves the other 8 untouched.
+TEST_F(SdlInputBridgeKeyboardTest, SimultaneousModifierAndLockKeyCombinationTracksAllIndependently)
+{
+    const SDL_Keycode allKeys[] = {
+        SDLK_LSHIFT, SDLK_RSHIFT, SDLK_LCTRL, SDLK_RCTRL, SDLK_LALT, SDLK_RALT,
+        SDLK_CAPSLOCK, SDLK_NUMLOCKCLEAR, SDLK_SCROLLLOCK,
+    };
+    const Keys allXnaKeys[] = {
+        Keys::LeftShift, Keys::RightShift, Keys::LeftControl, Keys::RightControl,
+        Keys::LeftAlt, Keys::RightAlt, Keys::CapsLock, Keys::NumLock, Keys::Scroll,
+    };
+
+    for (const SDL_Keycode key : allKeys)
+    {
+        SdlInputBridge::ProcessEvent(keyDownWithKeycode(key));
+    }
+
+    const auto state = Keyboard::GetState();
+    for (const Keys expected : allXnaKeys)
+    {
+        EXPECT_TRUE(state.IsKeyDown(expected)) << static_cast<int>(expected);
+    }
+    EXPECT_EQ(state.GetPressedKeys().size(), 9u);
+
+    // Releasing one (LeftShift) must not disturb the other 8.
+    SDL_Event up{};
+    up.type = SDL_EVENT_KEY_UP;
+    up.key.key = SDLK_LSHIFT;
+    up.key.scancode = SDL_SCANCODE_UNKNOWN;
+    SdlInputBridge::ProcessEvent(up);
+
+    const auto afterRelease = Keyboard::GetState();
+    EXPECT_FALSE(afterRelease.IsKeyDown(Keys::LeftShift));
+    for (const Keys expected : allXnaKeys)
+    {
+        if (expected == Keys::LeftShift) continue;
+        EXPECT_TRUE(afterRelease.IsKeyDown(expected)) << static_cast<int>(expected);
+    }
+    EXPECT_EQ(afterRelease.GetPressedKeys().size(), 8u);
+}
+
 TEST_F(SdlInputBridgeKeyboardTest, UnmappedKeycodeIsDroppedNotMarkedNone)
 {
     // DEC-16: SDLK_UNKNOWN (and any unmapped keycode) is dropped rather than marked Keys::None pressed.

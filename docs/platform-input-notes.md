@@ -143,8 +143,12 @@ a fundamental XNA limitation, not a CNA bug — games needing these must read `T
 the composed Unicode text), not `Keyboard`. Exceptions: a few Nordic keys whose *physical position* is a
 US OEM key still map to that OEM key (e.g. the codepoints for `æ`/`ø` resolve to `Keys::OemQuotes` /
 `Keys::OemSemicolon`), matching FNA. Tested by `NonUsLayoutAccentedKeysAreUnmappedInKeycodeMode`.
-- **No horizontal scroll wheel** (all platforms): XNA 4.0 / this FNA `MouseState` expose only the
-  vertical `ScrollWheelValue`; `event.wheel.x` is intentionally dropped (task 805).
+- **Horizontal scroll wheel is a NOXNA/EXT extension** (all platforms): XNA 4.0 `MouseState` exposes
+  only the vertical `ScrollWheelValue`, so `event.wheel.x` has no strict-XNA property to route to.
+  N-005 (2026-07-17/P1-018) added `MouseState::getHorizontalScrollWheelValueEXTProperty()`: `wheel.x`
+  is scaled to the same 120-unit notch and surfaced there, deliberately excluded from
+  `Equals`/`GetHashCode`/`ToString`/`==`/`!=` so those stay byte-identical to FNA. See DEC-18 in
+  `docs/input-fna-fidelity.md`'s Mouse section.
 - **Input is main-thread only** (all platforms): SDL requires event pumping on the video/window
   thread; see [`docs/input-backend.md`](input-backend.md) §6.
 - **Cursor creation needs `SDL_INIT_VIDEO`** (INPUT-MOUSE-020, all platforms): stock cursors are lazy

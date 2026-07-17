@@ -2245,7 +2245,7 @@ are the same pre-existing, unrelated SDL_RENDERER 3D-backend gap recorded under 
 
 ---
 
-## P2-001 — Keys enum completeness vs FNA `[ ]`
+## P2-001 — Keys enum completeness vs FNA `[x]`
 **Goal:** Confirm every `Keys` enumerator FNA defines exists in `Keys.hpp` with no gaps.
 
 **Steps:**
@@ -2267,11 +2267,11 @@ are the same pre-existing, unrelated SDL_RENDERER 3D-backend gap recorded under 
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Programmatic diff of `include/Microsoft/Xna/Framework/Input/Keys.hpp` against `FNA/src/Input/Keys.cs`: extracted every `Name = value` pair from both (regex-based, not eyeballed) — 160 enumerators on each side, zero missing on either side. Existing test `KeyboardStateTest.KeysValuesMatchXNANumericConstants` (`KeyboardInputTests.cpp`) already pins all 160 name+value pairs as a regression guard. No files changed (no gap found).
 
 ---
 
-## P2-002 — Keys enum numeric values vs FNA `[ ]`
+## P2-002 — Keys enum numeric values vs FNA `[x]`
 **Goal:** Confirm every `Keys` enumerator's numeric value matches FNA exactly.
 
 **Steps:**
@@ -2293,11 +2293,11 @@ are the same pre-existing, unrelated SDL_RENDERER 3D-backend gap recorded under 
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Same programmatic diff as P2-001, comparing numeric values (decimal and the several hex-literal FNA members: `Pause`=0x13, `Kana`=0x15, `Kanji`=0x19, `ImeConvert`=0x1c, `ImeNoConvert`=0x1d, `ChatPadGreen`=0xCA, `ChatPadOrange`=0xCB, `OemCopy`=0xf2, `OemAuto`=0xf3, `OemEnlW`=0xf4): zero value mismatches across all 160 shared members, zero duplicate values on either side. `KeysValuesMatchXNANumericConstants` already covers this exhaustively. No files changed (no gap found).
 
 ---
 
-## P2-003 — Invalid Keys value safety `[ ]`
+## P2-003 — Invalid Keys value safety `[x]`
 **Goal:** Confirm passing an out-of-range `Keys` value to `KeyboardState::IsKeyDown`/`IsKeyUp` cannot read out of bounds.
 
 **Steps:**
@@ -2323,11 +2323,11 @@ are the same pre-existing, unrelated SDL_RENDERER 3D-backend gap recorded under 
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `KeyboardState::IsKeyDown`/`IsKeyUp` (`KeyboardState.cpp:52-60`) call `pressedKeys_.contains(key)` on a `std::unordered_set<Keys>` — hash+lookup, never an array index derived from the raw `Keys` value, so an out-of-range value cannot read out of bounds regardless of the P1-014 constructor filter. Confirmed by `KeyboardStateTest.AccessorsAreSafeForOutOfRangeKeysValues` (`EXPECT_NO_THROW` on `IsKeyDown`/`operator[]`/`GetPressedKeys`/`GetHashCode` for values 999, -5, 70000). No files changed (already safe by construction).
 
 ---
 
-## P2-004 — Negative key enum handling `[ ]`
+## P2-004 — Negative key enum handling `[x]`
 **Goal:** Confirm a negative underlying value cast to `Keys` is handled safely (no UB, no OOB array access).
 
 **Steps:**
@@ -2353,11 +2353,11 @@ are the same pre-existing, unrelated SDL_RENDERER 3D-backend gap recorded under 
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. A negative `Keys` value passed to `IsKeyDown`/`IsKeyUp` hits the same `unordered_set::contains` hash lookup as P2-003 — no UB, no OOB. The P1-014 constructor guard (`IsWithinKeyBitfieldRange`, `static_cast<unsigned int>(key) < 256u`) additionally prevents a negative value from ever being stored in `pressedKeys_` in the first place (a negative `int` casts to a huge `unsigned`, failing the `< 256u` check). Covered by `KeyboardStateTest.GetHashCodeIgnoresNegativeKeysValue` and `InitializerListConstructorDropsNegativeAndBoundaryKeysValues`. No files changed.
 
 ---
 
-## P2-005 — Too-large key enum handling `[ ]`
+## P2-005 — Too-large key enum handling `[x]`
 **Goal:** Confirm a too-large underlying value cast to `Keys` is handled safely (no UB, no OOB array access).
 
 **Steps:**
@@ -2383,11 +2383,11 @@ are the same pre-existing, unrelated SDL_RENDERER 3D-backend gap recorded under 
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. A too-large `Keys` value (>=256) is excluded by the same `IsWithinKeyBitfieldRange` guard as P2-004 (constructor level) and cannot cause OOB access via `IsKeyDown`/`IsKeyUp` (`unordered_set` lookup, not array indexing — P2-003). Covered by `KeyboardStateTest.GetHashCodeIgnoresOutOfRangeKeysValue`, `GetHashCodeIgnoresBoundaryKeysValue256` (the exact 256 boundary), and `InitializerListConstructorDropsOutOfRangeKeysValue`. No files changed.
 
 ---
 
-## P2-006 — KeyboardState::GetHashCode safety with invalid keys `[ ]`
+## P2-006 — KeyboardState::GetHashCode safety with invalid keys `[x]`
 **Goal:** Confirm hash computation cannot crash or read OOB when the state contains an invalid key bit.
 
 **Steps:**
@@ -2413,11 +2413,11 @@ are the same pre-existing, unrelated SDL_RENDERER 3D-backend gap recorded under 
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `KeyboardState::GetHashCode()` (`KeyboardState.cpp:90-109`) re-checks `IsWithinKeyBitfieldRange` per-key before indexing its 8-word array — a second line of defense beyond the P1-014 constructor filter, since `pressedKeys_` can no longer contain an out-of-range value at all. Covered by `GetHashCodeIgnoresOutOfRangeKeysValue`, `GetHashCodeIgnoresNegativeKeysValue`, `GetHashCodeIgnoresBoundaryKeysValue256`. No files changed.
 
 ---
 
-## P2-007 — KeyboardState::IsKeyDown parity `[ ]`
+## P2-007 — KeyboardState::IsKeyDown parity `[x]`
 **Goal:** Confirm `IsKeyDown` semantics (true iff key currently pressed) match FNA exactly.
 
 **Steps:**
@@ -2443,11 +2443,11 @@ are the same pre-existing, unrelated SDL_RENDERER 3D-backend gap recorded under 
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `IsKeyDown` returns `pressedKeys_.contains(key)`, matching FNA's `InternalGetKey`/bitfield-test semantics exactly (pressed iff explicitly added). Covered by `IndexerMatchesGetItemAndIsKeyDown`, `InitializerListConstructorFlagsGivenKeys`, and the full `SdlInputBridgeKeyboardTests.cpp` suite (every keycode/scancode case asserts `IsKeyDown` post-event). No files changed.
 
 ---
 
-## P2-008 — KeyboardState::IsKeyUp parity `[ ]`
+## P2-008 — KeyboardState::IsKeyUp parity `[x]`
 **Goal:** Confirm `IsKeyUp` is the exact logical negation of `IsKeyDown`, matching FNA.
 
 **Steps:**
@@ -2473,11 +2473,11 @@ are the same pre-existing, unrelated SDL_RENDERER 3D-backend gap recorded under 
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `IsKeyUp` returns `!IsKeyDown(key)` (`KeyboardState.cpp:57-60`) — FNA's `IsKeyUp` is likewise the exact logical complement of `IsKeyDown` (`KeyboardState.cs`). Covered by `IsKeyUpIsTheComplementOfIsKeyDown`. No files changed.
 
 ---
 
-## P2-009 — KeyboardState::GetPressedKeys parity `[ ]`
+## P2-009 — KeyboardState::GetPressedKeys parity `[x]`
 **Goal:** Confirm `GetPressedKeys` returns exactly the set of currently-down keys, matching FNA's array contents.
 
 **Steps:**
@@ -2503,11 +2503,11 @@ are the same pre-existing, unrelated SDL_RENDERER 3D-backend gap recorded under 
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `GetPressedKeys()` returns exactly the contents of `pressedKeys_` (no extras, no omissions), matching FNA's bitfield walk. Covered by `GetPressedKeysContainsOnlyPressedKeys` and `GetPressedKeysReturnsEmptyForDefaultState`. No files changed.
 
 ---
 
-## P2-010 — Pressed key ordering `[ ]`
+## P2-010 — Pressed key ordering `[x]`
 **Goal:** Confirm the ordering of keys returned by `GetPressedKeys` matches FNA's documented/observed ordering (or document the deviation).
 
 **Steps:**
@@ -2533,11 +2533,11 @@ are the same pre-existing, unrelated SDL_RENDERER 3D-backend gap recorded under 
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `GetPressedKeys()` sorts by ascending numeric `Keys` value before returning (`KeyboardState.cpp:62-73`), matching FNA's `keys0..keys7` bit-by-bit-ascending walk exactly. Directly pinned by `GetPressedKeysIsSortedByAscendingNumericValue` (Z/A/Space/D1 -> Space,D1,A,Z). No files changed.
 
 ---
 
-## P2-011 — Duplicate key prevention in GetPressedKeys `[ ]`
+## P2-011 — Duplicate key prevention in GetPressedKeys `[x]`
 **Goal:** Confirm no key can appear twice in a single `GetPressedKeys` result.
 
 **Steps:**
@@ -2563,11 +2563,11 @@ are the same pre-existing, unrelated SDL_RENDERER 3D-backend gap recorded under 
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `pressedKeys_` is a `std::unordered_set<Keys>`, so inserting the same key twice is structurally a no-op — matches FNA's per-key bitfield (a single bit cannot be 'more pressed'). No existing test exercised this directly, so added `KeyboardStateTest.GetPressedKeysHasNoDuplicateWhenSameKeyGivenTwice` (`tests/Microsoft/Xna/Framework/Input/KeyboardInputTests.cpp`): constructs `KeyboardState{Keys::A, Keys::A, Keys::B, Keys::A}` and asserts `GetPressedKeys()` returns exactly `{A, B}`. Verified via `xvfb-run env SDL_VIDEODRIVER=x11 ./cmake-build-debug/CnaTests --gtest_filter=$CNA_INPUT_TEST_FILTER --gtest_shuffle --gtest_repeat=3` — 518/518 passing (517 + 1 new), zero FAILED.
 
 ---
 
-## P2-012 — Default KeyboardState value `[ ]`
+## P2-012 — Default KeyboardState value `[x]`
 **Goal:** Confirm a default-constructed `KeyboardState` reports every key up, matching FNA.
 
 **Steps:**
@@ -2593,11 +2593,11 @@ are the same pre-existing, unrelated SDL_RENDERER 3D-backend gap recorded under 
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `KeyboardState()` default-constructs an empty `pressedKeys_`, matching FNA's `default(KeyboardState)` (all-zero bitfields -> no keys pressed). Covered by `DefaultConstructorHasNoPressedKeys` and `GetPressedKeysReturnsEmptyForDefaultState`. No files changed.
 
 ---
 
-## P2-013 — KeyboardState equality `[ ]`
+## P2-013 — KeyboardState equality `[x]`
 **Goal:** Confirm `KeyboardState::operator==` compares full key-state equality matching FNA.
 
 **Steps:**
@@ -2623,11 +2623,11 @@ are the same pre-existing, unrelated SDL_RENDERER 3D-backend gap recorded under 
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `Equals`/`operator==` compare `pressedKeys_` set-equality (order-independent), matching FNA's field-wise `keys0..keys7` comparison (set membership, not insertion order). Covered by `EqualStatesCompareEqual` (constructed in different orders, still equal). No files changed.
 
 ---
 
-## P2-014 — KeyboardState inequality `[ ]`
+## P2-014 — KeyboardState inequality `[x]`
 **Goal:** Confirm `KeyboardState::operator!=` is the exact logical negation of `operator==`.
 
 **Steps:**
@@ -2653,11 +2653,11 @@ are the same pre-existing, unrelated SDL_RENDERER 3D-backend gap recorded under 
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `operator!=` is the exact negation of `operator==` (`KeyboardState.cpp:124-127`). Covered by `UnequalStatesCompareUnequal`. No files changed.
 
 ---
 
-## P2-015 — KeyboardState hash stability `[ ]`
+## P2-015 — KeyboardState hash stability `[x]`
 **Goal:** Confirm two equal `KeyboardState` instances always produce equal hashes across repeated calls.
 
 **Steps:**
@@ -2683,11 +2683,11 @@ are the same pre-existing, unrelated SDL_RENDERER 3D-backend gap recorded under 
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `GetHashCode()` is deterministic and consistent for equal states (same `pressedKeys_` contents -> same 8-word XOR regardless of insertion order, since the word array is keyed by numeric value, not iteration order). Covered by `GetHashCodeIsConsistentForEqualStates`, `GetHashCodeOfEmptyStateIsZero`, and `GetHashCodeMatchesFNAWordXorFormula` (hand-verified against FNA's `keys0^keys1^...^keys7` formula, `KeyboardState.cs:264-267`). No files changed.
 
 ---
 
-## P2-016 — SDL keycode mapping completeness `[ ]`
+## P2-016 — SDL keycode mapping completeness `[x]`
 **Goal:** Confirm every SDL3 keycode CNA claims to support maps to the correct `Keys` value.
 
 **Steps:**
@@ -2712,11 +2712,11 @@ are the same pre-existing, unrelated SDL_RENDERER 3D-backend gap recorded under 
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Wrote a programmatic diff extracting every `{ SDLK_X, Keys.Y }` pair from FNA's `INTERNAL_keyMap` (`SDL3_FNAPlatform.cs:2358-2489`, 123 named-keycode entries + 6 locale/char entries + `SDLK_UNKNOWN`) against every `case SDLK_X: return Keys::Y;` in `SdlInputBridge.cpp`'s `try_convert_sdl_key` (lines ~560-701). Result: all 123 named entries present with matching targets, all 6 locale entries (`'²'`,`'é'`,`'|'`,`'+'`,`'ø'`,`'æ'`) present with matching targets, zero mismatches, zero unexplained extras (the one CNA-only entry, `SDLK_AC_BACK`->`Escape`, is documented DEC-17; `SDLK_UNKNOWN` is documented DEC-16 — both already in `docs/input-fna-fidelity.md`). Confirms the file's existing 'byte-identical on all 122 shared keycodes' claim by independent re-derivation rather than trusting the comment. No files changed (verification only, no gap found).
 
 ---
 
-## P2-017 — SDL scancode mapping completeness `[ ]`
+## P2-017 — SDL scancode mapping completeness `[x]`
 **Goal:** Confirm every SDL3 scancode CNA claims to support maps to the correct `Keys` value via `GetKeyFromScancodeEXT`.
 
 **Steps:**
@@ -2738,11 +2738,11 @@ are the same pre-existing, unrelated SDL_RENDERER 3D-backend gap recorded under 
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Same programmatic-diff method as P2-016 applied to FNA's `INTERNAL_scanMap` (`SDL3_FNAPlatform.cs:2366-2618`, 125 entries) against `try_convert_sdl_scancode` (`SdlInputBridge.cpp:708-848`). Result: 122/125 mapped identically; the 3 gaps (`SDL_SCANCODE_UNKNOWN`, `SDL_SCANCODE_NONUSHASH`, `SDL_SCANCODE_NONUSBACKSLASH`) all map to `Keys.None` in FNA and are intentionally *dropped* by CNA instead — the DEC-16 no-`None`-pollution policy extended consistently to scancode mode (already documented in `docs/input-fna-fidelity.md` as INPUT-KBD-011/019), directly tested by `IsoLayoutExtraScancodesAreDroppedNotMarkedNone`. Zero unexplained mismatches. No files changed.
 
 ---
 
-## P2-018 — Left/right modifier key distinction `[ ]`
+## P2-018 — Left/right modifier key distinction `[x]`
 **Goal:** Confirm LeftShift/RightShift, LeftControl/RightControl, LeftAlt/RightAlt map to distinct `Keys` values matching FNA, not a single generic modifier.
 
 **Steps:**
@@ -2771,11 +2771,11 @@ are the same pre-existing, unrelated SDL_RENDERER 3D-backend gap recorded under 
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Verified via `ModifierAndLockKeysMapToDistinctKeysWithoutMerging` (`SdlInputBridgeKeyboardTests.cpp`): each of Left/RightShift, Left/RightControl, Left/RightAlt maps to its own distinct `Keys` value with no cross-merging (pressing Left never lights Right and vice versa) — matches FNA's `INTERNAL_keyMap`, which likewise keeps `SDLK_LSHIFT`/`SDLK_RSHIFT` etc. as separate dictionary entries to separate `Keys` values. Additionally strengthened by the new P2-056 test (`SimultaneousModifierAndLockKeyCombinationTracksAllIndependently`), which holds all 6 L/R modifiers down *simultaneously* and confirms all remain independently tracked. No files changed beyond the P2-056 test addition.
 
 ---
 
-## P2-019 — CapsLock/NumLock/ScrollLock behavior `[ ]`
+## P2-019 — CapsLock/NumLock/ScrollLock behavior `[x]`
 **Goal:** Confirm lock-key state is reported as a momentary key event (not a toggle), matching FNA's XNA-compatible behavior.
 
 **Steps:**
@@ -2801,11 +2801,11 @@ are the same pre-existing, unrelated SDL_RENDERER 3D-backend gap recorded under 
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `ModifierAndLockKeysMapToDistinctKeysWithoutMerging` also covers all 3 lock keys (`CapsLock`, `NumLock`, `Scroll`) mapping to their own distinct `Keys` values, matching FNA's `SDLK_CAPSLOCK`/`SDLK_NUMLOCKCLEAR`/`SDLK_SCROLLLOCK` entries. Lock-key *toggle* state (as opposed to key-down/up) is out of scope for XNA's `Keyboard`/`KeyboardState` — XNA only reports whether the physical key is currently held, never the OS toggle/LED state, and FNA implements nothing beyond that either (confirmed: no `SDL_GetModState`/lock-state query anywhere in `SDL3_FNAPlatform.cs`'s keyboard path) — so there is no FNA behavior to diverge from. No files changed.
 
 ---
 
-## P2-020 — OEM punctuation key mapping `[ ]`
+## P2-020 — OEM punctuation key mapping `[x]`
 **Goal:** Confirm OEM punctuation keys (`OemSemicolon`, `OemComma`, `OemPeriod`, etc.) map correctly on a US layout and degrade sanely on others.
 
 **Steps:**
@@ -2831,11 +2831,11 @@ are the same pre-existing, unrelated SDL_RENDERER 3D-backend gap recorded under 
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Included in the P2-016 programmatic diff: all OEM punctuation keycodes (`SDLK_SEMICOLON`/`EQUALS`/`COMMA`/`MINUS`/`PERIOD`/`SLASH`/`GRAVE`/`LEFTBRACKET`/`BACKSLASH`/`RIGHTBRACKET`/`APOSTROPHE`) match FNA's `OemSemicolon`/`OemPlus`/`OemComma`/`OemMinus`/`OemPeriod`/`OemQuestion`/`OemTilde`/`OemOpenBrackets`/`OemPipe`/`OemCloseBrackets`/`OemQuotes` targets exactly, plus the 6 non-US locale-fallback OEM keys (`'²'`,`'é'`,`'|'`,`'+'`,`'ø'`,`'æ'`) also matched. Also covered by `KeycodeMapCoversLettersDigitsNumpadOemModifiersFunctionAndMediaKeys` and `NordicOemKeysMapToTheirOemKeyMatchingFna`. No files changed.
 
 ---
 
-## P2-021 — Keyboard layout caveats documented `[ ]`
+## P2-021 — Keyboard layout caveats documented `[x]`
 **Goal:** Confirm known layout-dependent caveats (physical-vs-logical key mapping) are documented in `docs/platform-input-notes.md`.
 
 **Steps:**
@@ -2855,11 +2855,11 @@ are the same pre-existing, unrelated SDL_RENDERER 3D-backend gap recorded under 
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Reviewed `docs/platform-input-notes.md`'s '### Non-US keyboard layouts (INPUT-KBD-014)' section (lines 126-145): accurately documents keycode-mode layout-dependence vs. `FNA_KEYBOARD_USE_SCANCODES=1` layout-independence, the accented-key-drop policy, and the Nordic physical-position exception — all independently re-verified true in this session's P2-016/017/020 diffs. While reviewing this section, found and fixed an unrelated stale claim in the same 'Cross-cutting' block: 'No horizontal scroll wheel... intentionally dropped (task 805)' — this predates N-005/P1-018, which added `MouseState::getHorizontalScrollWheelValueEXTProperty()`; corrected to describe the current NOXNA/EXT behavior and cross-reference DEC-18 in `docs/input-fna-fidelity.md`. Files changed: `docs/platform-input-notes.md`.
 
 ---
 
-## P2-022 — Czech keyboard checklist accuracy `[ ]`
+## P2-022 — Czech keyboard checklist accuracy `[x]`
 **Goal:** Review/correct the Czech-keyboard manual-test checklist entry (physical QWERTZ layout, diacritic OEM keys).
 
 **Steps:**
@@ -2880,11 +2880,11 @@ are the same pre-existing, unrelated SDL_RENDERER 3D-backend gap recorded under 
 
 **Notes:** Checklist only — the actual run is [[P11-002]].
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Reviewed `docs/demo-input-checklist.md`'s 'Keyboard' and 'Text input & IME' sections against the Czech-layout behavior verified in P2-016/017/020/031-034 (Czech diacritics `ě š č` drop in `Keyboard`/`GetState` but decode correctly via `TextInputEXT`, per `NonUsLayoutAccentedKeysAreUnmappedInKeycodeMode` and `TextInputEventDecodesCzechDiacritics`). The checklist's generic items ('accented/non-Latin characters appear correctly', 'modifier keys highlight independently') are accurate and actionable for a QWERTZ tester when paired with `platform-input-notes.md`'s layout caveats (which the checklist already cross-references, line 9). No content gap found; the P2-021 horizontal-wheel staleness fix in `platform-input-notes.md` benefits this checklist run too. No additional files changed. Actual hardware run remains blocked on [[P11-002]].
 
 ---
 
-## P2-023 — US keyboard checklist accuracy `[ ]`
+## P2-023 — US keyboard checklist accuracy `[x]`
 **Goal:** Review/correct the US-keyboard manual-test checklist entry.
 
 **Steps:**
@@ -2905,11 +2905,11 @@ are the same pre-existing, unrelated SDL_RENDERER 3D-backend gap recorded under 
 
 **Notes:** Checklist only — the actual run is [[P11-001]].
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Same review as P2-022 applied to the US-QWERTY case: the checklist's generic keyboard items are layout-agnostic and correct for a US board (no accented-key caveat applies, so the extra non-US layout notes are simply not relevant, not wrong). No content gap found; no files changed. Actual hardware run remains blocked on [[P11-001]].
 
 ---
 
-## P2-024 — Non-QWERTY keyboard checklist accuracy `[ ]`
+## P2-024 — Non-QWERTY keyboard checklist accuracy `[x]`
 **Goal:** Review/correct the non-QWERTY (e.g. AZERTY/Dvorak) manual-test checklist entry.
 
 **Steps:**
@@ -2930,11 +2930,11 @@ are the same pre-existing, unrelated SDL_RENDERER 3D-backend gap recorded under 
 
 **Notes:** Checklist only — the actual run is [[P11-003]].
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Same review as P2-022/023 applied to a hypothetical non-QWERTY (AZERTY/Dvorak) run: `platform-input-notes.md`'s AZERTY-specific note (`'²'` -> `OemTilde`, line 138-145) is present and was independently re-verified correct in the P2-016 diff. No content gap found; no files changed. Actual hardware run remains blocked on [[P11-003]].
 
 ---
 
-## P2-025 — Key repeat behavior `[ ]`
+## P2-025 — Key repeat behavior `[x]`
 **Goal:** Confirm CNA does not synthesize XNA-level key-repeat events for `KeyboardState` (XNA polls, it does not repeat) while `TextInputEXT` legitimately repeats characters via SDL text-input events.
 
 **Steps:**
@@ -2966,7 +2966,7 @@ are the same pre-existing, unrelated SDL_RENDERER 3D-backend gap recorded under 
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Verified via `KeyRepeatKeepsKeyDownWithoutSpuriousTransitions` (`SdlInputBridgeKeyboardTests.cpp`) and `KeyRepeatReemitsControlCharacter` (`SdlInputBridgeTextInputTests.cpp`): a held key's repeat KEY_DOWN events keep `IsKeyDown` true without spurious up/down transitions, and control-char text synthesis re-fires on repeat exactly as FNA's `else if (evt.key.repeat)` branch does (`SDL3_FNAPlatform.cs:920-934`) — already documented as DEC-19 in `docs/input-fna-fidelity.md`. No files changed.
 
 ---
 
@@ -3014,7 +3014,7 @@ case (a held key's up-event delivered to a different window), which is explicitl
 
 ---
 
-## P2-027 — Window minimized keyboard behavior `[ ]`
+## P2-027 — Window minimized keyboard behavior `[x]`
 **Goal:** Confirm minimizing the window behaves the same as focus loss for keyboard state.
 
 **Steps:**
@@ -3042,11 +3042,11 @@ case (a held key's up-event delivered to a different window), which is explicitl
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Verified via `WindowLifecycleEventsDoNotCorruptKeyboardState` and `UnconsumedResizeDisplayAndQuitEventsDoNotAffectInputState` (`SdlInputBridgeKeyboardTests.cpp`): window minimize/restore/resize/display-change/quit events pass through `ProcessEvent`'s `default: break;` (no keyboard-specific handling) and leave keyboard state untouched, matching FNA (which has no minimize-specific keyboard-clear logic either — only the focus-loss path discussed under DEC-15 in `docs/input-fna-fidelity.md`, and minimizing a window does not, by itself, fire SDL_EVENT_WINDOW_FOCUS_LOST on every platform/WM). No files changed.
 
 ---
 
-## P2-028 — Keyboard reset behavior between tests `[ ]`
+## P2-028 — Keyboard reset behavior between tests `[x]`
 **Goal:** Confirm `InputResetAllForTests`-style reset fully clears keyboard state with no leftover bits.
 
 **Steps:**
@@ -3072,11 +3072,11 @@ case (a held key's up-event delivered to a different window), which is explicitl
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Verified via `InputResetAllForTests.ClearsAccumulatedInputManagerState` (`tests/CNA/Internal/Input/InputResetTests.cpp`): sets `Keys::A` pressed via `InputManager::SetKeyState`, calls `InputManager::ResetAllForTests()`, confirms `IsKeyDown(A)` is false afterward — i.e. the reset clears `pressedKeys_` fully rather than leaving stale bits. Additionally, every one of the ~20 tests in `SdlInputBridgeKeyboardTests.cpp` calls `InputManager::ResetForTests()` in `SetUp()`/`TearDown()` and depends on a truly-empty starting state to pass; the consolidated 3x-shuffled-repeat run (518/518, zero FAILED) is itself strong empirical evidence no leftover bits survive a reset in any test ordering. No files changed.
 
 ---
 
-## P2-029 — Keyboard test isolation `[ ]`
+## P2-029 — Keyboard test isolation `[x]`
 **Goal:** Confirm keyboard tests do not leak state into unrelated tests run in the same process (gtest ordering/shuffle safe).
 
 **Steps:**
@@ -3102,11 +3102,11 @@ case (a held key's up-event delivered to a different window), which is explicitl
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `SdlInputBridgeKeyboardTest`'s fixture (`Reset()` in both `SetUp()`/`TearDown()`) and `KeyboardInputTests.cpp`'s ad-hoc state give every keyboard test a clean slate regardless of gtest run order. Directly confirmed by running the full input suite shuffled 3x in a single process (`--gtest_shuffle --gtest_repeat=3`, 518/518 passing, zero FAILED across all 3 orderings) — if any keyboard test leaked state into an unrelated test, a shuffle+repeat run would surface it as an order-dependent flake (this exact failure mode was previously found and fixed for a Mouse test in the P1 sweep, so the check is not merely theoretical here). No files changed.
 
 ---
 
-## P2-030 — TextInputEXT scope-as-extension documented `[ ]`
+## P2-030 — TextInputEXT scope-as-extension documented `[x]`
 **Goal:** Confirm `TextInputEXT` is clearly documented as a NOXNA/FNA-EXT addition, not part of strict XNA 4.0.
 
 **Steps:**
@@ -3132,11 +3132,11 @@ case (a held key's up-event delivered to a different window), which is explicitl
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Confirmed FNA itself ships `TextInputEXT` (`FNA/src/Input/TextInputEXT.cs`) as its own beyond-XNA-4.0 extension class — so CNA's port is strict FNA-parity (not `NOXNA`-tagged) for the baseline surface, with exactly 3 genuinely CNA-only `NOXNA` members (`TextEditingCandidatesEXT`, `StartTextInputWithTypeEXT`, `CNA::Input::TextInputTypeEXT`). Made this scope boundary explicit with a new lead-in paragraph in `docs/input-fna-fidelity.md`'s 'TextInputEXT / TextEditing' section (previously the section documented individual deviations but never stated which members are FNA-required vs. CNA-added). Files changed: `docs/input-fna-fidelity.md`.
 
 ---
 
-## P2-031 — UTF-8 decoding correctness `[ ]`
+## P2-031 — UTF-8 decoding correctness `[x]`
 **Goal:** Confirm SDL3 UTF-8 text-input events are decoded into correct characters end to end.
 
 **Steps:**
@@ -3162,11 +3162,11 @@ case (a held key's up-event delivered to a different window), which is explicitl
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. UTF-8 decoding verified via `SdlInputBridgeTextInputTests.cpp`'s `TextInputEventDecodesTwoByteUtf8ToSingleCodeUnit`, `TextInputEventDecodesThreeByteUtf8ToSingleCodeUnit`, `TextInputEventDecodesCombiningCharactersAsSeparateCodeUnits`, `TextInputEventDecodesCzechDiacritics`, `TextInputEventDecodesMixedWidthStringInOrder` — matches FNA's `Encoding.UTF8.GetChars` behavior exactly per the existing DEC-08 documentation. No files changed.
 
 ---
 
-## P2-032 — UTF-16 surrogate pair behavior `[ ]`
+## P2-032 — UTF-16 surrogate pair behavior `[x]`
 **Goal:** Confirm codepoints outside the BMP are correctly represented (e.g. via surrogate pairs or `char32_t` per the project's `charcs` alias) with no data loss.
 
 **Steps:**
@@ -3192,11 +3192,11 @@ case (a held key's up-event delivered to a different window), which is explicitl
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. UTF-16 surrogate-pair synthesis for astral code points (outside the BMP, e.g. emoji) verified via `TextInputEventDecodesAstralEmojiToSurrogatePair` — a 4-byte UTF-8 sequence decodes to a proper UTF-16 high/low surrogate pair (2 `charcs` code units), matching FNA's C# `char` surrogate-pair semantics exactly. No files changed.
 
 ---
 
-## P2-033 — Invalid UTF-8 handling `[ ]`
+## P2-033 — Invalid UTF-8 handling `[x]`
 **Goal:** Confirm malformed UTF-8 byte sequences from SDL are handled without crashing or corrupting subsequent characters.
 
 **Steps:**
@@ -3222,11 +3222,11 @@ case (a held key's up-event delivered to a different window), which is explicitl
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Invalid UTF-8 handling (DEC-08) verified via `InvalidLeadByteBecomesReplacementCharAndPreservesSurroundingText`, `BadContinuationEmitsReplacementCharThenResyncsToValidText`, `OverlongEncodingBecomesReplacementChar`, and `SurrogateCodePointEncodedInUtf8BecomesReplacementChar` — each malformed-input class emits U+FFFD and resyncs, matching FNA's `Encoding.UTF8` replacement-fallback behavior (documented DEC-08 in `docs/input-fna-fidelity.md`). No files changed.
 
 ---
 
-## P2-034 — Truncated UTF-8 handling `[ ]`
+## P2-034 — Truncated UTF-8 handling `[x]`
 **Goal:** Confirm a UTF-8 sequence truncated mid-codepoint (e.g. split across two SDL events) is handled correctly or safely dropped.
 
 **Steps:**
@@ -3252,11 +3252,11 @@ case (a held key's up-event delivered to a different window), which is explicitl
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Truncated UTF-8 (a multi-byte sequence cut short by the 32-byte SDL text-input event buffer or a malformed producer) verified via `TruncatedMultiByteSequenceBecomesReplacementChar` — emits U+FFFD rather than reading past the buffer or emitting garbage, matching the DEC-08 replacement policy. No files changed.
 
 ---
 
-## P2-035 — Empty text input event handling `[ ]`
+## P2-035 — Empty text input event handling `[x]`
 **Goal:** Confirm an empty SDL text-input event does not raise a spurious character.
 
 **Steps:**
@@ -3282,11 +3282,11 @@ case (a held key's up-event delivered to a different window), which is explicitl
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Empty `SDL_EVENT_TEXT_INPUT` (empty `event.text.text`) verified via `EmptyTextInputEventDeliversNoCodeUnits` — zero `TextInput` callback invocations, no crash. No files changed.
 
 ---
 
-## P2-036 — Text editing (composition) events forwarded `[ ]`
+## P2-036 — Text editing (composition) events forwarded `[x]`
 **Goal:** Confirm `SDL_TEXTEDITING` events forward start/length correctly, per existing `TextEditingEventForwardsTextStartLength` coverage.
 
 **Steps:**
@@ -3311,11 +3311,11 @@ case (a held key's up-event delivered to a different window), which is explicitl
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `SDL_EVENT_TEXT_EDITING` (IME composition draft) forwarding verified via `TextEditingEventForwardsTextStartLength` and `TextEditingForwardsMultiByteUtf8CompositionUnchanged` — the composition text/start/length reach `TextInputEXT::TextEditing` subscribers, matching FNA's `OnTextEditing(text, start, length)` forwarding. No files changed.
 
 ---
 
-## P2-037 — IME composition correctness `[ ]`
+## P2-037 — IME composition correctness `[x]`
 **Goal:** Confirm an in-progress IME composition does not emit committed characters until composition ends.
 
 **Steps:**
@@ -3340,11 +3340,11 @@ case (a held key's up-event delivered to a different window), which is explicitl
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. IME composition correctness (byte- vs. UTF-16-unit offsets, empty-composition handling) verified via `TextEditingStartLengthAreRawByteOffsetsNotUtf16Indices` (documents/pins the intentional UTF-8-byte-offset deviation from FNA's UTF-16-unit offsets, already recorded in `docs/input-fna-fidelity.md`) and `TextEditingEmptyCompositionForwardsZeroes`. No files changed.
 
 ---
 
-## P2-038 — IME candidate list behavior `[ ]`
+## P2-038 — IME candidate list behavior `[x]`
 **Goal:** Confirm whether candidate-list UI is in scope; if not implemented, document that explicitly rather than leaving it ambiguous.
 
 **Steps:**
@@ -3369,11 +3369,11 @@ case (a held key's up-event delivered to a different window), which is explicitl
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. IME candidate-list behavior (`TextEditingCandidatesEXT`, a CNA-only NOXNA extension — FNA's `TextInputEXT` has no candidates support) verified via `SdlInputBridgeCandidatesTests.cpp`'s `CandidatesEventDecodesStringsSelectedAndOrientation` and `NullCandidatesDispatchEmptyList`, plus `TextInputEXTTests.cpp`'s `TextEditingCandidatesDispatchesListSelectedAndHorizontal`, `TextEditingCandidatesIsMulticastAndDeliversToEverySubscriber`, and `TextEditingCandidatesWithoutSubscriberIsSafe`. No files changed.
 
 ---
 
-## P2-039 — Backspace synthesis via TextInputEXT `[ ]`
+## P2-039 — Backspace synthesis via TextInputEXT `[x]`
 **Goal:** Confirm Backspace is synthesized as a control character consistent with FNA's TextInputEXT behavior.
 
 **Steps:**
@@ -3398,11 +3398,11 @@ case (a held key's up-event delivered to a different window), which is explicitl
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Backspace synthesis cross-checked directly against FNA's `FNAPlatform.TextInputCharacters`/`TextInputBindings` tables (`FNAPlatform.cs:261-278`): `Keys.Back -> (char)8`. CNA's `ControlKeysSynthesizeTextInputCharacters` (`SdlInputBridgeTextInputTests.cpp`) asserts `SDLK_BACKSPACE` synthesizes exactly `charcs{8}` — byte-identical. `KeyRepeatReemitsControlCharacter` additionally confirms the repeat-reemits behavior for Backspace specifically. No files changed.
 
 ---
 
-## P2-040 — Tab synthesis via TextInputEXT `[ ]`
+## P2-040 — Tab synthesis via TextInputEXT `[x]`
 **Goal:** Confirm Tab is synthesized as a control character consistent with FNA's TextInputEXT behavior.
 
 **Steps:**
@@ -3427,11 +3427,11 @@ case (a held key's up-event delivered to a different window), which is explicitl
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Tab synthesis: FNA's table maps `Keys.Tab -> (char)9`; `ControlKeysSynthesizeTextInputCharacters` asserts `SDLK_TAB` synthesizes exactly `charcs{9}` — matches. No files changed.
 
 ---
 
-## P2-041 — Enter synthesis via TextInputEXT `[ ]`
+## P2-041 — Enter synthesis via TextInputEXT `[x]`
 **Goal:** Confirm Enter/Return is synthesized as a control character consistent with FNA's TextInputEXT behavior.
 
 **Steps:**
@@ -3456,11 +3456,11 @@ case (a held key's up-event delivered to a different window), which is explicitl
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Enter synthesis: FNA's table maps `Keys.Enter -> (char)13`; `ControlKeysSynthesizeTextInputCharacters` asserts `SDLK_RETURN` synthesizes exactly `charcs{13}` — matches. No files changed.
 
 ---
 
-## P2-042 — Delete synthesis via TextInputEXT `[ ]`
+## P2-042 — Delete synthesis via TextInputEXT `[x]`
 **Goal:** Confirm Delete is synthesized as a control character consistent with FNA's TextInputEXT behavior.
 
 **Steps:**
@@ -3485,11 +3485,11 @@ case (a held key's up-event delivered to a different window), which is explicitl
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Delete synthesis: FNA's table maps `Keys.Delete -> (char)127` (ASCII DEL); `ControlKeysSynthesizeTextInputCharacters` asserts `SDLK_DELETE` synthesizes exactly `charcs{127}` — matches. (The test also covers `SDLK_HOME`->2 and `SDLK_END`->3, FNA's other two bound control keys, both confirmed matching too.) No files changed.
 
 ---
 
-## P2-043 — Ctrl+V paste synthesis `[ ]`
+## P2-043 — Ctrl+V paste synthesis `[x]`
 **Goal:** Confirm Ctrl+V synthesizes the paste control character and suppresses the literal 'v', per existing `CtrlVEmitsPasteCharAndSuppressesLiteralText` coverage.
 
 **Steps:**
@@ -3514,11 +3514,11 @@ case (a held key's up-event delivered to a different window), which is explicitl
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Ctrl+V paste synthesis: FNA's table's 7th entry (index 6, 'special-cased' outside `TextInputBindings`) maps to `(char)22`; CNA's `CtrlVEmitsPasteCharAndSuppressesLiteralText` asserts holding Ctrl then pressing V emits exactly `charcs{22}` and suppresses the literal `'v'` TEXT_INPUT echo SDL also delivers — matching FNA's `textInputSuppress` flag behavior exactly (`SDL3_FNAPlatform.cs:912-918`). `CtrlVSuppressionDoesNotStickWhenCtrlReleasedWithoutVKeyUp` and `PlainVWithoutCtrlIsNotSuppressed` cover the surrounding edge cases. No files changed.
 
 ---
 
-## P2-044 — Clipboard interaction with text input `[ ]`
+## P2-044 — Clipboard interaction with text input `[x]`
 **Goal:** Confirm `CNA::Input::Clipboard` content is what actually gets pasted, with no double-insertion or encoding mismatch.
 
 **Steps:**
@@ -3545,11 +3545,11 @@ case (a held key's up-event delivered to a different window), which is explicitl
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Clipboard/text-input interaction: CNA's Ctrl+V path (like FNA's) only synthesizes the paste *control character* (22) — the receiving game is expected to read the real clipboard text itself (e.g. via `CNA::Input::Clipboard`) upon seeing that control character, exactly as FNA does; neither FNA nor CNA auto-inserts clipboard text into the `TextInput` stream. Verified `CNA::Input::Clipboard`'s `SetText`/`GetText` round-trip independently via `CnaInputClipboardTest.SetTextThenGetTextRoundTripsIncludingUtf8`/`EmptyTextLeavesNoText` (`ClipboardTests.cpp`) — the two systems are correctly decoupled, matching FNA's design where `TextInputEXT` and `TextCopyPaste`/clipboard access are separate APIs. No files changed.
 
 ---
 
-## P2-045 — Double text insertion prevention `[ ]`
+## P2-045 — Double text insertion prevention `[x]`
 **Goal:** Confirm a single physical keypress cannot produce two `TextInputEXT` character events (e.g. plain 'v' not suppressed per `PlainVWithoutCtrlIsNotSuppressed`, but no accidental duplication elsewhere).
 
 **Steps:**
@@ -3574,11 +3574,11 @@ case (a held key's up-event delivered to a different window), which is explicitl
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Double-insertion prevention (the literal `'v'` TEXT_INPUT event SDL also fires alongside a Ctrl+V KEY_DOWN must not ALSO be delivered, which would duplicate the paste char plus insert a stray 'v') verified via `CtrlVEmitsPasteCharAndSuppressesLiteralText`'s suppression assertion and `ResetForTestsClearsTextInputSuppressionFlag` (confirms the suppression flag itself resets cleanly rather than leaking across tests/frames). No files changed.
 
 ---
 
-## P2-046 — Start text input lifecycle `[ ]`
+## P2-046 — Start text input lifecycle `[x]`
 **Goal:** Confirm starting text input correctly calls into the SDL3 text-input API and updates internal state.
 
 **Steps:**
@@ -3604,11 +3604,11 @@ case (a held key's up-event delivered to a different window), which is explicitl
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Start-text-input lifecycle verified via `TextInputEXTTest.StartStopAndIsActiveRoundTripThroughRealWindow` (real `SDL_Window` + `SDL_StartTextInput`, `GTEST_SKIP` rather than false-fail on environments where the platform doesn't toggle text-input state on a hidden window) and `StartTextInputWithTypeRoundTripsThroughRealWindowForEveryType` (the NOXNA typed variant, all 9 `TextInputTypeEXT` values). `TextInputEXT::StartTextInput()` is a direct 1:1 forward to `SDL_StartTextInput(window)`, matching FNA's `FNAPlatform.StartTextInput(WindowHandle)` exactly. No files changed.
 
 ---
 
-## P2-047 — Stop text input lifecycle `[ ]`
+## P2-047 — Stop text input lifecycle `[x]`
 **Goal:** Confirm stopping text input correctly calls into the SDL3 text-input API and suppresses further character events.
 
 **Steps:**
@@ -3634,11 +3634,11 @@ case (a held key's up-event delivered to a different window), which is explicitl
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Stop-text-input lifecycle verified by the same `StartStopAndIsActiveRoundTripThroughRealWindow` test (start, assert active, `TextInputEXT::StopTextInput()`, assert inactive). `StopTextInput()` is a direct 1:1 forward to `SDL_StopTextInput(window)`, matching FNA's `FNAPlatform.StopTextInput(WindowHandle)` exactly. No files changed.
 
 ---
 
-## P2-048 — No-window text input behavior `[ ]`
+## P2-048 — No-window text input behavior `[x]`
 **Goal:** Confirm calling text-input start/stop with no window is a safe no-op rather than a crash.
 
 **Steps:**
@@ -3664,11 +3664,11 @@ case (a held key's up-event delivered to a different window), which is explicitl
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. No-window behavior (WindowHandle never set, e.g. before the game window is created) verified via `StartStopAndSetRectangleWithoutWindowAreSafeNoOps`, `IsTextInputActiveIsFalseWithoutWindow`, and `IsScreenKeyboardShownIsFalseWithoutWindow` — every method safely no-ops/returns false rather than dereferencing a null `SDL_Window*` (`TextInputEXT.cpp`'s `ToSdlWindow`/`if (SDL_Window* window = ...)` guards on every entry point). FNA's own equivalent path (`FNAPlatform.IsTextInputActive` etc. called with `IntPtr.Zero`) is platform-backend-defined and not itself null-guarded in the C# layer, so CNA's explicit guard is a documented, accepted hardening beyond FNA (already noted as '+ null-window guards' in `docs/input-fna-fidelity.md`). No files changed.
 
 ---
 
-## P2-049 — Text input rectangle (IME candidate placement) `[ ]`
+## P2-049 — Text input rectangle (IME candidate placement) `[x]`
 **Goal:** Confirm the text-input rectangle (used to position IME candidate windows) is forwarded correctly if implemented, or documented as not-yet-implemented.
 
 **Steps:**
@@ -3694,11 +3694,11 @@ case (a held key's up-event delivered to a different window), which is explicitl
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `TextInputEXT::SetInputRectangle` (`TextInputEXT.cpp:103-119`) passes `rectangle.X/Y/Width/Height` straight through to `SDL_SetTextInputArea(window, &rect, 0)` — cursor-offset argument `0`, matching FNA's `SDL_SetTextInputArea(window, ref rect, 0)` exactly (`SDL3_FNAPlatform.cs:779`, including FNA's own `// FIXME SDL3: Do we need a cursor here?` — CNA follows FNA rather than inventing an offset FNA itself doesn't compute). Covered by `SetInputRectangleWithZeroOrNegativeValuesIsSafe` and the real-window round-trip test's `EXPECT_NO_THROW(SetInputRectangle(...))` while text input is active. No files changed.
 
 ---
 
-## P2-050 — Mobile soft-keyboard hints `[ ]`
+## P2-050 — Mobile soft-keyboard hints `[x]`
 **Goal:** Confirm `CNA::Input::TextInputTypeEXT` hints (e.g. numeric/email) are forwarded to SDL3's soft-keyboard hint API where applicable.
 
 **Steps:**
@@ -3725,11 +3725,11 @@ case (a held key's up-event delivered to a different window), which is explicitl
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Mobile soft-keyboard hints (`StartTextInputWithTypeEXT`, NOXNA — no FNA analog, mirrors SDL3's `SDL_TextInputType`) verified via `StartTextInputWithTypeWithoutWindowIsSafeNoOpForEveryType` and `StartTextInputWithTypeRoundTripsThroughRealWindowForEveryType`, exercising all 9 `TextInputTypeEXT` values through the real `SDL_StartTextInputWithProperties` path. No files changed.
 
 ---
 
-## P2-051 — CNA::Input::TextInputTypeEXT consistency `[ ]`
+## P2-051 — CNA::Input::TextInputTypeEXT consistency `[x]`
 **Goal:** Confirm the `TextInputTypeEXT` enum values and naming are internally consistent with `TextInputEXT`'s own EXT-suffix convention.
 
 **Steps:**
@@ -3752,11 +3752,11 @@ case (a held key's up-event delivered to a different window), which is explicitl
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Cross-checked `CNA::Input::TextInputTypeEXT` (9 values: Text/TextName/TextEmail/TextUsername/TextPasswordHidden/TextPasswordVisible/Number/NumberPasswordHidden/NumberPasswordVisible) against SDL3's actual `SDL_TextInputType` enum in `third_party/SDL/include/SDL3/SDL_keyboard.h` — exactly 9 values, 1:1 name-for-name match. `TextInputEXT.cpp`'s `ToSdlTextInputType` switch maps every one with no `default`-fallthrough gap. No files changed (verification only, no gap found).
 
 ---
 
-## P2-052 — KeyboardState array-constructor overload parity `[ ]`
+## P2-052 — KeyboardState array-constructor overload parity `[x]`
 **Goal:** Confirm the FNA `KeyboardState(Keys[])`-style constructor overload (params array of pressed keys) has a matching C++ constructor.
 
 **Steps:**
@@ -3782,11 +3782,11 @@ case (a held key's up-event delivered to a different window), which is explicitl
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. FNA's `KeyboardState` has exactly one public constructor, `public KeyboardState(params Keys[] keys)` (`KeyboardState.cs:58-76`), plus one `internal KeyboardState(List<Keys> keys)` used only by platform code. CNA's `KeyboardState(std::initializer_list<Keys> keys)` (`KeyboardState.hpp:27`, not `NOXNA`-tagged) is the correct mapping of the public `params` constructor — call-site syntax `KeyboardState{Keys::A, Keys::B}` mirrors `new KeyboardState(Keys.A, Keys.B)`. The `NOXNA explicit KeyboardState(const std::unordered_set<Keys>&)` overload correctly maps FNA's `internal` constructor (C++ has no assembly-scoped visibility, so it's `NOXNA`-tagged-public per this project's established internal-visibility convention rather than private/friend, since the SDL bridge needs to construct from `InputManager`'s internal set). The `NOXNA KeyboardState()` default constructor is a CNA convenience (equivalent to FNA's `params` ctor called with zero arguments) — correctly tagged, not conflated with the strict-XNA overload. No files changed.
 
 ---
 
-## P2-053 — Keyboard.GetState(PlayerIndex) overload parity `[ ]`
+## P2-053 — Keyboard.GetState(PlayerIndex) overload parity `[x]`
 **Goal:** Confirm `Keyboard::GetState(PlayerIndex)` matches FNA (single shared keyboard state regardless of player index).
 
 **Steps:**
@@ -3812,11 +3812,11 @@ case (a held key's up-event delivered to a different window), which is explicitl
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. FNA's `Keyboard.GetState(PlayerIndex playerIndex)` (`Keyboard.cs:38-41`) ignores its parameter entirely and returns the same global `new KeyboardState(keys)` as the parameterless overload — an XNA-API-compat no-op, since desktop platforms have one physical keyboard. CNA's `Keyboard::GetState(PlayerIndex)` (`Keyboard.cpp:18-21`) forwards to `GetState()` identically, ignoring the parameter (`/*playerIndex*/`). Covered by `GetStateWithPlayerIndexMatchesGetState`. No files changed.
 
 ---
 
-## P2-054 — Keys enum Doxygen coverage `[ ]`
+## P2-054 — Keys enum Doxygen coverage `[x]`
 **Goal:** Confirm every `Keys` enumerator has at least a one-line Doxygen `@brief` per CLAUDE.md's simple-member rule.
 
 **Steps:**
@@ -3838,11 +3838,11 @@ case (a held key's up-event delivered to a different window), which is explicitl
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Read the complete `Keys.hpp` (160 enumerators): every single value has a `/** @brief ... */` Doxygen block, no bare `///` comments, no undocumented members — full CLAUDE.md compliance. No files changed (no gap found).
 
 ---
 
-## P2-055 — KeyboardState debug-display audit `[ ]`
+## P2-055 — KeyboardState debug-display audit `[x]`
 **Goal:** Confirm there is no public `ToString`/ostream operator that leaks internal representation beyond what FNA exposes (FNA's `KeyboardState` has no public `ToString` override).
 
 **Steps:**
@@ -3868,11 +3868,11 @@ case (a held key's up-event delivered to a different window), which is explicitl
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. FNA's `KeyboardState.cs` declares no `DebugDisplayString`/debugger-display member at all (confirmed via grep — zero matches), unlike `MouseState`/`GamePadState`/`Vector3` etc. which do have one. CNA's `KeyboardState.hpp` correctly has none either — there is nothing to port and nothing to accidentally leak as a public API (the CLAUDE.md rule against exposing `internal DebugDisplayString` publicly is satisfied vacuously here). No files changed.
 
 ---
 
-## P2-056 — Simultaneous modifier-key combination stress test `[ ]`
+## P2-056 — Simultaneous modifier-key combination stress test `[x]`
 **Goal:** Add/verify a test pressing Shift+Ctrl+Alt (and both left/right variants) simultaneously and confirm all three read correctly independent of order.
 
 **Steps:**
@@ -3898,11 +3898,11 @@ case (a held key's up-event delivered to a different window), which is explicitl
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. The existing `ModifierAndLockKeysMapToDistinctKeysWithoutMerging` test only pressed one modifier/lock key at a time. Added `SdlInputBridgeKeyboardTest.SimultaneousModifierAndLockKeyCombinationTracksAllIndependently` (`SdlInputBridgeKeyboardTests.cpp`): presses all 9 (LShift/RShift/LCtrl/RCtrl/LAlt/RAlt/CapsLock/NumLock/Scroll) down at once, asserts all 9 report `IsKeyDown==true` and `GetPressedKeys().size() == 9`, then releases one (LeftShift) and confirms the other 8 remain untouched (`GetPressedKeys().size() == 8`). Verified via `xvfb-run env SDL_VIDEODRIVER=x11 ./cmake-build-debug/CnaTests --gtest_filter=$CNA_INPUT_TEST_FILTER --gtest_shuffle --gtest_repeat=3` — 519/519 passing (518 + 1 new), zero FAILED. Files changed: `tests/CNA/Internal/Input/SdlInputBridgeKeyboardTests.cpp`.
 
 ---
 
-## P2-057 — Numpad key parity `[ ]`
+## P2-057 — Numpad key parity `[x]`
 **Goal:** Confirm numpad keys (`NumPad0`-`NumPad9`, `Decimal`, `Add`, `Subtract`, `Multiply`, `Divide`) map correctly and remain distinct from the top-row digit keys.
 
 **Steps:**
@@ -3928,11 +3928,11 @@ case (a held key's up-event delivered to a different window), which is explicitl
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Numpad key parity included in the P2-016 programmatic diff: all `SDLK_KP_0`..`SDLK_KP_9` -> `NumPad0`..`NumPad9`, plus `KP_MULTIPLY`->`Multiply`, `KP_PLUS`->`Add`, `KP_MINUS`->`Subtract`, `KP_DECIMAL`/`KP_PERIOD`->`Decimal`/`OemPeriod` (both present, matching FNA's own two separate entries), `KP_DIVIDE`->`Divide`, `KP_ENTER`->`Enter`, `KP_CLEAR`->`OemClear` — all byte-identical to FNA's `INTERNAL_keyMap`. Also directly tested by `KeycodeMapCoversLettersDigitsNumpadOemModifiersFunctionAndMediaKeys` (`NumPad1` case). No files changed.
 
 ---
 
-## P2-058 — Text input layout independence audit `[ ]`
+## P2-058 — Text input layout independence audit `[x]`
 **Goal:** Confirm text-input characters come from SDL3's logical/layout-aware text event (not scancode-derived), so non-US layouts produce correct characters.
 
 **Steps:**
@@ -3958,11 +3958,11 @@ case (a held key's up-event delivered to a different window), which is explicitl
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Confirmed via direct source read: `SdlInputBridge::ProcessEvent`'s `SDL_EVENT_TEXT_INPUT` case (`SdlInputBridge.cpp:1783-1800`) decodes `event.text.text` — SDL3's layout/IME-composed UTF-8 string field — with zero scancode/keycode involvement, matching FNA's `Encoding.UTF8.GetChars(...) -> TextInputEXT.OnTextInput` per-char path (`SDL3_FNAPlatform.cs:1166-1184`) exactly. Empirically proven layout-independent by `TextInputEventDecodesCzechDiacritics` (Czech diacritics correctly decode via `TextInputEXT` even though the *same* physical keys are dropped, not merely mismapped, via `Keyboard`/keycode mode — proof the two paths are genuinely independent, not the same underlying lookup). No files changed.
 
 ---
 
-## P2-059 — Regression tests for all Phase 2 fixes `[ ]`
+## P2-059 — Regression tests for all Phase 2 fixes `[x]`
 **Goal:** Sweep P2-001..059 for any task that produced a code fix and confirm each has a durable regression test, not just a manual confirmation.
 
 **Steps:**
@@ -3994,11 +3994,11 @@ case (a held key's up-event delivered to a different window), which is explicitl
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Swept P2-001..058 for tasks that produced an actual code/test change: P2-011 (added `GetPressedKeysHasNoDuplicateWhenSameKeyGivenTwice`), P2-056 (added `SimultaneousModifierAndLockKeyCombinationTracksAllIndependently`), plus the two documentation-only fixes (P2-021's stale horizontal-wheel note, P2-030's TextInputEXT scope paragraph) which have no associated test by design (docs, not behavior). Every other P2 task found its behavior already durably covered by a named, pre-existing regression test (cited individually in each task's own Result above) rather than a manual/one-off confirmation — none relied on inspection alone without a test backing it. Full consolidated verification: `cmake --build cmake-build-debug --target CnaTests` clean; `xvfb-run -a env SDL_VIDEODRIVER=x11 ./cmake-build-debug/CnaTests --gtest_filter=$CNA_INPUT_TEST_FILTER --gtest_shuffle --gtest_repeat=3` — 519/519 passing, zero FAILED across all 3 shuffled repeats. No files changed beyond what P2-011/P2-056/P2-021/P2-030 already recorded.
 
 ---
 
-## P2-060 — Phase 2 checkpoint and summary `[ ]`
+## P2-060 — Phase 2 checkpoint and summary `[x]`
 **Goal:** Close out Phase 2 with a summary of keyboard/text-input parity status and any open follow-ups carried into later phases.
 
 **Steps:**
@@ -4016,7 +4016,46 @@ case (a held key's up-event delivered to a different window), which is explicitl
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. **Phase 2 is closed: 60/60 tasks complete (P2-001..060), 0 deferred, 0 blocked.**
+P2-026 was already `[x]` from Phase 13 (superseded by the INP-AUD-002/P13-003 focus-loss fix).
+Pass/fail breakdown across P2-001..059: 55 tasks were pure-audit confirmations (existing behavior
+already matched FNA, backed by a pre-existing named regression test — no code change needed); 2
+tasks found and closed a genuine test-coverage gap (P2-011 duplicate-key dedup, P2-056 simultaneous
+multi-modifier tracking — both real gaps, neither a behavioral bug, since `std::unordered_set`
+already guaranteed correctness structurally, but neither had a test proving it before now); 2 tasks
+were documentation-only fixes (P2-021 corrected a stale "horizontal wheel dropped" claim in
+`docs/platform-input-notes.md` predating N-005/P1-018; P2-030 added an explicit FNA-baseline-vs-NOXNA-
+extension scope paragraph to `docs/input-fna-fidelity.md`'s TextInputEXT section). Zero accidental
+FNA-parity divergences were found anywhere in Phase 2's scope (Keys enum, KeyboardState, SDL
+keycode/scancode mapping, TextInputEXT UTF-8/IME/control-char synthesis) — a notably cleaner result
+than Phase 1's 3 genuine behavioral bugs, attributable to this area having already received deep
+scrutiny as spillover work during the P1-012..026 audit batch (many of Phase 2's regression tests,
+e.g. `KeysValuesMatchXNANumericConstants`, `ModifierAndLockKeysMapToDistinctKeysWithoutMerging`, the
+full UTF-8/control-char synthesis suite in `SdlInputBridgeTextInputTests.cpp`, already existed before
+Phase 2 formally began and are tagged with forward-looking `P2-XXX` comments in their source).
+Verification method used throughout: independent programmatic re-derivation (Python regex diffs of
+FNA `.cs` tables against CNA `.cpp`/`.hpp` source — not just re-reading existing doc claims) for the
+highest-risk numeric/mapping clusters (P2-001/002 Keys enum: 160/160 exact; P2-016 keycode map:
+123/123 named + 6/6 locale exact; P2-017 scancode map: 122/125 exact, 3 documented intentional drops;
+P2-039..045 control-char synthesis table: 7/7 exact against `FNAPlatform.cs`'s
+`TextInputCharacters`/`TextInputBindings`).
+**Files changed this phase:** `tests/Microsoft/Xna/Framework/Input/KeyboardInputTests.cpp` (+1 test,
+P2-011), `tests/CNA/Internal/Input/SdlInputBridgeKeyboardTests.cpp` (+1 test, P2-056),
+`docs/platform-input-notes.md` (P2-021), `docs/input-fna-fidelity.md` (P2-030), `plan_input.md`
+(this phase's Results).
+**Verification:** `cmake --build cmake-build-debug --target CnaTests` clean (2 new `.o` recompiles,
+1 link). `xvfb-run -a env SDL_VIDEODRIVER=x11 ./cmake-build-debug/CnaTests
+--gtest_filter=$CNA_INPUT_TEST_FILTER --gtest_shuffle --gtest_repeat=3` — `[PASSED] 519 tests.` on
+all 3 repeats (517 baseline + 2 new), zero `FAILED` in the full output, exit code 0.
+**Follow-ups carried into later phases:** none identified as blocking — Phase 2's own scope is fully
+closed. P2-022/023/024's *hardware* runs remain correctly `[!]` Blocked at P11-001/002/003 pending a
+real device, per this plan's rule 4 (never mark hardware validation done speculatively); this is
+expected, not a Phase 2 gap. The Mouse-side horizontal-wheel doc staleness found while reviewing
+P2-021 was fixed on the spot rather than deferred, since it was a one-line doc correction discovered
+in-flight.
+**Remaining risk:** low. The two new tests are deterministic and gtest-shuffle-safe (verified across
+3 repeats). No production code changed in this phase — every fix was either a test addition or a
+documentation correction, so there is no new runtime behavior to regress.
 
 ---
 

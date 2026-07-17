@@ -237,6 +237,19 @@ TEST(KeyboardStateTest, GetPressedKeysIsSortedByAscendingNumericValue)
     EXPECT_EQ(pressed, expected);
 }
 
+// P2-011: a key repeated within the same initializer list (e.g. from a caller that queries the
+// same physical key twice) must appear exactly once in GetPressedKeys, mirroring FNA's bitfield
+// representation where "pressed" is a single bit per key, not a count.
+TEST(KeyboardStateTest, GetPressedKeysHasNoDuplicateWhenSameKeyGivenTwice)
+{
+    const KeyboardState state{Keys::A, Keys::A, Keys::B, Keys::A};
+
+    const auto pressed = state.GetPressedKeys();
+    const std::vector<Keys> expected{Keys::A, Keys::B};
+
+    EXPECT_EQ(pressed, expected);
+}
+
 // ===========================================================================
 // KeyboardState — equality / Equals
 // ===========================================================================
