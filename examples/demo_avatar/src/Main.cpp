@@ -70,6 +70,7 @@ int main(int argc, char* argv[])
     bool haveYaw = false;
     std::string screenshotPath;
     std::string clipName;
+    bool showHelp = false;
     for (int i = 1; i < argc; ++i)
     {
         if (std::strcmp(argv[i], "--smoke") == 0)
@@ -88,6 +89,12 @@ int main(int argc, char* argv[])
         else if (std::strcmp(argv[i], "--clip") == 0 && i + 1 < argc)
         {
             clipName = argv[++i];
+        }
+        else if (std::strcmp(argv[i], "--show-help") == 0)
+        {
+            // Task 8.5 (plan_net.md Phase 8): verifies the overlay actually renders via a
+            // non-interactive smoke/screenshot run, without needing simulated keyboard input.
+            showHelp = true;
         }
     }
 
@@ -108,6 +115,10 @@ int main(int argc, char* argv[])
     if (!clipName.empty())
     {
         game->SetInitialClipEXT(clipName);
+    }
+    if (showHelp)
+    {
+        game->SetShowHelpForTestingEXT(true);
     }
     game->Run();
     delete game;

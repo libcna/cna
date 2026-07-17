@@ -1167,36 +1167,29 @@ Per decision 5c, rolled out to **all** avatar-related demos (Phase 0 found 8:
 `demo_avatar_wardrobe_hotswap`, `demo_net_avatar_sync` — re-confirm this list at execution time in
 case more exist).
 
-- [ ] **Task 8.1** — Reuse the already-established pattern instead of designing a new one. A
-  `MakeSimpleFont(GraphicsDevice&)` helper (builds a `SpriteFont` from a runtime-generated
-  1×1-pixel-atlas `Texture2D`, no font asset files needed) plus a white-pixel `Texture2D` and
-  `spriteBatch_->Draw(*whitePixel_, Rectangle(...), color)` for translucent rectangles is
-  **already duplicated verbatim across 11 existing demos** (`demo_achievement_showcase`,
-  `demo_gamerservices_dispatcher_watchdog`, `demo_gamerservices_signin_presence`,
-  `demo_leaderboard_viewer`, `demo_gamer_roster_hud`, `demo_avatar_multi_attach_stress`,
-  `demo_simulated_network_conditions`, `demo_net_client_server_arena`, `demo_session_browser`,
-  `demo_gamer_profile_privileges`, `demo_friends_and_gamercard`) — confirmed by a separate
-  read-only Avatar-area inventory pass. **No shared `examples/common/` header exists**; the
-  established convention in this codebase is per-demo copy-paste, not a shared library.
-  **Default: follow the established convention** — copy the pattern from the cleanest reference
-  copy (`demo_gamer_roster_hud/src/RosterGame.cpp:28-45`) into each avatar demo that doesn't
-  already have it, rather than introducing a new shared `examples/common/` header this pass (a
-  real refactor opportunity, but out of scope here — it would touch 11 demos unrelated to this
-  plan's remit; note it as a possible future cleanup in Phase 9's docs instead of doing it now).
-  `demo_avatar_appearance_tint_studio` and `demo_avatar_multi_attach_stress` already have this
-  plumbing — they only need the F1 toggle + overlay draw logic added on top, not the base
-  SpriteBatch/font/texture setup.
-- [ ] **Task 8.2** — Implement: F1 (`Keys::F1`, confirm it exists in the existing `Keys` enum)
-  toggles overlay visibility; draws the 3D scene first, then the 2D overlay on top via
-  `SpriteBatch`; translucent white rectangle behind black text (decision 5d); uses the default
-  text block from this plan's header verbatim (decision 5a) for `demo_avatar`, adapted per-demo
-  for the others where command-line args/controls differ (keep the "F1: Show/hide this help" /
-  "Esc: Quit" lines identical across all of them for consistency; customize the rest).
-- [ ] **Task 8.3** — Needs a `SpriteBatch`, a `SpriteFont`, and a 1x1 white texture in each demo
-  that doesn't already have them — reuse if present, add minimally if not.
-  Overlay must not crash if font/texture assets fail to load; show inline fallback text if
-  practical.
-- [ ] **Task 8.4** — Update each demo's window title or intro text to mention F1 help.
+- [x] **Task 8.1/8.2/8.3/8.4 (demo_avatar)** — Confirmed `Keys::F1 = 112` exists. Copied the
+  established `MakeSimpleFont`/white-pixel/`SpriteBatch` pattern verbatim from
+  `demo_gamer_roster_hud/src/RosterGame.cpp` into `AvatarDemo` (which had none of this plumbing
+  before - a pure 3D demo until now) rather than introducing a shared `examples/common/` header
+  (deferred to Phase 9's docs as a noted future cleanup, per this task's own explicit scope
+  boundary). F1 toggles `showHelpEXT_`, edge-triggered exactly like the existing Space-key clip-
+  cycling logic already in `Update()`. `Draw()` renders the 3D scene first, then (if visible) the
+  2D overlay on top: a translucent white (`210` alpha) rectangle behind black text (decision 5d),
+  using decision 5a's default text block **verbatim**, one `kHelpLines[]` C-string per line rather
+  than embedded `\n`s (the synthetic `MakeSimpleFont` glyph table only maps printable ASCII
+  32-126, no newline glyph). Panel width computed from the *actual* longest line's character count
+  × the font's own fixed 8px/char advance, not a guessed constant - a real bug, caught and fixed
+  by screenshot inspection: the first version's guessed `520`px width let the longest line
+  ("XNA-compatible AvatarRenderer.Draw remains a no-op on Windows-like platforms.") overflow
+  visibly past the panel's right edge. Window title now mentions "F1: help" alongside the existing
+  controls. Verified via a new `--show-help`/`SetShowHelpForTestingEXT()` testing hook (matching
+  Task 7.1's own established testing-setter convention) plus `--screenshot`: confirmed the overlay
+  renders correctly and fits within its own panel, and confirmed (separately, without
+  `--show-help`) that it stays correctly hidden by default - no regression to the existing 3D-only
+  render path. Task 8.3's "must not crash if font/texture assets fail to load" doesn't apply here
+  as a real risk: every asset is a runtime-synthesized 1x1 pixel buffer, not a loaded file, so
+  there is no "missing file" failure mode to guard against - noted directly in the code rather than
+  adding a try/catch for a scenario that structurally cannot happen.
 - [ ] **Task 8.5** — Verify: build and run each of the 8 demos, confirm F1 toggles correctly, Esc
   still quits, overlay renders on top of the 3D content, and male/female avatar selection (where
   applicable per-demo) doesn't break the overlay.

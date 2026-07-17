@@ -9,6 +9,9 @@
 #include "Microsoft/Xna/Framework/GamerServices/AvatarRenderer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedModelEXT.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteFont.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Input/Keyboard.hpp"
 #include "Microsoft/Xna/Framework/Input/KeyboardState.hpp"
 #include "Microsoft/Xna/Framework/Input/Keys.hpp"
@@ -55,6 +58,11 @@ public:
      *  Task 7.1 (plan_net.md Phase 7). No effect unless SetSmokeFrames was also called. */
     void SetScreenshotPathEXT(std::string path) { screenshotPathEXT_ = std::move(path); }
 
+    /** @brief Forces the F1 help overlay's initial visibility instead of the default hidden -
+     *  Task 8.5 (plan_net.md Phase 8): lets a non-interactive smoke/screenshot run verify the
+     *  overlay actually renders without needing simulated keyboard input. */
+    void SetShowHelpForTestingEXT(bool visible) { showHelpEXT_ = visible; }
+
     /** @brief Selects a starting clip by name instead of the default clipNames_[0] - Task 7.1
      *  (plan_net.md Phase 7): lets baseline/after captures target a bent-limb pose (e.g. "Wave"),
      *  not just the default T-pose, to reveal joint deformation. No-op if name isn't found. */
@@ -97,4 +105,15 @@ private:
 
     int smokeFramesLeft_ = -1;
     std::string screenshotPathEXT_;
+
+    // Task 8.1-8.3 (plan_net.md Phase 8): F1 help overlay - the same SpriteBatch/1x1-white-
+    // Texture2D/runtime-built-SpriteFont pattern already duplicated across 11+ other demos (see
+    // demo_gamer_roster_hud/src/RosterGame.cpp's own MakeSimpleFont for the reference copy this
+    // was copied from); no shared examples/common/ header exists for this, and this plan
+    // deliberately follows that established per-demo-copy convention rather than introducing one.
+    std::unique_ptr<Microsoft::Xna::Framework::Graphics::SpriteBatch> spriteBatch_;
+    std::unique_ptr<Microsoft::Xna::Framework::Graphics::Texture2D> whitePixel_;
+    std::unique_ptr<Microsoft::Xna::Framework::Graphics::SpriteFont> font_;
+    bool showHelpEXT_ = false;
+    bool f1WasDownEXT_ = false;
 };

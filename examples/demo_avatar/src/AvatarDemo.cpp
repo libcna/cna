@@ -3,7 +3,9 @@
 #include "Microsoft/Xna/Framework/GamerServices/AvatarBodyTypeNamesEXT.hpp"
 #include "../../common/ScreenshotEXT.hpp"
 
+#include <algorithm>
 #include <cmath>
+#include <cstring>
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -20,6 +22,51 @@ namespace
     constexpr float kCameraDistance = 3.0f;
     constexpr float kCameraHeight = 1.0f;
     constexpr float kTargetHeight = 0.9f; // roughly chest height on our ~1.7m-tall avatar
+
+    // Task 8.1 (plan_net.md Phase 8): the same 1x1-white-Texture2D-atlas SpriteFont pattern
+    // already duplicated across 11+ other demos (see demo_gamer_roster_hud/src/RosterGame.cpp's
+    // own MakeSimpleFont) - no shared examples/common/ header exists for this, so this is a
+    // deliberate copy, not a missed opportunity to share code (see this file's own AvatarDemo.hpp
+    // comment on the same point).
+    std::unique_ptr<SpriteFont> MakeSimpleFont(GraphicsDevice& device)
+    {
+        const std::vector<uint8_t> px = {255, 255, 255, 255};
+        Texture2D atlas = Texture2D::CreateFromPixels(device, 1, 1, px);
+
+        std::vector<SharpRuntime::charcs> chars;
+        std::vector<Rectangle> bounds;
+        std::vector<Rectangle> cropping;
+        std::vector<Vector3> kerning;
+        for (char c = 32; c < 127; ++c)
+        {
+            chars.push_back(static_cast<SharpRuntime::charcs>(c));
+            bounds.push_back(Rectangle(0, 0, 1, 1));
+            cropping.push_back(Rectangle(0, 0, 8, 14));
+            kerning.push_back(Vector3(0.0f, 8.0f, 0.0f));
+        }
+
+        return std::make_unique<SpriteFont>(atlas, bounds, cropping, chars, 16, 1.0f, kerning,
+                                             static_cast<SharpRuntime::charcs>(' '));
+    }
+
+    // Task 8.2 (plan_net.md Phase 8): decision 5a's own default text block, verbatim - kept as
+    // one line per array entry rather than embedded '\n's, since MakeSimpleFont's synthetic glyph
+    // table above only maps printable ASCII 32-126 (no newline glyph to fall back on).
+    constexpr const char* kHelpLines[] = {
+        "CNA Avatar Demo Help",
+        "",
+        "F1: Show/hide this help",
+        "Esc: Quit",
+        "Space: Next animation",
+        "Left/Right: Rotate camera",
+        "",
+        "Command line:",
+        "--gender male|female",
+        "--wardrobe-hair Cap|Ponytail",
+        "",
+        "This demo uses CNA real avatar rendering extensions.",
+        "XNA-compatible AvatarRenderer.Draw remains a no-op on Windows-like platforms.",
+    };
 }
 
 AvatarDemo::AvatarDemo(AvatarBodyType bodyType, std::string wardrobeHairStyle)
@@ -112,9 +159,18 @@ void AvatarDemo::LoadContent()
     renderer_->setLightColorProperty(Vector3(1.0f, 1.0f, 1.0f));
     renderer_->setLightDirectionProperty(Vector3(-0.4f, -0.6f, -0.7f));
 
+    // Task 8.1/8.3 (plan_net.md Phase 8): F1 help overlay's own SpriteBatch/white-pixel/font -
+    // must not crash if this fails, so LoadContent()'s own real device/content are reused here
+    // (already known-good, since model_ loaded successfully above) rather than anything that
+    // could plausibly fail independently.
+    spriteBatch_ = std::make_unique<SpriteBatch>(device);
+    const std::vector<uint8_t> px = {255, 255, 255, 255};
+    whitePixel_ = std::make_unique<Texture2D>(Texture2D::CreateFromPixels(device, 1, 1, px));
+    font_ = MakeSimpleFont(device);
+
     getWindowProperty().setTitleProperty(
         (bodyType_ == AvatarBodyType::Female ? "CNA Avatar Demo [female] - " : "CNA Avatar Demo [male] - ")
-        + clipNames_[currentClipIndex_] + "  (Space: next anim, Left/Right: rotate, Esc: quit)");
+        + clipNames_[currentClipIndex_] + "  (F1: help, Space: next anim, Left/Right: rotate, Esc: quit)");
 }
 
 void AvatarDemo::Update(GameTime& gameTime)
@@ -143,6 +199,15 @@ void AvatarDemo::Update(GameTime& gameTime)
             + clipNames_[currentClipIndex_] + "  (Space: next anim, Left/Right: rotate, Esc: quit)");
     }
     spaceWasDown_ = spaceDown;
+
+    // Task 8.2 (plan_net.md Phase 8): F1 toggles overlay visibility - edge-triggered, matching
+    // the Space-key clip-cycling pattern just above.
+    const bool f1Down = kb.IsKeyDown(Keys::F1);
+    if (f1Down && !f1WasDownEXT_)
+    {
+        showHelpEXT_ = !showHelpEXT_;
+    }
+    f1WasDownEXT_ = f1Down;
 
     clipPositionSeconds_ += static_cast<double>(dt);
 
@@ -180,6 +245,36 @@ void AvatarDemo::Draw(const GameTime&)
         Matrix::CreatePerspectiveFieldOfView(kPiOver4, aspect, 0.1f, 100.0f));
 
     renderer_->DrawRealEXT(clipNames_[currentClipIndex_], System::TimeSpan::FromSeconds(clipPositionSeconds_), /*loop=*/true);
+
+    // Task 8.2 (plan_net.md Phase 8): 3D scene drawn first (above), then the 2D help overlay on
+    // top - decision 5d: translucent white rectangle behind black text.
+    if (showHelpEXT_)
+    {
+        constexpr int kLineCount = static_cast<int>(sizeof(kHelpLines) / sizeof(kHelpLines[0]));
+        constexpr float kLineHeight = 18.0f;
+        constexpr float kPadding = 12.0f;
+        // MakeSimpleFont's synthetic glyphs advance a fixed 8px/char (see its own kerning
+        // above) - sized to the longest line ("XNA-compatible AvatarRenderer.Draw remains a
+        // no-op on Windows-like platforms.", 79 chars) plus padding, not a guessed constant.
+        constexpr float kCharAdvance = 8.0f;
+        std::size_t longestLine = 0;
+        for (const char* line : kHelpLines)
+        {
+            longestLine = std::max(longestLine, std::strlen(line));
+        }
+        const Rectangle panel(8, 8, static_cast<int>(longestLine * kCharAdvance + kPadding * 2.0f),
+                               static_cast<int>(kLineCount * kLineHeight + kPadding * 2.0f));
+
+        spriteBatch_->Begin();
+        spriteBatch_->Draw(*whitePixel_, panel, Color(255, 255, 255, 210));
+        float y = panel.Y + kPadding;
+        for (const char* line : kHelpLines)
+        {
+            spriteBatch_->DrawString(*font_, line, Vector2(panel.X + kPadding, y), Color(0, 0, 0, 255));
+            y += kLineHeight;
+        }
+        spriteBatch_->End();
+    }
 
     // Task 7.1 (plan_net.md Phase 7): captured after DrawRealEXT so the just-rendered frame is
     // what ends up in the backbuffer read below. Fires on smokeFramesLeft_ == 1, not 0 - Exit()
