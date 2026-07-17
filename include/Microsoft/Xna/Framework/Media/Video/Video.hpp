@@ -23,15 +23,23 @@ namespace Microsoft::Xna::Framework::Media
     {
     public:
         /**
-         * @brief Creates a Video from a file path and a graphics device (XNB constructor).
+         * @brief Creates a Video from a file path and a graphics device (raw-file constructor).
          *
+         * Probes the file directly for width/height/frame rate. Note: this label was previously
+         * swapped with the 7-argument constructor's below -- this one is the raw-file/probing
+         * constructor, the 7-argument one is the XNB-sourced constructor.
+         *
+         * @throws System::IO::FileNotFoundException If no file exists at fileName.
          * @param fileName File path to the video file.
          * @param device   GraphicsDevice used for frame rendering.
          */
         NOXNA Video(std::string fileName, Graphics::GraphicsDevice* device);
 
         /**
-         * @brief Creates a Video with explicit metadata (raw-file constructor).
+         * @brief Creates a Video with explicit, trusted metadata (XNB constructor).
+         *
+         * Does not touch the file at construction time -- matches FNA's own "we have to wait
+         * until VideoPlayer tries to load this before throwing Exceptions" design.
          *
          * @param fileName       File path to the video file.
          * @param device         GraphicsDevice used for frame rendering.

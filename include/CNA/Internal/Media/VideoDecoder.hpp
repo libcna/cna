@@ -8,6 +8,8 @@
 // Forward-declare FFmpeg types so this header stays clean of extern "C"
 struct AVFormatContext;
 struct AVCodecContext;
+struct AVCodec;
+struct AVCodecParameters;
 struct AVFrame;
 struct AVPacket;
 struct SwrContext;
@@ -72,12 +74,37 @@ namespace CNA::Internal::Media
         bool OpenAudioStreamByIndex(int streamIdx);
         bool OpenVideoStreamByIndex(int streamIdx);
 
-        // BT.601 YUV420P → RGBA (no libswscale needed)
-        static void yuv420p_to_rgba(
+        // Allocates + configures a codec context from stream parameters; returns nullptr (freeing
+        // any partial allocation) on either allocation or avcodec_parameters_to_context failure,
+        // instead of risking a null dereference downstream (plan_media.md MEDIA-38).
+        static AVCodecContext* AllocAndConfigureCodecContext(
+            const AVCodec* codec, const AVCodecParameters* params);
+
+        // (Re)creates swrCtx_ for the given codec context, resampling to packed float32. Leaves
+        // swrCtx_ null (freeing any partial allocation) if either allocation or swr_init fails,
+        // instead of leaving a half-configured context a later swr_convert call would crash on
+        // (plan_media.md MEDIA-38).
+        void SetupResampler(AVCodecContext* ctx);
+
+        // BT.601 8-bit planar YUV -> RGBA (no libswscale needed). hChromaShift/vChromaShift
+        // encode the chroma subsampling: 0 = full resolution on that axis, 1 = halved (4:2:0 is
+        // shift 1/1, 4:2:2 is shift 1/0, 4:4:4 is shift 0/0) -- plan_media.md MEDIA-35.
+        static void yuv_planar8_to_rgba(
             const uint8_t* y, int yStride,
             const uint8_t* u, int uStride,
             const uint8_t* v, int vStride,
-            uint8_t* rgba, int w, int h);
+            uint8_t* rgba, int w, int h,
+            int hChromaShift, int vChromaShift);
+
+        // BT.601 10-/12-bit (16-bit-packed, little-endian) planar YUV -> RGBA. Downshifts each
+        // sample to its 8-bit equivalent (bitDepth-8 bits) before reusing the same integer YUV
+        // math as the 8-bit path -- plan_media.md MEDIA-36.
+        static void yuv_planar16_to_rgba(
+            const uint8_t* y, int yStride,
+            const uint8_t* u, int uStride,
+            const uint8_t* v, int vStride,
+            uint8_t* rgba, int w, int h,
+            int hChromaShift, int vChromaShift, int bitDepth);
 
         // Generic planar/packed YUV → RGBA fallback via libavutil
         void generic_to_rgba(AVFrame* src, std::vector<uint8_t>& out);

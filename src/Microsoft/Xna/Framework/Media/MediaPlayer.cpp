@@ -276,21 +276,35 @@ namespace Microsoft::Xna::Framework::Media
         // SDL3_mixer does not expose frequency/sample visualization data.
     }
 
+    bool MediaPlayer::DetectSongEndedByElapsedTime(Song* activeSong, System::TimeSpan elapsed)
+    {
+        if (activeSong == nullptr)
+        {
+            return false;
+        }
+        System::TimeSpan duration = activeSong->getDurationProperty();
+        return duration > System::TimeSpan::Zero && elapsed >= duration;
+    }
+
     void MediaPlayer::Update()
     {
-        if (queue_.getActiveSongProperty() == nullptr || getStateProperty() != MediaState::Playing)
+        Song* activeSong = queue_.getActiveSongProperty();
+        if (activeSong == nullptr || getStateProperty() != MediaState::Playing)
         {
             return;
         }
 
 #ifdef SOUND_ENABLED
-        if (!g_songEnded.exchange(false, std::memory_order_relaxed))
+        bool songEnded = g_songEnded.exchange(false, std::memory_order_relaxed);
+#else
+        // No native track-stopped signal in this build configuration -- fall back to comparing
+        // wall-clock elapsed time against the song's known duration (plan_media.md MEDIA-32).
+        bool songEnded = DetectSongEndedByElapsedTime(activeSong, TimerElapsed());
+#endif
+        if (!songEnded)
         {
             return;
         }
-#else
-        return;
-#endif
 
         numSongsInQueuePlayed_ += 1;
 

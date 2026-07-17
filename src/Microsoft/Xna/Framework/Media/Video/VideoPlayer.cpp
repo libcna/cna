@@ -2,11 +2,14 @@
 #include "Microsoft/Xna/Framework/Media/Video/VideoPlayer.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <SDL3/SDL.h>
 
 #include "CNA/Internal/Media/VideoDecoder.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "System/InvalidOperationException.hpp"
+#include "System/ObjectDisposedException.hpp"
 
 namespace Microsoft::Xna::Framework::Media
 {
@@ -74,6 +77,21 @@ namespace Microsoft::Xna::Framework::Media
         {
             decoder_.reset();
             return;
+        }
+
+        // FNA's VideoPlayerAV1/VideoPlayerTheora both validate the video's declared metadata
+        // (trusted upfront, e.g. from an XNB) against what the real file actually reports before
+        // ever playing it, throwing InvalidOperationException on mismatch (~1.0f fps tolerance,
+        // matching FNA's own check) -- plan_media.md MEDIA-42. For the raw-file constructor this
+        // is a trivially-true self-check (Video's own properties already came from an identical
+        // probe); for the XNB-sourced constructor it is the real, meaningful validation.
+        if (video->getWidthProperty() != decoder_->GetWidth() ||
+            video->getHeightProperty() != decoder_->GetHeight() ||
+            std::abs(video->getFramesPerSecondProperty() - decoder_->GetFPS()) > 1.0f)
+        {
+            decoder_.reset();
+            throw System::InvalidOperationException(
+                "Video metadata (width/height/framesPerSecond) does not match the decoded file.");
         }
 
         // Create frame texture sized to video dimensions
@@ -144,8 +162,29 @@ namespace Microsoft::Xna::Framework::Media
 
     // -------------------------------------------------------------------------
 
+    namespace
+    {
+        // FNA's real checkDisposed() throws ObjectDisposedException("VideoPlayer") -- a hardcoded
+        // literal type-name string, not nameof/reflection -- reproduced verbatim here for message
+        // fidelity (plan_media.md MEDIA-43). Deliberately NOT applied to Dispose() itself: FNA's
+        // own Dispose() also calls checkDisposed() (throws on a second call), but ~VideoPlayer()
+        // unconditionally calls Dispose() -- replicating that would make a second explicit
+        // Dispose() followed by normal destruction throw from inside the destructor, which is
+        // undefined behavior in C++ (destructors are implicitly noexcept) rather than a merely
+        // surprising API quirk as it is in C#. Kept safely idempotent instead; documented, not
+        // silently diverged.
+        void CheckDisposed(bool isDisposed)
+        {
+            if (isDisposed)
+            {
+                throw System::ObjectDisposedException("VideoPlayer");
+            }
+        }
+    }
+
     void VideoPlayer::Play(Video* video)
     {
+        CheckDisposed(isDisposed_);
         if (!video) return;
         video_ = video;
         OpenDecoder(video);
@@ -158,12 +197,14 @@ namespace Microsoft::Xna::Framework::Media
 
     void VideoPlayer::Stop()
     {
+        CheckDisposed(isDisposed_);
         CloseDecoder();
         state_ = MediaState::Stopped;
     }
 
     void VideoPlayer::Pause()
     {
+        CheckDisposed(isDisposed_);
         if (state_ != MediaState::Playing) return;
         pauseOffset_ += std::chrono::duration<double>(Clock::now() - startTime_).count();
         state_ = MediaState::Paused;
@@ -172,6 +213,7 @@ namespace Microsoft::Xna::Framework::Media
 
     void VideoPlayer::Resume()
     {
+        CheckDisposed(isDisposed_);
         if (state_ != MediaState::Paused) return;
         startTime_ = Clock::now();
         state_     = MediaState::Playing;
@@ -180,12 +222,14 @@ namespace Microsoft::Xna::Framework::Media
 
     void VideoPlayer::SetAudioTrackEXT(SharpRuntime::intcs track)
     {
+        CheckDisposed(isDisposed_);
         audioTrack_ = track;
         if (decoder_) decoder_->SetAudioStream(track);
     }
 
     void VideoPlayer::SetVideoTrackEXT(SharpRuntime::intcs track)
     {
+        CheckDisposed(isDisposed_);
         videoTrack_ = track;
         if (decoder_) decoder_->SetVideoStream(track);
     }
@@ -194,6 +238,13 @@ namespace Microsoft::Xna::Framework::Media
 
     Graphics::Texture2D* VideoPlayer::GetTexture()
     {
+        CheckDisposed(isDisposed_);
+
+        // plan_media.md MEDIA-45: FNA's own GetTexture() dereferences its impl unguarded, so
+        // calling it before any Play() is a raw NullReferenceException in real XNA/FNA -- not a
+        // bug to silently improve there. CNA instead returns nullptr gracefully (frameTexture_ is
+        // simply still unset), a documented, deliberate deviation: C++ has no safe equivalent to
+        // "let it NRE" the way a managed runtime does.
         if (state_ == MediaState::Stopped || !decoder_ || !frameTexture_)
             return frameTexture_.get();
 
@@ -221,6 +272,15 @@ namespace Microsoft::Xna::Framework::Media
                 }
                 else
                 {
+                    // FNA's VideoPlayerTheora explicitly waits for the audio stream's own
+                    // PendingBufferCount to reach 0 (in addition to the codec's EOS) before
+                    // declaring State == Stopped, so queued audio isn't cut off abruptly at
+                    // video EOF (plan_media.md MEDIA-41). Re-checked on each GetTexture() call
+                    // until the SDL audio device has actually finished playing what was queued.
+                    if (audioStream_ && SDL_GetAudioStreamQueued(audioStream_) > 0)
+                    {
+                        break;
+                    }
                     state_ = MediaState::Stopped;
                     if (audioStream_) SDL_PauseAudioStreamDevice(audioStream_);
                 }

@@ -123,6 +123,7 @@ namespace Microsoft::Xna::Framework::Media
          * Decodes the next frame if the playback clock has advanced past the
          * last decoded presentation timestamp.
          *
+         * @throws System::ObjectDisposedException If this VideoPlayer has been disposed.
          * @return Pointer to the frame Texture2D, or nullptr if no video is active.
          */
         Graphics::Texture2D* GetTexture();
@@ -130,17 +131,29 @@ namespace Microsoft::Xna::Framework::Media
         /**
          * @brief Starts playback of the given video from the beginning.
          *
+         * @throws System::ObjectDisposedException If this VideoPlayer has been disposed.
+         * @throws System::InvalidOperationException If the video's declared width/height/frame
+         *         rate does not match what the decoded file actually reports.
          * @param video Video to play.
          */
         void Play(Video* video);
 
-        /** @brief Stops playback and resets the playback position. */
+        /**
+         * @brief Stops playback and resets the playback position.
+         * @throws System::ObjectDisposedException If this VideoPlayer has been disposed.
+         */
         void Stop();
 
-        /** @brief Pauses playback at the current position. */
+        /**
+         * @brief Pauses playback at the current position.
+         * @throws System::ObjectDisposedException If this VideoPlayer has been disposed.
+         */
         void Pause();
 
-        /** @brief Resumes playback from the paused position. */
+        /**
+         * @brief Resumes playback from the paused position.
+         * @throws System::ObjectDisposedException If this VideoPlayer has been disposed.
+         */
         void Resume();
 
         /**
@@ -149,6 +162,7 @@ namespace Microsoft::Xna::Framework::Media
          * An FNA extension beyond the original XNA 4.0 API surface (note the "EXT" suffix),
          * not a CNA invention.
          *
+         * @throws System::ObjectDisposedException If this VideoPlayer has been disposed.
          * @param track Zero-based audio stream index.
          */
         NOXNA void SetAudioTrackEXT(SharpRuntime::intcs track);
@@ -159,6 +173,7 @@ namespace Microsoft::Xna::Framework::Media
          * An FNA extension beyond the original XNA 4.0 API surface (note the "EXT" suffix),
          * not a CNA invention.
          *
+         * @throws System::ObjectDisposedException If this VideoPlayer has been disposed.
          * @param track Zero-based video stream index.
          */
         NOXNA void SetVideoTrackEXT(SharpRuntime::intcs track);

@@ -350,7 +350,7 @@ free to override a row — the tasks that depend on it are cited so the blast ra
 
 ### Phase 2 — Real bug fixes in the already-working (Playback) cluster
 
-- [ ] **MEDIA-32 — Fix or document `MediaPlayer`'s silent no-`SOUND_ENABLED` gap.**
+- [x] **MEDIA-32 — Fix or document `MediaPlayer`'s silent no-`SOUND_ENABLED` gap.**
   `MediaPlayer::Update()` (`MediaPlayer.cpp:291-293`) returns immediately when built without
   `SOUND_ENABLED`, so song-end detection and Queue auto-advance never fire in that configuration.
   *Recommended:* add a `SOUND_ENABLED`-independent fallback using the already-tracked wall-clock
@@ -360,13 +360,13 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   *Accept:* a test built without/with the flag simulated exercises queue auto-advance either way; the
   decision is recorded either in code behavior or in `CHECKLIST.md`.
 
-- [ ] **MEDIA-33 — Confirm `MediaPlayer` shuffle matches FNA's "can repeat" behavior.** FNA's
+- [x] **MEDIA-33 — Confirm `MediaPlayer` shuffle matches FNA's "can repeat" behavior.** FNA's
   `NextSong` (`MediaPlayer.cs:353-356`) does `Queue.ActiveSongIndex = random.Next(Queue.Count)` with
   **no exclusion** of the currently-playing index. Confirm CNA's shuffle implementation has the same
   "can repeat the same song" behavior rather than an unrequested "improvement."
   *Accept:* a regression test documents/locks in the exact (can-repeat) behavior.
 
-- [ ] **MEDIA-34 — Verify `MediaPlayer.Play()`'s "duplicate the Song at play time" quirk is
+- [x] **MEDIA-34 — Verify `MediaPlayer.Play()`'s "duplicate the Song at play time" quirk is
   reproduced.** FNA's own comment: "Believe it or not, XNA duplicates the Song object and then assigns a
   bunch of stuff to it at Play time" — `LoadSong` constructs a **new** `Song(song.handle, song.Name)`
   rather than enqueuing the caller's own instance, meaning mutations to the original `Song` object after
@@ -376,55 +376,55 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   *Accept:* a test mutates the original `Song` after `Play()` and confirms the queued copy is unaffected
   (or the deviation is explicitly documented if CNA currently shares the reference).
 
-- [ ] **MEDIA-35 — `VideoDecoder`: add YUV422P/YUV444P conversion.** `generic_to_rgba`
+- [x] **MEDIA-35 — `VideoDecoder`: add YUV422P/YUV444P conversion.** `generic_to_rgba`
   (`VideoDecoder.cpp:271-332`) only handles `RGBA`/`RGB24`/`NV12`; everything else (including 4:2:2 and
   4:4:4, which are within FNA's own real supported pixel-layout matrix — Theora's
   `TH_PF_422`/`TH_PF_444`, dav1d's `I422`/`I444`) falls through to a hardcoded solid-magenta fill. Add
   real conversion paths for the FFmpeg `AVPixelFormat`s corresponding to 4:2:2/4:4:4 8-bit content.
   *Accept:* MEDIA-6's 4:2:2/4:4:4 fixtures decode to correct colors, not magenta.
 
-- [ ] **MEDIA-36 — `VideoDecoder`: add 10/12-bit HDR pixel-format support.** FNA's `VideoPlayerAV1` has
+- [x] **MEDIA-36 — `VideoDecoder`: add 10/12-bit HDR pixel-format support.** FNA's `VideoPlayerAV1` has
   real high-bit-depth handling (a shader `RescaleFactor` of `4096/65536` for 10-bit, `1024/65536` for
   12-bit). CNA's `generic_to_rgba` has no equivalent, so 10/12-bit content either misrenders or falls to
   the magenta fallback — a real capability regression vs. FNA. Add coverage for the relevant
   high-bit-depth `AVPixelFormat`s (e.g. `AV_PIX_FMT_YUV420P10LE`) with the equivalent rescale.
   *Accept:* MEDIA-7's 10-/12-bit fixtures decode with correct (non-clipped, non-magenta) color.
 
-- [ ] **MEDIA-37 — Document AV1-content-keeps-audio as a deliberate improvement over FNA (§2.3).** No
+- [x] **MEDIA-37 — Document AV1-content-keeps-audio as a deliberate improvement over FNA (§2.3).** No
   code change — CNA's unified decoder already does this; add the deviation-table entry and a doc note
   so it isn't mistaken for an unported FNA limitation later.
   *Accept:* §2/`CHECKLIST.md` entry added; a test confirms an AV1-container fixture with an audio track
   actually produces audible/decodable audio output through `VideoDecoder`.
 
-- [ ] **MEDIA-38 — Harden `VideoDecoder::Open`/`OpenAudioStreamByIndex` against allocation failures.**
+- [x] **MEDIA-38 — Harden `VideoDecoder::Open`/`OpenAudioStreamByIndex` against allocation failures.**
   `avcodec_alloc_context3()`'s return isn't null-checked before use (`VideoDecoder.cpp:58-60,87-89`);
   `swr_alloc_set_opts2()`'s return value is discarded (`102-106`,`173-177`) before the
   immediately-following `swr_init()` call. Add explicit null/error checks that throw a clear, documented
   C++ exception instead of risking a null dereference.
   *Accept:* a fault-injection test throws cleanly instead of crashing; ASan-clean.
 
-- [ ] **MEDIA-39 — Harden the broader unchecked FFmpeg decode return codes.** Beyond MEDIA-38's
+- [x] **MEDIA-39 — Harden the broader unchecked FFmpeg decode return codes.** Beyond MEDIA-38's
   allocation sites, `avcodec_send_packet`/`swr_convert`'s return values are unchecked in several other
   call sites within `NextFrame`/the audio-packet-processing path. A malformed file can silently produce
   garbage frames rather than a clear error. Add explicit error checks/propagation at each site.
   *Accept:* MEDIA-7's truncated/corrupted fixture surfaces a clear exception rather than garbage output
   or a crash, at each hardened call site (not just the allocation sites from MEDIA-38).
 
-- [ ] **MEDIA-40 — Distinguish real I/O errors from EOF in `av_read_frame` handling.** Every negative
+- [x] **MEDIA-40 — Distinguish real I/O errors from EOF in `av_read_frame` handling.** Every negative
   return from `av_read_frame` is currently treated as EOF; only `AVERROR_EOF` should be. A genuine
   mid-stream I/O error should surface as an error/exception, not silently end playback as if the video
   finished normally.
   *Accept:* MEDIA-7's truncated/corrupted fixture demonstrates the distinction (a clear I/O-error signal,
   not a silent "video ended normally").
 
-- [ ] **MEDIA-41 — Confirm end-of-stream "let audio drain" parity.** FNA's `VideoPlayerTheora`
+- [x] **MEDIA-41 — Confirm end-of-stream "let audio drain" parity.** FNA's `VideoPlayerTheora`
   explicitly waits for `audioStream.PendingBufferCount==0` in addition to `tf_eos` before declaring
   `State==Stopped`, so queued audio isn't cut off abruptly. Audit CNA's `VideoDecoder`/`VideoPlayer` EOS
   handling for the same behavior; fix if audio is currently truncated at video EOS.
   *Accept:* MEDIA-7's audio-tail-longer-than-video fixture plays that tail out before `State` flips to
   `Stopped`.
 
-- [ ] **MEDIA-42 — Confirm dimension/fps sanity-check parity for the decode path.** FNA's
+- [x] **MEDIA-42 — Confirm dimension/fps sanity-check parity for the decode path.** FNA's
   `VideoPlayerAV1`/`VideoPlayerTheora.Play()` both throw `InvalidOperationException` on a dimension/fps
   mismatch between the container's declared metadata and what the decoder reports (AV1 additionally
   guards `fps==0`). Confirm `VideoDecoder`/`VideoPlayer` perform an equivalent check and throw a
@@ -432,7 +432,7 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   *Accept:* MEDIA-7's mismatched-metadata fixture (or a synthetic unit test constructing a `Video` with
   deliberately wrong declared dimensions) throws; matches FNA's exception-type intent.
 
-- [ ] **MEDIA-43 — `VideoPlayer`: enforce a disposed-state guard on every public method (X5).** FNA's
+- [x] **MEDIA-43 — `VideoPlayer`: enforce a disposed-state guard on every public method (X5).** FNA's
   real `VideoPlayer` calls `checkDisposed()` (throwing `ObjectDisposedException("VideoPlayer")`, exact
   literal type-name string — preserve verbatim for message fidelity) at the top of every public method.
   Add the equivalent guard to CNA's `Play`/`Stop`/`Pause`/`Resume`/`GetTexture`/property
@@ -440,14 +440,14 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   *Accept:* calling any public method after `Dispose()` throws the documented exception instead of
   touching stale state; a test covers at least `Play`/`GetTexture`/`Stop` post-dispose.
 
-- [ ] **MEDIA-44 — `Video`: throw `FileNotFoundException` from the raw-file constructor for a missing
+- [x] **MEDIA-44 — `Video`: throw `FileNotFoundException` from the raw-file constructor for a missing
   file.** FNA's raw-file `Video(string fileName, GraphicsDevice device)` constructor explicitly checks
   `File.Exists` and throws. CNA's equivalent currently probes via `VideoDecoder::Open` and silently
   leaves `width_`/`height_`/`duration_` at 0 on failure, with no exception at all — a real fidelity gap.
   *Accept:* constructing a `Video` from a nonexistent path throws `System::IO::FileNotFoundException`; a
   valid path is unaffected.
 
-- [ ] **MEDIA-45 — Confirm/document `VideoPlayer::GetTexture()`'s behavior when called before any
+- [x] **MEDIA-45 — Confirm/document `VideoPlayer::GetTexture()`'s behavior when called before any
   `Play()`.** FNA's real behavior is an unguarded `impl.GetTexture()` call that throws a plain
   `NullReferenceException` if `impl` is still null (matches XNA's own actual behavior of calling
   `GetTexture()` before ever calling `Play()` — not a bug to silently improve). Decide: reproduce this

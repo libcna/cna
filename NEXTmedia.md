@@ -25,7 +25,38 @@ Phase 5's `MEDIA-75`, closed early). Full-suite regression after all Phase 1 cha
 4664 passed, 0 failed, 2 pre-existing hardware skips** (Accelerometer/Gyroscope, need real hardware) —
 run against the real display per §2's corrected methodology, not the flawed all-`dummy` Phase 0 run.
 
-**Now starting Phase 2** (`MEDIA-32`..`MEDIA-45`, real bug fixes in the playback cluster).
+**Phase 2 complete** (`MEDIA-32`..`MEDIA-45`, real bug fixes in the playback cluster). Real bugs
+found and fixed beyond the plan's own written description:
+- `swr_convert`'s return value (actual samples produced, can be less than requested or negative on
+  error) was discarded entirely in `ProcessAudioPacket` -- a partial/failed conversion still
+  appended the full, partly-stale buffer (including uninitialized trailing samples) to the pending
+  audio queue. Fixed to trim to what was actually produced and skip entirely on error.
+- `Video.hpp`'s two constructors had their `(XNB constructor)` / `(raw-file constructor)` doc
+  labels literally swapped (the 2-arg probing constructor was labeled XNB; the 7-arg
+  metadata-trusting constructor was labeled raw-file) -- fixed, doc-only.
+- Every other MEDIA-35..45 item landed as planned: 4:2:2/4:4:4 chroma + 10-/12-bit HDR decode
+  (`yuv_planar8_to_rgba`/`yuv_planar16_to_rgba`, generalized from the old 4:2:0-only function),
+  `AllocAndConfigureCodecContext`/`SetupResampler` alloc-failure hardening (4 call sites),
+  I/O-error-vs-EOF distinction in `NextFrame` (throws on a genuine demux error instead of treating
+  it as clean EOF), the no-`SOUND_ENABLED` duration-based fallback (`DetectSongEndedByElapsedTime`,
+  a pure always-compiled function so it's testable regardless of audio backend), confirmed
+  shuffle-can-repeat and duplicate-on-play via FNA fidelity, `VideoPlayer`'s disposed-guard (7
+  methods; `Dispose()` itself deliberately NOT guarded -- see the code comment on why replicating
+  FNA's double-Dispose-throws would be UB in C++), `Video`'s missing-file `FileNotFoundException`,
+  and the width/height/fps XNB-metadata-vs-decoded-file `InvalidOperationException` check.
+
+Full-suite regression after Phase 2: **4699 tests, 4697 passed, 0 failed, 2 pre-existing hardware
+skips.** New Media-scoped tests: 38 (`VideoDecoderTests.cpp` new under
+`tests/CNA/Internal/Media/`, `MediaPlayerTests.cpp` new, `VideoTests.cpp` new, `VideoPlayerTests.cpp`
+extended) -- includes two real-wall-clock-timing tests (~2-2.5s each) that actually play a fixture
+video past its duration to prove the EOS/looping state machine, not just unit-test the pieces.
+
+**Now starting Phase 3** (`MEDIA-46`..`MEDIA-60`, the real from-scratch local media-library
+backend) -- the largest, most novel remaining chunk: `MediaLibraryPaths`, `AudioTagParser` (Ogg
+Vorbis-comment + ID3v2.3/2.4 + filename-fallback), `MediaLibraryIndex` (incl. symlink-loop/
+permission hardening), `MediaCollectionBase<T>`, `PictureLibraryIndex` (reusing the existing
+`CNA::Internal::Graphics::ImageLoader`, do not reimplement image decoding), `PlaylistParser`
+(M3U/M3U8), `SavedPictureStore`.
 
 ## 2. Correction to Phase 0's own build-verification record
 

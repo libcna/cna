@@ -4,12 +4,15 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <stdexcept>
+#include <string>
 
 extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
 #include <libavutil/avutil.h>
 #include <libavutil/channel_layout.h>
+#include <libavutil/error.h>
 #include <libavutil/imgutils.h>
 #include <libavutil/opt.h>
 #include <libswresample/swresample.h>
@@ -54,8 +57,12 @@ namespace CNA::Internal::Media
             avformat_close_input(&fmtCtx_);
             return false;
         }
-        videoCtx_ = avcodec_alloc_context3(vCodec);
-        avcodec_parameters_to_context(videoCtx_, vs->codecpar);
+        videoCtx_ = AllocAndConfigureCodecContext(vCodec, vs->codecpar);
+        if (!videoCtx_)
+        {
+            avformat_close_input(&fmtCtx_);
+            return false;
+        }
         if (avcodec_open2(videoCtx_, vCodec, nullptr) < 0)
         {
             avcodec_free_context(&videoCtx_);
@@ -83,12 +90,14 @@ namespace CNA::Internal::Media
             const AVCodec* aCodec = avcodec_find_decoder(as->codecpar->codec_id);
             if (aCodec)
             {
-                audioCtx_ = avcodec_alloc_context3(aCodec);
-                avcodec_parameters_to_context(audioCtx_, as->codecpar);
-                if (avcodec_open2(audioCtx_, aCodec, nullptr) < 0)
+                audioCtx_ = AllocAndConfigureCodecContext(aCodec, as->codecpar);
+                if (audioCtx_ && avcodec_open2(audioCtx_, aCodec, nullptr) < 0)
                 {
                     avcodec_free_context(&audioCtx_);
                     audioCtx_ = nullptr;
+                }
+                if (!audioCtx_)
+                {
                     audioStream_ = -1;
                 }
                 else
@@ -96,18 +105,7 @@ namespace CNA::Internal::Media
                     sampleRate_ = audioCtx_->sample_rate;
                     channels_   = audioCtx_->ch_layout.nb_channels;
                     audioTimeBase_ = av_q2d(as->time_base);
-
-                    // Setup resampler: any format → packed float32
-                    swr_alloc_set_opts2(
-                        &swrCtx_,
-                        &audioCtx_->ch_layout, AV_SAMPLE_FMT_FLT, sampleRate_,
-                        &audioCtx_->ch_layout, audioCtx_->sample_fmt, sampleRate_,
-                        0, nullptr);
-                    if (swr_init(swrCtx_) < 0)
-                    {
-                        swr_free(&swrCtx_);
-                        swrCtx_ = nullptr;
-                    }
+                    SetupResampler(audioCtx_);
                 }
             }
         }
@@ -142,6 +140,36 @@ namespace CNA::Internal::Media
         if (audioCtx_) avcodec_flush_buffers(audioCtx_);
     }
 
+    AVCodecContext* VideoDecoder::AllocAndConfigureCodecContext(
+        const AVCodec* codec, const AVCodecParameters* params)
+    {
+        AVCodecContext* ctx = avcodec_alloc_context3(codec);
+        if (!ctx) return nullptr;
+        if (avcodec_parameters_to_context(ctx, params) < 0)
+        {
+            avcodec_free_context(&ctx);
+            return nullptr;
+        }
+        return ctx;
+    }
+
+    void VideoDecoder::SetupResampler(AVCodecContext* ctx)
+    {
+        SwrContext* newSwr = nullptr;
+        int ret = swr_alloc_set_opts2(
+            &newSwr,
+            &ctx->ch_layout, AV_SAMPLE_FMT_FLT, ctx->sample_rate,
+            &ctx->ch_layout, ctx->sample_fmt, ctx->sample_rate,
+            0, nullptr);
+        if (ret < 0 || !newSwr || swr_init(newSwr) < 0)
+        {
+            if (newSwr) swr_free(&newSwr);
+            swrCtx_ = nullptr;
+            return;
+        }
+        swrCtx_ = newSwr;
+    }
+
     bool VideoDecoder::OpenAudioStreamByIndex(int streamIdx)
     {
         if (!fmtCtx_ || streamIdx < 0 || streamIdx >= (int)fmtCtx_->nb_streams) return false;
@@ -151,8 +179,8 @@ namespace CNA::Internal::Media
         const AVCodec* codec = avcodec_find_decoder(as->codecpar->codec_id);
         if (!codec) return false;
 
-        AVCodecContext* newCtx = avcodec_alloc_context3(codec);
-        avcodec_parameters_to_context(newCtx, as->codecpar);
+        AVCodecContext* newCtx = AllocAndConfigureCodecContext(codec, as->codecpar);
+        if (!newCtx) return false;
         if (avcodec_open2(newCtx, codec, nullptr) < 0)
         {
             avcodec_free_context(&newCtx);
@@ -169,12 +197,7 @@ namespace CNA::Internal::Media
         audioTimeBase_ = av_q2d(as->time_base);
         pendingAudio_.clear();
 
-        swr_alloc_set_opts2(
-            &swrCtx_,
-            &audioCtx_->ch_layout, AV_SAMPLE_FMT_FLT, sampleRate_,
-            &audioCtx_->ch_layout, audioCtx_->sample_fmt, sampleRate_,
-            0, nullptr);
-        if (swr_init(swrCtx_) < 0) { swr_free(&swrCtx_); swrCtx_ = nullptr; }
+        SetupResampler(audioCtx_);
 
         return true;
     }
@@ -188,8 +211,8 @@ namespace CNA::Internal::Media
         const AVCodec* codec = avcodec_find_decoder(vs->codecpar->codec_id);
         if (!codec) return false;
 
-        AVCodecContext* newCtx = avcodec_alloc_context3(codec);
-        avcodec_parameters_to_context(newCtx, vs->codecpar);
+        AVCodecContext* newCtx = AllocAndConfigureCodecContext(codec, vs->codecpar);
+        if (!newCtx) return false;
         if (avcodec_open2(newCtx, codec, nullptr) < 0)
         {
             avcodec_free_context(&newCtx);
@@ -238,21 +261,62 @@ namespace CNA::Internal::Media
     }
 
     // ---------------------------------------------------------------------------
-    // YUV420P → RGBA  (BT.601 full-range)
+    // 8-bit planar YUV → RGBA  (BT.601 full-range), any chroma subsampling
     // ---------------------------------------------------------------------------
-    void VideoDecoder::yuv420p_to_rgba(
+    void VideoDecoder::yuv_planar8_to_rgba(
         const uint8_t* y, int yStride,
         const uint8_t* u, int uStride,
         const uint8_t* v, int vStride,
-        uint8_t* rgba, int w, int h)
+        uint8_t* rgba, int w, int h,
+        int hChromaShift, int vChromaShift)
     {
         for (int row = 0; row < h; ++row)
         {
+            const uint8_t* uRow = u + (row >> vChromaShift) * uStride;
+            const uint8_t* vRow = v + (row >> vChromaShift) * vStride;
             for (int col = 0; col < w; ++col)
             {
                 int yv = y[row * yStride + col];
-                int uv = u[(row >> 1) * uStride + (col >> 1)] - 128;
-                int vv = v[(row >> 1) * vStride + (col >> 1)] - 128;
+                int uv = uRow[col >> hChromaShift] - 128;
+                int vv = vRow[col >> hChromaShift] - 128;
+
+                int r = yv + ((359 * vv) >> 8);
+                int g = yv - ((88 * uv + 183 * vv) >> 8);
+                int b = yv + ((454 * uv) >> 8);
+
+                uint8_t* px = rgba + (row * w + col) * 4;
+                px[0] = static_cast<uint8_t>(std::clamp(r, 0, 255));
+                px[1] = static_cast<uint8_t>(std::clamp(g, 0, 255));
+                px[2] = static_cast<uint8_t>(std::clamp(b, 0, 255));
+                px[3] = 255;
+            }
+        }
+    }
+
+    // ---------------------------------------------------------------------------
+    // 10-/12-bit (16-bit-packed LE) planar YUV → RGBA, any chroma subsampling.
+    // Downshifts each sample to its 8-bit equivalent before reusing the same integer
+    // YUV math as the 8-bit path -- a simple, correct (if not full-precision-HDR)
+    // approach; see plan_media.md MEDIA-36.
+    // ---------------------------------------------------------------------------
+    void VideoDecoder::yuv_planar16_to_rgba(
+        const uint8_t* y, int yStride,
+        const uint8_t* u, int uStride,
+        const uint8_t* v, int vStride,
+        uint8_t* rgba, int w, int h,
+        int hChromaShift, int vChromaShift, int bitDepth)
+    {
+        const int downshift = bitDepth - 8;
+        for (int row = 0; row < h; ++row)
+        {
+            const auto* yRow = reinterpret_cast<const uint16_t*>(y + row * yStride);
+            const auto* uRow = reinterpret_cast<const uint16_t*>(u + (row >> vChromaShift) * uStride);
+            const auto* vRow = reinterpret_cast<const uint16_t*>(v + (row >> vChromaShift) * vStride);
+            for (int col = 0; col < w; ++col)
+            {
+                int yv = yRow[col] >> downshift;
+                int uv = (uRow[col >> hChromaShift] >> downshift) - 128;
+                int vv = (vRow[col >> hChromaShift] >> downshift) - 128;
 
                 int r = yv + ((359 * vv) >> 8);
                 int g = yv - ((88 * uv + 183 * vv) >> 8);
@@ -332,15 +396,53 @@ namespace CNA::Internal::Media
 
     void VideoDecoder::ConvertFrameToRGBA(std::vector<uint8_t>& out)
     {
-        if (frame_->format == AV_PIX_FMT_YUV420P ||
-            frame_->format == AV_PIX_FMT_YUVJ420P)
+        // hChromaShift/vChromaShift: 0 = full resolution, 1 = halved (plan_media.md MEDIA-35).
+        struct PlanarFormat { int hShift; int vShift; int bitDepth; };
+        auto planarFormat = [](int fmt) -> const PlanarFormat*
+        {
+            static const PlanarFormat p420_8  {1, 1, 8};
+            static const PlanarFormat p422_8  {1, 0, 8};
+            static const PlanarFormat p444_8  {0, 0, 8};
+            static const PlanarFormat p420_10 {1, 1, 10};
+            static const PlanarFormat p422_10 {1, 0, 10};
+            static const PlanarFormat p444_10 {0, 0, 10};
+            static const PlanarFormat p420_12 {1, 1, 12};
+            static const PlanarFormat p422_12 {1, 0, 12};
+            static const PlanarFormat p444_12 {0, 0, 12};
+            switch (fmt)
+            {
+                case AV_PIX_FMT_YUV420P:    case AV_PIX_FMT_YUVJ420P:    return &p420_8;
+                case AV_PIX_FMT_YUV422P:    case AV_PIX_FMT_YUVJ422P:    return &p422_8;
+                case AV_PIX_FMT_YUV444P:    case AV_PIX_FMT_YUVJ444P:    return &p444_8;
+                case AV_PIX_FMT_YUV420P10LE: return &p420_10;
+                case AV_PIX_FMT_YUV422P10LE: return &p422_10;
+                case AV_PIX_FMT_YUV444P10LE: return &p444_10;
+                case AV_PIX_FMT_YUV420P12LE: return &p420_12;
+                case AV_PIX_FMT_YUV422P12LE: return &p422_12;
+                case AV_PIX_FMT_YUV444P12LE: return &p444_12;
+                default: return nullptr;
+            }
+        };
+
+        if (const PlanarFormat* pf = planarFormat(frame_->format))
         {
             out.resize(static_cast<std::size_t>(width_) * height_ * 4);
-            yuv420p_to_rgba(
-                frame_->data[0], frame_->linesize[0],
-                frame_->data[1], frame_->linesize[1],
-                frame_->data[2], frame_->linesize[2],
-                out.data(), width_, height_);
+            if (pf->bitDepth == 8)
+            {
+                yuv_planar8_to_rgba(
+                    frame_->data[0], frame_->linesize[0],
+                    frame_->data[1], frame_->linesize[1],
+                    frame_->data[2], frame_->linesize[2],
+                    out.data(), width_, height_, pf->hShift, pf->vShift);
+            }
+            else
+            {
+                yuv_planar16_to_rgba(
+                    frame_->data[0], frame_->linesize[0],
+                    frame_->data[1], frame_->linesize[1],
+                    frame_->data[2], frame_->linesize[2],
+                    out.data(), width_, height_, pf->hShift, pf->vShift, pf->bitDepth);
+            }
         }
         else
         {
@@ -373,7 +475,17 @@ namespace CNA::Internal::Media
                 ret = av_read_frame(fmtCtx_, pkt_);
                 if (ret < 0)
                 {
-                    // EOF — flush codec
+                    if (ret != AVERROR_EOF)
+                    {
+                        // A genuine I/O/demux error, not a clean end-of-stream -- surface it
+                        // distinctly rather than silently treating a corrupt/truncated file as
+                        // "video finished normally" (plan_media.md MEDIA-40).
+                        char errBuf[AV_ERROR_MAX_STRING_SIZE] = {0};
+                        av_strerror(ret, errBuf, sizeof(errBuf));
+                        throw std::runtime_error(
+                            std::string("VideoDecoder: I/O error while reading frame: ") + errBuf);
+                    }
+                    // Clean EOF — flush codec
                     avcodec_send_packet(videoCtx_, nullptr);
                     break;
                 }
@@ -407,10 +519,18 @@ namespace CNA::Internal::Media
             // Convert to float
             std::vector<float> buf(static_cast<std::size_t>(numSamples) * channels_);
             uint8_t* outPtr = reinterpret_cast<uint8_t*>(buf.data());
-            swr_convert(swrCtx_, &outPtr, numSamples,
+            int converted = swr_convert(swrCtx_, &outPtr, numSamples,
                         const_cast<const uint8_t**>(aFrame->data), numSamples);
-            // Store in pending audio buffer
-            pendingAudio_.insert(pendingAudio_.end(), buf.begin(), buf.end());
+            // plan_media.md MEDIA-39: swr_convert's return is the ACTUAL number of samples
+            // produced, which can be less than numSamples (or negative on error) -- previously
+            // discarded, so a partial/failed conversion still appended the full, partly-stale
+            // buf (including uninitialized trailing samples) to pendingAudio_. Trim to what was
+            // actually produced; skip entirely on error.
+            if (converted > 0)
+            {
+                buf.resize(static_cast<std::size_t>(converted) * channels_);
+                pendingAudio_.insert(pendingAudio_.end(), buf.begin(), buf.end());
+            }
         }
         av_frame_free(&aFrame);
     }
