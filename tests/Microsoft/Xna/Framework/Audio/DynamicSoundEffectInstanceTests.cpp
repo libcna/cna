@@ -371,6 +371,42 @@ TEST(DynamicSoundEffectInstanceTest, SubmitBufferWhileStoppedSwitchesBackToIntMo
            "SubmitFloatBufferEXT call";
 }
 
+// AUD-07-008 (2026-07-17 deep audit, A-07 "strong risk"): EnsureStream() creates the
+// SDL_AudioStream with a null destination spec (SDL3 uses the device's native format for output
+// conversion) -- the audit flagged that SDL_PutAudioStreamData/SDL_GetAudioStreamData require
+// valid specs at BOTH ends, and asked whether MIX_SetTrackAudioStream genuinely establishes the
+// destination side before any data flows. Empirically confirmed via a direct probe: a stream's
+// destination format is indeed invalid/absent immediately after SDL_CreateAudioStream(spec,
+// nullptr) (SDL_GetAudioStreamFormat fails, "Stream has no destination format"), but
+// MIX_SetTrackAudioStream immediately establishes it -- and Play()'s existing call order already
+// has MIX_SetTrackAudioStream run before the first SubmitQueuedToStream()/SDL_PutAudioStreamData
+// call (via QueueInitialBuffers(), itself called after MIX_SetTrackAudioStream succeeds). This
+// test locks that down: both the source AND destination specs must be valid immediately after
+// Play() returns, for a plain instance that never touched the float submission path at all.
+TEST(DynamicSoundEffectInstanceTest, StreamDestinationFormatIsValidImmediatelyAfterPlay)
+{
+    DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
+    if (!tryStartHeadless(d))
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+
+    MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(d);
+    ASSERT_NE(track, nullptr);
+    SDL_AudioStream* stream = MIX_GetTrackAudioStream(track);
+    ASSERT_NE(stream, nullptr);
+
+    SDL_AudioSpec srcSpec{};
+    SDL_AudioSpec dstSpec{};
+    EXPECT_TRUE(SDL_GetAudioStreamFormat(stream, &srcSpec, &dstSpec))
+        << "both source and destination formats must be valid once Play() has returned -- "
+           "SDL_GetError(): " << SDL_GetError();
+    EXPECT_EQ(srcSpec.format, SDL_AUDIO_S16LE);
+    EXPECT_EQ(srcSpec.channels, 2);
+    EXPECT_EQ(srcSpec.freq, 44100);
+    EXPECT_NE(dstSpec.format, 0) << "destination format must not be left null/unset";
+}
+
 // AUD-07-001/002/A-03: symmetric to SubmitFloatAfterPlayingThrowsInvalidOperation below --
 // submitting a plain int16 buffer into a *live* float-mode stream must throw rather than
 // silently corrupt the stream's data with misinterpreted bytes.
