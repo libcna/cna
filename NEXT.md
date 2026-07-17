@@ -49,16 +49,21 @@
 > **Separate, unrelated track — `feature/input` branch, `audit_input.md` remediation + full
 > phase-by-phase FNA-parity audit, in progress as of 2026-07-17.** Completely independent of the D3D9
 > work below (this `NEXT.md`/`plan_dx9.md` pair is D3D9-only) — tracked in full in `plan_input.md`,
-> not duplicated here. Status: **Phases 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, and 13 are fully closed and pushed**
-> (`P0-001..020`, `P1-001..045`, `P2-001..060`, `P3-001..045`, `P4-001..070`, `P5-001..045`,
-> `P6-001..045`, `P7-001..040`, `P8-001..040`, `P9-001..035`, `P13-001..006` — 451/506 tasks total,
-> ~89%; latest pushed commit `799d486d` on `feature/input`). Working autonomously at the user's
-> explicit request through `plan_input.md`'s remaining tasks (Phase 10 documentation onward — Phases
-> 10–12, ~55 tasks, minus Phase 11's hardware-gated ones which stay `[!]` Blocked pending real
-> devices). Phase 8 left in place 3 new persistent verification build directories —
-> `cmake-build-input-easygl/`, `cmake-build-input-vulkan/`, `cmake-build-input-bgfx/` — and Phase 9
-> added a 4th, `cmake-build-input-asan/` (`-DCNA_SANITIZE=address,undefined`), all already
-> anticipated in `.gitignore`, alongside the pre-existing default `cmake-build-debug/`
+> not duplicated here. **Status: this plan is now CLOSED as of 2026-07-17** — Phases 0-10, 12, and 13
+> are fully closed and pushed (`P0-001..020`, `P1-001..045`, `P2-001..060`, `P3-001..045`,
+> `P4-001..070`, `P5-001..045`, `P6-001..045`, `P7-001..040`, `P8-001..040`, `P9-001..035`,
+> `P10-001..025`, `P12-001..015`, `P13-001..006` — 490/505 tasks total, 15/505 correctly `[!]`
+> Blocked (all of Phase 11, hardware-gated, never marked done speculatively), 0 remaining `[ ]`;
+> latest pushed commit `1746df1e` on `feature/input`). **Merge recommendation (P12-014): merge the
+> audit work itself; do not yet declare "Input stable"** per `docs/input-pre-merge-checklist.md`'s
+> own release gate, which requires real-hardware validation (0/15 Phase 11 checks performed) —
+> final decision is the user's. If further work on this track is wanted: Phase 11's 15 tasks need an
+> actual human at a real keyboard/mouse/controller/touchscreen (see
+> `docs/input-manual-verification-results.md`'s recording template); everything else is done. Phases
+> 8/9 left 4 persistent verification build directories in place — `cmake-build-input-easygl/`,
+> `cmake-build-input-vulkan/`, `cmake-build-input-bgfx/`, `cmake-build-input-asan/`
+> (`-DCNA_SANITIZE=address,undefined`), plus Phase 12 added `cmake-build-input-sdlrenderer/` — all
+> already anticipated in `.gitignore`, alongside the pre-existing default `cmake-build-debug/`
 > (`SDL_RENDERER`); reuse these directly for any future non-default-backend/sanitizer check.
 >
 > **IMPORTANT — separate, out-of-Input-scope finding from P9-031 (2026-07-17):** running the full
