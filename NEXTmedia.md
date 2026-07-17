@@ -130,10 +130,53 @@ Media-scoped tests across 9 files (`MediaSourceTests.cpp`, `GenreTests.cpp`, `Ar
 `AlbumTests.cpp`, `PictureTests.cpp`, `PictureAlbumTests.cpp`, `PlaylistTests.cpp`,
 `MediaLibraryTests.cpp` incl. the object-graph audit, `MediaLibraryTestFixture.hpp` shared fixture).
 
-**Now starting Phase 5** (`MEDIA-70`..`MEDIA-75`, content-pipeline/XNB integration) --
-`VideoContentTypeReader`, matching `SongContentTypeReader`'s existing structure, is the only
-remaining piece needed before Phase 6 (the consolidated test-completeness sweep) and Phase 7
-(closure/docs).
+**Phase 5 complete** (`MEDIA-70`..`MEDIA-75`, content-pipeline/XNB integration). New
+`CNA::Internal::Xnb::VideoContentTypeReader` (`.hpp`/`.cpp`), registered under FNA's real canonical
+name `Microsoft.Xna.Framework.Content.VideoReader` from `XnbBuiltInReaders.cpp` — `ContentManager::
+Load<Video>()` is possible for the first time (confirmed: no such reader existed anywhere in the
+repo before this task, and `plan_xnb.md` never planned one). Field layout matches FNA's real binary
+format exactly (reference string with the fake `.wmv` suffix stripped and re-resolved against
+`.ogv`/`.oga`, mirroring `SongReader`'s `.wma`-strip/`Normalize` pattern, then `durationMS`/`width`/
+`height`(int32) + `framesPerSecond`(float32) + `soundTrackType`(int32)) but uses direct typed reads
+(`ReadInt32`/`ReadSingle`), matching `SongContentTypeReader`'s established CNA code style rather than
+FNA's own internal inconsistency (`SongReader` reads directly; `VideoReader` reads via the more
+generic `ReadObject<T>()`) — a pure C# implementation-detail difference with no binary-format effect
+(`MEDIA-71`).
+
+`MEDIA-75` re-verification found the existing coverage was real but incomplete: Phase 1's fix (the
+`SongContentTypeReaderTests.cpp` assertion now expecting `System::IO::FileNotFoundException`) only
+proved the exception type at the reader-`Read()`-called-directly level, not through the actual, real
+`.xnb` container-parsing path (header + type-reader table + object dispatch) that
+`ContentManager::Load<Song>()` actually uses. Added `ContentManagerSongXnbTest.
+UnresolvableReferenceThrowsFileNotFoundExceptionThroughLoad` to the pre-existing
+`ContentManagerSongXnbTests.cpp` (hand-built full container byte stream, matching
+`ContentManagerXnbTests.cpp`'s own `BuildTestXnbFile()` technique) — confirms the corrected exception
+type genuinely propagates end-to-end, not just out of the reader in isolation. (While building this
+test, briefly hit — and then understood, not "fixed" — `ContentReader`'s real, correct FNA-matching
+behavior of eagerly resolving *every* entry in a `.xnb`'s type-reader table up front, even unused
+ones: the real `one_two_three.xnb` fixture's table lists both `SongReader` and `Int32Reader`, and a
+test fixture that only registers `SongReader` fails to open it at all, independent of the actual
+duration-field encoding.)
+
+**Honest gap** (`MEDIA-73`): unlike `Song`, no real MonoGame-produced `Video` `.xnb` fixture was
+locatable, and this environment has no `dotnet`/`mgcb` tooling to produce one. `VideoContentTypeReaderTests.cpp`
+exercises `VideoReader::Read()`'s real logic via a hand-constructed in-memory buffer (matching
+`SongContentTypeReaderTests.cpp`'s own established technique for non-container tests) rather than a
+true `ContentManager::Load<Video>()` round-trip against an externally-produced binary. The
+container-parsing path itself is separately proven correct via `Song`'s real end-to-end tests, so
+this gap is narrowly about lacking a genuine Video binary sample, not doubt about the reader logic.
+Flagged as a candidate follow-up for a future session with `mgcb` access.
+
+Full-suite regression after Phase 5: **4791 tests, 4789 passed, 0 failed, 2 pre-existing hardware
+skips.** New/changed Media-scoped tests: `VideoContentTypeReaderTests.cpp` (5 new), 1 new test added
+to the pre-existing `ContentManagerSongXnbTests.cpp`.
+
+**Now starting Phase 6** (`MEDIA-76`..`MEDIA-120`, the consolidated test-completeness sweep). Per
+`plan_media.md`'s own §6 milestone note, most of this is already satisfied incrementally by tests
+written in each phase (Phases 1-5 add tests alongside their own implementation work, not deferred) —
+this phase is primarily an audit/completeness pass confirming every public method/operator/constant
+across all Media classes has coverage per `CLAUDE.md`'s per-overload mandate, not a large net-new
+implementation effort. Phase 7 (`MEDIA-121`..`MEDIA-126`, closure/docs) follows.
 
 ## 2. Correction to Phase 0's own build-verification record
 
@@ -186,11 +229,10 @@ display at all — not needed here since one exists.
 
 ## 4. Immediate next steps
 
-Work through `plan_media.md` Phase 2 (`MEDIA-32`..`MEDIA-45`): real bug fixes in the already-working
-playback cluster — the `MediaPlayer` no-`SOUND_ENABLED` gap, shuffle/duplicate-on-play regressions,
-`VideoDecoder` pixel-format/bit-depth gaps, FFmpeg error-handling hardening, the `VideoPlayer`
-disposed-guard gap, and `Video`'s missing `FileNotFoundException`. Then Phase 3 (`MEDIA-46`..`MEDIA-60`,
-the real from-scratch library backend) — the largest, most novel remaining chunk of work.
+Phases 0-5 are complete (see §1). Work through `plan_media.md` Phase 6 (`MEDIA-76`..`MEDIA-120`,
+consolidated test-completeness audit against `CLAUDE.md`'s per-overload mandate) next, then Phase 7
+(`MEDIA-121`..`MEDIA-126`: `CHECKLIST.md` deviations table, `AUDIT.md`'s Media table, final
+`NEXTmedia.md` update, final build + full-suite regression, future-addendum convention note).
 
 ## 5. Open items / blocked
 

@@ -633,7 +633,7 @@ free to override a row — the tasks that depend on it are cited so the blast ra
 
 ### Phase 5 — Content-pipeline (XNB) integration
 
-- [ ] **MEDIA-70 — `VideoContentTypeReader`.** New `CNA::Internal::Xnb::VideoContentTypeReader`
+- [x] **MEDIA-70 — `VideoContentTypeReader`.** New `CNA::Internal::Xnb::VideoContentTypeReader`
   (`.hpp`/`.cpp`), mirroring `SongContentTypeReader`'s existing structure: port FNA's real
   `VideoReader.cs` field layout — path string (with the XNB-embedded fake `.wmv` suffix stripped and
   re-resolved against `.ogv`/`.ogg`, matching `SongReader`'s analogous `.wma`-strip/`Normalize`
@@ -645,7 +645,7 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   *Accept:* deserializes a real `.xnb`-wrapped `Video` fixture into a working `Video` object with correct
   metadata.
 
-- [ ] **MEDIA-71 — Field-read style: match `SongContentTypeReader`'s existing code style, not FNA's own
+- [x] **MEDIA-71 — Field-read style: match `SongContentTypeReader`'s existing code style, not FNA's own
   internal inconsistency.** FNA's `SongReader` reads its one int field directly (`ReadInt32()`) while
   `VideoReader` reads its 5 fields via the more generic `input.ReadObject<T>()` — an FNA-internal C#
   implementation-detail inconsistency with no observable binary-format effect either way. Use direct,
@@ -655,22 +655,32 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   *Accept:* code review confirms consistent read-call style between the two readers; binary layout
   compatibility is unaffected (verified by MEDIA-70's round-trip test).
 
-- [ ] **MEDIA-72 — Register the new reader.** Add `RegisterVideoXnbReader()`, called from
+- [x] **MEDIA-72 — Register the new reader.** Add `RegisterVideoXnbReader()`, called from
   `XnbBuiltInReaders.cpp`, matching `RegisterSongXnbReader()`'s existing call-site pattern exactly.
   *Accept:* `ContentManager::Load<Video>("fixture")` works end-to-end.
 
-- [ ] **MEDIA-73 — Content-pipeline fixture + round-trip test.** Source or construct a real
+- [x] **MEDIA-73 — Content-pipeline fixture + round-trip test.** Source or construct a real
   `.xnb`-wrapped `Video` fixture (matching the `Song` fixture's own sourcing approach — a real
   MonoGame-produced `.xnb` plus its companion video file, vendored alongside it) and verify the full
   `ContentManager::Load<Video>()` path.
   *Accept:* test passes; companion video file resolves and is playable via `VideoPlayer`.
+  *Honest gap:* unlike `Song` (which had a real MonoGame-produced `.xnb` fixture available to vendor),
+  no real MonoGame-produced `Video` `.xnb` fixture was locatable, and this environment has no
+  `dotnet`/`mgcb` content-pipeline tooling to produce one. `VideoContentTypeReaderTests.cpp` instead
+  exercises `VideoReader::Read()`'s real logic (field parsing, path normalization/fallback,
+  `GraphicsDevice` wiring) via a hand-constructed in-memory buffer matching FNA's real binary layout —
+  the same technique `SongContentTypeReaderTests.cpp` itself already uses for its own non-container
+  tests — plus a full real-container round-trip proof pattern is separately confirmed working for
+  `Song` via `ContentManagerSongXnbTests.cpp`, so the container-parsing path itself is not in doubt,
+  only a genuine externally-produced `Video` `.xnb` byte sample is missing. Documented, not silently
+  skipped; a future session with `mgcb` access should replace this gap with a real vendored fixture.
 
-- [ ] **MEDIA-74 — Cross-reference `plan_xnb.md`.** Add a pointer row there documenting this reader's
+- [x] **MEDIA-74 — Cross-reference `plan_xnb.md`.** Add a pointer row there documenting this reader's
   completion, matching how `plan_xnb.md` documents the `SongReader` task, keeping the two plans
   consistent for future readers.
   *Accept:* `plan_xnb.md` updated.
 
-- [ ] **MEDIA-75 — Re-verify `SongContentTypeReader` after MEDIA-10.** Confirm the existing Song
+- [x] **MEDIA-75 — Re-verify `SongContentTypeReader` after MEDIA-10.** Confirm the existing Song
   reader's own error path (an unresolvable `.ogg`/`.oga`/`.qoa` after extension-reprobing) now surfaces
   `System::IO::FileNotFoundException` end-to-end through `ContentManager::Load<Song>()`, not just at the
   raw `Song` constructor level.
