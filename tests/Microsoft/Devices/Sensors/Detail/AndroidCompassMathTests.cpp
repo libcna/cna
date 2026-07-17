@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
 #include <cmath>
+#include <limits>
 
 #include "Microsoft/Devices/Sensors/Detail/AndroidCompassMath.hpp"
 
@@ -10,6 +11,7 @@ using Microsoft::Devices::Sensors::Detail::ConvertRotationVectorToMagneticHeadin
 using Microsoft::Devices::Sensors::Detail::ConvertRotationVectorToMagneticHeadingDegreesWithTiltMode;
 using Microsoft::Devices::Sensors::Detail::ConvertRotationVectorToUprightMagneticHeadingDegrees;
 using Microsoft::Devices::Sensors::Detail::IsDeviceInUprightCompassMode;
+using Microsoft::Devices::Sensors::Detail::NormalizeCompassQuaternion;
 using Microsoft::Devices::Sensors::Detail::ShouldRaiseCalibrateForAccuracyStatus;
 
 namespace
@@ -163,6 +165,88 @@ TEST(AndroidCompassMathTests, WithTiltModeUsesUprightFormulaWhenHeldUpright)
 {
     const double combined = ConvertRotationVectorToMagneticHeadingDegreesWithTiltMode(
         UprightBaseX, 0.0f, 0.0f, UprightBaseW);
+    const double uprightOnly =
+        ConvertRotationVectorToUprightMagneticHeadingDegrees(UprightBaseX, 0.0f, 0.0f, UprightBaseW);
+    EXPECT_NEAR(combined, uprightOnly, Tolerance);
+}
+
+// Task COMP2-002 (2026-07-17, external audit `audit_devices_2026-07-17.md`):
+// NormalizeCompassQuaternion() directly.
+TEST(AndroidCompassMathTests, NormalizeCompassQuaternionNormalizesNonUnitInput)
+{
+    float x = 1.0f, y = 2.0f, z = 3.0f, w = 4.0f;
+    EXPECT_TRUE(NormalizeCompassQuaternion(x, y, z, w));
+
+    const double lengthSquared =
+        (static_cast<double>(x) * x) + (static_cast<double>(y) * y) +
+        (static_cast<double>(z) * z) + (static_cast<double>(w) * w);
+    EXPECT_NEAR(lengthSquared, 1.0, Tolerance);
+    // Direction preserved.
+    EXPECT_NEAR(static_cast<double>(y) / x, 2.0, Tolerance);
+    EXPECT_NEAR(static_cast<double>(z) / x, 3.0, Tolerance);
+    EXPECT_NEAR(static_cast<double>(w) / x, 4.0, Tolerance);
+}
+
+TEST(AndroidCompassMathTests, NormalizeCompassQuaternionRejectsNaN)
+{
+    float x = std::numeric_limits<float>::quiet_NaN(), y = 0.0f, z = 0.0f, w = 1.0f;
+    EXPECT_FALSE(NormalizeCompassQuaternion(x, y, z, w));
+}
+
+TEST(AndroidCompassMathTests, NormalizeCompassQuaternionRejectsInfinity)
+{
+    float x = std::numeric_limits<float>::infinity(), y = 0.0f, z = 0.0f, w = 0.0f;
+    EXPECT_FALSE(NormalizeCompassQuaternion(x, y, z, w));
+}
+
+TEST(AndroidCompassMathTests, NormalizeCompassQuaternionRejectsZeroQuaternion)
+{
+    float x = 0.0f, y = 0.0f, z = 0.0f, w = 0.0f;
+    EXPECT_FALSE(NormalizeCompassQuaternion(x, y, z, w));
+}
+
+TEST(AndroidCompassMathTests, NormalizeCompassQuaternionRejectsSubnormalNearZero)
+{
+    float x = std::numeric_limits<float>::denorm_min(), y = 0.0f, z = 0.0f, w = 0.0f;
+    EXPECT_FALSE(NormalizeCompassQuaternion(x, y, z, w));
+}
+
+// Confirms double-precision intermediate arithmetic genuinely avoids the
+// overflow-to-Inf risk AndroidMotionMath.hpp's equivalent float-only
+// LengthSquared() has for the same extreme input -- the largest possible
+// float component, squared, still fits in double.
+TEST(AndroidCompassMathTests, NormalizeCompassQuaternionAcceptsLargestFiniteFloatWithoutOverflow)
+{
+    float x = std::numeric_limits<float>::max(), y = 0.0f, z = 0.0f, w = 0.0f;
+    EXPECT_TRUE(NormalizeCompassQuaternion(x, y, z, w));
+    EXPECT_NEAR(x, 1.0f, Tolerance);
+}
+
+TEST(AndroidCompassMathTests, WithTiltModeReturnsZeroForNaNInputInsteadOfPropagatingNaN)
+{
+    const double heading = ConvertRotationVectorToMagneticHeadingDegreesWithTiltMode(
+        std::numeric_limits<float>::quiet_NaN(), 0.0f, 0.0f, 1.0f);
+    EXPECT_FALSE(std::isnan(heading));
+    EXPECT_NEAR(heading, 0.0, Tolerance);
+}
+
+TEST(AndroidCompassMathTests, WithTiltModeReturnsZeroForZeroQuaternionInsteadOfPropagatingNaN)
+{
+    const double heading = ConvertRotationVectorToMagneticHeadingDegreesWithTiltMode(0.0f, 0.0f, 0.0f, 0.0f);
+    EXPECT_FALSE(std::isnan(heading));
+    EXPECT_NEAR(heading, 0.0, Tolerance);
+}
+
+// Confirms the tilt-mode decision and the heading value it feeds are
+// computed from the *same* normalized quaternion, not a raw-vs-normalized
+// mismatch -- a non-unit-but-otherwise-valid "upright" input must still
+// correctly route to the upright formula and match that formula's own
+// result for the equivalent normalized input.
+TEST(AndroidCompassMathTests, WithTiltModeNormalizesBeforeChoosingFormula)
+{
+    constexpr float Scale = 3.0f;
+    const double combined = ConvertRotationVectorToMagneticHeadingDegreesWithTiltMode(
+        UprightBaseX * Scale, 0.0f, 0.0f, UprightBaseW * Scale);
     const double uprightOnly =
         ConvertRotationVectorToUprightMagneticHeadingDegrees(UprightBaseX, 0.0f, 0.0f, UprightBaseW);
     EXPECT_NEAR(combined, uprightOnly, Tolerance);

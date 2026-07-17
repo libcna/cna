@@ -7,6 +7,73 @@
 namespace Microsoft::Devices::Sensors::Detail
 {
     /**
+     * @brief Minimum squared length a raw quaternion must have before this
+     * file will normalize and use it (Task COMP2-002).
+     *
+     * Mirrors `AndroidMotionMath.hpp`'s identical
+     * `MinimumValidQuaternionLengthSquared` constant/reasoning: deliberately
+     * far below any length a real, even barely-valid orientation quaternion
+     * could ever have (`1.0` for a unit quaternion) — exists purely to
+     * reject numerically-unstable division by a near-zero norm, not to
+     * express any real tolerance for a "slightly off" orientation.
+     */
+    inline constexpr double MinimumValidCompassQuaternionLengthSquared = 1e-12;
+
+    /**
+     * @brief Validates and normalizes raw quaternion components in place (Task COMP2-002).
+     *
+     * `ConvertRotationVectorToMagneticHeadingDegrees()`/
+     * `ConvertRotationVectorToUprightMagneticHeadingDegrees()`/
+     * `IsDeviceInUprightCompassMode()` below all assume a unit-length
+     * quaternion — their formulas are exact quaternion-to-rotation-matrix
+     * identities that only hold for `x^2+y^2+z^2+w^2 == 1`. A non-unit
+     * input (a real possibility from a raw, unvalidated Android sensor
+     * sample) does not merely lose precision here: because each formula
+     * mixes quaternion-product terms (which scale with the square of the
+     * quaternion's own scale) with a fixed additive constant (the `1.0` in
+     * `r11`/`deviceFrameGravityZ`), a non-unit input changes the *ratio*
+     * `atan2()` resolves — a genuinely wrong heading, not just numerical
+     * noise. A non-finite (`NaN`/`Inf`) or near-zero-norm input is rejected
+     * outright rather than normalized (see
+     * `MinimumValidCompassQuaternionLengthSquared`'s own doc comment).
+     *
+     * Uses `double` intermediate arithmetic throughout (matching every
+     * function below), so unlike `AndroidMotionMath.hpp`'s equivalent
+     * `float`-only `Quaternion::LengthSquared()`, even the largest possible
+     * `float` component (`~3.4e38`, squared is `~1.16e77`) cannot overflow
+     * `double`'s own range (`~1.8e308`) — the non-finite branch here is
+     * reached only by an explicit `NaN`/`Inf` component already present in
+     * the raw sample, never by float-range overflow during this
+     * computation itself.
+     *
+     * @param x Quaternion X component, normalized in place if this returns `true`.
+     * @param y Quaternion Y component, normalized in place if this returns `true`.
+     * @param z Quaternion Z component, normalized in place if this returns `true`.
+     * @param w Quaternion scalar component, normalized in place if this returns `true`.
+     * @return true if the input was valid and has been normalized in place;
+     * false if it was rejected (`x`/`y`/`z`/`w` are left unchanged — the
+     * caller must apply its own documented invalid-input fallback).
+     */
+    [[nodiscard]] inline bool NormalizeCompassQuaternion(float& x, float& y, float& z, float& w)
+    {
+        const double lengthSquared =
+            (static_cast<double>(x) * x) + (static_cast<double>(y) * y) +
+            (static_cast<double>(z) * z) + (static_cast<double>(w) * w);
+
+        if (!std::isfinite(lengthSquared) || lengthSquared < MinimumValidCompassQuaternionLengthSquared)
+        {
+            return false;
+        }
+
+        const double invLength = 1.0 / std::sqrt(lengthSquared);
+        x = static_cast<float>(static_cast<double>(x) * invLength);
+        y = static_cast<float>(static_cast<double>(y) * invLength);
+        z = static_cast<float>(static_cast<double>(z) * invLength);
+        w = static_cast<float>(static_cast<double>(w) * invLength);
+        return true;
+    }
+
+    /**
      * @brief Android magnetic-field-sensor accuracy status values.
      *
      * Numerically identical to the NDK's `ASENSOR_STATUS_*` constants
@@ -190,15 +257,37 @@ namespace Microsoft::Devices::Sensors::Detail
      * single-mode building blocks, kept directly testable and unchanged from
      * their own pre-COMPASS-009 behavior.
      *
+     * Task COMP2-002 (2026-07-17, external audit `audit_devices_2026-07-17.md`):
+     * this is the one production entry point (`AndroidCompassBackend.cpp`'s
+     * only call site into this file) a raw, unvalidated sensor sample
+     * actually reaches, so validation/normalization belongs here, once, via
+     * `NormalizeCompassQuaternion()` — its result (not the raw input) is
+     * what both `IsDeviceInUprightCompassMode()` and the chosen heading
+     * function below receive, so the tilt-mode decision and the heading
+     * value it feeds are always computed from the *same* validated
+     * quaternion. A non-finite or near-zero-norm input degrades to `0.0`
+     * degrees ("north") rather than propagating `NaN`/`Inf` — a deliberate,
+     * documented CNA policy choice (there is no WP7 reference behavior for
+     * "what heading does an invalid native sensor sample produce," since
+     * real WP7 never ran this code path at all; `0.0` mirrors
+     * `AndroidMotionMath.hpp`'s identical `Quaternion::Identity` fallback
+     * for the analogous Motion case).
+     *
      * @param x Quaternion X component (`ASensorEvent::data[0]`).
      * @param y Quaternion Y component (`data[1]`).
      * @param z Quaternion Z component (`data[2]`).
      * @param w Quaternion scalar component (`data[3]`).
-     * @return Magnetic heading, in degrees, in the range [0, 360).
+     * @return Magnetic heading, in degrees, in the range [0, 360) (`0.0` if
+     * the input was non-finite or had a near-zero norm).
      */
     [[nodiscard]] inline double ConvertRotationVectorToMagneticHeadingDegreesWithTiltMode(
         float x, float y, float z, float w)
     {
+        if (!NormalizeCompassQuaternion(x, y, z, w))
+        {
+            return 0.0;
+        }
+
         if (IsDeviceInUprightCompassMode(x, y, z, w))
         {
             return ConvertRotationVectorToUprightMagneticHeadingDegrees(x, y, z, w);

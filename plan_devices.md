@@ -7211,7 +7211,7 @@ test is not sufficient for an Android coordinate/fusion claim.
   - Synthetic skew tests prove pairing boundaries.
 - **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
 
-### COMP2-002 — Normalize and validate rotation quaternions before heading math — OPEN
+### COMP2-002 — Normalize and validate rotation quaternions before heading math — CLOSED (2026-07-17)
 
 - **Priority:** P1
 - **Area:** Perfection re-audit
@@ -7224,6 +7224,64 @@ test is not sufficient for an Android coordinate/fusion claim.
   - No NaN/Inf heading escapes for any finite input.
   - Known orientation vectors remain accurate after normalization.
 - **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+- **Resolution:** the Compass analogue of `MOT2-002` (this same pass), for a different, non-`Quaternion`-typed
+  code path: `AndroidCompassMath.hpp`'s `atan2()`-based formulas (`ConvertRotationVectorToMagneticHeadingDegrees()`,
+  `ConvertRotationVectorToUprightMagneticHeadingDegrees()`, `IsDeviceInUprightCompassMode()`) mix
+  quaternion-product terms (which scale with the square of the quaternion's own magnitude) with a
+  fixed additive constant (the `1.0` in `r11`/`deviceFrameGravityZ`) — a non-unit input therefore
+  changes the *ratio* `atan2()` resolves, a genuinely **wrong heading**, not merely numerical noise
+  (a stronger correctness concern than `MOT2-002`'s `asin()`-domain issue, which was purely about
+  avoiding `NaN`). An explicit `NaN`/`Inf` component in the raw sample (not just a huge-but-finite
+  one) still propagates straight through `atan2()` to a `NaN` heading.
+  - Added `Detail::NormalizeCompassQuaternion()` (new, `AndroidCompassMath.hpp`) — normalizes in
+    place, or returns `false` (leaving its output parameters unchanged) for a non-finite or
+    near-zero-norm (`< 1e-12`) input.
+  - Unlike `MOT2-002`'s `AndroidMotionMath.hpp` (which uses `float`-only `Quaternion::LengthSquared()`,
+    overflowing to `Inf` for the largest possible `float` component squared), this file already used
+    `double` intermediate arithmetic throughout every formula — confirmed by direct calculation
+    that even the largest representable `float` component (`~3.4e38`, squared `~1.16e77`) cannot
+    overflow `double`'s own range (`~1.8e308`); the non-finite rejection branch here is reached only
+    by an explicit `NaN`/`Inf` already present in the raw sample, never by overflow during this
+    computation itself — confirmed by a dedicated test, not merely asserted.
+  - Wired into the **one production entry point** `AndroidCompassBackend.cpp` actually calls,
+    `ConvertRotationVectorToMagneticHeadingDegreesWithTiltMode()` — validates/normalizes once,
+    then passes the *same* validated quaternion to both the tilt-mode decision
+    (`IsDeviceInUprightCompassMode()`) and whichever heading formula it selects, so the two never
+    operate on inconsistent (one raw, one normalized) data. The three lower-level building blocks
+    are unchanged (still take raw components directly, as before, since they are only ever called
+    with already-validated data from the combined entry point or directly from tests exercising
+    the formulas in isolation — matching this file's own pre-existing "kept directly testable"
+    design intent for those three functions).
+  - **"Define last-good/no-data behavior on invalid samples":** an invalid input to the combined
+    entry point now returns `0.0` degrees ("north") rather than propagating `NaN`/`Inf` — mirrors
+    `MOT2-002`'s identical `Quaternion::Identity` (→ yaw `0`) fallback for the analogous Motion
+    case, a deliberate, documented CNA policy choice (no WP7 reference behavior exists for this,
+    since real WP7 never ran this code path at all). "Last-good" (retaining the previous valid
+    reading instead of resetting to a fixed fallback) was considered and not chosen: that would
+    require this stateless, pure-function file to carry state across calls, a larger design change
+    with no clearly-stronger justification than the simpler fixed fallback already used by the
+    directly-analogous `MOT2-002` fix in the same pass.
+- **Files changed:** `include/Microsoft/Devices/Sensors/Detail/AndroidCompassMath.hpp`,
+  `tests/Microsoft/Devices/Sensors/Detail/AndroidCompassMathTests.cpp`.
+- **Tests:** confirmed every pre-existing test still passes unchanged (none call the modified
+  entry point with a non-unit input — the two `WithTiltMode*` tests use already-unit-length
+  constants). Added 9 new tests: `NormalizeCompassQuaternion()` normalizing non-unit input,
+  rejecting `NaN`/`+Inf`/exact-zero/subnormal-near-zero, and accepting the largest finite `float`
+  without overflow (directly confirming the `double`-arithmetic overflow-resistance claim above);
+  the combined entry point returning `0.0` (not `NaN`) for `NaN` and zero-quaternion input; and a
+  test confirming the tilt-mode decision and chosen heading formula are computed from the *same*
+  normalized quaternion (a scaled non-unit "upright" input still correctly routes to, and matches,
+  the upright formula's own result for the equivalent normalized input). Full Devices/Sensors
+  filtered suite: 424 tests, 420 passed, 4 skipped (hardware-only, unchanged) — 9 new, all passing.
+- **Sanitizer/static-analysis result:** clean under `devices-ubsan` (pure, host-testable math, no
+  Android-only gap here).
+- **Remaining limitations:** "Known orientation vectors remain accurate after normalization" is
+  confirmed for the pre-existing self-consistency tests (unchanged, still passing) but not against
+  real hardware — same standing limitation as everything else in this file (never checked against
+  a real Android device/emulator, per this header's own pre-existing doc comment). This task
+  hardens against a hypothetical bad sample; it does not newly verify the underlying heading
+  formulas' real-world correctness, which remains a separate, already-tracked open question
+  (`COMP2-003`/`COMP2-004`).
 
 ### COMP2-003 — Derive Android-to-Windows-Phone compass basis mathematically — OPEN
 
