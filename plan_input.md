@@ -7616,7 +7616,7 @@ case (a held key's up-event delivered to a different window), which is explicitl
 
 ---
 
-## P5-028 — TouchPanel::GetState overall parity `[ ]`
+## P5-028 — TouchPanel::GetState overall parity `[x]`
 **Goal:** Confirm `TouchPanel::GetState()` composes active+released touches into one `TouchCollection` exactly as FNA does per frame.
 
 **Steps:**
@@ -7642,13 +7642,18 @@ case (a held key's up-event delivered to a different window), which is explicitl
 - `tests/Microsoft/Xna/Framework/Input/TouchInputTests.cpp`
 - `tests/CNA/Internal/Input/TouchEdgeCaseTests.cpp`
 
-**Notes:** _none._
+**Notes:** Superseded by [[P13-002]] (INP-AUD-001), which found and fixed a real divergence in this
+exact area (see that task's Result for the full fix/test/doc record).
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** Resolved by [[P13-002]] (2026-07-16): `GetState()` no longer mutates on read; touch
+composition/promotion/retirement now happens exactly once per frame via
+`InputManager::AdvanceTouchFrame()`. See `TouchEdgeCaseTests.cpp` /
+`SdlInputBridgeGoldenTests.cpp::TwoFingerScriptResolvesToExactTouchSnapshots` for the composed
+multi-touch snapshot coverage. `ctest -L input` 496/496 passed.
 
 ---
 
-## P5-029 — Active touches tracked correctly `[ ]`
+## P5-029 — Active touches tracked correctly `[x]`
 **Goal:** Confirm currently-pressed/moved touches appear in every `GetState()` call until released.
 
 **Steps:**
@@ -7674,13 +7679,13 @@ case (a held key's up-event delivered to a different window), which is explicitl
 - `tests/Microsoft/Xna/Framework/Input/TouchInputTests.cpp`
 - `tests/CNA/Internal/Input/TouchEdgeCaseTests.cpp`
 
-**Notes:** _none._
+**Notes:** Superseded by [[P13-002]] (INP-AUD-001), which found and fixed a real divergence in this exact area (see that task's Result for the full fix/test/doc record).
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** Resolved by [[P13-002]] (2026-07-16): a Pressed/Moved touch now reliably survives across reads within a frame (`GetTouchStateIsPureAndRepeatedReadsWithinAFrameAreIdentical`) and correctly promotes/persists across explicit frame advances (`AdvanceTouchFrameWorksEvenWithoutAnIntermediateRead`, `HeldTouchAutoPromotesToMovedWithPressedPrevious`). `ctest -L input` 496/496 passed.
 
 ---
 
-## P5-030 — Previous touches available for delta `[ ]`
+## P5-030 — Previous touches available for delta `[x]`
 **Goal:** Confirm the previous frame's touch positions remain queryable via `TryGetPreviousLocation` while a touch is still active.
 
 **Steps:**
@@ -7706,13 +7711,13 @@ case (a held key's up-event delivered to a different window), which is explicitl
 - `tests/Microsoft/Xna/Framework/Input/TouchInputTests.cpp`
 - `tests/CNA/Internal/Input/TouchEdgeCaseTests.cpp`
 
-**Notes:** _none._
+**Notes:** Superseded by [[P13-002]] (INP-AUD-001), which found and fixed a real divergence in this exact area (see that task's Result for the full fix/test/doc record).
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** Resolved by [[P13-002]] (2026-07-16): previous-location tracking (`TryGetPreviousLocation`) is now recorded by `InputManager::AdvanceTouchFrame()` once per frame rather than on every read, so it reflects the prior *frame's* location rather than the prior *read's*. See `EventDrivenPathPreservesPreviousLocation` in `TouchEdgeCaseTests.cpp` and `SdlInputBridgeTouchGestureTests.cpp::FingerEventsExposePreviousLocationThroughTouchPanelGetState`. `ctest -L input` 496/496 passed.
 
 ---
 
-## P5-031 — Released touch cleanup after one frame `[ ]`
+## P5-031 — Released touch cleanup after one frame `[x]`
 **Goal:** Confirm a released touch appears exactly once with `State == Released` then is removed from subsequent `GetState()` results, matching FNA.
 
 **Steps:**
@@ -7738,9 +7743,9 @@ case (a held key's up-event delivered to a different window), which is explicitl
 - `tests/Microsoft/Xna/Framework/Input/TouchInputTests.cpp`
 - `tests/CNA/Internal/Input/TouchEdgeCaseTests.cpp`
 
-**Notes:** _none._
+**Notes:** Superseded by [[P13-002]] (INP-AUD-001), which found and fixed a real divergence in this exact area (see that task's Result for the full fix/test/doc record).
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** Resolved by [[P13-002]] (2026-07-16): a Released touch is now visible for exactly one post-advance read regardless of how many times it was read beforehand (`ReleasedTouchIsVisibleForExactlyOnePostAdvanceReadRegardlessOfPriorReads`), fixing the prior read-frequency-dependent retirement. `ctest -L input` 496/496 passed.
 
 ---
 
@@ -7976,7 +7981,7 @@ case (a held key's up-event delivered to a different window), which is explicitl
 
 ---
 
-## P5-040 — TouchPanel::GetCapabilities parity `[ ]`
+## P5-040 — TouchPanel::GetCapabilities parity `[x]`
 **Goal:** Confirm `GetCapabilities` reports `IsConnected`/`MaximumTouchCount` matching FNA/SDL3 touch-device queries.
 
 **Steps:**
@@ -8002,13 +8007,13 @@ case (a held key's up-event delivered to a different window), which is explicitl
 - `tests/Microsoft/Xna/Framework/Input/TouchInputTests.cpp`
 - `tests/CNA/Internal/Input/TouchEdgeCaseTests.cpp`
 
-**Notes:** _none._
+**Notes:** Superseded by [[P13-005]] (INP-AUD-003), which found and fixed a real divergence in this exact area (see that task's Result for the full fix/test/doc record).
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** Resolved by [[P13-005]] (2026-07-16): `GetCapabilities()` now queries `system_device_backend().GetTouchDevices()` on every call (matching FNA's unconditional `SDL_GetTouchDevices()`), instead of only ever consulting the sticky `touchDeviceExists_`/`HasAnyTouch()` fallbacks. See the `TouchCapabilitiesEnumerationTest` fixture in `TouchEdgeCaseTests.cpp`. `ctest -L input` 496/496 passed.
 
 ---
 
-## P5-041 — Capabilities query does not mutate touch state `[ ]`
+## P5-041 — Capabilities query does not mutate touch state `[x]`
 **Goal:** Confirm calling `GetCapabilities()` before any touch never mutates active-touch tracking state (Phase-0 concern #8).
 
 **Steps:**
@@ -8034,9 +8039,9 @@ case (a held key's up-event delivered to a different window), which is explicitl
 - `tests/Microsoft/Xna/Framework/Input/TouchInputTests.cpp`
 - `tests/CNA/Internal/Input/TouchEdgeCaseTests.cpp`
 
-**Notes:** _none._
+**Notes:** Superseded by [[P13-005]] (INP-AUD-003) for the enumeration-source aspect (this task's own non-mutation concern was already correctly handled before P13 and remains verified).
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** Confirmed still correct after [[P13-005]] (2026-07-16): `GetCapabilities()` remains fully non-mutating with the new SDL-enumeration check added (`TouchCapabilitiesEnumerationTest.EnumerationQueryDoesNotMutateTouchState`, plus the pre-existing `GetCapabilitiesHasNoSideEffectOnTouchState`). `ctest -L input` 496/496 passed.
 
 ---
 
@@ -10984,7 +10989,7 @@ case (a held key's up-event delivered to a different window), which is explicitl
 
 ---
 
-## P8-019 — Focus lost handling `[ ]`
+## P8-019 — Focus lost handling `[x]`
 **Goal:** Confirm `SDL_EVENT_WINDOW_FOCUS_LOST` triggers the keyboard/mouse-button clearing behavior audited in Phase 2/3.
 
 **Steps:**
@@ -11008,13 +11013,13 @@ case (a held key's up-event delivered to a different window), which is explicitl
 - `tests/CNA/Internal/Input/SdlInputBridgeGoldenTests.cpp`
 - `tests/CNA/Internal/Input/InputResetTests.cpp`
 
-**Notes:** _none._
+**Notes:** Superseded by [[P13-003]] (INP-AUD-002) for the `Game::IsActive` aspect of focus-lost handling. The keyboard/mouse-state aspect was separately confirmed correct (no clear, matching FNA) by [[P13-004]]/DEC-15.
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** Resolved by [[P13-003]] (2026-07-16): `SDL_EVENT_WINDOW_FOCUS_LOST` now routes through `setIsActiveProperty(false)` in `Game::PollEvents()`, matching FNA (`SDL3_FNAPlatform.cs:1006-1037`). No automated test exists at this level (`Game` has no unit-test scaffold in this repo, confirmed in [[P13-003]]'s own Result); this is an established, explicitly-documented constraint, not a gap introduced here.
 
 ---
 
-## P8-020 — Focus gained handling `[ ]`
+## P8-020 — Focus gained handling `[x]`
 **Goal:** Confirm `SDL_EVENT_WINDOW_FOCUS_GAINED` does not spuriously report stale pressed keys/buttons from before the focus loss.
 
 **Steps:**
@@ -11038,13 +11043,13 @@ case (a held key's up-event delivered to a different window), which is explicitl
 - `tests/CNA/Internal/Input/SdlInputBridgeGoldenTests.cpp`
 - `tests/CNA/Internal/Input/InputResetTests.cpp`
 
-**Notes:** _none._
+**Notes:** Superseded by [[P13-003]] (INP-AUD-002) for the `Game::IsActive` aspect of focus-gained handling. Stale-key-visibility on focus gain was separately confirmed by [[P13-004]] via `SdlInputBridgeKeyboardTests.cpp::WindowLifecycleEventsDoNotCorruptKeyboardState`.
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** Resolved by [[P13-003]] (2026-07-16): `SDL_EVENT_WINDOW_FOCUS_GAINED` now routes through `setIsActiveProperty(true)` in `Game::PollEvents()`, matching FNA. `WindowLifecycleEventsDoNotCorruptKeyboardState` (`SdlInputBridgeKeyboardTests.cpp`) already covers this event not spuriously reporting stale pressed keys. `ctest -L input` 496/496 passed.
 
 ---
 
-## P8-021 — Minimize handling `[ ]`
+## P8-021 — Minimize handling `[x]`
 **Goal:** Confirm `SDL_EVENT_WINDOW_MINIMIZED` is treated consistently with focus-lost for input-clearing purposes.
 
 **Steps:**
@@ -11068,9 +11073,9 @@ case (a held key's up-event delivered to a different window), which is explicitl
 - `tests/CNA/Internal/Input/SdlInputBridgeGoldenTests.cpp`
 - `tests/CNA/Internal/Input/InputResetTests.cpp`
 
-**Notes:** _none._
+**Notes:** Investigated as part of the [[P13-002]]..[[P13-004]] remediation pass; no divergence found for this specific event.
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** Investigated 2026-07-16: `SDL_EVENT_WINDOW_MINIMIZED` has no dedicated handler in `Game::PollEvents()` or `SdlInputBridge::ProcessEvent()` — it falls through as a no-op, same as every other unhandled window-lifecycle event (`WindowLifecycleEventsDoNotCorruptKeyboardState` already covers `SDL_EVENT_WINDOW_MINIMIZED` in its event-type loop and confirms it does not corrupt keyboard state). This is consistent with focus-lost/gained handling for input-clearing purposes (none of the three clear transient state), matching the DEC-15/[[P13-004]] policy. CNA does **not** set `Game::IsActive = false` on minimize the way it does for `WILL_ENTER_BACKGROUND`/`FOCUS_LOST` — FNA's own SDL3 platform loop has no `SDL_EVENT_WINDOW_MINIMIZED` case either (it relies on the platform-specific background/foreground or focus events instead), so this is FNA-consistent, not a gap. No test added beyond the existing `WindowLifecycleEventsDoNotCorruptKeyboardState` coverage.
 
 ---
 
