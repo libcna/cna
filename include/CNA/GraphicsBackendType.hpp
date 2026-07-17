@@ -1,6 +1,6 @@
 #pragma once
 
-#include <string>
+#include <string_view>
 
 namespace CNA
 {
@@ -52,17 +52,77 @@ namespace CNA
 
     /**
      * @brief Returns the graphics backend compiled into this build.
+     *
+     * Resolved entirely from the CNA_BACKEND_* compile definition cmake/BackendSelection.cmake
+     * sets per backend, so this is a compile-time constant -- usable in a constant expression
+     * (e.g. static_assert(CNA::getCurrentGraphicsBackendType() == CNA::GraphicsBackendType::EasyGL)).
+     *
      * @return The active GraphicsBackendType, determined at compile time by CNA_GRAPHICS_BACKEND.
      */
-    GraphicsBackendType getCurrentGraphicsBackendType();
+    constexpr GraphicsBackendType getCurrentGraphicsBackendType()
+    {
+#if defined(CNA_BACKEND_SDL_RENDERER)
+        return GraphicsBackendType::SdlRenderer;
+#elif defined(CNA_BACKEND_EASYGL)
+        return GraphicsBackendType::EasyGL;
+#elif defined(CNA_BACKEND_BGFX)
+        return GraphicsBackendType::Bgfx;
+#elif defined(CNA_BACKEND_VULKAN)
+        return GraphicsBackendType::Vulkan;
+#elif defined(CNA_BACKEND_WEBGPU)
+        return GraphicsBackendType::WebGPU;
+#elif defined(CNA_BACKEND_HEADLESS)
+        return GraphicsBackendType::Headless;
+#elif defined(CNA_BACKEND_SOFTWARE)
+        return GraphicsBackendType::Software;
+#elif defined(CNA_BACKEND_D3D11)
+        return GraphicsBackendType::D3D11;
+#elif defined(CNA_BACKEND_D3D12)
+        return GraphicsBackendType::D3D12;
+#elif defined(CNA_BACKEND_CANVAS)
+        return GraphicsBackendType::Canvas;
+#elif defined(CNA_BACKEND_ASCII)
+        return GraphicsBackendType::Ascii;
+#elif defined(CNA_BACKEND_DX3)
+        return GraphicsBackendType::Dx3;
+#elif defined(CNA_BACKEND_D3D9)
+        return GraphicsBackendType::D3D9;
+#elif defined(CNA_BACKEND_SDL_GPU)
+        return GraphicsBackendType::SdlGpu;
+#else
+#error "CNA: no CNA_BACKEND_* compile definition set -- graphics backend selection (cmake/BackendSelection.cmake) is broken"
+#endif
+    }
 
     /**
      * @brief Returns the human-readable name of the graphics backend compiled into this build.
      *
-     * The returned string matches the CNA_GRAPHICS_BACKEND CMake option value exactly
-     * (e.g. "EASYGL", "SDL_RENDERER", "D3D9").
+     * The returned view matches the CNA_GRAPHICS_BACKEND CMake option value exactly
+     * (e.g. "EASYGL", "SDL_RENDERER", "D3D9") and points at static storage (a string literal),
+     * so it stays valid for the lifetime of the program. Like getCurrentGraphicsBackendType(),
+     * this is a compile-time constant.
      *
      * @return The active backend's name.
      */
-    const std::string& getCurrentGraphicsBackendName();
+    constexpr std::string_view getCurrentGraphicsBackendName()
+    {
+        switch (getCurrentGraphicsBackendType())
+        {
+            case GraphicsBackendType::SdlRenderer: return "SDL_RENDERER";
+            case GraphicsBackendType::EasyGL:      return "EASYGL";
+            case GraphicsBackendType::Bgfx:         return "BGFX";
+            case GraphicsBackendType::Vulkan:       return "VULKAN";
+            case GraphicsBackendType::WebGPU:       return "WEBGPU";
+            case GraphicsBackendType::Headless:     return "HEADLESS";
+            case GraphicsBackendType::Software:     return "SOFTWARE";
+            case GraphicsBackendType::D3D11:        return "D3D11";
+            case GraphicsBackendType::D3D12:        return "D3D12";
+            case GraphicsBackendType::Canvas:       return "CANVAS";
+            case GraphicsBackendType::Ascii:        return "ASCII";
+            case GraphicsBackendType::Dx3:           return "DX3";
+            case GraphicsBackendType::D3D9:          return "D3D9";
+            case GraphicsBackendType::SdlGpu:        return "SDL_GPU";
+        }
+        return "UNKNOWN";
+    }
 } // CNA

@@ -5,6 +5,15 @@ using CNA::GraphicsBackendType;
 using CNA::getCurrentGraphicsBackendType;
 using CNA::getCurrentGraphicsBackendName;
 
+// Both functions are constexpr -- usable directly in a constant expression, not just at
+// runtime. This is the actual point of making them constexpr (they don't take a GraphicsDevice
+// argument, so unlike the GraphicsDevice::GetGraphicsBackendType()/Name() member wrappers,
+// these two are genuinely evaluable at compile time).
+static_assert(getCurrentGraphicsBackendType() == getCurrentGraphicsBackendType());
+static_assert(!getCurrentGraphicsBackendName().empty());
+constexpr GraphicsBackendType kCompileTimeType = getCurrentGraphicsBackendType();
+constexpr std::string_view kCompileTimeName = getCurrentGraphicsBackendName();
+
 TEST(GraphicsBackendTypeTest, GetCurrentGraphicsBackendTypeDoesNotThrow)
 {
     EXPECT_NO_THROW({ (void)getCurrentGraphicsBackendType(); });
@@ -26,7 +35,7 @@ TEST(GraphicsBackendTypeTest, NameMatchesTypeForEveryBackend)
     // that the (type, name) pair returned is internally consistent (the name matches what this
     // specific type is documented to map to), not that a specific backend is active.
     const auto type = getCurrentGraphicsBackendType();
-    const auto& name = getCurrentGraphicsBackendName();
+    const auto name = getCurrentGraphicsBackendName();
 
     switch (type)
     {
@@ -50,5 +59,11 @@ TEST(GraphicsBackendTypeTest, NameMatchesTypeForEveryBackend)
 TEST(GraphicsBackendTypeTest, RepeatedCallsAreStable)
 {
     EXPECT_EQ(getCurrentGraphicsBackendType(), getCurrentGraphicsBackendType());
-    EXPECT_EQ(&getCurrentGraphicsBackendName(), &getCurrentGraphicsBackendName());
+    EXPECT_EQ(getCurrentGraphicsBackendName(), getCurrentGraphicsBackendName());
+}
+
+TEST(GraphicsBackendTypeTest, RuntimeValueMatchesCompileTimeConstant)
+{
+    EXPECT_EQ(getCurrentGraphicsBackendType(), kCompileTimeType);
+    EXPECT_EQ(getCurrentGraphicsBackendName(), kCompileTimeName);
 }

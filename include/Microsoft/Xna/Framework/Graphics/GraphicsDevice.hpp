@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "Microsoft/Xna/Framework/Color.hpp"
@@ -713,16 +714,24 @@ namespace Microsoft::Xna::Framework::Graphics
         NOXNA [[nodiscard]] CNA::Internal::Backends::IGraphicsBackend& GetBackend() const;
 
         /** @brief Returns which graphics backend was compiled into this build (see CNA_GRAPHICS_BACKEND). */
-        NOXNA [[nodiscard]] CNA::GraphicsBackendType GetGraphicsBackendType() const;
+        NOXNA [[nodiscard]] inline constexpr CNA::GraphicsBackendType GetGraphicsBackendType() const
+        {
+            return CNA::getCurrentGraphicsBackendType();
+        }
 
         /**
          * @brief Returns the human-readable name of the graphics backend compiled into this build.
          *
          * Matches the CNA_GRAPHICS_BACKEND CMake option value exactly (e.g. "EASYGL", "D3D9").
+         * Doesn't depend on `this` -- delegates to CNA::getCurrentGraphicsBackendName(), a pure
+         * compile-time constant -- so, like GetGraphicsBackendType(), this is `constexpr`.
          *
          * @return The active backend's name.
          */
-        NOXNA [[nodiscard]] const std::string& GetGraphicsBackendName() const;
+        NOXNA [[nodiscard]] inline constexpr std::string_view GetGraphicsBackendName() const
+        {
+            return CNA::getCurrentGraphicsBackendName();
+        }
         /**
          * @brief Sets the currently active Effect for draw calls.
          *
