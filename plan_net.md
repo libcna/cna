@@ -964,18 +964,63 @@ generated via `../mesh-craft` for body/head (and other feasible) geometry, feedi
 existing `tools/avatar_builder/` Blender pipeline for skeleton/skinning/animation (mesh-craft has
 no rigging concept — confirmed in Phase 0).
 
-- [ ] **Task 7.1** — Capture baseline screenshots: current `demo_avatar` male and female avatars,
-  front/side/back, plus a few animation-gallery poses from `demo_avatar_animation_gallery` that
-  best reveal today's deformation problems. Store under a scratch/docs location (not committed
-  binary bloat unless the repo already commits demo screenshots elsewhere — check convention
-  first).
-- [ ] **Task 7.2** — Write `docs/avatar-art-direction.md`: restate the user-approved acceptance
-  criteria from decision 4c verbatim, plus concrete proportion targets (head/neck/shoulder/torso/
-  limb/hip/foot ratios) derived from *original* reference thinking, not any proprietary asset.
-- [ ] **Task 7.3** — Audit `tools/avatar_builder/generate_body.py`/`generate_skeleton.py`'s
-  current proportion logic against the new art-direction doc; identify concretely where today's
-  generator produces the "monster" look (disproportionate head/limbs, bad joint placement, etc.)
-  — read the actual generator code and baseline screenshots together rather than guessing.
+- [x] **Task 7.1** — No existing screenshot-capture mechanism existed in any avatar demo. Added
+  a small shared helper (`examples/common/ScreenshotEXT.hpp`, `SaveBackBufferScreenshotEXT` —
+  reuses `GraphicsDevice::GetBackBufferData` + `Texture2D::SaveAsPng`, the exact same pattern
+  `examples/common/PixelTestGame.hpp` already established for golden-image tests, no new
+  image-encoding code) and three new `cna_demo_avatar` CLI flags (`--yaw <degrees>` fixes the
+  orbiting camera instead of requiring live keyboard input; `--clip <name>` selects a starting
+  animation clip instead of always the T-pose; `--screenshot <path>` saves the backbuffer on the
+  final smoke frame). **Real bug found and fixed while wiring this up**: `Game::Exit()` sets
+  `suppressDraw_ = true`, so capturing on `smokeFramesLeft_ == 0` (the frame `Update()` calls
+  `Exit()`) silently produced no file at all — `Draw()` never runs that frame. Fixed by capturing
+  one frame earlier, on `smokeFramesLeft_ == 1` (the last frame before `Exit()` is called), where
+  `Draw()` still runs normally. Captured 6 static screenshots (male/female × front/side/back,
+  T-pose) plus one mid-animation capture (male, `Wave`, ~1.5s in) under the session scratchpad
+  (diagnostic captures, not committed — matches this repo's existing convention of not committing
+  demo screenshot output). **Findings, confirmed by direct visual inspection, not guessing**:
+  three independent, separately-rooted problems, not one — (1) proportions: arms read ~1.6-1.8×
+  too long and uniformly stick-thin with zero taper, torso short, head small; (2) topology: dark,
+  jagged, self-intersecting triangle fans at the hip/crotch in every single screenshot regardless
+  of angle or pose, and feet taper to sharp points instead of reading as shoes; (3) skinning: the
+  `Wave` capture shows severe dark ring ("candy-wrapper") artifacts at *every* joint (shoulder,
+  elbow, hip, knee, ankle) - a hard single-bone-weight-boundary symptom, independent of both (1)
+  and (2). All three need independent fixes for Task 7.11's "no mesh explosions, no distorted
+  limbs" bar.
+- [x] **Task 7.2** — Wrote `docs/avatar-art-direction.md`: restates decisions 4/4a/4b/4c verbatim
+  from this plan's own User Decisions table, plus a full head-heights-unit proportion target table
+  (total height, neck/torso/arm/leg lengths, shoulder/hip width, limb thickness with taper) derived
+  from well-established, non-proprietary figure-drawing/character-design conventions (the "N
+  head-heights tall" unit and "T-pose arm span ≈ height" rule of thumb), explicitly scoped as a
+  stylization *category* rather than a reproduction of any specific character. Also documents the
+  topology/skinning requirements (manifold joins, real multi-bone blend weighting, distinct foot
+  geometry) that proportions alone cannot fix, and explicit non-goals (no specific-character
+  matching, no photorealism).
+- [x] **Task 7.3** — Read `generate_body.py`/`generate_skeleton.py` in full against the baseline
+  screenshots and the new art-direction doc. Confirmed, with real numbers from `BONES`/
+  `BONE_RADII`, exactly why each Task 7.1 finding happens:
+  - **Proportions**: the current skeleton stands ~7.6 head-heights tall (foot to head-top ÷ head
+    sphere diameter) - realistic-adult proportion, not this plan's toy-like ~6 head-heights target
+    (this is *why* the head reads as small - not a head-size bug on its own, a whole-body scale
+    issue). Arm bone radii (`UpperArm` 0.06m, `LowerArm` 0.05m, `Hand` 0.04m) are 2-3× thinner than
+    the corresponding leg radii (`UpperLeg` 0.09m, `LowerLeg` 0.07m) with **zero taper** - each
+    cylinder segment has one uniform radius along its entire length - confirmed as the dominant
+    contributor to the "stick arm" look (thinness reads more strongly than the T-pose span, which
+    is actually close to the standard arm-span-≈-height ratio already).
+  - **Topology**: `build_body()` constructs one Blender cylinder + one separate joint sphere *per
+    bone*, then only `bpy.ops.object.join()`s them into a single mesh object - `join()` combines
+    objects into one data-block, it does **not** weld/boolean-merge overlapping geometry. Confirmed
+    as the root cause of the hip/crotch mess: that's exactly where the most primitives (`Hips`,
+    `Spine`, both `UpperLeg`s) converge and overlap non-manifold.
+  - **Skinning**: a mitigation for exactly this class of defect already exists
+    (`fix_automatic_weights`'s `BEND_JOINTS` smoothstep blend, `blend_radius=0.08`, added in Task
+    11.20) and confirmed via `git log` to already be baked into the currently-shipped `Content/`
+    assets (the content was last regenerated in a *later* commit than the weight-fix). The Wave-
+    pose ring artifacts are therefore a real "existing mitigation is insufficient" finding, not
+    stale/unregenerated content - `docs/avatar-art-direction.md`'s own README cross-reference
+    (`tools/avatar_builder/README.md`'s "Bend-artifact check") already documented this exact tear
+    as a known, deliberately-deferred-to-polish-work gap back in Phase 11 ("out of scope for Phase
+    11a/11b/11c's 'functional, not polished' pipeline milestones") - Phase 7 is that deferred pass.
 - [ ] **Task 7.4** — Prototype body/head geometry authored via `mesh-craft`'s `.mc3.xml` format
   (primitives + CSG, per `gen.md`'s documented capabilities) as a replacement input to
   `generate_body.py`'s current procedural-Blender body construction. Export via `mc3togltf` to

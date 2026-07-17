@@ -44,6 +44,28 @@ public:
     void Update(Microsoft::Xna::Framework::GameTime& gameTime) override;
     void Draw(const Microsoft::Xna::Framework::GameTime& gameTime) override;
 
+    /** @brief Enables smoke-test mode: exit cleanly after @p n Draw frames. */
+    void SetSmokeFrames(int n) { smokeFramesLeft_ = n; }
+
+    /** @brief Fixes the orbiting camera at a specific yaw (radians) instead of live Left/Right
+     *  control - Task 7.1 (plan_net.md Phase 7): reproducible front/side/back baseline captures. */
+    void SetFixedCameraYawEXT(float yawRadians) { cameraYaw_ = yawRadians; fixedCameraYawEXT_ = true; }
+
+    /** @brief Saves a PNG of the backbuffer on the final smoke frame instead of just exiting -
+     *  Task 7.1 (plan_net.md Phase 7). No effect unless SetSmokeFrames was also called. */
+    void SetScreenshotPathEXT(std::string path) { screenshotPathEXT_ = std::move(path); }
+
+    /** @brief Selects a starting clip by name instead of the default clipNames_[0] - Task 7.1
+     *  (plan_net.md Phase 7): lets baseline/after captures target a bent-limb pose (e.g. "Wave"),
+     *  not just the default T-pose, to reveal joint deformation. No-op if name isn't found. */
+    void SetInitialClipEXT(const std::string& name)
+    {
+        for (std::size_t i = 0; i < clipNames_.size(); ++i)
+        {
+            if (clipNames_[i] == name) { currentClipIndex_ = i; break; }
+        }
+    }
+
     GetTypeNameHPP()
 
 private:
@@ -71,4 +93,8 @@ private:
     // Simple fixed-distance orbiting camera so the avatar is always framed;
     // Left/Right arrows rotate it around the avatar for a better look.
     float cameraYaw_ = 0.0f;
+    bool fixedCameraYawEXT_ = false;
+
+    int smokeFramesLeft_ = -1;
+    std::string screenshotPathEXT_;
 };

@@ -1,6 +1,7 @@
 #include "AvatarDemo.hpp"
 
 #include "Microsoft/Xna/Framework/GamerServices/AvatarBodyTypeNamesEXT.hpp"
+#include "../../common/ScreenshotEXT.hpp"
 
 #include <cmath>
 
@@ -126,9 +127,12 @@ void AvatarDemo::Update(GameTime& gameTime)
     const float dt = static_cast<float>(
         gameTime.getElapsedGameTimeProperty().getTotalSecondsProperty());
 
-    const float rotSpeed = 1.6f * dt;
-    if (kb.IsKeyDown(Keys::Left))  cameraYaw_ -= rotSpeed;
-    if (kb.IsKeyDown(Keys::Right)) cameraYaw_ += rotSpeed;
+    if (!fixedCameraYawEXT_)
+    {
+        const float rotSpeed = 1.6f * dt;
+        if (kb.IsKeyDown(Keys::Left))  cameraYaw_ -= rotSpeed;
+        if (kb.IsKeyDown(Keys::Right)) cameraYaw_ += rotSpeed;
+    }
 
     const bool spaceDown = kb.IsKeyDown(Keys::Space);
     if (spaceDown && !spaceWasDown_) {
@@ -141,6 +145,17 @@ void AvatarDemo::Update(GameTime& gameTime)
     spaceWasDown_ = spaceDown;
 
     clipPositionSeconds_ += static_cast<double>(dt);
+
+    // Task 7.1 (plan_net.md Phase 7): matches every other smoke-testable demo's own convention -
+    // guarded by > 0, not >= 0, so Exit() (which doesn't halt Update()/Draw() immediately) can't
+    // keep re-triggering this every subsequent frame.
+    if (smokeFramesLeft_ > 0)
+    {
+        if (--smokeFramesLeft_ == 0)
+        {
+            Exit();
+        }
+    }
 }
 
 void AvatarDemo::Draw(const GameTime&)
@@ -165,6 +180,17 @@ void AvatarDemo::Draw(const GameTime&)
         Matrix::CreatePerspectiveFieldOfView(kPiOver4, aspect, 0.1f, 100.0f));
 
     renderer_->DrawRealEXT(clipNames_[currentClipIndex_], System::TimeSpan::FromSeconds(clipPositionSeconds_), /*loop=*/true);
+
+    // Task 7.1 (plan_net.md Phase 7): captured after DrawRealEXT so the just-rendered frame is
+    // what ends up in the backbuffer read below. Fires on smokeFramesLeft_ == 1, not 0 - Exit()
+    // (called by Update() once the countdown reaches 0) sets Game's own suppressDraw_ flag, which
+    // skips this Draw() call entirely on that final frame, so capturing at 0 would never run at
+    // all. At 1, Exit() hasn't been called yet this frame, so Draw() still runs normally.
+    if (smokeFramesLeft_ == 1 && !screenshotPathEXT_.empty())
+    {
+        SaveBackBufferScreenshotEXT(device, screenshotPathEXT_);
+        screenshotPathEXT_.clear(); // guards against a duplicate save if Draw() runs once more
+    }
 }
 
 GetTypeNameCPP(AvatarDemo, "AvatarDemo")
