@@ -7308,7 +7308,7 @@ test is not sufficient for an Android coordinate/fusion claim.
   - Strict behavior is documented and tested.
 - **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
 
-### COMP2-009 — Make Compass notification batches lifetime-safe — OPEN
+### COMP2-009 — Make Compass notification batches lifetime-safe — CLOSED (2026-07-17)
 
 - **Priority:** P1
 - **Area:** Perfection re-audit
@@ -7321,6 +7321,43 @@ test is not sufficient for an Android coordinate/fusion claim.
   - Destruction in either event cannot invoke the other on a dead owner.
   - Ordering matches the behavioral oracle.
 - **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+- **Resolution:** this task's own core safety concern — "destruction in either event cannot invoke
+  the other on a dead owner" — is the *exact* hazard `LIFE-005` (this same pass, same audit
+  document) already fully closed for both `Compass` and `Motion`, via `Detail::SensorOwnerControlBlock`:
+  each reading/calibration lambda independently validates `control->generation == myGeneration &&
+  control->owner != nullptr` under the shared control block's own lock immediately before
+  touching `owner`, and neither lambda touches `owner`/`backend_` state again after invoking the
+  user callback (`setCurrentValueProperty()`/`Calibrate.Raise()` are each lambda's last
+  statement). Re-verified this directly against the current code (not assumed from the earlier
+  task's own claim) before closing this one on that basis — confirmed both call sites in
+  `Compass.cpp`'s and `Motion.cpp`'s `Start()` still match this shape exactly.
+  - **"Create an immutable notification batch" — not built, and not needed:** re-examined whether
+    bundling the reading/calibration flags, generation, and timestamp into one new struct type
+    would add any safety property beyond what the two independently-validating lambdas already
+    provide. It would not — both lambdas already validate before touching owner state and never
+    touch it after the user callback, which is the entirety of what "lifetime-safe" requires here.
+    A notification-batch wrapper would be a pure structural refactor (bundling data that is
+    currently passed as separate lambda parameters/captures into one object) with no new
+    correctness guarantee to show for it — introducing it purely to match this task's literal
+    wording, with no live gap to close, was judged unwarranted churn on already-verified,
+    already-TSan-clean lifecycle code.
+  - **"Owner generation and source timestamps":** generation is already carried (via each
+    lambda's own captured `myGeneration`); "source timestamps" is `COMP2-001`'s own, separate
+    scope (timestamp/freshness *alignment*, not lifetime safety) — not conflated with this task.
+- **Files changed:** none — this task is closed by reference to `LIFE-005`'s already-committed
+  fix and tests, not a new change.
+- **Tests:** `LIFE-005`'s own `CompassTests`/`MotionTests.DestroyingOwnerFromCurrentValueChangedThenFiringCalibrateDoesNotCrash`
+  already directly covers this task's own acceptance criterion (destruction from
+  `CurrentValueChanged` while a calibration callback is separately pending, and confirms the
+  calibration handler correctly never fires afterward). The reverse ordering (a `Calibrate`
+  handler destroying the owner before a pending reading callback fires) is symmetric under the
+  identical mechanism, per `LIFE-005`'s own resolution note — not separately re-tested here, since
+  doing so would just re-prove the same shared mechanism a second time.
+- **Sanitizer/static-analysis result:** covered by `LIFE-005`'s own verification (no new code to
+  separately verify).
+- **Remaining limitations:** same as `LIFE-005` — no real Android hardware/ASan run performed (the
+  fix lives entirely in host-testable `Compass`/`Motion` code, not `AndroidCompassBackend`/
+  `AndroidMotionBackend`'s own `#ifdef __ANDROID__` bodies).
 
 ### MOT2-001 — Derive the Android rotation-vector to XNA/WP attitude transform — OPEN
 
