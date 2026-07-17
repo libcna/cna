@@ -1,52 +1,51 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Media/PictureAlbumCollection.hpp"
 
-#include <stdexcept>
-
 namespace Microsoft::Xna::Framework::Media
 {
+    PictureAlbumCollection::PictureAlbumCollection(std::vector<PictureAlbum*> albums)
+        : base_(std::move(albums))
+    {
+    }
+
     void PictureAlbumCollection::Dispose()
     {
-        // TODO: implement collection cleanup
-        throw std::runtime_error("not implemented");
+        base_.Dispose();
     }
 
     SharpRuntime::intcs PictureAlbumCollection::getCountProperty() const
     {
-        // TODO: implement media library catalog access
-        throw std::runtime_error("not implemented");
+        return base_.Count();
     }
 
     bool PictureAlbumCollection::getIsDisposedProperty() const
     {
-        // TODO: implement media library catalog access
-        throw std::runtime_error("not implemented");
+        return base_.IsDisposed();
     }
 
     PictureAlbum* PictureAlbumCollection::operator[](SharpRuntime::intcs index) const
     {
-        // TODO: implement media library catalog access
-        throw std::runtime_error("not implemented");
+        return base_.At(index);
     }
 
     PictureAlbumCollection::iterator PictureAlbumCollection::begin()
     {
-        return innerList_.begin();
+        return base_.begin();
     }
 
     PictureAlbumCollection::iterator PictureAlbumCollection::end()
     {
-        return innerList_.end();
+        return base_.end();
     }
 
     PictureAlbumCollection::const_iterator PictureAlbumCollection::begin() const
     {
-        return innerList_.begin();
+        return base_.begin();
     }
 
     PictureAlbumCollection::const_iterator PictureAlbumCollection::end() const
     {
-        return innerList_.end();
+        return base_.end();
     }
 
     const std::string& PictureAlbumCollection::GetTypeName() const

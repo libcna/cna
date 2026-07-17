@@ -10,13 +10,10 @@
 
 namespace Microsoft::Xna::Framework::Media
 {
+    class MediaLibrary;
     class SongCollection;
 
-    /**
-     * @brief Represents a playlist of songs in the media library.
-     *
-     * @note Status: Stub — media library catalog access not implemented.
-     */
+    /** @brief Represents a playlist of songs in the media library. */
     class Playlist final : public System::Object, public System::IDisposable
     {
     public:
@@ -82,6 +79,12 @@ namespace Microsoft::Xna::Framework::Media
         friend bool operator!=(const Playlist& lhs, const Playlist& rhs);
 
     private:
-        Playlist();
+        friend class MediaLibrary;
+        Playlist(std::string name, SongCollection* songs, System::TimeSpan duration);
+
+        std::string name_;
+        SongCollection* songs_; // non-owning -- owned by MediaLibrary
+        System::TimeSpan duration_;
+        bool isDisposed_ = false;
     };
 }

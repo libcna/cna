@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "CNA/CNAHelper.hpp"
+#include "CNA/Internal/Media/MediaCollectionBase.hpp"
 #include "System/IDisposable.hpp"
 #include "System/Object.hpp"
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
@@ -12,12 +13,9 @@
 namespace Microsoft::Xna::Framework::Media
 {
     class PictureAlbum;
+    class MediaLibrary;
 
-    /**
-     * @brief An ordered, read-only collection of PictureAlbum objects.
-     *
-     * @note Status: Stub — media library catalog access not implemented.
-     */
+    /** @brief An ordered, read-only collection of PictureAlbum objects. */
     class PictureAlbumCollection final : public System::Object, public System::IDisposable
     {
     public:
@@ -65,8 +63,9 @@ namespace Microsoft::Xna::Framework::Media
         NOXNA [[nodiscard]] const std::string& GetTypeName() const override;
 
     private:
-        PictureAlbumCollection();
+        friend class MediaLibrary;
+        explicit PictureAlbumCollection(std::vector<PictureAlbum*> albums);
 
-        std::vector<PictureAlbum*> innerList_;
+        CNA::Internal::Media::MediaCollectionBase<PictureAlbum> base_;
     };
 }

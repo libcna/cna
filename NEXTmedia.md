@@ -82,10 +82,58 @@ about it), `PictureLibraryIndexTests.cpp`, `PlaylistParserTests.cpp`, `SavedPict
 `MediaLibraryPathsTests.cpp`, `MediaCollectionBaseTests.cpp`. Full-suite regression: **4733 tests,
 4731 passed, 0 failed, 2 pre-existing hardware skips.**
 
-**Now starting Phase 4** (`MEDIA-61`..`MEDIA-69`, wiring the real backend onto the public XNA API)
--- `MediaSource`/`MediaLibrary` first (they gate everything else), then the 6 item+collection
-pairs (`Genre`, `Artist`, `Album`, `Picture`, `PictureAlbum`, `Playlist`), then `MEDIA-69`'s
-cross-class object-graph integration audit as the capstone.
+**Phase 4 complete** (`MEDIA-61`..`MEDIA-69`, wiring the real backend onto the public XNA API).
+`MediaSource`, `MediaLibrary` (the ~230-line orchestrator building the entire real object graph
+from the Phase 3 indexes in its constructor), and all 6 item+collection pairs (`Genre`, `Artist`,
+`Album`, `Picture`, `PictureAlbum`, `Playlist`) are now genuinely real -- every one of the 14
+previously-`NotImplementedException` classes plus `MediaSource`/`MediaLibrary` now has working
+constructors, real equality, real relationships. `MEDIA-69`'s object-graph audit
+(`ObjectGraphIsInternallyConsistent`) passed on the first real run, confirming the whole graph
+(Genre↔Album↔Artist↔Song↔Picture↔PictureAlbum, all cross-references) is internally consistent, not
+just individually populated.
+
+Real bugs found via actually building and testing this (not caught by inspection):
+- `std::make_unique<T>()` cannot construct a friend-gated private constructor -- the `new` happens
+  inside `std::`'s own implementation, which isn't a friend of `T`, only `MediaLibrary`'s own code
+  is. Every friend-constructed type (`Genre`/`Artist`/`Album`/`Picture`/`PictureAlbum`/`Playlist`/
+  their Collections) had to use `std::unique_ptr<T>(new T(...))` instead -- a real, easy-to-hit C++
+  gotcha, not specific to this codebase.
+- A real memory leak: every per-genre/per-artist/per-album/per-playlist `SongCollection` was
+  `new`'d inline with no owning storage at all. Fixed with a new `ownedGroupSongCollections_`
+  vector in `MediaLibrary`.
+- A real design flaw caught before it shipped: the original `SavePicture`/`SavedPictures` design
+  called `SavedPictureStore::GetSavedPicturesDirectory()` (which *creates* the directory)
+  unconditionally at `MediaLibrary` construction time -- meaning just *opening* a library (even
+  read-only browsing) would silently create a new "Saved Pictures" folder on disk, including
+  inside the checked-in test fixture tree during every test run. Redesigned to be lazy: the
+  directory (and its PictureAlbum tree node) is only created the first time `SavePicture()` is
+  actually called.
+- A test-authoring bug (not a production bug) in the first version of the `GetImage()` byte-round-
+  trip test: comparing a `std::vector<char>` (signed) against a `std::vector<uint8_t>` via
+  `std::equal` silently fails for any byte >= 0x80 (both operands promote to `int`, and e.g.
+  `char(-1)` promotes to `int(-1)` while `uint8_t(255)` promotes to `int(255)`) -- common
+  throughout real binary JPEG data. Fixed by making both vectors `uint8_t`.
+
+Design choices made without FNA precedent (§0 -- FNA never built this half), recorded here since
+they're not otherwise obvious from reading the code: Album's Genre is derived from its first-seen
+member song's genre (not a full per-song-genre consensus); `Song.Duration` (and therefore
+Album/Playlist `Duration`) stays at TimeSpan.Zero for library-scanned songs until actually played
+via MediaPlayer -- deliberately NOT eagerly probed via FFmpeg, both to avoid a real
+platform-conditional CMake complication (`CNA_FFMPEG_AVAILABLE` isn't currently exposed as a C++
+preprocessor define) and because it's consistent with Song's already-established lazy-duration
+pattern elsewhere in this codebase; `Picture::GetPictureFromToken`'s token is the picture's own
+resolved file path (exposed via a new NOXNA `Picture::getTokenEXT()`), since FNA's real "opaque
+library token" has no real desktop equivalent to source from.
+
+Full-suite regression: **4785 tests, 4783 passed, 0 failed, 2 pre-existing hardware skips.** 90 new
+Media-scoped tests across 9 files (`MediaSourceTests.cpp`, `GenreTests.cpp`, `ArtistTests.cpp`,
+`AlbumTests.cpp`, `PictureTests.cpp`, `PictureAlbumTests.cpp`, `PlaylistTests.cpp`,
+`MediaLibraryTests.cpp` incl. the object-graph audit, `MediaLibraryTestFixture.hpp` shared fixture).
+
+**Now starting Phase 5** (`MEDIA-70`..`MEDIA-75`, content-pipeline/XNB integration) --
+`VideoContentTypeReader`, matching `SongContentTypeReader`'s existing structure, is the only
+remaining piece needed before Phase 6 (the consolidated test-completeness sweep) and Phase 7
+(closure/docs).
 
 ## 2. Correction to Phase 0's own build-verification record
 

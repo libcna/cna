@@ -1,56 +1,68 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Media/PictureAlbum.hpp"
 
-#include <stdexcept>
+#include <functional>
+#include <utility>
 
 namespace Microsoft::Xna::Framework::Media
 {
+    PictureAlbum::PictureAlbum(std::string name, PictureAlbum* parent, std::string path)
+        : name_(std::move(name)), parent_(parent), path_(std::move(path))
+    {
+    }
+
+    void PictureAlbum::SetChildAlbumsAndPictures(PictureAlbumCollection* childAlbums,
+                                                   PictureCollection* pictures)
+    {
+        childAlbums_ = childAlbums;
+        pictures_ = pictures;
+    }
+
     void PictureAlbum::Dispose()
     {
-        // TODO: implement picture album resource cleanup
-        throw std::runtime_error("not implemented");
+        // A PictureAlbum is a non-owning view into MediaLibrary's real data -- nothing
+        // album-specific to release, only the disposed flag itself.
+        isDisposed_ = true;
     }
 
     PictureAlbumCollection* PictureAlbum::getAlbumsProperty() const
     {
-        // TODO: implement media library catalog access
-        throw std::runtime_error("not implemented");
+        return childAlbums_;
     }
 
     bool PictureAlbum::getIsDisposedProperty() const
     {
-        // TODO: implement media library catalog access
-        throw std::runtime_error("not implemented");
+        return isDisposed_;
     }
 
     std::string PictureAlbum::getNameProperty() const
     {
-        // TODO: implement media library catalog access
-        throw std::runtime_error("not implemented");
+        return name_;
     }
 
     PictureAlbum* PictureAlbum::getParentProperty() const
     {
-        // TODO: implement media library catalog access
-        throw std::runtime_error("not implemented");
+        return parent_;
     }
 
     PictureCollection* PictureAlbum::getPicturesProperty() const
     {
-        // TODO: implement media library catalog access
-        throw std::runtime_error("not implemented");
+        return pictures_;
     }
 
     bool PictureAlbum::Equals(const PictureAlbum* other) const
     {
-        // TODO: implement equality comparison
-        throw std::runtime_error("not implemented");
+        return other != nullptr && path_ == other->path_;
+    }
+
+    int PictureAlbum::GetHashCode() const
+    {
+        return static_cast<int>(std::hash<std::string>{}(path_));
     }
 
     std::string PictureAlbum::ToString() const
     {
-        // TODO: implement media library catalog access
-        throw std::runtime_error("not implemented");
+        return name_;
     }
 
     const std::string& PictureAlbum::GetTypeName() const
@@ -61,13 +73,11 @@ namespace Microsoft::Xna::Framework::Media
 
     bool operator==(const PictureAlbum& lhs, const PictureAlbum& rhs)
     {
-        // TODO: implement equality comparison
-        throw std::runtime_error("not implemented");
+        return lhs.Equals(&rhs);
     }
 
     bool operator!=(const PictureAlbum& lhs, const PictureAlbum& rhs)
     {
-        // TODO: implement equality comparison
-        throw std::runtime_error("not implemented");
+        return !(lhs == rhs);
     }
 }

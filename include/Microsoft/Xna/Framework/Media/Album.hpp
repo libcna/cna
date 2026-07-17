@@ -5,6 +5,7 @@
 
 #include "CNA/CNAHelper.hpp"
 #include "System/IDisposable.hpp"
+#include "System/IO/Stream.hpp"
 #include "System/Object.hpp"
 #include "System/TimeSpan.hpp"
 
@@ -12,13 +13,10 @@ namespace Microsoft::Xna::Framework::Media
 {
     class Artist;
     class Genre;
+    class MediaLibrary;
     class SongCollection;
 
-    /**
-     * @brief Represents a music album in the media library.
-     *
-     * @note Status: Stub — media library catalog access not implemented.
-     */
+    /** @brief Represents a music album in the media library. */
     class Album final : public System::Object, public System::IDisposable
     {
     public:
@@ -75,18 +73,26 @@ namespace Microsoft::Xna::Framework::Media
         [[nodiscard]] SongCollection* getSongsProperty() const;
 
         /**
-         * @brief Returns the cover art image for this album, or nullptr if unavailable.
+         * @brief Returns a stream over the cover art image for this album.
          *
-         * @return Opaque pointer to image data.
+         * The FNA/XNA return type is Stream (not the previous placeholder void*, corrected here
+         * to match the real API shape now that this member is genuinely implemented).
+         *
+         * @throws System::InvalidOperationException If HasArt is false.
+         * @return Pointer to a Stream over the album art image data. Caller owns the Stream.
          */
-        void* GetAlbumArt();
+        System::IO::Stream* GetAlbumArt();
 
         /**
-         * @brief Returns a thumbnail image for this album, or nullptr if unavailable.
+         * @brief Returns a stream over a thumbnail image for this album.
          *
-         * @return Opaque pointer to thumbnail data.
+         * No separate thumbnail is generated -- returns the same image as GetAlbumArt(), matching
+         * this being a from-scratch feature with no FNA behavior to differ against.
+         *
+         * @throws System::InvalidOperationException If HasArt is false.
+         * @return Pointer to a Stream over the thumbnail image data. Caller owns the Stream.
          */
-        void* GetThumbnail();
+        System::IO::Stream* GetThumbnail();
 
         /**
          * @brief Returns whether this album is equal to another.
@@ -119,6 +125,16 @@ namespace Microsoft::Xna::Framework::Media
         friend bool operator!=(const Album& lhs, const Album& rhs);
 
     private:
-        Album();
+        friend class MediaLibrary;
+        Album(std::string name, Artist* artist, Genre* genre, System::TimeSpan duration,
+              std::string artPath, SongCollection* songs);
+
+        std::string name_;
+        Artist* artist_; // non-owning -- owned by MediaLibrary
+        Genre* genre_;   // non-owning
+        System::TimeSpan duration_;
+        std::string artPath_; // empty if no cover art was found
+        SongCollection* songs_; // non-owning
+        bool isDisposed_ = false;
     };
 }

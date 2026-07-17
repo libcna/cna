@@ -1,52 +1,51 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Media/PlaylistCollection.hpp"
 
-#include <stdexcept>
-
 namespace Microsoft::Xna::Framework::Media
 {
+    PlaylistCollection::PlaylistCollection(std::vector<Playlist*> playlists)
+        : base_(std::move(playlists))
+    {
+    }
+
     void PlaylistCollection::Dispose()
     {
-        // TODO: implement collection cleanup
-        throw std::runtime_error("not implemented");
+        base_.Dispose();
     }
 
     SharpRuntime::intcs PlaylistCollection::getCountProperty() const
     {
-        // TODO: implement media library catalog access
-        throw std::runtime_error("not implemented");
+        return base_.Count();
     }
 
     bool PlaylistCollection::getIsDisposedProperty() const
     {
-        // TODO: implement media library catalog access
-        throw std::runtime_error("not implemented");
+        return base_.IsDisposed();
     }
 
     Playlist* PlaylistCollection::operator[](SharpRuntime::intcs index) const
     {
-        // TODO: implement media library catalog access
-        throw std::runtime_error("not implemented");
+        return base_.At(index);
     }
 
     PlaylistCollection::iterator PlaylistCollection::begin()
     {
-        return innerList_.begin();
+        return base_.begin();
     }
 
     PlaylistCollection::iterator PlaylistCollection::end()
     {
-        return innerList_.end();
+        return base_.end();
     }
 
     PlaylistCollection::const_iterator PlaylistCollection::begin() const
     {
-        return innerList_.begin();
+        return base_.begin();
     }
 
     PlaylistCollection::const_iterator PlaylistCollection::end() const
     {
-        return innerList_.end();
+        return base_.end();
     }
 
     const std::string& PlaylistCollection::GetTypeName() const

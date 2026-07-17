@@ -1,52 +1,51 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Media/GenreCollection.hpp"
 
-#include <stdexcept>
-
 namespace Microsoft::Xna::Framework::Media
 {
+    GenreCollection::GenreCollection(std::vector<Genre*> genres)
+        : base_(std::move(genres))
+    {
+    }
+
     void GenreCollection::Dispose()
     {
-        // TODO: implement collection cleanup
-        throw std::runtime_error("not implemented");
+        base_.Dispose();
     }
 
     SharpRuntime::intcs GenreCollection::getCountProperty() const
     {
-        // TODO: implement media library catalog access
-        throw std::runtime_error("not implemented");
+        return base_.Count();
     }
 
     bool GenreCollection::getIsDisposedProperty() const
     {
-        // TODO: implement media library catalog access
-        throw std::runtime_error("not implemented");
+        return base_.IsDisposed();
     }
 
     Genre* GenreCollection::operator[](SharpRuntime::intcs index) const
     {
-        // TODO: implement media library catalog access
-        throw std::runtime_error("not implemented");
+        return base_.At(index);
     }
 
     GenreCollection::iterator GenreCollection::begin()
     {
-        return innerList_.begin();
+        return base_.begin();
     }
 
     GenreCollection::iterator GenreCollection::end()
     {
-        return innerList_.end();
+        return base_.end();
     }
 
     GenreCollection::const_iterator GenreCollection::begin() const
     {
-        return innerList_.begin();
+        return base_.begin();
     }
 
     GenreCollection::const_iterator GenreCollection::end() const
     {
-        return innerList_.end();
+        return base_.end();
     }
 
     const std::string& GenreCollection::GetTypeName() const

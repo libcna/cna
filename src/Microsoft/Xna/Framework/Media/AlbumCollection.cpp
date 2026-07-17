@@ -1,52 +1,51 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Media/AlbumCollection.hpp"
 
-#include <stdexcept>
-
 namespace Microsoft::Xna::Framework::Media
 {
+    AlbumCollection::AlbumCollection(std::vector<Album*> albums)
+        : base_(std::move(albums))
+    {
+    }
+
     void AlbumCollection::Dispose()
     {
-        // TODO: implement collection cleanup
-        throw std::runtime_error("not implemented");
+        base_.Dispose();
     }
 
     SharpRuntime::intcs AlbumCollection::getCountProperty() const
     {
-        // TODO: implement media library catalog access
-        throw std::runtime_error("not implemented");
+        return base_.Count();
     }
 
     bool AlbumCollection::getIsDisposedProperty() const
     {
-        // TODO: implement media library catalog access
-        throw std::runtime_error("not implemented");
+        return base_.IsDisposed();
     }
 
     Album* AlbumCollection::operator[](SharpRuntime::intcs index) const
     {
-        // TODO: implement media library catalog access
-        throw std::runtime_error("not implemented");
+        return base_.At(index);
     }
 
     AlbumCollection::iterator AlbumCollection::begin()
     {
-        return innerList_.begin();
+        return base_.begin();
     }
 
     AlbumCollection::iterator AlbumCollection::end()
     {
-        return innerList_.end();
+        return base_.end();
     }
 
     AlbumCollection::const_iterator AlbumCollection::begin() const
     {
-        return innerList_.begin();
+        return base_.begin();
     }
 
     AlbumCollection::const_iterator AlbumCollection::end() const
     {
-        return innerList_.end();
+        return base_.end();
     }
 
     const std::string& AlbumCollection::GetTypeName() const

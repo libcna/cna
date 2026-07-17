@@ -43,6 +43,11 @@ namespace CNA::Internal::Media
             return items_[static_cast<std::size_t>(index)];
         }
 
+        /// Internal-only append (e.g. MediaLibrary::SavePicture growing SavedPictures at
+        /// runtime) -- not part of the public XNA read-only-collection contract; only reachable
+        /// through a concrete collection class's own friend-gated private members.
+        void Add(T* item) { items_.push_back(item); }
+
         using iterator = typename std::vector<T*>::iterator;
         using const_iterator = typename std::vector<T*>::const_iterator;
 

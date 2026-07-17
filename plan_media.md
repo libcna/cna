@@ -565,14 +565,14 @@ free to override a row — the tasks that depend on it are cited so the blast ra
 
 ### Phase 4 — Wire the real backend onto the public XNA API (one class at a time, "make and forget")
 
-- [ ] **MEDIA-61 — `MediaSource`: real implementation.** `GetAvailableMediaSources()` returns a real
+- [x] **MEDIA-61 — `MediaSource`: real implementation.** `GetAvailableMediaSources()` returns a real
   single-element list (`{ MediaSource(LocalDevice, "<platform-appropriate name>") }`) backed by a now
   genuinely reachable internal constructor; `Name`/`MediaSourceType`/`ToString()` all real.
   *FNA:* MediaSource.cs (API shape only — no FNA logic to port, see §0).
   *Accept:* `GetAvailableMediaSources().Count == 1`; round-trips through `MediaLibrary(MediaSource)`
   (MEDIA-62).
 
-- [ ] **MEDIA-62 — `MediaLibrary`: real implementation.** Both constructors real: no-arg triggers
+- [x] **MEDIA-62 — `MediaLibrary`: real implementation.** Both constructors real: no-arg triggers
   `MediaLibraryIndex`+`PictureLibraryIndex` scans (D6, synchronous); `MediaLibrary(MediaSource)` accepts
   the one real `LocalDevice` source instead of throwing. All 10 properties
   (`Albums`/`Artists`/`Genres`/`Pictures`/`Playlists`/`RootPictureAlbum`/`SavedPictures`/`Songs`/
@@ -582,18 +582,18 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   *Accept:* constructing against MEDIA-3/4's fixture Music+Pictures tree produces a `MediaLibrary` whose
   every property is populated and internally consistent (feeds MEDIA-69's full graph audit).
 
-- [ ] **MEDIA-63 — `Genre` + `GenreCollection`: real implementation.** Backed by `MediaLibraryIndex`'s
+- [x] **MEDIA-63 — `Genre` + `GenreCollection`: real implementation.** Backed by `MediaLibraryIndex`'s
   genre grouping (incl. MEDIA-54's normalization); `Albums`/`Songs`/`Name`/`IsDisposed` real;
   `Equals`/`GetHashCode`/`operator==`/`operator!=`/`ToString` real, by `Name`.
   *Accept:* per-genre album/song membership matches the fixture tree exactly; equality tests for
   equal/unequal genres.
 
-- [ ] **MEDIA-64 — `Artist` + `ArtistCollection`: real implementation.** Backed by the index's artist
+- [x] **MEDIA-64 — `Artist` + `ArtistCollection`: real implementation.** Backed by the index's artist
   grouping (incl. MEDIA-54's normalization); `Albums`/`Songs`/`Name`/`IsDisposed` real; equality set
   real, by `Name`.
   *Accept:* per-artist album/song membership matches the fixture tree exactly; equality tests.
 
-- [ ] **MEDIA-65 — `Album` + `AlbumCollection`: real implementation.** Backed by the index's
+- [x] **MEDIA-65 — `Album` + `AlbumCollection`: real implementation.** Backed by the index's
   artist→album grouping; `Artist`/`Genre`/`Duration` (sum of member `Song.Duration`)/`HasArt`/`Songs`/
   `Name`/`IsDisposed` real. `GetAlbumArt`/`GetThumbnail`: real `Stream` if a same-directory cover image
   (`cover.jpg`/`folder.jpg`) is found (MEDIA-4's fixture), else a documented, XNA-plausible exception
@@ -602,20 +602,20 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   *Accept:* `HasArt` correctly reflects fixture presence/absence of a cover file; `Duration` sums
   correctly; equality tests including the same-name-different-artist case.
 
-- [ ] **MEDIA-66 — `Picture` + `PictureCollection`: real implementation.** Backed by
+- [x] **MEDIA-66 — `Picture` + `PictureCollection`: real implementation.** Backed by
   `PictureLibraryIndex`; `Album`/`Date`/`Height`/`Width`/`Name`/`IsDisposed` real. `GetImage`/
   `GetThumbnail` return real `System::IO::Stream`s (via `System::IO::FileStream`/`MemoryStream`,
   already in sharp-runtime). Equality set real, by resolved file path.
   *Accept:* dimensions/date match the fixture files exactly; `GetImage()` content round-trips
   byte-for-byte against the source file.
 
-- [ ] **MEDIA-67 — `PictureAlbum` + `PictureAlbumCollection`: real implementation.** Real tree node
+- [x] **MEDIA-67 — `PictureAlbum` + `PictureAlbumCollection`: real implementation.** Real tree node
   backed by `PictureLibraryIndex`; `Albums`/`Pictures`/`Parent`/`Name`/`IsDisposed` real, including the
   self-referencing root case (`MediaLibrary.RootPictureAlbum.Parent == nullptr`).
   *Accept:* walking `Parent` from any leaf reaches the root in exactly as many steps as the fixture's
   real directory depth.
 
-- [ ] **MEDIA-68 — `Playlist` + `PlaylistCollection`: real implementation.** Backed by `PlaylistParser`
+- [x] **MEDIA-68 — `Playlist` + `PlaylistCollection`: real implementation.** Backed by `PlaylistParser`
   results scanned from the Music root's `.m3u`/`.m3u8` files. `Duration` (sum of member
   `Song.Duration`)/`Songs`/`Name`/`IsDisposed` real. `Equals`/`GetHashCode` real, by `Name`.
   `operator==`/`operator!=` **keep** FNA's exact null-check shape
@@ -624,7 +624,7 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   *Accept:* MEDIA-5's fixture `.m3u`/`.m3u8` resolve to the correct `Song` sequence and `Duration`;
   equality tests including both-null/one-null/both-real cases.
 
-- [ ] **MEDIA-69 — Full cross-class object-graph integration audit.** Construct a real `MediaLibrary`
+- [x] **MEDIA-69 — Full cross-class object-graph integration audit.** Construct a real `MediaLibrary`
   against MEDIA-3/4's fixture tree and walk every relationship round-trip (e.g. `Genres[i].Albums[j]`'s
   `Songs[k]`'s containing `Album` equals `Albums[j]`; every `Picture.Album.Pictures` contains that
   `Picture`) to confirm the object graph is internally consistent, not just individually populated.

@@ -10,13 +10,10 @@
 namespace Microsoft::Xna::Framework::Media
 {
     class AlbumCollection;
+    class MediaLibrary;
     class SongCollection;
 
-    /**
-     * @brief Represents a music artist in the media library.
-     *
-     * @note Status: Stub — media library catalog access not implemented.
-     */
+    /** @brief Represents a music artist in the media library. */
     class Artist final : public System::Object, public System::IDisposable
     {
     public:
@@ -82,6 +79,13 @@ namespace Microsoft::Xna::Framework::Media
         friend bool operator!=(const Artist& lhs, const Artist& rhs);
 
     private:
-        Artist();
+        friend class MediaLibrary;
+        Artist(std::string name, AlbumCollection* albums, SongCollection* songs);
+        void SetAlbums(AlbumCollection* albums) { albums_ = albums; }
+
+        std::string name_;
+        AlbumCollection* albums_; // non-owning -- owned by MediaLibrary
+        SongCollection* songs_;   // non-owning
+        bool isDisposed_ = false;
     };
 }

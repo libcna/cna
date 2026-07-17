@@ -1,50 +1,57 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Media/Genre.hpp"
 
-#include <stdexcept>
+#include <functional>
+#include <utility>
 
 namespace Microsoft::Xna::Framework::Media
 {
+    Genre::Genre(std::string name, AlbumCollection* albums, SongCollection* songs)
+        : name_(std::move(name)), albums_(albums), songs_(songs)
+    {
+    }
+
     void Genre::Dispose()
     {
-        // TODO: implement genre resource cleanup
-        throw std::runtime_error("not implemented");
+        // A Genre is a non-owning view into MediaLibrary's real data (MediaLibrary owns the
+        // underlying Album/Song objects and their collections) -- there is nothing genre-specific
+        // to release, only the disposed flag itself.
+        isDisposed_ = true;
     }
 
     AlbumCollection* Genre::getAlbumsProperty() const
     {
-        // TODO: implement media library catalog access
-        throw std::runtime_error("not implemented");
+        return albums_;
     }
 
     bool Genre::getIsDisposedProperty() const
     {
-        // TODO: implement media library catalog access
-        throw std::runtime_error("not implemented");
+        return isDisposed_;
     }
 
     std::string Genre::getNameProperty() const
     {
-        // TODO: implement media library catalog access
-        throw std::runtime_error("not implemented");
+        return name_;
     }
 
     SongCollection* Genre::getSongsProperty() const
     {
-        // TODO: implement media library catalog access
-        throw std::runtime_error("not implemented");
+        return songs_;
     }
 
     bool Genre::Equals(const Genre* other) const
     {
-        // TODO: implement equality comparison
-        throw std::runtime_error("not implemented");
+        return other != nullptr && name_ == other->name_;
+    }
+
+    int Genre::GetHashCode() const
+    {
+        return static_cast<int>(std::hash<std::string>{}(name_));
     }
 
     std::string Genre::ToString() const
     {
-        // TODO: implement media library catalog access
-        throw std::runtime_error("not implemented");
+        return name_;
     }
 
     const std::string& Genre::GetTypeName() const
@@ -55,13 +62,11 @@ namespace Microsoft::Xna::Framework::Media
 
     bool operator==(const Genre& lhs, const Genre& rhs)
     {
-        // TODO: implement equality comparison
-        throw std::runtime_error("not implemented");
+        return lhs.Equals(&rhs);
     }
 
     bool operator!=(const Genre& lhs, const Genre& rhs)
     {
-        // TODO: implement equality comparison
-        throw std::runtime_error("not implemented");
+        return !(lhs == rhs);
     }
 }

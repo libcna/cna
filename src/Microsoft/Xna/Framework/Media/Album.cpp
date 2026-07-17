@@ -1,80 +1,99 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Media/Album.hpp"
 
-#include <stdexcept>
+#include <functional>
+#include <utility>
+
+#include "Microsoft/Xna/Framework/Media/Artist.hpp"
+#include "System/InvalidOperationException.hpp"
+#include "System/IO/FileStream.hpp"
 
 namespace Microsoft::Xna::Framework::Media
 {
+    Album::Album(std::string name, Artist* artist, Genre* genre, System::TimeSpan duration,
+                 std::string artPath, SongCollection* songs)
+        : name_(std::move(name)), artist_(artist), genre_(genre), duration_(duration),
+          artPath_(std::move(artPath)), songs_(songs)
+    {
+    }
+
     void Album::Dispose()
     {
-        // TODO: implement album resource cleanup
-        throw std::runtime_error("not implemented");
+        // An Album is a non-owning view into MediaLibrary's real data -- nothing album-specific to
+        // release, only the disposed flag itself.
+        isDisposed_ = true;
     }
 
     Artist* Album::getArtistProperty() const
     {
-        // TODO: implement media library catalog access
-        throw std::runtime_error("not implemented");
+        return artist_;
     }
 
     System::TimeSpan Album::getDurationProperty() const
     {
-        // TODO: implement media library catalog access
-        throw std::runtime_error("not implemented");
+        return duration_;
     }
 
     Genre* Album::getGenreProperty() const
     {
-        // TODO: implement media library catalog access
-        throw std::runtime_error("not implemented");
+        return genre_;
     }
 
     bool Album::getHasArtProperty() const
     {
-        // TODO: implement media library catalog access
-        throw std::runtime_error("not implemented");
+        return !artPath_.empty();
     }
 
     bool Album::getIsDisposedProperty() const
     {
-        // TODO: implement media library catalog access
-        throw std::runtime_error("not implemented");
+        return isDisposed_;
     }
 
     std::string Album::getNameProperty() const
     {
-        // TODO: implement media library catalog access
-        throw std::runtime_error("not implemented");
+        return name_;
     }
 
     SongCollection* Album::getSongsProperty() const
     {
-        // TODO: implement media library catalog access
-        throw std::runtime_error("not implemented");
+        return songs_;
     }
 
-    void* Album::GetAlbumArt()
+    System::IO::Stream* Album::GetAlbumArt()
     {
-        // TODO: implement album art retrieval
-        throw std::runtime_error("not implemented");
+        if (artPath_.empty())
+        {
+            throw System::InvalidOperationException("This album has no album art.");
+        }
+        return new System::IO::FileStream(artPath_);
     }
 
-    void* Album::GetThumbnail()
+    System::IO::Stream* Album::GetThumbnail()
     {
-        // TODO: implement thumbnail retrieval
-        throw std::runtime_error("not implemented");
+        return GetAlbumArt();
     }
 
     bool Album::Equals(const Album* other) const
     {
-        // TODO: implement equality comparison
-        throw std::runtime_error("not implemented");
+        // Album names can collide across different artists -- equality is by (Name, Artist), not
+        // Name alone.
+        if (other == nullptr) return false;
+        if (name_ != other->name_) return false;
+        if (artist_ == other->artist_) return true;
+        if (artist_ == nullptr || other->artist_ == nullptr) return false;
+        return artist_->Equals(other->artist_);
+    }
+
+    int Album::GetHashCode() const
+    {
+        std::size_t h1 = std::hash<std::string>{}(name_);
+        std::size_t h2 = artist_ != nullptr ? static_cast<std::size_t>(artist_->GetHashCode()) : 0;
+        return static_cast<int>(h1 ^ (h2 + 0x9e3779b9 + (h1 << 6) + (h1 >> 2)));
     }
 
     std::string Album::ToString() const
     {
-        // TODO: implement media library catalog access
-        throw std::runtime_error("not implemented");
+        return name_;
     }
 
     const std::string& Album::GetTypeName() const
@@ -85,13 +104,11 @@ namespace Microsoft::Xna::Framework::Media
 
     bool operator==(const Album& lhs, const Album& rhs)
     {
-        // TODO: implement equality comparison
-        throw std::runtime_error("not implemented");
+        return lhs.Equals(&rhs);
     }
 
     bool operator!=(const Album& lhs, const Album& rhs)
     {
-        // TODO: implement equality comparison
-        throw std::runtime_error("not implemented");
+        return !(lhs == rhs);
     }
 }

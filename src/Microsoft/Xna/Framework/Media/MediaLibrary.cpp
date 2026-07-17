@@ -1,96 +1,423 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Media/MediaLibrary.hpp"
 
-#include <stdexcept>
+#include <algorithm>
+#include <filesystem>
+#include <map>
+#include <utility>
+
+#include "CNA/Internal/Graphics/ImageLoader.hpp"
+#include "CNA/Internal/Media/MediaLibraryIndex.hpp"
+#include "CNA/Internal/Media/MediaLibraryPaths.hpp"
+#include "CNA/Internal/Media/PictureLibraryIndex.hpp"
+#include "CNA/Internal/Media/PlaylistParser.hpp"
+#include "CNA/Internal/Media/SavedPictureStore.hpp"
+#include "System/ArgumentNullException.hpp"
+#include "System/IO/IOException.hpp"
+#include "System/NotSupportedException.hpp"
 
 namespace Microsoft::Xna::Framework::Media
 {
+    namespace
+    {
+        // Looks for a cover-art image in the same directory as `songPath`, matching the common
+        // "cover.jpg"/"folder.jpg" file-naming convention (plan_media.md MEDIA-65/R2).
+        std::string FindAlbumArtPath(const std::string& songPath)
+        {
+            std::filesystem::path dir = std::filesystem::path(songPath).parent_path();
+            for (const char* candidate : {"cover.jpg", "folder.jpg"})
+            {
+                std::filesystem::path artPath = dir / candidate;
+                std::error_code ec;
+                if (std::filesystem::exists(artPath, ec) && !ec)
+                {
+                    return artPath.string();
+                }
+            }
+            return {};
+        }
+    }
+
     MediaLibrary::MediaLibrary()
     {
+        mediaSource_ = std::unique_ptr<MediaSource>(
+            new MediaSource(MediaSourceType::LocalDevice, "Local Device"));
+        BuildFromRoots(CNA::Internal::Media::MediaLibraryPaths::GetMusicRoot(),
+                        CNA::Internal::Media::MediaLibraryPaths::GetPictureRoot());
     }
 
     MediaLibrary::MediaLibrary(MediaSource* mediaSource)
     {
-        // TODO: implement media library catalog integration
-        throw std::runtime_error("not implemented");
+        if (mediaSource == nullptr)
+        {
+            throw System::ArgumentNullException("mediaSource");
+        }
+        if (mediaSource->getMediaSourceTypeProperty() != MediaSourceType::LocalDevice)
+        {
+            throw System::NotSupportedException(
+                "Only MediaSourceType::LocalDevice is supported.");
+        }
+        mediaSource_ = std::unique_ptr<MediaSource>(
+            new MediaSource(mediaSource->getMediaSourceTypeProperty(), mediaSource->getNameProperty()));
+        BuildFromRoots(CNA::Internal::Media::MediaLibraryPaths::GetMusicRoot(),
+                        CNA::Internal::Media::MediaLibraryPaths::GetPictureRoot());
+    }
+
+    void MediaLibrary::BuildFromRoots(const std::string& musicRoot, const std::string& pictureRoot)
+    {
+        pictureRoot_ = pictureRoot;
+
+        // --- Songs ---
+        CNA::Internal::Media::MediaLibraryIndex musicIndex(musicRoot);
+        for (const auto& indexed : musicIndex.GetSongs())
+        {
+            auto song = std::make_unique<Song>(indexed.path, indexed.title);
+            songByPath_[indexed.path] = song.get();
+            ownedSongs_.push_back(std::move(song));
+        }
+        std::vector<Song*> allSongPtrs;
+        for (auto& s : ownedSongs_) allSongPtrs.push_back(s.get());
+        songsCollection_ = std::unique_ptr<SongCollection>(new SongCollection(allSongPtrs));
+
+        // --- Group songs by genre / artist / (artist,album), preserving first-seen order (the
+        // scan itself is already deterministic -- MediaLibraryIndex sorts directory entries). ---
+        std::vector<std::string> genreOrder;
+        std::unordered_map<std::string, std::vector<Song*>> songsByGenre;
+        std::vector<std::string> artistOrder;
+        std::unordered_map<std::string, std::vector<Song*>> songsByArtist;
+        std::vector<std::pair<std::string, std::string>> albumOrder; // (artist, album)
+        std::map<std::pair<std::string, std::string>, std::vector<Song*>> songsByAlbumKey;
+        std::map<std::pair<std::string, std::string>, std::string> albumArtPathByKey;
+        std::map<std::pair<std::string, std::string>, std::string> albumGenreByKey;
+
+        for (const auto& indexed : musicIndex.GetSongs())
+        {
+            Song* song = songByPath_[indexed.path];
+
+            if (!indexed.genre.empty())
+            {
+                if (songsByGenre.find(indexed.genre) == songsByGenre.end())
+                {
+                    genreOrder.push_back(indexed.genre);
+                }
+                songsByGenre[indexed.genre].push_back(song);
+            }
+
+            if (indexed.artist.empty()) continue;
+
+            if (songsByArtist.find(indexed.artist) == songsByArtist.end())
+            {
+                artistOrder.push_back(indexed.artist);
+            }
+            songsByArtist[indexed.artist].push_back(song);
+
+            if (indexed.album.empty()) continue;
+
+            auto key = std::make_pair(indexed.artist, indexed.album);
+            if (songsByAlbumKey.find(key) == songsByAlbumKey.end())
+            {
+                albumOrder.push_back(key);
+                albumArtPathByKey[key] = FindAlbumArtPath(indexed.path);
+                albumGenreByKey[key] = indexed.genre; // first song's genre represents the album
+            }
+            songsByAlbumKey[key].push_back(song);
+        }
+
+        // --- Genres (AlbumCollection patched in after Albums are built, below) ---
+        std::unordered_map<std::string, Genre*> genreByName;
+        std::vector<Genre*> allGenres;
+        for (const auto& name : genreOrder)
+        {
+            auto genreSongs = std::make_unique<SongCollection>(songsByGenre[name]);
+            std::unique_ptr<Genre> genre(new Genre(name, nullptr, genreSongs.get()));
+            ownedGroupSongCollections_.push_back(std::move(genreSongs));
+            genreByName[name] = genre.get();
+            allGenres.push_back(genre.get());
+            ownedGenres_.push_back(std::move(genre));
+        }
+        genresCollection_ = std::unique_ptr<GenreCollection>(new GenreCollection(allGenres));
+
+        // --- Artists (AlbumCollection patched in after Albums are built, below) ---
+        std::unordered_map<std::string, Artist*> artistByName;
+        std::vector<Artist*> allArtists;
+        for (const auto& name : artistOrder)
+        {
+            auto artistSongs = std::make_unique<SongCollection>(songsByArtist[name]);
+            std::unique_ptr<Artist> artist(new Artist(name, nullptr, artistSongs.get()));
+            ownedGroupSongCollections_.push_back(std::move(artistSongs));
+            artistByName[name] = artist.get();
+            allArtists.push_back(artist.get());
+            ownedArtists_.push_back(std::move(artist));
+        }
+        artistsCollection_ = std::unique_ptr<ArtistCollection>(new ArtistCollection(allArtists));
+
+        // --- Albums ---
+        std::unordered_map<std::string, std::vector<Album*>> albumsByArtistName;
+        std::unordered_map<std::string, std::vector<Album*>> albumsByGenreName;
+        std::vector<Album*> allAlbums;
+        for (const auto& key : albumOrder)
+        {
+            const std::string& artistName = key.first;
+            const std::string& albumName = key.second;
+            Artist* artist = artistByName[artistName];
+            std::string genreName = albumGenreByKey[key];
+            Genre* genre = genreName.empty() ? nullptr : genreByName[genreName];
+
+            auto albumSongs = std::make_unique<SongCollection>(songsByAlbumKey[key]);
+            std::unique_ptr<Album> album(new Album(
+                albumName, artist, genre, System::TimeSpan::Zero,
+                albumArtPathByKey[key], albumSongs.get()));
+            ownedGroupSongCollections_.push_back(std::move(albumSongs));
+            allAlbums.push_back(album.get());
+            albumsByArtistName[artistName].push_back(album.get());
+            if (!genreName.empty()) albumsByGenreName[genreName].push_back(album.get());
+            ownedAlbums_.push_back(std::move(album));
+        }
+        albumsCollection_ = std::unique_ptr<AlbumCollection>(new AlbumCollection(allAlbums));
+
+        // Patch Genre::Albums / Artist::Albums now that Album objects exist.
+        for (const auto& name : genreOrder)
+        {
+            auto* collection = new AlbumCollection(albumsByGenreName[name]);
+            genreByName[name]->SetAlbums(collection);
+            ownedGroupAlbumCollections_.emplace_back(collection);
+        }
+        for (const auto& name : artistOrder)
+        {
+            auto* collection = new AlbumCollection(albumsByArtistName[name]);
+            artistByName[name]->SetAlbums(collection);
+            ownedGroupAlbumCollections_.emplace_back(collection);
+        }
+
+        // --- Playlists ---
+        std::vector<Playlist*> allPlaylists;
+        for (const auto& parsed : CNA::Internal::Media::PlaylistParser::ScanDirectory(musicRoot))
+        {
+            std::vector<Song*> members;
+            System::TimeSpan duration = System::TimeSpan::Zero;
+            for (const auto& path : parsed.songPaths)
+            {
+                auto it = songByPath_.find(path);
+                if (it != songByPath_.end())
+                {
+                    members.push_back(it->second);
+                    duration = duration + it->second->getDurationProperty();
+                }
+            }
+            auto playlistSongs = std::make_unique<SongCollection>(members);
+            std::unique_ptr<Playlist> playlist(new Playlist(parsed.name, playlistSongs.get(), duration));
+            ownedGroupSongCollections_.push_back(std::move(playlistSongs));
+            allPlaylists.push_back(playlist.get());
+            ownedPlaylists_.push_back(std::move(playlist));
+        }
+        playlistsCollection_ = std::unique_ptr<PlaylistCollection>(new PlaylistCollection(allPlaylists));
+
+        // --- Pictures / PictureAlbum tree ---
+        // Deliberately does NOT create the "Saved Pictures" directory here -- merely constructing
+        // (or even just browsing) a MediaLibrary should not have the surprising side effect of
+        // creating a new directory on disk; that only happens lazily, the first time SavePicture()
+        // is actually called. If a Saved Pictures folder already exists from a previous session,
+        // the scan below picks it up like any other real subdirectory.
+        std::string savedDirIfExists;
+        {
+            std::filesystem::path candidate = std::filesystem::path(pictureRoot) / "Saved Pictures";
+            std::error_code ec;
+            if (std::filesystem::exists(candidate, ec) && !ec)
+            {
+                savedDirIfExists = candidate.string();
+            }
+        }
+
+        CNA::Internal::Media::PictureLibraryIndex pictureIndex(pictureRoot);
+        if (!pictureIndex.GetRootAlbumPath().empty())
+        {
+            rootPictureAlbum_ = BuildPictureAlbumTree(pictureIndex, pictureIndex.GetRootAlbumPath(), nullptr);
+        }
+        std::vector<Picture*> allPictures;
+        for (auto& p : ownedPictures_) allPictures.push_back(p.get());
+        picturesCollection_ = std::unique_ptr<PictureCollection>(new PictureCollection(allPictures));
+
+        // --- SavedPictures: real files already present under Pictures/Saved Pictures (if any,
+        // e.g. left over from a previous run) -- the PictureLibraryIndex scan above already
+        // picked these up like any other picture; identify them via the real PictureAlbum tree
+        // node for that directory. ---
+        std::vector<Picture*> savedPictures;
+        if (!savedDirIfExists.empty())
+        {
+            std::error_code ec;
+            std::string canonicalSavedDir = std::filesystem::weakly_canonical(savedDirIfExists, ec).string();
+            if (!ec)
+            {
+                auto it = pictureAlbumByPath_.find(canonicalSavedDir);
+                if (it != pictureAlbumByPath_.end())
+                {
+                    savedPicturesAlbum_ = it->second;
+                    for (Picture* p : *savedPicturesAlbum_->getPicturesProperty())
+                    {
+                        savedPictures.push_back(p);
+                    }
+                }
+            }
+        }
+        savedPicturesCollection_ = std::unique_ptr<PictureCollection>(new PictureCollection(savedPictures));
+    }
+
+    PictureAlbum* MediaLibrary::BuildPictureAlbumTree(
+        const CNA::Internal::Media::PictureLibraryIndex& pictureIndex,
+        const std::string& nodePath, PictureAlbum* parent)
+    {
+        const auto& node = pictureIndex.GetAlbums().at(nodePath);
+
+        std::unique_ptr<PictureAlbum> album(new PictureAlbum(node.name, parent, node.path));
+        PictureAlbum* raw = album.get();
+        ownedPictureAlbums_.push_back(std::move(album));
+
+        std::vector<PictureAlbum*> childPtrs;
+        for (const auto& childPath : node.childPaths)
+        {
+            childPtrs.push_back(BuildPictureAlbumTree(pictureIndex, childPath, raw));
+        }
+
+        std::vector<Picture*> picturePtrs;
+        for (auto idx : node.pictureIndices)
+        {
+            const auto& ip = pictureIndex.GetPictures()[idx];
+            std::unique_ptr<Picture> pic(new Picture(ip.name, raw, ip.width, ip.height, ip.date, ip.path));
+            picturePtrs.push_back(pic.get());
+            ownedPictures_.push_back(std::move(pic));
+        }
+
+        std::unique_ptr<PictureAlbumCollection> childCollection(new PictureAlbumCollection(childPtrs));
+        std::unique_ptr<PictureCollection> pictureCollection(new PictureCollection(picturePtrs));
+        raw->SetChildAlbumsAndPictures(childCollection.get(), pictureCollection.get());
+        ownedPictureAlbumChildCollections_.push_back(std::move(childCollection));
+        ownedPictureAlbumPictureCollections_.push_back(std::move(pictureCollection));
+
+        pictureAlbumByPath_[nodePath] = raw;
+        return raw;
     }
 
     void MediaLibrary::Dispose()
     {
-        // TODO: implement media library catalog integration
-        throw std::runtime_error("not implemented");
+        isDisposed_ = true;
     }
 
     AlbumCollection* MediaLibrary::getAlbumsProperty() const
     {
-        // TODO: implement media library catalog integration
-        throw std::runtime_error("not implemented");
+        return albumsCollection_.get();
     }
 
     ArtistCollection* MediaLibrary::getArtistsProperty() const
     {
-        // TODO: implement media library catalog integration
-        throw std::runtime_error("not implemented");
+        return artistsCollection_.get();
     }
 
     GenreCollection* MediaLibrary::getGenresProperty() const
     {
-        // TODO: implement media library catalog integration
-        throw std::runtime_error("not implemented");
+        return genresCollection_.get();
     }
 
     bool MediaLibrary::getIsDisposedProperty() const
     {
-        // TODO: implement media library catalog integration
-        throw std::runtime_error("not implemented");
+        return isDisposed_;
     }
 
     MediaSource* MediaLibrary::getMediaSourceProperty() const
     {
-        // TODO: implement media library catalog integration
-        throw std::runtime_error("not implemented");
+        return mediaSource_.get();
     }
 
     PictureCollection* MediaLibrary::getPicturesProperty() const
     {
-        // TODO: implement media library catalog integration
-        throw std::runtime_error("not implemented");
+        return picturesCollection_.get();
     }
 
     PlaylistCollection* MediaLibrary::getPlaylistsProperty() const
     {
-        // TODO: implement media library catalog integration
-        throw std::runtime_error("not implemented");
+        return playlistsCollection_.get();
     }
 
     PictureAlbum* MediaLibrary::getRootPictureAlbumProperty() const
     {
-        // TODO: implement media library catalog integration
-        throw std::runtime_error("not implemented");
+        return rootPictureAlbum_;
     }
 
     PictureCollection* MediaLibrary::getSavedPicturesProperty() const
     {
-        // TODO: implement media library catalog integration
-        throw std::runtime_error("not implemented");
+        return savedPicturesCollection_.get();
     }
 
     SongCollection* MediaLibrary::getSongsProperty() const
     {
-        // TODO: implement media library catalog integration
-        throw std::runtime_error("not implemented");
+        return songsCollection_.get();
     }
 
     Picture* MediaLibrary::GetPictureFromToken(std::string token)
     {
-        // TODO: implement media library catalog integration
-        throw std::runtime_error("not implemented");
+        // No real OS media-library token system exists to reference -- a Picture's own resolved
+        // file path (Picture::getTokenEXT()) is used as its token, a simple, real, stable
+        // identifier (plan_media.md MEDIA-62; no FNA logic to port here, see plan §0).
+        for (auto& p : ownedPictures_)
+        {
+            if (p->getTokenEXT() == token)
+            {
+                return p.get();
+            }
+        }
+        return nullptr;
     }
 
     Picture* MediaLibrary::SavePicture(std::string name, const std::vector<uint8_t>& imageBuffer)
     {
-        // TODO: implement media library catalog integration
-        throw std::runtime_error("not implemented");
+        std::string savedPath = CNA::Internal::Media::SavedPictureStore::SavePicture(
+            pictureRoot_, name, imageBuffer);
+        if (savedPath.empty())
+        {
+            throw System::IO::IOException("Failed to save picture '" + name + "'.");
+        }
+
+        CNA::Internal::Graphics::ImageData img;
+        try
+        {
+            img = CNA::Internal::Graphics::ImageLoader::Load(savedPath);
+        }
+        catch (const std::exception&)
+        {
+            img.width = 0;
+            img.height = 0;
+        }
+
+        auto now = std::chrono::system_clock::now();
+        PictureAlbum* parentAlbum = savedPicturesAlbum_ != nullptr ? savedPicturesAlbum_ : rootPictureAlbum_;
+        std::unique_ptr<Picture> pic(new Picture(name, parentAlbum, img.width, img.height, now, savedPath));
+        Picture* raw = pic.get();
+        ownedPictures_.push_back(std::move(pic));
+
+        // Grow every collection this new picture is genuinely a member of. MediaLibrary is a
+        // friend of PictureCollection, so base_ (the underlying MediaCollectionBase<Picture>) is
+        // directly reachable here for the runtime append the read-only public API doesn't expose.
+        picturesCollection_->base_.Add(raw);
+        savedPicturesCollection_->base_.Add(raw);
+        if (parentAlbum != nullptr && parentAlbum->getPicturesProperty() != nullptr)
+        {
+            parentAlbum->getPicturesProperty()->base_.Add(raw);
+        }
+
+        return raw;
+    }
+
+    Picture* MediaLibrary::SavePicture(std::string name, System::IO::Stream* source)
+    {
+        if (source == nullptr)
+        {
+            throw System::ArgumentNullException("source");
+        }
+        std::vector<uint8_t> buffer(static_cast<std::size_t>(source->getLengthProperty()));
+        if (!buffer.empty())
+        {
+            source->Read(buffer.data(), 0, static_cast<SharpRuntime::intcs>(buffer.size()));
+        }
+        return SavePicture(std::move(name), buffer);
     }
 
     const std::string& MediaLibrary::GetTypeName() const
