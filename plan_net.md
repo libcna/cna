@@ -1234,6 +1234,14 @@ case more exist).
   in this window. Added `--show-help`/`--screenshot` flags to `Main.cpp` (previously had no CLI
   parsing at all). Verified via `--show-help --screenshot` (overlay legible, fits panel, console
   output unaffected) and a default `--screenshot`-only run (plain background, no regression).
+- [x] **Task 8.5 (demo_avatar_dual_compare)** — Same pattern, built from scratch (this demo had
+  no prior `SpriteBatch`/font plumbing at all - a pure dual-3D demo). Help text documents the 1/2
+  active-avatar select and Space-cycle-clip controls, plus a one-line summary of what the demo
+  proves (per-`AvatarRenderer`-instance appearance isolation). F1 uses its own edge-triggered bool
+  rather than the existing `previousKeys_` (matching the convention already established in
+  `TintStudioDemo`, which also has both). Verified via `--show-help --smoke 30 --screenshot`
+  (overlay legible, fits panel, both avatars still visible/distinctly tinted below it) and a
+  default `--smoke`-only run (overlay hidden, both avatars render normally - no regression).
 - [ ] **Task 8.6** — One commit per demo is likely excessive for 8 near-identical additions built
   on the same Task 8.1 helper — since the user's "one task = one commit" rule maps to *this
   plan's tasks*, treat Task 8.1+8.2+8.3 (the shared helper + its first real usage in
