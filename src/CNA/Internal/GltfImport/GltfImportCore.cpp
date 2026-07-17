@@ -740,6 +740,27 @@ namespace CNA::Internal::GltfImport
         out.occlusionImage = (!out.colored) ? FindOcclusionImage(prim) : nullptr;
         out.useDualTexture = (!out.usePbr) && (!out.skinned) &&
                               (out.occlusionImage != nullptr) && (out.baseColorImage != nullptr);
+
+        // Each of a glTF material's texture references (baseColorTexture, normalTexture,
+        // metallicRoughnessTexture, emissiveTexture, occlusionTexture) can independently select
+        // its own TEXCOORD set via its own "texcoord" index -- but PbrEffect/SkinnedPbrEffect only
+        // sample from ONE shared UV channel (the one baked into TextureCoordinate, itself always
+        // taken from the base-color texture's own texcoord, `texcoordIndex` above). Detect (but do
+        // not attempt to fix -- see MeshOut::pbrUv2Mismatch's own doc comment) any present map
+        // that disagrees, so the caller can at least warn instead of silently mis-rendering it.
+        if (out.usePbr && prim.material)
+        {
+            const auto usesDifferentTexcoord = [&](const cgltf_texture_view& view)
+            {
+                return view.texture != nullptr && view.texcoord != texcoordIndex;
+            };
+            out.pbrUv2Mismatch =
+                usesDifferentTexcoord(prim.material->normal_texture) ||
+                usesDifferentTexcoord(prim.material->emissive_texture) ||
+                usesDifferentTexcoord(prim.material->occlusion_texture) ||
+                (prim.material->has_pbr_metallic_roughness &&
+                 usesDifferentTexcoord(prim.material->pbr_metallic_roughness.metallic_roughness_texture));
+        }
         // Unskinned colored meshes reuse the real XNA VertexPositionColorTexture layout (stride
         // 24, Position+Color+TextureCoordinate, no Normal) -- already fully supported end-to-end
         // by ModelTypeReader and every graphics backend's existing VertexColorEnabled shader path.

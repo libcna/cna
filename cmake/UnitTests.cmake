@@ -79,6 +79,14 @@ if(CNA_BUILD_TESTS)
             SDL3::SDL3
     )
 
+    # GltfImportCoreTests.cpp includes CNA/Internal/GltfImport/GltfImportCore.hpp directly (to call
+    # ExtractMesh() without spawning the CLI tool), which itself includes cgltf.h -- CNA's own
+    # target_include_directories for that path is PRIVATE (see cmake/CnaLibrary.cmake), so it does
+    # not propagate to CnaTests via target_link_libraries and must be added here too.
+    target_include_directories(CnaTests PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/third_party/cgltf
+    )
+
     if(CNA_ENABLE_NET)
         target_link_libraries(CnaTests PRIVATE CNA_GamerServices CNA_Net)
     endif()

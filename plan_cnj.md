@@ -1,14 +1,19 @@
 # `.cnj` content format — implementation plan for CNA
 
-> **Status update (2026-07-17): Phase 14A also closed.** Phase 14 (`CNB-75`–) is a follow-up to
-> Phase 13, opened by the project owner's "vse udelej prosim" (please do everything) after a
-> post-Phase-13 gap survey. 14A (`CNB-75`–`CNB-79`, PBR + skinning combo) is done: a new
+> **Status update (2026-07-17): Phase 14A and 14B also closed.** Phase 14 (`CNB-75`–) is a
+> follow-up to Phase 13, opened by the project owner's "vse udelej prosim" (please do everything)
+> after a post-Phase-13 gap survey. 14A (`CNB-75`–`CNB-79`, PBR + skinning combo) is done: a new
 > `SkinnedPbrEffect` (NOXNA, combines `PbrEffect`'s BRDF with `SkinnedEffect`'s bone API) and a new
 > stride-68 `VertexPositionNormalTangentTextureSkinned` vertex format, with a real EasyGL shader,
 > full `gltf_to_cnj`/`ContentManager` wiring on both the offline and runtime glTF paths, and tests
 > (including a golden-image test that reproduces `PbrEffect`'s own golden PNGs pixel-for-pixel
-> under an identity bind pose). See Phase 14's own section for full detail; 14B (the other 9 items
-> from the same gap survey) is queued next.
+> under an identity bind pose). 14B (`CNB-80`–`CNB-81`, per-map UV set selection) closed at a
+> deliberately scoped-down "detect and warn" level rather than full multi-UV-channel rendering
+> support (a similarly large undertaking to 14A itself, for a rare real-world authoring pattern —
+> see 14B's own section for the reasoning); a real fixture-authoring bug (wrong JSON key casing,
+> `"texcoord"` instead of the glTF spec's `"texCoord"`) was caught and fixed while writing its
+> tests. See Phase 14's own section for full detail; 14C (the remaining items from the same gap
+> survey) is queued next.
 >
 > **Status update (2026-07-17): Phases 10, 11, and 12 also closed.** Phase 10 (`CNB-40`–`CNB-42`,
 > standalone `AnimationClipTypeReader`); Phase 11 (`CNB-43`–`CNB-49`, `Texture3D`/`Curve`/5 stock
@@ -479,15 +484,34 @@ onto `.cnj`, `RegisterCnjLoader<T>`, and Phase 9's hardening of those mechanisms
 | CNB-78 | Extend `GltfImportCore`/`gltf_to_cnj`/`ContentManager` to select `SkinnedPbrEffect` + stride 68 | ✅ | `GltfImportCore::ExtractMesh`: `usePbr` eligibility relaxed from `!skinned && !colored && (normalImage\|\|metallicRoughnessImage)` to `!colored && (normalImage\|\|metallicRoughnessImage)` (the `!skinned` exclusion dropped); `occlusionImage` extraction relaxed to also cover skinned meshes (needed for `SkinnedPbrEffect::OcclusionMap`), while `useDualTexture` stays gated to unskinned primitives (`SkinnedEffect`/`SkinnedPbrEffect` have no `Texture2` slot); stride selection extended to `skinned ? (colored?56:(usePbr?68:52)) : ...`; the vertex-write loop's tangent computation and `usePbr` branch both extended to append the skinning suffix (shared `appendSkinning()` lambda, deduplicating the logic already used by the plain stride-52/56 branch) when `skinned` is also true. `gltf_to_cnj.cpp`: `ConvertGroup`'s effect selection gains `(usePbr && skinned) ? "SkinnedPbrEffect" : ...` ahead of the plain `usePbr`/`skinned` checks; PBR JSON-field emission (`normalMap`/`metallicRoughnessMap`/`emissiveMap`/`occlusionMap`/factors) extended to also fire for `"SkinnedPbrEffect"` entries. `ContentManager.cpp`: `BuildVertexBufferFromRawBytes` gains a stride-68 raw-upload case (same vtable-inflation reasoning as strides 48/52/56); both `ReadGltfModel()` and `ModelTypeReader::Read()`'s `.cnj` JSON path construct `SkinnedPbrEffect` when `usePbr && skinned` (checked before the plain `skinned`/`usePbr` branches) and wire all 4 maps + factors + base texture identically to the existing `PbrEffect` wiring. |
 | CNB-79 | Tests + docs | ✅ | Engine-side: `SkinnedPbrEffectTests.cpp` (mirrors `PbrEffectTests.cpp`'s defaults/round-trip/`Clone`/`GetTypeName`/`FillGpuDrawParams` coverage, plus `SkinnedEffectTests.cpp`'s own `MaxBones`/`WeightsPerVertex`/`SetBoneTransforms`/`GetBoneTransforms` coverage) — caught a **real bug** during authoring: the constructor didn't default-initialize the 72 bone slots to identity (unlike `SkinnedEffect`'s own constructor), so `GetBoneTransforms(MaxBones)` returned an empty vector until `SetBoneTransforms` was called explicitly; fixed by adding the same `SetBoneTransforms(identityBones)` call `SkinnedEffect`'s own constructor makes. `VertexPositionNormalTangentTextureSkinnedTests.cpp` (declaration/ctor/equality/`ToString` coverage, mirrors `VertexPositionNormalTextureSkinnedTests.cpp`). New EasyGL golden test `examples/easygl_skinnedpbreffect_golden_test.cpp` (ctest `EasyGL_SkinnedPbrEffect_Golden`) reuses `easygl_pbreffect_golden_test.cpp`'s exact 4-quad scene through `SkinnedPbrEffect` with a single identity bone (weight 1.0 on bone 0) — an identity bind pose is a mathematical no-op for the skin transform, so the golden oracle is literally the same already-verified `PbrEffect` golden PNGs/pixel values, which the new shader reproduced pixel-for-pixel on the first run, proving the bone-palette multiply in `EnsurePbrSkinnedProgram()`'s vertex shader is wired correctly. Tool-side: `GltfToCnjToolTest.SerializesAndReloadsSkinnedPbrMaterialThroughTheOfflineCnjPath` (CLI → `.cnj` → `ContentManager` round-trip, verifies stride-68 byte layout including tangent+weight fields) and `RuntimeGltfModelTest.LoadsSkinnedPbrMaterialDirectlyFromGltf` (direct glTF loading, no sidecars) — both new fixtures are single-bone-skinned triangles with base-color+normal maps. Full-suite regression after this task: **4824 tests, 0 failures** (CnaTests). |
 
-### 14B — Remaining "vse udelej prosim" items ⬜ NOT STARTED
+### 14B — Per-map UV set selection for PBR textures ✅ CLOSED (diagnostic scope) 2026-07-17
 
-> Task numbering reserved (`CNB-80`+) for whichever item is picked up next: per-map UV set
-> selection for PBR textures, morph target `.cnj`/CLI serialization, CUBICSPLINE morph-weight
-> animation interpolation, `DualTextureEffect` occlusion brightness fix (needs an image codec),
-> Draco mesh compression, full MikkTSpace tangent generation, newer glTF extensions
-> (`KHR_texture_transform`/`KHR_lights_punctual`/`KHR_materials_emissive_strength`), and PBR/
-> skinned-vertex-color shader support on the other 7+ graphics backends (CNB-61/13C's own
-> deliberately-deferred scope, now being taken up).
+> `PbrEffect`/`SkinnedPbrEffect` sample every one of their 4 maps from a single shared UV channel
+> (whichever `TEXCOORD_n` the base-color texture itself references) — but glTF lets each texture
+> reference on a material (`normalTexture`/`metallicRoughnessTexture`/`emissiveTexture`/
+> `occlusionTexture`) independently select its own `texCoord` index. A genuinely correct fix (a
+> second UV channel baked into a new vertex format, plus a matching shader variant on every
+> PBR-capable backend) is a similarly-sized undertaking to 14A itself, for what is in practice a
+> rare glTF authoring pattern (most exporters put every PBR map on `TEXCOORD_0`). Per CLAUDE.md's
+> own "don't design for hypothetical future requirements" guidance, scoped this down to a real,
+> bounded, zero-risk improvement instead: **detect and honestly diagnose** the mismatch rather than
+> silently mis-rendering it. True multi-UV-channel rendering support remains explicitly tracked,
+> separate future work — see 14C below.
+
+| # | Task | Status | Notes |
+|---|---|---|---|
+| CNB-80 | Detect per-map UV-set divergence in `GltfImportCore::ExtractMesh` | ✅ | New `MeshOut::pbrUv2Mismatch` (bool): true when `usePbr` is true and any present map's own `cgltf_texture_view::texcoord` (read directly off `material->normal_texture`/`emissive_texture`/`occlusion_texture`/`pbr_metallic_roughness.metallic_roughness_texture`) differs from the base-color texture's own `texcoordIndex` (the one actually baked into the vertex buffer's `TextureCoordinate` slot). Zero behavior change to rendering or to the common (non-divergent) case — purely additive detection. |
+| CNB-81 | Surface the divergence as a warning (offline CLI path); tests | ✅ | `gltf_to_cnj.cpp`'s `ConvertGroup` pushes a warning (mirrors the pre-existing morph-target-not-serialized warning's exact pattern) when `meshOut.pbrUv2Mismatch` is true, printed to stdout at the end of a run alongside any other warnings. New direct-unit-test file `tests/CNA/Internal/GltfImport/GltfImportCoreTests.cpp` (`GltfImportCoreTest.ExtractMeshDetectsMismatchedPbrMapUvSets` / `...DoesNotFlagMatchedPbrMapUvSets`) calls `ExtractMesh()` in-process against two small fixtures (base color on `TEXCOORD_0` + normal map on `TEXCOORD_1` vs. both on `TEXCOORD_0`) — the first test genuinely caught a fixture-authoring bug during development (used the invalid lowercase JSON key `"texcoord"` instead of the glTF spec's actual `"texCoord"`, which `cgltf` silently ignores and defaults to 0 -- both fixtures looked "matched" until the key casing was fixed). `CnaTests` needed a new `target_include_directories` entry for `third_party/cgltf` (previously only `PRIVATE` on the `CNA` target itself, not propagated to the separate `CnaTests` target) to include `GltfImportCore.hpp` directly. Full-suite regression: **4826 tests, 0 failures.** |
+
+### 14C — Remaining "vse udelej prosim" items ⬜ NOT STARTED
+
+> Task numbering reserved (`CNB-82`+) for whichever item is picked up next: true multi-UV-channel
+> rendering support for PBR maps (14B's own explicitly-deferred full fix), morph target `.cnj`/CLI
+> serialization, CUBICSPLINE morph-weight animation interpolation, `DualTextureEffect` occlusion
+> brightness fix (needs an image codec), Draco mesh compression, full MikkTSpace tangent
+> generation, newer glTF extensions (`KHR_texture_transform`/`KHR_lights_punctual`/
+> `KHR_materials_emissive_strength`), and PBR/skinned-vertex-color shader support on the other 7+
+> graphics backends (CNB-61/13C's own deliberately-deferred scope, now being taken up).
 
 ## Relationship to other plan files
 

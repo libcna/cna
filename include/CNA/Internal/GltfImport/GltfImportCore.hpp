@@ -146,6 +146,18 @@ namespace CNA::Internal::GltfImport
         float roughnessFactor = 1.0f;
         /** @brief The material's emissive factor (glTF default black/zero). */
         Microsoft::Xna::Framework::Vector3 emissiveFactor;
+        /**
+         * @brief True when `usePbr` is true and at least one present PBR map (normal,
+         * metallic-roughness, emissive, or occlusion) references a different glTF TEXCOORD set
+         * than the one actually baked into this primitive's vertex buffer (always the base-color
+         * texture's own TEXCOORD set, or TEXCOORD_0 if there is no base-color texture) -- CNA's
+         * PbrEffect/SkinnedPbrEffect currently sample every map from a single shared UV channel,
+         * so a mismatched map will be sampled with the wrong UV data. `ExtractMesh`'s caller
+         * (`gltf_to_cnj.cpp`) surfaces this as a warning rather than silently mis-rendering it;
+         * true multi-UV-channel support is tracked as separate future work (plan_cnj.md Phase
+         * 14B), not implemented here.
+         */
+        bool pbrUv2Mismatch = false;
     };
 
     /** @brief A group of glTF mesh instances sharing the same skin (or no skin at all). */
