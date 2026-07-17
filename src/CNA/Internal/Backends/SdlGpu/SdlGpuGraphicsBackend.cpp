@@ -340,6 +340,17 @@ namespace CNA::Internal::Backends::SdlGpu
             out[52] = p.specularColor[0]; out[53] = p.specularColor[1]; out[54] = p.specularColor[2]; out[55] = p.specularPower;
         }
 
+        // pbr3d.frag.glsl's tertiary PbrParams block: MetallicFactor, RoughnessFactor, 2 floats
+        // of padding (not consumed by anything, kept purely for std140 vec4 alignment symmetry
+        // with every other uniform block in this backend).
+        void FillPbrParams(std::array<float, 4>& out, const GpuDrawParams& p)
+        {
+            out[0] = p.pbrMetallicFactor;
+            out[1] = p.pbrRoughnessFactor;
+            out[2] = 0.0f;
+            out[3] = 0.0f;
+        }
+
         // Mirrors VulkanGraphicsBackend::FillAlphaTestPushConst()/WebGPUGraphicsBackend::
         // FillAlphaTestUniforms() field-for-field (minus fog): [20..23]=alphaTest params
         // (refVal, tolerance, passWeight, failWeight), [24]=vertexColorEnabled -- the
@@ -517,6 +528,7 @@ namespace CNA::Internal::Backends::SdlGpu
         CreateDualTextureResources();
         CreateEnvMapResources();
         CreateSkinnedResources();
+        CreatePbrResources();
 
         int w = 0;
         int h = 0;
@@ -534,6 +546,7 @@ namespace CNA::Internal::Backends::SdlGpu
     {
         IGraphicsBackend::UnregisterForWindow(window_);
         ReleaseSceneDrawBuffers();
+        DestroyPbrResources();
         DestroySkinnedResources();
         DestroyEnvMapResources();
         DestroyDualTextureResources();
@@ -2562,6 +2575,40 @@ namespace CNA::Internal::Backends::SdlGpu
         skinnedVertexShader_ = SDL_CreateGPUShader(device_, &vsInfo);
         if (skinnedVertexShader_ == nullptr)
             throw std::runtime_error(std::string("CNA SDL_GPU: failed to create skinned3d vertex shader: ") + SDL_GetError());
+
+        SDL_GPUShaderCreateInfo colVsInfo{};
+        colVsInfo.code = reinterpret_cast<const Uint8*>(Shaders::kSkinnedColored3dVertSpv);
+        colVsInfo.code_size = Shaders::kSkinnedColored3dVertSpv_size;
+        colVsInfo.entrypoint = "main";
+        colVsInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
+        colVsInfo.stage = SDL_GPU_SHADERSTAGE_VERTEX;
+        colVsInfo.num_uniform_buffers = 2;  // PC, SkinnedLightParams
+        colVsInfo.num_storage_buffers = 1;  // BoneBlock
+        skinnedColoredVertexShader_ = SDL_CreateGPUShader(device_, &colVsInfo);
+        if (skinnedColoredVertexShader_ == nullptr)
+        {
+            SDL_ReleaseGPUShader(device_, skinnedVertexShader_);
+            skinnedVertexShader_ = nullptr;
+            throw std::runtime_error(std::string("CNA SDL_GPU: failed to create skinned_colored3d vertex shader: ") + SDL_GetError());
+        }
+
+        SDL_GPUShaderCreateInfo colFsInfo{};
+        colFsInfo.code = reinterpret_cast<const Uint8*>(Shaders::kSkinnedColored3dFragSpv);
+        colFsInfo.code_size = Shaders::kSkinnedColored3dFragSpv_size;
+        colFsInfo.entrypoint = "main";
+        colFsInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
+        colFsInfo.stage = SDL_GPU_SHADERSTAGE_FRAGMENT;
+        colFsInfo.num_samplers = 1;
+        colFsInfo.num_uniform_buffers = 2;
+        skinnedColoredFragmentShader_ = SDL_CreateGPUShader(device_, &colFsInfo);
+        if (skinnedColoredFragmentShader_ == nullptr)
+        {
+            SDL_ReleaseGPUShader(device_, skinnedColoredVertexShader_);
+            skinnedColoredVertexShader_ = nullptr;
+            SDL_ReleaseGPUShader(device_, skinnedVertexShader_);
+            skinnedVertexShader_ = nullptr;
+            throw std::runtime_error(std::string("CNA SDL_GPU: failed to create skinned_colored3d fragment shader: ") + SDL_GetError());
+        }
     }
 
     void SdlGpuGraphicsBackend::DestroySkinnedResources()
@@ -2569,43 +2616,55 @@ namespace CNA::Internal::Backends::SdlGpu
         for (auto& [key, pipeline] : skinnedPipelines_)
             if (pipeline != nullptr) SDL_ReleaseGPUGraphicsPipeline(device_, pipeline);
         skinnedPipelines_.clear();
+        for (auto& [key, pipeline] : skinnedColoredPipelines_)
+            if (pipeline != nullptr) SDL_ReleaseGPUGraphicsPipeline(device_, pipeline);
+        skinnedColoredPipelines_.clear();
+        if (skinnedColoredFragmentShader_ != nullptr) { SDL_ReleaseGPUShader(device_, skinnedColoredFragmentShader_); skinnedColoredFragmentShader_ = nullptr; }
+        if (skinnedColoredVertexShader_ != nullptr) { SDL_ReleaseGPUShader(device_, skinnedColoredVertexShader_); skinnedColoredVertexShader_ = nullptr; }
         if (skinnedVertexShader_ != nullptr) { SDL_ReleaseGPUShader(device_, skinnedVertexShader_); skinnedVertexShader_ = nullptr; }
     }
 
     SDL_GPUGraphicsPipeline* SdlGpuGraphicsBackend::GetOrCreatePipelineSkinned3D(
-        SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
+        bool hasVertexColor, SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
         SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount, const RenderStateSnapshot& renderState)
     {
         const std::size_t key = PipelineCacheKey(topology, depthTest, depthWrite, depthFunc, colorFormat, sampleCount, renderState);
-        const auto it = skinnedPipelines_.find(key);
-        if (it != skinnedPipelines_.end())
+        auto& cache = hasVertexColor ? skinnedColoredPipelines_ : skinnedPipelines_;
+        const auto it = cache.find(key);
+        if (it != cache.end())
             return it->second;
 
         // Stride 52: VertexPositionNormalTextureSkinned -- pos(12) + normal(12) + uv(8) +
         // blendWeight(16) + blendIndices(4, UBYTE4, non-normalized -> uvec4 in the shader).
+        // Stride 56 appends a normalized ubyte4 Color at offset 52 (location 5), matching
+        // EasyGLGraphicsBackend::ApplyLayout's stride==56 case exactly.
         SDL_GPUVertexBufferDescription vbDesc{};
         vbDesc.slot = 0;
-        vbDesc.pitch = 52;
+        vbDesc.pitch = hasVertexColor ? 56 : 52;
         vbDesc.input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
 
-        SDL_GPUVertexAttribute attrs[5]{};
+        SDL_GPUVertexAttribute attrs[6]{};
         attrs[0].location = 0; attrs[0].buffer_slot = 0; attrs[0].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3; attrs[0].offset = 0;
         attrs[1].location = 1; attrs[1].buffer_slot = 0; attrs[1].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3; attrs[1].offset = 12;
         attrs[2].location = 2; attrs[2].buffer_slot = 0; attrs[2].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2; attrs[2].offset = 24;
         attrs[3].location = 3; attrs[3].buffer_slot = 0; attrs[3].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4; attrs[3].offset = 32;
         attrs[4].location = 4; attrs[4].buffer_slot = 0; attrs[4].format = SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4; attrs[4].offset = 48;
+        attrs[5].location = 5; attrs[5].buffer_slot = 0; attrs[5].format = SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4_NORM; attrs[5].offset = 52;
 
         SDL_GPUColorTargetDescription colorTarget{};
         colorTarget.format = colorFormat;
         FillBlendState(colorTarget.blend_state, renderState);
 
         SDL_GPUGraphicsPipelineCreateInfo pipelineInfo{};
-        pipelineInfo.vertex_shader = skinnedVertexShader_;
-        pipelineInfo.fragment_shader = litTexturedFragmentShader_;  // reused unchanged, see SkinnedDrawCommand's doc comment
+        pipelineInfo.vertex_shader = hasVertexColor ? skinnedColoredVertexShader_ : skinnedVertexShader_;
+        // Stride 52 reuses litTexturedFragmentShader_ unchanged; stride 56 needs its own
+        // fragment shader to multiply vertex color into the post-specular output (see
+        // SkinnedDrawCommand's own doc comment).
+        pipelineInfo.fragment_shader = hasVertexColor ? skinnedColoredFragmentShader_ : litTexturedFragmentShader_;
         pipelineInfo.vertex_input_state.vertex_buffer_descriptions = &vbDesc;
         pipelineInfo.vertex_input_state.num_vertex_buffers = 1;
         pipelineInfo.vertex_input_state.vertex_attributes = attrs;
-        pipelineInfo.vertex_input_state.num_vertex_attributes = 5;
+        pipelineInfo.vertex_input_state.num_vertex_attributes = hasVertexColor ? 6 : 5;
         pipelineInfo.primitive_type = topology;
         FillRasterizerState(pipelineInfo.rasterizer_state, renderState);
         pipelineInfo.multisample_state.sample_count = sampleCount;
@@ -2618,7 +2677,146 @@ namespace CNA::Internal::Backends::SdlGpu
         SDL_GPUGraphicsPipeline* pipeline = SDL_CreateGPUGraphicsPipeline(device_, &pipelineInfo);
         if (pipeline == nullptr)
             throw std::runtime_error(std::string("CNA SDL_GPU: failed to create skinned3d pipeline: ") + SDL_GetError());
-        skinnedPipelines_[key] = pipeline;
+        cache[key] = pipeline;
+        return pipeline;
+    }
+
+    void SdlGpuGraphicsBackend::EnsureDefaultPbrTextures()
+    {
+        if (defaultWhiteTexture_ == nullptr)
+        {
+            ImageData white{1, 1, {255, 255, 255, 255}, 1};
+            defaultWhiteTexture_ = std::make_unique<SdlGpuTextureBackend>(*this, white);
+        }
+        if (defaultFlatNormalTexture_ == nullptr)
+        {
+            // (128,128,255,255) decodes (via the shader's rgb*2-1) to a tangent-space normal of
+            // ~(0,0,1) -- the unperturbed geometric normal -- mirrors EasyGLGraphicsBackend::
+            // EnsureDefaultFlatNormalTexture()'s identical encoding exactly.
+            ImageData flatNormal{1, 1, {128, 128, 255, 255}, 1};
+            defaultFlatNormalTexture_ = std::make_unique<SdlGpuTextureBackend>(*this, flatNormal);
+        }
+    }
+
+    void SdlGpuGraphicsBackend::CreatePbrResources()
+    {
+        if (pbrVertexShader_ != nullptr)
+            return;
+
+        SDL_GPUShaderCreateInfo vsInfo{};
+        vsInfo.code = reinterpret_cast<const Uint8*>(Shaders::kPbr3dVertSpv);
+        vsInfo.code_size = Shaders::kPbr3dVertSpv_size;
+        vsInfo.entrypoint = "main";
+        vsInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
+        vsInfo.stage = SDL_GPU_SHADERSTAGE_VERTEX;
+        vsInfo.num_uniform_buffers = 2;  // PC, LitLightParams
+        pbrVertexShader_ = SDL_CreateGPUShader(device_, &vsInfo);
+        if (pbrVertexShader_ == nullptr)
+            throw std::runtime_error(std::string("CNA SDL_GPU: failed to create pbr3d vertex shader: ") + SDL_GetError());
+
+        SDL_GPUShaderCreateInfo skinnedVsInfo{};
+        skinnedVsInfo.code = reinterpret_cast<const Uint8*>(Shaders::kPbrSkinned3dVertSpv);
+        skinnedVsInfo.code_size = Shaders::kPbrSkinned3dVertSpv_size;
+        skinnedVsInfo.entrypoint = "main";
+        skinnedVsInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
+        skinnedVsInfo.stage = SDL_GPU_SHADERSTAGE_VERTEX;
+        skinnedVsInfo.num_uniform_buffers = 2;  // PC, SkinnedLightParams
+        skinnedVsInfo.num_storage_buffers = 1;  // BoneBlock
+        pbrSkinnedVertexShader_ = SDL_CreateGPUShader(device_, &skinnedVsInfo);
+        if (pbrSkinnedVertexShader_ == nullptr)
+        {
+            SDL_ReleaseGPUShader(device_, pbrVertexShader_);
+            pbrVertexShader_ = nullptr;
+            throw std::runtime_error(std::string("CNA SDL_GPU: failed to create pbr_skinned3d vertex shader: ") + SDL_GetError());
+        }
+
+        SDL_GPUShaderCreateInfo fsInfo{};
+        fsInfo.code = reinterpret_cast<const Uint8*>(Shaders::kPbr3dFragSpv);
+        fsInfo.code_size = Shaders::kPbr3dFragSpv_size;
+        fsInfo.entrypoint = "main";
+        fsInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
+        fsInfo.stage = SDL_GPU_SHADERSTAGE_FRAGMENT;
+        fsInfo.num_samplers = 5;  // base color, normal, metallic-roughness, emissive, occlusion
+        fsInfo.num_uniform_buffers = 3;  // PC, LitLightParams, PbrParams
+        pbrFragmentShader_ = SDL_CreateGPUShader(device_, &fsInfo);
+        if (pbrFragmentShader_ == nullptr)
+        {
+            SDL_ReleaseGPUShader(device_, pbrSkinnedVertexShader_);
+            pbrSkinnedVertexShader_ = nullptr;
+            SDL_ReleaseGPUShader(device_, pbrVertexShader_);
+            pbrVertexShader_ = nullptr;
+            throw std::runtime_error(std::string("CNA SDL_GPU: failed to create pbr3d fragment shader: ") + SDL_GetError());
+        }
+    }
+
+    void SdlGpuGraphicsBackend::DestroyPbrResources()
+    {
+        for (auto& [key, pipeline] : pbrPipelines_)
+            if (pipeline != nullptr) SDL_ReleaseGPUGraphicsPipeline(device_, pipeline);
+        pbrPipelines_.clear();
+        for (auto& [key, pipeline] : pbrSkinnedPipelines_)
+            if (pipeline != nullptr) SDL_ReleaseGPUGraphicsPipeline(device_, pipeline);
+        pbrSkinnedPipelines_.clear();
+        if (pbrFragmentShader_ != nullptr) { SDL_ReleaseGPUShader(device_, pbrFragmentShader_); pbrFragmentShader_ = nullptr; }
+        if (pbrSkinnedVertexShader_ != nullptr) { SDL_ReleaseGPUShader(device_, pbrSkinnedVertexShader_); pbrSkinnedVertexShader_ = nullptr; }
+        if (pbrVertexShader_ != nullptr) { SDL_ReleaseGPUShader(device_, pbrVertexShader_); pbrVertexShader_ = nullptr; }
+        // Destroyed here (not left to ~SdlGpuGraphicsBackend()'s generic pendingTextureReleases_
+        // sweep) since these are owned SdlGpuTextureBackend instances, not raw handles.
+        defaultFlatNormalTexture_.reset();
+        defaultWhiteTexture_.reset();
+    }
+
+    SDL_GPUGraphicsPipeline* SdlGpuGraphicsBackend::GetOrCreatePipelinePbr3D(
+        bool skinned, SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
+        SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount, const RenderStateSnapshot& renderState)
+    {
+        const std::size_t key = PipelineCacheKey(topology, depthTest, depthWrite, depthFunc, colorFormat, sampleCount, renderState);
+        auto& cache = skinned ? pbrSkinnedPipelines_ : pbrPipelines_;
+        const auto it = cache.find(key);
+        if (it != cache.end())
+            return it->second;
+
+        SDL_GPUVertexBufferDescription vbDesc{};
+        vbDesc.slot = 0;
+        vbDesc.pitch = skinned ? 68 : 48;
+        vbDesc.input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
+
+        // Stride 48 (VertexPositionNormalTangentTexture): pos(12) + normal(12) + tangent(16) +
+        // uv(8). Stride 68 (VertexPositionNormalTangentTextureSkinned) appends blendWeight(16) +
+        // blendIndices(4) after the same 48-byte prefix, matching EasyGLGraphicsBackend::
+        // ApplyLayout's stride==48/68 cases exactly.
+        SDL_GPUVertexAttribute attrs[6]{};
+        attrs[0].location = 0; attrs[0].buffer_slot = 0; attrs[0].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3; attrs[0].offset = 0;
+        attrs[1].location = 1; attrs[1].buffer_slot = 0; attrs[1].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3; attrs[1].offset = 12;
+        attrs[2].location = 2; attrs[2].buffer_slot = 0; attrs[2].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4; attrs[2].offset = 24;
+        attrs[3].location = 3; attrs[3].buffer_slot = 0; attrs[3].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2; attrs[3].offset = 40;
+        attrs[4].location = 4; attrs[4].buffer_slot = 0; attrs[4].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4; attrs[4].offset = 48;
+        attrs[5].location = 5; attrs[5].buffer_slot = 0; attrs[5].format = SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4; attrs[5].offset = 64;
+
+        SDL_GPUColorTargetDescription colorTarget{};
+        colorTarget.format = colorFormat;
+        FillBlendState(colorTarget.blend_state, renderState);
+
+        SDL_GPUGraphicsPipelineCreateInfo pipelineInfo{};
+        pipelineInfo.vertex_shader = skinned ? pbrSkinnedVertexShader_ : pbrVertexShader_;
+        pipelineInfo.fragment_shader = pbrFragmentShader_;  // shared unchanged by both variants
+        pipelineInfo.vertex_input_state.vertex_buffer_descriptions = &vbDesc;
+        pipelineInfo.vertex_input_state.num_vertex_buffers = 1;
+        pipelineInfo.vertex_input_state.vertex_attributes = attrs;
+        pipelineInfo.vertex_input_state.num_vertex_attributes = skinned ? 6 : 4;
+        pipelineInfo.primitive_type = topology;
+        FillRasterizerState(pipelineInfo.rasterizer_state, renderState);
+        pipelineInfo.multisample_state.sample_count = sampleCount;
+        FillDepthStencilState(pipelineInfo.depth_stencil_state, depthTest, depthWrite, depthFunc, renderState);
+        pipelineInfo.target_info.color_target_descriptions = &colorTarget;
+        pipelineInfo.target_info.num_color_targets = 1;
+        pipelineInfo.target_info.has_depth_stencil_target = (depthStencilFormat_ != SDL_GPU_TEXTUREFORMAT_INVALID);
+        pipelineInfo.target_info.depth_stencil_format = depthStencilFormat_;
+
+        SDL_GPUGraphicsPipeline* pipeline = SDL_CreateGPUGraphicsPipeline(device_, &pipelineInfo);
+        if (pipeline == nullptr)
+            throw std::runtime_error(std::string("CNA SDL_GPU: failed to create pbr3d pipeline: ") + SDL_GetError());
+        cache[key] = pipeline;
         return pipeline;
     }
 
@@ -2790,14 +2988,17 @@ namespace CNA::Internal::Backends::SdlGpu
                                                  PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
     {
         const auto& sdlGpuVb = static_cast<const SdlGpuVertexBufferBackend&>(vb);
-        if (sdlGpuVb.Stride() != 52)
+        const std::size_t stride = sdlGpuVb.Stride();
+        if (stride != 52 && stride != 56)
             throw std::invalid_argument("CNA SDL_GPU: skinned3d requires a stride-52 "
-                                        "(VertexPositionNormalTextureSkinned) vertex buffer");
+                                        "(VertexPositionNormalTextureSkinned) or stride-56 "
+                                        "(+ per-vertex Color) vertex buffer");
 
         SkinnedDrawCommand command;
+        command.hasVertexColor = (stride == 56);
         const int vertexStart = params.vertexStart;
         const auto& shadow = sdlGpuVb.ShadowData();
-        const std::size_t byteOffset = static_cast<std::size_t>(vertexStart) * 52u;
+        const std::size_t byteOffset = static_cast<std::size_t>(vertexStart) * stride;
         if (byteOffset <= shadow.size())
             command.vertexData.assign(shadow.begin() + static_cast<std::ptrdiff_t>(byteOffset), shadow.end());
         command.topology = ToTopology(primitive);
@@ -2831,6 +3032,76 @@ namespace CNA::Internal::Backends::SdlGpu
         command.target = CurrentDrawTarget();
         skinnedDrawCommands_.push_back(std::move(command));
         drawOrder_.push_back({DrawKind::Skinned, skinnedDrawCommands_.size() - 1});
+        framePending_ = true;
+    }
+
+    void SdlGpuGraphicsBackend::QueuePbrDraw(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
+                                             const Matrix& world, const Matrix& view, const Matrix& projection,
+                                             PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
+    {
+        const auto& sdlGpuVb = static_cast<const SdlGpuVertexBufferBackend&>(vb);
+        const std::size_t stride = sdlGpuVb.Stride();
+        const bool skinned = params.skinned;
+        const std::size_t expectedStride = skinned ? 68u : 48u;
+        if (stride != expectedStride)
+            throw std::invalid_argument(skinned
+                ? "CNA SDL_GPU: pbr_skinned3d requires a stride-68 "
+                  "(VertexPositionNormalTangentTextureSkinned) vertex buffer"
+                : "CNA SDL_GPU: pbr3d requires a stride-48 "
+                  "(VertexPositionNormalTangentTexture) vertex buffer");
+
+        EnsureDefaultPbrTextures();
+
+        PbrDrawCommand command;
+        command.skinned = skinned;
+        const int vertexStart = params.vertexStart;
+        const auto& shadow = sdlGpuVb.ShadowData();
+        const std::size_t byteOffset = static_cast<std::size_t>(vertexStart) * stride;
+        if (byteOffset <= shadow.size())
+            command.vertexData.assign(shadow.begin() + static_cast<std::ptrdiff_t>(byteOffset), shadow.end());
+        command.topology = ToTopology(primitive);
+        command.depthTest = depthTestEnabled_;
+        command.depthFunc = depthCompareFunction_;
+        command.depthWrite = depthWriteEnabled_;
+        command.renderState = CaptureRenderState();
+        const Matrix wvp = world * view * projection;
+        FillExtUniforms(command.uniforms, wvp, params);
+        FillLitLightUniforms(command.lightUniforms, params);
+        if (skinned)
+        {
+            // FillLitLightUniforms already wrote eyePos_pad's xyz; only the otherwise-unused w
+            // slot (WeightsPerVertex) needs the same SkinnedLightParams packing
+            // FillSkinnedLightUniforms uses -- see pbr_skinned3d.vert.glsl's own doc comment.
+            command.lightUniforms[39] = static_cast<float>(params.weightsPerVertex);
+            FillSkinnedBoneUniforms(command.boneUniforms, params);
+        }
+        FillPbrParams(command.pbrParams, params);
+        command.texture = static_cast<const SdlGpuTextureBackend*>(params.texture0);
+        command.normalMap = static_cast<const SdlGpuTextureBackend*>(params.pbrNormalMap);
+        command.metallicRoughnessMap = static_cast<const SdlGpuTextureBackend*>(params.pbrMetallicRoughnessMap);
+        command.emissiveMap = static_cast<const SdlGpuTextureBackend*>(params.pbrEmissiveMap);
+        command.occlusionMap = static_cast<const SdlGpuTextureBackend*>(params.pbrOcclusionMap);
+        command.textureFilter = samplerSlots_[0].filter;
+        command.addressU = samplerSlots_[0].addressU;
+        command.addressV = samplerSlots_[0].addressV;
+
+        if (ib != nullptr)
+        {
+            const auto& sdlGpuIb = static_cast<const SdlGpuIndexBufferBackend&>(*ib);
+            command.indexed = true;
+            command.index32 = sdlGpuIb.IsThirtyTwoBit();
+            command.indexData = sdlGpuIb.ShadowData();
+            command.indexCount = static_cast<Uint32>(PrimitiveIndexCount(primitive, primitiveCount));
+            command.vertexCount = static_cast<Uint32>(sdlGpuVb.GetVertexCount()) - static_cast<Uint32>(vertexStart);
+        }
+        else
+        {
+            command.vertexCount = static_cast<Uint32>(PrimitiveVertexCount(primitive, primitiveCount));
+        }
+
+        command.target = CurrentDrawTarget();
+        pbrDrawCommands_.push_back(std::move(command));
+        drawOrder_.push_back({DrawKind::Pbr, pbrDrawCommands_.size() - 1});
         framePending_ = true;
     }
 
@@ -2951,13 +3222,14 @@ namespace CNA::Internal::Backends::SdlGpu
                                                  SDL_GPUSampleCount sampleCount, SDL_GPUGraphicsPipeline*& boundPipeline)
     {
         SDL_GPUGraphicsPipeline* pipeline = GetOrCreatePipelineSkinned3D(
-            command.topology, command.depthTest, command.depthWrite, command.depthFunc, colorFormat, sampleCount, command.renderState);
+            command.hasVertexColor, command.topology, command.depthTest, command.depthWrite, command.depthFunc, colorFormat, sampleCount, command.renderState);
         if (pipeline != boundPipeline) { SDL_BindGPUGraphicsPipeline(pass, pipeline); boundPipeline = pipeline; }
         SDL_SetGPUStencilReference(pass, static_cast<Uint8>(command.renderState.stencilReference));
         SDL_PushGPUVertexUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
         SDL_PushGPUVertexUniformData(cmd, 1, command.lightUniforms.data(), sizeof(command.lightUniforms));
-        // litTexturedFragmentShader_ (reused unchanged) expects PC at slot 0 and
-        // LitLightParams-shaped data at slot 1 -- SkinnedLightParams is byte-identical.
+        // Both the stride-52 (litTexturedFragmentShader_, reused unchanged) and stride-56
+        // (skinnedColoredFragmentShader_) fragment shaders expect PC at slot 0 and a
+        // LitLightParams-shaped block at slot 1 -- SkinnedLightParams is byte-identical to both.
         SDL_PushGPUFragmentUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
         SDL_PushGPUFragmentUniformData(cmd, 1, command.lightUniforms.data(), sizeof(command.lightUniforms));
 
@@ -2987,11 +3259,69 @@ namespace CNA::Internal::Backends::SdlGpu
         }
     }
 
+    void SdlGpuGraphicsBackend::IssuePbrDraw(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
+                                             const PbrDrawCommand& command, SDL_GPUTextureFormat colorFormat,
+                                             SDL_GPUSampleCount sampleCount, SDL_GPUGraphicsPipeline*& boundPipeline)
+    {
+        SDL_GPUGraphicsPipeline* pipeline = GetOrCreatePipelinePbr3D(
+            command.skinned, command.topology, command.depthTest, command.depthWrite, command.depthFunc, colorFormat, sampleCount, command.renderState);
+        if (pipeline != boundPipeline) { SDL_BindGPUGraphicsPipeline(pass, pipeline); boundPipeline = pipeline; }
+        SDL_SetGPUStencilReference(pass, static_cast<Uint8>(command.renderState.stencilReference));
+        SDL_PushGPUVertexUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
+        SDL_PushGPUVertexUniformData(cmd, 1, command.lightUniforms.data(), sizeof(command.lightUniforms));
+        SDL_PushGPUFragmentUniformData(cmd, 0, command.uniforms.data(), sizeof(command.uniforms));
+        SDL_PushGPUFragmentUniformData(cmd, 1, command.lightUniforms.data(), sizeof(command.lightUniforms));
+        SDL_PushGPUFragmentUniformData(cmd, 2, command.pbrParams.data(), sizeof(command.pbrParams));
+
+        SDL_GPUBufferBinding vbBinding{};
+        vbBinding.buffer = command.uploadedVertexBuffer;
+        SDL_BindGPUVertexBuffers(pass, 0, &vbBinding, 1);
+        // The unskinned pbrVertexShader_ declares zero storage buffers -- only bind the bone
+        // palette for the skinned variant (pbrSkinnedVertexShader_), mirroring
+        // SkinnedDrawCommand's own storage-buffer-over-uniform-push rationale.
+        if (command.skinned)
+            SDL_BindGPUVertexStorageBuffers(pass, 0, &command.uploadedBoneBuffer, 1);
+
+        // 5 samplers: base color, normal, metallic-roughness, emissive, occlusion. Optional maps
+        // fall back to the lazily-created default textures (EnsureDefaultPbrTextures(), already
+        // invoked at Queue-time) so "map absent" reads as the correct neutral value per semantic
+        // (flat normal, factor-only, no emissive tint, fully lit) -- mirrors
+        // EasyGLGraphicsBackend::BindDrawParams()'s identical fallback set. All 5 share the base
+        // color texture's own sampler state (GraphicsDevice.SamplerStates[0]) -- GpuDrawParams has
+        // no independent per-PBR-map sampler state to select from.
+        SDL_GPUTextureSamplerBinding samplerBindings[5]{};
+        SDL_GPUSampler* sampler = GetOrCreateSampler(command.textureFilter, command.addressU, command.addressV);
+        samplerBindings[0].texture = command.texture->Texture();
+        samplerBindings[0].sampler = sampler;
+        samplerBindings[1].texture = command.normalMap != nullptr ? command.normalMap->Texture() : defaultFlatNormalTexture_->Texture();
+        samplerBindings[1].sampler = sampler;
+        samplerBindings[2].texture = command.metallicRoughnessMap != nullptr ? command.metallicRoughnessMap->Texture() : defaultWhiteTexture_->Texture();
+        samplerBindings[2].sampler = sampler;
+        samplerBindings[3].texture = command.emissiveMap != nullptr ? command.emissiveMap->Texture() : defaultWhiteTexture_->Texture();
+        samplerBindings[3].sampler = sampler;
+        samplerBindings[4].texture = command.occlusionMap != nullptr ? command.occlusionMap->Texture() : defaultWhiteTexture_->Texture();
+        samplerBindings[4].sampler = sampler;
+        SDL_BindGPUFragmentSamplers(pass, 0, samplerBindings, 5);
+
+        if (command.indexed && command.uploadedIndexBuffer != nullptr)
+        {
+            SDL_GPUBufferBinding ibBinding{};
+            ibBinding.buffer = command.uploadedIndexBuffer;
+            SDL_BindGPUIndexBuffer(pass, &ibBinding,
+                                   command.index32 ? SDL_GPU_INDEXELEMENTSIZE_32BIT : SDL_GPU_INDEXELEMENTSIZE_16BIT);
+            SDL_DrawGPUIndexedPrimitives(pass, command.indexCount, 1, 0, 0, 0);
+        }
+        else
+        {
+            SDL_DrawGPUPrimitives(pass, command.vertexCount, 1, 0, 0);
+        }
+    }
+
     void SdlGpuGraphicsBackend::UploadSceneDrawData(SDL_GPUCommandBuffer* cmd)
     {
         if (coloredDrawCommands_.empty() && texturedDrawCommands_.empty() && litTexturedDrawCommands_.empty() &&
             alphaTestDrawCommands_.empty() && dualTextureDrawCommands_.empty() && envMapDrawCommands_.empty() &&
-            skinnedDrawCommands_.empty())
+            skinnedDrawCommands_.empty() && pbrDrawCommands_.empty())
             return;
 
         SDL_GPUCopyPass* copyPass = SDL_BeginGPUCopyPass(cmd);
@@ -3097,6 +3427,20 @@ namespace CNA::Internal::Backends::SdlGpu
             const auto* boneBytes = reinterpret_cast<const std::uint8_t*>(command.boneUniforms.data());
             const std::vector<std::uint8_t> boneData(boneBytes, boneBytes + sizeof(command.boneUniforms));
             command.uploadedBoneBuffer = uploadOne(boneData, SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ);
+        }
+        for (PbrDrawCommand& command : pbrDrawCommands_)
+        {
+            if (command.vertexCount == 0 || command.vertexData.empty())
+                continue;
+            command.uploadedVertexBuffer = uploadOne(command.vertexData, SDL_GPU_BUFFERUSAGE_VERTEX);
+            if (command.indexed && !command.indexData.empty())
+                command.uploadedIndexBuffer = uploadOne(command.indexData, SDL_GPU_BUFFERUSAGE_INDEX);
+            if (command.skinned)
+            {
+                const auto* boneBytes = reinterpret_cast<const std::uint8_t*>(command.boneUniforms.data());
+                const std::vector<std::uint8_t> boneData(boneBytes, boneBytes + sizeof(command.boneUniforms));
+                command.uploadedBoneBuffer = uploadOne(boneData, SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ);
+            }
         }
 
         SDL_EndGPUCopyPass(copyPass);
@@ -3272,6 +3616,14 @@ namespace CNA::Internal::Backends::SdlGpu
                         IssueSkinnedDraw(pass, cmd, c, colorFormat, sampleCount, boundPipeline);
                     break;
                 }
+                case DrawKind::Pbr:
+                {
+                    const PbrDrawCommand& c = pbrDrawCommands_[ref.index];
+                    if (c.uploadedVertexBuffer != nullptr && c.texture != nullptr
+                        && (!c.skinned || c.uploadedBoneBuffer != nullptr) && c.target == target)
+                        IssuePbrDraw(pass, cmd, c, colorFormat, sampleCount, boundPipeline);
+                    break;
+                }
                 case DrawKind::Sprite:
                 {
                     const SpriteCommand& c = spriteCommands_[ref.index];
@@ -3328,6 +3680,13 @@ namespace CNA::Internal::Backends::SdlGpu
             if (command.uploadedBoneBuffer != nullptr) SDL_ReleaseGPUBuffer(device_, command.uploadedBoneBuffer);
         }
         skinnedDrawCommands_.clear();
+        for (PbrDrawCommand& command : pbrDrawCommands_)
+        {
+            if (command.uploadedVertexBuffer != nullptr) SDL_ReleaseGPUBuffer(device_, command.uploadedVertexBuffer);
+            if (command.uploadedIndexBuffer != nullptr) SDL_ReleaseGPUBuffer(device_, command.uploadedIndexBuffer);
+            if (command.uploadedBoneBuffer != nullptr) SDL_ReleaseGPUBuffer(device_, command.uploadedBoneBuffer);
+        }
+        pbrDrawCommands_.clear();
     }
 
     void SdlGpuGraphicsBackend::DrawColoredPrimitives(const IVertexBufferBackend& vb,
@@ -3353,13 +3712,17 @@ namespace CNA::Internal::Backends::SdlGpu
         const auto& sdlGpuVb = static_cast<const SdlGpuVertexBufferBackend&>(vb);
         const std::size_t stride = sdlGpuVb.Stride();
         // Matches VulkanGraphicsBackend/WebGPUGraphicsBackend's own dispatch precedence: alpha
-        // test wins over dual-texture/env-map/skinned (an AlphaTestEffect draw on any of those
-        // shapes never reaches those shaders); env-map/skinned win over plain lit_textured3d
-        // (env-map shares stride 32, skinned has its own stride 52).
+        // test wins over dual-texture/env-map/pbr/skinned (an AlphaTestEffect draw on any of those
+        // shapes never reaches those shaders); env-map/pbr/skinned win over plain lit_textured3d
+        // (env-map shares stride 32, skinned has its own stride 52/56, pbr its own stride 48/68).
+        // needsPbr is checked (and excluded from needsSkinned) before needsSkinned since
+        // SkinnedPbrEffect::FillGpuDrawParams() sets BOTH params.pbr and params.skinned -- the PBR
+        // shader variant, not the plain SkinnedEffect one, must win for that combination.
         const bool needsAlphaTest = params.alphaTest[2] < 0.0f || params.alphaTest[3] < 0.0f;
         const bool needsDualTexture = !needsAlphaTest && params.dualTexture;
         const bool needsEnvMap = !needsAlphaTest && !needsDualTexture && params.envMapping;
-        const bool needsSkinned = !needsAlphaTest && !needsDualTexture && !needsEnvMap && params.skinned;
+        const bool needsPbr = !needsAlphaTest && !needsDualTexture && !needsEnvMap && params.pbr;
+        const bool needsSkinned = !needsAlphaTest && !needsDualTexture && !needsEnvMap && !needsPbr && params.skinned;
         if (needsAlphaTest && (stride == 20 || stride == 24 || stride == 32) && params.texture0 != nullptr)
         {
             QueueAlphaTestDraw(vb, nullptr, world, view, projection, primitive, primitiveCount, params);
@@ -3375,7 +3738,12 @@ namespace CNA::Internal::Backends::SdlGpu
             QueueEnvMapDraw(vb, nullptr, world, view, projection, primitive, primitiveCount, params);
             return;
         }
-        if (needsSkinned && stride == 52 && params.texture0 != nullptr)
+        if (needsPbr && ((params.skinned && stride == 68) || (!params.skinned && stride == 48)) && params.texture0 != nullptr)
+        {
+            QueuePbrDraw(vb, nullptr, world, view, projection, primitive, primitiveCount, params);
+            return;
+        }
+        if (needsSkinned && (stride == 52 || stride == 56) && params.texture0 != nullptr)
         {
             QueueSkinnedDraw(vb, nullptr, world, view, projection, primitive, primitiveCount, params);
             return;
@@ -3408,7 +3776,8 @@ namespace CNA::Internal::Backends::SdlGpu
         const bool needsAlphaTest = params.alphaTest[2] < 0.0f || params.alphaTest[3] < 0.0f;
         const bool needsDualTexture = !needsAlphaTest && params.dualTexture;
         const bool needsEnvMap = !needsAlphaTest && !needsDualTexture && params.envMapping;
-        const bool needsSkinned = !needsAlphaTest && !needsDualTexture && !needsEnvMap && params.skinned;
+        const bool needsPbr = !needsAlphaTest && !needsDualTexture && !needsEnvMap && params.pbr;
+        const bool needsSkinned = !needsAlphaTest && !needsDualTexture && !needsEnvMap && !needsPbr && params.skinned;
         if (needsAlphaTest && (stride == 20 || stride == 24 || stride == 32) && params.texture0 != nullptr)
         {
             QueueAlphaTestDraw(vb, &ib, world, view, projection, primitive, primitiveCount, params);
@@ -3424,7 +3793,12 @@ namespace CNA::Internal::Backends::SdlGpu
             QueueEnvMapDraw(vb, &ib, world, view, projection, primitive, primitiveCount, params);
             return;
         }
-        if (needsSkinned && stride == 52 && params.texture0 != nullptr)
+        if (needsPbr && ((params.skinned && stride == 68) || (!params.skinned && stride == 48)) && params.texture0 != nullptr)
+        {
+            QueuePbrDraw(vb, &ib, world, view, projection, primitive, primitiveCount, params);
+            return;
+        }
+        if (needsSkinned && (stride == 52 || stride == 56) && params.texture0 != nullptr)
         {
             QueueSkinnedDraw(vb, &ib, world, view, projection, primitive, primitiveCount, params);
             return;

@@ -346,6 +346,16 @@ namespace Microsoft::Xna::Framework::Graphics
         [[nodiscard]] std::vector<Matrix> GetBoneTransforms(int count) const;
 
         /**
+         * @brief Gets or sets whether per-vertex color is used for rendering.
+         *
+         * @note NOXNA — not part of the XNA 4.0 API. Real XNA's SkinnedEffect has no
+         * VertexColorEnabled property at all (unlike BasicEffect/AlphaTestEffect/
+         * DualTextureEffect); added so glTF-imported skinned meshes with a COLOR_0 attribute
+         * (see CNB-66/67) have a shader path, mirroring BasicEffect::VertexColorEnabled's shape.
+         */
+        NOXNA bool VertexColorEnabled = false;
+
+        /**
          * @brief Fills a GpuDrawParams struct with this effect's current render parameters.
          *
          * Populates bone transforms, lighting, diffuse/emissive colors, eye position, and

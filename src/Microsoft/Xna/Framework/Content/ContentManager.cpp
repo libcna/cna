@@ -2,30 +2,44 @@
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "System/IServiceProvider.hpp"
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
-#include "CNA/Internal/CnbEnvelope.hpp"
-#include "CNA/Internal/CnbSourceFile.hpp"
+#include "CNA/Internal/CnjEnvelope.hpp"
+#include "CNA/Internal/CnjSourceFile.hpp"
+#include "CNA/Internal/GltfImport/GltfImportCore.hpp"
+#include "CNA/Internal/Json.hpp"
 #include "CNA/Internal/Xnb/XnbTypeReaderTable.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
+#include "Microsoft/Xna/Framework/Curve.hpp"
+#include "Microsoft/Xna/Framework/CurveKey.hpp"
 #include "Microsoft/Xna/Framework/Graphics/AnimationPlayer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/AlphaTestEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/CompareFunction.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DualTextureEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EnvironmentMapEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/IEffectLights.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Model.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelBone.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMesh.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshPart.hpp"
+#include "Microsoft/Xna/Framework/Graphics/MorphTargetEXT.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PbrEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedModelEXT.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SkinnedPbrEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteFont.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTextureSkinned.hpp"
 #include "Microsoft/Xna/Framework/Quaternion.hpp"
 #include "Microsoft/Xna/Framework/Media/Song.hpp"
 #include "System/IO/FileStream.hpp"
+#include "System/IO/MemoryStream.hpp"
 // Must match CMakeLists.txt's CNA_FFMPEG_AVAILABLE condition (MINGW OR EMSCRIPTEN OR ANDROID) --
 // VideoDecoder.cpp/VideoPlayer.cpp/Video.cpp are excluded from the build on all three, so
 // Video::Video() has no definition to link against on any of them, not just Emscripten/Android.
@@ -220,9 +234,9 @@ namespace Microsoft::Xna::Framework::Content
                 entry.hasXnb = true;
                 entry.xnbReaderNames = ScanXnbReaderNames(path);
             }
-            else if (ext == ".cnb")
+            else if (ext == ".cnj")
             {
-                entry.hasCnb = true;
+                entry.hasCnj = true;
             }
             else
             {
@@ -308,28 +322,41 @@ namespace Microsoft::Xna::Framework::Content
     namespace
     {
         // Forward declaration -- defined below, alongside the other minimal JSON helpers used by
-        // .cnb/.font.json-style readers. Texture2DTypeReader needs it for the .cnb sidecar path
-        // (plan_cnb.md CNB-8), ahead of where it's textually defined.
+        // .cnj/.font.json-style readers. Texture2DTypeReader needs it for the .cnj sidecar path
+        // (plan_cnj.md CNB-8), ahead of where it's textually defined.
         std::string ReadTextFile(const std::string& path);
 
-        // plan_cnb.md CNB-34: SpriteFont/Effect/Model .cnb documents are self-contained
+        // Forward declaration -- defined below (originally added for the skeleton/clip binary
+        // sidecars). plan_cnj.md CNB-43: Texture3DTypeReader needs it ahead of where it's
+        // textually defined, same reason as ReadTextFile above.
+        std::vector<std::uint8_t> ReadBinaryFile(const std::string& path);
+
+        // Forward declaration -- defined below (originally added for AnimationClipTypeReader).
+        // plan_cnj.md CNB-45: EffectTypeReader's stock-effect branch reuses it for
+        // diffuseColor/emissiveColor/specularColor/environmentMapSpecular fields rather than
+        // duplicating a third array-parsing helper.
+        bool TryReadFloatArrayField(const CNA::Internal::JsonValue& obj, const char* field,
+                                     std::size_t expectedCount, std::vector<float>& out,
+                                     const std::string& path);
+
+        // plan_cnj.md CNB-34: SpriteFont/Effect/Model .cnj documents are self-contained
         // descriptors -- unlike Texture2D/SoundEffect/TextureCube, they have no meaning for a
         // "sourceFile" field. Reject it explicitly with a clear error instead of silently
         // ignoring it (the previous behavior) or letting some future field-parsing change
         // accidentally half-honor it.
-        void RejectSourceFileForSelfContainedCnb(const CNA::Internal::CnbEnvelope& envelope,
+        void RejectSourceFileForSelfContainedCnj(const CNA::Internal::CnjEnvelope& envelope,
                                                   const std::string& typeName, const std::string& path)
         {
             if (envelope.hasSourceFile)
             {
                 throw ContentLoadException(
-                    "ContentManager: " + typeName + " .cnb '" + path + "' has a 'sourceFile' "
-                    "field, but " + typeName + " .cnb documents are self-contained and do not "
+                    "ContentManager: " + typeName + " .cnj '" + path + "' has a 'sourceFile' "
+                    "field, but " + typeName + " .cnj documents are self-contained and do not "
                     "support 'sourceFile'.");
             }
         }
 
-        // Minimal "colorKey": [r, g, b] extractor for a Texture2D .cnb sidecar (CNB-8). Kept
+        // Minimal "colorKey": [r, g, b] extractor for a Texture2D .cnj sidecar (CNB-8). Kept
         // local/self-contained rather than reusing JsonIntArray4 (a 4-element parser) below, since
         // colorKey is always exactly 3 components and duplicating this ~10-line scan is cheaper and
         // safer than coaxing a 4-element parser into stopping after 3.
@@ -392,30 +419,30 @@ namespace Microsoft::Xna::Framework::Content
             {
                 Graphics::GraphicsDevice& gd = cm.getGraphicsDeviceInternal();
 
-                if (std::filesystem::path(path).extension() == ".cnb")
+                if (std::filesystem::path(path).extension() == ".cnj")
                 {
-                    return ReadCnb(path, cm);
+                    return ReadCnj(path, cm);
                 }
 
                 return Graphics::Texture2D(path, gd);
             }
 
         private:
-            static Graphics::Texture2D ReadCnb(const std::string& path, ContentManager& cm)
+            static Graphics::Texture2D ReadCnj(const std::string& path, ContentManager& cm)
             {
                 const std::string json = ReadTextFile(path);
-                const CNA::Internal::CnbEnvelope envelope = CNA::Internal::ParseCnbEnvelope(json);
-                CNA::Internal::ValidateCnbEnvelope(envelope, "Texture2D", path);
+                const CNA::Internal::CnjEnvelope envelope = CNA::Internal::ParseCnjEnvelope(json);
+                CNA::Internal::ValidateCnjEnvelope(envelope, "Texture2D", path);
 
                 if (!envelope.hasSourceFile)
                 {
                     throw ContentLoadException(
-                        "ContentManager: Texture2D .cnb '" + path + "' has no 'sourceFile' field "
-                        "(a self-contained, non-sourceFile Texture2D .cnb is not supported).");
+                        "ContentManager: Texture2D .cnj '" + path + "' has no 'sourceFile' field "
+                        "(a self-contained, non-sourceFile Texture2D .cnj is not supported).");
                 }
 
-                const CNA::Internal::CnbSourceFileResult resolved =
-                    CNA::Internal::ResolveCnbSourceFileSafely(
+                const CNA::Internal::CnjSourceFileResult resolved =
+                    CNA::Internal::ResolveCnjSourceFileSafely(
                         path, cm.getRootDirectoryProperty(), envelope.sourceFile);
                 Graphics::Texture2D result = cm.Load<Graphics::Texture2D>(resolved.logicalName);
 
@@ -439,9 +466,9 @@ namespace Microsoft::Xna::Framework::Content
 
             Graphics::TextureCube Read(const std::string& path, ContentManager& cm) override
             {
-                if (std::filesystem::path(path).extension() == ".cnb")
+                if (std::filesystem::path(path).extension() == ".cnj")
                 {
-                    return ReadCnb(path, cm);
+                    return ReadCnj(path, cm);
                 }
 
                 Graphics::GraphicsDevice& gd = cm.getGraphicsDeviceInternal();
@@ -450,24 +477,109 @@ namespace Microsoft::Xna::Framework::Content
             }
 
         private:
-            static Graphics::TextureCube ReadCnb(const std::string& path, ContentManager& cm)
+            static Graphics::TextureCube ReadCnj(const std::string& path, ContentManager& cm)
             {
                 const std::string json = ReadTextFile(path);
-                const CNA::Internal::CnbEnvelope envelope = CNA::Internal::ParseCnbEnvelope(json);
-                CNA::Internal::ValidateCnbEnvelope(envelope, "TextureCube", path);
+                const CNA::Internal::CnjEnvelope envelope = CNA::Internal::ParseCnjEnvelope(json);
+                CNA::Internal::ValidateCnjEnvelope(envelope, "TextureCube", path);
 
                 if (!envelope.hasSourceFile)
                 {
                     throw ContentLoadException(
-                        "ContentManager: TextureCube .cnb '" + path + "' has no 'sourceFile' "
-                        "field (a self-contained, non-sourceFile TextureCube .cnb is not "
+                        "ContentManager: TextureCube .cnj '" + path + "' has no 'sourceFile' "
+                        "field (a self-contained, non-sourceFile TextureCube .cnj is not "
                         "supported).");
                 }
 
-                const CNA::Internal::CnbSourceFileResult resolved =
-                    CNA::Internal::ResolveCnbSourceFileSafely(
+                const CNA::Internal::CnjSourceFileResult resolved =
+                    CNA::Internal::ResolveCnjSourceFileSafely(
                         path, cm.getRootDirectoryProperty(), envelope.sourceFile);
                 return cm.Load<Graphics::TextureCube>(resolved.logicalName);
+            }
+        };
+
+        // plan_cnj.md CNB-43: no native "3D texture" file format exists in CNA the way .dds serves
+        // TextureCube (Texture3D has no FromStream/DDSFromStream equivalent) -- so unlike
+        // TextureCubeTypeReader, this is self-contained JSON + a raw binary pixel-data sidecar
+        // (mirrors Model's own vertex/index binary-sidecar convention), not a sourceFile delegation.
+        // Single mip level only; deliberately skips the .xnb Texture3DReader's mip-chain/DXT
+        // handling -- no real sample content needs either (plan_cnj.md CNB-43's own survey), and
+        // .cnj content is hand-authored, so pre-compressed DXT data has no natural place to come
+        // from here the way it does inside a real XNA content-pipeline build.
+        class Texture3DTypeReader : public LooseFileContentTypeReader<std::shared_ptr<Graphics::Texture3D>>
+        {
+        public:
+            [[nodiscard]] std::vector<std::string> GetExtensions() const override
+            {
+                return {".cnj"};
+            }
+
+            // Targets std::shared_ptr<Texture3D>, not a bare Texture3D: Texture3D is move-only
+            // (copy deleted), and ContentManager's generic asset cache stores results in a
+            // std::any, which requires CopyConstructible -- the same reason the .xnb-side
+            // Texture3DReader/StockEffectContentTypeReaders already return shared_ptr instead of
+            // a bare value.
+            std::shared_ptr<Graphics::Texture3D> Read(const std::string& path, ContentManager& cm) override
+            {
+                namespace fs = std::filesystem;
+                using CNA::Internal::JsonValue;
+
+                const std::string json = ReadTextFile(path);
+                const CNA::Internal::CnjEnvelope envelope = CNA::Internal::ParseCnjEnvelope(json);
+                CNA::Internal::ValidateCnjEnvelope(envelope, "Texture3D", path);
+                RejectSourceFileForSelfContainedCnj(envelope, "Texture3D", path);
+
+                const JsonValue root = CNA::Internal::ParseJson(json);
+                const JsonValue* widthField  = root.FindMember("width");
+                const JsonValue* heightField = root.FindMember("height");
+                const JsonValue* depthField  = root.FindMember("depth");
+                const JsonValue* dataField   = root.FindMember("data");
+
+                if (widthField == nullptr || !widthField->IsNumber() ||
+                    heightField == nullptr || !heightField->IsNumber() ||
+                    depthField == nullptr || !depthField->IsNumber())
+                {
+                    throw ContentLoadException(
+                        "Texture3D .cnj '" + path + "' is missing a numeric 'width'/'height'/'depth' field.");
+                }
+                if (dataField == nullptr || !dataField->IsString() || dataField->stringValue.empty())
+                {
+                    throw ContentLoadException(
+                        "Texture3D .cnj '" + path + "' is missing a non-empty 'data' field naming a raw pixel sidecar.");
+                }
+
+                const int width  = static_cast<int>(widthField->numberValue);
+                const int height = static_cast<int>(heightField->numberValue);
+                const int depth  = static_cast<int>(depthField->numberValue);
+                if (width <= 0 || height <= 0 || depth <= 0)
+                {
+                    throw ContentLoadException(
+                        "Texture3D .cnj '" + path + "' has a non-positive 'width'/'height'/'depth'.");
+                }
+
+                const auto bytes = ReadBinaryFile((fs::path(cm.getRootDirectoryProperty()) / dataField->stringValue).string());
+                const std::size_t expectedBytes =
+                    static_cast<std::size_t>(width) * static_cast<std::size_t>(height) *
+                    static_cast<std::size_t>(depth) * 4;
+                if (bytes.size() != expectedBytes)
+                {
+                    throw ContentLoadException(
+                        "Texture3D .cnj '" + path + "': 'data' sidecar has " + std::to_string(bytes.size()) +
+                        " bytes, expected " + std::to_string(expectedBytes) + " for " +
+                        std::to_string(width) + "x" + std::to_string(height) + "x" + std::to_string(depth) + ".");
+                }
+
+                std::vector<Color> colors;
+                colors.reserve(expectedBytes / 4);
+                for (std::size_t i = 0; i < expectedBytes; i += 4)
+                {
+                    colors.emplace_back(bytes[i], bytes[i + 1], bytes[i + 2], bytes[i + 3]);
+                }
+
+                auto texture = std::make_shared<Graphics::Texture3D>(
+                    cm.getGraphicsDeviceInternal(), width, height, depth, false, Graphics::SurfaceFormat::Color);
+                texture->SetData(colors.data(), static_cast<int>(colors.size()));
+                return texture;
             }
         };
 
@@ -481,31 +593,31 @@ namespace Microsoft::Xna::Framework::Content
 
             Audio::SoundEffect Read(const std::string& path, ContentManager& cm) override
             {
-                if (std::filesystem::path(path).extension() == ".cnb")
+                if (std::filesystem::path(path).extension() == ".cnj")
                 {
-                    return ReadCnb(path, cm);
+                    return ReadCnj(path, cm);
                 }
 
                 return Audio::SoundEffect(path);
             }
 
         private:
-            static Audio::SoundEffect ReadCnb(const std::string& path, ContentManager& cm)
+            static Audio::SoundEffect ReadCnj(const std::string& path, ContentManager& cm)
             {
                 const std::string json = ReadTextFile(path);
-                const CNA::Internal::CnbEnvelope envelope = CNA::Internal::ParseCnbEnvelope(json);
-                CNA::Internal::ValidateCnbEnvelope(envelope, "SoundEffect", path);
+                const CNA::Internal::CnjEnvelope envelope = CNA::Internal::ParseCnjEnvelope(json);
+                CNA::Internal::ValidateCnjEnvelope(envelope, "SoundEffect", path);
 
                 if (!envelope.hasSourceFile)
                 {
                     throw ContentLoadException(
-                        "ContentManager: SoundEffect .cnb '" + path + "' has no 'sourceFile' "
-                        "field (a self-contained, non-sourceFile SoundEffect .cnb is not "
+                        "ContentManager: SoundEffect .cnj '" + path + "' has no 'sourceFile' "
+                        "field (a self-contained, non-sourceFile SoundEffect .cnj is not "
                         "supported).");
                 }
 
-                const CNA::Internal::CnbSourceFileResult resolved =
-                    CNA::Internal::ResolveCnbSourceFileSafely(
+                const CNA::Internal::CnjSourceFileResult resolved =
+                    CNA::Internal::ResolveCnjSourceFileSafely(
                         path, cm.getRootDirectoryProperty(), envelope.sourceFile);
                 return cm.Load<Audio::SoundEffect>(resolved.logicalName);
             }
@@ -543,19 +655,76 @@ namespace Microsoft::Xna::Framework::Content
             return json.substr(pos + 1, end - pos - 1);
         }
 
+        Microsoft::Xna::Framework::Graphics::CompareFunction ParseCompareFunctionEXT(
+            const std::string& value, const std::string& path)
+        {
+            using Microsoft::Xna::Framework::Graphics::CompareFunction;
+            if (value == "Always") { return CompareFunction::Always; }
+            if (value == "Never") { return CompareFunction::Never; }
+            if (value == "Less") { return CompareFunction::Less; }
+            if (value == "LessEqual") { return CompareFunction::LessEqual; }
+            if (value == "Equal") { return CompareFunction::Equal; }
+            if (value == "GreaterEqual") { return CompareFunction::GreaterEqual; }
+            if (value == "Greater") { return CompareFunction::Greater; }
+            if (value == "NotEqual") { return CompareFunction::NotEqual; }
+            throw ContentLoadException(
+                "Effect .cnj '" + path + "' has an unrecognized CompareFunction '" + value + "'.");
+        }
+
+        Vector3 ReadVector3FieldEXT(const CNA::Internal::JsonValue& obj, const char* field,
+                                     Vector3 def, const std::string& path)
+        {
+            std::vector<float> arr;
+            if (!TryReadFloatArrayField(obj, field, 3, arr, path)) { return def; }
+            return Vector3(arr[0], arr[1], arr[2]);
+        }
+
+        float ReadFloatFieldEXT(const CNA::Internal::JsonValue& obj, const char* field,
+                                 float def, const std::string& path)
+        {
+            const CNA::Internal::JsonValue* v = obj.FindMember(field);
+            if (v == nullptr) { return def; }
+            if (!v->IsNumber())
+            {
+                throw ContentLoadException(
+                    "Effect .cnj '" + path + "': '" + field + "' must be numeric.");
+            }
+            return static_cast<float>(v->numberValue);
+        }
+
+        bool ReadBoolFieldEXT(const CNA::Internal::JsonValue& obj, const char* field,
+                               bool def, const std::string& path)
+        {
+            const CNA::Internal::JsonValue* v = obj.FindMember(field);
+            if (v == nullptr) { return def; }
+            if (v->type != CNA::Internal::JsonType::Boolean)
+            {
+                throw ContentLoadException(
+                    "Effect .cnj '" + path + "': '" + field + "' must be a boolean.");
+            }
+            return v->boolValue;
+        }
+
+        // plan_cnj.md CNB-45: RegisterTypeReader<T>() allows exactly one reader per T, and this
+        // class already owns std::shared_ptr<Effect> for the pre-existing custom-GLSL "Effect"
+        // .cnj shape -- so the 5 stock effects (BasicEffect/AlphaTestEffect/DualTextureEffect/
+        // EnvironmentMapEffect/SkinnedEffect) are dispatched from inside this same reader by
+        // .cnj "type", rather than each getting its own registration (which would collide).
+        // Field lists below are a direct JSON port of StockEffectContentTypeReaders.cpp's
+        // already-FNA-verified per-effect field order.
         class EffectTypeReader : public LooseFileContentTypeReader<std::shared_ptr<Graphics::Effect>>
         {
         public:
             [[nodiscard]] std::vector<std::string> GetExtensions() const override
             {
-                return {".cnb"};
+                return {".cnj"};
             }
 
             std::shared_ptr<Graphics::Effect> Read(const std::string& path, ContentManager& cm) override
             {
-                // If path doesn't already end with .cnb, append it.
+                // If path doesn't already end with .cnj, append it.
                 std::string jsonPath = path;
-                const std::string ext = ".cnb";
+                const std::string ext = ".cnj";
                 if (jsonPath.size() < ext.size() ||
                     jsonPath.substr(jsonPath.size() - ext.size()) != ext)
                 {
@@ -564,10 +733,38 @@ namespace Microsoft::Xna::Framework::Content
 
                 const std::string jsonText = ReadTextFile(jsonPath);
 
-                const CNA::Internal::CnbEnvelope envelope = CNA::Internal::ParseCnbEnvelope(jsonText);
-                CNA::Internal::ValidateCnbEnvelope(envelope, "Effect", jsonPath);
-                RejectSourceFileForSelfContainedCnb(envelope, "Effect", jsonPath);
+                const CNA::Internal::CnjEnvelope envelope = CNA::Internal::ParseCnjEnvelope(jsonText);
+                CNA::Internal::ValidateCnjEnvelopeBaseline(envelope, jsonPath);
 
+                // Confirm envelope.type is one of the 6 valid names *before* any other check --
+                // otherwise a .cnj with both an unrecognized type and a 'sourceFile' field gets
+                // the misleading "sourceFile not supported" message instead of the real problem
+                // (an unrecognized 'type'). Found by adversarial review, 2026-07-17.
+                const bool isStockEffect =
+                    envelope.type == "BasicEffect" || envelope.type == "AlphaTestEffect" ||
+                    envelope.type == "DualTextureEffect" || envelope.type == "EnvironmentMapEffect" ||
+                    envelope.type == "SkinnedEffect";
+                if (envelope.type != "Effect" && !isStockEffect)
+                {
+                    throw ContentLoadException(
+                        "ContentManager: '" + jsonPath + "' has type '" + envelope.type + "', but an "
+                        "Effect .cnj must be one of 'Effect', 'BasicEffect', 'AlphaTestEffect', "
+                        "'DualTextureEffect', 'EnvironmentMapEffect', or 'SkinnedEffect'.");
+                }
+
+                RejectSourceFileForSelfContainedCnj(envelope, envelope.type, jsonPath);
+
+                if (envelope.type == "Effect")
+                {
+                    return ReadCustomGlslEffect(jsonText, jsonPath, cm);
+                }
+                return ReadStockEffect(CNA::Internal::ParseJson(jsonText), envelope.type, jsonPath, cm);
+            }
+
+        private:
+            static std::shared_ptr<Graphics::Effect> ReadCustomGlslEffect(
+                const std::string& jsonText, const std::string& jsonPath, ContentManager& cm)
+            {
                 const std::string vertRel = ExtractJsonStringField(jsonText, "vertex");
                 const std::string fragRel = ExtractJsonStringField(jsonText, "fragment");
 
@@ -587,6 +784,117 @@ namespace Microsoft::Xna::Framework::Content
                     ReadTextFile(vertPath),
                     ReadTextFile(fragPath));
             }
+
+            static std::optional<Graphics::Texture2D> LoadOptionalTexture2D(
+                const CNA::Internal::JsonValue& root, const char* field, ContentManager& cm)
+            {
+                const CNA::Internal::JsonValue* v = root.FindMember(field);
+                if (v == nullptr) { return std::nullopt; }
+                if (!v->IsString() || v->stringValue.empty())
+                {
+                    throw ContentLoadException(std::string("Effect .cnj: '") + field + "' must be a non-empty string.");
+                }
+                return cm.Load<Graphics::Texture2D>(v->stringValue);
+            }
+
+            static std::shared_ptr<Graphics::Effect> ReadStockEffect(
+                const CNA::Internal::JsonValue& root, const std::string& type,
+                const std::string& jsonPath, ContentManager& cm)
+            {
+                using namespace Graphics;
+                GraphicsDevice& gd = cm.getGraphicsDeviceInternal();
+
+                if (type == "BasicEffect")
+                {
+                    auto effect = std::make_shared<BasicEffect>(gd);
+                    if (auto tex = LoadOptionalTexture2D(root, "texture", cm))
+                    {
+                        effect->SetOwnedTexture(std::make_shared<Texture2D>(std::move(*tex)));
+                        effect->setTextureEnabledProperty(true);
+                    }
+                    effect->setDiffuseColorProperty(ReadVector3FieldEXT(root, "diffuseColor", Vector3::One, jsonPath));
+                    effect->setEmissiveColorProperty(ReadVector3FieldEXT(root, "emissiveColor", Vector3::Zero, jsonPath));
+                    effect->setSpecularColorProperty(ReadVector3FieldEXT(root, "specularColor", Vector3::One, jsonPath));
+                    effect->setSpecularPowerProperty(ReadFloatFieldEXT(root, "specularPower", 16.0f, jsonPath));
+                    effect->setAlphaProperty(ReadFloatFieldEXT(root, "alpha", 1.0f, jsonPath));
+                    effect->VertexColorEnabled = ReadBoolFieldEXT(root, "vertexColorEnabled", false, jsonPath);
+                    return effect;
+                }
+                if (type == "AlphaTestEffect")
+                {
+                    auto effect = std::make_shared<AlphaTestEffect>(gd);
+                    if (auto tex = LoadOptionalTexture2D(root, "texture", cm))
+                    {
+                        effect->SetOwnedTexture(std::make_shared<Texture2D>(std::move(*tex)));
+                    }
+                    const CNA::Internal::JsonValue* alphaFn = root.FindMember("alphaFunction");
+                    effect->setAlphaFunctionProperty(
+                        alphaFn != nullptr && alphaFn->IsString()
+                            ? ParseCompareFunctionEXT(alphaFn->stringValue, jsonPath)
+                            : CompareFunction::Greater);
+                    effect->setReferenceAlphaProperty(
+                        static_cast<int32_t>(ReadFloatFieldEXT(root, "referenceAlpha", 0.0f, jsonPath)));
+                    effect->setDiffuseColorProperty(ReadVector3FieldEXT(root, "diffuseColor", Vector3::One, jsonPath));
+                    effect->setAlphaProperty(ReadFloatFieldEXT(root, "alpha", 1.0f, jsonPath));
+                    effect->setVertexColorEnabledProperty(ReadBoolFieldEXT(root, "vertexColorEnabled", false, jsonPath));
+                    return effect;
+                }
+                if (type == "DualTextureEffect")
+                {
+                    auto effect = std::make_shared<DualTextureEffect>(gd);
+                    if (auto tex = LoadOptionalTexture2D(root, "texture", cm))
+                    {
+                        effect->SetOwnedTexture(std::make_shared<Texture2D>(std::move(*tex)));
+                    }
+                    if (auto tex2 = LoadOptionalTexture2D(root, "texture2", cm))
+                    {
+                        effect->SetOwnedTexture2(std::make_shared<Texture2D>(std::move(*tex2)));
+                    }
+                    effect->setDiffuseColorProperty(ReadVector3FieldEXT(root, "diffuseColor", Vector3::One, jsonPath));
+                    effect->setAlphaProperty(ReadFloatFieldEXT(root, "alpha", 1.0f, jsonPath));
+                    effect->setVertexColorEnabledProperty(ReadBoolFieldEXT(root, "vertexColorEnabled", false, jsonPath));
+                    return effect;
+                }
+                if (type == "EnvironmentMapEffect")
+                {
+                    auto effect = std::make_shared<EnvironmentMapEffect>(gd);
+                    if (auto tex = LoadOptionalTexture2D(root, "texture", cm))
+                    {
+                        effect->SetOwnedTexture(std::make_shared<Texture2D>(std::move(*tex)));
+                    }
+                    if (const CNA::Internal::JsonValue* envMap = root.FindMember("environmentMap"))
+                    {
+                        if (!envMap->IsString() || envMap->stringValue.empty())
+                        {
+                            throw ContentLoadException(
+                                "Effect .cnj '" + jsonPath + "': 'environmentMap' must be a non-empty string.");
+                        }
+                        Graphics::TextureCube cube = cm.Load<Graphics::TextureCube>(envMap->stringValue);
+                        effect->SetOwnedEnvironmentMap(std::make_shared<TextureCube>(std::move(cube)));
+                    }
+                    effect->setEnvironmentMapAmountProperty(ReadFloatFieldEXT(root, "environmentMapAmount", 1.0f, jsonPath));
+                    effect->setEnvironmentMapSpecularProperty(ReadVector3FieldEXT(root, "environmentMapSpecular", Vector3::Zero, jsonPath));
+                    effect->setFresnelFactorProperty(ReadFloatFieldEXT(root, "fresnelFactor", 1.0f, jsonPath));
+                    effect->setDiffuseColorProperty(ReadVector3FieldEXT(root, "diffuseColor", Vector3::One, jsonPath));
+                    effect->setEmissiveColorProperty(ReadVector3FieldEXT(root, "emissiveColor", Vector3::Zero, jsonPath));
+                    effect->setAlphaProperty(ReadFloatFieldEXT(root, "alpha", 1.0f, jsonPath));
+                    return effect;
+                }
+                // SkinnedEffect (the only remaining branch this method is ever called with).
+                auto effect = std::make_shared<SkinnedEffect>(gd);
+                if (auto tex = LoadOptionalTexture2D(root, "texture", cm))
+                {
+                    effect->SetOwnedTexture(std::make_shared<Texture2D>(std::move(*tex)));
+                }
+                effect->setWeightsPerVertexProperty(
+                    static_cast<int32_t>(ReadFloatFieldEXT(root, "weightsPerVertex", 4.0f, jsonPath)));
+                effect->setDiffuseColorProperty(ReadVector3FieldEXT(root, "diffuseColor", Vector3::One, jsonPath));
+                effect->setEmissiveColorProperty(ReadVector3FieldEXT(root, "emissiveColor", Vector3::Zero, jsonPath));
+                effect->setSpecularColorProperty(ReadVector3FieldEXT(root, "specularColor", Vector3::One, jsonPath));
+                effect->setSpecularPowerProperty(ReadFloatFieldEXT(root, "specularPower", 16.0f, jsonPath));
+                effect->setAlphaProperty(ReadFloatFieldEXT(root, "alpha", 1.0f, jsonPath));
+                return effect;
+            }
         };
 
         // ---------------------------------------------------------------------------
@@ -604,6 +912,20 @@ namespace Microsoft::Xna::Framework::Content
             while (pos < j.size() && std::isspace(static_cast<unsigned char>(j[pos]))) ++pos;
             if (pos >= j.size()) return def;
             try { return std::stoi(j.substr(pos)); } catch (...) { return def; }
+        }
+
+        static bool JsonBool(const std::string& j, const std::string& key, bool def = false)
+        {
+            const std::string needle = "\"" + key + "\"";
+            auto pos = j.find(needle);
+            if (pos == std::string::npos) return def;
+            pos = j.find(':', pos + needle.size());
+            if (pos == std::string::npos) return def;
+            ++pos;
+            while (pos < j.size() && std::isspace(static_cast<unsigned char>(j[pos]))) ++pos;
+            if (j.compare(pos, 4, "true") == 0) return true;
+            if (j.compare(pos, 5, "false") == 0) return false;
+            return def;
         }
 
         static float JsonFloat(const std::string& j, const std::string& key, float def = 0.0f)
@@ -661,12 +983,33 @@ namespace Microsoft::Xna::Framework::Content
             return r;
         }
 
+        // Morph target CLI/.cnj serialization: variable-length float array (mesh entry's own
+        // "morphWeights" field, and each morph weight-track keyframe's own "weights" field) --
+        // generalizes JsonFloatArray3's identical scan logic to an unbounded count, stopping at
+        // the array's own closing bracket.
+        static std::vector<float> JsonFloatArrayN(const std::string& j, std::size_t from)
+        {
+            std::vector<float> r;
+            if (from == std::string::npos) return r;
+            std::size_t pos = from + 1;
+            while (pos < j.size() && j[pos] != ']')
+            {
+                while (pos < j.size() && j[pos] != ']' &&
+                       !std::isdigit(static_cast<unsigned char>(j[pos])) && j[pos] != '-') ++pos;
+                if (pos >= j.size() || j[pos] == ']') break;
+                r.push_back(std::stof(j.substr(pos)));
+                while (pos < j.size() && j[pos] != ',' && j[pos] != ']') ++pos;
+                if (pos < j.size() && j[pos] == ',') ++pos;
+            }
+            return r;
+        }
+
         class SpriteFontTypeReader : public LooseFileContentTypeReader<Graphics::SpriteFont>
         {
         public:
             [[nodiscard]] std::vector<std::string> GetExtensions() const override
             {
-                return {".cnb"};
+                return {".cnj"};
             }
 
             Graphics::SpriteFont Read(const std::string& path, ContentManager& cm) override
@@ -676,9 +1019,9 @@ namespace Microsoft::Xna::Framework::Content
 
                 const std::string json = ReadTextFile(path);
 
-                const CNA::Internal::CnbEnvelope envelope = CNA::Internal::ParseCnbEnvelope(json);
-                CNA::Internal::ValidateCnbEnvelope(envelope, "SpriteFont", path);
-                RejectSourceFileForSelfContainedCnb(envelope, "SpriteFont", path);
+                const CNA::Internal::CnjEnvelope envelope = CNA::Internal::ParseCnjEnvelope(json);
+                CNA::Internal::ValidateCnjEnvelope(envelope, "SpriteFont", path);
+                RejectSourceFileForSelfContainedCnj(envelope, "SpriteFont", path);
 
                 const std::string textureName   = ExtractJsonStringField(json, "texture");
                 const int         lineSpacing    = JsonInt(json, "lineSpacing");
@@ -752,7 +1095,7 @@ namespace Microsoft::Xna::Framework::Content
             }
         };
 
-        static std::vector<std::uint8_t> ReadBinaryFile(const std::string& path)
+        std::vector<std::uint8_t> ReadBinaryFile(const std::string& path)
         {
             std::ifstream file(path, std::ios::binary);
             if (!file.is_open())
@@ -825,6 +1168,19 @@ namespace Microsoft::Xna::Framework::Content
                 ++pos;
             }
             return pos;
+        }
+
+        // Morph target CLI/.cnj serialization: extracts a single nested JSON object's substring
+        // by key (e.g. a mesh entry's own "morphWeightTrack" field), bracket-depth-aware via
+        // FindMatchingBracketEXT so a nested "keys" array's own braces don't truncate it early.
+        std::string ExtractJsonObjectFieldEXT(const std::string& json, const std::string& key)
+        {
+            const std::size_t k = json.find("\"" + key + "\"");
+            if (k == std::string::npos) { return {}; }
+            const std::size_t os = json.find('{', k);
+            if (os == std::string::npos) { return {}; }
+            const std::size_t oe = FindMatchingBracketEXT(json, os, '{', '}');
+            return json.substr(os, oe - os);
         }
 
         // Parses a flat JSON array of small objects bounded to the array's own closing
@@ -902,45 +1258,866 @@ namespace Microsoft::Xna::Framework::Content
             return clip;
         }
 
+        // plan_cnj.md CNB-48: an "animations" entry's "clip" field may name either a raw
+        // .clip.bin binary blob (ReadAnimationClipFileEXT's original, still-supported shape) or
+        // a standalone .cnj AnimationClip asset (Phase 10) -- letting multiple Models/
+        // SkinnedModels share one clip (e.g. a common "Idle"/"Walk" library) instead of
+        // duplicating the binary per model. Dispatched by extension. The .cnj branch goes
+        // through ContentManager (real caching), so @p baseDir must be re-expressed relative to
+        // @p root first -- cm.Load<T>() always resolves relative to the content root, not
+        // @p baseDir, mirroring SkinnedModelTypeReader's own existing texRootRelative pattern for
+        // textures. The binary branch is unaffected by that distinction (it never goes through
+        // ContentManager) and keeps resolving directly against @p baseDir, exactly as before this
+        // task.
+        Graphics::AnimationClipEXT ReadAnimationClipRefEXT(
+            const std::string& clipFile, const std::filesystem::path& baseDir,
+            const std::string& root, ContentManager& cm)
+        {
+            namespace fs = std::filesystem;
+            if (fs::path(clipFile).extension() == ".cnj")
+            {
+                const std::string rootRelative = fs::relative(baseDir / clipFile, root).string();
+                return cm.Load<Graphics::AnimationClipEXT>(rootRelative);
+            }
+            return ReadAnimationClipFileEXT((baseDir / clipFile).string());
+        }
+
+        // Reads a fixed-length JSON numeric array field (e.g. "translation": [x,y,z]) from a
+        // JSON object, or returns false leaving `out` untouched if the field is absent --
+        // AnimationClipTypeReader's keyframes then keep KeyframeEXT's own default member
+        // initializers (Rotation = Identity, Scale = {1,1,1}) instead of requiring every field
+        // on every key.
+        bool TryReadFloatArrayField(const CNA::Internal::JsonValue& obj, const char* field,
+                                     std::size_t expectedCount, std::vector<float>& out,
+                                     const std::string& path)
+        {
+            const CNA::Internal::JsonValue* v = obj.FindMember(field);
+            if (v == nullptr) { return false; }
+            if (v->type != CNA::Internal::JsonType::Array || v->arrayValue.size() != expectedCount)
+            {
+                throw ContentLoadException(
+                    "AnimationClip .cnj '" + path + "': '" + field + "' must be a " +
+                    std::to_string(expectedCount) + "-element numeric array.");
+            }
+            out.clear();
+            out.reserve(expectedCount);
+            for (const auto& element : v->arrayValue)
+            {
+                if (!element.IsNumber())
+                {
+                    throw ContentLoadException(
+                        "AnimationClip .cnj '" + path + "': '" + field + "' has a non-number element.");
+                }
+                out.push_back(static_cast<float>(element.numberValue));
+            }
+            return true;
+        }
+
+        // plan_cnj.md CNB-40: a directly-loadable .cnj AnimationClip document, independent of
+        // any specific Model -- cnj.md's own per-type conventions table documented this as a
+        // natural, open-ended follow-up beyond plan_cnj.md's original 9 phases. Either inline
+        // JSON keyframe/bone-transform data ("tracks"), or -- for large clips, to avoid bloating
+        // JSON with thousands of matrices, exactly as cnj.md's table describes -- a reference to
+        // an existing raw binary blob via "clipFile", read through the same shared
+        // ReadAnimationClipFileEXT() helper ModelTypeReader's/SkinnedModelTypeReader's own
+        // "animations" field already uses. Self-contained either way: like SpriteFont/Effect/
+        // Model, "sourceFile" is rejected (CNB-34's capability matrix).
+        class AnimationClipTypeReader : public LooseFileContentTypeReader<Graphics::AnimationClipEXT>
+        {
+        public:
+            [[nodiscard]] std::vector<std::string> GetExtensions() const override
+            {
+                return {".cnj"};
+            }
+
+            Graphics::AnimationClipEXT Read(const std::string& path, ContentManager& cm) override
+            {
+                namespace fs = std::filesystem;
+                using CNA::Internal::JsonType;
+                using CNA::Internal::JsonValue;
+
+                const std::string json = ReadTextFile(path);
+
+                const CNA::Internal::CnjEnvelope envelope = CNA::Internal::ParseCnjEnvelope(json);
+                CNA::Internal::ValidateCnjEnvelope(envelope, "AnimationClip", path);
+                RejectSourceFileForSelfContainedCnj(envelope, "AnimationClip", path);
+
+                const JsonValue root = CNA::Internal::ParseJson(json);
+                const JsonValue* clipFileField = root.FindMember("clipFile");
+                const JsonValue* tracksField   = root.FindMember("tracks");
+
+                if ((clipFileField != nullptr) == (tracksField != nullptr))
+                {
+                    throw ContentLoadException(
+                        "AnimationClip .cnj '" + path +
+                        "' must have exactly one of 'clipFile' or 'tracks'.");
+                }
+
+                if (clipFileField != nullptr)
+                {
+                    if (!clipFileField->IsString() || clipFileField->stringValue.empty())
+                    {
+                        throw ContentLoadException(
+                            "AnimationClip .cnj '" + path + "' has a non-string or empty 'clipFile'.");
+                    }
+                    return ReadAnimationClipFileEXT(
+                        (fs::path(cm.getRootDirectoryProperty()) / clipFileField->stringValue).string());
+                }
+
+                const JsonValue* durationField = root.FindMember("duration");
+                if (durationField == nullptr || !durationField->IsNumber())
+                {
+                    throw ContentLoadException(
+                        "AnimationClip .cnj '" + path + "' is missing a numeric 'duration' field.");
+                }
+
+                Graphics::AnimationClipEXT clip;
+                clip.Duration = System::TimeSpan::FromSeconds(durationField->numberValue);
+
+                if (tracksField->type != JsonType::Array)
+                {
+                    throw ContentLoadException(
+                        "AnimationClip .cnj '" + path + "' has a 'tracks' field that is not an array.");
+                }
+
+                std::vector<float> arr;
+                for (const JsonValue& trackValue : tracksField->arrayValue)
+                {
+                    if (!trackValue.IsObject())
+                    {
+                        throw ContentLoadException(
+                            "AnimationClip .cnj '" + path + "' has a non-object entry in 'tracks'.");
+                    }
+
+                    Graphics::BoneTrackEXT track;
+
+                    const JsonValue* boneIndexField = trackValue.FindMember("boneIndex");
+                    if (boneIndexField == nullptr || !boneIndexField->IsNumber())
+                    {
+                        throw ContentLoadException(
+                            "AnimationClip .cnj '" + path + "' has a track missing a numeric 'boneIndex'.");
+                    }
+                    track.BoneIndex = static_cast<int>(boneIndexField->numberValue);
+
+                    const JsonValue* keysField = trackValue.FindMember("keys");
+                    if (keysField == nullptr || keysField->type != JsonType::Array)
+                    {
+                        throw ContentLoadException(
+                            "AnimationClip .cnj '" + path + "' has a track missing a 'keys' array.");
+                    }
+
+                    track.Keys.reserve(keysField->arrayValue.size());
+                    for (const JsonValue& keyValue : keysField->arrayValue)
+                    {
+                        if (!keyValue.IsObject())
+                        {
+                            throw ContentLoadException(
+                                "AnimationClip .cnj '" + path + "' has a non-object entry in a track's 'keys'.");
+                        }
+
+                        Graphics::KeyframeEXT key;
+
+                        const JsonValue* timeField = keyValue.FindMember("time");
+                        if (timeField == nullptr || !timeField->IsNumber())
+                        {
+                            throw ContentLoadException(
+                                "AnimationClip .cnj '" + path + "' has a keyframe missing a numeric 'time'.");
+                        }
+                        key.Time = System::TimeSpan::FromSeconds(timeField->numberValue);
+
+                        if (TryReadFloatArrayField(keyValue, "translation", 3, arr, path))
+                        {
+                            key.Translation = Vector3(arr[0], arr[1], arr[2]);
+                        }
+                        if (TryReadFloatArrayField(keyValue, "rotation", 4, arr, path))
+                        {
+                            key.Rotation = Quaternion(arr[0], arr[1], arr[2], arr[3]);
+                        }
+                        if (TryReadFloatArrayField(keyValue, "scale", 3, arr, path))
+                        {
+                            key.Scale = Vector3(arr[0], arr[1], arr[2]);
+                        }
+
+                        track.Keys.push_back(key);
+                    }
+
+                    clip.Tracks.push_back(std::move(track));
+                }
+
+                return clip;
+            }
+        };
+
+        Microsoft::Xna::Framework::CurveLoopType ParseCurveLoopTypeEXT(
+            const std::string& value, const std::string& path)
+        {
+            using Microsoft::Xna::Framework::CurveLoopType;
+            if (value.empty() || value == "Constant") { return CurveLoopType::Constant; }
+            if (value == "Cycle") { return CurveLoopType::Cycle; }
+            if (value == "CycleOffset") { return CurveLoopType::CycleOffset; }
+            if (value == "Oscillate") { return CurveLoopType::Oscillate; }
+            if (value == "Linear") { return CurveLoopType::Linear; }
+            throw ContentLoadException(
+                "Curve .cnj '" + path + "' has an unrecognized CurveLoopType '" + value + "'.");
+        }
+
+        Microsoft::Xna::Framework::CurveContinuity ParseCurveContinuityEXT(
+            const std::string& value, const std::string& path)
+        {
+            using Microsoft::Xna::Framework::CurveContinuity;
+            if (value.empty() || value == "Smooth") { return CurveContinuity::Smooth; }
+            if (value == "Step") { return CurveContinuity::Step; }
+            throw ContentLoadException(
+                "Curve .cnj '" + path + "' has an unrecognized CurveContinuity '" + value + "'.");
+        }
+
+        // plan_cnj.md CNB-44: self-contained JSON port of CurveContentTypeReader.hpp's already-
+        // FNA-verified field order/shape -- "preLoop"/"postLoop" (CurveLoopType names, default
+        // "Constant" when omitted) + "keys" (position/value/tangentIn/tangentOut/continuity,
+        // tangentIn/tangentOut/continuity default to 0.0/0.0/"Smooth" when omitted per key).
+        class CurveTypeReader : public LooseFileContentTypeReader<Microsoft::Xna::Framework::Curve>
+        {
+        public:
+            [[nodiscard]] std::vector<std::string> GetExtensions() const override
+            {
+                return {".cnj"};
+            }
+
+            Microsoft::Xna::Framework::Curve Read(const std::string& path, ContentManager& /*cm*/) override
+            {
+                using CNA::Internal::JsonType;
+                using CNA::Internal::JsonValue;
+                using Microsoft::Xna::Framework::Curve;
+                using Microsoft::Xna::Framework::CurveKey;
+
+                const std::string json = ReadTextFile(path);
+
+                const CNA::Internal::CnjEnvelope envelope = CNA::Internal::ParseCnjEnvelope(json);
+                CNA::Internal::ValidateCnjEnvelope(envelope, "Curve", path);
+                RejectSourceFileForSelfContainedCnj(envelope, "Curve", path);
+
+                const JsonValue root = CNA::Internal::ParseJson(json);
+
+                Curve curve;
+
+                if (const JsonValue* preLoop = root.FindMember("preLoop"))
+                {
+                    if (!preLoop->IsString())
+                    {
+                        throw ContentLoadException("Curve .cnj '" + path + "': 'preLoop' must be a string.");
+                    }
+                    curve.setPreLoopProperty(ParseCurveLoopTypeEXT(preLoop->stringValue, path));
+                }
+                if (const JsonValue* postLoop = root.FindMember("postLoop"))
+                {
+                    if (!postLoop->IsString())
+                    {
+                        throw ContentLoadException("Curve .cnj '" + path + "': 'postLoop' must be a string.");
+                    }
+                    curve.setPostLoopProperty(ParseCurveLoopTypeEXT(postLoop->stringValue, path));
+                }
+
+                const JsonValue* keysField = root.FindMember("keys");
+                if (keysField == nullptr || keysField->type != JsonType::Array)
+                {
+                    throw ContentLoadException("Curve .cnj '" + path + "' is missing a 'keys' array.");
+                }
+
+                for (const JsonValue& keyValue : keysField->arrayValue)
+                {
+                    if (!keyValue.IsObject())
+                    {
+                        throw ContentLoadException(
+                            "Curve .cnj '" + path + "' has a non-object entry in 'keys'.");
+                    }
+
+                    const JsonValue* positionField = keyValue.FindMember("position");
+                    const JsonValue* valueField    = keyValue.FindMember("value");
+                    if (positionField == nullptr || !positionField->IsNumber() ||
+                        valueField == nullptr || !valueField->IsNumber())
+                    {
+                        throw ContentLoadException(
+                            "Curve .cnj '" + path + "' has a key missing numeric 'position'/'value'.");
+                    }
+
+                    float tangentIn = 0.0f;
+                    if (const JsonValue* t = keyValue.FindMember("tangentIn"))
+                    {
+                        if (!t->IsNumber())
+                        {
+                            throw ContentLoadException("Curve .cnj '" + path + "': 'tangentIn' must be numeric.");
+                        }
+                        tangentIn = static_cast<float>(t->numberValue);
+                    }
+                    float tangentOut = 0.0f;
+                    if (const JsonValue* t = keyValue.FindMember("tangentOut"))
+                    {
+                        if (!t->IsNumber())
+                        {
+                            throw ContentLoadException("Curve .cnj '" + path + "': 'tangentOut' must be numeric.");
+                        }
+                        tangentOut = static_cast<float>(t->numberValue);
+                    }
+                    auto continuity = Microsoft::Xna::Framework::CurveContinuity::Smooth;
+                    if (const JsonValue* c = keyValue.FindMember("continuity"))
+                    {
+                        if (!c->IsString())
+                        {
+                            throw ContentLoadException("Curve .cnj '" + path + "': 'continuity' must be a string.");
+                        }
+                        continuity = ParseCurveContinuityEXT(c->stringValue, path);
+                    }
+
+                    curve.getKeysProperty().Add(CurveKey(
+                        static_cast<float>(positionField->numberValue),
+                        static_cast<float>(valueField->numberValue),
+                        tangentIn, tangentOut, continuity));
+                }
+
+                return curve;
+            }
+        };
+
         // ---------------------------------------------------------------------------
         // .model.json descriptor reader
         // ---------------------------------------------------------------------------
+
+        // Owned resources shared by all copies of a Model returned by ModelTypeReader::Read()
+        // (the .cnj JSON path) or ReadGltfModel() (CNB-70/71, Phase 13D's runtime glTF path) --
+        // hoisted out of ModelTypeReader::Read() so both readers share one definition.
+        struct ModelResources {
+            std::vector<std::unique_ptr<Graphics::VertexBuffer>>  vbs;
+            std::vector<std::unique_ptr<Graphics::IndexBuffer>>   ibs;
+            std::vector<std::unique_ptr<Graphics::ModelBone>>     boneOwners;
+            std::vector<std::unique_ptr<Graphics::ModelMesh>>     meshOwners;
+            std::vector<std::unique_ptr<Graphics::ModelMeshPart>> partOwners;
+            std::vector<std::shared_ptr<Graphics::Effect>>        effectOwners;
+            std::vector<std::unique_ptr<Graphics::Texture2D>>     textureOwners;
+            // Task 941: owns the skeleton/animation-clip data attached to the returned Model's
+            // own Tag property. Null for a rigid, non-skinned model with no skeleton.
+            std::unique_ptr<Graphics::SkinningData>               skinningData;
+            // CNB-64/65 (Phase 13B): owns the morph-target data attached to each morphed mesh
+            // part's own Tag property (one entry per part that has morph targets, not per Model).
+            std::vector<std::unique_ptr<Graphics::MorphTargetDataEXT>> morphOwners;
+        };
+
+        // Task 927: `stride` is always one of XNA's own "clean" (tightly packed, no vtable) sizes
+        // -- 16/20/24/32/52/56 -- since every offline conversion tool (and, since CNB-70, the
+        // runtime glTF reader) writes/produces that exact layout. Every CNA vertex struct below
+        // publicly inherits the polymorphic IVertexType (a vtable pointer XNA's own C# interface
+        // never carried), inflating its real sizeof() past that clean size -- comparing `stride`
+        // against sizeof(...) directly, then reinterpret_cast-ing the tightly-packed bytes as an
+        // array of those inflated structs, silently reads every vertex field from the wrong byte
+        // offset (confirmed the true cause of a long-tracked "near-plane-clipping"/invisible-model
+        // symptom family in ../cna-samples). Read each vertex's fields explicitly from the
+        // buffer's own known-clean offsets instead, and construct real, normally-initialized C++
+        // objects (the compiler resolves member layout correctly), then upload through the
+        // existing typed SetData overload, which already packs into the correct compact GPU
+        // layout. Stride 52/56 (GPU-skinned, with/without per-vertex Color -- CNB-67) already
+        // match VertexBuffer's own compact skinned layout, so SetDataRaw() copies them straight
+        // through with no C++ struct reinterpretation at all, avoiding the vtable-inflation risk
+        // by construction rather than by careful offset arithmetic.
+        std::unique_ptr<Graphics::VertexBuffer> BuildVertexBufferFromRawBytes(
+            Graphics::GraphicsDevice& device, int stride, int numVertices,
+            const std::vector<std::uint8_t>& vertBytes)
+        {
+            auto readF = [&](std::size_t off) {
+                float v;
+                std::memcpy(&v, vertBytes.data() + off, sizeof(float));
+                return v;
+            };
+            auto readVec3 = [&](std::size_t off) {
+                return Vector3(readF(off), readF(off + 4), readF(off + 8));
+            };
+            auto readVec2 = [&](std::size_t off) {
+                return Vector2(readF(off), readF(off + 4));
+            };
+            auto readColor = [&](std::size_t off) {
+                return Color(vertBytes[off], vertBytes[off + 1],
+                             vertBytes[off + 2], vertBytes[off + 3]);
+            };
+
+            // Note: VertexPositionColorTexture's own declared `= default` default constructor is
+            // implicitly deleted (its `Color Color` member has no zero-arg constructor) -- build
+            // each vector via reserve()+emplace_back() rather than a sized constructor, so none
+            // of the 4 struct-backed branches below ever needs default-construction.
+            auto vb = std::make_unique<Graphics::VertexBuffer>(device, numVertices);
+            if (stride == 16) {
+                std::vector<Graphics::VertexPositionColor> verts;
+                verts.reserve(static_cast<std::size_t>(numVertices));
+                for (int i = 0; i < numVertices; ++i) {
+                    const std::size_t o = static_cast<std::size_t>(i) * 16;
+                    verts.emplace_back(readVec3(o), readColor(o + 12));
+                }
+                vb->SetData(verts.data(), numVertices);
+            } else if (stride == 20) {
+                std::vector<Graphics::VertexPositionTexture> verts;
+                verts.reserve(static_cast<std::size_t>(numVertices));
+                for (int i = 0; i < numVertices; ++i) {
+                    const std::size_t o = static_cast<std::size_t>(i) * 20;
+                    verts.emplace_back(readVec3(o), readVec2(o + 12));
+                }
+                vb->SetData(verts.data(), numVertices);
+            } else if (stride == 24) {
+                std::vector<Graphics::VertexPositionColorTexture> verts;
+                verts.reserve(static_cast<std::size_t>(numVertices));
+                for (int i = 0; i < numVertices; ++i) {
+                    const std::size_t o = static_cast<std::size_t>(i) * 24;
+                    verts.emplace_back(readVec3(o), readColor(o + 12), readVec2(o + 16));
+                }
+                vb->SetData(verts.data(), numVertices);
+            } else if (stride == 32) {
+                std::vector<Graphics::VertexPositionNormalTexture> verts;
+                verts.reserve(static_cast<std::size_t>(numVertices));
+                for (int i = 0; i < numVertices; ++i) {
+                    const std::size_t o = static_cast<std::size_t>(i) * 32;
+                    verts.emplace_back(readVec3(o), readVec3(o + 12), readVec2(o + 24));
+                }
+                vb->SetData(verts.data(), numVertices);
+            } else if (stride == 48) {
+                // plan_cnj.md CNB-57 (Phase 13A): VertexPositionNormalTangentTexture (PbrEffect)
+                // -- raw byte upload for the same vtable-inflation reason as stride 52/56 above.
+                vb->SetDataRaw(vertBytes.data(), numVertices, 48);
+            } else if (stride == 52) {
+                vb->SetDataRaw(vertBytes.data(), numVertices, 52);
+            } else if (stride == 56) {
+                vb->SetDataRaw(vertBytes.data(), numVertices, 56);
+            } else if (stride == 68) {
+                // PBR + skinning combo: VertexPositionNormalTangentTextureSkinned (SkinnedPbrEffect)
+                // -- raw byte upload for the same vtable-inflation reason as stride 48/52/56 above.
+                vb->SetDataRaw(vertBytes.data(), numVertices, 68);
+            }
+            return vb;
+        }
+
+        // CNB-97 (Phase 14H): applies up to 3 KHR_lights_punctual-derived directional lights
+        // (see GltfImportCore::ExtractPunctualLightsEXT's own doc comment) to any effect
+        // implementing IEffectLights -- a single dynamic_cast against the interface covers
+        // BasicEffect/SkinnedEffect/PbrEffect/SkinnedPbrEffect uniformly, rather than one branch
+        // per concrete type. A no-op for DualTextureEffect/AlphaTestEffect (neither implements
+        // IEffectLights, matching real XNA's own lighting-less shape for both). Any DirectionalLight
+        // slot beyond lights.size() is left at the effect's own default (disabled).
+        void ApplyPunctualLightsEXT(Graphics::Effect& fx, const std::vector<CNA::Internal::GltfImport::LightOut>& lights)
+        {
+            if (lights.empty()) { return; }
+            auto* lit = dynamic_cast<Graphics::IEffectLights*>(&fx);
+            if (!lit) { return; }
+
+            Graphics::DirectionalLight* slots[3] = {
+                &lit->getDirectionalLight0Property(),
+                &lit->getDirectionalLight1Property(),
+                &lit->getDirectionalLight2Property(),
+            };
+            for (std::size_t i = 0; i < lights.size() && i < 3; ++i)
+            {
+                slots[i]->setDirectionProperty(lights[i].direction);
+                slots[i]->setDiffuseColorProperty(lights[i].diffuseColor);
+                slots[i]->setEnabledProperty(true);
+            }
+        }
+
+        // plan_cnj.md CNB-70/71 (Phase 13D): loads a .gltf/.glb file directly into a real Model,
+        // with no intermediate .cnj/binary sidecar files -- reuses the same
+        // CNA::Internal::GltfImport::GltfImportCore parsing/skeleton/animation/mesh-extraction
+        // functions tools/gltf_to_cnj's offline CLI tool calls (see that header's own docs for the
+        // full behavior description: topological bone reorder, sparse-accessor-safe reads,
+        // CUBICSPLINE Hermite evaluation, base-color/occlusion texture extraction, scene-scoped
+        // mesh grouping, stride-20/24/32/52/56 selection).
+        //
+        // Unlike the offline tool (which can emit multiple .cnj Model outputs for a glTF file
+        // combining several independently-skinned characters), a single Load<Model>() call
+        // returns exactly one Model -- only the file's FIRST mesh group (CollectMeshGroups' own
+        // order) is imported. A multi-character glTF file needs the offline gltf_to_cnj tool (or
+        // splitting the source into separate files) to reach the other groups -- a documented
+        // limitation, not a bug. unitScale is always 1.0 (no CLI-argument equivalent exists for
+        // runtime loading); a source file not authored in meters needs the offline tool instead.
+        Graphics::Model ReadGltfModel(const std::string& path, ContentManager& cm)
+        {
+            namespace fs = std::filesystem;
+            using namespace CNA::Internal::GltfImport;
+
+            cgltf_options parseOptions{};
+            cgltf_data* data = nullptr;
+            cgltf_result parseResult = cgltf_parse_file(&parseOptions, path.c_str(), &data);
+            if (parseResult != cgltf_result_success)
+            {
+                throw ContentLoadException(
+                    "Failed to parse glTF file '" + path + "' (cgltf error " +
+                    std::to_string(static_cast<int>(parseResult)) + ").");
+            }
+            struct DataGuard { cgltf_data* d; ~DataGuard() { cgltf_free(d); } } guard{data};
+
+            parseResult = cgltf_load_buffers(&parseOptions, data, path.c_str());
+            if (parseResult != cgltf_result_success)
+            {
+                throw ContentLoadException("Failed to load buffers for glTF file '" + path + "'.");
+            }
+
+            if (data->asset.version && std::string(data->asset.version) != "2.0")
+            {
+                throw ContentLoadException(
+                    "Unsupported glTF asset.version '" + std::string(data->asset.version) +
+                    "' in '" + path + "' -- only glTF 2.0 is supported.");
+            }
+
+            const std::vector<MeshGroup> groups = CollectMeshGroups(data);
+            if (groups.empty())
+            {
+                throw ContentLoadException("glTF file '" + path + "' contains no mesh instances to import.");
+            }
+            const MeshGroup& group = groups.front();
+
+            // CNB-97 (Phase 14H): KHR_lights_punctual, approximated as up to 3 directional lights
+            // (see ExtractPunctualLightsEXT's own doc comment) -- applied to every mesh part's
+            // effect below via ApplyPunctualLightsEXT, for whichever ones implement IEffectLights.
+            const std::vector<LightOut> punctualLights = ExtractPunctualLightsEXT(data);
+
+            const bool hasSkin = group.skin != nullptr;
+            SkeletonResult skeleton;
+            if (hasSkin) { skeleton = BuildSkeleton(group.skin, 1.0f); }
+
+            Graphics::GraphicsDevice& device = cm.getGraphicsDeviceInternal();
+            const fs::path gltfDir = fs::path(path).parent_path();
+
+            auto res = std::make_shared<ModelResources>();
+            std::vector<Graphics::ModelBone*> boneRawPtrs;
+            std::vector<Graphics::ModelMesh*> meshRawPtrs;
+
+            {
+                auto bone = std::make_unique<Graphics::ModelBone>(0, std::string("Root"));
+                boneRawPtrs.push_back(bone.get());
+                res->boneOwners.push_back(std::move(bone));
+            }
+            Graphics::ModelBone* rootBone = boneRawPtrs.front();
+
+            if (hasSkin)
+            {
+                auto skinningData = std::make_unique<Graphics::SkinningData>();
+                const int boneCount = static_cast<int>(skeleton.bones.size());
+                skinningData->BoneCount = boneCount;
+                skinningData->SkeletonHierarchy.resize(static_cast<std::size_t>(boneCount));
+                skinningData->BindPose.resize(static_cast<std::size_t>(boneCount));
+                skinningData->InverseBindPose.resize(static_cast<std::size_t>(boneCount));
+                for (int i = 0; i < boneCount; ++i)
+                {
+                    const auto ui = static_cast<std::size_t>(i);
+                    skinningData->SkeletonHierarchy[ui] = skeleton.bones[ui].parentIndex;
+                    skinningData->BindPose[ui] = skeleton.bones[ui].bindPoseLocal;
+                    skinningData->InverseBindPose[ui] = skeleton.bones[ui].inverseBindGlobal;
+                }
+
+                std::vector<std::string> warnings;
+                const std::vector<ClipOut> clips = ExtractClips(data, skeleton, 1.0f, warnings);
+                for (const ClipOut& clip : clips)
+                {
+                    Graphics::AnimationClipEXT outClip;
+                    outClip.Duration = System::TimeSpan::FromSeconds(clip.duration);
+                    outClip.Tracks.reserve(clip.tracks.size());
+                    for (const TrackOut& track : clip.tracks)
+                    {
+                        Graphics::BoneTrackEXT outTrack;
+                        outTrack.BoneIndex = track.boneIndex;
+                        outTrack.Keys.reserve(track.keys.size());
+                        for (const KeyframeOut& k : track.keys)
+                        {
+                            Graphics::KeyframeEXT key;
+                            key.Time = System::TimeSpan::FromSeconds(k.time);
+                            key.Translation = k.translation;
+                            key.Rotation = k.rotation;
+                            key.Scale = k.scale;
+                            outTrack.Keys.push_back(key);
+                        }
+                        outClip.Tracks.push_back(std::move(outTrack));
+                    }
+                    skinningData->AnimationClips[clip.name] = std::move(outClip);
+                }
+
+                res->skinningData = std::move(skinningData);
+            }
+
+            // Textures are decoded straight from the extracted in-memory bytes via MemoryStream --
+            // no temporary files, unlike the offline CLI tool. Cached by cgltf_image* so a texture
+            // shared by several primitives is only decoded once per Load<Model>() call.
+            std::unordered_map<const cgltf_image*, Graphics::Texture2D*> textureCache;
+            auto loadTexture = [&](const cgltf_image* image) -> Graphics::Texture2D*
+            {
+                if (!image) { return nullptr; }
+                auto cached = textureCache.find(image);
+                if (cached != textureCache.end()) { return cached->second; }
+                auto extracted = ExtractImage(image, gltfDir);
+                if (!extracted) { return nullptr; }
+                System::IO::MemoryStream ms(extracted->bytes.data(),
+                                             static_cast<std::int32_t>(extracted->bytes.size()));
+                auto tex = std::make_unique<Graphics::Texture2D>(
+                    Graphics::Texture2D::FromStream(device, ms));
+                Graphics::Texture2D* texPtr = tex.get();
+                res->textureOwners.push_back(std::move(tex));
+                textureCache[image] = texPtr;
+                return texPtr;
+            };
+
+            // CNB-88 (Phase 14E): DualTextureEffect's own occlusion-as-lightmap blend expects
+            // "0.5 = neutral", not glTF's own real "1.0 = fully visible" occlusion convention --
+            // decode/halve/re-encode before loading (see RemapOcclusionImageForDualTextureEXT's
+            // own doc comment). A separate cache from textureCache above: the SAME cgltf_image*
+            // could in principle also be referenced, unmodified, by a different primitive's
+            // PbrEffect::OcclusionMap elsewhere in this same file.
+            std::unordered_map<const cgltf_image*, Graphics::Texture2D*> remappedOcclusionCache;
+            auto loadOcclusionTextureForDualTextureEXT = [&](const cgltf_image* image) -> Graphics::Texture2D*
+            {
+                if (!image) { return nullptr; }
+                auto cached = remappedOcclusionCache.find(image);
+                if (cached != remappedOcclusionCache.end()) { return cached->second; }
+                auto extracted = ExtractImage(image, gltfDir);
+                if (!extracted) { return nullptr; }
+                auto remapped = RemapOcclusionImageForDualTextureEXT(*extracted);
+                const ExtractedImage& toLoad = remapped ? *remapped : *extracted;
+                System::IO::MemoryStream ms(toLoad.bytes.data(),
+                                             static_cast<std::int32_t>(toLoad.bytes.size()));
+                auto tex = std::make_unique<Graphics::Texture2D>(
+                    Graphics::Texture2D::FromStream(device, ms));
+                Graphics::Texture2D* texPtr = tex.get();
+                res->textureOwners.push_back(std::move(tex));
+                remappedOcclusionCache[image] = texPtr;
+                return texPtr;
+            };
+
+            int meshCounter = 0;
+            for (const cgltf_mesh* mesh : group.meshes)
+            {
+                for (cgltf_size p = 0; p < mesh->primitives_count; ++p)
+                {
+                    const std::string partName = mesh->name
+                        ? (std::string(mesh->name) + (mesh->primitives_count > 1 ? "_" + std::to_string(p) : ""))
+                        : ("mesh" + std::to_string(meshCounter));
+                    MeshOut meshOut = ExtractMesh(data, mesh->primitives[p], partName, hasSkin ? &skeleton : nullptr, 1.0f);
+
+                    const int numVertices = meshOut.stride > 0
+                        ? static_cast<int>(meshOut.vertexBytes.size()) / meshOut.stride : 0;
+                    auto vb = BuildVertexBufferFromRawBytes(device, meshOut.stride, numVertices, meshOut.vertexBytes);
+
+                    const int indexSize = meshOut.use32BitIndices
+                        ? static_cast<int>(sizeof(std::uint32_t)) : static_cast<int>(sizeof(std::uint16_t));
+                    const int numIndices = static_cast<int>(meshOut.indexBytes.size()) / indexSize;
+                    const int primCount = numIndices / 3;
+
+                    auto ib = std::make_unique<Graphics::IndexBuffer>(
+                        device,
+                        meshOut.use32BitIndices ? Graphics::IndexElementSize::ThirtyTwoBits
+                                                : Graphics::IndexElementSize::SixteenBits,
+                        numIndices, Graphics::BufferUsage::None);
+                    if (meshOut.use32BitIndices) {
+                        ib->SetData(reinterpret_cast<const std::uint32_t*>(meshOut.indexBytes.data()), numIndices);
+                    } else {
+                        ib->SetData(reinterpret_cast<const std::uint16_t*>(meshOut.indexBytes.data()), numIndices);
+                    }
+
+                    auto part = std::make_unique<Graphics::ModelMeshPart>(
+                        vb.get(), ib.get(), numVertices, primCount, 0, 0);
+                    Graphics::ModelMeshPart* partPtr = part.get();
+
+                    // CNB-64/65 (Phase 13B): morph targets, attached to this part's own real XNA
+                    // Tag property (see MorphTargetEXT.hpp's own doc comment). Weight animation
+                    // (ExtractMorphWeightTrack) is independent of skinning -- checked regardless
+                    // of hasSkin, since a mesh can have morph targets and no skin at all.
+                    if (!meshOut.morphPositionDeltas.empty())
+                    {
+                        const std::size_t targetCount = meshOut.morphPositionDeltas.size();
+                        auto morph = std::make_unique<Graphics::MorphTargetDataEXT>();
+                        morph->BaseVertexBytes = meshOut.vertexBytes;
+                        morph->Stride = meshOut.stride;
+                        morph->PositionDeltas.reserve(targetCount);
+                        morph->NormalDeltas.reserve(targetCount);
+                        for (std::size_t t = 0; t < targetCount; ++t)
+                        {
+                            morph->PositionDeltas.push_back(meshOut.morphPositionDeltas[t]);
+                            morph->NormalDeltas.push_back(meshOut.morphNormalDeltas[t]);
+                        }
+                        morph->Weights = GetMeshDefaultWeights(mesh, targetCount);
+                        if (auto weightTrack = ExtractMorphWeightTrack(data, mesh, targetCount))
+                        {
+                            morph->WeightTrack.Keys.reserve(weightTrack->keys.size());
+                            for (const MorphWeightKeyframeOut& k : weightTrack->keys)
+                            {
+                                Graphics::MorphWeightKeyframeEXT key;
+                                key.Time = System::TimeSpan::FromSeconds(k.time);
+                                key.Weights = k.weights;
+                                key.InTangent = k.inTangent;
+                                key.OutTangent = k.outTangent;
+                                morph->WeightTrack.Keys.push_back(std::move(key));
+                            }
+                            morph->WeightTrack.StepInterpolation = weightTrack->stepInterpolation;
+                            morph->WeightTrack.CubicSpline = weightTrack->cubicSpline;
+                        }
+                        partPtr->setTagProperty(morph.get());
+                        // glTF's "mesh.weights" is the default/initial blend state, not
+                        // necessarily all-zero -- apply it now so the uploaded vertex buffer
+                        // reflects the file author's own intended default pose, not always the
+                        // raw (zero-weight) base pose. SetMorphWeightsEXT re-reads Tag, so this
+                        // must run after setTagProperty() above.
+                        const bool hasNonZeroDefault = std::any_of(
+                            morph->Weights.begin(), morph->Weights.end(),
+                            [](float w) { return w != 0.0f; });
+                        if (hasNonZeroDefault)
+                        {
+                            Graphics::SetMorphWeightsEXT(*partPtr, morph->Weights);
+                        }
+                        res->morphOwners.push_back(std::move(morph));
+                    }
+
+                    const std::string& meshName = meshOut.name;
+                    auto meshObj = std::make_unique<Graphics::ModelMesh>(
+                        &device, meshName.empty() ? "mesh" : meshName,
+                        std::vector<Graphics::ModelMeshPart*>{partPtr});
+
+                    auto meshBone = std::make_unique<Graphics::ModelBone>(
+                        static_cast<int>(boneRawPtrs.size()), meshName.empty() ? "mesh" : meshName);
+                    rootBone->AddChild(meshBone.get());
+                    meshObj->setParentBoneProperty(meshBone.get());
+                    boneRawPtrs.push_back(meshBone.get());
+                    res->boneOwners.push_back(std::move(meshBone));
+
+                    std::shared_ptr<Graphics::Effect> fx;
+                    // PBR + skinning combo: SkinnedPbrEffect is a separate class from both
+                    // SkinnedEffect and PbrEffect (see that header's own doc comment), so it must
+                    // be checked before either single-flag branch below.
+                    if (meshOut.skinned && meshOut.usePbr) { fx = std::make_shared<Graphics::SkinnedPbrEffect>(device); }
+                    else if (meshOut.skinned) { fx = std::make_shared<Graphics::SkinnedEffect>(device); }
+                    else if (meshOut.usePbr) { fx = std::make_shared<Graphics::PbrEffect>(device); }
+                    else if (meshOut.useDualTexture) { fx = std::make_shared<Graphics::DualTextureEffect>(device); }
+                    else { fx = std::make_shared<Graphics::BasicEffect>(device); }
+
+                    if (Graphics::Texture2D* tex = loadTexture(meshOut.baseColorImage))
+                    {
+                        if (auto* basicFx = dynamic_cast<Graphics::BasicEffect*>(fx.get())) {
+                            basicFx->setTextureProperty(tex);
+                            basicFx->setTextureEnabledProperty(true);
+                        } else if (auto* skinnedFx = dynamic_cast<Graphics::SkinnedEffect*>(fx.get())) {
+                            skinnedFx->setTextureProperty(tex);
+                        } else if (auto* dualFx = dynamic_cast<Graphics::DualTextureEffect*>(fx.get())) {
+                            dualFx->setTextureProperty(tex);
+                        } else if (auto* pbrFx = dynamic_cast<Graphics::PbrEffect*>(fx.get())) {
+                            pbrFx->setTextureProperty(tex);
+                        } else if (auto* skinnedPbrFx = dynamic_cast<Graphics::SkinnedPbrEffect*>(fx.get())) {
+                            skinnedPbrFx->setTextureProperty(tex);
+                        }
+                    }
+
+                    if (meshOut.useDualTexture)
+                    {
+                        if (Graphics::Texture2D* tex2 = loadOcclusionTextureForDualTextureEXT(meshOut.occlusionImage))
+                        {
+                            if (auto* dualFx = dynamic_cast<Graphics::DualTextureEffect*>(fx.get())) {
+                                dualFx->setTexture2Property(tex2);
+                            }
+                        }
+                    }
+
+                    if (meshOut.usePbr)
+                    {
+                        if (auto* pbrFx = dynamic_cast<Graphics::PbrEffect*>(fx.get()))
+                        {
+                            if (Graphics::Texture2D* normalTex = loadTexture(meshOut.normalImage))
+                                pbrFx->setNormalMapProperty(normalTex);
+                            if (Graphics::Texture2D* mrTex = loadTexture(meshOut.metallicRoughnessImage))
+                                pbrFx->setMetallicRoughnessMapProperty(mrTex);
+                            if (Graphics::Texture2D* emissiveTex = loadTexture(meshOut.emissiveImage))
+                                pbrFx->setEmissiveMapProperty(emissiveTex);
+                            // MeshOut::occlusionImage is shared with useDualTexture's own
+                            // Texture2 approximation (CNB-72/73) -- the two are mutually
+                            // exclusive per-mesh (useDualTexture is forced false whenever usePbr
+                            // is true), so reusing the same field here is unambiguous.
+                            if (Graphics::Texture2D* occlusionTex = loadTexture(meshOut.occlusionImage))
+                                pbrFx->setOcclusionMapProperty(occlusionTex);
+                            pbrFx->setMetallicFactorProperty(meshOut.metallicFactor);
+                            pbrFx->setRoughnessFactorProperty(meshOut.roughnessFactor);
+                            pbrFx->setEmissiveFactorProperty(meshOut.emissiveFactor);
+                        }
+                        else if (auto* skinnedPbrFx = dynamic_cast<Graphics::SkinnedPbrEffect*>(fx.get()))
+                        {
+                            if (Graphics::Texture2D* normalTex = loadTexture(meshOut.normalImage))
+                                skinnedPbrFx->setNormalMapProperty(normalTex);
+                            if (Graphics::Texture2D* mrTex = loadTexture(meshOut.metallicRoughnessImage))
+                                skinnedPbrFx->setMetallicRoughnessMapProperty(mrTex);
+                            if (Graphics::Texture2D* emissiveTex = loadTexture(meshOut.emissiveImage))
+                                skinnedPbrFx->setEmissiveMapProperty(emissiveTex);
+                            if (Graphics::Texture2D* occlusionTex = loadTexture(meshOut.occlusionImage))
+                                skinnedPbrFx->setOcclusionMapProperty(occlusionTex);
+                            skinnedPbrFx->setMetallicFactorProperty(meshOut.metallicFactor);
+                            skinnedPbrFx->setRoughnessFactorProperty(meshOut.roughnessFactor);
+                            skinnedPbrFx->setEmissiveFactorProperty(meshOut.emissiveFactor);
+                        }
+                    }
+
+                    if (meshOut.colored)
+                    {
+                        if (auto* basicFx = dynamic_cast<Graphics::BasicEffect*>(fx.get())) {
+                            basicFx->VertexColorEnabled = true;
+                        } else if (auto* skinnedFx = dynamic_cast<Graphics::SkinnedEffect*>(fx.get())) {
+                            skinnedFx->VertexColorEnabled = true;
+                        }
+                    }
+
+                    ApplyPunctualLightsEXT(*fx, punctualLights);
+
+                    partPtr->setEffectProperty(fx.get());
+                    res->effectOwners.push_back(std::move(fx));
+
+                    meshRawPtrs.push_back(meshObj.get());
+                    res->vbs.push_back(std::move(vb));
+                    res->ibs.push_back(std::move(ib));
+                    res->partOwners.push_back(std::move(part));
+                    res->meshOwners.push_back(std::move(meshObj));
+                    ++meshCounter;
+                }
+            }
+
+            if (meshRawPtrs.empty())
+            {
+                throw ContentLoadException("glTF file '" + path + "' contains no mesh primitives to import.");
+            }
+
+            Graphics::Model model(&device, std::move(boneRawPtrs), std::move(meshRawPtrs));
+            model.setOwnedResources(res);
+            model.setTagProperty(res->skinningData.get());
+            return model;
+        }
 
         class ModelTypeReader : public LooseFileContentTypeReader<Graphics::Model>
         {
         public:
             [[nodiscard]] std::vector<std::string> GetExtensions() const override
             {
-                return {".cnb"};
+                // CNB-70/71 (Phase 13D): .gltf/.glb are tried after .cnj (ResolveAssetPath's own
+                // "always try .cnj first" rule), so an asset with both a .cnj sidecar and a
+                // same-named .gltf/.glb file still resolves to the .cnj -- matching cnj.md's
+                // established "sidecar always wins" convention for every other native format.
+                return {".cnj", ".gltf", ".glb"};
             }
 
             Graphics::Model Read(const std::string& path, ContentManager& cm) override
             {
                 namespace fs = std::filesystem;
 
+                // CNB-70/71 (Phase 13D): a .gltf/.glb path is parsed directly, with no .cnj/binary
+                // sidecar files at all -- see ReadGltfModel()'s own doc comment.
+                const std::string ext = fs::path(path).extension().string();
+                if (ext == ".gltf" || ext == ".glb")
+                {
+                    return ReadGltfModel(path, cm);
+                }
+
                 const std::string json = ReadTextFile(path);
 
-                const CNA::Internal::CnbEnvelope envelope = CNA::Internal::ParseCnbEnvelope(json);
-                CNA::Internal::ValidateCnbEnvelope(envelope, "Model", path);
-                RejectSourceFileForSelfContainedCnb(envelope, "Model", path);
+                const CNA::Internal::CnjEnvelope envelope = CNA::Internal::ParseCnjEnvelope(json);
+                CNA::Internal::ValidateCnjEnvelope(envelope, "Model", path);
+                RejectSourceFileForSelfContainedCnj(envelope, "Model", path);
 
                 const std::string root = cm.getRootDirectoryProperty();
                 Graphics::GraphicsDevice& device = cm.getGraphicsDeviceInternal();
 
-                // Owned resources shared by all copies of the returned Model.
-                struct ModelResources {
-                    std::vector<std::unique_ptr<Graphics::VertexBuffer>>  vbs;
-                    std::vector<std::unique_ptr<Graphics::IndexBuffer>>   ibs;
-                    std::vector<std::unique_ptr<Graphics::ModelBone>>     boneOwners;
-                    std::vector<std::unique_ptr<Graphics::ModelMesh>>     meshOwners;
-                    std::vector<std::unique_ptr<Graphics::ModelMeshPart>> partOwners;
-                    std::vector<std::shared_ptr<Graphics::Effect>>        effectOwners;
-                    std::vector<std::unique_ptr<Graphics::Texture2D>>     textureOwners;
-                    // Task 941: owns the skeleton/animation-clip data attached to the returned
-                    // Model's own Tag property (see the "Skeletal animation" section below) --
-                    // null for a rigid, non-skinned .model.json with no "skeleton" field.
-                    std::unique_ptr<Graphics::SkinningData>               skinningData;
-                };
+                // Owned resources shared by all copies of the returned Model (ModelResources is
+                // hoisted to file scope, shared with ReadGltfModel()).
                 auto res = std::make_shared<ModelResources>();
 
                 std::vector<Graphics::ModelBone*> boneRawPtrs;
@@ -1019,10 +2196,24 @@ namespace Microsoft::Xna::Framework::Content
                         const std::string clipFile = ExtractJsonStringField(ag, "clip");
                         if (name.empty() || clipFile.empty()) { continue; }
                         skinningData->AnimationClips[name] =
-                            ReadAnimationClipFileEXT((fs::path(root) / clipFile).string());
+                            ReadAnimationClipRefEXT(clipFile, fs::path(root), root, cm);
                     }
 
                     res->skinningData = std::move(skinningData);
+                }
+
+                // CNB-97 (Phase 14H): KHR_lights_punctual, written by gltf_to_cnj.cpp as a
+                // top-level "lights" array (see that file's own doc comment) -- applied to every
+                // mesh part's effect below via ApplyPunctualLightsEXT.
+                std::vector<CNA::Internal::GltfImport::LightOut> punctualLights;
+                for (const std::string& lg : ParseFlatObjectArrayEXT(json, "lights"))
+                {
+                    CNA::Internal::GltfImport::LightOut light;
+                    const auto dir = JsonFloatArray3(lg, FindKeyArray(lg, "direction"));
+                    const auto diff = JsonFloatArray3(lg, FindKeyArray(lg, "diffuseColor"));
+                    light.direction = Vector3(dir[0], dir[1], dir[2]);
+                    light.diffuseColor = Vector3(diff[0], diff[1], diff[2]);
+                    punctualLights.push_back(light);
                 }
 
                 // Meshes
@@ -1050,6 +2241,24 @@ namespace Microsoft::Xna::Framework::Content
                             const int         stride     = JsonInt(mg, "vertexStride", 16);
                             const std::string effectStr  = ExtractJsonStringField(mg, "effect");
                             const std::string textureFile = ExtractJsonStringField(mg, "texture");
+                            const std::string texture2File = ExtractJsonStringField(mg, "texture2");
+                            const bool vertexColorEnabled = JsonBool(mg, "vertexColorEnabled", false);
+                            // CNB-59 (Phase 13A): PbrEffect's own 4 maps + factor values.
+                            const std::string normalMapFile = ExtractJsonStringField(mg, "normalMap");
+                            const std::string metallicRoughnessMapFile = ExtractJsonStringField(mg, "metallicRoughnessMap");
+                            const std::string emissiveMapFile = ExtractJsonStringField(mg, "emissiveMap");
+                            const std::string occlusionMapFile = ExtractJsonStringField(mg, "occlusionMap");
+                            const float metallicFactor  = JsonFloat(mg, "metallicFactor", 1.0f);
+                            const float roughnessFactor = JsonFloat(mg, "roughnessFactor", 1.0f);
+                            const auto emissiveFactorArr = JsonFloatArray3(mg, FindKeyArray(mg, "emissiveFactor"));
+                            // Morph target CLI/.cnj serialization: "morphTargets" is the binary
+                            // sidecar path (BuildMorphBytes' own format, see gltf_to_cnj.cpp),
+                            // "morphWeights" the default blend weights, and "morphWeightTrack"
+                            // (optional) the weight animation track.
+                            const std::string morphTargetsFile = ExtractJsonStringField(mg, "morphTargets");
+                            const std::vector<float> morphWeightsField =
+                                JsonFloatArrayN(mg, FindKeyArray(mg, "morphWeights"));
+                            const std::string morphWeightTrackJson = ExtractJsonObjectFieldEXT(mg, "morphWeightTrack");
 
                             if (vertFile.empty() || idxFile.empty())
                                 continue;
@@ -1073,87 +2282,7 @@ namespace Microsoft::Xna::Framework::Content
                             const int numIndices  = static_cast<int>(idxBytes.size()) / indexSize;
                             const int primCount   = numIndices / 3;
 
-                            // Task 927: `stride` is always one of XNA's own "clean" (tightly
-                            // packed, no vtable) sizes -- 16/20/24/32 -- since every offline
-                            // conversion tool writes that exact layout. Every CNA vertex struct
-                            // below publicly inherits the polymorphic IVertexType (a vtable
-                            // pointer XNA's own C# interface never carried), inflating its real
-                            // sizeof() past that clean size -- comparing `stride` against
-                            // sizeof(...) directly, then reinterpret_cast-ing the tightly-packed
-                            // file bytes as an array of those inflated structs, silently read
-                            // every vertex field from the wrong byte offset (confirmed the true
-                            // cause of a long-tracked "near-plane-clipping"/invisible-model
-                            // symptom family in ../cna-samples). Read each vertex's fields
-                            // explicitly from the file's own known-clean offsets instead, and
-                            // construct real, normally-initialized C++ objects (the compiler
-                            // resolves member layout correctly), then upload through the existing
-                            // typed SetData overload, which already packs into the correct
-                            // compact GPU layout.
-                            auto readF = [&](std::size_t off) {
-                                float v;
-                                std::memcpy(&v, vertBytes.data() + off, sizeof(float));
-                                return v;
-                            };
-                            auto readVec3 = [&](std::size_t off) {
-                                return Vector3(readF(off), readF(off + 4), readF(off + 8));
-                            };
-                            auto readVec2 = [&](std::size_t off) {
-                                return Vector2(readF(off), readF(off + 4));
-                            };
-                            auto readColor = [&](std::size_t off) {
-                                return Color(vertBytes[off], vertBytes[off + 1],
-                                             vertBytes[off + 2], vertBytes[off + 3]);
-                            };
-
-                            // Note: VertexPositionColorTexture's own declared `= default` default
-                            // constructor is implicitly deleted (its `Color Color` member has no
-                            // zero-arg constructor) -- build each vector via reserve()+
-                            // emplace_back() rather than a sized constructor, so none of the 4
-                            // branches below ever needs default-construction.
-                            auto vb = std::make_unique<Graphics::VertexBuffer>(device, numVertices);
-                            if (stride == 16) {
-                                std::vector<Graphics::VertexPositionColor> verts;
-                                verts.reserve(static_cast<std::size_t>(numVertices));
-                                for (int i = 0; i < numVertices; ++i) {
-                                    const std::size_t o = static_cast<std::size_t>(i) * 16;
-                                    verts.emplace_back(readVec3(o), readColor(o + 12));
-                                }
-                                vb->SetData(verts.data(), numVertices);
-                            } else if (stride == 20) {
-                                std::vector<Graphics::VertexPositionTexture> verts;
-                                verts.reserve(static_cast<std::size_t>(numVertices));
-                                for (int i = 0; i < numVertices; ++i) {
-                                    const std::size_t o = static_cast<std::size_t>(i) * 20;
-                                    verts.emplace_back(readVec3(o), readVec2(o + 12));
-                                }
-                                vb->SetData(verts.data(), numVertices);
-                            } else if (stride == 24) {
-                                std::vector<Graphics::VertexPositionColorTexture> verts;
-                                verts.reserve(static_cast<std::size_t>(numVertices));
-                                for (int i = 0; i < numVertices; ++i) {
-                                    const std::size_t o = static_cast<std::size_t>(i) * 24;
-                                    verts.emplace_back(readVec3(o), readColor(o + 12), readVec2(o + 16));
-                                }
-                                vb->SetData(verts.data(), numVertices);
-                            } else if (stride == 32) {
-                                std::vector<Graphics::VertexPositionNormalTexture> verts;
-                                verts.reserve(static_cast<std::size_t>(numVertices));
-                                for (int i = 0; i < numVertices; ++i) {
-                                    const std::size_t o = static_cast<std::size_t>(i) * 32;
-                                    verts.emplace_back(readVec3(o), readVec3(o + 12), readVec2(o + 24));
-                                }
-                                vb->SetData(verts.data(), numVertices);
-                            } else if (stride == 52) {
-                                // Task 941 (Phase 77): GPU-skinned vertex (VertexPositionNormal
-                                // TextureSkinned) -- pos+normal+texcoord+blendweight+blendindices,
-                                // already exactly the compact GPU layout VertexBuffer's own
-                                // skinned SetData path expects (matches
-                                // SkinnedModelTypeReader's own identical stride-52 handling in
-                                // this same file). SetDataRaw() copies these bytes straight
-                                // through with no C++ struct reinterpretation at all, so this
-                                // branch has no analogue of Task 927's own vtable-inflation risk.
-                                vb->SetDataRaw(vertBytes.data(), numVertices, 52);
-                            }
+                            auto vb = BuildVertexBufferFromRawBytes(device, stride, numVertices, vertBytes);
 
                             auto ib = std::make_unique<Graphics::IndexBuffer>(
                                 device,
@@ -1171,6 +2300,96 @@ namespace Microsoft::Xna::Framework::Content
                             auto part = std::make_unique<Graphics::ModelMeshPart>(
                                 vb.get(), ib.get(), numVertices, primCount, 0, 0);
                             Graphics::ModelMeshPart* partPtr = part.get();
+
+                            // Morph target CLI/.cnj serialization: read BuildMorphBytes' own
+                            // binary sidecar format back and attach the result to this part's own
+                            // real XNA Tag property, mirroring ReadGltfModel()'s identical
+                            // MorphTargetDataEXT wiring for the runtime glTF path (see
+                            // MorphTargetEXT.hpp's own doc comments).
+                            if (!morphTargetsFile.empty())
+                            {
+                                const auto morphBytes = ReadBinaryFile(
+                                    (fs::path(root) / morphTargetsFile).string());
+                                BinReaderEXT morphReader{morphBytes};
+                                const int targetCount = morphReader.Read<std::int32_t>();
+                                constexpr int kMaxSaneTargetCount = 100000;
+                                if (targetCount < 0 || targetCount > kMaxSaneTargetCount)
+                                {
+                                    throw ContentLoadException(
+                                        "Model mesh has an invalid morph target count ("
+                                            + std::to_string(targetCount) + "): " + path);
+                                }
+
+                                auto morph = std::make_unique<Graphics::MorphTargetDataEXT>();
+                                morph->BaseVertexBytes = vertBytes;
+                                morph->Stride = stride;
+                                morph->PositionDeltas.reserve(static_cast<std::size_t>(targetCount));
+                                morph->NormalDeltas.reserve(static_cast<std::size_t>(targetCount));
+                                for (int t = 0; t < targetCount; ++t)
+                                {
+                                    const int vertexCount = morphReader.Read<std::int32_t>();
+                                    std::vector<Vector3> positions;
+                                    positions.reserve(static_cast<std::size_t>(vertexCount));
+                                    for (int v = 0; v < vertexCount; ++v)
+                                    {
+                                        const float x = morphReader.Read<float>();
+                                        const float y = morphReader.Read<float>();
+                                        const float z = morphReader.Read<float>();
+                                        positions.emplace_back(x, y, z);
+                                    }
+                                    morph->PositionDeltas.push_back(std::move(positions));
+
+                                    std::vector<Vector3> normals;
+                                    if (morphReader.Read<std::int32_t>() != 0)
+                                    {
+                                        normals.reserve(static_cast<std::size_t>(vertexCount));
+                                        for (int v = 0; v < vertexCount; ++v)
+                                        {
+                                            const float x = morphReader.Read<float>();
+                                            const float y = morphReader.Read<float>();
+                                            const float z = morphReader.Read<float>();
+                                            normals.emplace_back(x, y, z);
+                                        }
+                                    }
+                                    morph->NormalDeltas.push_back(std::move(normals));
+                                }
+
+                                morph->Weights = !morphWeightsField.empty()
+                                    ? morphWeightsField
+                                    : std::vector<float>(static_cast<std::size_t>(targetCount), 0.0f);
+
+                                if (!morphWeightTrackJson.empty())
+                                {
+                                    morph->WeightTrack.StepInterpolation =
+                                        JsonBool(morphWeightTrackJson, "stepInterpolation", false);
+                                    morph->WeightTrack.CubicSpline =
+                                        JsonBool(morphWeightTrackJson, "cubicSpline", false);
+                                    for (const std::string& kg : ParseFlatObjectArrayEXT(morphWeightTrackJson, "keys"))
+                                    {
+                                        Graphics::MorphWeightKeyframeEXT key;
+                                        key.Time = System::TimeSpan::FromSeconds(JsonFloat(kg, "time", 0.0f));
+                                        key.Weights = JsonFloatArrayN(kg, FindKeyArray(kg, "weights"));
+                                        key.InTangent = JsonFloatArrayN(kg, FindKeyArray(kg, "inTangent"));
+                                        key.OutTangent = JsonFloatArrayN(kg, FindKeyArray(kg, "outTangent"));
+                                        morph->WeightTrack.Keys.push_back(std::move(key));
+                                    }
+                                }
+
+                                partPtr->setTagProperty(morph.get());
+                                // glTF's "mesh.weights" is the default/initial blend state, not
+                                // necessarily all-zero -- apply it now so the uploaded vertex
+                                // buffer reflects the file author's own intended default pose, not
+                                // always the raw zero-weight base (mirrors ReadGltfModel()'s
+                                // identical logic).
+                                const bool hasNonZeroDefault = std::any_of(
+                                    morph->Weights.begin(), morph->Weights.end(),
+                                    [](float w) { return w != 0.0f; });
+                                if (hasNonZeroDefault)
+                                {
+                                    Graphics::SetMorphWeightsEXT(*partPtr, morph->Weights);
+                                }
+                                res->morphOwners.push_back(std::move(morph));
+                            }
 
                             auto mesh = std::make_unique<Graphics::ModelMesh>(
                                 &device, meshName.empty() ? "mesh" : meshName,
@@ -1201,6 +2420,26 @@ namespace Microsoft::Xna::Framework::Content
                                 // GetSkinTransforms() feeds SkinnedEffect::SetBoneTransforms()
                                 // directly (see Task 942), not through this reader.
                                 fx = std::make_shared<Graphics::SkinnedEffect>(device);
+                            } else if (effectStr == "DualTextureEffect") {
+                                // CNB-73: real XNA's two-layer multitexturing effect -- always
+                                // samples both texture slots (no TextureEnabled toggle), so its
+                                // vertex buffer must be the stride-20 VertexPositionTexture shape
+                                // (no Normal in between location0/location1, see ApplyLayout's
+                                // stride==20 case) rather than stride-32.
+                                fx = std::make_shared<Graphics::DualTextureEffect>(device);
+                            } else if (effectStr == "PbrEffect") {
+                                // CNB-56/58 (Phase 13A): NOXNA metallic-roughness PBR effect --
+                                // its vertex buffer must be the stride-48
+                                // VertexPositionNormalTangentTexture shape (Position+Normal+
+                                // Tangent+TextureCoordinate), never stride-32.
+                                fx = std::make_shared<Graphics::PbrEffect>(device);
+                            } else if (effectStr == "SkinnedPbrEffect") {
+                                // PBR + skinning combo: PbrEffect's own BRDF applied to a
+                                // GPU-skinned mesh -- its vertex buffer must be the stride-68
+                                // VertexPositionNormalTangentTextureSkinned shape. Bone transforms
+                                // are fed by AnimationPlayer::GetSkinTransforms() at draw time,
+                                // same as SkinnedEffect above -- not through this reader.
+                                fx = std::make_shared<Graphics::SkinnedPbrEffect>(device);
                             } else {
                                 fx = cm.Load<std::shared_ptr<Graphics::Effect>>(effectStr);
                             }
@@ -1221,8 +2460,92 @@ namespace Microsoft::Xna::Framework::Content
                                 } else if (auto* skinnedFx = dynamic_cast<Graphics::SkinnedEffect*>(fx.get())) {
                                     skinnedFx->setTextureProperty(tex.get());
                                     res->textureOwners.push_back(std::move(tex));
+                                } else if (auto* dualFx = dynamic_cast<Graphics::DualTextureEffect*>(fx.get())) {
+                                    dualFx->setTextureProperty(tex.get());
+                                    res->textureOwners.push_back(std::move(tex));
+                                } else if (auto* pbrFx = dynamic_cast<Graphics::PbrEffect*>(fx.get())) {
+                                    pbrFx->setTextureProperty(tex.get());
+                                    res->textureOwners.push_back(std::move(tex));
+                                } else if (auto* skinnedPbrFx = dynamic_cast<Graphics::SkinnedPbrEffect*>(fx.get())) {
+                                    skinnedPbrFx->setTextureProperty(tex.get());
+                                    res->textureOwners.push_back(std::move(tex));
                                 }
                             }
+
+                            // CNB-73: the second (layer-1) texture slot -- only meaningful for
+                            // DualTextureEffect, which is the only stock effect with a Texture2
+                            // parameter.
+                            if (!texture2File.empty()) {
+                                if (auto* dualFx = dynamic_cast<Graphics::DualTextureEffect*>(fx.get())) {
+                                    auto tex2 = std::make_unique<Graphics::Texture2D>(
+                                        cm.Load<Graphics::Texture2D>(texture2File));
+                                    dualFx->setTexture2Property(tex2.get());
+                                    res->textureOwners.push_back(std::move(tex2));
+                                }
+                            }
+
+                            // CNB-59 (Phase 13A): PbrEffect's own 4 maps + factor values.
+                            if (auto* pbrFx = dynamic_cast<Graphics::PbrEffect*>(fx.get())) {
+                                auto loadPbrMap = [&](const std::string& file) -> Graphics::Texture2D* {
+                                    if (file.empty()) { return nullptr; }
+                                    auto tex = std::make_unique<Graphics::Texture2D>(
+                                        cm.Load<Graphics::Texture2D>(file));
+                                    Graphics::Texture2D* texPtr = tex.get();
+                                    res->textureOwners.push_back(std::move(tex));
+                                    return texPtr;
+                                };
+                                if (Graphics::Texture2D* t = loadPbrMap(normalMapFile))
+                                    pbrFx->setNormalMapProperty(t);
+                                if (Graphics::Texture2D* t = loadPbrMap(metallicRoughnessMapFile))
+                                    pbrFx->setMetallicRoughnessMapProperty(t);
+                                if (Graphics::Texture2D* t = loadPbrMap(emissiveMapFile))
+                                    pbrFx->setEmissiveMapProperty(t);
+                                if (Graphics::Texture2D* t = loadPbrMap(occlusionMapFile))
+                                    pbrFx->setOcclusionMapProperty(t);
+                                pbrFx->setMetallicFactorProperty(metallicFactor);
+                                pbrFx->setRoughnessFactorProperty(roughnessFactor);
+                                pbrFx->setEmissiveFactorProperty(Vector3(
+                                    emissiveFactorArr[0], emissiveFactorArr[1], emissiveFactorArr[2]));
+                            } else if (auto* skinnedPbrFx = dynamic_cast<Graphics::SkinnedPbrEffect*>(fx.get())) {
+                                auto loadPbrMap = [&](const std::string& file) -> Graphics::Texture2D* {
+                                    if (file.empty()) { return nullptr; }
+                                    auto tex = std::make_unique<Graphics::Texture2D>(
+                                        cm.Load<Graphics::Texture2D>(file));
+                                    Graphics::Texture2D* texPtr = tex.get();
+                                    res->textureOwners.push_back(std::move(tex));
+                                    return texPtr;
+                                };
+                                if (Graphics::Texture2D* t = loadPbrMap(normalMapFile))
+                                    skinnedPbrFx->setNormalMapProperty(t);
+                                if (Graphics::Texture2D* t = loadPbrMap(metallicRoughnessMapFile))
+                                    skinnedPbrFx->setMetallicRoughnessMapProperty(t);
+                                if (Graphics::Texture2D* t = loadPbrMap(emissiveMapFile))
+                                    skinnedPbrFx->setEmissiveMapProperty(t);
+                                if (Graphics::Texture2D* t = loadPbrMap(occlusionMapFile))
+                                    skinnedPbrFx->setOcclusionMapProperty(t);
+                                skinnedPbrFx->setMetallicFactorProperty(metallicFactor);
+                                skinnedPbrFx->setRoughnessFactorProperty(roughnessFactor);
+                                skinnedPbrFx->setEmissiveFactorProperty(Vector3(
+                                    emissiveFactorArr[0], emissiveFactorArr[1], emissiveFactorArr[2]));
+                            }
+
+                            // Task 1115 / CNB-67 (Phase 13C): a "vertexStride": 24
+                            // (VertexPositionColorTexture) or 56 (skinned + Color) mesh may set
+                            // "vertexColorEnabled" to actually light the per-vertex color data it
+                            // already uploads -- both BasicEffect and SkinnedEffect default
+                            // VertexColorEnabled to false, so without this the color bytes are
+                            // present in the vertex buffer but the shader ignores them.
+                            // SkinnedEffect's VertexColorEnabled is a NOXNA addition (real XNA's
+                            // SkinnedEffect has no such property at all).
+                            if (vertexColorEnabled) {
+                                if (auto* basicFx = dynamic_cast<Graphics::BasicEffect*>(fx.get())) {
+                                    basicFx->VertexColorEnabled = true;
+                                } else if (auto* skinnedFx = dynamic_cast<Graphics::SkinnedEffect*>(fx.get())) {
+                                    skinnedFx->VertexColorEnabled = true;
+                                }
+                            }
+
+                            ApplyPunctualLightsEXT(*fx, punctualLights);
 
                             partPtr->setEffectProperty(fx.get());
                             res->effectOwners.push_back(std::move(fx));
@@ -1409,7 +2732,10 @@ namespace Microsoft::Xna::Framework::Content
 
                     // Task 941: extracted into the shared ReadAnimationClipFileEXT() helper
                     // (also used by ModelTypeReader's own new .model.json "animations" support).
-                    model->Clips[name] = ReadAnimationClipFileEXT((manifestDir / clipFile).string());
+                    // plan_cnj.md CNB-48: ReadAnimationClipRefEXT additionally lets "clip" name a
+                    // standalone, shareable .cnj AnimationClip asset instead of only a raw
+                    // .clip.bin blob.
+                    model->Clips[name] = ReadAnimationClipRefEXT(clipFile, manifestDir, root, cm);
                 }
 
                 return model;
@@ -1456,10 +2782,13 @@ namespace Microsoft::Xna::Framework::Content
     {
         RegisterTypeReader<Graphics::Texture2D>(std::make_unique<Texture2DTypeReader>());
         RegisterTypeReader<Graphics::TextureCube>(std::make_unique<TextureCubeTypeReader>());
+        RegisterTypeReader<std::shared_ptr<Graphics::Texture3D>>(std::make_unique<Texture3DTypeReader>());
         RegisterTypeReader<Audio::SoundEffect>(std::make_unique<SoundEffectTypeReader>());
         RegisterTypeReader<std::shared_ptr<Graphics::Effect>>(std::make_unique<EffectTypeReader>());
         RegisterTypeReader<Graphics::SpriteFont>(std::make_unique<SpriteFontTypeReader>());
         RegisterTypeReader<Graphics::Model>(std::make_unique<ModelTypeReader>());
+        RegisterTypeReader<Graphics::AnimationClipEXT>(std::make_unique<AnimationClipTypeReader>());
+        RegisterTypeReader<Microsoft::Xna::Framework::Curve>(std::make_unique<CurveTypeReader>());
         RegisterTypeReader<std::shared_ptr<Graphics::SkinnedModelEXT>>(
             std::make_unique<SkinnedModelTypeReader>());
         RegisterTypeReader<Media::Song>(std::make_unique<SongTypeReader>());
@@ -1512,7 +2841,7 @@ namespace Microsoft::Xna::Framework::Content
             textureCache_.erase(cacheIt);
         }
 
-        // .xnb always wins first (cnb.md's "Core rule", 2026-07-16 decision) -- same reasoning
+        // .xnb always wins first (cnj.md's "Core rule", 2026-07-16 decision) -- same reasoning
         // as the generic Load<T>() template; this specialization needs its own copy since it
         // doesn't call that template body at all (weak-cache semantics require a bespoke
         // implementation here).
@@ -1574,7 +2903,7 @@ namespace Microsoft::Xna::Framework::Content
 
         log::Debug(std::string("Loading asset: ") + assetName);
 
-        // .xnb always wins first (cnb.md's "Core rule") -- same reasoning as Load<Texture2D>'s
+        // .xnb always wins first (cnj.md's "Core rule") -- same reasoning as Load<Texture2D>'s
         // own specialisation; this one needs its own copy too since move-only types skip the
         // generic Load<T>() template's any-cache body entirely.
         const std::string xnbCandidate = BuildAssetPath(assetName) + ".xnb";
@@ -1616,7 +2945,7 @@ namespace Microsoft::Xna::Framework::Content
 
         log::Debug(std::string("Loading asset: ") + assetName);
 
-        // .xnb always wins first (cnb.md's "Core rule") -- same reasoning as Load<Texture2D>'s and
+        // .xnb always wins first (cnj.md's "Core rule") -- same reasoning as Load<Texture2D>'s and
         // Load<SoundEffect>'s own specialisations above; this one needs its own copy too since
         // move-only types skip the generic Load<T>() template's any-cache body entirely
         // (plan_xnb.md XNB-25).

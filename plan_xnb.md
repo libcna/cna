@@ -6,8 +6,8 @@
 > (`Texture3DReader`/`TextureCubeReader`) fully complete; Phase G (top-quality hardening + custom
 > reader ergonomics) fully complete; only Phase H (cancelled) and Phase I (still deferred) remain.**
 > CNA's owner decided `.xnb` becomes a real, additional runtime format
-> again, ranked **above** `.cnb` in `ContentManager`'s resolution order (see [`cnb.md`](cnb.md)'s
-> "Core rule": `.xnb` → literal caller-given path → `.cnb` → native-by-extension). The MVP scope
+> again, ranked **above** `.cnj` in `ContentManager`'s resolution order (see [`cnj.md`](cnj.md)'s
+> "Core rule": `.xnb` → literal caller-given path → `.cnj` → native-by-extension). The MVP scope
 > through the end of Phase C (container parsing, binary primitives, uncompressed-only, a first real
 > `Texture2D` reader — this plan's own M1/M2 milestones) is fully done. CNA's owner explicitly
 > requested Phase D (LZX decompression) next; it is now implemented and real-fixture-verified
@@ -29,7 +29,7 @@
 > pending a future decision to resume it — do not start those tasks without checking in first.
 > **Phase H (Lua-scripted custom readers) is cancelled outright, not deferred**
 > — see that phase's own section below; custom `.xnb` readers
-> stay a plain C++ registration API (Phase G), matching `.cnb`'s existing `RegisterCnbLoader<T>`.
+> stay a plain C++ registration API (Phase G), matching `.cnj`'s existing `RegisterCnjLoader<T>`.
 > Phase B3 has also grown new scope: a `ContentManager` startup content-manifest scan (internal perf
 > cache + a public introspection API + the `.xnb` reader-name inventory), see that phase below.
 
@@ -95,7 +95,7 @@
 > phase's section for the reasoning; folded a new `ContentManager` startup content-manifest feature
 > (perf cache, public introspection API, `.xnb` reader-name inventory) into Phase B3
 > (`XNB-65`–`XNB-67`); and fixed the `ContentManager` resolution order to rank `.xnb` above both the
-> literal caller-given path and `.cnb` (`XNB-17B`).
+> literal caller-given path and `.cnj` (`XNB-17B`).
 >
 > **Revised a sixth time (2026-07-16)** after CNA's owner explicitly requested Phase D next: LZX
 > decompression (XNB-28/29), the block-framing loop wired into `ContentManager::LoadXnbAsset<T>()`,
@@ -369,13 +369,13 @@ entirely the second one.
 > CLAUDE.md ("Original XNA types must stay in the matching XNA namespace... do not move original
 > XNA API types into the CNA namespace") they belong in `Microsoft::Xna::Framework::Content`, not
 > `CNA::Internal`. But CNA **already has** a `Microsoft::Xna::Framework::Content::ContentTypeReader<T>`
-> — the `.cnb`/native-loader interface (`Read(const std::string& path, ContentManager&)`), a
+> — the `.cnj`/native-loader interface (`Read(const std::string& path, ContentManager&)`), a
 > CNA-original shape that does not match FNA's real `ContentTypeReader<T>`
 > (`Read(ContentReader input, T existingInstance)`) at all. The two cannot coexist under the same
 > name in the same namespace. Options: (a) rename CNA's existing loose-file reader interface to
-> free up the real name — a wide-reaching refactor touching every existing `.cnb` reader
+> free up the real name — a wide-reaching refactor touching every existing `.cnj` reader
 > (`SpriteFontTypeReader`/`EffectTypeReader`/`ModelTypeReader`/`SkinnedModelTypeReader`,
-> `RegisterCnbLoader<T>`, `RegisterTypeReader<T>`) and `ContentManager.hpp`/`.cpp` itself; (b) keep
+> `RegisterCnjLoader<T>`, `RegisterTypeReader<T>`) and `ContentManager.hpp`/`.cpp` itself; (b) keep
 > the real-protocol classes under `CNA::Internal::Xnb` as an implementation detail for now,
 > deferring the public-namespace move to a later, explicitly-scoped task; (c) some other resolution.
 > XNB-11 (header parse), XNB-12/XNB-13 (type-reader table + name normalization) do not depend on
@@ -405,11 +405,11 @@ entirely the second one.
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| XNB-17B | `ContentManager` `.xnb` extension resolution/dispatch, coexisting with existing loose-file loaders (no behavior change to existing `.model.json`/`.shader.json`/`FromStream` paths) | ✅ | **Implemented 2026-07-16**: `ContentManager::Load<T>()`/`LoadXnbAsset<T>()` (`include/Microsoft/Xna/Framework/Content/ContentManager.hpp`) — `<name>.xnb` checked first (ahead of the literal path/`.cnb`/native extensions), needing no per-T reader registered on `ContentManager` at all (dispatch is driven by the file's own type-reader table via the global `ContentTypeReaderManager` registry). LZX-compressed files now decompress and load through the same path since Phase D landed (2026-07-16). Real design bug found and fixed along the way: see the `std::optional<T>` note on `ContentTypeReader<T>::Read()` below |
+| XNB-17B | `ContentManager` `.xnb` extension resolution/dispatch, coexisting with existing loose-file loaders (no behavior change to existing `.model.json`/`.shader.json`/`FromStream` paths) | ✅ | **Implemented 2026-07-16**: `ContentManager::Load<T>()`/`LoadXnbAsset<T>()` (`include/Microsoft/Xna/Framework/Content/ContentManager.hpp`) — `<name>.xnb` checked first (ahead of the literal path/`.cnj`/native extensions), needing no per-T reader registered on `ContentManager` at all (dispatch is driven by the file's own type-reader table via the global `ContentTypeReaderManager` registry). LZX-compressed files now decompress and load through the same path since Phase D landed (2026-07-16). Real design bug found and fixed along the way: see the `std::optional<T>` note on `ContentTypeReader<T>::Read()` below |
 | XNB-17C | Asset-path normalization + basic cache-identity handling for `.xnb` assets (same identity rules the loose-file loaders already use) | ✅ | **Free by construction**: `.xnb` results are cached through the exact same `AssetCacheKey`/`loadedAssets_` mechanism loose-file assets already use, no new code needed |
 | XNB-17D | `ContentLoadException`-equivalent propagation from the Phase B container/registry errors up through `ContentManager.Load<T>()` | ✅ | **Free by construction**: `ParseXnbHeader`/`ContentTypeReaderManager`/`ContentReader` already throw `ContentLoadException`; `Load<T>()` never intercepts it |
 | XNB-17E | `Unload()` behavior for `.xnb`-sourced assets | ✅ | **Free by construction**: `Unload()` already clears `loadedAssets_`, which `.xnb` results are stored in identically to loose-file assets. Tested explicitly (`ContentManagerXnbTest.UnloadClearsXnbCachedAssets`) |
-| XNB-17F | End-to-end milestone: `auto value = content.Load<TestValue>("fixture");` using only the Phase B test-only reader | ✅ | **Reached 2026-07-16**: `ContentManagerXnbTest.LoadFindsAndDeserializesARealXnbFile` — first real proof the pipeline fits CNA's existing `ContentManager` API, not just a standalone parser. Also tested: `.xnb` wins over a same-named `.cnb` (`XnbWinsOverCnbAndNativeExtensionForTheSameName`), confirming the 2026-07-16 resolution-order decision end-to-end |
+| XNB-17F | End-to-end milestone: `auto value = content.Load<TestValue>("fixture");` using only the Phase B test-only reader | ✅ | **Reached 2026-07-16**: `ContentManagerXnbTest.LoadFindsAndDeserializesARealXnbFile` — first real proof the pipeline fits CNA's existing `ContentManager` API, not just a standalone parser. Also tested: `.xnb` wins over a same-named `.cnj` (`XnbWinsOverCnjAndNativeExtensionForTheSameName`), confirming the 2026-07-16 resolution-order decision end-to-end |
 | XNB-17G | Confirm `ContentReader`, per-file reader instances (XNB-14A), shared-resource fixups (XNB-15), and decompression state (Phase D) contain no global mutable state, so different `.xnb` files can be loaded concurrently without cross-talk | ✅ | **Confirmed by inspection 2026-07-16**: `ContentTypeReaderManager`'s static `typeCreators_` is write-once-then-read-only in practice (registered at startup, never mutated during loads); all per-file state (`typeReaders_`, `sharedResources_`, `sharedResourceFixups_`) lives on the `ContentReader` instance `LoadXnbAsset<T>()` constructs fresh per call. Decompression state (`CNA::Internal::Xnb::LzxDecoder`'s `LzxState`) similarly lives entirely on the local `LzxDecoder` instance `DecompressXnbPayload()` constructs fresh per call — no static/global state either |
 
 > **Design note found while closing XNB-17B (2026-07-16):** `ContentTypeReader<T>::Read()`'s
@@ -459,7 +459,7 @@ entirely the second one.
 |---|------|--------|-------|
 | XNB-65 | `ContentManager` startup manifest scan: walk the `Content` root once (`std::filesystem::recursive_directory_iterator`, bounded by `XnbReadLimits`-style limits on file/entry count) and cache each relative path's existence/extension in memory; `ResolveAssetPath` consults this cache instead of calling `std::filesystem::exists()` per candidate | ✅ | **Implemented 2026-07-16**: `ContentManager::RefreshContentManifest()` (`src/Microsoft/Xna/Framework/Content/ContentManager.cpp`). **Scope narrowed**: the manifest is additive/introspective only in this pass — `ResolveAssetPath()`/`Load<T>()` still use live `std::filesystem::exists()` checks, unchanged. Wiring the manifest into that hot path is deliberately deferred to an isolated follow-up, to avoid risking the large existing test surface built around ContentManager noticing a just-written file immediately |
 | XNB-65A | Manifest snapshot/staleness policy: document that the manifest is a point-in-time snapshot (files added after the scan are not found until refreshed) and add an explicit `NOXNA RefreshContentManifest()` method that re-scans on demand — no automatic filesystem-watch/hot-reload is in scope here | ✅ | **Implemented 2026-07-16**, tested explicitly (`ContentManagerManifestTest.RefreshContentManifestPicksUpNewlyAddedFiles`: a file added after the first scan is invisible until `RefreshContentManifest()` runs again) |
-| XNB-66 | Public `NOXNA` introspection API exposing the manifest (e.g. `std::vector<ContentManifestEntry> GetContentManifest() const`, `ContentManifestEntry{relativePath, extension, hasXnb, hasCnb}`) | ✅ | **Implemented 2026-07-16**: `ContentManager::GetContentManifest()` + `ContentManifestEntry` (`include/Microsoft/Xna/Framework/Content/ContentManifestEntry.hpp`) — one entry per logical asset name, `nativeExtensions` as a list (not a single `extension` field, since a name can have several native-extension siblings at once) |
+| XNB-66 | Public `NOXNA` introspection API exposing the manifest (e.g. `std::vector<ContentManifestEntry> GetContentManifest() const`, `ContentManifestEntry{relativePath, extension, hasXnb, hasCnj}`) | ✅ | **Implemented 2026-07-16**: `ContentManager::GetContentManifest()` + `ContentManifestEntry` (`include/Microsoft/Xna/Framework/Content/ContentManifestEntry.hpp`) — one entry per logical asset name, `nativeExtensions` as a list (not a single `extension` field, since a name can have several native-extension siblings at once) |
 | XNB-61a | Reader-name-only scan, **uncompressed `.xnb` files only**, folded into the XNB-65 manifest pass: for every `.xnb` file the manifest scan finds, read the header and type-reader table (no object-graph deserialization) and list every type-reader name referenced | ✅ | **Implemented 2026-07-16**: `ContentManager::ScanXnbReaderNames()`, reusing `ParseXnbHeader`/`ParseXnbTypeReaderTable` from Phase B directly. A malformed `.xnb` doesn't abort the scan — just leaves that entry's `xnbReaderNames` empty (tested) |
 | XNB-67 | Aggregate the XNB-61a reader-name inventory into the same public manifest API (XNB-66): which reader names are referenced, how many `.xnb` files reference each, and whether CNA currently has a registered reader for that name | ✅ | **Implemented 2026-07-16**: `ContentManager::GetXnbReaderUsageSummary()` + `ContentManifestReaderUsage`, using a new query-only `ContentTypeReaderManager::IsRegistered()` (no construction side effect, unlike `CreateReader()`) |
 | XNB-61b | Extend the XNB-61a scan to **LZX-compressed** XNA `.xnb` files, using CNA's own decompressor (Phase D) — decompress the payload sequentially from the start until the type-reader table has been fully read (for a first implementation, decompressing the entire payload is acceptable; do not prematurely optimize this into a partial-decompression short-circuit); do not continue into the root object. Verify that a compressed fixture and its uncompressed equivalent produce the same reader-name inventory | ⬜ | **Unblocked 2026-07-16** — Phase D's decompressor (`DecompressXnbPayload`) now exists, so this task is no longer waiting on a dependency, but it has not been picked up yet. `ScanXnbReaderNames()` (`src/Microsoft/Xna/Framework/Content/ContentManager.cpp`) still just checks `header.compressed` and returns an empty inventory early for compressed files — that early-return is the exact spot to replace with a real decompress-then-scan call |
@@ -612,8 +612,8 @@ entirely the second one.
 > design (a dedicated Lua state, custom allocator/instruction-count limits, ~13 binding tasks
 > formerly numbered `XNB-48`–`XNB-60`) and rejected it as disproportionate complexity for a niche
 > need. Custom `.xnb` `ContentTypeReader`s remain **native C++ only**, registered through Phase G's
-> plain `registry.Register("MyGame.Content.LevelReader", ...)` API — the same shape `.cnb`'s
-> `RegisterCnbLoader<T>` already uses for game-specific JSON data. No Lua sandbox, binding layer, or
+> plain `registry.Register("MyGame.Content.LevelReader", ...)` API — the same shape `.cnj`'s
+> `RegisterCnjLoader<T>` already uses for game-specific JSON data. No Lua sandbox, binding layer, or
 > script-based reader host will be built for `.xnb` custom readers. The task rows that used to live
 > here (`ILuaContentReaderHost`, a sandboxed Lua state, primitive/math bindings, a reader
 > descriptor/manifest format, shared-resource/external-reference handles, memory/instruction limits,

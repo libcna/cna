@@ -5,7 +5,7 @@
 // `ContentTypeReaderManager::AddTypeCreator()` (XNB-14/14A) is already public/NOXNA-callable and
 // generic over any `ContentTypeReader<T>` subclass a game defines outside CNA entirely, matching
 // FNA's own real internal method of the same name/shape (see that method's own doc comment).
-// `.cnb`'s `RegisterCnbLoader<T>()` is the equivalent extension point for CNA's own JSON-based
+// `.cnj`'s `RegisterCnjLoader<T>()` is the equivalent extension point for CNA's own JSON-based
 // format; this is the `.xnb` binary-format counterpart. This test plays the role of "a game",
 // defining a custom asset type and reader entirely within the test file (nothing about
 // `GameLevelData`/`GameLevelDataReader` exists anywhere in CNA itself), then loads a real,

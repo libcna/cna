@@ -143,8 +143,8 @@ protected:
 
         WriteFile(root / "toon.vert.glsl", kVertSrc);
         WriteFile(root / "toon.frag.glsl", kFragSrc);
-        WriteFile(root / "toon.cnb", R"({
-  "cnbVersion": 1,
+        WriteFile(root / "toon.cnj", R"({
+  "cnjVersion": 1,
   "type": "Effect",
   "vertex": "toon.vert.glsl",
   "fragment": "toon.frag.glsl"
@@ -217,7 +217,7 @@ protected:
         auto* fx = dynamic_cast<ShaderEffect*>(fxBase_.get());
         if (!fx || !fx->IsEffectValid())
         {
-            std::printf("[FAIL] EasyGLCartoonEffectToon: .cnb load or GLSL compile failed\n");
+            std::printf("[FAIL] EasyGLCartoonEffectToon: .cnj load or GLSL compile failed\n");
             Exit();
             return;
         }

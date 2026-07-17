@@ -13,7 +13,7 @@ namespace Microsoft::Xna::Framework::Content
      *
      * Extend as later phases identify further known-but-out-of-scope readers -- this is not
      * meant to grow unbounded; each value should map to a real, documented scope decision
-     * (see plan_xnb.md/cnb.md for the general `EffectReader` case this was introduced for).
+     * (see plan_xnb.md/cnj.md for the general `EffectReader` case this was introduced for).
      */
     enum class NOXNA UnsupportedContentReaderReason
     {

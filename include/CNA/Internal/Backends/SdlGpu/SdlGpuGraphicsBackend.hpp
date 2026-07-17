@@ -593,7 +593,7 @@ namespace CNA::Internal::Backends::SdlGpu
         // Adversarial-review finding #4: which per-family queue a QueuedDrawRef points into.
         enum class DrawKind : Uint8
         {
-            Colored, Textured, LitTextured, AlphaTest, DualTexture, EnvMap, Skinned, Sprite
+            Colored, Textured, LitTextured, AlphaTest, DualTexture, EnvMap, Skinned, Sprite, Pbr
         };
 
         // A single entry in drawOrder_ (see that field's own doc comment) -- identifies one queued
@@ -863,14 +863,18 @@ namespace CNA::Internal::Backends::SdlGpu
             SDL_GPUBuffer* uploadedIndexBuffer = nullptr;
         };
 
-        // SkinnedEffect (Phase SDLGPU-7, SDLGPU-34) -- stride 52 (VertexPositionNormalTextureSkinned).
-        // The fragment stage reuses litTexturedFragmentShader_ unchanged (byte-identical varying
-        // interface and UBO layout to lit_textured3d's own fragment shader) -- no separate
-        // skinned fragment shader exists. The 72-bone palette (4608 bytes) is uploaded as a real
-        // SDL_GPUBuffer (GRAPHICS_STORAGE_READ) and bound via SDL_BindGPUVertexStorageBuffers,
-        // NOT pushed via SDL_PushGPUVertexUniformData -- empirically found (SdlGpu_Skinned) that
-        // this backend's push-uniform-data mechanism has a real ~4096-byte cap per slot on this
-        // Vulkan-backed environment, well under the full 4608-byte palette.
+        // SkinnedEffect (Phase SDLGPU-7, SDLGPU-34) -- stride 52 (VertexPositionNormalTextureSkinned)
+        // or stride 56 (the same layout plus a per-vertex Color, `hasVertexColor` selects it).
+        // Stride 52 draws reuse litTexturedFragmentShader_ unchanged (byte-identical varying
+        // interface and UBO layout to lit_textured3d's own fragment shader). Stride 56 draws use a
+        // dedicated skinnedColoredVertexShader_/skinnedColoredFragmentShader_ pair instead (see
+        // skinned_colored3d.frag.glsl's own doc comment for why vertex color needs its own
+        // fragment shader rather than folding into fragTint). The 72-bone palette (4608 bytes) is
+        // uploaded as a real SDL_GPUBuffer (GRAPHICS_STORAGE_READ) and bound via
+        // SDL_BindGPUVertexStorageBuffers, NOT pushed via SDL_PushGPUVertexUniformData --
+        // empirically found (SdlGpu_Skinned) that this backend's push-uniform-data mechanism has a
+        // real ~4096-byte cap per slot on this Vulkan-backed environment, well under the full
+        // 4608-byte palette.
         struct SkinnedDrawCommand
         {
             std::vector<std::uint8_t> vertexData;
@@ -891,10 +895,51 @@ namespace CNA::Internal::Backends::SdlGpu
             int textureFilter = 0;
             int addressU = 0;
             int addressV = 0;
+            bool hasVertexColor = false;  ///< stride 56 vs stride 52
             DrawTarget target;  ///< default = swapchain
             SDL_GPUBuffer* uploadedVertexBuffer = nullptr;
             SDL_GPUBuffer* uploadedIndexBuffer = nullptr;
             SDL_GPUBuffer* uploadedBoneBuffer = nullptr;
+        };
+
+        // PbrEffect/SkinnedPbrEffect (metallic-roughness BRDF) -- stride 48
+        // (VertexPositionNormalTangentTexture, unskinned) or stride 68
+        // (VertexPositionNormalTangentTextureSkinned), `skinned` selects the vertex shader/pipeline
+        // (pbrVertexShader_/pbrSkinnedVertexShader_) and whether boneUniforms is uploaded/bound as
+        // a storage buffer -- both variants share pbrFragmentShader_ unchanged (see
+        // pbr_skinned3d.vert.glsl's own doc comment). uniforms/lightUniforms reuse FillExtUniforms/
+        // FillLitLightUniforms's/FillSkinnedLightUniforms's existing layouts unchanged; pbrParams
+        // is the one genuinely new uniform block (MetallicFactor/RoughnessFactor).
+        struct PbrDrawCommand
+        {
+            std::vector<std::uint8_t> vertexData;
+            std::vector<std::uint8_t> indexData;
+            bool indexed = false;
+            bool index32 = false;
+            Uint32 vertexCount = 0;
+            Uint32 indexCount = 0;
+            SDL_GPUPrimitiveType topology = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
+            std::array<float, 32> uniforms{};          ///< PC (FillExtUniforms's existing layout)
+            std::array<float, 56> lightUniforms{};     ///< LitLightParams/SkinnedLightParams (byte-identical)
+            std::array<float, 4>  pbrParams{};          ///< PbrParams: metallicFactor, roughnessFactor, pad, pad
+            bool skinned = false;
+            std::array<float, 72 * 16> boneUniforms{}; ///< only used/uploaded when skinned == true
+            bool depthTest = false;
+            bool depthWrite = false;
+            int depthFunc = 3;
+            RenderStateSnapshot renderState;  ///< SDLGPU-18/19/20
+            const SdlGpuTextureBackend* texture = nullptr;                  ///< base color, required
+            const SdlGpuTextureBackend* normalMap = nullptr;                ///< optional, default flat normal
+            const SdlGpuTextureBackend* metallicRoughnessMap = nullptr;     ///< optional, default white
+            const SdlGpuTextureBackend* emissiveMap = nullptr;              ///< optional, default white
+            const SdlGpuTextureBackend* occlusionMap = nullptr;             ///< optional, default white
+            int textureFilter = 0;
+            int addressU = 0;
+            int addressV = 0;
+            DrawTarget target;  ///< default = swapchain
+            SDL_GPUBuffer* uploadedVertexBuffer = nullptr;
+            SDL_GPUBuffer* uploadedIndexBuffer = nullptr;
+            SDL_GPUBuffer* uploadedBoneBuffer = nullptr;  ///< only set when skinned == true
         };
 
         /**
@@ -1263,11 +1308,13 @@ namespace CNA::Internal::Backends::SdlGpu
                             SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
                             SDL_GPUGraphicsPipeline*& boundPipeline);
 
-        // Phase SDLGPU-7: SkinnedEffect (SDLGPU-34).
+        // Phase SDLGPU-7: SkinnedEffect (SDLGPU-34). GetOrCreatePipelineSkinned3D's `hasVertexColor`
+        // selects the stride-56 skinnedColoredVertexShader_/skinnedColoredFragmentShader_ pair
+        // instead of the stride-52 skinnedVertexShader_/litTexturedFragmentShader_ pair.
         void CreateSkinnedResources();
         void DestroySkinnedResources();
         [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipelineSkinned3D(
-            SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
+            bool hasVertexColor, SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
             SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount, const RenderStateSnapshot& renderState);
         void QueueSkinnedDraw(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
                               const Matrix& world, const Matrix& view, const Matrix& projection,
@@ -1275,6 +1322,24 @@ namespace CNA::Internal::Backends::SdlGpu
         void IssueSkinnedDraw(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd, const SkinnedDrawCommand& command,
                              SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
                              SDL_GPUGraphicsPipeline*& boundPipeline);
+
+        // PbrEffect/SkinnedPbrEffect (metallic-roughness BRDF). `skinned` selects
+        // pbrVertexShader_/pbrSkinnedVertexShader_ (both share pbrFragmentShader_ unchanged).
+        // EnsureDefaultPbrTextures() lazily creates the 1x1 fallback textures the 4 optional maps
+        // bind when the effect leaves them unset, mirroring EasyGLGraphicsBackend::
+        // EnsureDefaultWhiteTexture()/EnsureDefaultFlatNormalTexture()'s identical role.
+        void CreatePbrResources();
+        void DestroyPbrResources();
+        void EnsureDefaultPbrTextures();
+        [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipelinePbr3D(
+            bool skinned, SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
+            SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount, const RenderStateSnapshot& renderState);
+        void QueuePbrDraw(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
+                          const Matrix& world, const Matrix& view, const Matrix& projection,
+                          PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
+        void IssuePbrDraw(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd, const PbrDrawCommand& command,
+                         SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
+                         SDL_GPUGraphicsPipeline*& boundPipeline);
 
         // Uploads every queued 3D draw command's shadow-copied vertex/index data into a fresh
         // transient SDL_GPUBuffer per command (mirrors WebGPUGraphicsBackend's own per-draw
@@ -1405,11 +1470,35 @@ namespace CNA::Internal::Backends::SdlGpu
         std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> envMapPipelines_;
         std::vector<EnvMapDrawCommand> envMapDrawCommands_;
 
-        // No dedicated fragment shader -- reuses litTexturedFragmentShader_ (see SkinnedDrawCommand's
-        // own doc comment).
+        // No dedicated fragment shader for stride 52 -- reuses litTexturedFragmentShader_ (see
+        // SkinnedDrawCommand's own doc comment). Stride 56 (vertex color) uses its own dedicated
+        // pair below, cached separately from skinnedPipelines_ (mirrors alphaTestPipelines_/
+        // alphaTestColoredPipelines_'s own separate-map-per-stride convention).
         SDL_GPUShader* skinnedVertexShader_ = nullptr;
         std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> skinnedPipelines_;
         std::vector<SkinnedDrawCommand> skinnedDrawCommands_;
+
+        SDL_GPUShader* skinnedColoredVertexShader_ = nullptr;    ///< stride 56
+        SDL_GPUShader* skinnedColoredFragmentShader_ = nullptr;  ///< stride 56 (see skinned_colored3d.frag.glsl)
+        std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> skinnedColoredPipelines_;
+
+        // PbrEffect/SkinnedPbrEffect. pbrFragmentShader_ is shared by both the unskinned
+        // (pbrVertexShader_, stride 48) and skinned (pbrSkinnedVertexShader_, stride 68)
+        // pipelines -- cached separately since their vertex_input_state/vertex shader differ.
+        SDL_GPUShader* pbrVertexShader_ = nullptr;
+        SDL_GPUShader* pbrSkinnedVertexShader_ = nullptr;
+        SDL_GPUShader* pbrFragmentShader_ = nullptr;
+        std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> pbrPipelines_;
+        std::unordered_map<std::size_t, SDL_GPUGraphicsPipeline*> pbrSkinnedPipelines_;
+        std::vector<PbrDrawCommand> pbrDrawCommands_;
+        // 1x1 fallback textures for PbrEffect's 4 optional maps when left unbound -- lazily
+        // created by EnsureDefaultPbrTextures(). default_white_ makes an absent metallic-
+        // roughness/emissive/occlusion map read as "factor alone"/"no emissive tint"/"fully lit"
+        // (each semantic's own neutral value is 1.0); default_flat_normal_ makes an absent normal
+        // map decode (via the shader's rgb*2-1) to the unperturbed geometric normal (0,0,1).
+        // Mirrors EasyGLGraphicsBackend::default_white_texture_/default_flat_normal_texture_.
+        std::unique_ptr<SdlGpuTextureBackend> defaultWhiteTexture_;
+        std::unique_ptr<SdlGpuTextureBackend> defaultFlatNormalTexture_;
 
         int depthCompareFunction_ = 3;  ///< XNA CompareFunction ordinal; 3 = LessEqual (DepthStencilState.Default)
 

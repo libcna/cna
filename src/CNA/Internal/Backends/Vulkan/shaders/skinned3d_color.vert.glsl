@@ -1,0 +1,65 @@
+#version 450
+
+// SkinnedEffect stride-56 variant (SkinnedVertex with a per-vertex Color appended at offset 52,
+// CNB-67) — see EasyGLGraphicsBackend.cpp's ApplyLayout stride==56 case for the canonical layout
+// this mirrors. Skinning/fog math is byte-for-byte identical to skinned3d.vert.glsl; the only
+// addition is the aColor attribute (location 5) and its vColor varying.
+layout(location = 0) in vec3  aPos;
+layout(location = 1) in vec3  aNormal;
+layout(location = 2) in vec2  aUV;
+layout(location = 3) in vec4  aBoneWeights;
+layout(location = 4) in uvec4 aBoneIndices;
+layout(location = 5) in vec4  aColor;
+
+layout(location = 0) out vec3 vNormal;
+layout(location = 1) out vec2 vUV;
+layout(location = 2) out float vFogFactor;
+layout(location = 3) out vec3 vWorldPos;
+layout(location = 4) out vec4 vColor;
+
+layout(push_constant) uniform PC {
+    mat4  mvp;
+    vec4  diffuseColor;
+    vec3  ambientColor;
+    float lightingEnabled;
+    vec3  light0Dir;
+    float textureEnabled;
+    vec3  light0Diffuse;
+    float vertexColorEnabled;
+} pc;
+
+layout(set = 0, binding = 1) uniform BoneBlock {
+    mat4 bones[72];
+} bb;
+
+layout(set = 0, binding = 2) uniform FogParams {
+    vec4 fogColorEnabled;  // xyz = FogColor, w = fogEnabled
+    vec4 fogStartEnd;      // x = fogStart, y = fogEnd, zw = unused
+    vec4 light1Dir_pad;
+    vec4 light1Diff_pad;
+    vec4 light2Dir_pad;
+    vec4 light2Diff_pad;
+    mat4 world;
+    vec4 eyePos_pad; // w = WeightsPerVertex
+    vec4 specularColor_power;
+    vec4 light0Spec_pad;
+    vec4 light1Spec_pad;
+    vec4 light2Spec_pad;
+} fog;
+
+void main() {
+    float weightsPerVertex = fog.eyePos_pad.w;
+    mat4 skinMat = bb.bones[aBoneIndices.x] * aBoneWeights.x;
+    if (weightsPerVertex >= 2.0) skinMat += bb.bones[aBoneIndices.y] * aBoneWeights.y;
+    if (weightsPerVertex >= 4.0) skinMat += bb.bones[aBoneIndices.z] * aBoneWeights.z
+                                          + bb.bones[aBoneIndices.w] * aBoneWeights.w;
+    vec4 skinnedPos = skinMat * vec4(aPos, 1.0);
+    gl_Position = pc.mvp * skinnedPos;
+    vNormal     = normalize(mat3(skinMat) * aNormal);
+    vUV         = aUV;
+    vWorldPos   = (fog.world * skinnedPos).xyz;
+    vColor      = aColor;
+    vFogFactor = (fog.fogColorEnabled.w > 0.5)
+        ? clamp((fog.fogStartEnd.y - aPos.z) / max(fog.fogStartEnd.y - fog.fogStartEnd.x, 1e-6), 0.0, 1.0)
+        : 1.0;
+}

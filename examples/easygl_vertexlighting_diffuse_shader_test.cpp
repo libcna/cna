@@ -131,8 +131,8 @@ protected:
 
         WriteFile(root / "vldiffuse.vert.glsl", kVertSrc);
         WriteFile(root / "vldiffuse.frag.glsl", kFragSrc);
-        WriteFile(root / "vldiffuse.cnb", R"({
-  "cnbVersion": 1,
+        WriteFile(root / "vldiffuse.cnj", R"({
+  "cnjVersion": 1,
   "type": "Effect",
   "vertex": "vldiffuse.vert.glsl",
   "fragment": "vldiffuse.frag.glsl"
@@ -197,7 +197,7 @@ protected:
         auto* fx = dynamic_cast<ShaderEffect*>(fxBase_.get());
         if (!fx || !fx->IsEffectValid())
         {
-            std::printf("[FAIL] EasyGLVertexLightingDiffuse: .cnb load or GLSL compile failed\n");
+            std::printf("[FAIL] EasyGLVertexLightingDiffuse: .cnj load or GLSL compile failed\n");
             Exit();
             return;
         }

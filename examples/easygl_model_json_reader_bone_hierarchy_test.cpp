@@ -112,8 +112,8 @@ protected:
         WriteTriangleFixture(root, "wheel");
         WriteTriangleFixture(root, "turret");
 
-        WriteFile(root / "rig.cnb", R"({
-  "cnbVersion": 1,
+        WriteFile(root / "rig.cnj", R"({
+  "cnjVersion": 1,
   "type": "Model",
   "meshes": [
     {

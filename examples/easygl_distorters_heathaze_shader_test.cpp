@@ -140,8 +140,8 @@ protected:
 
         WriteFile(root / "hh.vert.glsl", kVertSrc);
         WriteFile(root / "hh.frag.glsl", kFragSrc);
-        WriteFile(root / "hh.cnb", R"({
-  "cnbVersion": 1,
+        WriteFile(root / "hh.cnj", R"({
+  "cnjVersion": 1,
   "type": "Effect",
   "vertex": "hh.vert.glsl",
   "fragment": "hh.frag.glsl"
@@ -203,7 +203,7 @@ protected:
         auto* fx = dynamic_cast<ShaderEffect*>(fxBase_.get());
         if (!fx || !fx->IsEffectValid())
         {
-            std::printf("[FAIL] EasyGLDistortersHeatHaze: .cnb load or GLSL compile failed\n");
+            std::printf("[FAIL] EasyGLDistortersHeatHaze: .cnj load or GLSL compile failed\n");
             Exit();
             return;
         }

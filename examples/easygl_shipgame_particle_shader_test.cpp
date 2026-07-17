@@ -250,8 +250,8 @@ protected:
 
         WriteFile(root / "spf.vert.glsl", kVertSrc);
         WriteFile(root / "spf.frag.glsl", kFragSrc);
-        WriteFile(root / "spf.cnb", R"({
-  "cnbVersion": 1,
+        WriteFile(root / "spf.cnj", R"({
+  "cnjVersion": 1,
   "type": "Effect",
   "vertex": "spf.vert.glsl",
   "fragment": "spf.frag.glsl"
@@ -326,7 +326,7 @@ protected:
         auto* fx = dynamic_cast<ShaderEffect*>(fxBase_.get());
         if (!fx || !fx->IsEffectValid())
         {
-            std::printf("[FAIL] EasyGLShipGameParticle: .cnb load or GLSL compile failed\n");
+            std::printf("[FAIL] EasyGLShipGameParticle: .cnj load or GLSL compile failed\n");
             Exit();
             return;
         }

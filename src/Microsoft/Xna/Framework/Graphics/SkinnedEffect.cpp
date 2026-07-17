@@ -322,7 +322,7 @@ namespace Microsoft::Xna::Framework::Graphics
         p.skinned            = true;
         p.textureEnabled     = true;
         p.lightingEnabled    = true;
-        p.vertexColorEnabled = false;
+        p.vertexColorEnabled = VertexColorEnabled;
         p.preferPerPixelLighting = preferPerPixelLighting_;
 
         if (texture_) p.texture0 = &texture_->GetBackend();

@@ -33,6 +33,13 @@ if(CNA_BUILD_TESTS)
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Internal/Audio/AudioMixerTests\\.cpp$")
     endif()
 
+    # GltfToCnjToolTests.cpp (plan_cnj.md CNB-52) uses the same POSIX-only posix_spawn/sys-wait
+    # process APIs to spawn cna_tool_gltf_to_cnj as an independent OS process, for the same
+    # reasons as the harness-spawning tests above.
+    if(WIN32 OR EMSCRIPTEN OR ANDROID)
+        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/Microsoft/Xna/Framework/Content/GltfToCnjToolTests\\.cpp$")
+    endif()
+
     add_executable(CnaTests
             ${CNA_TEST_SOURCES}
     )
@@ -72,6 +79,14 @@ if(CNA_BUILD_TESTS)
             SDL3::SDL3
     )
 
+    # GltfImportCoreTests.cpp includes CNA/Internal/GltfImport/GltfImportCore.hpp directly (to call
+    # ExtractMesh() without spawning the CLI tool), which itself includes cgltf.h -- CNA's own
+    # target_include_directories for that path is PRIVATE (see cmake/CnaLibrary.cmake), so it does
+    # not propagate to CnaTests via target_link_libraries and must be added here too.
+    target_include_directories(CnaTests PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/third_party/cgltf
+    )
+
     if(CNA_ENABLE_NET)
         target_link_libraries(CnaTests PRIVATE CNA_GamerServices CNA_Net)
     endif()
@@ -99,6 +114,17 @@ if(CNA_BUILD_TESTS)
         add_dependencies(CnaTests cna_audio_no_hardware_harness)
         target_compile_definitions(CnaTests PRIVATE
             CNA_AUDIO_NO_HARDWARE_HARNESS_PATH="$<TARGET_FILE:cna_audio_no_hardware_harness>"
+        )
+    endif()
+
+    if(TARGET cna_tool_gltf_to_cnj)
+        # plan_cnj.md CNB-52: GltfToCnjToolTests.cpp spawns the real converter tool as a
+        # subprocess (same reasoning as cna_net_two_process_harness above -- a separate
+        # executable with its own main(), not a library call) and needs its real built path
+        # baked in at compile time.
+        add_dependencies(CnaTests cna_tool_gltf_to_cnj)
+        target_compile_definitions(CnaTests PRIVATE
+            CNA_GLTF_TO_CNJ_TOOL_PATH="$<TARGET_FILE:cna_tool_gltf_to_cnj>"
         )
     endif()
 

@@ -73,7 +73,7 @@ namespace CNA::Internal::Xnb
      * @brief Parses and validates a `.xnb` container header from @p reader, advancing it past
      *        the header's 10 bytes.
      *
-     * Unlike CnbEnvelope's parse/validate split (which exists to give JSON parsing rich
+     * Unlike CnjEnvelope's parse/validate split (which exists to give JSON parsing rich
      * per-field diagnostics), a binary header has no useful partial-failure state to preserve,
      * so this function validates directly and throws on any failure -- matching FNA's own
      * `GetContentReaderFromXnb`, which likewise throws immediately on a bad version rather than

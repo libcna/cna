@@ -482,6 +482,10 @@ namespace CNA::Internal::Backends::Bgfx
         bgfx::ProgramHandle skinned3DVertexLitProgram_ = BGFX_INVALID_HANDLE; // Task 1104
         bgfx::ProgramHandle instanced3DProgram_       = BGFX_INVALID_HANDLE;
         bgfx::ProgramHandle envMap3DProgram_          = BGFX_INVALID_HANDLE;
+        /// plan_cnj.md CNB-58/60 (Phase 13A) Bgfx port: PbrEffect (unskinned, stride 48).
+        bgfx::ProgramHandle pbr3DProgram_             = BGFX_INVALID_HANDLE;
+        /// PBR + skinning combo: SkinnedPbrEffect (stride 68).
+        bgfx::ProgramHandle pbrSkinned3DProgram_      = BGFX_INVALID_HANDLE;
         // Uniforms shared across 3D draw calls
         bgfx::UniformHandle wvpUniform_         = BGFX_INVALID_HANDLE;
         /// Task 767: RasterizerState.DepthBias vertex-shader Z-offset emulation, x component only.
@@ -527,9 +531,25 @@ namespace CNA::Internal::Backends::Bgfx
         bgfx::UniformHandle envMapAmountUnif_   = BGFX_INVALID_HANDLE;
         bgfx::UniformHandle envMapSpecularUnif_ = BGFX_INVALID_HANDLE;
         bgfx::UniformHandle envMapSampler_      = BGFX_INVALID_HANDLE;
+        // PbrEffect/SkinnedPbrEffect-specific uniforms (plan_cnj.md CNB-58/60, Phase 13A Bgfx port).
+        /// x = MetallicFactor, y = RoughnessFactor.
+        bgfx::UniformHandle metallicRoughnessFactorUnif_ = BGFX_INVALID_HANDLE;
+        bgfx::UniformHandle normalMapSampler_            = BGFX_INVALID_HANDLE;
+        bgfx::UniformHandle metallicRoughnessSampler_    = BGFX_INVALID_HANDLE;
+        bgfx::UniformHandle emissiveMapSampler_          = BGFX_INVALID_HANDLE;
+        bgfx::UniformHandle occlusionMapSampler_         = BGFX_INVALID_HANDLE;
+        /// Tangent-space "flat normal" (0,0,1) encoded as RGB (128,128,255) -- fallback for
+        /// PbrEffect::NormalMap when unbound, matching EasyGLGraphicsBackend::
+        /// EnsureDefaultFlatNormalTexture()'s identical rationale. The other 3 PBR map fallbacks
+        /// (metallic-roughness, emissive, occlusion) reuse defaultWhiteTexture3D_ instead.
+        bgfx::TextureHandle defaultFlatNormalTexture3D_  = BGFX_INVALID_HANDLE;
 
         explicit BgfxGraphicsBackend(SDL_Window* window, int swapInterval = 1);
         ~BgfxGraphicsBackend() override;
+        // OcclusionQuery reflects the real, live bgfx::getCaps() device query (BGFX_CAPS_OCCLUSION_QUERY).
+        // Everything else CNA::GraphicsCapability currently enumerates is genuinely supported
+        // here, so falls through to the shared default (true).
+        [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
         void Clear(float r, float g, float b, float a) override;
         void Present() override;
         void GetViewportSize(int& width, int& height) override;
@@ -658,6 +678,14 @@ namespace CNA::Internal::Backends::Bgfx
         /// Task 767: uploads depthBias_ (scaled by kDepthBiasScale) to u_depthBias. bgfx resets
         /// uniform state per submit() call, so this must be called before every 3D bgfx::submit().
         void SetDepthBiasUniform();
+
+        /// plan_cnj.md CNB-58/60 (Phase 13A) Bgfx port: binds PbrEffect/SkinnedPbrEffect's 4
+        /// additional texture units (1=normal, 2=metallic-roughness, 3=emissive, 4=occlusion),
+        /// each falling back to the "map absent" constant matching its own semantic --
+        /// factored out since both DrawPrimitivesEx and DrawIndexedPrimitivesEx need it for both
+        /// the unskinned and skinned PBR program variants (4 call sites), unlike this file's
+        /// other per-branch texture-binding blocks (which bind only 1-2 units each).
+        void BindPbrTextures(const GpuDrawParams& params);
 
         // Task 448: submits a 3D draw call's already-configured bgfx state to currentViewId_,
         // routing through bgfx's occlusion-query submit() overload when activeOcclusionQuery_ is

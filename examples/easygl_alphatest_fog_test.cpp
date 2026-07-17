@@ -11,16 +11,20 @@
 // pattern exactly — no shader changes needed on EasyGL.
 //
 // CNA's fog formula (EasyGL-specific, simpler than FNA's WorldViewProj-derived `FogVector` dot
-// product but equivalent in effect for these axis-aligned test cases): `vFogFactor =
-// clamp((FogEnd-z)/(FogEnd-FogStart), 0, 1)` per-vertex (raw object-space Z, `World`/`View`/
+// product, and — corrected under Task 1111 (see plan_graphics.md) — genuinely equivalent to it
+// for these axis-aligned test cases, not just coincidentally matching at one point): `vFogFactor
+// = clamp((z+FogEnd)/(FogEnd-FogStart), 0, 1)` per-vertex (raw object-space Z, `World`/`View`/
 // `Projection` are all Identity in this test — meaning `gl_Position.z` equals raw vertex `z`
 // directly, unprojected, so `z` must stay within OpenGL's valid clip-space NDC range of `[-1,1]`
 // or the primitive is frustum-clipped away entirely and never reaches the fragment shader at all;
 // `FogStart`/`FogEnd` are chosen inside that range accordingly, not at FNA-typical world-space
-// distances), then `FragColor.rgb = mix(FogColor, original, vFogFactor)` — `vFogFactor=1`
-// (`z<=FogStart`) shows the original color unblended; `vFogFactor=0` (`z>=FogEnd`) shows pure fog
-// color; values between interpolate. A 3-point sweep (`z=-0.9` no fog, `z=0.9` full fog, `z=0`
-// half fog) proves the blend is a genuine interpolation, not just an on/off switch.
+// distances), then `FragColor.rgb = mix(FogColor, original, vFogFactor)` — `vFogFactor=0`
+// (`z<=FogStart`) shows pure fog color; `vFogFactor=1` (`z>=FogEnd`) shows the original color
+// unblended (a real, easy-to-miss consequence: with `View=Identity`, `FogStart` is the FULLY
+// FOGGED boundary, not the unfogged one the property name might suggest — see
+// `fog_gradient_quad.scene`'s own comment / Task 1111 for the full derivation); values between
+// interpolate. A 3-point sweep (`z=FogStart` full fog, `z=FogEnd` no fog, `z=0` half fog) proves
+// the blend is a genuine interpolation, not just an on/off switch.
 //
 // CONFIRMED, NOT FIXED HERE (a much larger, pre-existing, project-wide gap discovered while
 // investigating this task, unrelated to `AlphaTestEffect` specifically): **fog is completely
@@ -68,10 +72,16 @@ static const Vector3 kFogColor(0.1f, 0.6f, 0.9f);
 static constexpr float kFogStart = -0.9f;
 static constexpr float kFogEnd   =  0.9f;
 
-// Expected: mix(FogColor, MaterialColor, clamp((FogEnd-z)/(FogEnd-FogStart),0,1)).
-static const Color kExpectedNoFog(204, 51, 102, 255);   // z=-0.9: factor=1, unblended material color
-static const Color kExpectedFullFog(26, 153, 230, 255); // z=0.9:  factor=0, pure fog color
-static const Color kExpectedHalfFog(115, 102, 166, 255);// z=0:    factor=0.5, halfway blend
+// Formula corrected under Task 1111 (see plan_graphics.md): the header comment's original
+// (FogEnd-z)/(FogEnd-FogStart) formula was never actually equivalent to FNA's real fog dot
+// product, only coincidentally right at z=0. Real formula (World=View=Identity):
+//   vFogFactor = clamp((z+FogEnd)/(FogEnd-FogStart), 0, 1)
+// A real, easy-to-miss consequence: with View=Identity, FogStart is the FULLY FOGGED boundary
+// here, not the unfogged one the property name might suggest -- see fog_gradient_quad.scene's
+// own comment / Task 1111 for the full derivation.
+static const Color kExpectedNoFog(204, 51, 102, 255);   // z=FogEnd:   factor=1, unblended material color
+static const Color kExpectedFullFog(26, 153, 230, 255); // z=FogStart: factor=0, pure fog color
+static const Color kExpectedHalfFog(115, 102, 166, 255);// z=0:        factor=0.5, halfway blend
 
 class AlphaTestFogTest : public Game
 {
@@ -151,13 +161,13 @@ protected:
     {
         auto& dev = getGraphicsDeviceProperty();
 
-        const Color noFogGot = renderAtZ(dev, kFogStart);
+        const Color noFogGot = renderAtZ(dev, kFogEnd);
         check(matches(noFogGot, kExpectedNoFog),
-              "z=-0.9 (at FogStart): unblended material color", noFogGot, "(204,51,102)");
+              "z=0.9 (at FogEnd): unblended material color", noFogGot, "(204,51,102)");
 
-        const Color fullFogGot = renderAtZ(dev, kFogEnd);
+        const Color fullFogGot = renderAtZ(dev, kFogStart);
         check(matches(fullFogGot, kExpectedFullFog),
-              "z=0.9 (at FogEnd): pure fog color", fullFogGot, "(26,153,230)");
+              "z=-0.9 (at FogStart): pure fog color", fullFogGot, "(26,153,230)");
 
         const Color halfFogGot = renderAtZ(dev, 0.0f);
         check(matches(halfFogGot, kExpectedHalfFog),

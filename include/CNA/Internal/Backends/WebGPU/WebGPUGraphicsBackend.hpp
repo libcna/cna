@@ -594,5 +594,71 @@ namespace CNA::Internal::Backends::WebGPU
         std::unordered_map<int, WGPURenderPipeline> dualTexturePipelines_;
         std::unordered_map<int, WGPURenderPipeline> dualTextureColoredPipelines_;
         std::vector<DualTextureDrawCommand> dualTextureDrawCommands_;
+
+        // pbr3d.wgsl -- PbrEffect's real glTF 2.0 metallic-roughness BRDF (GGX distribution +
+        // Smith-Schlick-GGX visibility + Schlick Fresnel), ported from
+        // EasyGLGraphicsBackend::EnsurePbrProgram()'s GLSL shader. UNSKINNED only (stride 48,
+        // VertexPositionNormalTangentTexture) -- this backend has no skinning shader variant at
+        // all yet (see needsUnsupportedEffect's own skinned gate in DrawPrimitivesEx()), so
+        // SkinnedPbrEffect (stride 68) is a separate, pre-existing, out-of-scope gap and keeps
+        // falling back exactly as it did before. Genuinely new bind-group shapes on both sides:
+        // group 0 needs a THIRD uniform buffer (PbrFactors: metallic/roughness factors -- the
+        // existing 128-byte Uniforms and 272-byte LitLightParams blocks are both already fully
+        // packed and are reused verbatim via the existing FillExtUniforms()/
+        // FillLitLightUniforms() helpers), and group 1 needs FIVE textures (base color, normal,
+        // metallic-roughness, emissive, occlusion) behind one shared sampler, each falling back to
+        // a 1x1 default texture (matching EasyGLGraphicsBackend's own
+        // EnsureDefaultFlatNormalTexture()/EnsureDefaultWhiteTexture() "map absent" convention)
+        // when PbrEffect leaves that map unbound. Fog and alpha-test are deliberately NOT wired
+        // into this shader: every other WebGPU 3D shader already defers fog identically (see
+        // CreateLitTexturedResources()'s own comment), and PbrEffect::FillGpuDrawParams() never
+        // touches GpuDrawParams::alphaTest at all (stays the default always-pass value), so
+        // embedding that branch here would be permanently dead code.
+        struct PbrDrawCommand
+        {
+            std::vector<std::uint8_t> vertexData;
+            std::vector<std::uint8_t> indexData;
+            bool indexed = false;
+            bool index32 = false;
+            std::uint32_t vertexCount = 0;
+            std::uint32_t indexCount = 0;
+            WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
+            std::array<float, 32> uniforms{};
+            std::array<float, 68> lightUniforms{};
+            std::array<float, 4> pbrFactors{};
+            bool depthTest = false;
+            bool depthWrite = false;
+            int depthFunc = 3;
+            const WebGPUTextureBackend* baseColorTexture = nullptr;
+            const WebGPUTextureBackend* normalMap = nullptr;
+            const WebGPUTextureBackend* metallicRoughnessMap = nullptr;
+            const WebGPUTextureBackend* emissiveMap = nullptr;
+            const WebGPUTextureBackend* occlusionMap = nullptr;
+            int textureFilter = 0;
+            int addressU = 1;
+            int addressV = 1;
+        };
+        void CreatePbrResources();
+        void DestroyPbrResources();
+        /// Lazily creates the 1x1 default white / flat-normal fallback textures used whenever
+        /// PbrEffect leaves an optional map (normal/metallic-roughness/emissive/occlusion)
+        /// unbound. Idempotent; safe to call from every QueuePbrDraw().
+        void EnsurePbrDefaultTextures();
+        [[nodiscard]] WGPURenderPipeline GetOrCreatePipelinePbr3D(WGPUPrimitiveTopology topology,
+                                                                    bool depthTest, bool depthWrite,
+                                                                    int depthFunc);
+        void QueuePbrDraw(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
+                          const Matrix& world, const Matrix& view, const Matrix& projection,
+                          PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
+        void RenderPbrDraws(WGPURenderPassEncoder pass);
+
+        WGPUShaderModule pbrShader_ = nullptr;
+        WGPUBindGroupLayout pbrBindGroupLayout0_ = nullptr;  ///< group 0: Uniforms + LitLightParams + PbrFactors UBOs
+        WGPUBindGroupLayout pbrBindGroupLayout1_ = nullptr;  ///< group 1: sampler + 5 textures
+        WGPUPipelineLayout pbrPipelineLayout_ = nullptr;
+        std::unordered_map<int, WGPURenderPipeline> pbrPipelines_;
+        std::vector<PbrDrawCommand> pbrDrawCommands_;
+        std::unique_ptr<WebGPUTextureBackend> pbrDefaultWhiteTexture_;
+        std::unique_ptr<WebGPUTextureBackend> pbrDefaultFlatNormalTexture_;
     };
 }

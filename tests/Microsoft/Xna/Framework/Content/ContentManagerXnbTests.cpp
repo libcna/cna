@@ -248,13 +248,13 @@ TEST_F(ContentManagerXnbTest, TotalLengthLargerThanActualFileSizeThrowsContentLo
     EXPECT_THROW(cm.Load<TestValue>("fixture"), ContentLoadException);
 }
 
-TEST_F(ContentManagerXnbTest, XnbWinsOverCnbAndNativeExtensionForTheSameName)
+TEST_F(ContentManagerXnbTest, XnbWinsOverCnjAndNativeExtensionForTheSameName)
 {
     ScratchContentRoot root;
     WriteBytes(root.path() / "fixture.xnb", BuildTestXnbFile(42));
-    // A .cnb sidecar with the same logical name that would resolve to a totally different value
-    // if it were consulted -- proves .xnb is checked and wins before .cnb ever gets a look.
-    WriteFile(root.path() / "fixture.cnb", R"({"cnbVersion": 1, "type": "TestValue"})");
+    // A .cnj sidecar with the same logical name that would resolve to a totally different value
+    // if it were consulted -- proves .xnb is checked and wins before .cnj ever gets a look.
+    WriteFile(root.path() / "fixture.cnj", R"({"cnjVersion": 1, "type": "TestValue"})");
 
     ContentManager cm(nullptr, root.path().string());
     const TestValue result = cm.Load<TestValue>("fixture");

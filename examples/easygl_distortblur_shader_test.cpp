@@ -179,8 +179,8 @@ protected:
 
         WriteFile(root / "distortblur.vert.glsl", kVertSrc);
         WriteFile(root / "distortblur.frag.glsl", kFragSrc);
-        WriteFile(root / "distortblur.cnb", R"({
-  "cnbVersion": 1,
+        WriteFile(root / "distortblur.cnj", R"({
+  "cnjVersion": 1,
   "type": "Effect",
   "vertex": "distortblur.vert.glsl",
   "fragment": "distortblur.frag.glsl"
@@ -267,7 +267,7 @@ protected:
         auto* fx = dynamic_cast<ShaderEffect*>(fxBase_.get());
         if (!fx || !fx->IsEffectValid())
         {
-            std::printf("[FAIL] EasyGLDistortBlur: .cnb load or GLSL compile failed\n");
+            std::printf("[FAIL] EasyGLDistortBlur: .cnj load or GLSL compile failed\n");
             Exit();
             return;
         }

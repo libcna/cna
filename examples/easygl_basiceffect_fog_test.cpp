@@ -1,18 +1,35 @@
 // SPDX-License-Identifier: MS-PL
 // Task 195: BasicEffect linear fog pixel integration test — EasyGL.
+// Formula corrected under Task 1111 (see that task's plan_graphics.md row): the previous
+// (FogEnd-Z)/(FogEnd-FogStart) falloff was never actually equivalent to FNA's real
+// EffectHelpers.SetFogVector/Common.fxh ComputeFogFactor dot product, even for FogStart<FogEnd —
+// it happened to give the same answer at this test's own Z=0 midpoint but was wrong everywhere
+// else, confirmed by the oracle scene fog_gradient_quad's own worked derivation.
 //
-// Fog is computed per-vertex using model-space Z as depth (valid when World=View=I).
-// Formula: fogFactor = clamp((FogEnd - Z) / (FogEnd - FogStart), 0, 1)
-//          finalRGB  = mix(FogColor, geomRGB, fogFactor)
+// Real formula (World=View=Identity, so the FogVector dot product reduces to a plain scalar):
+//   fnaFogFactor = saturate(scale*(z+FogStart)), scale = 1/(FogStart-FogEnd)
+//   finalRGB = lerp(geomRGB, FogColor, fnaFogFactor)
+// EasyGL's own vFogFactor is 1-fnaFogFactor (mix(FogColor,geomRGB,vFogFactor) convention), which
+// simplifies to clamp((Z+FogEnd)/(FogEnd-FogStart), 0, 1).
+//
+// A real, easy-to-miss consequence (the same one fog_gradient_quad.scene's own comment
+// discovered): with View=Identity, FogStart is NOT "the near/unfogged boundary" the way the
+// property name might suggest — which boundary reads as fogged depends on the sign relationship
+// above, not on which one is literally named Start vs End. This test picks FogStart=-0.9/
+// FogEnd=0.9 (matching every sibling *_fog_test.cpp) specifically because that combination gives
+// a genuine, non-degenerate gradient; FogStart=0 configurations (this file's own pre-fix values)
+// collapse to a constant (always fully unfogged for any Z>=0) and cannot demonstrate a gradient
+// at all once the real formula is used.
 //
 // NDC range is [-1, 1] — all quads kept within Z ∈ [-0.9, 0.9].
 //
-// Sub-tests (VertexPositionColor stride=16, identity WVP):
+// Sub-tests (VertexPositionColor stride=16, identity WVP, FogColor=red, geom=blue):
 //   (a) Fog disabled: blue quad at Z=0 → pixel = pure blue
-//   (b) Fog enabled: FogStart=0, FogEnd=1, FogColor=red, geom=blue, Z=0.5
-//       fogFactor = 0.5 → pixel = mix(red,blue,0.5) = (128, 0, 128), tolerance ±30
-//   (c) Full fog: FogStart=0, FogEnd=0.5, Z=0.9 → fogFactor = clamp(-0.8,0,1) = 0
-//       → pixel = full fog red
+//   (b) Fog enabled: FogStart=-0.9, FogEnd=0.9, Z=0 (halfway)
+//       vFogFactor = (0+0.9)/(0.9-(-0.9)) = 0.5 → pixel = mix(red,blue,0.5) = (128,0,128) ± 30
+//   (c) Full fog: FogStart=-0.9, FogEnd=0.9, Z=-0.9 (at FogStart)
+//       vFogFactor = (-0.9+0.9)/(0.9-(-0.9)) = 0 → pixel = full fog red
+//       (Z=FogStart is where this scene is FULLY fogged, not unfogged — see header note above)
 //
 // Exit code 0 = all PASS, 1 = any FAIL.
 
@@ -121,8 +138,8 @@ protected:
             check(isBlue, "(a) fog OFF: blue quad → pure blue", got, kBlue);
         }
 
-        // ── (b) Fog 50%: Z=0.5, FogStart=0, FogEnd=1, FogColor=red ──────
-        // fogFactor = (1-0.5)/(1-0) = 0.5
+        // ── (b) Fog 50%: Z=0, FogStart=-0.9, FogEnd=0.9, FogColor=red ────
+        // vFogFactor = (0+0.9)/(0.9-(-0.9)) = 0.5
         // pixel = mix(red,blue,0.5) = (128, 0, 128) ± 30
         {
             dev.Clear(kBlack);
@@ -130,11 +147,11 @@ protected:
             setupBase(fx);
             fx.setFogEnabledProperty(true);
             fx.setFogColorProperty(Vector3(1.0f, 0.0f, 0.0f));
-            fx.setFogStartProperty(0.0f);
-            fx.setFogEndProperty(1.0f);
+            fx.setFogStartProperty(-0.9f);
+            fx.setFogEndProperty(0.9f);
             fx.Apply();
 
-            makeQuad(0.5f, kBlue);
+            makeQuad(0.0f, kBlue);
             // Task 896 finding (mirrors the Bgfx sibling's Task 364/884 fix): this quad's winding
             // is culled by the real default RasterizerState once EasyGL pushes it at construction.
             dev.setRasterizerStateProperty(RasterizerState::CullNone);
@@ -148,20 +165,21 @@ protected:
             check(isMix, "(b) fog 50%: Z=0.5 → purple mix", got, kMix);
         }
 
-        // ── (c) Full fog: FogEnd=0.5, Z=0.9 → fogFactor=0 → red ─────────
-        // fogFactor = clamp((0.5-0.9)/(0.5-0), 0, 1) = clamp(-0.8, 0, 1) = 0
-        // pixel = mix(red,blue,0) = red  (Z=0.9 is within NDC range [-1,1])
+        // ── (c) Full fog: FogStart=-0.9, FogEnd=0.9, Z=-0.9 (at FogStart) → red ──
+        // vFogFactor = clamp((-0.9+0.9)/(0.9-(-0.9)), 0, 1) = clamp(0, 0, 1) = 0
+        // pixel = mix(red,blue,0) = red — Z=FogStart is the FULLY fogged boundary here, not
+        // FogEnd (see the file header's note on this sign convention).
         {
             dev.Clear(kBlack);
             BasicEffect fx(dev);
             setupBase(fx);
             fx.setFogEnabledProperty(true);
             fx.setFogColorProperty(Vector3(1.0f, 0.0f, 0.0f));
-            fx.setFogStartProperty(0.0f);
-            fx.setFogEndProperty(0.5f);
+            fx.setFogStartProperty(-0.9f);
+            fx.setFogEndProperty(0.9f);
             fx.Apply();
 
-            makeQuad(0.9f, kBlue);
+            makeQuad(-0.9f, kBlue);
             // Task 896 finding (mirrors the Bgfx sibling's Task 364/884 fix): this quad's winding
             // is culled by the real default RasterizerState once EasyGL pushes it at construction.
             dev.setRasterizerStateProperty(RasterizerState::CullNone);
@@ -170,7 +188,7 @@ protected:
             const bool isRed = got.getRProperty() > 200
                             && got.getGProperty() < 50
                             && got.getBProperty() < 50;
-            check(isRed, "(c) full fog: FogEnd=0.5, Z=0.9 → full red", got, kRed);
+            check(isRed, "(c) full fog: Z=FogStart=-0.9 → full red", got, kRed);
         }
 
         Exit();

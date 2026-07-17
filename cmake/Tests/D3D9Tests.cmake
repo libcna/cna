@@ -68,6 +68,22 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D9")
     cna_register_backend_test(NAME D3D9_Instanced COMMAND ${_d3d9_instanced_cmd}
         TIMEOUT 60 LABELS "D3D9")
 
+    # D3D9 PBR porting task: real DrawPrimitivesEx dispatch for CNA's own NOXNA PbrEffect/
+    # SkinnedPbrEffect (params.pbr) through CNA's own custom Pbr3D/PbrSkinned3D vs_3_0/ps_3_0
+    # shaders (D3D9PbrDraw.cpp).
+    cna_d3d9_test(cna_test_d3d9_pbr examples/d3d9_pbr_test.cpp)
+    cna_d3d9_ctest_command(_d3d9_pbr_cmd cna_test_d3d9_pbr)
+    cna_register_backend_test(NAME D3D9_Pbr COMMAND ${_d3d9_pbr_cmd}
+        TIMEOUT 60 LABELS "D3D9")
+
+    # D3D9 skinned-vertex-color porting task: real DrawPrimitivesEx dispatch for CNA's own NOXNA
+    # SkinnedVertexColor3D shader (stride 56 -- SkinnedEffect + a vertex Color real XNA's own
+    # compiled SkinnedEffect.fx bytecode never carries).
+    cna_d3d9_test(cna_test_d3d9_skinnedvertexcolor examples/d3d9_skinnedvertexcolor_test.cpp)
+    cna_d3d9_ctest_command(_d3d9_skinnedvertexcolor_cmd cna_test_d3d9_skinnedvertexcolor)
+    cna_register_backend_test(NAME D3D9_SkinnedVertexColor COMMAND ${_d3d9_skinnedvertexcolor_cmd}
+        TIMEOUT 60 LABELS "D3D9")
+
     # D9-90/D9-91/D9-92: real D3D9SpriteBatchBackend driving Microsoft's own SpriteEffect, tested
     # through the real public SpriteBatch/Texture2D API (D9-93's own explicit requirement).
     cna_d3d9_test(cna_test_d3d9_spritebatch examples/d3d9_spritebatch_test.cpp)

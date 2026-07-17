@@ -29,8 +29,17 @@ namespace CNA::Internal::Backends::D3D9
     ///   24: POSITION0 (FLOAT3, 0), COLOR0 (UBYTE4N, 12), TEXCOORD0 (FLOAT2, 16)
     ///   28: POSITION0 (FLOAT3, 0), TEXCOORD0 (FLOAT2, 12), TEXCOORD1 (FLOAT2, 20)
     ///   32: POSITION0 (FLOAT3, 0), NORMAL0 (FLOAT3, 12), TEXCOORD0 (FLOAT2, 24)
+    ///   48: POSITION0 (FLOAT3, 0), NORMAL0 (FLOAT3, 12), TANGENT0 (FLOAT4, 24), TEXCOORD0
+    ///       (FLOAT2, 40) -- VertexPositionNormalTangentTexture, CNA's own NOXNA "Pbr3D" shader
+    ///       (PbrEffect, unskinned)
     ///   52: POSITION0 (0), NORMAL0 (12), TEXCOORD0 (24), BLENDWEIGHT0 (FLOAT4, 32),
     ///       BLENDINDICES0 (UBYTE4, 48)
+    ///   56: the stride-52 layout with COLOR0 (UBYTE4N, 52) appended -- CNA's own NOXNA
+    ///       "SkinnedVertexColor3D" shader (real XNA SkinnedEffect has no vertex-color input)
+    ///   68: POSITION0 (FLOAT3, 0), NORMAL0 (FLOAT3, 12), TANGENT0 (FLOAT4, 24), TEXCOORD0
+    ///       (FLOAT2, 40), BLENDWEIGHT0 (FLOAT4, 48), BLENDINDICES0 (UBYTE4, 64) --
+    ///       VertexPositionNormalTangentTextureSkinned, CNA's own NOXNA "PbrSkinned3D" shader
+    ///       (SkinnedPbrEffect)
     ///
     /// D9-82d found live that stride 28 (Position+TexCoord0+TexCoord1) has no equivalent in the 5
     /// layouts D3D11/D3D12 share: `DualTextureEffect.fx`'s real, byte-identical `VSInputTx2`

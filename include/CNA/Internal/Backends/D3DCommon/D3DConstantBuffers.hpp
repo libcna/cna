@@ -215,4 +215,49 @@ namespace CNA::Internal::Backends::D3DCommon
     };
     static_assert(sizeof(D3DSprite2DConstants) == 16, "D3DSprite2DConstants must be a 16-byte buffer (sprite2d's real PerDraw cbuffer is only 8 bytes of shader-visible data)");
     static_assert(sizeof(D3DSprite2DConstants) % 16 == 0, "D3D11 constant buffer ByteWidth must be a 16-byte multiple");
+
+    /// plan_cnj.md CNB-58 follow-up: matches pbr3d.vert.hlsl/pbr3d.frag.hlsl's and
+    /// pbr_skinned3d.vert.hlsl/pbr_skinned3d.frag.hlsl's shared `cbuffer PerDraw : register(b0)`
+    /// byte-for-byte (176 bytes) -- the metallic-roughness BRDF's material-level constants
+    /// (PbrEffect/SkinnedPbrEffect). Includes World (unlike D3DPerDrawConstants) since the PBR
+    /// fragment stage needs a true world-space position/normal for its BRDF, same reasoning
+    /// D3DLightingConstants documents for lit_textured3d.
+    struct alignas(16) D3DPbrPerDrawConstants
+    {
+        float Mvp[16];              ///< row_major float4x4, offset 0 (64 bytes).
+        float World[16];            ///< row_major float4x4, offset 64 (64 bytes).
+        float DiffuseColor[4];      ///< offset 128: material base color factor (RGBA)
+        float AmbientMetallic[4];   ///< offset 144: xyz = AmbientColor, w = MetallicFactor
+        float EmissiveRoughness[4]; ///< offset 160: xyz = EmissiveColor, w = RoughnessFactor
+    };
+    static_assert(sizeof(D3DPbrPerDrawConstants) == 176, "D3DPbrPerDrawConstants must match pbr3d's real 176-byte PerDraw cbuffer size");
+    static_assert(offsetof(D3DPbrPerDrawConstants, World) == 64, "D3DPbrPerDrawConstants field offset mismatch vs HLSL");
+    static_assert(offsetof(D3DPbrPerDrawConstants, DiffuseColor) == 128, "D3DPbrPerDrawConstants field offset mismatch vs HLSL");
+    static_assert(offsetof(D3DPbrPerDrawConstants, AmbientMetallic) == 144, "D3DPbrPerDrawConstants field offset mismatch vs HLSL");
+    static_assert(offsetof(D3DPbrPerDrawConstants, EmissiveRoughness) == 160, "D3DPbrPerDrawConstants field offset mismatch vs HLSL");
+    static_assert(sizeof(D3DPbrPerDrawConstants) % 16 == 0, "D3D11 constant buffer ByteWidth must be a 16-byte multiple");
+
+    /// plan_cnj.md CNB-58 follow-up: matches pbr3d.vert.hlsl/pbr3d.frag.hlsl's shared
+    /// `cbuffer PbrLights : register(b1)` (unskinned Pbr3d) and pbr_skinned3d.vert.hlsl/
+    /// pbr_skinned3d.frag.hlsl's `cbuffer PbrLights : register(b2)` (PbrSkinned3d, since BoneBlock
+    /// claims b1 there) byte-for-byte (144 bytes) either way -- the same struct, only the bind
+    /// slot differs per variant. EyePosWeights.w carries WeightsPerVertex (Task 895 convention,
+    /// unused/0 for the unskinned Pbr3d variant, same as D3DSkinnedExtraConstants::EyePosition.w).
+    struct alignas(16) D3DPbrLightConstants
+    {
+        float EyePosWeights[4];     ///< offset 0:   xyz = EyePosition, w = WeightsPerVertex
+        float Light0Dir[4];         ///< offset 16:  xyz + pad
+        float Light0Diffuse[4];     ///< offset 32
+        float Light1Dir[4];         ///< offset 48:  xyz + pad
+        float Light1Diffuse[4];     ///< offset 64
+        float Light2Dir[4];         ///< offset 80:  xyz + pad
+        float Light2Diffuse[4];     ///< offset 96
+        float FogColorEnabled[4];   ///< offset 112: xyz = FogColor, w = fogEnabled
+        float FogStartEnd[4];       ///< offset 128: x = fogStart, y = fogEnd, zw = unused
+    };
+    static_assert(sizeof(D3DPbrLightConstants) == 144, "D3DPbrLightConstants must match PbrLights's real 144-byte HLSL cbuffer size");
+    static_assert(offsetof(D3DPbrLightConstants, Light0Dir) == 16, "D3DPbrLightConstants field offset mismatch vs HLSL");
+    static_assert(offsetof(D3DPbrLightConstants, FogColorEnabled) == 112, "D3DPbrLightConstants field offset mismatch vs HLSL");
+    static_assert(offsetof(D3DPbrLightConstants, FogStartEnd) == 128, "D3DPbrLightConstants field offset mismatch vs HLSL");
+    static_assert(sizeof(D3DPbrLightConstants) % 16 == 0, "D3D11 constant buffer ByteWidth must be a 16-byte multiple");
 }

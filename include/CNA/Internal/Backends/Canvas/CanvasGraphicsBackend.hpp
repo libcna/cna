@@ -84,6 +84,14 @@ namespace CNA::Internal::Backends::Canvas
         // real depth/stencil buffer (same reasoning as IRenderTargetBackend::HasRealDepthBuffer's
         // override, CANVAS-23), same as SDL_RENDERER's own override for the same reason.
         [[nodiscard]] bool SupportsDepthStencil() const override { return false; }
+        // Every 3D call below unconditionally throws. SupportsCapability() lets callers check
+        // ahead of time instead of relying on the throw -- see CNA::GraphicsCapability.
+        [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability /*capability*/) const override
+        {
+            // 2D-only by design: none of the capabilities CNA::GraphicsCapability currently
+            // enumerates are supported on this backend.
+            return false;
+        }
 
         void ClearColorAndDepth(float r, float g, float b, float a, float depth) override;
         void ClearDepth(float depth) override;

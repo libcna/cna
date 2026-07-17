@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "Microsoft/Xna/Framework/Color.hpp"
@@ -34,6 +35,8 @@
 #include "System/IDisposable.hpp"
 #include "System/Object.hpp"
 #include "CNA/CNAHelper.hpp"
+#include "CNA/GraphicsBackendType.hpp"
+#include "CNA/GraphicsCapability.hpp"
 
 struct SDL_Window;
 struct SDL_Renderer;
@@ -710,6 +713,40 @@ namespace Microsoft::Xna::Framework::Graphics
 
         /** @brief Returns a reference to the active graphics backend. */
         NOXNA [[nodiscard]] CNA::Internal::Backends::IGraphicsBackend& GetBackend() const;
+
+        /** @brief Returns which graphics backend was compiled into this build (see CNA_GRAPHICS_BACKEND). */
+        NOXNA [[nodiscard]] inline constexpr CNA::GraphicsBackendType GetGraphicsBackendType() const
+        {
+            return CNA::getCurrentGraphicsBackendType();
+        }
+
+        /**
+         * @brief Returns the human-readable name of the graphics backend compiled into this build.
+         *
+         * Matches the CNA_GRAPHICS_BACKEND CMake option value exactly (e.g. "EASYGL", "D3D9").
+         * Doesn't depend on `this` -- delegates to CNA::getCurrentGraphicsBackendName(), a pure
+         * compile-time constant -- so, like GetGraphicsBackendType(), this is `constexpr`.
+         *
+         * @return The active backend's name.
+         */
+        NOXNA [[nodiscard]] inline constexpr std::string_view GetGraphicsBackendName() const
+        {
+            return CNA::getCurrentGraphicsBackendName();
+        }
+
+        /**
+         * @brief Returns whether the active backend (and, for device-dependent entries, the
+         * current runtime device/driver) supports the given CNA::GraphicsCapability.
+         *
+         * Query this before relying on a feature that isn't universally supported (e.g. 3D on
+         * the 2D-only SDL_Renderer/DX3/Canvas backends), instead of calling it and handling the
+         * resulting exception.
+         *
+         * @param capability The capability to check.
+         * @return True if supported by the active backend/device.
+         */
+        NOXNA [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const;
+
         /**
          * @brief Sets the currently active Effect for draw calls.
          *

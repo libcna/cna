@@ -161,8 +161,8 @@ protected:
 
         WriteFile(root / "perpixellighting.vert.glsl", kVertSrc);
         WriteFile(root / "perpixellighting.frag.glsl", kFragSrc);
-        WriteFile(root / "perpixellighting.cnb", R"({
-  "cnbVersion": 1,
+        WriteFile(root / "perpixellighting.cnj", R"({
+  "cnjVersion": 1,
   "type": "Effect",
   "vertex": "perpixellighting.vert.glsl",
   "fragment": "perpixellighting.frag.glsl"
@@ -231,7 +231,7 @@ protected:
         auto* fx = dynamic_cast<ShaderEffect*>(fxBase_.get());
         if (!fx || !fx->IsEffectValid())
         {
-            std::printf("[FAIL] EasyGLPerPixelLightingShader: .cnb load or GLSL compile failed\n");
+            std::printf("[FAIL] EasyGLPerPixelLightingShader: .cnj load or GLSL compile failed\n");
             Exit();
             return;
         }

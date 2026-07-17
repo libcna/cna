@@ -549,15 +549,27 @@ namespace CNA::Internal::Backends::D3D9
     {
         ThrowIfDeviceLost();
 
+        const auto& d3dVb = static_cast<const D3D9VertexBufferBackend&>(vb);
+        const std::size_t stride = d3dVb.GetStrideEXT() > 0 ? d3dVb.GetStrideEXT() : 16;
+
+        // D3D9 PBR porting task: params.pbr takes the HIGHEST priority of every flag below,
+        // mirroring EasyGLGraphicsBackend::SelectProgram()'s own identical
+        // "pbr-before-everything-else" cascade (checked before alpha test/dual texture/env
+        // mapping/skinned, not after). PbrEffect/SkinnedPbrEffect are not Microsoft Stock Effects
+        // at all, so this dispatches to D3D9PbrDraw.cpp's own self-contained shader, not one of
+        // this cascade's own DrawXxxEffectEXT stock-effect helpers.
+        if (params.pbr)
+        {
+            DrawPbrEffectEXT(vb, ib, stride, world, view, projection, primitive, primitiveCount, params);
+            return;
+        }
+
         // D9-82b: same flag priority cascade D3D11GraphicsBackend::DrawPrimitivesExImpl already
         // established (GpuDrawParams is the only per-draw signal available to pick an effect).
         const bool needsAlphaTest = (params.alphaTest[3] < 0.0f || params.alphaTest[2] < 0.0f);
         const bool needsDualTex   = params.dualTexture && !needsAlphaTest;
         const bool needsEnvMap    = params.envMapping  && !needsAlphaTest && !needsDualTex;
         const bool needsSkinned   = params.skinned     && !needsAlphaTest && !needsDualTex && !needsEnvMap;
-
-        const auto& d3dVb = static_cast<const D3D9VertexBufferBackend&>(vb);
-        const std::size_t stride = d3dVb.GetStrideEXT() > 0 ? d3dVb.GetStrideEXT() : 16;
 
         if (needsAlphaTest)
         {
@@ -576,6 +588,17 @@ namespace CNA::Internal::Backends::D3D9
         }
         if (needsSkinned)
         {
+            // D3D9 skinned-vertex-color porting task: stride 56 (VertexPositionNormalTextureSkinned
+            // + a vertex Color) has no real XNA SkinnedEffect equivalent -- Microsoft's own
+            // compiled SkinnedEffect.fx bytecode never carries a Color input (see
+            // D3D9SkinnedVertexColorDraw.cpp's own header comment). Routed to CNA's own
+            // SkinnedVertexColor3D custom shader instead of DrawSkinnedEffectEXT, which would
+            // otherwise throw "no matching CNA vertex layout" for this stride (it only accepts 52).
+            if (stride == 56)
+            {
+                DrawSkinnedVertexColorEXT(vb, ib, world, view, projection, primitive, primitiveCount, params);
+                return;
+            }
             DrawSkinnedEffectEXT(vb, ib, stride, world, view, projection, primitive, primitiveCount, params);
             return;
         }

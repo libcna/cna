@@ -1,5 +1,5 @@
-$input a_position, a_normal, a_texcoord0, a_weight, a_indices
-$output v_texcoord0, v_normal, v_color0, v_fogFactor, v_worldPos
+$input a_position, a_normal, a_texcoord0, a_weight, a_indices, a_color0
+$output v_texcoord0, v_normal, v_color0, v_fogFactor, v_worldPos, v_vertexColor0
 
 #include <bgfx_shader.sh>
 
@@ -29,6 +29,11 @@ void main()
                            + skinMat[2].xyz * a_normal.z);
     v_texcoord0  = a_texcoord0;
     v_color0     = u_diffuseColor;
+    // CNB-67 (Phase 13C) Bgfx port: stride-56 SkinnedEffect+Color vertex color, kept in its own
+    // varying (see varying.def.sc's v_vertexColor0 comment) so it can be gated by
+    // u_vertexColorEnabled3D and multiplied into the final combined diffuse+specular output in
+    // the fragment stage, mirroring EasyGLGraphicsBackend::EnsureSkinnedProgram()'s vColor.
+    v_vertexColor0 = a_color0;
     v_worldPos   = mul(u_world, skinnedPos).xyz;
     // Task 899: fog factor from raw PRE-SKIN object-space Z (matches EasyGL's Task 900 formula
     // exactly, which also uses aPos.z rather than the skinned position).

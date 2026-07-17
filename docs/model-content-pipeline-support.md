@@ -3,7 +3,7 @@
 > **Update (plan_xnb.md Phase F, 2026-07-16):** a second, genuinely real binary `.xnb` `ModelReader`
 > now exists (`CNA::Internal::Xnb::ModelReader`), wire-compatible with real XNA/MonoGame/FNA-produced
 > `Model` assets — full bone hierarchy, per-mesh `ParentBone`, `BoundingSphere`, shared-resource
-> (`VertexBuffer`/`IndexBuffer`/`Effect`) resolution, all real. Per `cnb.md`'s "Core rule", `.xnb`
+> (`VertexBuffer`/`IndexBuffer`/`Effect`) resolution, all real. Per `cnj.md`'s "Core rule", `.xnb`
 > always wins first in `ContentManager::Load<Model>()`'s resolution order, ahead of the
 > `.model.json` path this document describes. **Everything below this note describes only the
 > older, CNA-original `.model.json` loose-file loader** (`ModelTypeReader`) — see

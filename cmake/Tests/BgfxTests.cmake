@@ -879,4 +879,31 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME Bgfx_OcclusionQuery_DisposeActive COMMAND cna_test_bgfx_occlusionquery_dispose_active
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # plan_cnj.md CNB-58/60 (Phase 13A), Bgfx port: PbrEffect real glTF metallic-roughness BRDF
+    # (vs_pbr3d.sc/fs_pbr3d.sc, stride-48 VertexPositionNormalTangentTexture) -- closes the
+    # EasyGL-only PBR gap for the Bgfx backend (see examples/bgfx_pbreffect_test.cpp's own
+    # file-header comment for the fully analytic camera/light derivation).
+    cna_bgfx_test(cna_test_bgfx_pbreffect
+                  examples/bgfx_pbreffect_test.cpp)
+    cna_register_backend_test(NAME Bgfx_PbrEffect COMMAND cna_test_bgfx_pbreffect
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_cnj.md CNB-58/60 (Phase 13A), Bgfx port: SkinnedPbrEffect (PBR + skinning combo,
+    # vs_pbr_skinned3d.sc sharing fs_pbr3d.sc, stride-68
+    # VertexPositionNormalTangentTextureSkinned) -- reuses bgfx_pbreffect_test.cpp's own
+    # expected values via an identity bind pose (see the test's own file-header comment).
+    cna_bgfx_test(cna_test_bgfx_skinnedpbreffect
+                  examples/bgfx_skinnedpbreffect_test.cpp)
+    cna_register_backend_test(NAME Bgfx_SkinnedPbrEffect COMMAND cna_test_bgfx_skinnedpbreffect
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # CNB-67 (Phase 13C), Bgfx port: SkinnedEffect.VertexColorEnabled on the stride-56 skinned+
+    # Color vertex layout (vs_skinned3d.sc/fs_skinned3d.sc and vs_skinned3d_vertexlit.sc/
+    # fs_skinned3d_vertexlit.sc's new a_color0/v_vertexColor0/u_vertexColorEnabled3D wiring) --
+    # closes the EasyGL-only vertex-color-on-skinned-mesh gap for the Bgfx backend.
+    cna_bgfx_test(cna_test_bgfx_skinnedeffect_vertexcolor
+                  examples/bgfx_skinnedeffect_vertexcolor_test.cpp)
+    cna_register_backend_test(NAME Bgfx_SkinnedEffect_VertexColor COMMAND cna_test_bgfx_skinnedeffect_vertexcolor
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
 endif()

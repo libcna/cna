@@ -25,8 +25,8 @@ namespace Microsoft::Xna::Framework::Content
         /** @brief True if `<relativePath>.xnb` exists. */
         bool hasXnb = false;
 
-        /** @brief True if `<relativePath>.cnb` exists. */
-        bool hasCnb = false;
+        /** @brief True if `<relativePath>.cnj` exists. */
+        bool hasCnj = false;
 
         /** @brief Every other extension found for this name (e.g. `{".png"}`), in scan order. */
         std::vector<std::string> nativeExtensions;

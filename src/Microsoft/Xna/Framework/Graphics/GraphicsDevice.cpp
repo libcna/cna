@@ -1320,6 +1320,11 @@ namespace Microsoft::Xna::Framework::Graphics
         return *backend_;
     }
 
+    bool GraphicsDevice::SupportsCapability(CNA::GraphicsCapability capability) const
+    {
+        return GetBackend().SupportsCapability(capability);
+    }
+
     void GraphicsDevice::SetCurrentEffect(Effect* effect)
     {
         currentEffect_ = effect;

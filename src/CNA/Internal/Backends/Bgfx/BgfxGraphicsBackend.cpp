@@ -1121,6 +1121,17 @@ namespace CNA::Internal::Backends::Bgfx
                                                              "vs_env_map3d",
                                                              "fs_env_map3d",
                                                              "env_map3d");
+                // plan_cnj.md CNB-58/60 (Phase 13A) Bgfx port: PbrEffect/SkinnedPbrEffect --
+                // both vertex shaders share the one fs_pbr3d fragment shader (identical BRDF,
+                // see compile_shaders.py's kPbr3dShaders comment).
+                pbr3DProgram_             = tryCreateProgram(kPbr3dShaders,
+                                                             "vs_pbr3d",
+                                                             "fs_pbr3d",
+                                                             "pbr3d");
+                pbrSkinned3DProgram_      = tryCreateProgram(kPbr3dShaders,
+                                                             "vs_pbr_skinned3d",
+                                                             "fs_pbr3d",
+                                                             "pbr_skinned3d");
 
                 wvpUniform_         = bgfx::createUniform("u_wvp",            bgfx::UniformType::Mat4);
                 depthBiasUnif_      = bgfx::createUniform("u_depthBias",      bgfx::UniformType::Vec4);
@@ -1155,6 +1166,13 @@ namespace CNA::Internal::Backends::Bgfx
                 envMapSpecularUnif_  = bgfx::createUniform("u_envMapSpecular", bgfx::UniformType::Vec4);
                 envMapSampler_       = bgfx::createUniform("s_envMap",         bgfx::UniformType::Sampler);
 
+                // plan_cnj.md CNB-58/60 (Phase 13A) Bgfx port: PbrEffect/SkinnedPbrEffect uniforms.
+                metallicRoughnessFactorUnif_ = bgfx::createUniform("u_metallicRoughnessFactor", bgfx::UniformType::Vec4);
+                normalMapSampler_            = bgfx::createUniform("s_texNormal",             bgfx::UniformType::Sampler);
+                metallicRoughnessSampler_    = bgfx::createUniform("s_texMetallicRoughness",  bgfx::UniformType::Sampler);
+                emissiveMapSampler_          = bgfx::createUniform("s_texEmissive",           bgfx::UniformType::Sampler);
+                occlusionMapSampler_         = bgfx::createUniform("s_texOcclusion",          bgfx::UniformType::Sampler);
+
                 // 1x1 opaque white fallback texture (Task 379) — sampled whenever a draw's
                 // texture0 is null, matching EasyGL/Vulkan's identical fallback.
                 const uint8_t whitePixel[4] = {255, 255, 255, 255};
@@ -1162,6 +1180,15 @@ namespace CNA::Internal::Backends::Bgfx
                 defaultWhiteTexture3D_ = bgfx::createTexture2D(
                     1, 1, false, 1, bgfx::TextureFormat::RGBA8,
                     BGFX_TEXTURE_NONE | BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP, whiteMem);
+
+                // plan_cnj.md CNB-58 (Phase 13A): fallback for PbrEffect::NormalMap when unbound
+                // -- a "flat" tangent-space normal (0,0,1) encoded as RGB (128,128,255), matching
+                // EasyGLGraphicsBackend::EnsureDefaultFlatNormalTexture()'s identical rationale.
+                const uint8_t flatNormalPixel[4] = {128, 128, 255, 255};
+                const bgfx::Memory* flatNormalMem = bgfx::copy(flatNormalPixel, sizeof(flatNormalPixel));
+                defaultFlatNormalTexture3D_ = bgfx::createTexture2D(
+                    1, 1, false, 1, bgfx::TextureFormat::RGBA8,
+                    BGFX_TEXTURE_NONE | BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP, flatNormalMem);
             }
 
             if (!bgfx::isValid(textureSampler))
@@ -1214,6 +1241,17 @@ namespace CNA::Internal::Backends::Bgfx
         }
     }
 
+    bool BgfxGraphicsBackend::SupportsCapability(CNA::GraphicsCapability capability) const
+    {
+        switch (capability)
+        {
+            case CNA::GraphicsCapability::OcclusionQuery:
+                return (bgfx::getCaps()->supported & BGFX_CAPS_OCCLUSION_QUERY) != 0;
+            default:
+                return true;
+        }
+    }
+
     BgfxGraphicsBackend::~BgfxGraphicsBackend()
     {
         auto destroyU = [](bgfx::UniformHandle& h) { if (bgfx::isValid(h)) { bgfx::destroy(h); h = BGFX_INVALID_HANDLE; } };
@@ -1250,7 +1288,13 @@ namespace CNA::Internal::Backends::Bgfx
         destroyU(envMapAmountUnif_);
         destroyU(envMapSpecularUnif_);
         destroyU(envMapSampler_);
+        destroyU(metallicRoughnessFactorUnif_);
+        destroyU(normalMapSampler_);
+        destroyU(metallicRoughnessSampler_);
+        destroyU(emissiveMapSampler_);
+        destroyU(occlusionMapSampler_);
         if (bgfx::isValid(defaultWhiteTexture3D_)) { bgfx::destroy(defaultWhiteTexture3D_); defaultWhiteTexture3D_ = BGFX_INVALID_HANDLE; }
+        if (bgfx::isValid(defaultFlatNormalTexture3D_)) { bgfx::destroy(defaultFlatNormalTexture3D_); defaultFlatNormalTexture3D_ = BGFX_INVALID_HANDLE; }
         destroyP(colored3DProgram_);
         destroyP(textured3DProgram_);
         destroyP(coloredTextured3DProgram_);
@@ -1264,6 +1308,8 @@ namespace CNA::Internal::Backends::Bgfx
         destroyP(skinned3DVertexLitProgram_);
         destroyP(instanced3DProgram_);
         destroyP(envMap3DProgram_);
+        destroyP(pbr3DProgram_);
+        destroyP(pbrSkinned3DProgram_);
         if (bgfx::isValid(mrtFbo_))         { bgfx::destroy(mrtFbo_);         mrtFbo_         = BGFX_INVALID_HANDLE; }
         if (mrtViewId_ != Detail::kInvalidRtViewId) { Detail::ReleaseRtViewId(mrtViewId_); mrtViewId_ = Detail::kInvalidRtViewId; }
         if (bgfx::isValid(textureSampler))  { bgfx::destroy(textureSampler);  textureSampler  = BGFX_INVALID_HANDLE; }
@@ -1998,6 +2044,42 @@ namespace CNA::Internal::Backends::Bgfx
             layout.add(bgfx::Attrib::Normal,    3, bgfx::AttribType::Float);
             layout.add(bgfx::Attrib::TexCoord0, 2, bgfx::AttribType::Float);
         }
+        else if (stride == 48)
+        {
+            // plan_cnj.md CNB-58/60 (Phase 13A) Bgfx port: VertexPositionNormalTangentTexture
+            // (PbrEffect): pos(3f=12) + normal(3f=12) + tangent(4f=16, xyz + bitangent
+            // handedness in w) + uv(2f=8) -- see EasyGLGraphicsBackend.cpp's own "case 48"
+            // comment for the full cross-backend-duplication note.
+            layout.add(bgfx::Attrib::Position,  3, bgfx::AttribType::Float);
+            layout.add(bgfx::Attrib::Normal,    3, bgfx::AttribType::Float);
+            layout.add(bgfx::Attrib::Tangent,   4, bgfx::AttribType::Float);
+            layout.add(bgfx::Attrib::TexCoord0, 2, bgfx::AttribType::Float);
+        }
+        else if (stride == 56)
+        {
+            // CNB-67 (Phase 13C) Bgfx port: the stride-52 SkinnedVertex layout with a per-vertex
+            // Color (normalized ubyte4) appended at the end (offset 52), matching
+            // EasyGLGraphicsBackend.cpp's own "case 56" comment exactly.
+            layout.add(bgfx::Attrib::Position,  3, bgfx::AttribType::Float);
+            layout.add(bgfx::Attrib::Normal,    3, bgfx::AttribType::Float);
+            layout.add(bgfx::Attrib::TexCoord0, 2, bgfx::AttribType::Float);
+            layout.add(bgfx::Attrib::Weight,    4, bgfx::AttribType::Float);
+            layout.add(bgfx::Attrib::Indices,   4, bgfx::AttribType::Uint8);
+            layout.add(bgfx::Attrib::Color0,    4, bgfx::AttribType::Uint8, true);
+        }
+        else if (stride == 68)
+        {
+            // PBR + skinning combo: VertexPositionNormalTangentTextureSkinned -- the stride-48
+            // Position+Normal+Tangent+TextureCoordinate layout with the stride-52/56 skinning
+            // suffix (BlendWeight, BlendIndices) appended, matching
+            // EasyGLGraphicsBackend.cpp's own "case 68" comment exactly.
+            layout.add(bgfx::Attrib::Position,  3, bgfx::AttribType::Float);
+            layout.add(bgfx::Attrib::Normal,    3, bgfx::AttribType::Float);
+            layout.add(bgfx::Attrib::Tangent,   4, bgfx::AttribType::Float);
+            layout.add(bgfx::Attrib::TexCoord0, 2, bgfx::AttribType::Float);
+            layout.add(bgfx::Attrib::Weight,    4, bgfx::AttribType::Float);
+            layout.add(bgfx::Attrib::Indices,   4, bgfx::AttribType::Uint8);
+        }
         else
         {
             // VertexPositionColor (stride 16), and any other/unknown stride as a fallback.
@@ -2102,6 +2184,80 @@ namespace CNA::Internal::Backends::Bgfx
     {
         const float depthBias4[4] = { depthBias_ * kDepthBiasScale, 0.0f, 0.0f, 0.0f };
         bgfx::setUniform(depthBiasUnif_, depthBias4);
+    }
+
+    // plan_cnj.md CNB-58/60 (Phase 13A) Bgfx port: binds the base color map (unit 0, shared
+    // texColor3DSampler_) plus PbrEffect's 4 additional maps (units 1-4, bound before unit 0 to
+    // leave it active last, matching EasyGLGraphicsBackend::BindDrawParams()'s established
+    // envMap/texture2 unit-ordering precedent). Each fallback texture is the correct "map
+    // absent" constant for its own semantic -- see EnsureDefaultFlatNormalTexture()'s doc
+    // comment (mirrored on defaultFlatNormalTexture3D_ above) for the normal-map case; the other
+    // 3 all reuse defaultWhiteTexture3D_ since their respective factor/no-op semantics already
+    // make (1,1,1,1) the correct "map absent" value.
+    void BgfxGraphicsBackend::BindPbrTextures(const GpuDrawParams& params)
+    {
+        if (bgfx::isValid(normalMapSampler_))
+        {
+            if (params.pbrNormalMap)
+            {
+                auto& tex = static_cast<const BgfxTextureBackend&>(*params.pbrNormalMap);
+                bgfx::setTexture(1, normalMapSampler_, tex.textureHandle, samplerFlags_[1]);
+            }
+            else
+            {
+                bgfx::setTexture(1, normalMapSampler_, defaultFlatNormalTexture3D_, samplerFlags_[1]);
+            }
+        }
+        if (bgfx::isValid(metallicRoughnessSampler_))
+        {
+            if (params.pbrMetallicRoughnessMap)
+            {
+                auto& tex = static_cast<const BgfxTextureBackend&>(*params.pbrMetallicRoughnessMap);
+                bgfx::setTexture(2, metallicRoughnessSampler_, tex.textureHandle, samplerFlags_[2]);
+            }
+            else
+            {
+                bgfx::setTexture(2, metallicRoughnessSampler_, defaultWhiteTexture3D_, samplerFlags_[2]);
+            }
+        }
+        if (bgfx::isValid(emissiveMapSampler_))
+        {
+            if (params.pbrEmissiveMap)
+            {
+                auto& tex = static_cast<const BgfxTextureBackend&>(*params.pbrEmissiveMap);
+                bgfx::setTexture(3, emissiveMapSampler_, tex.textureHandle, samplerFlags_[3]);
+            }
+            else
+            {
+                bgfx::setTexture(3, emissiveMapSampler_, defaultWhiteTexture3D_, samplerFlags_[3]);
+            }
+        }
+        if (bgfx::isValid(occlusionMapSampler_))
+        {
+            if (params.pbrOcclusionMap)
+            {
+                auto& tex = static_cast<const BgfxTextureBackend&>(*params.pbrOcclusionMap);
+                bgfx::setTexture(4, occlusionMapSampler_, tex.textureHandle, samplerFlags_[4]);
+            }
+            else
+            {
+                bgfx::setTexture(4, occlusionMapSampler_, defaultWhiteTexture3D_, samplerFlags_[4]);
+            }
+        }
+        if (bgfx::isValid(texColor3DSampler_))
+        {
+            if (params.texture0)
+            {
+                auto& tex = static_cast<const BgfxTextureBackend&>(*params.texture0);
+                bgfx::setTexture(0, texColor3DSampler_, tex.textureHandle, samplerFlags_[0]);
+            }
+            else
+            {
+                // Task 379: fall back to opaque white instead of leaving the previous draw's
+                // texture bound (matches EasyGL/Vulkan's identical fallback).
+                bgfx::setTexture(0, texColor3DSampler_, defaultWhiteTexture3D_, samplerFlags_[0]);
+            }
+        }
     }
 
     static uint64_t ToTopologyFlag(PrimitiveType p)
@@ -2322,9 +2478,93 @@ namespace CNA::Internal::Backends::Bgfx
             }
             SubmitViewProgram(dualTexture3DProgram_);
         }
+        else if (params.pbr && params.skinned && bgfx::isValid(pbrSkinned3DProgram_))
+        {
+            // plan_cnj.md CNB-58/60 (Phase 13A) Bgfx port: SkinnedPbrEffect -- same BRDF as
+            // PbrEffect below, plus the bone-palette skin transform (see vs_pbr_skinned3d.sc).
+            bgfx::setUniform(diffuseColor3DUnif_, params.diffuseColor);
+            float amb[4] = { params.ambientColor[0], params.ambientColor[1],
+                             params.ambientColor[2], 0.0f };
+            bgfx::setUniform(ambientColor3DUnif_, amb);
+            float emissive[4] = { params.emissiveColor[0], params.emissiveColor[1],
+                                   params.emissiveColor[2], 0.0f };
+            bgfx::setUniform(emissiveColor3DUnif_, emissive);
+            float mrFactor[4] = { params.pbrMetallicFactor, params.pbrRoughnessFactor, 0.0f, 0.0f };
+            bgfx::setUniform(metallicRoughnessFactorUnif_, mrFactor);
+            float dir0[4] = { params.light0Dir[0], params.light0Dir[1], params.light0Dir[2], 0.0f };
+            bgfx::setUniform(light0Dir3DUnif_, dir0);
+            float diff0[4] = { params.light0Diffuse[0], params.light0Diffuse[1],
+                                params.light0Diffuse[2], 0.0f };
+            bgfx::setUniform(light0Diff3DUnif_, diff0);
+            float dir1[4] = { params.light1Dir[0], params.light1Dir[1], params.light1Dir[2], 0.0f };
+            bgfx::setUniform(light1Dir3DUnif_, dir1);
+            float diff1[4] = { params.light1Diffuse[0], params.light1Diffuse[1],
+                                params.light1Diffuse[2], 0.0f };
+            bgfx::setUniform(light1Diff3DUnif_, diff1);
+            float dir2[4] = { params.light2Dir[0], params.light2Dir[1], params.light2Dir[2], 0.0f };
+            bgfx::setUniform(light2Dir3DUnif_, dir2);
+            float diff2[4] = { params.light2Diffuse[0], params.light2Diffuse[1],
+                                params.light2Diffuse[2], 0.0f };
+            bgfx::setUniform(light2Diff3DUnif_, diff2);
+            bgfx::setUniform(world3DUnif_, params.worldColMajor);
+            float eyePos[4] = { params.eyePositionWorld[0], params.eyePositionWorld[1],
+                                 params.eyePositionWorld[2], 0.0f };
+            bgfx::setUniform(eyePos3DUnif_, eyePos);
+            bgfx::setUniform(alphaTestUnif_, params.alphaTest);
+            if (params.boneCount > 0 && bgfx::isValid(bonesUnif_))
+                bgfx::setUniform(bonesUnif_, params.boneTransforms, static_cast<uint16_t>(params.boneCount));
+            float weightsPerVertex[4] = { static_cast<float>(params.weightsPerVertex), 0.0f, 0.0f, 0.0f };
+            bgfx::setUniform(weightsPerVertex3DUnif_, weightsPerVertex);
+            BindPbrTextures(params);
+            SubmitViewProgram(pbrSkinned3DProgram_);
+        }
+        else if (params.pbr && bgfx::isValid(pbr3DProgram_))
+        {
+            // plan_cnj.md CNB-58/60 (Phase 13A) Bgfx port: PbrEffect -- real glTF 2.0
+            // metallic-roughness BRDF (see fs_pbr3d.sc's own doc comment).
+            bgfx::setUniform(diffuseColor3DUnif_, params.diffuseColor);
+            float amb[4] = { params.ambientColor[0], params.ambientColor[1],
+                             params.ambientColor[2], 0.0f };
+            bgfx::setUniform(ambientColor3DUnif_, amb);
+            float emissive[4] = { params.emissiveColor[0], params.emissiveColor[1],
+                                   params.emissiveColor[2], 0.0f };
+            bgfx::setUniform(emissiveColor3DUnif_, emissive);
+            float mrFactor[4] = { params.pbrMetallicFactor, params.pbrRoughnessFactor, 0.0f, 0.0f };
+            bgfx::setUniform(metallicRoughnessFactorUnif_, mrFactor);
+            float dir0[4] = { params.light0Dir[0], params.light0Dir[1], params.light0Dir[2], 0.0f };
+            bgfx::setUniform(light0Dir3DUnif_, dir0);
+            float diff0[4] = { params.light0Diffuse[0], params.light0Diffuse[1],
+                                params.light0Diffuse[2], 0.0f };
+            bgfx::setUniform(light0Diff3DUnif_, diff0);
+            float dir1[4] = { params.light1Dir[0], params.light1Dir[1], params.light1Dir[2], 0.0f };
+            bgfx::setUniform(light1Dir3DUnif_, dir1);
+            float diff1[4] = { params.light1Diffuse[0], params.light1Diffuse[1],
+                                params.light1Diffuse[2], 0.0f };
+            bgfx::setUniform(light1Diff3DUnif_, diff1);
+            float dir2[4] = { params.light2Dir[0], params.light2Dir[1], params.light2Dir[2], 0.0f };
+            bgfx::setUniform(light2Dir3DUnif_, dir2);
+            float diff2[4] = { params.light2Diffuse[0], params.light2Diffuse[1],
+                                params.light2Diffuse[2], 0.0f };
+            bgfx::setUniform(light2Diff3DUnif_, diff2);
+            bgfx::setUniform(world3DUnif_, params.worldColMajor);
+            float normalMatrix[9];
+            ComputeNormalMatrix3x3(params.worldColMajor, normalMatrix);
+            bgfx::setUniform(normalMatrix3DUnif_, normalMatrix);
+            float eyePos[4] = { params.eyePositionWorld[0], params.eyePositionWorld[1],
+                                 params.eyePositionWorld[2], 0.0f };
+            bgfx::setUniform(eyePos3DUnif_, eyePos);
+            bgfx::setUniform(alphaTestUnif_, params.alphaTest);
+            BindPbrTextures(params);
+            SubmitViewProgram(pbr3DProgram_);
+        }
         else if (params.skinned && bgfx::isValid(skinned3DProgram_))
         {
             bgfx::setUniform(diffuseColor3DUnif_, params.diffuseColor);
+            // CNB-67 (Phase 13C) Bgfx port: stride-56 SkinnedEffect+Color VertexColorEnabled gate
+            // (see fs_skinned3d.sc/fs_skinned3d_vertexlit.sc's own comment) -- reuses the shared
+            // u_vertexColorEnabled3D uniform, same as every other VertexColorEnabled-aware branch.
+            float vceSkinned[4] = { params.vertexColorEnabled ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f };
+            bgfx::setUniform(vertexColorEn3DUnif_, vceSkinned);
             float amb[4]  = { params.ambientColor[0],  params.ambientColor[1],  params.ambientColor[2],  0.0f };
             bgfx::setUniform(ambientColor3DUnif_, amb);
             float dir[4]  = { params.light0Dir[0],     params.light0Dir[1],     params.light0Dir[2],     0.0f };
@@ -2746,9 +2986,93 @@ namespace CNA::Internal::Backends::Bgfx
             }
             SubmitViewProgram(dualTexture3DProgram_);
         }
+        else if (params.pbr && params.skinned && bgfx::isValid(pbrSkinned3DProgram_))
+        {
+            // plan_cnj.md CNB-58/60 (Phase 13A) Bgfx port: SkinnedPbrEffect -- same BRDF as
+            // PbrEffect below, plus the bone-palette skin transform (see vs_pbr_skinned3d.sc).
+            bgfx::setUniform(diffuseColor3DUnif_, params.diffuseColor);
+            float amb[4] = { params.ambientColor[0], params.ambientColor[1],
+                             params.ambientColor[2], 0.0f };
+            bgfx::setUniform(ambientColor3DUnif_, amb);
+            float emissive[4] = { params.emissiveColor[0], params.emissiveColor[1],
+                                   params.emissiveColor[2], 0.0f };
+            bgfx::setUniform(emissiveColor3DUnif_, emissive);
+            float mrFactor[4] = { params.pbrMetallicFactor, params.pbrRoughnessFactor, 0.0f, 0.0f };
+            bgfx::setUniform(metallicRoughnessFactorUnif_, mrFactor);
+            float dir0[4] = { params.light0Dir[0], params.light0Dir[1], params.light0Dir[2], 0.0f };
+            bgfx::setUniform(light0Dir3DUnif_, dir0);
+            float diff0[4] = { params.light0Diffuse[0], params.light0Diffuse[1],
+                                params.light0Diffuse[2], 0.0f };
+            bgfx::setUniform(light0Diff3DUnif_, diff0);
+            float dir1[4] = { params.light1Dir[0], params.light1Dir[1], params.light1Dir[2], 0.0f };
+            bgfx::setUniform(light1Dir3DUnif_, dir1);
+            float diff1[4] = { params.light1Diffuse[0], params.light1Diffuse[1],
+                                params.light1Diffuse[2], 0.0f };
+            bgfx::setUniform(light1Diff3DUnif_, diff1);
+            float dir2[4] = { params.light2Dir[0], params.light2Dir[1], params.light2Dir[2], 0.0f };
+            bgfx::setUniform(light2Dir3DUnif_, dir2);
+            float diff2[4] = { params.light2Diffuse[0], params.light2Diffuse[1],
+                                params.light2Diffuse[2], 0.0f };
+            bgfx::setUniform(light2Diff3DUnif_, diff2);
+            bgfx::setUniform(world3DUnif_, params.worldColMajor);
+            float eyePos[4] = { params.eyePositionWorld[0], params.eyePositionWorld[1],
+                                 params.eyePositionWorld[2], 0.0f };
+            bgfx::setUniform(eyePos3DUnif_, eyePos);
+            bgfx::setUniform(alphaTestUnif_, params.alphaTest);
+            if (params.boneCount > 0 && bgfx::isValid(bonesUnif_))
+                bgfx::setUniform(bonesUnif_, params.boneTransforms, static_cast<uint16_t>(params.boneCount));
+            float weightsPerVertex[4] = { static_cast<float>(params.weightsPerVertex), 0.0f, 0.0f, 0.0f };
+            bgfx::setUniform(weightsPerVertex3DUnif_, weightsPerVertex);
+            BindPbrTextures(params);
+            SubmitViewProgram(pbrSkinned3DProgram_);
+        }
+        else if (params.pbr && bgfx::isValid(pbr3DProgram_))
+        {
+            // plan_cnj.md CNB-58/60 (Phase 13A) Bgfx port: PbrEffect -- real glTF 2.0
+            // metallic-roughness BRDF (see fs_pbr3d.sc's own doc comment).
+            bgfx::setUniform(diffuseColor3DUnif_, params.diffuseColor);
+            float amb[4] = { params.ambientColor[0], params.ambientColor[1],
+                             params.ambientColor[2], 0.0f };
+            bgfx::setUniform(ambientColor3DUnif_, amb);
+            float emissive[4] = { params.emissiveColor[0], params.emissiveColor[1],
+                                   params.emissiveColor[2], 0.0f };
+            bgfx::setUniform(emissiveColor3DUnif_, emissive);
+            float mrFactor[4] = { params.pbrMetallicFactor, params.pbrRoughnessFactor, 0.0f, 0.0f };
+            bgfx::setUniform(metallicRoughnessFactorUnif_, mrFactor);
+            float dir0[4] = { params.light0Dir[0], params.light0Dir[1], params.light0Dir[2], 0.0f };
+            bgfx::setUniform(light0Dir3DUnif_, dir0);
+            float diff0[4] = { params.light0Diffuse[0], params.light0Diffuse[1],
+                                params.light0Diffuse[2], 0.0f };
+            bgfx::setUniform(light0Diff3DUnif_, diff0);
+            float dir1[4] = { params.light1Dir[0], params.light1Dir[1], params.light1Dir[2], 0.0f };
+            bgfx::setUniform(light1Dir3DUnif_, dir1);
+            float diff1[4] = { params.light1Diffuse[0], params.light1Diffuse[1],
+                                params.light1Diffuse[2], 0.0f };
+            bgfx::setUniform(light1Diff3DUnif_, diff1);
+            float dir2[4] = { params.light2Dir[0], params.light2Dir[1], params.light2Dir[2], 0.0f };
+            bgfx::setUniform(light2Dir3DUnif_, dir2);
+            float diff2[4] = { params.light2Diffuse[0], params.light2Diffuse[1],
+                                params.light2Diffuse[2], 0.0f };
+            bgfx::setUniform(light2Diff3DUnif_, diff2);
+            bgfx::setUniform(world3DUnif_, params.worldColMajor);
+            float normalMatrix[9];
+            ComputeNormalMatrix3x3(params.worldColMajor, normalMatrix);
+            bgfx::setUniform(normalMatrix3DUnif_, normalMatrix);
+            float eyePos[4] = { params.eyePositionWorld[0], params.eyePositionWorld[1],
+                                 params.eyePositionWorld[2], 0.0f };
+            bgfx::setUniform(eyePos3DUnif_, eyePos);
+            bgfx::setUniform(alphaTestUnif_, params.alphaTest);
+            BindPbrTextures(params);
+            SubmitViewProgram(pbr3DProgram_);
+        }
         else if (params.skinned && bgfx::isValid(skinned3DProgram_))
         {
             bgfx::setUniform(diffuseColor3DUnif_, params.diffuseColor);
+            // CNB-67 (Phase 13C) Bgfx port: stride-56 SkinnedEffect+Color VertexColorEnabled gate
+            // (see fs_skinned3d.sc/fs_skinned3d_vertexlit.sc's own comment) -- reuses the shared
+            // u_vertexColorEnabled3D uniform, same as every other VertexColorEnabled-aware branch.
+            float vceSkinned[4] = { params.vertexColorEnabled ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f };
+            bgfx::setUniform(vertexColorEn3DUnif_, vceSkinned);
             float amb[4]  = { params.ambientColor[0],  params.ambientColor[1],  params.ambientColor[2],  0.0f };
             bgfx::setUniform(ambientColor3DUnif_, amb);
             float dir[4]  = { params.light0Dir[0],     params.light0Dir[1],     params.light0Dir[2],     0.0f };

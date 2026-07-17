@@ -774,6 +774,8 @@ namespace CNA::Internal::Backends::SdlRenderer
     }
 
     // ---- 3D: SDL_Renderer is intentionally 2D-only. All 3D calls throw. ----
+    // Callers can check GraphicsDevice::SupportsCapability(GraphicsCapability::ThreeD) ahead of
+    // time instead of relying on this throw -- see SupportsCapability() in the header.
     static void ThrowNo3D(const char* methodName)
     {
         throw std::runtime_error(

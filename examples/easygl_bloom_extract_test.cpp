@@ -15,10 +15,10 @@
 // broadcast for `c - BloomThreshold` / `1 - BloomThreshold` (applied to ALL 4 channels, including
 // alpha) is native GLSL behaviour too, so the formula translates directly with no restructuring.
 //
-// Also proves the .cnb (Effect type) + GLSL descriptor round-trip via
+// Also proves the .cnj (Effect type) + GLSL descriptor round-trip via
 // ContentManager::Load<Effect>() (EffectTypeReader,
 // src/Microsoft/Xna/Framework/Content/ContentManager.cpp) -- implemented in CNA but, before this
-// test, never exercised anywhere in the repo. Migrated from .shader.json to .cnb per plan_cnb.md
+// test, never exercised anywhere in the repo. Migrated from .shader.json to .cnj per plan_cnj.md
 // CNB-14/CNB-15.
 //
 // Check A — bright input (1,1,1,1), BloomThreshold=0.5: saturate((1-0.5)/0.5) = 1 on every
@@ -107,8 +107,8 @@ protected:
 
         WriteFile(root / "bloom_extract.vert.glsl", kVertSrc);
         WriteFile(root / "bloom_extract.frag.glsl", kFragSrc);
-        WriteFile(root / "bloom_extract.cnb", R"({
-  "cnbVersion": 1,
+        WriteFile(root / "bloom_extract.cnj", R"({
+  "cnjVersion": 1,
   "type": "Effect",
   "vertex": "bloom_extract.vert.glsl",
   "fragment": "bloom_extract.frag.glsl"
@@ -136,7 +136,7 @@ protected:
         auto* fx = dynamic_cast<ShaderEffect*>(fxBase_.get());
         if (!fx || !fx->IsEffectValid())
         {
-            std::printf("[FAIL] EasyGLBloomExtract: .cnb load or GLSL compile failed\n");
+            std::printf("[FAIL] EasyGLBloomExtract: .cnj load or GLSL compile failed\n");
             Exit();
             return;
         }

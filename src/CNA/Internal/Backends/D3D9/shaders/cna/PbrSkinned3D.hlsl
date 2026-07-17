@@ -1,0 +1,188 @@
+// SPDX-License-Identifier: MS-PL
+// D3D9 PBR porting task: CNA's own NOXNA "PbrSkinned3D" shader -- SkinnedPbrEffect (same
+// metallic-roughness BRDF as Pbr3D.hlsl, plus bone skinning), ported line-by-line from
+// EasyGLGraphicsBackend.cpp's EnsurePbrSkinnedProgram() (GLSL/GLES 3.00) to HLSL Shader Model 3
+// (vs_3_0/ps_3_0). See Pbr3D.hlsl's own header comment for why this is a CNA custom shader (no
+// Microsoft Stock Effect equivalent) and why SM3 (not SM2) is the target -- both reasons apply
+// identically here; this file's own pixel shader is a straight copy of Pbr3D.hlsl's (same BRDF,
+// same PSInput shape), so the same empirically-confirmed "ps_2_0 fails with X4505 maximum temp
+// register index exceeded, ps_3_0 compiles cleanly" finding applies without re-deriving it.
+//
+// Bone skinning mirrors the vendored, real Microsoft SkinnedEffect.fx's own Skin() function
+// exactly (src/CNA/Internal/Backends/D3D9/shaders/xna/SkinnedEffect.fx): a fixed-size
+// float4x3 Bones[72] array (3 registers/bone, the same ColumnCount==4/RowCount==3
+// EffectParameter.SetValue(Matrix) packing D3D9EffectDraw.cpp's own UploadBonesVS() already
+// uses for the real SkinnedEffect), accumulated per-vertex via BLENDINDICES0/BLENDWEIGHT0, and the
+// same "(float3x3)skinning" cast to extract the rotation-only part for the normal/tangent -- proven
+// idiom, not invented (SkinnedEffect.fx's own Skin() does `vin.Normal = mul(vin.Normal,
+// (float3x3)skinning);`).
+//
+// Deviation from EnsurePbrSkinnedProgram()'s own GLSL (documented, not silent): after the
+// skin-local rotation, the skinned Normal/Tangent are further transformed by (float3x3)World
+// before use -- EasyGL's own EnsurePbrSkinnedProgram() does this too
+// (`vNormal=normalize(mat3(uWorld)*(skinNormalMat*aNormal));`), so this is a faithful port, not a
+// deviation from THAT function. (EnsureSkinnedProgram()'s separate, non-PBR skinned path omits this
+// World step for its own Normal -- SkinnedVertexColor3D.hlsl's own header comment discusses that
+// inconsistency; it does not apply here since EnsurePbrSkinnedProgram() already includes the step.)
+//
+// Vertex declaration (stride 68, D3D9VertexDeclarations.hpp): POSITION0 (FLOAT3, 0), NORMAL0
+// (FLOAT3, 12), TANGENT0 (FLOAT4, 24), TEXCOORD0 (FLOAT2, 40), BLENDWEIGHT0 (FLOAT4, 48),
+// BLENDINDICES0 (UBYTE4, 64). Texture sampler assignment identical to Pbr3D.hlsl.
+//
+// Register layout: VS constants WorldViewProj(c0-c3)/World(c4-c7)/FogParams(c8, w=WeightsPerVertex)
+// leave Bones[72] starting at c9 (3*72=216 registers, c9..c224) -- 225 registers total, within
+// vs_3_0's guaranteed 256-register minimum (matches real SkinnedEffect.fx's own proven usage up to
+// c241, same order of magnitude). PS constants identical to Pbr3D.hlsl's own layout (register-
+// verified against a real D3DDisassemble(), not guessed -- see this task's final report).
+
+#define PBR_SKINNED_MAX_BONES 72
+
+float4x4 WorldViewProj                : register(c0); // c0-c3
+float4x4 World                         : register(c4); // c4-c7
+float4   FogParams                     : register(c8); // x=FogEnabled, y=FogStart, z=FogEnd, w=WeightsPerVertex
+float4x3 Bones[PBR_SKINNED_MAX_BONES]  : register(c9); // c9..c224 (216 registers)
+
+struct VSInput
+{
+    float3 Position    : POSITION0;
+    float3 Normal      : NORMAL0;
+    float4 Tangent     : TANGENT0;
+    float2 UV          : TEXCOORD0;
+    float4 BoneWeights : BLENDWEIGHT0;
+    int4   BoneIndices : BLENDINDICES0;
+};
+
+struct VSOutput
+{
+    float4 Position  : SV_Position;
+    float3 Normal    : TEXCOORD0;
+    float4 TangentWS : TEXCOORD1;
+    float2 UV        : TEXCOORD2;
+    float3 WorldPos  : TEXCOORD3;
+    float  FogFactor : TEXCOORD4;
+};
+
+VSOutput VSPbrSkinned3D(VSInput vin)
+{
+    VSOutput vout;
+
+    // Task 895's real Skin(vin, boneCount) shape: only sum the first WeightsPerVertex (1, 2, or 4)
+    // weight/index pairs, matching XNA's own validated SkinningEffect.WeightsPerVertex domain.
+    float weightsPerVertex = FogParams.w;
+    float4x3 skinning = Bones[vin.BoneIndices.x] * vin.BoneWeights.x;
+    if (weightsPerVertex >= 2.0)
+        skinning += Bones[vin.BoneIndices.y] * vin.BoneWeights.y;
+    if (weightsPerVertex >= 4.0)
+        skinning += Bones[vin.BoneIndices.z] * vin.BoneWeights.z
+                   + Bones[vin.BoneIndices.w] * vin.BoneWeights.w;
+
+    float3 skinnedPos = mul(float4(vin.Position, 1.0), skinning);
+    float3x3 skinNormalMat = (float3x3)skinning;
+    float3 skinnedNormal = mul(vin.Normal, skinNormalMat);
+    float3 skinnedTangent = mul(vin.Tangent.xyz, skinNormalMat);
+
+    vout.Position = mul(float4(skinnedPos, 1.0), WorldViewProj);
+    vout.Normal = normalize(mul(skinnedNormal, (float3x3)World));
+    vout.TangentWS = float4(mul(skinnedTangent, (float3x3)World), vin.Tangent.w);
+    vout.UV = vin.UV;
+    vout.WorldPos = mul(float4(skinnedPos, 1.0), World).xyz;
+    vout.FogFactor = (FogParams.x > 0.5)
+        ? ((abs(FogParams.z - FogParams.y) < 1e-6)
+            ? 0.0
+            : saturate((vin.Position.z + FogParams.z) / (FogParams.z - FogParams.y)))
+        : 1.0;
+
+    return vout;
+}
+
+sampler2D Texture              : register(s0);
+sampler2D NormalMap            : register(s1);
+sampler2D MetallicRoughnessMap : register(s2);
+sampler2D EmissiveMap          : register(s3);
+sampler2D OcclusionMap         : register(s4);
+
+float4 DiffuseColor           : register(c0);
+float3 AmbientColor            : register(c1);
+float3 EmissiveColor           : register(c2);
+float4 MetallicRoughnessFactor : register(c3); // x=MetallicFactor, y=RoughnessFactor
+float3 Light0Dir               : register(c4);
+float3 Light0Diffuse           : register(c5);
+float3 Light1Dir               : register(c6);
+float3 Light1Diffuse           : register(c7);
+float3 Light2Dir               : register(c8);
+float3 Light2Diffuse           : register(c9);
+float3 EyePosition             : register(c10);
+float4 AlphaTest               : register(c11);
+float3 FogColor                : register(c12);
+
+struct PSInput
+{
+    float3 Normal    : TEXCOORD0;
+    float4 TangentWS : TEXCOORD1;
+    float2 UV        : TEXCOORD2;
+    float3 WorldPos  : TEXCOORD3;
+    float  FogFactor : TEXCOORD4;
+};
+
+// Identical BRDF to Pbr3D.hlsl's own PbrLight() -- see that file's own comment for the citation.
+float3 PbrLight(float3 N, float3 V, float3 L, float3 lightColor, float3 albedo, float3 F0,
+                float roughness, float metallic)
+{
+    float3 H = normalize(V + L);
+    float NdotL = max(dot(N, L), 0.0);
+    float NdotV = max(dot(N, V), 1e-4);
+    float NdotH = max(dot(N, H), 0.0);
+    float VdotH = max(dot(V, H), 0.0);
+    float a2 = pow(roughness, 4.0);
+    float dTerm = (NdotH * NdotH * (a2 - 1.0) + 1.0);
+    float D = a2 / (3.14159265 * dTerm * dTerm + 1e-7);
+    float k = (roughness + 1.0);
+    k = k * k / 8.0;
+    float G = (NdotV / (NdotV * (1.0 - k) + k)) * (NdotL / (NdotL * (1.0 - k) + k));
+    float3 F = F0 + (float3(1.0, 1.0, 1.0) - F0) * pow(saturate(1.0 - VdotH), 5.0);
+    float3 specular = (D * G * F) / max(4.0 * NdotV * NdotL, 1e-4);
+    float3 diffuseColor = albedo * (1.0 - metallic);
+    float3 kd = float3(1.0, 1.0, 1.0) - F;
+    return (kd * diffuseColor / 3.14159265 + specular) * lightColor * NdotL;
+}
+
+float4 PSPbrSkinned3D(PSInput pin) : SV_Target0
+{
+    float4 baseColorTex = tex2D(Texture, pin.UV);
+    float3 albedo = baseColorTex.rgb * DiffuseColor.rgb;
+    float alpha = baseColorTex.a * DiffuseColor.a;
+
+    float3 N = normalize(pin.Normal);
+    float3 T = normalize(pin.TangentWS.xyz - N * dot(N, pin.TangentWS.xyz));
+    float3 B = cross(N, T) * pin.TangentWS.w;
+    float3x3 TBN = float3x3(T, B, N);
+
+    float3 sampledNormal = tex2D(NormalMap, pin.UV).rgb * 2.0 - 1.0;
+    float3 finalNormal = normalize(mul(sampledNormal, TBN));
+
+    float4 mr = tex2D(MetallicRoughnessMap, pin.UV);
+    float roughness = clamp(mr.g * MetallicRoughnessFactor.y, 0.045, 1.0);
+    float metallic = clamp(mr.b * MetallicRoughnessFactor.x, 0.0, 1.0);
+
+    float3 V = normalize(EyePosition - pin.WorldPos);
+    float3 F0 = lerp(float3(0.04, 0.04, 0.04), albedo, metallic);
+
+    float3 Lo = float3(0.0, 0.0, 0.0);
+    Lo += PbrLight(finalNormal, V, normalize(-Light0Dir), Light0Diffuse, albedo, F0, roughness, metallic);
+    Lo += PbrLight(finalNormal, V, normalize(-Light1Dir), Light1Diffuse, albedo, F0, roughness, metallic);
+    Lo += PbrLight(finalNormal, V, normalize(-Light2Dir), Light2Diffuse, albedo, F0, roughness, metallic);
+
+    float occlusion = tex2D(OcclusionMap, pin.UV).r;
+    float3 ambient = AmbientColor * albedo * occlusion;
+    float3 emissive = EmissiveColor * tex2D(EmissiveMap, pin.UV).rgb;
+
+    float4 outColor = float4(ambient + Lo + emissive, alpha);
+
+    float alphaTestResult = (AlphaTest.y > 0.0)
+        ? ((abs(outColor.a - AlphaTest.x) < AlphaTest.y) ? AlphaTest.z : AlphaTest.w)
+        : ((outColor.a < AlphaTest.x) ? AlphaTest.z : AlphaTest.w);
+    clip(alphaTestResult);
+
+    outColor.rgb = lerp(FogColor, outColor.rgb, pin.FogFactor);
+    return outColor;
+}

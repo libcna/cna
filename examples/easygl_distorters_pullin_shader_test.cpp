@@ -128,8 +128,8 @@ protected:
 
         WriteFile(root / "pi.vert.glsl", kVertSrc);
         WriteFile(root / "pi.frag.glsl", kFragSrc);
-        WriteFile(root / "pi.cnb", R"({
-  "cnbVersion": 1,
+        WriteFile(root / "pi.cnj", R"({
+  "cnjVersion": 1,
   "type": "Effect",
   "vertex": "pi.vert.glsl",
   "fragment": "pi.frag.glsl"
@@ -198,7 +198,7 @@ protected:
         auto* fx = dynamic_cast<ShaderEffect*>(fxBase_.get());
         if (!fx || !fx->IsEffectValid())
         {
-            std::printf("[FAIL] EasyGLDistortersPullIn: .cnb load or GLSL compile failed\n");
+            std::printf("[FAIL] EasyGLDistortersPullIn: .cnj load or GLSL compile failed\n");
             Exit();
             return;
         }

@@ -99,8 +99,10 @@ namespace CNA::Internal::Backends::Canvas
     {
         // Phase C1's NotYetImplemented() placeholder (Clear/Present/CreateTexture/CreateSpriteBatch)
         // has no remaining callers -- Phases C2-C4 replaced all of them with real implementations.
-        // Only the inherently-3D-only surface still throws, via ThrowNo3D() below (permanent, not a
-        // placeholder -- Phase C7 just formalizes/audits this same wiring).
+        // Only the inherently-3D-only surface still throws (permanent, not a placeholder --
+        // Phase C7 just formalizes/audits this same wiring). Callers can check
+        // GraphicsDevice::SupportsCapability(GraphicsCapability::ThreeD) ahead of time instead of
+        // relying on this throw -- see SupportsCapability() in the header.
         [[noreturn]] void ThrowNo3D(const char* methodName)
         {
             throw std::runtime_error(

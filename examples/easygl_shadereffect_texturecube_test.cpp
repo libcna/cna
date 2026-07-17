@@ -126,8 +126,8 @@ protected:
 
         WriteFile(root / "tc.vert.glsl", kVertSrc);
         WriteFile(root / "tc.frag.glsl", kFragSrc);
-        WriteFile(root / "tc.cnb", R"({
-  "cnbVersion": 1,
+        WriteFile(root / "tc.cnj", R"({
+  "cnjVersion": 1,
   "type": "Effect",
   "vertex": "tc.vert.glsl",
   "fragment": "tc.frag.glsl"
@@ -216,7 +216,7 @@ protected:
         auto* fx = dynamic_cast<ShaderEffect*>(fxBase_.get());
         if (!fx || !fx->IsEffectValid())
         {
-            std::printf("[FAIL] EasyGLTextureCube: .cnb load or GLSL compile failed\n");
+            std::printf("[FAIL] EasyGLTextureCube: .cnj load or GLSL compile failed\n");
             Exit();
             return;
         }

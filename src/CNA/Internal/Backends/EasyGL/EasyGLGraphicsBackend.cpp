@@ -1396,6 +1396,27 @@ void main()
         // No SDL_Quit or subsystem shutdown here - managed centrally.
     }
 
+    bool EasyGLGraphicsBackend::SupportsCapability(CNA::GraphicsCapability capability) const
+    {
+        switch (capability)
+        {
+            case CNA::GraphicsCapability::MultiSampleAntiAliasing:
+            {
+                GLint maxSamplesCap = 0;
+                metagl::glGetIntegerv(::metagl::GetParameter::MaxSamples, &maxSamplesCap);
+                return maxSamplesCap > 1;
+            }
+            case CNA::GraphicsCapability::AnisotropicFiltering:
+                return metagl::HasExtension("GL_EXT_texture_filter_anisotropic");
+            case CNA::GraphicsCapability::WireFrame:
+                // GLES3 (EasyGL's underlying API) has no wireframe fill mode at all -- matches
+                // the XNA 4.0 Graphics API coverage table's own "EasyGL N/A (GLES3)" entry.
+                return false;
+            default:
+                return true;
+        }
+    }
+
     void EasyGLGraphicsBackend::DebugSimulateContextLoss()
     {
 #if defined(__EMSCRIPTEN__)
@@ -2221,6 +2242,20 @@ void main()
             vao.enable_attribute(2);
             vao.set_attribute_pointer(2, 2, ::easygl::DataType::Float, false, s, (void*)24);
             break;
+        case 48:
+            // plan_cnj.md CNB-57 (Phase 13A): VertexPositionNormalTangentTexture (packed):
+            // float3 position + float3 normal + float4 tangent (xyz + bitangent handedness in w)
+            // + float2 texcoord -- the layout PbrEffect's normal mapping needs to build a
+            // per-pixel TBN basis.
+            vao.enable_attribute(0);
+            vao.set_attribute_pointer(0, 3, ::easygl::DataType::Float, false, s, (void*)0);
+            vao.enable_attribute(1);
+            vao.set_attribute_pointer(1, 3, ::easygl::DataType::Float, false, s, (void*)12);
+            vao.enable_attribute(2);
+            vao.set_attribute_pointer(2, 4, ::easygl::DataType::Float, false, s, (void*)24);
+            vao.enable_attribute(3);
+            vao.set_attribute_pointer(3, 2, ::easygl::DataType::Float, false, s, (void*)40);
+            break;
         case 52:
             // Task 11.10: this layout is independently duplicated (magic stride 52) in
             // BgfxGraphicsBackend.cpp's MakeBgfxLayout and VulkanGraphicsBackend.cpp's
@@ -2246,6 +2281,48 @@ void main()
             vao.set_attribute_pointer(3, 4, ::easygl::DataType::Float, false, s, (void*)32);
             vao.enable_attribute(4);
             vao.set_attribute_i_pointer(4, 4, ::easygl::DataType::UnsignedByte, s, (void*)48);
+            break;
+        case 56:
+            // CNB-67 (Phase 13C): the stride-52 SkinnedVertex layout above with a per-vertex
+            // Color (normalized ubyte4) appended at the end (offset 52), rather than inserted
+            // mid-layout -- keeps attribute locations 0-4 byte-identical to the stride-52 case
+            // above, so EnsureSkinnedProgram()/EnsureSkinnedVertexLitProgram()'s single shader
+            // pair serves both strides; location 5 (aColor) is simply left unbound for stride-52
+            // draws, and GpuDrawParams::vertexColorEnabled (gated by SkinnedEffect::
+            // VertexColorEnabled, see FillGpuDrawParams) already governs whether the shader reads
+            // it at all.
+            vao.enable_attribute(0);
+            vao.set_attribute_pointer(0, 3, ::easygl::DataType::Float, false, s, (void*)0);
+            vao.enable_attribute(1);
+            vao.set_attribute_pointer(1, 3, ::easygl::DataType::Float, false, s, (void*)12);
+            vao.enable_attribute(2);
+            vao.set_attribute_pointer(2, 2, ::easygl::DataType::Float, false, s, (void*)24);
+            vao.enable_attribute(3);
+            vao.set_attribute_pointer(3, 4, ::easygl::DataType::Float, false, s, (void*)32);
+            vao.enable_attribute(4);
+            vao.set_attribute_i_pointer(4, 4, ::easygl::DataType::UnsignedByte, s, (void*)48);
+            vao.enable_attribute(5);
+            vao.set_attribute_pointer(5, 4, ::easygl::DataType::UnsignedByte, true, s, (void*)52);
+            break;
+        case 68:
+            // PBR + skinning combo (VertexPositionNormalTangentTextureSkinned): the stride-48
+            // Position+Normal+Tangent+TextureCoordinate layout with the stride-52/56 skinning
+            // suffix (BlendWeight, BlendIndices) appended, matching those precedents' own
+            // "append rather than insert" convention -- locations 0-3 stay byte-identical to the
+            // stride-48 PbrEffect layout, locations 4-5 mirror the stride-52 skinning suffix's
+            // own attribute shape.
+            vao.enable_attribute(0);
+            vao.set_attribute_pointer(0, 3, ::easygl::DataType::Float, false, s, (void*)0);
+            vao.enable_attribute(1);
+            vao.set_attribute_pointer(1, 3, ::easygl::DataType::Float, false, s, (void*)12);
+            vao.enable_attribute(2);
+            vao.set_attribute_pointer(2, 4, ::easygl::DataType::Float, false, s, (void*)24);
+            vao.enable_attribute(3);
+            vao.set_attribute_pointer(3, 2, ::easygl::DataType::Float, false, s, (void*)40);
+            vao.enable_attribute(4);
+            vao.set_attribute_pointer(4, 4, ::easygl::DataType::Float, false, s, (void*)48);
+            vao.enable_attribute(5);
+            vao.set_attribute_i_pointer(5, 4, ::easygl::DataType::UnsignedByte, s, (void*)64);
             break;
         default:
             // Unknown layout: bind position-only as a safe fallback
@@ -2503,7 +2580,16 @@ void main()
 "void main(){\n"
 "    gl_Position=uWVP*vec4(aPos,1.0);\n"
 "    vColor=aColor;\n"
-"    vFogFactor=(uFogEnabled>0.5)?clamp((uFogEnd-aPos.z)/max(uFogEnd-uFogStart,1e-6),0.0,1.0):1.0;\n"
+// Task 1111: matches FNA's EffectHelpers.SetFogVector/Common.fxh ComputeFogFactor exactly
+// (fogFactor=saturate(scale*(z+fogStart)), scale=1/(fogStart-fogEnd), dotted with object-space
+// position since World=View=Identity in every CNA fog test/scene) -- NOT a naive (fogEnd-z)/
+// (fogEnd-fogStart) falloff, which silently inverts/collapses once FogEnd<FogStart (oracle
+// scene fog_gradient_quad) and was never actually equivalent to FNA even for FogStart<FogEnd.
+// EasyGL's own vFogFactor is "fraction of original color" (mix(uFogColor,color,vFogFactor)),
+// the inverse of FNA's fogFactor (lerp(color,fogColor,fogFactor)); simplifying
+// 1-saturate(scale*(z+fogStart)) with EasyGL's uFogStart/uFogEnd naming gives the form below.
+// The FogStart==FogEnd degenerate case (FNA forces fully fogged) is guarded, not sign-clamped.
+"    vFogFactor=(uFogEnabled>0.5)?((abs(uFogEnd-uFogStart)<1e-6)?0.0:clamp((aPos.z+uFogEnd)/(uFogEnd-uFogStart),0.0,1.0)):1.0;\n"
 "}\n";
         static const char* fsrc =
 "#version 300 es\n"
@@ -2554,7 +2640,16 @@ void main()
 "void main(){\n"
 "    gl_Position=uWVP*vec4(aPos,1.0);\n"
 "    vUV=aUV;\n"
-"    vFogFactor=(uFogEnabled>0.5)?clamp((uFogEnd-aPos.z)/max(uFogEnd-uFogStart,1e-6),0.0,1.0):1.0;\n"
+// Task 1111: matches FNA's EffectHelpers.SetFogVector/Common.fxh ComputeFogFactor exactly
+// (fogFactor=saturate(scale*(z+fogStart)), scale=1/(fogStart-fogEnd), dotted with object-space
+// position since World=View=Identity in every CNA fog test/scene) -- NOT a naive (fogEnd-z)/
+// (fogEnd-fogStart) falloff, which silently inverts/collapses once FogEnd<FogStart (oracle
+// scene fog_gradient_quad) and was never actually equivalent to FNA even for FogStart<FogEnd.
+// EasyGL's own vFogFactor is "fraction of original color" (mix(uFogColor,color,vFogFactor)),
+// the inverse of FNA's fogFactor (lerp(color,fogColor,fogFactor)); simplifying
+// 1-saturate(scale*(z+fogStart)) with EasyGL's uFogStart/uFogEnd naming gives the form below.
+// The FogStart==FogEnd degenerate case (FNA forces fully fogged) is guarded, not sign-clamped.
+"    vFogFactor=(uFogEnabled>0.5)?((abs(uFogEnd-uFogStart)<1e-6)?0.0:clamp((aPos.z+uFogEnd)/(uFogEnd-uFogStart),0.0,1.0)):1.0;\n"
 "}\n";
         static const char* fsrc =
 "#version 300 es\n"
@@ -2607,7 +2702,16 @@ void main()
 "    gl_Position=uWVP*vec4(aPos,1.0);\n"
 "    vColor=aColor;\n"
 "    vUV=aUV;\n"
-"    vFogFactor=(uFogEnabled>0.5)?clamp((uFogEnd-aPos.z)/max(uFogEnd-uFogStart,1e-6),0.0,1.0):1.0;\n"
+// Task 1111: matches FNA's EffectHelpers.SetFogVector/Common.fxh ComputeFogFactor exactly
+// (fogFactor=saturate(scale*(z+fogStart)), scale=1/(fogStart-fogEnd), dotted with object-space
+// position since World=View=Identity in every CNA fog test/scene) -- NOT a naive (fogEnd-z)/
+// (fogEnd-fogStart) falloff, which silently inverts/collapses once FogEnd<FogStart (oracle
+// scene fog_gradient_quad) and was never actually equivalent to FNA even for FogStart<FogEnd.
+// EasyGL's own vFogFactor is "fraction of original color" (mix(uFogColor,color,vFogFactor)),
+// the inverse of FNA's fogFactor (lerp(color,fogColor,fogFactor)); simplifying
+// 1-saturate(scale*(z+fogStart)) with EasyGL's uFogStart/uFogEnd naming gives the form below.
+// The FogStart==FogEnd degenerate case (FNA forces fully fogged) is guarded, not sign-clamped.
+"    vFogFactor=(uFogEnabled>0.5)?((abs(uFogEnd-uFogStart)<1e-6)?0.0:clamp((aPos.z+uFogEnd)/(uFogEnd-uFogStart),0.0,1.0)):1.0;\n"
 "}\n";
         static const char* fsrc =
 "#version 300 es\n"
@@ -2667,7 +2771,16 @@ void main()
 "    gl_Position=uWVP*vec4(aPos,1.0);\n"
 "    vNormal=uNormalMatrix*aNormal;\n"
 "    vUV=aUV;\n"
-"    vFogFactor=(uFogEnabled>0.5)?clamp((uFogEnd-aPos.z)/max(uFogEnd-uFogStart,1e-6),0.0,1.0):1.0;\n"
+// Task 1111: matches FNA's EffectHelpers.SetFogVector/Common.fxh ComputeFogFactor exactly
+// (fogFactor=saturate(scale*(z+fogStart)), scale=1/(fogStart-fogEnd), dotted with object-space
+// position since World=View=Identity in every CNA fog test/scene) -- NOT a naive (fogEnd-z)/
+// (fogEnd-fogStart) falloff, which silently inverts/collapses once FogEnd<FogStart (oracle
+// scene fog_gradient_quad) and was never actually equivalent to FNA even for FogStart<FogEnd.
+// EasyGL's own vFogFactor is "fraction of original color" (mix(uFogColor,color,vFogFactor)),
+// the inverse of FNA's fogFactor (lerp(color,fogColor,fogFactor)); simplifying
+// 1-saturate(scale*(z+fogStart)) with EasyGL's uFogStart/uFogEnd naming gives the form below.
+// The FogStart==FogEnd degenerate case (FNA forces fully fogged) is guarded, not sign-clamped.
+"    vFogFactor=(uFogEnabled>0.5)?((abs(uFogEnd-uFogStart)<1e-6)?0.0:clamp((aPos.z+uFogEnd)/(uFogEnd-uFogStart),0.0,1.0)):1.0;\n"
 "    vWorldPos=(uWorld*vec4(aPos,1.0)).xyz;\n"
 "}\n";
         static const char* fsrc =
@@ -2803,7 +2916,16 @@ void main()
 "void main(){\n"
 "    gl_Position=uWVP*vec4(aPos,1.0);\n"
 "    vUV=aUV;\n"
-"    vFogFactor=(uFogEnabled>0.5)?clamp((uFogEnd-aPos.z)/max(uFogEnd-uFogStart,1e-6),0.0,1.0):1.0;\n"
+// Task 1111: matches FNA's EffectHelpers.SetFogVector/Common.fxh ComputeFogFactor exactly
+// (fogFactor=saturate(scale*(z+fogStart)), scale=1/(fogStart-fogEnd), dotted with object-space
+// position since World=View=Identity in every CNA fog test/scene) -- NOT a naive (fogEnd-z)/
+// (fogEnd-fogStart) falloff, which silently inverts/collapses once FogEnd<FogStart (oracle
+// scene fog_gradient_quad) and was never actually equivalent to FNA even for FogStart<FogEnd.
+// EasyGL's own vFogFactor is "fraction of original color" (mix(uFogColor,color,vFogFactor)),
+// the inverse of FNA's fogFactor (lerp(color,fogColor,fogFactor)); simplifying
+// 1-saturate(scale*(z+fogStart)) with EasyGL's uFogStart/uFogEnd naming gives the form below.
+// The FogStart==FogEnd degenerate case (FNA forces fully fogged) is guarded, not sign-clamped.
+"    vFogFactor=(uFogEnabled>0.5)?((abs(uFogEnd-uFogStart)<1e-6)?0.0:clamp((aPos.z+uFogEnd)/(uFogEnd-uFogStart),0.0,1.0)):1.0;\n"
 "    vec3 worldPos=(uWorld*vec4(aPos,1.0)).xyz;\n"
 "    vec3 N=normalize(uNormalMatrix*aNormal);\n"
 "    vec3 E=normalize(uEyePosition-worldPos);\n"
@@ -2884,7 +3006,16 @@ void main()
 "void main(){\n"
 "    gl_Position=uWVP*vec4(aPos,1.0);\n"
 "    vUV=aUV;\n"
-"    vFogFactor=(uFogEnabled>0.5)?clamp((uFogEnd-aPos.z)/max(uFogEnd-uFogStart,1e-6),0.0,1.0):1.0;\n"
+// Task 1111: matches FNA's EffectHelpers.SetFogVector/Common.fxh ComputeFogFactor exactly
+// (fogFactor=saturate(scale*(z+fogStart)), scale=1/(fogStart-fogEnd), dotted with object-space
+// position since World=View=Identity in every CNA fog test/scene) -- NOT a naive (fogEnd-z)/
+// (fogEnd-fogStart) falloff, which silently inverts/collapses once FogEnd<FogStart (oracle
+// scene fog_gradient_quad) and was never actually equivalent to FNA even for FogStart<FogEnd.
+// EasyGL's own vFogFactor is "fraction of original color" (mix(uFogColor,color,vFogFactor)),
+// the inverse of FNA's fogFactor (lerp(color,fogColor,fogFactor)); simplifying
+// 1-saturate(scale*(z+fogStart)) with EasyGL's uFogStart/uFogEnd naming gives the form below.
+// The FogStart==FogEnd degenerate case (FNA forces fully fogged) is guarded, not sign-clamped.
+"    vFogFactor=(uFogEnabled>0.5)?((abs(uFogEnd-uFogStart)<1e-6)?0.0:clamp((aPos.z+uFogEnd)/(uFogEnd-uFogStart),0.0,1.0)):1.0;\n"
 "}\n";
         static const char* fsrc =
 "#version 300 es\n"
@@ -2944,7 +3075,16 @@ void main()
 "    gl_Position=uWVP*vec4(aPos,1.0);\n"
 "    vColor=aColor;\n"
 "    vUV=aUV;\n"
-"    vFogFactor=(uFogEnabled>0.5)?clamp((uFogEnd-aPos.z)/max(uFogEnd-uFogStart,1e-6),0.0,1.0):1.0;\n"
+// Task 1111: matches FNA's EffectHelpers.SetFogVector/Common.fxh ComputeFogFactor exactly
+// (fogFactor=saturate(scale*(z+fogStart)), scale=1/(fogStart-fogEnd), dotted with object-space
+// position since World=View=Identity in every CNA fog test/scene) -- NOT a naive (fogEnd-z)/
+// (fogEnd-fogStart) falloff, which silently inverts/collapses once FogEnd<FogStart (oracle
+// scene fog_gradient_quad) and was never actually equivalent to FNA even for FogStart<FogEnd.
+// EasyGL's own vFogFactor is "fraction of original color" (mix(uFogColor,color,vFogFactor)),
+// the inverse of FNA's fogFactor (lerp(color,fogColor,fogFactor)); simplifying
+// 1-saturate(scale*(z+fogStart)) with EasyGL's uFogStart/uFogEnd naming gives the form below.
+// The FogStart==FogEnd degenerate case (FNA forces fully fogged) is guarded, not sign-clamped.
+"    vFogFactor=(uFogEnabled>0.5)?((abs(uFogEnd-uFogStart)<1e-6)?0.0:clamp((aPos.z+uFogEnd)/(uFogEnd-uFogStart),0.0,1.0)):1.0;\n"
 "}\n";
         static const char* fsrc =
 "#version 300 es\n"
@@ -3001,17 +3141,40 @@ void main()
 "uniform float uFogEnabled;\n"
 "uniform float uFogStart;\n"
 "uniform float uFogEnd;\n"
+"uniform float uEnvMapAmount;\n"
+"uniform float uFresnelEnabled;\n"
+"uniform float uFresnelFactor;\n"
 "out vec3 vWorldNormal;\n"
 "out vec3 vEyeDir;\n"
 "out vec2 vUV;\n"
 "out float vFogFactor;\n"
+"out float vFresnel;\n"
 "void main(){\n"
 "    gl_Position=uWVP*vec4(aPos,1.0);\n"
 "    vec3 worldPos=(uWorld*vec4(aPos,1.0)).xyz;\n"
-"    vWorldNormal=uNormalMatrix*aNormal;\n"
-"    vEyeDir=uEyePosition-worldPos;\n"
+"    vec3 worldNormal=normalize(uNormalMatrix*aNormal);\n"
+"    vec3 eyeVector=normalize(uEyePosition-worldPos);\n"
+"    vWorldNormal=worldNormal;\n"
+"    vEyeDir=eyeVector;\n"
 "    vUV=aUV;\n"
-"    vFogFactor=(uFogEnabled>0.5)?clamp((uFogEnd-aPos.z)/max(uFogEnd-uFogStart,1e-6),0.0,1.0):1.0;\n"
+// Real XNA (EnvironmentMapEffect.fx's ComputeFresnelFactor) evaluates this per-VERTEX, in the
+// vertex shader, from each vertex's own un-interpolated normal/eye vector, then Gouraud-
+// interpolates the resulting scalar -- NOT a per-fragment recompute from an interpolated normal
+// (Task 1112: the two are not equivalent once vertices carry different normals).
+"    float viewAngle=dot(eyeVector,worldNormal);\n"
+"    vFresnel=(uFresnelEnabled>0.5)\n"
+"        ? pow(max(1.0-abs(viewAngle),0.0),uFresnelFactor)*uEnvMapAmount\n"
+"        : uEnvMapAmount;\n"
+// Task 1111: matches FNA's EffectHelpers.SetFogVector/Common.fxh ComputeFogFactor exactly
+// (fogFactor=saturate(scale*(z+fogStart)), scale=1/(fogStart-fogEnd), dotted with object-space
+// position since World=View=Identity in every CNA fog test/scene) -- NOT a naive (fogEnd-z)/
+// (fogEnd-fogStart) falloff, which silently inverts/collapses once FogEnd<FogStart (oracle
+// scene fog_gradient_quad) and was never actually equivalent to FNA even for FogStart<FogEnd.
+// EasyGL's own vFogFactor is "fraction of original color" (mix(uFogColor,color,vFogFactor)),
+// the inverse of FNA's fogFactor (lerp(color,fogColor,fogFactor)); simplifying
+// 1-saturate(scale*(z+fogStart)) with EasyGL's uFogStart/uFogEnd naming gives the form below.
+// The FogStart==FogEnd degenerate case (FNA forces fully fogged) is guarded, not sign-clamped.
+"    vFogFactor=(uFogEnabled>0.5)?((abs(uFogEnd-uFogStart)<1e-6)?0.0:clamp((aPos.z+uFogEnd)/(uFogEnd-uFogStart),0.0,1.0)):1.0;\n"
 "}\n";
         static const char* fsrc =
 "#version 300 es\n"
@@ -3020,6 +3183,7 @@ void main()
 "in vec3 vEyeDir;\n"
 "in vec2 vUV;\n"
 "in float vFogFactor;\n"
+"in float vFresnel;\n"
 "uniform sampler2D uTexture;\n"
 "uniform samplerCube uEnvMap;\n"
 "uniform vec4 uDiffuseColor;\n"
@@ -3030,10 +3194,7 @@ void main()
 "uniform vec3 uLight1Diffuse;\n"
 "uniform vec3 uLight2Dir;\n"
 "uniform vec3 uLight2Diffuse;\n"
-"uniform float uEnvMapAmount;\n"
 "uniform vec3 uEnvMapSpecular;\n"
-"uniform float uFresnelEnabled;\n"
-"uniform float uFresnelFactor;\n"
 "uniform vec4 uAlphaTest;\n"
 "uniform vec3 uFogColor;\n"
 "out vec4 FragColor;\n"
@@ -3050,10 +3211,7 @@ void main()
 "    vec4 envSample=texture(uEnvMap,reflDir);\n"
 "    vec3 baseColor=litRGB*texColor.rgb;\n"
 "    float combinedAlpha=uDiffuseColor.a*texColor.a;\n"
-"    float viewAngle=dot(E,N);\n"
-"    float blendFactor=(uFresnelEnabled>0.5)\n"
-"        ? pow(max(1.0-abs(viewAngle),0.0),uFresnelFactor)*uEnvMapAmount\n"
-"        : uEnvMapAmount;\n"
+"    float blendFactor=vFresnel;\n"
 "    vec3 rgb=mix(baseColor,envSample.rgb*combinedAlpha,blendFactor)+uEnvMapSpecular*envSample.a*combinedAlpha;\n"
 "    FragColor=vec4(rgb,combinedAlpha);\n"
 "    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
@@ -3102,6 +3260,7 @@ void main()
 "layout(location=2) in vec2 aUV;\n"
 "layout(location=3) in vec4 aBoneWeights;\n"
 "layout(location=4) in uvec4 aBoneIndices;\n"
+"layout(location=5) in vec4 aColor;\n"
 "uniform mat4 uWVP;\n"
 "uniform mat4 uWorld;\n"
 "uniform mat4 uBones[72];\n"
@@ -3113,6 +3272,7 @@ void main()
 "out vec2 vUV;\n"
 "out float vFogFactor;\n"
 "out vec3 vWorldPos;\n"
+"out vec4 vColor;\n"
 "void main(){\n"
 // Task 895: FNA's real Skin(vin, boneCount) only sums the first WeightsPerVertex (1, 2, or 4)
 // weight/index pairs -- matches XNA's own validated property range, so >=2/>=4 gating suffices.
@@ -3124,7 +3284,17 @@ void main()
 "    vNormal=normalize(mat3(skinMat)*aNormal);\n"
 "    vUV=aUV;\n"
 "    vWorldPos=(uWorld*skinnedPos).xyz;\n"
-"    vFogFactor=(uFogEnabled>0.5)?clamp((uFogEnd-aPos.z)/max(uFogEnd-uFogStart,1e-6),0.0,1.0):1.0;\n"
+"    vColor=aColor;\n"
+// Task 1111: matches FNA's EffectHelpers.SetFogVector/Common.fxh ComputeFogFactor exactly
+// (fogFactor=saturate(scale*(z+fogStart)), scale=1/(fogStart-fogEnd), dotted with object-space
+// position since World=View=Identity in every CNA fog test/scene) -- NOT a naive (fogEnd-z)/
+// (fogEnd-fogStart) falloff, which silently inverts/collapses once FogEnd<FogStart (oracle
+// scene fog_gradient_quad) and was never actually equivalent to FNA even for FogStart<FogEnd.
+// EasyGL's own vFogFactor is "fraction of original color" (mix(uFogColor,color,vFogFactor)),
+// the inverse of FNA's fogFactor (lerp(color,fogColor,fogFactor)); simplifying
+// 1-saturate(scale*(z+fogStart)) with EasyGL's uFogStart/uFogEnd naming gives the form below.
+// The FogStart==FogEnd degenerate case (FNA forces fully fogged) is guarded, not sign-clamped.
+"    vFogFactor=(uFogEnabled>0.5)?((abs(uFogEnd-uFogStart)<1e-6)?0.0:clamp((aPos.z+uFogEnd)/(uFogEnd-uFogStart),0.0,1.0)):1.0;\n"
 "}\n";
 
         static const char* fsrc =
@@ -3134,6 +3304,7 @@ void main()
 "in vec2 vUV;\n"
 "in float vFogFactor;\n"
 "in vec3 vWorldPos;\n"
+"in vec4 vColor;\n"
 "uniform sampler2D uTexture;\n"
 "uniform vec4 uDiffuseColor;\n"
 "uniform vec3 uEmissiveColor;\n"
@@ -3151,6 +3322,7 @@ void main()
 "uniform vec3 uEyePosition;\n"
 "uniform vec4 uAlphaTest;\n"
 "uniform vec3 uFogColor;\n"
+"uniform float uVertexColorEnabled;\n"
 "out vec4 FragColor;\n"
 "void main(){\n"
 "    vec3 N=normalize(vNormal);\n"
@@ -3165,8 +3337,13 @@ void main()
 "    vec3 h2=normalize(E-uLight2Dir); float spec2=pow(max(dot(h2,N),0.0)*zeroL2,uSpecularPower);\n"
 "    vec3 specularRGB=(spec0*uLight0Specular+spec1*uLight1Specular+spec2*uLight2Specular)*uSpecularColor;\n"
 "    vec4 texColor=texture(uTexture,vUV);\n"
-"    FragColor=vec4(litRGB*texColor.rgb,uDiffuseColor.a*texColor.a);\n"
+"    vec4 vc=(uVertexColorEnabled>0.5)?vColor:vec4(1.0,1.0,1.0,1.0);\n"
+"    FragColor=vec4(litRGB*texColor.rgb,uDiffuseColor.a*texColor.a*vc.a);\n"
 "    FragColor.rgb+=specularRGB*FragColor.a;\n"
+// Vertex color modulates the whole combined diffuse+specular output, not just diffuse -- applied
+// after the specular add so VertexColorEnabled=true with a black vertex color genuinely zeroes
+// the pixel (a specular highlight added afterward would otherwise leak through unmodulated).
+"    FragColor.rgb*=vc.rgb;\n"
 "    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
 "    if(_at<0.0)discard;\n"
 "    FragColor.rgb=mix(uFogColor,FragColor.rgb,vFogFactor);\n"
@@ -3198,6 +3375,7 @@ void main()
         p.loc_fog_color   = p.prog.uniform_location("uFogColor");
         p.loc_fog_start   = p.prog.uniform_location("uFogStart");
         p.loc_fog_end     = p.prog.uniform_location("uFogEnd");
+        p.loc_vertexcolor = p.prog.uniform_location("uVertexColorEnabled");
         p.ready         = true;
         CNA_RENDER_LOG("skinned3D ready loc_wvp=" << p.loc_wvp << " loc_bones=" << p.loc_bones);
     }
@@ -3230,6 +3408,7 @@ void main()
 "layout(location=2) in vec2 aUV;\n"
 "layout(location=3) in vec4 aBoneWeights;\n"
 "layout(location=4) in uvec4 aBoneIndices;\n"
+"layout(location=5) in vec4 aColor;\n"
 "uniform mat4 uWVP;\n"
 "uniform mat4 uWorld;\n"
 "uniform mat4 uBones[72];\n"
@@ -3259,6 +3438,7 @@ void main()
 "out float vFogFactor;\n"
 "out vec3 vLitRGB;\n"
 "out vec3 vSpecularRGB;\n"
+"out vec4 vColor;\n"
 "void main(){\n"
 "    mat4 skinMat=uBones[aBoneIndices.x]*aBoneWeights.x;\n"
 "    if(uWeightsPerVertex>=2) skinMat+=uBones[aBoneIndices.y]*aBoneWeights.y;\n"
@@ -3266,7 +3446,17 @@ void main()
 "    vec4 skinnedPos=skinMat*vec4(aPos,1.0);\n"
 "    gl_Position=uWVP*skinnedPos;\n"
 "    vUV=aUV;\n"
-"    vFogFactor=(uFogEnabled>0.5)?clamp((uFogEnd-aPos.z)/max(uFogEnd-uFogStart,1e-6),0.0,1.0):1.0;\n"
+"    vColor=aColor;\n"
+// Task 1111: matches FNA's EffectHelpers.SetFogVector/Common.fxh ComputeFogFactor exactly
+// (fogFactor=saturate(scale*(z+fogStart)), scale=1/(fogStart-fogEnd), dotted with object-space
+// position since World=View=Identity in every CNA fog test/scene) -- NOT a naive (fogEnd-z)/
+// (fogEnd-fogStart) falloff, which silently inverts/collapses once FogEnd<FogStart (oracle
+// scene fog_gradient_quad) and was never actually equivalent to FNA even for FogStart<FogEnd.
+// EasyGL's own vFogFactor is "fraction of original color" (mix(uFogColor,color,vFogFactor)),
+// the inverse of FNA's fogFactor (lerp(color,fogColor,fogFactor)); simplifying
+// 1-saturate(scale*(z+fogStart)) with EasyGL's uFogStart/uFogEnd naming gives the form below.
+// The FogStart==FogEnd degenerate case (FNA forces fully fogged) is guarded, not sign-clamped.
+"    vFogFactor=(uFogEnabled>0.5)?((abs(uFogEnd-uFogStart)<1e-6)?0.0:clamp((aPos.z+uFogEnd)/(uFogEnd-uFogStart),0.0,1.0)):1.0;\n"
 "    vec3 worldPos=(uWorld*skinnedPos).xyz;\n"
 "    vec3 N=normalize(mat3(skinMat)*aNormal);\n"
 "    vec3 E=normalize(uEyePosition-worldPos);\n"
@@ -3288,15 +3478,21 @@ void main()
 "in float vFogFactor;\n"
 "in vec3 vLitRGB;\n"
 "in vec3 vSpecularRGB;\n"
+"in vec4 vColor;\n"
 "uniform sampler2D uTexture;\n"
 "uniform highp vec4 uDiffuseColor;\n"
 "uniform vec4 uAlphaTest;\n"
 "uniform vec3 uFogColor;\n"
+"uniform float uVertexColorEnabled;\n"
 "out vec4 FragColor;\n"
 "void main(){\n"
 "    vec4 texColor=texture(uTexture,vUV);\n"
-"    FragColor=vec4(vLitRGB*texColor.rgb,uDiffuseColor.a*texColor.a);\n"
+"    vec4 vc=(uVertexColorEnabled>0.5)?vColor:vec4(1.0,1.0,1.0,1.0);\n"
+"    FragColor=vec4(vLitRGB*texColor.rgb,uDiffuseColor.a*texColor.a*vc.a);\n"
 "    FragColor.rgb+=vSpecularRGB*FragColor.a;\n"
+// See EnsureSkinnedProgram()'s identical comment: vertex color modulates the whole combined
+// diffuse+specular output, applied after the specular add.
+"    FragColor.rgb*=vc.rgb;\n"
 "    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
 "    if(_at<0.0)discard;\n"
 "    FragColor.rgb=mix(uFogColor,FragColor.rgb,vFogFactor);\n"
@@ -3328,8 +3524,316 @@ void main()
         p.loc_fog_color   = p.prog.uniform_location("uFogColor");
         p.loc_fog_start   = p.prog.uniform_location("uFogStart");
         p.loc_fog_end     = p.prog.uniform_location("uFogEnd");
+        p.loc_vertexcolor = p.prog.uniform_location("uVertexColorEnabled");
         p.ready         = true;
         CNA_RENDER_LOG("skinned3D (vertex-lit) ready loc_wvp=" << p.loc_wvp << " loc_bones=" << p.loc_bones);
+    }
+
+    // plan_cnj.md CNB-58 (Phase 13A): real glTF metallic-roughness BRDF (glTF 2.0 spec Appendix
+    // B) -- GGX/Trowbridge-Reitz normal distribution, Smith-Schlick-GGX visibility, Schlick
+    // Fresnel -- driven by the same 3-DirectionalLight + AmbientLightColor convention every other
+    // CNA stock effect already uses (so existing scene-lighting setup code transfers directly),
+    // rather than image-based lighting (a much larger, separate feature: irradiance/prefiltered
+    // environment maps + a BRDF LUT). Normal mapping via a per-pixel TBN basis built from the
+    // vertex tangent (re-orthogonalized against the interpolated normal) and glTF's own
+    // bitangent-handedness-sign convention (Bitangent = cross(Normal,Tangent.xyz)*Tangent.w).
+    // Only the EasyGL backend implements this program (CNB-58 explicitly scopes other backends to
+    // separate follow-ups, CNB-61) -- PbrEffect::FillGpuDrawParams() still fills GpuDrawParams
+    // completely, so a non-EasyGL backend simply ignores the new pbr*/texture fields already,
+    // matching this codebase's established "unimplemented field is safely ignored" convention.
+    void EasyGLGraphicsBackend::EnsurePbrProgram()
+    {
+        if (prog_pbr_.ready) return;
+
+        static const char* vsrc =
+"#version 300 es\n"
+"precision highp float;\n"
+"layout(location=0) in vec3 aPos;\n"
+"layout(location=1) in vec3 aNormal;\n"
+"layout(location=2) in vec4 aTangent;\n"
+"layout(location=3) in vec2 aUV;\n"
+"uniform mat4 uWVP;\n"
+"uniform mat4 uWorld;\n"
+"uniform mat3 uNormalMatrix;\n"
+"uniform float uFogEnabled;\n"
+"uniform float uFogStart;\n"
+"uniform float uFogEnd;\n"
+"out vec3 vNormal;\n"
+"out vec3 vTangent;\n"
+"out float vBitangentSign;\n"
+"out vec2 vUV;\n"
+"out float vFogFactor;\n"
+"out vec3 vWorldPos;\n"
+"void main(){\n"
+"    gl_Position=uWVP*vec4(aPos,1.0);\n"
+"    vNormal=uNormalMatrix*aNormal;\n"
+// Tangent transforms as a plain direction under mat3(uWorld) (not the inverse-transpose
+// uNormalMatrix use for the normal) -- correct for uniform-scale World transforms, a documented
+// simplification for non-uniform scale shared with most real-time engines lacking a full
+// per-tangent inverse-transpose.
+"    vTangent=mat3(uWorld)*aTangent.xyz;\n"
+"    vBitangentSign=aTangent.w;\n"
+"    vUV=aUV;\n"
+"    vWorldPos=(uWorld*vec4(aPos,1.0)).xyz;\n"
+"    vFogFactor=(uFogEnabled>0.5)?((abs(uFogEnd-uFogStart)<1e-6)?0.0:clamp((aPos.z+uFogEnd)/(uFogEnd-uFogStart),0.0,1.0)):1.0;\n"
+"}\n";
+
+        static const char* fsrc =
+"#version 300 es\n"
+"precision mediump float;\n"
+"in vec3 vNormal;\n"
+"in vec3 vTangent;\n"
+"in float vBitangentSign;\n"
+"in vec2 vUV;\n"
+"in float vFogFactor;\n"
+"in vec3 vWorldPos;\n"
+"uniform sampler2D uTexture;\n"
+"uniform sampler2D uNormalMap;\n"
+"uniform sampler2D uMetallicRoughnessMap;\n"
+"uniform sampler2D uEmissiveMap;\n"
+"uniform sampler2D uOcclusionMap;\n"
+"uniform vec4 uDiffuseColor;\n"
+"uniform vec3 uAmbientColor;\n"
+"uniform vec3 uEmissiveColor;\n"
+"uniform float uMetallicFactor;\n"
+"uniform float uRoughnessFactor;\n"
+"uniform vec3 uLight0Dir;\n"
+"uniform vec3 uLight0Diffuse;\n"
+"uniform vec3 uLight1Dir;\n"
+"uniform vec3 uLight1Diffuse;\n"
+"uniform vec3 uLight2Dir;\n"
+"uniform vec3 uLight2Diffuse;\n"
+"uniform vec3 uEyePosition;\n"
+"uniform vec4 uAlphaTest;\n"
+"uniform vec3 uFogColor;\n"
+"out vec4 FragColor;\n"
+// GGX/Trowbridge-Reitz D, Smith-Schlick-GGX visibility (direct-lighting k=(roughness+1)^2/8), and
+// Schlick Fresnel -- the glTF 2.0 spec's own reference BRDF (Appendix B.3.3/B.3.4/B.3.2).
+"vec3 PbrLight(vec3 N, vec3 V, vec3 L, vec3 lightColor, vec3 albedo, vec3 F0, float roughness, float metallic){\n"
+"    vec3 H=normalize(V+L);\n"
+"    float NdotL=max(dot(N,L),0.0);\n"
+"    float NdotV=max(dot(N,V),1e-4);\n"
+"    float NdotH=max(dot(N,H),0.0);\n"
+"    float VdotH=max(dot(V,H),0.0);\n"
+"    float a2=pow(roughness,4.0);\n"
+"    float dTerm=(NdotH*NdotH*(a2-1.0)+1.0);\n"
+"    float D=a2/(3.14159265*dTerm*dTerm+1e-7);\n"
+"    float k=(roughness+1.0); k=k*k/8.0;\n"
+"    float G=(NdotV/(NdotV*(1.0-k)+k))*(NdotL/(NdotL*(1.0-k)+k));\n"
+"    vec3 F=F0+(vec3(1.0)-F0)*pow(clamp(1.0-VdotH,0.0,1.0),5.0);\n"
+"    vec3 specular=(D*G*F)/max(4.0*NdotV*NdotL,1e-4);\n"
+"    vec3 diffuseColor=albedo*(1.0-metallic);\n"
+"    vec3 kd=vec3(1.0)-F;\n"
+"    return (kd*diffuseColor/3.14159265+specular)*lightColor*NdotL;\n"
+"}\n"
+"void main(){\n"
+"    vec4 baseColorTex=texture(uTexture,vUV);\n"
+"    vec3 albedo=baseColorTex.rgb*uDiffuseColor.rgb;\n"
+"    float alpha=baseColorTex.a*uDiffuseColor.a;\n"
+"    vec3 N=normalize(vNormal);\n"
+"    vec3 T=normalize(vTangent-N*dot(N,vTangent));\n"
+"    vec3 B=cross(N,T)*vBitangentSign;\n"
+"    mat3 TBN=mat3(T,B,N);\n"
+"    vec3 sampledNormal=texture(uNormalMap,vUV).rgb*2.0-1.0;\n"
+"    vec3 finalNormal=normalize(TBN*sampledNormal);\n"
+"    vec4 mr=texture(uMetallicRoughnessMap,vUV);\n"
+"    float roughness=clamp(mr.g*uRoughnessFactor,0.045,1.0);\n"
+"    float metallic=clamp(mr.b*uMetallicFactor,0.0,1.0);\n"
+"    vec3 V=normalize(uEyePosition-vWorldPos);\n"
+"    vec3 F0=mix(vec3(0.04),albedo,metallic);\n"
+"    vec3 Lo=vec3(0.0);\n"
+"    Lo+=PbrLight(finalNormal,V,normalize(-uLight0Dir),uLight0Diffuse,albedo,F0,roughness,metallic);\n"
+"    Lo+=PbrLight(finalNormal,V,normalize(-uLight1Dir),uLight1Diffuse,albedo,F0,roughness,metallic);\n"
+"    Lo+=PbrLight(finalNormal,V,normalize(-uLight2Dir),uLight2Diffuse,albedo,F0,roughness,metallic);\n"
+"    float occlusion=texture(uOcclusionMap,vUV).r;\n"
+"    vec3 ambient=uAmbientColor*albedo*occlusion;\n"
+"    vec3 emissive=uEmissiveColor*texture(uEmissiveMap,vUV).rgb;\n"
+"    FragColor=vec4(ambient+Lo+emissive,alpha);\n"
+"    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
+"    if(_at<0.0)discard;\n"
+"    FragColor.rgb=mix(uFogColor,FragColor.rgb,vFogFactor);\n"
+"}\n";
+
+        CompileAndLink(prog_pbr_.prog, vsrc, fsrc, "pbr");
+        auto& p = prog_pbr_;
+        p.loc_wvp       = p.prog.uniform_location("uWVP");
+        p.loc_world     = p.prog.uniform_location("uWorld");
+        p.loc_normalmat = p.prog.uniform_location("uNormalMatrix");
+        p.loc_diffuse   = p.prog.uniform_location("uDiffuseColor");
+        p.loc_ambient   = p.prog.uniform_location("uAmbientColor");
+        p.loc_emissive  = p.prog.uniform_location("uEmissiveColor");
+        p.loc_l0dir     = p.prog.uniform_location("uLight0Dir");
+        p.loc_l0diff    = p.prog.uniform_location("uLight0Diffuse");
+        p.loc_l1dir     = p.prog.uniform_location("uLight1Dir");
+        p.loc_l1diff    = p.prog.uniform_location("uLight1Diffuse");
+        p.loc_l2dir     = p.prog.uniform_location("uLight2Dir");
+        p.loc_l2diff    = p.prog.uniform_location("uLight2Diffuse");
+        p.loc_eyepos    = p.prog.uniform_location("uEyePosition");
+        p.loc_texture   = p.prog.uniform_location("uTexture");
+        p.loc_pbr_normalmap     = p.prog.uniform_location("uNormalMap");
+        p.loc_pbr_mr            = p.prog.uniform_location("uMetallicRoughnessMap");
+        p.loc_pbr_emissivemap   = p.prog.uniform_location("uEmissiveMap");
+        p.loc_pbr_occlusionmap  = p.prog.uniform_location("uOcclusionMap");
+        p.loc_pbr_metallic      = p.prog.uniform_location("uMetallicFactor");
+        p.loc_pbr_roughness     = p.prog.uniform_location("uRoughnessFactor");
+        p.loc_alphatest = p.prog.uniform_location("uAlphaTest");
+        p.loc_fog_enabled = p.prog.uniform_location("uFogEnabled");
+        p.loc_fog_color   = p.prog.uniform_location("uFogColor");
+        p.loc_fog_start   = p.prog.uniform_location("uFogStart");
+        p.loc_fog_end     = p.prog.uniform_location("uFogEnd");
+        p.ready         = true;
+        CNA_RENDER_LOG("pbr3D ready loc_wvp=" << p.loc_wvp);
+    }
+
+    // PBR + skinning combo: EnsureSkinnedProgram()'s bone-palette vertex transform (applied to
+    // Position, Normal, and now also Tangent, since a skinned normal map needs a skinned TBN
+    // basis too) feeding EnsurePbrProgram()'s own fragment-stage BRDF unchanged -- the two
+    // programs' logic is additive, not a new algorithm (SkinnedPbrEffect, PBR+skinning combo).
+    void EasyGLGraphicsBackend::EnsurePbrSkinnedProgram()
+    {
+        if (prog_pbr_skinned_.ready) return;
+
+        static const char* vsrc =
+"#version 300 es\n"
+"precision highp float;\n"
+"layout(location=0) in vec3 aPos;\n"
+"layout(location=1) in vec3 aNormal;\n"
+"layout(location=2) in vec4 aTangent;\n"
+"layout(location=3) in vec2 aUV;\n"
+"layout(location=4) in vec4 aBoneWeights;\n"
+"layout(location=5) in uvec4 aBoneIndices;\n"
+"uniform mat4 uWVP;\n"
+"uniform mat4 uWorld;\n"
+"uniform mat4 uBones[72];\n"
+"uniform int uWeightsPerVertex;\n"
+"uniform float uFogEnabled;\n"
+"uniform float uFogStart;\n"
+"uniform float uFogEnd;\n"
+"out vec3 vNormal;\n"
+"out vec3 vTangent;\n"
+"out float vBitangentSign;\n"
+"out vec2 vUV;\n"
+"out float vFogFactor;\n"
+"out vec3 vWorldPos;\n"
+"void main(){\n"
+"    mat4 skinMat=uBones[aBoneIndices.x]*aBoneWeights.x;\n"
+"    if(uWeightsPerVertex>=2) skinMat+=uBones[aBoneIndices.y]*aBoneWeights.y;\n"
+"    if(uWeightsPerVertex>=4) skinMat+=uBones[aBoneIndices.z]*aBoneWeights.z+uBones[aBoneIndices.w]*aBoneWeights.w;\n"
+"    vec4 skinnedPos=skinMat*vec4(aPos,1.0);\n"
+"    gl_Position=uWVP*skinnedPos;\n"
+"    mat3 skinNormalMat=mat3(skinMat);\n"
+"    vNormal=normalize(mat3(uWorld)*(skinNormalMat*aNormal));\n"
+"    vTangent=mat3(uWorld)*(skinNormalMat*aTangent.xyz);\n"
+"    vBitangentSign=aTangent.w;\n"
+"    vUV=aUV;\n"
+"    vWorldPos=(uWorld*skinnedPos).xyz;\n"
+"    vFogFactor=(uFogEnabled>0.5)?((abs(uFogEnd-uFogStart)<1e-6)?0.0:clamp((aPos.z+uFogEnd)/(uFogEnd-uFogStart),0.0,1.0)):1.0;\n"
+"}\n";
+
+        static const char* fsrc =
+"#version 300 es\n"
+"precision mediump float;\n"
+"in vec3 vNormal;\n"
+"in vec3 vTangent;\n"
+"in float vBitangentSign;\n"
+"in vec2 vUV;\n"
+"in float vFogFactor;\n"
+"in vec3 vWorldPos;\n"
+"uniform sampler2D uTexture;\n"
+"uniform sampler2D uNormalMap;\n"
+"uniform sampler2D uMetallicRoughnessMap;\n"
+"uniform sampler2D uEmissiveMap;\n"
+"uniform sampler2D uOcclusionMap;\n"
+"uniform vec4 uDiffuseColor;\n"
+"uniform vec3 uAmbientColor;\n"
+"uniform vec3 uEmissiveColor;\n"
+"uniform float uMetallicFactor;\n"
+"uniform float uRoughnessFactor;\n"
+"uniform vec3 uLight0Dir;\n"
+"uniform vec3 uLight0Diffuse;\n"
+"uniform vec3 uLight1Dir;\n"
+"uniform vec3 uLight1Diffuse;\n"
+"uniform vec3 uLight2Dir;\n"
+"uniform vec3 uLight2Diffuse;\n"
+"uniform vec3 uEyePosition;\n"
+"uniform vec4 uAlphaTest;\n"
+"uniform vec3 uFogColor;\n"
+"out vec4 FragColor;\n"
+"vec3 PbrLight(vec3 N, vec3 V, vec3 L, vec3 lightColor, vec3 albedo, vec3 F0, float roughness, float metallic){\n"
+"    vec3 H=normalize(V+L);\n"
+"    float NdotL=max(dot(N,L),0.0);\n"
+"    float NdotV=max(dot(N,V),1e-4);\n"
+"    float NdotH=max(dot(N,H),0.0);\n"
+"    float VdotH=max(dot(V,H),0.0);\n"
+"    float a2=pow(roughness,4.0);\n"
+"    float dTerm=(NdotH*NdotH*(a2-1.0)+1.0);\n"
+"    float D=a2/(3.14159265*dTerm*dTerm+1e-7);\n"
+"    float k=(roughness+1.0); k=k*k/8.0;\n"
+"    float G=(NdotV/(NdotV*(1.0-k)+k))*(NdotL/(NdotL*(1.0-k)+k));\n"
+"    vec3 F=F0+(vec3(1.0)-F0)*pow(clamp(1.0-VdotH,0.0,1.0),5.0);\n"
+"    vec3 specular=(D*G*F)/max(4.0*NdotV*NdotL,1e-4);\n"
+"    vec3 diffuseColor=albedo*(1.0-metallic);\n"
+"    vec3 kd=vec3(1.0)-F;\n"
+"    return (kd*diffuseColor/3.14159265+specular)*lightColor*NdotL;\n"
+"}\n"
+"void main(){\n"
+"    vec4 baseColorTex=texture(uTexture,vUV);\n"
+"    vec3 albedo=baseColorTex.rgb*uDiffuseColor.rgb;\n"
+"    float alpha=baseColorTex.a*uDiffuseColor.a;\n"
+"    vec3 N=normalize(vNormal);\n"
+"    vec3 T=normalize(vTangent-N*dot(N,vTangent));\n"
+"    vec3 B=cross(N,T)*vBitangentSign;\n"
+"    mat3 TBN=mat3(T,B,N);\n"
+"    vec3 sampledNormal=texture(uNormalMap,vUV).rgb*2.0-1.0;\n"
+"    vec3 finalNormal=normalize(TBN*sampledNormal);\n"
+"    vec4 mr=texture(uMetallicRoughnessMap,vUV);\n"
+"    float roughness=clamp(mr.g*uRoughnessFactor,0.045,1.0);\n"
+"    float metallic=clamp(mr.b*uMetallicFactor,0.0,1.0);\n"
+"    vec3 V=normalize(uEyePosition-vWorldPos);\n"
+"    vec3 F0=mix(vec3(0.04),albedo,metallic);\n"
+"    vec3 Lo=vec3(0.0);\n"
+"    Lo+=PbrLight(finalNormal,V,normalize(-uLight0Dir),uLight0Diffuse,albedo,F0,roughness,metallic);\n"
+"    Lo+=PbrLight(finalNormal,V,normalize(-uLight1Dir),uLight1Diffuse,albedo,F0,roughness,metallic);\n"
+"    Lo+=PbrLight(finalNormal,V,normalize(-uLight2Dir),uLight2Diffuse,albedo,F0,roughness,metallic);\n"
+"    float occlusion=texture(uOcclusionMap,vUV).r;\n"
+"    vec3 ambient=uAmbientColor*albedo*occlusion;\n"
+"    vec3 emissive=uEmissiveColor*texture(uEmissiveMap,vUV).rgb;\n"
+"    FragColor=vec4(ambient+Lo+emissive,alpha);\n"
+"    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
+"    if(_at<0.0)discard;\n"
+"    FragColor.rgb=mix(uFogColor,FragColor.rgb,vFogFactor);\n"
+"}\n";
+
+        CompileAndLink(prog_pbr_skinned_.prog, vsrc, fsrc, "pbr_skinned");
+        auto& p = prog_pbr_skinned_;
+        p.loc_wvp       = p.prog.uniform_location("uWVP");
+        p.loc_world     = p.prog.uniform_location("uWorld");
+        p.loc_bones     = p.prog.uniform_location("uBones[0]");
+        p.loc_weightsPerVertex = p.prog.uniform_location("uWeightsPerVertex");
+        p.loc_diffuse   = p.prog.uniform_location("uDiffuseColor");
+        p.loc_ambient   = p.prog.uniform_location("uAmbientColor");
+        p.loc_emissive  = p.prog.uniform_location("uEmissiveColor");
+        p.loc_l0dir     = p.prog.uniform_location("uLight0Dir");
+        p.loc_l0diff    = p.prog.uniform_location("uLight0Diffuse");
+        p.loc_l1dir     = p.prog.uniform_location("uLight1Dir");
+        p.loc_l1diff    = p.prog.uniform_location("uLight1Diffuse");
+        p.loc_l2dir     = p.prog.uniform_location("uLight2Dir");
+        p.loc_l2diff    = p.prog.uniform_location("uLight2Diffuse");
+        p.loc_eyepos    = p.prog.uniform_location("uEyePosition");
+        p.loc_texture   = p.prog.uniform_location("uTexture");
+        p.loc_pbr_normalmap     = p.prog.uniform_location("uNormalMap");
+        p.loc_pbr_mr            = p.prog.uniform_location("uMetallicRoughnessMap");
+        p.loc_pbr_emissivemap   = p.prog.uniform_location("uEmissiveMap");
+        p.loc_pbr_occlusionmap  = p.prog.uniform_location("uOcclusionMap");
+        p.loc_pbr_metallic      = p.prog.uniform_location("uMetallicFactor");
+        p.loc_pbr_roughness     = p.prog.uniform_location("uRoughnessFactor");
+        p.loc_alphatest = p.prog.uniform_location("uAlphaTest");
+        p.loc_fog_enabled = p.prog.uniform_location("uFogEnabled");
+        p.loc_fog_color   = p.prog.uniform_location("uFogColor");
+        p.loc_fog_start   = p.prog.uniform_location("uFogStart");
+        p.loc_fog_end     = p.prog.uniform_location("uFogEnd");
+        p.ready         = true;
+        CNA_RENDER_LOG("pbr_skinned3D ready loc_wvp=" << p.loc_wvp << " loc_bones=" << p.loc_bones);
     }
 
     void EasyGLGraphicsBackend::EnsureDefaultWhiteTexture()
@@ -3341,9 +3845,34 @@ void main()
         default_white_texture_ready_ = true;
     }
 
+    // plan_cnj.md CNB-58 (Phase 13A): fallback for PbrEffect::NormalMap when unbound -- a "flat"
+    // tangent-space normal (0,0,1) encoded as RGB (128,128,255), so the sampled/decoded (rgb*2-1)
+    // normal is exactly the geometric normal (no perturbation). The other 3 PBR map fallbacks
+    // (metallic-roughness, emissive, occlusion) all reuse the existing default_white_texture_
+    // instead -- their respective factor/no-op semantics already make (1,1,1,1) the correct
+    // "map absent" value (factor*1.0=factor; emissive tint*1.0=tint; occlusion 1.0=unoccluded).
+    void EasyGLGraphicsBackend::EnsureDefaultFlatNormalTexture()
+    {
+        if (default_flat_normal_texture_ready_) return;
+        static const uint8_t flatNormal[4] = {128, 128, 255, 255};
+        default_flat_normal_texture_.create();
+        default_flat_normal_texture_.set_image_2d(::easygl::TextureTarget::Texture2D, 0, 1, 1, flatNormal);
+        default_flat_normal_texture_ready_ = true;
+    }
+
     EasyGLGraphicsBackend::Prog3D& EasyGLGraphicsBackend::SelectProgram(std::size_t stride,
                                                                           const GpuDrawParams& params)
     {
+        if (params.pbr && params.skinned)
+        {
+            EnsurePbrSkinnedProgram();
+            return prog_pbr_skinned_;
+        }
+        if (params.pbr)
+        {
+            EnsurePbrProgram();
+            return prog_pbr_;
+        }
         if (params.skinned)
         {
             // Task 1102b (plan_dx9.md Divergence 1): real XNA's SkinnedEffect defaults
@@ -3594,6 +4123,59 @@ void main()
                 default_white_texture_.bind(::easygl::TextureTarget::Texture2D);
             ::metagl::glActiveTexture(::metagl::TextureUnit::Texture0);
         }
+
+        // plan_cnj.md CNB-58 (Phase 13A): PbrEffect's 4 additional maps (units 1-4, bound before
+        // unit 0 to leave it active last, matching the envMap/texture2 precedent above). Each
+        // falls back to a texture whose sampled value is the correct "map absent" constant for
+        // its own semantic (see EnsureDefaultFlatNormalTexture()'s own doc comment).
+        if (p.loc_pbr_normalmap >= 0)
+        {
+            EnsureDefaultFlatNormalTexture();
+            p.prog.set_uniform(p.loc_pbr_normalmap, 1);
+            ::metagl::glActiveTexture(::metagl::TextureUnit::Texture1);
+            if (params.pbrNormalMap)
+                params.pbrNormalMap->BindGL();
+            else
+                default_flat_normal_texture_.bind(::easygl::TextureTarget::Texture2D);
+            ::metagl::glActiveTexture(::metagl::TextureUnit::Texture0);
+        }
+        if (p.loc_pbr_mr >= 0)
+        {
+            EnsureDefaultWhiteTexture();
+            p.prog.set_uniform(p.loc_pbr_mr, 2);
+            ::metagl::glActiveTexture(::metagl::TextureUnit::Texture2);
+            if (params.pbrMetallicRoughnessMap)
+                params.pbrMetallicRoughnessMap->BindGL();
+            else
+                default_white_texture_.bind(::easygl::TextureTarget::Texture2D);
+            ::metagl::glActiveTexture(::metagl::TextureUnit::Texture0);
+        }
+        if (p.loc_pbr_emissivemap >= 0)
+        {
+            EnsureDefaultWhiteTexture();
+            p.prog.set_uniform(p.loc_pbr_emissivemap, 3);
+            ::metagl::glActiveTexture(::metagl::TextureUnit::Texture3);
+            if (params.pbrEmissiveMap)
+                params.pbrEmissiveMap->BindGL();
+            else
+                default_white_texture_.bind(::easygl::TextureTarget::Texture2D);
+            ::metagl::glActiveTexture(::metagl::TextureUnit::Texture0);
+        }
+        if (p.loc_pbr_occlusionmap >= 0)
+        {
+            EnsureDefaultWhiteTexture();
+            p.prog.set_uniform(p.loc_pbr_occlusionmap, 4);
+            ::metagl::glActiveTexture(::metagl::TextureUnit::Texture4);
+            if (params.pbrOcclusionMap)
+                params.pbrOcclusionMap->BindGL();
+            else
+                default_white_texture_.bind(::easygl::TextureTarget::Texture2D);
+            ::metagl::glActiveTexture(::metagl::TextureUnit::Texture0);
+        }
+        if (p.loc_pbr_metallic >= 0)
+            p.prog.set_uniform(p.loc_pbr_metallic, params.pbrMetallicFactor);
+        if (p.loc_pbr_roughness >= 0)
+            p.prog.set_uniform(p.loc_pbr_roughness, params.pbrRoughnessFactor);
 
         // Texture (unit 0)
         if (p.loc_texture >= 0)

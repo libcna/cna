@@ -6,13 +6,13 @@ ContentManager`/`ContentReader`/`ContentTypeReaderManager`, plus the individual 
 written once Phase A through Phase G's other tasks (XNB-42/42A/43/44/46) had landed. See
 `xnb.md` for the original design rationale and `plan_xnb.md` for the full, numbered task history.
 
-This is **CNA's second, independent content format** alongside `.cnb` (see `cnb.md`) and the older,
+This is **CNA's second, independent content format** alongside `.cnj` (see `cnj.md`) and the older,
 CNA-original `.model.json` loose-file format (see `docs/model-content-pipeline-support.md`, which
 predates this document and does not cover the real binary `Model` reader described below —
 `ModelTypeReader`'s `.model.json` path and `ModelReader`'s real `.xnb` binary path are two
-genuinely separate systems that happen to both produce a `Model`). Per `cnb.md`'s "Core rule",
+genuinely separate systems that happen to both produce a `Model`). Per `cnj.md`'s "Core rule",
 `ContentManager::Load<T>()` always tries a `.xnb` file first, ahead of a literal caller-given path
-or a `.cnb` sidecar/file.
+or a `.cnj` sidecar/file.
 
 ## Scope
 
@@ -76,7 +76,7 @@ collection-of-`T` combination nothing has registered fails with a clear "unregis
 A CNA game can register its own custom, non-built-in `.xnb` reader — no CNA-side involvement or
 special-casing needed. `ContentTypeReaderManager::AddTypeCreator()` (already public/`NOXNA`) is the
 extension point, matching FNA's own real internal method of the same name/shape and playing the
-same role `.cnb`'s `RegisterCnbLoader<T>()` plays for CNA's JSON-based format:
+same role `.cnj`'s `RegisterCnjLoader<T>()` plays for CNA's JSON-based format:
 
 ```cpp
 class MyLevelDataReader : public Microsoft::Xna::Framework::Content::ContentTypeReader<MyLevelData>
@@ -97,7 +97,7 @@ ContentTypeReaderManager::AddTypeCreator(
 ```
 
 Then `content.Load<MyLevelData>("level1")` works exactly like any built-in type, going through the
-same `.xnb` → literal path → `.cnb` resolution order. See
+same `.xnb` → literal path → `.cnj` resolution order. See
 `tests/Microsoft/Xna/Framework/Content/CustomContentTypeReaderTests.cpp` for a complete, runnable
 example (including the correct canonical-name string a real `.xnb` file compiled against your
 custom `ContentTypeWriter` would reference).
@@ -122,7 +122,7 @@ game-specific name at all — instead the file just names the target type direct
 **CNA decision**: only the explicit, named-reader path is supported. CNA has no runtime reflection
 of the kind `ReflectiveReader<T>` needs (walking arbitrary field lists by name/type at load time),
 and implementing a general reflection-driven fallback is out of scope — this mirrors the same
-explicit-registration-only decision `.cnb`'s `RegisterCnbLoader<T>` already made for CNA's own
+explicit-registration-only decision `.cnj`'s `RegisterCnjLoader<T>` already made for CNA's own
 format. A `.xnb` file whose content pipeline used an implicit `ReflectiveReader<T>` for some type
 cannot be loaded by CNA at all today.
 
@@ -195,7 +195,7 @@ adversarial/negative declared element count before allocating/reserving
 type-reader table now surfaces as the same `ContentLoadException` every other malformed-input case
 uses, instead of leaking `XnbTypeName`'s own lower-level `std::invalid_argument`.
 
-`BinaryReader::ReadString()`/`ReadBytes(int)` (in `sharp-runtime`, used by every `.xnb`/`.cnb`
+`BinaryReader::ReadString()`/`ReadBytes(int)` (in `sharp-runtime`, used by every `.xnb`/`.cnj`
 reader) were also hardened: a seekable stream's own remaining length now bounds the eager
 allocation both methods used to make directly from an attacker-controlled length/count prefix,
 closing an allocation-bomb vector (a single 5-byte 7-bit-encoded prefix can declare up to ~2GB)

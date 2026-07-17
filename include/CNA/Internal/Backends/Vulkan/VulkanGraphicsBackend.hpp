@@ -668,6 +668,12 @@ namespace CNA::Internal::Backends::Vulkan
         explicit VulkanGraphicsBackend(SDL_Window* window, int multiSampleCount = 1, int swapInterval = 1);
         ~VulkanGraphicsBackend() override;
 
+        // AnisotropicFiltering/WireFrame reflect real, already-cached device feature queries
+        // (anisotropySupported_/fillModeNonSolidSupported_, both set once at device creation).
+        // Everything else CNA::GraphicsCapability currently enumerates is genuinely supported
+        // here, so falls through to the shared default (true).
+        [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
+
         void Clear(float r, float g, float b, float a) override;
         void Present() override;
         void GetViewportSize(int& width, int& height) override;
@@ -952,11 +958,58 @@ namespace CNA::Internal::Backends::Vulkan
         // Vertex binding=0: per-vertex VERTEX rate; binding=1: per-instance INSTANCE rate (stride=64).
         std::unordered_map<PipelineKey, VkPipeline, PipelineKeyHash> pipelinesInstanced3D_;
 
+        // PbrEffect resources (unskinned, stride 48: VertexPositionNormalTangentTexture).
+        // 5 combined image samplers (baseColor@0, normalMap@1, metallicRoughnessMap@2,
+        // emissiveMap@3, occlusionMap@4) + 1 dynamic UBO (PbrParams@5, world/lights1-2/emissive/
+        // eyePos/metallic-roughness/fog -- everything FillExtPushConst's 128-byte PC has no room
+        // for), mirroring descriptorSetLayoutSkinned_'s sampler+dynamic-UBO shape.
+        VkDescriptorSetLayout descriptorSetLayoutPbr_ = VK_NULL_HANDLE;
+        VkDescriptorPool      descriptorPoolPbr_      = VK_NULL_HANDLE;
+        VkPipelineLayout      pipelineLayoutPbr3D_    = VK_NULL_HANDLE;
+        std::unordered_map<PipelineKey, VkPipeline, PipelineKeyHash>             pipelinesPbr3D_;
+        std::array<std::unordered_map<uint64_t, VkDescriptorSet>,
+                   MaxFramesInFlight>                        pbrDescSets_;
+        static constexpr uint32_t kPbrUBOStride   = 256; // 192 bytes used (48 floats), padded to 256
+        static constexpr uint32_t kPbrUBOMaxDraws = 512;
+        std::array<VkBuffer,       MaxFramesInFlight> pbrUBO_    = {};
+        std::array<VkDeviceMemory, MaxFramesInFlight> pbrUBOMem_ = {};
+        std::array<void*,          MaxFramesInFlight> pbrUBOPtr_ = {};
+
+        // SkinnedPbrEffect resources (PBR + skinning combo, stride 68:
+        // VertexPositionNormalTangentTextureSkinned). Same 5 samplers as descriptorSetLayoutPbr_
+        // above, plus a dynamic bone-palette UBO (binding=5, same shape as
+        // descriptorSetLayoutSkinned_'s own BoneBlock) and a PbrParams dynamic UBO at binding=6
+        // (WeightsPerVertex packed into its own fogStartEnd_weights.z field, mirroring
+        // skinned3d.vert.glsl's fog.eyePos_pad.w packing trick).
+        VkDescriptorSetLayout descriptorSetLayoutPbrSkinned_ = VK_NULL_HANDLE;
+        VkDescriptorPool      descriptorPoolPbrSkinned_      = VK_NULL_HANDLE;
+        VkPipelineLayout      pipelineLayoutPbrSkinned3D_    = VK_NULL_HANDLE;
+        std::unordered_map<PipelineKey, VkPipeline, PipelineKeyHash>             pipelinesPbrSkinned3D_;
+        std::array<std::unordered_map<uint64_t, VkDescriptorSet>,
+                   MaxFramesInFlight>                        pbrSkinnedDescSets_;
+        static constexpr uint32_t kPbrSkinnedBoneUBOStride   = 4608; // 72×64, multiple of 256
+        static constexpr uint32_t kPbrSkinnedBoneUBOMaxDraws = 32;
+        std::array<VkBuffer,       MaxFramesInFlight> pbrSkinnedBoneUBO_    = {};
+        std::array<VkDeviceMemory, MaxFramesInFlight> pbrSkinnedBoneUBOMem_ = {};
+        std::array<void*,          MaxFramesInFlight> pbrSkinnedBoneUBOPtr_ = {};
+        static constexpr uint32_t kPbrSkinnedUBOStride   = 256; // 192 bytes used (48 floats), padded to 256
+        static constexpr uint32_t kPbrSkinnedUBOMaxDraws = 32;
+        std::array<VkBuffer,       MaxFramesInFlight> pbrSkinnedUBO_    = {};
+        std::array<VkDeviceMemory, MaxFramesInFlight> pbrSkinnedUBOMem_ = {};
+        std::array<void*,          MaxFramesInFlight> pbrSkinnedUBOPtr_ = {};
+
         // Default 1×1 white texture used when DrawPrimitivesEx has no texture bound.
         VkImage               defaultWhiteImage_     = VK_NULL_HANDLE;
         VkDeviceMemory        defaultWhiteMemory_    = VK_NULL_HANDLE;
         VkImageView           defaultWhiteView_      = VK_NULL_HANDLE;
         VkDescriptorSet       defaultWhiteDescSet_   = VK_NULL_HANDLE;
+
+        // Default 1×1 "flat" tangent-space normal texture (128,128,255,255 -> decodes to
+        // (0,0,1)) used when a PbrEffect/SkinnedPbrEffect draw has no NormalMap bound, mirroring
+        // EasyGLGraphicsBackend::EnsureDefaultFlatNormalTexture()'s own fallback semantics.
+        VkImage               defaultFlatNormalImage_  = VK_NULL_HANDLE;
+        VkDeviceMemory        defaultFlatNormalMemory_ = VK_NULL_HANDLE;
+        VkImageView            defaultFlatNormalView_  = VK_NULL_HANDLE;
 
         // --- Sprite batch GPU buffers (host-visible, one per frame-in-flight) ---
         std::array<VkBuffer,       MaxFramesInFlight> spriteVB_    = {};
@@ -1037,6 +1090,16 @@ namespace CNA::Internal::Backends::Vulkan
             // eyePosition_pad, specularColor_specularPower, light0/1/2Specular_pad (4 more vec4).
             // 60 floats = 240 bytes, still under kSkinnedFogUBOStride=256.
             float                   skinnedFogUboData[60] = {};
+            bool                    usePbr            = false; // true = Pbr3D pipeline (unskinned)
+            bool                    usePbrSkinned     = false; // true = PbrSkinned3D pipeline (combo)
+            VkDescriptorSet         pbrDescSet        = VK_NULL_HANDLE; // 5-sampler set
+            // PbrParams UBO layout (floats), matching pbr3d.vert/frag.glsl's and
+            // pbr3d_skinned.vert/frag.glsl's own struct exactly: [0..15]=light1/2 dir+diffuse (4
+            // vec4), [16..31]=world mat4, [32..35]=eyePos+metallicFactor, [36..39]=emissive+
+            // roughnessFactor, [40..43]=fogColor+fogEnabled, [44]=fogStart, [45]=fogEnd,
+            // [46]=weightsPerVertex (usePbrSkinned only, 0 otherwise), [47]=unused. 48 floats =
+            // 192 bytes, under kPbrUBOStride=256. usePbrSkinned also reuses boneMatrices above.
+            float                   pbrUboData[48]    = {};
             bool                    useLitTextured    = false; // true = LitTextured3D pipeline (Task 897)
             // Task 1103: true = select the PreferPerPixelLighting=false (XNA's real default)
             // per-vertex-lit pipeline sibling instead of the (historically always-selected)
@@ -1254,7 +1317,11 @@ namespace CNA::Internal::Backends::Vulkan
         // SkinnedEffect
         void       EnsureSkinnedResources();
         VkDescriptorSet GetOrCreateSkinnedDescSet(uint32_t frameIdx, VkImageView view2D);
-        VkPipeline GetOrCreatePipelineSkinned3D(VkPrimitiveTopology,
+        // `stride` selects the vertex layout/shader variant: 52 = VertexPositionNormalTextureSkinned
+        // (no per-vertex color), 56 = the same layout with a per-vertex Color appended (CNB-67 /
+        // SkinnedEffect::VertexColorEnabled) -- mirrors GetOrCreatePipelineDualTex3D's own
+        // stride-selects-shader-variant convention.
+        VkPipeline GetOrCreatePipelineSkinned3D(std::size_t stride, VkPrimitiveTopology,
                                                  bool depthTest, bool depthWrite,
                                                  bool blend, int cullMode,
                                                  uint32_t colorAttachmentCount, bool wireframe,
@@ -1264,16 +1331,47 @@ namespace CNA::Internal::Backends::Vulkan
         // Task 1103: PreferPerPixelLighting=false sibling of GetOrCreatePipelineSkinned3D above
         // (real per-vertex/Gouraud lighting, XNA's own default) — same signature/layout, different
         // shader modules and pipeline cache only.
-        VkPipeline GetOrCreatePipelineSkinned3DVertexLit(VkPrimitiveTopology,
+        VkPipeline GetOrCreatePipelineSkinned3DVertexLit(std::size_t stride, VkPrimitiveTopology,
                                                  bool depthTest, bool depthWrite,
                                                  bool blend, int cullMode,
                                                  uint32_t colorAttachmentCount, bool wireframe,
                                                  bool msaa, const DepthStencilKeyParams& dsParams = {},
                                          const BlendKeyParams& blendParams = {},
                                          VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED);
+        // PbrEffect (unskinned, stride 48) / SkinnedPbrEffect (PBR + skinning combo, stride 68).
+        // Metallic-roughness BRDF ported from EasyGLGraphicsBackend::EnsurePbrProgram()/
+        // EnsurePbrSkinnedProgram() unchanged; only the resource-binding plumbing differs.
+        void       EnsurePbrResources();
+        VkDescriptorSet GetOrCreatePbrDescSet(uint32_t frameIdx, VkImageView baseColor,
+                                               VkImageView normalMap, VkImageView metallicRoughness,
+                                               VkImageView emissive, VkImageView occlusion);
+        VkPipeline GetOrCreatePipelinePbr3D(VkPrimitiveTopology,
+                                             bool depthTest, bool depthWrite,
+                                             bool blend, int cullMode,
+                                             uint32_t colorAttachmentCount, bool wireframe,
+                                             bool msaa, const DepthStencilKeyParams& dsParams = {},
+                                         const BlendKeyParams& blendParams = {},
+                                         VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED);
+        void       EnsurePbrSkinnedResources();
+        VkDescriptorSet GetOrCreatePbrSkinnedDescSet(uint32_t frameIdx, VkImageView baseColor,
+                                                      VkImageView normalMap, VkImageView metallicRoughness,
+                                                      VkImageView emissive, VkImageView occlusion);
+        VkPipeline GetOrCreatePipelinePbrSkinned3D(VkPrimitiveTopology,
+                                             bool depthTest, bool depthWrite,
+                                             bool blend, int cullMode,
+                                             uint32_t colorAttachmentCount, bool wireframe,
+                                             bool msaa, const DepthStencilKeyParams& dsParams = {},
+                                         const BlendKeyParams& blendParams = {},
+                                         VkFormat targetDepthFmt = VK_FORMAT_UNDEFINED);
         void       EnsureDefaultWhiteTexture();
+        void       EnsureDefaultFlatNormalTexture();
         void       FillExtPushConst(float (&pc)[32], const Matrix& wvp, const GpuDrawParams& p);
         void       FillAlphaTestPushConst(float (&pc)[32], const Matrix& wvp, const GpuDrawParams& p);
+        // Fills the 48-float PbrParams UBO layout shared by pbr3d.vert/frag.glsl and
+        // pbr3d_skinned.vert/frag.glsl (see Pending3DDraw::pbrUboData's own layout comment).
+        // weightsPerVertex is only meaningful for the pbr+skinned combo (stride 68); pass 0 for
+        // the unskinned PbrEffect path (stride 48), where it's unused.
+        void       FillPbrUboData(float (&out)[48], const GpuDrawParams& p, float weightsPerVertex);
         // BasicEffect lit-textured path (Task 897) — DirectionalLight1/2 + EmissiveColor,
         // forwarded via a small UBO (set=0,binding=1) alongside the unchanged 128-byte PC
         // (set=0,binding=0 stays the texture sampler; PC content unchanged from FillExtPushConst).

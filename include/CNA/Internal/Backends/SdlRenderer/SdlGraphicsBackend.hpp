@@ -139,9 +139,16 @@ namespace CNA::Internal::Backends::SdlRenderer
 
         SDL_BlendMode blendMode_ = SDL_BLENDMODE_BLEND;
 
-        // 3D pipeline: NOT supported by the SDL_Renderer backend.
-        // @note Status: STUB. Every entry point throws std::runtime_error.
+        // 3D pipeline: NOT supported by the SDL_Renderer backend. Every entry point below
+        // unconditionally throws std::runtime_error. SupportsCapability() lets callers check
+        // ahead of time instead of relying on the throw -- see CNA::GraphicsCapability.
         [[nodiscard]] bool SupportsDepthStencil() const override { return false; }
+        [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability /*capability*/) const override
+        {
+            // 2D-only by design (Tasks 720-729's own exhaustive audit): none of the capabilities
+            // CNA::GraphicsCapability currently enumerates are supported on this backend.
+            return false;
+        }
         void ClearColorAndDepth(float r, float g, float b, float a, float depth) override;
         void ClearDepth(float depth) override;
         void ClearStencil(int stencil) override;

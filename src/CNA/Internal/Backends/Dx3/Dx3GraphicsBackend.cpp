@@ -30,6 +30,8 @@ namespace CNA::Internal::Backends::Dx3
         }
 
         // ---- 3D pipeline: DirectDraw is 2D-only. All 3D calls throw. ----
+        // Callers can check GraphicsDevice::SupportsCapability(GraphicsCapability::ThreeD) ahead
+        // of time instead of relying on this throw -- see SupportsCapability() in the header.
         [[noreturn]] void ThrowNo3D(const char* methodName)
         {
             throw std::runtime_error(std::string("DX3 (DirectDraw) does not support 3D: ") + methodName);

@@ -307,8 +307,8 @@ protected:
 
         WriteFile(root / "se.vert.glsl", kVertSrc);
         WriteFile(root / "se.frag.glsl", kFragSrc);
-        WriteFile(root / "se.cnb", R"({
-  "cnbVersion": 1,
+        WriteFile(root / "se.cnj", R"({
+  "cnjVersion": 1,
   "type": "Effect",
   "vertex": "se.vert.glsl",
   "fragment": "se.frag.glsl"
@@ -404,7 +404,7 @@ protected:
         auto* fx = dynamic_cast<ShaderEffect*>(fxBase_.get());
         if (!fx || !fx->IsEffectValid())
         {
-            std::printf("[FAIL] EasyGLShatterEffect: .cnb load or GLSL compile failed\n");
+            std::printf("[FAIL] EasyGLShatterEffect: .cnj load or GLSL compile failed\n");
             Exit();
             return;
         }
