@@ -3,12 +3,15 @@
 #include <gtest/gtest.h>
 
 #include "CNA/Internal/Net/ENetBackend.hpp"
+#include "CNA/Internal/Net/ENetDiscoveryService.hpp"
 #include "CNA/Internal/Net/ENetHostHandle.hpp"
 #include "CNA/Internal/Net/NetPacketCodec.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
+#include "Microsoft/Xna/Framework/Net/AvailableNetworkSession.hpp"
 #include "Microsoft/Xna/Framework/Net/GameStartedEventArgs.hpp"
 #include "Microsoft/Xna/Framework/Net/GamerJoinedEventArgs.hpp"
 #include "Microsoft/Xna/Framework/Net/GamerLeftEventArgs.hpp"
+#include "Microsoft/Xna/Framework/Net/HostChangedEventArgs.hpp"
 #include "Microsoft/Xna/Framework/Net/LocalNetworkGamer.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkGamer.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkSession.hpp"
@@ -25,6 +28,7 @@ using Microsoft::Xna::Framework::GamerServices::SignedInGamer;
 using Microsoft::Xna::Framework::Net::GameStartedEventArgs;
 using Microsoft::Xna::Framework::Net::GamerJoinedEventArgs;
 using Microsoft::Xna::Framework::Net::GamerLeftEventArgs;
+using Microsoft::Xna::Framework::Net::HostChangedEventArgs;
 using Microsoft::Xna::Framework::Net::LocalNetworkGamer;
 using Microsoft::Xna::Framework::Net::NetworkGamer;
 using Microsoft::Xna::Framework::Net::NetworkSession;
@@ -727,11 +731,12 @@ TEST(ENetBackendTest, ClientRaisesSessionEndedOnHostDisconnect) {
     }
     ASSERT_NE(clientPeerFromHostSide, nullptr);
 
-    // Task 2.6: AllowHostMigration is stored but has no effect on actual behavior (matching FNA's
-    // own reference implementation, itself a plain auto-property with no real migration logic
-    // anywhere in FNA's stubbed-out networking layer) - HandleDisconnect below unconditionally
-    // ends the session regardless of this flag; this test proves that documented behavior rather
-    // than letting a future reader assume setting it to true silently, secretly works.
+    // Task 5.2/5.3 (plan_net.md Phase 5): AllowHostMigration now has a real effect in general (see
+    // the tests below), but this specific scenario never completes a real ServerWelcome handshake
+    // - client.session's own WireIdToGamer stays empty, so AttemptHostMigration has no roster to
+    // find a survivor in and correctly falls back to the exact same immediate-end behavior as
+    // AllowHostMigration=false. Setting it true here (rather than testing the disabled default)
+    // proves that fallback explicitly, instead of only ever exercising it by accident.
     client.session->setAllowHostMigrationProperty(true);
 
     int endedCount = 0;
@@ -751,6 +756,198 @@ TEST(ENetBackendTest, ClientRaisesSessionEndedOnHostDisconnect) {
     EXPECT_EQ(endedCount, 1);
     EXPECT_EQ(observedReason, NetworkSessionEndReason::HostEndedSession);
     EXPECT_EQ(client.session->getSessionStateProperty(), NetworkSessionState::Ended);
+}
+
+// --- Task 5.2/5.3/5.4: real host migration (plan_net.md Phase 5) ---
+
+// Task 5.4: the regression case ClientRaisesSessionEndedOnHostDisconnect above can't actually
+// cover, since its own handshake never completes far enough to give AttemptHostMigration a real
+// survivor to consider - this one does (a real ServerWelcome roster with another known gamer), so
+// AllowHostMigration=false is proven to keep ending the session immediately even when migration
+// would otherwise have a real decision to make.
+TEST(ENetBackendTest, AllowHostMigrationFalseStillEndsSessionImmediatelyWithARealSurvivorKnown) {
+    ENetHostHandle fakeHost = ENetHostHandle::CreateHost(kFakeHostTestPort, 4, 2);
+    uint16_t fakeHostPort = fakeHost.getBoundPortProperty();
+    ASSERT_GT(fakeHostPort, 0);
+
+    SystemLinkSessionFixture client("ClientPlayer");
+    // Explicit default - AllowHostMigration is false unless a caller opts in.
+    ASSERT_FALSE(client.session->getAllowHostMigrationProperty());
+    ENetBackend::ConnectToHost(client.session, "127.0.0.1", fakeHostPort);
+
+    ENetPeer* clientPeerFromHostSide = nullptr;
+    for (int i = 0; i < 200 && !clientPeerFromHostSide; ++i, PollYield()) {
+        client.session->Update();
+        ENetEvent evt{};
+        if (fakeHost.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_CONNECT) {
+            clientPeerFromHostSide = evt.peer;
+        }
+    }
+    ASSERT_NE(clientPeerFromHostSide, nullptr);
+
+    ServerWelcomeMessage welcome;
+    welcome.AssignedWireIds = {5};
+    welcome.ExistingRoster = {RosterEntry{0, "HostPlayer", true}, RosterEntry{2, "OtherSurvivor", false}};
+    auto welcomeBytes = NetPacketCodec::Encode(welcome);
+    fakeHost.Send(clientPeerFromHostSide, 0, welcomeBytes.data(), welcomeBytes.size(), ENET_PACKET_FLAG_RELIABLE);
+    fakeHost.Flush();
+
+    for (int i = 0; i < 200 && client.session->getAllGamersProperty().getCountProperty() < 3; ++i, PollYield()) {
+        client.session->Update();
+    }
+    ASSERT_EQ(client.session->getAllGamersProperty().getCountProperty(), 3);
+
+    int endedCount = 0;
+    NetworkSessionEndReason observedReason = NetworkSessionEndReason::ClientSignedOut;
+    client.session->SessionEnded += [&](System::Object*, const NetworkSessionEndedEventArgs& e) {
+        ++endedCount;
+        observedReason = e.getEndReasonProperty();
+    };
+    int hostChangedCount = 0;
+    client.session->HostChanged += [&](System::Object*, const HostChangedEventArgs&) { ++hostChangedCount; };
+
+    fakeHost.Disconnect(clientPeerFromHostSide, 0);
+    fakeHost.Flush();
+
+    for (int i = 0; i < 200 && endedCount == 0; ++i, PollYield()) {
+        client.session->Update();
+    }
+
+    EXPECT_EQ(endedCount, 1);
+    EXPECT_EQ(observedReason, NetworkSessionEndReason::HostEndedSession);
+    EXPECT_EQ(hostChangedCount, 0);
+    EXPECT_EQ(client.session->getSessionStateProperty(), NetworkSessionState::Ended);
+}
+
+TEST(ENetBackendTest, ClientPromotesItselfWhenItIsTheOnlyKnownSurvivor) {
+    ENetHostHandle fakeHost = ENetHostHandle::CreateHost(kFakeHostTestPort, 4, 2);
+    uint16_t fakeHostPort = fakeHost.getBoundPortProperty();
+    ASSERT_GT(fakeHostPort, 0);
+
+    SystemLinkSessionFixture client("ClientPlayer");
+    client.session->setAllowHostMigrationProperty(true);
+    ENetBackend::ConnectToHost(client.session, "127.0.0.1", fakeHostPort);
+
+    ENetPeer* clientPeerFromHostSide = nullptr;
+    for (int i = 0; i < 200 && !clientPeerFromHostSide; ++i, PollYield()) {
+        client.session->Update();
+        ENetEvent evt{};
+        if (fakeHost.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_CONNECT) {
+            clientPeerFromHostSide = evt.peer;
+        }
+    }
+    ASSERT_NE(clientPeerFromHostSide, nullptr);
+
+    // ConnectToHost's own StartHosting call always registers this session for discovery too, even
+    // while it's purely playing "client" - unregister first so the "discoverable after promotion"
+    // check below genuinely proves the *new* RegisterHost call AttemptHostMigration makes, not
+    // this pre-existing side effect.
+    ENetDiscoveryService::UnregisterHost(client.session);
+    for (const auto& candidate : ENetDiscoveryService::FindSessions(NetworkSessionType::SystemLink)) {
+        ASSERT_NE(candidate.GetConnectPort(), ENetBackend::GetBoundPort(client.session));
+    }
+
+    // Only the host is known - once it dies, the client's own local gamer is the sole survivor and
+    // must deterministically promote itself (trivially the "lowest remaining wire id").
+    ServerWelcomeMessage welcome;
+    welcome.AssignedWireIds = {5};
+    welcome.ExistingRoster = {RosterEntry{0, "HostPlayer", true}};
+    auto welcomeBytes = NetPacketCodec::Encode(welcome);
+    fakeHost.Send(clientPeerFromHostSide, 0, welcomeBytes.data(), welcomeBytes.size(), ENET_PACKET_FLAG_RELIABLE);
+    fakeHost.Flush();
+
+    for (int i = 0; i < 200 && client.session->getAllGamersProperty().getCountProperty() < 2; ++i, PollYield()) {
+        client.session->Update();
+    }
+    ASSERT_EQ(client.session->getAllGamersProperty().getCountProperty(), 2);
+
+    int hostChangedCount = 0;
+    NetworkGamer* observedNewHost = nullptr;
+    client.session->HostChanged += [&](System::Object*, const HostChangedEventArgs& e) {
+        ++hostChangedCount;
+        observedNewHost = e.getNewHostProperty();
+    };
+    int endedCount = 0;
+    client.session->SessionEnded += [&](System::Object*, const NetworkSessionEndedEventArgs&) { ++endedCount; };
+
+    fakeHost.Disconnect(clientPeerFromHostSide, 0);
+    fakeHost.Flush();
+
+    for (int i = 0; i < 200 && hostChangedCount == 0; ++i, PollYield()) {
+        client.session->Update();
+    }
+
+    EXPECT_EQ(hostChangedCount, 1);
+    EXPECT_EQ(endedCount, 0);
+    EXPECT_EQ(observedNewHost, client.session->getLocalGamersProperty()[0]);
+    // Task 5.1's "rebuilt from scratch, not preserved" scope note: the stale remote "HostPlayer"
+    // gamer is really gone (a real GamerLeave, not just superseded bookkeeping).
+    EXPECT_EQ(client.session->getAllGamersProperty().getCountProperty(), 1);
+
+    // The real proof this is a genuine promotion, not just local flag-flipping: this session is
+    // now really discoverable at its own bound port, exactly like any other real SystemLink host.
+    bool foundSelf = false;
+    for (const auto& candidate : ENetDiscoveryService::FindSessions(NetworkSessionType::SystemLink)) {
+        if (candidate.GetConnectPort() == ENetBackend::GetBoundPort(client.session)) {
+            foundSelf = true;
+        }
+    }
+    EXPECT_TRUE(foundSelf);
+}
+
+// Task 5.3: proves the tie-break math itself (excluding the dead host, picking the true minimum
+// remaining wire id) rather than a full cross-process reconnect, which needs a second real
+// NetworkSession to reconnect to - see plan_net.md Task 5.1's own note on why that's covered by
+// the multi-process harness instead (Task 5.5), not here.
+TEST(ENetBackendTest, ClientTargetsTheLowestSurvivingWireIdInsteadOfPromotingItself) {
+    ENetHostHandle fakeHost = ENetHostHandle::CreateHost(kFakeHostTestPort, 4, 2);
+    uint16_t fakeHostPort = fakeHost.getBoundPortProperty();
+    ASSERT_GT(fakeHostPort, 0);
+
+    SystemLinkSessionFixture client("ClientPlayer");
+    client.session->setAllowHostMigrationProperty(true);
+    ENetBackend::ConnectToHost(client.session, "127.0.0.1", fakeHostPort);
+
+    ENetPeer* clientPeerFromHostSide = nullptr;
+    for (int i = 0; i < 200 && !clientPeerFromHostSide; ++i, PollYield()) {
+        client.session->Update();
+        ENetEvent evt{};
+        if (fakeHost.Service(0, evt) > 0 && evt.type == ENET_EVENT_TYPE_CONNECT) {
+            clientPeerFromHostSide = evt.peer;
+        }
+    }
+    ASSERT_NE(clientPeerFromHostSide, nullptr);
+
+    // The client's own local gamer gets wire id 5; "OtherSurvivor" (id 2) has a lower id than the
+    // client but is not the dying host (id 0) - it, not the client, must be the deterministic
+    // choice.
+    ServerWelcomeMessage welcome;
+    welcome.AssignedWireIds = {5};
+    welcome.ExistingRoster = {RosterEntry{0, "HostPlayer", true}, RosterEntry{2, "OtherSurvivor", false}};
+    auto welcomeBytes = NetPacketCodec::Encode(welcome);
+    fakeHost.Send(clientPeerFromHostSide, 0, welcomeBytes.data(), welcomeBytes.size(), ENET_PACKET_FLAG_RELIABLE);
+    fakeHost.Flush();
+
+    for (int i = 0; i < 200 && client.session->getAllGamersProperty().getCountProperty() < 3; ++i, PollYield()) {
+        client.session->Update();
+    }
+    ASSERT_EQ(client.session->getAllGamersProperty().getCountProperty(), 3);
+
+    fakeHost.Disconnect(clientPeerFromHostSide, 0);
+    fakeHost.Flush();
+
+    // No real "OtherSurvivor" session is discoverable in this single-process test (see the test's
+    // own top comment) - AttemptHostMigration correctly gives up and falls back to ending the
+    // session, but only *after* recording the gamertag it actually targeted, proving the tie-break
+    // math itself picked "OtherSurvivor" (id 2), not the dead host (id 0) or itself (id 5).
+    int endedCount = 0;
+    client.session->SessionEnded += [&](System::Object*, const NetworkSessionEndedEventArgs&) { ++endedCount; };
+    for (int i = 0; i < 200 && endedCount == 0; ++i, PollYield()) {
+        client.session->Update();
+    }
+
+    EXPECT_EQ(endedCount, 1);
+    EXPECT_EQ(ENetBackend::GetLastMigrationReconnectAttemptGamertagForTesting(client.session), "OtherSurvivor");
 }
 
 // Task 2.7: incoming ClientHello was previously accepted unconditionally regardless of

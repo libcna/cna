@@ -153,11 +153,22 @@ namespace Microsoft::Xna::Framework::Net
         /**
          * @brief Gets whether host migration is allowed.
          *
-         * Implementation note: this flag is stored but has no effect on actual behavior, matching
-         * FNA's own reference implementation (a plain auto-property with no real migration logic
-         * anywhere in FNA's stubbed-out networking layer). Setting this to true does not enable
-         * host election: `ENetBackend::HandleDisconnect` unconditionally ends the session the
-         * instant its host peer disconnects, with no election logic, regardless of this flag.
+         * Task 5.1-5.4 (plan_net.md Phase 5): real, local-only implementation - `false` (the
+         * default) keeps FNA's own reference behavior exactly (`ENetBackend::HandleDisconnect`
+         * unconditionally ends the session the instant its host peer disconnects). `true` enables
+         * a real, full-reconnect migration instead: every surviving peer independently computes
+         * the same deterministic new host (the lowest remaining wire id - no election round-trip
+         * needed, since every peer already knows the roster) and either promotes itself (if it's
+         * the chosen peer) or reconnects to the promoted peer via a real LAN discovery search (the
+         * same mechanism `Find()` uses - a star topology gives surviving clients no direct channel
+         * to each other, and the old host obviously can't relay anything either). This is not
+         * FNA's own behavior (FNA's `AllowHostMigration` is a stored-but-inert auto-property, no
+         * migration logic exists anywhere in its stubbed-out networking layer) - see
+         * `ENetBackend.cpp`'s `AttemptHostMigration` for the full implementation, and this
+         * property's own scope note: reconnecting/promoted peers get their remote-gamer roster
+         * rebuilt from scratch (fresh `NetworkGamer*` identities, real `GamerLeave`+`GamerJoin`
+         * events), not preserved across the migration - a full reconnect, not a seamless live
+         * migration of existing sockets.
          *
          * @return true if host migration is allowed.
          */
@@ -166,9 +177,8 @@ namespace Microsoft::Xna::Framework::Net
         /**
          * @brief Sets whether host migration is allowed.
          *
-         * Implementation note: see getAllowHostMigrationProperty()'s doc comment - this value is
-         * stored, but real host migration is not implemented (matching FNA's own reference
-         * behavior).
+         * Implementation note: see getAllowHostMigrationProperty()'s doc comment for the real
+         * migration behavior this now enables.
          *
          * @param value The new value.
          */

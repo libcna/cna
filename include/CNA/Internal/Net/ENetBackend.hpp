@@ -177,6 +177,21 @@ namespace CNA::Internal::Net
         static std::size_t GetSessionCountForTesting();
 
         /**
+         * @brief Task 5.5: the gamertag `AttemptHostMigration` most recently decided the new host
+         * must be, the last time session lost its host connection and this peer itself was *not*
+         * the deterministically-chosen new host.
+         *
+         * Exists purely to make the tie-break math (excluding the dead host, picking the true
+         * minimum remaining wire id) testable in a single process, where a second real
+         * `NetworkSession` to actually reconnect to can't exist. Not part of real XNA.
+         *
+         * @param session The session to query.
+         * @return The gamertag, or an empty string if no such migration attempt has happened yet
+         * (or session has no registered transport).
+         */
+        static std::string GetLastMigrationReconnectAttemptGamertagForTesting(NetworkSession* session);
+
+        /**
          * @brief Broadcasts a session state change (StartGame/EndGame) to every connected peer.
          *
          * No-op if RealNetworkingEnabled(session's type) is false, session has no registered

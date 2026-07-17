@@ -5,10 +5,12 @@
 #include "CNA/Internal/Net/ENetHostHandle.hpp"
 #include "CNA/Internal/Net/NetPacketCodec.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
+#include "Microsoft/Xna/Framework/Net/AvailableNetworkSession.hpp"
 #include "Microsoft/Xna/Framework/Net/LocalNetworkGamer.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkGamer.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkSession.hpp"
 
+#include <algorithm>
 #include <enet/enet.h>
 #include <memory>
 #include <stdexcept>
@@ -71,6 +73,18 @@ namespace CNA::Internal::Net
             // (TeardownSession erasing it from Sessions()), which already happens at the same time
             // NetworkSession::Dispose() frees everything *it* owns.
             std::vector<std::unique_ptr<NetworkGamer>> OwnedRemoteGamers;
+            // Task 5.3 (plan_net.md Phase 5): set by AttemptHostMigration right before issuing the
+            // reconnect Connect() call, so the ServerWelcome that completes it (a genuine
+            // migration, not a plain fresh join) knows to raise NetworkEventType::HostChange once
+            // a real NetworkGamer* for the new host exists - see HandleServerWelcome.
+            bool AwaitingMigrationHostChangeEXT{false};
+            // Task 5.5: the gamertag AttemptHostMigration most recently decided the new host must
+            // be, whenever this peer wasn't that new host itself - set purely so the tie-break
+            // math (excluding the dead host, picking the true minimum remaining wire id) is
+            // testable in a single process, where a second real NetworkSession to actually
+            // reconnect to can't exist (see ENetBackendTests.cpp's own SystemLinkSessionFixture
+            // comment on why). Not part of real XNA.
+            std::string LastMigrationReconnectAttemptGamertagForTestingEXT;
         };
 
         // Task 2.13: process-wide, since SendAppData's silent-drop path (sender/target not yet in
@@ -256,6 +270,7 @@ namespace CNA::Internal::Net
                 locals[i]->SetId(id);
             }
 
+            NetworkGamer* welcomedHostGamer = nullptr;
             for (const RosterEntry& entry : welcome.ExistingRoster)
             {
                 if (state.WireIdToGamer.contains(entry.WireId))
@@ -272,6 +287,26 @@ namespace CNA::Internal::Net
                 // which remote gamer is the actual host here instead of always defaulting false.
                 gamer->SetIsHost(entry.IsHost);
                 session->AddRemoteGamer(gamer);
+                if (entry.IsHost)
+                {
+                    welcomedHostGamer = gamer;
+                }
+            }
+
+            // Task 5.3: this ServerWelcome completed a migration reconnect (AttemptHostMigration
+            // set the flag right before issuing the Connect() call, and always fully cleared
+            // WireIdToGamer first - see its own doc comment - so the host's own roster entry is
+            // guaranteed fresh here, never skipped by the `contains` check above).
+            if (state.AwaitingMigrationHostChangeEXT)
+            {
+                state.AwaitingMigrationHostChangeEXT = false;
+                if (welcomedHostGamer != nullptr)
+                {
+                    NetworkSession::NetworkEvent evt;
+                    evt.Type = NetworkSession::NetworkEventType::HostChange;
+                    evt.Gamer = welcomedHostGamer;
+                    session->SendNetworkEvent(std::move(evt));
+                }
             }
         }
 
@@ -356,10 +391,194 @@ namespace CNA::Internal::Net
             }
         }
 
+        // Task 5.1/5.2/5.3 (plan_net.md Phase 5): called from HandleDisconnect's host-lost branch
+        // when AllowHostMigration is true, instead of ending the session outright. Every survivor
+        // independently computes the same deterministic new host (lowest remaining wire id) from
+        // its own already-cached roster - no extra negotiation round-trip is needed, since every
+        // peer already learned the full roster via ServerWelcome/GamerJoinBroadcast. Returns true
+        // if a migration attempt was made (a real promotion, or a reconnect attempt was actually
+        // launched); false if the caller should fall back to the pre-existing immediate-
+        // session-end behavior (migration disabled, nobody left to migrate to, or no reachable new
+        // host was found - Task 5.1's documented "best-effort, not guaranteed" limitation, no
+        // retry loop here).
+        bool AttemptHostMigration(NetworkSession* session, SessionState& state)
+        {
+            if (!session->getAllowHostMigrationProperty())
+            {
+                return false;
+            }
+
+            // NetworkSession::getHostProperty() cannot be used here: host_ is only ever set to
+            // localGamers_[0] at construction (both for a real Create()-based host and for a real
+            // Join()-based client - see the constructor) and, before this task, was never updated
+            // to reflect an actual remote host afterward (NetworkEventType::HostChange existed but
+            // nothing ever enqueued it - see Task 5.1's own investigation notes). Find the dying
+            // host by its real IsHost flag instead - correctly maintained on every known gamer by
+            // HandleServerWelcome/HandleGamerJoinBroadcast per Task 4.6.
+            // Only ever matches a *remote* gamer: this peer just lost a connection it was the
+            // client of (peer == state.HostPeer, checked by the caller), so the dying host can
+            // never be one of this peer's own local gamers by construction - excluding locals also
+            // sidesteps a real, separate, pre-existing quirk where a NetworkSession constructed
+            // via Create() (unlike a real Join()) leaves its own local gamers' IsHost at whatever
+            // the constructor set, even after ConnectToHost turns it into a client (see
+            // ENetBackendTests.cpp's own SystemLinkSessionFixture comment).
+            uint8_t deadHostId = 0;
+            bool foundDeadHost = false;
+            for (const auto& [id, gamer] : state.WireIdToGamer)
+            {
+                if (!gamer->getIsLocalProperty() && gamer->getIsHostProperty())
+                {
+                    deadHostId = id;
+                    foundDeadHost = true;
+                    break;
+                }
+            }
+            if (!foundDeadHost)
+            {
+                return false; // handshake never completed far enough to even learn who the host was
+            }
+
+            std::vector<uint8_t> survivorIds;
+            for (const auto& [id, gamer] : state.WireIdToGamer)
+            {
+                if (id != deadHostId)
+                {
+                    survivorIds.push_back(id);
+                }
+            }
+            if (survivorIds.empty())
+            {
+                return false; // nothing left to migrate to (shouldn't happen - own locals survive)
+            }
+            uint8_t newHostId = *std::min_element(survivorIds.begin(), survivorIds.end());
+
+            bool selfIsNewHost = false;
+            for (LocalNetworkGamer* local : session->getLocalGamersProperty())
+            {
+                auto it = state.GamerToWireId.find(local);
+                if (it != state.GamerToWireId.end() && it->second == newHostId)
+                {
+                    selfIsNewHost = true;
+                    break;
+                }
+            }
+
+            // Still valid to read here - the shared cleanup below hasn't run yet.
+            std::string newHostGamertag;
+            if (!selfIsNewHost)
+            {
+                newHostGamertag = state.WireIdToGamer.at(newHostId)->getGamertagProperty();
+                state.LastMigrationReconnectAttemptGamertagForTestingEXT = newHostGamertag;
+            }
+
+            // Shared cleanup for both outcomes below: every remote gamer this peer knew about is
+            // really gone from its point of view now (real GamerLeave events - a reconnecting/
+            // promoted peer's roster genuinely gets rebuilt from scratch, not preserved across the
+            // migration - see plan_net.md Task 5.1's own "simple, not seamless" scope note), and
+            // every wire-id bookkeeping structure is reset so the handshake that follows (either
+            // accepting fresh reconnects as the new host, or this peer's own reconnect to whoever
+            // else was promoted) starts from a clean slate - stale entries from the dead host's own
+            // numbering would otherwise collide with freshly (re)assigned ids.
+            std::vector<NetworkGamer*> staleRemotes(
+                session->getRemoteGamersProperty().begin(), session->getRemoteGamersProperty().end()
+            );
+            for (NetworkGamer* gamer : staleRemotes)
+            {
+                session->RemoveGamer(gamer, NetworkSessionEndReason::Disconnected);
+            }
+            state.WireIdToGamer.clear();
+            state.GamerToWireId.clear();
+            state.PeerWireIds.clear();
+            state.WireIdToPeer.clear();
+            state.FreeWireIds.clear();
+            state.NextWireId = 0;
+            state.OwnedRemoteGamers.clear();
+            state.HostPeer = nullptr;
+
+            if (selfIsNewHost)
+            {
+                for (LocalNetworkGamer* local : session->getLocalGamersProperty())
+                {
+                    local->SetIsHost(true);
+                }
+                // Task 5.2: this peer's ENetHostHandle is already bound and running -
+                // ConnectToHost's own non-Emscripten path always calls StartHosting first, even
+                // for a pure client - so no new socket is needed to start accepting real incoming
+                // connections.
+                ENetDiscoveryService::RegisterHost(session, state.Host.getBoundPortProperty());
+
+                NetworkSession::NetworkEvent evt;
+                evt.Type = NetworkSession::NetworkEventType::HostChange;
+                evt.Gamer = session->getLocalGamersProperty()[0];
+                session->SendNetworkEvent(std::move(evt));
+                return true;
+            }
+
+            // Task 5.3: a star topology gives surviving clients no direct channel to each other,
+            // and the dead host obviously can't relay anything either - LAN rediscovery (the same
+            // mechanism NetworkSession::Find() already uses) is the only way left to learn the new
+            // host's address. Matches by gamertag - a pre-existing, honest limitation of this
+            // whole discovery layer (two same-gamertag hosts on one LAN are already ambiguous
+            // today), not a new gap host migration introduces.
+            //
+            // A few short attempts, not one: ENetDiscoveryService's own doc comments already
+            // acknowledge that which of several same-port-bound sockets actually *receives* a
+            // given datagram is OS-arbitrary when more than one process shares the discovery port
+            // (exactly the situation here - the newly-promoted peer's own RegisterHost call and
+            // this peer's FindSessions call can be landing at almost the same real wall-clock
+            // moment, across genuinely separate processes on a real multi-machine LAN). A single
+            // 150ms search window occasionally missing a reply it should have gotten is a real,
+            // acknowledged platform characteristic, not a bug this task can fix at the socket
+            // layer - retrying a handful of times (~150ms each, so still well under a second total
+            // even in the worst case) is the pragmatic mitigation, and it's free of cost for the
+            // common single-process case (an unregistered gamertag stays unregistered no matter
+            // how many times it's searched for, so this loop still exits after the first attempt
+            // there).
+            for (int attempt = 0; attempt < 3; ++attempt)
+            {
+                for (const AvailableNetworkSession& candidate
+                     : ENetDiscoveryService::FindSessions(session->getSessionTypeProperty()))
+                {
+                    if (candidate.getHostGamertagProperty() == newHostGamertag)
+                    {
+                        state.AwaitingMigrationHostChangeEXT = true;
+                        // state.Host.Connect(...) is called directly here rather than through the
+                        // public ENetBackend::ConnectToHost(session, ...) wrapper deliberately: on
+                        // Emscripten, that wrapper *replaces* Sessions()[session] outright (a
+                        // fresh client-only SessionState), which would leave this very function's
+                        // own `state` reference - and PumpSession's, still iterating its event
+                        // loop on the stack above this call - dangling for the rest of this pump.
+                        // Calling Connect() directly on the already-existing, already-bound host
+                        // handle reconnects to a new address without ever touching Sessions()
+                        // itself, safe on every platform (and functionally identical to the
+                        // wrapper's own non-Emscripten body once StartHosting's redundant no-op is
+                        // accounted for).
+                        state.HostPeer = state.Host.Connect(
+                            candidate.GetConnectAddress(), candidate.GetConnectPort(), kChannelLimit
+                        );
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
         void HandleDisconnect(NetworkSession* session, SessionState& state, ENetPeer* peer)
         {
             if (peer == state.HostPeer)
             {
+                // Task 5.2/5.3/5.4: migration replaces the old immediate-end behavior only when
+                // AllowHostMigration is true AND a real migration attempt could be launched (a
+                // promotion, or a reconnect to a discovered new host) - AttemptHostMigration
+                // itself falls back to false for every case that should still behave exactly as
+                // before (disabled, or no reachable new host), so this stays a pure branch, not a
+                // behavior change for the pre-existing default-off path.
+                if (AttemptHostMigration(session, state))
+                {
+                    return;
+                }
+
                 // We're a client and just lost our connection to the host: our own view of this
                 // session is over. RemoveGamer's isLocal branch raises a single session-wide
                 // SessionEnded event no matter which local gamer is passed (see its own doc
@@ -637,6 +856,16 @@ namespace CNA::Internal::Net
     std::size_t ENetBackend::GetSessionCountForTesting()
     {
         return Sessions().size();
+    }
+
+    std::string ENetBackend::GetLastMigrationReconnectAttemptGamertagForTesting(NetworkSession* session)
+    {
+        auto it = Sessions().find(session);
+        if (it == Sessions().end())
+        {
+            return {};
+        }
+        return it->second->LastMigrationReconnectAttemptGamertagForTestingEXT;
     }
 
     void ENetBackend::ConnectToHost(NetworkSession* session, const std::string& address, uint16_t port)

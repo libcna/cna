@@ -691,46 +691,201 @@ Current state confirmed in Phase 0:
   has none of this and would need to build it from scratch (it only knows the wire ids/gamers
   that were broadcast to it).
 
-- [ ] **Task 5.1** — Design the migration protocol (write this up in this plan before coding):
-  on host disconnect, if `AllowHostMigration` is true and at least one other gamer remains, the
-  surviving gamers deterministically agree on a new host **without any additional round-trip**
-  (default rule, per the "still-open micro-decisions" note: lowest remaining wire id becomes
-  host — every peer already has the same roster via existing `ServerWelcomeBroadcast`/
-  `GamerJoinBroadcast` messages, so this needs no negotiation). The new host must:
-  - start listening as a real ENet host (reuse `ENetBackend`'s existing host-start machinery),
-  - every other surviving peer must learn the new host's address/port and reconnect,
-  - the `0x05 HostChangeBroadcast` message (already reserved) carries the new host's identity/
-    endpoint to whichever peers can be reached before the old host's connections all drop.
-  Flag the concrete open engineering question this raises: in a star topology, non-host peers
-  currently only have a connection *to the host*, not to each other — a promoted host has no
-  pre-existing connections to migrate, so surviving clients need a genuine reconnect (a `Connect`
-  call, same code path `JoinInvited`/regular join already uses), not a live migration of existing
-  sockets. Confirm this is acceptable "simple" scope (matches the user's own "simple" qualifier)
-  before building anything fancier.
-- [ ] **Task 5.2** — Implement new-host promotion: the promoted client calls the same
-  `ENetBackend` host-start path a normal `Create` would use, transitions its local gamer's
-  `IsHost` via the existing `SetIsHost` (`NetworkGamer.hpp:97`), and re-registers session
-  discovery advertisement if applicable (SystemLink discovery — check `ENetDiscoveryService`'s
-  `RegisterHost`/`UnregisterHost` for how a mid-session host-address change should be surfaced).
-- [ ] **Task 5.3** — Implement surviving-peer reconnect-to-new-host path, raising
-  `HostChangedEventArgs` (already exists — `include/Microsoft/Xna/Framework/Net/HostChangedEventArgs.hpp`,
-  confirm it's currently unused/dead and wire it up here) instead of ending the session, when
-  `AllowHostMigration` is true.
-- [ ] **Task 5.4** — Preserve the existing behavior exactly when `AllowHostMigration` is false
-  (the current immediate-session-end path) — this must stay a pure branch, not a behavior change
-  for the default-off case. Add a test locking in the unchanged false-case behavior alongside the
-  new true-case tests.
-- [ ] **Task 5.5** — Add real two/three-peer integration tests (matching this codebase's existing
-  style of real ENet host+client(s) over loopback, not mocks): host disconnects mid-session with
-  `AllowHostMigration=true` and 2 remaining clients, confirm a real new host emerges, the
-  remaining client reconnects, and both can still exchange `AppData`. Add a 3-peer variant to
-  exercise the deterministic-lowest-wire-id tie-break rule concretely (not just 1-remaining-peer,
-  where there's no real choice to verify).
-- [ ] **Task 5.6** — Verify the bug/gap is real and the fix works via the standard revert-verify
-  cycle. Update `NetworkSession.hpp:158-170`'s doc comment (currently says migration is "not
-  implemented") to describe the real behavior.
-- [ ] **Task 5.7** — Update `examples/demo_session_lifecycle_events` and any other demo whose
-  behavior or comments assumed no migration.
+- [x] **Task 5.1** — Design investigated by reading `ENetBackend.cpp`, `NetworkSession.hpp`/`.cpp`,
+  `NetPacketCodec.hpp`, `HostChangedEventArgs.hpp`, `ENetDiscoveryService.hpp`/`.cpp`, the existing
+  `TwoProcessLoopbackTest.cpp`/`net_two_process_harness.cpp`, and `AvailableNetworkSession.hpp`.
+  Confirmed with the user (given the scope this uncovered) before writing code. Final design:
+
+  **Detection & branch point** — `ENetBackend.cpp`'s `HandleDisconnect`, the existing
+  `peer == state.HostPeer` branch. `AllowHostMigration == false` keeps today's exact behavior
+  (immediate `session->RemoveGamer(locals[0], HostEndedSession)`, unchanged — Task 5.4). `true`
+  calls a new `AttemptHostMigration(session, state)` helper instead.
+
+  **Deterministic promotion, computed independently by every survivor, no extra round-trip** —
+  every peer already knows the full roster (wire-id to gamertag, `IsHost`) via the existing
+  `ServerWelcome`/`GamerJoinBroadcast` messages, so no negotiation message is needed. Read the
+  dying host's wire id from `session->getHostProperty()->getIdProperty()` (still valid — `host_`
+  is only overwritten later, when `Update()` drains the `HostChange` event this helper enqueues).
+  New host = `min()` over every other known wire id. If that id belongs to one of *this* peer's
+  own local gamers, it promotes itself; otherwise, it must reconnect to whichever peer now owns
+  that id.
+
+  **Shared cleanup, both outcomes** — every currently-known remote `NetworkGamer` is removed from
+  the session via `RemoveGamer(gamer, NetworkSessionEndReason::Disconnected)` (real `GamerLeave`
+  events — a reconnecting/promoted peer's roster genuinely does get rebuilt from scratch, not
+  patched; see the "no seamless mesh" scope note below for why), then `WireIdToGamer`/
+  `GamerToWireId`/`PeerWireIds`/`WireIdToPeer`/`FreeWireIds`/`OwnedRemoteGamers` are all cleared
+  and `NextWireId` reset to 0 — without this, the next real handshake's `WireIdToGamer.contains(id)`
+  checks in `HandleServerWelcome`/`HandleGamerJoinBroadcast` could collide with stale entries left
+  over from the dead host's numbering.
+
+  **Promoted peer** (Task 5.2) — every local gamer's `SetIsHost(true)`; `state.HostPeer = nullptr`;
+  `ENetDiscoveryService::RegisterHost(session, state.Host.getBoundPortProperty())` — reuses the
+  ENet host this peer *already has bound*, since `ConnectToHost`'s non-Emscripten path already
+  calls `StartHosting` (bind first, connect second) even for a pure client, so no new socket is
+  needed to start accepting real incoming connections; enqueue `NetworkEventType::HostChange`
+  locally (the existing, previously-dead `Update()` handler already does the right thing —
+  `HostChanged.Raise` + `host_ = evt.Gamer` — once something finally enqueues this event).
+
+  **Reconnecting peer** (Task 5.3) — the only way to learn the new host's address is the same LAN
+  discovery `NetworkSession::Find()` already uses (`ENetDiscoveryService::FindSessions`) — a star
+  topology gives surviving clients no direct channel to each other, and the old host is dead, so
+  there is no wire message that could carry this instead. Matches candidates by
+  `getHostGamertagProperty()` against the expected new host's already-cached gamertag (a
+  pre-existing, honest limitation of this whole discovery layer — two same-gamertag hosts on one
+  LAN are already ambiguous today, not a new gap host migration introduces). On a match, calls
+  `ENetBackend::ConnectToHost(session, address, port)` again — the *exact* existing code path a
+  fresh `Join()` uses, reusing the same already-bound `ENetHostHandle` (Task 5.1's own "same
+  `Connect` call" requirement) — which re-runs the normal `ClientHello`/`ServerWelcome` handshake.
+  A new `SessionState::AwaitingMigrationHostChangeEXT` flag (cleared once consumed) tells
+  `HandleServerWelcome` to scan the fresh roster for the `IsHost == true` entry and enqueue
+  `NetworkEventType::HostChange` with that gamer once the reconnect actually completes (raising
+  `HostChangedEventArgs` only makes sense once a real `NetworkGamer*` for the new host exists). If
+  no matching session is found (new host not yet registered/reachable), migration is abandoned
+  once and the pre-existing immediate-end path runs — no retry loop in library code (a real game
+  could call `Update()` again on a later frame and get a fresh attempt naturally, since the next
+  `HandleDisconnect`-equivalent state doesn't re-fire, but this specific helper does not loop
+  internally; documented as a known "best-effort, not guaranteed" limitation matching the plan's
+  "simple" scope).
+
+  **No new wire message** — `0x05` stays reserved/unimplemented. Investigated whether
+  `HostChangeBroadcast` is actually load-bearing for this design and concluded it is not: in a
+  star topology every survivor reconnects independently via its *own* fresh `ClientHello`/
+  `ServerWelcome` exchange with the new host, and `ServerWelcome`'s `ExistingRoster` already
+  carries accurate `IsHost` per entry (Task 4.6, already shipped) — a survivor learns "who's the
+  new host" from its own reconnect handshake, with no separate broadcast required. Left the
+  reserved-opcode comment in `NetPacketCodec.hpp` as-is (still accurate: not implemented) rather
+  than removing it, since a future *seamless* migration design (see below) could still want it.
+
+  **Explicit "simple" scope confirmation** (per the original task's own request) — this is a full
+  reconnect, not a live migration of existing sockets: reconnecting peers get their remote-gamer
+  roster rebuilt from scratch (fresh `NetworkGamer*` identities, real `GamerLeave` + `GamerJoin`
+  events), not preserved across the promotion. Confirmed acceptable.
+
+  **Real complication found beyond the original task text, confirmed with the user before
+  proceeding**: `ENetBackendTests.cpp`'s own existing comments (`SystemLinkSessionFixture`) already
+  establish that only *one* real `NetworkSession` can exist per test process
+  (`NetworkSession::BeginCreate`'s `activeSession_` gate) — every existing multi-peer test pairs
+  one real `NetworkSession` with a raw `ENetHostHandle` standing in for "the other machine," not
+  two real sessions. `TwoProcessLoopbackTest.cpp`/`tools/net/net_two_process_harness.cpp` (Task
+  6.1, already shipped) solves this for a genuinely faithful 2-process test by spawning real,
+  separate OS processes — but its own comments document that relying on
+  `ENetDiscoveryService`'s shared well-known UDP port across *simultaneously-running independent
+  processes* is delivery-order-fragile (confirmed empirically reliable to *bind* on Linux via
+  `SO_REUSEADDR`, but which of several same-port-bound sockets actually *receives* a given
+  datagram is OS-arbitrary) — which is exactly the mechanism Task 5.3's reconnect step needs for
+  real. Task 5.5's plan: single-process `ENetBackendTests.cpp` tests cover the promotion decision
+  logic and the promoted-peer-becomes-really-discoverable half deterministically (both real
+  `NetworkSession` + `ENetDiscoveryService` calls staying within one process, exactly like the
+  already-solid `ENetDiscoveryServiceTests.cpp` precedent); a new 3-role addition to
+  `net_two_process_harness.cpp` proves the full cross-process promotion+reconnect end-to-end, with
+  a bounded retry loop around the reconnecting role's `FindSessions` call (a handful of short
+  attempts) to absorb the acknowledged delivery-ordering fragility rather than pretend it doesn't
+  exist — which is also just realistic client behavior for a real, unplanned host loss.
+- [x] **Task 5.2/5.3** — Implemented together as one `AttemptHostMigration(session, state)` helper
+  in `ENetBackend.cpp`, called from `HandleDisconnect`'s existing `peer == state.HostPeer` branch.
+  Finds the dying host by scanning `state.WireIdToGamer` for a *remote* gamer with `IsHost==true`
+  (not `session->getHostProperty()` - see the real pre-existing gap this uncovered, below), then
+  computes the deterministic new host and either promotes this peer (`SetIsHost(true)` on every
+  local gamer, `ENetDiscoveryService::RegisterHost` on the already-bound `ENetHostHandle`, a
+  locally-enqueued `HostChange` event) or reconnects to whoever else was chosen (a bounded 3-attempt
+  `ENetDiscoveryService::FindSessions` search by gamertag, then `state.Host.Connect(...)` directly -
+  see the function's own comment for why not the public `ConnectToHost` wrapper). A new
+  `SessionState::AwaitingMigrationHostChangeEXT` flag tells `HandleServerWelcome` to raise
+  `HostChanged` once the reconnect's fresh roster actually contains a real `NetworkGamer*` for the
+  new host, instead of firing it prematurely.
+  **Real pre-existing gap found and worked around**: `NetworkSession::getHostProperty()`/`host_` is
+  only ever set to `localGamers_[0]` at construction (both for a real `Create()`-based host and a
+  real `Join()`-based client) and, before this task, was never updated afterward -
+  `NetworkEventType::HostChange` existed in `Update()`'s own switch but nothing ever enqueued it.
+  Using it to find "the dying host's wire id" would have been wrong for every real client, not just
+  a test-fixture edge case - `AttemptHostMigration` instead scans for the real remote gamer whose
+  `IsHost` flag is true (correctly maintained by `HandleServerWelcome`/`HandleGamerJoinBroadcast`
+  since Task 4.6), explicitly excluding local gamers (a `Create()`-based session leaves its own
+  local gamers' `IsHost` at whatever the constructor set even after `ConnectToHost` turns it into a
+  client - a second, narrower pre-existing quirk, documented on the check itself). Fixing `host_`'s
+  own general tracking for every code path (not just migration) is explicitly out of scope here.
+  **No new wire message**: `0x05` stays reserved/unimplemented - investigated and confirmed not
+  load-bearing for this design (see `plan_net.md`'s Task 5.1 write-up above for the full reasoning).
+  **Bounded retry, not "no retry"**: `AttemptHostMigration`'s design intent was zero retries, but
+  `ENetDiscoveryService`'s own existing comments already acknowledge that which of several
+  same-port-bound sockets receives a given datagram is OS-arbitrary once more than one process
+  shares the discovery port - exactly the situation a real cross-process reconnect creates. A
+  single 150ms search window occasionally missing a reply it should have gotten is a real,
+  acknowledged platform characteristic; `FindSessions` is retried up to 3 times (~450ms worst case)
+  before giving up, free of cost for the common single-process case (an unregistered gamertag stays
+  unregistered no matter how many times it's searched for).
+- [x] **Task 5.4** — `AllowHostMigration==false` is checked first, before any state is touched, so
+  the pre-existing immediate-end path (`session->RemoveGamer(locals[0], HostEndedSession)`) is a
+  pure, unconditional fallback exactly as before. Two tests lock this in: the pre-existing
+  `ClientRaisesSessionEndedOnHostDisconnect` (its own comment updated - it happens to cover a
+  handshake-never-completed case, not a meaningful "migration would otherwise trigger" scenario)
+  and a new `AllowHostMigrationFalseStillEndsSessionImmediatelyWithARealSurvivorKnown`, which
+  completes a real `ServerWelcome` roster (a real survivor known) before disconnecting, proving the
+  false case stays unchanged even when migration would otherwise have a real decision to make.
+- [x] **Task 5.5** — Real single-process tests (`ENetBackendTests.cpp`, matching the established
+  `SystemLinkSessionFixture` + raw-`ENetHostHandle`-as-fake-peer style, since only one real
+  `NetworkSession` can exist per process): `ClientPromotesItselfWhenItIsTheOnlyKnownSurvivor` (also
+  proves the promoted session is *really* discoverable via a real `FindSessions` call from the same
+  process, first proving it was *not* discoverable pre-promotion - `ConnectToHost`'s own
+  `StartHosting` call registers every client for discovery too, a pre-existing quirk that would
+  otherwise make this check non-discriminating) and
+  `ClientTargetsTheLowestSurvivingWireIdInsteadOfPromotingItself` (proves the tie-break math itself
+  via a new `ENetBackend::GetLastMigrationReconnectAttemptGamertagForTesting()` testing-only
+  accessor, since there's no second real session to actually reconnect to in-process).
+  A genuinely faithful end-to-end proof needed real, separate processes - extended
+  `tools/net/net_two_process_harness.cpp` (Task 6.1's existing infrastructure) with two new roles,
+  `migration-host` and `migration-survivor`, and added
+  `TwoProcessLoopbackTest.HostMigrationPromotesOneSurvivorAndTheOtherReconnectsAcrossRealProcesses`:
+  3 real OS processes (one host, two survivors), the host disposes once all 3 have joined
+  (a graceful `Dispose()` sends real ENet DISCONNECT notifications immediately, faster and more
+  deterministic than waiting out a connection timeout), and the test proves SurvivorA (spawned
+  first, so it deterministically gets the lower surviving wire id per `EnsureLocalWireIds`'s own
+  join-order assignment) gets promoted while SurvivorB genuinely rediscovers and reconnects to it -
+  both confirmed via one real `AppData` round trip over the fresh post-migration connection, not
+  just event flags. This is the one test in the whole suite that deliberately *does* rely on
+  cross-process `ENetDiscoveryService` port sharing (every other multi-process test avoids it,
+  passing ports out-of-band instead - see `TwoProcessLoopbackTest.cpp`'s own top comment) since
+  production `AttemptHostMigration` has no other option for a real, unplanned host loss.
+  **Flakiness found and fixed**: passed 8/8 isolated runs at a consistent ~711ms, but timed out
+  once inside a full ~4700-test suite run (confirmed real system-load contention, not a logic bug -
+  re-ran the full suite twice more afterward with zero failures). Raised the harness's own internal
+  timeout from 10s to 30s (and the outer GTest watchdog to match) - real wall-clock work (3 spawned
+  processes, a real cross-process ENet handshake, a real UDP discovery round trip) can genuinely
+  slow down well past isolated timing under real CI/dev-machine load; a genuine hang or logic bug
+  still fails this well before the new deadline in practice.
+- [x] **Task 5.6** — Revert-verify: temporarily short-circuited `AttemptHostMigration`'s call site
+  in `HandleDisconnect` (`if (false && AttemptHostMigration(...))`), rebuilt, and confirmed all 3
+  migration-specific tests (the 2 single-process ones plus the 3-process harness test) failed with
+  exactly the expected symptom (`SessionEnded` instead of real migration), while
+  `AllowHostMigrationFalseStillEndsSessionImmediatelyWithARealSurvivorKnown` correctly kept passing
+  (it exercises the disabled path, unaffected by the temporary disable) - proving the new tests are
+  real, not vacuous. Reverted, rebuilt, re-ran the full suite twice more (4690/4692 passed, 0
+  failures both times, 2 expected hardware skips). Updated `getAllowHostMigrationProperty()`'s doc
+  comment in `NetworkSession.hpp` (previously said migration was "stored but has no effect") to
+  describe the real behavior and its "full reconnect, not seamless" scope.
+- [x] **Task 5.7** — `examples/demo_session_lifecycle_events` itself makes no claims about
+  migration at all (`NetworkSessionType::Local` only, where migration is inapplicable - `Real
+  Networking` is gated on `SystemLink`) - nothing false to correct there. Found and fixed the
+  actual stale assumption in `examples/demo_gamer_roster_hud` instead (a real two-process
+  `SystemLink` demo that already wired up `HostChanged`, previously dead): updated
+  `RosterGame.hpp`/`.cpp`'s doc comments (previously claimed real migration was "confirmed
+  unimplemented, Task 2.6"), enabled `setAllowHostMigrationProperty(true)` on the joining/client
+  role (the only side that ever actually loses a host connection) so `OnHostChanged` is genuinely
+  reachable now, and corrected the smoke-test summary log's own stale "(expected 0 - Task 2.6
+  documented gap)" wording. Manually verified via a real 2-process `--smoke 300` run under
+  `xvfb-run`: the host's own smoke run happened to finish (and `Dispose()`) before the client's,
+  which caught the resulting real disconnect and genuinely self-promoted live - `hostChangedFireCount=1`,
+  `HostChanged: new host is Stub Gamer`, roster correctly showing itself as the new host - an
+  unplanned but welcome full end-to-end confirmation of the feature working in a real demo, not
+  just tests. Adjusted the log message afterward to describe both possible outcomes honestly
+  instead of hardcoding "(expected 0)".
+- [x] **Verified**: full suite 4690/4692 passed (2 expected hardware skips, 0 failures) across
+  multiple consecutive runs; `TwoProcessLoopbackTest.HostMigrationPromotesOneSurvivorAndTheOtherReconnectsAcrossRealProcesses`
+  passed 8/8 additional isolated runs; `cna_demo_gamer_roster_hud` confirmed migrating live in a
+  real 2-process run.
+
+**Phase 5 complete — 7/7** (Tasks 5.1–5.7).
 
 ---
 
