@@ -49,16 +49,29 @@
 > **Separate, unrelated track — `feature/input` branch, `audit_input.md` remediation + full
 > phase-by-phase FNA-parity audit, in progress as of 2026-07-17.** Completely independent of the D3D9
 > work below (this `NEXT.md`/`plan_dx9.md` pair is D3D9-only) — tracked in full in `plan_input.md`,
-> not duplicated here. Status: **Phases 0, 1, 2, 3, 4, 5, 6, 7, 8, and 13 are fully closed and pushed**
+> not duplicated here. Status: **Phases 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, and 13 are fully closed and pushed**
 > (`P0-001..020`, `P1-001..045`, `P2-001..060`, `P3-001..045`, `P4-001..070`, `P5-001..045`,
-> `P6-001..045`, `P7-001..040`, `P8-001..040`, `P13-001..006` — 416/506 tasks total, ~82%; latest
-> pushed commit `9ad8773c` on `feature/input`). Working autonomously at the user's explicit request
-> through `plan_input.md`'s remaining tasks (Phase 9 Tests/fuzzing/sanitizers/CI onward — Phases
-> 9–12, ~90 tasks, minus Phase 11's hardware-gated ones which stay `[!]` Blocked pending real
-> devices). Phase 8 configured and left in place 3 new persistent verification build directories —
-> `cmake-build-input-easygl/`, `cmake-build-input-vulkan/`, `cmake-build-input-bgfx/` (already
-> anticipated in `.gitignore`) — alongside the pre-existing default `cmake-build-debug/`
-> (`SDL_RENDERER`); reuse these directly for any future non-default-backend check. Each phase closes with a
+> `P6-001..045`, `P7-001..040`, `P8-001..040`, `P9-001..035`, `P13-001..006` — 451/506 tasks total,
+> ~89%; latest pushed commit `799d486d` on `feature/input`). Working autonomously at the user's
+> explicit request through `plan_input.md`'s remaining tasks (Phase 10 documentation onward — Phases
+> 10–12, ~55 tasks, minus Phase 11's hardware-gated ones which stay `[!]` Blocked pending real
+> devices). Phase 8 left in place 3 new persistent verification build directories —
+> `cmake-build-input-easygl/`, `cmake-build-input-vulkan/`, `cmake-build-input-bgfx/` — and Phase 9
+> added a 4th, `cmake-build-input-asan/` (`-DCNA_SANITIZE=address,undefined`), all already
+> anticipated in `.gitignore`, alongside the pre-existing default `cmake-build-debug/`
+> (`SDL_RENDERER`); reuse these directly for any future non-default-backend/sanitizer check.
+>
+> **IMPORTANT — separate, out-of-Input-scope finding from P9-031 (2026-07-17):** running the full
+> unfiltered `CnaTests` binary (not the Input-filtered subset) crashes reproducibly with `double free
+> or corruption (fasttop)` (SIGABRT) inside the Net subsystem's `ENetBackendTest` suite. Confirmed via
+> isolation testing this is **not an Input bug**: `ENetBackendTest.*` passes cleanly run alone; the
+> corruption requires ~800 preceding tests' allocation history to manifest, consistent with heap
+> corruption originating earlier and only detected when the allocator's consistency check next fires.
+> Every Input-filtered run this session (9 phases, dozens of invocations, including under
+> AddressSanitizer+UndefinedBehaviorSanitizer) has been 100% clean. This is a real, separate memory-
+> safety defect needing dedicated cross-subsystem bisection — flagged, not fixed, since it is unrelated
+> to and out of scope for this track. See `plan_input.md`'s P9-031 Result for full reproduction detail.
+> Each phase closes with a
 > checkpoint task (`P{N}-0XX — Phase N checkpoint and summary`) recording pass/fail counts, files
 > changed, and follow-ups — read the **last completed phase's checkpoint Result** for the most
 > efficient overview, then check `plan_input.md`'s Phase overview table for the next open phase's
