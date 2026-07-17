@@ -49,20 +49,32 @@
 > **Separate, unrelated track — `feature/input` branch, `audit_input.md` remediation + full
 > phase-by-phase FNA-parity audit, in progress as of 2026-07-17.** Completely independent of the D3D9
 > work below (this `NEXT.md`/`plan_dx9.md` pair is D3D9-only) — tracked in full in `plan_input.md`,
-> not duplicated here. Status: **Phases 0, 1, 2, 3, and 13 are fully closed and pushed**
-> (`P0-001..020`, `P1-001..045`, `P2-001..060`, `P3-001..045`, `P13-001..006` — 216/506 tasks total;
-> latest pushed commit `d8283b92` on `feature/input`). Working autonomously at the user's explicit
-> request through `plan_input.md`'s remaining tasks (Phase 4 GamePad onward, ~290 tasks across Phases
-> 4–13 excluding the already-closed Phase 13). Each phase closes with a checkpoint task (`P{N}-0XX —
-> Phase N checkpoint and summary`) recording pass/fail counts, files changed, and follow-ups — read
-> the **last completed phase's checkpoint Result** for the most efficient overview, then check
-> `plan_input.md`'s Phase overview table for the next open phase's starting task ID. Commits are
-> per-phase (one `git commit` per closed phase, occasionally per-large-batch within a phase); `git log
-> --oneline` on `feature/input` is the index. A whole-file status/Result consistency check (see any
-> recent commit message for the Python snippet) is run before every commit as a safety net — a prior
-> session hit an unexplained checkbox-revert bug once, never repeated since. Thermal pacing rule in
-> effect: pause new heavy work (builds, large audits) at CPU Tctl >=85°C, resume at <=75°C
-> (`sensors | grep Tctl`). If resuming this track: read `plan_input.md`'s Phase overview + the last
+> not duplicated here. Status: **Phases 0, 1, 2, 3, 4, 5, 6, and 13 are fully closed and pushed**
+> (`P0-001..020`, `P1-001..045`, `P2-001..060`, `P3-001..045`, `P4-001..070`, `P5-001..045`,
+> `P6-001..045`, `P13-001..006` — 336/506 tasks total; latest pushed commit `63ec2c11` on
+> `feature/input`). Working autonomously at the user's explicit request through `plan_input.md`'s
+> remaining tasks (Phase 7 CNA/NOXNA extensions onward — Phases 7–12, ~170 tasks, minus Phase 11's
+> hardware-gated ones which stay `[!]` Blocked pending real devices). Each phase closes with a
+> checkpoint task (`P{N}-0XX — Phase N checkpoint and summary`) recording pass/fail counts, files
+> changed, and follow-ups — read the **last completed phase's checkpoint Result** for the most
+> efficient overview, then check `plan_input.md`'s Phase overview table for the next open phase's
+> starting task ID. Commits are per-phase (one `git commit` per closed phase); `git log --oneline` on
+> `feature/input` is the index. A whole-file status/Result consistency check (see any recent commit's
+> diff for the Python snippet, run before every commit) is a standing safety net — a prior session hit
+> an unexplained checkbox-revert bug once, never repeated since. Later phases (4-6) found dramatically
+> fewer gaps than Phases 1-3 (Phase 4 and most of Phase 5 needed **zero** code/test changes — the
+> pre-existing GamePad/Touch test suites were already exhaustive from earlier session work); when a
+> phase like that produces no diff beyond `plan_input.md` itself, that is a genuine, verified outcome
+> (each task still gets independent evidence — re-derived FNA cross-checks, not just re-reading old doc
+> claims), not a shortcut. One recurring authoring mistake to avoid: writing multi-paragraph Result text
+> by hand (via a direct `Edit` call rather than the batch Python script) has twice left stray `"`
+> line-wrap artifacts in the text — always grep `^"` after a manual multi-line edit and fix before
+> committing. Thermal pacing rule in effect: pause new heavy work (builds, large audits) at CPU Tctl
+> >=85°C, resume at <=75°C (`sensors | grep Tctl`). Test-verification note: this session's cumulative
+> `xvfb-run` usage (dozens of invocations) has caused elevated-but-non-failing `GTEST_SKIP` counts on
+> video-dependent tests in later phases (host X11/Xvfb resource pressure, not a code regression —
+> confirmed via isolated single-test sanity checks each time); zero `[  FAILED  ]` lines have appeared
+> in any run this session. If resuming this track: read `plan_input.md`'s Phase overview + the last
 > `[x]`-marked checkpoint task's Result for the exact stopping point, not this file.
 
 ## 1. Project summary
