@@ -337,6 +337,7 @@ namespace
         std::vector<float> values;
         int componentsPerValue = 0;
         bool cubicSpline = false;
+        bool stepInterpolation = false;
     };
 
     SampledChannel LoadChannel(const cgltf_animation_channel& ch, cgltf_size componentsPerValue,
@@ -345,6 +346,7 @@ namespace
         SampledChannel result;
         result.componentsPerValue = static_cast<int>(componentsPerValue);
         result.cubicSpline = ch.sampler->interpolation == cgltf_interpolation_type_cubic_spline;
+        result.stepInterpolation = ch.sampler->interpolation == cgltf_interpolation_type_step;
 
         const std::vector<float> times = UnpackAccessor(ch.sampler->input, 1, context);
         result.times.assign(times.begin(), times.end());
@@ -392,8 +394,7 @@ namespace
         if (ch == nullptr) { return fallback; }
         std::size_t lo = 0; float amount = 0.0f;
         FindBracket(ch->times, t, lo, amount);
-        if (amount <= 0.0f || ch->cubicSpline /* STEP handled implicitly: amount stays 0 at exact keys */ ||
-            lo + 1 >= ch->times.size())
+        if (amount <= 0.0f || ch->cubicSpline || ch->stepInterpolation || lo + 1 >= ch->times.size())
         {
             return ReadVec3Sample(*ch, lo);
         }
@@ -405,7 +406,7 @@ namespace
         if (ch == nullptr) { return fallback; }
         std::size_t lo = 0; float amount = 0.0f;
         FindBracket(ch->times, t, lo, amount);
-        if (amount <= 0.0f || ch->cubicSpline || lo + 1 >= ch->times.size())
+        if (amount <= 0.0f || ch->cubicSpline || ch->stepInterpolation || lo + 1 >= ch->times.size())
         {
             return ReadQuatSample(*ch, lo);
         }

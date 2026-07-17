@@ -265,6 +265,68 @@ namespace
   ]
 })GLTF";
 
+    // ChildBone has a STEP-interpolated translation channel (keys at t=0 -> (0,0,0), t=2 ->
+    // (10,10,10)) and a LINEAR-interpolated rotation channel with DIFFERENT keyframe times (t=0,
+    // t=1) -- the union-time resampling this tool does forces the translation channel to be
+    // evaluated at t=1, a time it has no native key at, which is exactly where a STEP channel
+    // must hold its last key's value (0,0,0) rather than linearly interpolate towards (5,5,5).
+    // Regression fixture for a real bug found during development: an earlier refactor (moving to
+    // sparse-accessor-safe bulk unpacking) accidentally dropped the STEP special-case, silently
+    // turning every STEP channel into LINEAR.
+    const char* kStepInterpolationGltf = R"GLTF({
+  "asset": { "version": "2.0" },
+  "scene": 0,
+  "scenes": [ { "nodes": [0, 2] } ],
+  "nodes": [
+    { "name": "RootBone", "children": [1] },
+    { "name": "ChildBone", "translation": [0, 0, 0] },
+    { "name": "MeshNode", "mesh": 0, "skin": 0 }
+  ],
+  "meshes": [ { "primitives": [ { "attributes": {
+      "POSITION": 0, "NORMAL": 1, "TEXCOORD_0": 2, "JOINTS_0": 3, "WEIGHTS_0": 4
+  } } ] } ],
+  "skins": [ { "joints": [1, 0], "inverseBindMatrices": 5 } ],
+  "animations": [ {
+    "name": "StepTest",
+    "samplers": [
+      { "input": 6, "output": 7, "interpolation": "STEP" },
+      { "input": 8, "output": 9, "interpolation": "LINEAR" }
+    ],
+    "channels": [
+      { "sampler": 0, "target": { "node": 1, "path": "translation" } },
+      { "sampler": 1, "target": { "node": 1, "path": "rotation" } }
+    ]
+  } ],
+  "buffers": [ {
+    "byteLength": 368,
+    "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAAAAAACAPwAAgD8AAAAAAAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAQAAAAAAAAAAAAAAAAAAAIEEAACBBAAAgQQAAAAAAAIA/AAAAAAAAAAAAAAAAAACAPwAAAADzBDU/AAAAAPMENT8="
+  } ],
+  "bufferViews": [
+    { "buffer": 0, "byteOffset": 0,   "byteLength": 36 },
+    { "buffer": 0, "byteOffset": 36,  "byteLength": 36 },
+    { "buffer": 0, "byteOffset": 72,  "byteLength": 24 },
+    { "buffer": 0, "byteOffset": 96,  "byteLength": 24 },
+    { "buffer": 0, "byteOffset": 120, "byteLength": 48 },
+    { "buffer": 0, "byteOffset": 168, "byteLength": 128 },
+    { "buffer": 0, "byteOffset": 296, "byteLength": 8 },
+    { "buffer": 0, "byteOffset": 304, "byteLength": 24 },
+    { "buffer": 0, "byteOffset": 328, "byteLength": 8 },
+    { "buffer": 0, "byteOffset": 336, "byteLength": 32 }
+  ],
+  "accessors": [
+    { "bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3", "min": [0,0,0], "max": [1,1,0] },
+    { "bufferView": 1, "componentType": 5126, "count": 3, "type": "VEC3" },
+    { "bufferView": 2, "componentType": 5126, "count": 3, "type": "VEC2" },
+    { "bufferView": 3, "componentType": 5123, "count": 3, "type": "VEC4" },
+    { "bufferView": 4, "componentType": 5126, "count": 3, "type": "VEC4" },
+    { "bufferView": 5, "componentType": 5126, "count": 2, "type": "MAT4" },
+    { "bufferView": 6, "componentType": 5126, "count": 2, "type": "SCALAR", "min": [0.0], "max": [2.0] },
+    { "bufferView": 7, "componentType": 5126, "count": 2, "type": "VEC3" },
+    { "bufferView": 8, "componentType": 5126, "count": 2, "type": "SCALAR", "min": [0.0], "max": [1.0] },
+    { "bufferView": 9, "componentType": 5126, "count": 2, "type": "VEC4" }
+  ]
+})GLTF";
+
     // Spawns the real cna_tool_gltf_to_cnj executable and waits for it to exit. Returns the exit
     // code, or -1 on a spawn-side failure (already reported via ADD_FAILURE).
     int RunGltfToCnjTool(const std::string& input, const std::string& outDir, const std::string& baseName)
@@ -464,4 +526,46 @@ TEST(GltfToCnjToolTest, ImportsAllSkinsAsSeparateModels)
     ASSERT_NE(dataB, nullptr);
     EXPECT_EQ(dataA->BoneCount, 1);
     EXPECT_EQ(dataB->BoneCount, 1);
+}
+
+TEST(GltfToCnjToolTest, StepInterpolatedChannelHoldsValueAcrossAForeignResampleTime)
+{
+    ScratchDir gltfDir;
+    ScratchDir contentRoot;
+
+    const std::filesystem::path gltfPath = gltfDir.path() / "step.gltf";
+    WriteFile(gltfPath, kStepInterpolationGltf);
+
+    const int exitCode = RunGltfToCnjTool(gltfPath.string(), contentRoot.path().string(), "steptest");
+    ASSERT_EQ(exitCode, 0);
+
+    GraphicsDevice gd;
+    ContentManager cm(nullptr, contentRoot.path().string());
+    cm.setGraphicsDevice(gd);
+
+    Model model = cm.Load<Model>("steptest");
+    auto* skinningData = static_cast<SkinningData*>(model.getTagProperty());
+    ASSERT_NE(skinningData, nullptr);
+    ASSERT_TRUE(skinningData->AnimationClips.count("StepTest"));
+    const auto& clip = skinningData->AnimationClips.at("StepTest");
+    ASSERT_EQ(clip.Tracks.size(), 1u);
+
+    // Union-time resampling must have produced 3 keys (t=0, t=1 -- foreign to the STEP channel,
+    // t=2), not just the STEP channel's own 2 native keys.
+    ASSERT_EQ(clip.Tracks[0].Keys.size(), 3u);
+
+    bool foundForeignTime = false;
+    for (const auto& key : clip.Tracks[0].Keys)
+    {
+        if (std::fabs(key.Time.getTotalSecondsProperty() - 1.0) < 1e-4)
+        {
+            foundForeignTime = true;
+            // STEP semantics: at t=1 (between the STEP channel's own t=0/t=2 keys), the value
+            // must still be the t=0 key (0,0,0), not linearly interpolated towards (10,10,10).
+            EXPECT_NEAR(key.Translation.X, 0.0f, 1e-4f);
+            EXPECT_NEAR(key.Translation.Y, 0.0f, 1e-4f);
+            EXPECT_NEAR(key.Translation.Z, 0.0f, 1e-4f);
+        }
+    }
+    EXPECT_TRUE(foundForeignTime);
 }
