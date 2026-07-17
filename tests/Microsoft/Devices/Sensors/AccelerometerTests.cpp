@@ -166,6 +166,37 @@ TEST(AccelerometerTests, FailedStartReleasesSubsystemHoldItAcquired)
     EXPECT_FALSE(a.GetSubsystemHeldForTesting());
 }
 
+// Task SDLCORE-003 (2026-07-17, external audit `audit_devices_2026-07-17.md`):
+// a failed SDL_AddEventWatch() registration must not leave this instance
+// claiming Ready with no possible way for a real sensor event to ever
+// reach it, and must release a subsystem hold this Start() call itself
+// just acquired. The real SDL_AddEventWatch() call offers no way to force
+// it to fail on demand, so SetEventWatchRegistrationFailureForTesting()
+// bypasses it entirely for this one, deterministic test. Requires reaching
+// *past* the "no default sensor" check FailedStartReleasesSubsystemHoldItAcquired
+// above exercises, so (unlike that test) this one needs real accelerometer
+// hardware to be present -- skips on an unsupported platform, same
+// discipline as every other supported-path-only test in this file.
+TEST(AccelerometerTests, FailedEventWatchRegistrationRollsBackAndReportsFailure)
+{
+    if (!Accelerometer::getIsSupportedProperty())
+    {
+        GTEST_SKIP() << "Accelerometer is not supported on this platform; supported-path test not applicable.";
+    }
+
+    Accelerometer::SetEventWatchRegistrationFailureForTesting(true);
+    struct ResetGuard
+    {
+        ~ResetGuard() { Accelerometer::SetEventWatchRegistrationFailureForTesting(false); }
+    } resetGuard;
+
+    Accelerometer a;
+    EXPECT_FALSE(a.GetSubsystemHeldForTesting());
+    EXPECT_THROW(a.Start(), AccelerometerFailedException);
+    EXPECT_FALSE(a.GetSubsystemHeldForTesting());
+    EXPECT_EQ(a.getStateProperty(), SensorState::NotSupported);
+}
+
 TEST(AccelerometerTests, StopDoesNotCrash)
 {
     Accelerometer a;

@@ -6,7 +6,9 @@
 #include <cstdint>
 #include <memory>
 #include <mutex>
+#include <string>
 #include <thread>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -339,26 +341,80 @@ namespace Microsoft::Devices::Sensors::Detail
             return supported;
         }
 
-        /** @brief Registers the SDL event watch if not already registered. Caller must already hold mutex_. */
-        void RegisterEventWatchIfNeededLocked()
+        /**
+         * @brief Registers the SDL event watch if not already registered. Caller must already hold mutex_.
+         *
+         * Task SDLCORE-003 (2026-07-17, external audit `audit_devices_2026-07-17.md`):
+         * `SDL_AddEventWatch()` returns `bool` and its result was previously
+         * ignored unconditionally, marking the watch registered even on
+         * failure — a later real sensor event would then never reach
+         * `SensorEventWatch()` (it was never actually installed), while
+         * every instance that had already committed to `Ready`/`started_`
+         * stayed in that state indefinitely, and a later
+         * `UnregisterEventWatchIfNeededLocked()` would call
+         * `SDL_RemoveEventWatch()` on a watch that was never installed.
+         * Now checks the return value and reports failure to the caller so
+         * `Start()` can roll back to a documented failure instead of a
+         * silent, permanently-broken "Ready" state.
+         *
+         * @return true if the watch is registered (already was, or just
+         * succeeded); false if registration was attempted and failed (see
+         * lastEventWatchError_ for SDL's own error string in that case).
+         */
+        [[nodiscard]] bool RegisterEventWatchIfNeededLocked()
         {
-            if (!eventWatchRegistered_)
+            if (eventWatchRegistered_)
             {
-                const SDL_EventFilter eventFilter =
-                    reinterpret_cast<SDL_EventFilter>(&SdlSensorSubsystem::SensorEventWatch);
-                SDL_AddEventWatch(eventFilter, nullptr);
-                eventWatchRegistered_ = true;
+                return true;
             }
+
+            // Task SDLCORE-003/TEST2-001: the real SDL_AddEventWatch() call
+            // below offers no way to force it to fail on demand, so a host
+            // test cannot otherwise deterministically exercise Start()'s
+            // rollback path. Caller must already hold mutex_ (same as this
+            // whole method).
+            if (forceEventWatchRegistrationFailureForTesting_)
+            {
+                lastEventWatchError_ = "forced failure (SetEventWatchRegistrationFailureForTesting)";
+                return false;
+            }
+
+            if (!SDL_AddEventWatch(&SdlSensorSubsystem::SensorEventWatch, nullptr))
+            {
+                // Task SDLCORE-003: capture SDL's own error string
+                // immediately -- SDL_GetError() reports the *last* SDL
+                // error on the calling thread, which a later, unrelated SDL
+                // call could otherwise overwrite before Start() gets a
+                // chance to read it.
+                const char* sdlError = SDL_GetError();
+                lastEventWatchError_ = (sdlError != nullptr) ? sdlError : "unknown SDL error";
+                return false;
+            }
+
+            eventWatchRegistered_ = true;
+            return true;
         }
+
+        /** @brief SDL's own error string from the most recent failed RegisterEventWatchIfNeededLocked() call (Task SDLCORE-003). Guarded by mutex_. */
+        std::string lastEventWatchError_;
+
+        /**
+         * @brief Test-only hook (Task SDLCORE-003): forces the next
+         * RegisterEventWatchIfNeededLocked() call to report failure without
+         * attempting the real SDL_AddEventWatch() call at all. Guarded by
+         * mutex_, same as every other field on this class. A process-wide
+         * flag (this subsystem instance is itself process-wide, one per
+         * TSensor) — tests that set this must reset it to false afterward,
+         * even on failure, so it cannot leak into a later, unrelated test.
+         */
+        bool forceEventWatchRegistrationFailureForTesting_ = false;
 
         /** @brief Unregisters the SDL event watch if no instances remain started. Caller must already hold mutex_. */
         void UnregisterEventWatchIfNeededLocked()
         {
             if (eventWatchRegistered_ && startedInstances_.empty())
             {
-                const SDL_EventFilter eventFilter =
-                    reinterpret_cast<SDL_EventFilter>(&SdlSensorSubsystem::SensorEventWatch);
-                SDL_RemoveEventWatch(eventFilter, nullptr);
+                SDL_RemoveEventWatch(&SdlSensorSubsystem::SensorEventWatch, nullptr);
                 eventWatchRegistered_ = false;
             }
         }
@@ -515,12 +571,31 @@ namespace Microsoft::Devices::Sensors::Detail
          * rationale. Dispatch itself always runs outside the lock (so a
          * handler re-entering Start()/Stop()/Dispose() doesn't
          * self-deadlock on mutex_).
+         *
+         * Task SDLCORE-002 (2026-07-17, external audit `audit_devices_2026-07-17.md`):
+         * declared with the *exact* `SDL_EventFilter` signature and calling
+         * convention — `bool (SDLCALL *)(void*, SDL_Event*)`
+         * (`third_party/SDL/include/SDL3/SDL_events.h`) — including the
+         * `SDLCALL` tag SDL's own documentation explicitly asks every
+         * callback to carry ("very important... mismatched calling
+         * conventions can cause strange behaviors"). Previously declared
+         * as `bool(void*, void*)` and forced through `reinterpret_cast` at
+         * both `SDL_AddEventWatch()`/`SDL_RemoveEventWatch()` call sites —
+         * calling a function through an incompatible function-pointer type
+         * is undefined behavior in C++ even when both pointer types are
+         * pointer-sized, and the cast silently hid any calling-convention
+         * mismatch on a platform where `SDLCALL` expands to something
+         * other than the default (`__cdecl` on 32-bit Windows/x86, a no-op
+         * everywhere this project currently builds and tests). Matching
+         * the type exactly lets `&SdlSensorSubsystem::SensorEventWatch` be
+         * passed directly to `SDL_AddEventWatch()`/`SDL_RemoveEventWatch()`
+         * with no cast at all — if SDL's own `SDL_EventFilter` signature
+         * ever changes, this call site fails to compile instead of
+         * silently reinterpreting an incompatible type.
          */
-        static bool SensorEventWatch(void* userdata, void* eventData)
+        static bool SDLCALL SensorEventWatch(void* userdata, SDL_Event* event)
         {
             (void)userdata;
-
-            SDL_Event* event = static_cast<SDL_Event*>(eventData);
 
             if (event == nullptr)
             {
@@ -551,5 +626,18 @@ namespace Microsoft::Devices::Sensors::Detail
 
             return true;
         }
+
+        // Task SDLCORE-002: a standalone, explicit compile-time proof (in
+        // addition to the direct, cast-free assignment at both
+        // SDL_AddEventWatch()/SDL_RemoveEventWatch() call sites above,
+        // which already fails to compile on any signature mismatch) that
+        // SensorEventWatch's type is *exactly* SDL_EventFilter, including
+        // calling convention -- gives a clearer diagnostic pointing
+        // directly at this line if a future SDL header update ever changes
+        // SDL_EventFilter's signature, rather than an overload-resolution
+        // error at a call site far from the actual mismatch.
+        static_assert(
+            std::is_same_v<decltype(&SdlSensorSubsystem::SensorEventWatch), SDL_EventFilter>,
+            "SdlSensorSubsystem::SensorEventWatch must exactly match SDL_EventFilter's signature and calling convention");
     };
 } // namespace Microsoft::Devices::Sensors::Detail

@@ -6,6 +6,7 @@
 #include <chrono>
 #include <memory>
 #include <mutex>
+#include <string>
 #include <utility>
 
 #include <SDL3/SDL.h>
@@ -171,6 +172,25 @@ namespace Microsoft::Devices::Sensors
             }
         }
 
+        // Task SDLCORE-003 (2026-07-17): see Accelerometer::Start()'s
+        // identical fix for the full rationale.
+        if (!subsystem.RegisterEventWatchIfNeededLocked())
+        {
+            state_ = SensorState::NotSupported;
+
+            if (acquiredSubsystemThisCall)
+            {
+                std::lock_guard<std::mutex> sdlLock(Detail::GetGlobalSdlSensorMutex());
+                SDL_QuitSubSystem(SDL_INIT_SENSOR);
+                subsystemHeld_ = false;
+            }
+
+            const std::string message =
+                "Failed to start gyroscope data acquisition. Failed to register the sensor event watch: "
+                + subsystem.lastEventWatchError_;
+            throw SensorFailedException(message.c_str());
+        }
+
         started_ = true;
         state_ = SensorState::Ready;
 
@@ -180,7 +200,6 @@ namespace Microsoft::Devices::Sensors
         ResetUpdateThrottle();
 
         subsystem.RegisterStartedInstanceLocked(this);
-        subsystem.RegisterEventWatchIfNeededLocked();
     }
 
     void Gyroscope::Stop()
@@ -539,6 +558,13 @@ namespace Microsoft::Devices::Sensors
         {
             instance->DispatchSensorReading(x, y, z);
         });
+    }
+
+    void Gyroscope::SetEventWatchRegistrationFailureForTesting(bool shouldFail)
+    {
+        auto& subsystem = GetSubsystem();
+        std::lock_guard<std::mutex> lock(subsystem.mutex_);
+        subsystem.forceEventWatchRegistrationFailureForTesting_ = shouldFail;
     }
 
     GetTypeNameCPP(Gyroscope, "Microsoft.Devices.Sensors.Gyroscope")

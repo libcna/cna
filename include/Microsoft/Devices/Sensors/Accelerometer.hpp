@@ -366,6 +366,27 @@ namespace Microsoft::Devices::Sensors
             const std::vector<Accelerometer*>& instances, float x, float y, float z);
 
         /**
+         * @brief Test-only hook (Task SDLCORE-003): forces the next
+         * SDL event-watch registration attempt (inside Start()) to report
+         * failure, without attempting the real SDL_AddEventWatch() call at
+         * all -- the real SDL API offers no way to force it to fail on
+         * demand. Lets a test deterministically exercise Start()'s
+         * rollback path (release a freshly-acquired subsystem hold, throw,
+         * and leave started_/state_/the shared started-instance registry
+         * untouched) rather than merely asserting the failure is "possible
+         * in principle."
+         *
+         * Affects every Accelerometer instance (the underlying flag is
+         * process-wide, shared with the underlying subsystem all instances
+         * of this class use) -- a test that sets this to true must reset it
+         * to false afterward, even on failure, so it cannot leak into a
+         * later, unrelated test.
+         *
+         * @param shouldFail true to force the next registration attempt to fail.
+         */
+        NOXNA static void SetEventWatchRegistrationFailureForTesting(bool shouldFail);
+
+        /**
          * @brief Legacy WP7 7.0 event raised when the accelerometer reading changes.
          *
          * Deprecated in favor of CurrentValueChanged, which is the WP7 7.1

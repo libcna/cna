@@ -304,5 +304,14 @@ namespace Microsoft::Devices::Sensors
          */
         NOXNA static void DispatchToInstancesForTesting(
             const std::vector<Gyroscope*>& instances, float x, float y, float z);
+
+        /**
+         * @brief Test-only hook (Task SDLCORE-003): see
+         * Accelerometer::SetEventWatchRegistrationFailureForTesting()'s
+         * identical hook for the full rationale.
+         *
+         * @param shouldFail true to force the next registration attempt to fail.
+         */
+        NOXNA static void SetEventWatchRegistrationFailureForTesting(bool shouldFail);
     };
 } // namespace Microsoft::Devices::Sensors

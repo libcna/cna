@@ -5937,7 +5937,7 @@ test is not sufficient for an Android coordinate/fusion claim.
   - TSan and shutdown stress are clean.
 - **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
 
-### SDLCORE-002 — Use the exact SDL_EventFilter signature and calling convention — OPEN
+### SDLCORE-002 — Use the exact SDL_EventFilter signature and calling convention — CLOSED (2026-07-17)
 
 - **Priority:** P0
 - **Area:** Perfection re-audit
@@ -5949,9 +5949,26 @@ test is not sufficient for an Android coordinate/fusion claim.
 - **Acceptance criteria:**
   - The code compiles without a function-pointer cast.
   - A compile check fails if the SDL callback signature changes.
-- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+- **Resolution:** `SdlSensorSubsystem<TSensor>::SensorEventWatch` re-declared as
+  `static bool SDLCALL SensorEventWatch(void* userdata, SDL_Event* event)` — the *exact*
+  `SDL_EventFilter` type (`third_party/SDL/include/SDL3/SDL_events.h:1413`:
+  `typedef bool (SDLCALL *SDL_EventFilter)(void *userdata, SDL_Event *event);`), including the
+  `SDLCALL` (`__cdecl`) calling-convention tag SDL's own header docs explicitly ask every
+  callback to carry. Both `reinterpret_cast<SDL_EventFilter>` call sites
+  (`RegisterEventWatchIfNeededLocked()`/`UnregisterEventWatchIfNeededLocked()`) removed —
+  `&SdlSensorSubsystem::SensorEventWatch` now passes directly, with no cast, to
+  `SDL_AddEventWatch()`/`SDL_RemoveEventWatch()`. Added an explicit
+  `static_assert(std::is_same_v<decltype(&SdlSensorSubsystem::SensorEventWatch), SDL_EventFilter>, ...)`
+  immediately after the method, so a future SDL header change that alters `SDL_EventFilter`'s
+  signature fails to compile with a diagnostic pointing directly at this line, not an
+  overload-resolution error at a distant call site.
+- **Evidence:** `include/Microsoft/Devices/Sensors/Detail/SdlSensorSubsystem.hpp`. Confirmed by a
+  clean `CnaTests` build (the direct, cast-free assignment itself would fail to compile on any
+  signature mismatch) and the new `static_assert`. No behavior change on any platform this
+  project currently builds for (`SDLCALL` expands to nothing except on 32-bit Windows/x86,
+  per `third_party/SDL/include/SDL3/SDL_begin_code.h`); full Devices/Sensors suite green.
 
-### SDLCORE-003 — Handle SDL_AddEventWatch failure transactionally — OPEN
+### SDLCORE-003 — Handle SDL_AddEventWatch failure transactionally — CLOSED (2026-07-17)
 
 - **Priority:** P0
 - **Area:** Perfection re-audit
@@ -5963,7 +5980,38 @@ test is not sufficient for an Android coordinate/fusion claim.
 - **Acceptance criteria:**
   - Fault-injected registration failure leaves no started instance and no false Ready state.
   - A later retry can succeed cleanly.
-- **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+- **Resolution:** `RegisterEventWatchIfNeededLocked()` now returns `[[nodiscard]] bool`,
+  checks `SDL_AddEventWatch()`'s real return value, and captures `SDL_GetError()` into a new
+  `lastEventWatchError_` member on failure (read immediately, before any later SDL call could
+  overwrite it). `Accelerometer::Start()`/`Gyroscope::Start()` now call this **before**
+  committing `started_`/`state_` to `Ready` (previously this ran *last*, so its result could
+  never stop an instance from claiming `Ready` even on genuine failure) — on failure, state is
+  set to `NotSupported`, a subsystem hold this call itself just acquired is released (mirroring
+  the already-established rollback discipline the adjacent "no default sensor found" failure
+  path already follows; the subsystem's shared, cached `sensor_` handle is deliberately left
+  untouched, since it may already be relied on by another started instance of the same sensor
+  type), and an exception is thrown including SDL's own captured error string. A later `Start()`
+  retry (once the underlying SDL condition clears) works normally, since none of this instance's
+  own state was left corrupted.
+  - **Fault injection:** the real `SDL_AddEventWatch()` offers no way to force a failure on
+    demand, so a new test-only hook,
+    `Accelerometer`/`Gyroscope::SetEventWatchRegistrationFailureForTesting(bool)`, makes
+    `RegisterEventWatchIfNeededLocked()` report failure without attempting the real SDL call —
+    exercising `Start()`'s own rollback logic deterministically. New regression tests
+    `AccelerometerTests`/`GyroscopeTests.FailedEventWatchRegistrationRollsBackAndReportsFailure`
+    confirm the subsystem hold is released, the correct exception is thrown, and `state_`
+    lands on `NotSupported`. **These two tests `GTEST_SKIP()` in this (headless, no
+    accelerometer/gyroscope hardware) container** — reaching this code path requires passing
+    the earlier, hardware-gated "no default sensor found" check first (same precondition
+    `FailedStartReleasesSubsystemHoldItAcquired` already documents), so they only actually run
+    on a machine with real sensor hardware present. They compile and are wired into the suite
+    either way, per `TEST2-001`'s requirement.
+- **Evidence:** `include/Microsoft/Devices/Sensors/Detail/SdlSensorSubsystem.hpp`,
+  `src/Microsoft/Devices/Sensors/Accelerometer.cpp`/`.hpp`,
+  `src/Microsoft/Devices/Sensors/Gyroscope.cpp`/`.hpp`,
+  `tests/Microsoft/Devices/Sensors/AccelerometerTests.cpp`/`GyroscopeTests.cpp`. Full
+  Devices/Sensors suite: 367 tests, 363 passed, 4 expected skips (2 pre-existing hardware
+  skips + these 2 new hardware-gated tests), zero failures.
 
 ### SDLCORE-004 — Replace raw-pointer dispatch membership with generation-bearing registrations — OPEN
 

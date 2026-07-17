@@ -9,6 +9,7 @@
 #include <chrono>
 #include <memory>
 #include <mutex>
+#include <string>
 #include <utility>
 
 #include <SDL3/SDL.h>
@@ -238,6 +239,37 @@ namespace Microsoft::Devices::Sensors
             }
         }
 
+        // Task SDLCORE-003 (2026-07-17, external audit `audit_devices_2026-07-17.md`):
+        // register the event watch *before* committing started_/state_ to
+        // Ready -- previously this ran last, and its (unconditionally
+        // ignored) result could never stop this instance from claiming
+        // Ready even if `SDL_AddEventWatch()` genuinely failed, leaving an
+        // instance permanently "Ready" with no possible way for a real
+        // sensor event to ever reach it. Does not touch the subsystem's
+        // shared, cached `sensor_`/`sensorId_` handle on this failure path
+        // -- that handle is subsystem-wide (potentially already relied on
+        // by another started instance of this same sensor type) and
+        // opening it is itself harmless to leave in place; only what *this*
+        // call itself freshly acquired (the subsystem hold) is rolled back,
+        // mirroring the identical, already-established discipline the
+        // "no default sensor found" failure path above already follows.
+        if (!subsystem.RegisterEventWatchIfNeededLocked())
+        {
+            state_ = SensorState::NotSupported;
+
+            if (acquiredSubsystemThisCall)
+            {
+                std::lock_guard<std::mutex> sdlLock(Detail::GetGlobalSdlSensorMutex());
+                SDL_QuitSubSystem(SDL_INIT_SENSOR);
+                subsystemHeld_ = false;
+            }
+
+            const std::string message =
+                "Failed to start accelerometer data acquisition. Failed to register the sensor event watch: "
+                + subsystem.lastEventWatchError_;
+            throw AccelerometerFailedException(message.c_str());
+        }
+
         started_ = true;
         state_ = SensorState::Ready;
 
@@ -247,7 +279,6 @@ namespace Microsoft::Devices::Sensors
         ResetUpdateThrottle();
 
         subsystem.RegisterStartedInstanceLocked(this);
-        subsystem.RegisterEventWatchIfNeededLocked();
     }
 
     void Accelerometer::Stop()
@@ -763,6 +794,13 @@ namespace Microsoft::Devices::Sensors
         {
             instance->DispatchSensorReading(x, y, z);
         });
+    }
+
+    void Accelerometer::SetEventWatchRegistrationFailureForTesting(bool shouldFail)
+    {
+        auto& subsystem = GetSubsystem();
+        std::lock_guard<std::mutex> lock(subsystem.mutex_);
+        subsystem.forceEventWatchRegistrationFailureForTesting_ = shouldFail;
     }
 
     GetTypeNameCPP(Accelerometer, "Microsoft.Devices.Sensors.Accelerometer")

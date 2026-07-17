@@ -123,6 +123,29 @@ TEST(GyroscopeTests, FailedStartReleasesSubsystemHoldItAcquired)
     EXPECT_FALSE(g.GetSubsystemHeldForTesting());
 }
 
+// Task SDLCORE-003 (2026-07-17): see AccelerometerTests.cpp's identical test
+// (FailedEventWatchRegistrationRollsBackAndReportsFailure) for the full
+// rationale.
+TEST(GyroscopeTests, FailedEventWatchRegistrationRollsBackAndReportsFailure)
+{
+    if (!Gyroscope::getIsSupportedProperty())
+    {
+        GTEST_SKIP() << "Gyroscope is not supported on this platform; supported-path test not applicable.";
+    }
+
+    Gyroscope::SetEventWatchRegistrationFailureForTesting(true);
+    struct ResetGuard
+    {
+        ~ResetGuard() { Gyroscope::SetEventWatchRegistrationFailureForTesting(false); }
+    } resetGuard;
+
+    Gyroscope g;
+    EXPECT_FALSE(g.GetSubsystemHeldForTesting());
+    EXPECT_THROW(g.Start(), SensorFailedException);
+    EXPECT_FALSE(g.GetSubsystemHeldForTesting());
+    EXPECT_EQ(g.getStateProperty(), SensorState::NotSupported);
+}
+
 TEST(GyroscopeTests, StopDoesNotCrash)
 {
     Gyroscope g;
