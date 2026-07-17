@@ -45,6 +45,9 @@ target_include_directories(CNA
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src
+        # plan_cnj.md CNB-70 (Phase 13D): CNA::Internal::GltfImport::GltfImportCore (used by both
+        # ContentManager.cpp's GltfModelTypeReader and tools/gltf_to_cnj) needs cgltf.h.
+        ${CMAKE_CURRENT_SOURCE_DIR}/third_party/cgltf
 )
 
 target_compile_definitions(CNA

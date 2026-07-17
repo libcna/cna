@@ -4,6 +4,7 @@
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "CNA/Internal/CnjEnvelope.hpp"
 #include "CNA/Internal/CnjSourceFile.hpp"
+#include "CNA/Internal/GltfImport/GltfImportCore.hpp"
 #include "CNA/Internal/Json.hpp"
 #include "CNA/Internal/Xnb/XnbTypeReaderTable.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
@@ -34,6 +35,7 @@
 #include "Microsoft/Xna/Framework/Quaternion.hpp"
 #include "Microsoft/Xna/Framework/Media/Song.hpp"
 #include "System/IO/FileStream.hpp"
+#include "System/IO/MemoryStream.hpp"
 // Must match CMakeLists.txt's CNA_FFMPEG_AVAILABLE condition (MINGW OR EMSCRIPTEN OR ANDROID) --
 // VideoDecoder.cpp/VideoPlayer.cpp/Video.cpp are excluded from the build on all three, so
 // Video::Video() has no definition to link against on any of them, not just Emscripten/Android.
@@ -1542,17 +1544,366 @@ namespace Microsoft::Xna::Framework::Content
         // .model.json descriptor reader
         // ---------------------------------------------------------------------------
 
+        // Owned resources shared by all copies of a Model returned by ModelTypeReader::Read()
+        // (the .cnj JSON path) or ReadGltfModel() (CNB-70/71, Phase 13D's runtime glTF path) --
+        // hoisted out of ModelTypeReader::Read() so both readers share one definition.
+        struct ModelResources {
+            std::vector<std::unique_ptr<Graphics::VertexBuffer>>  vbs;
+            std::vector<std::unique_ptr<Graphics::IndexBuffer>>   ibs;
+            std::vector<std::unique_ptr<Graphics::ModelBone>>     boneOwners;
+            std::vector<std::unique_ptr<Graphics::ModelMesh>>     meshOwners;
+            std::vector<std::unique_ptr<Graphics::ModelMeshPart>> partOwners;
+            std::vector<std::shared_ptr<Graphics::Effect>>        effectOwners;
+            std::vector<std::unique_ptr<Graphics::Texture2D>>     textureOwners;
+            // Task 941: owns the skeleton/animation-clip data attached to the returned Model's
+            // own Tag property. Null for a rigid, non-skinned model with no skeleton.
+            std::unique_ptr<Graphics::SkinningData>               skinningData;
+        };
+
+        // Task 927: `stride` is always one of XNA's own "clean" (tightly packed, no vtable) sizes
+        // -- 16/20/24/32/52/56 -- since every offline conversion tool (and, since CNB-70, the
+        // runtime glTF reader) writes/produces that exact layout. Every CNA vertex struct below
+        // publicly inherits the polymorphic IVertexType (a vtable pointer XNA's own C# interface
+        // never carried), inflating its real sizeof() past that clean size -- comparing `stride`
+        // against sizeof(...) directly, then reinterpret_cast-ing the tightly-packed bytes as an
+        // array of those inflated structs, silently reads every vertex field from the wrong byte
+        // offset (confirmed the true cause of a long-tracked "near-plane-clipping"/invisible-model
+        // symptom family in ../cna-samples). Read each vertex's fields explicitly from the
+        // buffer's own known-clean offsets instead, and construct real, normally-initialized C++
+        // objects (the compiler resolves member layout correctly), then upload through the
+        // existing typed SetData overload, which already packs into the correct compact GPU
+        // layout. Stride 52/56 (GPU-skinned, with/without per-vertex Color -- CNB-67) already
+        // match VertexBuffer's own compact skinned layout, so SetDataRaw() copies them straight
+        // through with no C++ struct reinterpretation at all, avoiding the vtable-inflation risk
+        // by construction rather than by careful offset arithmetic.
+        std::unique_ptr<Graphics::VertexBuffer> BuildVertexBufferFromRawBytes(
+            Graphics::GraphicsDevice& device, int stride, int numVertices,
+            const std::vector<std::uint8_t>& vertBytes)
+        {
+            auto readF = [&](std::size_t off) {
+                float v;
+                std::memcpy(&v, vertBytes.data() + off, sizeof(float));
+                return v;
+            };
+            auto readVec3 = [&](std::size_t off) {
+                return Vector3(readF(off), readF(off + 4), readF(off + 8));
+            };
+            auto readVec2 = [&](std::size_t off) {
+                return Vector2(readF(off), readF(off + 4));
+            };
+            auto readColor = [&](std::size_t off) {
+                return Color(vertBytes[off], vertBytes[off + 1],
+                             vertBytes[off + 2], vertBytes[off + 3]);
+            };
+
+            // Note: VertexPositionColorTexture's own declared `= default` default constructor is
+            // implicitly deleted (its `Color Color` member has no zero-arg constructor) -- build
+            // each vector via reserve()+emplace_back() rather than a sized constructor, so none
+            // of the 4 struct-backed branches below ever needs default-construction.
+            auto vb = std::make_unique<Graphics::VertexBuffer>(device, numVertices);
+            if (stride == 16) {
+                std::vector<Graphics::VertexPositionColor> verts;
+                verts.reserve(static_cast<std::size_t>(numVertices));
+                for (int i = 0; i < numVertices; ++i) {
+                    const std::size_t o = static_cast<std::size_t>(i) * 16;
+                    verts.emplace_back(readVec3(o), readColor(o + 12));
+                }
+                vb->SetData(verts.data(), numVertices);
+            } else if (stride == 20) {
+                std::vector<Graphics::VertexPositionTexture> verts;
+                verts.reserve(static_cast<std::size_t>(numVertices));
+                for (int i = 0; i < numVertices; ++i) {
+                    const std::size_t o = static_cast<std::size_t>(i) * 20;
+                    verts.emplace_back(readVec3(o), readVec2(o + 12));
+                }
+                vb->SetData(verts.data(), numVertices);
+            } else if (stride == 24) {
+                std::vector<Graphics::VertexPositionColorTexture> verts;
+                verts.reserve(static_cast<std::size_t>(numVertices));
+                for (int i = 0; i < numVertices; ++i) {
+                    const std::size_t o = static_cast<std::size_t>(i) * 24;
+                    verts.emplace_back(readVec3(o), readColor(o + 12), readVec2(o + 16));
+                }
+                vb->SetData(verts.data(), numVertices);
+            } else if (stride == 32) {
+                std::vector<Graphics::VertexPositionNormalTexture> verts;
+                verts.reserve(static_cast<std::size_t>(numVertices));
+                for (int i = 0; i < numVertices; ++i) {
+                    const std::size_t o = static_cast<std::size_t>(i) * 32;
+                    verts.emplace_back(readVec3(o), readVec3(o + 12), readVec2(o + 24));
+                }
+                vb->SetData(verts.data(), numVertices);
+            } else if (stride == 52) {
+                vb->SetDataRaw(vertBytes.data(), numVertices, 52);
+            } else if (stride == 56) {
+                vb->SetDataRaw(vertBytes.data(), numVertices, 56);
+            }
+            return vb;
+        }
+
+        // plan_cnj.md CNB-70/71 (Phase 13D): loads a .gltf/.glb file directly into a real Model,
+        // with no intermediate .cnj/binary sidecar files -- reuses the same
+        // CNA::Internal::GltfImport::GltfImportCore parsing/skeleton/animation/mesh-extraction
+        // functions tools/gltf_to_cnj's offline CLI tool calls (see that header's own docs for the
+        // full behavior description: topological bone reorder, sparse-accessor-safe reads,
+        // CUBICSPLINE Hermite evaluation, base-color/occlusion texture extraction, scene-scoped
+        // mesh grouping, stride-20/24/32/52/56 selection).
+        //
+        // Unlike the offline tool (which can emit multiple .cnj Model outputs for a glTF file
+        // combining several independently-skinned characters), a single Load<Model>() call
+        // returns exactly one Model -- only the file's FIRST mesh group (CollectMeshGroups' own
+        // order) is imported. A multi-character glTF file needs the offline gltf_to_cnj tool (or
+        // splitting the source into separate files) to reach the other groups -- a documented
+        // limitation, not a bug. unitScale is always 1.0 (no CLI-argument equivalent exists for
+        // runtime loading); a source file not authored in meters needs the offline tool instead.
+        Graphics::Model ReadGltfModel(const std::string& path, ContentManager& cm)
+        {
+            namespace fs = std::filesystem;
+            using namespace CNA::Internal::GltfImport;
+
+            cgltf_options parseOptions{};
+            cgltf_data* data = nullptr;
+            cgltf_result parseResult = cgltf_parse_file(&parseOptions, path.c_str(), &data);
+            if (parseResult != cgltf_result_success)
+            {
+                throw ContentLoadException(
+                    "Failed to parse glTF file '" + path + "' (cgltf error " +
+                    std::to_string(static_cast<int>(parseResult)) + ").");
+            }
+            struct DataGuard { cgltf_data* d; ~DataGuard() { cgltf_free(d); } } guard{data};
+
+            parseResult = cgltf_load_buffers(&parseOptions, data, path.c_str());
+            if (parseResult != cgltf_result_success)
+            {
+                throw ContentLoadException("Failed to load buffers for glTF file '" + path + "'.");
+            }
+
+            if (data->asset.version && std::string(data->asset.version) != "2.0")
+            {
+                throw ContentLoadException(
+                    "Unsupported glTF asset.version '" + std::string(data->asset.version) +
+                    "' in '" + path + "' -- only glTF 2.0 is supported.");
+            }
+
+            const std::vector<MeshGroup> groups = CollectMeshGroups(data);
+            if (groups.empty())
+            {
+                throw ContentLoadException("glTF file '" + path + "' contains no mesh instances to import.");
+            }
+            const MeshGroup& group = groups.front();
+
+            const bool hasSkin = group.skin != nullptr;
+            SkeletonResult skeleton;
+            if (hasSkin) { skeleton = BuildSkeleton(group.skin, 1.0f); }
+
+            Graphics::GraphicsDevice& device = cm.getGraphicsDeviceInternal();
+            const fs::path gltfDir = fs::path(path).parent_path();
+
+            auto res = std::make_shared<ModelResources>();
+            std::vector<Graphics::ModelBone*> boneRawPtrs;
+            std::vector<Graphics::ModelMesh*> meshRawPtrs;
+
+            {
+                auto bone = std::make_unique<Graphics::ModelBone>(0, std::string("Root"));
+                boneRawPtrs.push_back(bone.get());
+                res->boneOwners.push_back(std::move(bone));
+            }
+            Graphics::ModelBone* rootBone = boneRawPtrs.front();
+
+            if (hasSkin)
+            {
+                auto skinningData = std::make_unique<Graphics::SkinningData>();
+                const int boneCount = static_cast<int>(skeleton.bones.size());
+                skinningData->BoneCount = boneCount;
+                skinningData->SkeletonHierarchy.resize(static_cast<std::size_t>(boneCount));
+                skinningData->BindPose.resize(static_cast<std::size_t>(boneCount));
+                skinningData->InverseBindPose.resize(static_cast<std::size_t>(boneCount));
+                for (int i = 0; i < boneCount; ++i)
+                {
+                    const auto ui = static_cast<std::size_t>(i);
+                    skinningData->SkeletonHierarchy[ui] = skeleton.bones[ui].parentIndex;
+                    skinningData->BindPose[ui] = skeleton.bones[ui].bindPoseLocal;
+                    skinningData->InverseBindPose[ui] = skeleton.bones[ui].inverseBindGlobal;
+                }
+
+                std::vector<std::string> warnings;
+                const std::vector<ClipOut> clips = ExtractClips(data, skeleton, 1.0f, warnings);
+                for (const ClipOut& clip : clips)
+                {
+                    Graphics::AnimationClipEXT outClip;
+                    outClip.Duration = System::TimeSpan::FromSeconds(clip.duration);
+                    outClip.Tracks.reserve(clip.tracks.size());
+                    for (const TrackOut& track : clip.tracks)
+                    {
+                        Graphics::BoneTrackEXT outTrack;
+                        outTrack.BoneIndex = track.boneIndex;
+                        outTrack.Keys.reserve(track.keys.size());
+                        for (const KeyframeOut& k : track.keys)
+                        {
+                            Graphics::KeyframeEXT key;
+                            key.Time = System::TimeSpan::FromSeconds(k.time);
+                            key.Translation = k.translation;
+                            key.Rotation = k.rotation;
+                            key.Scale = k.scale;
+                            outTrack.Keys.push_back(key);
+                        }
+                        outClip.Tracks.push_back(std::move(outTrack));
+                    }
+                    skinningData->AnimationClips[clip.name] = std::move(outClip);
+                }
+
+                res->skinningData = std::move(skinningData);
+            }
+
+            // Textures are decoded straight from the extracted in-memory bytes via MemoryStream --
+            // no temporary files, unlike the offline CLI tool. Cached by cgltf_image* so a texture
+            // shared by several primitives is only decoded once per Load<Model>() call.
+            std::unordered_map<const cgltf_image*, Graphics::Texture2D*> textureCache;
+            auto loadTexture = [&](const cgltf_image* image) -> Graphics::Texture2D*
+            {
+                if (!image) { return nullptr; }
+                auto cached = textureCache.find(image);
+                if (cached != textureCache.end()) { return cached->second; }
+                auto extracted = ExtractImage(image, gltfDir);
+                if (!extracted) { return nullptr; }
+                System::IO::MemoryStream ms(extracted->bytes.data(),
+                                             static_cast<std::int32_t>(extracted->bytes.size()));
+                auto tex = std::make_unique<Graphics::Texture2D>(
+                    Graphics::Texture2D::FromStream(device, ms));
+                Graphics::Texture2D* texPtr = tex.get();
+                res->textureOwners.push_back(std::move(tex));
+                textureCache[image] = texPtr;
+                return texPtr;
+            };
+
+            int meshCounter = 0;
+            for (const cgltf_mesh* mesh : group.meshes)
+            {
+                for (cgltf_size p = 0; p < mesh->primitives_count; ++p)
+                {
+                    const std::string partName = mesh->name
+                        ? (std::string(mesh->name) + (mesh->primitives_count > 1 ? "_" + std::to_string(p) : ""))
+                        : ("mesh" + std::to_string(meshCounter));
+                    MeshOut meshOut = ExtractMesh(mesh->primitives[p], partName, hasSkin ? &skeleton : nullptr, 1.0f);
+
+                    const int numVertices = meshOut.stride > 0
+                        ? static_cast<int>(meshOut.vertexBytes.size()) / meshOut.stride : 0;
+                    auto vb = BuildVertexBufferFromRawBytes(device, meshOut.stride, numVertices, meshOut.vertexBytes);
+
+                    const int indexSize = meshOut.use32BitIndices
+                        ? static_cast<int>(sizeof(std::uint32_t)) : static_cast<int>(sizeof(std::uint16_t));
+                    const int numIndices = static_cast<int>(meshOut.indexBytes.size()) / indexSize;
+                    const int primCount = numIndices / 3;
+
+                    auto ib = std::make_unique<Graphics::IndexBuffer>(
+                        device,
+                        meshOut.use32BitIndices ? Graphics::IndexElementSize::ThirtyTwoBits
+                                                : Graphics::IndexElementSize::SixteenBits,
+                        numIndices, Graphics::BufferUsage::None);
+                    if (meshOut.use32BitIndices) {
+                        ib->SetData(reinterpret_cast<const std::uint32_t*>(meshOut.indexBytes.data()), numIndices);
+                    } else {
+                        ib->SetData(reinterpret_cast<const std::uint16_t*>(meshOut.indexBytes.data()), numIndices);
+                    }
+
+                    auto part = std::make_unique<Graphics::ModelMeshPart>(
+                        vb.get(), ib.get(), numVertices, primCount, 0, 0);
+                    Graphics::ModelMeshPart* partPtr = part.get();
+
+                    const std::string& meshName = meshOut.name;
+                    auto meshObj = std::make_unique<Graphics::ModelMesh>(
+                        &device, meshName.empty() ? "mesh" : meshName,
+                        std::vector<Graphics::ModelMeshPart*>{partPtr});
+
+                    auto meshBone = std::make_unique<Graphics::ModelBone>(
+                        static_cast<int>(boneRawPtrs.size()), meshName.empty() ? "mesh" : meshName);
+                    rootBone->AddChild(meshBone.get());
+                    meshObj->setParentBoneProperty(meshBone.get());
+                    boneRawPtrs.push_back(meshBone.get());
+                    res->boneOwners.push_back(std::move(meshBone));
+
+                    std::shared_ptr<Graphics::Effect> fx;
+                    if (meshOut.skinned) { fx = std::make_shared<Graphics::SkinnedEffect>(device); }
+                    else if (meshOut.useDualTexture) { fx = std::make_shared<Graphics::DualTextureEffect>(device); }
+                    else { fx = std::make_shared<Graphics::BasicEffect>(device); }
+
+                    if (Graphics::Texture2D* tex = loadTexture(meshOut.baseColorImage))
+                    {
+                        if (auto* basicFx = dynamic_cast<Graphics::BasicEffect*>(fx.get())) {
+                            basicFx->setTextureProperty(tex);
+                            basicFx->setTextureEnabledProperty(true);
+                        } else if (auto* skinnedFx = dynamic_cast<Graphics::SkinnedEffect*>(fx.get())) {
+                            skinnedFx->setTextureProperty(tex);
+                        } else if (auto* dualFx = dynamic_cast<Graphics::DualTextureEffect*>(fx.get())) {
+                            dualFx->setTextureProperty(tex);
+                        }
+                    }
+
+                    if (meshOut.useDualTexture)
+                    {
+                        if (Graphics::Texture2D* tex2 = loadTexture(meshOut.occlusionImage))
+                        {
+                            if (auto* dualFx = dynamic_cast<Graphics::DualTextureEffect*>(fx.get())) {
+                                dualFx->setTexture2Property(tex2);
+                            }
+                        }
+                    }
+
+                    if (meshOut.colored)
+                    {
+                        if (auto* basicFx = dynamic_cast<Graphics::BasicEffect*>(fx.get())) {
+                            basicFx->VertexColorEnabled = true;
+                        } else if (auto* skinnedFx = dynamic_cast<Graphics::SkinnedEffect*>(fx.get())) {
+                            skinnedFx->VertexColorEnabled = true;
+                        }
+                    }
+
+                    partPtr->setEffectProperty(fx.get());
+                    res->effectOwners.push_back(std::move(fx));
+
+                    meshRawPtrs.push_back(meshObj.get());
+                    res->vbs.push_back(std::move(vb));
+                    res->ibs.push_back(std::move(ib));
+                    res->partOwners.push_back(std::move(part));
+                    res->meshOwners.push_back(std::move(meshObj));
+                    ++meshCounter;
+                }
+            }
+
+            if (meshRawPtrs.empty())
+            {
+                throw ContentLoadException("glTF file '" + path + "' contains no mesh primitives to import.");
+            }
+
+            Graphics::Model model(&device, std::move(boneRawPtrs), std::move(meshRawPtrs));
+            model.setOwnedResources(res);
+            model.setTagProperty(res->skinningData.get());
+            return model;
+        }
+
         class ModelTypeReader : public LooseFileContentTypeReader<Graphics::Model>
         {
         public:
             [[nodiscard]] std::vector<std::string> GetExtensions() const override
             {
-                return {".cnj"};
+                // CNB-70/71 (Phase 13D): .gltf/.glb are tried after .cnj (ResolveAssetPath's own
+                // "always try .cnj first" rule), so an asset with both a .cnj sidecar and a
+                // same-named .gltf/.glb file still resolves to the .cnj -- matching cnj.md's
+                // established "sidecar always wins" convention for every other native format.
+                return {".cnj", ".gltf", ".glb"};
             }
 
             Graphics::Model Read(const std::string& path, ContentManager& cm) override
             {
                 namespace fs = std::filesystem;
+
+                // CNB-70/71 (Phase 13D): a .gltf/.glb path is parsed directly, with no .cnj/binary
+                // sidecar files at all -- see ReadGltfModel()'s own doc comment.
+                const std::string ext = fs::path(path).extension().string();
+                if (ext == ".gltf" || ext == ".glb")
+                {
+                    return ReadGltfModel(path, cm);
+                }
 
                 const std::string json = ReadTextFile(path);
 
@@ -1563,20 +1914,8 @@ namespace Microsoft::Xna::Framework::Content
                 const std::string root = cm.getRootDirectoryProperty();
                 Graphics::GraphicsDevice& device = cm.getGraphicsDeviceInternal();
 
-                // Owned resources shared by all copies of the returned Model.
-                struct ModelResources {
-                    std::vector<std::unique_ptr<Graphics::VertexBuffer>>  vbs;
-                    std::vector<std::unique_ptr<Graphics::IndexBuffer>>   ibs;
-                    std::vector<std::unique_ptr<Graphics::ModelBone>>     boneOwners;
-                    std::vector<std::unique_ptr<Graphics::ModelMesh>>     meshOwners;
-                    std::vector<std::unique_ptr<Graphics::ModelMeshPart>> partOwners;
-                    std::vector<std::shared_ptr<Graphics::Effect>>        effectOwners;
-                    std::vector<std::unique_ptr<Graphics::Texture2D>>     textureOwners;
-                    // Task 941: owns the skeleton/animation-clip data attached to the returned
-                    // Model's own Tag property (see the "Skeletal animation" section below) --
-                    // null for a rigid, non-skinned .model.json with no "skeleton" field.
-                    std::unique_ptr<Graphics::SkinningData>               skinningData;
-                };
+                // Owned resources shared by all copies of the returned Model (ModelResources is
+                // hoisted to file scope, shared with ReadGltfModel()).
                 auto res = std::make_shared<ModelResources>();
 
                 std::vector<Graphics::ModelBone*> boneRawPtrs;
@@ -1711,95 +2050,7 @@ namespace Microsoft::Xna::Framework::Content
                             const int numIndices  = static_cast<int>(idxBytes.size()) / indexSize;
                             const int primCount   = numIndices / 3;
 
-                            // Task 927: `stride` is always one of XNA's own "clean" (tightly
-                            // packed, no vtable) sizes -- 16/20/24/32 -- since every offline
-                            // conversion tool writes that exact layout. Every CNA vertex struct
-                            // below publicly inherits the polymorphic IVertexType (a vtable
-                            // pointer XNA's own C# interface never carried), inflating its real
-                            // sizeof() past that clean size -- comparing `stride` against
-                            // sizeof(...) directly, then reinterpret_cast-ing the tightly-packed
-                            // file bytes as an array of those inflated structs, silently read
-                            // every vertex field from the wrong byte offset (confirmed the true
-                            // cause of a long-tracked "near-plane-clipping"/invisible-model
-                            // symptom family in ../cna-samples). Read each vertex's fields
-                            // explicitly from the file's own known-clean offsets instead, and
-                            // construct real, normally-initialized C++ objects (the compiler
-                            // resolves member layout correctly), then upload through the existing
-                            // typed SetData overload, which already packs into the correct
-                            // compact GPU layout.
-                            auto readF = [&](std::size_t off) {
-                                float v;
-                                std::memcpy(&v, vertBytes.data() + off, sizeof(float));
-                                return v;
-                            };
-                            auto readVec3 = [&](std::size_t off) {
-                                return Vector3(readF(off), readF(off + 4), readF(off + 8));
-                            };
-                            auto readVec2 = [&](std::size_t off) {
-                                return Vector2(readF(off), readF(off + 4));
-                            };
-                            auto readColor = [&](std::size_t off) {
-                                return Color(vertBytes[off], vertBytes[off + 1],
-                                             vertBytes[off + 2], vertBytes[off + 3]);
-                            };
-
-                            // Note: VertexPositionColorTexture's own declared `= default` default
-                            // constructor is implicitly deleted (its `Color Color` member has no
-                            // zero-arg constructor) -- build each vector via reserve()+
-                            // emplace_back() rather than a sized constructor, so none of the 4
-                            // branches below ever needs default-construction.
-                            auto vb = std::make_unique<Graphics::VertexBuffer>(device, numVertices);
-                            if (stride == 16) {
-                                std::vector<Graphics::VertexPositionColor> verts;
-                                verts.reserve(static_cast<std::size_t>(numVertices));
-                                for (int i = 0; i < numVertices; ++i) {
-                                    const std::size_t o = static_cast<std::size_t>(i) * 16;
-                                    verts.emplace_back(readVec3(o), readColor(o + 12));
-                                }
-                                vb->SetData(verts.data(), numVertices);
-                            } else if (stride == 20) {
-                                std::vector<Graphics::VertexPositionTexture> verts;
-                                verts.reserve(static_cast<std::size_t>(numVertices));
-                                for (int i = 0; i < numVertices; ++i) {
-                                    const std::size_t o = static_cast<std::size_t>(i) * 20;
-                                    verts.emplace_back(readVec3(o), readVec2(o + 12));
-                                }
-                                vb->SetData(verts.data(), numVertices);
-                            } else if (stride == 24) {
-                                std::vector<Graphics::VertexPositionColorTexture> verts;
-                                verts.reserve(static_cast<std::size_t>(numVertices));
-                                for (int i = 0; i < numVertices; ++i) {
-                                    const std::size_t o = static_cast<std::size_t>(i) * 24;
-                                    verts.emplace_back(readVec3(o), readColor(o + 12), readVec2(o + 16));
-                                }
-                                vb->SetData(verts.data(), numVertices);
-                            } else if (stride == 32) {
-                                std::vector<Graphics::VertexPositionNormalTexture> verts;
-                                verts.reserve(static_cast<std::size_t>(numVertices));
-                                for (int i = 0; i < numVertices; ++i) {
-                                    const std::size_t o = static_cast<std::size_t>(i) * 32;
-                                    verts.emplace_back(readVec3(o), readVec3(o + 12), readVec2(o + 24));
-                                }
-                                vb->SetData(verts.data(), numVertices);
-                            } else if (stride == 52) {
-                                // Task 941 (Phase 77): GPU-skinned vertex (VertexPositionNormal
-                                // TextureSkinned) -- pos+normal+texcoord+blendweight+blendindices,
-                                // already exactly the compact GPU layout VertexBuffer's own
-                                // skinned SetData path expects (matches
-                                // SkinnedModelTypeReader's own identical stride-52 handling in
-                                // this same file). SetDataRaw() copies these bytes straight
-                                // through with no C++ struct reinterpretation at all, so this
-                                // branch has no analogue of Task 927's own vtable-inflation risk.
-                                vb->SetDataRaw(vertBytes.data(), numVertices, 52);
-                            } else if (stride == 56) {
-                                // CNB-67 (Phase 13C): the stride-52 GPU-skinned layout with a
-                                // per-vertex Color (normalized ubyte4) appended at the end --
-                                // matches EasyGLGraphicsBackend::ApplyLayout's stride==56 case,
-                                // which keeps attribute locations 0-4 identical to stride-52 and
-                                // only adds location 5 (aColor). Raw byte upload for the same
-                                // vtable-inflation reason as the stride-52 branch above.
-                                vb->SetDataRaw(vertBytes.data(), numVertices, 56);
-                            }
+                            auto vb = BuildVertexBufferFromRawBytes(device, stride, numVertices, vertBytes);
 
                             auto ib = std::make_unique<Graphics::IndexBuffer>(
                                 device,

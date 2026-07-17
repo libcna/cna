@@ -10,14 +10,18 @@
 > engine-level gaps (PBR materials, morph targets, skinned vertex color, runtime glTF loading, a
 > second texture layer) — implementation began 2026-07-17 at the project owner's explicit request
 > ("implementuj prosim postupne fazi 13"), working through sub-phases in order of tractability.
-> **13E (`CNB-72`–`CNB-74`, second texture via `DualTextureEffect`) and 13C (`CNB-66`–`CNB-69`,
-> vertex color on skinned meshes) are now ✅ CLOSED** — 13E wired occlusion texture to `Texture2`
-> (see its own section for the documented brightness-approximation caveat); 13C added a NOXNA
-> `SkinnedEffect::VertexColorEnabled`, a new stride-56 vertex layout, and real EasyGL shader
-> support (both the per-pixel-lit and vertex-lit skinned programs), catching and fixing a real
-> vertex-color/specular-compositing bug along the way — see its own section for detail. 13A/13B/13D
-> remain ⬜ not started. Final full-suite regression after 13C: **4698 tests, 4696 passed, same 2
-> pre-existing hardware skips, 0 failures** (CnaTests), plus all 15 EasyGL SkinnedEffect-family
+> **13E (`CNB-72`–`CNB-74`, second texture via `DualTextureEffect`), 13C (`CNB-66`–`CNB-69`,
+> vertex color on skinned meshes), and 13D (`CNB-70`–`CNB-71`, runtime non-CLI glTF loading) are
+> now ✅ CLOSED** — 13E wired occlusion texture to `Texture2` (see its own section for the
+> documented brightness-approximation caveat); 13C added a NOXNA `SkinnedEffect::
+> VertexColorEnabled`, a new stride-56 vertex layout, and real EasyGL shader support (both the
+> per-pixel-lit and vertex-lit skinned programs), catching and fixing a real vertex-color/specular-
+> compositing bug along the way; 13D factored the glTF parsing core into a reusable
+> `CNA::Internal::GltfImport::GltfImportCore` library and added a `ModelTypeReader::ReadGltfModel()`
+> path so `Content.Load<Model>("character.gltf")` works directly, no `.cnj`/binary sidecars — see
+> each section for full detail. Only 13A/13B remain ⬜ not started. Final full-suite regression
+> after 13D: **4700 tests, 4697 passed, same 2 pre-existing hardware skips plus 1 confirmed-
+> unrelated audio-timing flake, 0 failures** (CnaTests), plus all 15 EasyGL SkinnedEffect-family
 > ctest cases passing. Everything below this line
 > describes the original 9-phase scope as it stood on 2026-07-15; Phases 10-13 were added later as
 > follow-ups this plan's own "Genuinely new `.cnj` types" note (via `cnj.md`) had already flagged.
@@ -400,15 +404,15 @@ onto `.cnj`, `RegisterCnjLoader<T>`, and Phase 9's hardening of those mechanisms
 | CNB-68 | Extend `gltf_to_cnj`: drop the current "skinned meshes never get COLOR_0" restriction once a real shader path exists | ✅ | `ExtractMesh()`: `out.colored` no longer excludes skinned meshes; stride selection is now `skinned?(colored?56:52):(colored?24:(useDualTexture?20:32))`; the per-vertex write loop gained a shared `appendColor()` lambda used by both the unskinned stride-24 branch (Color right after Position, unchanged) and a new skinned+colored path (Color appended after BlendIndices, matching CNB-67's stride-56 layout); `normals` unpacking condition changed from `!out.colored` to `stride != 24 && stride != 20` (the two layouts with no Normal slot at all), since colored no longer implies unskinned/no-normal. `ConvertGroup`'s existing `entry.vertexColorEnabled = meshOut.colored;` needed no change — it already applies uniformly regardless of effect. |
 | CNB-69 | Tests + docs | ✅ | New `GltfToCnjToolTest.ExtractsVertexColorOnASkinnedMeshAndEnablesItOnSkinnedEffect` (fixture `kSkinnedVertexColorGltf`: one bone, 3 vertices each fully weighted to it, distinct RGBA colors) asserts the raw vertex buffer is `3*56` bytes with Color at the correct offset-52 position, and that a full `ContentManager::Load<Model>` round-trip produces a `SkinnedEffect` with `VertexColorEnabled == true`. Plus the EasyGL rendering-correctness golden test described under CNB-67. Full-suite regression after this task: **4698 tests, 4696 passed, same 2 pre-existing hardware skips, 0 failures** (CnaTests), plus all 15 EasyGL SkinnedEffect-family ctest cases passing separately. |
 
-### 13D — Runtime (non-CLI) glTF loading
+### 13D — Runtime (non-CLI) glTF loading ✅ CLOSED 2026-07-17
 
 > `gltf_to_cnj` is an offline developer tool today (matches `gltf.md`'s own recommended "phase 1"
 > for the Avatar-specific path) — a game cannot `Content.Load<Model>("character.glb")` directly.
 
 | # | Task | Status | Notes |
 |---|---|---|---|
-| CNB-70 | Factor `gltf_to_cnj`'s parsing/skeleton/animation core into a reusable library (not just a CLI `main()`), then add a `ContentManager` `LooseFileContentTypeReader<Model>` (or similar) that parses `.gltf`/`.glb` directly into memory, no intermediate `.cnj`/binary sidecars | ⬜ | Mirrors `gltf.md` §4.2's own "item 2" recommendation for the Avatar-specific path, applied to the general-purpose `Model` path this phase already covers. |
-| CNB-71 | Tests + docs | ⬜ | |
+| CNB-70 | Factor `gltf_to_cnj`'s parsing/skeleton/animation core into a reusable library (not just a CLI `main()`), then add a `ContentManager` `LooseFileContentTypeReader<Model>` (or similar) that parses `.gltf`/`.glb` directly into memory, no intermediate `.cnj`/binary sidecars | ✅ | New `CNA::Internal::GltfImport::GltfImportCore` library (`include/CNA/Internal/GltfImport/GltfImportCore.hpp` + `src/.../GltfImportCore.cpp`) holds every pure parsing/extraction function (`BuildSkeleton`, `ExtractClips`, `ExtractMesh`, `ExtractImage`, `FindBaseColorImage`, `FindOcclusionImage`, `CollectMeshGroups`) and struct (`BoneOut`/`SkeletonResult`/`KeyframeOut`/`TrackOut`/`ClipOut`/`ExtractedImage`/`MeshOut`/`MeshGroup`) moved verbatim out of `tools/gltf_to_cnj/gltf_to_cnj.cpp`, which now only keeps its own file-writing/JSON-emission code and calls into the shared library — this is also the library's one and only `CGLTF_IMPLEMENTATION` translation unit (`cmake/CnaLibrary.cmake` adds `third_party/cgltf` to `CNA`'s own include path). `ContentManager.cpp`'s `ModelTypeReader::GetExtensions()` now also returns `.gltf`/`.glb` (tried after `.cnj`, matching `cnj.md`'s "sidecar always wins" rule); `Read()` branches on the resolved path's extension to a new `ReadGltfModel()` function that parses the file directly (`cgltf_parse_file`/`cgltf_load_buffers`) and builds a real `Model` in memory — vertex/index buffers from `GltfImportCore`'s raw bytes (reusing a newly-hoisted-to-file-scope `BuildVertexBufferFromRawBytes()` helper, factored out of `ModelTypeReader::Read()`'s own stride-dispatch code so both the `.cnj` JSON path and the new glTF path share one implementation), `SkinningData`/`AnimationClipEXT`/`BoneTrackEXT`/`KeyframeEXT` built directly from `SkeletonResult`/`ClipOut` (no `.skeleton.bin`/`.clip.cnj` round-trip at all), and textures decoded straight from `ExtractImage()`'s in-memory bytes via `System::IO::MemoryStream` + `Texture2D::FromStream` (no temp files). **Documented limitation**: unlike the offline CLI tool (which can emit multiple `.cnj` Model outputs for a glTF file combining several independently-skinned characters), a single `Load<Model>()` call always imports only the file's *first* mesh group (`CollectMeshGroups`' own order); a multi-character glTF file still needs the offline tool (or splitting into separate files) for the other groups. `unitScale` is always `1.0` for runtime loading (no CLI-argument equivalent) — a source file not authored in meters needs the offline tool instead. |
+| CNB-71 | Tests + docs | ✅ | New `tests/.../RuntimeGltfModelTests.cpp` (in-process, not a subprocess — `ReadGltfModel()` is a library function now, not a CLI tool being spawned): `LoadsUnskinnedTexturedModelDirectlyFromGltf` (extension resolution, vertex/index buffers, in-memory `BasicEffect` texture decoding) and `LoadsSkinnedAnimatedModelDirectlyFromGltfWithReversedJointOrder` (topological bone reorder with `skin.joints=[1,0]` reversed, `SkinningData` bone count/hierarchy, a full `AnimationClips["Wave"]` entry with correct duration/track/keyframe values, `SkinnedEffect` + texture). Refactor verified behavior-preserving for the existing `.cnj` path: all 14 `GltfToCnjToolTest` cases and the full `ModelContentTypeReaderTest`/`*Model*` subset re-ran green immediately after the `BuildVertexBufferFromRawBytes`/`ModelResources` hoist, before `ReadGltfModel` was even added. Full-suite regression after this task: **4700 tests, 4697 passed, same 2 pre-existing hardware skips plus 1 unrelated audio-timing flake (`WaveBankTest.IsInUseTrueWhilePlayingThenFalseAfterStop`, confirmed passing in isolation — a pre-existing flake, not a regression from this task), 0 failures.** |
 
 ### 13E — Second texture via existing `DualTextureEffect` (smaller, more tractable) ✅ CLOSED 2026-07-17
 
