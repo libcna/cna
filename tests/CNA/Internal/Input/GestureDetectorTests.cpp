@@ -85,6 +85,31 @@ TEST_F(GestureDetectorTest, TapFiresOnQuickReleaseNearPressPosition)
     EXPECT_FALSE(TouchPanel::getIsGestureAvailableProperty());
 }
 
+// P6-012: GetGestureTimestamp() is file-local (not directly unit-testable), but its output is
+// observable via any real gesture's Timestamp field. Pin the two properties that actually matter
+// for a monotonic clock-derived value (docs/input-fna-fidelity.md's Gestures section documents why
+// CNA intentionally does NOT replicate FNA's literal tick/millisecond unit-mismatch formula):
+// non-negative, and strictly increasing for two gestures separated by an advanced test clock.
+TEST_F(GestureDetectorTest, GestureTimestampIsNonNegativeAndAdvancesWithTheClock)
+{
+    TouchPanel::setEnabledGesturesProperty(GestureType::Tap);
+
+    Press(1, 0.5f, 0.5f);
+    Release(1, 0.5f, 0.5f);
+    ASSERT_TRUE(TouchPanel::getIsGestureAvailableProperty());
+    const GestureSample first = TouchPanel::ReadGesture();
+    EXPECT_GE(first.getTimestampProperty(), System::TimeSpan::Zero);
+
+    GestureDetector::AdvanceTestClockMilliseconds(250);
+
+    Press(2, 0.2f, 0.2f);
+    Release(2, 0.2f, 0.2f);
+    ASSERT_TRUE(TouchPanel::getIsGestureAvailableProperty());
+    const GestureSample second = TouchPanel::ReadGesture();
+    EXPECT_GE(second.getTimestampProperty(), System::TimeSpan::Zero);
+    EXPECT_GT(second.getTimestampProperty(), first.getTimestampProperty());
+}
+
 // P6-005(b): moving beyond MOVE_THRESHOLD with only Tap enabled cancels the tap. No drag is enabled, so
 // the detector leaves HOLDING for NONE once the finger crosses 35px, and the release emits no Tap.
 TEST_F(GestureDetectorTest, TapDoesNotFireWhenFingerMovesBeyondMoveThreshold)

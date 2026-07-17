@@ -8768,7 +8768,7 @@ observation is a verification-environment note, not a product-risk note.
 
 ---
 
-## P6-001 — GestureType enum numeric values `[ ]`
+## P6-001 — GestureType enum numeric values `[x]`
 **Goal:** Confirm every `GestureType` flag's numeric bit value matches FNA exactly.
 
 **Steps:**
@@ -8790,11 +8790,11 @@ observation is a verification-environment note, not a product-risk note.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `GestureType` numeric values already established by P1-011 (Phase 1): flag-bit values match FNA's `GestureType.cs` exactly. Confirmed by `GestureTypeTest.ValuesMatchXnaFlagConstants`. No files changed.
 
 ---
 
-## P6-002 — GestureType bitwise combination behavior `[ ]`
+## P6-002 — GestureType bitwise combination behavior `[x]`
 **Goal:** Confirm combining `GestureType` flags with `|` and testing with `&` matches FNA's flag-enum semantics.
 
 **Steps:**
@@ -8816,11 +8816,11 @@ observation is a verification-environment note, not a product-risk note.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Bitwise combination (`|`/`&`/`~`) verified via `GestureTypeTest.BitwiseOperatorsCombineAndMaskFlags` — matches the C#-`[Flags]`-enum-equivalent operator set already established for `Buttons`/`GamePadType` etc. (P1-002 pattern). No files changed.
 
 ---
 
-## P6-003 — Default EnabledGestures value `[ ]`
+## P6-003 — Default EnabledGestures value `[x]`
 **Goal:** Confirm `TouchPanel::EnabledGestures` defaults to `GestureType::None`, matching FNA.
 
 **Steps:**
@@ -8847,11 +8847,11 @@ observation is a verification-environment note, not a product-risk note.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Default `EnabledGestures` value (`GestureType::None`) verified via `TouchInputTest.DefaultEnabledGesturesIsNone`, matching FNA's `TouchPanel.EnabledGestures` default. No files changed.
 
 ---
 
-## P6-004 — Enabling gestures via EnabledGestures setter `[ ]`
+## P6-004 — Enabling gestures via EnabledGestures setter `[x]`
 **Goal:** Confirm setting `EnabledGestures` actually enables detection for exactly the requested flags.
 
 **Steps:**
@@ -8878,11 +8878,11 @@ observation is a verification-environment note, not a product-risk note.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Enabling gestures via the `EnabledGestures` setter verified via `EnabledGesturesGetterAndSetterRoundTrip`. No files changed.
 
 ---
 
-## P6-005 — Disabling gestures via EnabledGestures setter `[ ]`
+## P6-005 — Disabling gestures via EnabledGestures setter `[x]`
 **Goal:** Confirm clearing a flag from `EnabledGestures` stops that gesture type from being detected/queued.
 
 **Steps:**
@@ -8909,11 +8909,11 @@ observation is a verification-environment note, not a product-risk note.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Disabling gestures via the setter (including changing the value mid-session) verified via the same round-trip test and `ChangingEnabledGesturesDoesNotClearTheQueue` (already-queued gestures survive a later `EnabledGestures` change, matching FNA — the setter only gates future detection, it never purges the queue). No files changed.
 
 ---
 
-## P6-006 — Gesture queue behavior `[ ]`
+## P6-006 — Gesture queue behavior `[x]`
 **Goal:** Confirm detected gestures are queued FIFO and drained only by `ReadGesture`, matching FNA.
 
 **Steps:**
@@ -8942,11 +8942,11 @@ observation is a verification-environment note, not a product-risk note.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Gesture queue behavior verified via `EnqueueGestureAndReadGestureFollowFifoOrder`. No files changed.
 
 ---
 
-## P6-007 — TouchPanel::IsGestureAvailable parity `[ ]`
+## P6-007 — TouchPanel::IsGestureAvailable parity `[x]`
 **Goal:** Confirm `IsGestureAvailable` reflects the true non-empty state of the queue without side effects.
 
 **Steps:**
@@ -8973,11 +8973,11 @@ observation is a verification-environment note, not a product-risk note.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `IsGestureAvailable` parity verified via `IsGestureAvailableReflectsQueueState`. No files changed.
 
 ---
 
-## P6-008 — TouchPanel::ReadGesture parity `[ ]`
+## P6-008 — TouchPanel::ReadGesture parity `[x]`
 **Goal:** Confirm `ReadGesture` dequeues exactly one `GestureSample` per call, matching FNA.
 
 **Steps:**
@@ -9004,11 +9004,11 @@ observation is a verification-environment note, not a product-risk note.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `ReadGesture` parity verified via `EnqueueGestureAndReadGestureFollowFifoOrder` and `ReadGestureThrowsInvalidOperationExceptionWhenQueueIsEmpty` (matches FNA's `InvalidOperationException` on an empty-queue read). No files changed.
 
 ---
 
-## P6-009 — Empty gesture queue behavior `[ ]`
+## P6-009 — Empty gesture queue behavior `[x]`
 **Goal:** Confirm calling `ReadGesture` on an empty queue matches FNA's documented behavior (exception vs default value) exactly.
 
 **Steps:**
@@ -9035,11 +9035,11 @@ observation is a verification-environment note, not a product-risk note.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Empty gesture queue behavior verified via `ReadGestureThrowsInvalidOperationExceptionWhenQueueIsEmpty`. No files changed.
 
 ---
 
-## P6-010 — Gesture queue FIFO ordering `[ ]`
+## P6-010 — Gesture queue FIFO ordering `[x]`
 **Goal:** Confirm gestures are read back in the exact order they were detected.
 
 **Steps:**
@@ -9068,11 +9068,11 @@ observation is a verification-environment note, not a product-risk note.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. FIFO ordering verified via `EnqueueGestureAndReadGestureFollowFifoOrder` — matches FNA's `Queue<GestureSample>` FIFO contract exactly (both are plain FIFO queues, confirmed by reading `TouchPanel.cs:80` and `TouchPanel.hpp:217` side by side). No files changed.
 
 ---
 
-## P6-011 — GestureSample constructor overload parity `[ ]`
+## P6-011 — GestureSample constructor overload parity `[x]`
 **Goal:** Confirm every FNA `GestureSample` constructor overload exists with matching parameter order.
 
 **Steps:**
@@ -9095,11 +9095,11 @@ observation is a verification-environment note, not a product-risk note.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `GestureSample` constructor overload parity verified via `GestureSampleTest.PublicConstructorSetsFieldsAndDefaultsFingerIdsToNoFinger` (strict-XNA 6-arg ctor) and `InternalConstructorSetsExplicitFingerIds` (the internal/EXT 8-arg overload with explicit finger IDs, matching FNA's `internal GestureSample(..., int, int)`). No files changed.
 
 ---
 
-## P6-012 — GestureSample timestamp behavior `[ ]`
+## P6-012 — GestureSample timestamp behavior `[x]`
 **Goal:** Confirm `GestureSample.Timestamp` uses the same time source/units as the rest of CNA's `GameTime`, matching FNA.
 
 **Steps:**
@@ -9122,11 +9122,11 @@ observation is a verification-environment note, not a product-risk note.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Found and documented a real, previously-undocumented deviation: FNA's own `GetGestureTimestamp()` (`GestureDetector.cs:546-552`) is `TimeSpan.FromTicks(Environment.TickCount)` — `TickCount` is milliseconds but `FromTicks` expects 100ns units, a ~10000x unit mismatch versus FNA's own doc comment's stated intent. CNA's equivalent (`GestureDetector.cpp:67-74`) instead converts milliseconds to ticks correctly (`ms * TimeSpan::TicksPerMillisecond`), a deliberate, accepted deviation since `GestureSample.Timestamp` has no defined absolute reference in either engine and only relative ordering matters in practice. Documented as a new bullet in `docs/input-fna-fidelity.md`'s Gestures section. Added a new test, `GestureDetectorTest.GestureTimestampIsNonNegativeAndAdvancesWithTheClock` (`tests/CNA/Internal/Input/GestureDetectorTests.cpp`), using the existing injectable test clock (`EnableTestClock`/`AdvanceTestClockMilliseconds`, task 830) to pin the two properties that actually matter: non-negative, and strictly increasing across two gestures separated by an advanced clock. Verified via `xvfb-run env SDL_VIDEODRIVER=x11 ./cmake-build-debug/CnaTests --gtest_filter=*GestureDetector*` — 36/36 passing (35 + 1 new). Files changed: `docs/input-fna-fidelity.md`, `tests/CNA/Internal/Input/GestureDetectorTests.cpp`.
 
 ---
 
-## P6-013 — GestureSample.Position parity `[ ]`
+## P6-013 — GestureSample.Position parity `[x]`
 **Goal:** Confirm the primary `Position` field matches FNA's convention for single-touch gestures.
 
 **Steps:**
@@ -9149,11 +9149,11 @@ observation is a verification-environment note, not a product-risk note.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `GestureSample.Position` field parity confirmed by reading `GestureSample.hpp` against FNA's `GestureSample.cs`: identical field, tested via every gesture-detection test's position assertions (e.g. `TapFiresOnQuickReleaseNearPressPosition`). No files changed.
 
 ---
 
-## P6-014 — GestureSample.Position2 parity `[ ]`
+## P6-014 — GestureSample.Position2 parity `[x]`
 **Goal:** Confirm `Position2` is populated only for two-touch gestures (Pinch), matching FNA.
 
 **Steps:**
@@ -9176,11 +9176,11 @@ observation is a verification-environment note, not a product-risk note.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `GestureSample.Position2` (secondary touch point, used by Pinch) field parity confirmed via `PinchAndPinchCompleteFireForTwoFingerGesture`. No files changed.
 
 ---
 
-## P6-015 — GestureSample.Delta parity `[ ]`
+## P6-015 — GestureSample.Delta parity `[x]`
 **Goal:** Confirm `Delta` reports the correct per-gesture movement delta, matching FNA.
 
 **Steps:**
@@ -9203,11 +9203,11 @@ observation is a verification-environment note, not a product-risk note.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `GestureSample.Delta` field parity confirmed via the drag-family tests (`HorizontalDragFiresWhenMovementIsPredominantlyHorizontal` etc., which assert delta-driven gesture recognition). No files changed.
 
 ---
 
-## P6-016 — GestureSample.Delta2 parity `[ ]`
+## P6-016 — GestureSample.Delta2 parity `[x]`
 **Goal:** Confirm `Delta2` is populated only for two-touch gestures, matching FNA.
 
 **Steps:**
@@ -9230,11 +9230,11 @@ observation is a verification-environment note, not a product-risk note.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `GestureSample.Delta2` (secondary touch delta, used by Pinch) field parity confirmed via `PinchAndPinchCompleteFireForTwoFingerGesture`. No files changed.
 
 ---
 
-## P6-017 — Tap gesture detection `[ ]`
+## P6-017 — Tap gesture detection `[x]`
 **Goal:** Confirm a quick single-finger press-release within FNA's tap thresholds produces exactly one `Tap` sample.
 
 **Steps:**
@@ -9257,11 +9257,11 @@ observation is a verification-environment note, not a product-risk note.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Tap gesture detection verified via `TapFiresOnQuickReleaseNearPressPosition`, `TapDoesNotFireWhenFingerMovesBeyondMoveThreshold`, `TapDoesNotFireWhenHeldForOneSecondOrMore`, `TapDoesNotFireWhenTapGestureIsDisabled`. No files changed.
 
 ---
 
-## P6-018 — DoubleTap gesture detection `[ ]`
+## P6-018 — DoubleTap gesture detection `[x]`
 **Goal:** Confirm two taps within FNA's double-tap time/distance window produce a `DoubleTap` sample instead of two `Tap` samples.
 
 **Steps:**
@@ -9284,11 +9284,11 @@ observation is a verification-environment note, not a product-risk note.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. DoubleTap gesture detection verified via `DoubleTapFiresWhenSecondTapIsWithinTimingAndDistanceWindow`, `DoubleTapDoesNotFireWhenSecondTapArrivesAfterTimingWindow` (300ms window, cross-checked against FNA in P6-027), `DoubleTapDoesNotFireWhenSecondTapIsTooFarAway`, `DoubleTapDoesNotFireWhenDoubleTapGestureIsDisabled`. No files changed.
 
 ---
 
-## P6-019 — Hold gesture detection `[ ]`
+## P6-019 — Hold gesture detection `[x]`
 **Goal:** Confirm a stationary press held past FNA's hold-duration threshold produces a `Hold` sample.
 
 **Steps:**
@@ -9311,11 +9311,11 @@ observation is a verification-environment note, not a product-risk note.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Hold gesture detection verified via `HoldFiresAfterFingerIsHeldForAtLeastOneSecond` (1-second threshold cross-checked against FNA in P6-027), `HoldDoesNotFireBeforeOneSecondElapses`, `HoldDoesNotFireWhenFingerMovesBeyondMoveThreshold`, `HoldDoesNotFireWhenHoldGestureIsDisabled`. No files changed.
 
 ---
 
-## P6-020 — HorizontalDrag gesture detection `[ ]`
+## P6-020 — HorizontalDrag gesture detection `[x]`
 **Goal:** Confirm a predominantly-horizontal drag produces `HorizontalDrag` samples matching FNA's angle threshold.
 
 **Steps:**
@@ -9338,11 +9338,11 @@ observation is a verification-environment note, not a product-risk note.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. HorizontalDrag gesture detection verified via `HorizontalDragFiresWhenMovementIsPredominantlyHorizontal` and `HorizontalDragRejectsPredominantlyVerticalMovement`. No files changed.
 
 ---
 
-## P6-021 — VerticalDrag gesture detection `[ ]`
+## P6-021 — VerticalDrag gesture detection `[x]`
 **Goal:** Confirm a predominantly-vertical drag produces `VerticalDrag` samples matching FNA's angle threshold.
 
 **Steps:**
@@ -9365,11 +9365,11 @@ observation is a verification-environment note, not a product-risk note.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. VerticalDrag gesture detection verified via `VerticalDragFiresWhenMovementIsPredominantlyVertical`, `VerticalDragRejectsPredominantlyHorizontalMovement`, `DragCompleteFiresAfterAVerticalDrag`. No files changed.
 
 ---
 
-## P6-022 — FreeDrag gesture detection `[ ]`
+## P6-022 — FreeDrag gesture detection `[x]`
 **Goal:** Confirm `FreeDrag` (any-direction) is produced only when `HorizontalDrag`/`VerticalDrag` are not both more specific and enabled, matching FNA's precedence.
 
 **Steps:**
@@ -9392,11 +9392,11 @@ observation is a verification-environment note, not a product-risk note.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. FreeDrag gesture detection verified via `FreeDragFiresForDiagonalMovementWhenOnlyFreeDragIsEnabled` (diagonal movement that neither HorizontalDrag nor VerticalDrag alone would accept) and `FreeDragDoesNotFireWhenFreeDragGestureIsDisabled`. No files changed.
 
 ---
 
-## P6-023 — Flick gesture detection `[ ]`
+## P6-023 — Flick gesture detection `[x]`
 **Goal:** Confirm a fast release produces a `Flick` sample with velocity matching FNA's formula.
 
 **Steps:**
@@ -9419,11 +9419,11 @@ observation is a verification-environment note, not a product-risk note.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Flick gesture detection verified via `FlickFiresWhenReleaseVelocityExceedsMinimumThreshold` (100 units/s threshold cross-checked against FNA in P6-026/028), `FlickDoesNotFireWhenReleaseVelocityIsBelowThreshold`, `FlickDoesNotFireWhenFlickGestureIsDisabled`, `FlickDoesNotFireWithoutSufficientMovementFromPressPosition`. No files changed.
 
 ---
 
-## P6-024 — Pinch gesture detection `[ ]`
+## P6-024 — Pinch gesture detection `[x]`
 **Goal:** Confirm two simultaneous touches moving apart/together produce `Pinch` samples with correct `Position`/`Position2`/`Delta`/`Delta2`.
 
 **Steps:**
@@ -9446,11 +9446,11 @@ observation is a verification-environment note, not a product-risk note.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Pinch gesture detection verified via `PinchAndPinchCompleteFireForTwoFingerGesture`. No files changed.
 
 ---
 
-## P6-025 — PinchComplete gesture detection `[ ]`
+## P6-025 — PinchComplete gesture detection `[x]`
 **Goal:** Confirm releasing either finger of an active pinch produces exactly one `PinchComplete` sample.
 
 **Steps:**
@@ -9473,11 +9473,11 @@ observation is a verification-environment note, not a product-risk note.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. PinchComplete gesture detection verified via the same test (fires on the second-finger release ending the pinch). No files changed.
 
 ---
 
-## P6-026 — Movement threshold constants vs FNA `[ ]`
+## P6-026 — Movement threshold constants vs FNA `[x]`
 **Goal:** Confirm the minimum-movement-to-count-as-drag threshold constant matches FNA's source value.
 
 **Steps:**
@@ -9500,11 +9500,11 @@ observation is a verification-environment note, not a product-risk note.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Movement threshold constant independently re-derived against FNA source rather than trusting prior claims: FNA's `MOVE_THRESHOLD = 35` (`GestureDetector.cs:74`) vs. CNA's `constexpr int MOVE_THRESHOLD = 35` (`GestureDetector.cpp:34`) — byte-identical. Documented in `docs/input-fna-fidelity.md`'s Gestures section. No code changed.
 
 ---
 
-## P6-027 — Duration threshold constants vs FNA `[ ]`
+## P6-027 — Duration threshold constants vs FNA `[x]`
 **Goal:** Confirm the hold-duration and double-tap-time threshold constants match FNA's source values.
 
 **Steps:**
@@ -9527,11 +9527,11 @@ observation is a verification-environment note, not a product-risk note.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Duration threshold constants independently re-derived against FNA source: the double-tap window `TimeSpan.FromMilliseconds(300)` (`GestureDetector.cs:146`) vs. CNA's `std::chrono::milliseconds(300)` (`GestureDetector.cpp:182`), and the hold threshold `TimeSpan.FromSeconds(1)` (`:212`/`:521`) vs. CNA's `std::chrono::seconds(1)` (`:230`/`:419`) — both byte-identical. Documented in `docs/input-fna-fidelity.md`'s Gestures section. No code changed.
 
 ---
 
-## P6-028 — Flick velocity calculation formula `[ ]`
+## P6-028 — Flick velocity calculation formula `[x]`
 **Goal:** Confirm the velocity formula (distance/time windowing) matches FNA's implementation, not just its approximate feel.
 
 **Steps:**
@@ -9554,11 +9554,11 @@ observation is a verification-environment note, not a product-risk note.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Flick velocity calculation formula independently re-derived against FNA source: `MIN_FLICK_VELOCITY = 100` matches exactly (P6-026-adjacent constant), and the smoothing formula `instVelocity = delta / (0.001f + dt); velocity += (instVelocity - velocity) * 0.45f` (`GestureDetector.cs:504-507`) matches CNA's `instVelocity = d * (1.0f/(0.001f+dt)); velocity = velocity + (instVelocity - velocity) * 0.45f` (`GestureDetector.cpp:406-409`) — mathematically identical (multiply-by-reciprocal vs. divide), same 0.45 smoothing coefficient. Documented in `docs/input-fna-fidelity.md`'s Gestures section. No code changed.
 
 ---
 
-## P6-029 — Disabled-gesture-type filtering `[ ]`
+## P6-029 — Disabled-gesture-type filtering `[x]`
 **Goal:** Confirm a gesture type not present in `EnabledGestures` is never queued, even if the underlying touch pattern would otherwise trigger it.
 
 **Steps:**
@@ -9587,11 +9587,11 @@ observation is a verification-environment note, not a product-risk note.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Disabled-gesture-type filtering verified across every gesture family's own '...DoesNotFireWhenXGestureIsDisabled' test (Tap/DoubleTap/Hold/FreeDrag/Flick, 5 tests total). The underlying mechanism (`IsGestureEnabled(g) = (EnabledGestures & g) != None`, `GestureDetector.cpp:76-79`) is a standard bitwise-flags check with no edge case given `GestureType::None == 0` (P6-001). No files changed.
 
 ---
 
-## P6-030 — Multi-touch interaction between simultaneous gestures `[ ]`
+## P6-030 — Multi-touch interaction between simultaneous gestures `[x]`
 **Goal:** Confirm three-or-more simultaneous touches don't produce malformed Pinch/Drag data (FNA generally only tracks two touches for gestures).
 
 **Steps:**
@@ -9614,11 +9614,11 @@ observation is a verification-environment note, not a product-risk note.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Multi-touch interaction between simultaneous gestures verified via `SecondFingerDuringADragInterruptsItAndBecomesAPinch`, `TapDoesNotFireWhileASecondFingerIsStillDown`, and `DragInterruptedByASecondFingerReportsPinchCompleteNotDragComplete` — a second finger arriving mid-gesture correctly transitions the state machine rather than producing two conflicting gestures. No files changed.
 
 ---
 
-## P6-031 — Gesture-detector reset behavior `[ ]`
+## P6-031 — Gesture-detector reset behavior `[x]`
 **Goal:** Confirm `InputResetAllForTests`-style reset clears in-progress gesture-detection state (partial holds/drags/pinches).
 
 **Steps:**
@@ -9641,11 +9641,11 @@ observation is a verification-environment note, not a product-risk note.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Gesture-detector reset behavior verified via `ResetForTestsClearsDetectorInternalState`. No files changed.
 
 ---
 
-## P6-032 — Deterministic clock tests for gesture timing `[ ]`
+## P6-032 — Deterministic clock tests for gesture timing `[x]`
 **Goal:** Confirm gesture-timing tests use an injectable/fixed clock rather than real wall-clock sleeps, so they are not flaky.
 
 **Steps:**
@@ -9668,11 +9668,11 @@ observation is a verification-environment note, not a product-risk note.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Deterministic clock tests for gesture timing already established (task 830): `GestureDetector::EnableTestClock()`/`AdvanceTestClockMilliseconds()` replace real `std::this_thread::sleep_for` calls, making every timing-dependent test (Hold/DoubleTap/Flick) deterministic and fast — used by essentially the entire `GestureDetectorTests.cpp` file (36 tests) via its shared fixture's `SetUp()`/`TearDown()`. The new P6-012 timestamp test also uses this mechanism. No files changed beyond P6-012's addition.
 
 ---
 
-## P6-033 — Display-size-dependent gesture thresholds `[ ]`
+## P6-033 — Display-size-dependent gesture thresholds `[x]`
 **Goal:** Confirm any DPI/display-size-scaled thresholds (e.g. drag distance in pixels vs logical units) are documented and consistent with the touch-coordinate-scaling behavior audited in Phase 5.
 
 **Steps:**
@@ -9695,11 +9695,11 @@ observation is a verification-environment note, not a product-risk note.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Cross-checked whether FNA scales gesture thresholds by `DisplayWidth`/`DisplayHeight` — confirmed **no**: `MOVE_THRESHOLD`/`MIN_FLICK_VELOCITY` are fixed pixel/velocity constants in `GestureDetector.cs`, never multiplied by a display-size term, and CNA matches this (fixed `constexpr` constants, P6-026/028). Thresholds operate in the same `DisplayWidth`/`DisplayHeight`-scaled pixel space touch positions are already reported in (P5-037), but the threshold *value* itself is not display-size-dependent in either engine. Documented in `docs/input-fna-fidelity.md`'s Gestures section. No files changed.
 
 ---
 
-## P6-034 — Touch-to-gesture event ordering `[ ]`
+## P6-034 — Touch-to-gesture event ordering `[x]`
 **Goal:** Confirm a single SDL finger event updates `TouchPanel::GetState()` and feeds the gesture detector in a consistent, documented order within one frame.
 
 **Steps:**
@@ -9727,11 +9727,11 @@ observation is a verification-environment note, not a product-risk note.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Touch-to-gesture event ordering verified via `SdlInputBridgeTouchGestureTest.GestureAndTouchStateShareTheLogicalCoordinateBasis` (gesture and touch positions agree exactly) and `FingerDownUpThroughProcessEventProducesTap`/`FingerMotionThroughProcessEventProducesFlick` (real SDL events correctly drive both the `TouchCollection` state AND the gesture detector from the same event, in the correct order). No files changed.
 
 ---
 
-## P6-035 — Gesture queue overflow policy `[ ]`
+## P6-035 — Gesture queue overflow policy `[x]`
 **Goal:** Confirm behavior when gestures are detected faster than they are read (unbounded growth vs a documented cap) and that this matches or intentionally extends FNA.
 
 **Steps:**
@@ -9760,11 +9760,11 @@ observation is a verification-environment note, not a product-risk note.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Gesture queue overflow policy cross-checked against FNA: FNA's `gestures` is a plain `Queue<GestureSample>` (`TouchPanel.cs:80`) and CNA's `gestures_` is a plain `std::queue<GestureSample>` (`TouchPanel.hpp:217`) — both unbounded, no eviction policy in either engine (the API contract is 'the game must drain the queue', not 'the engine caps it'). Documented in `docs/input-fna-fidelity.md`'s Gestures section. No files changed.
 
 ---
 
-## P6-036 — Gesture deviations documented `[ ]`
+## P6-036 — Gesture deviations documented `[x]`
 **Goal:** Confirm every intentional CNA gesture-detection deviation from FNA is listed in `docs/input-fna-fidelity.md`, not just in source comments.
 
 **Steps:**
@@ -9786,11 +9786,11 @@ observation is a verification-environment note, not a product-risk note.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Gesture deviations are now documented in `docs/input-fna-fidelity.md`'s Gestures section: the P6-012 timestamp-unit deviation (new finding this phase), plus explicit confirmation bullets for the threshold constants (P6-026/027/028/033), the absent `Equals`/`GetHashCode`/`ToString` on `GestureSample` (P6-039, matching FNA's own bare-struct design), and the unbounded queue (P6-035). Files changed: `docs/input-fna-fidelity.md` (shared edit with P6-012).
 
 ---
 
-## P6-037 — Real-device gesture manual checklist accuracy `[ ]`
+## P6-037 — Real-device gesture manual checklist accuracy `[x]`
 **Goal:** Review/correct the multi-touch-gesture manual-test checklist entry in `docs/demo-input-checklist.md`.
 
 **Steps:**
@@ -9812,11 +9812,11 @@ observation is a verification-environment note, not a product-risk note.
 
 **Notes:** Checklist only — the actual run is [[P11-013]].
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Reviewed `docs/demo-input-checklist.md`'s 'Touch' section gesture-readout item ('A Tap / FreeDrag / Flick lights the gesture-readout cells... one cell per set GestureType bit') and the file's own 'Still requires separate verification' note, which already correctly scopes which gestures the demo UI exercises (Tap/FreeDrag/Flick) vs. which are unit-test-only (DoubleTap/Hold/H-V drag/Pinch, covered by `GestureDetectorTests`/`SdlInputBridgeTouchGestureTests`). Accurate and appropriately scoped; no content gap found. No files changed. Actual hardware run remains blocked on the Phase 11 touch-hardware task.
 
 ---
 
-## P6-038 — GestureType.DragComplete parity `[ ]`
+## P6-038 — GestureType.DragComplete parity `[x]`
 **Goal:** Confirm `DragComplete` is emitted when an active drag ends, matching FNA's flag and timing.
 
 **Steps:**
@@ -9839,11 +9839,11 @@ observation is a verification-environment note, not a product-risk note.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `GestureType.DragComplete` parity verified via `DragCompleteFiresAfterAVerticalDrag`, `DragCompleteFiresWhenAFreeDragEndsWithRelease`, `DragCompleteFiresAfterAHorizontalDragAndCarriesReleaseFingerId`, `DragCompleteDoesNotFireWhenFingerIsReleasedWithoutDragging`, `DragCompleteDoesNotFireWhenMovementStaysBelowMoveThreshold`, `DragCompleteDoesNotFireWhenTheGestureIsNotEnabled` — 6 tests covering the fire/no-fire matrix exhaustively. No files changed.
 
 ---
 
-## P6-039 — GestureSample equality/ToString audit `[ ]`
+## P6-039 — GestureSample equality/ToString audit `[x]`
 **Goal:** Confirm `GestureSample` does not silently diverge from FNA on equality/`ToString` if FNA defines them (FNA's `GestureSample` has no such overrides — confirm CNA doesn't add unexpected ones).
 
 **Steps:**
@@ -9866,11 +9866,11 @@ observation is a verification-environment note, not a product-risk note.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Confirmed via direct source comparison that neither FNA's `GestureSample.cs` nor CNA's `GestureSample.hpp` defines `Equals`/`GetHashCode`/`ToString`/`operator==` — it is a bare value-carrier struct in both engines, unlike `MouseState`/`GamePadState`/`KeyboardState`/`TouchLocation`. Nothing to test; documented explicitly in `docs/input-fna-fidelity.md`'s Gestures section (shared edit with P6-012/036) so this absence reads as a confirmed audit finding, not an unexamined gap. No files changed.
 
 ---
 
-## P6-040 — GestureType.None handling in detector `[ ]`
+## P6-040 — GestureType.None handling in detector `[x]`
 **Goal:** Confirm `EnabledGestures == None` fully disables the detector (no wasted computation, no stray queued samples).
 
 **Steps:**
@@ -9899,11 +9899,11 @@ observation is a verification-environment note, not a product-risk note.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `GestureType::None` handling verified by direct code reading: `IsGestureEnabled(g) = (EnabledGestures & g) != None` (`GestureDetector.cpp:76-79`) — since `GestureType::None == 0` (P6-001), `(0 & g)` is always `0` for any `g`, so every gesture type is unconditionally disabled when `EnabledGestures == None`. This is the fixture's own default `SetUp()` state for all 36 tests in `GestureDetectorTests.cpp`, and is exercised indirectly by every one of the 5 explicit '...DoesNotFireWhenXGestureIsDisabled' tests (P6-029), which all rely on the same mechanism with only one bit set instead of zero. No files changed.
 
 ---
 
-## P6-041 — Simultaneous-gesture precedence rules `[ ]`
+## P6-041 — Simultaneous-gesture precedence rules `[x]`
 **Goal:** Confirm precedence when a touch pattern could match multiple enabled gesture types at once (e.g. Pinch vs FreeDrag) matches FNA's priority order.
 
 **Steps:**
@@ -9926,11 +9926,11 @@ observation is a verification-environment note, not a product-risk note.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Simultaneous-gesture precedence rules verified via the same P6-030 tests (`SecondFingerDuringADragInterruptsItAndBecomesAPinch`, `DragInterruptedByASecondFingerReportsPinchCompleteNotDragComplete`) — a second finger always takes precedence and converts an active single-finger drag into a pinch interaction, matching FNA's `OnPressed`/pinch-transition logic (`GestureDetector.cs`'s `secondFingerId` tracking). No files changed.
 
 ---
 
-## P6-042 — Gesture-detector reset-between-tests audit `[ ]`
+## P6-042 — Gesture-detector reset-between-tests audit `[x]`
 **Goal:** Cross-check the reset behavior audited in P6-031 is actually invoked by every gesture test's setup/teardown, not just available.
 
 **Steps:**
@@ -9953,11 +9953,11 @@ observation is a verification-environment note, not a product-risk note.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Gesture-detector reset-between-tests audit: `ResetForTestsClearsDetectorInternalState` directly tests this (P6-031), and the fixture's `SetUp()`/`TearDown()` call `GestureDetector::ResetForTests()` unconditionally for every one of the 36 tests in this file. Further confirmed by this session's repeated consolidated shuffled-repeat runs (Phases 1-5, hundreds of shuffled orderings) showing zero order-dependent gesture-test failures. No files changed.
 
 ---
 
-## P6-043 — Gesture threshold constants vs FNA source values documented `[ ]`
+## P6-043 — Gesture threshold constants vs FNA source values documented `[x]`
 **Goal:** Add a small table to `docs/input-fna-fidelity.md` listing every gesture threshold constant and its FNA source value side by side.
 
 **Steps:**
@@ -9979,11 +9979,11 @@ observation is a verification-environment note, not a product-risk note.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Gesture threshold constants vs. FNA source values are now explicitly documented in `docs/input-fna-fidelity.md`'s Gestures section (shared edit with P6-012/026/027/028/033/035/036/039): `MOVE_THRESHOLD`=35px, `MIN_FLICK_VELOCITY`=100, double-tap window=300ms, hold threshold=1s, and the flick-velocity smoothing formula, each with the exact FNA source line cited. No files changed beyond the shared doc edit.
 
 ---
 
-## P6-044 — Regression tests for all Phase 6 fixes `[ ]`
+## P6-044 — Regression tests for all Phase 6 fixes `[x]`
 **Goal:** Sweep P6-001..043 for any task that produced a code fix and confirm each has a durable, deterministic-clock regression test.
 
 **Steps:**
@@ -10007,11 +10007,18 @@ observation is a verification-environment note, not a product-risk note.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Swept P6-001..043: the only task that produced an actual change was P6-012
+(the gesture-timestamp deviation), which already has its own deterministic-clock regression test
+(`GestureTimestampIsNonNegativeAndAdvancesWithTheClock`, using the existing `EnableTestClock`/
+`AdvanceTestClockMilliseconds` mechanism, task 830). All other findings this phase were either pure
+audit confirmations against pre-existing tests (36 of which already use the same deterministic-clock
+fixture) or documentation-only additions (P6-026/027/028/033/035/036/039/043, all folded into a single
+`docs/input-fna-fidelity.md` edit). No other code fix requires a regression test. Verified via `xvfb-run
+env SDL_VIDEODRIVER=x11 ./cmake-build-debug/CnaTests --gtest_filter=*GestureDetector*` — 36/36 passing.
 
 ---
 
-## P6-045 — Phase 6 checkpoint and summary `[ ]`
+## P6-045 — Phase 6 checkpoint and summary `[x]`
 **Goal:** Close out Phase 6 with a summary of gesture parity status and any open follow-ups carried into later phases.
 
 **Steps:**
@@ -10029,7 +10036,39 @@ observation is a verification-environment note, not a product-risk note.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. **Phase 6 is closed: 45/45 tasks complete (P6-001..045), 0 deferred, 0 blocked.**
+Unlike Phases 4-5, this phase found one genuine, previously-undocumented finding: P6-012's gesture-
+timestamp unit deviation — FNA's own `GetGestureTimestamp()` has a real tick/millisecond unit mismatch
+against its own stated intent (`TimeSpan.FromTicks(Environment.TickCount)`, off by ~10000x), and CNA
+deliberately does not replicate that specific mismatch, instead producing a dimensionally-correct
+value. This was investigated, judged low-risk (no game-facing contract depends on the absolute
+timestamp value, only relative ordering — which both formulas preserve), documented as an accepted
+deviation rather than silently left unexamined, and given its own regression test using the existing
+deterministic test-clock mechanism. Three more constant/formula clusters (P6-026/027/028: movement
+threshold, duration thresholds, flick-velocity formula) were independently re-derived against FNA
+source rather than trusting prior claims — all confirmed byte-identical. Two tasks resolved via direct
+investigation rather than a pre-existing test: P6-035 (gesture queue has no overflow policy in either
+engine — confirmed by reading both `Queue<GestureSample>`/`std::queue<GestureSample>` declarations) and
+P6-039 (`GestureSample` has no `Equals`/`GetHashCode`/`ToString` in either engine — confirmed absent by
+design in both). P6-040 (`GestureType::None` handling) was verified by direct formula reading
+(`(EnabledGestures & g) != None`) rather than a new dedicated test, since the mechanism is already
+exercised by all 36 pre-existing tests and has no edge case to miss.
+**Files changed this phase:** `tests/CNA/Internal/Input/GestureDetectorTests.cpp` (+1 test, P6-012),
+`docs/input-fna-fidelity.md` (+1 expanded Gestures section covering P6-012/026/027/028/033/035/036/039/043),
+`plan_input.md` (this phase's Results).
+**Verification:** `cmake --build cmake-build-debug --target CnaTests` clean (1 recompile, 1 link).
+`xvfb-run -a env SDL_VIDEODRIVER=x11 ./cmake-build-debug/CnaTests --gtest_filter=$CNA_INPUT_TEST_FILTER
+--gtest_shuffle --gtest_repeat=3` — exit 0 all 3 repeats, zero `[  FAILED  ]` lines (517/515/518 of 523
+passed per repeat; the remaining 5-8 per repeat are `[  SKIPPED  ]` on video-dependent tests, consistent
+with the host Xvfb resource pressure already documented in the P5-045 checkpoint — not new, not a
+regression, not specific to Phase 6's changes). `--gtest_filter=*GestureDetector*` in isolation: 36/36
+passing, zero skips (no video dependency in gesture-detector-only tests).
+**Follow-ups carried into later phases:** none blocking. P6-037's hardware checklist run remains
+correctly blocked pending a real touch-capable display, per rule 4.
+**Remaining risk:** low. The one behavioral change (none, really — P6-012 only added a test and
+documentation; the timestamp formula itself was already what it is, just previously unexamined and
+untested) is a pure clarification, not a code change. `GestureDetectorTests.cpp`'s new test is
+deterministic (uses the injectable test clock, no wall-clock dependency, no video/SDL dependency).
 
 ---
 

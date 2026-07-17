@@ -370,6 +370,42 @@ Covered by `GestureDetectorTests` and the end-to-end `SdlInputBridgeTouchGesture
 new `FINGER_CANCELED` release path). Broader parameterized regression coverage across every gesture
 type + interruption is partial (task 906).
 
+**Threshold constants verified byte-identical to FNA (P6-026/027/028, 2026-07-17):** independently
+re-derived from `GestureDetector.cs` rather than trusting prior claims —
+`MOVE_THRESHOLD`=35px (`GestureDetector.cpp:34`), `MIN_FLICK_VELOCITY`=100.0f (`:35`), the double-tap
+timing window=300ms (`:182`, `TimeSpan.FromMilliseconds(300)` in FNA), the hold threshold=1 second
+(`:230`/`:419`, `TimeSpan.FromSeconds(1)` in FNA), and the flick-velocity exponential-smoothing formula
+`velocity += (instVelocity - velocity) * 0.45f` where `instVelocity = delta / (0.001f + dt)`
+(`GestureDetector.cpp:406-409`, byte-identical to `GestureDetector.cs:504-507`). None of these
+thresholds scale with `TouchPanel.DisplayWidth`/`DisplayHeight` in either engine — they are fixed pixel/
+time constants (P6-033: confirmed NOT display-size-dependent, matching FNA).
+
+**Intentional / documented deviation — gesture auto-timestamp units (P6-012, found 2026-07-17):**
+FNA's `GestureDetector.GetGestureTimestamp()` (`GestureDetector.cs:546-552`) is
+`TimeSpan.FromTicks(Environment.TickCount)` — `Environment.TickCount` is a **millisecond** counter, but
+`TimeSpan.FromTicks` expects **100ns ticks**, so FNA's own formula has a ~10000x unit mismatch versus
+its own doc comment ("XNA calculates gesture timestamps from how long the device has been turned on").
+CNA's `GetGestureTimestamp()` (`GestureDetector.cpp:67-74`) instead converts the millisecond count to
+ticks correctly (`ms * TimeSpan::TicksPerMillisecond`), producing a dimensionally accurate "time since
+epoch" `TimeSpan`. This is a deliberate, accepted deviation, not a bug: `GestureSample.Timestamp` has no
+defined absolute reference point in either engine (it is not wall-clock time, and no game-facing
+contract depends on its exact scale), only relative ordering/deltas between gesture events matter in
+practice, and both formulas remain monotonically increasing with real elapsed time. Replicating FNA's
+literal unit-mismatch here would trade a real correctness property for a match against what reads as an
+upstream implementation slip, with no compatibility benefit since no observable game behavior depends on
+the absolute value. Not previously documented; added here as part of the P6 audit.
+
+**`GestureSample` equality/`ToString` (P6-039, confirmed 2026-07-17):** neither FNA's
+`GestureSample.cs` nor CNA's `GestureSample.hpp` defines `Equals`/`GetHashCode`/`ToString`/`operator==`
+— it is a bare value-carrier struct in both engines (no `ValueType`-default override needed, unlike
+`MouseState`/`GamePadState`/`KeyboardState`). Nothing to test; confirmed absent by design in both.
+
+**Gesture queue has no overflow/eviction policy (P6-035, confirmed 2026-07-17):** FNA's
+`gestures` is a plain `Queue<GestureSample>` (`TouchPanel.cs:80`) and CNA's `gestures_` is a plain
+`std::queue<GestureSample>` (`TouchPanel.hpp:217`) — both grow unbounded if a game never calls
+`ReadGesture()`. This is accepted upstream XNA/FNA behavior (a "the game is expected to drain its
+queue" API contract), not a CNA-specific gap to fix.
+
 ---
 
 ## TextInputEXT / TextEditing
