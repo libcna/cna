@@ -63,7 +63,7 @@ framework/runtime, not a game.
   `docs/cna_audio_deep_audit_2026-07-17.md` for the audit report and `plan_audio.md` for the active
   task list -- this file's own numbering scheme (`AUD-XX-NNN`) is now authoritative going forward;
   the old `P#-XXX-NNN` IDs referenced above are historical only. **Substantial progress this pass**
-  (7 commits so far, see §3): fixed 2 confirmed real defects with direct relevance to the reported
+  (13 commits, see §2/§3): fixed 2 confirmed real defects with direct relevance to the reported
   bugs (a `DynamicSoundEffectInstance` int/float mode asymmetry, and -- the highest-value finding --
   every **MS-ADPCM-compressed** XACT WaveBank/XNB `SoundEffect` silently failing to decode at all,
   a direct match for "missing audio"); built a genuinely new capability, a deterministic offline
@@ -102,7 +102,19 @@ framework/runtime, not a game.
   compact XWB final-entry length -- CNA's existing code already matches real FAudio exactly; fixed
   a misleading comment instead). New shared `CNA::Internal::Audio::WavWrapper`
   (`WavWrapper.hpp`/`.cpp`) is the common WAV-assembly logic behind both the WaveBank fix and the
-  XNB reader expansion. See §3 for full detail on each, `plan_audio.md` for exact evidence/citations.
+  XNB reader expansion. Also this pass: `AUD-07-008` (confirmed the audit's A-07 "strong risk" --
+  `SDL_AudioStream`'s destination format is genuinely absent until `MIX_SetTrackAudioStream` runs,
+  but CNA's existing `Play()` call order already guarantees that happens before any data is put --
+  no code change, new regression test), `AUD-09-003/004/005/007/011` (golden-tested 5 previously
+  untested `Apply3D`/Doppler invariants -- zero velocities, equal velocities, tangential motion,
+  coincident positions, extreme-velocity clamping -- all already correct, no code change),
+  `AUD-10-005/006/013` (verified the full XACT pitch cents-to-ratio composition chain against real
+  FNA source and confirmed no exponential-accumulation risk across repeated `ReconcileState()`
+  ticks -- already correct, no code change), and `AUD-15-001` (fresh ASan+UBSan sweep of the
+  audio-scoped suite, 579/579 pass, zero sanitizer findings; the only `LeakSanitizer` noise traced
+  to pre-existing driver/runtime frames, confirmed unrelated by isolating this session's own new
+  tests). **13 commits total this pass** (`5023cf05`..`7edc397d`). See §3 for full detail on each,
+  `plan_audio.md` for exact evidence/citations.
 - **Build (historical, Phase 9-14):** clean, rebuilt and reverified this pass (`P14-LIFECYCLE-001`/`P14-BUFFER-001`/
   `P14-ORDER-001`/`P14-PARSER-001`, a second user-provided external audit's fixes, on top of
   `P13-3D-001`/`P13-MIXER-001`/`P13-DOC-001`/`P13-DYNAMIC-001`, `P12-BANK-001`, `P11-PAN-002`,
@@ -190,6 +202,35 @@ every item are in `plan_audio.md`'s "Phase 9"/"Phase 10"/"Phase 11"/"Phase 12"/"
 
 ### Phase 15 (current, 2026-07-17-, `AUD-XX-NNN` IDs)
 
+- **`AUD-15-001`** — fresh one-off ASan+UBSan sweep of the audio-scoped test subset (§7's filter
+  list): 579/579 pass, zero `ERROR: AddressSanitizer`/UBSan `runtime error:` findings.
+  `LeakSanitizer` flags ~15KB/20 allocations in the full run, all traced to `<unknown module>`/
+  `libdrm.so.2`/`libubsan.so.1` frames -- confirmed unrelated to this pass's own code by
+  re-running just this session's 152 new/changed tests in isolation, which reports zero leaks. See
+  `plan_audio.md`.
+- **`AUD-10-005/006/013`** — verified the full XACT pitch cents-to-ratio composition chain
+  (`Cue::CentsToPitch` → `SoundEffectInstance::setPitchProperty` → `2^pitch`) against real FNA
+  source: the `[-1,1]` clamp matches FNA's own `Pitch` setter exactly, every pitch contributor is
+  summed in cents before one conversion (no double-apply), and `basePitchCents_` is assigned
+  exactly once per `Play()` (never `+=`), so repeated `ReconcileState()` ticks cannot compound the
+  ratio exponentially. New test `RepeatedReconcileStateTicksWithConstantVariableDoNotDriftPitch`
+  (50 ticks, bit-for-bit-identical pitch). No code change -- already correct. See `plan_audio.md`.
+- **`AUD-09-003/004/005/007/011`** — golden-tested 5 previously untested `Apply3D`/Doppler
+  invariants directly relevant to the audit's A-09 finding and the user's reported regression:
+  zero velocities with DopplerScale at its real default, equal listener/emitter velocity
+  (parallel motion), purely tangential motion, coincident positions, and extreme-velocity
+  clamping (traced by hand that an absurd approach velocity drives the Doppler denominator to
+  exactly zero -- a genuine `+infinity` correctly clamped to `4.0f` by the existing
+  `std::clamp(dopplerFactor, 0.5f, 4.0f)`). All 5 already correct, no code change. See
+  `plan_audio.md`.
+- **`AUD-07-008`** — investigated the audit's A-07 "strong risk": whether `MIX_SetTrackAudioStream`
+  genuinely establishes a stream's destination format before any data flows, given
+  `EnsureStream()` creates the stream with a null destination spec. Confirmed via a direct probe
+  that the destination format is indeed absent until attachment, but `MIX_SetTrackAudioStream`
+  immediately establishes it, and traced every code path that can reach
+  `SubmitQueuedToStream()`/`SDL_PutAudioStreamData` to confirm CNA's existing `Play()` ordering
+  always attaches first. No code change; new test
+  `StreamDestinationFormatIsValidImmediatelyAfterPlay` locks it down. See `plan_audio.md`.
 - **`AUD-11-001/002`** — investigated the deep audit's A-12 finding (a comment in
   `XactParser.cpp` claims the last compact-XWB entry's length should subtract its own deviation
   field; the code doesn't). Read real FAudio source directly (`FACT_internal.c`'s compact-entry
