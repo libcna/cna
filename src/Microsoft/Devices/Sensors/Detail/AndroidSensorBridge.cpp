@@ -3,6 +3,7 @@
 #include "Microsoft/Devices/Sensors/Detail/AndroidSensorBridge.hpp"
 
 #ifdef __ANDROID__
+#include <android/log.h>
 #include <android/looper.h>
 #include <android/sensor.h>
 
@@ -396,6 +397,20 @@ namespace Microsoft::Devices::Sensors::Detail
 
             SignalStartOutcome(StartOutcome::Success);
 
+            // Task ANDR2-006 (2026-07-17, external audit
+            // `audit_devices_2026-07-17.md`): ASensorEventQueue_getEvents()
+            // returns a negative value on a genuine read error, not just "no
+            // events right now" (0). The inner loop's own `> 0` condition
+            // below cannot distinguish the two -- previously a persistent
+            // read error (e.g. the underlying sensor device failing/
+            // disconnecting mid-session) would silently retry forever, once
+            // per ~100ms poll, indefinitely. Tracked across outer-loop
+            // iterations (not reset per iteration) so a handful of
+            // transient failures do not immediately tear delivery down, but
+            // a run of consecutive failures does -- see its use below.
+            int consecutiveGetEventsFailures = 0;
+            constexpr int MaxConsecutiveGetEventsFailures = 5;
+
             // 100ms bounded wait: re-checks stopRequested_ promptly even if
             // ALooper_wake() is missed due to the benign startup race on
             // looper_ (Stop() may run before this store above completes) —
@@ -439,9 +454,45 @@ namespace Microsoft::Devices::Sensors::Detail
                 // Without this check, a second already-queued event could
                 // still trigger callback_() again with a now-invalid
                 // captured pointer even though Stop() had already run.
-                while (!stopRequested_.load(std::memory_order_acquire)
-                       && ASensorEventQueue_getEvents(queue_, &event, 1) > 0)
+                for (;;)
                 {
+                    if (stopRequested_.load(std::memory_order_acquire))
+                    {
+                        break;
+                    }
+
+                    const ssize_t eventCount = ASensorEventQueue_getEvents(queue_, &event, 1);
+
+                    // Task ANDR2-006: a negative return is a genuine read
+                    // error (e.g. the sensor device failing/disconnecting),
+                    // not "no events available right now" (0) -- treating
+                    // them identically (the prior `> 0` condition's implicit
+                    // behavior) silently retried a persistent error forever.
+                    // A transient failure alone does not stop delivery
+                    // (real hardware/drivers can report a spurious one-off
+                    // error); consecutiveGetEventsFailures reaching
+                    // MaxConsecutiveGetEventsFailures does -- signals
+                    // stopRequested_ so this thread winds down through its
+                    // own normal, already-correct shutdown path (the exit
+                    // guard still publishes the terminal run state) rather
+                    // than a bespoke separate failure exit.
+                    if (eventCount < 0)
+                    {
+                        ++consecutiveGetEventsFailures;
+                        if (consecutiveGetEventsFailures >= MaxConsecutiveGetEventsFailures)
+                        {
+                            stopRequested_.store(true, std::memory_order_release);
+                        }
+                        break;
+                    }
+
+                    consecutiveGetEventsFailures = 0;
+
+                    if (eventCount == 0)
+                    {
+                        break;
+                    }
+
                     AndroidSensorSample sample;
                     // Task ANDROID-BRIDGE-001 (2026-07-06): ValueCount now
                     // reflects the real per-sensor-type value count (3 for
@@ -493,8 +544,36 @@ namespace Microsoft::Devices::Sensors::Detail
                 }
             }
 
-            ASensorEventQueue_disableSensor(queue_, sensor_);
-            ASensorManager_destroyEventQueue(manager_, queue_);
+            // Task ANDR2-006: both return an int, negative on failure --
+            // previously ignored entirely. Nothing can meaningfully be done
+            // differently in either case: this queue/sensor is being torn
+            // down unconditionally, and there is no per-call-site recovery
+            // available (a failed disableSensor()/destroyEventQueue() here
+            // means, at worst, the underlying native resource is left in
+            // whatever state the platform's own driver decides, which this
+            // bridge cannot query or repair from here). Logged (debug builds
+            // only, __android_log_print rather than SDL_Log -- this file is
+            // deliberately SDL-free) so the failure is at least observable
+            // instead of silently disappearing, per this task's own "report
+            // cleanup failures without throwing from destructors" -- neither
+            // call can throw (they are plain C NDK functions), so there is
+            // no destructor-safety concern here, only a diagnostics one.
+            if (ASensorEventQueue_disableSensor(queue_, sensor_) < 0)
+            {
+#ifndef NDEBUG
+                __android_log_print(ANDROID_LOG_WARN, "CNA",
+                    "AndroidSensorBridge: ASensorEventQueue_disableSensor failed for sensor type %d",
+                    sensorType_);
+#endif
+            }
+            if (ASensorManager_destroyEventQueue(manager_, queue_) < 0)
+            {
+#ifndef NDEBUG
+                __android_log_print(ANDROID_LOG_WARN, "CNA",
+                    "AndroidSensorBridge: ASensorManager_destroyEventQueue failed for sensor type %d",
+                    sensorType_);
+#endif
+            }
             queue_ = nullptr;
 
             // looperCleanup's destructor (running here, at the normal end

@@ -6945,7 +6945,7 @@ test is not sufficient for an Android coordinate/fusion claim.
   (see that task's own resolution note for the sketch), extend it to cover this check too rather
   than building a separate one.
 
-### ANDR2-006 — Check disable/destroy/getEvents native failures — OPEN
+### ANDR2-006 — Check disable/destroy/getEvents native failures — CLOSED (2026-07-17)
 
 - **Priority:** P1
 - **Area:** Perfection re-audit
@@ -6958,6 +6958,57 @@ test is not sufficient for an Android coordinate/fusion claim.
   - Fault injection covers enable, rate, poll, getEvents, disable and destroy.
   - No failure disappears without a state or diagnostic.
 - **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+- **Resolution:** `enableSensor()`/`setEventRate()` were already handled correctly (prior sessions'
+  "async startup reporting" tasks) — this task covers the two genuinely-unhandled ones:
+  - **`ASensorEventQueue_getEvents()` persistent failure:** the inner drain loop's own `> 0`
+    condition could not distinguish a genuine read error (negative return) from "no events
+    available right now" (`0`) — a persistent error (device failing/disconnecting mid-session)
+    would previously retry silently forever, once per ~100ms poll. Rewrote the inner loop to check
+    the exact return value: a negative result increments a `consecutiveGetEventsFailures` counter
+    (tracked *across* outer poll iterations, not reset per iteration, so a handful of transient
+    failures alone do not tear delivery down — real drivers can report a spurious one-off error);
+    reaching `MaxConsecutiveGetEventsFailures` (5) sets `stopRequested_`, winding this thread down
+    through its own already-correct, already-tested shutdown path (the `ANDR2-004`-hardened exit
+    guard still publishes the terminal run state). A successful call (`>= 0`) resets the streak.
+  - **`ASensorEventQueue_disableSensor()`/`ASensorManager_destroyEventQueue()` cleanup failures:**
+    both return an `int`, negative on failure, previously ignored entirely. Checked now; on
+    failure, logged via `__android_log_print()` (debug builds only, `#ifndef NDEBUG`) — deliberately
+    **not** `SDL_Log()` (this file is established as deliberately SDL-free) and deliberately not a
+    new production diagnostic channel (that is `DEVPERF-005`'s own future, systematic scope, not
+    this narrow task's). Neither call can throw (plain C NDK functions) and nothing in this
+    already-unconditional teardown path branches differently on failure — there is no recovery
+    action available here, only an observability gap this closes.
+  - **`liblog.so` linkage:** `__android_log_print()` needed a new link dependency
+    (`cmake/CnaLibrary.cmake`'s existing `target_link_libraries(CNA PUBLIC android)` for Android
+    only linked `libandroid.so`, not `liblog.so` — a separate NDK system library) — added `log`
+    alongside it.
+- **Files changed:** `src/Microsoft/Devices/Sensors/Detail/AndroidSensorBridge.cpp`,
+  `cmake/CnaLibrary.cmake`.
+- **Tests:** entirely inside `#ifdef __ANDROID__`-gated code — no host-side test can exercise it.
+  Verified via a real Android NDK cross-compile of this exact translation unit (compiles cleanly,
+  including the new `<android/log.h>` include and `__android_log_print()` call). The **full**
+  `CNA` library Android cross-compile (needed to confirm the new `liblog.so` link dependency
+  actually resolves at link time, not just that the source compiles) could not be completed in
+  this environment — blocked by the same pre-existing, unrelated `sharp-runtime`
+  `RandomNumberGenerator.cpp`/`getrandom()` failure noted in `ANDR2-001`/`ANDR2-003`'s own
+  resolution notes. Full host Devices/Sensors filtered suite re-run for regression safety: 405
+  tests, 401 passed, 4 skipped (unchanged) — this file's non-Android stub path is untouched.
+- **Sanitizer/static-analysis result:** not applicable on the host; no TSan/ASan configured for
+  the Android NDK cross-compile in this environment.
+- **Remaining limitations, explicitly left OPEN, not fabricated:**
+  - "Fault injection covers enable, rate, poll, getEvents, disable and destroy" — `enable`/`rate`
+    were already fault-injection-free-but-handled from prior sessions (non-fatal-by-design for
+    rate, fatal-with-rollback for enable); this task's own two targets (`getEvents`/`disable`/
+    `destroy`) have no fault-injection seam either, for the same reason `ANDR2-005` documented
+    (a new NDK-call interception layer is out of this narrow task's scope). `poll`
+    (`ALooper_pollOnce()`) itself is not checked at all — its own return value indicates *which*
+    fd triggered it, not a pass/fail result, and this bridge does not use fd-based callbacks
+    (`ALOOPER_PREPARE_ALLOW_NON_CALLBACKS`), so there was nothing meaningful to check there; not
+    treated as a gap.
+  - **The new link dependency (`liblog.so`) was not confirmed to actually resolve at Android
+    link time** in this environment — see the tests note above. If a future session fixes the
+    unrelated `sharp-runtime` Android cross-compile blocker, re-verify a full `CNA`
+    (`+ CnaTests` if ever cross-compiled) Android link succeeds with this change in place.
 
 ### ANDR2-007 — Convert ASensorEvent timestamps to DateTimeOffset — OPEN
 
