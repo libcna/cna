@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
+#include <limits>
 #include <memory>
 #include <string>
 #include <thread>
@@ -250,6 +251,25 @@ TEST(VibrateControllerTests, StartWithIntensityHalfDoesNotThrow)
 TEST(VibrateControllerTests, StartWithIntensityOneDoesNotThrow)
 {
     EXPECT_NO_THROW(VibrateController::getDefaultProperty()->Start(TimeSpan::FromMilliseconds(50), 1.0f));
+}
+
+// Task VIB2-002: exercises the *real* SdlHapticVibrateBackend (no fake
+// installed) -- confirms SanitizeSdlHapticInput()/ToSdlHapticMagnitude()
+// prevent undefined behavior in the actual SDL_PlayHapticRumble()/
+// static_cast<Uint16>() call sites, not just VibrateController's own
+// upstream clamp (VibrateControllerTests.StartWith*CanonicalizesToZero...
+// below prove the latter via the fake).
+TEST(VibrateControllerTests, StartWithNaNIntensityOnRealBackendDoesNotCrash)
+{
+    EXPECT_NO_THROW(VibrateController::getDefaultProperty()->Start(
+        TimeSpan::FromMilliseconds(10), std::numeric_limits<float>::quiet_NaN()));
+}
+
+TEST(VibrateControllerTests, StartLeftRightWithNaNMagnitudesOnRealBackendDoesNotCrash)
+{
+    EXPECT_NO_THROW(VibrateController::getDefaultProperty()->StartLeftRight(
+        std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::quiet_NaN(),
+        TimeSpan::FromMilliseconds(10)));
 }
 
 TEST(VibrateControllerTests, StartWithOutOfRangeIntensityIsClampedSilentlyAndDoesNotThrow)
@@ -536,6 +556,69 @@ TEST(VibrateControllerTests, StartClampsOutOfRangeIntensityBeforeReachingBackend
 
     controller->Start(TimeSpan::FromMilliseconds(10), -5.0f);
     EXPECT_FLOAT_EQ(fake->LastStartIntensity, 0.0f);
+}
+
+// Task VIB2-002 (2026-07-17, external audit `audit_devices_2026-07-17.md`):
+// std::clamp(v, 0.0f, 1.0f) alone leaves NaN unchanged -- every comparison
+// against NaN is false, so std::clamp's own `v < lo ? lo : (hi < v ? hi : v)`
+// falls through to returning v itself. A NaN intensity/motor value reaching
+// SdlHapticVibrateBackend's real SDL_PlayHapticRumble() call or its
+// static_cast<Uint16>(magnitude * 65535.0f) conversion would be undefined
+// behavior. Canonicalized to 0.0f ("no vibration"), matching this API's own
+// established silent-correction policy for out-of-range input.
+TEST(VibrateControllerTests, StartWithNaNIntensityCanonicalizesToZeroBeforeReachingBackend)
+{
+    ScopedFakeVibrateBackend fake;
+    VibrateController* controller = VibrateController::getDefaultProperty();
+
+    controller->Start(TimeSpan::FromMilliseconds(10), std::numeric_limits<float>::quiet_NaN());
+
+    EXPECT_FLOAT_EQ(fake->LastStartIntensity, 0.0f);
+}
+
+// True +/-infinity need no special handling -- both comparisons against a
+// finite bound are well-defined for infinity, so std::clamp already
+// saturates it correctly. This pins that down as a permanent regression test
+// alongside the NaN case above, rather than leaving it merely implied.
+TEST(VibrateControllerTests, StartWithInfiniteIntensitySaturatesBeforeReachingBackend)
+{
+    ScopedFakeVibrateBackend fake;
+    VibrateController* controller = VibrateController::getDefaultProperty();
+
+    controller->Start(TimeSpan::FromMilliseconds(10), std::numeric_limits<float>::infinity());
+    EXPECT_FLOAT_EQ(fake->LastStartIntensity, 1.0f);
+
+    controller->Start(TimeSpan::FromMilliseconds(10), -std::numeric_limits<float>::infinity());
+    EXPECT_FLOAT_EQ(fake->LastStartIntensity, 0.0f);
+}
+
+// Subnormals and signed zero need no special canonicalization -- both are
+// already finite, in-[0,1]-range (or clamp-to-range) values with no UB risk
+// in std::clamp or the Uint16 cast; this pins that down as a permanent
+// regression test rather than leaving it merely asserted.
+TEST(VibrateControllerTests, StartWithSubnormalOrSignedZeroIntensityDoesNotThrowAndForwardsAsIs)
+{
+    ScopedFakeVibrateBackend fake;
+    VibrateController* controller = VibrateController::getDefaultProperty();
+
+    controller->Start(TimeSpan::FromMilliseconds(10), std::numeric_limits<float>::denorm_min());
+    EXPECT_FLOAT_EQ(fake->LastStartIntensity, std::numeric_limits<float>::denorm_min());
+
+    controller->Start(TimeSpan::FromMilliseconds(10), -0.0f);
+    EXPECT_FLOAT_EQ(fake->LastStartIntensity, 0.0f);
+}
+
+TEST(VibrateControllerTests, StartLeftRightWithNaNMagnitudesCanonicalizesToZeroBeforeReachingBackend)
+{
+    ScopedFakeVibrateBackend fake;
+    VibrateController* controller = VibrateController::getDefaultProperty();
+
+    controller->StartLeftRight(
+        std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::quiet_NaN(),
+        TimeSpan::FromMilliseconds(10));
+
+    EXPECT_FLOAT_EQ(fake->LastLargeMotor, 0.0f);
+    EXPECT_FLOAT_EQ(fake->LastSmallMotor, 0.0f);
 }
 
 TEST(VibrateControllerTests, StartWithOutOfRangeDurationThrowsAndNeverReachesBackend)

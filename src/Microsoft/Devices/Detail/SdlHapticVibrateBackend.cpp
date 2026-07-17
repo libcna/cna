@@ -3,6 +3,7 @@
 #include "Microsoft/Devices/Detail/SdlHapticVibrateBackend.hpp"
 
 #include <algorithm>
+#include <cmath>
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_init.h>
@@ -62,6 +63,45 @@ namespace Microsoft::Devices::Detail
 
             SDL_free(joysticks);
             return matchesGamepad;
+        }
+
+        /**
+         * @brief Clamps a motor-magnitude/intensity value to `[0, 1]`, canonicalizing NaN to `0`.
+         *
+         * Task VIB2-002: `VibrateController` already canonicalizes NaN/
+         * out-of-range input before it reaches this backend (see
+         * `VibrateController.cpp`'s `CanonicalizeVibrationMagnitude()`), but
+         * this backend's own `Start()`/`StartLeftRight()` are the *only*
+         * places any caller's value actually reaches a real SDL call or an
+         * integer cast -- a checked conversion here does not depend on that
+         * upstream discipline holding for every possible caller (a future
+         * direct `IVibrateBackend` caller, a test, ...). `std::isnan` first:
+         * `std::clamp` alone leaves NaN unchanged (every comparison against
+         * NaN is `false`), unlike true +/-infinity, which it already
+         * saturates correctly against a finite bound.
+         */
+        [[nodiscard]] float SanitizeSdlHapticInput(float value)
+        {
+            if (std::isnan(value))
+            {
+                return 0.0f;
+            }
+            return std::clamp(value, 0.0f, 1.0f);
+        }
+
+        /**
+         * @brief Converts a `[0, 1]`-range motor magnitude to `SDL_HapticLeftRight`'s `Uint16` scale.
+         *
+         * `static_cast<Uint16>(magnitude * 65535.0f)` on an unsanitized
+         * `magnitude` is undefined behavior if it is NaN (converting a
+         * floating value not representable in the destination integer type
+         * is undefined, not merely a truncating/wrapping cast the way an
+         * already-in-range float-to-integer conversion is) — `SanitizeSdlHapticInput()`
+         * guarantees a finite, in-range value reaches this cast.
+         */
+        [[nodiscard]] Uint16 ToSdlHapticMagnitude(float magnitude)
+        {
+            return static_cast<Uint16>(SanitizeSdlHapticInput(magnitude) * 65535.0f);
         }
     } // namespace
 
@@ -216,7 +256,9 @@ namespace Microsoft::Devices::Detail
         // be stopped explicitly or both would vibrate simultaneously.
         DestroyLeftRightEffectIfAny();
 
-        SDL_PlayHapticRumble(haptic_, intensity, durationMs);
+        // Task VIB2-002: see SanitizeSdlHapticInput()'s own doc comment --
+        // an unsanitized NaN `intensity` must not reach this real SDL call.
+        SDL_PlayHapticRumble(haptic_, SanitizeSdlHapticInput(intensity), durationMs);
     }
 
     void SdlHapticVibrateBackend::Stop()
@@ -328,8 +370,8 @@ namespace Microsoft::Devices::Detail
         SDL_HapticEffect effect{};
         effect.leftright.type = SDL_HAPTIC_LEFTRIGHT;
         effect.leftright.length = durationMs;
-        effect.leftright.large_magnitude = static_cast<Uint16>(largeMotor * 65535.0f);
-        effect.leftright.small_magnitude = static_cast<Uint16>(smallMotor * 65535.0f);
+        effect.leftright.large_magnitude = ToSdlHapticMagnitude(largeMotor);
+        effect.leftright.small_magnitude = ToSdlHapticMagnitude(smallMotor);
 
         leftRightEffectId_ = SDL_CreateHapticEffect(haptic_, &effect);
         if (leftRightEffectId_ < 0)

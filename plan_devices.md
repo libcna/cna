@@ -7409,7 +7409,7 @@ test is not sufficient for an Android coordinate/fusion claim.
   - Probe remains side-effect-free and releases temporary resources.
 - **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
 
-### VIB2-002 — Validate finite intensity and motor inputs — OPEN
+### VIB2-002 — Validate finite intensity and motor inputs — CLOSED (2026-07-17)
 
 - **Priority:** P1
 - **Area:** Perfection re-audit
@@ -7422,6 +7422,55 @@ test is not sufficient for an Android coordinate/fusion claim.
   - No nonfinite float reaches SDL or an integer cast.
   - Behavior is documented and deterministic.
 - **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+- **Resolution:** confirmed the exact defect: `std::clamp(v, lo, hi)` is defined as
+  `v < lo ? lo : (hi < v ? hi : v)` — every comparison against NaN is `false`, so a NaN `v` falls
+  through to `return v;` unchanged. A NaN reaching `SdlHapticVibrateBackend::StartLeftRight()`'s
+  `static_cast<Uint16>(magnitude * 65535.0f)` is undefined behavior (converting a value not
+  representable in the destination integer type); a NaN reaching `SDL_PlayHapticRumble()`'s
+  `strength` parameter is not literally C++ UB (a `float` crosses the SDL C API boundary
+  uneventfully) but is still unvalidated, non-deterministic input reaching real hardware/driver
+  code. True +/-infinity need **no** special handling: both comparisons against a finite bound
+  are well-defined for infinity, so `std::clamp` already saturates it correctly — confirmed by
+  tracing the definition, not assumed, and pinned down with its own regression test rather than
+  left merely asserted.
+  - Fixed at **two layers**, both defense-in-depth, not redundant: `VibrateController.cpp` gained
+    `CanonicalizeVibrationMagnitude()` (NaN → `0.0f`, otherwise `std::clamp`), used in place of
+    the bare `std::clamp` call for `intensity`/`largeMotor`/`smallMotor` — the required work's own
+    "before calling SDL/casting" instruction points at this layer specifically.
+    `SdlHapticVibrateBackend.cpp` **separately** gained `SanitizeSdlHapticInput()` (same
+    canonicalization) and `ToSdlHapticMagnitude()` (the checked, saturating float→`Uint16`
+    conversion the required work's second bullet asks for), used at both real call sites
+    (`SDL_PlayHapticRumble()` and the `SDL_HapticLeftRight` magnitude fields) — this backend is
+    the *only* place any caller's value actually reaches SDL/a cast, so it does not rely on
+    `VibrateController`'s own upstream discipline holding for every possible caller (a future
+    direct `IVibrateBackend` caller, a test, ...).
+  - NaN is canonicalized to `0.0f` ("no vibration"), not rejected/thrown — matches this API's own
+    established policy of silently correcting out-of-range input rather than throwing (see
+    `StartWithOutOfRangeIntensityIsClampedSilentlyAndDoesNotThrow`, pre-existing).
+- **Files changed:** `src/Microsoft/Devices/VibrateController.cpp`,
+  `src/Microsoft/Devices/Detail/SdlHapticVibrateBackend.cpp`,
+  `tests/Microsoft/Devices/VibrateControllerTests.cpp`.
+- **Tests:** added, all against `VibrateController`'s own public API — the fake-backend tests
+  prove `VibrateController`'s own upstream canonicalization; the real-backend ("...OnRealBackendDoesNotCrash")
+  tests separately prove the backend-layer fix, since the real backend is what a fake bypasses
+  entirely: `StartWithNaNIntensityCanonicalizesToZeroBeforeReachingBackend`,
+  `StartWithInfiniteIntensitySaturatesBeforeReachingBackend`,
+  `StartLeftRightWithNaNMagnitudesCanonicalizesToZeroBeforeReachingBackend`,
+  `StartWithSubnormalOrSignedZeroIntensityDoesNotThrowAndForwardsAsIs` (fake-backend, exact-value
+  assertions), `StartWithNaNIntensityOnRealBackendDoesNotCrash`,
+  `StartLeftRightWithNaNMagnitudesOnRealBackendDoesNotCrash` (real `SdlHapticVibrateBackend`, no
+  fake — proves the backend-layer conversion itself is safe, independent of
+  `VibrateController`'s own clamp). Full Devices/Sensors filtered suite: 404 tests, 400 passed, 4
+  skipped (hardware-only, unchanged from before this task) — 6 new, all passing.
+- **Sanitizer/static-analysis result:** built and run under `devices-ubsan` — the exact build that
+  would have caught the pre-fix `static_cast<Uint16>(NaN)` UB had any test exercised it before
+  this task (none did; this task is what added that coverage). Clean: 0 UBSan findings across
+  every new NaN/infinity/subnormal/signed-zero test.
+- **Remaining limitations:** none identified for this specific finding. Real-hardware
+  confirmation that an actual haptic device receives a sane (silent, non-vibrating) result for a
+  canonicalized-to-zero input was not performed — no haptic device is available in this
+  container — but this is a deterministic, host-verifiable software correctness fix, not a
+  hardware-behavior question, so no device procedure is warranted here (unlike `ANDR2-001`/`003`).
 
 ### VIB2-003 — Handle and report every haptic operation result — OPEN
 
