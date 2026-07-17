@@ -248,6 +248,18 @@ namespace CNA::Internal::GltfImport
             return static_cast<std::uint8_t>(std::clamp(v, 0.0f, 1.0f) * 255.0f + 0.5f);
         }
 
+        // cgltf_find_accessor only searches a cgltf_primitive's own attributes[], not a morph
+        // target's -- cgltf has no built-in equivalent for cgltf_morph_target, so this mirrors it
+        // for the one attribute shape (a flat cgltf_attribute[] array) both share.
+        const cgltf_accessor* FindMorphTargetAttribute(const cgltf_morph_target& target, cgltf_attribute_type type)
+        {
+            for (cgltf_size i = 0; i < target.attributes_count; ++i)
+            {
+                if (target.attributes[i].type == type) { return target.attributes[i].data; }
+            }
+            return nullptr;
+        }
+
         // Nodes reachable from the file's default scene (data->scene, or the first scene if
         // that's unset but at least one scene exists), walked via each node's own children[]
         // array. A file with more than one scene may have nodes that exist only in a non-default
@@ -697,6 +709,45 @@ namespace CNA::Internal::GltfImport
             else { AppendUint16(out.indexBytes, static_cast<std::uint16_t>(v)); }
         }
 
+        // CNB-64 (Phase 13B): morph target position/normal deltas. TANGENT deltas are not
+        // extracted (CNA's stock effects have no tangent-space normal mapping, matching PBR
+        // normal-map's own documented scope cut).
+        out.morphPositionDeltas.resize(prim.targets_count);
+        out.morphNormalDeltas.resize(prim.targets_count);
+        for (cgltf_size ti = 0; ti < prim.targets_count; ++ti)
+        {
+            const cgltf_morph_target& target = prim.targets[ti];
+
+            const cgltf_accessor* posDeltaAcc = FindMorphTargetAttribute(target, cgltf_attribute_type_position);
+            out.morphPositionDeltas[ti].resize(vertexCount);
+            if (posDeltaAcc)
+            {
+                const std::vector<float> deltas = UnpackAccessor(posDeltaAcc, 3, "morph target POSITION delta");
+                for (cgltf_size v = 0; v < vertexCount; ++v)
+                {
+                    const std::size_t o = static_cast<std::size_t>(v) * 3;
+                    out.morphPositionDeltas[ti][v] = Vector3(
+                        deltas[o] * unitScale, deltas[o + 1] * unitScale, deltas[o + 2] * unitScale);
+                }
+            }
+            // else: leave the zero-initialized Vector3 default (a target with no POSITION delta
+            // at all is unusual but spec-legal).
+
+            const cgltf_accessor* normDeltaAcc = FindMorphTargetAttribute(target, cgltf_attribute_type_normal);
+            if (normDeltaAcc)
+            {
+                const std::vector<float> deltas = UnpackAccessor(normDeltaAcc, 3, "morph target NORMAL delta");
+                out.morphNormalDeltas[ti].resize(vertexCount);
+                for (cgltf_size v = 0; v < vertexCount; ++v)
+                {
+                    const std::size_t o = static_cast<std::size_t>(v) * 3;
+                    out.morphNormalDeltas[ti][v] = Vector3(deltas[o], deltas[o + 1], deltas[o + 2]);
+                }
+            }
+            // else: leave out.morphNormalDeltas[ti] empty -- signals "no normal delta for this
+            // target" to SetMorphWeightsEXT, which then leaves the base normal unchanged.
+        }
+
         return out;
     }
 
@@ -736,5 +787,79 @@ namespace CNA::Internal::GltfImport
         }
 
         return groups;
+    }
+
+    std::vector<float> GetMeshDefaultWeights(const cgltf_mesh* mesh, std::size_t targetCount)
+    {
+        std::vector<float> weights(targetCount, 0.0f);
+        const std::size_t n = std::min(static_cast<std::size_t>(mesh->weights_count), targetCount);
+        for (std::size_t i = 0; i < n; ++i) { weights[i] = mesh->weights[i]; }
+        return weights;
+    }
+
+    std::optional<MorphWeightTrackOut> ExtractMorphWeightTrack(const cgltf_data* data, const cgltf_mesh* mesh,
+                                                                std::size_t targetCount)
+    {
+        if (targetCount == 0) { return std::nullopt; }
+
+        const cgltf_node* meshNode = nullptr;
+        for (cgltf_size i = 0; i < data->nodes_count; ++i)
+        {
+            if (data->nodes[i].mesh == mesh) { meshNode = &data->nodes[i]; break; }
+        }
+        if (!meshNode) { return std::nullopt; }
+
+        for (cgltf_size a = 0; a < data->animations_count; ++a)
+        {
+            const cgltf_animation& anim = data->animations[a];
+            for (cgltf_size c = 0; c < anim.channels_count; ++c)
+            {
+                const cgltf_animation_channel& ch = anim.channels[c];
+                if (ch.target_node != meshNode || ch.target_path != cgltf_animation_path_type_weights)
+                {
+                    continue;
+                }
+
+                const std::vector<float> times = UnpackAccessor(ch.sampler->input, 1, "weights channel time");
+                const bool cubicSpline = ch.sampler->interpolation == cgltf_interpolation_type_cubic_spline;
+                // CUBICSPLINE: [in-tangent, value, out-tangent] triplets per keyframe -- only the
+                // middle "value" third is read here (documented scope cut, see
+                // MorphWeightTrackOut's own doc comment; unlike ExtractClips' bone channels,
+                // which do evaluate the real Hermite tangents).
+                const std::size_t tripletStride = cubicSpline ? 3 : 1;
+
+                // The output accessor is SCALAR-typed per component (glTF's own "weights"
+                // channel convention -- targetCount is external context, not encoded in the
+                // accessor's own declared type), so this reads it as one flat array via
+                // cgltf_accessor_unpack_floats directly rather than through UnpackAccessor's
+                // per-element component-count validation (which assumes componentsPerValue
+                // divides evenly via the accessor's own type -- not true here).
+                std::vector<float> flat(static_cast<std::size_t>(ch.sampler->output->count));
+                const cgltf_size unpacked =
+                    cgltf_accessor_unpack_floats(ch.sampler->output, flat.data(), flat.size());
+                if (unpacked != flat.size() ||
+                    flat.size() != times.size() * targetCount * tripletStride)
+                {
+                    throw std::runtime_error(
+                        "Failed to unpack morph weight animation channel output (malformed data, "
+                        "or its size does not match keyframe count * target count).");
+                }
+
+                MorphWeightTrackOut track;
+                track.stepInterpolation = ch.sampler->interpolation == cgltf_interpolation_type_step;
+                track.keys.reserve(times.size());
+                for (std::size_t k = 0; k < times.size(); ++k)
+                {
+                    MorphWeightKeyframeOut key;
+                    key.time = times[k];
+                    key.weights.resize(targetCount);
+                    const std::size_t base = (k * tripletStride + (cubicSpline ? 1 : 0)) * targetCount;
+                    for (std::size_t t = 0; t < targetCount; ++t) { key.weights[t] = flat[base + t]; }
+                    track.keys.push_back(std::move(key));
+                }
+                return track;
+            }
+        }
+        return std::nullopt;
     }
 }

@@ -22,7 +22,13 @@
 // CNB-50/51/55/67/73's notes for the full list): only the base-color and occlusion textures are
 // extracted (no normal/metallic-roughness/emissive maps, no PBR factor values); vertex color and
 // DualTextureEffect's Texture2 are each mutually exclusive with the other and, for Texture2, with
-// skinning; morph targets (blend shapes) are not imported.
+// skinning.
+//
+// CNB-64 (Phase 13B): GltfImportCore::ExtractMesh always extracts morph target deltas, but this
+// offline .cnj export does not yet serialize them (a warning is emitted per morphed primitive
+// rather than silently dropping them) -- morph targets are fully supported through the runtime
+// glTF path only (Content.Load<Model>("*.gltf"), see ModelTypeReader::ReadGltfModel() in
+// ContentManager.cpp and MorphTargetEXT.hpp's own doc comments).
 
 #include "CNA/Internal/GltfImport/GltfImportCore.hpp"
 
@@ -148,6 +154,21 @@ namespace
                     ? (std::string(mesh->name) + (mesh->primitives_count > 1 ? "_" + std::to_string(p) : ""))
                     : ("mesh" + std::to_string(meshCounter));
                 MeshOut meshOut = ExtractMesh(mesh->primitives[p], partName, hasSkin ? &skeleton : nullptr, unitScale);
+
+                // CNB-64 (Phase 13B): morph targets are extracted (GltfImportCore::ExtractMesh
+                // always populates them) but this offline .cnj export does not yet serialize them
+                // -- a documented, deliberate scope cut, not silent data loss. Runtime loading
+                // (Content.Load<Model>("*.gltf"), ModelTypeReader::ReadGltfModel) does support
+                // morph targets fully; use that path instead if morph targets matter.
+                if (!meshOut.morphPositionDeltas.empty())
+                {
+                    warnings.push_back(
+                        "Primitive '" + partName + "' has " +
+                        std::to_string(meshOut.morphPositionDeltas.size()) +
+                        " morph target(s), which this offline .cnj export does not yet serialize "
+                        "-- load the .gltf/.glb file directly via Content.Load<Model>() instead "
+                        "if morph targets are needed.");
+                }
 
                 const std::string vertFile = outName + "_mesh" + std::to_string(meshCounter) + "_verts.bin";
                 const std::string idxFile  = outName + "_mesh" + std::to_string(meshCounter) + "_idx.bin";

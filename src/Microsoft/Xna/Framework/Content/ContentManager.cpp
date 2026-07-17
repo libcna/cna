@@ -23,6 +23,7 @@
 #include "Microsoft/Xna/Framework/Graphics/ModelBone.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMesh.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshPart.hpp"
+#include "Microsoft/Xna/Framework/Graphics/MorphTargetEXT.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedModelEXT.hpp"
@@ -1558,6 +1559,9 @@ namespace Microsoft::Xna::Framework::Content
             // Task 941: owns the skeleton/animation-clip data attached to the returned Model's
             // own Tag property. Null for a rigid, non-skinned model with no skeleton.
             std::unique_ptr<Graphics::SkinningData>               skinningData;
+            // CNB-64/65 (Phase 13B): owns the morph-target data attached to each morphed mesh
+            // part's own Tag property (one entry per part that has morph targets, not per Model).
+            std::vector<std::unique_ptr<Graphics::MorphTargetDataEXT>> morphOwners;
         };
 
         // Task 927: `stride` is always one of XNA's own "clean" (tightly packed, no vtable) sizes
@@ -1809,6 +1813,52 @@ namespace Microsoft::Xna::Framework::Content
                     auto part = std::make_unique<Graphics::ModelMeshPart>(
                         vb.get(), ib.get(), numVertices, primCount, 0, 0);
                     Graphics::ModelMeshPart* partPtr = part.get();
+
+                    // CNB-64/65 (Phase 13B): morph targets, attached to this part's own real XNA
+                    // Tag property (see MorphTargetEXT.hpp's own doc comment). Weight animation
+                    // (ExtractMorphWeightTrack) is independent of skinning -- checked regardless
+                    // of hasSkin, since a mesh can have morph targets and no skin at all.
+                    if (!meshOut.morphPositionDeltas.empty())
+                    {
+                        const std::size_t targetCount = meshOut.morphPositionDeltas.size();
+                        auto morph = std::make_unique<Graphics::MorphTargetDataEXT>();
+                        morph->BaseVertexBytes = meshOut.vertexBytes;
+                        morph->Stride = meshOut.stride;
+                        morph->PositionDeltas.reserve(targetCount);
+                        morph->NormalDeltas.reserve(targetCount);
+                        for (std::size_t t = 0; t < targetCount; ++t)
+                        {
+                            morph->PositionDeltas.push_back(meshOut.morphPositionDeltas[t]);
+                            morph->NormalDeltas.push_back(meshOut.morphNormalDeltas[t]);
+                        }
+                        morph->Weights = GetMeshDefaultWeights(mesh, targetCount);
+                        if (auto weightTrack = ExtractMorphWeightTrack(data, mesh, targetCount))
+                        {
+                            morph->WeightTrack.Keys.reserve(weightTrack->keys.size());
+                            for (const MorphWeightKeyframeOut& k : weightTrack->keys)
+                            {
+                                Graphics::MorphWeightKeyframeEXT key;
+                                key.Time = System::TimeSpan::FromSeconds(k.time);
+                                key.Weights = k.weights;
+                                morph->WeightTrack.Keys.push_back(std::move(key));
+                            }
+                            morph->WeightTrack.StepInterpolation = weightTrack->stepInterpolation;
+                        }
+                        partPtr->setTagProperty(morph.get());
+                        // glTF's "mesh.weights" is the default/initial blend state, not
+                        // necessarily all-zero -- apply it now so the uploaded vertex buffer
+                        // reflects the file author's own intended default pose, not always the
+                        // raw (zero-weight) base pose. SetMorphWeightsEXT re-reads Tag, so this
+                        // must run after setTagProperty() above.
+                        const bool hasNonZeroDefault = std::any_of(
+                            morph->Weights.begin(), morph->Weights.end(),
+                            [](float w) { return w != 0.0f; });
+                        if (hasNonZeroDefault)
+                        {
+                            Graphics::SetMorphWeightsEXT(*partPtr, morph->Weights);
+                        }
+                        res->morphOwners.push_back(std::move(morph));
+                    }
 
                     const std::string& meshName = meshOut.name;
                     auto meshObj = std::make_unique<Graphics::ModelMesh>(

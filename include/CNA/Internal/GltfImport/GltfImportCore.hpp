@@ -113,6 +113,17 @@ namespace CNA::Internal::GltfImport
         const cgltf_image* baseColorImage = nullptr;
         /** @brief The material's occlusion texture image, or nullptr if none. */
         const cgltf_image* occlusionImage = nullptr;
+        /**
+         * @brief Per-target, per-vertex position deltas: morphPositionDeltas[target][vertex],
+         * already unit-scaled. Empty if the primitive has no morph targets.
+         */
+        std::vector<std::vector<Microsoft::Xna::Framework::Vector3>> morphPositionDeltas;
+        /**
+         * @brief Per-target, per-vertex normal deltas: morphNormalDeltas[target][vertex], or an
+         * empty inner vector for a target with no NORMAL delta. Only meaningful for strides with
+         * a Normal slot (32/52/56) -- see SetMorphWeightsEXT's own doc comment.
+         */
+        std::vector<std::vector<Microsoft::Xna::Framework::Vector3>> morphNormalDeltas;
     };
 
     /** @brief A group of glTF mesh instances sharing the same skin (or no skin at all). */
@@ -122,6 +133,31 @@ namespace CNA::Internal::GltfImport
         const cgltf_skin* skin = nullptr;
         /** @brief The glTF meshes belonging to this group. */
         std::vector<const cgltf_mesh*> meshes;
+    };
+
+    /** @brief One keyframe of a morph-weight animation track: a full weight vector at a point in time. */
+    struct MorphWeightKeyframeOut
+    {
+        /** @brief Time of this keyframe, in seconds relative to the start of the clip. */
+        double time = 0.0;
+        /** @brief Weight for each morph target at this keyframe. */
+        std::vector<float> weights;
+    };
+
+    /**
+     * @brief A morph-weight animation track extracted from a glTF "weights" animation channel.
+     *
+     * @note NOXNA — not part of the XNA 4.0 API. Independent of ExtractClips' own bone-track
+     * extraction: glTF's "weights" channel targets a mesh-instance node directly, not a skeleton
+     * joint, so a mesh can have morph weight animation with no skin at all -- see
+     * ExtractMorphWeightTrack's own doc comment.
+     */
+    struct MorphWeightTrackOut
+    {
+        /** @brief Keyframes for this track, in ascending time order. */
+        std::vector<MorphWeightKeyframeOut> keys;
+        /** @brief True if the source channel used STEP interpolation (hold last value, no lerp). */
+        bool stepInterpolation = false;
     };
 
     /**
@@ -192,4 +228,30 @@ namespace CNA::Internal::GltfImport
      * @return One `MeshGroup` per distinct skin (plus one for unskinned meshes, if any exist).
      */
     std::vector<MeshGroup> CollectMeshGroups(const cgltf_data* data);
+
+    /**
+     * @brief Returns a mesh's default morph target weights (its own "weights" array), zero-filled
+     * up to @p targetCount if the mesh's own array is shorter or absent.
+     *
+     * @param mesh The glTF mesh.
+     * @param targetCount The primitive's own morph target count (MeshOut::morphPositionDeltas.size()).
+     * @return The default weight vector, exactly @p targetCount entries long.
+     */
+    std::vector<float> GetMeshDefaultWeights(const cgltf_mesh* mesh, std::size_t targetCount);
+
+    /**
+     * @brief Extracts a mesh's morph-weight animation track, if one exists.
+     *
+     * glTF's "weights" animation channel targets the *node* instancing a mesh, not the mesh (or a
+     * skeleton joint) directly -- unlike bone channels (see ExtractClips), this works for a mesh
+     * with morph targets and no skin at all. A mesh referenced by more than one node resolves to
+     * the first node found (a documented simplification for a rare edge case).
+     *
+     * @param data The parsed glTF file.
+     * @param mesh The glTF mesh to find a weight animation channel for.
+     * @param targetCount The primitive's own morph target count.
+     * @return The extracted track, or std::nullopt if the mesh has no weight animation channel.
+     */
+    std::optional<MorphWeightTrackOut> ExtractMorphWeightTrack(const cgltf_data* data, const cgltf_mesh* mesh,
+                                                                std::size_t targetCount);
 }
