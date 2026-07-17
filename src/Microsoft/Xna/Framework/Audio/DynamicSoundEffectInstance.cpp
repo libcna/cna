@@ -10,6 +10,8 @@
 #include "System/InvalidOperationException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
+#include <iostream>
+
 #ifdef SOUND_ENABLED
 #include <SDL3/SDL.h>
 #include <SDL3_mixer/SDL_mixer.h>
@@ -153,6 +155,19 @@ namespace Microsoft::Xna::Framework::Audio
 #ifdef SOUND_ENABLED
         EnsureStream();
 
+        // AUD-02-007/AUD-07-007: SDL_CreateAudioStream (inside EnsureStream()) can fail (e.g.
+        // invalid spec, allocation failure); MIX_SetTrackAudioStream(track, nullptr) is
+        // documented as *legal* -- it detaches the track's input rather than failing -- so
+        // without this check a failed EnsureStream() would silently attach no input at all and
+        // fall through to a false "Playing" state below with total silence, not caught by any
+        // downstream return-value check.
+        if (!audioStream_)
+        {
+            std::cerr << "[DynamicSoundEffectInstance] SDL_CreateAudioStream failed: "
+                      << SDL_GetError() << "\n";
+            return;
+        }
+
         MIX_Mixer* mixer = GetMixerOrThrowXna();
 
         // Destroy previous track if any.
@@ -160,12 +175,19 @@ namespace Microsoft::Xna::Framework::Audio
         if (!track)
         {
             track = MIX_CreateTrack(mixer);
-            if (!track) return;
+            if (!track)
+            {
+                std::cerr << "[DynamicSoundEffectInstance] MIX_CreateTrack failed: "
+                          << SDL_GetError() << "\n";
+                return;
+            }
             track_ = track;
         }
 
         if (!MIX_SetTrackAudioStream(track, AsStream(audioStream_)))
         {
+            std::cerr << "[DynamicSoundEffectInstance] MIX_SetTrackAudioStream failed: "
+                      << SDL_GetError() << "\n";
             return;
         }
 
@@ -179,17 +201,29 @@ namespace Microsoft::Xna::Framework::Audio
         INTERNAL_applyComposedTrackProperties();
 
         SDL_PropertiesID props = SDL_CreateProperties();
+        bool played;
         if (props != 0)
         {
             // Don't halt the track when the stream runs dry; we'll keep feeding it.
             SDL_SetBooleanProperty(props, MIX_PROP_PLAY_HALT_WHEN_EXHAUSTED_BOOLEAN, false);
             SDL_SetNumberProperty(props, MIX_PROP_PLAY_LOOPS_NUMBER, -1);
-            MIX_PlayTrack(track, props);
+            played = MIX_PlayTrack(track, props);
             SDL_DestroyProperties(props);
         }
         else
         {
-            MIX_PlayTrack(track, 0);
+            played = MIX_PlayTrack(track, 0);
+        }
+
+        // AUD-02-009/AUD-07-010: a failed MIX_PlayTrack must never be followed by a public
+        // Playing state -- without this check, a track that failed to start (e.g. the mixer
+        // rejected the track for some backend reason) would still report SoundState::Playing
+        // and be registered with FrameworkDispatcher::Streams as if audio were flowing.
+        if (!played)
+        {
+            std::cerr << "[DynamicSoundEffectInstance] MIX_PlayTrack failed: "
+                      << SDL_GetError() << "\n";
+            return;
         }
 
         // Submit any already-queued buffers.
@@ -530,11 +564,20 @@ namespace Microsoft::Xna::Framework::Audio
 
         for (const auto& chunk : toSubmit)
         {
-            SDL_PutAudioStreamData(
+            // AUD-02-008/AUD-07-009: a failed SDL_PutAudioStreamData must not be counted as
+            // submitted -- SDL guarantees no partial data is queued on failure, so crediting the
+            // chunk to submittedChunkSizes_ anyway would corrupt PendingBufferCount forever (the
+            // stream never actually receives those bytes, so Update()'s consumed-byte accounting
+            // would never reach far enough to pop it).
+            if (!SDL_PutAudioStreamData(
                 stream,
                 chunk.data(),
-                static_cast<int>(chunk.size())
-            );
+                static_cast<int>(chunk.size())))
+            {
+                std::cerr << "[DynamicSoundEffectInstance] SDL_PutAudioStreamData failed ("
+                          << chunk.size() << " bytes dropped): " << SDL_GetError() << "\n";
+                continue;
+            }
 
             std::lock_guard<std::mutex> lock(queueMutex_);
             submittedChunkSizes_.push_back(chunk.size());

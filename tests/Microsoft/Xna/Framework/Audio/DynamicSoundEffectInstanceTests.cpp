@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "Microsoft/Xna/Framework/Audio/DynamicSoundEffectInstance.hpp"
+#include "Microsoft/Xna/Framework/Audio/NoAudioHardwareException.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundEffectInstance.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioChannels.hpp"
 #include "Microsoft/Xna/Framework/Audio/AudioEmitter.hpp"
@@ -397,6 +398,35 @@ TEST(DynamicSoundEffectInstanceTest, PlayAfterDisposeThrowsObjectDisposed)
     DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
     d.Dispose();
     EXPECT_THROW(d.Play(), System::ObjectDisposedException);
+}
+
+// AUD-02-007/AUD-07-007 (2026-07-17 deep audit, A-04): SDL_CreateAudioStream fails outright for
+// freq=0 (confirmed empirically: SDL reports "Parameter 'src_spec->freq' is invalid"). Per
+// P10-DYN-001/002/003 (resolved decision matching real FNA), the constructor itself must NOT
+// validate/reject sampleRate=0 -- but Play() must not report a false "Playing" state when the
+// resulting stream creation silently fails. Without EnsureStream()'s new audioStream_ check, this
+// used to fall through: MIX_SetTrackAudioStream(track, nullptr) is documented as legal (detaches
+// input), so the pre-fix code sailed past its own "if (!MIX_SetTrackAudioStream(...)) return;"
+// guard and reported Playing with a track that has no audio input at all.
+TEST(DynamicSoundEffectInstanceTest, PlayWithZeroSampleRateDoesNotReportPlayingOnStreamCreationFailure)
+{
+    DynamicSoundEffectInstance d(0, AudioChannels::Stereo);
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+    std::vector<unsigned char> pcm(4 * 256, 0);
+    d.SubmitBuffer(pcm);
+
+    // GetMixerOrThrowXna() can still throw NoAudioHardwareException if there's truly no audio
+    // device at all (unrelated to this test's own freq=0 failure) -- skip in that unrelated case.
+    try
+    {
+        d.Play();
+    }
+    catch (const Microsoft::Xna::Framework::Audio::NoAudioHardwareException&)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+
+    EXPECT_NE(d.getStateProperty(), SoundState::Playing);
 }
 
 // P9-VALIDATION-010: Resume() delegates to Play() when there's no active track_, which is
