@@ -94,9 +94,28 @@
 > `bufferView`, external file, or base64 `data:` URI all handled) and wired into the mesh's `.cnj`
 > `"texture"` field -- `CesiumMan.glb`'s own real 1024×1024 JPEG texture round-trips correctly. A
 > file with more than one skin now produces one `Model` `.cnj` per skin (`<baseName>_<skinName>.cnj`),
-> not just the first. Remaining, still-deliberate scope cuts: only the base-color texture (no
-> normal/metallic-roughness/emissive/occlusion maps), `CUBICSPLINE` tangents discarded. Full-suite
-> regression: 4689 tests, 4687 passed, same 2 pre-existing hardware skips, 0 failures.
+> not just the first. Full-suite regression: 4689 tests, 4687 passed, same 2 pre-existing hardware
+> skips, 0 failures.
+>
+> **Self-caught fix (`CNB-54`)**: the same-day refactor above accidentally dropped `STEP`
+> animation-interpolation handling (silently became `LINEAR`) -- found and fixed the same day, with
+> a regression test. See `plan_cnj.md` for the full root-cause writeup.
+>
+> **Second follow-up (`plan_cnj.md` `CNB-55`), at the project owner's explicit "oprav vsechny tyto
+> diry" request**: TEXCOORD set selection now honors the base-color texture's own `"texcoord"`
+> index instead of always `TEXCOORD_0`; only nodes reachable from the file's default scene are
+> imported; an optional `unitScale` CLI argument corrects a source file not authored in meters
+> (positions, bone bind poses, and animated translation keyframes all scale consistently); Draco-
+> compressed primitives are rejected with a clear error instead of silently misread; `CUBICSPLINE`
+> channels now use the glTF spec's real cubic Hermite basis (tangents included), not just the
+> sampled value; and `COLOR_0` vertex color is extracted for unskinned meshes, reusing the real XNA
+> `VertexPositionColorTexture` layout and `BasicEffect`'s already-working `VertexColorEnabled`
+> shader path (one small `ModelTypeReader` addition: an optional `"vertexColorEnabled"` `.cnj` mesh
+> field). **Deliberately still out of scope**: PBR maps beyond base color and vertex color on
+> skinned meshes have no shader path on CNA's real-XNA-faithful `BasicEffect`/`SkinnedEffect` at
+> all (adding them would mean diverging from XNA fidelity or building a new custom shader
+> pipeline); morph targets have no support anywhere in CNA's rendering pipeline. Full-suite
+> regression: 4696 tests, 4694 passed, same 2 pre-existing hardware skips, 0 failures.
 
 ## Why this alternative exists
 

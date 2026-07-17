@@ -36,6 +36,7 @@
 //   - kMultiSkinGltf: two independent one-bone skins, each with its own mesh node -- proves the
 //     tool no longer silently imports only the first skin in a file.
 
+#include <array>
 #include <cerrno>
 #include <cstring>
 #include <filesystem>
@@ -48,6 +49,7 @@
 
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Graphics/AnimationPlayer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Model.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMesh.hpp"
@@ -327,15 +329,220 @@ namespace
   ]
 })GLTF";
 
+    // A primitive with KHR_draco_mesh_compression must be rejected with a clear error, not
+    // silently read as garbage (cgltf never decodes Draco itself).
+    const char* kDracoGltf = R"GLTF({
+  "asset": { "version": "2.0" },
+  "scene": 0,
+  "scenes": [ { "nodes": [0] } ],
+  "nodes": [ { "name": "MeshNode", "mesh": 0 } ],
+  "meshes": [ { "primitives": [ {
+      "attributes": { "POSITION": 0 },
+      "extensions": { "KHR_draco_mesh_compression": { "bufferView": 0, "attributes": { "POSITION": 0 } } }
+  } ] } ],
+  "buffers": [ {
+    "byteLength": 36,
+    "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAA"
+  } ],
+  "bufferViews": [ { "buffer": 0, "byteOffset": 0, "byteLength": 36 } ],
+  "accessors": [
+    { "bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3", "min": [0,0,0], "max": [1,1,0] }
+  ]
+})GLTF";
+
+    // TEXCOORD_0 is deliberately filled with (9,9) sentinel values the tool must NEVER pick;
+    // the material's baseColorTexture selects "texCoord": 1, so the real UVs must come from
+    // TEXCOORD_1. Also carries a real embedded 1x1 PNG so the texture-extraction step (unrelated
+    // to what this fixture actually tests) succeeds rather than erroring on a missing file.
+    const char* kTexcoordSelectionGltf = R"GLTF({
+  "asset": { "version": "2.0" },
+  "scene": 0,
+  "scenes": [ { "nodes": [0] } ],
+  "nodes": [ { "name": "MeshNode", "mesh": 0 } ],
+  "meshes": [ { "primitives": [ {
+      "attributes": { "POSITION": 0, "NORMAL": 1, "TEXCOORD_0": 2, "TEXCOORD_1": 3 },
+      "material": 0
+  } ] } ],
+  "materials": [ { "pbrMetallicRoughness": { "baseColorTexture": { "index": 0, "texCoord": 1 } } } ],
+  "textures": [ { "source": 0 } ],
+  "images": [ { "bufferView": 4, "mimeType": "image/png" } ],
+  "buffers": [ {
+    "byteLength": 189,
+    "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAQQQAAEEEAABBBAAAQQQAAEEEAABBBAAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC"
+  } ],
+  "bufferViews": [
+    { "buffer": 0, "byteOffset": 0,   "byteLength": 36 },
+    { "buffer": 0, "byteOffset": 36,  "byteLength": 36 },
+    { "buffer": 0, "byteOffset": 72,  "byteLength": 24 },
+    { "buffer": 0, "byteOffset": 96,  "byteLength": 24 },
+    { "buffer": 0, "byteOffset": 120, "byteLength": 69 }
+  ],
+  "accessors": [
+    { "bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3", "min": [0,0,0], "max": [1,1,0] },
+    { "bufferView": 1, "componentType": 5126, "count": 3, "type": "VEC3" },
+    { "bufferView": 2, "componentType": 5126, "count": 3, "type": "VEC2" },
+    { "bufferView": 3, "componentType": 5126, "count": 3, "type": "VEC2" }
+  ]
+})GLTF";
+
+    // Two nodes reference the same mesh; only "InSceneMesh" is listed in the default scene's own
+    // node list -- "OrphanMesh" must not be imported.
+    const char* kSceneScopedGltf = R"GLTF({
+  "asset": { "version": "2.0" },
+  "scene": 0,
+  "scenes": [ { "nodes": [0] } ],
+  "nodes": [
+    { "name": "InSceneMesh", "mesh": 0 },
+    { "name": "OrphanMesh", "mesh": 0 }
+  ],
+  "meshes": [ { "primitives": [ { "attributes": { "POSITION": 0, "NORMAL": 1, "TEXCOORD_0": 2 } } ] } ],
+  "buffers": [ {
+    "byteLength": 96,
+    "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/"
+  } ],
+  "bufferViews": [
+    { "buffer": 0, "byteOffset": 0,  "byteLength": 36 },
+    { "buffer": 0, "byteOffset": 36, "byteLength": 36 },
+    { "buffer": 0, "byteOffset": 72, "byteLength": 24 }
+  ],
+  "accessors": [
+    { "bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3", "min": [0,0,0], "max": [1,1,0] },
+    { "bufferView": 1, "componentType": 5126, "count": 3, "type": "VEC3" },
+    { "bufferView": 2, "componentType": 5126, "count": 3, "type": "VEC2" }
+  ]
+})GLTF";
+
+    // One bone's translation channel is CUBICSPLINE with distinctive tangents (key0:
+    // value=(0,0,0) outTangent=(10,0,0); key1: inTangent=(-10,0,0) value=(10,0,0)) over
+    // t=[0,2]; a second (LINEAR, identity throughout) rotation channel has a key at t=1,
+    // forcing the union-time resample to evaluate the CUBICSPLINE channel at a time it has no
+    // native key at. The real Hermite basis gives X=10.0 there; a buggy linear/value-only
+    // fallback would give 5.0 or 0.0 instead.
+    const char* kCubicSplineGltf = R"GLTF({
+  "asset": { "version": "2.0" },
+  "scene": 0,
+  "scenes": [ { "nodes": [0, 1] } ],
+  "nodes": [
+    { "name": "RootBone" },
+    { "name": "MeshNode", "mesh": 0, "skin": 0 }
+  ],
+  "meshes": [ { "primitives": [ { "attributes": {
+      "POSITION": 0, "NORMAL": 1, "TEXCOORD_0": 2, "JOINTS_0": 3, "WEIGHTS_0": 4
+  } } ] } ],
+  "skins": [ { "joints": [0], "inverseBindMatrices": 5 } ],
+  "animations": [ {
+    "name": "CubicTest",
+    "samplers": [
+      { "input": 6, "output": 7, "interpolation": "CUBICSPLINE" },
+      { "input": 8, "output": 9, "interpolation": "LINEAR" }
+    ],
+    "channels": [
+      { "sampler": 0, "target": { "node": 0, "path": "translation" } },
+      { "sampler": 1, "target": { "node": 0, "path": "rotation" } }
+    ]
+  } ],
+  "buffers": [ {
+    "byteLength": 352,
+    "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAAAAAACAPwAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgQQAAAAAAAAAAAAAgwQAAAAAAAAAAAAAgQQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAAAAAACAPw=="
+  } ],
+  "bufferViews": [
+    { "buffer": 0, "byteOffset": 0,   "byteLength": 36 },
+    { "buffer": 0, "byteOffset": 36,  "byteLength": 36 },
+    { "buffer": 0, "byteOffset": 72,  "byteLength": 24 },
+    { "buffer": 0, "byteOffset": 96,  "byteLength": 24 },
+    { "buffer": 0, "byteOffset": 120, "byteLength": 48 },
+    { "buffer": 0, "byteOffset": 168, "byteLength": 64 },
+    { "buffer": 0, "byteOffset": 232, "byteLength": 8 },
+    { "buffer": 0, "byteOffset": 240, "byteLength": 72 },
+    { "buffer": 0, "byteOffset": 312, "byteLength": 8 },
+    { "buffer": 0, "byteOffset": 320, "byteLength": 32 }
+  ],
+  "accessors": [
+    { "bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3", "min": [0,0,0], "max": [1,1,0] },
+    { "bufferView": 1, "componentType": 5126, "count": 3, "type": "VEC3" },
+    { "bufferView": 2, "componentType": 5126, "count": 3, "type": "VEC2" },
+    { "bufferView": 3, "componentType": 5123, "count": 3, "type": "VEC4" },
+    { "bufferView": 4, "componentType": 5126, "count": 3, "type": "VEC4" },
+    { "bufferView": 5, "componentType": 5126, "count": 1, "type": "MAT4" },
+    { "bufferView": 6, "componentType": 5126, "count": 2, "type": "SCALAR", "min": [0.0], "max": [2.0] },
+    { "bufferView": 7, "componentType": 5126, "count": 6, "type": "VEC3" },
+    { "bufferView": 8, "componentType": 5126, "count": 2, "type": "SCALAR", "min": [0.0], "max": [1.0] },
+    { "bufferView": 9, "componentType": 5126, "count": 2, "type": "VEC4" }
+  ]
+})GLTF";
+
+    // COLOR_0 (VEC4 float) on an unskinned mesh: vertex 0 red, vertex 1 green, vertex 2 blue,
+    // all opaque.
+    const char* kVertexColorGltf = R"GLTF({
+  "asset": { "version": "2.0" },
+  "scene": 0,
+  "scenes": [ { "nodes": [0] } ],
+  "nodes": [ { "name": "MeshNode", "mesh": 0 } ],
+  "meshes": [ { "primitives": [ { "attributes": { "POSITION": 0, "TEXCOORD_0": 1, "COLOR_0": 2 } } ] } ],
+  "buffers": [ {
+    "byteLength": 108,
+    "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AACAPwAAAAAAAAAAAACAPwAAAAAAAIA/AAAAAAAAgD8AAAAAAAAAAAAAgD8AAIA/"
+  } ],
+  "bufferViews": [
+    { "buffer": 0, "byteOffset": 0,  "byteLength": 36 },
+    { "buffer": 0, "byteOffset": 36, "byteLength": 24 },
+    { "buffer": 0, "byteOffset": 60, "byteLength": 48 }
+  ],
+  "accessors": [
+    { "bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3", "min": [0,0,0], "max": [1,1,0] },
+    { "bufferView": 1, "componentType": 5126, "count": 3, "type": "VEC2" },
+    { "bufferView": 2, "componentType": 5126, "count": 3, "type": "VEC4" }
+  ]
+})GLTF";
+
+    // Authored in centimeters (RootBone at [50,0,0], triangle spanning 100 units): with
+    // unitScale=0.01, every position and bone translation must come out divided by 100.
+    const char* kUnitScaleGltf = R"GLTF({
+  "asset": { "version": "2.0" },
+  "scene": 0,
+  "scenes": [ { "nodes": [0, 1] } ],
+  "nodes": [
+    { "name": "RootBone", "translation": [50, 0, 0] },
+    { "name": "MeshNode", "mesh": 0, "skin": 0 }
+  ],
+  "meshes": [ { "primitives": [ { "attributes": {
+      "POSITION": 0, "NORMAL": 1, "TEXCOORD_0": 2, "JOINTS_0": 3, "WEIGHTS_0": 4
+  } } ] } ],
+  "skins": [ { "joints": [0], "inverseBindMatrices": 5 } ],
+  "buffers": [ {
+    "byteLength": 232,
+    "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAADIQgAAAAAAAAAAAAAAAAAAyEIAAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAAAAAACAPw=="
+  } ],
+  "bufferViews": [
+    { "buffer": 0, "byteOffset": 0,   "byteLength": 36 },
+    { "buffer": 0, "byteOffset": 36,  "byteLength": 36 },
+    { "buffer": 0, "byteOffset": 72,  "byteLength": 24 },
+    { "buffer": 0, "byteOffset": 96,  "byteLength": 24 },
+    { "buffer": 0, "byteOffset": 120, "byteLength": 48 },
+    { "buffer": 0, "byteOffset": 168, "byteLength": 64 }
+  ],
+  "accessors": [
+    { "bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3", "min": [0,0,0], "max": [100,100,0] },
+    { "bufferView": 1, "componentType": 5126, "count": 3, "type": "VEC3" },
+    { "bufferView": 2, "componentType": 5126, "count": 3, "type": "VEC2" },
+    { "bufferView": 3, "componentType": 5123, "count": 3, "type": "VEC4" },
+    { "bufferView": 4, "componentType": 5126, "count": 3, "type": "VEC4" },
+    { "bufferView": 5, "componentType": 5126, "count": 1, "type": "MAT4" }
+  ]
+})GLTF";
+
     // Spawns the real cna_tool_gltf_to_cnj executable and waits for it to exit. Returns the exit
-    // code, or -1 on a spawn-side failure (already reported via ADD_FAILURE).
-    int RunGltfToCnjTool(const std::string& input, const std::string& outDir, const std::string& baseName)
+    // code, or -1 on a spawn-side failure (already reported via ADD_FAILURE). unitScale is passed
+    // as the tool's optional 5th CLI argument when non-empty.
+    int RunGltfToCnjTool(const std::string& input, const std::string& outDir, const std::string& baseName,
+                         const std::string& unitScale = "")
     {
         char* argv[] = {
             const_cast<char*>(CNA_GLTF_TO_CNJ_TOOL_PATH),
             const_cast<char*>(input.c_str()),
             const_cast<char*>(outDir.c_str()),
             const_cast<char*>(baseName.c_str()),
+            unitScale.empty() ? nullptr : const_cast<char*>(unitScale.c_str()),
             nullptr,
         };
 
@@ -568,4 +775,178 @@ TEST(GltfToCnjToolTest, StepInterpolatedChannelHoldsValueAcrossAForeignResampleT
         }
     }
     EXPECT_TRUE(foundForeignTime);
+}
+
+TEST(GltfToCnjToolTest, RejectsDracoCompressedPrimitive)
+{
+    ScratchDir gltfDir;
+    ScratchDir contentRoot;
+
+    const std::filesystem::path gltfPath = gltfDir.path() / "draco.gltf";
+    WriteFile(gltfPath, kDracoGltf);
+
+    const int exitCode = RunGltfToCnjTool(gltfPath.string(), contentRoot.path().string(), "draco");
+    EXPECT_NE(exitCode, 0);
+    EXPECT_FALSE(std::filesystem::exists(contentRoot.path() / "draco.cnj"));
+}
+
+TEST(GltfToCnjToolTest, UsesTexcoordSetSelectedByMaterial)
+{
+    ScratchDir gltfDir;
+    ScratchDir contentRoot;
+
+    const std::filesystem::path gltfPath = gltfDir.path() / "texc.gltf";
+    WriteFile(gltfPath, kTexcoordSelectionGltf);
+
+    const int exitCode = RunGltfToCnjTool(gltfPath.string(), contentRoot.path().string(), "texc");
+    ASSERT_EQ(exitCode, 0);
+
+    const std::filesystem::path vertsPath = contentRoot.path() / "texc_mesh0_verts.bin";
+    ASSERT_TRUE(std::filesystem::exists(vertsPath));
+    std::ifstream f(vertsPath, std::ios::binary);
+    std::vector<char> bytes((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+    ASSERT_EQ(bytes.size(), 3u * 32u); // stride 32, unskinned, untextured-color
+
+    // UV lives at byte offset 24 within each stride-32 vertex (pos12+normal12+uv8). TEXCOORD_0
+    // was deliberately filled with (9,9) sentinels the tool must never emit; the real values,
+    // from TEXCOORD_1 (the set the material's baseColorTexture actually selects), are (0,0),
+    // (1,0), (0,1).
+    float uv0[2], uv1[2], uv2[2];
+    std::memcpy(uv0, bytes.data() + 0 * 32 + 24, sizeof(uv0));
+    std::memcpy(uv1, bytes.data() + 1 * 32 + 24, sizeof(uv1));
+    std::memcpy(uv2, bytes.data() + 2 * 32 + 24, sizeof(uv2));
+    EXPECT_FLOAT_EQ(uv0[0], 0.0f); EXPECT_FLOAT_EQ(uv0[1], 0.0f);
+    EXPECT_FLOAT_EQ(uv1[0], 1.0f); EXPECT_FLOAT_EQ(uv1[1], 0.0f);
+    EXPECT_FLOAT_EQ(uv2[0], 0.0f); EXPECT_FLOAT_EQ(uv2[1], 1.0f);
+}
+
+TEST(GltfToCnjToolTest, OnlyImportsNodesReachableFromTheDefaultScene)
+{
+    ScratchDir gltfDir;
+    ScratchDir contentRoot;
+
+    const std::filesystem::path gltfPath = gltfDir.path() / "scene.gltf";
+    WriteFile(gltfPath, kSceneScopedGltf);
+
+    const int exitCode = RunGltfToCnjTool(gltfPath.string(), contentRoot.path().string(), "scenetest");
+    ASSERT_EQ(exitCode, 0);
+
+    // "OrphanMesh" (not listed in the default scene's own node list) must not have produced a
+    // second mesh part -- only mesh0 (from "InSceneMesh") should exist.
+    EXPECT_TRUE(std::filesystem::exists(contentRoot.path() / "scenetest_mesh0_verts.bin"));
+    EXPECT_FALSE(std::filesystem::exists(contentRoot.path() / "scenetest_mesh1_verts.bin"));
+
+    GraphicsDevice gd;
+    ContentManager cm(nullptr, contentRoot.path().string());
+    cm.setGraphicsDevice(gd);
+    Model model = cm.Load<Model>("scenetest");
+    EXPECT_EQ(model.getMeshesProperty().getCountProperty(), 1);
+}
+
+TEST(GltfToCnjToolTest, EvaluatesCubicSplineWithRealHermiteBasis)
+{
+    ScratchDir gltfDir;
+    ScratchDir contentRoot;
+
+    const std::filesystem::path gltfPath = gltfDir.path() / "cubic.gltf";
+    WriteFile(gltfPath, kCubicSplineGltf);
+
+    const int exitCode = RunGltfToCnjTool(gltfPath.string(), contentRoot.path().string(), "cubictest");
+    ASSERT_EQ(exitCode, 0);
+
+    GraphicsDevice gd;
+    ContentManager cm(nullptr, contentRoot.path().string());
+    cm.setGraphicsDevice(gd);
+    Model model = cm.Load<Model>("cubictest");
+    auto* skinningData = static_cast<SkinningData*>(model.getTagProperty());
+    ASSERT_NE(skinningData, nullptr);
+    ASSERT_TRUE(skinningData->AnimationClips.count("CubicTest"));
+    const auto& clip = skinningData->AnimationClips.at("CubicTest");
+    ASSERT_EQ(clip.Tracks.size(), 1u);
+
+    // Union-time resampling forces evaluation at t=1 (native to the rotation channel, foreign to
+    // the CUBICSPLINE translation channel) -- the real Hermite basis (key0: value=(0,0,0),
+    // outTangent=(10,0,0); key1: inTangent=(-10,0,0), value=(10,0,0); deltaT=2) gives X=10.0
+    // there. A buggy fallback using only the sampled value (no tangents) would give 0.0; a buggy
+    // linear fallback would give 5.0 -- neither is close to the real answer.
+    bool foundForeignTime = false;
+    for (const auto& key : clip.Tracks[0].Keys)
+    {
+        if (std::fabs(key.Time.getTotalSecondsProperty() - 1.0) < 1e-4)
+        {
+            foundForeignTime = true;
+            EXPECT_NEAR(key.Translation.X, 10.0f, 1e-3f);
+        }
+    }
+    EXPECT_TRUE(foundForeignTime);
+}
+
+TEST(GltfToCnjToolTest, ExtractsVertexColorAndEnablesItOnBasicEffect)
+{
+    ScratchDir gltfDir;
+    ScratchDir contentRoot;
+
+    const std::filesystem::path gltfPath = gltfDir.path() / "color.gltf";
+    WriteFile(gltfPath, kVertexColorGltf);
+
+    const int exitCode = RunGltfToCnjTool(gltfPath.string(), contentRoot.path().string(), "colortest");
+    ASSERT_EQ(exitCode, 0);
+
+    const std::filesystem::path vertsPath = contentRoot.path() / "colortest_mesh0_verts.bin";
+    ASSERT_TRUE(std::filesystem::exists(vertsPath));
+    std::ifstream f(vertsPath, std::ios::binary);
+    std::vector<char> bytes((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+    ASSERT_EQ(bytes.size(), 3u * 24u); // stride 24 (VertexPositionColorTexture): pos12+color4+uv8
+
+    auto readRgba = [&](std::size_t vertexIndex) {
+        std::uint8_t rgba[4];
+        std::memcpy(rgba, bytes.data() + vertexIndex * 24 + 12, 4);
+        return std::array<std::uint8_t, 4>{rgba[0], rgba[1], rgba[2], rgba[3]};
+    };
+    EXPECT_EQ(readRgba(0), (std::array<std::uint8_t, 4>{255, 0, 0, 255}));
+    EXPECT_EQ(readRgba(1), (std::array<std::uint8_t, 4>{0, 255, 0, 255}));
+    EXPECT_EQ(readRgba(2), (std::array<std::uint8_t, 4>{0, 0, 255, 255}));
+
+    GraphicsDevice gd;
+    ContentManager cm(nullptr, contentRoot.path().string());
+    cm.setGraphicsDevice(gd);
+    Model model = cm.Load<Model>("colortest");
+    ModelMesh* mesh = model.getMeshesProperty()[0];
+    auto* basicFx = dynamic_cast<BasicEffect*>(mesh->getMeshPartsProperty()[0]->getEffectProperty());
+    ASSERT_NE(basicFx, nullptr);
+    EXPECT_TRUE(basicFx->VertexColorEnabled);
+}
+
+TEST(GltfToCnjToolTest, UnitScaleAppliesToPositionsAndBoneTranslations)
+{
+    ScratchDir gltfDir;
+    ScratchDir contentRoot;
+
+    const std::filesystem::path gltfPath = gltfDir.path() / "scale.gltf";
+    WriteFile(gltfPath, kUnitScaleGltf);
+
+    const int exitCode = RunGltfToCnjTool(gltfPath.string(), contentRoot.path().string(), "scaletest", "0.01");
+    ASSERT_EQ(exitCode, 0);
+
+    const std::filesystem::path vertsPath = contentRoot.path() / "scaletest_mesh0_verts.bin";
+    std::ifstream f(vertsPath, std::ios::binary);
+    std::vector<char> bytes((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+    ASSERT_EQ(bytes.size(), 3u * 52u); // stride 52, skinned
+
+    // Authored positions were (0,0,0)/(100,0,0)/(0,100,0) (centimeters); with unitScale=0.01,
+    // vertex 1's X must come out as 1.0, not 100.0.
+    float pos1[3];
+    std::memcpy(pos1, bytes.data() + 1 * 52, sizeof(pos1));
+    EXPECT_NEAR(pos1[0], 1.0f, 1e-4f);
+
+    GraphicsDevice gd;
+    ContentManager cm(nullptr, contentRoot.path().string());
+    cm.setGraphicsDevice(gd);
+    Model model = cm.Load<Model>("scaletest");
+    auto* skinningData = static_cast<SkinningData*>(model.getTagProperty());
+    ASSERT_NE(skinningData, nullptr);
+    ASSERT_EQ(skinningData->BindPose.size(), 1u);
+    // RootBone's authored translation was [50,0,0] (centimeters); scaled, its bind-pose X must
+    // come out as 0.5.
+    EXPECT_NEAR(skinningData->BindPose[0].getTranslationProperty().X, 0.5f, 1e-4f);
 }

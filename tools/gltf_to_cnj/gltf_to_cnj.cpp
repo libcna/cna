@@ -30,11 +30,25 @@
 // Each primitive's material base-color texture (embedded bufferView, external file, or base64
 // data: URI) is extracted and written out as a real image file, wired into the mesh's own "texture"
 // field -- reuses Texture2DTypeReader's existing native-extension loading, no CNA core change.
+// The base-color texture uses whichever TEXCOORD set the material's own "texcoord" index selects,
+// not always TEXCOORD_0. A primitive's COLOR_0 attribute (unskinned meshes only -- see below) is
+// extracted too, reusing the real XNA VertexPositionColorTexture layout and BasicEffect's existing
+// VertexColorEnabled shader path on every backend.
+//
+// Only nodes reachable from the file's default scene are imported (matches how the file's own
+// author intended it to be used), and CUBICSPLINE animation channels are evaluated with the glTF
+// spec's real cubic Hermite basis (in/out tangents included), not just the sampled value. An
+// optional unitScale CLI argument corrects a source file not authored in meters, applied uniformly
+// to positions, bone bind-pose translations, and animated translation keyframes/tangents alike.
+// Draco-compressed primitives (KHR_draco_mesh_compression) are rejected with a clear error rather
+// than silently read as garbage.
 //
 // Known, deliberate MVP scope cuts (see plan_cnj.md CNB-50/51's own notes for the full list): only
 // the base-color texture is extracted (no normal/metallic-roughness/emissive/occlusion maps, no
-// PBR factor values); CUBICSPLINE animation channels use only the value component of each keyframe
-// triplet (in/out tangents are read but discarded), which is valid but not perfectly smooth.
+// PBR factor values -- CNA's real-XNA-faithful BasicEffect/SkinnedEffect have no shader path for
+// any of these, unlike VertexColorEnabled); vertex color is only supported for unskinned meshes
+// (real XNA's SkinnedEffect has no VertexColorEnabled property at all); morph targets (blend
+// shapes) are not imported.
 
 #define CGLTF_IMPLEMENTATION
 #include "cgltf.h"
@@ -52,6 +66,7 @@
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "Microsoft/Xna/Framework/Matrix.hpp"
@@ -217,7 +232,22 @@ namespace
         std::unordered_map<const cgltf_node*, int> nodeToNewIndex;
     };
 
-    SkeletonResult BuildSkeleton(const cgltf_skin* skin)
+    // Uniformly scales just the translation part of an affine transform, leaving rotation and any
+    // local scale factor untouched -- correct for a global unit-of-measure correction (e.g. a
+    // source file authored in centimeters), not a shape-changing per-axis scale. Applying the same
+    // factor to both a bone's local bind pose translation and its (separately glTF-authored)
+    // inverse bind matrix translation is mathematically consistent: Inverse([R|t]) = [R^-1 |
+    // -R^-1*t], so scaling t by k scales the inverse's own translation by exactly k too, not 1/k.
+    Matrix ScaleTranslation(const Matrix& m, float scale)
+    {
+        Matrix result = m;
+        result.M41 *= scale;
+        result.M42 *= scale;
+        result.M43 *= scale;
+        return result;
+    }
+
+    SkeletonResult BuildSkeleton(const cgltf_skin* skin, float unitScale)
     {
         SkeletonResult result;
         const std::size_t n = skin->joints_count;
@@ -284,12 +314,12 @@ namespace
 
             float localMat[16];
             cgltf_node_transform_local(node, localMat);
-            bone.bindPoseLocal = ConvertGltfMatrix(localMat);
+            bone.bindPoseLocal = ScaleTranslation(ConvertGltfMatrix(localMat), unitScale);
 
             if (!ibm.empty())
             {
                 const float* m = ibm.data() + static_cast<std::size_t>(oldIdx) * 16;
-                bone.inverseBindGlobal = ConvertGltfMatrix(m);
+                bone.inverseBindGlobal = ScaleTranslation(ConvertGltfMatrix(m), unitScale);
             }
 
             result.bones[newIdx] = bone;
@@ -389,14 +419,47 @@ namespace
         return Quaternion(ch.values[o], ch.values[o + 1], ch.values[o + 2], ch.values[o + 3]);
     }
 
+    // glTF's CUBICSPLINE Hermite basis, applied component-wise: given the bracketing keyframes
+    // lo/lo+1 (each holding an [in-tangent, value, out-tangent] triplet in ch.values), the
+    // normalized fraction s within the bracket, and the bracket's real time span deltaT (the
+    // spec's Hermite formula scales tangents by the interval length, not just s), writes
+    // ch.componentsPerValue interpolated components into out.
+    void HermiteEvaluate(const SampledChannel& ch, std::size_t lo, float s, double deltaT, float* out)
+    {
+        const int n = ch.componentsPerValue;
+        const std::size_t stride = static_cast<std::size_t>(n);
+        const float* v0 = ch.values.data() + (lo * 3 + 1) * stride;       // value at lo
+        const float* b0 = ch.values.data() + (lo * 3 + 2) * stride;       // out-tangent at lo
+        const float* v1 = ch.values.data() + ((lo + 1) * 3 + 1) * stride; // value at lo+1
+        const float* a1 = ch.values.data() + ((lo + 1) * 3 + 0) * stride; // in-tangent at lo+1
+
+        const float s2 = s * s, s3 = s2 * s;
+        const float h00 = 2.0f * s3 - 3.0f * s2 + 1.0f;
+        const float h10 = s3 - 2.0f * s2 + s;
+        const float h01 = -2.0f * s3 + 3.0f * s2;
+        const float h11 = s3 - s2;
+        const float dt = static_cast<float>(deltaT);
+
+        for (int i = 0; i < n; ++i)
+        {
+            out[i] = h00 * v0[i] + dt * h10 * b0[i] + h01 * v1[i] + dt * h11 * a1[i];
+        }
+    }
+
     Vector3 EvaluateVec3Channel(const SampledChannel* ch, double t, Vector3 fallback)
     {
         if (ch == nullptr) { return fallback; }
         std::size_t lo = 0; float amount = 0.0f;
         FindBracket(ch->times, t, lo, amount);
-        if (amount <= 0.0f || ch->cubicSpline || ch->stepInterpolation || lo + 1 >= ch->times.size())
+        if (amount <= 0.0f || ch->stepInterpolation || lo + 1 >= ch->times.size())
         {
             return ReadVec3Sample(*ch, lo);
+        }
+        if (ch->cubicSpline)
+        {
+            float out[3];
+            HermiteEvaluate(*ch, lo, amount, ch->times[lo + 1] - ch->times[lo], out);
+            return Vector3(out[0], out[1], out[2]);
         }
         return Vector3::Lerp(ReadVec3Sample(*ch, lo), ReadVec3Sample(*ch, lo + 1), amount);
     }
@@ -406,15 +469,30 @@ namespace
         if (ch == nullptr) { return fallback; }
         std::size_t lo = 0; float amount = 0.0f;
         FindBracket(ch->times, t, lo, amount);
-        if (amount <= 0.0f || ch->cubicSpline || ch->stepInterpolation || lo + 1 >= ch->times.size())
+        if (amount <= 0.0f || ch->stepInterpolation || lo + 1 >= ch->times.size())
         {
             return ReadQuatSample(*ch, lo);
+        }
+        if (ch->cubicSpline)
+        {
+            // Component-wise Hermite does not preserve unit length -- normalize afterward, the
+            // standard treatment for glTF CUBICSPLINE rotation channels.
+            float out[4];
+            HermiteEvaluate(*ch, lo, amount, ch->times[lo + 1] - ch->times[lo], out);
+            Quaternion q(out[0], out[1], out[2], out[3]);
+            const float lenSq = q.X * q.X + q.Y * q.Y + q.Z * q.Z + q.W * q.W;
+            if (lenSq > 1e-12f)
+            {
+                const float invLen = 1.0f / std::sqrt(lenSq);
+                q = Quaternion(q.X * invLen, q.Y * invLen, q.Z * invLen, q.W * invLen);
+            }
+            return q;
         }
         return Quaternion::Slerp(ReadQuatSample(*ch, lo), ReadQuatSample(*ch, lo + 1), amount);
     }
 
     std::vector<ClipOut> ExtractClips(const cgltf_data* data, const SkeletonResult& skel,
-                                       std::vector<std::string>& warnings)
+                                       float unitScale, std::vector<std::string>& warnings)
     {
         std::vector<ClipOut> clips;
 
@@ -428,7 +506,6 @@ namespace
             };
             std::unordered_map<int, BoneChannels> byBone;
             double maxTime = 0.0;
-            bool sawCubicSpline = false;
             bool sawUnsupportedTarget = false;
 
             for (cgltf_size c = 0; c < anim.channels_count; ++c)
@@ -438,11 +515,14 @@ namespace
                 if (it == skel.nodeToNewIndex.end()) { continue; } // targets a non-joint node -- skip
                 const int boneIdx = it->second;
 
-                if (ch.sampler->interpolation == cgltf_interpolation_type_cubic_spline) { sawCubicSpline = true; }
-
                 if (ch.target_path == cgltf_animation_path_type_translation)
                 {
                     byBone[boneIdx].translation = LoadChannel(ch, 3, "translation channel");
+                    // Translation values (and, for CUBICSPLINE, their in/out tangents -- both are
+                    // position-derived quantities) must track the same unit-scale correction
+                    // already applied to the skeleton's own bind-pose translations, or an
+                    // animated bone would jump back to unscaled-space offsets mid-clip.
+                    for (float& component : byBone[boneIdx].translation->values) { component *= unitScale; }
                 }
                 else if (ch.target_path == cgltf_animation_path_type_rotation)
                 {
@@ -461,14 +541,6 @@ namespace
                 }
             }
 
-            if (sawCubicSpline)
-            {
-                warnings.push_back(
-                    "Clip '" + std::string(anim.name ? anim.name : "") +
-                    "' uses CUBICSPLINE interpolation on at least one channel -- only the sampled "
-                    "value is used (in/out tangents are discarded), which is valid but not "
-                    "perfectly smooth.");
-            }
             if (sawUnsupportedTarget)
             {
                 warnings.push_back(
@@ -633,32 +705,78 @@ namespace
         std::vector<std::uint8_t> indexBytes;
         bool use32BitIndices = false;
         bool skinned = false;
+        bool colored = false;
         const cgltf_image* baseColorImage = nullptr;
     };
 
-    MeshOut ExtractMesh(const cgltf_primitive& prim, const std::string& name, const SkeletonResult* skel)
+    std::uint8_t ToByteColorChannel(float v)
     {
+        return static_cast<std::uint8_t>(std::clamp(v, 0.0f, 1.0f) * 255.0f + 0.5f);
+    }
+
+    MeshOut ExtractMesh(const cgltf_primitive& prim, const std::string& name, const SkeletonResult* skel,
+                         float unitScale)
+    {
+        if (prim.has_draco_mesh_compression)
+        {
+            throw std::runtime_error(
+                "Primitive '" + name + "' uses Draco mesh compression (KHR_draco_mesh_compression), "
+                "which this tool does not support.");
+        }
+
         const cgltf_accessor* posAcc = cgltf_find_accessor(&prim, cgltf_attribute_type_position, 0);
         if (!posAcc) { throw std::runtime_error("Primitive '" + name + "' has no POSITION attribute."); }
         const cgltf_accessor* normAcc = cgltf_find_accessor(&prim, cgltf_attribute_type_normal, 0);
-        const cgltf_accessor* uvAcc = cgltf_find_accessor(&prim, cgltf_attribute_type_texcoord, 0);
+
+        // Use whichever TEXCOORD set the base-color texture actually references (glTF allows a
+        // texture reference to select TEXCOORD_1/2/... via its own "texcoord" index, defaulting
+        // to 0) -- a hardcoded TEXCOORD_0 would silently mismatch a texture authored against a
+        // different UV set.
+        int texcoordIndex = 0;
+        if (prim.material && prim.material->has_pbr_metallic_roughness &&
+            prim.material->pbr_metallic_roughness.base_color_texture.texture)
+        {
+            texcoordIndex = prim.material->pbr_metallic_roughness.base_color_texture.texcoord;
+        }
+        const cgltf_accessor* uvAcc = cgltf_find_accessor(&prim, cgltf_attribute_type_texcoord, texcoordIndex);
+
+        const cgltf_accessor* colorAcc = cgltf_find_accessor(&prim, cgltf_attribute_type_color, 0);
         const cgltf_accessor* jointsAcc = skel ? cgltf_find_accessor(&prim, cgltf_attribute_type_joints, 0) : nullptr;
         const cgltf_accessor* weightsAcc = skel ? cgltf_find_accessor(&prim, cgltf_attribute_type_weights, 0) : nullptr;
 
         MeshOut out;
         out.name = name;
         out.skinned = (jointsAcc != nullptr) && (weightsAcc != nullptr);
-        out.stride = out.skinned ? 52 : 32;
+        // Vertex color (COLOR_0) is only supported for unskinned meshes: real XNA's SkinnedEffect
+        // has no VertexColorEnabled property at all (unlike BasicEffect/AlphaTestEffect/
+        // DualTextureEffect), so a skinned+colored combination has no XNA-faithful shader path to
+        // render through -- COLOR_0 is intentionally dropped for skinned meshes rather than
+        // silently doing nothing with a real capability request.
+        out.colored = (!out.skinned) && (colorAcc != nullptr);
+        // Colored meshes reuse the real XNA VertexPositionColorTexture layout (stride 24,
+        // Position+Color+TextureCoordinate) -- already fully supported end-to-end by
+        // ModelTypeReader and every graphics backend's existing VertexColorEnabled shader path,
+        // rather than inventing a new Position+Normal+Color+TextureCoordinate layout that would
+        // need a brand new shader permutation on every backend. The tradeoff (no per-vertex
+        // Normal when colored) is a deliberate, documented scope cut.
+        out.stride = out.skinned ? 52 : (out.colored ? 24 : 32);
         out.baseColorImage = FindBaseColorImage(prim);
 
         const cgltf_size vertexCount = posAcc->count;
         out.vertexBytes.reserve(static_cast<std::size_t>(vertexCount) * static_cast<std::size_t>(out.stride));
 
         const std::vector<float> positions = UnpackAccessor(posAcc, 3, "POSITION");
-        const std::vector<float> normals = normAcc ? UnpackAccessor(normAcc, 3, "NORMAL") : std::vector<float>();
-        const std::vector<float> uvs = uvAcc ? UnpackAccessor(uvAcc, 2, "TEXCOORD_0") : std::vector<float>();
+        const std::vector<float> normals = (normAcc && !out.colored) ? UnpackAccessor(normAcc, 3, "NORMAL") : std::vector<float>();
+        const std::vector<float> uvs = uvAcc ? UnpackAccessor(uvAcc, 2, "TEXCOORD") : std::vector<float>();
         const std::vector<float> weights = out.skinned ? UnpackAccessor(weightsAcc, 4, "WEIGHTS_0") : std::vector<float>();
         const std::vector<float> joints = out.skinned ? UnpackAccessor(jointsAcc, 4, "JOINTS_0") : std::vector<float>();
+        // COLOR_0 may be VEC3 (RGB) or VEC4 (RGBA) per the glTF spec; a missing alpha defaults to
+        // fully opaque. cgltf_accessor_unpack_floats/UnpackAccessor also transparently normalizes
+        // whichever component type (FLOAT/normalized UBYTE/normalized USHORT) the file actually uses.
+        const int colorComponents = colorAcc ? static_cast<int>(cgltf_num_components(colorAcc->type)) : 0;
+        const std::vector<float> colors = out.colored
+            ? UnpackAccessor(colorAcc, static_cast<cgltf_size>(colorComponents), "COLOR_0")
+            : std::vector<float>();
 
         for (cgltf_size i = 0; i < vertexCount; ++i)
         {
@@ -666,14 +784,26 @@ namespace
             const std::size_t i2 = static_cast<std::size_t>(i) * 2;
             const std::size_t i4 = static_cast<std::size_t>(i) * 4;
 
-            const float px = positions[i3], py = positions[i3 + 1], pz = positions[i3 + 2];
-            const float nx = normals.empty() ? 0.0f : normals[i3];
-            const float ny = normals.empty() ? 0.0f : normals[i3 + 1];
-            const float nz = normals.empty() ? 1.0f : normals[i3 + 2];
+            const float px = positions[i3] * unitScale, py = positions[i3 + 1] * unitScale, pz = positions[i3 + 2] * unitScale;
             const float u = uvs.empty() ? 0.0f : uvs[i2];
             const float v = uvs.empty() ? 0.0f : uvs[i2 + 1];
 
             AppendFloat(out.vertexBytes, px); AppendFloat(out.vertexBytes, py); AppendFloat(out.vertexBytes, pz);
+
+            if (out.colored)
+            {
+                const std::size_t co = static_cast<std::size_t>(i) * static_cast<std::size_t>(colorComponents);
+                out.vertexBytes.push_back(ToByteColorChannel(colors[co]));
+                out.vertexBytes.push_back(ToByteColorChannel(colors[co + 1]));
+                out.vertexBytes.push_back(ToByteColorChannel(colors[co + 2]));
+                out.vertexBytes.push_back(colorComponents >= 4 ? ToByteColorChannel(colors[co + 3]) : std::uint8_t{255});
+                AppendFloat(out.vertexBytes, u); AppendFloat(out.vertexBytes, v);
+                continue;
+            }
+
+            const float nx = normals.empty() ? 0.0f : normals[i3];
+            const float ny = normals.empty() ? 0.0f : normals[i3 + 1];
+            const float nz = normals.empty() ? 1.0f : normals[i3 + 2];
             AppendFloat(out.vertexBytes, nx); AppendFloat(out.vertexBytes, ny); AppendFloat(out.vertexBytes, nz);
             AppendFloat(out.vertexBytes, u);  AppendFloat(out.vertexBytes, v);
 
@@ -725,15 +855,40 @@ namespace
         std::vector<const cgltf_mesh*> meshes;
     };
 
+    // Nodes reachable from the file's default scene (data->scene, or the first scene if that's
+    // unset but at least one scene exists), walked via each node's own children[] array. A file
+    // with more than one scene may have nodes that exist only in a non-default scene, or that
+    // aren't part of any scene at all (e.g. staging nodes an authoring tool left behind) -- those
+    // must not be silently imported alongside the actual content.
+    std::unordered_set<const cgltf_node*> CollectSceneReachableNodes(const cgltf_data* data)
+    {
+        std::unordered_set<const cgltf_node*> reachable;
+        const cgltf_scene* scene = data->scene ? data->scene : (data->scenes_count > 0 ? &data->scenes[0] : nullptr);
+        if (!scene) { return reachable; } // no scenes at all -- caller falls back to "every node"
+
+        std::vector<const cgltf_node*> stack(scene->nodes, scene->nodes + scene->nodes_count);
+        while (!stack.empty())
+        {
+            const cgltf_node* node = stack.back();
+            stack.pop_back();
+            if (!reachable.insert(node).second) { continue; } // already visited
+            for (cgltf_size c = 0; c < node->children_count; ++c) { stack.push_back(node->children[c]); }
+        }
+        return reachable;
+    }
+
     std::vector<MeshGroup> CollectMeshGroups(const cgltf_data* data)
     {
         std::vector<MeshGroup> groups;
         std::unordered_map<const cgltf_skin*, std::size_t> indexOfSkin;
 
+        const std::unordered_set<const cgltf_node*> reachable = CollectSceneReachableNodes(data);
+
         for (cgltf_size i = 0; i < data->nodes_count; ++i)
         {
             const cgltf_node& node = data->nodes[i];
             if (!node.mesh) { continue; }
+            if (!reachable.empty() && reachable.find(&node) == reachable.end()) { continue; }
 
             auto it = indexOfSkin.find(node.skin);
             if (it == indexOfSkin.end())
@@ -767,13 +922,13 @@ namespace
     void ConvertGroup(const cgltf_data* data, const MeshGroup& group, const std::string& outName,
                        const std::filesystem::path& gltfDir, const std::filesystem::path& outputDir,
                        std::unordered_map<const cgltf_image*, std::string>& writtenTextures,
-                       std::vector<std::string>& warnings)
+                       float unitScale, std::vector<std::string>& warnings)
     {
         const bool hasSkin = group.skin != nullptr;
         SkeletonResult skeleton;
-        if (hasSkin) { skeleton = BuildSkeleton(group.skin); }
+        if (hasSkin) { skeleton = BuildSkeleton(group.skin, unitScale); }
 
-        struct MeshEntry { std::string vertFile, idxFile, textureFile; int stride; std::string effect; };
+        struct MeshEntry { std::string vertFile, idxFile, textureFile; int stride; std::string effect; bool vertexColorEnabled; };
         std::vector<MeshEntry> meshEntries;
 
         int meshCounter = 0;
@@ -784,7 +939,7 @@ namespace
                 const std::string partName = mesh->name
                     ? (std::string(mesh->name) + (mesh->primitives_count > 1 ? "_" + std::to_string(p) : ""))
                     : ("mesh" + std::to_string(meshCounter));
-                MeshOut meshOut = ExtractMesh(mesh->primitives[p], partName, hasSkin ? &skeleton : nullptr);
+                MeshOut meshOut = ExtractMesh(mesh->primitives[p], partName, hasSkin ? &skeleton : nullptr, unitScale);
 
                 const std::string vertFile = outName + "_mesh" + std::to_string(meshCounter) + "_verts.bin";
                 const std::string idxFile  = outName + "_mesh" + std::to_string(meshCounter) + "_idx.bin";
@@ -813,6 +968,7 @@ namespace
                 entry.stride = meshOut.stride;
                 entry.effect = meshOut.skinned ? "SkinnedEffect" : "BasicEffect";
                 entry.textureFile = textureFile;
+                entry.vertexColorEnabled = meshOut.colored;
                 meshEntries.push_back(entry);
                 ++meshCounter;
             }
@@ -839,7 +995,7 @@ namespace
         std::vector<ClipEntry> clipEntries;
         if (hasSkin)
         {
-            std::vector<ClipOut> clips = ExtractClips(data, skeleton, warnings);
+            std::vector<ClipOut> clips = ExtractClips(data, skeleton, unitScale, warnings);
             for (const ClipOut& clip : clips)
             {
                 std::ostringstream json;
@@ -891,6 +1047,7 @@ namespace
             json << "    { \"vertices\": \"" << JsonEscape(e.vertFile) << "\", \"indices\": \"" << JsonEscape(e.idxFile)
                  << "\", \"vertexStride\": " << e.stride << ", \"effect\": \"" << e.effect << "\"";
             if (!e.textureFile.empty()) { json << ", \"texture\": \"" << JsonEscape(e.textureFile) << "\""; }
+            if (e.vertexColorEnabled) { json << ", \"vertexColorEnabled\": true"; }
             json << " }" << (i + 1 < meshEntries.size() ? "," : "") << "\n";
         }
         json << "  ]\n}\n";
@@ -912,6 +1069,10 @@ namespace
         std::filesystem::path inputPath;
         std::filesystem::path outputDir;
         std::string baseName;
+        // glTF mandates meters; a source file that doesn't follow that convention (some exporters
+        // don't) can be corrected with an explicit multiplier applied uniformly to every position
+        // and bone translation (see gltf.md's own quality checklist, "Unit/coordinate convention").
+        float unitScale = 1.0f;
     };
 
     void Convert(const ConvertOptions& opts)
@@ -961,7 +1122,7 @@ namespace
                                                              : ("skin" + std::to_string(g)));
                 }
             }
-            ConvertGroup(data, groups[g], outName, gltfDir, opts.outputDir, writtenTextures, warnings);
+            ConvertGroup(data, groups[g], outName, gltfDir, opts.outputDir, writtenTextures, opts.unitScale, warnings);
         }
 
         if (groups.size() > 1)
@@ -975,9 +1136,12 @@ namespace
 
 int main(int argc, char** argv)
 {
-    if (argc != 4)
+    if (argc != 4 && argc != 5)
     {
-        std::cerr << "Usage: gltf_to_cnj <input.gltf|input.glb> <outputDir> <baseName>\n";
+        std::cerr << "Usage: gltf_to_cnj <input.gltf|input.glb> <outputDir> <baseName> [unitScale]\n"
+                      "  unitScale: optional multiplier applied to all positions/bone translations\n"
+                      "             (default 1.0; glTF mandates meters -- use e.g. 0.01 for a source\n"
+                      "             file authored in centimeters).\n";
         return 1;
     }
 
@@ -985,6 +1149,23 @@ int main(int argc, char** argv)
     opts.inputPath = argv[1];
     opts.outputDir = argv[2];
     opts.baseName = argv[3];
+    if (argc == 5)
+    {
+        try
+        {
+            opts.unitScale = std::stof(argv[4]);
+        }
+        catch (const std::exception&)
+        {
+            std::cerr << "error: unitScale must be a number, got '" << argv[4] << "'\n";
+            return 1;
+        }
+        if (!(opts.unitScale > 0.0f))
+        {
+            std::cerr << "error: unitScale must be a positive number.\n";
+            return 1;
+        }
+    }
 
     try
     {

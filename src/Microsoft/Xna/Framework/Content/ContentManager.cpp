@@ -908,6 +908,20 @@ namespace Microsoft::Xna::Framework::Content
             try { return std::stoi(j.substr(pos)); } catch (...) { return def; }
         }
 
+        static bool JsonBool(const std::string& j, const std::string& key, bool def = false)
+        {
+            const std::string needle = "\"" + key + "\"";
+            auto pos = j.find(needle);
+            if (pos == std::string::npos) return def;
+            pos = j.find(':', pos + needle.size());
+            if (pos == std::string::npos) return def;
+            ++pos;
+            while (pos < j.size() && std::isspace(static_cast<unsigned char>(j[pos]))) ++pos;
+            if (j.compare(pos, 4, "true") == 0) return true;
+            if (j.compare(pos, 5, "false") == 0) return false;
+            return def;
+        }
+
         static float JsonFloat(const std::string& j, const std::string& key, float def = 0.0f)
         {
             const std::string needle = "\"" + key + "\"";
@@ -1672,6 +1686,7 @@ namespace Microsoft::Xna::Framework::Content
                             const int         stride     = JsonInt(mg, "vertexStride", 16);
                             const std::string effectStr  = ExtractJsonStringField(mg, "effect");
                             const std::string textureFile = ExtractJsonStringField(mg, "texture");
+                            const bool vertexColorEnabled = JsonBool(mg, "vertexColorEnabled", false);
 
                             if (vertFile.empty() || idxFile.empty())
                                 continue;
@@ -1843,6 +1858,19 @@ namespace Microsoft::Xna::Framework::Content
                                 } else if (auto* skinnedFx = dynamic_cast<Graphics::SkinnedEffect*>(fx.get())) {
                                     skinnedFx->setTextureProperty(tex.get());
                                     res->textureOwners.push_back(std::move(tex));
+                                }
+                            }
+
+                            // Task 1115: a "vertexStride": 24 (VertexPositionColorTexture) mesh
+                            // may set "vertexColorEnabled" to actually light the per-vertex color
+                            // data it already uploads -- BasicEffect defaults VertexColorEnabled
+                            // to false (matching real XNA), so without this the color bytes are
+                            // present in the vertex buffer but the shader ignores them. Real XNA's
+                            // SkinnedEffect has no VertexColorEnabled property at all, so this is
+                            // only meaningful for BasicEffect.
+                            if (vertexColorEnabled) {
+                                if (auto* basicFx = dynamic_cast<Graphics::BasicEffect*>(fx.get())) {
+                                    basicFx->VertexColorEnabled = true;
                                 }
                             }
 
