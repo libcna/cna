@@ -1177,22 +1177,47 @@ case more exist).
   2D overlay on top: a translucent white (`210` alpha) rectangle behind black text (decision 5d),
   using decision 5a's default text block **verbatim**, one `kHelpLines[]` C-string per line rather
   than embedded `\n`s (the synthetic `MakeSimpleFont` glyph table only maps printable ASCII
-  32-126, no newline glyph). Panel width computed from the *actual* longest line's character count
-  × the font's own fixed 8px/char advance, not a guessed constant - a real bug, caught and fixed
-  by screenshot inspection: the first version's guessed `520`px width let the longest line
-  ("XNA-compatible AvatarRenderer.Draw remains a no-op on Windows-like platforms.") overflow
-  visibly past the panel's right edge. Window title now mentions "F1: help" alongside the existing
-  controls. Verified via a new `--show-help`/`SetShowHelpForTestingEXT()` testing hook (matching
-  Task 7.1's own established testing-setter convention) plus `--screenshot`: confirmed the overlay
-  renders correctly and fits within its own panel, and confirmed (separately, without
-  `--show-help`) that it stays correctly hidden by default - no regression to the existing 3D-only
-  render path. Task 8.3's "must not crash if font/texture assets fail to load" doesn't apply here
-  as a real risk: every asset is a runtime-synthesized 1x1 pixel buffer, not a loaded file, so
-  there is no "missing file" failure mode to guard against - noted directly in the code rather than
-  adding a try/catch for a scenario that structurally cannot happen.
-- [ ] **Task 8.5** — Verify: build and run each of the 8 demos, confirm F1 toggles correctly, Esc
-  still quits, overlay renders on top of the 3D content, and male/female avatar selection (where
-  applicable per-demo) doesn't break the overlay.
+  32-126, no newline glyph). Window title now mentions "F1: help" alongside the existing controls.
+  Verified via a new `--show-help`/`SetShowHelpForTestingEXT()` testing hook (matching Task 7.1's
+  own established testing-setter convention) plus `--screenshot`. Task 8.3's "must not crash if
+  font/texture assets fail to load" doesn't apply here as a real risk: every asset is a
+  runtime-synthesized 1x1 pixel buffer, not a loaded file, so there is no "missing file" failure
+  mode to guard against - noted directly in the code rather than adding a try/catch for a scenario
+  that structurally cannot happen.
+  **Correction (found while rolling out to `demo_avatar_animation_gallery`):** the "confirmed
+  legible" claim above was wrong - the screenshot was only checked for panel-overflow, not glyph
+  legibility, and both were actually broken. Two real bugs, root-caused via pixel inspection of
+  the screenshot rather than assumption: (1) `MakeSimpleFont`'s glyph `bounds` (the *destination*
+  rectangle `SpriteBatch::DrawString` sizes each glyph draw from - confirmed against FNA's own
+  `SpriteBatch.cs`, where `glyphData[index].Width/Height` feed the destination rect, not just the
+  atlas source rect) were set to `Rectangle(0,0,1,1)` for every character, so every glyph rendered
+  as a single sub-pixel dot instead of a visible block - the "text" in both `f1_overlay_test2.png`
+  and the first `gallery_f1.png` was rows of dots, not readable content. Fixed by sizing non-space
+  glyphs to `Rectangle(0,0,6,10)` (solid blocks - CNA has no real bitmap-font rasterizer, so this
+  stays a synthetic block font, just now actually visible) and space to `Rectangle(0,0,0,0)`
+  (invisible, so word gaps read correctly). (2) The panel-width calculation assumed a flat 8px/char
+  advance, but `SpriteFont::spacing_` (set to `1.0f` in `MakeSimpleFont`) adds on top of the 8px
+  kerning advance, making the real advance 9px/char - confirmed by measuring dot spacing in the
+  original screenshot (9px apart) against the panel's right edge (dots ran ~57px past it on the
+  longest line). Fixed by computing panel width from `font_->MeasureString()` (the font's own
+  measurement, which already accounts for `spacing_`) instead of a hand-rolled
+  `strlen(line) * 8.0f` guess, removing the magic-number class of bug entirely rather than just
+  patching the constant. Both fixes applied identically to `AvatarDemo.cpp` and
+  `GalleryDemo.cpp` (the only two files with this pattern rolled out so far); re-verified via fresh
+  `--show-help --screenshot` and default (`--screenshot` only, no `--show-help`) runs for both
+  demos - overlay now renders as legible blocky text fully inside the panel, and stays correctly
+  hidden by default with no regression. Every subsequent demo in this phase gets the corrected
+  `MakeSimpleFont`/panel-width code from the start.
+- [x] **Task 8.5 (demo_avatar_animation_gallery)** — Same pattern as `demo_avatar` (see
+  `GalleryDemo.hpp`/`.cpp`'s own comments cross-referencing `AvatarDemo`), including the corrected
+  `MakeSimpleFont`/`MeasureString`-based panel sizing above. Help text customized for this demo
+  (auto-cycling/auto-rotating, no command-line args or interactive camera/animation controls), F1/
+  Esc lines kept identical per decision 5a. Also added `SetScreenshotPathEXT()` +
+  `--screenshot`, reusing Task 7.1's `ScreenshotEXT.hpp` helper and the `smokeFramesLeft_==1`
+  capture timing established for `demo_avatar` (`Game::Exit()` suppresses `Draw()` on the frame
+  `Update()` calls it, so capturing one frame earlier is required). Verified via
+  `--show-help --smoke 30 --screenshot` and a default `--smoke`-only run: overlay renders
+  correctly, panel fits the longest line, and stays hidden by default.
 - [ ] **Task 8.6** — One commit per demo is likely excessive for 8 near-identical additions built
   on the same Task 8.1 helper — since the user's "one task = one commit" rule maps to *this
   plan's tasks*, treat Task 8.1+8.2+8.3 (the shared helper + its first real usage in

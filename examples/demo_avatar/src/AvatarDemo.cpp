@@ -5,7 +5,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <cstring>
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -40,7 +39,12 @@ namespace
         for (char c = 32; c < 127; ++c)
         {
             chars.push_back(static_cast<SharpRuntime::charcs>(c));
-            bounds.push_back(Rectangle(0, 0, 1, 1));
+            // SpriteBatch::DrawString sizes each glyph's destination rectangle from `bounds`
+            // (glyphData), not `cropping` - a (0,0,1,1) bounds rect here previously drew every
+            // character as a single sub-pixel dot instead of a visible block. Space is left
+            // zero-size so word gaps stay visible against the solid blocks used for every other
+            // printable character.
+            bounds.push_back(c == ' ' ? Rectangle(0, 0, 0, 0) : Rectangle(0, 0, 6, 10));
             cropping.push_back(Rectangle(0, 0, 8, 14));
             kerning.push_back(Vector3(0.0f, 8.0f, 0.0f));
         }
@@ -253,16 +257,16 @@ void AvatarDemo::Draw(const GameTime&)
         constexpr int kLineCount = static_cast<int>(sizeof(kHelpLines) / sizeof(kHelpLines[0]));
         constexpr float kLineHeight = 18.0f;
         constexpr float kPadding = 12.0f;
-        // MakeSimpleFont's synthetic glyphs advance a fixed 8px/char (see its own kerning
-        // above) - sized to the longest line ("XNA-compatible AvatarRenderer.Draw remains a
-        // no-op on Windows-like platforms.", 79 chars) plus padding, not a guessed constant.
-        constexpr float kCharAdvance = 8.0f;
-        std::size_t longestLine = 0;
+        // Measure via the actual SpriteFont rather than a hand-rolled char-count * advance
+        // guess - SpriteFont::spacing_ (1px, set in MakeSimpleFont) adds to the per-glyph
+        // kerning advance, so a naive strlen()*8 estimate silently undercounts and the longest
+        // line overflows the panel's right edge.
+        float longestLineWidth = 0.0f;
         for (const char* line : kHelpLines)
         {
-            longestLine = std::max(longestLine, std::strlen(line));
+            longestLineWidth = std::max(longestLineWidth, font_->MeasureString(line).X);
         }
-        const Rectangle panel(8, 8, static_cast<int>(longestLine * kCharAdvance + kPadding * 2.0f),
+        const Rectangle panel(8, 8, static_cast<int>(longestLineWidth + kPadding * 2.0f),
                                static_cast<int>(kLineCount * kLineHeight + kPadding * 2.0f));
 
         spriteBatch_->Begin();
