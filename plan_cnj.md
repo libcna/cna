@@ -6,13 +6,16 @@
 > Phase 12 (`CNB-50`–`CNB-55`, a real glTF 2.0 → `Model`/`AnimationClip` import tool, including
 > skeleton/skinning/animation/textures/multi-skin/sparse-accessor/vertex-color support, verified
 > against both a real Khronos sample model and a permanent adversarial regression test). See each
-> phase's own section below for full details. Final full-suite regression: **4696 tests, 4694
-> passed, same 2 pre-existing hardware skips, 0 failures.** Phase 13 (`CNB-56`–`CNB-74`) logs the
-> remaining, genuinely large engine-level gaps (PBR materials, morph targets, skinned vertex color,
-> runtime glTF loading, a second texture layer) as tracked-but-not-started tasks — do not begin any
-> of them without an explicit request. Everything below this line describes the original 9-phase
-> scope as it stood on 2026-07-15; Phases 10-13 were added later as follow-ups this plan's own
-> "Genuinely new `.cnj` types" note (via `cnj.md`) had already flagged.
+> phase's own section below for full details. Phase 13 (`CNB-56`–`CNB-74`) logs the remaining
+> engine-level gaps (PBR materials, morph targets, skinned vertex color, runtime glTF loading, a
+> second texture layer) — implementation began 2026-07-17 at the project owner's explicit request
+> ("implementuj prosim postupne fazi 13"), working through sub-phases in order of tractability.
+> **13E (`CNB-72`–`CNB-74`, second texture via `DualTextureEffect`) is now ✅ CLOSED** — occlusion
+> texture wired to `Texture2`, see 13E's own section for the documented brightness-approximation
+> caveat. 13A/13B/13C/13D remain ⬜ not started. Final full-suite regression after 13E: **4697
+> tests, 4695 passed, same 2 pre-existing hardware skips, 0 failures.** Everything below this line
+> describes the original 9-phase scope as it stood on 2026-07-15; Phases 10-13 were added later as
+> follow-ups this plan's own "Genuinely new `.cnj` types" note (via `cnj.md`) had already flagged.
 >
 > **Status: ✅ COMPLETE 2026-07-15 — all 9 phases (`CNB-1`–`CNB-39`) closed.** Phases 0–8
 > (`CNB-1`–`CNB-31`) were completed first on `feature/cnb`. A subsequent external review found
@@ -402,16 +405,16 @@ onto `.cnj`, `RegisterCnjLoader<T>`, and Phase 9's hardening of those mechanisms
 | CNB-70 | Factor `gltf_to_cnj`'s parsing/skeleton/animation core into a reusable library (not just a CLI `main()`), then add a `ContentManager` `LooseFileContentTypeReader<Model>` (or similar) that parses `.gltf`/`.glb` directly into memory, no intermediate `.cnj`/binary sidecars | ⬜ | Mirrors `gltf.md` §4.2's own "item 2" recommendation for the Avatar-specific path, applied to the general-purpose `Model` path this phase already covers. |
 | CNB-71 | Tests + docs | ⬜ | |
 
-### 13E — Second texture via existing `DualTextureEffect` (smaller, more tractable)
+### 13E — Second texture via existing `DualTextureEffect` (smaller, more tractable) ✅ CLOSED 2026-07-17
 
 > Unlike 13A, this reuses an existing, already-shader-complete real XNA effect (`DualTextureEffect`,
 > confirmed working on every backend already) — no new shader code needed, just detection + wiring.
 
 | # | Task | Status | Notes |
 |---|---|---|---|
-| CNB-72 | Research: which glTF construct(s) most sensibly map to a second texture layer (a second UV set with its own distinct image reference? `KHR_materials_pbrSpecularGlossiness`'s specular texture used as a crude second layer? something else?) — no single obvious glTF-native "second diffuse texture" convention exists, unlike `baseColorTexture` | ⬜ | Needs a concrete decision before implementation — flag the ambiguity to the project owner rather than guessing a convention. |
-| CNB-73 | Extend `gltf_to_cnj` + `ModelTypeReader`'s existing `"texture"` field precedent with a second `"texture2"` field, wire to `DualTextureEffect` (already registered by `ModelTypeReader`'s `effectStr` dispatch) | ⬜ | |
-| CNB-74 | Tests + docs | ⬜ | |
+| CNB-72 | Research: which glTF construct(s) most sensibly map to a second texture layer (a second UV set with its own distinct image reference? `KHR_materials_pbrSpecularGlossiness`'s specular texture used as a crude second layer? something else?) — no single obvious glTF-native "second diffuse texture" convention exists, unlike `baseColorTexture` | ✅ | Decided: the material's **occlusion texture** (`cgltf_material::occlusion_texture`) → `DualTextureEffect::Texture2`. Confirmed the real EasyGL blend shader is `base.rgb *= 2.0; FragColor = base * texture(uTexture2, vUV) * uDiffuseColor;` (a "0.5 = neutral baked lightmap" convention) and confirmed `DualTextureEffect`'s existing golden test (`examples/easygl_dualtextureeffect_golden_test.cpp`) uses `VertexPositionTexture` (stride 20, Position+TextureCoordinate only, no Normal) — confirmed via `EasyGLGraphicsBackend::ApplyLayout`'s `stride==20` case (location0=Position, location1=TextureCoordinate) that this is the vertex layout its shader actually expects, not stride-32 (where location1 is Normal instead). Documented, **not fixed**, known approximation: occlusion maps use "1.0 = fully visible", not "0.5 = neutral", so unoccluded areas render ~2x brighter than the base color alone under the real blend formula; a correct fix needs decoding/re-encoding the occlusion image (pixel × 0.5) rather than `ExtractImage()`'s current byte-for-byte passthrough — left as a documented follow-up rather than vendoring an image codec for a single-purpose remap. |
+| CNB-73 | Extend `gltf_to_cnj` + `ModelTypeReader`'s existing `"texture"` field precedent with a second `"texture2"` field, wire to `DualTextureEffect` (already registered by `ModelTypeReader`'s `effectStr` dispatch) | ✅ | `gltf_to_cnj.cpp`: `FindOcclusionImage()`, `MeshOut::occlusionImage`/`useDualTexture`, stride selection extended to `skinned?52:(colored?24:(useDualTexture?20:32))`, vertex-write loop gets a third branch (position+uv only, no Normal/Color), `ConvertGroup` extracts/caches the occlusion image the same way as base color and emits `"effect":"DualTextureEffect"` + `"texture2"` (falls back to `"BasicEffect"` if occlusion image extraction fails despite `useDualTexture` being decided from material data). Only applies to unskinned, uncolored meshes — mutually exclusive with vertex color (CNB-55) and skinning, since both DualTextureEffect's vertex shader and the plain `VertexPositionTexture` layout have no room for a per-vertex Normal or Color. `ContentManager.cpp`'s `ModelTypeReader`: added the `"DualTextureEffect"` branch to the `effectStr` dispatch, extended the `"texture"` binding block with a `DualTextureEffect*` case (`setTextureProperty`), added a new `"texture2"` field + binding block (`setTexture2Property`, only when `fx` is `DualTextureEffect`). |
+| CNB-74 | Tests + docs | ✅ | New `GltfToCnjToolTest.WiresBaseColorAndOcclusionTexturesThroughDualTextureEffect` (fixture `kDualTextureGltf`: unskinned single-triangle mesh, base-color + occlusion textures, no NORMAL attribute at all) asserts: both textures written to disk, vertex buffer is exactly `3*20` bytes (stride 20, no Normal baked in), and after a full `ContentManager::Load<Model>` round-trip the mesh's effect is a real `DualTextureEffect` with both `getTextureProperty()`/`getTexture2Property()` non-null and correctly sized. Full-suite regression after this task: **4697 tests, 4695 passed, same 2 pre-existing hardware skips, 0 failures.** |
 
 ---
 

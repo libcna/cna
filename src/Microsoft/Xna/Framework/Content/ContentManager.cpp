@@ -1686,6 +1686,7 @@ namespace Microsoft::Xna::Framework::Content
                             const int         stride     = JsonInt(mg, "vertexStride", 16);
                             const std::string effectStr  = ExtractJsonStringField(mg, "effect");
                             const std::string textureFile = ExtractJsonStringField(mg, "texture");
+                            const std::string texture2File = ExtractJsonStringField(mg, "texture2");
                             const bool vertexColorEnabled = JsonBool(mg, "vertexColorEnabled", false);
 
                             if (vertFile.empty() || idxFile.empty())
@@ -1838,6 +1839,13 @@ namespace Microsoft::Xna::Framework::Content
                                 // GetSkinTransforms() feeds SkinnedEffect::SetBoneTransforms()
                                 // directly (see Task 942), not through this reader.
                                 fx = std::make_shared<Graphics::SkinnedEffect>(device);
+                            } else if (effectStr == "DualTextureEffect") {
+                                // CNB-73: real XNA's two-layer multitexturing effect -- always
+                                // samples both texture slots (no TextureEnabled toggle), so its
+                                // vertex buffer must be the stride-20 VertexPositionTexture shape
+                                // (no Normal in between location0/location1, see ApplyLayout's
+                                // stride==20 case) rather than stride-32.
+                                fx = std::make_shared<Graphics::DualTextureEffect>(device);
                             } else {
                                 fx = cm.Load<std::shared_ptr<Graphics::Effect>>(effectStr);
                             }
@@ -1858,6 +1866,21 @@ namespace Microsoft::Xna::Framework::Content
                                 } else if (auto* skinnedFx = dynamic_cast<Graphics::SkinnedEffect*>(fx.get())) {
                                     skinnedFx->setTextureProperty(tex.get());
                                     res->textureOwners.push_back(std::move(tex));
+                                } else if (auto* dualFx = dynamic_cast<Graphics::DualTextureEffect*>(fx.get())) {
+                                    dualFx->setTextureProperty(tex.get());
+                                    res->textureOwners.push_back(std::move(tex));
+                                }
+                            }
+
+                            // CNB-73: the second (layer-1) texture slot -- only meaningful for
+                            // DualTextureEffect, which is the only stock effect with a Texture2
+                            // parameter.
+                            if (!texture2File.empty()) {
+                                if (auto* dualFx = dynamic_cast<Graphics::DualTextureEffect*>(fx.get())) {
+                                    auto tex2 = std::make_unique<Graphics::Texture2D>(
+                                        cm.Load<Graphics::Texture2D>(texture2File));
+                                    dualFx->setTexture2Property(tex2.get());
+                                    res->textureOwners.push_back(std::move(tex2));
                                 }
                             }
 

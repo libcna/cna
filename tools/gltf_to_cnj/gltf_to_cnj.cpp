@@ -43,12 +43,29 @@
 // Draco-compressed primitives (KHR_draco_mesh_compression) are rejected with a clear error rather
 // than silently read as garbage.
 //
+// CNB-72/73 (Phase 13E): an unskinned, uncolored primitive with both a base-color and an
+// occlusion texture is imported through DualTextureEffect (Texture=base color, Texture2=
+// occlusion) instead of BasicEffect, reusing that effect's already-working cross-backend shaders.
+// This is a documented approximation, not a faithful PBR occlusion implementation: real XNA's
+// DualTextureEffect blends as `(base*2) * texture2 * diffuseColor` (a "centered at 0.5 = neutral"
+// baked-lightmap convention), while glTF occlusion maps use "1.0 = fully visible, 0.0 = fully
+// occluded" -- so unoccluded surface areas (occlusion ~= 1.0) render roughly 2x brighter than the
+// base color alone, rather than unchanged. Occlusion was still chosen over the other PBR maps
+// because it is the only one that is a single multiplicative modulation map to begin with (normal/
+// metallic-roughness/emissive don't fit a multiply-blend model at all). Fixing the brightness bias
+// would require decoding and re-encoding the occlusion image (remapping each pixel by x0.5) rather
+// than the byte-for-byte passthrough ExtractImage() does today -- left as a documented follow-up,
+// not implemented here to avoid vendoring an image codec for a single-purpose remap.
+//
 // Known, deliberate MVP scope cuts (see plan_cnj.md CNB-50/51's own notes for the full list): only
-// the base-color texture is extracted (no normal/metallic-roughness/emissive/occlusion maps, no
-// PBR factor values -- CNA's real-XNA-faithful BasicEffect/SkinnedEffect have no shader path for
-// any of these, unlike VertexColorEnabled); vertex color is only supported for unskinned meshes
-// (real XNA's SkinnedEffect has no VertexColorEnabled property at all); morph targets (blend
-// shapes) are not imported.
+// the base-color and (per above) occlusion textures are extracted (no normal/metallic-roughness/
+// emissive maps, no PBR factor values -- CNA's real-XNA-faithful BasicEffect/SkinnedEffect/
+// DualTextureEffect have no shader path for any of these, unlike VertexColorEnabled); vertex color
+// and DualTextureEffect's Texture2 are each only supported for unskinned, and mutually exclusive
+// with each other, since both need the mesh's one shared vertex layout (real XNA's SkinnedEffect
+// has no VertexColorEnabled property, and DualTextureEffect's own vertex shader has no room for a
+// per-vertex Normal or Color between its Position/TextureCoordinate attributes); morph targets
+// (blend shapes) are not imported.
 
 #define CGLTF_IMPLEMENTATION
 #include "cgltf.h"
@@ -689,6 +706,17 @@ namespace
         return view.texture->image;
     }
 
+    // CNB-72/73 (Phase 13E): returns the material's occlusion texture image, or nullptr. Among
+    // glTF's own PBR texture slots, occlusion is the only one that is a single multiplicative
+    // modulation map (not a normal/vector map, not an additive emissive map), making it the
+    // closest available semantic match to DualTextureEffect's real-XNA "diffuse * 2 * lightmap"
+    // Texture2 slot -- see the ConvertGroup docs below for the known brightness caveat.
+    const cgltf_image* FindOcclusionImage(const cgltf_primitive& prim)
+    {
+        if (!prim.material || !prim.material->occlusion_texture.texture) { return nullptr; }
+        return prim.material->occlusion_texture.texture->image;
+    }
+
     // ---------------------------------------------------------------------------
     // Mesh geometry: handles both indexed and non-indexed primitives (Khronos's own "Fox" sample
     // has the latter -- gltf.md's own already-found bug), and both the unskinned stride-32
@@ -706,7 +734,9 @@ namespace
         bool use32BitIndices = false;
         bool skinned = false;
         bool colored = false;
+        bool useDualTexture = false;
         const cgltf_image* baseColorImage = nullptr;
+        const cgltf_image* occlusionImage = nullptr;
     };
 
     std::uint8_t ToByteColorChannel(float v)
@@ -753,14 +783,26 @@ namespace
         // render through -- COLOR_0 is intentionally dropped for skinned meshes rather than
         // silently doing nothing with a real capability request.
         out.colored = (!out.skinned) && (colorAcc != nullptr);
+        out.baseColorImage = FindBaseColorImage(prim);
+        // CNB-73: an unskinned, uncolored primitive with both a base-color and an occlusion
+        // texture is imported through DualTextureEffect (Texture=base color, Texture2=occlusion)
+        // instead of BasicEffect -- real XNA's DualTextureEffect always samples both texture
+        // slots (no TextureEnabled-style toggle) via a single shared UV set at vertex attribute
+        // locations 0/1 with no Normal in between (see EasyGLGraphicsBackend::ApplyLayout's
+        // stride==20 case), so this reuses the plain VertexPositionTexture layout rather than a
+        // new Position+Normal+Texture+Texture2 vertex format. Skinned/colored meshes keep their
+        // existing effect (SkinnedEffect has no Texture2 slot; the colored VertexPositionColor
+        // Texture layout has no room for a second UV/texture either) -- a documented scope cut,
+        // not an oversight.
+        out.occlusionImage = (!out.skinned && !out.colored) ? FindOcclusionImage(prim) : nullptr;
+        out.useDualTexture = (out.occlusionImage != nullptr) && (out.baseColorImage != nullptr);
         // Colored meshes reuse the real XNA VertexPositionColorTexture layout (stride 24,
         // Position+Color+TextureCoordinate) -- already fully supported end-to-end by
         // ModelTypeReader and every graphics backend's existing VertexColorEnabled shader path,
         // rather than inventing a new Position+Normal+Color+TextureCoordinate layout that would
         // need a brand new shader permutation on every backend. The tradeoff (no per-vertex
         // Normal when colored) is a deliberate, documented scope cut.
-        out.stride = out.skinned ? 52 : (out.colored ? 24 : 32);
-        out.baseColorImage = FindBaseColorImage(prim);
+        out.stride = out.skinned ? 52 : (out.colored ? 24 : (out.useDualTexture ? 20 : 32));
 
         const cgltf_size vertexCount = posAcc->count;
         out.vertexBytes.reserve(static_cast<std::size_t>(vertexCount) * static_cast<std::size_t>(out.stride));
@@ -797,6 +839,12 @@ namespace
                 out.vertexBytes.push_back(ToByteColorChannel(colors[co + 1]));
                 out.vertexBytes.push_back(ToByteColorChannel(colors[co + 2]));
                 out.vertexBytes.push_back(colorComponents >= 4 ? ToByteColorChannel(colors[co + 3]) : std::uint8_t{255});
+                AppendFloat(out.vertexBytes, u); AppendFloat(out.vertexBytes, v);
+                continue;
+            }
+
+            if (out.useDualTexture)
+            {
                 AppendFloat(out.vertexBytes, u); AppendFloat(out.vertexBytes, v);
                 continue;
             }
@@ -928,7 +976,7 @@ namespace
         SkeletonResult skeleton;
         if (hasSkin) { skeleton = BuildSkeleton(group.skin, unitScale); }
 
-        struct MeshEntry { std::string vertFile, idxFile, textureFile; int stride; std::string effect; bool vertexColorEnabled; };
+        struct MeshEntry { std::string vertFile, idxFile, textureFile, texture2File; int stride; std::string effect; bool vertexColorEnabled; };
         std::vector<MeshEntry> meshEntries;
 
         int meshCounter = 0;
@@ -962,12 +1010,42 @@ namespace
                     }
                 }
 
+                std::string texture2File;
+                if (meshOut.useDualTexture && meshOut.occlusionImage)
+                {
+                    auto cached = writtenTextures.find(meshOut.occlusionImage);
+                    if (cached != writtenTextures.end())
+                    {
+                        texture2File = cached->second;
+                    }
+                    else if (auto img = ExtractImage(meshOut.occlusionImage, gltfDir))
+                    {
+                        texture2File = outName + "_tex" + std::to_string(writtenTextures.size()) + "." + img->extension;
+                        WriteBinaryFile(outputDir / texture2File, img->bytes);
+                        writtenTextures[meshOut.occlusionImage] = texture2File;
+                    }
+                }
+
                 MeshEntry entry;
                 entry.vertFile = vertFile;
                 entry.idxFile = idxFile;
                 entry.stride = meshOut.stride;
-                entry.effect = meshOut.skinned ? "SkinnedEffect" : "BasicEffect";
+                entry.effect = meshOut.skinned ? "SkinnedEffect"
+                              : meshOut.useDualTexture ? "DualTextureEffect"
+                              : "BasicEffect";
                 entry.textureFile = textureFile;
+                // A DualTextureEffect mesh needs both textures to render sensibly (the shader
+                // always samples both slots) -- if occlusion image extraction failed for some
+                // reason while useDualTexture was still decided from the material data, fall back
+                // to BasicEffect rather than emitting a Texture2-less DualTextureEffect.
+                if (meshOut.useDualTexture && texture2File.empty())
+                {
+                    entry.effect = "BasicEffect";
+                }
+                else
+                {
+                    entry.texture2File = texture2File;
+                }
                 entry.vertexColorEnabled = meshOut.colored;
                 meshEntries.push_back(entry);
                 ++meshCounter;
@@ -1047,6 +1125,7 @@ namespace
             json << "    { \"vertices\": \"" << JsonEscape(e.vertFile) << "\", \"indices\": \"" << JsonEscape(e.idxFile)
                  << "\", \"vertexStride\": " << e.stride << ", \"effect\": \"" << e.effect << "\"";
             if (!e.textureFile.empty()) { json << ", \"texture\": \"" << JsonEscape(e.textureFile) << "\""; }
+            if (!e.texture2File.empty()) { json << ", \"texture2\": \"" << JsonEscape(e.texture2File) << "\""; }
             if (e.vertexColorEnabled) { json << ", \"vertexColorEnabled\": true"; }
             json << " }" << (i + 1 < meshEntries.size() ? "," : "") << "\n";
         }

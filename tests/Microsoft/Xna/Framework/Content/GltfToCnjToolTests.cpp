@@ -50,6 +50,7 @@
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Graphics/AnimationPlayer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DualTextureEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Model.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMesh.hpp"
@@ -531,6 +532,37 @@ namespace
   ]
 })GLTF";
 
+    // CNB-72/73 (Phase 13E): an unskinned, uncolored mesh whose material has both a base-color
+    // and an occlusion texture must import through DualTextureEffect (stride-20 VertexPosition
+    // Texture, Texture=base color, Texture2=occlusion) instead of BasicEffect.
+    const char* kDualTextureGltf = R"GLTF({
+  "asset": { "version": "2.0" },
+  "scene": 0,
+  "scenes": [ { "nodes": [0] } ],
+  "nodes": [ { "name": "MeshNode", "mesh": 0 } ],
+  "meshes": [ { "primitives": [ { "attributes": { "POSITION": 0, "TEXCOORD_0": 1 }, "material": 0 } ] } ],
+  "materials": [ { "pbrMetallicRoughness": { "baseColorTexture": { "index": 0 } }, "occlusionTexture": { "index": 1 } } ],
+  "textures": [ { "source": 0 }, { "source": 1 } ],
+  "images": [
+    { "bufferView": 2, "mimeType": "image/png" },
+    { "bufferView": 3, "mimeType": "image/png" }
+  ],
+  "buffers": [ {
+    "byteLength": 198,
+    "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCCiVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC"
+  } ],
+  "bufferViews": [
+    { "buffer": 0, "byteOffset": 0,   "byteLength": 36 },
+    { "buffer": 0, "byteOffset": 36,  "byteLength": 24 },
+    { "buffer": 0, "byteOffset": 60,  "byteLength": 69 },
+    { "buffer": 0, "byteOffset": 129, "byteLength": 69 }
+  ],
+  "accessors": [
+    { "bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3", "min": [0,0,0], "max": [1,1,0] },
+    { "bufferView": 1, "componentType": 5126, "count": 3, "type": "VEC2" }
+  ]
+})GLTF";
+
     // Spawns the real cna_tool_gltf_to_cnj executable and waits for it to exit. Returns the exit
     // code, or -1 on a spawn-side failure (already reported via ADD_FAILURE). unitScale is passed
     // as the tool's optional 5th CLI argument when non-empty.
@@ -949,4 +981,42 @@ TEST(GltfToCnjToolTest, UnitScaleAppliesToPositionsAndBoneTranslations)
     // RootBone's authored translation was [50,0,0] (centimeters); scaled, its bind-pose X must
     // come out as 0.5.
     EXPECT_NEAR(skinningData->BindPose[0].getTranslationProperty().X, 0.5f, 1e-4f);
+}
+
+// CNB-72/73: a material with both a base-color and an occlusion texture must be imported through
+// DualTextureEffect (Texture=base color, Texture2=occlusion), with the mesh's vertex buffer using
+// the stride-20 VertexPositionTexture layout DualTextureEffect's shader actually expects.
+TEST(GltfToCnjToolTest, WiresBaseColorAndOcclusionTexturesThroughDualTextureEffect)
+{
+    ScratchDir gltfDir;
+    ScratchDir contentRoot;
+
+    const std::filesystem::path gltfPath = gltfDir.path() / "dualtex.gltf";
+    WriteFile(gltfPath, kDualTextureGltf);
+
+    const int exitCode = RunGltfToCnjTool(gltfPath.string(), contentRoot.path().string(), "dualtex");
+    ASSERT_EQ(exitCode, 0);
+    ASSERT_TRUE(std::filesystem::exists(contentRoot.path() / "dualtex_tex0.png"));
+    ASSERT_TRUE(std::filesystem::exists(contentRoot.path() / "dualtex_tex1.png"));
+
+    const std::filesystem::path vertsPath = contentRoot.path() / "dualtex_mesh0_verts.bin";
+    std::ifstream f(vertsPath, std::ios::binary);
+    std::vector<char> bytes((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+    ASSERT_EQ(bytes.size(), 3u * 20u); // stride 20, VertexPositionTexture (no Normal)
+
+    GraphicsDevice gd;
+    ContentManager cm(nullptr, contentRoot.path().string());
+    cm.setGraphicsDevice(gd);
+    Model model = cm.Load<Model>("dualtex");
+    ASSERT_EQ(model.getMeshesProperty().getCountProperty(), 1);
+    ModelMesh* mesh = model.getMeshesProperty()[0];
+
+    auto* dualFx = dynamic_cast<DualTextureEffect*>(mesh->getMeshPartsProperty()[0]->getEffectProperty());
+    ASSERT_NE(dualFx, nullptr);
+    Texture2D* tex1 = dualFx->getTextureProperty();
+    Texture2D* tex2 = dualFx->getTexture2Property();
+    ASSERT_NE(tex1, nullptr);
+    ASSERT_NE(tex2, nullptr);
+    EXPECT_EQ(tex1->getWidthProperty(), 1);
+    EXPECT_EQ(tex2->getWidthProperty(), 1);
 }
