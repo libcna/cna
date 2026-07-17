@@ -387,6 +387,26 @@ namespace Microsoft::Devices::Sensors
         NOXNA static void SetEventWatchRegistrationFailureForTesting(bool shouldFail);
 
         /**
+         * @brief Test-only hook (Task SDLCORE-009): total callback exceptions swallowed so far.
+         *
+         * Forwards to the shared
+         * Detail::SdlSensorSubsystem<Accelerometer>::dispatchExceptionCountForTesting_
+         * -- process-wide and never reset, so a test must compare against
+         * this value from *before* its own throwing-callback action, not
+         * assume it starts at zero.
+         *
+         * @return The number of exceptions Detail::SdlSensorSubsystem<Accelerometer>::DispatchToInstances() has ever swallowed.
+         */
+        NOXNA static int GetDispatchExceptionCountForTesting();
+
+        /**
+         * @brief Test-only hook (Task SDLCORE-009): message from the most recently swallowed callback exception.
+         *
+         * @return `ex.what()` for a swallowed `std::exception`, a fixed placeholder for any other thrown value, or empty if none has been swallowed yet.
+         */
+        NOXNA static std::string GetLastDispatchExceptionMessageForTesting();
+
+        /**
          * @brief Legacy WP7 7.0 event raised when the accelerometer reading changes.
          *
          * Deprecated in favor of CurrentValueChanged, which is the WP7 7.1

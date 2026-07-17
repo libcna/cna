@@ -6277,7 +6277,7 @@ test is not sufficient for an Android coordinate/fusion claim.
   - p50/p95/p99 callback latency and lock contention stay below recorded budgets.
 - **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
 
-### SDLCORE-009 — Make real callback exception handling observable and consistent — OPEN
+### SDLCORE-009 — Make real callback exception handling observable and consistent — CLOSED (2026-07-17)
 
 - **Priority:** P1
 - **Area:** Perfection re-audit
@@ -6290,6 +6290,77 @@ test is not sufficient for an Android coordinate/fusion claim.
   - A throwing handler never corrupts bookkeeping and always produces an observable result.
   - Subsequent instances/updates behave according to the documented policy.
 - **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+- **Resolution:**
+  - **Chosen policy: log-and-continue.** `Detail::SdlSensorSubsystem<TSensor>::DispatchToInstances()`'s
+    `catch (...)` block (the one real place a sensor callback's exception is ever swallowed —
+    confirmed by grep, `AndroidSensorBridge.cpp`'s own worker-thread callback invocation already
+    has its own, separate, pre-existing swallow with an identical rationale, out of this header's
+    scope) already never let a C++ exception unwind through the `SDL_EventFilter` C callback frame
+    it runs inside — that part was already correct. What was missing was *observability*: the
+    swallow was completely silent, with no trace anywhere. The other three policies this task's
+    required work names were considered and rejected: propagate-to-owner-error would need a new
+    error-reporting surface added to every `TSensor` class (`Accelerometer`/`Gyroscope`), a much
+    larger XNA-compatibility-surface change than this task's own scope; unsubscribe-failing-handler
+    would silently stop delivering readings to an instance after a single bad callback, changing
+    observable behavior for what may be a one-off, transient bug in caller code (and the real WP7
+    `SensorBase` contract has no such "auto-unsubscribe on handler exception" concept to preserve);
+    terminate would crash the whole process over one user callback's exception, strictly worse UX
+    than the existing safe swallow.
+  - Split the single `catch (...)` into `catch (const std::exception& ex)` (extracts `ex.what()`)
+    followed by a `catch (...)` fallback (a fixed `"non-std::exception value"` message, since a
+    non-`std::exception` thrown value has no portable way to extract a description from), both
+    routed through a new private `LogAndRecordDispatchException(const std::string&)` helper.
+  - Observability, split two ways since `DEVPERF-005`'s structured diagnostic channel does not
+    exist yet (this task's own "report through the diagnostic channel" bullet is explicitly
+    deferred to that task, not built here): (1) `SDL_Log()`, debug builds only, matching this
+    codebase's established convention, for interactive/manual observability; (2) two new
+    test-only fields on `SdlSensorSubsystem<TSensor>` — `dispatchExceptionCountForTesting_` (a
+    running total) and `lastDispatchExceptionMessageForTesting_` (the most recent message), both
+    guarded by the class's existing `mutex_` — exposed per-`TSensor`-class via new
+    `Accelerometer`/`Gyroscope` static `NOXNA` methods
+    (`GetDispatchExceptionCountForTesting()`/`GetLastDispatchExceptionMessageForTesting()`), giving
+    genuine automated observability instead of "trust the log line fired." Did not literally
+    capture/store a `std::exception_ptr` (the required work's literal wording) — there is nowhere
+    useful for one to go without `DEVPERF-005`'s channel to route it through, and the message
+    string already captures everything a caller/test can currently act on; revisit if
+    `DEVPERF-005` is built and needs the original exception object, not just its message.
+  - "Apply the same semantics to synthetic dispatch tests": already true by construction, not a
+    new fix — `Accelerometer`/`Gyroscope`'s own `DispatchToInstancesForTesting()` test hooks
+    forward to this exact same `DispatchToInstances()` method (confirmed by reading both), so
+    there was never a second, divergent swallow path to reconcile.
+  - Extended two **pre-existing** tests (`ThrowingHandlerInBatchDispatchDoesNotPreventNextInstanceFromReceivingItsEvent`,
+    one per class) with the new counter/message assertions, plus a second dispatch-batch
+    assertion proving "subsequent instances/updates behave according to the documented policy" —
+    rather than adding new near-duplicate tests, since these already set up and asserted the
+    exact "a throwing handler never corrupts bookkeeping" scenario this task's acceptance
+    criteria describe. Added one genuinely new test per class covering the one scenario neither
+    pre-existing test touched: a thrown value that is not a `std::exception` at all
+    (`ThrowingNonStdExceptionDuringDispatchToInstancesForTestingIsObservable`, `Accelerometer`
+    only — `Detail::SdlSensorSubsystem<TSensor>::DispatchToInstances()` is a shared template, so
+    this doesn't need duplicating per-class; `Gyroscope`'s own extended pre-existing test already
+    gives its public static hooks their own required per-method coverage).
+- **Files changed:** `include/Microsoft/Devices/Sensors/Detail/SdlSensorSubsystem.hpp`,
+  `include/Microsoft/Devices/Sensors/Accelerometer.hpp`,
+  `src/Microsoft/Devices/Sensors/Accelerometer.cpp`,
+  `include/Microsoft/Devices/Sensors/Gyroscope.hpp`, `src/Microsoft/Devices/Sensors/Gyroscope.cpp`,
+  `tests/Microsoft/Devices/Sensors/AccelerometerTests.cpp`,
+  `tests/Microsoft/Devices/Sensors/GyroscopeTests.cpp`.
+- **Tests:** 1 new test (`AccelerometerTests.ThrowingNonStdExceptionDuringDispatchToInstancesForTestingIsObservable`)
+  plus 2 pre-existing tests extended
+  (`AccelerometerTests`/`GyroscopeTests.ThrowingHandlerInBatchDispatchDoesNotPreventNextInstanceFromReceivingItsEvent`).
+  Scoped filtered run: 285 tests, 281 passed, 4 pre-existing hardware-only skips, 0 failures.
+- **Sanitizer/static-analysis result:** built and run under `devices-ubsan` (clean) and, since this
+  adds a genuinely new lock-acquisition site (`LogAndRecordDispatchException()`'s brief `mutex_`
+  lock, reached from inside the dispatch loop's `catch` block — new concurrent-access surface,
+  unlike `VIB2-003`/`004`/`ANDR2-002` this pass), `devices-tsan`: 3 consecutive clean runs (0
+  `WARNING: ThreadSanitizer` occurrences), 83/83 tests passing each run
+  (`AccelerometerTests.*:GyroscopeTests.*:SensorSubsystemOwnershipTests.*`).
+- **Remaining limitations:** none requiring hardware — unlike `VIB2-003`/`004`/`ANDR2-002`
+  earlier this pass, this task's acceptance criteria describe purely in-process C++ exception
+  handling, fully exercisable and exercised on this host with real, passing assertions (not
+  reasoning alone). Full "report through the diagnostic channel" routing (a real
+  `std::exception_ptr`, structured beyond a message string) is deferred to `DEVPERF-005`, not
+  yet built — noted above, not silently dropped.
 
 ### SDLCORE-010 — Benchmark software throttling cost and power — OPEN
 

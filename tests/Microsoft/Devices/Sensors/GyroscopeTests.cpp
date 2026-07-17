@@ -849,6 +849,15 @@ TEST(GyroscopeTests, SelfDestroyingFromOwnCallbackDuringBatchDispatchDoesNotUseA
 // Task P8-5: see AccelerometerTests's identical test for the full rationale —
 // DispatchToInstances()'s own doc comment claims a throwing handler doesn't prevent
 // the next instance in the same batch from being dispatched to; this proves it.
+//
+// Task SDLCORE-009 (2026-07-17, external audit `audit_devices_2026-07-17.md`):
+// extended with GetDispatchExceptionCountForTesting()/
+// GetLastDispatchExceptionMessageForTesting() assertions — see
+// AccelerometerTests's identically-extended test for the full rationale; this
+// gives Gyroscope's own public static test hooks at least one direct test
+// each, per this project's own per-method test coverage rule, rather than
+// relying solely on Accelerometer's coverage of the shared underlying
+// Detail::SdlSensorSubsystem<TSensor>::DispatchToInstances() template logic.
 TEST(GyroscopeTests, ThrowingHandlerInBatchDispatchDoesNotPreventNextInstanceFromReceivingItsEvent)
 {
     auto a = std::make_unique<Gyroscope>();
@@ -874,11 +883,15 @@ TEST(GyroscopeTests, ThrowingHandlerInBatchDispatchDoesNotPreventNextInstanceFro
         bCallbackCalled = true;
     };
 
+    const int countBefore = Gyroscope::GetDispatchExceptionCountForTesting();
+
     const std::vector<Gyroscope*> batch{a.get(), b.get()};
     EXPECT_NO_THROW(Gyroscope::DispatchToInstancesForTesting(batch, 1.0f, 2.0f, 3.0f));
 
     EXPECT_TRUE(aCallbackCalled);
     EXPECT_TRUE(bCallbackCalled);
+    EXPECT_EQ(Gyroscope::GetDispatchExceptionCountForTesting(), countBefore + 1);
+    EXPECT_EQ(Gyroscope::GetLastDispatchExceptionMessageForTesting(), "a's handler deliberately fails");
 
     EXPECT_NO_THROW(a->Dispose());
     EXPECT_NO_THROW(b->Dispose());

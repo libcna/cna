@@ -313,5 +313,23 @@ namespace Microsoft::Devices::Sensors
          * @param shouldFail true to force the next registration attempt to fail.
          */
         NOXNA static void SetEventWatchRegistrationFailureForTesting(bool shouldFail);
+
+        /**
+         * @brief Test-only hook (Task SDLCORE-009): see
+         * Accelerometer::GetDispatchExceptionCountForTesting()'s identical
+         * hook for the full rationale.
+         *
+         * @return The number of exceptions Detail::SdlSensorSubsystem<Gyroscope>::DispatchToInstances() has ever swallowed.
+         */
+        NOXNA static int GetDispatchExceptionCountForTesting();
+
+        /**
+         * @brief Test-only hook (Task SDLCORE-009): see
+         * Accelerometer::GetLastDispatchExceptionMessageForTesting()'s
+         * identical hook for the full rationale.
+         *
+         * @return `ex.what()` for a swallowed `std::exception`, a fixed placeholder for any other thrown value, or empty if none has been swallowed yet.
+         */
+        NOXNA static std::string GetLastDispatchExceptionMessageForTesting();
     };
 } // namespace Microsoft::Devices::Sensors

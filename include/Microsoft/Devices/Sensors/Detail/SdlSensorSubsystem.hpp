@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <condition_variable>
 #include <cstdint>
+#include <exception>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -481,6 +482,27 @@ namespace Microsoft::Devices::Sensors::Detail
          */
         bool forceEventWatchRegistrationFailureForTesting_ = false;
 
+        /**
+         * @brief Test-only hook (Task SDLCORE-009): message from the most recent exception `DispatchToInstances()` swallowed.
+         *
+         * Empty until the first swallowed exception. `SDL_Log()` (debug
+         * builds only) already reports every swallowed exception for
+         * interactive/manual observability, but that cannot be asserted on
+         * from a test — this field is what
+         * `Get*LastDispatchExceptionMessageForTesting()`
+         * (`Accelerometer`/`Gyroscope`'s own static wrappers) actually
+         * checks. Guarded by mutex_, same as every other field here. A
+         * process-wide value (this subsystem instance is itself
+         * process-wide) — tests must compare against
+         * `dispatchExceptionCountForTesting_`'s value from *before* their
+         * own action, not assume this starts empty, since an earlier,
+         * unrelated test may have already set it.
+         */
+        std::string lastDispatchExceptionMessageForTesting_;
+
+        /** @brief Test-only hook (Task SDLCORE-009): total exceptions `DispatchToInstances()` has ever swallowed. Guarded by mutex_. Process-wide, never reset — see `lastDispatchExceptionMessageForTesting_`'s own doc comment. */
+        int dispatchExceptionCountForTesting_ = 0;
+
         /** @brief Unregisters the SDL event watch if no instances remain started. Caller must already hold mutex_. */
         void UnregisterEventWatchIfNeededLocked()
         {
@@ -669,6 +691,33 @@ namespace Microsoft::Devices::Sensors::Detail
                 {
                     dispatchOne(instance);
                 }
+                catch (const std::exception& ex)
+                {
+                    // Task SDLCORE-009 (2026-07-17, external audit
+                    // `audit_devices_2026-07-17.md`): still swallowed, for
+                    // the same reason the plain `catch (...)` below always
+                    // has (see that block's own comment), but no longer
+                    // silent -- previously a throwing callback left zero
+                    // trace anywhere. Chosen policy: log-and-continue. The
+                    // other policies this task's required work names were
+                    // considered and rejected: propagate-to-owner-error
+                    // would need a new error-reporting surface on every
+                    // TSensor class -- a much larger XNA-compatibility-surface
+                    // change than this task's own scope; unsubscribe-failing-handler
+                    // would silently stop delivering readings to an instance
+                    // after a single bad callback, changing observable
+                    // behavior for what may be a one-off, transient bug in
+                    // caller code; terminate would crash the whole process
+                    // over one user callback's exception, strictly worse
+                    // than the existing safe swallow. Full routing through a
+                    // structured diagnostic channel (this task's own
+                    // "report through the diagnostic channel" bullet) is
+                    // deferred to `DEVPERF-005` (not yet built) -- until
+                    // then, `SDL_Log()` (interactive/manual observability)
+                    // plus this test-only counter/message pair (automated
+                    // observability) are what this task delivers.
+                    LogAndRecordDispatchException(ex.what());
+                }
                 catch (...)
                 {
                     // Swallowed deliberately — see SensorEventWatch()'s doc
@@ -678,11 +727,33 @@ namespace Microsoft::Devices::Sensors::Detail
                     // call frames, and swallowing it here also lets the
                     // remaining snapshotted instances still get dispatched
                     // to and cleaned up.
+                    LogAndRecordDispatchException("non-std::exception value");
                 }
             }
         }
 
     private:
+        /**
+         * @brief Reports a swallowed dispatch-callback exception (Task SDLCORE-009).
+         *
+         * `SDL_Log()` for interactive/manual observability (debug builds
+         * only, matching this codebase's established convention elsewhere)
+         * plus `lastDispatchExceptionMessageForTesting_`/
+         * `dispatchExceptionCountForTesting_` for automated test
+         * observability — see those fields' own doc comments.
+         *
+         * @param message Human-readable description of what was thrown.
+         */
+        void LogAndRecordDispatchException(const std::string& message)
+        {
+#ifndef NDEBUG
+            SDL_Log("SdlSensorSubsystem: sensor callback threw: %s", message.c_str());
+#endif
+            std::lock_guard<std::mutex> lock(mutex_);
+            lastDispatchExceptionMessageForTesting_ = message;
+            ++dispatchExceptionCountForTesting_;
+        }
+
         /**
          * SDL_EventFilter trampoline for TSensor's event watch. Takes a
          * stable snapshot of startedInstances_ (pointer values only) under

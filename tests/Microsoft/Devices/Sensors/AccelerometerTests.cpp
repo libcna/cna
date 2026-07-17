@@ -1137,6 +1137,38 @@ TEST(AccelerometerTests, DisposingDifferentInstanceDuringSameBatchDispatchDoesNo
     EXPECT_NO_THROW(a->Dispose());
 }
 
+// Task SDLCORE-009 (2026-07-17, external audit `audit_devices_2026-07-17.md`):
+// ThrowingHandlerInBatchDispatchDoesNotPreventNextInstanceFromReceivingItsEvent
+// (below) already extends this file's exact std::exception-throwing batch
+// scenario with GetDispatchExceptionCountForTesting()/
+// GetLastDispatchExceptionMessageForTesting() assertions -- this test covers
+// the one distinct scenario that one does not: a thrown value that is not a
+// std::exception at all, confirming the plain catch (...) fallback also
+// records a message (a fixed placeholder, since a non-std::exception value
+// has no portable way to extract a description from) rather than only the
+// std::exception-typed catch clause doing so.
+TEST(AccelerometerTests, ThrowingNonStdExceptionDuringDispatchToInstancesForTestingIsObservable)
+{
+    auto a = std::make_unique<Accelerometer>();
+    a->SetStartedForTesting(true);
+    Accelerometer::RegisterStartedInstanceForTesting(*a);
+
+    a->CurrentValueChanged += [](System::Object*, const SensorReadingEventArgs<AccelerometerReading>&)
+    {
+        throw 42; // NOLINT(hicpp-exception-baseclass) -- deliberately not a std::exception.
+    };
+
+    const int countBefore = Accelerometer::GetDispatchExceptionCountForTesting();
+
+    const std::vector<Accelerometer*> batch{a.get()};
+    EXPECT_NO_THROW(Accelerometer::DispatchToInstancesForTesting(batch, 1.0f, 2.0f, 3.0f));
+
+    EXPECT_EQ(Accelerometer::GetDispatchExceptionCountForTesting(), countBefore + 1);
+    EXPECT_EQ(Accelerometer::GetLastDispatchExceptionMessageForTesting(), "non-std::exception value");
+
+    EXPECT_NO_THROW(a->Dispose());
+}
+
 // Task SDLCORE-004 (2026-07-17, external audit `audit_devices_2026-07-17.md`):
 // deterministic address-reuse (ABA) regression test. Reproduces the exact
 // hazard SDLCORE-004 fixes via placement-new -- rather than relying on the
@@ -1238,6 +1270,15 @@ TEST(AccelerometerTests, SelfDestroyingFromOwnReadingChangedCallbackDuringInject
 // proves a single instance's own dispatch survives its own handler throwing; it
 // says nothing about whether a *different*, later instance in the same batch still
 // gets dispatched to.
+//
+// Task SDLCORE-009 (2026-07-17, external audit `audit_devices_2026-07-17.md`):
+// extended with GetDispatchExceptionCountForTesting()/
+// GetLastDispatchExceptionMessageForTesting() assertions -- this was already
+// the exact scenario ("a throwing handler never corrupts bookkeeping") that
+// task's acceptance criteria describe; it only needed the new observability
+// hooks added to it, not a new near-duplicate test. Counts are compared as a
+// delta (before vs. after), not an absolute value: the counter is backed by
+// a process-wide field shared by every AccelerometerTests case in this binary.
 TEST(AccelerometerTests, ThrowingHandlerInBatchDispatchDoesNotPreventNextInstanceFromReceivingItsEvent)
 {
     auto a = std::make_unique<Accelerometer>();
@@ -1263,11 +1304,25 @@ TEST(AccelerometerTests, ThrowingHandlerInBatchDispatchDoesNotPreventNextInstanc
         bCallbackCalled = true;
     };
 
+    const int countBefore = Accelerometer::GetDispatchExceptionCountForTesting();
+
     const std::vector<Accelerometer*> batch{a.get(), b.get()};
     EXPECT_NO_THROW(Accelerometer::DispatchToInstancesForTesting(batch, 1.0f, 2.0f, 3.0f));
 
     EXPECT_TRUE(aCallbackCalled);
     EXPECT_TRUE(bCallbackCalled);
+    EXPECT_EQ(Accelerometer::GetDispatchExceptionCountForTesting(), countBefore + 1);
+    EXPECT_EQ(Accelerometer::GetLastDispatchExceptionMessageForTesting(), "a's handler deliberately fails");
+
+    // "Subsequent instances/updates behave according to the documented
+    // policy" (this task's own acceptance criterion): a second dispatch
+    // batch right after the first threw must still work normally.
+    aCallbackCalled = false;
+    bCallbackCalled = false;
+    EXPECT_NO_THROW(Accelerometer::DispatchToInstancesForTesting(batch, 4.0f, 5.0f, 6.0f));
+    EXPECT_TRUE(aCallbackCalled);
+    EXPECT_TRUE(bCallbackCalled);
+    EXPECT_EQ(Accelerometer::GetDispatchExceptionCountForTesting(), countBefore + 2);
 
     // Also confirms A's own dispatch-tracking state was cleaned up despite the
     // throw (no hang, matching Task P6-4's single-instance guarantee).

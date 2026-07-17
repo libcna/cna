@@ -593,5 +593,19 @@ namespace Microsoft::Devices::Sensors
         subsystem.forceEventWatchRegistrationFailureForTesting_ = shouldFail;
     }
 
+    int Gyroscope::GetDispatchExceptionCountForTesting()
+    {
+        auto& subsystem = GetSubsystem();
+        std::lock_guard<std::mutex> lock(subsystem.mutex_);
+        return subsystem.dispatchExceptionCountForTesting_;
+    }
+
+    std::string Gyroscope::GetLastDispatchExceptionMessageForTesting()
+    {
+        auto& subsystem = GetSubsystem();
+        std::lock_guard<std::mutex> lock(subsystem.mutex_);
+        return subsystem.lastDispatchExceptionMessageForTesting_;
+    }
+
     GetTypeNameCPP(Gyroscope, "Microsoft.Devices.Sensors.Gyroscope")
 } // namespace Microsoft::Devices::Sensors
