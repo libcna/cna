@@ -314,6 +314,23 @@ namespace Microsoft::Xna::Framework::Audio
             throw System::ArgumentOutOfRangeException("count");
         }
 
+        // AUD-07-001/002/A-03: real FNA's own SubmitBuffer has no equivalent guard at all --
+        // once SubmitFloatBufferEXT (an FNA/NOXNA extension, not real XNA) has flipped
+        // format.wFormatTag to float, nothing in FNA ever resets it, and a later plain
+        // SubmitBuffer() submits raw int16 bytes into what may still be a float-format voice.
+        // Since SubmitFloatBufferEXT is a NOXNA-only surface to begin with, CNA is free to make
+        // this safer without diverging from any real XNA behavior: symmetric to
+        // SubmitFloatBufferEXT's own "float buffer while live int stream" guard below, reject an
+        // int submission into a live float stream, and -- only while Stopped, when EnsureStream()
+        // is about to rebuild the stream from scratch on the next Play() anyway -- let it commit
+        // the mode back to int. A caller that never touches SubmitFloatBufferEXT (i.e. every real
+        // XNA game) never has isFloat_ true and never observes any behavior change here.
+        if (isFloat_ && getStateProperty() != SoundState::Stopped)
+        {
+            throw System::InvalidOperationException("Submit an integer buffer before Playing!");
+        }
+        isFloat_ = false;
+
         std::vector<SharpRuntime::bytecs> chunk(
             buffer.begin() + offset,
             buffer.begin() + offset + count

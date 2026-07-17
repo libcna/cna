@@ -51,6 +51,24 @@ namespace
         }
         return d.getStateProperty() != SoundState::Stopped;
     }
+
+    // AUD-07-001/002/A-03: mirror of tryStartHeadless() above, but submits a float buffer
+    // first so playback starts in float mode instead of int16 mode.
+    bool tryStartHeadlessFloat(DynamicSoundEffectInstance& d)
+    {
+        System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+        std::vector<float> buf(4 * 256, 0.0f); // 256 stereo float frames of silence
+        d.SubmitFloatBufferEXT(buf);
+        try
+        {
+            d.Play();
+        }
+        catch (...)
+        {
+            return false;
+        }
+        return d.getStateProperty() != SoundState::Stopped;
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -305,6 +323,65 @@ TEST(DynamicSoundEffectInstanceTest, SubmitFloatBufferBeforePlayingIsAllowed)
     std::vector<float> buf(32, 0.25f);
     EXPECT_NO_THROW(d.SubmitFloatBufferEXT(buf));
     EXPECT_EQ(d.getPendingBufferCountProperty(), 1);
+}
+
+// AUD-07-001/002/A-03: confirmed code risk from the 2026-07-17 deep audit -- a stopped instance
+// that previously used SubmitFloatBufferEXT must be able to switch back to int16 mode via a
+// plain SubmitBuffer() while Stopped (EnsureStream() rebuilds the stream from scratch on the
+// next Play() anyway), rather than silently staying in float mode and feeding raw int16 bytes
+// into what becomes a float-format SDL_AudioStream.
+TEST(DynamicSoundEffectInstanceTest, SubmitBufferWhileStoppedSwitchesBackToIntModeAfterFloatSubmission)
+{
+    DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+
+    std::vector<float> floatBuf(4 * 256, 0.0f);
+    d.SubmitFloatBufferEXT(floatBuf);
+
+    // Still Stopped (never Played) -- committing back to int mode must be allowed.
+    std::vector<unsigned char> pcm(4 * 256, 0);
+    EXPECT_NO_THROW(d.SubmitBuffer(pcm));
+
+    MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(d);
+    ASSERT_EQ(track, nullptr) << "still stopped -- no track should exist yet";
+
+    try
+    {
+        d.Play();
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+    if (d.getStateProperty() == SoundState::Stopped)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+
+    track = SoundEffectInstanceTestAccess::GetTrack(d);
+    ASSERT_NE(track, nullptr);
+    SDL_AudioStream* stream = MIX_GetTrackAudioStream(track);
+    ASSERT_NE(stream, nullptr);
+    SDL_AudioSpec srcSpec{};
+    SDL_AudioSpec dstSpec{};
+    ASSERT_TRUE(SDL_GetAudioStreamFormat(stream, &srcSpec, &dstSpec));
+    EXPECT_EQ(srcSpec.format, SDL_AUDIO_S16LE)
+        << "stream must be int16, not left over as float from the earlier "
+           "SubmitFloatBufferEXT call";
+}
+
+// AUD-07-001/002/A-03: symmetric to SubmitFloatAfterPlayingThrowsInvalidOperation below --
+// submitting a plain int16 buffer into a *live* float-mode stream must throw rather than
+// silently corrupt the stream's data with misinterpreted bytes.
+TEST(DynamicSoundEffectInstanceTest, SubmitIntBufferAfterPlayingInFloatModeThrowsInvalidOperation)
+{
+    DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
+    if (!tryStartHeadlessFloat(d))
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+    std::vector<unsigned char> pcm(32, 0);
+    EXPECT_THROW(d.SubmitBuffer(pcm), System::InvalidOperationException);
 }
 
 TEST(DynamicSoundEffectInstanceTest, DisposeMarksDisposedAndIsIdempotent)

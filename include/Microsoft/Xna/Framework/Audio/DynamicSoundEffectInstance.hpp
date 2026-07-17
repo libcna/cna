@@ -116,9 +116,16 @@ namespace Microsoft::Xna::Framework::Audio
         /**
          * @brief Submits a range from a 16-bit PCM byte buffer for playback.
          *
+         * If SubmitFloatBufferEXT() was previously used on this instance while it is not
+         * currently Stopped, throws System::InvalidOperationException instead of feeding int16
+         * bytes into a live float-format stream (a NOXNA safety guard; real XNA has no float
+         * submission path at all).
+         *
          * @param buffer PCM audio data.
          * @param offset Byte offset into the buffer.
          * @param count  Number of bytes to submit.
+         * @throws System::InvalidOperationException if this instance is currently playing/paused
+         *         in float mode (see SubmitFloatBufferEXT()).
          */
         void SubmitBuffer(const std::vector<SharpRuntime::bytecs>& buffer,
                           SharpRuntime::intcs offset,
@@ -134,9 +141,15 @@ namespace Microsoft::Xna::Framework::Audio
         /**
          * @brief Submits a range from a float32 sample buffer for playback.
          *
+         * Switches this instance to float mode; throws System::InvalidOperationException if
+         * called while playing/paused in int16 mode. See SubmitBuffer()'s symmetric guard for
+         * switching back.
+         *
          * @param buffer Float32 audio samples.
          * @param offset Sample offset into the buffer.
          * @param count  Number of samples to submit.
+         * @throws System::InvalidOperationException if this instance is currently playing/paused
+         *         in int16 mode.
          */
         NOXNA void SubmitFloatBufferEXT(const std::vector<float>& buffer,
                                          SharpRuntime::intcs offset,
