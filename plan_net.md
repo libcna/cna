@@ -1378,11 +1378,28 @@ case more exist).
     precedent), not mid-Phase-9 while more phases remain in flight. Tracked as a to-do for this
     session's own wrap-up, not left silently unaddressed.
   - `third_party/SDL/docs/README-gdk.md` — vendored third-party documentation, out of scope.
-- [ ] **Task 9.6** — Add a troubleshooting section for avatar asset generation (mesh-craft +
-  Blender pipeline) and network demo startup (ENet port binding, discovery).
-- [ ] **Task 9.7** — Add a short README for avatar demo controls/command-line args if one doesn't
-  already exist, referencing the new F1 overlays from Phase 8 as the authoritative in-app control
-  reference (avoid duplicating control lists that can drift out of sync).
+- [x] **Task 9.6/9.7 (combined, new `docs/avatar-demos.md`)** — No `examples/` README convention
+  exists at all (confirmed: `find examples -maxdepth 1 -iname "README*"` is empty project-wide,
+  not just for avatar demos), so Task 9.7 needed a genuinely new file rather than an update. Wrote
+  one doc covering both tasks:
+  - **Controls (9.7):** a per-demo summary table (what it demonstrates + notable CLI flags) for
+    all 8 avatar demos, explicitly pointing at each demo's own F1 overlay as the authoritative
+    control reference rather than duplicating exact control text that would drift out of sync -
+    per this task's own explicit instruction.
+  - **Avatar asset-generation troubleshooting (9.6a):** `mc3togltf` resolution failures,
+    confirming you're running the mesh-craft pipeline (not the old primitive-join one) when
+    geometry looks wrong, `validate_gltf.py`'s known presence-only-not-correctness-checking gap,
+    CMake's `Content/` copy-step staleness, and the expected ~1-ULP export non-determinism.
+  - **Network demo startup troubleshooting (9.6b):** written generally (applies to any Net demo,
+    not just `demo_net_avatar_sync`) - discovery search-window/retry timing and host-before-client
+    launch ordering, the discovery port's real `SO_REUSEADDR` sharing behavior (with `pkill -f
+    cna_demo_net` as a concrete leftover-process check, confirmed against the real `cna_demo_net_*`
+    binary name prefix in `cmake/Examples.cmake`) vs. the session-transport port's OS-assigned
+    ephemeral binding (essentially never conflicts), UDP broadcast's same-broadcast-domain
+    requirement for cross-machine play, and host migration's specific real-disconnect trigger
+    condition. Every claim traced to the actual `ENetDiscoveryService.cpp`/`ENetHostHandle.cpp`
+    source (discovery port number, `SO_REUSEADDR` reasoning, ephemeral host port) before writing
+    it, not assumed.
 
 ---
 
