@@ -335,6 +335,25 @@ namespace Microsoft::Devices::Sensors::Detail
                     runExitedCv_.notify_all();
                 });
 
+            // Task ANDR2-005 (2026-07-17, external audit
+            // `audit_devices_2026-07-17.md`): ALooper_prepare()'s return
+            // value was previously stored and passed straight into
+            // ASensorManager_createEventQueue() with no null check --
+            // extremely unlikely to fail in practice (the NDK's own
+            // implementation only returns null if allocating a new Looper
+            // for this thread fails, e.g. genuine OOM), but passing a null
+            // looper into ASensorManager_createEventQueue() is unspecified
+            // behavior this bridge has no documented NDK guarantee is safe.
+            // Fails the same documented way the queue-creation/enable checks
+            // immediately below already do: signal startup failure and let
+            // looperCleanup (already constructed above) publish the
+            // terminal run state on the way out.
+            if (looper == nullptr)
+            {
+                SignalStartOutcome(StartOutcome::Failure);
+                return;
+            }
+
             queue_ = ASensorManager_createEventQueue(manager_, looper, 0, nullptr, nullptr);
             if (queue_ == nullptr)
             {

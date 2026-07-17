@@ -6908,7 +6908,7 @@ test is not sufficient for an Android coordinate/fusion claim.
   `runExitedCv_` still gets notified — not built here, as it wasn't explicitly required by this
   task's own acceptance criteria beyond what direct source-level reasoning already establishes.
 
-### ANDR2-005 — Handle ALooper_prepare failure — OPEN
+### ANDR2-005 — Handle ALooper_prepare failure — CLOSED (2026-07-17)
 
 - **Priority:** P1
 - **Area:** Perfection re-audit
@@ -6920,6 +6920,30 @@ test is not sufficient for an Android coordinate/fusion claim.
   - No NDK queue function receives a null looper from this bridge.
   - Start returns the documented failure promptly.
 - **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+- **Resolution:** `Run()`'s `ALooper_prepare()` return value was stored into `looper_` and passed
+  straight into `ASensorManager_createEventQueue()` with no null check. Extremely unlikely to fail
+  in practice (the NDK only returns null if allocating a new `Looper` for the calling thread fails
+  — genuine OOM), but this bridge has no documented NDK guarantee that passing a null looper into
+  `ASensorManager_createEventQueue()` is safe. Added a null check immediately after
+  `ALooper_prepare()` (already after `looperCleanup`'s construction — Task ANDR2-004's just-fixed
+  exit guard — so the terminal run state is still correctly published on this path), failing the
+  same documented way the queue-creation/enable checks immediately below it already do:
+  `SignalStartOutcome(StartOutcome::Failure); return;`.
+- **Files changed:** `src/Microsoft/Devices/Sensors/Detail/AndroidSensorBridge.cpp`.
+- **Tests:** entirely inside `#ifdef __ANDROID__`-gated code — no host-side test can exercise it.
+  Verified via a real Android NDK cross-compile of this exact translation unit (compiles cleanly).
+  Full host Devices/Sensors filtered suite re-run for regression safety: 405 tests, 401 passed, 4
+  skipped (unchanged).
+- **Sanitizer/static-analysis result:** not applicable on the host; no TSan/ASan configured for
+  the Android NDK cross-compile in this environment.
+- **Remaining limitations, explicitly left OPEN, not fabricated:** "Add fault injection for looper
+  preparation" was not implemented — `ALooper_prepare()` is a direct NDK call with no seam this
+  codebase can intercept without a new abstraction layer purely to fault-inject a call that (per
+  the NDK's own implementation) essentially only fails under genuine OOM. No real device/emulator
+  run was performed to observe this path. If real Android hardware/emulator access becomes
+  available and a fault-injection seam is later added for `ANDR2-003`-style native-call testing
+  (see that task's own resolution note for the sketch), extend it to cover this check too rather
+  than building a separate one.
 
 ### ANDR2-006 — Check disable/destroy/getEvents native failures — OPEN
 
