@@ -53,8 +53,24 @@ framework/runtime, not a game.
   correctness audit, user-requested 2026-07-07) is now **also fully closed**: all 5 audit groups
   (`P12-AUDIT-001..005`) and all 6 follow-up tasks they spawned (`P12-PITCH-001`, `P12-DOC-001`,
   `P12-CATEGORY-001`, `P12-VAR-001`, `P12-PAUSE-001`, `P12-BANK-001`) are `[x]`. **This closes the
-  entire Phase 11/12 Audio audit scope with zero remaining self-selectable or user-pending items**
-  (see §8).
+  entire Phase 11/12 Audio audit scope with zero remaining self-selectable or user-pending items (as of that point)**
+  (see §8). **Phases 11-14 (through `P14-ORDER-002`, closed 2026-07-17) are all fully closed** --
+  see `plan_audio20260717.md` (archived, do not read/use for new work) for that full history.
+- **Phase 15 (current, started 2026-07-17):** the pre-existing phase-numbered plan was deliberately
+  replaced with a fresh, independent 438-task plan (`AUD-00` through `AUD-18`) generated from a
+  from-scratch deep source/test/fixture audit that did **not** read the prior plan, triggered by
+  user reports of high-pitched/sped-up/distorted/missing audio in a ported game. See
+  `docs/cna_audio_deep_audit_2026-07-17.md` for the audit report and `plan_audio.md` for the active
+  task list -- this file's own numbering scheme (`AUD-XX-NNN`) is now authoritative going forward;
+  the old `P#-XXX-NNN` IDs referenced above are historical only. **Substantial progress this pass**
+  (7 commits so far, see §3): fixed 2 confirmed real defects with direct relevance to the reported
+  bugs (a `DynamicSoundEffectInstance` int/float mode asymmetry, and -- the highest-value finding --
+  every **MS-ADPCM-compressed** XACT WaveBank/XNB `SoundEffect` silently failing to decode at all,
+  a direct match for "missing audio"); built a genuinely new capability, a deterministic offline
+  audio render/measurement harness (`OfflineAudioRenderer.hpp`) that empirically rules out
+  SDL3_mixer's own resampler as the cause of the reported pitch bug when the source sample rate is
+  correctly declared; and expanded the XNB `SoundEffectReader` to support 8-bit PCM/float/MS-ADPCM/
+  IMA-ADPCM instead of rejecting them. See §3/§8 for the current state and what's still open.
 - **Key architectural decision:** the audio backend is **SDL3_mixer 3.x**
   (`MIX_Mixer`/`MIX_Track`/`MIX_Audio`), **not** FAudio/FACT (the user explicitly reconfirmed this
   2026-07-07, rejecting `P10-HRTF-002`'s RFC-2 optional-FAudio-backend proposal). XACT
@@ -72,7 +88,22 @@ framework/runtime, not a game.
 
 ## 2. Current status
 
-- **Build:** clean, rebuilt and reverified this pass (`P14-LIFECYCLE-001`/`P14-BUFFER-001`/
+- **Build (Phase 15, current):** clean. This pass's 7 commits: `AUD-07-001/002` (fixed
+  `DynamicSoundEffectInstance` int/float mode asymmetry), `AUD-02-007/008/009`/`AUD-07-007/009/010`
+  (checked previously-unchecked SDL/MIX return values in `DynamicSoundEffectInstance::Play()`),
+  `AUD-03/05/08` (new deterministic offline audio render/measurement harness,
+  `tests/.../Audio/OfflineAudioRenderer.hpp` + golden-test matrix), `AUD-11-008` (fixed a real,
+  confirmed defect: every MS-ADPCM-compressed XACT WaveBank entry silently failed to decode --
+  missing coefficient table in the synthetic WAV wrapper), `AUD-06` (expanded the XNB
+  `SoundEffectReader` to support 8-bit PCM/IEEE float/MS-ADPCM/IMA-ADPCM instead of rejecting them,
+  reusing the same fixed WAV-wrapper infrastructure), `AUD-05-001/002/003/008` (locked down
+  already-correct raw `SoundEffect` input-safety behavior with new regression tests, no code
+  change), and `AUD-11-001/002` (investigated and disproved the audit's A-12 suspicion about
+  compact XWB final-entry length -- CNA's existing code already matches real FAudio exactly; fixed
+  a misleading comment instead). New shared `CNA::Internal::Audio::WavWrapper`
+  (`WavWrapper.hpp`/`.cpp`) is the common WAV-assembly logic behind both the WaveBank fix and the
+  XNB reader expansion. See §3 for full detail on each, `plan_audio.md` for exact evidence/citations.
+- **Build (historical, Phase 9-14):** clean, rebuilt and reverified this pass (`P14-LIFECYCLE-001`/`P14-BUFFER-001`/
   `P14-ORDER-001`/`P14-PARSER-001`, a second user-provided external audit's fixes, on top of
   `P13-3D-001`/`P13-MIXER-001`/`P13-DOC-001`/`P13-DYNAMIC-001`, `P12-BANK-001`, `P11-PAN-002`,
   `P12-VAR-001`, `P12-CATEGORY-001`, `P12-PAUSE-001`, `P12-DOC-001`, `P12-PITCH-001`, `P11-PAN-001`,
@@ -81,7 +112,16 @@ framework/runtime, not a game.
   linked. `cna_demo_sound`/`cna_demo_2d` example targets not rebuilt this pass (no Audio *public
   XNA* API surface touched -- every Phase 14 change is to private members/internal ordering/an
   internal parser helper, not the public XNA surface).
-- **Tests:** `CnaTests` whole-suite count is **4651 / 4653 pass** (2 skipped, same as before -- see
+- **Tests (Phase 15, current):** `CnaTests` whole-suite count is **4692 / 4694 pass** (2 skipped,
+  hardware-only, unchanged). New this pass: 2 `DynamicSoundEffectInstanceTests.cpp`, ~10
+  `OfflineAudioRendererTests.cpp` (harness self-tests + a 14-case golden sample-rate matrix + a
+  9-case golden pitch-ratio matrix, parameterized so the raw test count is higher), 1
+  `WaveBankTests.cpp` (`GetSoundEffectForAdpcmEntrySucceeds`), 4 flipped-from-rejected +1 new
+  (Xma2) in `SoundEffectContentTypeReaderTests.cpp`, 4 `SoundEffectTests.cpp`, 1
+  `XactParserTests.cpp`. Every fix verified via `git stash` (new test fails against the pre-fix
+  code, passes restored) except the two "investigated, found already correct" tasks
+  (`AUD-05-001/002/003/008`, `AUD-11-001/002`), which have no production code change to stash.
+- **Tests (historical, Phase 9-14):** `CnaTests` whole-suite count is **4651 / 4653 pass** (2 skipped, same as before -- see
   below; +3 net new tests from `P14-ORDER-002` -- 5 added, 2 renamed/replaced in
   `SoundEffectInstanceTests.cpp`, plus 3 pre-existing `CueTests.cpp` tests that gained regression
   significance via comment updates only -- zero regressions, reverified via a full whole-repo run).
@@ -145,7 +185,92 @@ framework/runtime, not a game.
 ## 3. Recent changes
 
 Newest first. Full rationale, FNA/FAudio line citations, and `git stash` verification notes for
-every item are in `plan_audio.md`'s "Phase 9"/"Phase 10"/"Phase 11"/"Phase 12"/"Phase 13" sections.
+every item are in `plan_audio.md`'s "Phase 9"/"Phase 10"/"Phase 11"/"Phase 12"/"Phase 13" sections
+(historical, `P#-XXX-NNN` IDs) or `plan_audio.md`'s `AUD-XX` sections (current, Phase 15).
+
+### Phase 15 (current, 2026-07-17-, `AUD-XX-NNN` IDs)
+
+- **`AUD-11-001/002`** — investigated the deep audit's A-12 finding (a comment in
+  `XactParser.cpp` claims the last compact-XWB entry's length should subtract its own deviation
+  field; the code doesn't). Read real FAudio source directly (`FACT_internal.c`'s compact-entry
+  parsing, ~line 3106-3124, from the locally available FAudio checkout): confirmed CNA's existing
+  code is correct (no deviation subtraction for the last entry, exactly matching FAudio) -- the
+  *comment* was wrong, not the code. Found a more interesting fact en route: FAudio's own
+  non-last-entry computation in that same function reads as a genuine, long-standing bug (git-blamed
+  to at least 2018-12-18, unchanged) -- it subtracts an entry's own just-computed offset from
+  itself, always yielding zero, which would silence every non-last compact-bank entry if actually
+  hit. CNA's own non-last-entry computation deliberately does not replicate that (same precedent as
+  `P11-XACT-004`). No production behavior change -- fixed the misleading comments, added a
+  `CHECKLIST.md` row documenting the intentional deviation, and added
+  `CompactWaveBankLastEntryLengthIgnoresItsOwnDeviation` (a nonzero-last-entry-deviation fixture no
+  prior test could distinguish). See `plan_audio.md`.
+- **`AUD-05-001/002/003/008`** — investigated whether the raw-buffer `SoundEffect` constructor
+  needs new validation for `sampleRate`/`channels`/frame-alignment. Confirmed via direct probes
+  against `MIX_LoadRawAudio` that invalid `sampleRate`/`channels` are already rejected by the
+  backend (safely converted to `NotSupportedException` by the existing guard) and a misaligned byte
+  count is already handled gracefully (trailing partial frame silently ignored, not corrupted) --
+  matches real FNA's own total lack of C#-level validation here (same resolved-decision pattern as
+  `P10-DYN-001..003`). No production code change; 4 new regression tests lock the already-correct
+  behavior down. See `plan_audio.md`.
+- **`AUD-06`** — expanded the XNB `SoundEffectReader` beyond 16-bit PCM. Confirmed finding A-01:
+  real fixtures for 8-bit PCM/float/MS-ADPCM/IMA-ADPCM already existed in the test corpus but were
+  only tested as rejected, while real FNA's own reader has no such rejection at all (relies on the
+  native backend to handle any WAVEFORMATEX). Since SDL3's own WAV loader natively decodes all four
+  formats, non-16-bit-PCM formats now get wrapped in a synthetic in-memory WAV (via the same
+  `WavWrapper` the `AUD-11-008` fix uses) and decoded through `SoundEffect::FromStream`. XMA2
+  remains rejected (no decode path anywhere in this stack). Found a second real defect while
+  testing against the *real* MonoGame MS-ADPCM fixture: MonoGame's content pipeline writes `cbSize=0`
+  (no coefficient table at all) -- fixed by synthesizing the standard MS-ADPCM coefficient table
+  plus a computed `wSamplesPerBlock` when the XNB doesn't supply a usable extension. Loop points
+  now forwarded via a synthesized WAV `smpl` chunk. 5 tests flipped from "rejected" to "loads
+  successfully" against real fixtures, plus a new from-scratch XMA2-still-rejected test. See
+  `plan_audio.md`.
+- **`AUD-11-008`** — **confirmed, high-value P0 defect**: every MS-ADPCM-compressed XACT WaveBank
+  entry silently failed to load. `WaveBank.cpp`'s `BuildAdpcmWav()` wrapped raw MS-ADPCM bytes in a
+  synthetic WAV with a `cbSize=2` fmt-chunk extension (only `wSamplesPerBlock`, no coefficient
+  table) -- empirically confirmed via a standalone probe that SDL3's real MS-ADPCM decoder rejects
+  this outright ("Could not read MS ADPCM format header"). MS-ADPCM is XACT's standard compression
+  codec for size-conscious games -- a direct match for the audit's "missing audio" symptom class.
+  Fixed by adding the standard 7-pair MS-ADPCM coefficient table (new shared
+  `CNA::Internal::Audio::WavWrapper`, `WavWrapper.hpp`/`.cpp`). New test
+  `WaveBankTest.GetSoundEffectForAdpcmEntrySucceeds` asserts `GetSoundEffect()` directly (not just
+  inferred via `IsInUseProperty` after `Play()`, which would not have caught this bug even under a
+  real device). See `plan_audio.md`.
+- **`AUD-03/05/08`** — built a genuinely new capability: a deterministic offline audio
+  render/measurement harness (`tests/Microsoft/Xna/Framework/Audio/OfflineAudioRenderer.hpp`) using
+  `MIX_CreateMixer()`+`MIX_Generate()` (NOT `MIX_CreateMixerDevice()`) -- no physical device, no
+  `SDL_AUDIODRIVER`, no wall-clock timing, fully deterministic. Includes fixture generators, RMS/
+  peak/NaN-Inf detection, a Goertzel single-bin magnitude helper, and a phase-difference frequency
+  estimator (`RefineFrequencyEstimateHz`) that achieves the plan's 0.1% calibration tolerance even
+  from short windows (a basic FFT/Goertzel peak search cannot, its precision is fundamentally
+  limited by ~1/duration). New golden tests: an 8000-96000 Hz x mono/stereo sample-rate matrix
+  (closes `AUD-05-017..030`); cross-rate tests proving SDL3_mixer's resampler correctly preserves
+  frequency when a correctly-declared 22050/48000 Hz source is rendered through CNA's hard-coded
+  44100 Hz mixer spec (`AudioMixer.cpp`), in both directions -- **this rules out one entire
+  hypothesis class for the user's reported high-pitch regression**: the mixer's own resampler is
+  not the defect when the source sample rate is correctly declared; a 9-case pitch-ratio matrix
+  (`Pitch=-1.0..+1.0`) proving `2^Pitch` produces the exact expected frequency shift on real
+  rendered audio (closes `AUD-08-003/004`). See `plan_audio.md`.
+- **`AUD-02-007/008/009`/`AUD-07-007/009/010`** — `DynamicSoundEffectInstance::Play()` ignored
+  `SDL_CreateAudioStream`/`MIX_PlayTrack`'s return values, and `SubmitQueuedToStream()` ignored
+  `SDL_PutAudioStreamData`'s -- all three could leave the instance reporting a false `Playing`
+  state or corrupt `PendingBufferCount` on backend failure. All three now checked, matching this
+  codebase's `std::cerr`-diagnostic convention. New test
+  `PlayWithZeroSampleRateDoesNotReportPlayingOnStreamCreationFailure` (empirically confirmed
+  `sampleRate=0` makes `SDL_CreateAudioStream` fail). Also investigated `AUD-07-004` (constructor
+  validation): already a resolved decision from `P10-DYN-001..003` (matches FNA's own
+  zero-validation constructor) -- corrected the plan's acceptance criterion instead of
+  re-litigating it. See `plan_audio.md`.
+- **`AUD-07-001/002`** — `DynamicSoundEffectInstance::SubmitBuffer` (int16 path) never checked or
+  reset `isFloat_`, unlike `SubmitFloatBufferEXT`'s existing guard. Confirmed against real FNA
+  source that FNA itself has this exact asymmetry (`SubmitFloatBufferEXT` is an FNA/NOXNA
+  extension, not real XNA) -- CNA can be safer than FNA here without diverging from true XNA
+  behavior. `SubmitBuffer` now throws `InvalidOperationException` when called while Playing/Paused
+  in float mode, and resets `isFloat_` when called while Stopped. Two new tests, one verifying the
+  live `SDL_AudioStream` format directly via `MIX_GetTrackAudioStream`+`SDL_GetAudioStreamFormat`.
+  See `plan_audio.md`.
+
+### Phase 9-14 (historical, `P#-XXX-NNN` IDs)
 
 - **`P14-ORDER-002`** (follow-up to `P14-ORDER-001`'s scope note, user-requested 2026-07-17,
   narrowly-scoped task) — made per-track XACT filter establishment order-independent of `Play()`,
@@ -882,9 +1007,35 @@ establishment order-independence), was closed 2026-07-17 in its own scoped task 
 `P14-ORDER-002` entry for the fix, tests, and sanitizer verification. Everything else was a real
 bug, fixed for real -- see §3 for each.
 
-**There is currently no open, scoped Audio task on this branch.** Whoever resumes next needs a
-fresh instruction from the user (a new phase, a specific bug report, or explicit permission to run
-another audit pass) -- see §9 for what not to self-start without asking.
+**Phase 15 (current) is actively in progress -- `plan_audio.md`'s `AUD-XX` numbering is the live
+task list, 438 tasks total, most still open.** This is NOT a "wait for the user" state the way
+Phase 9-14's closure was -- the user's own 2026-07-17 instruction authorized working through
+`plan_audio.md` autonomously for an extended session. Concrete next candidates, in roughly the plan's
+own recommended priority order (see `docs/cna_audio_deep_audit_2026-07-17.md`'s "Recommended
+implementation order" and `plan_audio.md`'s own priority rules):
+
+1. **`AUD-02` structured diagnostics** (`AudioDiagnosticEvent`, a runtime trace switch, logging
+   negotiated mixer/device specs and final pitch-ratio composition) -- foundational infrastructure
+   the later pitch/XACT tracing work (`AUD-08`/`AUD-09`/`AUD-10`) will want to build on. Only
+   ad-hoc `std::cerr` checks exist so far (this pass's `AUD-02-007/008/009` fixes), not the
+   structured event model.
+2. **`AUD-07-008`** -- query both `SDL_AudioStream` specs after `MIX_SetTrackAudioStream` in
+   `DynamicSoundEffectInstance::Play()` (a strong risk the audit flagged, A-07, not yet verified
+   either way this pass).
+3. **`AUD-09` (Apply3D/Doppler)** -- directly relevant to the user's reported regressions (A-09:
+   "Doppler can create a large pitch increase when ported velocity units are wrong"). Not audited
+   this pass at all.
+4. **`AUD-10` (XACT pitch/RPC/variation composition)** -- directly relevant to the reported pitch
+   bug (A-10: "no XNA capture corpus proves the resulting voice parameters over time"). A large
+   section; start with `AUD-10-005/006/013` (cents-to-ratio, composition-order, no-double-apply).
+5. **`AUD-11`'s remaining items** -- IMA-ADPCM/XMA/WMA WaveBank entry handling
+   (`AUD-11-009/010/011`), streaming offset/alignment validation (`AUD-11-015/016`).
+6. **`AUD-06-010/013/014/015`** -- XNB duration-as-validation-oracle, WAVEFORMATEX coherence
+   checks, loop-point-vs-decoded-frames validation, Xbox-endian fixtures (all left open this pass).
+
+**Do not re-run a fresh full audit or restart from AUD-00** -- the audit and the 438-task plan
+already exist; work through the existing list. See §9 for what to still confirm with the user
+before doing (backend/API-surface changes), which remains unchanged from before.
 
 ---
 
@@ -916,18 +1067,24 @@ another audit pass) -- see §9 for what not to self-start without asking.
 ## 10. Resume prompt
 
 ```
-Read NEXT.md first. Do not assume anything is complete beyond what NEXT.md §2/§4 state. Phases
-9, 10, 11, 12, 13, and 14 are all closed (plan_audio.md) -- every task ID in every one of those
-phases is checked [x] with a concrete, cited status. There is NO open, scoped Audio task on this
-branch (§8) -- do not self-start a new phase or audit pass; wait for the user to name a specific
-task, report a bug, or explicitly authorize another audit round (§9).
+Read NEXT.md first, then plan_audio.md (the AUD-XX task list is authoritative for new work; the
+archived plan_audio20260717.md is historical only, do not read/use it). Phases 9-14
+(P#-XXX-NNN IDs) are all closed and historical. Phase 15 (AUD-XX-NNN IDs, 438 tasks, started
+2026-07-17 from an independent deep audit) is the CURRENT, ACTIVE work -- most tasks are still
+open. This is not a "wait for the user" state: keep working through plan_audio.md's task list in
+priority order (see §8 for concrete next candidates) unless told otherwise.
 
-1. If the user names a specific task, inspect only the files needed for it -- do not refactor
-   unrelated code. Confirm scope/approach with the user first if it's real feature work rather
-   than a one-line fix.
+1. Pick the next task from §8/plan_audio.md's own priority order. Validate every important claim
+   against current code/tests/FNA/FAudio/SDL docs before implementing -- do not "fix" parser/math
+   behavior from a comment or audit claim alone; confirm with a fixture or authoritative source
+   first (see AUD-11-001/002's entry in §3 for why this matters -- the audit's own suspicion was
+   wrong once checked against real FAudio source).
 2. Make one small, verified improvement at a time: add/extend a test, verify with the git-stash
    pattern (§7) for any behavioral fix, run the relevant build/test command, and run ASan+UBSan if
    it touches memory lifetime or ownership.
-3. Update plan_audio.md's checkbox + note for whatever sub-item was completed, then update this
-   NEXT.md (status, recent changes, next task) to reflect what changed, and commit.
+3. Update plan_audio.md's checkbox + evidence note for whatever sub-item was completed (mark [x]
+   only with concrete evidence, per the plan's own completion rules), then update this NEXT.md
+   (status, recent changes, next task) to reflect what changed, and commit -- one task, one commit.
+4. Do not stop after one task. Continue to the next item; do not end the session merely because
+   one phase/bug/test passes.
 ```
