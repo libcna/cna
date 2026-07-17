@@ -100,11 +100,11 @@ protected:
 
         fx.VertexColorEnabled = false;
         fx.Apply();
-        device.DrawPrimitives(PrimitiveType::TriangleList, 0, 6);
+        device.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
 
         fx.VertexColorEnabled = true;
         fx.Apply();
-        device.DrawPrimitives(PrimitiveType::TriangleList, 6, 6);
+        device.DrawPrimitives(PrimitiveType::TriangleList, 6, 2);
 
         const int sampleY = H / 2;
         const int sampleAx = W / 8;       // quad A: NDC x ~ -0.75

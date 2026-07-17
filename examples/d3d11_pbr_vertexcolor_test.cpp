@@ -161,7 +161,7 @@ protected:
             device.SetVertexBuffer(&vb);
 
             fx.Apply();
-            device.DrawPrimitives(PrimitiveType::TriangleList, 0, 6);
+            device.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
 
             const int sampleAx = W / 8;
             ExpectPixel("pbr3d-unskinned-emissive-only", Rectangle(sampleAx, sampleY, 1, 1),
@@ -187,7 +187,7 @@ protected:
             device.SetVertexBuffer(&vb);
 
             fx.Apply();
-            device.DrawPrimitives(PrimitiveType::TriangleList, 0, 6);
+            device.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
 
             const int sampleBx = W * 3 / 8;
             ExpectPixel("pbrskinned3d-emissive-only-identity-bone", Rectangle(sampleBx, sampleY, 1, 1),
@@ -221,12 +221,12 @@ protected:
             // Quad C: PreferPerPixelLighting=true -> Skinned3dColored.
             fx.setPreferPerPixelLightingProperty(true);
             fx.Apply();
-            device.DrawPrimitives(PrimitiveType::TriangleList, 0, 6);
+            device.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
 
             // Quad D: PreferPerPixelLighting=false (XNA's real default) -> Skinned3dVertexLitColored.
             fx.setPreferPerPixelLightingProperty(false);
             fx.Apply();
-            device.DrawPrimitives(PrimitiveType::TriangleList, 6, 6);
+            device.DrawPrimitives(PrimitiveType::TriangleList, 6, 2);
 
             const int sampleCx = W * 5 / 8;
             const int sampleDx = W * 7 / 8;

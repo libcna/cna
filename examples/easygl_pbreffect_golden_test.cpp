@@ -108,24 +108,24 @@ protected:
         fx.setRoughnessFactorProperty(1.0f);
         fx.setMetallicFactorProperty(0.0f);
         fx.Apply();
-        device.DrawPrimitives(PrimitiveType::TriangleList, 0, 6);
+        device.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
 
         // Quad B: same as A, but with a tilted normal map.
         fx.setNormalMapProperty(&tiltedNormalTex);
         fx.Apply();
-        device.DrawPrimitives(PrimitiveType::TriangleList, 6, 6);
+        device.DrawPrimitives(PrimitiveType::TriangleList, 6, 2);
 
         // Quad C: red, fully metallic, flat normal.
         fx.setTextureProperty(&redTex);
         fx.setNormalMapProperty(nullptr);
         fx.setMetallicFactorProperty(1.0f);
         fx.Apply();
-        device.DrawPrimitives(PrimitiveType::TriangleList, 12, 6);
+        device.DrawPrimitives(PrimitiveType::TriangleList, 12, 2);
 
         // Quad D: red, fully dielectric, flat normal.
         fx.setMetallicFactorProperty(0.0f);
         fx.Apply();
-        device.DrawPrimitives(PrimitiveType::TriangleList, 18, 6);
+        device.DrawPrimitives(PrimitiveType::TriangleList, 18, 2);
 
         const int sampleY = H / 2;
         const int sampleAx = W * 1 / 8;
