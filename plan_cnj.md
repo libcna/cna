@@ -279,6 +279,63 @@ onto `.cnj`, `RegisterCnjLoader<T>`, and Phase 9's hardening of those mechanisms
 
 ---
 
+## Phase 11 — Close the remaining `.xnb`-vs-`.cnj` type-coverage gap
+
+> Added 2026-07-17, right after Phase 10, following a user-requested review of "how far can `.cnj`
+> be extended to cover the maximum number of asset types." Method: cross-referenced FNA's real
+> `ContentTypeReader` inventory (`FNA/src/Content/ContentReaders/`, 56 files) against what `.xnb`
+> already implements (`plan_xnb.md`, Phases D3/E/G — all closed) and what `.cnj` implements
+> (`ContentManager.cpp`'s registered `LooseFileContentTypeReader<T>` classes). Every gap below is a
+> type where the `.xnb` binary reader already exists and is already verified — the `.cnj` reader
+> reuses the exact same target C++ types/fields, so this is porting known-correct field mappings to
+> JSON, not new design. Also surveyed 1947 real content files across 86 already-ported XNA samples
+> (`cna-samples/samples/*/Content`) for empirical asset-type usage — confirmed no sample currently
+> uses `Texture3D`/`Curve` directly (low urgency, but cheap/mechanical to close anyway), and found
+> `RolePlayingGame`'s `Content/CharacterClasses/*.xml` (etc., 286 XML files total) are original
+> `<XnaContent>` XML read by bespoke code entirely outside `ContentManager` -- `RegisterCnjLoader<T>`
+> already exists for exactly this case, but no ported sample currently uses it; a real `cna-samples`
+> adoption gap, not a `.cnj` core-format gap, so no task is opened for it here.
+
+| # | Task | Status | Acceptance criteria / implementation notes |
+|---|---|---|---|
+| CNB-43 | `Texture3DTypeReader` (`.cnj`, self-contained) | ⬜ | No native "3D texture" file format exists in CNA the way `.dds` serves `TextureCube` (confirmed: `Texture3D.hpp` has no `FromStream`/`DDSFromStream`-equivalent) -- so unlike `TextureCube`'s `sourceFile`-only `.cnj` support, this one is self-contained: JSON `"width"`/`"height"`/`"depth"` + `"data"` naming a raw binary sidecar (tightly-packed RGBA8 bytes, `width*height*depth*4`), mirroring `Model`'s existing vertex/index binary-sidecar convention. Single mip level only (level 0) -- matches `.xnb`'s own `Texture3DReader.cs` field order/semantics but deliberately skips its mip-chain and DXT-decompression handling (no real sample needs either; add later if a real need appears). Builds via `Texture3D`'s `SetData(const Color*, int)` overload. Register for `Graphics::Texture3D` (note: unlike `TextureCube`, `Texture3DReader`'s `.xnb` side targets `shared_ptr<Texture3D>` because `Texture3D` had no move constructor before that reader needed one -- confirm current `Texture3D` copy/move-ability before deciding the `.cnj` reader's own return shape, adjust if a bare-value return still doesn't compile). |
+| CNB-44 | `CurveTypeReader` (`.cnj`, self-contained) | ⬜ | JSON `"preLoop"`/`"postLoop"` (string names of `CurveLoopType`: `Constant`/`Cycle`/`CycleOffset`/`Oscillate`/`Linear`) + `"keys"`: array of `{"position","value","tangentIn","tangentOut","continuity"}` (`continuity` string name of `CurveContinuity`: `Smooth`/`Step`). Direct port of `CurveContentTypeReader.hpp`'s already-FNA-verified field order, just JSON instead of binary. Register for `Microsoft::Xna::Framework::Curve`. |
+| CNB-45 | Stock-effect `.cnj` support: `BasicEffect`/`AlphaTestEffect`/`DualTextureEffect`/`EnvironmentMapEffect`/`SkinnedEffect` | ⬜ | **Architectural note, not a new design**: `RegisterTypeReader<T>()` allows exactly one reader per C++ type, and `EffectTypeReader` already owns `std::shared_ptr<Graphics::Effect>` for the existing custom-GLSL `"type": "Effect"` shape -- so these 5 do **not** get their own `LooseFileContentTypeReader` registrations (that would collide). Instead, extend `EffectTypeReader::Read()`'s own dispatch: after parsing the envelope, branch on `envelope.type` across all 6 valid values (`"Effect"` keeps today's exact behavior; the 5 stock names each build the matching concrete effect type from JSON fields, exactly mirroring `StockEffectContentTypeReaders.cpp`'s already-verified field list per effect -- e.g. `BasicEffect`: optional `"texture"` (a `Texture2D` asset name, loaded via `cm.Load<Texture2D>()`), `"diffuseColor"`/`"emissiveColor"`/`"specularColor"` (`[r,g,b]`), `"specularPower"`, `"alpha"`, `"vertexColorEnabled"`). Requires relaxing the current unconditional `ValidateCnjEnvelope(envelope, "Effect", jsonPath)` call to `ValidateCnjEnvelopeBaseline()` + an explicit allow-list check across the 6 names (clear `ContentLoadException` naming the unrecognized `type` otherwise) -- same rejection quality `ValidateCnjEnvelope` already gives a single type, just widened to a set. |
+| CNB-46 | Tests for CNB-43/44/45 | ⬜ | One `Cnj*Tests.cpp` file per new type (`CnjTexture3DTests.cpp`, `CnjCurveTests.cpp`, `CnjStockEffectTests.cpp`), following this plan's established pattern (real fixture, round-trip value assertions, type-mismatch throws). `CnjStockEffectTests.cpp` needs at least one case per effect (5) plus the existing `"Effect"` custom-GLSL path still working unchanged (regression). |
+| CNB-47 | Docs for CNB-43/44/45/46 | ⬜ | `cnj.md`'s per-type conventions table gains rows for `Texture3D`/`Curve`/stock effects (today's table has no dedicated rows for these); "Implementation record" list gets a new item; this file's status banner updated. |
+
+## Phase 11 (continued) — `AnimationClip` sharing across `Model`/`SkinnedModel`
+
+| # | Task | Status | Acceptance criteria / implementation notes |
+|---|---|---|---|
+| CNB-48 | Let a `Model`'s/`SkinnedModel`'s `"animations"` entry reference a standalone `.cnj` `AnimationClip` asset by logical name, not only a raw `.clip.bin` path | ⬜ | Today (Task 941/Phase 77 for `Model`, pre-existing for `SkinnedModel`), every `"animations"` entry is `{"name", "clip": "<path-to-.clip.bin>"}`, always resolved via the shared `ReadAnimationClipFileEXT()` binary reader. Extend resolution so a `"clip"` value that resolves to a `.cnj` `AnimationClip` (via `cm.Load<Graphics::AnimationClipEXT>(logicalName)`, going through the normal cache) is used instead of the raw-binary path when the target isn't a `.clip.bin`-shaped file -- letting multiple models share one clip asset (e.g. a common "Idle"/"Walk" library) instead of duplicating the binary per model. Must stay backward compatible: every existing `.clip.bin`-referencing fixture (7 migrated `examples/*model_json*` fixtures, `ContentManagerSkinnedModelTests.cpp`'s fixtures) keeps working unchanged. |
+| CNB-49 | Tests + docs for CNB-48 | ⬜ | New test: two `Model`s' `"animations"` entries both name the same `.cnj` `AnimationClip` asset; assert it's loaded once (cache hit) and both models' `SkinningData::AnimationClips` produce identical `Duration`/`Tracks`. Regression: existing `.clip.bin`-based fixtures still pass unchanged. `cnj.md`/this file updated. |
+
+---
+
+## Phase 12 — glTF → `Model`/`AnimationClip` import tool (deferred, large, cross-cutting)
+
+> **Not started; do not begin without explicit confirmation**, matching this plan's own established
+> pattern for large deferred phases (see Phase 6/9's own precedent). Logged here so the proposal
+> discussed 2026-07-17 isn't lost, not as a green light to build it in the same sweep as Phase 11's
+> small mechanical readers.
+>
+> Builds on `../gltf.md`'s existing, already-thorough analysis (written for a sibling checkout,
+> confirmed to apply directly to this repo -- `SkinnedModelEXT.hpp`/`avatar-real-rendering-ext.md`/
+> `tools/avatar_asset_pipeline/convert_avatar.py` all really exist here). `gltf.md` targets
+> `SkinnedModelEXT`/`.skinnedmodel.json` (the Avatar-specific path, deliberately kept separate from
+> `.cnj` per `CNB-22`). This phase's own target is different and narrower: the general-purpose
+> `Model`/standalone `AnimationClip` path, which is now fully `.cnj`-native after Phase 10 -- no
+> `.skinnedmodel.json` involvement needed for non-Avatar use cases.
+
+| # | Task | Status | Notes |
+|---|---|---|---|
+| CNB-50 | Vendor `cgltf` (C99, single-header, MIT) and write a shared glTF-parsing core | ⬜ | Per `gltf.md` §4.1's own library comparison -- reasoning carries over unchanged. Must carry forward `convert_avatar.py`'s already-found-and-fixed bugs: topological bone reorder + `inverseBindMatrices`/`JOINTS_0` remap (silent wrong-skinning bug otherwise), non-indexed primitive handling (Khronos "Fox" sample triggers this for real). |
+| CNB-51 | `--target=cnj` output backend: emits `Model` `.cnj` (`"meshes"`, `"skeleton"`/`"animations"` fields, Task 941's existing shape) + optional standalone `.cnj` `AnimationClip` files for shared clips (CNB-48) | ⬜ | New scope beyond `gltf.md`'s own recommendation, which only covers a `--target=skinnedmodel` equivalent. Both targets should share the same parsing/bone-fix core (CNB-50); only the output serialization differs. |
+| CNB-52 | CLI tool, offline conversion only (matches `gltf.md`'s phase-1 recommendation, not the later runtime-`ContentManager`-reader phase-2) | ⬜ | Test corpus: Khronos `glTF-Sample-Assets`, per `gltf.md` §5's quality checklist (non-indexed primitives, sparse accessors, all accessor component types, 3 interpolation modes, sRGB base color, unit convention, `asset.version` validation). |
+
+---
+
 ## Relationship to other plan files
 
 - **`cnj.md`** — the design this plan implements; read it first.
