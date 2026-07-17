@@ -246,6 +246,31 @@ TEST_F(CnjStockEffectTest, UnrecognizedTypeThrows)
     EXPECT_THROW(cm.Load<std::shared_ptr<Effect>>("wrong"), ContentLoadException);
 }
 
+// Found by adversarial review, 2026-07-17: an unrecognized 'type' combined with a 'sourceFile'
+// field must report the *type* problem, not the (also-true, but less useful) sourceFile
+// rejection -- the type check must run first.
+TEST_F(CnjStockEffectTest, UnrecognizedTypeWithSourceFileReportsTypeProblem)
+{
+    ScratchContentRoot root;
+    WriteFile(root.path() / "wrong.cnj",
+              R"({"cnjVersion": 1, "type": "NotARealEffectType", "sourceFile": "x.bin"})");
+
+    ContentManager cm(nullptr, root.path().string());
+    cm.setGraphicsDevice(gd);
+
+    try
+    {
+        (void)cm.Load<std::shared_ptr<Effect>>("wrong");
+        FAIL() << "expected ContentLoadException";
+    }
+    catch (const ContentLoadException& e)
+    {
+        const std::string message = e.what();
+        EXPECT_NE(message.find("NotARealEffectType"), std::string::npos) << message;
+        EXPECT_EQ(message.find("sourceFile"), std::string::npos) << message;
+    }
+}
+
 TEST_F(CnjStockEffectTest, SourceFileRejected)
 {
     ScratchContentRoot root;

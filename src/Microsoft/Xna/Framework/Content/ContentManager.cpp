@@ -729,24 +729,30 @@ namespace Microsoft::Xna::Framework::Content
 
                 const CNA::Internal::CnjEnvelope envelope = CNA::Internal::ParseCnjEnvelope(jsonText);
                 CNA::Internal::ValidateCnjEnvelopeBaseline(envelope, jsonPath);
+
+                // Confirm envelope.type is one of the 6 valid names *before* any other check --
+                // otherwise a .cnj with both an unrecognized type and a 'sourceFile' field gets
+                // the misleading "sourceFile not supported" message instead of the real problem
+                // (an unrecognized 'type'). Found by adversarial review, 2026-07-17.
+                const bool isStockEffect =
+                    envelope.type == "BasicEffect" || envelope.type == "AlphaTestEffect" ||
+                    envelope.type == "DualTextureEffect" || envelope.type == "EnvironmentMapEffect" ||
+                    envelope.type == "SkinnedEffect";
+                if (envelope.type != "Effect" && !isStockEffect)
+                {
+                    throw ContentLoadException(
+                        "ContentManager: '" + jsonPath + "' has type '" + envelope.type + "', but an "
+                        "Effect .cnj must be one of 'Effect', 'BasicEffect', 'AlphaTestEffect', "
+                        "'DualTextureEffect', 'EnvironmentMapEffect', or 'SkinnedEffect'.");
+                }
+
                 RejectSourceFileForSelfContainedCnj(envelope, envelope.type, jsonPath);
 
                 if (envelope.type == "Effect")
                 {
                     return ReadCustomGlslEffect(jsonText, jsonPath, cm);
                 }
-                if (envelope.type == "BasicEffect" || envelope.type == "AlphaTestEffect" ||
-                    envelope.type == "DualTextureEffect" || envelope.type == "EnvironmentMapEffect" ||
-                    envelope.type == "SkinnedEffect")
-                {
-                    return ReadStockEffect(
-                        CNA::Internal::ParseJson(jsonText), envelope.type, jsonPath, cm);
-                }
-
-                throw ContentLoadException(
-                    "ContentManager: '" + jsonPath + "' has type '" + envelope.type + "', but an "
-                    "Effect .cnj must be one of 'Effect', 'BasicEffect', 'AlphaTestEffect', "
-                    "'DualTextureEffect', 'EnvironmentMapEffect', or 'SkinnedEffect'.");
+                return ReadStockEffect(CNA::Internal::ParseJson(jsonText), envelope.type, jsonPath, cm);
             }
 
         private:
