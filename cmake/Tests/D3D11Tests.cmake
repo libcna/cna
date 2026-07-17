@@ -65,4 +65,13 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "D3D11")
     cna_d3d11_ctest_command(_d3d11_rast_cullmode_cmd cna_test_d3d11_rasterizerstate_cullmode)
     cna_register_backend_test(NAME D3D11_RasterizerState_CullMode COMMAND ${_d3d11_rast_cullmode_cmd}
         TIMEOUT 60 LABELS "D3D11")
+
+    # plan_cnj.md CNB-58/CNB-67 follow-up: real-GPU pixel proof for PbrEffect (stride 48)/
+    # SkinnedPbrEffect (stride 68)/SkinnedEffect vertex-color-on-skinned-mesh (stride 56,
+    # Skinned3dColored/Skinned3dVertexLitColored) -- each new shader variant is actually selected
+    # and executes correctly, not just linked.
+    cna_d3d11_test(cna_test_d3d11_pbr_vertexcolor examples/d3d11_pbr_vertexcolor_test.cpp)
+    cna_d3d11_ctest_command(_d3d11_pbr_vertexcolor_cmd cna_test_d3d11_pbr_vertexcolor)
+    cna_register_backend_test(NAME D3D11_Pbr_VertexColor COMMAND ${_d3d11_pbr_vertexcolor_cmd}
+        TIMEOUT 60 LABELS "D3D11")
 endif()
