@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <gtest/gtest.h>
@@ -151,10 +152,48 @@ namespace
         EXPECT_EQ(result, cgltf_result_success);
         if (result != cgltf_result_success) { cgltf_free(data); return MeshOut{}; }
 
-        MeshOut out = ExtractMesh(data->meshes[0].primitives[0], "primitive0", nullptr, 1.0f);
+        MeshOut out = ExtractMesh(data, data->meshes[0].primitives[0], "primitive0", nullptr, 1.0f);
         cgltf_free(data);
         return out;
     }
+
+    // Draco mesh compression decoding (CNB-91, Phase 14F): a single triangle (POSITION at
+    // (0,0,0)/(1,0,0)/(0,1,0), a uniform (0,0,1) NORMAL, and TEXCOORD_0 (0,0)/(1,0)/(0,1)) encoded
+    // with a real draco::Encoder via draco::TriangleSoupMeshBuilder (not hand-authored bytes --
+    // Draco's own bitstream format is not something to fake) using the exact same values as
+    // every other real-glTF fixture's own unskinned triangle. The Draco encoder assigns unique
+    // attribute IDs 0/1/2 in AddAttribute() call order (POSITION/NORMAL/TEXCOORD_0), confirmed by
+    // a standalone encode+decode round-trip during authoring -- hence the
+    // "KHR_draco_mesh_compression"."attributes" mapping below.
+    const char* kDracoTriangleGltf = R"GLTF({
+  "asset": { "version": "2.0" },
+  "scene": 0,
+  "scenes": [ { "nodes": [0] } ],
+  "nodes": [ { "name": "MeshNode", "mesh": 0 } ],
+  "extensionsUsed": [ "KHR_draco_mesh_compression" ],
+  "extensionsRequired": [ "KHR_draco_mesh_compression" ],
+  "meshes": [ { "primitives": [ {
+      "attributes": { "POSITION": 0, "NORMAL": 1, "TEXCOORD_0": 2 },
+      "extensions": {
+        "KHR_draco_mesh_compression": {
+          "bufferView": 0,
+          "attributes": { "POSITION": 0, "NORMAL": 1, "TEXCOORD_0": 2 }
+        }
+      }
+  } ] } ],
+  "buffers": [ {
+    "byteLength": 156,
+    "uri": "data:application/octet-stream;base64,RFJBQ08CAgEBAAAAAwECAQAAAQf/AREBAQABAQAD/wAAAAAAAQAAAQAJAwAAAAEBCQMAAQABAwkCAAIAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AACAPwAAAAAAAAAAAACAPwAAAAAAAAAA"
+  } ],
+  "bufferViews": [
+    { "buffer": 0, "byteOffset": 0, "byteLength": 156 }
+  ],
+  "accessors": [
+    { "componentType": 5126, "count": 3, "type": "VEC3", "min": [0,0,0], "max": [1,1,0] },
+    { "componentType": 5126, "count": 3, "type": "VEC3" },
+    { "componentType": 5126, "count": 3, "type": "VEC2" }
+  ]
+})GLTF";
 }
 
 TEST(GltfImportCoreTest, ExtractMeshDetectsMismatchedPbrMapUvSets)
@@ -210,3 +249,61 @@ TEST(GltfImportCoreTest, RemapOcclusionImageReturnsNulloptOnUndecodableInput)
     const auto result = RemapOcclusionImageForDualTextureEXT(input);
     EXPECT_FALSE(result.has_value());
 }
+
+#ifdef CNA_DRACO_AVAILABLE
+// Draco mesh compression decoding (CNB-91, Phase 14F). Only compiled when this build actually has
+// libdraco support (see CNA_DRACO_AVAILABLE's own doc comment in cmake/CnaLibrary.cmake) --
+// mirrors the production code's own #ifdef, so a Draco-less build's test suite has no test to
+// skip at all rather than reporting a misleading "SKIPPED".
+TEST(GltfImportCoreTest, ExtractMeshDecodesDracoCompressedTriangle)
+{
+    const MeshOut out = ExtractPrimitive0(kDracoTriangleGltf);
+
+    // Unskinned, uncolored, no PBR maps -> stride 32 (Position+Normal+TextureCoordinate).
+    ASSERT_EQ(out.stride, 32);
+    ASSERT_FALSE(out.skinned);
+    ASSERT_FALSE(out.colored);
+    ASSERT_FALSE(out.usePbr);
+    ASSERT_EQ(out.vertexBytes.size(), 3u * 32u);
+
+    auto readFloat = [&](std::size_t byteOffset) {
+        float v;
+        std::memcpy(&v, out.vertexBytes.data() + byteOffset, sizeof(float));
+        return v;
+    };
+
+    // Vertex 0: Position (0,0,0), Normal (0,0,1), UV (0,0).
+    EXPECT_NEAR(readFloat(0), 0.0f, 1e-5f);
+    EXPECT_NEAR(readFloat(4), 0.0f, 1e-5f);
+    EXPECT_NEAR(readFloat(8), 0.0f, 1e-5f);
+    EXPECT_NEAR(readFloat(12), 0.0f, 1e-5f);
+    EXPECT_NEAR(readFloat(16), 0.0f, 1e-5f);
+    EXPECT_NEAR(readFloat(20), 1.0f, 1e-5f);
+    EXPECT_NEAR(readFloat(24), 0.0f, 1e-5f);
+    EXPECT_NEAR(readFloat(28), 0.0f, 1e-5f);
+
+    // Vertex 1: Position (1,0,0), UV (1,0).
+    EXPECT_NEAR(readFloat(32 + 0), 1.0f, 1e-5f);
+    EXPECT_NEAR(readFloat(32 + 4), 0.0f, 1e-5f);
+    EXPECT_NEAR(readFloat(32 + 24), 1.0f, 1e-5f);
+    EXPECT_NEAR(readFloat(32 + 28), 0.0f, 1e-5f);
+
+    // Vertex 2: Position (0,1,0), UV (0,1).
+    EXPECT_NEAR(readFloat(64 + 0), 0.0f, 1e-5f);
+    EXPECT_NEAR(readFloat(64 + 4), 1.0f, 1e-5f);
+    EXPECT_NEAR(readFloat(64 + 24), 0.0f, 1e-5f);
+    EXPECT_NEAR(readFloat(64 + 28), 1.0f, 1e-5f);
+
+    // Draco's own decoded face list drives the index buffer directly (prim.indices has no
+    // backing data for a Draco-compressed primitive) -- one triangle, 16-bit indices.
+    ASSERT_FALSE(out.use32BitIndices);
+    ASSERT_EQ(out.indexBytes.size(), 3u * sizeof(std::uint16_t));
+    std::uint16_t i0, i1, i2;
+    std::memcpy(&i0, out.indexBytes.data() + 0, 2);
+    std::memcpy(&i1, out.indexBytes.data() + 2, 2);
+    std::memcpy(&i2, out.indexBytes.data() + 4, 2);
+    EXPECT_EQ(i0, 0);
+    EXPECT_EQ(i1, 1);
+    EXPECT_EQ(i2, 2);
+}
+#endif

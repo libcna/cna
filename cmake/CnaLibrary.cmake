@@ -18,6 +18,22 @@ if(CNA_FFMPEG_AVAILABLE)
     pkg_check_modules(LIBSWRESAMPLE REQUIRED libswresample)
 endif()
 
+# --- Draco (KHR_draco_mesh_compression mesh decoding, plan_cnj.md CNB-91, Phase 14F) — optional,
+# genuinely a system dependency (unlike cgltf.h/stb_image.h, which are vendored single-header
+# libs): Draco is a real multi-file C++ library, not something worth vendoring wholesale just to
+# decode compressed meshes. Detected via CMake's own exported package config (Debian's
+# libdraco-dev ships draco-config.cmake); when absent, GltfImportCore::ExtractMesh keeps its own
+# existing "throws a clear unsupported-format error" behavior for a Draco-compressed primitive,
+# exactly like FFmpeg's own CNA_FFMPEG_AVAILABLE=OFF fallback above.
+find_package(draco CONFIG QUIET)
+if(draco_FOUND)
+    set(CNA_DRACO_AVAILABLE ON)
+    message(STATUS "CNA: Draco found (${draco_VERSION}) -- KHR_draco_mesh_compression decoding enabled")
+else()
+    set(CNA_DRACO_AVAILABLE OFF)
+    message(STATUS "CNA: Draco not found -- KHR_draco_mesh_compression primitives will throw at import time")
+endif()
+
 file(GLOB_RECURSE CNA_SOURCES CONFIGURE_DEPENDS
         "src/*.cpp"
 )
@@ -60,7 +76,12 @@ target_compile_definitions(CNA
         XNA5
         $<$<BOOL:${CNA_NOXNA}>:CNA_NOXNA>
         $<$<BOOL:${CNA_DEVICES}>:CNA_DEVICES>
+        $<$<BOOL:${CNA_DRACO_AVAILABLE}>:CNA_DRACO_AVAILABLE>
 )
+
+if(CNA_DRACO_AVAILABLE)
+    target_link_libraries(CNA PRIVATE draco::draco)
+endif()
 
 target_link_libraries(CNA
         PUBLIC

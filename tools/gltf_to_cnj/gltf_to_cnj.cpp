@@ -208,7 +208,7 @@ namespace
                 const std::string partName = mesh->name
                     ? (std::string(mesh->name) + (mesh->primitives_count > 1 ? "_" + std::to_string(p) : ""))
                     : ("mesh" + std::to_string(meshCounter));
-                MeshOut meshOut = ExtractMesh(mesh->primitives[p], partName, hasSkin ? &skeleton : nullptr, unitScale);
+                MeshOut meshOut = ExtractMesh(data, mesh->primitives[p], partName, hasSkin ? &skeleton : nullptr, unitScale);
 
                 // Morph target CLI/.cnj serialization: write the position/normal deltas to a
                 // binary sidecar (BuildMorphBytes) plus the default weights and (if present) the

@@ -299,13 +299,16 @@ namespace CNA::Internal::GltfImport
      * @brief Extracts one glTF mesh primitive's vertex/index bytes, selecting the vertex stride
      * and effect-relevant flags from its attributes and material (see `MeshOut`).
      *
+     * @param data The parsed glTF file (needed to resolve KHR_draco_mesh_compression attribute
+     * unique IDs against `data->accessors`' own base pointer — see `FindDracoUniqueId`'s own doc
+     * comment; unused for a non-Draco primitive).
      * @param prim The glTF primitive to extract.
      * @param name The mesh part's name (used only in error messages and `MeshOut::name`).
      * @param skel The mesh's skeleton (already topologically reordered), or nullptr if unskinned.
      * @param unitScale Uniform scale applied to every vertex position.
      * @return The extracted mesh bytes and flags.
      */
-    MeshOut ExtractMesh(const cgltf_primitive& prim, const std::string& name,
+    MeshOut ExtractMesh(const cgltf_data* data, const cgltf_primitive& prim, const std::string& name,
                          const SkeletonResult* skel, float unitScale);
 
     /**

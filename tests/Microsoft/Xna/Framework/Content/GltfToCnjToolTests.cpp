@@ -790,6 +790,40 @@ namespace
   ]
 })GLTF";
 
+    // Draco mesh compression decoding (CNB-91, Phase 14F): identical fixture and encoded bytes to
+    // GltfImportCoreTests.cpp's own kDracoTriangleGltf -- see that file's own doc comment for how
+    // the Draco bitstream was produced (a real draco::Encoder via draco::TriangleSoupMeshBuilder,
+    // not hand-authored bytes).
+    const char* kDracoTriangleGltf = R"GLTF({
+  "asset": { "version": "2.0" },
+  "scene": 0,
+  "scenes": [ { "nodes": [0] } ],
+  "nodes": [ { "name": "MeshNode", "mesh": 0 } ],
+  "extensionsUsed": [ "KHR_draco_mesh_compression" ],
+  "extensionsRequired": [ "KHR_draco_mesh_compression" ],
+  "meshes": [ { "primitives": [ {
+      "attributes": { "POSITION": 0, "NORMAL": 1, "TEXCOORD_0": 2 },
+      "extensions": {
+        "KHR_draco_mesh_compression": {
+          "bufferView": 0,
+          "attributes": { "POSITION": 0, "NORMAL": 1, "TEXCOORD_0": 2 }
+        }
+      }
+  } ] } ],
+  "buffers": [ {
+    "byteLength": 156,
+    "uri": "data:application/octet-stream;base64,RFJBQ08CAgEBAAAAAwECAQAAAQf/AREBAQABAQAD/wAAAAAAAQAAAQAJAwAAAAEBCQMAAQABAwkCAAIAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AACAPwAAAAAAAAAAAACAPwAAAAAAAAAA"
+  } ],
+  "bufferViews": [
+    { "buffer": 0, "byteOffset": 0, "byteLength": 156 }
+  ],
+  "accessors": [
+    { "componentType": 5126, "count": 3, "type": "VEC3", "min": [0,0,0], "max": [1,1,0] },
+    { "componentType": 5126, "count": 3, "type": "VEC3" },
+    { "componentType": 5126, "count": 3, "type": "VEC2" }
+  ]
+})GLTF";
+
     // Spawns the real cna_tool_gltf_to_cnj executable and waits for it to exit. Returns the exit
     // code, or -1 on a spawn-side failure (already reported via ADD_FAILURE). unitScale is passed
     // as the tool's optional 5th CLI argument when non-empty.
@@ -1484,3 +1518,44 @@ TEST(GltfToCnjToolTest, SerializesAndReloadsCubicSplineMorphWeightsThroughTheOff
     ASSERT_EQ(quarterWeights.size(), 1u);
     EXPECT_NEAR(quarterWeights[0], 0.15625f, 1e-5f);
 }
+
+#ifdef CNA_DRACO_AVAILABLE
+// Draco mesh compression decoding (CNB-91, Phase 14F): the offline CLI/.cnj path must decode a
+// KHR_draco_mesh_compression primitive too, not just the runtime glTF path -- proves ExtractMesh's
+// new `data` parameter threads correctly through gltf_to_cnj.cpp's own ConvertGroup call site.
+TEST(GltfToCnjToolTest, ConvertsDracoCompressedTriangleAndLoadsBackThroughContentManager)
+{
+    ScratchDir gltfDir;
+    ScratchDir contentRoot;
+
+    const std::filesystem::path gltfPath = gltfDir.path() / "draco.gltf";
+    WriteFile(gltfPath, kDracoTriangleGltf);
+
+    const int exitCode = RunGltfToCnjTool(gltfPath.string(), contentRoot.path().string(), "draco");
+    ASSERT_EQ(exitCode, 0);
+
+    const std::filesystem::path vertsPath = contentRoot.path() / "draco_mesh0_verts.bin";
+    std::ifstream f(vertsPath, std::ios::binary);
+    std::vector<char> bytes((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+    ASSERT_EQ(bytes.size(), 3u * 32u); // stride 32, VertexPositionNormalTexture
+
+    float px1;
+    std::memcpy(&px1, bytes.data() + 32, sizeof(float)); // vertex 1's Position.X
+    EXPECT_NEAR(px1, 1.0f, 1e-5f);
+
+    const std::filesystem::path idxPath = contentRoot.path() / "draco_mesh0_idx.bin";
+    std::ifstream fi(idxPath, std::ios::binary);
+    std::vector<char> idxBytes((std::istreambuf_iterator<char>(fi)), std::istreambuf_iterator<char>());
+    ASSERT_EQ(idxBytes.size(), 3u * sizeof(std::uint16_t));
+
+    GraphicsDevice gd;
+    ContentManager cm(nullptr, contentRoot.path().string());
+    cm.setGraphicsDevice(gd);
+    Model model = cm.Load<Model>("draco");
+    ASSERT_EQ(model.getMeshesProperty().getCountProperty(), 1);
+    ModelMesh* mesh = model.getMeshesProperty()[0];
+
+    auto* basicFx = dynamic_cast<BasicEffect*>(mesh->getMeshPartsProperty()[0]->getEffectProperty());
+    ASSERT_NE(basicFx, nullptr);
+}
+#endif

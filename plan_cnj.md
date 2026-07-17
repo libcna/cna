@@ -1,5 +1,12 @@
 # `.cnj` content format — implementation plan for CNA
 
+> **Status update (2026-07-17): Phase 14F also closed.** `KHR_draco_mesh_compression` primitives
+> now decode for real (a new optional system dependency, `libdraco-dev`, detected via CMake and
+> gated behind `CNA_DRACO_AVAILABLE` — mirrors `CNA_FFMPEG_AVAILABLE`'s own established pattern),
+> instead of always throwing a "not supported" error. Verified against a real Draco-encoded test
+> fixture (produced by a real `draco::Encoder`, not hand-authored bytes) on all 3 import paths. See
+> Phase 14's own section for full detail.
+>
 > **Status update (2026-07-17): Phase 14E also closed.** `DualTextureEffect`'s occlusion-as-
 > lightmap texture is now genuinely decoded/halved/re-encoded (via a newly-vendored
 > `stb_image`/`stb_image_write`) before being written or loaded, fixing the ~2x-too-bright
@@ -569,14 +576,28 @@ onto `.cnj`, `RegisterCnjLoader<T>`, and Phase 9's hardening of those mechanisms
 | CNB-89 | Wire into both the offline CLI/`.cnj` path and the runtime glTF path, with a cache-collision fix | ✅ | Both `gltf_to_cnj.cpp`'s `ConvertGroup` and `ContentManager.cpp`'s `ReadGltfModel()` previously shared ONE texture cache (keyed by `cgltf_image*`) across every texture role (base color, occlusion-as-`Texture2`, all 4 PBR maps) -- introducing a byte-content-differing remap for one specific role while keeping the same key would let the SAME physical `cgltf_image*`, if referenced both as `DualTextureEffect::Texture2` on one primitive AND as `PbrEffect::OcclusionMap` (unmodified) on a different primitive in the same file, incorrectly share whichever variant happened to be cached first. Fixed with a genuinely separate cache for the remapped role in both files (`remappedOcclusionTextures`/`remappedOcclusionCache`), using its own `"_texocc"+N` filename sequence in the CLI tool (not `writtenTextures`' own `"_tex"+N`, since summing two independent maps' `.size()` for a shared index still risked two unrelated entries computing the same N and colliding on disk). |
 | CNB-90 | Tests | ✅ | 2 new direct unit tests in `GltfImportCoreTests.cpp` (valid-PNG-in → re-encoded-PNG-out with a real PNG-signature check; undecodable input → `std::nullopt`, no crash). Extended the pre-existing `GltfToCnjToolTest.WiresBaseColorAndOcclusionTexturesThroughDualTextureEffect` (now also asserts the new `dualtex_texocc0.png` filename and, via `Texture2D::GetData`, that the loaded pixel is the halved `(~127,0,0,255)` value, not the raw `(255,0,0,255)` a passthrough would have produced) and added the equivalent new `RuntimeGltfModelTest.RemapsOcclusionTextureBrightnessForDualTextureEffectFromGltf` for the runtime path, both against the fixture's own solid-`(255,0,0)` 1x1 occlusion PNG. Full-suite regression: **4835 tests, 0 failures.** |
 
-### 14F — Remaining "vse udelej prosim" items ⬜ NOT STARTED
+### 14F — Draco mesh compression decoding ✅ CLOSED 2026-07-17
 
-> Task numbering reserved (`CNB-91`+) for whichever item is picked up next: true multi-UV-channel
-> rendering support for PBR maps (14B's own explicitly-deferred full fix), Draco mesh compression,
-> full MikkTSpace tangent generation, newer glTF extensions (`KHR_texture_transform`/
-> `KHR_lights_punctual`/`KHR_materials_emissive_strength`), and PBR/skinned-vertex-color shader
-> support on the other 7+ graphics backends (CNB-61/13C's own deliberately-deferred scope, now
-> being taken up).
+> `KHR_draco_mesh_compression` primitives previously threw a clear "not supported" error at import
+> time (a deliberate, honest MVP scope cut, not a silent failure). Draco is a real multi-file C++
+> library (not a single-header, vendorable-in-repo library like `cgltf.h`/`stb_image.h`), so this
+> is treated as a genuine, optional system dependency — mirroring `CNA_FFMPEG_AVAILABLE`'s own
+> established pattern exactly (detected via CMake, gated behind a compile definition, gracefully
+> degrading to the old "throws a clear error" behavior when absent).
+
+| # | Task | Status | Notes |
+|---|---|---|---|
+| CNB-91 | CMake: detect system Draco, gate behind `CNA_DRACO_AVAILABLE` | ✅ | `find_package(draco CONFIG QUIET)` (Debian's `libdraco-dev` ships a real `draco-config.cmake` exporting the `draco::draco` target — no hand-rolled `find_library`/`find_path` needed). Only the RUNTIME package (`libdraco8`) was pre-installed on the dev machine; `libdraco-dev` (the headers) needed a separate `sudo apt-get install` the project owner ran directly (this agent cannot supply a sudo password). `CNA_DRACO_AVAILABLE` is a `PUBLIC` compile definition on the `CNA` target, so it propagates transitively to `CnaTests`/`cna_tool_gltf_to_cnj` (both already link `CNA`) without any extra per-target wiring. Documented in `CLAUDE.md`'s own "System Dependencies (Linux)" section, matching FFmpeg's existing entry there. |
+| CNB-92 | Decode via `draco::Decoder` in `GltfImportCore`, wire into `ExtractMesh` | ✅ | New `DecodeDracoPrimitiveEXT`/`FindDracoUniqueId`/`UnpackDracoAttribute` helpers (all `#ifdef CNA_DRACO_AVAILABLE`). The trickiest part: `KHR_draco_mesh_compression`'s own `attributes` object maps each semantic name to the Draco bitstream's own small unique attribute ID — NOT an accessor index — but `cgltf` (which has no Draco decoding of its own) parses it through the exact same generic attribute-list code as regular accessor-backed attributes, storing the raw integer as a pointer-index placeholder its own fixup pass resolves into `&data->accessors[N]`; recovering the original integer is just pointer arithmetic against that array's base (`FindDracoUniqueId`) — the standard convention every cgltf+Draco integration uses. `ExtractMesh` gained a new leading `const cgltf_data* data` parameter (needed for that pointer arithmetic) — updated both call sites (`gltf_to_cnj.cpp`, `ContentManager.cpp`) and the direct-unit-test call site from 14B. A single `unpackSemantic` lambda unifies every per-attribute extraction call site (positions/normals/uvs/weights/joints/colors/tangent) so each one is agnostic to whether it's reading from a decoded Draco mesh or a regular accessor; triangle connectivity for a Draco primitive comes directly from the decoded mesh's own face list (`prim.indices` has no backing data to read in that case). Morph target deltas are unaffected — `KHR_draco_mesh_compression` never compresses `mesh.primitives[].targets`, per spec. |
+| CNB-93 | A real Draco-encoded test fixture + tests on all 3 paths | ✅ | Hand-authoring a valid Draco bitstream is not practical (it's a real compressed binary format) — instead wrote a small throwaway program using `draco::TriangleSoupMeshBuilder` + a real `draco::Encoder` to compress a standard unskinned triangle (matching the same Position/Normal/UV values every other fixture in this project already uses) and independently verified via a decode-round-trip (before ever touching CNA's own code) that the encoder assigns unique attribute IDs 0/1/2 in `AddAttribute()` call order — the exact mapping the embedded `"KHR_draco_mesh_compression"."attributes"` JSON needed. New direct unit test `GltfImportCoreTest.ExtractMeshDecodesDracoCompressedTriangle` (byte-level: exact Position/Normal/UV values per vertex, exact triangle indices) plus `GltfToCnjToolTest.ConvertsDracoCompressedTriangleAndLoadsBackThroughContentManager` (offline CLI/`.cnj` round-trip) and `RuntimeGltfModelTest.LoadsDracoCompressedTriangleDirectlyFromGltf` (runtime path), all `#ifdef CNA_DRACO_AVAILABLE`-gated so a Draco-less build's test suite has no test to report as "SKIPPED" (mirrors the production code's own conditional compilation, rather than a runtime `GTEST_SKIP()`). Full-suite regression: **4838 tests, 0 failures.** |
+
+### 14G — Remaining "vse udelej prosim" items ⬜ NOT STARTED
+
+> Task numbering reserved (`CNB-94`+) for whichever item is picked up next: true multi-UV-channel
+> rendering support for PBR maps (14B's own explicitly-deferred full fix), full MikkTSpace tangent
+> generation, newer glTF extensions (`KHR_texture_transform`/`KHR_lights_punctual`/
+> `KHR_materials_emissive_strength`), and PBR/skinned-vertex-color shader support on the other 7+
+> graphics backends (CNB-61/13C's own deliberately-deferred scope, now being taken up).
 
 ## Relationship to other plan files
 

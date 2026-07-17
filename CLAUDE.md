@@ -434,4 +434,11 @@ sudo apt-get install -y libavcodec-dev libavformat-dev libavutil-dev libswresamp
 
 # Note: libswscale-dev may not be available in some repos (runtime libswscale8 is enough).
 # CNA implements YUV→RGBA conversion internally and does NOT depend on libswscale headers.
+
+# Draco — optional, enables KHR_draco_mesh_compression decoding in GltfImportCore
+# (plan_cnj.md CNB-91, Phase 14F). Detected via CMake's find_package(draco CONFIG); when absent,
+# a Draco-compressed glTF primitive throws a clear "not supported" error at import time instead
+# of failing to build. Not vendored (unlike cgltf.h/stb_image.h) — a real multi-file C++ library,
+# not a single header.
+sudo apt-get install -y libdraco-dev
 ```

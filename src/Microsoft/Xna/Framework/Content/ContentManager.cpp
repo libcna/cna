@@ -1858,7 +1858,7 @@ namespace Microsoft::Xna::Framework::Content
                     const std::string partName = mesh->name
                         ? (std::string(mesh->name) + (mesh->primitives_count > 1 ? "_" + std::to_string(p) : ""))
                         : ("mesh" + std::to_string(meshCounter));
-                    MeshOut meshOut = ExtractMesh(mesh->primitives[p], partName, hasSkin ? &skeleton : nullptr, 1.0f);
+                    MeshOut meshOut = ExtractMesh(data, mesh->primitives[p], partName, hasSkin ? &skeleton : nullptr, 1.0f);
 
                     const int numVertices = meshOut.stride > 0
                         ? static_cast<int>(meshOut.vertexBytes.size()) / meshOut.stride : 0;

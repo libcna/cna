@@ -372,6 +372,39 @@ namespace
     { "bufferView": 1, "componentType": 5126, "count": 3, "type": "VEC2" }
   ]
 })GLTF";
+
+    // Draco mesh compression decoding (CNB-91, Phase 14F): identical fixture and encoded bytes to
+    // GltfImportCoreTests.cpp's own kDracoTriangleGltf -- see that file's own doc comment for how
+    // the Draco bitstream was produced.
+    const char* kDracoTriangleGltf = R"GLTF({
+  "asset": { "version": "2.0" },
+  "scene": 0,
+  "scenes": [ { "nodes": [0] } ],
+  "nodes": [ { "name": "MeshNode", "mesh": 0 } ],
+  "extensionsUsed": [ "KHR_draco_mesh_compression" ],
+  "extensionsRequired": [ "KHR_draco_mesh_compression" ],
+  "meshes": [ { "primitives": [ {
+      "attributes": { "POSITION": 0, "NORMAL": 1, "TEXCOORD_0": 2 },
+      "extensions": {
+        "KHR_draco_mesh_compression": {
+          "bufferView": 0,
+          "attributes": { "POSITION": 0, "NORMAL": 1, "TEXCOORD_0": 2 }
+        }
+      }
+  } ] } ],
+  "buffers": [ {
+    "byteLength": 156,
+    "uri": "data:application/octet-stream;base64,RFJBQ08CAgEBAAAAAwECAQAAAQf/AREBAQABAQAD/wAAAAAAAQAAAQAJAwAAAAEBCQMAAQABAwkCAAIAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AACAPwAAAAAAAAAAAACAPwAAAAAAAAAA"
+  } ],
+  "bufferViews": [
+    { "buffer": 0, "byteOffset": 0, "byteLength": 156 }
+  ],
+  "accessors": [
+    { "componentType": 5126, "count": 3, "type": "VEC3", "min": [0,0,0], "max": [1,1,0] },
+    { "componentType": 5126, "count": 3, "type": "VEC3" },
+    { "componentType": 5126, "count": 3, "type": "VEC2" }
+  ]
+})GLTF";
 }
 
 TEST(RuntimeGltfModelTest, LoadsUnskinnedTexturedModelDirectlyFromGltf)
@@ -625,3 +658,30 @@ TEST(RuntimeGltfModelTest, RemapsOcclusionTextureBrightnessForDualTextureEffectF
     EXPECT_EQ(occlusionPixel.getBProperty(), 0);
     EXPECT_EQ(occlusionPixel.getAProperty(), 255);
 }
+
+#ifdef CNA_DRACO_AVAILABLE
+// Draco mesh compression decoding (CNB-91, Phase 14F): the runtime glTF path must also decode a
+// KHR_draco_mesh_compression primitive, not just the offline CLI/.cnj path.
+TEST(RuntimeGltfModelTest, LoadsDracoCompressedTriangleDirectlyFromGltf)
+{
+    ScratchDir contentRoot;
+    WriteFile(contentRoot.path() / "draco.gltf", kDracoTriangleGltf);
+
+    GraphicsDevice gd;
+    ContentManager cm(nullptr, contentRoot.path().string());
+    cm.setGraphicsDevice(gd);
+
+    Model model = cm.Load<Model>("draco");
+    ASSERT_EQ(model.getMeshesProperty().getCountProperty(), 1);
+    ModelMesh* mesh = model.getMeshesProperty()[0];
+
+    auto* basicFx = dynamic_cast<BasicEffect*>(mesh->getMeshPartsProperty()[0]->getEffectProperty());
+    ASSERT_NE(basicFx, nullptr);
+
+    // No TEXCOORD-referencing material was authored, so BasicEffect stays untextured -- this
+    // test only needs to prove the mesh geometry itself decoded correctly (no crash, right
+    // vertex/index counts implicitly verified via GltfImportCoreTests.cpp's own more detailed
+    // byte-level assertions for the identical fixture).
+    EXPECT_FALSE(basicFx->getTextureEnabledProperty());
+}
+#endif

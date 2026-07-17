@@ -41,8 +41,16 @@
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <memory>
 #include <stdexcept>
 #include <unordered_set>
+
+// plan_cnj.md CNB-91 (Phase 14F): KHR_draco_mesh_compression decoding. Optional -- see
+// CNA_DRACO_AVAILABLE's own doc comment in cmake/CnaLibrary.cmake for why this is a real system
+// dependency rather than a vendored single-header library like cgltf.h/stb_image.h.
+#ifdef CNA_DRACO_AVAILABLE
+#include "draco/compression/decode.h"
+#endif
 
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 
@@ -707,15 +715,106 @@ namespace CNA::Internal::GltfImport
         return prim.material->emissive_texture.texture->image;
     }
 
-    MeshOut ExtractMesh(const cgltf_primitive& prim, const std::string& name, const SkeletonResult* skel,
-                         float unitScale)
+#ifdef CNA_DRACO_AVAILABLE
+    // CNB-91 (Phase 14F): decodes a Draco-compressed primitive's buffer_view into a real
+    // draco::Mesh. Dequantization/attribute-transform is left at the decoder's own default
+    // (i.e. every attribute reads back as real, already-dequantized float values via
+    // PointAttribute::ConvertValue<float>, matching the semantic meaning UnpackAccessor's own
+    // cgltf_accessor_unpack_floats gives for a regular accessor) -- SetSkipAttributeTransform is
+    // never called.
+    std::unique_ptr<draco::Mesh> DecodeDracoPrimitiveEXT(const cgltf_primitive& prim, const std::string& name)
     {
+        const cgltf_buffer_view* bv = prim.draco_mesh_compression.buffer_view;
+        if (!bv) { throw std::runtime_error("Primitive '" + name + "' has no Draco buffer_view."); }
+        const std::uint8_t* data = cgltf_buffer_view_data(bv);
+        if (!data) { throw std::runtime_error("Primitive '" + name + "' has an unreadable Draco buffer_view."); }
+
+        draco::DecoderBuffer buffer;
+        buffer.Init(reinterpret_cast<const char*>(data), bv->size);
+
+        draco::Decoder decoder;
+        draco::StatusOr<std::unique_ptr<draco::Mesh>> result = decoder.DecodeMeshFromBuffer(&buffer);
+        if (!result.ok())
+        {
+            throw std::runtime_error(
+                "Primitive '" + name + "' failed Draco decoding: " + result.status().error_msg_string());
+        }
+        return std::move(result).value();
+    }
+
+    // Recovers a Draco-compressed primitive's own attribute unique ID for the given glTF semantic
+    // (type + set index), from cgltf's own already-fixed-up cgltf_attribute::data pointer.
+    // KHR_draco_mesh_compression's "attributes" object maps each semantic name to a small integer
+    // that is the *Draco stream's own unique attribute ID* -- NOT an accessor index -- but cgltf
+    // parses it through the exact same generic attribute-list code as regular (accessor-backed)
+    // primitive attributes, storing the raw integer as a pointer-index placeholder that its own
+    // fixup pass later resolves into `&data->accessors[N]`. Recovering the original integer N is
+    // then just pointer arithmetic against that same array's base -- the standard, well-known
+    // convention every cgltf + Draco integration uses (cgltf itself has no Draco decoding of its
+    // own, so this reinterpretation is left entirely to the consumer).
+    int FindDracoUniqueId(const cgltf_primitive& prim, const cgltf_data* data,
+                           cgltf_attribute_type type, int index)
+    {
+        for (cgltf_size k = 0; k < prim.draco_mesh_compression.attributes_count; ++k)
+        {
+            const cgltf_attribute& a = prim.draco_mesh_compression.attributes[k];
+            if (a.type == type && a.index == index && a.data)
+            {
+                return static_cast<int>(a.data - data->accessors);
+            }
+        }
+        return -1;
+    }
+
+    // Reads one Draco-decoded attribute out into a flat per-point float array, in Draco's own
+    // point-index order -- the same shape UnpackAccessor's own cgltf_accessor_unpack_floats
+    // produces for a regular accessor, so callers can treat the two interchangeably.
+    std::vector<float> UnpackDracoAttribute(const draco::Mesh& mesh, int uniqueId, int numComponents,
+                                             const std::string& context)
+    {
+        if (uniqueId < 0) { return {}; }
+        const draco::PointAttribute* attr = mesh.GetAttributeByUniqueId(static_cast<std::uint32_t>(uniqueId));
+        if (!attr)
+        {
+            throw std::runtime_error("Draco attribute '" + context + "' (unique id " +
+                                      std::to_string(uniqueId) + ") not found in decoded mesh.");
+        }
+
+        std::vector<float> out(static_cast<std::size_t>(mesh.num_points()) * static_cast<std::size_t>(numComponents));
+        for (draco::PointIndex p(0); p < mesh.num_points(); ++p)
+        {
+            float* dst = out.data() + static_cast<std::size_t>(p.value()) * static_cast<std::size_t>(numComponents);
+            if (!attr->ConvertValue<float>(attr->mapped_index(p), numComponents, dst))
+            {
+                throw std::runtime_error("Failed to convert Draco attribute '" + context + "' at point " +
+                                          std::to_string(p.value()) + ".");
+            }
+        }
+        return out;
+    }
+#endif
+
+    MeshOut ExtractMesh(const cgltf_data* data, const cgltf_primitive& prim, const std::string& name,
+                         const SkeletonResult* skel, float unitScale)
+    {
+#ifdef CNA_DRACO_AVAILABLE
+        // CNB-91 (Phase 14F): decoded once here; every per-attribute unpack below (via
+        // unpackSemantic) and the index extraction near the end both branch on whether this is
+        // non-null instead of reading from cgltf's own (bufferView-less, metadata-only for a
+        // Draco primitive) accessors.
+        std::unique_ptr<draco::Mesh> dracoMesh;
+        if (prim.has_draco_mesh_compression)
+        {
+            dracoMesh = DecodeDracoPrimitiveEXT(prim, name);
+        }
+#else
         if (prim.has_draco_mesh_compression)
         {
             throw std::runtime_error(
                 "Primitive '" + name + "' uses Draco mesh compression (KHR_draco_mesh_compression), "
-                "which this tool does not support.");
+                "which this build of CNA was compiled without libdraco support for.");
         }
+#endif
 
         const cgltf_accessor* posAcc = cgltf_find_accessor(&prim, cgltf_attribute_type_position, 0);
         if (!posAcc) { throw std::runtime_error("Primitive '" + name + "' has no POSITION attribute."); }
@@ -829,20 +928,51 @@ namespace CNA::Internal::GltfImport
         const cgltf_size vertexCount = posAcc->count;
         out.vertexBytes.reserve(static_cast<std::size_t>(vertexCount) * static_cast<std::size_t>(out.stride));
 
-        const std::vector<float> positions = UnpackAccessor(posAcc, 3, "POSITION");
+#ifdef CNA_DRACO_AVAILABLE
+        if (dracoMesh && static_cast<cgltf_size>(dracoMesh->num_points()) != vertexCount)
+        {
+            throw std::runtime_error(
+                "Primitive '" + name + "' has a Draco-decoded point count that does not match its "
+                "declared POSITION accessor count (malformed file).");
+        }
+        // Unified per-semantic unpacking: reads from the decoded Draco mesh (via its own unique
+        // attribute ID) when this is a Draco-compressed primitive, or from the regular accessor
+        // otherwise -- every call site below is agnostic to which source actually backs it.
+        const auto unpackSemantic = [&](cgltf_attribute_type type, int setIndex, const cgltf_accessor* acc,
+                                         int numComponents, const char* context) -> std::vector<float>
+        {
+            if (dracoMesh)
+            {
+                const int uniqueId = FindDracoUniqueId(prim, data, type, setIndex);
+                return UnpackDracoAttribute(*dracoMesh, uniqueId, numComponents, context);
+            }
+            return acc ? UnpackAccessor(acc, static_cast<cgltf_size>(numComponents), context) : std::vector<float>();
+        };
+#else
+        const auto unpackSemantic = [&](cgltf_attribute_type /*type*/, int /*setIndex*/, const cgltf_accessor* acc,
+                                         int numComponents, const char* context) -> std::vector<float>
+        {
+            return acc ? UnpackAccessor(acc, static_cast<cgltf_size>(numComponents), context) : std::vector<float>();
+        };
+#endif
+
+        const std::vector<float> positions = unpackSemantic(cgltf_attribute_type_position, 0, posAcc, 3, "POSITION");
         // Only the unskinned stride-24 (Position+Color+TextureCoordinate) and stride-20
         // (DualTextureEffect) layouts have no room for a per-vertex Normal.
         const std::vector<float> normals = (normAcc && out.stride != 24 && out.stride != 20)
-            ? UnpackAccessor(normAcc, 3, "NORMAL") : std::vector<float>();
-        const std::vector<float> uvs = uvAcc ? UnpackAccessor(uvAcc, 2, "TEXCOORD") : std::vector<float>();
-        const std::vector<float> weights = out.skinned ? UnpackAccessor(weightsAcc, 4, "WEIGHTS_0") : std::vector<float>();
-        const std::vector<float> joints = out.skinned ? UnpackAccessor(jointsAcc, 4, "JOINTS_0") : std::vector<float>();
+            ? unpackSemantic(cgltf_attribute_type_normal, 0, normAcc, 3, "NORMAL") : std::vector<float>();
+        const std::vector<float> uvs = uvAcc
+            ? unpackSemantic(cgltf_attribute_type_texcoord, texcoordIndex, uvAcc, 2, "TEXCOORD") : std::vector<float>();
+        const std::vector<float> weights = out.skinned
+            ? unpackSemantic(cgltf_attribute_type_weights, 0, weightsAcc, 4, "WEIGHTS_0") : std::vector<float>();
+        const std::vector<float> joints = out.skinned
+            ? unpackSemantic(cgltf_attribute_type_joints, 0, jointsAcc, 4, "JOINTS_0") : std::vector<float>();
         // COLOR_0 may be VEC3 (RGB) or VEC4 (RGBA) per the glTF spec; a missing alpha defaults to
         // fully opaque. cgltf_accessor_unpack_floats/UnpackAccessor also transparently normalizes
         // whichever component type (FLOAT/normalized UBYTE/normalized USHORT) the file actually uses.
         const int colorComponents = colorAcc ? static_cast<int>(cgltf_num_components(colorAcc->type)) : 0;
         const std::vector<float> colors = out.colored
-            ? UnpackAccessor(colorAcc, static_cast<cgltf_size>(colorComponents), "COLOR_0")
+            ? unpackSemantic(cgltf_attribute_type_color, 0, colorAcc, colorComponents, "COLOR_0")
             : std::vector<float>();
 
         // plan_cnj.md CNB-57 (Phase 13A): PbrEffect's normal mapping needs a per-vertex tangent
@@ -855,7 +985,7 @@ namespace CNA::Internal::GltfImport
             const cgltf_accessor* tangentAcc = cgltf_find_accessor(&prim, cgltf_attribute_type_tangent, 0);
             if (tangentAcc)
             {
-                const std::vector<float> raw = UnpackAccessor(tangentAcc, 4, "TANGENT");
+                const std::vector<float> raw = unpackSemantic(cgltf_attribute_type_tangent, 0, tangentAcc, 4, "TANGENT");
                 tangents.resize(vertexCount);
                 for (cgltf_size v = 0; v < vertexCount; ++v)
                 {
@@ -955,18 +1085,45 @@ namespace CNA::Internal::GltfImport
             }
         }
 
+#ifdef CNA_DRACO_AVAILABLE
+        const cgltf_size indexCount = dracoMesh
+            ? static_cast<cgltf_size>(dracoMesh->num_faces()) * 3
+            : (prim.indices ? prim.indices->count : vertexCount);
+#else
         const cgltf_size indexCount = prim.indices ? prim.indices->count : vertexCount;
+#endif
         out.use32BitIndices = vertexCount > 65535;
         out.indexBytes.reserve(static_cast<std::size_t>(indexCount) *
                                 (out.use32BitIndices ? sizeof(std::uint32_t) : sizeof(std::uint16_t)));
 
-        for (cgltf_size i = 0; i < indexCount; ++i)
+#ifdef CNA_DRACO_AVAILABLE
+        if (dracoMesh)
         {
-            // Non-indexed primitive (prim.indices == nullptr): implicit sequential vertex order
-            // per the glTF spec -- Khronos's own "Fox" sample has exactly this shape.
-            const cgltf_size v = prim.indices ? cgltf_accessor_read_index(prim.indices, i) : i;
-            if (out.use32BitIndices) { AppendUint32(out.indexBytes, static_cast<std::uint32_t>(v)); }
-            else { AppendUint16(out.indexBytes, static_cast<std::uint16_t>(v)); }
+            // A Draco-compressed primitive's triangle connectivity comes directly from the
+            // decoded mesh's own face list -- prim.indices has no backing data to read (same
+            // "metadata-only accessor" situation as the per-attribute accessors above).
+            for (draco::FaceIndex fi(0); fi < dracoMesh->num_faces(); ++fi)
+            {
+                const draco::Mesh::Face& face = dracoMesh->face(fi);
+                for (int c = 0; c < 3; ++c)
+                {
+                    const auto v = static_cast<std::uint32_t>(face[static_cast<std::size_t>(c)].value());
+                    if (out.use32BitIndices) { AppendUint32(out.indexBytes, v); }
+                    else { AppendUint16(out.indexBytes, static_cast<std::uint16_t>(v)); }
+                }
+            }
+        }
+        else
+#endif
+        {
+            for (cgltf_size i = 0; i < indexCount; ++i)
+            {
+                // Non-indexed primitive (prim.indices == nullptr): implicit sequential vertex
+                // order per the glTF spec -- Khronos's own "Fox" sample has exactly this shape.
+                const cgltf_size v = prim.indices ? cgltf_accessor_read_index(prim.indices, i) : i;
+                if (out.use32BitIndices) { AppendUint32(out.indexBytes, static_cast<std::uint32_t>(v)); }
+                else { AppendUint16(out.indexBytes, static_cast<std::uint16_t>(v)); }
+            }
         }
 
         // CNB-64 (Phase 13B): morph target position/normal deltas. TANGENT deltas are not
