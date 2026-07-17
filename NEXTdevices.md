@@ -114,6 +114,37 @@ resolution notes as the template.
     genuinely needs real hardware/emulator or `TEST2-005`'s future fault-injection
     layer. "App lifecycle changes" from the required work deliberately left to
     `ANDR2-012`'s own separate scope, not silently dropped.
+15. `SDLCORE-009` (`1ff35248`) — **CLOSED**, not left OPEN (see the labeling convention
+    above for why this one differs from `VIB2-003`/`004`/`ANDR2-002`: its acceptance
+    criteria describe purely in-process C++ exception handling, fully exercisable and
+    exercised with real, passing assertions, not a hardware-dependent fact). Chose
+    log-and-continue as `DispatchToInstances()`'s formal policy (documented in its own
+    comment); the swallow itself was already correct, only silent. Split the
+    `catch (...)` into a `std::exception&`-typed clause (extracts `.what()`) plus a
+    fallback, both routed through a new `LogAndRecordDispatchException()`: debug-only
+    `SDL_Log()` for interactive observability, plus new
+    `dispatchExceptionCountForTesting_`/`lastDispatchExceptionMessageForTesting_` fields
+    (guarded by the existing `mutex_`) exposed via new `Accelerometer`/`Gyroscope`
+    static test hooks — genuine automated observability, not just "trust the log line."
+    Extended two **pre-existing** tests with the new assertions rather than adding
+    near-duplicates. Adds a new lock-acquisition site, so re-verified clean under
+    `devices-tsan` (3 runs, 0 warnings) — the first task this pass to need that.
+16. `SDLCORE-005` (`de37673d`) — the SDL-sensor analogue of `VIB2-004`: `sensor_`/
+    `sensorId_` (`Detail::SdlSensorSubsystem<TSensor>`, shared by `Accelerometer` and
+    `Gyroscope`) were cached by the first successful open and reused indefinitely.
+    Confirmed SDL3 has no sensor-specific hotplug event either (same as haptics) — added
+    `IsSensorConnected()` (re-queries `SDL_GetSensors()`, compares ids) and wired it into
+    `OpenDefaultSensorLocked()`, closing/discarding a stale handle before the existing
+    selection loop reruns. One fix covers both sensor classes (shared template).
+    **Explicitly did not implement** the required work's mid-session live-disconnect
+    bullet ("on removal, stop delivery, invalidate data, transition State... policy-driven
+    reacquisition") — the SDL sensor path is entirely event-driven with no polling loop
+    (unlike `AndroidSensorBridge::Run()`), so there's no natural trigger point for an
+    already-running instance to notice a disconnect without a genuinely new
+    architectural piece; flagged as a candidate for its own future task, not silently
+    dropped. **Left OPEN** (implementation done) — same reasoning as `VIB2-003`/`004`/
+    `ANDR2-002`. Re-verified clean under `devices-tsan` (new call site from `Start()`'s
+    locked section).
 
 **Pattern across `ANDR2-002`/`004`/`005`/`006`:** all inside `#ifdef __ANDROID__` code
 with **zero host-side test coverage possible** — verified instead via a real Android
@@ -124,13 +155,14 @@ by a pre-existing, unrelated `sharp-runtime` failure (`RandomNumberGenerator.cpp
 compiles work. `ANDR2-006`'s `liblog.so` link dependency has still **not** been
 confirmed to actually resolve at link time.
 
-**Build:** `cmake-build-devices-ubsan` and `cmake-build-android` both still build
-clean (the latter for individual translation units only, per above).
+**Build:** `cmake-build-devices-ubsan`, `cmake-build-devices-tsan`, and
+`cmake-build-android` all still build clean (the last for individual translation units
+only, per above).
 
-**Tests:** Devices/Sensors filtered suite — **284 tests** (narrower, precise filter
-used from `VIB2-003` onward: `AccelerometerTests.*:GyroscopeTests.*:CompassTests.*:
-MotionTests.*:SensorBaseTests.*:SensorSubsystemOwnershipTests.*:VibrateControllerTests.*:
-AndroidMotionMathTests.*:AndroidCompassMathTests.*`) — **280 passed, 4 skipped**
+**Tests:** Devices/Sensors filtered suite — **287 tests** (precise filter, used from
+`VIB2-003` onward: `AccelerometerTests.*:GyroscopeTests.*:CompassTests.*:MotionTests.*:
+SensorBaseTests.*:SensorSubsystemOwnershipTests.*:VibrateControllerTests.*:
+AndroidMotionMathTests.*:AndroidCompassMathTests.*`) — **283 passed, 4 skipped**
 (hardware-only, unchanged), 0 failures across every task above. Note: a broader,
 unscoped `*Devices*:*Sensor*:...` filter also incidentally matches
 `AccelerometerReadingTests`/`*EventArgsTests` (plain data-holder tests), one of which
@@ -141,11 +173,12 @@ filter and use the precise one above (or expect and ignore that one specific fai
 if using a broader filter for some other reason).
 
 **Sanitizers:** `devices-ubsan` clean on every P1 change this pass. `devices-tsan` was
-NOT re-run for `VIB2-003`/`004`/`ANDR2-002` — none add new locking/concurrency
-structure beyond what already existed (same mutex scope, same call ordering; the one
-new mutex use in `ANDR2-002`, `IsAvailable()`'s lock, is Android-only and can't run
-under host TSan at all). Re-run TSan if a future P1 task touches concurrent
-*host-buildable* logic.
+NOT re-run for `VIB2-003`/`004`/`ANDR2-002` (none add new locking/concurrency structure
+beyond what already existed, or the new lock is Android-only and can't run under host
+TSan at all) but WAS re-run for `SDLCORE-009` and `SDLCORE-005` (both add a new,
+host-buildable lock-acquisition site) — 3 consecutive clean runs each, 0
+`WARNING: ThreadSanitizer` occurrences. Re-run TSan if a future P1 task touches
+concurrent *host-buildable* logic.
 
 ---
 
@@ -173,13 +206,19 @@ checkpoints (unchanged):
   ANDR2-001/003 host-untestability, Net/sharp-runtime gaps, VIB2-001/LIFE-008's
   never-actually-reached-on-this-host new code paths).
 - **New this pass:** `VIB2-003`'s `SDL_RunHapticEffect()`-failure cleanup path,
-  `VIB2-004`'s disconnect/reconnect detection, and `ANDR2-002`'s lock/invalidation
-  fixes are all implemented and reasoned-through-correct but **never actually
-  exercised** — no haptic device and no Android hardware/emulator exist in this
+  `VIB2-004`'s and `SDLCORE-005`'s disconnect/reconnect detection, and `ANDR2-002`'s
+  lock/invalidation fixes are all implemented and reasoned-through-correct (and, for
+  `SDLCORE-005`, TSan-clean) but **never actually exercised on real hardware** — no
+  haptic device, no real SDL sensor, and no Android hardware/emulator exist in this
   container. Each has a documented hardware validation procedure in
-  `docs/devices-hardware-checklist.md` (Sections 4a, 4b, 6a respectively) and is
+  `docs/devices-hardware-checklist.md` (Sections 2a, 4a, 4b, 6a respectively) and is
   explicitly left **OPEN** in `plan_devices.md` (see Section 1's labeling convention).
-- 35+ more Section 16 tasks remain OPEN across P1/P2/P3 (`plan_devices.md` is the
+  `SDLCORE-005` additionally leaves its required work's mid-session live-disconnect
+  bullet entirely unimplemented (see Section 2's own entry) — a real architectural gap,
+  not just an untested one.
+- `SDLCORE-009` (in contrast) **is fully closed** — its acceptance criteria describe
+  purely in-process exception handling, exercised with real, passing, TSan-clean tests.
+- 33+ more Section 16 tasks remain OPEN across P1/P2/P3 (`plan_devices.md` is the
   actual source of truth — this file only tracks what's been *closed or progressed*).
 
 ---
@@ -195,6 +234,14 @@ changes only:
 - `AndroidSensorBridge.cpp`: `IsAvailable()`'s `Probe()` call now locked under
   `stateMutex_` (matching `Start()`'s pre-existing discipline); new
   `Impl::InvalidateProbeCache()`, called from `Run()`'s three native-failure sites.
+- `SdlSensorSubsystem.hpp`: `DispatchToInstances()`'s single silent `catch (...)` split
+  into a `std::exception&`-typed clause + fallback, both routed through new
+  `LogAndRecordDispatchException()`; new `dispatchExceptionCountForTesting_`/
+  `lastDispatchExceptionMessageForTesting_` fields. New `IsSensorConnected()` (static),
+  wired into `OpenDefaultSensorLocked()`'s existing cache-reuse fast path.
+  `Accelerometer`/`Gyroscope` each gained 3 new `NOXNA` static test hooks forwarding to
+  these (`GetDispatchExceptionCountForTesting`/`GetLastDispatchExceptionMessageForTesting`/
+  `IsSensorConnectedForTesting`).
 
 ---
 
@@ -237,14 +284,14 @@ tractability):
   naive symmetric `Stop()` wait, it reintroduces `TEST2-001`'s fixed deadlock.
 - `DEVPERF-002`–`005` — API/behavioral oracle generation, callback/threading contract
   documentation, structured diagnostic channel. `DEVPERF-005` (diagnostic channel) is
-  referenced as "future scope" by several already-closed tasks — worth considering
-  next since multiple other tasks implicitly wait on it.
-- `SDLCORE-005`/`009` — hotplug handling, callback exception consistency (host-buildable,
-  unlike the ANDR2-* Android items — worth prioritizing for actual TSan coverage).
+  referenced as "future scope" by several already-closed tasks (including this pass's
+  `SDLCORE-009`) — worth considering next since multiple other tasks implicitly wait on
+  it.
   `SDLCORE-007`/`011` — investigated briefly last pass, still open, see prior notes.
 - `ANDR2-007`/`009`–`012`/`014`/`015` — remaining Android-only items (`014`/`015`
   explicitly want fuzzing/instrumented hardware runs; `ANDR2-012` is the right home for
-  the "app lifecycle changes" scope `ANDR2-002` deliberately deferred).
+  the "app lifecycle changes"/mid-session-recovery scope both `ANDR2-002` and
+  `SDLCORE-005` deliberately deferred this pass).
 - `COMP2-001`/`003`/`004`/`005`/`008` — remaining Compass items (`004`/`005` need
   physical devices).
 - `MOT2-001`/`003`/`005`/`006`/`008`/`009`/`010` — remaining Motion items (`010` needs
@@ -255,10 +302,18 @@ tractability):
 - `VIB2-005`–`007` — remaining Vibrate items (`005` needs a direct-backend Android
   validation; `006`/`007` are host-testable design/behavior questions).
 - `PERF2-001`–`003`, `TEST2-002`/`004`–`006`/`010` — remaining P1 perf/test-infra items.
-  `TEST2-005` ("Build a native fault-injection layer") is now referenced by three
-  closed-but-OPEN tasks (`VIB2-003`/`004`, `ANDR2-002`) as the thing that would let
-  their acceptance criteria actually be verified — worth prioritizing highly if
-  picked up, since it unblocks re-closing multiple tasks at once, not just its own.
+  `TEST2-005` ("Build a native fault-injection layer") is now referenced by four
+  closed-but-OPEN tasks (`VIB2-003`/`004`, `ANDR2-002`, `SDLCORE-005`) as the thing that
+  would let their acceptance criteria actually be verified — worth prioritizing highly
+  if picked up, since it unblocks re-closing multiple tasks at once, not just its own.
+- A genuinely new design need surfaced twice this pass (`ANDR2-002`'s "app lifecycle
+  changes" and `SDLCORE-005`'s mid-session live-disconnect bullet): neither the SDL
+  sensor path nor the Android bridge has any mechanism for an **already-started**
+  instance to notice its device going away without a *new* `Start()` call prompting
+  re-validation. `ANDR2-012` is explicitly scoped for the Android/app-lifecycle half of
+  this; the SDL-sensor half (an already-running `Accelerometer`/`Gyroscope` instance)
+  has no task of its own yet — worth creating one if picked up, rather than bolting it
+  onto `SDLCORE-005` retroactively.
 
 Before starting any task, grep `plan_devices.md` for other tasks touching the same
 file/function first — several tasks this pass and last overlapped with or were
@@ -292,14 +347,15 @@ whether a finished implementation should be marked CLOSED or left OPEN.
 ```
 Read plan_devices.md's "Section 16. Independent perfection re-audit backlog
 (2026-07-17)" first -- it is the source of truth for current work. Read this
-file (NEXTdevices.md) for what's been done: all P0 tasks are closed, and 14 P1
+file (NEXTdevices.md) for what's been done: all P0 tasks are closed, and 16 P1
 tasks are closed or progressed so far (BASE2-007, VIB2-002, VIB2-001, LIFE-008,
 ANDR2-004, ANDR2-005, ANDR2-006, LIFE-006, COMP2-009, MOT2-002, COMP2-002,
-VIB2-003, VIB2-004, ANDR2-002 -- see Section 2 for commit hashes and a one-line
-summary of each). Read Section 1's "labeling convention" note carefully before
-closing anything -- it distinguishes tasks provable by code inspection (CLOSED)
-from tasks whose acceptance criteria name an empirical/hardware result (stays
-OPEN even once implemented).
+VIB2-003, VIB2-004, ANDR2-002, SDLCORE-009, SDLCORE-005 -- see Section 2 for
+commit hashes and a one-line summary of each). Read Section 1's "labeling
+convention" note carefully before closing anything -- it distinguishes tasks
+provable by code inspection (CLOSED, e.g. SDLCORE-009) from tasks whose
+acceptance criteria name an empirical/hardware result (stays OPEN even once
+implemented, e.g. VIB2-003/004, ANDR2-002, SDLCORE-005).
 
 Continue the P1 backlog (Section 8 lists untriaged candidates with rough
 tractability notes). Read each task's full plan_devices.md entry before
