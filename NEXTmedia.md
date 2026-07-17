@@ -171,12 +171,77 @@ Full-suite regression after Phase 5: **4791 tests, 4789 passed, 0 failed, 2 pre-
 skips.** New/changed Media-scoped tests: `VideoContentTypeReaderTests.cpp` (5 new), 1 new test added
 to the pre-existing `ContentManagerSongXnbTests.cpp`.
 
-**Now starting Phase 6** (`MEDIA-76`..`MEDIA-120`, the consolidated test-completeness sweep). Per
-`plan_media.md`'s own §6 milestone note, most of this is already satisfied incrementally by tests
-written in each phase (Phases 1-5 add tests alongside their own implementation work, not deferred) —
-this phase is primarily an audit/completeness pass confirming every public method/operator/constant
-across all Media classes has coverage per `CLAUDE.md`'s per-overload mandate, not a large net-new
-implementation effort. Phase 7 (`MEDIA-121`..`MEDIA-126`, closure/docs) follows.
+**Phase 6 complete** (`MEDIA-76`..`MEDIA-120`, the consolidated test-completeness audit). Ran a
+dedicated audit pass (a background research agent, cross-checked before acting on it) against every
+one of the 44 individual test-coverage tasks (`MEDIA-76`..`MEDIA-119`) comparing the plan's own
+stated Accept criteria against the actual test files. Result: 15 tasks were already genuinely
+covered by tests written incrementally in Phases 1-5 (confirming the plan's own "make and forget"
+premise); **29 were real, concrete gaps** — this phase closed all but one of them:
+
+- **Library item/collection classes** (`Genre`/`Artist`/`Album`/`Picture`/`PictureAlbum`/`Playlist`
+  and their 6 collections, `MEDIA-98`..`MEDIA-109`): every collection's own `Dispose()`/`IsDisposed`
+  was untested (only the contained item's), several in-bounds indexer paths were untested (only
+  out-of-range), and several item-level properties had zero coverage at all (`Genre.Albums`,
+  `Artist.IsDisposed`, `Album.Duration`/`GetThumbnail()`/`IsDisposed`, `Picture.Date`/
+  `GetThumbnail()`/`IsDisposed`, `PictureAlbum.IsDisposed`, `Playlist.Duration`/`IsDisposed`/
+  `Equals(nullptr)`). Fixed by adding the missing assertions to each class's existing test file.
+  `Album`'s required-but-previously-only-indirect "same-name-different-artist" equality case
+  (`MEDIA-102`) got a real, dedicated scratch music tree (two artists both named "Collision",
+  matching `MediaLibrarySavePictureTest`'s own established scratch-dir pattern) rather than
+  continuing to reason about it indirectly.
+- **`MediaPlayer`** (`MEDIA-76`, `MEDIA-79`..`MEDIA-84`): `Song`'s unequal-handle equality case was
+  missing; `VisualizationDataTests.cpp` **did not exist at all** before this phase (created); the
+  plain `Play(SongCollection)` overload, `MovePrevious()`, `IsRepeating`/`IsShuffled` getters,
+  `IsMuted`, and real `MediaState` transitions across Play/Pause/Resume/Stop had zero coverage.
+  `ActiveSongChanged`/`MediaStateChanged` had never been driven through the real
+  `FrameworkDispatcher::Update()` call chain — added, using `EventHandler<T>::Add()`/`Remove()`
+  (not `operator+=`) since these events are process-global statics and a leaked `+=` subscription
+  capturing local test variables by reference would dangle for the rest of the test binary's run.
+- **`Video`/`VideoPlayer`/`VideoDecoder`** (`MEDIA-86`, `MEDIA-87`, `MEDIA-89`, `MEDIA-90`,
+  `MEDIA-93`, `MEDIA-95`): `Video`'s own `SetAudioTrackEXT`/`SetVideoTrackEXT` were untested;
+  `VideoPlayer`'s `Stop`/`Pause`/`Resume` state transitions and `PlayPosition` were only ever
+  exercised as post-`Dispose()` throw-guards, never for their actual live behavior; `IsMuted`/
+  `Volume` clamping were untested on `VideoPlayer`. Three **new real fixtures** were authored
+  (`tests/assets/media/video/`, manifest updated) to close the rest: `av1_with_audio.mkv` (real
+  `libaom-av1`-encoded video + a real audio track, decoded via libavcodec's native `av1` decoder —
+  proves `MEDIA-37`'s "AV1 keeps its audio track" claim against genuine AV1 content, not just the
+  Phase 0 fixture set's `ffv1` files, which can't exercise this codec-specific claim) and
+  `multi_track_audio.mkv` (one video stream + two audio streams at deliberately different sample
+  rates — 48000 Hz vs 44100 Hz — so `VideoDecoder::SetAudioStream()`'s track switch can be proven
+  by an actual `GetSampleRate()` change, not just "didn't crash"). `DrainAudio()` itself had never
+  been called directly by any test (only `HasAudio()`/`GetSampleRate()`/`GetChannels()` presence) —
+  added a real decode-then-drain round-trip. **`MEDIA-86`'s "codec-guess-equivalent behavior"**
+  wording was found to be stale/non-existent (confirmed by grep: no such logic exists anywhere in
+  `Video.cpp`/`Video.hpp`) — dropped from the task rather than invented a test for it.
+- **`AudioTagParser`** (`MEDIA-111`): the full ID3v2 text-encoding-byte matrix (Latin-1/
+  UTF-16+BOM-little-endian/UTF-16+BOM-big-endian/UTF-16BE-no-BOM/UTF-8) was untested — the two real
+  MP3 fixtures only exercise whichever single encoding their own real tagger happened to write.
+  Closed with hand-built minimal ID3v2.4 byte buffers (matching this session's established
+  hand-constructed-binary-buffer technique from the XNB reader tests), one per encoding, calling
+  `AudioTagParser::TryReadId3v2()` directly.
+- **`MediaLibraryIndex`** (`MEDIA-113`, `MEDIA-119`): the permission-denied half of `MEDIA-53`'s
+  hardening (only the symlink-cycle half had a test) was untested — closed with a real `chmod`'d
+  unreadable subdirectory (skips itself if run as root, since permission bits don't restrict root).
+  `MEDIA-119`'s case-insensitive-Artist-normalization regression previously only lived inside
+  `ArtistTests.cpp` (the file it was supposed to be isolated from) — moved to its own dedicated
+  `ArtistGenreNormalizationRegressionTests.cpp`.
+
+**One gap remains open, documented rather than closed with a workaround** (`MEDIA-94`): true
+allocation-failure fault injection for `AllocAndConfigureCodecContext`'s two guarded branches.
+`avcodec_alloc_context3` returning null is real-OOM-only and not reachable without process-level
+fault injection (e.g. an `LD_PRELOAD` malloc interceptor) — infrastructure disproportionate to this
+one test's value. `avcodec_parameters_to_context` failing on malformed codec parameters is
+theoretically reachable via a hand-crafted file, but no reliable, non-flaky way to construct one was
+found within this phase's scope. The corrupt/truncated-fixture and I/O-error-vs-EOF halves of
+`MEDIA-94` (`MEDIA-38`/`MEDIA-40`) were already real and covered before this phase.
+
+Full-suite regression after Phase 6: **4846 tests, 4844 passed, 0 failed, 2 pre-existing hardware
+skips** (Accelerometer/Gyroscope) — grepped in full for `FAILED`, not a truncated tail, per
+`MEDIA-120`'s own requirement.
+
+**Now starting Phase 7** (`MEDIA-121`..`MEDIA-126`, documentation and closure): add every new
+deviation to `CHECKLIST.md`'s table, update `AUDIT.md`'s Media table, finalize this file, final
+build & report, one more full-suite regression run, and the future-addendum convention note.
 
 ## 2. Correction to Phase 0's own build-verification record
 

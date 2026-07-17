@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <filesystem>
+#include <unistd.h>
 #include <gtest/gtest.h>
 #include "CNA/Internal/Media/MediaLibraryIndex.hpp"
 
@@ -101,4 +102,53 @@ TEST(MediaLibraryIndexTest, TerminatesOnASelfReferentialSymlinkCycle)
     EXPECT_TRUE(index.GetSongs().empty());
 
     std::filesystem::remove_all(root, ec);
+}
+
+// plan_media.md MEDIA-53/MEDIA-113: an unreadable subdirectory (real file-permission denial, not
+// just a missing/empty root) must be silently skipped via
+// std::filesystem::directory_options::skip_permission_denied, not crash or throw. Skips itself
+// (rather than fail) if this test happens to run as root, since root bypasses Unix permission
+// bits entirely and the scenario genuinely can't be exercised there.
+TEST(MediaLibraryIndexTest, SkipsAnUnreadableSubdirectoryWithoutCrashing)
+{
+    if (::geteuid() == 0)
+    {
+        GTEST_SKIP() << "running as root -- permission bits don't restrict access, can't exercise this";
+    }
+
+    std::filesystem::path root = "tests/assets/media/.permission_denied_test_fixture";
+    std::error_code ec;
+    std::filesystem::remove_all(root, ec);
+    std::filesystem::create_directories(root / "Readable Artist" / "Readable Album", ec);
+    std::filesystem::create_directories(root / "Locked Artist" / "Locked Album", ec);
+    ASSERT_FALSE(ec);
+
+    std::filesystem::copy_file(
+        "tests/assets/media/music/Artist One/Album Alpha/01 - Sunrise.ogg",
+        root / "Readable Artist" / "Readable Album" / "01 - Track.ogg", ec);
+    std::filesystem::copy_file(
+        "tests/assets/media/music/Artist Two/Album Gamma/01 - Nocturne.wav",
+        root / "Locked Artist" / "Locked Album" / "01 - Track.wav", ec);
+    ASSERT_FALSE(ec);
+
+    std::filesystem::path lockedDir = root / "Locked Artist";
+    std::filesystem::permissions(lockedDir, std::filesystem::perms::none, ec);
+    ASSERT_FALSE(ec);
+
+    MediaLibraryIndex index(root.string());
+
+    // Restore permissions before cleanup -- remove_all can't recurse into a directory it can't
+    // read/traverse.
+    std::filesystem::permissions(
+        lockedDir,
+        std::filesystem::perms::owner_all | std::filesystem::perms::group_read |
+            std::filesystem::perms::group_exec,
+        ec);
+    std::filesystem::remove_all(root, ec);
+
+    // The readable song is still found (Sunrise.ogg's own real embedded Vorbis-comment title
+    // survives the copy/rename); the locked one is silently skipped, not a thrown exception or a
+    // crash.
+    ASSERT_EQ(index.GetSongs().size(), 1u);
+    EXPECT_EQ(index.GetSongs()[0].title, "Sunrise");
 }

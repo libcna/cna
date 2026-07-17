@@ -20,6 +20,7 @@ using Microsoft::Xna::Framework::Media::VideoPlayer;
 namespace
 {
     constexpr const char* kFixture = "tests/assets/media/video/chroma_420.mkv";
+    constexpr const char* kMultiTrackFixture = "tests/assets/media/video/multi_track_audio.mkv";
 }
 
 // plan_media.md MEDIA-1: seeds tests/Microsoft/Xna/Framework/Media/Video/ so the existing
@@ -143,4 +144,103 @@ TEST(VideoPlayerTest, LoopedVideoKeepsPlayingPastItsDuration)
     std::this_thread::sleep_for(std::chrono::milliseconds(2500)); // past the ~2s clip duration
     player.GetTexture();
     EXPECT_EQ(player.getStateProperty(), MediaState::Playing);
+}
+
+// plan_media.md MEDIA-87: real playback-state transitions across Stop/Pause/Resume -- previously
+// only Play()'s own Playing transition was covered (PlayWithMatchingMetadataDoesNotThrow) and
+// Stop/Pause/Resume were only exercised post-Dispose() as throw-guards.
+TEST(VideoPlayerTest, StopPauseResumeTransitionStateCorrectly)
+{
+    GraphicsDevice gd;
+    Video video(kFixture, &gd);
+    VideoPlayer player;
+
+    player.Play(&video);
+    ASSERT_EQ(player.getStateProperty(), MediaState::Playing);
+
+    player.Pause();
+    EXPECT_EQ(player.getStateProperty(), MediaState::Paused);
+
+    player.Resume();
+    EXPECT_EQ(player.getStateProperty(), MediaState::Playing);
+
+    player.Stop();
+    EXPECT_EQ(player.getStateProperty(), MediaState::Stopped);
+}
+
+// plan_media.md MEDIA-87: Pause()/Resume() are documented no-ops outside their expected source
+// state (Playing for Pause, Paused for Resume) -- confirms that guard, not just the happy path.
+TEST(VideoPlayerTest, PauseAndResumeAreNoOpsOutsideExpectedState)
+{
+    VideoPlayer player;
+    ASSERT_EQ(player.getStateProperty(), MediaState::Stopped);
+
+    player.Pause(); // no-op: not Playing
+    EXPECT_EQ(player.getStateProperty(), MediaState::Stopped);
+
+    player.Resume(); // no-op: not Paused
+    EXPECT_EQ(player.getStateProperty(), MediaState::Stopped);
+}
+
+// plan_media.md MEDIA-87: PlayPosition -- zero coverage anywhere else in this file.
+TEST(VideoPlayerTest, PlayPositionIsZeroWhenStoppedAndAdvancesWhilePlaying)
+{
+    GraphicsDevice gd;
+    Video video(kFixture, &gd);
+    VideoPlayer player;
+
+    EXPECT_EQ(player.getPlayPositionProperty(), System::TimeSpan::Zero);
+
+    player.Play(&video);
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    EXPECT_GT(player.getPlayPositionProperty().getTotalMillisecondsProperty(), 0.0);
+
+    player.Stop();
+    EXPECT_EQ(player.getPlayPositionProperty(), System::TimeSpan::Zero);
+}
+
+// plan_media.md MEDIA-89: IsMuted round-trip -- DefaultConstructionMatchesFna only ever checked
+// the default (false) value, never an actual set/get round trip.
+TEST(VideoPlayerTest, IsMutedRoundTrips)
+{
+    VideoPlayer player;
+    EXPECT_FALSE(player.getIsMutedProperty());
+    player.setIsMutedProperty(true);
+    EXPECT_TRUE(player.getIsMutedProperty());
+    player.setIsMutedProperty(false);
+    EXPECT_FALSE(player.getIsMutedProperty());
+}
+
+// plan_media.md MEDIA-89: Volume clamping -- zero coverage anywhere in this file (only the
+// default value of 1.0f was checked).
+TEST(VideoPlayerTest, VolumeClampsToZeroOneRange)
+{
+    VideoPlayer player;
+    player.setVolumeProperty(2.0f);
+    EXPECT_FLOAT_EQ(player.getVolumeProperty(), 1.0f);
+    player.setVolumeProperty(-1.0f);
+    EXPECT_FLOAT_EQ(player.getVolumeProperty(), 0.0f);
+}
+
+// plan_media.md MEDIA-90: SetAudioTrackEXT/SetVideoTrackEXT round-trip against a real multi-track
+// fixture (tests/assets/media/video/multi_track_audio.mkv, added Phase 6 -- no such fixture
+// existed before). VideoPlayer exposes no getter to directly observe which track is active (the
+// underlying switch itself is directly, numerically verified at the VideoDecoder level by
+// VideoDecoderTests.cpp's SetAudioStreamSwitchesToTheRequestedTrack), so this confirms the
+// VideoPlayer-level wiring: calling these methods after Play() doesn't throw and playback keeps
+// producing valid frames afterward.
+TEST(VideoPlayerTest, SetAudioTrackEXTAndSetVideoTrackEXTDoNotBreakPlaybackAfterPlay)
+{
+    GraphicsDevice gd;
+    Video video(kMultiTrackFixture, &gd);
+    VideoPlayer player;
+    player.Play(&video);
+
+    EXPECT_NO_THROW(player.SetAudioTrackEXT(1));
+    EXPECT_NO_THROW(player.SetVideoTrackEXT(0));
+
+    auto* texture = player.GetTexture();
+    ASSERT_NE(texture, nullptr);
+    EXPECT_EQ(texture->getWidthProperty(), 160);
+    EXPECT_EQ(texture->getHeightProperty(), 90);
 }

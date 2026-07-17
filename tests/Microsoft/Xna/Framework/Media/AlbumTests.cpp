@@ -1,15 +1,19 @@
 // SPDX-License-Identifier: MS-PL
 
+#include <filesystem>
+
 #include "MediaLibraryTestFixture.hpp"
 #include "Microsoft/Xna/Framework/Media/Album.hpp"
 #include "Microsoft/Xna/Framework/Media/AlbumCollection.hpp"
 #include "Microsoft/Xna/Framework/Media/Artist.hpp"
 #include "Microsoft/Xna/Framework/Media/Genre.hpp"
+#include "Microsoft/Xna/Framework/Media/MediaLibrary.hpp"
 #include "Microsoft/Xna/Framework/Media/SongCollection.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/IO/Stream.hpp"
 
 using Microsoft::Xna::Framework::Media::Album;
+using Microsoft::Xna::Framework::Media::MediaLibrary;
 using Microsoft::Xna::Framework::Media::Test::MediaLibraryTestFixture;
 
 namespace
@@ -22,6 +26,62 @@ namespace
         }
         return nullptr;
     }
+
+    // plan_media.md MEDIA-102: a real, dedicated scratch music tree with two DIFFERENT artists
+    // that both happen to have an album literally named "Collision" -- the main shared fixture
+    // tree (tests/assets/media/music/) has no such name collision by design, so
+    // AlbumEqualitySetForEqualAndUnequalAlbums could only prove equality-by-(Name,Artist)
+    // indirectly. This scratch tree (matching MediaLibrarySavePictureTest's own established
+    // pattern) proves it directly: same Name, different Artist, must compare unequal.
+    class AlbumNameCollisionTest : public ::testing::Test
+    {
+    protected:
+        std::string scratchMusicRoot = "tests/assets/media/.album_name_collision_test_music";
+
+        void SetUp() override
+        {
+            std::error_code ec;
+            std::filesystem::remove_all(scratchMusicRoot, ec);
+            std::filesystem::create_directories(scratchMusicRoot + "/Artist X/Collision", ec);
+            std::filesystem::create_directories(scratchMusicRoot + "/Artist Y/Collision", ec);
+            std::filesystem::copy_file(
+                "tests/assets/media/music/Artist Two/Album Gamma/01 - Nocturne.wav",
+                scratchMusicRoot + "/Artist X/Collision/01 - Track.wav", ec);
+            std::filesystem::copy_file(
+                "tests/assets/media/music/Artist Two/Album Gamma/01 - Nocturne.wav",
+                scratchMusicRoot + "/Artist Y/Collision/01 - Track.wav", ec);
+
+            CNA::Internal::Media::MediaLibraryPaths::SetMusicRootOverride(scratchMusicRoot);
+            CNA::Internal::Media::MediaLibraryPaths::SetPictureRootOverride(scratchMusicRoot); // no pictures needed
+        }
+
+        void TearDown() override
+        {
+            CNA::Internal::Media::MediaLibraryPaths::SetMusicRootOverride("");
+            CNA::Internal::Media::MediaLibraryPaths::SetPictureRootOverride("");
+            std::error_code ec;
+            std::filesystem::remove_all(scratchMusicRoot, ec);
+        }
+    };
+}
+
+TEST_F(AlbumNameCollisionTest, SameNameDifferentArtistAlbumsCompareUnequal)
+{
+    MediaLibrary library;
+    ASSERT_EQ(library.getAlbumsProperty()->getCountProperty(), 2);
+
+    Album* first = (*library.getAlbumsProperty())[0];
+    Album* second = (*library.getAlbumsProperty())[1];
+    ASSERT_NE(first, nullptr);
+    ASSERT_NE(second, nullptr);
+    ASSERT_EQ(first->getNameProperty(), "Collision");
+    ASSERT_EQ(second->getNameProperty(), "Collision");
+    ASSERT_NE(first->getArtistProperty()->getNameProperty(), second->getArtistProperty()->getNameProperty());
+
+    EXPECT_FALSE(first->Equals(second));
+    EXPECT_TRUE(*first != *second);
+    EXPECT_TRUE(first->Equals(first));
+    EXPECT_TRUE(*first == *first);
 }
 
 // plan_media.md MEDIA-65: real implementation, incl. HasArt reflecting the real cover.jpg fixture.
@@ -89,4 +149,68 @@ TEST_F(MediaLibraryTestFixture, AlbumGetTypeNameIsFullyQualified)
     Album* alpha = FindAlbum(library->getAlbumsProperty(), "Album Alpha");
     ASSERT_NE(alpha, nullptr);
     EXPECT_EQ(alpha->GetTypeName(), "Microsoft.Xna.Framework.Media.Album");
+}
+
+// plan_media.md MEDIA-102: Duration -- library-scanned songs stay TimeSpan.Zero until actually
+// played (§4 D9, deliberate design choice recorded in NEXTmedia.md), so a freshly-scanned Album's
+// Duration is zero too; this asserts that documented behavior rather than leaving it untested.
+TEST_F(MediaLibraryTestFixture, AlbumDurationIsZeroForUnplayedLibraryScannedSongs)
+{
+    Album* alpha = FindAlbum(library->getAlbumsProperty(), "Album Alpha");
+    ASSERT_NE(alpha, nullptr);
+    EXPECT_EQ(alpha->getDurationProperty(), System::TimeSpan::Zero);
+}
+
+// plan_media.md MEDIA-102: GetThumbnail() -- both the has-art and no-art branches, not just
+// GetAlbumArt()'s own coverage above.
+TEST_F(MediaLibraryTestFixture, AlbumGetThumbnailReturnsArtWhenAvailable)
+{
+    Album* alpha = FindAlbum(library->getAlbumsProperty(), "Album Alpha");
+    ASSERT_NE(alpha, nullptr);
+
+    System::IO::Stream* thumb = alpha->GetThumbnail();
+    ASSERT_NE(thumb, nullptr);
+    EXPECT_GT(thumb->getLengthProperty(), 0);
+    delete thumb;
+}
+
+TEST_F(MediaLibraryTestFixture, AlbumGetThumbnailThrowsWhenNoArt)
+{
+    Album* beta = FindAlbum(library->getAlbumsProperty(), "Album Beta");
+    ASSERT_NE(beta, nullptr);
+    EXPECT_THROW(beta->GetThumbnail(), System::InvalidOperationException);
+}
+
+// plan_media.md MEDIA-102: IsDisposed, not exercised anywhere else in this file.
+TEST_F(MediaLibraryTestFixture, AlbumDisposeFlipsIsDisposed)
+{
+    Album* alpha = FindAlbum(library->getAlbumsProperty(), "Album Alpha");
+    ASSERT_NE(alpha, nullptr);
+    ASSERT_FALSE(alpha->getIsDisposedProperty());
+
+    alpha->Dispose();
+
+    EXPECT_TRUE(alpha->getIsDisposedProperty());
+}
+
+// plan_media.md MEDIA-103: AlbumCollection's own indexer (in-bounds) and Dispose()/IsDisposed --
+// not exercised anywhere else in this file (only Count was previously checked).
+TEST_F(MediaLibraryTestFixture, AlbumCollectionIndexerReturnsAlbumsInBounds)
+{
+    auto* albums = library->getAlbumsProperty();
+    ASSERT_EQ(albums->getCountProperty(), 4);
+    for (SharpRuntime::intcs i = 0; i < albums->getCountProperty(); ++i)
+    {
+        EXPECT_NE((*albums)[i], nullptr);
+    }
+}
+
+TEST_F(MediaLibraryTestFixture, AlbumCollectionDisposeFlipsIsDisposed)
+{
+    auto* albums = library->getAlbumsProperty();
+    ASSERT_FALSE(albums->getIsDisposedProperty());
+
+    albums->Dispose();
+
+    EXPECT_TRUE(albums->getIsDisposedProperty());
 }

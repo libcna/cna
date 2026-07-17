@@ -99,3 +99,89 @@ TEST(AudioTagParserTest, Id3v2ParserFailsGracefullyOnNonId3Input)
     AudioTags tags;
     EXPECT_FALSE(AudioTagParser::TryReadId3v2(notId3, tags));
 }
+
+namespace
+{
+    // Hand-builds a minimal, real ID3v2.4 tag containing a single TIT2 (title) frame whose text
+    // payload uses the given encoding byte, matching AudioTagParser.cpp's own documented matrix
+    // (plan_media.md D11): 0x00=Latin-1, 0x01=UTF-16+BOM, 0x02=UTF-16BE, 0x03=UTF-8. All frame/tag
+    // sizes are synchsafe (7 significant bits per byte), matching real ID3v2.4 (Twilight.mp3's own
+    // real fixture format).
+    std::vector<uint8_t> BuildId3v24WithTitleFrame(uint8_t encoding, const std::vector<uint8_t>& textPayload)
+    {
+        std::vector<uint8_t> frameData;
+        frameData.push_back(encoding);
+        frameData.insert(frameData.end(), textPayload.begin(), textPayload.end());
+
+        std::vector<uint8_t> frame;
+        frame.insert(frame.end(), {'T', 'I', 'T', '2'});
+        uint32_t frameSize = static_cast<uint32_t>(frameData.size());
+        frame.push_back(static_cast<uint8_t>((frameSize >> 21) & 0x7F));
+        frame.push_back(static_cast<uint8_t>((frameSize >> 14) & 0x7F));
+        frame.push_back(static_cast<uint8_t>((frameSize >> 7) & 0x7F));
+        frame.push_back(static_cast<uint8_t>(frameSize & 0x7F));
+        frame.push_back(0); // flags byte 1
+        frame.push_back(0); // flags byte 2
+        frame.insert(frame.end(), frameData.begin(), frameData.end());
+
+        uint32_t tagSize = static_cast<uint32_t>(frame.size());
+        std::vector<uint8_t> tag;
+        tag.insert(tag.end(), {'I', 'D', '3', 4, 0, 0}); // "ID3" + major version 4 + revision + flags
+        tag.push_back(static_cast<uint8_t>((tagSize >> 21) & 0x7F));
+        tag.push_back(static_cast<uint8_t>((tagSize >> 14) & 0x7F));
+        tag.push_back(static_cast<uint8_t>((tagSize >> 7) & 0x7F));
+        tag.push_back(static_cast<uint8_t>(tagSize & 0x7F));
+        tag.insert(tag.end(), frame.begin(), frame.end());
+        return tag;
+    }
+}
+
+// plan_media.md MEDIA-111: the full text-encoding-byte matrix (Latin-1/UTF-16+BOM/UTF-16BE/UTF-8)
+// -- the two real MP3 fixtures only ever exercise whichever single encoding their own real tagger
+// happened to write, not all four documented in AudioTagParser.cpp's own DecodeId3TextFrame.
+TEST(AudioTagParserTest, Id3v2TextFrameDecodesLatin1Encoding)
+{
+    // 0x00 = Latin-1: 'C', 'a', 0xE9 ("Café" minus the trailing 'f' for brevity), NUL terminator.
+    AudioTags tags;
+    auto tag = BuildId3v24WithTitleFrame(0x00, {'C', 'a', 0xE9, 0x00});
+    ASSERT_TRUE(AudioTagParser::TryReadId3v2(tag, tags));
+    EXPECT_EQ(tags.title, "Ca\xC3\xA9"); // "Caé" in UTF-8
+}
+
+TEST(AudioTagParserTest, Id3v2TextFrameDecodesUtf16WithLittleEndianBom)
+{
+    // 0x01 = UTF-16 + BOM: FF FE (little-endian BOM) then "Aé" as UTF-16LE code units, NUL term.
+    AudioTags tags;
+    auto tag = BuildId3v24WithTitleFrame(
+        0x01, {0xFF, 0xFE, 'A', 0x00, 0xE9, 0x00, 0x00, 0x00});
+    ASSERT_TRUE(AudioTagParser::TryReadId3v2(tag, tags));
+    EXPECT_EQ(tags.title, "A\xC3\xA9"); // "Aé" in UTF-8
+}
+
+TEST(AudioTagParserTest, Id3v2TextFrameDecodesUtf16WithBigEndianBom)
+{
+    // 0x01 = UTF-16 + BOM: FE FF (big-endian BOM) then "Aé" as UTF-16BE code units, NUL term.
+    AudioTags tags;
+    auto tag = BuildId3v24WithTitleFrame(
+        0x01, {0xFE, 0xFF, 0x00, 'A', 0x00, 0xE9, 0x00, 0x00});
+    ASSERT_TRUE(AudioTagParser::TryReadId3v2(tag, tags));
+    EXPECT_EQ(tags.title, "A\xC3\xA9");
+}
+
+TEST(AudioTagParserTest, Id3v2TextFrameDecodesUtf16BigEndianWithoutBom)
+{
+    // 0x02 = UTF-16BE (ID3v2.4 only), no BOM: "Aé" as UTF-16BE code units, NUL terminator.
+    AudioTags tags;
+    auto tag = BuildId3v24WithTitleFrame(0x02, {0x00, 'A', 0x00, 0xE9, 0x00, 0x00});
+    ASSERT_TRUE(AudioTagParser::TryReadId3v2(tag, tags));
+    EXPECT_EQ(tags.title, "A\xC3\xA9");
+}
+
+TEST(AudioTagParserTest, Id3v2TextFrameDecodesUtf8Encoding)
+{
+    // 0x03 = UTF-8 (ID3v2.4 only): "Aé" already as real UTF-8 bytes, NUL terminator.
+    AudioTags tags;
+    auto tag = BuildId3v24WithTitleFrame(0x03, {'A', 0xC3, 0xA9, 0x00});
+    ASSERT_TRUE(AudioTagParser::TryReadId3v2(tag, tags));
+    EXPECT_EQ(tags.title, "A\xC3\xA9");
+}

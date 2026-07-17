@@ -123,3 +123,136 @@ TEST_F(MediaPlayerTest, VolumeClampsToZeroOneRange)
     MediaPlayer::setVolumeProperty(-1.0f);
     EXPECT_FLOAT_EQ(MediaPlayer::getVolumeProperty(), 0.0f);
 }
+
+// plan_media.md MEDIA-80: the plain Play(SongCollection) overload (distinct from
+// Play(SongCollection, index), already covered by ShuffleCanRepeatTheSameSongIndex/etc.) --
+// confirms it starts at index 0, matching Play(songs, 0)'s own documented equivalence.
+TEST_F(MediaPlayerTest, PlaySongCollectionStartsAtIndexZero)
+{
+    Song a(kFixtureA, "A");
+    Song b(kFixtureB, "B");
+    SongCollection songs({&a, &b});
+
+    MediaPlayer::Play(songs);
+
+    EXPECT_EQ(MediaPlayer::getQueueProperty().getActiveSongIndexProperty(), 0);
+    Song* active = MediaPlayer::getQueueProperty().getActiveSongProperty();
+    ASSERT_NE(active, nullptr);
+    EXPECT_EQ(active->getNameProperty(), "A");
+}
+
+// plan_media.md MEDIA-80: State transitions across Play/Pause/Resume/Stop -- not asserted
+// anywhere else in this file (other tests exercise the queue/index side effects only).
+TEST_F(MediaPlayerTest, StateTransitionsAcrossPlayPauseResumeStop)
+{
+    EXPECT_EQ(MediaPlayer::getStateProperty(), Microsoft::Xna::Framework::Media::MediaState::Stopped);
+
+    Song song(kFixtureA, "A");
+    MediaPlayer::Play(&song);
+    EXPECT_EQ(MediaPlayer::getStateProperty(), Microsoft::Xna::Framework::Media::MediaState::Playing);
+
+    MediaPlayer::Pause();
+    EXPECT_EQ(MediaPlayer::getStateProperty(), Microsoft::Xna::Framework::Media::MediaState::Paused);
+
+    MediaPlayer::Resume();
+    EXPECT_EQ(MediaPlayer::getStateProperty(), Microsoft::Xna::Framework::Media::MediaState::Playing);
+
+    MediaPlayer::Stop();
+    EXPECT_EQ(MediaPlayer::getStateProperty(), Microsoft::Xna::Framework::Media::MediaState::Stopped);
+}
+
+// plan_media.md MEDIA-81: MovePrevious(), never exercised anywhere else in this file (only
+// MoveNext() is, via ShuffleCanRepeatTheSameSongIndex); non-shuffled so movement is deterministic.
+TEST_F(MediaPlayerTest, MovePreviousMovesBackwardThroughTheQueue)
+{
+    Song a(kFixtureA, "A");
+    Song b(kFixtureB, "B");
+    SongCollection songs({&a, &b});
+
+    MediaPlayer::Play(songs, 1);
+    EXPECT_EQ(MediaPlayer::getQueueProperty().getActiveSongIndexProperty(), 1);
+
+    MediaPlayer::MovePrevious();
+    EXPECT_EQ(MediaPlayer::getQueueProperty().getActiveSongIndexProperty(), 0);
+}
+
+// plan_media.md MEDIA-81: IsRepeating/IsShuffled getters -- only the setters were previously
+// exercised (indirectly, via SetUp/TearDown resets and ShuffleCanRepeatTheSameSongIndex).
+TEST_F(MediaPlayerTest, IsRepeatingAndIsShuffledGettersReflectSetters)
+{
+    EXPECT_FALSE(MediaPlayer::getIsRepeatingProperty());
+    EXPECT_FALSE(MediaPlayer::getIsShuffledProperty());
+
+    MediaPlayer::setIsRepeatingProperty(true);
+    EXPECT_TRUE(MediaPlayer::getIsRepeatingProperty());
+
+    MediaPlayer::setIsShuffledProperty(true);
+    EXPECT_TRUE(MediaPlayer::getIsShuffledProperty());
+}
+
+// plan_media.md MEDIA-82: IsMuted get/set, zero coverage anywhere else in this file.
+TEST_F(MediaPlayerTest, IsMutedGetSet)
+{
+    EXPECT_FALSE(MediaPlayer::getIsMutedProperty());
+    MediaPlayer::setIsMutedProperty(true);
+    EXPECT_TRUE(MediaPlayer::getIsMutedProperty());
+    MediaPlayer::setIsMutedProperty(false);
+    EXPECT_FALSE(MediaPlayer::getIsMutedProperty());
+}
+
+// plan_media.md MEDIA-83: ActiveSongChanged/MediaStateChanged, driven through the real, already-
+// wired FrameworkDispatcher::Update() call chain (not a direct OnActiveSongChanged()/
+// OnMediaStateChanged() invocation) -- confirms the deferred-event plumbing genuinely fires, not
+// just that the raise-if-called methods work in isolation. Uses Add()/Remove() (not operator+=)
+// so the stack-captured lambdas are unsubscribed before the test returns -- MediaPlayer's event
+// fields are static/process-global, so a leaked operator+= subscription capturing local
+// references by reference would dangle for the rest of the test binary's run.
+TEST_F(MediaPlayerTest, ActiveSongChangedAndMediaStateChangedFireThroughFrameworkDispatcherUpdate)
+{
+    bool activeSongChangedFired = false;
+    bool mediaStateChangedFired = false;
+    auto activeSongToken = MediaPlayer::ActiveSongChanged.Add(
+        [&activeSongChangedFired](System::Object*, const System::EventArgs&)
+        {
+            activeSongChangedFired = true;
+        });
+    auto mediaStateToken = MediaPlayer::MediaStateChanged.Add(
+        [&mediaStateChangedFired](System::Object*, const System::EventArgs&)
+        {
+            mediaStateChangedFired = true;
+        });
+
+    Microsoft::Xna::Framework::FrameworkDispatcher::ActiveSongChanged = false;
+    Microsoft::Xna::Framework::FrameworkDispatcher::MediaStateChanged = false;
+
+    Song song(kFixtureA, "A");
+    MediaPlayer::Play(&song); // flips both flags (new active song + Stopped->Playing transition)
+
+    Microsoft::Xna::Framework::FrameworkDispatcher::Update();
+
+    EXPECT_TRUE(activeSongChangedFired);
+    EXPECT_TRUE(mediaStateChangedFired);
+
+    MediaPlayer::ActiveSongChanged.Remove(activeSongToken);
+    MediaPlayer::MediaStateChanged.Remove(mediaStateToken);
+}
+
+// plan_media.md MEDIA-84: IsVisualizationEnabled/GetVisualizationData -- zero coverage anywhere
+// else. SDL3_mixer does not expose visualization data (MediaPlayer.cpp's own documented
+// limitation) -- this asserts that documented behavior explicitly rather than leaving it
+// silently untested.
+TEST_F(MediaPlayerTest, VisualizationIsDocumentedAsUnsupportedBySdl3Mixer)
+{
+    EXPECT_FALSE(MediaPlayer::getIsVisualizationEnabledProperty());
+    MediaPlayer::setIsVisualizationEnabledProperty(true);
+    EXPECT_FALSE(MediaPlayer::getIsVisualizationEnabledProperty()); // setter is a documented no-op
+
+    Microsoft::Xna::Framework::Media::VisualizationData data;
+    for (float& v : data.freq) v = 1.0f;
+    for (float& v : data.samp) v = 1.0f;
+    MediaPlayer::GetVisualizationData(data);
+    // GetVisualizationData() is also a documented no-op -- the buffer is left untouched, not
+    // zeroed or populated, matching MediaPlayer.cpp's own comment.
+    for (float v : data.freq) EXPECT_FLOAT_EQ(v, 1.0f);
+    for (float v : data.samp) EXPECT_FLOAT_EQ(v, 1.0f);
+}

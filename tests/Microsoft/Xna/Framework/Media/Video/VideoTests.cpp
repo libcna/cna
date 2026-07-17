@@ -73,3 +73,21 @@ TEST(VideoTest, GetTypeNameIsFullyQualified)
     Video video(kFixture, &gd);
     EXPECT_EQ(video.GetTypeName(), "Microsoft.Xna.Framework.Media.Video");
 }
+
+// plan_media.md MEDIA-86: Video's own SetAudioTrackEXT/SetVideoTrackEXT (distinct from
+// VideoPlayer's identically-named methods -- these only record the selected track index and
+// forward to an attached VideoPlayer, which is nullptr for a standalone Video like this one, so
+// "doesn't throw and other fields stay unaffected" is what's actually observable at this level).
+TEST(VideoTest, SetAudioTrackEXTAndSetVideoTrackEXTDoNotThrowOrAffectOtherFields)
+{
+    GraphicsDevice gd;
+    Video video(kFixture, &gd, 2000, 160, 90, 25.0f, VideoSoundtrackType::MusicAndDialog);
+
+    EXPECT_NO_THROW(video.SetAudioTrackEXT(1));
+    EXPECT_NO_THROW(video.SetVideoTrackEXT(1));
+    EXPECT_NO_THROW(video.SetAudioTrackEXT(-1)); // "no explicit selection" sentinel
+
+    EXPECT_EQ(video.getWidthProperty(), 160);
+    EXPECT_EQ(video.getHeightProperty(), 90);
+    EXPECT_EQ(video.getDurationProperty(), System::TimeSpan::FromMilliseconds(2000));
+}

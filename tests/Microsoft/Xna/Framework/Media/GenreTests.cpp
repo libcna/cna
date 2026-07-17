@@ -85,3 +85,37 @@ TEST_F(MediaLibraryTestFixture, GenreCollectionIndexerAndIterationWork)
     for (Genre* g : *genres) { EXPECT_NE(g, nullptr); ++count; }
     EXPECT_EQ(count, 2);
 }
+
+// plan_media.md MEDIA-98: Albums property, not exercised by any other test above.
+TEST_F(MediaLibraryTestFixture, RockGenreAlbumsPropertyContainsRockAlbums)
+{
+    Genre* rock = FindGenre(library->getGenresProperty(), "Rock");
+    ASSERT_NE(rock, nullptr);
+    ASSERT_NE(rock->getAlbumsProperty(), nullptr);
+    EXPECT_GT(rock->getAlbumsProperty()->getCountProperty(), 0);
+}
+
+// plan_media.md MEDIA-98: Genre::Dispose() flips IsDisposed; a non-owning view, so the
+// underlying Albums/Songs collections (owned by MediaLibrary) remain independently valid.
+TEST_F(MediaLibraryTestFixture, GenreDisposeFlipsIsDisposed)
+{
+    Genre* rock = FindGenre(library->getGenresProperty(), "Rock");
+    ASSERT_NE(rock, nullptr);
+    ASSERT_FALSE(rock->getIsDisposedProperty());
+
+    rock->Dispose();
+
+    EXPECT_TRUE(rock->getIsDisposedProperty());
+}
+
+// plan_media.md MEDIA-99: GenreCollection's own Dispose()/IsDisposed, distinct from any one
+// contained Genre's Dispose()/IsDisposed.
+TEST_F(MediaLibraryTestFixture, GenreCollectionDisposeFlipsIsDisposed)
+{
+    auto* genres = library->getGenresProperty();
+    ASSERT_FALSE(genres->getIsDisposedProperty());
+
+    genres->Dispose();
+
+    EXPECT_TRUE(genres->getIsDisposedProperty());
+}

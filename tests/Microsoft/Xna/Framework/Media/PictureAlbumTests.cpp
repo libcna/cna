@@ -4,6 +4,7 @@
 #include "Microsoft/Xna/Framework/Media/PictureAlbum.hpp"
 #include "Microsoft/Xna/Framework/Media/PictureAlbumCollection.hpp"
 #include "Microsoft/Xna/Framework/Media/PictureCollection.hpp"
+#include "System/ArgumentOutOfRangeException.hpp"
 
 using Microsoft::Xna::Framework::Media::PictureAlbum;
 using Microsoft::Xna::Framework::Media::Test::MediaLibraryTestFixture;
@@ -89,4 +90,38 @@ TEST_F(MediaLibraryTestFixture, PictureAlbumGetTypeNameIsFullyQualified)
     PictureAlbum* root = library->getRootPictureAlbumProperty();
     ASSERT_NE(root, nullptr);
     EXPECT_EQ(root->GetTypeName(), "Microsoft.Xna.Framework.Media.PictureAlbum");
+}
+
+// plan_media.md MEDIA-106: IsDisposed, not exercised anywhere else in this file.
+TEST_F(MediaLibraryTestFixture, PictureAlbumDisposeFlipsIsDisposed)
+{
+    PictureAlbum* root = library->getRootPictureAlbumProperty();
+    PictureAlbum* vacation = FindChildAlbum(root->getAlbumsProperty(), "Vacation");
+    ASSERT_NE(vacation, nullptr);
+    ASSERT_FALSE(vacation->getIsDisposedProperty());
+
+    vacation->Dispose();
+
+    EXPECT_TRUE(vacation->getIsDisposedProperty());
+}
+
+// plan_media.md MEDIA-107: PictureAlbumCollection's own explicit out-of-range indexer test and
+// Dispose()/IsDisposed -- neither was exercised anywhere else in this file (only in-bounds access
+// via FindChildAlbum, and only implicitly, never Dispose()).
+TEST_F(MediaLibraryTestFixture, PictureAlbumCollectionIndexerThrowsOutOfRange)
+{
+    auto* albums = library->getRootPictureAlbumProperty()->getAlbumsProperty();
+    EXPECT_THROW((void)(*albums)[-1], System::ArgumentOutOfRangeException);
+    EXPECT_THROW((void)(*albums)[static_cast<SharpRuntime::intcs>(albums->getCountProperty())],
+                 System::ArgumentOutOfRangeException);
+}
+
+TEST_F(MediaLibraryTestFixture, PictureAlbumCollectionDisposeFlipsIsDisposed)
+{
+    auto* albums = library->getRootPictureAlbumProperty()->getAlbumsProperty();
+    ASSERT_FALSE(albums->getIsDisposedProperty());
+
+    albums->Dispose();
+
+    EXPECT_TRUE(albums->getIsDisposedProperty());
 }

@@ -15,6 +15,8 @@ namespace
     constexpr const char* kBitDepth10 = "tests/assets/media/video/bitdepth_10.mkv";
     constexpr const char* kBitDepth12 = "tests/assets/media/video/bitdepth_12.mkv";
     constexpr const char* kAudioTail = "tests/assets/media/video/audio_tail.mkv";
+    constexpr const char* kAv1WithAudio = "tests/assets/media/video/av1_with_audio.mkv";
+    constexpr const char* kMultiTrackAudio = "tests/assets/media/video/multi_track_audio.mkv";
 
     // SMPTE bar reference colors sampled at fixture-authoring time (manifest.json), y=0.3*height,
     // 7 bars left to right. Generous tolerance for chroma-subsampling/bit-depth-downshift rounding.
@@ -126,6 +128,104 @@ TEST(VideoDecoderTest, AudioTailFixtureHasAudio)
     EXPECT_TRUE(decoder.HasAudio());
     EXPECT_GT(decoder.GetSampleRate(), 0);
     EXPECT_GT(decoder.GetChannels(), 0);
+}
+
+// plan_media.md MEDIA-93: DrainAudio() itself, not exercised by any other test above (only
+// HasAudio()/GetSampleRate()/GetChannels() presence were checked) -- confirms real decoded audio
+// samples are actually produced and returned, not just that the stream metadata is present.
+TEST(VideoDecoderTest, DrainAudioProducesRealSamplesAfterDecodingFrames)
+{
+    VideoDecoder decoder;
+    ASSERT_TRUE(decoder.Open(kAudioTail));
+    ASSERT_TRUE(decoder.HasAudio());
+
+    std::vector<uint8_t> rgba;
+    double pts = 0.0;
+    for (int i = 0; i < 5; ++i)
+    {
+        if (!decoder.NextFrame(rgba, pts)) break;
+    }
+
+    std::vector<float> samples;
+    decoder.DrainAudio(samples);
+    EXPECT_GT(samples.size(), 0u);
+
+    // A second drain with no further decoding must not return stale/duplicate data --
+    // DrainAudio()'s own documented "appended to, not replaced" contract still means the
+    // *source* buffer (pendingAudio_) is cleared after each drain.
+    std::vector<float> secondDrain;
+    decoder.DrainAudio(secondDrain);
+    EXPECT_TRUE(secondDrain.empty());
+}
+
+// plan_media.md MEDIA-89/MEDIA-37: real AV1-coded content (not just the generic ffv1 fixtures)
+// keeps its audio track through the same unified decode path -- a deliberate improvement beyond
+// FNA's own dav1dfile-based AV1 handling, which is video-only.
+TEST(VideoDecoderTest, Av1ContentDecodesVideoAndKeepsItsAudioTrack)
+{
+    VideoDecoder decoder;
+    ASSERT_TRUE(decoder.Open(kAv1WithAudio));
+    EXPECT_EQ(decoder.GetWidth(), 160);
+    EXPECT_EQ(decoder.GetHeight(), 90);
+    ASSERT_TRUE(decoder.HasAudio());
+    EXPECT_GT(decoder.GetSampleRate(), 0);
+    EXPECT_GT(decoder.GetChannels(), 0);
+
+    std::vector<uint8_t> rgba;
+    double pts = 0.0;
+    ASSERT_TRUE(decoder.NextFrame(rgba, pts));
+    EXPECT_EQ(rgba.size(), static_cast<std::size_t>(160 * 90 * 4));
+
+    // Audio packets interleaved in the container may not all land before the very first video
+    // packet -- decode a few more frames (matching DrainAudioProducesRealSamplesAfterDecodingFrames'
+    // own established pattern) before expecting DrainAudio() to have real samples.
+    for (int i = 0; i < 4; ++i)
+    {
+        if (!decoder.NextFrame(rgba, pts)) break;
+    }
+
+    std::vector<float> samples;
+    decoder.DrainAudio(samples);
+    EXPECT_GT(samples.size(), 0u);
+}
+
+// plan_media.md MEDIA-90/MEDIA-95: SetAudioStream() by index, against a real 2-track fixture --
+// the two tracks deliberately use different sample rates (48000 vs 44100) so GetSampleRate()
+// actually changing after the switch proves the track really changed, not just that the call
+// didn't crash.
+TEST(VideoDecoderTest, SetAudioStreamSwitchesToTheRequestedTrack)
+{
+    VideoDecoder decoder;
+    ASSERT_TRUE(decoder.Open(kMultiTrackAudio));
+    ASSERT_TRUE(decoder.HasAudio());
+    EXPECT_EQ(decoder.GetSampleRate(), 48000); // track 0, the default
+
+    decoder.SetAudioStream(1);
+    EXPECT_EQ(decoder.GetSampleRate(), 44100); // track 1
+
+    decoder.SetAudioStream(0);
+    EXPECT_EQ(decoder.GetSampleRate(), 48000); // back to track 0
+}
+
+// plan_media.md MEDIA-95: SetVideoStream() -- the multi-track fixture has only one video stream
+// (index 0), so this confirms re-selecting the same, already-active video stream by index is a
+// safe, correctness-preserving no-op rather than confirming an actual switch (no second video
+// stream fixture exists to test that with -- see plan_media.md's own honest-gap note).
+TEST(VideoDecoderTest, SetVideoStreamReselectingTheSameStreamPreservesDimensions)
+{
+    VideoDecoder decoder;
+    ASSERT_TRUE(decoder.Open(kMultiTrackAudio));
+    ASSERT_EQ(decoder.GetWidth(), 160);
+    ASSERT_EQ(decoder.GetHeight(), 90);
+
+    decoder.SetVideoStream(0);
+
+    EXPECT_EQ(decoder.GetWidth(), 160);
+    EXPECT_EQ(decoder.GetHeight(), 90);
+
+    std::vector<uint8_t> rgba;
+    double pts = 0.0;
+    EXPECT_TRUE(decoder.NextFrame(rgba, pts));
 }
 
 // plan_media.md MEDIA-38: fault injection -- Open() must not crash on a truncated/corrupted file,

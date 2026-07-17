@@ -10,6 +10,8 @@ namespace
 {
     constexpr const char* kRealFixture =
         "tests/assets/media/music/Artist One/Album Alpha/01 - Sunrise.ogg";
+    constexpr const char* kOtherRealFixture =
+        "tests/assets/media/music/Artist One/Album Beta/01 - Twilight.mp3";
 }
 
 // plan_media.md MEDIA-10: the ctor's missing-file path now throws the same typed exception FNA
@@ -77,6 +79,18 @@ TEST(SongTest, EqualsAndOperatorsCompareByHandle)
     EXPECT_TRUE(a.Equals(&b));
     EXPECT_TRUE(a == b);
     EXPECT_FALSE(a != b);
+}
+
+// plan_media.md MEDIA-76: the unequal case -- two different handles must NOT compare equal, even
+// with the same display Name, confirming Equals()/operator==/operator!= genuinely compare by
+// handle rather than always returning true.
+TEST(SongTest, EqualsAndOperatorsCompareUnequalForDifferentHandles)
+{
+    Song a(kRealFixture, "Same Display Name");
+    Song b(kOtherRealFixture, "Same Display Name");
+    EXPECT_FALSE(a.Equals(&b));
+    EXPECT_FALSE(a == b);
+    EXPECT_TRUE(a != b);
 }
 
 TEST(SongTest, PlayCountGetSet)

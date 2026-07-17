@@ -95,3 +95,69 @@ TEST_F(MediaLibraryTestFixture, PictureGetTypeNameIsFullyQualified)
     ASSERT_NE(beach, nullptr);
     EXPECT_EQ(beach->GetTypeName(), "Microsoft.Xna.Framework.Media.Picture");
 }
+
+// plan_media.md MEDIA-104: Date -- sourced from the real file's last-write-time
+// (PictureLibraryIndex), not exercised by any other test above.
+TEST_F(MediaLibraryTestFixture, PictureDateIsARealNonDefaultTimestamp)
+{
+    Picture* beach = FindPicture(library->getPicturesProperty(), "beach");
+    ASSERT_NE(beach, nullptr);
+    EXPECT_NE(beach->getDateProperty(), std::chrono::system_clock::time_point{});
+}
+
+// plan_media.md MEDIA-104: GetThumbnail() -- only GetImage() was covered above.
+TEST_F(MediaLibraryTestFixture, PictureGetThumbnailRoundTripsByteForByte)
+{
+    Picture* beach = FindPicture(library->getPicturesProperty(), "beach");
+    ASSERT_NE(beach, nullptr);
+
+    std::ifstream src("tests/assets/media/pictures/Vacation/beach.jpg", std::ios::binary);
+    ASSERT_TRUE(src.is_open());
+    std::vector<uint8_t> expected((std::istreambuf_iterator<char>(src)), std::istreambuf_iterator<char>());
+
+    System::IO::Stream* stream = beach->GetThumbnail();
+    ASSERT_NE(stream, nullptr);
+    std::vector<uint8_t> actual(static_cast<std::size_t>(stream->getLengthProperty()));
+    if (!actual.empty())
+    {
+        stream->Read(actual.data(), 0, static_cast<SharpRuntime::intcs>(actual.size()));
+    }
+    delete stream;
+
+    ASSERT_EQ(actual.size(), expected.size());
+    EXPECT_TRUE(std::equal(actual.begin(), actual.end(), expected.begin()));
+}
+
+// plan_media.md MEDIA-104: IsDisposed, not exercised anywhere else in this file.
+TEST_F(MediaLibraryTestFixture, PictureDisposeFlipsIsDisposed)
+{
+    Picture* beach = FindPicture(library->getPicturesProperty(), "beach");
+    ASSERT_NE(beach, nullptr);
+    ASSERT_FALSE(beach->getIsDisposedProperty());
+
+    beach->Dispose();
+
+    EXPECT_TRUE(beach->getIsDisposedProperty());
+}
+
+// plan_media.md MEDIA-105: PictureCollection's own indexer (in-bounds) and Dispose()/IsDisposed --
+// only Count was previously checked.
+TEST_F(MediaLibraryTestFixture, PictureCollectionIndexerReturnsPicturesInBounds)
+{
+    auto* pics = library->getPicturesProperty();
+    ASSERT_EQ(pics->getCountProperty(), 3);
+    for (SharpRuntime::intcs i = 0; i < pics->getCountProperty(); ++i)
+    {
+        EXPECT_NE((*pics)[i], nullptr);
+    }
+}
+
+TEST_F(MediaLibraryTestFixture, PictureCollectionDisposeFlipsIsDisposed)
+{
+    auto* pics = library->getPicturesProperty();
+    ASSERT_FALSE(pics->getIsDisposedProperty());
+
+    pics->Dispose();
+
+    EXPECT_TRUE(pics->getIsDisposedProperty());
+}

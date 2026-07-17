@@ -30,16 +30,8 @@ TEST_F(MediaLibraryTestFixture, ArtistsContainsBothArtists)
     EXPECT_NE(FindArtist(library->getArtistsProperty(), "Artist Two"), nullptr);
 }
 
-// plan_media.md MEDIA-54/D10: "ARTIST ONE" (Twilight.mp3's case-variant tag) must NOT create a
-// second, distinct Artist entry -- confirms the normalization applied in MediaLibraryIndex flows
-// through end-to-end into the real public API.
-TEST_F(MediaLibraryTestFixture, CaseVariantArtistTagDidNotCreateADuplicateArtist)
-{
-    EXPECT_EQ(FindArtist(library->getArtistsProperty(), "ARTIST ONE"), nullptr);
-    Artist* artistOne = FindArtist(library->getArtistsProperty(), "Artist One");
-    ASSERT_NE(artistOne, nullptr);
-    EXPECT_EQ(artistOne->getSongsProperty()->getCountProperty(), 2); // Sunrise + Twilight
-}
+// plan_media.md MEDIA-119: the case-variant-artist-tag regression itself now lives in its own
+// dedicated, isolated file -- see ArtistGenreNormalizationRegressionTests.cpp.
 
 TEST_F(MediaLibraryTestFixture, ArtistOneHasTwoAlbums)
 {
@@ -82,4 +74,36 @@ TEST_F(MediaLibraryTestFixture, ArtistCollectionIndexerThrowsOutOfRange)
     EXPECT_THROW((void)(*artists)[-1], System::ArgumentOutOfRangeException);
     EXPECT_THROW((void)(*artists)[static_cast<SharpRuntime::intcs>(artists->getCountProperty())],
                  System::ArgumentOutOfRangeException);
+}
+
+// plan_media.md MEDIA-101: the in-bounds case, not just the out-of-range case above.
+TEST_F(MediaLibraryTestFixture, ArtistCollectionIndexerReturnsArtistsInBounds)
+{
+    auto* artists = library->getArtistsProperty();
+    ASSERT_EQ(artists->getCountProperty(), 2);
+    EXPECT_NE((*artists)[0], nullptr);
+    EXPECT_NE((*artists)[1], nullptr);
+}
+
+// plan_media.md MEDIA-100: Artist::IsDisposed, not exercised anywhere else in this file.
+TEST_F(MediaLibraryTestFixture, ArtistDisposeFlipsIsDisposed)
+{
+    Artist* artistOne = FindArtist(library->getArtistsProperty(), "Artist One");
+    ASSERT_NE(artistOne, nullptr);
+    ASSERT_FALSE(artistOne->getIsDisposedProperty());
+
+    artistOne->Dispose();
+
+    EXPECT_TRUE(artistOne->getIsDisposedProperty());
+}
+
+// plan_media.md MEDIA-101: ArtistCollection's own Dispose()/IsDisposed.
+TEST_F(MediaLibraryTestFixture, ArtistCollectionDisposeFlipsIsDisposed)
+{
+    auto* artists = library->getArtistsProperty();
+    ASSERT_FALSE(artists->getIsDisposedProperty());
+
+    artists->Dispose();
+
+    EXPECT_TRUE(artists->getIsDisposedProperty());
 }

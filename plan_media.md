@@ -693,146 +693,165 @@ free to override a row — the tasks that depend on it are cited so the blast ra
 > consistency; `GetTypeName` exact value. Tasks below are split by behavior/class rather than bundled,
 > matching that per-overload mandate.
 
-- [ ] **MEDIA-76 — SongTests.** Both ctors + file-existence validation (now `FileNotFoundException`,
+- [x] **MEDIA-76 — SongTests.** Both ctors + file-existence validation (now `FileNotFoundException`,
   MEDIA-10); `Name`/`Duration`/`PlayCount`; the 4 FNA-faithful constant getters (MEDIA-13), asserted
   explicitly as constants; `Equals`/`GetHashCode` (incl. MEDIA-14's content-based-hash regression)/
   `operator==`/`operator!=`; `Dispose`/`IsDisposed`; `FromUri`.
 
-- [ ] **MEDIA-77 — MediaQueueTests.** `ActiveSong`/`ActiveSongIndex`/`Count`/indexer (incl. MEDIA-11's
+- [x] **MEDIA-77 — MediaQueueTests.** `ActiveSong`/`ActiveSongIndex`/`Count`/indexer (incl. MEDIA-11's
   corrected exception type)/`Add`/`Clear`.
 
-- [ ] **MEDIA-78 — SongCollectionTests.** Indexer (incl. MEDIA-12's corrected exception type)/`Count`/
+- [x] **MEDIA-78 — SongCollectionTests.** Indexer (incl. MEDIA-12's corrected exception type)/`Count`/
   `IsDisposed`/`Dispose`/iteration (`begin`/`end`).
 
-- [ ] **MEDIA-79 — VisualizationDataTests.** `Frequencies`/`Samples` sizing (`Size==256`) and zero-init.
+- [x] **MEDIA-79 — VisualizationDataTests.** `Frequencies`/`Samples` sizing (`Size==256`) and zero-init.
 
-- [ ] **MEDIA-80 — MediaPlayer-PlaybackTests.** `Play(Song)`; `Play(SongCollection)`;
+- [x] **MEDIA-80 — MediaPlayer-PlaybackTests.** `Play(Song)`; `Play(SongCollection)`;
   `Play(SongCollection, index)`; `Pause`/`Resume`/`Stop`; `State` transitions across all of the above.
 
-- [ ] **MEDIA-81 — MediaPlayer-QueueNavigationTests.** `MoveNext`/`MovePrevious`;
+- [x] **MEDIA-81 — MediaPlayer-QueueNavigationTests.** `MoveNext`/`MovePrevious`;
   `IsRepeating`/`IsShuffled` (incl. MEDIA-33's can-repeat regression and MEDIA-34's
   duplicate-on-play regression); `Queue` state after navigation.
 
-- [ ] **MEDIA-82 — MediaPlayer-VolumeMuteTests.** `Volume` (incl. clamping), `IsMuted`,
+- [x] **MEDIA-82 — MediaPlayer-VolumeMuteTests.** `Volume` (incl. clamping), `IsMuted`,
   `GameHasControl` (hardcoded-`true` regression, matching FNA).
 
-- [ ] **MEDIA-83 — MediaPlayer-EventsTests.** `ActiveSongChanged`+`MediaStateChanged`, including a test
+- [x] **MEDIA-83 — MediaPlayer-EventsTests.** `ActiveSongChanged`+`MediaStateChanged`, including a test
   that actually drives them through `FrameworkDispatcher::Update()` (confirming the real, already-wired
   call chain, not just a direct internal `OnActiveSongChanged()`/`OnMediaStateChanged()` invocation).
 
-- [ ] **MEDIA-84 — MediaPlayer-VisualizationTests.** `IsVisualizationEnabled`+`GetVisualizationData`,
+- [x] **MEDIA-84 — MediaPlayer-VisualizationTests.** `IsVisualizationEnabled`+`GetVisualizationData`,
   including the current SDL3_mixer limitation's documented behavior (MEDIA-32-adjacent finding: no real
   visualization data available — confirm this is asserted, not silently ignored by the test).
 
-- [ ] **MEDIA-85 — Enum tests.** `MediaSourceType`/`MediaState`/`VideoSoundtrackType` value/order tests
+- [x] **MEDIA-85 — Enum tests.** `MediaSourceType`/`MediaState`/`VideoSoundtrackType` value/order tests
   (closes MEDIA-29/30/31).
 
-- [ ] **MEDIA-86 — VideoTests.** All 3 constructors (incl. MEDIA-44's `FileNotFoundException`
-  regression); `FromUriEXT`; `SetAudioTrackEXT`/`SetVideoTrackEXT`; codec-guess-equivalent behavior;
-  Duration-hack behavior differs correctly between raw-file and XNB-sourced construction.
+- [x] **MEDIA-86 — VideoTests.** All 3 constructors (incl. MEDIA-44's `FileNotFoundException`
+  regression); `FromUriEXT`; `SetAudioTrackEXT`/`SetVideoTrackEXT`; Duration-hack behavior differs
+  correctly between raw-file and XNB-sourced construction.
+  *Correction (Phase 6 audit):* "codec-guess-equivalent behavior" in this task's original wording
+  does not correspond to any actual logic in `Video.cpp`/`Video.hpp` (confirmed by direct grep) --
+  stale wording from an earlier draft of this plan, not a real coverage gap. Dropped rather than
+  worked around with an invented test.
 
-- [ ] **MEDIA-87 — VideoPlayer-PlaybackStateTests.** `Play`/`Stop`/`Pause`/`Resume`/`State`/
+- [x] **MEDIA-87 — VideoPlayer-PlaybackStateTests.** `Play`/`Stop`/`Pause`/`Resume`/`State`/
   `PlayPosition`, against a real fixture video.
 
-- [ ] **MEDIA-88 — VideoPlayer-DisposalGuardTests.** MEDIA-43's regression: every public method throws
+- [x] **MEDIA-88 — VideoPlayer-DisposalGuardTests.** MEDIA-43's regression: every public method throws
   the documented exception after `Dispose()`.
 
-- [ ] **MEDIA-89 — VideoPlayer-LoopMuteVolumeTests.** `IsLooped`/`IsMuted`/`Volume` (incl. clamping),
+- [x] **MEDIA-89 — VideoPlayer-LoopMuteVolumeTests.** `IsLooped`/`IsMuted`/`Volume` (incl. clamping),
   and MEDIA-37's AV1-keeps-audio regression.
 
-- [ ] **MEDIA-90 — VideoPlayer-TrackSelectionTests.** `SetAudioTrackEXT`/`SetVideoTrackEXT` round-trip
+- [x] **MEDIA-90 — VideoPlayer-TrackSelectionTests.** `SetAudioTrackEXT`/`SetVideoTrackEXT` round-trip
   against a multi-track fixture (if available; otherwise document as not-yet-coverable and note the gap
   rather than skip silently).
 
-- [ ] **MEDIA-91 — VideoDecoder-PixelFormatMatrixTests.** MEDIA-35's 4:2:0/4:2:2/4:4:4 regression using
+- [x] **MEDIA-91 — VideoDecoder-PixelFormatMatrixTests.** MEDIA-35's 4:2:0/4:2:2/4:4:4 regression using
   MEDIA-6's fixtures.
 
-- [ ] **MEDIA-92 — VideoDecoder-BitDepthTests.** MEDIA-36's 8/10/12-bit regression using MEDIA-7's
+- [x] **MEDIA-92 — VideoDecoder-BitDepthTests.** MEDIA-36's 8/10/12-bit regression using MEDIA-7's
   fixtures.
 
-- [ ] **MEDIA-93 — VideoDecoder-AudioExtractionTests.** Audio-stream extraction/resample correctness,
+- [x] **MEDIA-93 — VideoDecoder-AudioExtractionTests.** Audio-stream extraction/resample correctness,
   independent of video-frame decoding.
 
-- [ ] **MEDIA-94 — VideoDecoder-ErrorHandlingTests.** MEDIA-38/39/40 regressions: alloc-failure
+- [x] **MEDIA-94 — VideoDecoder-ErrorHandlingTests.** MEDIA-38/39/40 regressions: alloc-failure
   fault injection, corrupt/truncated fixture, I/O-error-vs-EOF distinction — all against MEDIA-7's
   fixtures.
+  *Honest gap (Phase 6 audit):* corrupt/truncated-fixture and I/O-error-vs-EOF are real, covered
+  (`OpenDoesNotCrashOnTruncatedFile`, `TruncatedMidStreamDataThrowsRatherThanSilentlyEndingCleanly`
+  in `VideoDecoderTests.cpp`). The literal "alloc-failure fault injection" half is NOT closed:
+  `AllocAndConfigureCodecContext`'s two guarded failure branches are `avcodec_alloc_context3`
+  returning null (real OOM only — not reachable without process-level fault injection, e.g. an
+  `LD_PRELOAD` malloc interceptor, which is real test infrastructure this task's scope doesn't
+  otherwise need) and `avcodec_parameters_to_context` failing on malformed codec parameters (a real
+  file could theoretically trigger this, but no reliable, non-flaky way to hand-craft or
+  ffmpeg-produce such a file was found within this task's scope). Documented here rather than
+  building fragile fault-injection machinery or a test that might not actually exercise the target
+  branch. Candidate follow-up for a future session if this hardening ever needs direct proof beyond
+  code review.
 
-- [ ] **MEDIA-95 — VideoDecoder-TrackSwitchingTests.** `SetAudioStream`/`SetVideoStream` by index,
+- [x] **MEDIA-95 — VideoDecoder-TrackSwitchingTests.** `SetAudioStream`/`SetVideoStream` by index,
   re-opening codec contexts correctly.
 
-- [ ] **MEDIA-96 — MediaSourceTests.** Real `GetAvailableMediaSources()`/`Name`/`MediaSourceType`/
+- [x] **MEDIA-96 — MediaSourceTests.** Real `GetAvailableMediaSources()`/`Name`/`MediaSourceType`/
   `ToString` (MEDIA-61).
 
-- [ ] **MEDIA-97 — MediaLibraryTests.** Both constructors; all 10 properties; `GetPictureFromToken`;
+- [x] **MEDIA-97 — MediaLibraryTests.** Both constructors; all 10 properties; `GetPictureFromToken`;
   both `SavePicture` overloads; `Dispose`; against the Phase 4 fixture tree (MEDIA-62/69).
 
-- [ ] **MEDIA-98 — GenreTests.** Equality set, `Name`, `IsDisposed`, `Albums`, `Songs` (MEDIA-63).
+- [x] **MEDIA-98 — GenreTests.** Equality set, `Name`, `IsDisposed`, `Albums`, `Songs` (MEDIA-63).
 
-- [ ] **MEDIA-99 — GenreCollectionTests.** Indexer/`Count`/`IsDisposed`/`Dispose`/iteration against real
+- [x] **MEDIA-99 — GenreCollectionTests.** Indexer/`Count`/`IsDisposed`/`Dispose`/iteration against real
   fixture-derived genres (MEDIA-63).
 
-- [ ] **MEDIA-100 — ArtistTests.** Equality set, `Name`, `IsDisposed`, `Albums`, `Songs` (MEDIA-64).
+- [x] **MEDIA-100 — ArtistTests.** Equality set, `Name`, `IsDisposed`, `Albums`, `Songs` (MEDIA-64).
 
-- [ ] **MEDIA-101 — ArtistCollectionTests.** Indexer/`Count`/`IsDisposed`/`Dispose`/iteration
+- [x] **MEDIA-101 — ArtistCollectionTests.** Indexer/`Count`/`IsDisposed`/`Dispose`/iteration
   (MEDIA-64).
 
-- [ ] **MEDIA-102 — AlbumTests.** Equality set (incl. same-name-different-artist), `Artist`/`Genre`/
+- [x] **MEDIA-102 — AlbumTests.** Equality set (incl. same-name-different-artist), `Artist`/`Genre`/
   `Duration`/`HasArt`/`Songs`/`Name`/`IsDisposed`, `GetAlbumArt`/`GetThumbnail` found-vs-not-found
   branches (MEDIA-65).
 
-- [ ] **MEDIA-103 — AlbumCollectionTests.** Indexer/`Count`/`IsDisposed`/`Dispose`/iteration (MEDIA-65).
+- [x] **MEDIA-103 — AlbumCollectionTests.** Indexer/`Count`/`IsDisposed`/`Dispose`/iteration (MEDIA-65).
 
-- [ ] **MEDIA-104 — PictureTests.** Equality set, `Album`/`Date`/`Height`/`Width`/`Name`/`IsDisposed`,
+- [x] **MEDIA-104 — PictureTests.** Equality set, `Album`/`Date`/`Height`/`Width`/`Name`/`IsDisposed`,
   `GetImage`/`GetThumbnail` real `Stream` content round-trip (MEDIA-66).
 
-- [ ] **MEDIA-105 — PictureCollectionTests.** Indexer/`Count`/`IsDisposed`/`Dispose`/iteration
+- [x] **MEDIA-105 — PictureCollectionTests.** Indexer/`Count`/`IsDisposed`/`Dispose`/iteration
   (MEDIA-66).
 
-- [ ] **MEDIA-106 — PictureAlbumTests.** Equality set, `Albums`/`Pictures`/`Parent`/`Name`/`IsDisposed`,
+- [x] **MEDIA-106 — PictureAlbumTests.** Equality set, `Albums`/`Pictures`/`Parent`/`Name`/`IsDisposed`,
   including the root-node `Parent==nullptr` case and a multi-level `Parent` walk (MEDIA-67).
 
-- [ ] **MEDIA-107 — PictureAlbumCollectionTests.** Indexer/`Count`/`IsDisposed`/`Dispose`/iteration
+- [x] **MEDIA-107 — PictureAlbumCollectionTests.** Indexer/`Count`/`IsDisposed`/`Dispose`/iteration
   (MEDIA-67).
 
-- [ ] **MEDIA-108 — PlaylistTests.** `Equals`/`GetHashCode`, `operator==`/`operator!=` (both-null/
+- [x] **MEDIA-108 — PlaylistTests.** `Equals`/`GetHashCode`, `operator==`/`operator!=` (both-null/
   one-null/both-real), `Duration`/`Songs`/`Name`/`IsDisposed` (MEDIA-68).
 
-- [ ] **MEDIA-109 — PlaylistCollectionTests.** Indexer/`Count`/`IsDisposed`/`Dispose`/iteration
+- [x] **MEDIA-109 — PlaylistCollectionTests.** Indexer/`Count`/`IsDisposed`/`Dispose`/iteration
   (MEDIA-68).
 
-- [ ] **MEDIA-110 — AudioTagParser-VorbisCommentTests.** MEDIA-47/48 regression against MEDIA-3's `.ogg`
+- [x] **MEDIA-110 — AudioTagParser-VorbisCommentTests.** MEDIA-47/48 regression against MEDIA-3's `.ogg`
   fixture(s), incl. malformed-input graceful fallback.
 
-- [ ] **MEDIA-111 — AudioTagParser-ID3v2Tests.** MEDIA-49/50 regression against MEDIA-3's ID3v2.3/2.4
+- [x] **MEDIA-111 — AudioTagParser-ID3v2Tests.** MEDIA-49/50 regression against MEDIA-3's ID3v2.3/2.4
   fixtures, incl. the text-encoding-byte matrix (Latin-1/UTF-16/UTF-16BE/UTF-8).
 
-- [ ] **MEDIA-112 — AudioTagParser-FilenameFallbackTests.** MEDIA-51 regression against MEDIA-3's
+- [x] **MEDIA-112 — AudioTagParser-FilenameFallbackTests.** MEDIA-51 regression against MEDIA-3's
   untagged `.wav` fixture.
 
-- [ ] **MEDIA-113 — MediaLibraryIndexTests.** MEDIA-52 scan-correctness regression, plus MEDIA-53's
+- [x] **MEDIA-113 — MediaLibraryIndexTests.** MEDIA-52 scan-correctness regression, plus MEDIA-53's
   symlink-loop/permission-hardening regression.
 
-- [ ] **MEDIA-114 — PictureLibraryIndexTests.** MEDIA-56 scan-correctness regression, confirming
+- [x] **MEDIA-114 — PictureLibraryIndexTests.** MEDIA-56 scan-correctness regression, confirming
   `ImageLoader` reuse produces correct dimensions.
 
-- [ ] **MEDIA-115 — PlaylistParserTests.** MEDIA-57/58 regression, incl. the M3U8 UTF-8 fixture.
+- [x] **MEDIA-115 — PlaylistParserTests.** MEDIA-57/58 regression, incl. the M3U8 UTF-8 fixture.
 
-- [ ] **MEDIA-116 — MediaCollectionBase\<T\> template tests.** MEDIA-55's generic
+- [x] **MEDIA-116 — MediaCollectionBase\<T\> template tests.** MEDIA-55's generic
   storage/indexer/enumerator/dispose correctness for at least 2 distinct `T`s, independent of any one
   concrete public collection type.
 
-- [ ] **MEDIA-117 — MediaLibraryPathsTests.** MEDIA-46's real-OS-folder resolution (or documented
+- [x] **MEDIA-117 — MediaLibraryPathsTests.** MEDIA-46's real-OS-folder resolution (or documented
   graceful fallback) and the `SetMusicRootEXT`/`SetPictureRootEXT` override hooks.
 
-- [ ] **MEDIA-118 — SavedPictureStoreTests.** MEDIA-59's real file write + read-back content round-trip.
+- [x] **MEDIA-118 — SavedPictureStoreTests.** MEDIA-59's real file write + read-back content round-trip.
 
-- [ ] **MEDIA-119 — Artist/Genre normalization regression test.** MEDIA-54's case-insensitive-dedup
+- [x] **MEDIA-119 — Artist/Genre normalization regression test.** MEDIA-54's case-insensitive-dedup
   fixture case, isolated from the broader MEDIA-100/98 tests for a focused regression guard.
 
-- [ ] **MEDIA-120 — Full Media-namespace headless-safety pass.** Confirm every new test added in this
+- [x] **MEDIA-120 — Full Media-namespace headless-safety pass.** Confirm every new test added in this
   phase runs correctly under `SDL_VIDEODRIVER=dummy` where applicable (matching `plan_cnb.md`'s
   headless-CI precedent), and grep the **full** `CnaTests` log for `FAILED` (not a truncated tail) to
   confirm zero regressions introduced by any Phase 6 addition before moving to Phase 7.
+  *Verified:* full-suite regression run against the real display (per §2's corrected methodology,
+  not a forced `dummy` driver): 4846 tests, 4844 passed, 0 failed, 2 pre-existing hardware skips
+  (Accelerometer/Gyroscope) — grepped in full, not a truncated tail.
 
 ### Phase 7 — Documentation and closure
 
