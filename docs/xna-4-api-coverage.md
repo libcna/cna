@@ -310,8 +310,8 @@ audits behind them:
 | `GamerPresenceMode` | Enum of presence modes; implemented. |
 | `GamerPrivilegeSetting` / `GamerPrivileges` / `GamerPrivilegeException` | Privilege flags/exception; implemented. |
 | `GameDefaults` | Static helper for reading default player settings; implemented. |
-| `FriendCollection` | Collection of friend gamers; implemented. |
-| `FriendGamer` | Represents a friend in the gamer's friend list; implemented. |
+| `FriendCollection` | Collection of friend gamers; implemented, but `SignedInGamer::GetFriends()` always returns it empty - see §9. |
+| `FriendGamer` | Represents a friend in the gamer's friend list; implemented, same population gap as `FriendCollection` above. |
 
 Also present and implemented, beyond this table's original scope: `Achievement`/`AchievementCollection`,
 the full `Avatar*` real-rendering extension (`AvatarRenderer`, `AvatarAppearanceEXT`, `AvatarBone`,
@@ -871,7 +871,7 @@ behavior or a genuinely unimplemented feature).
 | `LeaderboardReader` / `LeaderboardWriter` / `LeaderboardEntry` / `LeaderboardIdentity` / `LeaderboardKey` / `LeaderboardOutcome` | Locally persisted | Same Phase 4 store as Achievements; previously threw `NotSupportedException` on every read/write path. |
 | `GamerPresence` / `GamerPresenceMode` | Implemented | Real presence state. |
 | `GamerPrivilegeSetting` / `GamerPrivileges` / `GamerPrivilegeException` | Implemented | |
-| `FriendCollection` / `FriendGamer` | Implemented | |
+| `FriendCollection` / `FriendGamer` | Documented stub for population | The classes themselves are real, but `SignedInGamer::GetFriends()` always returns an empty `FriendCollection` (`CreateInternal({})`) - no friend-list population source exists. Self-documented in `FriendCollection.hpp`'s own comment. Found during Task 11.1's final audit; not a Phase 4 persistence gap (out of that task's scope), just an honestly-still-open one. |
 | `GamerProfile` / `GamerZone` / `GameDefaults` | Implemented | |
 | `Guide.Show` | No-op / documented stub | No system UI exists to show (consistent with FNA's own minimal PC `Guide`). |
 | `Guide.BeginShowKeyboardInput` | Implemented | Phase 3 (decision 3a) — real captured text through CNA's `TextInputEXT` input layer, not a stub value. |

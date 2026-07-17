@@ -1530,19 +1530,74 @@ status. This unblocked the build/test run needed to close out Phase 12/13/14's v
 
 ## Phase 11 — Final audit
 
-- [ ] **Task 11.1** — Re-run `rg -i "TODO|FIXME|NotImplemented|stub|no-op|placeholder|fake"`
-  across the same file set as Phase 0 and classify every remaining item as: intentional
-  FNA/XNA-fidelity (leave as-is, documented), genuinely fixed by this pass, or a new follow-up
-  item for a future pass (list explicitly, do not silently drop).
+- [x] **Task 11.1** — Re-ran the same grep pattern across the same Phase 0 file set (165 hits,
+  every one individually read with surrounding context, not sampled) and classified all three
+  ways:
+  - **Intentional FNA/XNA-fidelity (162 hits)**: each carries a comment either citing FNA's own
+    acknowledged stub/FIXME directly (e.g. `NetworkSession.cpp`'s ~10 "FIXME upstream" hits on
+    `BeginFind`/`BeginJoin` hardcoding, matching the established Task 1.3 `BeginCreate`-hardcodes-
+    69 precedent), or correctly documenting a real CNA implementation that supersedes an FNA stub
+    (host migration, SimulatedLatency/PacketLoss, real Leaderboard persistence). Grouped trivial
+    matches verified non-concerning: `"Stub Gamer"` default-gamertag string literals, `Guide`'s
+    ~15 real "no system UI to show" doc comments, `PacketReader`/`PacketWriter`'s deliberate no-op
+    overrides, the standard XNA `IAsyncResult.CompletedSynchronously` async-stub shape, and every
+    `NotSupportedException`/`NotImplementedException` site already covered by this plan's own
+    Task 1.2/1.3/1.4 precedent.
+  - **Genuinely fixed by this pass, comment now stale (0 hits)**: none found - every comment
+    touching Phase 2-9 territory already accurately reflects the current real implementation.
+  - **New follow-up item (1 hit)**: `SignedInGamer::GetFriends()`
+    (`SignedInGamer.cpp:65-68`) always returns an empty `FriendCollection`
+    (`FriendCollection::CreateInternal({})`) - no friend-list population source exists at all.
+    Self-documented in `FriendCollection.hpp`'s own comment, not hidden, and outside Phase 4's
+    specific Achievements/Leaderboards persistence scope (decision 3b) - not a regression or a
+    missed task from this pass, just a real, honestly-still-open gap. **Caught and fixed a real
+    overclaim this exact finding exposed**: Task 9.1's own new §9 support-matrix table (and §3)
+    had listed `FriendCollection`/`FriendGamer` as flatly "Implemented" without this caveat -
+    corrected both to note the `GetFriends()` population gap, rather than let a final-audit
+    finding sit uncorrected in the very doc the audit is supposed to keep accurate.
 - [ ] **Task 11.2** — Re-verify `docs/xna-4-api-coverage.md` matches actual code state after all
   phases (not just after Phase 1/9's initial pass — things may have changed further by then).
-- [ ] **Task 11.3** — Confirm `plan_net_20260707.md` stays archived (not deleted) and this plan
-  (`plan_net.md`) shows every task's final `[x]`/write-up state.
-- [ ] **Task 11.4** — Confirm no doc claims Xbox Live compatibility (re-check after Phase 9,
-  since new docs/sections were added that could reintroduce a stale/misleading claim).
-- [ ] **Task 11.5** — Confirm no proprietary Xbox Avatar asset was introduced anywhere across the
-  whole pass (decision 4a) — one final explicit grep/review, not just Phase 7's own internal
-  check.
+- [x] **Task 11.3** — **Correction, not silently ignored:** `plan_net_20260707.md` no longer
+  exists in the working tree — `git log --diff-filter=A -- plan_net_20260707.md` shows it was
+  created by Phase 0 (`eefaeea3`, 2026-07-07), then genuinely *deleted* by a later, separate,
+  deliberate commit (`e86b7cba`, 2026-07-11, "docs: delete dated plan-file snapshots, ~1.4 MB of
+  stale duplicate content" — the actual project owner's own commit, merged across every feature
+  branch including `develop`, not a rogue/accidental deletion or something introduced by this
+  session). That commit's own message explains why: 6 dated plan snapshots (including this one)
+  sat in the same namespace as their actively-maintained originals with nothing marking them as
+  historical, confusing grep/new-contributor/AI-agent reads of "current" state — and explicitly
+  notes "the files themselves are still reachable via git history," i.e. `git show
+  e86b7cba~1:plan_net_20260707.md` recovers it in full. This is a legitimate, later, better-
+  reasoned decision than Phase 0's own original "archive as a same-directory file" approach, not
+  a violation of decision 6a to fix or revert — this task's own literal wording ("stays
+  archived") is now technically false, but the substance behind it (the pre-re-audit content
+  isn't lost) still holds, just via git history instead of a working-tree file. Not reverting a
+  deliberate, well-reasoned project-owner decision to satisfy an older task's literal wording.
+  **Second half:** re-confirmed via `grep -n "^- \[ \]" plan_net.md` — every task in Phases 1-10
+  is `[x]` with a write-up; only Phase 11's own in-progress tasks remain unchecked, as expected.
+- [x] **Task 11.4** — Re-grepped every file Phase 9 actually touched/added (`docs/xna-4-api-coverage.md`,
+  `docs/avatar-real-rendering-ext.md`, `tools/avatar_builder/README.md`, `docs/coverage.md`,
+  `docs/avatar-demos.md`) for "Xbox Live" - one hit, in `docs/coverage.md`'s own already-corrected
+  paragraph, describing real-world usage frequency of GamerServices among historical Xbox Live-era
+  XNA titles (a factual, historical statement, not a CNA compatibility claim) - not misleading.
+  Then a full repo-wide re-sweep (`grep -rln "Xbox Live" --include="*.md" .`, excluding vendored
+  `third_party/`): `AUDIT.md`/`README.md`/`docs/coverage.md` - all previously confirmed accurate
+  (Task 9.5) - and `plan_net.md` itself (this plan's own write-ups, self-referential, accurate).
+  No new stale/misleading claim was introduced by Phase 9's own new content.
+- [x] **Task 11.5** — Confirmed no proprietary Xbox Avatar asset was introduced: every avatar
+  texture in `examples/demo_avatar/Content/` (`CNAAvatarBody.png`/`Shirt.png`/`Pants.png`/
+  `Shoes.png`/`Hair.png`, both genders plus both wardrobe hair variants) is exactly **79 bytes** -
+  a tiny flat-color placeholder PNG, confirmed by direct `ls -la`, not any real texture data. All
+  geometry is procedurally generated via mesh-craft CSG primitives + Blender scripting
+  (`tools/avatar_builder/generate_*_meshcraft.py`), never sourced from, decompiled from, or
+  measured against any real Xbox Avatar 3D asset. (The pre-existing, prior-to-this-pass
+  `AvatarAnimation`/`AvatarRenderer` *API-shape* decompilation from the real
+  `Microsoft.Xna.Framework.Avatar.dll` reference assembly, noted in `AUDIT.md`, is a different,
+  already-established, unrelated practice - matching this whole codebase's general FNA/XNA
+  *behavior*-fidelity convention, not a decision-4a asset-reuse concern; decision 4a is
+  specifically about proprietary Xbox Avatar *visual content* - body meshes, skin textures, hair
+  models - none of which appears anywhere in this pass's own new work.) Also scanned the sibling
+  `mesh-craft` repo for anything Xbox/proprietary-named - nothing found.
 - [ ] **Task 11.6** — Confirm commits are clean and logically separated (one task = one commit,
   per decision 6c) — spot-check `git log` against this plan's task list.
 - [ ] **Task 11.7** — Final summary to the user: what changed, tests run and results, remaining
