@@ -331,5 +331,15 @@ namespace Microsoft::Devices::Sensors
          * @return `ex.what()` for a swallowed `std::exception`, a fixed placeholder for any other thrown value, or empty if none has been swallowed yet.
          */
         NOXNA static std::string GetLastDispatchExceptionMessageForTesting();
+
+        /**
+         * @brief Test-only hook (Task SDLCORE-005): see
+         * Accelerometer::IsSensorConnectedForTesting()'s identical hook for
+         * the full rationale.
+         *
+         * @param sensorId The SDL sensor id to check.
+         * @return true if still present in the current SDL_GetSensors() list.
+         */
+        NOXNA static bool IsSensorConnectedForTesting(std::int64_t sensorId);
     };
 } // namespace Microsoft::Devices::Sensors

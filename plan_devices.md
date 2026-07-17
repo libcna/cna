@@ -6221,7 +6221,7 @@ test is not sufficient for an Android coordinate/fusion claim.
   TSan re-verification of this change specifically is tracked under `TEST2-001` (not yet re-run this
   pass — see `SDLCORE-001`'s resolution note for the same outstanding item).
 
-### SDLCORE-005 — Add SDL sensor hotplug/removal/reopen handling — OPEN
+### SDLCORE-005 — Add SDL sensor hotplug/removal/reopen handling — OPEN (validate-before-reuse implemented; mid-session live detection and hardware/fake-device tests remain)
 
 - **Priority:** P1
 - **Area:** Perfection re-audit
@@ -6234,6 +6234,68 @@ test is not sufficient for an Android coordinate/fusion claim.
   - Automated fake-device tests cover remove/re-add/default-device change.
   - No stale SDL_Sensor handle is used after removal.
 - **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+- **Progress so far (not yet CLOSED — see Remaining limitations):**
+  - Confirmed by reading `third_party/SDL/include/SDL3/SDL_events.h` that SDL3 has no
+    sensor-specific hotplug event (only `SDL_EVENT_SENSOR_UPDATE` exists), matching
+    `VIB2-004`'s identical finding for haptics — "validate connection before use" (the
+    required work's own named alternative) is the only viable approach.
+  - Added `Detail::SdlSensorSubsystem<TSensor>::IsSensorConnected(sensorId, ...)` (static,
+    re-queries `SDL_GetSensors()` and compares ids — the exact same pattern as
+    `SdlHapticVibrateBackend`'s `IsHapticDeviceStillConnected()`, `VIB2-004`) and wired it
+    into `OpenDefaultSensorLocked()`: if the cached `sensor_` is no longer in the live
+    list, it is closed and discarded (`sensor_ = nullptr; sensorId_ = 0;`) before the
+    existing deterministic-selection loop runs — since that one method is shared by both
+    `Accelerometer` and `Gyroscope` (a template), this closes the cached-indefinitely gap
+    for both classes with a single change.
+  - "Do not route an event from a replacement device using a stale id": satisfied by
+    construction, not a separate fix — `sensorId_` is only ever assigned a fresh value by
+    the same selection loop that now always runs again after a stale handle is
+    discarded, so a replacement device's events can never be matched against a leftover
+    id from a device that's been confirmed gone.
+  - **Explicitly not addressed, flagged rather than silently dropped:** "On removal, stop
+    delivery, invalidate data, transition State appropriately and attempt policy-driven
+    reacquisition" describes an **already-started, currently-running** instance noticing
+    a *mid-session* disconnect on its own. The SDL sensor path is entirely
+    event-driven (`SDL_EventFilter`), with no polling loop the way
+    `AndroidSensorBridge::Run()` has — there is no natural trigger point today for an
+    already-running instance to re-validate its own liveness without some new
+    architectural piece (e.g. opportunistically checking every started instance's
+    `sensorId_` whenever any same-`TSensor`-type event fires). This fix only guarantees
+    the *next* `Start()` call (new or restarting instance) never reuses a stale handle —
+    it does not add continuous mid-session disconnect monitoring. Judged genuinely
+    separate, larger design work, not attempted here; a candidate for its own future task.
+- **Files changed:** `include/Microsoft/Devices/Sensors/Detail/SdlSensorSubsystem.hpp`,
+  `include/Microsoft/Devices/Sensors/Accelerometer.hpp`,
+  `src/Microsoft/Devices/Sensors/Accelerometer.cpp`,
+  `include/Microsoft/Devices/Sensors/Gyroscope.hpp`, `src/Microsoft/Devices/Sensors/Gyroscope.cpp`,
+  `tests/Microsoft/Devices/Sensors/AccelerometerTests.cpp`,
+  `tests/Microsoft/Devices/Sensors/GyroscopeTests.cpp`, `docs/devices-hardware-checklist.md`.
+- **Tests:** added `IsSensorConnectedForTestingReportsNotConnectedWhenNoRealSensorIsOpen`
+  (one per class) proving `IsSensorConnected()`'s plumbing reaches the real
+  `SDL_GetSensors()` call and correctly reports "not found" for several ids — this
+  container never opens a real sensor, so this cannot exercise the actual staleness
+  branch, only the query logic itself (documented honestly, not overstated). Scoped
+  filtered run: 287 tests, 283 passed, 4 pre-existing hardware-only skips, 0 failures — 2
+  new, both passing.
+- **Sanitizer/static-analysis result:** clean under `devices-ubsan`. This adds a new
+  static-method call site reached from `Start()`'s existing locked section, so re-verified
+  under `devices-tsan`: 3 consecutive clean runs, 0 `WARNING: ThreadSanitizer`
+  occurrences, 85/85 tests passing each run
+  (`AccelerometerTests.*:GyroscopeTests.*:SensorSubsystemOwnershipTests.*`).
+- **Remaining limitations (explicitly OPEN, not fabricated):** the acceptance criteria's
+  literal ask — "automated fake-device tests cover remove/re-add/default-device change"
+  — needs either real hardware or a native fault-injection layer capable of safely
+  mocking `SDL_GetSensors()`/`SDL_OpenSensor()`/`SDL_CloseSensor()` (`TEST2-005`'s own
+  separate scope; building one ad hoc here was judged out of scope, matching the same
+  call made for `ANDR2-002`'s identical gap). Mid-session live disconnect detection for
+  an already-started instance (see the "explicitly not addressed" note above) is also
+  unimplemented and would need its own design pass. Documented as a new hardware
+  validation procedure in `docs/devices-hardware-checklist.md` Section 2a. Left **OPEN**
+  rather than CLOSED, consistent with `VIB2-003`/`VIB2-004`/`ANDR2-002`: the
+  validate-before-reuse fix itself is provably correct by code inspection and clean under
+  TSan, but the acceptance criteria as written require hardware/fault-injection
+  verification this session cannot perform, and the required work's mid-session-recovery
+  bullet is not yet implemented at all.
 
 ### SDLCORE-006 — Define deterministic physical sensor selection — OPEN
 

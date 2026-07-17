@@ -607,5 +607,11 @@ namespace Microsoft::Devices::Sensors
         return subsystem.lastDispatchExceptionMessageForTesting_;
     }
 
+    bool Gyroscope::IsSensorConnectedForTesting(std::int64_t sensorId)
+    {
+        std::lock_guard<std::mutex> sdlLock(Detail::GetGlobalSdlSensorMutex());
+        return Detail::SdlSensorSubsystem<Gyroscope>::IsSensorConnected(sensorId, sdlLock);
+    }
+
     GetTypeNameCPP(Gyroscope, "Microsoft.Devices.Sensors.Gyroscope")
 } // namespace Microsoft::Devices::Sensors

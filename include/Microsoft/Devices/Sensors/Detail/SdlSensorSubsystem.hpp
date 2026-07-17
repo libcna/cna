@@ -295,6 +295,39 @@ namespace Microsoft::Devices::Sensors::Detail
         }
 
         /**
+         * @brief Returns true if `sensorId` is still enumerated by `SDL_GetSensors()` (Task SDLCORE-005).
+         *
+         * Like `Detail::SdlHapticVibrateBackend`'s own analogous fix
+         * (Task VIB2-004), SDL3 has no sensor-specific hotplug event
+         * (confirmed by reading `third_party/SDL/include/SDL3/SDL_events.h`
+         * — only `SDL_EVENT_SENSOR_UPDATE` exists, no added/removed
+         * counterpart), so detecting a mid-session disconnect requires
+         * re-querying the live device list and comparing ids. Requires proof
+         * the global SDL sensor mutex is held, same as every other real SDL
+         * sensor call here — see `EnsureSubsystemInitialized()`'s own doc
+         * comment for the rationale.
+         */
+        static bool IsSensorConnected(
+            std::int64_t sensorId, const std::lock_guard<std::mutex>& /*globalSdlSensorMutexHeld*/)
+        {
+            int sensorCount = 0;
+            SDL_SensorID* sensors = SDL_GetSensors(&sensorCount);
+            if (sensors == nullptr)
+            {
+                return false;
+            }
+
+            bool stillConnected = false;
+            for (int i = 0; i < sensorCount && !stillConnected; ++i)
+            {
+                stillConnected = static_cast<std::int64_t>(sensors[i]) == sensorId;
+            }
+
+            SDL_free(sensors);
+            return stillConnected;
+        }
+
+        /**
          * Opens (if not already open) the first SDL sensor matching
          * TSensor::GetSdlSensorType() and caches its id. Returns the
          * shared handle. Caller must already hold mutex_ (documented, not
@@ -303,9 +336,29 @@ namespace Microsoft::Devices::Sensors::Detail
          * Task P8-3's rationale on EnsureSubsystemInitialized() above for
          * why *that* lock specifically is enforced via a required
          * parameter here too).
+         *
+         * Task SDLCORE-005 (2026-07-17, external audit
+         * `audit_devices_2026-07-17.md`): previously, once `sensor_` was
+         * opened it was cached and reused *indefinitely* — for the rest of
+         * this subsystem's process-wide lifetime, no matter how long the
+         * underlying device had been physically disconnected. Now
+         * revalidates against `IsSensorConnected()` first, closing and
+         * discarding a stale handle so the deterministic-selection loop
+         * below runs again instead of silently reusing a dead one forever.
+         * This also closes the "do not route an event from a replacement
+         * device using a stale id" requirement: `sensorId_` is only ever
+         * assigned a fresh value by this same loop, never carried over from
+         * a device that's since been confirmed gone.
          */
-        SDL_Sensor* OpenDefaultSensorLocked(const std::lock_guard<std::mutex>& /*globalSdlSensorMutexHeld*/)
+        SDL_Sensor* OpenDefaultSensorLocked(const std::lock_guard<std::mutex>& globalSdlSensorMutexHeld)
         {
+            if (sensor_ != nullptr && !IsSensorConnected(sensorId_, globalSdlSensorMutexHeld))
+            {
+                SDL_CloseSensor(sensor_);
+                sensor_ = nullptr;
+                sensorId_ = 0;
+            }
+
             if (sensor_ != nullptr)
             {
                 return sensor_;

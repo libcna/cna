@@ -896,3 +896,16 @@ TEST(GyroscopeTests, ThrowingHandlerInBatchDispatchDoesNotPreventNextInstanceFro
     EXPECT_NO_THROW(a->Dispose());
     EXPECT_NO_THROW(b->Dispose());
 }
+
+// Task SDLCORE-005 (2026-07-17, external audit `audit_devices_2026-07-17.md`):
+// see AccelerometerTests's identical test for the full rationale — this
+// container never has a real SDL sensor open, so this only proves
+// IsSensorConnectedForTesting()'s plumbing/logic (reaches SDL_GetSensors()
+// and correctly reports "not found"), not a genuine hardware
+// remove/re-add/default-device-change scenario.
+TEST(GyroscopeTests, IsSensorConnectedForTestingReportsNotConnectedWhenNoRealSensorIsOpen)
+{
+    EXPECT_FALSE(Gyroscope::IsSensorConnectedForTesting(0));
+    EXPECT_FALSE(Gyroscope::IsSensorConnectedForTesting(-1));
+    EXPECT_FALSE(Gyroscope::IsSensorConnectedForTesting(123456789));
+}

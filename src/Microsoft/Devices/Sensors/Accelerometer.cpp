@@ -860,5 +860,11 @@ namespace Microsoft::Devices::Sensors
         return subsystem.lastDispatchExceptionMessageForTesting_;
     }
 
+    bool Accelerometer::IsSensorConnectedForTesting(std::int64_t sensorId)
+    {
+        std::lock_guard<std::mutex> sdlLock(Detail::GetGlobalSdlSensorMutex());
+        return Detail::SdlSensorSubsystem<Accelerometer>::IsSensorConnected(sensorId, sdlLock);
+    }
+
     GetTypeNameCPP(Accelerometer, "Microsoft.Devices.Sensors.Accelerometer")
 } // namespace Microsoft::Devices::Sensors

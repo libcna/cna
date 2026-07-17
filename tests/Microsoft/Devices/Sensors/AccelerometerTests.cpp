@@ -1329,3 +1329,23 @@ TEST(AccelerometerTests, ThrowingHandlerInBatchDispatchDoesNotPreventNextInstanc
     EXPECT_NO_THROW(a->Dispose());
     EXPECT_NO_THROW(b->Dispose());
 }
+
+// Task SDLCORE-005 (2026-07-17, external audit `audit_devices_2026-07-17.md`):
+// this container never has a real SDL sensor open (SDL_GetSensors() always
+// returns an empty list here), so any id at all -- real-looking or not -- is
+// necessarily "not currently connected". This proves the plumbing/logic of
+// IsSensorConnectedForTesting() itself (it reaches the real SDL_GetSensors()
+// call and correctly reports "not found" rather than throwing, crashing, or
+// trivially returning true), not a genuine remove/re-add/default-device-change
+// scenario -- that would require either real hardware or a native
+// fault-injection layer capable of safely mocking SDL_GetSensors()/
+// SDL_OpenSensor()/SDL_CloseSensor() (Task TEST2-005's own separate scope),
+// neither of which exists in this environment. See this task's own
+// plan_devices.md resolution note and docs/devices-hardware-checklist.md for
+// the full, honest accounting of what remains unexercised.
+TEST(AccelerometerTests, IsSensorConnectedForTestingReportsNotConnectedWhenNoRealSensorIsOpen)
+{
+    EXPECT_FALSE(Accelerometer::IsSensorConnectedForTesting(0));
+    EXPECT_FALSE(Accelerometer::IsSensorConnectedForTesting(-1));
+    EXPECT_FALSE(Accelerometer::IsSensorConnectedForTesting(123456789));
+}

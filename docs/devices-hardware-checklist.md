@@ -209,6 +209,71 @@ there are no separate portrait rotation cases to test here either):**
    produces the same sign, regardless of which rotation state the device is in) as the
    primary correctness bar.
 
+## 2a. SDL sensor disconnect/reconnect and default-device change (Task SDLCORE-005, 2026-07-17)
+
+**Code under test:** `Detail::SdlSensorSubsystem<TSensor>::IsSensorConnected()`/
+`OpenDefaultSensorLocked()` (shared by `Accelerometer` and `Gyroscope` — one fix, one
+template, both classes). Before this fix, once `sensor_`/`sensorId_` were cached by the
+first successful `OpenDefaultSensorLocked()` call, they were reused **indefinitely** —
+for the rest of this subsystem's process-wide lifetime, no matter how long the
+underlying device had been physically disconnected, and with no way for a different
+default device (or the same device reappearing with a new SDL-assigned id) to ever be
+picked up again short of the whole process restarting. The fix re-validates the cached
+id against a fresh `SDL_GetSensors()` call every time `OpenDefaultSensorLocked()` runs,
+closing and discarding a stale handle so the existing deterministic-selection loop runs
+again instead.
+
+**Why this needs real hardware:** SDL3 has no sensor-specific hotplug event (confirmed
+by reading `third_party/SDL/include/SDL3/SDL_events.h` — only `SDL_EVENT_SENSOR_UPDATE`
+exists), so `IsSensorConnected()`'s only way to detect a disconnect is re-querying the
+live device list. This container never has a real SDL sensor open at all
+(`SDL_GetSensors()` always returns an empty list here), so
+`OpenDefaultSensorLocked()`'s actual staleness branch
+(`sensor_ != nullptr && !IsSensorConnected(...)`) is never taken by any test — every run
+here only exercises the "nothing cached yet" path.
+`IsSensorConnectedForTesting()` (`Accelerometer`/`Gyroscope`'s own test-only wrappers)
+proves the underlying `SDL_GetSensors()` query itself works and correctly reports "not
+found," but a genuine remove/re-add/default-device-change scenario — this task's own
+acceptance criteria's literal ask — would need either real hardware or a native
+fault-injection layer capable of safely mocking `SDL_GetSensors()`/`SDL_OpenSensor()`/
+`SDL_CloseSensor()` (`plan_devices.md` Task `TEST2-005`'s own separate scope; building
+one ad hoc here to fake-inject a full device lifecycle was judged out of scope for this
+task, the same call made for `ANDR2-002`'s identical gap). **Status: NOT RUN — hardware
+or TEST2-005 validation open.**
+
+**Separately not addressed by this fix, and flagged rather than silently dropped:** this
+task's required work also asks that a device disappearing **while an instance is
+already started** stop delivery, invalidate `CurrentValue`/`IsDataValid`, transition
+`SensorState` appropriately, and attempt policy-driven reacquisition. The SDL sensor path
+is entirely event-driven (`SDL_EventFilter`, no polling loop the way
+`AndroidSensorBridge::Run()` has) — there is no natural trigger point today to detect a
+disconnect *mid-session* for an instance that is not itself calling `Start()` again. This
+fix only closes the "cached indefinitely, reused forever" gap for the *next* `Start()`
+call (any instance, new or restarting) — it does not add live, continuous
+disconnect-monitoring for an already-running instance. That would need a genuinely new
+architectural piece (e.g. checking every already-started instance's `sensorId_` liveness
+opportunistically whenever any `SDL_EVENT_SENSOR_UPDATE` of the same `TSensor` type
+fires) and is significant enough design work that it was not attempted as part of this
+task — a candidate for its own future task if picked up, not a silently-abandoned piece
+of this one.
+
+**Steps:**
+1. On a real device/emulator with an accelerometer or gyroscope, `Start()` an instance
+   and confirm readings arrive normally.
+2. If the device can be simulated as disconnected (e.g. an emulator's sensor panel, or a
+   USB sensor peripheral that can be unplugged), disconnect it, then construct and
+   `Start()` a **second**, independent instance of the same sensor class — confirm the
+   second `Start()` correctly detects the first's cached handle is stale, discards it,
+   and either fails cleanly (`SensorState::NotSupported`, if nothing else is available)
+   or picks up a different available device, rather than reusing the dead cached handle.
+3. Reconnect the original device (or connect a different one of the same type) and
+   repeat step 2 — confirm the same instance/class can recover without any process
+   restart.
+4. Separately confirm (or, more likely, document as an accepted gap per the note above)
+   whether an **already-started, still-running** instance ever notices a mid-session
+   disconnect on its own, without a fresh `Start()` call from elsewhere prompting the
+   re-validation.
+
 ## 3. `VibrateController::Start()` actually vibrates the phone motor
 
 **Code under test:** `VibrateController.cpp`'s `OpenFirstHapticDevice()`/

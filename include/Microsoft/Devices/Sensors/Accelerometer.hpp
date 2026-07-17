@@ -407,6 +407,24 @@ namespace Microsoft::Devices::Sensors
         NOXNA static std::string GetLastDispatchExceptionMessageForTesting();
 
         /**
+         * @brief Test-only hook (Task SDLCORE-005): true if `sensorId` is still enumerated by `SDL_GetSensors()`.
+         *
+         * Forwards to the shared, private
+         * Detail::SdlSensorSubsystem<Accelerometer>::IsSensorConnected() so
+         * its staleness-detection logic (used by
+         * Detail::SdlSensorSubsystem<Accelerometer>::OpenDefaultSensorLocked()
+         * to invalidate a cached handle whose device has disappeared) has at
+         * least one direct, automated test — this container never has a
+         * real SDL sensor open, so every real id this returns for is
+         * necessarily "not connected"; this hook exists to prove the
+         * plumbing/logic itself, not to simulate a genuine live device.
+         *
+         * @param sensorId The SDL sensor id to check.
+         * @return true if still present in the current SDL_GetSensors() list.
+         */
+        NOXNA static bool IsSensorConnectedForTesting(std::int64_t sensorId);
+
+        /**
          * @brief Legacy WP7 7.0 event raised when the accelerometer reading changes.
          *
          * Deprecated in favor of CurrentValueChanged, which is the WP7 7.1
