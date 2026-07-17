@@ -74,8 +74,21 @@
 > (e.g. a common "Idle"/"Walk" library) through `ContentManager`'s normal caching. Dispatched by
 > extension; fully backward compatible with every existing `.clip.bin` reference. 3 new tests;
 > full-suite regression: 4683 tests, 4681 passed, same 2 pre-existing hardware skips, 0 failures.
-> A glTF→`Model`/`AnimationClip` import tool remains open (`plan_cnj.md` Phase 12), deliberately
-> not started without explicit confirmation.
+>
+> **2026-07-17 update — Phase 12, glTF import tool:** implemented at the project owner's explicit
+> request, including skeleton/skinning/animation ("melo by to umet i kosti"). `tools/gltf_to_cnj/`
+> (`cna_tool_gltf_to_cnj`, built on vendored `cgltf` v1.15) converts a real `.gltf`/`.glb` file into
+> a `Model` `.cnj` + vertex/index/skeleton binary sidecars + one standalone, shareable `.cnj`
+> `AnimationClip` per clip (CNB-48's mechanism, exercised for real by this tool). Carries forward
+> both real bugs `tools/avatar_asset_pipeline/convert_avatar.py` already found (topological bone
+> reorder, non-indexed primitives) and adds new animation-resampling logic (glTF's per-component
+> channels merged into CNA's own per-keyframe `KeyframeEXT` shape). Verified against a real official
+> Khronos `CesiumMan.glb` sample (19 bones, a real walk-cycle clip, genuine `AnimationPlayer`
+> playback) and a permanent, network-free adversarial regression test
+> (`GltfToCnjToolTests.cpp`). Full-suite regression: 4686 tests, 4684 passed, same 2 pre-existing
+> hardware skips, 0 failures. Deliberate MVP scope cuts (no material/texture extraction, single skin
+> per file, no sparse-accessor support) are documented in the tool's own file header and
+> `plan_cnj.md`'s CNB-50/51/52.
 
 ## Why this alternative exists
 
@@ -610,9 +623,9 @@ Summary of what landed, in the order it happened:
 11. `Model`'s/`SkinnedModel`'s `"animations"` field can now name a standalone, shareable `.cnj`
     `AnimationClip` asset (loaded/cached through `ContentManager`, real caching) instead of only a
     raw `.clip.bin` blob per model — Phase 11 continued (`plan_cnj.md` `CNB-48`/`CNB-49`).
+12. A real glTF 2.0 → `Model`/`AnimationClip` import tool (`tools/gltf_to_cnj/`, `cna_tool_gltf_to_cnj`,
+    vendored `cgltf`), including skeleton/skinning/animation — Phase 12 (`plan_cnj.md` `CNB-50`–`CNB-52`).
 
-A glTF→`Model`/`AnimationClip` import tool remains open, tracked separately in `plan_cnj.md`'s
-Phase 12 — deliberately not started without explicit confirmation, per that phase's own note.
 Further genuinely new `.cnj` types with no existing reader today (game-specific custom data beyond
 what a game registers itself) remain a natural, open-ended follow-up — `RegisterCnjLoader<T>`
 already supports them without any CNA core change.

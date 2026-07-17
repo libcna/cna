@@ -168,4 +168,6 @@ include(cmake/Tests/SdlGpuTests.cmake)
 
 include(cmake/Harnesses.cmake)
 
+include(cmake/ToolGltfToCnj.cmake)
+
 include(cmake/UnitTests.cmake)

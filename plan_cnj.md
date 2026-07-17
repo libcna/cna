@@ -1,10 +1,15 @@
 # `.cnj` content format — implementation plan for CNA
 
-> **Status update (2026-07-17): Phase 10 (`CNB-40`–`CNB-42`, standalone `AnimationClipTypeReader`)
-> also closed** — see that phase's own section below. Full-suite regression after Phase 10: 4661
-> tests, 4659 passed, same 2 pre-existing hardware skips, 0 failures. Everything below this line
-> describes the original 9-phase scope as it stood on 2026-07-15; Phase 10 was added later, as a
-> follow-up this plan's own "Genuinely new `.cnj` types" note (via `cnj.md`) had already flagged.
+> **Status update (2026-07-17): Phases 10, 11, and 12 also closed.** Phase 10 (`CNB-40`–`CNB-42`,
+> standalone `AnimationClipTypeReader`); Phase 11 (`CNB-43`–`CNB-49`, `Texture3D`/`Curve`/5 stock
+> effects + `AnimationClip` sharing, closing every remaining `.xnb`-vs-`.cnj` type-coverage gap);
+> Phase 12 (`CNB-50`–`CNB-52`, a real glTF 2.0 → `Model`/`AnimationClip` import tool, including
+> skeleton/skinning/animation, verified against both a real Khronos sample model and a permanent
+> adversarial regression test). See each phase's own section below for full details. Final
+> full-suite regression: **4686 tests, 4684 passed, same 2 pre-existing hardware skips, 0
+> failures.** Everything below this line describes the original 9-phase scope as it stood on
+> 2026-07-15; Phases 10-12 were added later as follow-ups this plan's own "Genuinely new `.cnj`
+> types" note (via `cnj.md`) had already flagged.
 >
 > **Status: ✅ COMPLETE 2026-07-15 — all 9 phases (`CNB-1`–`CNB-39`) closed.** Phases 0–8
 > (`CNB-1`–`CNB-31`) were completed first on `feature/cnb`. A subsequent external review found
@@ -313,26 +318,20 @@ onto `.cnj`, `RegisterCnjLoader<T>`, and Phase 9's hardening of those mechanisms
 
 ---
 
-## Phase 12 — glTF → `Model`/`AnimationClip` import tool (deferred, large, cross-cutting)
+## Phase 12 — glTF → `Model`/`AnimationClip` import tool
 
-> **Not started; do not begin without explicit confirmation**, matching this plan's own established
-> pattern for large deferred phases (see Phase 6/9's own precedent). Logged here so the proposal
-> discussed 2026-07-17 isn't lost, not as a green light to build it in the same sweep as Phase 11's
-> small mechanical readers.
->
-> Builds on `../gltf.md`'s existing, already-thorough analysis (written for a sibling checkout,
-> confirmed to apply directly to this repo -- `SkinnedModelEXT.hpp`/`avatar-real-rendering-ext.md`/
-> `tools/avatar_asset_pipeline/convert_avatar.py` all really exist here). `gltf.md` targets
-> `SkinnedModelEXT`/`.skinnedmodel.json` (the Avatar-specific path, deliberately kept separate from
-> `.cnj` per `CNB-22`). This phase's own target is different and narrower: the general-purpose
-> `Model`/standalone `AnimationClip` path, which is now fully `.cnj`-native after Phase 10 -- no
-> `.skinnedmodel.json` involvement needed for non-Avatar use cases.
+> Implemented 2026-07-17 at the project owner's explicit request ("udelej fazi 12. melo. by to umet
+> i kosti" -- must handle bones). Builds on `../gltf.md`'s existing analysis (written for a sibling
+> checkout, confirmed to apply directly to this repo). `gltf.md` targets `SkinnedModelEXT`/
+> `.skinnedmodel.json` (the Avatar-specific path, deliberately kept separate from `.cnj` per
+> `CNB-22`); this phase's target is different and narrower: the general-purpose `Model`/standalone
+> `AnimationClip` path, fully `.cnj`-native since Phase 10 -- no `.skinnedmodel.json` involvement.
 
 | # | Task | Status | Notes |
 |---|---|---|---|
-| CNB-50 | Vendor `cgltf` (C99, single-header, MIT) and write a shared glTF-parsing core | ⬜ | Per `gltf.md` §4.1's own library comparison -- reasoning carries over unchanged. Must carry forward `convert_avatar.py`'s already-found-and-fixed bugs: topological bone reorder + `inverseBindMatrices`/`JOINTS_0` remap (silent wrong-skinning bug otherwise), non-indexed primitive handling (Khronos "Fox" sample triggers this for real). |
-| CNB-51 | `--target=cnj` output backend: emits `Model` `.cnj` (`"meshes"`, `"skeleton"`/`"animations"` fields, Task 941's existing shape) + optional standalone `.cnj` `AnimationClip` files for shared clips (CNB-48) | ⬜ | New scope beyond `gltf.md`'s own recommendation, which only covers a `--target=skinnedmodel` equivalent. Both targets should share the same parsing/bone-fix core (CNB-50); only the output serialization differs. |
-| CNB-52 | CLI tool, offline conversion only (matches `gltf.md`'s phase-1 recommendation, not the later runtime-`ContentManager`-reader phase-2) | ⬜ | Test corpus: Khronos `glTF-Sample-Assets`, per `gltf.md` §5's quality checklist (non-indexed primitives, sparse accessors, all accessor component types, 3 interpolation modes, sRGB base color, unit convention, `asset.version` validation). |
+| CNB-50 | Vendor `cgltf` (C99, single-header, MIT) and write a shared glTF-parsing core | ✅ | `third_party/cgltf/cgltf.h` (v1.15, pinned tag, MIT `LICENSE` alongside it). Both of `convert_avatar.py`'s already-found bugs carried forward and **both independently re-verified working** (not just carried forward as a claim -- see CNB-52's real-asset and adversarial-fixture testing below): (1) topological bone reorder (glTF's `skin.joints` order is not guaranteed parent-before-child; `SkinningData::SkeletonHierarchy`/`AnimationPlayer::ComputeBoneTransformsEXT` both require it) -- BFS-from-roots reorder with a full `oldIndex -> newIndex` remap applied to bind pose, inverse bind pose, vertex `JOINTS_0`, and animation-channel bone targets alike; (2) non-indexed primitives (no `indices` accessor) -- synthesizes a sequential index buffer. Animation resampling is new work beyond `convert_avatar.py`'s own scope (CNA's `KeyframeEXT` bundles translation/rotation/scale per key; glTF stores each as a separate channel with independent keyframe times) -- unions the distinct times across whichever of a bone's T/R/S channels exist, then interpolates each (`Vector3::Lerp`/`Quaternion::Slerp`, matching `AnimationPlayer`'s own interpolation exactly) at every such time, falling back to the bone's own real bind-pose component (via `Matrix::Decompose`) for a channel that doesn't exist at all, not an unrelated identity/zero default. |
+| CNB-51 | `.cnj` output backend: emits `Model` `.cnj` (`"meshes"`, `"skeleton"`/`"animations"` fields, Task 941's existing shape) + one standalone, shareable `.cnj` `AnimationClip` file per clip (CNB-48) | ✅ | Skinned meshes write the existing stride-52 (`VertexPositionNormalTextureSkinned`) binary layout `ModelTypeReader` already supports (confirmed byte-for-byte against `VertexBuffer.cpp`'s own `GpuVertex` struct, not assumed); unskinned meshes use stride-32. `.skeleton.bin` matches `BinReaderEXT`'s existing format exactly (int32 boneCount, int32 parent indices, then `Matrix` bind pose / inverse bind pose, both as 16 sequential row-major floats). Each animation clip is written as its own standalone `.cnj` `AnimationClip` document (not inline `.clip.bin`), directly exercising CNB-48's sharing mechanism from the same day. **Deliberate MVP scope cuts, documented in the tool's own file header**: no material/texture extraction (meshes always use untextured `BasicEffect`/`SkinnedEffect`); only the first skin in a file is imported; sparse accessors are rejected with a clear error (`cgltf_accessor_read_float` itself returns false for them) rather than silently reading zeros; `CUBICSPLINE`-interpolated channels use only the sampled value (in/out tangents discarded, with a printed warning) -- valid per spec, not perfectly smooth. |
+| CNB-52 | CLI tool + build wiring + real verification | ✅ | `tools/gltf_to_cnj/gltf_to_cnj.cpp`, `cmake/ToolGltfToCnj.cmake` (`cna_tool_gltf_to_cnj`, built unconditionally -- a developer content tool, not gated behind `CNA_BUILD_TESTS`, matching `cna_diag_compare`'s own "standalone tool" precedent in `Harnesses.cmake`). **Verified twice, not just built**: (1) run interactively against a real official Khronos `glTF-Sample-Assets` model (`CesiumMan.glb`, CC-BY 4.0, downloaded to scratch only -- not committed) -- produced a correct 19-bone topologically-ordered skeleton (every parent index < child index, checked programmatically), a real 2-second/19-track walk-cycle clip, and `AnimationPlayer::GetSkinTransforms()` genuinely produced non-identity matrices mid-playback, proving the full pipeline end-to-end on real content; (2) a permanent, network-free `GltfToCnjToolTests.cpp` (2 gtest cases) spawns the real built tool as a subprocess (`CNA_GLTF_TO_CNJ_TOOL_PATH`, same `posix_spawn` pattern as `TwoProcessLoopbackTest.cpp`/`AudioMixerTests.cpp`, excluded on WIN32/EMSCRIPTEN/ANDROID for the same POSIX-only reason those already are) against a small, deliberately adversarial hand-built glTF fixture: a non-indexed primitive, `skin.joints` authored in reversed (child-before-parent) order specifically to force a real topological-reorder bug to surface if the remap were wrong, and only one bone's rotation animated (no translation/scale channel at all, testing the bind-pose-fallback path) -- then loads the tool's own output back through `ContentManager::Load<Model>()` and asserts the reordered hierarchy, the remapped `JOINTS_0`/animation bone index, the bind-pose-fallback translation, and real `AnimationPlayer` playback all come out correct. Full-suite regression: 4686 tests, 4684 passed, same 2 pre-existing hardware skips, 0 failures. Khronos's own quality checklist (`gltf.md` §5) items *not* covered by this MVP: sparse accessors (explicitly rejected, not silently mishandled), non-`FLOAT` accessor component types beyond what `cgltf_accessor_read_float`'s own normalization already handles transparently, sRGB texture color space (moot -- no textures are extracted at all), sample-corpus breadth beyond the two models actually tested here. |
 
 ---
 
