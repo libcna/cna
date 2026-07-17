@@ -3,6 +3,7 @@
 #include "Microsoft/Xna/Framework/Audio/AudioEngine.hpp"
 #include "Microsoft/Xna/Framework/Audio/Cue.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
+#include "CNA/Internal/Audio/WavWrapper.hpp"
 #include "CNA/Internal/Audio/XactTypes.hpp"
 #include "System/ArgumentNullException.hpp"
 #include "System/IO/FileNotFoundException.hpp"
@@ -33,50 +34,30 @@ namespace Microsoft::Xna::Framework::Audio
         {}
     };
 
-    // ── WAV-file builders (for ADPCM wrapping) ────────────────────────────────
+    // ── WAV-file builders (for PCM8/ADPCM wrapping) ───────────────────────────
+    //
+    // AUDIO-ADPCM-001 (2026-07-17 deep audit follow-up): the previous local BuildAdpcmWav() wrote
+    // a "fmt " chunk with cbSize=2 (only wSamplesPerBlock, no coefficient table at all). SDL3's
+    // real MS-ADPCM decoder requires at least 7 coefficient pairs (SDL_wave.c's MS_ADPCM_Init:
+    // "Missing required coefficients in MS ADPCM format header") and validates them against the
+    // standard preset table -- confirmed empirically that the old wrapper's output was REJECTED
+    // outright by SDL_LoadWAV_IO ("Could not read MS ADPCM format header"), meaning every
+    // MS-ADPCM-compressed XACT WaveBank entry silently failed to load (WaveBank::GetSoundEffect
+    // caught the resulting exception and returned nullptr). Now shares the same corrected,
+    // tested WAV-assembly logic as the XNB SoundEffectReader (CNA::Internal::Audio::
+    // BuildWavFromWaveFormatEx/BuildStandardMsAdpcmExtension).
 
     namespace
     {
-        static void w16(std::vector<uint8_t>& v, uint16_t x)
-        {
-            v.push_back(static_cast<uint8_t>(x));
-            v.push_back(static_cast<uint8_t>(x >> 8));
-        }
-        static void w32(std::vector<uint8_t>& v, uint32_t x)
-        {
-            v.push_back(static_cast<uint8_t>(x));
-            v.push_back(static_cast<uint8_t>(x >>  8));
-            v.push_back(static_cast<uint8_t>(x >> 16));
-            v.push_back(static_cast<uint8_t>(x >> 24));
-        }
-        static void tag(std::vector<uint8_t>& v, const char* t)
-        {
-            v.push_back(static_cast<uint8_t>(t[0]));
-            v.push_back(static_cast<uint8_t>(t[1]));
-            v.push_back(static_cast<uint8_t>(t[2]));
-            v.push_back(static_cast<uint8_t>(t[3]));
-        }
-
         std::vector<uint8_t> BuildPcmWav(
             const uint8_t* audioData, uint32_t audioLen,
             uint16_t channels, uint32_t sampleRate, uint8_t bitsPerSample)
         {
-            uint16_t blockAlign      = static_cast<uint16_t>(channels * (bitsPerSample / 8));
-            uint32_t avgBytesPerSec  = sampleRate * blockAlign;
-            uint32_t riffPayload     = 4 + (8 + 16) + (8 + audioLen);
-
-            std::vector<uint8_t> wav;
-            wav.reserve(12 + 24 + 8 + audioLen);
-
-            tag(wav, "RIFF"); w32(wav, riffPayload);
-            tag(wav, "WAVE");
-            tag(wav, "fmt "); w32(wav, 16);
-            w16(wav, 1); w16(wav, channels);
-            w32(wav, sampleRate); w32(wav, avgBytesPerSec);
-            w16(wav, blockAlign); w16(wav, bitsPerSample);
-            tag(wav, "data"); w32(wav, audioLen);
-            wav.insert(wav.end(), audioData, audioData + audioLen);
-            return wav;
+            const uint16_t blockAlign = static_cast<uint16_t>(channels * (bitsPerSample / 8));
+            const uint32_t avgBytesPerSec = sampleRate * blockAlign;
+            return CNA::Internal::Audio::BuildWavFromWaveFormatEx(
+                audioData, audioLen, /*wFormatTag=*/1, channels, sampleRate, avgBytesPerSec,
+                blockAlign, bitsPerSample, /*extensionData=*/{}, /*factSampleFrames=*/0);
         }
 
         std::vector<uint8_t> BuildAdpcmWav(
@@ -84,33 +65,15 @@ namespace Microsoft::Xna::Framework::Audio
             uint16_t channels, uint32_t sampleRate,
             uint16_t blockAlign, uint16_t samplesPerBlock)
         {
-            // nAvgBytesPerSec
-            uint32_t avgBytesPerSec = (samplesPerBlock > 0)
+            const uint32_t avgBytesPerSec = (samplesPerBlock > 0)
                 ? (sampleRate * blockAlign / samplesPerBlock) : sampleRate;
-            uint32_t totalSamples   = (blockAlign > 0)
+            const uint32_t totalSamples = (blockAlign > 0)
                 ? (audioLen / blockAlign * samplesPerBlock) : 0;
-
-            // fmt chunk: 18 bytes (16 standard + 2 cbSize + 2 wSamplesPerBlock = 20)
-            uint32_t fmtSize = 20;
-            uint32_t riffPayload = 4 + (8 + fmtSize) + (8 + 4) + (8 + audioLen);
-
-            std::vector<uint8_t> wav;
-            wav.reserve(12 + 8 + fmtSize + 12 + 8 + audioLen);
-
-            tag(wav, "RIFF"); w32(wav, riffPayload);
-            tag(wav, "WAVE");
-            tag(wav, "fmt "); w32(wav, fmtSize);
-            w16(wav, 2);       // MS-ADPCM
-            w16(wav, channels);
-            w32(wav, sampleRate); w32(wav, avgBytesPerSec);
-            w16(wav, blockAlign); w16(wav, 4); // bitsPerSample=4
-            w16(wav, 2);       // cbSize = 2
-            w16(wav, samplesPerBlock);
-            tag(wav, "fact"); w32(wav, 4);
-            w32(wav, totalSamples);
-            tag(wav, "data"); w32(wav, audioLen);
-            wav.insert(wav.end(), audioData, audioData + audioLen);
-            return wav;
+            return CNA::Internal::Audio::BuildWavFromWaveFormatEx(
+                audioData, audioLen, /*wFormatTag=*/2, channels, sampleRate, avgBytesPerSec,
+                blockAlign, /*bitsPerSample=*/4,
+                CNA::Internal::Audio::BuildStandardMsAdpcmExtension(samplesPerBlock),
+                totalSamples);
         }
     }
 

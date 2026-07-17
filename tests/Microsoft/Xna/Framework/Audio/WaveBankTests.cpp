@@ -149,6 +149,76 @@ namespace
         return data;
     }
 
+    // AUDIO-ADPCM-001 (2026-07-17 deep audit follow-up): minimal compact .xwb with one mono
+    // MS-ADPCM entry, real block-aligned payload (not silence -- SDL's real MS-ADPCM decoder
+    // must actually parse a full block header + nibble data, which a run of zero bytes alone
+    // would not meaningfully exercise). wBlockAlign=8 -> blockAlign=(8+22)*1=30 bytes/block,
+    // samplesPerBlock=(8+16)*2=48 samples/block (XactParser.cpp's own compact-ADPCM formula);
+    // 4 blocks of 30 bytes each. Each block: predictor index 0 (valid, <7 preset coefficients),
+    // iDelta/iSamp1/iSamp2 header, then 23 bytes of nibble data.
+    std::vector<uint8_t> BuildAdpcmXwbFixtureBytes(const std::string& bankName)
+    {
+        constexpr uint32_t headerSize       = 48;
+        constexpr uint32_t bankDataSize     = 96;
+        constexpr uint32_t entryCount       = 1;
+        constexpr uint32_t entryMetaDataSize = 4;
+        constexpr uint32_t entryMetaSegSize = entryCount * entryMetaDataSize;
+        constexpr uint16_t blockAlign       = 30;
+        constexpr uint32_t blockCount       = 4;
+        constexpr uint32_t waveDataLength   = blockAlign * blockCount;
+        constexpr uint32_t alignment        = 4;
+
+        const uint32_t segOffset[5] = {
+            headerSize,
+            headerSize + bankDataSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+        };
+        const uint32_t segLength[5] = { bankDataSize, entryMetaSegSize, 0, 0, waveDataLength };
+
+        std::vector<uint8_t> data;
+
+        const char magic[4] = { 'W', 'B', 'N', 'D' };
+        data.insert(data.end(), magic, magic + 4);
+        AppendU32(data, 1);
+        for (int i = 0; i < 5; ++i)
+        {
+            AppendU32(data, segOffset[i]);
+            AppendU32(data, segLength[i]);
+        }
+
+        AppendU32(data, 0x00020000u); // wbFlags: COMPACT only, no names
+        AppendU32(data, entryCount);
+        AppendPadded(data, bankName, 64);
+        AppendU32(data, entryMetaDataSize);
+        AppendU32(data, 0);
+        AppendU32(data, alignment);
+        constexpr uint8_t wBlockAlign = 8;
+        const uint32_t compactFormat =
+              (2u)                 // format tag: ADPCM
+            | (1u << 2)            // channels: mono
+            | (22050u << 5)        // sample rate
+            | (static_cast<uint32_t>(wBlockAlign) << 23)
+            | (0u << 31);          // bps flag unused for ADPCM
+        AppendU32(data, compactFormat);
+        for (int i = 0; i < 8; ++i) data.push_back(0); // buildTime
+
+        AppendU32(data, 0u); // entry 0: offset=0, deviation=0
+
+        for (uint32_t b = 0; b < blockCount; ++b)
+        {
+            data.push_back(0); // bPredictor: coefficient index 0 (valid, < 7 presets)
+            AppendU16(data, 32);  // iDelta
+            AppendU16(data, 0);   // iSamp1
+            AppendU16(data, 0);   // iSamp2
+            for (uint32_t j = 0; j < blockAlign - 7; ++j)
+                data.push_back(static_cast<uint8_t>(0x11 * (j + 1))); // arbitrary nibble data
+        }
+
+        return data;
+    }
+
     // Minimal .xsb with one wavebank reference, one simple sound pointing at wave 0
     // of that bank, and one simple cue playing that sound.
     std::vector<uint8_t> BuildXsbFixtureBytes(const std::string& wavebankName = kWaveBankName,
@@ -263,6 +333,16 @@ namespace
         static const std::string path = WriteFixture(
             "cna_wavebank_test", "fixture8bit.xsb",
             BuildXsbFixtureBytes(kWaveBank8BitName, kCue8BitName));
+        return path;
+    }
+
+    constexpr const char* kWaveBankAdpcmName = "TestWaveBankAdpcm";
+
+    const std::string& XwbAdpcmFixturePath()
+    {
+        static const std::string path = WriteFixture(
+            "cna_wavebank_test", "fixtureadpcm.xwb",
+            BuildAdpcmXwbFixtureBytes(kWaveBankAdpcmName));
         return path;
     }
 
@@ -871,6 +951,36 @@ TEST(WaveBankTest, GetSoundEffectFor8BitPcmEntrySucceeds)
     {
         GTEST_SKIP() << "no audio device (dummy driver unavailable); "
                         "could not exercise WaveBank playback";
+    }
+}
+
+// AUDIO-ADPCM-001 (2026-07-17 deep audit follow-up): confirmed, previously-uncaught defect --
+// WaveBank::GetSoundEffect's MS-ADPCM branch wrapped raw compressed bytes in a WAV file with no
+// coefficient table at all, which SDL3's real MS-ADPCM decoder rejects outright ("Could not read
+// MS ADPCM format header"), meaning every MS-ADPCM-compressed XACT wave silently failed to load
+// (caught internally, GetSoundEffect returned nullptr). Asserts GetSoundEffect() directly
+// (non-null) rather than only inferring success via IsInUseProperty after Play() -- that older
+// pattern conflates "no audio device" with "decode failed" into the same GTEST_SKIP path and
+// would not have caught this bug even if run under a real device.
+TEST(WaveBankTest, GetSoundEffectForAdpcmEntrySucceeds)
+{
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+
+    try
+    {
+        AudioEngine& engine = SharedEngine();
+        WaveBank wb(&engine, XwbAdpcmFixturePath());
+        ASSERT_TRUE(wb.getIsPreparedProperty());
+
+        const SoundEffect* effect = WaveBankTestAccess::GetSoundEffect(wb, 0);
+        ASSERT_NE(effect, nullptr)
+            << "MS-ADPCM entry failed to decode -- see AUDIO-ADPCM-001";
+        EXPECT_GT(effect->getDurationProperty().getTicksProperty(), 0);
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable); "
+                        "could not construct WaveBank/AudioEngine";
     }
 }
 
