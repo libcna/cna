@@ -7373,7 +7373,7 @@ test is not sufficient for an Android coordinate/fusion claim.
   - Quaternion, matrix and Euler fields remain mutually consistent.
 - **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
 
-### MOT2-002 — Harden attitude math against invalid/non-unit input — OPEN
+### MOT2-002 — Harden attitude math against invalid/non-unit input — CLOSED (2026-07-17)
 
 - **Priority:** P1
 - **Area:** Perfection re-audit
@@ -7386,6 +7386,69 @@ test is not sufficient for an Android coordinate/fusion claim.
   - No undefined/NaN output escapes for invalid input; invalid data changes validity/state according to policy.
   - Round-trip error bounds are documented.
 - **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+- **Resolution:** confirmed both concerns are real. `Quaternion::Normalize()` (real, faithfully
+  unchanged XNA behavior) divides by `1/sqrt(lengthSquared)` with no zero/near-zero guard — a
+  near-zero-norm or non-finite input produces `NaN`/`Inf` throughout, not a clean error.
+  `std::asin(-M32)`'s argument is mathematically guaranteed in `[-1, 1]` for a unit-length, finite
+  rotation matrix, but floating-point rounding (most commonly exactly at a gimbal-lock pole) can
+  push it fractionally outside that range, and `asin()` outside its domain returns `NaN`, not a
+  clamped boundary value.
+  - Added `Detail::NormalizeOrIdentity()` (new shared helper,
+    `AndroidMotionMath.hpp`) — normalizes, or falls back to `Quaternion::Identity` for a
+    non-finite (`NaN`/`Inf`, including a finite-looking input whose `LengthSquared()` itself
+    overflows to `Inf` for a huge component) or near-zero-norm (`< 1e-12`, a threshold far below
+    any real orientation quaternion's `LengthSquared() == 1`) input.
+  - **Found and fixed a real gap beyond the literal one function this task named:**
+    `ExtractYawPitchRollFromQuaternion()` alone was not the only place raw sensor data reaches
+    unchecked math — `AndroidMotionBackend::HandleAttitudeSample()` *separately* calls
+    `Matrix::CreateFromQuaternion()` on the raw `Quaternion` returned by
+    `ConvertRotationVectorToXnaQuaternion()` to build the **published**
+    `AttitudeReading::RotationMatrix` (and publishes the raw `Quaternion` itself). Normalizing only
+    inside the yaw/pitch/roll extraction would have left that separately-computed, separately-published
+    matrix (and quaternion) still built from raw, possibly non-finite/non-unit input — silently
+    violating `ConvertRotationVectorToXnaQuaternion()`'s own pre-existing doc-comment promise that
+    "RotationMatrix/Yaw/Pitch/Roll are always derived FROM this same Quaternion." Moved validation
+    into `ConvertRotationVectorToXnaQuaternion()` itself (via the same shared `NormalizeOrIdentity()`
+    helper) so the `Quaternion` it returns is already valid/normalized, and every downstream
+    consumer (the caller's own `Matrix::CreateFromQuaternion()` call, and
+    `ExtractYawPitchRollFromQuaternion()`, which keeps its own independent, idempotent
+    normalization as defense-in-depth for any *other* caller) stays consistent.
+  - `std::asin(-m.M32)`'s argument is now `std::clamp`ed to `[-1, 1]` first.
+  - **Gimbal-lock convention:** unchanged from the pre-existing formula — `yaw`/`roll` remain
+    independently computed via `atan2()` at the pole (no new special case), since `atan2(0, 0)` is
+    already well-defined (`0`) in C++, unlike `asin()` outside `[-1, 1]` — there was no actual gap
+    in the `atan2()` calls to fix, only in the `asin()` one.
+  - **"Reconstruct/validate W where required":** investigated whether this project's actual
+    Android target range needs W-reconstruction (some older Android API levels' `TYPE_ROTATION_VECTOR`
+    omit `values[3]`/`w`, requiring `w = sqrt(1 - x^2 - y^2 - z^2)`). `GetValueCountForAndroidSensorType()`'s
+    own pre-existing doc comment (`AndroidSensorBridge.hpp`) already documents `w` as "optional on
+    older API levels, always populated on the API 24+ minimum this project targets" — since this
+    project's minimum target *is* API 24 (`docs/devices-build.md`), W-reconstruction is not
+    applicable to any platform this codebase actually supports; not built, to avoid unreachable
+    dead code for an API range out of scope.
+- **Files changed:** `include/Microsoft/Devices/Sensors/Detail/AndroidMotionMath.hpp`,
+  `tests/Microsoft/Devices/Sensors/Detail/AndroidMotionMathTests.cpp`.
+- **Tests:** one pre-existing test (`ConvertRotationVectorToXnaQuaternionIsComponentwise`) asserted
+  raw passthrough for a non-unit input (`{0.1,0.2,0.3,0.9}`, `LengthSquared() == 0.95`) — this is
+  no longer true by design, so it was updated (not weakened) to an already-unit-length input
+  (normalization is numerically a no-op there, preserving the original intent for that specific
+  case) plus a new, separate test locking in the actual normalization behavior for non-unit input.
+  Added 8 new tests: NaN/`+Inf`/exact-zero/huge-overflowing/subnormal-near-zero input to
+  `ConvertRotationVectorToXnaQuaternion()` (each asserts fallback to `Quaternion::Identity`);
+  NaN and exact-zero input directly to `ExtractYawPitchRollFromQuaternion()` (asserts no `NaN`
+  output); and a gimbal-lock-pole test (`+-pi/2` pitch) confirming no `NaN` emerges at the exact
+  angle the `asin()` clamp targets. Full Devices/Sensors filtered suite: 415 tests, 411 passed, 4
+  skipped (hardware-only, unchanged) — 9 net new/changed, all passing.
+- **Sanitizer/static-analysis result:** clean under `devices-ubsan` (this is pure, host-testable
+  math with no platform-specific code — no Android-only gap here).
+- **Remaining limitations:** "Round-trip error bounds are documented" — the pre-existing
+  round-trip tests already use an explicit `Tolerance = 1e-3f` constant, documented in this file;
+  no tighter bound was independently derived or required by this task. Real Android
+  hardware/emulator confirmation that actual `TYPE_ROTATION_VECTOR`/`TYPE_GAME_ROTATION_VECTOR`
+  samples never legitimately trigger this fallback path in practice was not performed — same
+  standing environment limitation as every other Android-only verification in this plan; this is
+  pure math hardening against a hypothetical bad sample, not a claim about real hardware's typical
+  output quality.
 
 ### MOT2-003 — Replace latest-value Motion fusion with timestamp-aligned fusion — OPEN
 
