@@ -729,6 +729,44 @@ this exact translation unit, never observed incrementing at runtime.
    evidence-based "tight" threshold, rather than picking one arbitrarily — the required
    work's own "measured" wording is a literal instruction, not a suggestion.
 
+## 8b. Motion attitude-source fallback diagnostic (Task MOT2-005, 2026-07-17)
+
+**Code under test:** `Motion::getIsAttitudeNorthReferencedProperty()` (new `NOXNA`
+property) / `Detail::AndroidMotionBackend::IsUsingNorthReferencedAttitudeSource()` (new
+`IMotionBackend` method) — reports whether the real Android backend's currently-active
+attitude source is the magnetometer-fused, north-referenced `TYPE_ROTATION_VECTOR`, or
+the drift-prone `TYPE_GAME_ROTATION_VECTOR` fallback (`usingGameRotationVector_`, set once
+by `Start()`, per Task DEVICES-0104's original fallback logic). Before this task, nothing
+exposed which of the two was actually in effect at all.
+
+**What is already verified, without hardware:** the delegation plumbing itself
+(`Motion` → `IMotionBackend` → `AndroidMotionBackend`) is fully host-testable via
+`MotionTests.cpp`'s `FakeMotionBackend` (unlike most other Android-only fixes this pass)
+— 4 new tests confirm the property returns `true` with no backend at all, correctly
+mirrors a fake backend reporting either `true` or `false`, and throws
+`ObjectDisposedException` after disposal, matching this class's other properties'
+convention.
+
+**Why this needs real hardware:** whether `AndroidMotionBackend::Start()` actually picks
+`TYPE_GAME_ROTATION_VECTOR` in the expected circumstance (the device genuinely lacking a
+usable `TYPE_ROTATION_VECTOR` — usually meaning no magnetometer, or one currently
+uncalibrated/unavailable) — and whether the property then correctly reports `false` end
+to end — has never been observed on a real device/emulator. **Status: NOT RUN — hardware
+validation open**, matching this pass's established precedent for Android-only runtime
+behavior.
+
+**Steps:**
+1. On a real Android device with a working magnetometer, start `Motion` and confirm
+   `getIsAttitudeNorthReferencedProperty()` reports `true`.
+2. If possible, disable/cover the magnetometer (or use a device/emulator profile known to
+   lack `TYPE_ROTATION_VECTOR`) and confirm `AndroidMotionBackend` falls back to
+   `TYPE_GAME_ROTATION_VECTOR` and the property correctly reports `false`.
+3. With the fallback active, let the device sit still for an extended period (several
+   minutes) and confirm `Motion.CurrentValue.Attitude`'s yaw visibly drifts over time
+   (the expected, documented behavior of the game rotation vector with no absolute
+   reference) — this is the concrete symptom the property exists to let an application
+   detect and react to.
+
 ---
 
 ## 9. Emulator limitations for Devices testing (`plan_devices.md` Task DEVICES-0129)

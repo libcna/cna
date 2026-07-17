@@ -78,5 +78,26 @@ namespace Microsoft::Devices::Sensors::Detail
          * @param timeBetweenUpdates New requested sample interval.
          */
         virtual void SetSampleInterval(const System::TimeSpan& timeBetweenUpdates) = 0;
+
+        /**
+         * @brief Whether the currently-active attitude source is referenced to true/magnetic north (Task MOT2-005).
+         *
+         * A real Android backend prefers `TYPE_ROTATION_VECTOR` (fused with
+         * the magnetometer, north-referenced, matching the real WP7
+         * `Motion.Attitude` documentation's implicit assumption) but falls
+         * back to `TYPE_GAME_ROTATION_VECTOR` (gyroscope/accelerometer only,
+         * no magnetometer reference, free to drift in yaw over time) if the
+         * former is unavailable on this device — see
+         * `AndroidMotionBackend::Start()`'s own doc comment (Task
+         * DEVICES-0104). Before this task, nothing exposed *which* of the
+         * two was actually in use to a caller — "Expose fallback
+         * diagnostics" (this task's own required work) is what this method
+         * answers. Meaningless before the first successful `Start()`;
+         * implementations should return `true` (the "nothing to warn about
+         * yet" default) until then.
+         *
+         * @return true if the active attitude source is north-referenced (or no backend has started yet); false if it is the drift-prone fallback.
+         */
+        [[nodiscard]] virtual bool IsUsingNorthReferencedAttitudeSource() = 0;
     };
 } // namespace Microsoft::Devices::Sensors::Detail

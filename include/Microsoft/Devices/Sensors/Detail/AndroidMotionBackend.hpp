@@ -72,6 +72,8 @@ namespace Microsoft::Devices::Sensors::Detail
 
         void SetSampleInterval(const System::TimeSpan& timeBetweenUpdates) override;
 
+        [[nodiscard]] bool IsUsingNorthReferencedAttitudeSource() override;
+
         /**
          * @brief Test-only hook (Task MOT2-003): total fused frames dropped for exceeding `MaxFusionAgeWindow`.
          *
@@ -98,7 +100,18 @@ namespace Microsoft::Devices::Sensors::Detail
         /** @brief Task MOTION-011: calibration-only -- never exposed through MotionReading, see this class's own doc comment. */
         AndroidSensorBridge magneticFieldBridge_;
 
-        /** @brief Set once Start() picks which of rotationVectorBridge_/gameRotationVectorBridge_ is actually in use. */
+        /**
+         * @brief Set once Start() picks which of rotationVectorBridge_/gameRotationVectorBridge_ is actually in use.
+         *
+         * Task MOT2-005 (2026-07-17, external audit
+         * `audit_devices_2026-07-17.md`): now read by
+         * `IsUsingNorthReferencedAttitudeSource()`, so — unlike before this
+         * task, when nothing ever read it and an unsynchronized write from
+         * `Start()` was harmless — this is now guarded by `stateMutex_`
+         * (`Start()` computes the value locally first, then stores it under
+         * the lock, matching this class's own established discipline for
+         * every other field a public method can read from another thread).
+         */
         bool usingGameRotationVector_ = false;
 
         std::mutex stateMutex_;

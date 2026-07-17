@@ -75,17 +75,25 @@ namespace Microsoft::Devices::Sensors::Detail
         // back to the game rotation vector only if the plain one isn't
         // available on this device (Task DEVICES-0104).
         bool attitudeStarted;
+        bool usingGameRotationVector;
         if (rotationVectorBridge_.IsAvailable())
         {
-            usingGameRotationVector_ = false;
+            usingGameRotationVector = false;
             attitudeStarted = rotationVectorBridge_.Start(
                 timeBetweenUpdates, [this](const AndroidSensorSample& sample) { HandleAttitudeSample(sample); });
         }
         else
         {
-            usingGameRotationVector_ = true;
+            usingGameRotationVector = true;
             attitudeStarted = gameRotationVectorBridge_.Start(
                 timeBetweenUpdates, [this](const AndroidSensorSample& sample) { HandleAttitudeSample(sample); });
+        }
+
+        // Task MOT2-005: stored under stateMutex_ -- see usingGameRotationVector_'s
+        // own doc comment for why this is no longer a bare, unsynchronized write.
+        {
+            std::lock_guard<std::mutex> lock(stateMutex_);
+            usingGameRotationVector_ = usingGameRotationVector;
         }
 
         const bool gravityStarted = gravityBridge_.Start(
@@ -143,6 +151,12 @@ namespace Microsoft::Devices::Sensors::Detail
     {
         std::lock_guard<std::mutex> lock(stateMutex_);
         return droppedFusionFrameCountForTesting_;
+    }
+
+    bool AndroidMotionBackend::IsUsingNorthReferencedAttitudeSource()
+    {
+        std::lock_guard<std::mutex> lock(stateMutex_);
+        return !usingGameRotationVector_;
     }
 
     void AndroidMotionBackend::HandleAttitudeSample(const AndroidSensorSample& sample)

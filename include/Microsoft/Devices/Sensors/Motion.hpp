@@ -130,6 +130,30 @@ namespace Microsoft::Devices::Sensors
          */
         NOXNA [[nodiscard]] SensorState getStateProperty() const;
 
+        /**
+         * @brief Gets whether `CurrentValue.Attitude`'s yaw is currently referenced to true/magnetic north.
+         *
+         * CNA extension beyond the documented WP7 API (Task MOT2-005,
+         * 2026-07-17, external audit `audit_devices_2026-07-17.md`): a real
+         * Android backend prefers the magnetometer-fused, north-referenced
+         * rotation vector, but falls back to the gyroscope/accelerometer-only
+         * game rotation vector (free to drift in yaw over time, with no
+         * absolute reference) if the former is unavailable on this device —
+         * see `Detail::AndroidMotionBackend::Start()`'s own doc comment.
+         * There was previously no way for a caller to discover which of the
+         * two is actually in effect; this closes that gap ("expose fallback
+         * diagnostics", this task's own required work) so an application can
+         * choose to warn the player, disable a north-dependent feature, or
+         * otherwise react, rather than silently trusting a drifting yaw as
+         * if it were absolute.
+         *
+         * @return true if the active attitude source is north-referenced
+         * (including when unsupported/not yet started, or on any platform
+         * with no native backend at all — nothing to warn about in either
+         * case); false if it is the drift-prone fallback.
+         */
+        NOXNA [[nodiscard]] bool getIsAttitudeNorthReferencedProperty() const;
+
     public:
         /**
          * @brief Creates a new instance of the Motion object.

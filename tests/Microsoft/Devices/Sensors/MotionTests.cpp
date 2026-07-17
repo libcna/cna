@@ -58,6 +58,11 @@ namespace
         ReadingCallback CapturedOnReading;
         CalibrationCallback CapturedOnCalibrationNeeded;
 
+        // Task MOT2-005 (2026-07-17, external audit `audit_devices_2026-07-17.md`):
+        // controllable so tests can simulate both the north-referenced and
+        // drift-prone-fallback cases without needing a real Android device.
+        bool UsingNorthReferencedAttitudeSourceResult = true;
+
         // Task TEST2-001 (LIFE-001/LIFE-002 regression coverage): see
         // FakeCompassBackend's identical hook for the full rationale.
         std::function<void()> OnStartCalledBeforeReturn;
@@ -93,6 +98,11 @@ namespace
         {
             ++SetSampleIntervalCallCount;
             LastSetSampleInterval = timeBetweenUpdates;
+        }
+
+        [[nodiscard]] bool IsUsingNorthReferencedAttitudeSource() override
+        {
+            return UsingNorthReferencedAttitudeSourceResult;
         }
     };
 } // namespace
@@ -419,6 +429,45 @@ TEST(MotionTests, CurrentValueChangedFiresFromBackendReading)
     ASSERT_TRUE(invoked);
     EXPECT_EQ(received.getDeviceRotationRateProperty(), Vector3(0.01f, 0.02f, 0.03f));
     EXPECT_TRUE(m.getIsDataValidProperty());
+}
+
+// Task MOT2-005 (2026-07-17, external audit `audit_devices_2026-07-17.md`):
+// no backend at all (this host build has no native Motion backend) means
+// nothing has ever claimed a north-referenced heading -- true is a vacuous
+// "nothing to warn about" default, not an affirmative claim.
+TEST(MotionTests, GetIsAttitudeNorthReferencedPropertyIsTrueWithNoBackend)
+{
+    const Motion m;
+    EXPECT_TRUE(m.getIsAttitudeNorthReferencedProperty());
+}
+
+TEST(MotionTests, GetIsAttitudeNorthReferencedPropertyReflectsBackendTrue)
+{
+    Motion m;
+    auto fakeOwned = std::make_unique<FakeMotionBackend>();
+    fakeOwned->UsingNorthReferencedAttitudeSourceResult = true;
+    m.SetBackendForTesting(std::move(fakeOwned));
+    m.Start();
+
+    EXPECT_TRUE(m.getIsAttitudeNorthReferencedProperty());
+}
+
+TEST(MotionTests, GetIsAttitudeNorthReferencedPropertyReflectsBackendFalse)
+{
+    Motion m;
+    auto fakeOwned = std::make_unique<FakeMotionBackend>();
+    fakeOwned->UsingNorthReferencedAttitudeSourceResult = false;
+    m.SetBackendForTesting(std::move(fakeOwned));
+    m.Start();
+
+    EXPECT_FALSE(m.getIsAttitudeNorthReferencedProperty());
+}
+
+TEST(MotionTests, GetIsAttitudeNorthReferencedPropertyThrowsAfterDispose)
+{
+    Motion m;
+    m.Dispose();
+    EXPECT_THROW((void)m.getIsAttitudeNorthReferencedProperty(), System::ObjectDisposedException);
 }
 
 // Task READINGS-003 (2026-07-06): the real timestamp-setting logic for

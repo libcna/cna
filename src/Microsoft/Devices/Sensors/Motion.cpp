@@ -33,6 +33,17 @@ namespace Microsoft::Devices::Sensors
         return state_;
     }
 
+    bool Motion::getIsAttitudeNorthReferencedProperty() const
+    {
+        System::ObjectDisposedException::ThrowIf(getIsDisposedProperty(), "Motion");
+        std::lock_guard<std::mutex> lock(control_->mutex);
+        // No backend at all (no native platform support) or never started:
+        // nothing has ever claimed a north-referenced heading, so there is
+        // nothing to warn about -- `true` here is a vacuous default, not an
+        // affirmative claim about a real attitude source.
+        return !backend_ || backend_->IsUsingNorthReferencedAttitudeSource();
+    }
+
     Motion::Motion()
         : state_(SensorState::NotSupported),
           started_(false)

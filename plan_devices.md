@@ -7850,7 +7850,7 @@ test is not sufficient for an Android coordinate/fusion claim.
   - TimeBetweenUpdates tests measure actual callback cadence on hardware.
 - **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
 
-### MOT2-005 — Verify rotation-vector vs game-rotation-vector fallback semantics — OPEN
+### MOT2-005 — Verify rotation-vector vs game-rotation-vector fallback semantics — OPEN (fallback diagnostic implemented and host-tested; hardware confirmation and drift measurement remain)
 
 - **Priority:** P1
 - **Area:** Perfection re-audit
@@ -7863,6 +7863,62 @@ test is not sufficient for an Android coordinate/fusion claim.
   - The application never receives an undocumented north-referenced claim from a drifting source.
   - Fallback behavior has hardware tests and state documentation.
 - **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+- **Progress so far (not yet CLOSED — see Remaining limitations):**
+  - "Expose fallback diagnostics" (this task's own most directly actionable bullet):
+    `Detail::AndroidMotionBackend::Start()` already picks `TYPE_ROTATION_VECTOR`
+    (north-referenced, preferred) or falls back to `TYPE_GAME_ROTATION_VECTOR`
+    (drift-prone, no absolute reference) into `usingGameRotationVector_` (Task
+    DEVICES-0104's original logic), but nothing ever exposed *which* was actually in
+    effect to a caller. Added `IMotionBackend::IsUsingNorthReferencedAttitudeSource()`
+    (new interface method, implemented by `AndroidMotionBackend`) and a new public
+    `NOXNA` property, `Motion::getIsAttitudeNorthReferencedProperty()`, forwarding to it
+    (`true` — a vacuous "nothing to warn about" default — when there is no backend at
+    all or it has never started).
+  - Found and fixed a **latent, previously-harmless data race** while wiring this up:
+    `usingGameRotationVector_` was written by `Start()` with no lock at all — harmless
+    before this task because nothing ever *read* it, but a real race the instant a
+    reader existed. `Start()` now computes the value locally first, then stores it under
+    `stateMutex_` (the same lock every other field in this class already uses), before
+    any new reader could observe a torn/unsynchronized value.
+  - "Determine whether Motion IsSupported/Attitude on WP implies a north-referenced
+    source": this codebase has no local WP7 SDK/MonoGame reference for
+    `Microsoft.Devices.Sensors.Motion` (it's a WP7-only namespace never part of desktop
+    XNA/FNA, so the project's own authoritative-reference rule — the local FNA tree —
+    doesn't cover it); this determination would need archived WP7 MSDN documentation
+    research, not attempted as part of this pass — flagged, not silently assumed either
+    way.
+  - "Measure drift and decide whether fallback is acceptable, degraded, or unsupported":
+    not attempted — "measure" requires a real device running the fallback for an
+    extended period, which this container cannot do.
+- **Files changed:** `include/Microsoft/Devices/Sensors/Detail/IMotionBackend.hpp`,
+  `include/Microsoft/Devices/Sensors/Detail/AndroidMotionBackend.hpp`,
+  `src/Microsoft/Devices/Sensors/Detail/AndroidMotionBackend.cpp`,
+  `include/Microsoft/Devices/Sensors/Motion.hpp`, `src/Microsoft/Devices/Sensors/Motion.cpp`,
+  `tests/Microsoft/Devices/Sensors/MotionTests.cpp`, `docs/devices-hardware-checklist.md`.
+- **Tests:** 4 new tests in `MotionTests.cpp` — unlike most other Android-only fixes this
+  pass, the `Motion` → `IMotionBackend` delegation plumbing itself is fully host-testable
+  via the existing `FakeMotionBackend` (now updated with a controllable
+  `UsingNorthReferencedAttitudeSourceResult` field): the property correctly reports
+  `true` with no backend at all, correctly mirrors a fake backend reporting `true` or
+  `false`, and throws `ObjectDisposedException` after disposal, matching this class's
+  other properties. Scoped filtered run: 300 tests, 296 passed, 4 pre-existing
+  hardware-only skips, 0 failures — 4 new, all passing.
+- **Sanitizer/static-analysis result:** clean under `devices-ubsan`. This fixes a genuine
+  new-reader-exposed data race and adds host-buildable interface/lock changes, so
+  re-verified under `devices-tsan`: 3 consecutive clean runs, 0 `WARNING: ThreadSanitizer`
+  occurrences, 41/41 `MotionTests` passing each run. `AndroidMotionBackend.cpp` itself
+  (the actual `#ifdef __ANDROID__` wiring) verified via a successful Android NDK
+  cross-compile of this exact translation unit.
+- **Remaining limitations (explicitly OPEN, not fabricated):** whether
+  `AndroidMotionBackend::Start()` actually selects the fallback in the expected real
+  circumstance, and whether the new property then correctly reports it end to end, has
+  never been observed on real hardware — no Android device/emulator here. The WP7
+  documentation-comparison and drift-measurement bullets are entirely unattempted (see
+  above). Documented as a new hardware validation procedure in
+  `docs/devices-hardware-checklist.md` Section 8b. Left **OPEN** rather than CLOSED,
+  consistent with this pass's established convention: the host-testable delegation logic
+  is directly, thoroughly tested, but the acceptance criteria as written require
+  real-device confirmation and a genuine drift measurement this session cannot produce.
 
 ### MOT2-006 — Verify Motion support requirements and degraded-source failures — OPEN
 
