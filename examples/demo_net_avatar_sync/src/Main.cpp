@@ -13,6 +13,8 @@ int main(int argc, char* argv[])
 
     bool isHost = true;
     int smokeFrames = -1;
+    bool showHelp = false;
+    std::string screenshotPath;
 
     for (int i = 1; i < argc; ++i)
     {
@@ -21,12 +23,24 @@ int main(int argc, char* argv[])
         else if (arg == "--join") { isHost = false; }
         else if (arg == "--smoke" && i + 1 < argc) { smokeFrames = std::atoi(argv[++i]); }
         else if (arg == "--smoke") { smokeFrames = 180; }
+        // Task 8.5 (plan_net.md Phase 8): verifies the overlay renders via a non-interactive
+        // smoke/screenshot run, without needing simulated keyboard input.
+        else if (arg == "--show-help") { showHelp = true; }
+        else if (arg == "--screenshot" && i + 1 < argc) { screenshotPath = argv[++i]; }
     }
 
     auto* game = new SyncGame(isHost);
     if (smokeFrames >= 0)
     {
         game->SetSmokeFrames(smokeFrames);
+    }
+    if (showHelp)
+    {
+        game->SetShowHelpForTestingEXT(true);
+    }
+    if (!screenshotPath.empty())
+    {
+        game->SetScreenshotPathEXT(screenshotPath);
     }
     game->Run();
     delete game;

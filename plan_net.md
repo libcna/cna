@@ -1270,11 +1270,30 @@ case more exist).
   now mentions "F1: help" too, so the reminder survives every hair-state change. Verified via
   `--show-help --smoke 30 --screenshot` (overlay legible, fits panel) and a default `--smoke`-only
   run (overlay hidden, hair-cycling unaffected - no regression).
-- [ ] **Task 8.6** — One commit per demo is likely excessive for 8 near-identical additions built
+- [x] **Task 8.5 (demo_net_avatar_sync)** — Last of the 8 avatar-related demos (Phase 0's list
+  re-confirmed at execution time: no more than the original 8 exist). Built from scratch. This
+  demo previously had no Escape-to-quit at all (only smoke-test/no-session-found paths called
+  `Exit()`) - added it alongside F1 for consistency with every other avatar demo's controls,
+  gated behind the same pre-existing `session_ == nullptr` early-return as all its other keyboard
+  handling (unchanged scope, not a new gap). Help text notes the `--host`/`--join` role split and
+  what travels over the wire (position/yaw/clip-index only, per this demo's own header comment).
+  Verified via `--show-help --smoke 30 --screenshot` in `--host` mode (overlay legible, fits
+  panel) and a default `--smoke`-only run (no regression). Also re-ran a real 2-process
+  `--host`/`--join` smoke test (this demo's actual purpose, not just the overlay) to confirm the
+  new Escape/F1 handling in `Update()` didn't disturb real network sync - both processes still
+  reported `haveRemote=true` with correct positions/clips exchanged.
+  **Phase 8 complete**: all 8 avatar-related demos now have the F1 help overlay.
+- [x] **Task 8.6** — One commit per demo is likely excessive for 8 near-identical additions built
   on the same Task 8.1 helper — since the user's "one task = one commit" rule maps to *this
   plan's tasks*, treat Task 8.1+8.2+8.3 (the shared helper + its first real usage in
   `demo_avatar`) as one task/commit, then each subsequent demo's rollout as its own small
-  task/commit referencing this same Phase.
+  task/commit referencing this same Phase. Followed exactly: `85d9164f` (Task 8.1-8.4,
+  `demo_avatar`), `bb8d2ff5` (`demo_avatar_animation_gallery` + the real glyph/panel bug fixes),
+  `d6204d9c` (`demo_avatar_appearance_tint_studio`), `c24c2d0a`
+  (`demo_avatar_bone_state_boundary`), `6ebd1cbf` (`demo_avatar_dual_compare`), `7fb238d6`
+  (`demo_avatar_multi_attach_stress` + the pre-existing counter-text bug fix), `cfa2a8f1`
+  (`demo_avatar_wardrobe_hotswap`), and the commit landing this Task 8.5/8.6 write-up
+  (`demo_net_avatar_sync`) - 8 commits total for 8 demos plus the one bug-fix bundle.
 
 ---
 

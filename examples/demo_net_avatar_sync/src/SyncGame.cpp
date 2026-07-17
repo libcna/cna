@@ -1,5 +1,6 @@
 #include "SyncGame.hpp"
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -18,6 +19,7 @@
 #include "Microsoft/Xna/Framework/Net/PacketReader.hpp"
 #include "Microsoft/Xna/Framework/Net/PacketWriter.hpp"
 #include "System/IServiceProvider.hpp"
+#include "../../common/ScreenshotEXT.hpp"
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -67,6 +69,53 @@ namespace
         }
         return names;
     }
+
+    // Task 8 (plan_net.md Phase 8): same pattern as demo_avatar's own AvatarDemo.
+    std::unique_ptr<SpriteFont> MakeSimpleFont(GraphicsDevice& device)
+    {
+        const std::vector<uint8_t> px = {255, 255, 255, 255};
+        Texture2D atlas = Texture2D::CreateFromPixels(device, 1, 1, px);
+
+        std::vector<SharpRuntime::charcs> chars;
+        std::vector<Rectangle> bounds;
+        std::vector<Rectangle> cropping;
+        std::vector<Vector3> kerning;
+        for (char c = 32; c < 127; ++c)
+        {
+            chars.push_back(static_cast<SharpRuntime::charcs>(c));
+            // SpriteBatch::DrawString sizes each glyph's destination rectangle from `bounds`
+            // (glyphData), not `cropping` - a (0,0,1,1) bounds rect draws every character as a
+            // single sub-pixel dot instead of a visible block. Space is left zero-size so word
+            // gaps stay visible against the solid blocks used for every other printable
+            // character.
+            bounds.push_back(c == ' ' ? Rectangle(0, 0, 0, 0) : Rectangle(0, 0, 6, 10));
+            cropping.push_back(Rectangle(0, 0, 8, 14));
+            kerning.push_back(Vector3(0.0f, 8.0f, 0.0f));
+        }
+
+        return std::make_unique<SpriteFont>(atlas, bounds, cropping, chars, 16, 1.0f, kerning,
+                                             static_cast<SharpRuntime::charcs>(' '));
+    }
+
+    // Task 8.2: decision 5a's default text block, adapted per this task's own instruction (keep
+    // the F1/Esc lines identical across every demo, customize the rest) - this demo has a
+    // host/client role, so the text notes which local avatar gender that implies.
+    constexpr const char* kHelpLines[] = {
+        "CNA Net Avatar Sync Help",
+        "",
+        "F1: Show/hide this help",
+        "Esc: Quit",
+        "Up/Down: Move local avatar",
+        "Left/Right: Rotate local avatar",
+        "Space: Next animation for the local avatar",
+        "",
+        "Launch with --host (Male avatar, creates a SystemLink session) or",
+        "--join (Female avatar, finds/joins the host). Only position/yaw/",
+        "clip-index sync over the wire - no asset bytes.",
+        "",
+        "This demo uses CNA real avatar rendering extensions.",
+        "XNA-compatible AvatarRenderer.Draw remains a no-op on Windows-like platforms.",
+    };
 }
 
 SyncGame::SyncGame(bool isHost)
@@ -172,6 +221,13 @@ void SyncGame::LoadContent()
 {
     LoadAvatarView(localView_, localGender_);
     LoadAvatarView(remoteView_, remoteGender_);
+
+    // Task 8.1/8.3 (plan_net.md Phase 8): F1 help overlay plumbing.
+    auto& device = getGraphicsDeviceProperty();
+    spriteBatch_ = std::make_unique<SpriteBatch>(device);
+    const std::vector<uint8_t> px = {255, 255, 255, 255};
+    whitePixel_ = std::make_unique<Texture2D>(Texture2D::CreateFromPixels(device, 1, 1, px));
+    font_ = MakeSimpleFont(device);
 }
 
 void SyncGame::Update(GameTime& gameTime)
@@ -184,6 +240,16 @@ void SyncGame::Update(GameTime& gameTime)
 
     const float dt = static_cast<float>(gameTime.getElapsedGameTimeProperty().getTotalSecondsProperty());
     const auto kb = Keyboard::GetState();
+    if (kb.IsKeyDown(Keys::Escape)) { Exit(); return; }
+
+    // Task 8.2: F1 toggles overlay visibility, edge-triggered.
+    const bool f1Down = kb.IsKeyDown(Keys::F1);
+    if (f1Down && !f1WasDownEXT_)
+    {
+        showHelpEXT_ = !showHelpEXT_;
+    }
+    f1WasDownEXT_ = f1Down;
+
     const float speed = 1.2f;
     const float rotSpeed = 1.6f;
     if (kb.IsKeyDown(Keys::Up))    { localPos_.Y -= speed * dt; }
@@ -296,5 +362,38 @@ void SyncGame::Draw(const GameTime& /*gameTime*/)
         remoteView_.renderer->setProjectionProperty(projection);
         remoteView_.renderer->DrawRealEXT(remoteView_.clipNames[remoteClipIndex_],
                                            System::TimeSpan::FromSeconds(remoteClipSeconds_), /*loop=*/true);
+    }
+
+    // Task 8.2: 3D scene drawn first (above), then the 2D help overlay on top.
+    if (showHelpEXT_)
+    {
+        constexpr int kLineCount = static_cast<int>(sizeof(kHelpLines) / sizeof(kHelpLines[0]));
+        constexpr float kLineHeight = 18.0f;
+        constexpr float kPadding = 12.0f;
+        float longestLineWidth = 0.0f;
+        for (const char* line : kHelpLines)
+        {
+            longestLineWidth = std::max(longestLineWidth, font_->MeasureString(line).X);
+        }
+        const Rectangle panel(8, 8, static_cast<int>(longestLineWidth + kPadding * 2.0f),
+                               static_cast<int>(kLineCount * kLineHeight + kPadding * 2.0f));
+
+        spriteBatch_->Begin();
+        spriteBatch_->Draw(*whitePixel_, panel, Color(255, 255, 255, 210));
+        float y = panel.Y + kPadding;
+        for (const char* line : kHelpLines)
+        {
+            spriteBatch_->DrawString(*font_, line, Vector2(panel.X + kPadding, y), Color(0, 0, 0, 255));
+            y += kLineHeight;
+        }
+        spriteBatch_->End();
+    }
+
+    // Task 8.5 (plan_net.md Phase 8): same smokeFramesLeft_==1 timing as demo_avatar's own
+    // AvatarDemo - Game::Exit() suppresses Draw() on the frame Update() actually calls it.
+    if (smokeFramesLeft_ == 1 && !screenshotPathEXT_.empty())
+    {
+        SaveBackBufferScreenshotEXT(device, screenshotPathEXT_);
+        screenshotPathEXT_.clear();
     }
 }
