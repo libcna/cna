@@ -17,6 +17,7 @@
 #include <unordered_map>
 #include <vector>
 #include "CNA/Internal/Graphics/ImageData.hpp"
+#include "CNA/UnsupportedGraphicsCallBehavior.hpp"
 
 struct SDL_Window;
 struct SDL_Renderer;
@@ -810,6 +811,20 @@ namespace CNA::Internal::Backends
         /// loaded yet (e.g. from Game1 constructor). Future Create* calls
         /// will skip registry registration and CPU shadow copies.
         virtual void SetContextRecoveryEnabled(bool /*enabled*/) {}
+
+        /// Configures whether an unsupported "fire and forget" state/draw call (e.g. any 3D
+        /// call on the 2D-only SDL_Renderer backend) throws std::runtime_error (the default)
+        /// or is silently ignored -- see CNA::UnsupportedGraphicsCallBehavior. Default
+        /// implementation is a no-op; only SDL_Renderer overrides it today (the only backend
+        /// with genuinely unsupported operations by design, not by omission).
+        virtual void SetUnsupportedGraphicsCallBehavior(CNA::UnsupportedGraphicsCallBehavior /*behavior*/) {}
+
+        /// Returns the current CNA::UnsupportedGraphicsCallBehavior (CNA::UnsupportedGraphicsCallBehavior::Throw
+        /// on every backend that doesn't override SetUnsupportedGraphicsCallBehavior()).
+        [[nodiscard]] virtual CNA::UnsupportedGraphicsCallBehavior GetUnsupportedGraphicsCallBehavior() const
+        {
+            return CNA::UnsupportedGraphicsCallBehavior::Throw;
+        }
 
         // ---- Debug / testing ----
 

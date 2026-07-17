@@ -353,6 +353,13 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME SDL_Renderer_DrawPrimitivesThrows COMMAND cna_test_sdl_drawprimitives_throws
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # CNA::UnsupportedGraphicsCallBehavior: SDL_Renderer's unsupported "fire and forget" 3D calls
+    # can be configured to silently no-op instead of throwing; resource creation always throws.
+    cna_sdl_test(cna_test_sdl_unsupported_call_behavior
+                 examples/sdlrenderer_unsupported_call_behavior_test.cpp)
+    cna_register_backend_test(NAME SDL_Renderer_UnsupportedCallBehavior COMMAND cna_test_sdl_unsupported_call_behavior
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # Task 721: all 5 DrawUserPrimitives typed + VertexDeclaration overloads throw the
     # correct exception type+message on SDL_Renderer.
     cna_sdl_test(cna_test_sdl_drawuserprimitives_throws

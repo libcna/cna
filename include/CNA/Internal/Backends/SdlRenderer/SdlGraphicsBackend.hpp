@@ -139,9 +139,22 @@ namespace CNA::Internal::Backends::SdlRenderer
 
         SDL_BlendMode blendMode_ = SDL_BLENDMODE_BLEND;
 
+        CNA::UnsupportedGraphicsCallBehavior unsupportedGraphicsCallBehavior_ = CNA::UnsupportedGraphicsCallBehavior::Throw;
+
         // 3D pipeline: NOT supported by the SDL_Renderer backend.
-        // @note Status: STUB. Every entry point throws std::runtime_error.
+        // @note Status: STUB. Every "fire and forget" entry point throws std::runtime_error by
+        // default, or is silently ignored if SetUnsupportedGraphicsCallBehavior(Ignore) was
+        // called -- see CNA::UnsupportedGraphicsCallBehavior. The resource-creation entry points
+        // (CreateVertexBuffer/CreateIndexBuffer16/CreateOcclusionQuery) always throw regardless.
         [[nodiscard]] bool SupportsDepthStencil() const override { return false; }
+        void SetUnsupportedGraphicsCallBehavior(CNA::UnsupportedGraphicsCallBehavior behavior) override
+        {
+            unsupportedGraphicsCallBehavior_ = behavior;
+        }
+        [[nodiscard]] CNA::UnsupportedGraphicsCallBehavior GetUnsupportedGraphicsCallBehavior() const override
+        {
+            return unsupportedGraphicsCallBehavior_;
+        }
         void ClearColorAndDepth(float r, float g, float b, float a, float depth) override;
         void ClearDepth(float depth) override;
         void ClearStencil(int stencil) override;
