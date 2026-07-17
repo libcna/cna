@@ -1026,10 +1026,10 @@ namespace CNA::Internal::GltfImport
 
                 const std::vector<float> times = UnpackAccessor(ch.sampler->input, 1, "weights channel time");
                 const bool cubicSpline = ch.sampler->interpolation == cgltf_interpolation_type_cubic_spline;
-                // CUBICSPLINE: [in-tangent, value, out-tangent] triplets per keyframe -- only the
-                // middle "value" third is read here (documented scope cut, see
-                // MorphWeightTrackOut's own doc comment; unlike ExtractClips' bone channels,
-                // which do evaluate the real Hermite tangents).
+                // CUBICSPLINE: [in-tangent, value, out-tangent] triplets per keyframe -- all three
+                // thirds are read below and carried into MorphWeightKeyframeOut, so
+                // EvaluateMorphWeightsEXT can evaluate the real Hermite curve at playback time
+                // (see MorphWeightTrackOut's own doc comment).
                 const std::size_t tripletStride = cubicSpline ? 3 : 1;
 
                 // The output accessor is SCALAR-typed per component (glTF's own "weights"
@@ -1051,14 +1051,29 @@ namespace CNA::Internal::GltfImport
 
                 MorphWeightTrackOut track;
                 track.stepInterpolation = ch.sampler->interpolation == cgltf_interpolation_type_step;
+                track.cubicSpline = cubicSpline;
                 track.keys.reserve(times.size());
                 for (std::size_t k = 0; k < times.size(); ++k)
                 {
                     MorphWeightKeyframeOut key;
                     key.time = times[k];
                     key.weights.resize(targetCount);
-                    const std::size_t base = (k * tripletStride + (cubicSpline ? 1 : 0)) * targetCount;
-                    for (std::size_t t = 0; t < targetCount; ++t) { key.weights[t] = flat[base + t]; }
+                    const std::size_t valueBase = (k * tripletStride + (cubicSpline ? 1 : 0)) * targetCount;
+                    for (std::size_t t = 0; t < targetCount; ++t) { key.weights[t] = flat[valueBase + t]; }
+
+                    if (cubicSpline)
+                    {
+                        key.inTangent.resize(targetCount);
+                        key.outTangent.resize(targetCount);
+                        const std::size_t inBase = (k * tripletStride + 0) * targetCount;
+                        const std::size_t outBase = (k * tripletStride + 2) * targetCount;
+                        for (std::size_t t = 0; t < targetCount; ++t)
+                        {
+                            key.inTangent[t] = flat[inBase + t];
+                            key.outTangent[t] = flat[outBase + t];
+                        }
+                    }
+
                     track.keys.push_back(std::move(key));
                 }
                 return track;

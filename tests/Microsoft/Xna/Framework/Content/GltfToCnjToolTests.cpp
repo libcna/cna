@@ -258,6 +258,46 @@ namespace
   ]
 })GLTF";
 
+    // CUBICSPLINE interpolation for morph-weight animation tracks: identical fixture to
+    // RuntimeGltfModelTests.cpp's own kCubicSplineMorphedTriangleGltf, reused here to prove the
+    // offline CLI/.cnj round-trip preserves the real Hermite tangents (not just the sampled
+    // middle-third value) through the new "inTangent"/"outTangent" .cnj JSON fields.
+    const char* kCubicSplineMorphedTriangleGltf = R"GLTF({
+  "asset": { "version": "2.0" },
+  "scene": 0,
+  "scenes": [ { "nodes": [0] } ],
+  "nodes": [ { "name": "MeshNode", "mesh": 0 } ],
+  "meshes": [ {
+    "primitives": [ { "attributes": { "POSITION": 0, "NORMAL": 1, "TEXCOORD_0": 2 }, "targets": [ { "POSITION": 3 } ] } ],
+    "weights": [0.0]
+  } ],
+  "animations": [ {
+    "name": "MorphCubic",
+    "samplers": [ { "input": 4, "output": 5, "interpolation": "CUBICSPLINE" } ],
+    "channels": [ { "sampler": 0, "target": { "node": 0, "path": "weights" } } ]
+  } ],
+  "buffers": [ {
+    "byteLength": 164,
+    "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAgD8AAAAAAAAAAAAAAAAAAAAAAACAPwAAAAA="
+  } ],
+  "bufferViews": [
+    { "buffer": 0, "byteOffset": 0,   "byteLength": 36 },
+    { "buffer": 0, "byteOffset": 36,  "byteLength": 36 },
+    { "buffer": 0, "byteOffset": 72,  "byteLength": 24 },
+    { "buffer": 0, "byteOffset": 96,  "byteLength": 36 },
+    { "buffer": 0, "byteOffset": 132, "byteLength": 8 },
+    { "buffer": 0, "byteOffset": 140, "byteLength": 24 }
+  ],
+  "accessors": [
+    { "bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3", "min": [0,0,0], "max": [1,1,0] },
+    { "bufferView": 1, "componentType": 5126, "count": 3, "type": "VEC3" },
+    { "bufferView": 2, "componentType": 5126, "count": 3, "type": "VEC2" },
+    { "bufferView": 3, "componentType": 5126, "count": 3, "type": "VEC3" },
+    { "bufferView": 4, "componentType": 5126, "count": 2, "type": "SCALAR", "min": [0.0], "max": [1.0] },
+    { "bufferView": 5, "componentType": 5126, "count": 6, "type": "SCALAR" }
+  ]
+})GLTF";
+
     // Two independent one-bone skins ("SkinA"/"SkinB"), each with its own mesh node. See file
     // header.
     const char* kMultiSkinGltf = R"GLTF({
@@ -1392,4 +1432,41 @@ TEST(GltfToCnjToolTest, SerializesAndReloadsMorphTargetsThroughTheOfflineCnjPath
     const auto midWeights = EvaluateMorphWeightsEXT(morph->WeightTrack, 0.5);
     ASSERT_EQ(midWeights.size(), 1u);
     EXPECT_NEAR(midWeights[0], 0.5f, 1e-5f);
+}
+
+// CUBICSPLINE interpolation for morph-weight animation tracks: the offline CLI/.cnj round-trip
+// must preserve the real Hermite tangents through the new "inTangent"/"outTangent" JSON fields,
+// not just the sampled middle-third value -- same fixture and hand-derived expected value as
+// RuntimeGltfModelTest.LoadsCubicSplineMorphWeightAnimationFromGltf.
+TEST(GltfToCnjToolTest, SerializesAndReloadsCubicSplineMorphWeightsThroughTheOfflineCnjPath)
+{
+    ScratchDir gltfDir;
+    ScratchDir contentRoot;
+
+    const std::filesystem::path gltfPath = gltfDir.path() / "morphcubic.gltf";
+    WriteFile(gltfPath, kCubicSplineMorphedTriangleGltf);
+
+    const int exitCode = RunGltfToCnjTool(gltfPath.string(), contentRoot.path().string(), "morphcubic");
+    ASSERT_EQ(exitCode, 0);
+
+    GraphicsDevice gd;
+    ContentManager cm(nullptr, contentRoot.path().string());
+    cm.setGraphicsDevice(gd);
+    Model model = cm.Load<Model>("morphcubic");
+    ASSERT_EQ(model.getMeshesProperty().getCountProperty(), 1);
+    ModelMesh* mesh = model.getMeshesProperty()[0];
+    ModelMeshPart* part = mesh->getMeshPartsProperty()[0];
+
+    auto* morph = dynamic_cast<MorphTargetDataEXT*>(part->getTagProperty());
+    ASSERT_NE(morph, nullptr);
+    ASSERT_EQ(morph->WeightTrack.Keys.size(), 2u);
+    EXPECT_TRUE(morph->WeightTrack.CubicSpline);
+    ASSERT_EQ(morph->WeightTrack.Keys[0].OutTangent.size(), 1u);
+    ASSERT_EQ(morph->WeightTrack.Keys[1].InTangent.size(), 1u);
+    EXPECT_NEAR(morph->WeightTrack.Keys[0].OutTangent[0], 0.0f, 1e-5f);
+    EXPECT_NEAR(morph->WeightTrack.Keys[1].InTangent[0], 0.0f, 1e-5f);
+
+    const auto quarterWeights = EvaluateMorphWeightsEXT(morph->WeightTrack, 0.25);
+    ASSERT_EQ(quarterWeights.size(), 1u);
+    EXPECT_NEAR(quarterWeights[0], 0.15625f, 1e-5f);
 }

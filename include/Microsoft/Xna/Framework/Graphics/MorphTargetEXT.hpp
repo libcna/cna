@@ -26,6 +26,16 @@ namespace Microsoft::Xna::Framework::Graphics
         System::TimeSpan Time;
         /** @brief Weight for each morph target at this keyframe, same order as MorphTargetDataEXT::PositionDeltas. */
         std::vector<float> Weights;
+        /**
+         * @brief CUBICSPLINE in-tangent, one per morph target (same order as Weights), or empty
+         * when the source channel was not CUBICSPLINE-interpolated.
+         */
+        std::vector<float> InTangent;
+        /**
+         * @brief CUBICSPLINE out-tangent, one per morph target (same order as Weights), or empty
+         * when the source channel was not CUBICSPLINE-interpolated.
+         */
+        std::vector<float> OutTangent;
     };
 
     /**
@@ -36,9 +46,9 @@ namespace Microsoft::Xna::Framework::Graphics
      * SkinningData's own bone-track timeline: glTF's own "weights" animation channel targets a
      * mesh-instance node directly, not a skeleton joint, so it has no bone index to key against.
      * EvaluateMorphWeightsEXT supports LINEAR and STEP interpolation (real hold-last-value
-     * behavior, not an approximation); CUBICSPLINE weight channels are read as their sampled
-     * (middle-of-triplet) values without evaluating the Hermite tangents -- a documented scope
-     * cut, unlike GltfImportCore's own bone-channel evaluation which does support it.
+     * behavior, not an approximation), and real CUBICSPLINE Hermite evaluation (component-wise,
+     * matching GltfImportCore::HermiteEvaluate's own formula) when CubicSpline is true and each
+     * keyframe's InTangent/OutTangent are populated.
      */
     struct MorphWeightTrackEXT
     {
@@ -46,6 +56,8 @@ namespace Microsoft::Xna::Framework::Graphics
         std::vector<MorphWeightKeyframeEXT> Keys;
         /** @brief True if the source channel used STEP interpolation (hold last value, no lerp). */
         bool StepInterpolation = false;
+        /** @brief True if the source channel used CUBICSPLINE interpolation (real Hermite tangents). */
+        bool CubicSpline = false;
     };
 
     /**
@@ -107,10 +119,10 @@ namespace Microsoft::Xna::Framework::Graphics
     NOXNA void SetMorphWeightsEXT(ModelMeshPart& part, const std::vector<float>& weights);
 
     /**
-     * @brief Evaluates a morph-weight animation track at a point in time: LINEAR interpolation
-     * between the bracketing keyframes (clamped at both ends), or the bracket's lower keyframe
-     * value unchanged when the track is STEP-interpolated (see MorphWeightTrackEXT's own doc
-     * comment for the CUBICSPLINE scope cut).
+     * @brief Evaluates a morph-weight animation track at a point in time: real Hermite
+     * interpolation between the bracketing keyframes when the track is CUBICSPLINE-interpolated,
+     * LINEAR interpolation for a plain track (both clamped at both ends), or the bracket's lower
+     * keyframe value unchanged when the track is STEP-interpolated.
      *
      * @param track The track to evaluate.
      * @param timeSeconds Time within the clip, in seconds.

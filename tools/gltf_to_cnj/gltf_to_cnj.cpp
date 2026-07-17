@@ -440,17 +440,35 @@ namespace
                 if (e.morphWeightTrack)
                 {
                     const MorphWeightTrackOut& track = *e.morphWeightTrack;
+                    auto writeFloatArray = [&](const std::vector<float>& v)
+                    {
+                        json << "[";
+                        for (std::size_t w = 0; w < v.size(); ++w)
+                        {
+                            json << v[w] << (w + 1 < v.size() ? ", " : "");
+                        }
+                        json << "]";
+                    };
                     json << ", \"morphWeightTrack\": { \"stepInterpolation\": "
-                         << (track.stepInterpolation ? "true" : "false") << ", \"keys\": [\n";
+                         << (track.stepInterpolation ? "true" : "false")
+                         << ", \"cubicSpline\": " << (track.cubicSpline ? "true" : "false")
+                         << ", \"keys\": [\n";
                     for (std::size_t ki = 0; ki < track.keys.size(); ++ki)
                     {
                         const MorphWeightKeyframeOut& k = track.keys[ki];
-                        json << "        { \"time\": " << k.time << ", \"weights\": [";
-                        for (std::size_t w = 0; w < k.weights.size(); ++w)
+                        json << "        { \"time\": " << k.time << ", \"weights\": ";
+                        writeFloatArray(k.weights);
+                        if (!k.inTangent.empty())
                         {
-                            json << k.weights[w] << (w + 1 < k.weights.size() ? ", " : "");
+                            json << ", \"inTangent\": ";
+                            writeFloatArray(k.inTangent);
                         }
-                        json << "] }" << (ki + 1 < track.keys.size() ? "," : "") << "\n";
+                        if (!k.outTangent.empty())
+                        {
+                            json << ", \"outTangent\": ";
+                            writeFloatArray(k.outTangent);
+                        }
+                        json << " }" << (ki + 1 < track.keys.size() ? "," : "") << "\n";
                     }
                     json << "      ] }";
                 }

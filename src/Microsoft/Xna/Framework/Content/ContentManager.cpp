@@ -1884,9 +1884,12 @@ namespace Microsoft::Xna::Framework::Content
                                 Graphics::MorphWeightKeyframeEXT key;
                                 key.Time = System::TimeSpan::FromSeconds(k.time);
                                 key.Weights = k.weights;
+                                key.InTangent = k.inTangent;
+                                key.OutTangent = k.outTangent;
                                 morph->WeightTrack.Keys.push_back(std::move(key));
                             }
                             morph->WeightTrack.StepInterpolation = weightTrack->stepInterpolation;
+                            morph->WeightTrack.CubicSpline = weightTrack->cubicSpline;
                         }
                         partPtr->setTagProperty(morph.get());
                         // glTF's "mesh.weights" is the default/initial blend state, not
@@ -2285,11 +2288,15 @@ namespace Microsoft::Xna::Framework::Content
                                 {
                                     morph->WeightTrack.StepInterpolation =
                                         JsonBool(morphWeightTrackJson, "stepInterpolation", false);
+                                    morph->WeightTrack.CubicSpline =
+                                        JsonBool(morphWeightTrackJson, "cubicSpline", false);
                                     for (const std::string& kg : ParseFlatObjectArrayEXT(morphWeightTrackJson, "keys"))
                                     {
                                         Graphics::MorphWeightKeyframeEXT key;
                                         key.Time = System::TimeSpan::FromSeconds(JsonFloat(kg, "time", 0.0f));
                                         key.Weights = JsonFloatArrayN(kg, FindKeyArray(kg, "weights"));
+                                        key.InTangent = JsonFloatArrayN(kg, FindKeyArray(kg, "inTangent"));
+                                        key.OutTangent = JsonFloatArrayN(kg, FindKeyArray(kg, "outTangent"));
                                         morph->WeightTrack.Keys.push_back(std::move(key));
                                     }
                                 }

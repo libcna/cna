@@ -1,5 +1,11 @@
 # `.cnj` content format — implementation plan for CNA
 
+> **Status update (2026-07-17): Phase 14D also closed.** `EvaluateMorphWeightsEXT` now performs
+> real Hermite (CUBICSPLINE) interpolation between morph-weight keyframes when the source glTF
+> channel used it, instead of always falling back to LINEAR between the sampled middle-third
+> values — closing a documented scope cut from Phase 13B. See Phase 14's own section for full
+> detail.
+>
 > **Status update (2026-07-17): Phase 14C also closed.** Morph target position/normal deltas,
 > default weights, and weight-track animation now serialize through the offline `gltf_to_cnj`
 > CLI/`.cnj` path too (a new binary sidecar + 3 new mesh-entry JSON fields), not just the runtime
@@ -523,15 +529,31 @@ onto `.cnj`, `RegisterCnjLoader<T>`, and Phase 9's hardening of those mechanisms
 | CNB-83 | Extend `ModelTypeReader::Read()`'s `.cnj` JSON path (`ContentManager.cpp`) to read the sidecar + JSON fields back into a real `MorphTargetDataEXT`, attached the same way `ReadGltfModel()` already does | ✅ | Two new generic JSON helpers (`JsonFloatArrayN` — a variable-length generalization of the existing fixed-3 `JsonFloatArray3`; `ExtractJsonObjectFieldEXT` — extracts a nested object's substring by key, bracket-depth-aware via the existing `FindMatchingBracketEXT`). The mesh-loop reads `"morphTargets"`/`"morphWeights"`/`"morphWeightTrack"`, decodes the binary sidecar via `BinReaderEXT` (mirroring the existing `.skeleton.bin` reader's own shape, including the same corrupt-file sanity-check-then-throw pattern), builds a `MorphTargetDataEXT`, attaches it via `partPtr->setTagProperty()`, and — exactly like `ReadGltfModel()` — immediately applies a non-zero default weight via `SetMorphWeightsEXT` so the initial upload reflects the file's own authored default pose. |
 | CNB-84 | Tests + docs | ✅ | New `GltfToCnjToolTest.SerializesAndReloadsMorphTargetsThroughTheOfflineCnjPath` reuses `RuntimeGltfModelTests.cpp`'s own `kMorphedTriangleGltf` fixture verbatim (one POSITION-only target, non-zero `mesh.weights=[0.5]` default, a LINEAR weight-animation channel) through the real CLI subprocess → `.cnj` → `ContentManager::Load<Model>` round-trip, asserting the exact same things `RuntimeGltfModelTest.LoadsMorphTargetDataWithDefaultWeightsAndWeightAnimationFromGltf` already does for the runtime path — proving the two paths now produce equivalent `MorphTargetDataEXT` results. Manually inspected the generated `.cnj` JSON and binary sidecar byte count (48 bytes = 4 + 4 + 3×3×4 + 4, exactly matching `BuildMorphBytes`'s own format for this fixture) before trusting the test. Full-suite regression: **4827 tests, 0 failures.** |
 
-### 14D — Remaining "vse udelej prosim" items ⬜ NOT STARTED
+### 14D — CUBICSPLINE interpolation for morph-weight animation tracks ✅ CLOSED 2026-07-17
 
-> Task numbering reserved (`CNB-85`+) for whichever item is picked up next: true multi-UV-channel
-> rendering support for PBR maps (14B's own explicitly-deferred full fix), CUBICSPLINE morph-weight
-> animation interpolation, `DualTextureEffect` occlusion brightness fix (needs an image codec),
-> Draco mesh compression, full MikkTSpace tangent generation, newer glTF extensions
-> (`KHR_texture_transform`/`KHR_lights_punctual`/`KHR_materials_emissive_strength`), and PBR/
-> skinned-vertex-color shader support on the other 7+ graphics backends (CNB-61/13C's own
-> deliberately-deferred scope, now being taken up).
+> `ExtractMorphWeightTrack` previously discarded a CUBICSPLINE channel's in/out tangent thirds,
+> keeping only the sampled middle value -- `EvaluateMorphWeightsEXT` then always did plain LINEAR
+> interpolation between those values at playback, a documented approximation (unlike
+> `GltfImportCore`'s own bone-channel evaluation, which does real Hermite math via
+> `HermiteEvaluate`). Fixed by preserving the tangents end-to-end and evaluating the real curve
+> lazily at playback time, rather than baking/resampling at import time like `ExtractClips`' own
+> bone channels do (a single "weights" channel has no sibling channel to derive extra union sample
+> points from, so lazy evaluation is both simpler and exact here).
+
+| # | Task | Status | Notes |
+|---|---|---|---|
+| CNB-85 | Preserve CUBICSPLINE in/out tangents through `GltfImportCore::ExtractMorphWeightTrack` | ✅ | `MorphWeightKeyframeOut` gains `inTangent`/`outTangent` (`std::vector<float>`, one per morph target, empty when not CUBICSPLINE); `MorphWeightTrackOut` gains `cubicSpline` (bool). `ExtractMorphWeightTrack` now reads all three thirds of each CUBICSPLINE `[in, value, out]` triplet instead of only the middle one. |
+| CNB-86 | Real Hermite evaluation in `EvaluateMorphWeightsEXT` (`MorphTargetEXT.hpp`/`.cpp`) | ✅ | `MorphWeightKeyframeEXT` gains `InTangent`/`OutTangent`; `MorphWeightTrackEXT` gains `CubicSpline`. `EvaluateMorphWeightsEXT` now applies the same component-wise Hermite basis as `GltfImportCore::HermiteEvaluate` (`h00`/`h10`/`h01`/`h11`, tangents scaled by the real bracket time span) when `CubicSpline` is true and both bracketing keyframes have tangent data, falling back to plain LINEAR otherwise (covers a track marked `CubicSpline` but missing tangent data, a defensive fallback rather than a crash). |
+| CNB-87 | Wire the new fields through the offline CLI/`.cnj` path (14C's own newly-added `"morphWeightTrack"` JSON) and tests | ✅ | `gltf_to_cnj.cpp` emits `"cubicSpline"` on the track object plus `"inTangent"`/`"outTangent"` per keyframe when present; `ContentManager.cpp`'s `.cnj` JSON reader (added in 14C) and `ReadGltfModel()`'s own runtime-path construction both now copy the tangent fields through. New tests: 3 new `MorphTargetEXTTests.cpp` cases (`CubicSplineEvaluatesRealHermiteCurveNotLinear` — hand-derived value 0.15625 at s=0.25 with zero endpoint tangents, distinguishing the real Hermite curve from LINEAR's 0.25; `CubicSplineHonorsNonZeroTangents` — a second hand-derived value proving the tangent term itself is read; `FallsBackToLinearWhenTangentsAreMissing`), plus a new fixture (`kCubicSplineMorphedTriangleGltf`) reused verbatim in both `RuntimeGltfModelTest.LoadsCubicSplineMorphWeightAnimationFromGltf` and `GltfToCnjToolTest.SerializesAndReloadsCubicSplineMorphWeightsThroughTheOfflineCnjPath`, both asserting the exact same hand-derived 0.15625 value end-to-end through their respective real pipelines. Full-suite regression: **4832 tests, 0 failures.** |
+
+### 14E — Remaining "vse udelej prosim" items ⬜ NOT STARTED
+
+> Task numbering reserved (`CNB-88`+) for whichever item is picked up next: true multi-UV-channel
+> rendering support for PBR maps (14B's own explicitly-deferred full fix), `DualTextureEffect`
+> occlusion brightness fix (needs an image codec), Draco mesh compression, full MikkTSpace tangent
+> generation, newer glTF extensions (`KHR_texture_transform`/`KHR_lights_punctual`/
+> `KHR_materials_emissive_strength`), and PBR/skinned-vertex-color shader support on the other 7+
+> graphics backends (CNB-61/13C's own deliberately-deferred scope, now being taken up).
 
 ## Relationship to other plan files
 

@@ -125,6 +125,32 @@ namespace Microsoft::Xna::Framework::Graphics
                 const float amount = span > 0.0 ? static_cast<float>((timeSeconds - t0) / span) : 0.0f;
                 const std::vector<float>& a = track.Keys[i].Weights;
                 const std::vector<float>& b = track.Keys[i + 1].Weights;
+
+                // Real glTF CUBICSPLINE Hermite basis, applied component-wise -- same formula as
+                // GltfImportCore::HermiteEvaluate (the bone-channel equivalent), but evaluated
+                // lazily here at playback time rather than baked/resampled at import time (see
+                // MorphWeightTrackEXT's own doc comment for why).
+                if (track.CubicSpline &&
+                    !track.Keys[i].OutTangent.empty() && !track.Keys[i + 1].InTangent.empty())
+                {
+                    const std::vector<float>& outTangentA = track.Keys[i].OutTangent;
+                    const std::vector<float>& inTangentB = track.Keys[i + 1].InTangent;
+                    const float s = amount, s2 = s * s, s3 = s2 * s;
+                    const float h00 = 2.0f * s3 - 3.0f * s2 + 1.0f;
+                    const float h10 = s3 - 2.0f * s2 + s;
+                    const float h01 = -2.0f * s3 + 3.0f * s2;
+                    const float h11 = s3 - s2;
+                    const float dt = static_cast<float>(span);
+
+                    std::vector<float> result(a.size());
+                    for (std::size_t k = 0; k < a.size(); ++k)
+                    {
+                        result[k] = h00 * a[k] + dt * h10 * outTangentA[k]
+                                  + h01 * b[k] + dt * h11 * inTangentB[k];
+                    }
+                    return result;
+                }
+
                 std::vector<float> result(a.size());
                 for (std::size_t k = 0; k < a.size(); ++k)
                 {

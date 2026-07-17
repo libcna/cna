@@ -176,6 +176,16 @@ namespace CNA::Internal::GltfImport
         double time = 0.0;
         /** @brief Weight for each morph target at this keyframe. */
         std::vector<float> weights;
+        /**
+         * @brief CUBICSPLINE in-tangent, one per morph target (same order as `weights`), or empty
+         * when the source channel was not CUBICSPLINE-interpolated.
+         */
+        std::vector<float> inTangent;
+        /**
+         * @brief CUBICSPLINE out-tangent, one per morph target (same order as `weights`), or empty
+         * when the source channel was not CUBICSPLINE-interpolated.
+         */
+        std::vector<float> outTangent;
     };
 
     /**
@@ -184,7 +194,12 @@ namespace CNA::Internal::GltfImport
      * @note NOXNA — not part of the XNA 4.0 API. Independent of ExtractClips' own bone-track
      * extraction: glTF's "weights" channel targets a mesh-instance node directly, not a skeleton
      * joint, so a mesh can have morph weight animation with no skin at all -- see
-     * ExtractMorphWeightTrack's own doc comment.
+     * ExtractMorphWeightTrack's own doc comment. CUBICSPLINE tangents are preserved (in
+     * MorphWeightKeyframeOut::inTangent/outTangent) rather than baked down at import time, unlike
+     * ExtractClips' own bone-channel resampling -- a single "weights" channel has no sibling
+     * channel to derive extra union sample points from, so evaluating the real Hermite curve
+     * lazily at playback time (see EvaluateMorphWeightsEXT) is both simpler and exact, not a
+     * piecewise-linear approximation.
      */
     struct MorphWeightTrackOut
     {
@@ -192,6 +207,8 @@ namespace CNA::Internal::GltfImport
         std::vector<MorphWeightKeyframeOut> keys;
         /** @brief True if the source channel used STEP interpolation (hold last value, no lerp). */
         bool stepInterpolation = false;
+        /** @brief True if the source channel used CUBICSPLINE interpolation (real Hermite tangents). */
+        bool cubicSpline = false;
     };
 
     /**

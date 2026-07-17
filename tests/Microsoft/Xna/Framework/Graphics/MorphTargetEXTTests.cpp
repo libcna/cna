@@ -205,3 +205,75 @@ TEST(EvaluateMorphWeightsEXTTest, StepInterpolationHoldsTheLowerKeyframeValue)
     ASSERT_EQ(mid.size(), 1u);
     EXPECT_NEAR(mid[0], 0.0f, 1e-6f);
 }
+
+// CUBICSPLINE: both endpoint out/in-tangents zero -- the Hermite basis reduces to
+// h00(s)*v0 + h01(s)*v1 (smoothstep-shaped, not linear). At s=0.25: h00=0.84375, h01=0.15625,
+// so the interpolated value is 0.15625, not the linear 0.25 -- a genuine distinguishing case
+// proving real Hermite evaluation runs, not a lerp.
+TEST(EvaluateMorphWeightsEXTTest, CubicSplineEvaluatesRealHermiteCurveNotLinear)
+{
+    MorphWeightTrackEXT track;
+    track.CubicSpline = true;
+    MorphWeightKeyframeEXT k0;
+    k0.Time = System::TimeSpan::FromSeconds(0.0);
+    k0.Weights = {0.0f};
+    k0.OutTangent = {0.0f};
+    MorphWeightKeyframeEXT k1;
+    k1.Time = System::TimeSpan::FromSeconds(1.0);
+    k1.Weights = {1.0f};
+    k1.InTangent = {0.0f};
+    track.Keys.push_back(k0);
+    track.Keys.push_back(k1);
+
+    const auto quarter = EvaluateMorphWeightsEXT(track, 0.25);
+    ASSERT_EQ(quarter.size(), 1u);
+    EXPECT_NEAR(quarter[0], 0.15625f, 1e-5f);
+
+    // Symmetric zero-tangent case: the midpoint is still exactly 0.5 (h00=h01=0.5 at s=0.5).
+    const auto mid = EvaluateMorphWeightsEXT(track, 0.5);
+    EXPECT_NEAR(mid[0], 0.5f, 1e-5f);
+
+    const auto before = EvaluateMorphWeightsEXT(track, -1.0);
+    EXPECT_NEAR(before[0], 0.0f, 1e-6f);
+    const auto after = EvaluateMorphWeightsEXT(track, 5.0);
+    EXPECT_NEAR(after[0], 1.0f, 1e-6f);
+}
+
+// A non-zero out-tangent at k0 pulls the curve above the endpoint-symmetric case near t=0 --
+// distinguishes the tangent term (dt*h10*outTangent) from a tangent-less evaluation.
+TEST(EvaluateMorphWeightsEXTTest, CubicSplineHonorsNonZeroTangents)
+{
+    MorphWeightTrackEXT track;
+    track.CubicSpline = true;
+    MorphWeightKeyframeEXT k0;
+    k0.Time = System::TimeSpan::FromSeconds(0.0);
+    k0.Weights = {0.0f};
+    k0.OutTangent = {2.0f};
+    MorphWeightKeyframeEXT k1;
+    k1.Time = System::TimeSpan::FromSeconds(1.0);
+    k1.Weights = {1.0f};
+    k1.InTangent = {0.0f};
+    track.Keys.push_back(k0);
+    track.Keys.push_back(k1);
+
+    // h10(0.25) = 0.25^3 - 2*0.25^2 + 0.25 = 0.015625 - 0.125 + 0.25 = 0.140625.
+    // value = h00*0 + dt(=1)*h10*outTangent(=2) + h01*1 + dt*h11*0 = 0.84375*0 + 0.140625*2 + 0.15625
+    //       = 0.28125 + 0.15625 = 0.4375.
+    const auto quarter = EvaluateMorphWeightsEXT(track, 0.25);
+    ASSERT_EQ(quarter.size(), 1u);
+    EXPECT_NEAR(quarter[0], 0.4375f, 1e-5f);
+}
+
+// If either bracketing keyframe lacks tangent data (the non-CUBICSPLINE / plain LINEAR case),
+// evaluation must fall back to plain LINEAR even when CubicSpline happens to be left true.
+TEST(EvaluateMorphWeightsEXTTest, FallsBackToLinearWhenTangentsAreMissing)
+{
+    MorphWeightTrackEXT track;
+    track.CubicSpline = true;
+    track.Keys.push_back({System::TimeSpan::FromSeconds(0.0), {0.0f}});
+    track.Keys.push_back({System::TimeSpan::FromSeconds(1.0), {1.0f}});
+
+    const auto mid = EvaluateMorphWeightsEXT(track, 0.5);
+    ASSERT_EQ(mid.size(), 1u);
+    EXPECT_NEAR(mid[0], 0.5f, 1e-6f);
+}

@@ -195,6 +195,48 @@ namespace
   ]
 })GLTF";
 
+    // CUBICSPLINE interpolation for morph-weight animation tracks: identical shape to
+    // kMorphedTriangleGltf above, but the "weights" channel is CUBICSPLINE-interpolated with both
+    // endpoint tangents zero (keyframe0: outTangent=0, keyframe1: inTangent=0) -- the Hermite
+    // basis then reduces to h00(s)*v0 + h01(s)*v1, giving 0.15625 at s=0.25 (not the LINEAR 0.25),
+    // the same hand-derived value MorphTargetEXTTests.cpp's own
+    // CubicSplineEvaluatesRealHermiteCurveNotLinear test already verifies in isolation.
+    const char* kCubicSplineMorphedTriangleGltf = R"GLTF({
+  "asset": { "version": "2.0" },
+  "scene": 0,
+  "scenes": [ { "nodes": [0] } ],
+  "nodes": [ { "name": "MeshNode", "mesh": 0 } ],
+  "meshes": [ {
+    "primitives": [ { "attributes": { "POSITION": 0, "NORMAL": 1, "TEXCOORD_0": 2 }, "targets": [ { "POSITION": 3 } ] } ],
+    "weights": [0.0]
+  } ],
+  "animations": [ {
+    "name": "MorphCubic",
+    "samplers": [ { "input": 4, "output": 5, "interpolation": "CUBICSPLINE" } ],
+    "channels": [ { "sampler": 0, "target": { "node": 0, "path": "weights" } } ]
+  } ],
+  "buffers": [ {
+    "byteLength": 164,
+    "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAgD8AAAAAAAAAAAAAAAAAAAAAAACAPwAAAAA="
+  } ],
+  "bufferViews": [
+    { "buffer": 0, "byteOffset": 0,   "byteLength": 36 },
+    { "buffer": 0, "byteOffset": 36,  "byteLength": 36 },
+    { "buffer": 0, "byteOffset": 72,  "byteLength": 24 },
+    { "buffer": 0, "byteOffset": 96,  "byteLength": 36 },
+    { "buffer": 0, "byteOffset": 132, "byteLength": 8 },
+    { "buffer": 0, "byteOffset": 140, "byteLength": 24 }
+  ],
+  "accessors": [
+    { "bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3", "min": [0,0,0], "max": [1,1,0] },
+    { "bufferView": 1, "componentType": 5126, "count": 3, "type": "VEC3" },
+    { "bufferView": 2, "componentType": 5126, "count": 3, "type": "VEC2" },
+    { "bufferView": 3, "componentType": 5126, "count": 3, "type": "VEC3" },
+    { "bufferView": 4, "componentType": 5126, "count": 2, "type": "SCALAR", "min": [0.0], "max": [1.0] },
+    { "bufferView": 5, "componentType": 5126, "count": 6, "type": "SCALAR" }
+  ]
+})GLTF";
+
     // CNB-56/59 (Phase 13A): an unskinned triangle with base-color + normal + metallic-roughness
     // + emissive maps, an explicit TANGENT accessor (all tangents (1,0,0,1)), and non-default
     // factor values (metallicFactor=0.5, roughnessFactor=0.3, emissiveFactor=[0.1,0.2,0.3]).
@@ -410,6 +452,40 @@ TEST(RuntimeGltfModelTest, LoadsMorphTargetDataWithDefaultWeightsAndWeightAnimat
     const auto midWeights = EvaluateMorphWeightsEXT(morph->WeightTrack, 0.5);
     ASSERT_EQ(midWeights.size(), 1u);
     EXPECT_NEAR(midWeights[0], 0.5f, 1e-5f);
+}
+
+// CUBICSPLINE interpolation for morph-weight animation tracks: proves the full glTF ->
+// GltfImportCore -> MorphTargetDataEXT pipeline preserves real Hermite tangents (not just the
+// sampled middle-third value), and EvaluateMorphWeightsEXT evaluates the real curve at playback.
+TEST(RuntimeGltfModelTest, LoadsCubicSplineMorphWeightAnimationFromGltf)
+{
+    ScratchDir contentRoot;
+    WriteFile(contentRoot.path() / "morphcubic.gltf", kCubicSplineMorphedTriangleGltf);
+
+    GraphicsDevice gd;
+    ContentManager cm(nullptr, contentRoot.path().string());
+    cm.setGraphicsDevice(gd);
+
+    Model model = cm.Load<Model>("morphcubic");
+    ASSERT_EQ(model.getMeshesProperty().getCountProperty(), 1);
+    ModelMesh* mesh = model.getMeshesProperty()[0];
+    ModelMeshPart* part = mesh->getMeshPartsProperty()[0];
+
+    auto* morph = dynamic_cast<MorphTargetDataEXT*>(part->getTagProperty());
+    ASSERT_NE(morph, nullptr);
+    ASSERT_EQ(morph->WeightTrack.Keys.size(), 2u);
+    EXPECT_TRUE(morph->WeightTrack.CubicSpline);
+    ASSERT_EQ(morph->WeightTrack.Keys[0].OutTangent.size(), 1u);
+    ASSERT_EQ(morph->WeightTrack.Keys[1].InTangent.size(), 1u);
+    EXPECT_NEAR(morph->WeightTrack.Keys[0].OutTangent[0], 0.0f, 1e-5f);
+    EXPECT_NEAR(morph->WeightTrack.Keys[1].InTangent[0], 0.0f, 1e-5f);
+
+    // Same hand-derived value as MorphTargetEXTTests.cpp's own
+    // CubicSplineEvaluatesRealHermiteCurveNotLinear test (zero endpoint tangents -> h00/h01-only
+    // Hermite basis) -- 0.15625, not the LINEAR 0.25.
+    const auto quarterWeights = EvaluateMorphWeightsEXT(morph->WeightTrack, 0.25);
+    ASSERT_EQ(quarterWeights.size(), 1u);
+    EXPECT_NEAR(quarterWeights[0], 0.15625f, 1e-5f);
 }
 
 // CNB-56/59 (Phase 13A): PbrEffect's 4 maps + factor values, extracted directly from a glTF file
