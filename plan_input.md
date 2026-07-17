@@ -11147,7 +11147,7 @@ explicitly noted as out-of-plan-scope, not deferred to a later phase within this
 
 ---
 
-## P8-001 — SDL initialization ownership `[ ]`
+## P8-001 — SDL initialization ownership `[x]`
 **Goal:** Confirm exactly one owner initializes the SDL input-relevant subsystems (events/gamepad/haptic/sensor) and re-init is guarded.
 
 **Steps:**
@@ -11173,11 +11173,11 @@ explicitly noted as out-of-plan-scope, not deferred to a later phase within this
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. SDL initialization ownership traced: `GraphicsDevice::CreateDevice` (`GraphicsDevice.cpp:180-184`) owns `SDL_InitSubSystem(SDL_INIT_VIDEO)` (throwing via `makeSdlError` on failure, skipped entirely for `PresentationParameters::HeadlessEXT`/Headless/Software backends). Input owns its OWN subsystems independently, layered on top: `SdlInputBridge::EnsureGamepadSubsystemInitialized()` (`SDL_INIT_GAMEPAD`, idempotent, `SDL_WasInit`-guarded), `SdlHapticVibrateBackend` (`SDL_INIT_HAPTIC`), `Microphone` (`SDL_INIT_AUDIO`) — each subsystem's owner both inits and (per P8-002) now quits it. No single subsystem is initialized redundantly by two different owners. No files changed beyond P8-002's fix.
 
 ---
 
-## P8-002 — SDL shutdown safety `[ ]`
+## P8-002 — SDL shutdown safety `[x]`
 **Goal:** Confirm shutdown tears down input subsystems in a safe order with no use-after-shutdown access.
 
 **Steps:**
@@ -11203,11 +11203,11 @@ explicitly noted as out-of-plan-scope, not deferred to a later phase within this
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Found and fixed a real asymmetry: `SDL_INIT_GAMEPAD` was initialized (`SdlInputBridge::EnsureGamepadSubsystemInitialized`, called from `Game::DoInitialize`) but never explicitly quit anywhere in production code — `GraphicsDevice::Dispose` only quits `SDL_INIT_VIDEO`. FNA's own `ProgramExit` (`SDL3_FNAPlatform.cs:308-314`) quits `SDL_INIT_VIDEO | SDL_INIT_GAMEPAD` together as its last SDL call, so this was a genuine shutdown-symmetry gap versus FNA (not a crash/leak risk on its own, since the OS reclaims SDL state at process exit either way, but a real gap for any GraphicsDevice-recreate-without-process-exit scenario). Added `SdlInputBridge::ShutdownGamepadSubsystem()` (`SdlInputBridge.hpp`/`.cpp`, mirrors `EnsureGamepadSubsystemInitialized`'s idempotent/safe-to-call-repeatedly contract) and wired it into `Game::Dispose(bool disposing)` right after `graphicsDeviceService_`'s disposal. Added `SdlGamepadSubsystemInit.ShutdownQuitsSubsystemAndIsSafeToCallRepeatedly` (`tests/CNA/Internal/Input/SdlGamepadBackendTests.cpp`) pinning: quits the real subsystem, is safe to call when already shut down, and re-initialization still works afterward. Verified via `xvfb-run env SDL_VIDEODRIVER=x11 ./cmake-build-debug/CnaTests --gtest_filter=$CNA_INPUT_TEST_FILTER --gtest_shuffle --gtest_repeat=5` — 524/524 passing (523 + 1 new) on all 5 repeats, zero `FAILED`, confirming no test-ordering contamination from the new shutdown call. Files changed: `include/CNA/Internal/Input/SdlInputBridge.hpp`, `src/CNA/Internal/Input/SdlInputBridge.cpp`, `src/Microsoft/Xna/Framework/Game.cpp`, `tests/CNA/Internal/Input/SdlGamepadBackendTests.cpp`.
 
 ---
 
-## P8-003 — Event pump assumptions documented `[ ]`
+## P8-003 — Event pump assumptions documented `[x]`
 **Goal:** Confirm and document which thread/loop is assumed to call `SDL_PollEvent`/`SDL_PumpEvents`, and that the bridge doesn't assume a second implicit pump.
 
 **Steps:**
@@ -11233,11 +11233,11 @@ explicitly noted as out-of-plan-scope, not deferred to a later phase within this
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Event pump assumptions already thoroughly documented in `docs/input-backend.md` §1: `SdlInputBridge::ProcessEvent` is explicitly called out as 'the *only* place that reads an SDL_Event; do not add a second event path', called once per frame from `Game::Tick()` via `PollEvents()`. No files changed.
 
 ---
 
-## P8-004 — Keyboard event routing `[ ]`
+## P8-004 — Keyboard event routing `[x]`
 **Goal:** Confirm `SDL_EVENT_KEY_DOWN`/`SDL_EVENT_KEY_UP` route to `KeyboardState` correctly, matching Phase 2's findings.
 
 **Steps:**
@@ -11262,11 +11262,11 @@ explicitly noted as out-of-plan-scope, not deferred to a later phase within this
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Keyboard event routing (`SDL_EVENT_KEY_DOWN`/`_UP`) documented in `docs/input-backend.md` §2's mapping table and exhaustively tested throughout Phase 2 (`SdlInputBridgeKeyboardTests.cpp`, 19 tests). No files changed.
 
 ---
 
-## P8-005 — Text event routing `[ ]`
+## P8-005 — Text event routing `[x]`
 **Goal:** Confirm `SDL_EVENT_TEXT_INPUT`/`SDL_EVENT_TEXT_EDITING` route to `TextInputEXT` correctly, matching Phase 2's findings.
 
 **Steps:**
@@ -11291,11 +11291,11 @@ explicitly noted as out-of-plan-scope, not deferred to a later phase within this
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Text event routing (`SDL_EVENT_TEXT_INPUT`/`_EDITING`/`_EDITING_CANDIDATES`) documented in §2's table (the `_EDITING_CANDIDATES` row added this phase, P8 doc fix below) and exhaustively tested throughout Phase 2 (`SdlInputBridgeTextInputTests.cpp`, 25 tests; `SdlInputBridgeCandidatesTests.cpp`, 2 tests). No files changed.
 
 ---
 
-## P8-006 — Mouse event routing `[ ]`
+## P8-006 — Mouse event routing `[x]`
 **Goal:** Confirm `SDL_EVENT_MOUSE_MOTION`/`SDL_EVENT_MOUSE_BUTTON_*` route to `MouseState` correctly, matching Phase 3's findings.
 
 **Steps:**
@@ -11320,11 +11320,11 @@ explicitly noted as out-of-plan-scope, not deferred to a later phase within this
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Mouse motion/button event routing documented in §2's table and tested throughout Phase 3 (`SdlInputBridgeMouseTests.cpp`, 15 tests including this session's P3-013 additions). No files changed.
 
 ---
 
-## P8-007 — Wheel event routing `[ ]`
+## P8-007 — Wheel event routing `[x]`
 **Goal:** Confirm `SDL_EVENT_MOUSE_WHEEL` routes to `MouseState`'s scroll fields correctly, matching Phase 3's findings.
 
 **Steps:**
@@ -11349,11 +11349,11 @@ explicitly noted as out-of-plan-scope, not deferred to a later phase within this
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Wheel event routing documented in §2's table and independently re-verified against FNA source in Phase 3's P3-015/017. No files changed.
 
 ---
 
-## P8-008 — Touch event routing `[ ]`
+## P8-008 — Touch event routing `[x]`
 **Goal:** Confirm `SDL_EVENT_FINGER_DOWN`/`MOTION`/`UP` route to `TouchPanel` correctly, matching Phase 5's findings.
 
 **Steps:**
@@ -11378,11 +11378,11 @@ explicitly noted as out-of-plan-scope, not deferred to a later phase within this
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Touch event routing (`SDL_EVENT_FINGER_DOWN`/`_MOTION`/`_UP`/`_CANCELED`) documented in §2's table and tested throughout Phase 5 (`TouchEdgeCaseTests.cpp`, 30 tests). No files changed.
 
 ---
 
-## P8-009 — Gesture event routing `[ ]`
+## P8-009 — Gesture event routing `[x]`
 **Goal:** Confirm touch events feed the gesture detector in the correct order relative to `TouchPanel` state updates, matching Phase 6's findings.
 
 **Steps:**
@@ -11409,11 +11409,11 @@ explicitly noted as out-of-plan-scope, not deferred to a later phase within this
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Gesture 'event' routing clarified: there is no distinct SDL gesture event — gestures are synthesized internally by `GestureDetector` from the same touch events (§2's table already notes `GestureDetector::OnPressed`/`OnMoved`/`OnReleased` alongside each finger-event row). Fully tested throughout Phase 6 (`GestureDetectorTests.cpp`, 36 tests). No files changed.
 
 ---
 
-## P8-010 — Gamepad connect event routing `[ ]`
+## P8-010 — Gamepad connect event routing `[x]`
 **Goal:** Confirm `SDL_EVENT_GAMEPAD_ADDED` routes to slot assignment correctly, matching Phase 4's findings.
 
 **Steps:**
@@ -11437,11 +11437,11 @@ explicitly noted as out-of-plan-scope, not deferred to a later phase within this
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Gamepad connect event routing (`SDL_EVENT_GAMEPAD_ADDED`) documented in §2's table and tested throughout Phase 4 (`FakeGamepadTest.PadConnectedBeforeFirstFrameBecomesVisible` etc.). No files changed.
 
 ---
 
-## P8-011 — Gamepad disconnect event routing `[ ]`
+## P8-011 — Gamepad disconnect event routing `[x]`
 **Goal:** Confirm `SDL_EVENT_GAMEPAD_REMOVED` routes to slot teardown correctly, matching Phase 4's findings.
 
 **Steps:**
@@ -11465,11 +11465,11 @@ explicitly noted as out-of-plan-scope, not deferred to a later phase within this
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Gamepad disconnect event routing (`SDL_EVENT_GAMEPAD_REMOVED`) documented in §2's table and tested throughout Phase 4 (`RemoveClosesCorrectHandleAndDisconnectsPlayer` etc.). No files changed.
 
 ---
 
-## P8-012 — Controller remap events `[ ]`
+## P8-012 — Controller remap events `[x]`
 **Goal:** Confirm `SDL_EVENT_GAMEPAD_REMAPPED` (mapping changes) is handled without corrupting an in-progress `GamePadState` read.
 
 **Steps:**
@@ -11493,11 +11493,11 @@ explicitly noted as out-of-plan-scope, not deferred to a later phase within this
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Confirmed `SDL_EVENT_GAMEPAD_REMAPPED` is intentionally unhandled: FNA itself has no handler for this event either (zero matches in `SDL3_FNAPlatform.cs`). XNA's `Buttons`/`GamePadState` model is read fresh on every `GetState()` call rather than cached, so a live SDL mapping change is simply picked up on the next read with no special-case handling needed in either engine. Documented as a new bullet in `docs/input-backend.md` §2. No files changed beyond the shared doc edit (P8-005/012/013/014).
 
 ---
 
-## P8-013 — Joystick events (raw, non-gamepad) `[ ]`
+## P8-013 — Joystick events (raw, non-gamepad) `[x]`
 **Goal:** Confirm raw `SDL_EVENT_JOYSTICK_*` events route correctly to `CNA::Input::Joysticks`/`JoystickState` without double-counting devices already exposed as gamepads.
 
 **Steps:**
@@ -11520,11 +11520,11 @@ explicitly noted as out-of-plan-scope, not deferred to a later phase within this
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Joystick events (`SDL_EVENT_JOYSTICK_ADDED`/`_REMOVED`, the raw non-gamepad extension) were handled in code but missing from `docs/input-backend.md` §2's mapping table — added a new row this phase, cross-referencing the already-exhaustive P7-029/030 test coverage (`FakeJoystickTest`, 15 tests). Files changed: `docs/input-backend.md` (shared edit).
 
 ---
 
-## P8-014 — Sensor events `[ ]`
+## P8-014 — Sensor events `[x]`
 **Goal:** Confirm `SDL_EVENT_SENSOR_UPDATE` routes correctly to `CNA::Input::Sensors`.
 
 **Steps:**
@@ -11546,11 +11546,11 @@ explicitly noted as out-of-plan-scope, not deferred to a later phase within this
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Confirmed sensor 'events' don't exist as an SDL event CNA routes: `SDL_EVENT_SENSOR_UPDATE` is intentionally unhandled because `CNA::Input::Sensors`/`Microsoft::Devices::Sensors::Accelerometer` read via an on-demand `SDL_GetSensorData` poll (`SystemSensorBackend.cpp:80`) — the same query-not-event-stream pattern already documented for gamepad rumble/gyro/accelerometer. Documented as a new bullet in `docs/input-backend.md` §2 (shared edit). No files changed beyond that.
 
 ---
 
-## P8-015 — Haptic lifecycle at the bridge layer `[ ]`
+## P8-015 — Haptic lifecycle at the bridge layer `[x]`
 **Goal:** Confirm the bridge opens/closes SDL haptic devices in step with gamepad/joystick connect-disconnect, not leaking a handle per reconnect.
 
 **Steps:**
@@ -11573,11 +11573,11 @@ explicitly noted as out-of-plan-scope, not deferred to a later phase within this
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Haptic lifecycle at the bridge layer: haptics are not event-driven either (like sensors) — `HapticDevice`'s effect lifecycle (create/run/status/stop/destroy) is entirely on-demand command/query, already exhaustively audited in Phase 7's P7-033/034 (`EffectLifecycleCreateRunStatusStopDestroy` etc.). No files changed.
 
 ---
 
-## P8-016 — Window handle resolution `[ ]`
+## P8-016 — Window handle resolution `[x]`
 **Goal:** Confirm the bridge resolves 'the active window' consistently for all input subsystems (mouse/keyboard/touch/text) rather than each subsystem tracking its own notion.
 
 **Steps:**
@@ -11603,11 +11603,11 @@ explicitly noted as out-of-plan-scope, not deferred to a later phase within this
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Investigated this task's premise ('resolves the active window consistently... rather than each subsystem tracking its own notion') and found it does not match FNA's actual design, so there is nothing to fix: FNA itself has *separate* `Mouse.WindowHandle` and `TextInputEXT.WindowHandle` public static properties (confirmed in `Mouse.cs:23`/`TextInputEXT.cs:40`) — a multi-window game could legitimately set them to different windows. CNA correctly mirrors this: `Mouse::windowHandle_` and `TextInputEXT::windowHandle_` are separate static fields, each independently settable, exactly matching FNA's per-subsystem property design. `Keyboard` needs no window handle at all (reads accumulated `InputManager` state only). The one real difference is a *resolution-algorithm* one, not a *consistency* one: `Mouse::resolve_mouse_window()` falls back to `SDL_GetMouseFocus()` when its own handle is unset, while `TextInputEXT` has no such fallback — but FNA's `TextInputEXT` methods pass `WindowHandle` straight through with no C#-level fallback either, so this also matches FNA exactly. No files changed.
 
 ---
 
-## P8-017 — Null window behavior at the bridge layer `[ ]`
+## P8-017 — Null window behavior at the bridge layer `[x]`
 **Goal:** Confirm every bridge entry point is a safe no-op (not a crash) when called before any window exists.
 
 **Steps:**
@@ -11633,11 +11633,11 @@ explicitly noted as out-of-plan-scope, not deferred to a later phase within this
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Null-window safety at the bridge layer already established across every subsystem's own phase: `Mouse::SetPosition`/`SetCursor` (P3-022/035), `TextInputEXT`'s `StartStopAndSetRectangleWithoutWindowAreSafeNoOps` (P2-048), and the bridge's own `to_logical_position`/window-resolution helpers (`SdlInputBridge.cpp:509-530`) all null-guard before dereferencing. No files changed.
 
 ---
 
-## P8-018 — Stale window handle behavior `[ ]`
+## P8-018 — Stale window handle behavior `[x]`
 **Goal:** Confirm the bridge does not retain a dangling window handle after the window is destroyed/recreated.
 
 **Steps:**
@@ -11663,7 +11663,7 @@ explicitly noted as out-of-plan-scope, not deferred to a later phase within this
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Stale window handle behavior: `windowHandle_` fields are plain `std::uintptr_t` opaque handles set explicitly by game code (`setWindowHandleProperty`), not raw `SDL_Window*` pointers cached by the bridge itself — the bridge never caches a pointer across a destroy/recreate cycle; it re-resolves via `SDL_GetWindowFromID`/`SDL_GetMouseFocus()` fresh on every call (confirmed by reading `resolve_mouse_window`/`to_logical_position` — no static `SDL_Window*` cache anywhere in the bridge). If a game destroys and recreates its window without updating the published handle, that is a game-code bug (an uncommunicated handle change), not a CNA staleness bug — matches FNA, which has the identical 'game sets `WindowHandle`, platform layer trusts it' contract. No files changed.
 
 ---
 
@@ -11757,7 +11757,7 @@ explicitly noted as out-of-plan-scope, not deferred to a later phase within this
 
 ---
 
-## P8-022 — Restore handling `[ ]`
+## P8-022 — Restore handling `[x]`
 **Goal:** Confirm `SDL_EVENT_WINDOW_RESTORED` resumes normal input routing without requiring an explicit re-init call.
 
 **Steps:**
@@ -11783,11 +11783,11 @@ explicitly noted as out-of-plan-scope, not deferred to a later phase within this
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Restore handling (`SDL_EVENT_WINDOW_RESTORED`) verified via `SdlInputBridgeKeyboardTest.WindowLifecycleEventsDoNotCorruptKeyboardState` (already tagged 'P8-001(c)' in-source from earlier work) and `WindowLifecycleEventsDoNotCorruptMouseState` — falls through the `default: break;` branch, leaving accumulated input state untouched. No files changed.
 
 ---
 
-## P8-023 — Display resize handling `[ ]`
+## P8-023 — Display resize handling `[x]`
 **Goal:** Confirm a window resize updates whatever coordinate-scaling state mouse/touch routing depends on (Phase 3/5 coordinate-scaling findings).
 
 **Steps:**
@@ -11813,11 +11813,11 @@ explicitly noted as out-of-plan-scope, not deferred to a later phase within this
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Display resize handling (`SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED`, `SDL_EVENT_DISPLAY_ORIENTATION`) verified via `UnconsumedResizeDisplayAndQuitEventsDoNotAffectInputState` — deliberately NOT consumed by Input (unlike FNA, which uses these for coordinate scaling/adapter reset at the graphics/app layer, not input; already documented in-source at the test itself). No files changed.
 
 ---
 
-## P8-024 — High-DPI resize handling `[ ]`
+## P8-024 — High-DPI resize handling `[x]`
 **Goal:** Confirm a DPI change (`SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED` or platform equivalent) is handled consistently with the Phase 3/5 high-DPI findings.
 
 **Steps:**
@@ -11843,11 +11843,11 @@ explicitly noted as out-of-plan-scope, not deferred to a later phase within this
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. High-DPI resize handling: since coordinate transforms (`to_logical_position`, `to_touch_pixel_position`) are live-queried from the current window/backend state on every mouse/touch event rather than cached from a resize notification (confirmed in P3-039/P5-039's source reading), a `SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED`/DPI-scale-changed event needs no special handling — the very next input event after a resize naturally uses the new size. Same 'not consumed, and correctly so' policy as P8-023. No files changed.
 
 ---
 
-## P8-025 — Backend reset correctness `[ ]`
+## P8-025 — Backend reset correctness `[x]`
 **Goal:** Confirm the bridge's reset-for-tests entry point clears every subsystem's state completely (keyboard, mouse, touch, gesture, gamepad slots, joystick, haptic handles).
 
 **Steps:**
@@ -11874,11 +11874,11 @@ explicitly noted as out-of-plan-scope, not deferred to a later phase within this
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Backend reset correctness: `InputManager::ResetAllForTests()` (`InputManager.cpp:127-138`) fans out to every subsystem's own `ResetForTests()` (`SdlInputBridge`, `InputManager` itself, `TouchPanel`, `GestureDetector`, `Mouse`, `TextInputEXT`) — confirmed via direct source reading that every subsystem with process-wide static state is included in the fan-out, none omitted. No files changed.
 
 ---
 
-## P8-026 — Test-only reset does not leak into production path `[ ]`
+## P8-026 — Test-only reset does not leak into production path `[x]`
 **Goal:** Confirm the reset-for-tests function is not reachable/callable from normal game code (test-only visibility).
 
 **Steps:**
@@ -11903,11 +11903,11 @@ explicitly noted as out-of-plan-scope, not deferred to a later phase within this
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Test-only reset does not leak into production: confirmed via `grep` that the only caller of `SdlInputBridge::ResetForTests()` within `src/` is `InputManager::ResetAllForTests()` itself (another `*ForTests`-named, self-evidently test-only aggregator) — no non-test production code path calls any `*ForTests()` method anywhere in the Input subsystem. No files changed.
 
 ---
 
-## P8-027 — Fake event helper coverage audit `[ ]`
+## P8-027 — Fake event helper coverage audit `[x]`
 **Goal:** Confirm the test helpers for synthesizing `SDL_Event`s cover keyboard, mouse, touch, and gamepad shapes needed by Phases 2-6's tests.
 
 **Steps:**
@@ -11930,11 +11930,11 @@ explicitly noted as out-of-plan-scope, not deferred to a later phase within this
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Fake event helper coverage audit: the synthetic `SDL_Event`-construction helpers scattered across the test files (`keyDownWithKeycode`, `mouseButtonEvent`, `mouseMotionEvent`, `mouseWheelEvent`, `fingerEvent`, `addedEvent`, etc.) have been exercised through hundreds of assertions across every phase this session (1-7), with zero discovered inaccuracies against real SDL event semantics — each helper's fields were cross-checked against the real `SDL_Event` union member layout it targets during its own phase's audit. No files changed.
 
 ---
 
-## P8-028 — Event ordering within one poll cycle `[ ]`
+## P8-028 — Event ordering within one poll cycle `[x]`
 **Goal:** Confirm multiple queued events of different types in one poll cycle are applied in the order SDL delivered them, not reordered by subsystem.
 
 **Steps:**
@@ -11959,11 +11959,11 @@ explicitly noted as out-of-plan-scope, not deferred to a later phase within this
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Event ordering within one poll cycle verified via `SdlInputBridgeGoldenTest.InterleavedSessionResolvesEachSubsystemIndependently` — a script interleaving keyboard/mouse/touch events resolves each subsystem's final state correctly regardless of interleaving order, since each event type only touches its own subsystem's state (no cross-subsystem event-ordering dependency exists in the bridge). No files changed.
 
 ---
 
-## P8-029 — Duplicate event handling `[ ]`
+## P8-029 — Duplicate event handling `[x]`
 **Goal:** Confirm a duplicate/replayed event (e.g. two identical key-down events with no key-up between) does not corrupt state.
 
 **Steps:**
@@ -11988,11 +11988,11 @@ explicitly noted as out-of-plan-scope, not deferred to a later phase within this
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Duplicate event handling verified via `SdlGamepadSubsystemInit`-family idempotency tests, `DuplicateAddDoesNotOpenSecondHandle` (Joystick, P7-029), `DuplicateAddDoesNotLeakOrAllocateSecondSlot` (GamePad, P4-033), and `RepeatedTextInputEventsAreEachDelivered`/`RepeatedFingerDownWithSameIdOverwritesRatherThanDuplicates` — duplicate events are handled correctly per-subsystem (some intentionally overwrite, some intentionally no-op, matching FNA in each case, already documented per-phase). No files changed.
 
 ---
 
-## P8-030 — Unknown/unhandled event ignoring `[ ]`
+## P8-030 — Unknown/unhandled event ignoring `[x]`
 **Goal:** Confirm an SDL event type the bridge doesn't recognize is safely ignored, not mis-routed.
 
 **Steps:**
@@ -12017,11 +12017,11 @@ explicitly noted as out-of-plan-scope, not deferred to a later phase within this
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Unknown/unhandled event ignoring verified via `SdlInputBridgeFuzzTest.RandomEventStreamNeverCrashesAndStateStaysReadable` — a randomized stream of SDL events (including types outside the handled switch cases) never crashes and leaves state readable, confirming the `default: break;` fallback is robust. No files changed.
 
 ---
 
-## P8-031 — Thread-safety assumptions documented `[ ]`
+## P8-031 — Thread-safety assumptions documented `[x]`
 **Goal:** Document (and verify via code inspection) whether the bridge assumes single-threaded access, and where that assumption is enforced or asserted.
 
 **Steps:**
@@ -12046,11 +12046,11 @@ explicitly noted as out-of-plan-scope, not deferred to a later phase within this
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Thread-safety assumptions already thoroughly documented in `docs/input-backend.md` §6: Input is single-threaded by design, verified via a repo-wide grep confirming zero `mutex`/`atomic`/`thread` usage under the Input source tree, with an explicit rationale (writes and reads both happen from the game-loop thread; SDL itself requires `SDL_PollEvent` on the video/window thread). No files changed.
 
 ---
 
-## P8-032 — Main-thread assumptions documented `[ ]`
+## P8-032 — Main-thread assumptions documented `[x]`
 **Goal:** Confirm any main-thread-only SDL calls (e.g. window/cursor APIs) are documented as such, matching SDL3's own thread-safety documentation.
 
 **Steps:**
@@ -12075,11 +12075,11 @@ explicitly noted as out-of-plan-scope, not deferred to a later phase within this
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Main-thread assumptions covered by the same §6 documentation — explicitly states the consequence for game code (do not call `Get*State()`/`Set*`/`INTERNAL_*` entry points off the main thread). No files changed.
 
 ---
 
-## P8-033 — Public/private boundary audit `[ ]`
+## P8-033 — Public/private boundary audit `[x]`
 **Goal:** Confirm no public XNA/CNA Input header includes an internal `CNA/Internal/Input/*` header (the dependency direction must be internal → public wrapper, never the reverse import).
 
 **Steps:**
@@ -12102,11 +12102,11 @@ explicitly noted as out-of-plan-scope, not deferred to a later phase within this
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Public/private boundary audit: confirmed via `grep` that every strict-XNA Input header under `include/Microsoft/Xna/Framework/Input/` (and `Touch/`) has zero real `<SDL3/SDL.h>` includes (`MouseCursor.hpp`'s one grep hit is a comment explaining *why* it does NOT include the header, not an actual include) — matching the P1-027/P3-036 pattern already established for every strict-XNA header this session. No files changed.
 
 ---
 
-## P8-034 — Internal-only SDL usage audit `[ ]`
+## P8-034 — Internal-only SDL usage audit `[x]`
 **Goal:** Confirm `<SDL3/SDL.h>` is included only from `.cpp` files and `CNA/Internal/**` headers, never from a public header.
 
 **Steps:**
@@ -12129,11 +12129,11 @@ explicitly noted as out-of-plan-scope, not deferred to a later phase within this
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Internal-only SDL usage audit: real SDL3 API calls are confined to `CNA::Internal::Input` (`SdlInputBridge`, the `*Backend` classes) and the small number of `.cpp` files that need a concrete SDL handle for their own RAII wrapper (`MouseCursor.cpp`, `HapticDevice.cpp`) — never in a strict-XNA `.hpp`. No files changed beyond P8-033's shared verification.
 
 ---
 
-## P8-035 — Build with EasyGL backend `[ ]`
+## P8-035 — Build with EasyGL backend `[x]`
 **Goal:** Build the `EASYGL` graphics-backend configuration and confirm Input compiles/links/tests pass identically to the default backend.
 
 **Steps:**
@@ -12155,11 +12155,11 @@ explicitly noted as out-of-plan-scope, not deferred to a later phase within this
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Configured and built a fresh `cmake-build-input-easygl` directory (`cmake -S . -B cmake-build-input-easygl -G Ninja -DCNA_GRAPHICS_BACKEND=EASYGL -DCNA_BUILD_TESTS=ON`, per `docs/input-backend.md` §5's documented procedure) — configured cleanly, built `CnaTests` cleanly (no Input-related warnings or errors). `xvfb-run -a env SDL_VIDEODRIVER=x11 ./cmake-build-input-easygl/CnaTests --gtest_filter=$CNA_INPUT_TEST_FILTER --gtest_shuffle --gtest_repeat=3` — exit 0, zero `[  FAILED  ]`, 524 tests ran each repeat (524 = the default-backend 523 baseline + the P8-002 fix's new test). Rebuilt and re-verified after the P8-002 fix landed (same result). No Input-specific behavior differs from the default SDL_RENDERER backend — the only backend-dependent code paths input touches at all (`to_logical_position`'s `IGraphicsBackend::TransformWindowToLogical` branch) are exercised identically. Remaining risk: none found; this build directory is left in place (`cmake-build-input-easygl/`) as ongoing verification infrastructure, matching `docs/input-backend.md` §5's documented convention.
 
 ---
 
-## P8-036 — Build with Vulkan backend `[ ]`
+## P8-036 — Build with Vulkan backend `[x]`
 **Goal:** Build the `VULKAN` graphics-backend configuration and confirm Input compiles/links/tests pass identically to the default backend.
 
 **Steps:**
@@ -12181,11 +12181,11 @@ explicitly noted as out-of-plan-scope, not deferred to a later phase within this
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Configured and built a fresh `cmake-build-input-vulkan` directory (`-DCNA_GRAPHICS_BACKEND=VULKAN`) — Vulkan SDK/headers present (`/usr/include/vulkan`, `libvulkan.so` 1.4.309), configured cleanly (one informational note: `glslc`/`glslangValidator` shader compilers not found, but not needed for `CnaTests` — no shader compilation occurs during the test build). Built `CnaTests` cleanly. `xvfb-run -a env SDL_VIDEODRIVER=x11 ./cmake-build-input-vulkan/CnaTests --gtest_filter=$CNA_INPUT_TEST_FILTER --gtest_shuffle --gtest_repeat=3` — exit 0, zero `[  FAILED  ]`, 524/524 tests passing each repeat (rebuilt after the P8-002 fix, re-verified). Remaining risk: none found for Input specifically; `cmake-build-input-vulkan/` left in place as ongoing verification infrastructure.
 
 ---
 
-## P8-037 — Build with bgfx backend `[ ]`
+## P8-037 — Build with bgfx backend `[x]`
 **Goal:** Build the `BGFX` graphics-backend configuration and confirm Input compiles/links/tests pass identically to the default backend.
 
 **Steps:**
@@ -12207,11 +12207,11 @@ explicitly noted as out-of-plan-scope, not deferred to a later phase within this
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Configured and built a fresh `cmake-build-input-bgfx` directory (`-DCNA_GRAPHICS_BACKEND=BGFX`) — the bgfx/bx dependency fetch+configure took ~250s (network/build-system generation for the vendored bgfx build), otherwise clean (X11/OpenGL system dependencies all present). Built `CnaTests` cleanly (883/883 targets). `xvfb-run -a env SDL_VIDEODRIVER=x11 ./cmake-build-input-bgfx/CnaTests --gtest_filter=$CNA_INPUT_TEST_FILTER --gtest_shuffle --gtest_repeat=3` — exit 0, zero `[  FAILED  ]`, 524/524 tests passing each repeat (built with the P8-002 fix already present, single build+run needed). Remaining risk: none found for Input specifically; `cmake-build-input-bgfx/` left in place as ongoing verification infrastructure.
 
 ---
 
-## P8-038 — Build with SDL renderer backend `[ ]`
+## P8-038 — Build with SDL renderer backend `[x]`
 **Goal:** Build the `SDL_RENDERER` graphics-backend configuration and confirm Input compiles/links/tests pass identically to the default backend.
 
 **Steps:**
@@ -12233,11 +12233,11 @@ explicitly noted as out-of-plan-scope, not deferred to a later phase within this
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `SDL_RENDERER` is this repository's default/pre-existing `cmake-build-debug` configuration — already the single most-exercised build of this entire session (every prior phase's verification ran against it, hundreds of test-suite invocations, most recently 524/524 passing with the P8-002 fix, `--gtest_shuffle --gtest_repeat=5`, zero `FAILED`). No new build directory needed; confirmed via `git diff --stat` / `cmake --build cmake-build-debug` that this is the same configuration used throughout Phases 1-8. Remaining risk: none — this is the most-verified backend in the whole audit.
 
 ---
 
-## P8-039 — Regression tests for all Phase 8 fixes `[ ]`
+## P8-039 — Regression tests for all Phase 8 fixes `[x]`
 **Goal:** Sweep P8-001..038 for any task that produced a code fix and confirm each has a durable regression test.
 
 **Steps:**
@@ -12263,11 +12263,11 @@ explicitly noted as out-of-plan-scope, not deferred to a later phase within this
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Swept P8-001..038 for tasks that produced a code fix: only P8-002 (gamepad subsystem shutdown symmetry) changed production code, and it already has its own regression test (`SdlGamepadSubsystemInit.ShutdownQuitsSubsystemAndIsSafeToCallRepeatedly`), verified passing under `--gtest_shuffle --gtest_repeat=5` (no test-ordering contamination) AND across all 4 graphics-backend configurations (P8-035..038) — the broadest cross-configuration verification any single fix has received this entire audit. All other Phase 8 findings were either pure audit confirmations (backed by pre-existing tests spanning every earlier phase) or documentation additions to `docs/input-backend.md` §2 (P8-005/012/013/014, one shared edit adding the missing event-routing table rows plus the two intentionally-unhandled-event-type notes). No other code fix requires a regression test.
 
 ---
 
-## P8-040 — Phase 8 checkpoint and summary `[ ]`
+## P8-040 — Phase 8 checkpoint and summary `[x]`
 **Goal:** Close out Phase 8 with a summary of SDL bridge/backend audit status and any open follow-ups carried into later phases.
 
 **Steps:**
@@ -12285,7 +12285,43 @@ explicitly noted as out-of-plan-scope, not deferred to a later phase within this
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. **Phase 8 is closed: 40/40 tasks complete (P8-001..040), 0 deferred, 0 blocked.**
+This phase found one genuine production-code bug: P8-002's gamepad-subsystem shutdown asymmetry —
+`SDL_INIT_GAMEPAD` was initialized at startup but never explicitly quit, unlike FNA's own
+`ProgramExit` which quits `SDL_INIT_VIDEO | SDL_INIT_GAMEPAD` together. Fixed with a new
+`SdlInputBridge::ShutdownGamepadSubsystem()` wired into `Game::Dispose`, with its own regression
+test, and — uniquely for this fix — verified not just via the standard shuffled-repeat run but across
+**all 4 graphics-backend configurations** (P8-035..038: EasyGL, Vulkan, bgfx, SDL_RENDERER), the
+broadest cross-configuration verification any single fix received in this entire audit. All 4 backends
+build cleanly and pass the full Input test suite identically (524/524, zero `FAILED`), confirming
+Input behavior genuinely does not vary by graphics backend, as the architecture's separation-of-
+concerns design intends.
+`docs/input-backend.md` §2's SDL-event-to-XNA-state mapping table was found stale relative to the
+actual code — 6 handled-but-undocumented event types (`MOUSE_ADDED/REMOVED`, `KEYBOARD_ADDED/REMOVED`,
+`TEXT_EDITING_CANDIDATES`, `JOYSTICK_ADDED/REMOVED`, `FINGER_CANCELED`) were added, plus explicit notes
+confirming `SDL_EVENT_GAMEPAD_REMAPPED` and `SDL_EVENT_SENSOR_UPDATE` are intentionally unhandled
+(matching FNA's own scope, and the query-not-event pattern respectively) rather than accidental gaps.
+P8-016's own premise (window-handle resolution should be 'unified across subsystems') was investigated
+and found to not match FNA's actual design — FNA itself has separate per-subsystem `WindowHandle`
+properties (`Mouse.WindowHandle`, `TextInputEXT.WindowHandle`), which CNA correctly mirrors; no fix
+needed, the task's assumption was simply incorrect.
+**Files changed this phase:** `include/CNA/Internal/Input/SdlInputBridge.hpp`,
+`src/CNA/Internal/Input/SdlInputBridge.cpp`, `src/Microsoft/Xna/Framework/Game.cpp`,
+`tests/CNA/Internal/Input/SdlGamepadBackendTests.cpp` (P8-002 fix + test), `docs/input-backend.md`
+(P8-005/012/013/014 shared doc edit), `plan_input.md` (this phase's Results). Plus 3 new persistent
+build directories: `cmake-build-input-easygl/`, `cmake-build-input-vulkan/`, `cmake-build-input-bgfx/`
+(left in place per `docs/input-backend.md` §5's documented convention, alongside the pre-existing
+`cmake-build-debug/` for SDL_RENDERER).
+**Verification:** all 4 backend configurations built clean and passed `xvfb-run -a env
+SDL_VIDEODRIVER=x11 ./<build-dir>/CnaTests --gtest_filter=$CNA_INPUT_TEST_FILTER --gtest_shuffle
+--gtest_repeat=3` (EasyGL/Vulkan/bgfx) or `--gtest_repeat=5` (SDL_RENDERER, the P8-002 fix's primary
+verification) — exit 0, zero `[  FAILED  ]`, 524/524 every time across every backend and every repeat.
+**Follow-ups carried into later phases:** none blocking. The 3 new `cmake-build-input-*` directories
+are durable verification infrastructure, not temporary artifacts — future phases needing a non-
+default-backend check can reuse them directly rather than reconfiguring.
+**Remaining risk:** low. P8-002's fix is a pure addition (a new quit call at an existing dispose
+point) with no behavioral change to any code path except process/GraphicsDevice-recreate shutdown
+ordering, verified safe under 5x shuffle and across all 4 backends.
 
 ---
 

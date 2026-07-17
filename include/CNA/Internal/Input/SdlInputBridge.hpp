@@ -49,6 +49,17 @@ namespace CNA::Internal::Input
         static void EnsureGamepadSubsystemInitialized();
 
         /**
+         * @brief Quits the SDL gamepad subsystem if it was initialized (P8-002).
+         *
+         * Mirrors FNA's own shutdown symmetry: `SDL3_FNAPlatform.ProgramExit` quits
+         * `SDL_INIT_VIDEO | SDL_INIT_GAMEPAD` together. CNA's `GraphicsDevice::Dispose` already
+         * quits `SDL_INIT_VIDEO`; this is the `SDL_INIT_GAMEPAD` counterpart, called from
+         * `Game::Dispose(bool)`. Safe to call even if the subsystem was never initialized
+         * (`SDL_QuitSubSystem` is a documented no-op in that case) and safe to call more than once.
+         */
+        static void ShutdownGamepadSubsystem();
+
+        /**
          * @brief Triggers rumble on the gamepad for the given player.
          * @return true if vibration was successfully set.
          */

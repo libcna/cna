@@ -622,6 +622,12 @@ namespace Microsoft::Xna::Framework
                     disposable->Dispose();
                 }
             }
+
+            // P8-002: mirrors FNA's ProgramExit, which quits SDL_INIT_VIDEO | SDL_INIT_GAMEPAD
+            // together. GraphicsDevice::Dispose (above) already quit SDL_INIT_VIDEO; this is the
+            // SDL_INIT_GAMEPAD counterpart, since that subsystem is Input's own responsibility
+            // (DoInitialize() below is the matching startup call).
+            CNA::Internal::Input::SdlInputBridge::ShutdownGamepadSubsystem();
         }
 
         isDisposed_ = true;

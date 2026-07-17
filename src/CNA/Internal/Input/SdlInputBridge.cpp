@@ -1606,6 +1606,11 @@ namespace CNA::Internal::Input
         SDL_InitSubSystem(SDL_INIT_GAMEPAD);
     }
 
+    void SdlInputBridge::ShutdownGamepadSubsystem()
+    {
+        SDL_QuitSubSystem(SDL_INIT_GAMEPAD);
+    }
+
     void SdlInputBridge::ProcessEvent(const SDL_Event& event)
     {
         // SDL_INIT_VIDEO does not init the gamepad subsystem; do it lazily on first event so
