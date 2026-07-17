@@ -745,6 +745,57 @@ TEST(GyroscopeTests, DisposingDifferentInstanceDuringSameBatchDispatchDoesNotUse
     EXPECT_NO_THROW(a->Dispose());
 }
 
+// Task SDLCORE-004 (2026-07-17, external audit `audit_devices_2026-07-17.md`):
+// see AccelerometerTests's identical test for the full rationale — a
+// deterministic (placement-new-based) address-reuse (ABA) regression test.
+// b is disposed AND destroyed mid-batch, then a brand-new, unrelated
+// Gyroscope `c` is placement-constructed at b's exact freed address and
+// started, before the dispatch loop reaches its already-snapshotted (stale)
+// entry for b. DispatchRegistration must prevent that stale entry from
+// being delivered to `c`, regardless of the shared address.
+TEST(GyroscopeTests, DispatchDoesNotDeliverStaleEventToUnrelatedInstanceReusingSameAddress)
+{
+    auto a = std::make_unique<Gyroscope>();
+    a->SetStartedForTesting(true);
+    Gyroscope::RegisterStartedInstanceForTesting(*a);
+
+    alignas(Gyroscope) unsigned char storage[sizeof(Gyroscope)];
+    Gyroscope* b = new (static_cast<void*>(storage)) Gyroscope();
+    b->SetStartedForTesting(true);
+    Gyroscope::RegisterStartedInstanceForTesting(*b);
+
+    Gyroscope* c = nullptr;
+    bool cCallbackCalled = false;
+
+    bool aCallbackCalled = false;
+    a->CurrentValueChanged += [&](System::Object*, const SensorReadingEventArgs<GyroscopeReading>&)
+    {
+        aCallbackCalled = true;
+
+        b->~Gyroscope();
+        c = new (static_cast<void*>(storage)) Gyroscope();
+        c->SetStartedForTesting(true);
+        Gyroscope::RegisterStartedInstanceForTesting(*c);
+
+        c->CurrentValueChanged += [&cCallbackCalled](
+            System::Object*, const SensorReadingEventArgs<GyroscopeReading>&)
+        {
+            cCallbackCalled = true;
+        };
+    };
+
+    const std::vector<Gyroscope*> batch{a.get(), b};
+    EXPECT_NO_THROW(Gyroscope::DispatchToInstancesForTesting(batch, 1.0f, 2.0f, 3.0f));
+
+    EXPECT_TRUE(aCallbackCalled);
+    EXPECT_FALSE(cCallbackCalled);
+
+    ASSERT_NE(c, nullptr);
+    c->~Gyroscope();
+
+    EXPECT_NO_THROW(a->Dispose());
+}
+
 // Task P8-1: Gyroscope::DispatchSensorReading() raises CurrentValueChanged as its
 // last statement and touches `this` for nothing afterward, so — with the
 // dispatchToken_ fix — a handler that destroys (not just Dispose()s) this exact

@@ -790,7 +790,32 @@ namespace Microsoft::Devices::Sensors
     void Accelerometer::DispatchToInstancesForTesting(
         const std::vector<Accelerometer*>& instances, float x, float y, float z)
     {
-        GetSubsystem().DispatchToInstances(instances, [x, y, z](Accelerometer* instance)
+        // Task SDLCORE-004: DispatchToInstances() now takes a snapshot of
+        // DispatchRegistration nodes, not raw pointers -- reconstruct that
+        // snapshot from the *currently* active registration for each raw
+        // test pointer, exactly as SensorEventWatch() itself does from the
+        // live startedInstances_ list, before any dispatch (and thus any
+        // test callback that might dispose/destroy one of these instances)
+        // has had a chance to run.
+        auto& subsystem = GetSubsystem();
+
+        std::vector<std::shared_ptr<Detail::SdlSensorSubsystem<Accelerometer>::DispatchRegistration>> registrations;
+        {
+            std::lock_guard<std::mutex> lock(subsystem.mutex_);
+            for (Accelerometer* instance : instances)
+            {
+                for (const auto& registration : subsystem.startedInstances_)
+                {
+                    if (registration->owner == instance)
+                    {
+                        registrations.push_back(registration);
+                        break;
+                    }
+                }
+            }
+        }
+
+        subsystem.DispatchToInstances(registrations, [x, y, z](Accelerometer* instance)
         {
             instance->DispatchSensorReading(x, y, z);
         });

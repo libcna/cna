@@ -173,6 +173,63 @@ namespace Microsoft::Devices::Sensors::Detail
     {
     public:
         /**
+         * @brief Stable, ABA-safe dispatch registration node (Task SDLCORE-004).
+         *
+         * Previously `startedInstances_` held raw `TSensor*` values directly,
+         * and `DispatchToInstances()` revalidated a snapshotted pointer by
+         * checking whether that exact bit pattern was still present in the
+         * *live* `startedInstances_` list. That check cannot distinguish "the
+         * original instance this snapshot was taken for is still started"
+         * from "a completely different, later TSensor instance happens to
+         * have been allocated at the exact same address and is itself now
+         * started" — the classic ABA hazard. Concretely: instance X is
+         * snapshotted, then disposed and destroyed (freeing its memory)
+         * *before* the dispatch loop reaches it; a brand-new instance Y is
+         * then constructed at X's freed address and started, registering
+         * that same address in `startedInstances_` again; the old
+         * pointer-value revalidation would wrongly find "the address" still
+         * present and dispatch a stale event — meant for whatever happened
+         * while X was alive — into Y instead.
+         *
+         * The fix: a fresh `DispatchRegistration` is heap-allocated (via
+         * `shared_ptr`) every time `RegisterStartedInstanceLocked()` runs,
+         * and is never reused for a later, logically distinct registration —
+         * not even a later `Start()` by the very same `TSensor` object after
+         * an intervening `Stop()`. `startedInstances_` holds (and
+         * `DispatchToInstances()` snapshots/iterates) these `shared_ptr`s,
+         * never raw `TSensor*` values. `owner` is nulled by
+         * `UnregisterStartedInstanceLocked()` — under `mutex_`, the same lock
+         * every read of `owner` requires — strictly before that instance's
+         * `Dispose(bool)` can finish waiting for in-flight dispatches and let
+         * the object be destroyed (see `Accelerometer`/`Gyroscope`'s
+         * `Dispose(bool)`). A dispatcher holding an old snapshot's
+         * `shared_ptr<DispatchRegistration>` therefore always sees `owner ==
+         * nullptr` once that specific registration is torn down, regardless
+         * of whether some later, unrelated instance is later constructed at
+         * the same address and separately registers its own, distinct
+         * `DispatchRegistration` node — the two are never the same object, so
+         * they can never be confused with each other.
+         *
+         * `owner` is guarded by the *subsystem's* `mutex_` (not a mutex of
+         * its own) — every access to it already happens only while `mutex_`
+         * is held (`RegisterStartedInstanceLocked()`,
+         * `UnregisterStartedInstanceLocked()`, `DispatchToInstances()`),
+         * exactly like every other field this class documents as
+         * "Caller must already hold mutex_"; a dedicated per-registration
+         * mutex would add nothing here.
+         */
+        struct DispatchRegistration
+        {
+            /**
+             * @brief The instance this registration was created for, or
+             * `nullptr` once invalidated. Guarded by the owning
+             * `SdlSensorSubsystem::mutex_` — never read or written without
+             * it held.
+             */
+            TSensor* owner = nullptr;
+        };
+
+        /**
          * RAII probe guard (Task P5-1): balances a probe-only
          * SDL_InitSubSystem()/SDL_QuitSubSystem() pair, independent of
          * whatever any live TSensor instance separately holds via its own
@@ -434,21 +491,58 @@ namespace Microsoft::Devices::Sensors::Detail
             }
         }
 
-        /** @brief Adds instance to startedInstances_ if not already present. Caller must already hold mutex_. */
+        /**
+         * @brief Creates and adds a fresh DispatchRegistration for instance,
+         * unless one is already active. Caller must already hold mutex_.
+         *
+         * Task SDLCORE-004: always heap-allocates a brand-new
+         * `DispatchRegistration` for a genuinely new registration — never
+         * reuses or mutates a previous, already-invalidated one, even for
+         * the same `instance` restarting after a prior `Stop()`. This
+         * per-registration identity (not `instance`'s own address) is what
+         * `DispatchToInstances()` revalidates against, closing the ABA
+         * hazard described on `DispatchRegistration`'s own doc comment.
+         */
         void RegisterStartedInstanceLocked(TSensor* instance)
         {
-            if (std::find(startedInstances_.begin(), startedInstances_.end(), instance) == startedInstances_.end())
+            const bool alreadyActive = std::any_of(
+                startedInstances_.begin(), startedInstances_.end(),
+                [instance](const std::shared_ptr<DispatchRegistration>& registration)
+                {
+                    return registration->owner == instance;
+                });
+
+            if (!alreadyActive)
             {
-                startedInstances_.push_back(instance);
+                auto registration = std::make_shared<DispatchRegistration>();
+                registration->owner = instance;
+                startedInstances_.push_back(std::move(registration));
             }
         }
 
-        /** @brief Removes instance from startedInstances_ if present. Caller must already hold mutex_. */
+        /**
+         * @brief Invalidates and removes instance's active DispatchRegistration, if any. Caller must already hold mutex_.
+         *
+         * Task SDLCORE-004: nulls the registration's `owner` *before*
+         * erasing it from `startedInstances_` (both under the already-held
+         * `mutex_`) — a dispatcher holding its own copy of this exact
+         * `shared_ptr<DispatchRegistration>` from an earlier snapshot sees
+         * `owner == nullptr` the next time it locks `mutex_` to check,
+         * regardless of whether this entry has already been erased from the
+         * live list by then.
+         */
         void UnregisterStartedInstanceLocked(TSensor* instance)
         {
-            const auto it = std::find(startedInstances_.begin(), startedInstances_.end(), instance);
+            const auto it = std::find_if(
+                startedInstances_.begin(), startedInstances_.end(),
+                [instance](const std::shared_ptr<DispatchRegistration>& registration)
+                {
+                    return registration->owner == instance;
+                });
+
             if (it != startedInstances_.end())
             {
+                (*it)->owner = nullptr;
                 startedInstances_.erase(it);
             }
         }
@@ -463,25 +557,26 @@ namespace Microsoft::Devices::Sensors::Detail
         std::int64_t sensorId_ = 0;
         int instanceCount_ = 0;
         bool eventWatchRegistered_ = false;
-        std::vector<TSensor*> startedInstances_;
+        // Task SDLCORE-004: holds DispatchRegistration nodes, not raw
+        // TSensor* values — see that struct's own doc comment.
+        std::vector<std::shared_ptr<DispatchRegistration>> startedInstances_;
         std::mutex mutex_;
         std::condition_variable callbackFinished_;
 
         /**
-         * @brief Dispatches to each instance in `instancesSnapshot`, in
-         * order, via `dispatchOne` (Task P7-3).
+         * @brief Dispatches to each registration in `registrationsSnapshot`,
+         * in order, via `dispatchOne` (Task P7-3, revised Task SDLCORE-004).
          *
          * Shared by the real SDL_EventFilter path (SensorEventWatch(),
          * below) and the NOXNA test-only dispatch hooks that TSensor
          * exposes — both funnel through this one method so the bookkeeping
          * can never diverge between the real path and a test simulating it.
          *
-         * For each snapshotted pointer, re-validates it against the *live*
-         * startedInstances_ list — by pointer value only, never
-         * dereferencing the pointer before this check passes — and only if
-         * still present, marks it as actively dispatching (pushes this
-         * thread's id into its dispatchingThreadIds_) and calls
-         * `dispatchOne(instance)`.
+         * For each snapshotted `DispatchRegistration`, re-validates its
+         * `owner` field — under `mutex_`, never dereferencing the instance
+         * before this check passes — and only if still non-null, marks it as
+         * actively dispatching (pushes this thread's id into its
+         * dispatchToken_) and calls `dispatchOne(instance)`.
          *
          * This closes a real use-after-free (Task P7-3's audit finding C):
          * previously, *every* snapshotted instance had this thread's id
@@ -496,16 +591,24 @@ namespace Microsoft::Devices::Sensors::Detail
          * loop would then blindly call `dispatchOne` on the now-dangling
          * `B*` on its next iteration.
          *
-         * The fix: mark (and validate) each instance immediately before
-         * dispatching to *that* instance, not in bulk up front. If a prior
+         * The fix: mark (and validate) each registration immediately before
+         * dispatching to its instance, not in bulk up front. If a prior
          * iteration's callback already disposed a later instance in this
          * snapshot, that instance's own Dispose(bool)/Stop() has already
-         * removed it from startedInstances_ (necessarily before any wait
-         * that could let it be destroyed) — so the pointer-value-only
-         * re-check here safely detects that and skips it, never touching
+         * invalidated (and removed) its registration (necessarily before any
+         * wait that could let it be destroyed) — so the `owner` re-check
+         * here safely detects that and skips it, never touching
          * (dereferencing) the possibly-freed memory.
          *
-         * Task P8-1: the cleanup guard below now captures a *copy* of
+         * Task SDLCORE-004: this per-registration `owner` re-check replaces
+         * the previous pointer-value-only `std::find(startedInstances_...,
+         * instance)` revalidation, which could not distinguish "the original
+         * snapshotted instance is still started" from "a different, later
+         * instance happens to have been allocated at the exact same address
+         * and is itself now started" (a classic ABA hazard) — see
+         * `DispatchRegistration`'s own doc comment for the full analysis.
+         *
+         * Task P8-1: the cleanup guard below still captures a *copy* of
          * `instance->dispatchToken_` (a `shared_ptr`), taken while `instance`
          * is confirmed still alive+started under the lock, instead of
          * capturing `instance` itself. This closes a further use-after-free:
@@ -523,17 +626,20 @@ namespace Microsoft::Devices::Sensors::Detail
          * this method can close. See plan_devices_phase8.md Task P8-1.
          */
         template <typename DispatchFn>
-        void DispatchToInstances(const std::vector<TSensor*>& instancesSnapshot, DispatchFn&& dispatchOne)
+        void DispatchToInstances(
+            const std::vector<std::shared_ptr<DispatchRegistration>>& registrationsSnapshot,
+            DispatchFn&& dispatchOne)
         {
             const std::thread::id thisThreadId = std::this_thread::get_id();
 
-            for (TSensor* instance : instancesSnapshot)
+            for (const std::shared_ptr<DispatchRegistration>& registration : registrationsSnapshot)
             {
+                TSensor* instance = nullptr;
                 std::shared_ptr<std::vector<std::thread::id>> token;
                 {
                     std::lock_guard<std::mutex> lock(mutex_);
-                    if (std::find(startedInstances_.begin(), startedInstances_.end(), instance)
-                        != startedInstances_.end())
+                    instance = registration->owner;
+                    if (instance != nullptr)
                     {
                         token = instance->dispatchToken_;
                         token->push_back(thisThreadId);
@@ -628,13 +734,13 @@ namespace Microsoft::Devices::Sensors::Detail
             const float y = event->sensor.data[1];
             const float z = event->sensor.data[2];
 
-            std::vector<TSensor*> instancesSnapshot;
+            std::vector<std::shared_ptr<DispatchRegistration>> registrationsSnapshot;
             {
                 std::lock_guard<std::mutex> lock(subsystem.mutex_);
-                instancesSnapshot = subsystem.startedInstances_;
+                registrationsSnapshot = subsystem.startedInstances_;
             }
 
-            subsystem.DispatchToInstances(instancesSnapshot, [sensorId, x, y, z](TSensor* instance)
+            subsystem.DispatchToInstances(registrationsSnapshot, [sensorId, x, y, z](TSensor* instance)
             {
                 instance->ProcessSensorUpdateEvent(sensorId, x, y, z);
             });

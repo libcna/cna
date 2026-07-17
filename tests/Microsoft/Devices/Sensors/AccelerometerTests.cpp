@@ -1137,6 +1137,71 @@ TEST(AccelerometerTests, DisposingDifferentInstanceDuringSameBatchDispatchDoesNo
     EXPECT_NO_THROW(a->Dispose());
 }
 
+// Task SDLCORE-004 (2026-07-17, external audit `audit_devices_2026-07-17.md`):
+// deterministic address-reuse (ABA) regression test. Reproduces the exact
+// hazard SDLCORE-004 fixes via placement-new -- rather than relying on the
+// allocator naturally reusing freed memory, which is common in practice but
+// not portably guaranteed -- so this test is deterministic on any platform.
+//
+// b is disposed AND destroyed mid-batch (same setup as
+// DisposingDifferentInstanceDuringSameBatchDispatchDoesNotUseAfterFree
+// above), but instead of merely freeing b's memory, a's callback then
+// placement-constructs a brand-new, logically unrelated Accelerometer `c`
+// at that *exact* freed address and starts it, before the dispatch loop
+// reaches its already-snapshotted (stale) second batch entry (which was
+// captured for b's address before any of this happened). A raw-pointer-
+// identity-based revalidation (`std::find(startedInstances_, instance)`)
+// would wrongly find that address "still present" in the live list --
+// because `c` freshly registered itself there -- and deliver this stale
+// event, meant for the moment b was disposed, into `c`. DispatchRegistration
+// gives each Start() its own distinct, never-reused heap identity, so this
+// must not happen regardless of what raw address `c` occupies.
+TEST(AccelerometerTests, DispatchDoesNotDeliverStaleEventToUnrelatedInstanceReusingSameAddress)
+{
+    auto a = std::make_unique<Accelerometer>();
+    a->SetStartedForTesting(true);
+    Accelerometer::RegisterStartedInstanceForTesting(*a);
+
+    alignas(Accelerometer) unsigned char storage[sizeof(Accelerometer)];
+    Accelerometer* b = new (static_cast<void*>(storage)) Accelerometer();
+    b->SetStartedForTesting(true);
+    Accelerometer::RegisterStartedInstanceForTesting(*b);
+
+    Accelerometer* c = nullptr;
+    bool cCallbackCalled = false;
+
+    bool aCallbackCalled = false;
+    a->CurrentValueChanged += [&](System::Object*, const SensorReadingEventArgs<AccelerometerReading>&)
+    {
+        aCallbackCalled = true;
+
+        // Destroy b, then construct a brand-new, unrelated Accelerometer at
+        // the *exact* same address, and start it -- before the dispatch
+        // loop reaches its already-snapshotted (stale) entry for b.
+        b->~Accelerometer();
+        c = new (static_cast<void*>(storage)) Accelerometer();
+        c->SetStartedForTesting(true);
+        Accelerometer::RegisterStartedInstanceForTesting(*c);
+
+        c->CurrentValueChanged += [&cCallbackCalled](
+            System::Object*, const SensorReadingEventArgs<AccelerometerReading>&)
+        {
+            cCallbackCalled = true;
+        };
+    };
+
+    const std::vector<Accelerometer*> batch{a.get(), b};
+    EXPECT_NO_THROW(Accelerometer::DispatchToInstancesForTesting(batch, 1.0f, 2.0f, 3.0f));
+
+    EXPECT_TRUE(aCallbackCalled);
+    EXPECT_FALSE(cCallbackCalled);
+
+    ASSERT_NE(c, nullptr);
+    c->~Accelerometer();
+
+    EXPECT_NO_THROW(a->Dispose());
+}
+
 // Task P8-1: DispatchSensorReading() raises CurrentValueChanged, then
 // unconditionally touches `this` again (getIsDataValidProperty()) before deciding
 // whether to also raise the legacy ReadingChanged event — so destroying this same

@@ -6090,7 +6090,7 @@ test is not sufficient for an Android coordinate/fusion claim.
   Devices/Sensors suite: 367 tests, 363 passed, 4 expected skips (2 pre-existing hardware
   skips + these 2 new hardware-gated tests), zero failures.
 
-### SDLCORE-004 — Replace raw-pointer dispatch membership with generation-bearing registrations — OPEN
+### SDLCORE-004 — Replace raw-pointer dispatch membership with generation-bearing registrations — CLOSED (2026-07-17)
 
 - **Priority:** P0
 - **Area:** Perfection re-audit
@@ -6103,6 +6103,70 @@ test is not sufficient for an Android coordinate/fusion claim.
   - A deterministic allocator-reuse test cannot deliver an old event to a new object at the same address.
   - Cross-instance disposal and self-disposal remain deadlock-free.
 - **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+- **Resolution:** `Detail::SdlSensorSubsystem<TSensor>::startedInstances_` previously held raw
+  `TSensor*` values; `DispatchToInstances()` revalidated a snapshotted pointer by checking whether
+  that exact bit pattern was still present in the *live* `startedInstances_` list. That check cannot
+  distinguish "the original snapshotted instance is still started" from "a different, later
+  instance happens to have been allocated at the exact same freed address and is itself now
+  started" — the classic ABA hazard: instance X is snapshotted, then disposed and destroyed
+  (freeing its memory) before the dispatch loop reaches it; a brand-new instance Y is constructed at
+  X's freed address and started, registering that same address again; the old check would wrongly
+  find "the address" still present and deliver a stale event — meant for whatever happened while X
+  was alive — into Y instead.
+  - Added a nested `DispatchRegistration` struct (`{ TSensor* owner; }`,
+    `include/Microsoft/Devices/Sensors/Detail/SdlSensorSubsystem.hpp`). A fresh instance is
+    heap-allocated via `shared_ptr` every time `RegisterStartedInstanceLocked()` runs, and is never
+    reused for a later, logically distinct registration — not even a later `Start()` by the same
+    `TSensor` object after an intervening `Stop()`. `startedInstances_` now holds (and
+    `DispatchToInstances()` snapshots/iterates) these `shared_ptr`s, never raw `TSensor*` values.
+  - `owner` is guarded by the subsystem's existing `mutex_` (no new per-registration mutex needed —
+    every access already happens only while `mutex_` is held). `UnregisterStartedInstanceLocked()`
+    nulls `owner` *before* erasing the entry from `startedInstances_`, both under `mutex_` — a
+    dispatcher holding its own copy of that exact `shared_ptr<DispatchRegistration>` from an earlier
+    snapshot always sees `owner == nullptr` the next time it locks `mutex_` to check, regardless of
+    whether a completely different, later registration (for a possibly address-colliding instance)
+    now exists in the live list. Since a genuinely new `DispatchRegistration` object is allocated
+    per registration, two different registrations can never be confused with each other merely
+    because their *owning* `TSensor` objects happen to share a bit-identical address at different
+    points in time — the fix does not need an explicit generation counter; object identity of the
+    registration itself already provides it.
+  - `DispatchToInstances()`'s existing `dispatchToken_`-based in-flight-thread-id tracking and
+    `Dispose(bool)`'s existing `callbackFinished_` wait are unchanged — once a registration's
+    `owner` is confirmed non-null under `mutex_`, the rest of the already-correct P7-3/P8-1
+    machinery (safe token extraction, dispatch outside the lock, exception-swallowing per instance,
+    cleanup-guard-holds-its-own-token-copy) applies exactly as before.
+  - `RegisterStartedInstanceLocked()`/`UnregisterStartedInstanceLocked()` now search
+    `startedInstances_` for a registration whose `owner` equals the given instance (safe: both are
+    only ever called synchronously by that exact instance's own `Start()`/`Stop()`, on a
+    guaranteed-live `this`, never as a delayed revalidation of a stale snapshot).
+    `DispatchToInstancesForTesting()` (Accelerometer/Gyroscope) rebuilds a
+    `vector<shared_ptr<DispatchRegistration>>` from its caller-supplied raw-pointer batch by looking
+    up each pointer's currently active registration under `mutex_`, exactly mirroring what
+    `SensorEventWatch()` itself does from the live list — the test helper's public signature
+    (`vector<TSensor*>`) is unchanged.
+- **Files changed:** `include/Microsoft/Devices/Sensors/Detail/SdlSensorSubsystem.hpp` (new
+  `DispatchRegistration` struct; `startedInstances_`'s element type;
+  `RegisterStartedInstanceLocked()`/`UnregisterStartedInstanceLocked()`/`DispatchToInstances()`/
+  `SensorEventWatch()`), `src/Microsoft/Devices/Sensors/Accelerometer.cpp` and
+  `src/Microsoft/Devices/Sensors/Gyroscope.cpp` (`DispatchToInstancesForTesting()`).
+- **Tests:** added a deterministic, placement-new-based address-reuse regression test to both
+  `AccelerometerTests.cpp` and `GyroscopeTests.cpp`
+  (`DispatchDoesNotDeliverStaleEventToUnrelatedInstanceReusingSameAddress`) — rather than relying on
+  the allocator naturally reusing freed memory (common in practice, not portably guaranteed), a
+  second instance is disposed and destroyed mid-batch-dispatch and a brand-new, unrelated instance
+  is placement-constructed at that *exact* freed address and started before the dispatch loop
+  reaches its already-snapshotted stale entry; the test asserts the new instance never receives
+  that stale callback. Full Devices/Sensors filtered suite: 398 tests, 394 passed, 4 skipped
+  (hardware-only, expected, unchanged from before this task). No regressions.
+- **Sanitizer/static-analysis result:** built and run clean under `cmake-build-devices-ubsan`; no
+  new UBSan finding attributable to this change.
+- **Remaining limitations:** the deterministic placement-new test proves the fix's mechanism
+  directly; it does not additionally rely on (or prove anything about) real allocator behavior under
+  actual concurrent multi-threaded `new`/`delete` churn — that broader concurrency/timing scenario
+  is covered by this project's existing `SensorSubsystemOwnershipTests`
+  (`ConcurrentCrossClassConstructDestroyProbeDoesNotCrash`) and TSan, not by this specific new test.
+  TSan re-verification of this change specifically is tracked under `TEST2-001` (not yet re-run this
+  pass — see `SDLCORE-001`'s resolution note for the same outstanding item).
 
 ### SDLCORE-005 — Add SDL sensor hotplug/removal/reopen handling — OPEN
 

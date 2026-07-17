@@ -554,7 +554,28 @@ namespace Microsoft::Devices::Sensors
     void Gyroscope::DispatchToInstancesForTesting(
         const std::vector<Gyroscope*>& instances, float x, float y, float z)
     {
-        GetSubsystem().DispatchToInstances(instances, [x, y, z](Gyroscope* instance)
+        // Task SDLCORE-004: see Accelerometer::DispatchToInstancesForTesting()'s
+        // identical comment -- DispatchToInstances() now takes a snapshot of
+        // DispatchRegistration nodes, not raw pointers.
+        auto& subsystem = GetSubsystem();
+
+        std::vector<std::shared_ptr<Detail::SdlSensorSubsystem<Gyroscope>::DispatchRegistration>> registrations;
+        {
+            std::lock_guard<std::mutex> lock(subsystem.mutex_);
+            for (Gyroscope* instance : instances)
+            {
+                for (const auto& registration : subsystem.startedInstances_)
+                {
+                    if (registration->owner == instance)
+                    {
+                        registrations.push_back(registration);
+                        break;
+                    }
+                }
+            }
+        }
+
+        subsystem.DispatchToInstances(registrations, [x, y, z](Gyroscope* instance)
         {
             instance->DispatchSensorReading(x, y, z);
         });
