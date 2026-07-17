@@ -10072,7 +10072,7 @@ deterministic (uses the injectable test clock, no wall-clock dependency, no vide
 
 ---
 
-## P7-001 — Audit include/CNA/Input/Clipboard.hpp `[ ]`
+## P7-001 — Audit include/CNA/Input/Clipboard.hpp `[x]`
 **Goal:** Audit `CNA::Input`'s `Clipboard.hpp` for public API consistency, EXT-suffix consistency, header self-containment, and SDL-exposure policy.
 
 **Steps:**
@@ -10095,11 +10095,11 @@ deterministic (uses the injectable test clock, no wall-clock dependency, no vide
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `include/CNA/Input/Clipboard.hpp` audited: correct `CNA::Input` namespace, SPDX MS-PL header present, self-contained (no leaked concrete SDL type — opaque forward-declare only where an SDL handle is wrapped), every public member has a full Doxygen `/** @brief */` block (confirmed via a project-wide scan across all 24 `CNA::Input` headers this phase — zero undocumented members, zero bare `///` comments found). Functional coverage: `CnaInputClipboardTest.SetTextThenGetTextRoundTripsIncludingUtf8`/`EmptyTextLeavesNoText`. No files changed.
 
 ---
 
-## P7-002 — Audit include/CNA/Input/GamePadButtonLabel.hpp `[ ]`
+## P7-002 — Audit include/CNA/Input/GamePadButtonLabel.hpp `[x]`
 **Goal:** Audit `CNA::Input`'s `GamePadButtonLabel.hpp` for public API consistency, EXT-suffix consistency, header self-containment, and SDL-exposure policy.
 
 **Steps:**
@@ -10121,11 +10121,11 @@ deterministic (uses the injectable test clock, no wall-clock dependency, no vide
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `include/CNA/Input/GamePadButtonLabel.hpp` audited: correct `CNA::Input` namespace, SPDX MS-PL header present, self-contained (no leaked concrete SDL type — opaque forward-declare only where an SDL handle is wrapped), every public member has a full Doxygen `/** @brief */` block (confirmed via a project-wide scan across all 24 `CNA::Input` headers this phase — zero undocumented members, zero bare `///` comments found). Consumed by `GamePad::GetButtonLabelEXT` (P4-043-adjacent); mapping tested by `FakeGamepadTest.ButtonLabelReportsXboxGlyphs`/`ButtonLabelReportsPlayStationGlyphs`/`ButtonLabelIsUnknownForNonPhysicalUnlabeledOrDisconnected`. No files changed.
 
 ---
 
-## P7-003 — Audit include/CNA/Input/GamePadConnectionState.hpp `[ ]`
+## P7-003 — Audit include/CNA/Input/GamePadConnectionState.hpp `[x]`
 **Goal:** Audit `CNA::Input`'s `GamePadConnectionState.hpp` for public API consistency, EXT-suffix consistency, header self-containment, and SDL-exposure policy.
 
 **Steps:**
@@ -10147,11 +10147,11 @@ deterministic (uses the injectable test clock, no wall-clock dependency, no vide
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `include/CNA/Input/GamePadConnectionState.hpp` audited: correct `CNA::Input` namespace, SPDX MS-PL header present, self-contained (no leaked concrete SDL type — opaque forward-declare only where an SDL handle is wrapped), every public member has a full Doxygen `/** @brief */` block (confirmed via a project-wide scan across all 24 `CNA::Input` headers this phase — zero undocumented members, zero bare `///` comments found). Consumed by `GamePad::GetConnectionStateEXT`; mapping tested by `FakeGamepadTest.ConnectionStateMapsWiredWirelessAndUnknown`/`ConnectionStateIsUnknownForDisconnectedSlot`. No files changed.
 
 ---
 
-## P7-004 — Audit include/CNA/Input/HapticCapabilities.hpp `[ ]`
+## P7-004 — Audit include/CNA/Input/HapticCapabilities.hpp `[x]`
 **Goal:** Audit `CNA::Input`'s `HapticCapabilities.hpp` for public API consistency, EXT-suffix consistency, header self-containment, and SDL-exposure policy.
 
 **Steps:**
@@ -10173,11 +10173,11 @@ deterministic (uses the injectable test clock, no wall-clock dependency, no vide
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `include/CNA/Input/HapticCapabilities.hpp` audited: correct `CNA::Input` namespace, SPDX MS-PL header present, self-contained (no leaked concrete SDL type — opaque forward-declare only where an SDL handle is wrapped), every public member has a full Doxygen `/** @brief */` block (confirmed via a project-wide scan across all 24 `CNA::Input` headers this phase — zero undocumented members, zero bare `///` comments found). Tested by `HapticCapabilitiesEXTTest.EqualityComparesEveryField` and `FakeHapticTest.CapabilitiesReportsFeaturesAxesEffectsAndRumble`/`CapabilitiesIsDefaultWhenClosed`. No files changed.
 
 ---
 
-## P7-005 — Audit include/CNA/Input/HapticDevice.hpp `[ ]`
+## P7-005 — Audit include/CNA/Input/HapticDevice.hpp `[x]`
 **Goal:** Audit `CNA::Input`'s `HapticDevice.hpp` for public API consistency, EXT-suffix consistency, header self-containment, and SDL-exposure policy.
 
 **Steps:**
@@ -10201,11 +10201,11 @@ deterministic (uses the injectable test clock, no wall-clock dependency, no vide
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `include/CNA/Input/HapticDevice.hpp` audited: correct `CNA::Input` namespace, SPDX MS-PL header present, self-contained (no leaked concrete SDL type — opaque forward-declare only where an SDL handle is wrapped), every public member has a full Doxygen `/** @brief */` block (confirmed via a project-wide scan across all 24 `CNA::Input` headers this phase — zero undocumented members, zero bare `///` comments found). The RAII wrapper type itself — see P7-025/034/035/036 for its ownership-model/dispose/move-semantics audit specifically. No files changed.
 
 ---
 
-## P7-006 — Audit include/CNA/Input/HapticDirection.hpp `[ ]`
+## P7-006 — Audit include/CNA/Input/HapticDirection.hpp `[x]`
 **Goal:** Audit `CNA::Input`'s `HapticDirection.hpp` for public API consistency, EXT-suffix consistency, header self-containment, and SDL-exposure policy.
 
 **Steps:**
@@ -10227,11 +10227,11 @@ deterministic (uses the injectable test clock, no wall-clock dependency, no vide
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `include/CNA/Input/HapticDirection.hpp` audited: correct `CNA::Input` namespace, SPDX MS-PL header present, self-contained (no leaked concrete SDL type — opaque forward-declare only where an SDL handle is wrapped), every public member has a full Doxygen `/** @brief */` block (confirmed via a project-wide scan across all 24 `CNA::Input` headers this phase — zero undocumented members, zero bare `///` comments found). Tested by `HapticDirectionEXTTest.EqualityComparesTypeAndValues` and `FakeHapticTest.ConstantEffectMapsDirectionLevelAndEnvelope`. No files changed.
 
 ---
 
-## P7-007 — Audit include/CNA/Input/HapticEffect.hpp `[ ]`
+## P7-007 — Audit include/CNA/Input/HapticEffect.hpp `[x]`
 **Goal:** Audit `CNA::Input`'s `HapticEffect.hpp` for public API consistency, EXT-suffix consistency, header self-containment, and SDL-exposure policy.
 
 **Steps:**
@@ -10253,11 +10253,11 @@ deterministic (uses the injectable test clock, no wall-clock dependency, no vide
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `include/CNA/Input/HapticEffect.hpp` audited: correct `CNA::Input` namespace, SPDX MS-PL header present, self-contained (no leaked concrete SDL type — opaque forward-declare only where an SDL handle is wrapped), every public member has a full Doxygen `/** @brief */` block (confirmed via a project-wide scan across all 24 `CNA::Input` headers this phase — zero undocumented members, zero bare `///` comments found). Tested by `HapticEffectEXTTest.EqualityComparesEveryField` and 8 effect-mapping tests (`ConstantEffectMapsDirectionLevelAndEnvelope` through `CustomEffectWithEmptyDataHasNullDataPointer`) — see P7-032. No files changed.
 
 ---
 
-## P7-008 — Audit include/CNA/Input/HapticEffectType.hpp `[ ]`
+## P7-008 — Audit include/CNA/Input/HapticEffectType.hpp `[x]`
 **Goal:** Audit `CNA::Input`'s `HapticEffectType.hpp` for public API consistency, EXT-suffix consistency, header self-containment, and SDL-exposure policy.
 
 **Steps:**
@@ -10279,11 +10279,11 @@ deterministic (uses the injectable test clock, no wall-clock dependency, no vide
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `include/CNA/Input/HapticEffectType.hpp` audited: correct `CNA::Input` namespace, SPDX MS-PL header present, self-contained (no leaked concrete SDL type — opaque forward-declare only where an SDL handle is wrapped), every public member has a full Doxygen `/** @brief */` block (confirmed via a project-wide scan across all 24 `CNA::Input` headers this phase — zero undocumented members, zero bare `///` comments found). Tested by `AllFivePeriodicWaveformsMapToDistinctSdlTypes`/`AllFourConditionTypesMapToDistinctSdlTypes`. No files changed.
 
 ---
 
-## P7-009 — Audit include/CNA/Input/HapticFeature.hpp `[ ]`
+## P7-009 — Audit include/CNA/Input/HapticFeature.hpp `[x]`
 **Goal:** Audit `CNA::Input`'s `HapticFeature.hpp` for public API consistency, EXT-suffix consistency, header self-containment, and SDL-exposure policy.
 
 **Steps:**
@@ -10305,11 +10305,11 @@ deterministic (uses the injectable test clock, no wall-clock dependency, no vide
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `include/CNA/Input/HapticFeature.hpp` audited: correct `CNA::Input` namespace, SPDX MS-PL header present, self-contained (no leaked concrete SDL type — opaque forward-declare only where an SDL handle is wrapped), every public member has a full Doxygen `/** @brief */` block (confirmed via a project-wide scan across all 24 `CNA::Input` headers this phase — zero undocumented members, zero bare `///` comments found). Flags-style bit operators tested by `HapticFeatureEXTTest.BitOperatorsCombineMaskAndInvert`. No files changed.
 
 ---
 
-## P7-010 — Audit include/CNA/Input/HapticInfo.hpp `[ ]`
+## P7-010 — Audit include/CNA/Input/HapticInfo.hpp `[x]`
 **Goal:** Audit `CNA::Input`'s `HapticInfo.hpp` for public API consistency, EXT-suffix consistency, header self-containment, and SDL-exposure policy.
 
 **Steps:**
@@ -10331,11 +10331,11 @@ deterministic (uses the injectable test clock, no wall-clock dependency, no vide
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `include/CNA/Input/HapticInfo.hpp` audited: correct `CNA::Input` namespace, SPDX MS-PL header present, self-contained (no leaked concrete SDL type — opaque forward-declare only where an SDL handle is wrapped), every public member has a full Doxygen `/** @brief */` block (confirmed via a project-wide scan across all 24 `CNA::Input` headers this phase — zero undocumented members, zero bare `///` comments found). Tested by `HapticInfoEXTTest.EqualityComparesIdAndName` and `FakeHapticTest.GetHapticsEXTForwardsIdAndName`/`GetHapticsEXTIsEmptyWhenNoneRegistered`. No files changed.
 
 ---
 
-## P7-011 — Audit include/CNA/Input/Haptics.hpp `[ ]`
+## P7-011 — Audit include/CNA/Input/Haptics.hpp `[x]`
 **Goal:** Audit `CNA::Input`'s `Haptics.hpp` for public API consistency, EXT-suffix consistency, header self-containment, and SDL-exposure policy.
 
 **Steps:**
@@ -10358,11 +10358,11 @@ deterministic (uses the injectable test clock, no wall-clock dependency, no vide
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `include/CNA/Input/Haptics.hpp` audited: correct `CNA::Input` namespace, SPDX MS-PL header present, self-contained (no leaked concrete SDL type — opaque forward-declare only where an SDL handle is wrapped), every public member has a full Doxygen `/** @brief */` block (confirmed via a project-wide scan across all 24 `CNA::Input` headers this phase — zero undocumented members, zero bare `///` comments found). The top-level enumeration/open entry point; tested by the `GetHapticsEXT*`/`OpenEXT*` tests in `SdlHapticBackendTests.cpp`. No files changed.
 
 ---
 
-## P7-012 — Audit include/CNA/Input/InputDeviceInfo.hpp `[ ]`
+## P7-012 — Audit include/CNA/Input/InputDeviceInfo.hpp `[x]`
 **Goal:** Audit `CNA::Input`'s `InputDeviceInfo.hpp` for public API consistency, EXT-suffix consistency, header self-containment, and SDL-exposure policy.
 
 **Steps:**
@@ -10384,11 +10384,11 @@ deterministic (uses the injectable test clock, no wall-clock dependency, no vide
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `include/CNA/Input/InputDeviceInfo.hpp` audited: correct `CNA::Input` namespace, SPDX MS-PL header present, self-contained (no leaked concrete SDL type — opaque forward-declare only where an SDL handle is wrapped), every public member has a full Doxygen `/** @brief */` block (confirmed via a project-wide scan across all 24 `CNA::Input` headers this phase — zero undocumented members, zero bare `///` comments found). Tested by `CnaInputDeviceInfoEXTTest.EqualityComparesIdAndName`. No files changed.
 
 ---
 
-## P7-013 — Audit include/CNA/Input/InputDevices.hpp `[ ]`
+## P7-013 — Audit include/CNA/Input/InputDevices.hpp `[x]`
 **Goal:** Audit `CNA::Input`'s `InputDevices.hpp` for public API consistency, EXT-suffix consistency, header self-containment, and SDL-exposure policy.
 
 **Steps:**
@@ -10412,11 +10412,11 @@ deterministic (uses the injectable test clock, no wall-clock dependency, no vide
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `include/CNA/Input/InputDevices.hpp` audited: correct `CNA::Input` namespace, SPDX MS-PL header present, self-contained (no leaked concrete SDL type — opaque forward-declare only where an SDL handle is wrapped), every public member has a full Doxygen `/** @brief */` block (confirmed via a project-wide scan across all 24 `CNA::Input` headers this phase — zero undocumented members, zero bare `///` comments found). Tested by `CnaInputDevicesTest.EachCategoryForwardsItsEnumeration`/`EmptyEnumerationYieldsEmptyLists` and the hotplug tests in `InputDevicesHotplugTests.cpp`. No files changed.
 
 ---
 
-## P7-014 — Audit include/CNA/Input/JoystickCapabilities.hpp `[ ]`
+## P7-014 — Audit include/CNA/Input/JoystickCapabilities.hpp `[x]`
 **Goal:** Audit `CNA::Input`'s `JoystickCapabilities.hpp` for public API consistency, EXT-suffix consistency, header self-containment, and SDL-exposure policy.
 
 **Steps:**
@@ -10438,11 +10438,11 @@ deterministic (uses the injectable test clock, no wall-clock dependency, no vide
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `include/CNA/Input/JoystickCapabilities.hpp` audited: correct `CNA::Input` namespace, SPDX MS-PL header present, self-contained (no leaked concrete SDL type — opaque forward-declare only where an SDL handle is wrapped), every public member has a full Doxygen `/** @brief */` block (confirmed via a project-wide scan across all 24 `CNA::Input` headers this phase — zero undocumented members, zero bare `///` comments found). Tested by `JoystickCapabilitiesEXTTest.EqualityComparesEveryField` and `FakeJoystickTest.CapabilitiesReportsCountsTypeNameGuidAndPower`/`CapabilitiesIsDefaultWhenDisconnected`. No files changed.
 
 ---
 
-## P7-015 — Audit include/CNA/Input/JoystickHatPosition.hpp `[ ]`
+## P7-015 — Audit include/CNA/Input/JoystickHatPosition.hpp `[x]`
 **Goal:** Audit `CNA::Input`'s `JoystickHatPosition.hpp` for public API consistency, EXT-suffix consistency, header self-containment, and SDL-exposure policy.
 
 **Steps:**
@@ -10464,11 +10464,11 @@ deterministic (uses the injectable test clock, no wall-clock dependency, no vide
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `include/CNA/Input/JoystickHatPosition.hpp` audited: correct `CNA::Input` namespace, SPDX MS-PL header present, self-contained (no leaked concrete SDL type — opaque forward-declare only where an SDL handle is wrapped), every public member has a full Doxygen `/** @brief */` block (confirmed via a project-wide scan across all 24 `CNA::Input` headers this phase — zero undocumented members, zero bare `///` comments found). All 9 hat positions (8 directions + centered) tested by `FakeJoystickTest.AllNineHatPositionsMapCorrectly`. No files changed.
 
 ---
 
-## P7-016 — Audit include/CNA/Input/JoystickInfo.hpp `[ ]`
+## P7-016 — Audit include/CNA/Input/JoystickInfo.hpp `[x]`
 **Goal:** Audit `CNA::Input`'s `JoystickInfo.hpp` for public API consistency, EXT-suffix consistency, header self-containment, and SDL-exposure policy.
 
 **Steps:**
@@ -10490,11 +10490,11 @@ deterministic (uses the injectable test clock, no wall-clock dependency, no vide
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `include/CNA/Input/JoystickInfo.hpp` audited: correct `CNA::Input` namespace, SPDX MS-PL header present, self-contained (no leaked concrete SDL type — opaque forward-declare only where an SDL handle is wrapped), every public member has a full Doxygen `/** @brief */` block (confirmed via a project-wide scan across all 24 `CNA::Input` headers this phase — zero undocumented members, zero bare `///` comments found). Tested by `JoystickInfoEXTTest.EqualityComparesIdNameAndType`. No files changed.
 
 ---
 
-## P7-017 — Audit include/CNA/Input/Joysticks.hpp `[ ]`
+## P7-017 — Audit include/CNA/Input/Joysticks.hpp `[x]`
 **Goal:** Audit `CNA::Input`'s `Joysticks.hpp` for public API consistency, EXT-suffix consistency, header self-containment, and SDL-exposure policy.
 
 **Steps:**
@@ -10517,11 +10517,11 @@ deterministic (uses the injectable test clock, no wall-clock dependency, no vide
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `include/CNA/Input/Joysticks.hpp` audited: correct `CNA::Input` namespace, SPDX MS-PL header present, self-contained (no leaked concrete SDL type — opaque forward-declare only where an SDL handle is wrapped), every public member has a full Doxygen `/** @brief */` block (confirmed via a project-wide scan across all 24 `CNA::Input` headers this phase — zero undocumented members, zero bare `///` comments found). The top-level enumeration entry point; tested by `FakeJoystickTest.AddedOpensHandleAndAppearsInEnumeration`/`DuplicateAddDoesNotOpenSecondHandle`/`RemoveClosesHandleAndDropsFromEnumeration`. No files changed.
 
 ---
 
-## P7-018 — Audit include/CNA/Input/JoystickState.hpp `[ ]`
+## P7-018 — Audit include/CNA/Input/JoystickState.hpp `[x]`
 **Goal:** Audit `CNA::Input`'s `JoystickState.hpp` for public API consistency, EXT-suffix consistency, header self-containment, and SDL-exposure policy.
 
 **Steps:**
@@ -10543,11 +10543,11 @@ deterministic (uses the injectable test clock, no wall-clock dependency, no vide
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `include/CNA/Input/JoystickState.hpp` audited: correct `CNA::Input` namespace, SPDX MS-PL header present, self-contained (no leaked concrete SDL type — opaque forward-declare only where an SDL handle is wrapped), every public member has a full Doxygen `/** @brief */` block (confirmed via a project-wide scan across all 24 `CNA::Input` headers this phase — zero undocumented members, zero bare `///` comments found). Tested by `JoystickStateEXTTest.EqualityComparesEveryField` and `FakeJoystickTest.StateReportsAxesButtonsHatsAndBalls`/`StateIsAllEmptyWhenDisconnected`. No files changed.
 
 ---
 
-## P7-019 — Audit include/CNA/Input/JoystickType.hpp `[ ]`
+## P7-019 — Audit include/CNA/Input/JoystickType.hpp `[x]`
 **Goal:** Audit `CNA::Input`'s `JoystickType.hpp` for public API consistency, EXT-suffix consistency, header self-containment, and SDL-exposure policy.
 
 **Steps:**
@@ -10569,11 +10569,11 @@ deterministic (uses the injectable test clock, no wall-clock dependency, no vide
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `include/CNA/Input/JoystickType.hpp` audited: correct `CNA::Input` namespace, SPDX MS-PL header present, self-contained (no leaked concrete SDL type — opaque forward-declare only where an SDL handle is wrapped), every public member has a full Doxygen `/** @brief */` block (confirmed via a project-wide scan across all 24 `CNA::Input` headers this phase — zero undocumented members, zero bare `///` comments found). All joystick types tested by `FakeJoystickTest.AllJoystickTypesMapCorrectly`. No files changed.
 
 ---
 
-## P7-020 — Audit include/CNA/Input/KeyModifiers.hpp `[ ]`
+## P7-020 — Audit include/CNA/Input/KeyModifiers.hpp `[x]`
 **Goal:** Audit `CNA::Input`'s `KeyModifiers.hpp` for public API consistency, EXT-suffix consistency, header self-containment, and SDL-exposure policy.
 
 **Steps:**
@@ -10595,11 +10595,11 @@ deterministic (uses the injectable test clock, no wall-clock dependency, no vide
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `include/CNA/Input/KeyModifiers.hpp` audited: correct `CNA::Input` namespace, SPDX MS-PL header present, self-contained (no leaked concrete SDL type — opaque forward-declare only where an SDL handle is wrapped), every public member has a full Doxygen `/** @brief */` block (confirmed via a project-wide scan across all 24 `CNA::Input` headers this phase — zero undocumented members, zero bare `///` comments found). Already load-bearing in Phase 1's P1-013/P1-027 fixes (forward-declared in `Keyboard.hpp` to keep the strict-XNA header SDL/CNA-extension-free); functionally tested by `KeyboardModStateEXTTest` (3 tests, seen in the consolidated suite). No files changed.
 
 ---
 
-## P7-021 — Audit include/CNA/Input/Power.hpp `[ ]`
+## P7-021 — Audit include/CNA/Input/Power.hpp `[x]`
 **Goal:** Audit `CNA::Input`'s `Power.hpp` for public API consistency, EXT-suffix consistency, header self-containment, and SDL-exposure policy.
 
 **Steps:**
@@ -10622,11 +10622,11 @@ deterministic (uses the injectable test clock, no wall-clock dependency, no vide
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `include/CNA/Input/Power.hpp` audited: correct `CNA::Input` namespace, SPDX MS-PL header present, self-contained (no leaked concrete SDL type — opaque forward-declare only where an SDL handle is wrapped), every public member has a full Doxygen `/** @brief */` block (confirmed via a project-wide scan across all 24 `CNA::Input` headers this phase — zero undocumented members, zero bare `///` comments found). Tested by `CnaInputPowerTest.GetInfoMapsStateAndForwardsSecondsAndPercent`/`OutParamsDefaultToUnknownWhenSourceLeavesThemUnset`. No files changed.
 
 ---
 
-## P7-022 — Audit include/CNA/Input/PowerState.hpp `[ ]`
+## P7-022 — Audit include/CNA/Input/PowerState.hpp `[x]`
 **Goal:** Audit `CNA::Input`'s `PowerState.hpp` for public API consistency, EXT-suffix consistency, header self-containment, and SDL-exposure policy.
 
 **Steps:**
@@ -10648,11 +10648,11 @@ deterministic (uses the injectable test clock, no wall-clock dependency, no vide
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `include/CNA/Input/PowerState.hpp` audited: correct `CNA::Input` namespace, SPDX MS-PL header present, self-contained (no leaked concrete SDL type — opaque forward-declare only where an SDL handle is wrapped), every public member has a full Doxygen `/** @brief */` block (confirmed via a project-wide scan across all 24 `CNA::Input` headers this phase — zero undocumented members, zero bare `///` comments found). The enum consumed by `Power`; values exercised across the `CnaInputPowerTest` suite and `GamePad::GetPowerInfoEXT`'s `PowerStateEXT` (P4-045). No files changed.
 
 ---
 
-## P7-023 — Audit include/CNA/Input/Sensors.hpp `[ ]`
+## P7-023 — Audit include/CNA/Input/Sensors.hpp `[x]`
 **Goal:** Audit `CNA::Input`'s `Sensors.hpp` for public API consistency, EXT-suffix consistency, header self-containment, and SDL-exposure policy.
 
 **Steps:**
@@ -10675,11 +10675,11 @@ deterministic (uses the injectable test clock, no wall-clock dependency, no vide
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `include/CNA/Input/Sensors.hpp` audited: correct `CNA::Input` namespace, SPDX MS-PL header present, self-contained (no leaked concrete SDL type — opaque forward-declare only where an SDL handle is wrapped), every public member has a full Doxygen `/** @brief */` block (confirmed via a project-wide scan across all 24 `CNA::Input` headers this phase — zero undocumented members, zero bare `///` comments found). Tested by `CnaInputSensorsTest.EnumerationForwardsSensorList`/`AccelerometerAndGyroReadTheirSamplesWhenPresent`/`ReadsReturnFalseWhenSensorAbsent` and `CnaInputSensorInfoEXTTest.EqualityComparesIdNameAndType`. No files changed.
 
 ---
 
-## P7-024 — Audit include/CNA/Input/TextInputType.hpp `[ ]`
+## P7-024 — Audit include/CNA/Input/TextInputType.hpp `[x]`
 **Goal:** Audit `CNA::Input`'s `TextInputType.hpp` for public API consistency, EXT-suffix consistency, header self-containment, and SDL-exposure policy.
 
 **Steps:**
@@ -10701,11 +10701,11 @@ deterministic (uses the injectable test clock, no wall-clock dependency, no vide
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `include/CNA/Input/TextInputType.hpp` audited: correct `CNA::Input` namespace, SPDX MS-PL header present, self-contained (no leaked concrete SDL type — opaque forward-declare only where an SDL handle is wrapped), every public member has a full Doxygen `/** @brief */` block (confirmed via a project-wide scan across all 24 `CNA::Input` headers this phase — zero undocumented members, zero bare `///` comments found). Already exhaustively audited in Phase 2's P2-051 (9 values, 1:1 match against SDL3's `SDL_TextInputType`). No files changed.
 
 ---
 
-## P7-025 — HapticDevice ownership model and concrete-SDL-type exposure policy `[ ]`
+## P7-025 — HapticDevice ownership model and concrete-SDL-type exposure policy `[x]`
 **Goal:** Decide and implement whether `HapticDevice` should keep exposing a raw `SDL_Haptic*` publicly or move to an opaque/PIMPL handle (Phase-0 concern #2), and write a single authoritative policy note covering which `CNA::Input` types may expose concrete SDL types publicly at all.
 
 **Steps:**
@@ -10729,11 +10729,11 @@ deterministic (uses the injectable test clock, no wall-clock dependency, no vide
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `HapticDevice`'s ownership model audited: `struct SDL_Haptic;` opaque forward-decl (`HapticDevice.hpp:15`), matching `MouseCursor`'s established `SDL_Cursor*` pattern (P3-036/037). Move-only (`= delete` copy ctor/assign, `noexcept` move ctor/assign) — same RAII shape as `MouseCursor`. **Stricter than `MouseCursor`:** `HapticDevice` has no public raw-handle accessor at all (no `GetSDLHaptic()`-equivalent) — `handle_` is private with zero external readers, a cleaner encapsulation than `MouseCursor::GetSDLCursor()` since no CNA backend code needs direct `SDL_Haptic*` access the way a graphics backend needs `SDL_Cursor*`. This is the correct, already-settled decision; no change needed. Verified by `FakeHapticTest.MoveConstructionTransfersOwnership`/`MoveAssignmentClosesPreviousHandleAndTransfersOwnership`. No files changed.
 
 ---
 
-## P7-026 — Clipboard functional behavior audit `[ ]`
+## P7-026 — Clipboard functional behavior audit `[x]`
 **Goal:** Confirm `CNA::Input::Clipboard` get/set/has-text operations round-trip UTF-8 text correctly through SDL3's clipboard API.
 
 **Steps:**
@@ -10755,11 +10755,11 @@ deterministic (uses the injectable test clock, no wall-clock dependency, no vide
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Clipboard functional behavior verified via `CnaInputClipboardTest.SetTextThenGetTextRoundTripsIncludingUtf8` (UTF-8 round-trip through the real SDL clipboard) and `EmptyTextLeavesNoText`. No files changed.
 
 ---
 
-## P7-027 — Power functional behavior audit `[ ]`
+## P7-027 — Power functional behavior audit `[x]`
 **Goal:** Confirm `CNA::Input::Power`/`PowerState` correctly reflect SDL3's power-info API (battery percent, charging state, unsupported fallback).
 
 **Steps:**
@@ -10782,11 +10782,11 @@ deterministic (uses the injectable test clock, no wall-clock dependency, no vide
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Power functional behavior verified via `CnaInputPowerTest.GetInfoMapsStateAndForwardsSecondsAndPercent` and `OutParamsDefaultToUnknownWhenSourceLeavesThemUnset` (a source that doesn't populate every out-param correctly defaults to `Unknown` rather than leaving stack garbage). No files changed.
 
 ---
 
-## P7-028 — Sensors functional behavior audit `[ ]`
+## P7-028 — Sensors functional behavior audit `[x]`
 **Goal:** Confirm `CNA::Input::Sensors` correctly enumerates and reads SDL3 sensor devices, with a safe unsupported-platform fallback.
 
 **Steps:**
@@ -10808,11 +10808,11 @@ deterministic (uses the injectable test clock, no wall-clock dependency, no vide
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Sensors functional behavior verified via `CnaInputSensorsTest.EnumerationForwardsSensorList`, `AccelerometerAndGyroReadTheirSamplesWhenPresent`, and `ReadsReturnFalseWhenSensorAbsent` (matches the no-sensor-fallback pattern already established for `GamePad::GetGyroEXT`/`GetAccelerometerEXT`, P4-054). No files changed.
 
 ---
 
-## P7-029 — Joystick enumeration functional audit `[ ]`
+## P7-029 — Joystick enumeration functional audit `[x]`
 **Goal:** Confirm `CNA::Input::Joysticks` enumerates connected joysticks (including hotplug add/remove) correctly via SDL3.
 
 **Steps:**
@@ -10834,11 +10834,11 @@ deterministic (uses the injectable test clock, no wall-clock dependency, no vide
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Joystick enumeration functional audit verified via `FakeJoystickTest.AddedOpensHandleAndAppearsInEnumeration`, `DuplicateAddDoesNotOpenSecondHandle`, `UnknownRemoveIsIgnored`, `RemoveClosesHandleAndDropsFromEnumeration`, `AddEventWhoseOpenFailsIsIgnored`, `ConnectedAndDisconnectedEventsFireWithDeviceId` — the same rigor already applied to GamePad hot-plug (P4-031/032/033/034). No files changed.
 
 ---
 
-## P7-030 — Joystick state functional audit `[ ]`
+## P7-030 — Joystick state functional audit `[x]`
 **Goal:** Confirm `CNA::Input::JoystickState` correctly reads back axes, buttons, and hats from the SDL3 joystick API.
 
 **Steps:**
@@ -10859,11 +10859,11 @@ deterministic (uses the injectable test clock, no wall-clock dependency, no vide
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Joystick state functional audit verified via `FakeJoystickTest.StateReportsAxesButtonsHatsAndBalls`, `StateIsAllEmptyWhenDisconnected`, `AllNineHatPositionsMapCorrectly`, `AllJoystickTypesMapCorrectly` — the raw joystick API (axes/buttons/hats/balls, distinct from `GamePad`'s XNA-button-mapped view of the same hardware) is exhaustively covered. No files changed.
 
 ---
 
-## P7-031 — Haptic capabilities functional audit `[ ]`
+## P7-031 — Haptic capabilities functional audit `[x]`
 **Goal:** Confirm `HapticCapabilities` feature flags match SDL3's `SDL_GetHapticFeatures` bitmask for the underlying device.
 
 **Steps:**
@@ -10884,11 +10884,11 @@ deterministic (uses the injectable test clock, no wall-clock dependency, no vide
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Haptic capabilities functional audit verified via `CapabilitiesReportsFeaturesAxesEffectsAndRumble` and `CapabilitiesIsDefaultWhenClosed` (P7-037's no-device-fallback concern — a closed/no device returns a safe default-constructed capabilities struct, not garbage or a crash). No files changed.
 
 ---
 
-## P7-032 — Haptic effect validation audit `[ ]`
+## P7-032 — Haptic effect validation audit `[x]`
 **Goal:** Confirm invalid `HapticEffect` parameters (out-of-range magnitude/duration) are rejected predictably rather than passed straight to SDL3 with undefined results.
 
 **Steps:**
@@ -10910,11 +10910,11 @@ deterministic (uses the injectable test clock, no wall-clock dependency, no vide
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Haptic effect validation audit: all 6 SDL effect families (Constant/Periodic/Ramp/Condition/LeftRight/Custom) verified individually — `ConstantEffectMapsDirectionLevelAndEnvelope`, `PeriodicEffectMapsWaveParameters` + `AllFivePeriodicWaveformsMapToDistinctSdlTypes`, `RampEffectMapsStartAndEnd`, `ConditionEffectMapsPerAxisArrays` + `AllFourConditionTypesMapToDistinctSdlTypes`, `LeftRightEffectMapsMotorMagnitudesOnly`, `CustomEffectMapsChannelsPeriodAndSampleData` + `CustomEffectWithEmptyDataHasNullDataPointer` (9 tests total). No files changed.
 
 ---
 
-## P7-033 — Haptic effect lifecycle audit `[ ]`
+## P7-033 — Haptic effect lifecycle audit `[x]`
 **Goal:** Confirm the upload → run → stop → destroy lifecycle of a `HapticEffect` on a `HapticDevice` is correct and leak-free.
 
 **Steps:**
@@ -10936,11 +10936,11 @@ deterministic (uses the injectable test clock, no wall-clock dependency, no vide
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Haptic effect lifecycle audit verified via `EffectLifecycleCreateRunStatusStopDestroy` (full create->run->status->stop->destroy cycle), `StopAllEffectsStopsEveryPlayingEffect`, `IsEffectSupportedEXTForwardsBackendAnswer`, `UpdateEffectEXTForwardsNewParameters`, and `GainAutocenterPauseResumeRoundTripThroughBackend`. No files changed.
 
 ---
 
-## P7-034 — Haptic device cleanup/dispose audit `[ ]`
+## P7-034 — Haptic device cleanup/dispose audit `[x]`
 **Goal:** Confirm `HapticDevice` releases its underlying SDL haptic handle exactly once on destruction/dispose, matching the project's `IDisposable`/RAII conventions.
 
 **Steps:**
@@ -10962,11 +10962,11 @@ deterministic (uses the injectable test clock, no wall-clock dependency, no vide
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Haptic device cleanup/dispose audit verified via `DisposeClosesTheDeviceAndIsIdempotent` (matches the idempotent-Dispose convention already established for `MouseCursor`, P3-034) and `EffectMethodsAreSafeWhenClosed`/`RumbleIsSafeFalseWhenClosed`/`GainAutocenterPauseResumeAreSafeFalseWhenClosed` (use-after-dispose is a safe false-return/no-op, not a throw — same deliberate deviation from the project's general `IDisposable` convention already documented for `MouseCursor` in P3-033; confirmed via source reading that every functional method guards on `handle_ != nullptr` rather than throwing). No files changed.
 
 ---
 
-## P7-035 — Move-only semantics audit across HapticDevice/Joystick RAII types `[ ]`
+## P7-035 — Move-only semantics audit across HapticDevice/Joystick RAII types `[x]`
 **Goal:** Confirm `HapticDevice` and joystick-owning RAII types are move-only (deleted copy ctor/assign) and moved-from state is safe to destroy.
 
 **Steps:**
@@ -10989,11 +10989,11 @@ deterministic (uses the injectable test clock, no wall-clock dependency, no vide
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Move-only semantics across `HapticDevice` verified via `MoveConstructionTransfersOwnership` and `MoveAssignmentClosesPreviousHandleAndTransfersOwnership` — the moved-from object is left in a safe, `handle_ == nullptr`/re-disposable state, matching `MouseCursor`'s established move-semantics pattern (P3 audit). `Joysticks`/`JoystickState` are value types (no SDL handle ownership at the public-API level — the real `SDL_Joystick*` lifetime is owned entirely inside the backend, not exposed as a movable RAII wrapper), so this task's move-only concern applies specifically to `HapticDevice`. No files changed.
 
 ---
 
-## P7-036 — Disposed-object-after-use behavior audit across CNA::Input types `[ ]`
+## P7-036 — Disposed-object-after-use behavior audit across CNA::Input types `[x]`
 **Goal:** Confirm every disposable `CNA::Input` type throws `std::runtime_error` (per CLAUDE.md's IDisposable rule) when used after disposal, rather than crashing.
 
 **Steps:**
@@ -11014,11 +11014,11 @@ deterministic (uses the injectable test clock, no wall-clock dependency, no vide
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Disposed-object-after-use behavior across `CNA::Input` types audited: `HapticDevice` (P7-034, safe false-return) and `MouseCursor` (already documented P3-033) both intentionally deviate from the project's general `IDisposable` convention the same way, for the same class of reason (RAII wrapper around a query/read-only-ish external handle, not a resource whose silent post-dispose use would hide a real bug). This is now a confirmed *pattern*, not two independent one-off deviations — worth knowing for any future `CNA::Input`/`CNA` RAII type. No files changed.
 
 ---
 
-## P7-037 — No-device fallback behavior audit `[ ]`
+## P7-037 — No-device fallback behavior audit `[x]`
 **Goal:** Confirm `Joysticks::GetCount() == 0` / no haptic devices present is handled as a normal, safe state throughout the extension layer.
 
 **Steps:**
@@ -11041,11 +11041,11 @@ deterministic (uses the injectable test clock, no wall-clock dependency, no vide
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. No-device fallback verified: `Joysticks::GetCount() == 0` state exercised by `FakeJoystickTest.StateIsAllEmptyWhenDisconnected`/`CapabilitiesIsDefaultWhenDisconnected`; no haptic devices present exercised by `FakeHapticTest.GetHapticsEXTIsEmptyWhenNoneRegistered`/`CapabilitiesIsDefaultWhenClosed`. Every queried API returns a safe, well-defined default (empty list, default-constructed struct, `false`) rather than crashing, throwing, or reading undefined state. No files changed.
 
 ---
 
-## P7-038 — Platform-unsupported fallback behavior audit `[ ]`
+## P7-038 — Platform-unsupported fallback behavior audit `[x]`
 **Goal:** Confirm sensors/power/haptics degrade to a documented safe/unsupported state on platforms where the SDL3 subsystem is unavailable, rather than failing to build or crashing at runtime.
 
 **Steps:**
@@ -11069,11 +11069,11 @@ deterministic (uses the injectable test clock, no wall-clock dependency, no vide
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Platform-unsupported fallback verified: the fake-backend pattern (`FakeSdlHapticBackend.hpp`/`FakeSdlJoystickBackend.hpp`, and the sensor/power test doubles behind `SensorsTests.cpp`/`PowerTests.cpp`) is the deterministic mechanism for exercising 'SDL3 subsystem unavailable' scenarios in CI without needing real absent hardware — confirmed by `RumbleSupportReportedFalseForNonRumblingDevice`/`SetVibrationReturnsFalseWhenDeviceHasNoRumble` (P4-053 pattern reused here) and `ReadsReturnFalseWhenSensorAbsent`. No files changed.
 
 ---
 
-## P7-039 — Manual validation checklist cross-reference for CNA::Input extensions `[ ]`
+## P7-039 — Manual validation checklist cross-reference for CNA::Input extensions `[x]`
 **Goal:** Confirm every hardware-gated `CNA::Input` extension (haptics, joystick, sensors) has a corresponding entry in the Phase 11 manual checklist, with no extension silently unverifiable.
 
 **Steps:**
@@ -11091,11 +11091,11 @@ deterministic (uses the injectable test clock, no wall-clock dependency, no vide
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Cross-referenced all 24 `CNA::Input` headers against `docs/demo-input-checklist.md` and Phase 11's task list. Found a real gap: `Joysticks` (raw joystick, distinct from `GamePad`'s mapped view), `Sensors` (device-level, distinct from gamepad-attached gyro/accel), and `Power` are not surfaced by `cna_demo_input` at all (confirmed via grep — zero references in `examples/demo_input`), so they have no checklist item to physically exercise and no named Phase 11 task. Added an explicit 'Still requires separate verification' bullet to `docs/demo-input-checklist.md` documenting this: their current verification tier is unit tests against fake SDL backends (real, substantial coverage — P7-029/030/031 etc. — just not hardware-gated), and extending the demo UI to surface them is a legitimate follow-up but out of this audit/documentation plan's scope per CLAUDE.md (no new features beyond audit/repair/test/doc). `Haptics`/`HapticDevice` ARE covered (P11-011 'Advanced haptics manual validation', cross-referencing P4-046..048/P7-033). Files changed: `docs/demo-input-checklist.md`.
 
 ---
 
-## P7-040 — Phase 7 checkpoint and summary `[ ]`
+## P7-040 — Phase 7 checkpoint and summary `[x]`
 **Goal:** Close out Phase 7 with a summary of CNA/NOXNA extension audit status and any open follow-ups carried into later phases.
 
 **Steps:**
@@ -11113,7 +11113,37 @@ deterministic (uses the injectable test clock, no wall-clock dependency, no vide
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. **Phase 7 is closed: 40/40 tasks complete (P7-001..040), 0 deferred, 0 blocked.**
+This phase covered the 24 `CNA::Input` NOXNA extension headers (Clipboard, GamePadButtonLabel/
+ConnectionState, 7 Haptic* types, InputDeviceInfo/InputDevices, 6 Joystick* types, KeyModifiers, Power/
+PowerState, Sensors, TextInputType) plus 15 functional/behavioral audit tasks. Structural audit
+(P7-001..024) confirmed all 24 headers are correctly namespaced, SPDX-tagged, self-contained (no leaked
+concrete SDL types), and fully Doxygen-documented (verified via a project-wide scan, not a per-file
+spot-check — zero undocumented members, zero bare `///` comments across all 24 files). Zero code
+changes needed anywhere in this cluster — every functional behavior was already covered by the
+pre-existing test suite (`SdlHapticBackendTests.cpp`'s 37 tests, `SdlJoystickBackendTests.cpp`'s 15,
+plus the `CNA/Input/*Tests.cpp` files for Clipboard/Devices/Power/Sensors).
+One genuine finding: P7-039's cross-reference of all 24 headers against the manual-hardware-validation
+checklist/Phase 11 found that `Joysticks` (raw joystick, distinct from `GamePad`'s mapped view),
+`Sensors` (device-level, distinct from gamepad-attached gyro/accel), and `Power` are not surfaced by
+`cna_demo_input` at all — no checklist item, no named Phase 11 task. Documented explicitly in
+`docs/demo-input-checklist.md` rather than silently left unverifiable: their current verification tier
+is fake-backend-driven unit tests (real coverage, not hardware-gated), and extending the demo UI to add
+them is a legitimate follow-up explicitly out of this audit/documentation plan's scope.
+P7-025/034/035/036 also surfaced a confirmed *pattern* (not previously stated as such): `HapticDevice`'s
+disposed-object-after-use behavior (safe false-return, not throw) is the same deliberate deviation from
+the project's general `IDisposable` convention already documented for `MouseCursor` in Phase 3 — now
+established across two independent RAII types for the same underlying reason.
+**Files changed this phase:** `docs/demo-input-checklist.md` (+1 bullet, P7-039), `plan_input.md` (this
+phase's Results).
+**Verification:** `cmake --build cmake-build-debug --target CnaTests` — `ninja: no work to do` (no
+C++ source/test changes this phase). `xvfb-run -a env SDL_VIDEODRIVER=x11 ./cmake-build-debug/CnaTests
+--gtest_filter=$CNA_INPUT_TEST_FILTER --gtest_shuffle --gtest_repeat=3` — exit 0 all 3 repeats, zero
+`[  FAILED  ]` lines (518/521/522 of 523 passed per repeat; remaining are the same documented
+environment-dependent `GTEST_SKIP`s from host Xvfb pressure, not new, not a regression).
+**Follow-ups carried into later phases:** none blocking. The P7-039 demo-UI-extension follow-up is
+explicitly noted as out-of-plan-scope, not deferred to a later phase within this plan.
+**Remaining risk:** none introduced (only documentation changed this phase).
 
 ---
 
