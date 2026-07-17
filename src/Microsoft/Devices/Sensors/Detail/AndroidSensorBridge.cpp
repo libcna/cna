@@ -158,6 +158,30 @@ namespace Microsoft::Devices::Sensors::Detail
         SampleCallback callback_;
         System::TimeSpan timeBetweenUpdates_;
 
+        // Task ANDR2-003 (2026-07-17, external audit
+        // `audit_devices_2026-07-17.md`): sticky, permanent "this bridge's
+        // worker was abandoned rather than genuinely reclaimed" flag, set
+        // exactly once by Stop() (see its own comment) if a bounded wait for
+        // Run() to finish ever times out -- meaning Run() is presumed stuck
+        // inside a real native call (ASensorManager_createEventQueue()/
+        // ASensorEventQueue_enableSensor(), the only calls Run() makes
+        // before its own poll loop starts checking stopRequested_) that may
+        // never return. There is no safe way in C++ to forcibly cancel a
+        // thread blocked inside a native call, so once this is set, this
+        // AndroidSensorBridge instance is permanently unable to Start()
+        // again (a deliberate "fatal backend-health state", not a bug) --
+        // even though runState_ may *later* still transition back to
+        // NotRunning on its own, if the abandoned worker's blocked call
+        // eventually does return. Never reset back to false once set.
+        std::atomic<bool> abandoned_{false};
+
+        // Task ANDR2-003: shared bound for both Start()'s startup handshake
+        // wait (startCv_) and Stop()'s worker-finished wait (runExitedCv_) --
+        // the same underlying concern (a real native NDK call that may never
+        // return) applies to both, so both use the same, named timeout
+        // rather than two separately-chosen literals.
+        static constexpr std::chrono::seconds kNativeCallTimeout{5};
+
         // Task ANDROID-BRIDGE-002: SetSampleInterval()'s pending value,
         // guarded by stateMutex_ (same field access discipline as
         // timeBetweenUpdates_ above) -- separate from timeBetweenUpdates_
@@ -490,7 +514,18 @@ namespace Microsoft::Devices::Sensors::Detail
             // too-soon Start() reuse this Impl while the old worker was
             // still alive. runState_ only returns to NotRunning once Run()
             // itself confirms it has actually finished, closing that gap.
-            if (impl_->runState_ != Impl::RunState::NotRunning)
+            //
+            // Task ANDR2-003 (2026-07-17): also gated on abandoned_ -- once
+            // a prior Stop() call gave up waiting for a genuinely wedged
+            // worker (see Stop()'s own comment) and set this, runState_ may
+            // *still* eventually flip back to NotRunning on its own later,
+            // if the abandoned worker's blocked native call ever does
+            // return -- abandoned_ is never reset, so this check keeps
+            // refusing to Start() again regardless, treating a once-wedged
+            // bridge as permanently unusable rather than risking a new
+            // worker racing whatever the abandoned one is still doing.
+            if (impl_->abandoned_.load(std::memory_order_acquire)
+                || impl_->runState_ != Impl::RunState::NotRunning)
             {
                 return false;
             }
@@ -506,6 +541,36 @@ namespace Microsoft::Devices::Sensors::Detail
             impl_->startOutcome_ = Impl::StartOutcome::Pending;
             impl_->reclaimClaimed_ = false;
             impl_->runState_ = Impl::RunState::Running;
+
+            // Task ANDR2-001 (2026-07-17, external audit
+            // `audit_devices_2026-07-17.md`): clear any stale
+            // SetSampleInterval() request left over from a PREVIOUS
+            // Start()/Stop() cycle. rateChangeRequested_ is only ever
+            // cleared by Run()'s own poll loop (see its own comment) -- if a
+            // SetSampleInterval() call's request arrived too late in a
+            // previous run (e.g. after the worker's poll loop already
+            // observed a concurrent Stop()'s stopRequested_ and committed to
+            // exiting before reaching its next rateChangeRequested_ check),
+            // the flag survives untouched across runState_ returning to
+            // NotRunning. Without this reset, the *new* worker spawned by
+            // this very Start() call would see rateChangeRequested_ still
+            // true on an early poll iteration and wrongly re-apply
+            // pendingTimeBetweenUpdates_ -- a value from an already-ended
+            // run -- silently overriding the fresh timeBetweenUpdates_ this
+            // call just applied. Safe to reset unconditionally here: any
+            // SetSampleInterval() call that should legitimately affect the
+            // run this Start() call is about to begin can only be made after
+            // this locked section releases stateMutex_ (SetSampleInterval()
+            // requires runState_ != NotRunning, which only becomes true
+            // inside this very section), so it is impossible for a
+            // legitimate new-run request to be mistakenly cleared by this
+            // reset. pendingTimeBetweenUpdates_ is also reset to this call's
+            // own interval (rather than left holding whatever stale value it
+            // last had) purely for state consistency -- it has no observable
+            // effect unless rateChangeRequested_ is true, which it no longer
+            // is at this point.
+            impl_->rateChangeRequested_.store(false, std::memory_order_release);
+            impl_->pendingTimeBetweenUpdates_ = timeBetweenUpdates;
 
             // Captures impl_ (a shared_ptr copy), not this -- see
             // Impl::Run()'s own doc comment and the shared_ptr<Impl>
@@ -530,16 +595,24 @@ namespace Microsoft::Devices::Sensors::Detail
         // call, not a normal-path wait.
         std::unique_lock<std::mutex> lock(impl_->startMutex_);
         const bool signaled = impl_->startCv_.wait_for(
-            lock, std::chrono::seconds(5),
+            lock, Impl::kNativeCallTimeout,
             [this]() { return impl_->startOutcome_ != Impl::StartOutcome::Pending; });
         lock.unlock();
 
         if (!signaled || impl_->startOutcome_ != Impl::StartOutcome::Success)
         {
-            // Timed out, or Run() reported failure: stop and join so we
-            // never leak a half-started or permanently-wedged worker
-            // thread, and report the failure honestly rather than the
-            // stale "true" this method used to return unconditionally.
+            // Timed out, or Run() reported failure: stop so we never leak a
+            // half-started or permanently-wedged worker thread, and report
+            // the failure honestly rather than the stale "true" this method
+            // used to return unconditionally.
+            //
+            // Task ANDR2-003 (2026-07-17): if this timed out (!signaled),
+            // Run() is presumed stuck inside a real native call
+            // (ASensorManager_createEventQueue()/ASensorEventQueue_enableSensor())
+            // that may never return. Stop() itself is now bounded (see its
+            // own comment) -- it no longer risks blocking indefinitely on
+            // this same wedged call, so calling it unconditionally here
+            // remains correct and safe.
             Stop();
             return false;
         }
@@ -647,7 +720,49 @@ namespace Microsoft::Devices::Sensors::Detail
                 // additionally closes the case where a reentrant self-stop
                 // and a concurrent external caller raced on this same
                 // worker_ object.
-                impl_->worker_.join();
+                //
+                // Task ANDR2-003 (2026-07-17, external audit
+                // `audit_devices_2026-07-17.md`): an unconditional join()
+                // here previously defeated Start()'s own bounded startup
+                // wait -- if Run() is stuck inside a real native call
+                // (ASensorManager_createEventQueue()/
+                // ASensorEventQueue_enableSensor(), the only calls Run()
+                // makes before its poll loop starts re-checking
+                // stopRequested_ -- see Run()'s own body), a plain join()
+                // here blocks for exactly as long as that stuck call does,
+                // which may be forever, no matter how quickly Start()'s own
+                // startCv_ wait_for() gave up. There is no safe way in C++
+                // to forcibly cancel a thread blocked inside a native call,
+                // so this now waits, bounded, for Run() to genuinely finish
+                // (runState_ reaching NotRunning, signaled by Run()'s own
+                // exit guard) instead of joining unconditionally. If Run()
+                // finishes within the bound, join() immediately afterward is
+                // safe and near-instant (runState_ only reaches NotRunning
+                // once Run() is already at its very last statement). If it
+                // does not, this gives up: detach() (safe on any joinable
+                // thread regardless of whether the underlying OS thread has
+                // actually finished -- it just severs this std::thread
+                // object's association with it) and permanently mark this
+                // bridge abandoned_ (see that field's own doc comment) --
+                // this bridge instance can never Start() again afterward, a
+                // deliberate fatal backend-health state rather than an
+                // attempt to reuse or race whatever the abandoned worker is
+                // still doing.
+                std::unique_lock<std::mutex> waitLock(impl_->stateMutex_);
+                const bool finished = impl_->runExitedCv_.wait_for(
+                    waitLock, Impl::kNativeCallTimeout,
+                    [this] { return impl_->runState_ == Impl::RunState::NotRunning; });
+                waitLock.unlock();
+
+                if (finished)
+                {
+                    impl_->worker_.join();
+                }
+                else
+                {
+                    impl_->worker_.detach();
+                    impl_->abandoned_.store(true, std::memory_order_release);
+                }
             }
         }
 
@@ -672,8 +787,18 @@ namespace Microsoft::Devices::Sensors::Detail
         // Run()'s own exit guard, so this predicate is already true
         // immediately whenever the claimant instead reclaimed via a
         // blocking join() (which cannot return before Run() has finished).
+        //
+        // Task ANDR2-003 (2026-07-17): also unblocks on abandoned_ -- an
+        // unconditional wait for NotRunning here would otherwise still hang
+        // indefinitely for a *second*, non-claimant concurrent Stop() caller
+        // even after the claimant above already gave up (bounded) and
+        // detach()'d a genuinely wedged worker, since a permanently-stuck
+        // native call may never let runState_ reach NotRunning at all.
         std::unique_lock<std::mutex> lock(impl_->stateMutex_);
-        impl_->runExitedCv_.wait(lock, [this] { return impl_->runState_ == Impl::RunState::NotRunning; });
+        impl_->runExitedCv_.wait(lock, [this] {
+            return impl_->runState_ == Impl::RunState::NotRunning
+                || impl_->abandoned_.load(std::memory_order_acquire);
+        });
 #endif
     }
 
