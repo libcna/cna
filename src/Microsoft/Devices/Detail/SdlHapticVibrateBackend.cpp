@@ -295,7 +295,24 @@ namespace Microsoft::Devices::Detail
         // slot. Left unchanged rather than risk an unverifiable physical
         // side effect from a property getter a caller would reasonably
         // expect to be inert.
-        const bool supported = device != nullptr;
+        //
+        // Task VIB2-001 (2026-07-17, external audit `audit_devices_2026-07-17.md`):
+        // re-examined this exact boundary and found `SDL_HapticRumbleSupported()`
+        // -- a *different* function from `SDL_InitHapticRumble()`, overlooked by
+        // the prior VIB-005 investigation above. Confirmed genuinely read-only
+        // by reading its actual implementation directly (`third_party/SDL/src/
+        // haptic/SDL_haptic.c`): `return (haptic->supported & (SDL_HAPTIC_SINE |
+        // SDL_HAPTIC_LEFTRIGHT)) != 0;` -- a pure bitmask check against
+        // capabilities SDL already queried when opening the device, no
+        // `SDL_CreateHapticEffect()` call, no upload, no device I/O at all. A
+        // device that opens but exposes only e.g. condition/constant-force
+        // effects (no SINE/LEFTRIGHT) previously reported "supported" here even
+        // though `Start(TimeSpan)`'s own `SDL_InitHapticRumble()` call would
+        // then silently no-op (see `Start()`'s own "device doesn't support
+        // simple rumble" early return) -- this closes that gap without
+        // reopening VIB-005's original, still-valid concern about
+        // `SDL_InitHapticRumble()` itself.
+        const bool supported = device != nullptr && SDL_HapticRumbleSupported(device);
 
         if (openedTemporary && device != nullptr)
         {

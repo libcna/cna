@@ -7395,7 +7395,7 @@ test is not sufficient for an Android coordinate/fusion claim.
   - Optimizations preserve strict value semantics.
 - **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
 
-### VIB2-001 — Use SDL_HapticRumbleSupported for truthful capability — OPEN
+### VIB2-001 — Use SDL_HapticRumbleSupported for truthful capability — CLOSED (2026-07-17)
 
 - **Priority:** P1
 - **Area:** Perfection re-audit
@@ -7408,6 +7408,44 @@ test is not sufficient for an Android coordinate/fusion claim.
   - A non-rumble haptic reports unsupported for Start(TimeSpan).
   - Probe remains side-effect-free and releases temporary resources.
 - **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+- **Resolution:** `IsSupported()` previously reported `true` merely because *some* haptic device
+  could be opened, with no check that it actually supports the simple rumble effect
+  `Start(TimeSpan)` itself requires — a device exposing only e.g. condition/constant-force
+  effects (no `SDL_HAPTIC_SINE`/`SDL_HAPTIC_LEFTRIGHT`) would report "supported" here even though
+  `Start(TimeSpan)`'s own `SDL_InitHapticRumble()` call would then silently no-op. A prior task
+  (`VIB-005`) had already investigated this exact boundary and correctly rejected using
+  `SDL_InitHapticRumble()` itself for this check (confirmed via direct source reading that it
+  calls `SDL_CreateHapticEffect()`, a real upload, not read-only) — but that investigation
+  overlooked `SDL_HapticRumbleSupported()`, a genuinely different, read-only function. Confirmed
+  by reading its actual implementation directly (`third_party/SDL/src/haptic/SDL_haptic.c:809`):
+  `return (haptic->supported & (SDL_HAPTIC_SINE | SDL_HAPTIC_LEFTRIGHT)) != 0;` — a pure bitmask
+  check against capabilities already known from opening the device, no effect creation, no
+  upload, no device I/O. `IsSupported()` now additionally requires
+  `SDL_HapticRumbleSupported(device)`. `StartLeftRight()`'s own, narrower `SDL_HAPTIC_LEFTRIGHT`-only
+  capability check (dual-motor) is unchanged and remains appropriately separate, per the required
+  work's "keep dual-motor capability separate" — `VibrateController` has no public dual-motor
+  capability property to reconcile this against; `IsSupported()` legitimately means only "can
+  `Start(TimeSpan)` work."
+- **Files changed:** `src/Microsoft/Devices/Detail/SdlHapticVibrateBackend.cpp`.
+- **Tests:** full Devices/Sensors filtered suite, 404 tests, 400 passed, 4 skipped (hardware-only,
+  unchanged) — no regressions. No *new* test could meaningfully exercise the new
+  `SDL_HapticRumbleSupported()` branch itself: no haptic device of any kind is available in this
+  container, so `IsSupported()` already short-circuits on `device == nullptr` before reaching it
+  (confirmed unchanged: `IsSupported()`/`GetIsSupportedPropertyDoesNotCrash` still pass). The fake
+  backend (`FakeVibrateBackend` in `VibrateControllerTests.cpp`) implements `IVibrateBackend`
+  directly and never calls into `SdlHapticVibrateBackend`'s own code at all, so it cannot exercise
+  this specific fix either — only a real (or a dedicated, `SDL_Haptic`-level fake, which does not
+  currently exist) haptic device with a non-rumble effect set could.
+- **Sanitizer/static-analysis result:** clean under `devices-ubsan`.
+- **Remaining limitations, explicitly left OPEN, not fabricated:** the acceptance criterion "a
+  non-rumble haptic reports unsupported for Start(TimeSpan)" requires a real haptic device that
+  exposes some *other* effect type but not SINE/LEFTRIGHT — not available in this environment, and
+  not something a synthetic host-only test can honestly fabricate without a lower-level SDL
+  haptic-capability injection seam (which does not exist today — see `VIB2-005`'s own
+  "direct backend" framing for the closest related future work). If real haptic hardware with a
+  known, non-rumble-only capability set ever becomes available: construct a real
+  `SdlHapticVibrateBackend`, confirm `getIsSupportedProperty()` reports `false` against it, and
+  confirm `Start(TimeSpan)` remains a silent no-op (already covered by existing code, not new).
 
 ### VIB2-002 — Validate finite intensity and motor inputs — CLOSED (2026-07-17)
 
