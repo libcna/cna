@@ -11,7 +11,11 @@
 #include "Microsoft/Xna/Framework/Curve.hpp"
 #include "Microsoft/Xna/Framework/CurveKey.hpp"
 #include "Microsoft/Xna/Framework/Graphics/AnimationPlayer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/AlphaTestEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/CompareFunction.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DualTextureEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EnvironmentMapEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Model.hpp"
@@ -320,6 +324,14 @@ namespace Microsoft::Xna::Framework::Content
         // sidecars). plan_cnj.md CNB-43: Texture3DTypeReader needs it ahead of where it's
         // textually defined, same reason as ReadTextFile above.
         std::vector<std::uint8_t> ReadBinaryFile(const std::string& path);
+
+        // Forward declaration -- defined below (originally added for AnimationClipTypeReader).
+        // plan_cnj.md CNB-45: EffectTypeReader's stock-effect branch reuses it for
+        // diffuseColor/emissiveColor/specularColor/environmentMapSpecular fields rather than
+        // duplicating a third array-parsing helper.
+        bool TryReadFloatArrayField(const CNA::Internal::JsonValue& obj, const char* field,
+                                     std::size_t expectedCount, std::vector<float>& out,
+                                     const std::string& path);
 
         // plan_cnj.md CNB-34: SpriteFont/Effect/Model .cnj documents are self-contained
         // descriptors -- unlike Texture2D/SoundEffect/TextureCube, they have no meaning for a
@@ -637,6 +649,63 @@ namespace Microsoft::Xna::Framework::Content
             return json.substr(pos + 1, end - pos - 1);
         }
 
+        Microsoft::Xna::Framework::Graphics::CompareFunction ParseCompareFunctionEXT(
+            const std::string& value, const std::string& path)
+        {
+            using Microsoft::Xna::Framework::Graphics::CompareFunction;
+            if (value == "Always") { return CompareFunction::Always; }
+            if (value == "Never") { return CompareFunction::Never; }
+            if (value == "Less") { return CompareFunction::Less; }
+            if (value == "LessEqual") { return CompareFunction::LessEqual; }
+            if (value == "Equal") { return CompareFunction::Equal; }
+            if (value == "GreaterEqual") { return CompareFunction::GreaterEqual; }
+            if (value == "Greater") { return CompareFunction::Greater; }
+            if (value == "NotEqual") { return CompareFunction::NotEqual; }
+            throw ContentLoadException(
+                "Effect .cnj '" + path + "' has an unrecognized CompareFunction '" + value + "'.");
+        }
+
+        Vector3 ReadVector3FieldEXT(const CNA::Internal::JsonValue& obj, const char* field,
+                                     Vector3 def, const std::string& path)
+        {
+            std::vector<float> arr;
+            if (!TryReadFloatArrayField(obj, field, 3, arr, path)) { return def; }
+            return Vector3(arr[0], arr[1], arr[2]);
+        }
+
+        float ReadFloatFieldEXT(const CNA::Internal::JsonValue& obj, const char* field,
+                                 float def, const std::string& path)
+        {
+            const CNA::Internal::JsonValue* v = obj.FindMember(field);
+            if (v == nullptr) { return def; }
+            if (!v->IsNumber())
+            {
+                throw ContentLoadException(
+                    "Effect .cnj '" + path + "': '" + field + "' must be numeric.");
+            }
+            return static_cast<float>(v->numberValue);
+        }
+
+        bool ReadBoolFieldEXT(const CNA::Internal::JsonValue& obj, const char* field,
+                               bool def, const std::string& path)
+        {
+            const CNA::Internal::JsonValue* v = obj.FindMember(field);
+            if (v == nullptr) { return def; }
+            if (v->type != CNA::Internal::JsonType::Boolean)
+            {
+                throw ContentLoadException(
+                    "Effect .cnj '" + path + "': '" + field + "' must be a boolean.");
+            }
+            return v->boolValue;
+        }
+
+        // plan_cnj.md CNB-45: RegisterTypeReader<T>() allows exactly one reader per T, and this
+        // class already owns std::shared_ptr<Effect> for the pre-existing custom-GLSL "Effect"
+        // .cnj shape -- so the 5 stock effects (BasicEffect/AlphaTestEffect/DualTextureEffect/
+        // EnvironmentMapEffect/SkinnedEffect) are dispatched from inside this same reader by
+        // .cnj "type", rather than each getting its own registration (which would collide).
+        // Field lists below are a direct JSON port of StockEffectContentTypeReaders.cpp's
+        // already-FNA-verified per-effect field order.
         class EffectTypeReader : public LooseFileContentTypeReader<std::shared_ptr<Graphics::Effect>>
         {
         public:
@@ -659,9 +728,31 @@ namespace Microsoft::Xna::Framework::Content
                 const std::string jsonText = ReadTextFile(jsonPath);
 
                 const CNA::Internal::CnjEnvelope envelope = CNA::Internal::ParseCnjEnvelope(jsonText);
-                CNA::Internal::ValidateCnjEnvelope(envelope, "Effect", jsonPath);
-                RejectSourceFileForSelfContainedCnj(envelope, "Effect", jsonPath);
+                CNA::Internal::ValidateCnjEnvelopeBaseline(envelope, jsonPath);
+                RejectSourceFileForSelfContainedCnj(envelope, envelope.type, jsonPath);
 
+                if (envelope.type == "Effect")
+                {
+                    return ReadCustomGlslEffect(jsonText, jsonPath, cm);
+                }
+                if (envelope.type == "BasicEffect" || envelope.type == "AlphaTestEffect" ||
+                    envelope.type == "DualTextureEffect" || envelope.type == "EnvironmentMapEffect" ||
+                    envelope.type == "SkinnedEffect")
+                {
+                    return ReadStockEffect(
+                        CNA::Internal::ParseJson(jsonText), envelope.type, jsonPath, cm);
+                }
+
+                throw ContentLoadException(
+                    "ContentManager: '" + jsonPath + "' has type '" + envelope.type + "', but an "
+                    "Effect .cnj must be one of 'Effect', 'BasicEffect', 'AlphaTestEffect', "
+                    "'DualTextureEffect', 'EnvironmentMapEffect', or 'SkinnedEffect'.");
+            }
+
+        private:
+            static std::shared_ptr<Graphics::Effect> ReadCustomGlslEffect(
+                const std::string& jsonText, const std::string& jsonPath, ContentManager& cm)
+            {
                 const std::string vertRel = ExtractJsonStringField(jsonText, "vertex");
                 const std::string fragRel = ExtractJsonStringField(jsonText, "fragment");
 
@@ -680,6 +771,117 @@ namespace Microsoft::Xna::Framework::Content
                     cm.getGraphicsDeviceInternal(),
                     ReadTextFile(vertPath),
                     ReadTextFile(fragPath));
+            }
+
+            static std::optional<Graphics::Texture2D> LoadOptionalTexture2D(
+                const CNA::Internal::JsonValue& root, const char* field, ContentManager& cm)
+            {
+                const CNA::Internal::JsonValue* v = root.FindMember(field);
+                if (v == nullptr) { return std::nullopt; }
+                if (!v->IsString() || v->stringValue.empty())
+                {
+                    throw ContentLoadException(std::string("Effect .cnj: '") + field + "' must be a non-empty string.");
+                }
+                return cm.Load<Graphics::Texture2D>(v->stringValue);
+            }
+
+            static std::shared_ptr<Graphics::Effect> ReadStockEffect(
+                const CNA::Internal::JsonValue& root, const std::string& type,
+                const std::string& jsonPath, ContentManager& cm)
+            {
+                using namespace Graphics;
+                GraphicsDevice& gd = cm.getGraphicsDeviceInternal();
+
+                if (type == "BasicEffect")
+                {
+                    auto effect = std::make_shared<BasicEffect>(gd);
+                    if (auto tex = LoadOptionalTexture2D(root, "texture", cm))
+                    {
+                        effect->SetOwnedTexture(std::make_shared<Texture2D>(std::move(*tex)));
+                        effect->setTextureEnabledProperty(true);
+                    }
+                    effect->setDiffuseColorProperty(ReadVector3FieldEXT(root, "diffuseColor", Vector3::One, jsonPath));
+                    effect->setEmissiveColorProperty(ReadVector3FieldEXT(root, "emissiveColor", Vector3::Zero, jsonPath));
+                    effect->setSpecularColorProperty(ReadVector3FieldEXT(root, "specularColor", Vector3::One, jsonPath));
+                    effect->setSpecularPowerProperty(ReadFloatFieldEXT(root, "specularPower", 16.0f, jsonPath));
+                    effect->setAlphaProperty(ReadFloatFieldEXT(root, "alpha", 1.0f, jsonPath));
+                    effect->VertexColorEnabled = ReadBoolFieldEXT(root, "vertexColorEnabled", false, jsonPath);
+                    return effect;
+                }
+                if (type == "AlphaTestEffect")
+                {
+                    auto effect = std::make_shared<AlphaTestEffect>(gd);
+                    if (auto tex = LoadOptionalTexture2D(root, "texture", cm))
+                    {
+                        effect->SetOwnedTexture(std::make_shared<Texture2D>(std::move(*tex)));
+                    }
+                    const CNA::Internal::JsonValue* alphaFn = root.FindMember("alphaFunction");
+                    effect->setAlphaFunctionProperty(
+                        alphaFn != nullptr && alphaFn->IsString()
+                            ? ParseCompareFunctionEXT(alphaFn->stringValue, jsonPath)
+                            : CompareFunction::Greater);
+                    effect->setReferenceAlphaProperty(
+                        static_cast<int32_t>(ReadFloatFieldEXT(root, "referenceAlpha", 0.0f, jsonPath)));
+                    effect->setDiffuseColorProperty(ReadVector3FieldEXT(root, "diffuseColor", Vector3::One, jsonPath));
+                    effect->setAlphaProperty(ReadFloatFieldEXT(root, "alpha", 1.0f, jsonPath));
+                    effect->setVertexColorEnabledProperty(ReadBoolFieldEXT(root, "vertexColorEnabled", false, jsonPath));
+                    return effect;
+                }
+                if (type == "DualTextureEffect")
+                {
+                    auto effect = std::make_shared<DualTextureEffect>(gd);
+                    if (auto tex = LoadOptionalTexture2D(root, "texture", cm))
+                    {
+                        effect->SetOwnedTexture(std::make_shared<Texture2D>(std::move(*tex)));
+                    }
+                    if (auto tex2 = LoadOptionalTexture2D(root, "texture2", cm))
+                    {
+                        effect->SetOwnedTexture2(std::make_shared<Texture2D>(std::move(*tex2)));
+                    }
+                    effect->setDiffuseColorProperty(ReadVector3FieldEXT(root, "diffuseColor", Vector3::One, jsonPath));
+                    effect->setAlphaProperty(ReadFloatFieldEXT(root, "alpha", 1.0f, jsonPath));
+                    effect->setVertexColorEnabledProperty(ReadBoolFieldEXT(root, "vertexColorEnabled", false, jsonPath));
+                    return effect;
+                }
+                if (type == "EnvironmentMapEffect")
+                {
+                    auto effect = std::make_shared<EnvironmentMapEffect>(gd);
+                    if (auto tex = LoadOptionalTexture2D(root, "texture", cm))
+                    {
+                        effect->SetOwnedTexture(std::make_shared<Texture2D>(std::move(*tex)));
+                    }
+                    if (const CNA::Internal::JsonValue* envMap = root.FindMember("environmentMap"))
+                    {
+                        if (!envMap->IsString() || envMap->stringValue.empty())
+                        {
+                            throw ContentLoadException(
+                                "Effect .cnj '" + jsonPath + "': 'environmentMap' must be a non-empty string.");
+                        }
+                        Graphics::TextureCube cube = cm.Load<Graphics::TextureCube>(envMap->stringValue);
+                        effect->SetOwnedEnvironmentMap(std::make_shared<TextureCube>(std::move(cube)));
+                    }
+                    effect->setEnvironmentMapAmountProperty(ReadFloatFieldEXT(root, "environmentMapAmount", 1.0f, jsonPath));
+                    effect->setEnvironmentMapSpecularProperty(ReadVector3FieldEXT(root, "environmentMapSpecular", Vector3::Zero, jsonPath));
+                    effect->setFresnelFactorProperty(ReadFloatFieldEXT(root, "fresnelFactor", 1.0f, jsonPath));
+                    effect->setDiffuseColorProperty(ReadVector3FieldEXT(root, "diffuseColor", Vector3::One, jsonPath));
+                    effect->setEmissiveColorProperty(ReadVector3FieldEXT(root, "emissiveColor", Vector3::Zero, jsonPath));
+                    effect->setAlphaProperty(ReadFloatFieldEXT(root, "alpha", 1.0f, jsonPath));
+                    return effect;
+                }
+                // SkinnedEffect (the only remaining branch this method is ever called with).
+                auto effect = std::make_shared<SkinnedEffect>(gd);
+                if (auto tex = LoadOptionalTexture2D(root, "texture", cm))
+                {
+                    effect->SetOwnedTexture(std::make_shared<Texture2D>(std::move(*tex)));
+                }
+                effect->setWeightsPerVertexProperty(
+                    static_cast<int32_t>(ReadFloatFieldEXT(root, "weightsPerVertex", 4.0f, jsonPath)));
+                effect->setDiffuseColorProperty(ReadVector3FieldEXT(root, "diffuseColor", Vector3::One, jsonPath));
+                effect->setEmissiveColorProperty(ReadVector3FieldEXT(root, "emissiveColor", Vector3::Zero, jsonPath));
+                effect->setSpecularColorProperty(ReadVector3FieldEXT(root, "specularColor", Vector3::One, jsonPath));
+                effect->setSpecularPowerProperty(ReadFloatFieldEXT(root, "specularPower", 16.0f, jsonPath));
+                effect->setAlphaProperty(ReadFloatFieldEXT(root, "alpha", 1.0f, jsonPath));
+                return effect;
             }
         };
 

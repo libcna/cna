@@ -56,6 +56,18 @@
 > `CnjAnimationClipTests.cpp`, 1 more added to `CnjCapabilityMatrixTests.cpp` for
 > `sourceFile`-rejection); full-suite regression after landing: 4661 tests, 4659 passed, the same 2
 > pre-existing unrelated hardware skips, 0 failures.
+>
+> **2026-07-17 update — Phase 11, remaining `.xnb`-vs-`.cnj` type-coverage gaps closed:**
+> `Texture3D` (`CNB-43`, self-contained JSON + raw RGBA8 binary sidecar), `Curve` (`CNB-44`,
+> self-contained JSON, direct port of `CurveContentTypeReader.hpp`'s field order), and the 5 stock
+> effects — `BasicEffect`/`AlphaTestEffect`/`DualTextureEffect`/`EnvironmentMapEffect`/
+> `SkinnedEffect` (`CNB-45`, dispatched from inside the existing `EffectTypeReader` by `.cnj`
+> `"type"`, since `RegisterTypeReader<T>()` allows only one reader per C++ type) — are all now
+> `.cnj`-loadable, closing every gap identified by cross-referencing FNA's real `ContentTypeReader`
+> inventory against `.xnb`'s (already complete) and `.cnj`'s (previously partial) coverage. 19 new
+> tests across 3 new files; full-suite regression: 4680 tests, 4678 passed, same 2 pre-existing
+> hardware skips, 0 failures. `AnimationClip`-sharing across `Model`/`SkinnedModel` and a
+> glTF→`Model`/`AnimationClip` import tool remain open (`plan_cnj.md` Phase 11 continued/Phase 12).
 
 ## Why this alternative exists
 
@@ -379,7 +391,9 @@ for real XNA content, so nothing important is silently dropped by switching stra
 | `SpriteFont` | `SpriteFontReader` | JSON metadata (glyphs, kerning, line spacing) + a reference to a plain `.png` glyph atlas texture (no custom pixel packing logic needed inside `.cnj` itself — the atlas is just an ordinary image file). |
 | `Model` | `ModelReader` + `VertexBufferReader`/`IndexBufferReader`/`VertexDeclarationReader` | JSON metadata (bone hierarchy, mesh/mesh-part list, per-part material/effect references) referencing either (a) a conventional interchange mesh format CNA can already load (e.g. glTF/OBJ, if/when supported) for raw vertex/index data, or (b) a small CNA-owned binary vertex/index blob file referenced by path, kept *outside* the JSON (JSON is a poor fit for large raw float/index arrays). |
 | `AnimationClip` / skeletal animation data | `SkinningDataReader`-style custom readers seen in several samples (see `xnb.md`'s Lua discussion) | **Implemented** (`AnimationClipTypeReader`, `plan_cnj.md` `CNB-40`, Phase 10) — either inline JSON keyframe/bone-transform data (`"tracks"`), or, for large clips, a reference to an external raw binary blob via `"clipFile"` (the same `.clip.bin` format and shared reader `Model`'s/`SkinnedModelEXT`'s own `"animations"` field already used), to avoid bloating JSON with thousands of matrices. Standalone and independent of any specific `Model` — loaded via `ContentManager::Load<Graphics::AnimationClipEXT>()` (aliased as `Graphics::AnimationClip`). |
-| Stock effect parameters (`BasicEffect`/`SkinnedEffect`/etc.) | Stock-effect XNA readers (`xnb.md`'s "stock effects" section) | Plain JSON parameter object (colors, texture references, lighting flags) consumed directly by CNA's existing native stock-effect C++ classes — structurally the same idea `plan_xnb.md`'s XNB-32 already committed to (deserialize the stock effect's own fields, construct the native CNA object), just via JSON fields instead of a binary reader. |
+| Stock effect parameters (`BasicEffect`/`SkinnedEffect`/etc.) | Stock-effect XNA readers (`xnb.md`'s "stock effects" section) | **Implemented** (`plan_cnj.md` `CNB-45`, Phase 11) — plain JSON parameter object (colors, texture references, lighting flags) dispatched from inside the existing `EffectTypeReader` by `.cnj` `"type"` (`"BasicEffect"`/`"AlphaTestEffect"`/`"DualTextureEffect"`/`"EnvironmentMapEffect"`/`"SkinnedEffect"`, alongside the pre-existing `"Effect"` custom-GLSL shape), consumed directly by CNA's existing native stock-effect C++ classes. Omitted fields fall back to each effect's own real constructor defaults, not an independently-chosen default. |
+| `Texture3D` (volume texture) | `Texture3DReader` | **Implemented** (`plan_cnj.md` `CNB-43`, Phase 11) — self-contained JSON (`"width"`/`"height"`/`"depth"`) + a raw RGBA8 binary sidecar (`"data"`), mirroring `Model`'s own vertex/index binary-sidecar convention (no native "volume texture" file format exists in CNA the way `.dds` serves `TextureCube`). Single mip level; no DXT decompression (hand-authored `.cnj` content has no natural source for pre-compressed DXT data). |
+| `Curve` | `CurveReader` | **Implemented** (`plan_cnj.md` `CNB-44`, Phase 11) — self-contained JSON (`"preLoop"`/`"postLoop"` + `"keys"`: `position`/`value`/`tangentIn`/`tangentOut`/`continuity`), a direct port of `CurveContentTypeReader.hpp`'s already-FNA-verified field order. |
 | General custom/`.fx`-based `Effect` | `EffectReader` (compiled platform shader bytecode) | **Explicitly out of scope**, exactly as `plan_xnb.md`'s XNB-32A/XNB-14B already conclude for the binary case: no format, JSON or binary, changes the fact that an original D3D9-era compiled shader blob cannot be run through bgfx. A `.cnj` `Effect` entry can only ever reference a *rebuilt* CNA-native shader (source `.fx`/CNA shader recompiled through CNA's own pipeline), never carry the original bytecode meaningfully. |
 | Game-specific custom data (the ~82 hand-written `ContentTypeReader` classes found across `RolePlayingGame`, `Movipa`, `RobotGame`, etc. — see this session's sample survey) | Custom `ContentTypeReader` subclasses | A game-specific `type` string, with fields chosen by whoever migrates that game's content — no CNA core change needed per game, same "don't grow CNA core for one sample" principle `xnb.md`'s Lua section already argued for, just without needing a Lua sandbox/host at all: it is only ever *data*, read once by a small piece of C++ (or even generic reflection-free JSON field access) written for that one game. |
 
@@ -580,6 +594,13 @@ Summary of what landed, in the order it happened:
    independent of any specific `Model` (inline JSON tracks, or a `"clipFile"` reference to an
    existing `.clip.bin` blob) — Phase 10 (`plan_cnj.md` `CNB-40`–`CNB-42`), added 2026-07-17 as the
    first of the "genuinely new `.cnj` type" follow-ups this section used to flag as open.
+10. `Texture3DTypeReader`/`CurveTypeReader`, and stock-effect `.cnj` support
+    (`BasicEffect`/`AlphaTestEffect`/`DualTextureEffect`/`EnvironmentMapEffect`/`SkinnedEffect`,
+    dispatched from inside `EffectTypeReader`) — Phase 11 (`plan_cnj.md` `CNB-43`–`CNB-47`), closing
+    the last `.xnb`-vs-`.cnj` type-coverage gaps identified by cross-referencing FNA's real
+    `ContentTypeReader` inventory. `AnimationClip`-sharing across `Model`/`SkinnedModel` and a
+    glTF→`Model`/`AnimationClip` import tool remain open, tracked separately in `plan_cnj.md`'s
+    Phase 11 (continued)/Phase 12.
 
 Further genuinely new `.cnj` types with no existing reader today (game-specific custom data beyond
 what a game registers itself) remain a natural, open-ended follow-up — `RegisterCnjLoader<T>`
