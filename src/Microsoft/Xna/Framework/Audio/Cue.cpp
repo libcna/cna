@@ -1120,14 +1120,20 @@ namespace Microsoft::Xna::Framework::Audio
             // was already active when Apply3D() itself ran (see the for loop above).
             if (has3D_) inst->Apply3D(pending3DListener_, pending3DEmitter_);
 
-            inst->Play();
-
-            // P9-XACT-011/P11-XACT-003: wire the track's real filter into the real SDL3_mixer
-            // filter callback -- effect variation's randomized frequency/Q, when authored,
-            // *replaces* the plain per-track authored base value (matches FAudio's own "Initial
-            // Filter Variation" branch, a straight overwrite, not additive); RPC continues to
-            // override either base live every tick exactly as before, unaffected by which one
-            // established it.
+            // P14-ORDER-002: wire the track's real filter into the real SDL3_mixer filter callback
+            // BEFORE inst->Play() rather than after -- SoundEffectInstance::INTERNAL_apply*Filter
+            // are now order-independent of Play() (they establish/update the pending filter state
+            // in filterState_ regardless of whether a live track exists yet; only the actual
+            // SDL3_mixer callback registration is deferred to Play()'s own
+            // EnsureTrackDspState()/INTERNAL_applyComposedTrackProperties() call if there's no
+            // track yet), so doing this first means this track's very first output frame already
+            // has the authored filter applied, instead of a brief window where it could play
+            // unfiltered until a moment later -- the same "configure everything, then start"
+            // ordering P14-ORDER-001 already applied to volume/pitch/3D state. Effect variation's
+            // randomized frequency/Q, when authored, *replaces* the plain per-track authored base
+            // value (matches FAudio's own "Initial Filter Variation" branch, a straight overwrite,
+            // not additive); RPC continues to override either base live every tick exactly as
+            // before, unaffected by which one established it.
             if (waveRef.filterType != 0xFF)
             {
                 if (effect.hasFilterOverride)
@@ -1150,8 +1156,11 @@ namespace Microsoft::Xna::Framework::Audio
             // pattern P9-XACT-016 already established for volume/pitch. A no-op (see
             // INTERNAL_applyRpcFilterOverride's own guard) for a wave reference with no filter at
             // all, or when this cue has no RPC codes bound (rpc.filterFrequencyHz/filterQFactor
-            // are both -1.0f in that case).
+            // are both -1.0f in that case). P14-ORDER-002: also order-independent of Play() now,
+            // same as the base filter above.
             inst->INTERNAL_applyRpcFilterOverride(rpc.filterFrequencyHz, rpc.filterQFactor);
+
+            inst->Play();
 
             active_.push_back({std::move(inst), waveRef.volume,
                 effect.volumeAmplitudeMultiplier, effect.pitchCentsDelta});

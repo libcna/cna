@@ -115,12 +115,25 @@ namespace Microsoft::Xna::Framework::Audio
         // FAudio_internal.c's FAudio_INTERNAL_FilterVoice) via an SDL3_mixer per-track "cooked"
         // callback. `cutoff`/`center` are the pre-computed normalized frequency FAudio expects
         // (2*sin(pi*cutoffHz/sampleRate), range [0,1]), not raw Hz -- matches
-        // FAudioFilterParameters::Frequency exactly, since these methods just forward it. No-op
-        // if the track hasn't been created yet (matches FNA's `handle == IntPtr.Zero` guard);
-        // not sticky across Stop(true)/replay, again matching FNA (the filter lives on the
-        // voice/track, not the instance). `oneOverQ` defaults to 1.0f, matching every call site
-        // in FNA's own (dead-code, never-called) SoundEffectInstance.cs equivalents -- P9-XACT-011
-        // adds real per-track Q fidelity for XACT-driven playback via
+        // FAudioFilterParameters::Frequency exactly, since these methods just forward it.
+        // P14-ORDER-002: order-independent of Play() -- establishes/updates the pending filter
+        // state (kind/frequency/oneOverQ, in filterState_) regardless of whether a live track
+        // exists yet; only the real SDL3_mixer callback registration itself is deferred to
+        // EnsureTrackDspState() (called from Play()) if there's no track yet. This intentionally
+        // does NOT match FNA's own `if (handle == IntPtr.Zero) return;` guard on its equivalent,
+        // dead-code (never actually called) SoundEffectInstance.cs methods -- those exist only for
+        // a hypothetical direct C# caller FNA never has, whereas here establishing a filter before
+        // a live track is the normal, real path for XACT-driven playback (Cue::Play() may call
+        // this before or after inst->Play()), and FACT's own native track creation establishes a
+        // sound's filter atomically alongside the voice with no such gap to begin with -- this
+        // fix makes CNA match that atomicity instead of copying a guard that was never reachable
+        // for the XACT path anyway. Not sticky across Stop(true)/replay, matching FNA (the filter
+        // lives on the voice/track, not the instance) -- `filterState_` itself IS retained across
+        // Stop()/replay (same object, same track_), so a filter established once continues to
+        // apply after a Stop()-then-Play() cycle with no live track in between; only Dispose()
+        // ends this instance's own filter state entirely. `oneOverQ` defaults to 1.0f, matching
+        // every call site in FNA's own (dead-code, never-called) SoundEffectInstance.cs
+        // equivalents -- P9-XACT-011 adds real per-track Q fidelity for XACT-driven playback via
         // INTERNAL_applyXactTrackFilter below, without changing this default for any other caller.
         void INTERNAL_applyLowPassFilter(float cutoff, float oneOverQ = 1.0f);
         void INTERNAL_applyHighPassFilter(float cutoff, float oneOverQ = 1.0f);
@@ -134,25 +147,30 @@ namespace Microsoft::Xna::Framework::Audio
         // `qfactorRaw` is the raw XACT Q-factor byte, converted via
         // INTERNAL_calculateFilterOneOverQ. No-op for an unrecognized filterType (defensive only
         // -- XactParser.cpp's bit-decode never actually produces one). Establishes this filter's
-        // base frequency/Q; itself only ever called once, at Play() time -- live RPC-driven
+        // base frequency/Q; itself only ever called once per fresh Play() -- live RPC-driven
         // frequency/Q targeting on top of this base is a separate, continuously-reapplied concern
-        // (P10-FILTER-002/003, see INTERNAL_applyRpcFilterOverride below).
+        // (P10-FILTER-002/003, see INTERNAL_applyRpcFilterOverride below). P14-ORDER-002: order-
+        // independent of Play() too, same as INTERNAL_applyLowPassFilter/etc. above -- the mixer's
+        // own format (sample rate, needed to convert `frequencyHz`) is a device-level property
+        // available as soon as the shared mixer exists, independent of whether this particular
+        // instance has a track yet.
         NOXNA void INTERNAL_applyXactTrackFilter(uint8_t filterType, float frequencyHz, uint8_t qfactorRaw);
 
         // P11-XACT-003: same role as INTERNAL_applyXactTrackFilter above (establishes this
-        // filter's base frequency/Q; itself only ever called once, at Play() time), but for a
+        // filter's base frequency/Q; itself only ever called once per fresh Play()), but for a
         // PlayWaveEffectVariation-family event's randomized override. Unlike
         // INTERNAL_applyXactTrackFilter's raw XACT Q-factor byte, `oneOverQ` here is already the
         // final coefficient -- the caller (Cue.cpp's ApplyEffectVariation) already took the
         // reciprocal of the authored min/maxQFactor draw itself (matching FAudio's own
         // `rngQFactor = 1.0f / (...)`, assigned directly to `activeWave.baseQFactor` with no
         // further transformation downstream) -- so this method must NOT take another reciprocal.
+        // P14-ORDER-002: order-independent of Play(), same as INTERNAL_applyXactTrackFilter above.
         NOXNA void INTERNAL_applyEffectVariationFilter(uint8_t filterType, float frequencyHz, float oneOverQ);
 
         // P10-FILTER-002/003: continuous per-tick RPC targeting for filter frequency/Q, called
         // every tick from Cue::ReconcileState() (the same continuous-tick infra P9-XACT-016
-        // already built for volume/pitch) whenever this cue has RPC bindings, plus once more at
-        // Play() right after the base filter is established. `rpcFrequencyHz`/`rpcQFactor` use a
+        // already built for volume/pitch) whenever this cue has RPC bindings, plus once more when
+        // the base filter is first established. `rpcFrequencyHz`/`rpcQFactor` use a
         // negative sentinel (matching FAudio's own `>= 0.0f` checks, FACT_internal.c) meaning "no
         // RPC curve targets this axis this tick" -- that axis falls back to the filter's base
         // (XACT-authored) value instead, exactly like real FAudio's per-tick fallback between
@@ -160,11 +178,15 @@ namespace Microsoft::Xna::Framework::Audio
         // A no-op if this instance has no active filter at all (`waveRef.filterType == 0xFF`) --
         // matches FAudio's own `if (sound->sound->tracks[i].filter != 0xFF)` guard around the
         // whole filter-update block. Never touches `kind` or re-registers the cooked callback
-        // (already registered by INTERNAL_applyXactTrackFilter) -- only the two coefficient
-        // floats change, the same coefficient-only-write pattern the existing INTERNAL_apply*
-        // setters already use, so `yl`/`yb`'s recursive filter state is never disturbed
-        // (P10-FILTER-004: no click/pop from a live update, since nothing about the callback
-        // registration or recursive state changes, only the coefficients it reads).
+        // (already registered by INTERNAL_applyXactTrackFilter, or deferred alongside it to
+        // EnsureTrackDspState() if there's no track yet) -- only the two coefficient floats
+        // change, the same coefficient-only-write pattern the existing INTERNAL_apply* setters
+        // already use, so `yl`/`yb`'s recursive filter state is never disturbed (P10-FILTER-004:
+        // no click/pop from a live update, since nothing about the callback registration or
+        // recursive state changes, only the coefficients it reads). P14-ORDER-002: order-
+        // independent of Play() too, same as the base filter above -- a non-`None` filter `kind`
+        // already implies a base filter was established (which itself requires the mixer to
+        // already exist), so this is safe to apply regardless of whether a track exists yet.
         NOXNA void INTERNAL_applyRpcFilterOverride(float rpcFrequencyHz, float rpcQFactor);
 
         // P11-PAN-001 (RFC-1): lazily allocates filterState_ if this is the first DSP-affecting

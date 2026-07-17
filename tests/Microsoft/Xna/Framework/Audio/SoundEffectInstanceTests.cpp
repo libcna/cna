@@ -958,18 +958,76 @@ TEST_F(SoundEffectInstanceTest, ApplyReverbDoesNotThrow)
     EXPECT_NO_THROW(SoundEffectInstanceTestAccess::ApplyReverb(inst, 0.5f));
 }
 
-// Matches FNA's `handle == IntPtr.Zero` guard: applying a filter before the track exists must
-// not create filter state that later processes samples.
-TEST_F(SoundEffectInstanceTest, ApplyLowPassFilterBeforePlayIsNoOp)
+// P14-ORDER-002: applying a filter BEFORE Play() now establishes the pending filter state
+// immediately (in filterState_) instead of being a no-op -- matches FACT's own atomic
+// track-plus-filter creation, instead of copying FNA's `handle == IntPtr.Zero` guard on its own
+// dead-code (never actually called for the XACT path) equivalent. Same first-sample
+// state-variable filter math as LowPassFilterFirstSampleMatchesStateVariableFilterMath below
+// proves the filter is genuinely live, not just recorded -- the recursion doesn't depend on
+// whether a live track exists at all.
+TEST_F(SoundEffectInstanceTest, ApplyLowPassFilterBeforePlayPersistsAndProcessesSamplesImmediately)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    ASSERT_EQ(SoundEffectInstanceTestAccess::GetTrack(inst), nullptr); // no Play() yet
+
+    SoundEffectInstanceTestAccess::ApplyLowPassFilter(inst, 0.5f);
+
+    int kind = -1; float frequency = -1.0f, oneOverQ = -1.0f;
+    SoundEffectInstanceTestAccess::GetFilterState(inst, kind, frequency, oneOverQ);
+    EXPECT_EQ(kind, 1); // FilterState::Kind::LowPass
+    EXPECT_FLOAT_EQ(frequency, 0.5f);
+
+    float pcm[2] = {2.0f, 2.0f};
+    SoundEffectInstanceTestAccess::ProcessFilterSamples(inst, pcm, 2, 2);
+    EXPECT_NEAR(pcm[0], 0.0f, 1e-6f);
+    EXPECT_NEAR(pcm[1], 0.0f, 1e-6f);
+}
+
+// P14-ORDER-002: the pending filter state established before Play() must still be correctly
+// attached (not lost/reset) once the real track is actually created -- proves order-independence
+// end to end, not just that the state getter reports something immediately after the pre-Play()
+// call above.
+TEST_F(SoundEffectInstanceTest, ApplyLowPassFilterBeforePlayAttachesOncePlaying)
 {
     REQUIRE_DEVICE();
     SoundEffectInstance inst = instance();
     SoundEffectInstanceTestAccess::ApplyLowPassFilter(inst, 0.5f);
 
-    float pcm[2] = {2.0f, 2.0f};
-    SoundEffectInstanceTestAccess::ProcessFilterSamples(inst, pcm, 2, 2);
-    EXPECT_FLOAT_EQ(pcm[0], 2.0f);
-    EXPECT_FLOAT_EQ(pcm[1], 2.0f);
+    inst.Play();
+    MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(inst);
+    ASSERT_NE(track, nullptr);
+
+    int kind = -1; float frequency = -1.0f, oneOverQ = -1.0f;
+    SoundEffectInstanceTestAccess::GetFilterState(inst, kind, frequency, oneOverQ);
+    EXPECT_EQ(kind, 1); // FilterState::Kind::LowPass -- still established, not reset by Play()
+    EXPECT_FLOAT_EQ(frequency, 0.5f);
+}
+
+// P14-ORDER-002: a NEW scenario the pending-filter-state fix makes meaningful for the first time
+// -- previously, applying a filter before Play() was a no-op, so there was nothing for a move to
+// carry over. filterState_ can now hold a real pending filter even with no live track at all;
+// verify the move constructor correctly transfers that heap-owned pending state (not just an
+// already-registered callback, the scenario LowPassFilterSurvivesMoveConstruction below already
+// covers) and that Play() on the MOVED-TO instance still correctly attaches it.
+TEST_F(SoundEffectInstanceTest, LowPassFilterAppliedBeforePlaySurvivesMoveConstructionThenAttaches)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance src = instance();
+    ASSERT_EQ(SoundEffectInstanceTestAccess::GetTrack(src), nullptr); // no Play() yet
+    SoundEffectInstanceTestAccess::ApplyLowPassFilter(src, 0.5f);
+
+    SoundEffectInstance dst(std::move(src));
+    ASSERT_EQ(SoundEffectInstanceTestAccess::GetTrack(dst), nullptr); // still no track after the move
+
+    dst.Play();
+    MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(dst);
+    ASSERT_NE(track, nullptr);
+
+    int kind = -1; float frequency = -1.0f, oneOverQ = -1.0f;
+    SoundEffectInstanceTestAccess::GetFilterState(dst, kind, frequency, oneOverQ);
+    EXPECT_EQ(kind, 1); // FilterState::Kind::LowPass -- survived the move and attached on Play()
+    EXPECT_FLOAT_EQ(frequency, 0.5f);
 }
 
 // Regression coverage for the exact state-variable filter FAudio uses (FAudio_internal.c's
@@ -1551,17 +1609,62 @@ TEST_F(SoundEffectInstanceTest, ApplyXactTrackFilterIgnoresUnrecognizedType)
     EXPECT_EQ(kind, 0); // FilterState::Kind::None
 }
 
-// Matches every other INTERNAL_apply*Filter's `handle == IntPtr.Zero` guard -- no track means no
-// filter state gets created at all.
-TEST_F(SoundEffectInstanceTest, ApplyXactTrackFilterBeforePlayIsNoOp)
+// P14-ORDER-002: calling this before Play() now persists the XACT-authored filter too (the mixer's
+// own format, needed to convert frequencyHz -> a normalized cutoff, is a device-level property
+// available as soon as the shared mixer exists, independent of whether THIS instance has a track
+// yet) -- matches ApplyXactTrackFilterDispatchesHighPassWithConvertedOneOverQ's own fixture
+// values, just called before Play() instead of after, to prove the result is identical either way.
+TEST_F(SoundEffectInstanceTest, ApplyXactTrackFilterBeforePlayPersistsAndAttachesOncePlaying)
 {
     REQUIRE_DEVICE();
     SoundEffectInstance inst = instance();
-    SoundEffectInstanceTestAccess::ApplyXactTrackFilter(inst, 2, 8000.0f, 6);
+    ASSERT_EQ(SoundEffectInstanceTestAccess::GetTrack(inst), nullptr); // no Play() yet
+
+    SoundEffectInstanceTestAccess::ApplyXactTrackFilter(inst, /*filterType=*/2, 8000.0f, /*qfactorRaw=*/6);
 
     int kind = -1; float frequency = -1.0f, oneOverQ = -1.0f;
     SoundEffectInstanceTestAccess::GetFilterState(inst, kind, frequency, oneOverQ);
-    EXPECT_EQ(kind, 0); // FilterState::Kind::None
+    EXPECT_EQ(kind, 2); // FilterState::Kind::HighPass
+    EXPECT_NEAR(oneOverQ, 0.5f, 1e-6f);
+
+    inst.Play();
+    MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(inst);
+    ASSERT_NE(track, nullptr);
+
+    int kind2 = -1; float frequency2 = -1.0f, oneOverQ2 = -1.0f;
+    SoundEffectInstanceTestAccess::GetFilterState(inst, kind2, frequency2, oneOverQ2);
+    EXPECT_EQ(kind2, kind); // still HighPass -- not reset by Play()
+    EXPECT_NEAR(frequency2, frequency, 1e-6f);
+    EXPECT_NEAR(oneOverQ2, oneOverQ, 1e-6f);
+}
+
+// P14-ORDER-002: the continuous RPC filter override (P10-FILTER-002/003) is also order-independent
+// of Play() now -- a non-`None` filter kind already implies a base filter was established (which
+// itself requires the mixer to already exist), so overriding frequency/Q before a track exists is
+// safe and correctly persists into filterState_, the same way the base filter does above.
+TEST_F(SoundEffectInstanceTest, ApplyRpcFilterOverrideBeforePlayPersistsAndAttachesOncePlaying)
+{
+    REQUIRE_DEVICE();
+    SoundEffectInstance inst = instance();
+    ASSERT_EQ(SoundEffectInstanceTestAccess::GetTrack(inst), nullptr); // no Play() yet
+
+    SoundEffectInstanceTestAccess::ApplyXactTrackFilter(inst, /*filterType=*/0, 4000.0f, /*qfactorRaw=*/3);
+    SoundEffectInstanceTestAccess::ApplyRpcFilterOverride(inst, /*rpcFrequencyHz=*/8000.0f, /*rpcQFactor=*/4.0f);
+
+    int kind = -1; float frequency = -1.0f, oneOverQ = -1.0f;
+    SoundEffectInstanceTestAccess::GetFilterState(inst, kind, frequency, oneOverQ);
+    EXPECT_EQ(kind, 1); // FilterState::Kind::LowPass, unchanged by the RPC override
+    EXPECT_NEAR(oneOverQ, 0.25f, 1e-6f); // matches FAudio's plain `1.0f / rpcResult`
+
+    inst.Play();
+    MIX_Track* track = SoundEffectInstanceTestAccess::GetTrack(inst);
+    ASSERT_NE(track, nullptr);
+
+    int kind2 = -1; float frequency2 = -1.0f, oneOverQ2 = -1.0f;
+    SoundEffectInstanceTestAccess::GetFilterState(inst, kind2, frequency2, oneOverQ2);
+    EXPECT_EQ(kind2, kind);
+    EXPECT_NEAR(frequency2, frequency, 1e-6f); // the 8000Hz override, not the 4000Hz base
+    EXPECT_NEAR(oneOverQ2, oneOverQ, 1e-6f);
 }
 
 // ===================== INTERNAL_applyRpcFilterOverride (P10-FILTER-002/003) =====================

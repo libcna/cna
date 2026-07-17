@@ -81,11 +81,14 @@ framework/runtime, not a game.
   linked. `cna_demo_sound`/`cna_demo_2d` example targets not rebuilt this pass (no Audio *public
   XNA* API surface touched -- every Phase 14 change is to private members/internal ordering/an
   internal parser helper, not the public XNA surface).
-- **Tests:** `CnaTests` whole-suite count is **4648 / 4650 pass** (2 skipped, same as before --
-  see below; +4 new tests from Phase 14 -- 2 `SoundBankTests.cpp`, 1
-  `DynamicSoundEffectInstanceTests.cpp`, 1 `XactParserTests.cpp` -- zero regressions, reverified via
-  a full whole-repo run). Prior sync's count was **4644 / 4646 pass** (+5 from `P13-3D-001`, +4
-  from `P13-DYNAMIC-001`). Before that, **3400 / 3402 pass** (2 skipped:
+- **Tests:** `CnaTests` whole-suite count is **4651 / 4653 pass** (2 skipped, same as before -- see
+  below; +3 net new tests from `P14-ORDER-002` -- 5 added, 2 renamed/replaced in
+  `SoundEffectInstanceTests.cpp`, plus 3 pre-existing `CueTests.cpp` tests that gained regression
+  significance via comment updates only -- zero regressions, reverified via a full whole-repo run).
+  Prior sync's count was **4648 / 4650 pass** (+4 new tests from Phase 14's first four findings -- 2
+  `SoundBankTests.cpp`, 1 `DynamicSoundEffectInstanceTests.cpp`, 1 `XactParserTests.cpp`). Before
+  that, **4644 / 4646 pass** (+5 from `P13-3D-001`, +4 from `P13-DYNAMIC-001`). Before that,
+  **3400 / 3402 pass** (2 skipped:
   `AccelerometerTests`/`GyroscopeTests`' `GetCurrentValuePropertyDoesNotThrowWhenSupported`,
   hardware-dependent, expected — not Audio; the 3-test increase since the last sync is
   `P12-BANK-001`'s new force-stop-cascade coverage, see §3). Prior sync's 1-test increase was
@@ -97,7 +100,13 @@ framework/runtime, not a game.
   pattern -- plain synchronous C++ object-graph management, same snapshot-before-mutate shape
   already exercised by `AudioEngine::StopCategoryInternal`); verified instead via the standard
   git-stash regression pattern (§7). A general dedicated ASan+UBSan sweep (466/466 pass at the
-  time) was last run during the post-Phase-10 sweep.
+  time) was last run during the post-Phase-10 sweep. `P14-ORDER-002` (touches `filterState_`
+  lifetime/ownership before a track exists) got its own fresh one-off sanitizer pair: ASan+UBSan,
+  full audio-scoped subset 552/552 pass, zero errors, LeakSanitizer's full-suite-only leaks
+  isolated to `<unknown module>`/`libdrm.so.2` frames (pre-existing driver/graphics-init noise,
+  confirmed by re-running just the 8 new/updated tests alone with zero leaks reported); and a fresh
+  ThreadSanitizer rebuild re-running `ConcurrentFilterUpdatesDoNotRaceWithRealMixingThread`
+  10 times, zero `WARNING: ThreadSanitizer` reports.
 - **Known flaky tests (pre-existing, not Audio regressions):**
   `CueTest.PlayCalledTwiceWhileAlreadyPlayingIsANoOpAndDoesNotDuplicateInstances` (rare, full-
   suite-load-only; confirmed non-reproducing in isolation); two Net-module tests
@@ -138,6 +147,28 @@ framework/runtime, not a game.
 Newest first. Full rationale, FNA/FAudio line citations, and `git stash` verification notes for
 every item are in `plan_audio.md`'s "Phase 9"/"Phase 10"/"Phase 11"/"Phase 12"/"Phase 13" sections.
 
+- **`P14-ORDER-002`** (follow-up to `P14-ORDER-001`'s scope note, user-requested 2026-07-17,
+  narrowly-scoped task) — made per-track XACT filter establishment order-independent of `Play()`,
+  closing the one gap `P14-ORDER-001` deliberately left open. `SoundEffectInstance`'s
+  `INTERNAL_applyLowPassFilter`/`HighPassFilter`/`BandPassFilter`/`INTERNAL_applyXactTrackFilter`/
+  `INTERNAL_applyEffectVariationFilter`/`INTERNAL_applyRpcFilterOverride` no longer require a live
+  `track_` -- they always lazily-allocate/write `filterState_` now, only conditionally registering
+  SDL3_mixer's real cooked callback (`MIX_SetTrackCookedCallback`) when a track already exists;
+  `EnsureTrackDspState()` (unchanged) picks up any pending state once `Play()` actually creates one,
+  same shape as `P13-3D-001`'s spatial-state fix. New shared `TryGetMixer()` helper prevents a raw
+  `std::runtime_error` (first-ever-mixer-access, "no audio hardware") from escaping into
+  `Cue::Play()` now that these methods are reachable before any track has ever been created.
+  `Cue::Play()`'s per-wave loop reordered so the base filter and initial RPC filter override now run
+  *before* `inst->Play()`, completing the "configure everything, then start" ordering
+  `P14-ORDER-001` already applied to Volume/Pitch/3D state. `CHECKLIST.md` needed no change --
+  this fixes an internal CNA architecture gap, not a documented FNA/XNA behavioral deviation. 5 new
+  `SoundEffectInstanceTests.cpp` tests plus 3 pre-existing `CueTests.cpp` tests upgraded to
+  regression coverage via comment updates; two-stage `git stash` verification (isolating
+  `SoundEffectInstance` from `Cue.cpp`'s reorder, then both together) confirms each side is
+  independently necessary. Full audio-scoped suite 552/552 pass (was 549/549; +3 net new), full
+  whole-repo suite 4651/4653 pass, fresh one-off ASan+UBSan and ThreadSanitizer runs both clean (see
+  §2). **This closes the last open item in Phase 14 -- Phases 11 through 14 are now all fully
+  closed with zero deliberately-deferred items remaining** (see §8). See `plan_audio.md`.
 - **Phase 14** (`P14-LIFECYCLE-001`/`P14-BUFFER-001`/`P14-ORDER-001`/`P14-PARSER-001`) — a
   *second* user-provided external audit (Czech-language report, dated 2026-07-17, reviewing the
   state after Phase 13 landed), four findings, all independently re-verified against the actual
@@ -834,38 +865,26 @@ ls /rv/data/library/github.com/FNA-XNA/FNA/src/Audio
 
 ## 8. Next smallest tasks
 
-**Phase 11, Phase 12, Phase 13, and Phase 14 are all closed** except one deliberately-deferred
-follow-up (`P14-ORDER-002`, see below). Phase 11's one deliberate follow-up (`P11-PAN-002`,
-user-greenlit 2026-07-07), Phase 12's fresh logic-correctness audit (all 5 audit groups plus all 6
-follow-up tasks: `P12-PITCH-001`, `P12-DOC-001`, `P12-CATEGORY-001`, `P12-VAR-001`, `P12-PAUSE-001`,
-`P12-BANK-001`), and Phase 13's `P13-3D-001`/`P13-MIXER-001`/`P13-DOC-001`/`P13-DYNAMIC-001` are all
-`[x]` in `plan_audio.md`. `P10-HRTF-002`'s RFC-2 (optional FAudio/FACT backend) was explicitly
-**rejected** by the user the same day -- staying on SDL3_mixer (see §9). `P12-PAUSE-001` was
-investigated and found to be a **false positive** -- `Cue::state_` already stays `Playing`
-throughout a pause (the independent `paused_` bool, `P9-LIFECYCLE-013`); a new passing regression
-test locks in the already-correct behavior with zero code change. `P13-DYNAMIC-001` was initially
-deferred pending a user decision between two fix shapes; the user chose the root-cause option
-2026-07-16, and it's now also `[x]`. Phase 14's `P14-LIFECYCLE-001`/`P14-BUFFER-001`/
-`P14-PARSER-001` are all `[x]`; `P14-ORDER-001` is `[x]` but explicitly a **partial** fix (see its
-own scope note in `plan_audio.md`). Everything else was a real bug, fixed for real -- see §3 for
-each.
+**Phase 11, Phase 12, Phase 13, and Phase 14 are all fully closed, with zero deliberately-deferred
+items remaining.** Phase 11's one deliberate follow-up (`P11-PAN-002`, user-greenlit 2026-07-07),
+Phase 12's fresh logic-correctness audit (all 5 audit groups plus all 6 follow-up tasks:
+`P12-PITCH-001`, `P12-DOC-001`, `P12-CATEGORY-001`, `P12-VAR-001`, `P12-PAUSE-001`, `P12-BANK-001`),
+and Phase 13's `P13-3D-001`/`P13-MIXER-001`/`P13-DOC-001`/`P13-DYNAMIC-001` are all `[x]` in
+`plan_audio.md`. `P10-HRTF-002`'s RFC-2 (optional FAudio/FACT backend) was explicitly **rejected**
+by the user the same day -- staying on SDL3_mixer (see §9). `P12-PAUSE-001` was investigated and
+found to be a **false positive** -- `Cue::state_` already stays `Playing` throughout a pause (the
+independent `paused_` bool, `P9-LIFECYCLE-013`); a new passing regression test locks in the
+already-correct behavior with zero code change. `P13-DYNAMIC-001` was initially deferred pending a
+user decision between two fix shapes; the user chose the root-cause option 2026-07-16, and it's now
+also `[x]`. Phase 14's `P14-LIFECYCLE-001`/`P14-BUFFER-001`/`P14-PARSER-001`/`P14-ORDER-001` are all
+`[x]`; `P14-ORDER-002`, the one item `P14-ORDER-001` deliberately left open (per-track XACT filter
+establishment order-independence), was closed 2026-07-17 in its own scoped task -- see §3's
+`P14-ORDER-002` entry for the fix, tests, and sanitizer verification. Everything else was a real
+bug, fixed for real -- see §3 for each.
 
-**One deliberately-deferred item remains open: `P14-ORDER-002`** (not `[x]` in `plan_audio.md`).
-Per-track XACT filter establishment (`INTERNAL_applyXactTrackFilter`/`INTERNAL_applyEffectVariationFilter`/
-RPC-filter-override) still runs after `inst->Play()` in `Cue::Play()`'s per-wave loop, unlike the
-3D/volume state `P14-ORDER-001` already made order-independent -- because those filter methods
-hard-require a live `track_` to register SDL3_mixer's per-track cooked callback on (matching FNA's
-own identical `handle == IntPtr.Zero` guard). Making this order-independent too means persisting
-pending filter kind/frequency/Q before a track exists and applying it once one is created --
-a real, separable follow-up touching `SoundEffectInstance`'s DSP-callback machinery
-(`P9-XACT-011`/`P10-FILTER-002/003/004`/`P11-PAN-001`), not a rushed one-line reorder. **Needs its
-own scoped task before starting** (see `plan_audio.md`'s `P14-ORDER-002` entry) -- do not
-self-start without asking.
-
-**Otherwise, there is currently no open, scoped Audio task on this branch.** Whoever resumes next
-needs a fresh instruction from the user (approval for `P14-ORDER-002`, a new phase, a specific bug
-report, or explicit permission to run another audit pass) -- see §9 for what not to self-start
-without asking.
+**There is currently no open, scoped Audio task on this branch.** Whoever resumes next needs a
+fresh instruction from the user (a new phase, a specific bug report, or explicit permission to run
+another audit pass) -- see §9 for what not to self-start without asking.
 
 ---
 
@@ -899,12 +918,9 @@ without asking.
 ```
 Read NEXT.md first. Do not assume anything is complete beyond what NEXT.md §2/§4 state. Phases
 9, 10, 11, 12, 13, and 14 are all closed (plan_audio.md) -- every task ID in every one of those
-phases is checked [x] with a concrete, cited status, EXCEPT P14-ORDER-002, a real, verified,
-deliberately-deferred gap (per-track XACT filter establishment still runs after Play(), unlike the
-3D/volume state P14-ORDER-001 already made order-independent) needing its own scoped task and user
-go-ahead, not a self-start. There is otherwise NO open, scoped Audio task on this branch (§8) --
-do not self-start a new phase or audit pass; wait for the user to name a specific task, report a
-bug, approve P14-ORDER-002, or explicitly authorize another audit round (§9).
+phases is checked [x] with a concrete, cited status. There is NO open, scoped Audio task on this
+branch (§8) -- do not self-start a new phase or audit pass; wait for the user to name a specific
+task, report a bug, or explicitly authorize another audit round (§9).
 
 1. If the user names a specific task, inspect only the files needed for it -- do not refactor
    unrelated code. Confirm scope/approach with the user first if it's real feature work rather

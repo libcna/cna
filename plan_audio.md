@@ -5557,7 +5557,8 @@ written, per this branch's established practice.
   one is created, which is a real, separable follow-up, not a one-line reorder -- and, unlike the
   3D/volume case, FNA's own filter API has the identical "requires a live voice" constraint, so
   this is a narrower, more defensible architectural characteristic than a straightforward ordering
-  bug. Recorded as `P14-ORDER-002` below for a future pass, not force-fit into this one.
+  bug. Recorded as `P14-ORDER-002` below for a future pass, not force-fit into this one (later
+  completed -- see `P14-ORDER-002`'s own entry below).
   *Tests:* none added specifically for the ordering fix itself -- the actual benefit (whether the
   audio thread's very first output frame reflects the 3D/volume state or a later one does) is a
   real-time interleaving question a synchronous single-threaded test can't distinguish without
@@ -5567,14 +5568,91 @@ written, per this branch's established practice.
   via the full existing `Cue`/`SoundBank`/`SoundEffectInstance` test suites re-passing unchanged
   (no regression from the reorder) -- see Verification below.
 
-* [ ] P14-ORDER-002 (follow-up from `P14-ORDER-001`'s scope note, **not fixed this pass**): make
+* [x] P14-ORDER-002 (follow-up from `P14-ORDER-001`'s scope note, user-requested 2026-07-17): make
   per-track XACT filter establishment order-independent of `Play()`, the same way `P13-3D-001`
   already made spatial state order-independent -- persist pending filter kind/frequency/oneOverQ
   on `SoundEffectInstance` even before a track exists, and have `EnsureTrackDspState()`/
-  `INTERNAL_applyComposedTrackProperties()` apply it once a track is actually created. Left
-  unchecked deliberately: needs its own scoped task (touches `SoundEffectInstance`'s already
-  carefully-tuned DSP-callback machinery, `P9-XACT-011`/`P10-FILTER-002/003/004`/`P11-PAN-001`),
-  not a rushed side-fix bolted onto this pass.
+  `INTERNAL_applyComposedTrackProperties()` apply it once a track is actually created.
+  *Status:* Fixed. `INTERNAL_applyLowPassFilter`/`INTERNAL_applyHighPassFilter`/
+  `INTERNAL_applyBandPassFilter` no longer early-return `if (!track_)` -- they now always
+  lazily-allocate `filterState_` and write `kind`/`frequency`/`oneOverQ`/`baseFrequency`/
+  `baseOneOverQ`, and only *conditionally* call `MIX_SetTrackCookedCallback` when `track_` already
+  exists (deferring that one real-SDL3_mixer-registration step to `EnsureTrackDspState()`, called
+  from `Play()`'s existing `INTERNAL_applyComposedTrackProperties()`, once a track actually gets
+  created). `INTERNAL_applyXactTrackFilter`/`INTERNAL_applyEffectVariationFilter` similarly no
+  longer require `track_` -- the mixer format they need (`MIX_GetMixerFormat`, to convert the
+  authored Hz value into SDL3_mixer's normalized cutoff) is a device-level property available as
+  soon as the shared mixer exists, independent of whether *this* instance has a track yet.
+  `INTERNAL_applyRpcFilterOverride`'s guard dropped `!track_` too -- a non-`None` filter `kind`
+  already implies a base filter was established (which itself requires the mixer to exist), so
+  overriding frequency/Q before a track exists is safe by the same reasoning.
+  Independently re-verified against FNA's own equivalent (dead-code, never actually called for the
+  XACT path) `SoundEffectInstance.cs` filter methods before diverging from their literal
+  `handle == IntPtr.Zero` guard: those exist only for a hypothetical direct C# caller FNA never
+  has, since real FACT establishes a sound's filter atomically alongside its native voice with no
+  ordering gap to begin with -- this fix makes CNA match that atomicity instead of copying a guard
+  that was never actually reachable for XACT-driven playback anyway.
+  New shared `TryGetMixer()` helper (anonymous namespace, `SoundEffectInstance.cpp`): every one of
+  these methods' own `GetMixer()` call could previously only ever run *after* `Play()` had already
+  called it successfully once (gated by the very `!track_` guard this task removes), so a raw
+  `std::runtime_error` on "no audio hardware" was never actually observable there. Making these
+  methods callable before `Play()` genuinely opens a first-ever-`GetMixer()`-call path for the
+  first time -- `TryGetMixer()` catches that and returns `nullptr` instead of letting a raw
+  `std::runtime_error` escape into `Cue::Play()`, which (unlike `XactParser`/the `SoundBank`
+  constructor boundary) isn't a sanctioned raw-exception boundary; these are NOXNA-internal,
+  no-op-if-not-ready methods that must never throw at all, matching their pre-existing contract.
+  `Cue::Play()`'s per-wave loop reordered to match: the base filter (`INTERNAL_applyXactTrackFilter`/
+  `INTERNAL_applyEffectVariationFilter`) and the initial RPC filter override
+  (`INTERNAL_applyRpcFilterOverride`) now run *before* `inst->Play()` instead of after -- completing
+  the same "configure everything, then start" ordering `P14-ORDER-001` already applied to
+  Volume/Pitch/3D state, so a cue's very first mixed frame already has its authored filter applied
+  instead of playing unfiltered for a moment until the filter call caught up a few statements
+  later. `SoundBank::PlayCueInternal()` needed no further change -- its own `Apply3D()`-before-
+  `Play()` reorder from `P14-ORDER-001` already covers the 3D axis; filter establishment lives
+  entirely inside `Cue::Play()`'s own per-wave loop.
+  `CHECKLIST.md`: no accepted-deviation row needed changing -- this fixes an *internal* CNA
+  architecture gap (an ordering constraint `Cue.cpp` had to work around because
+  `SoundEffectInstance`'s own filter setters used to require a live track), not a documented
+  behavioral deviation from FNA/XNA; nothing here was ever listed as an accepted deviation to
+  begin with.
+  *Tests:* 5 new (`SoundEffectInstanceTests.cpp`): `ApplyLowPassFilterBeforePlayPersistsAndProcessesSamplesImmediately`
+  (replaces the old `ApplyLowPassFilterBeforePlayIsNoOp`, now proving the filter is genuinely live
+  before `Play()`, not just recorded, via the same first-sample state-variable filter math the
+  post-`Play()` test already pins down), `ApplyLowPassFilterBeforePlayAttachesOncePlaying` (the
+  pending state survives into a real, attached callback once `Play()` actually creates the track),
+  `LowPassFilterAppliedBeforePlaySurvivesMoveConstructionThenAttaches` (a new scenario the fix
+  makes meaningful for the first time -- moving an instance with a *pending*, not-yet-attached
+  filter, then `Play()`ing the moved-to instance), `ApplyXactTrackFilterBeforePlayPersistsAndAttachesOncePlaying`
+  (replaces `ApplyXactTrackFilterBeforePlayIsNoOp`), `ApplyRpcFilterOverrideBeforePlayPersistsAndAttachesOncePlaying`
+  (new, the RPC-override axis specifically). 3 existing `CueTests.cpp` tests
+  (`PlayWiresRealXactTrackFilterIntoSpawnedInstance`, `PlayAppliesInitialFilterFrequencyRpcEvaluationOverridingTrackBaseValue`,
+  `PlayWiresEffectVariationFilterFrequencyAndQIntoSpawnedInstance`) had their comments updated to
+  record that they now also serve as regression coverage for the pending-state path specifically
+  (not just "the final result is correct") -- confirmed by an intermediate `git stash` step (see
+  below) that reverting *only* the `SoundEffectInstance` side while keeping `Cue.cpp`'s reorder
+  makes all three fail (`kind` stays `0`/`None`, since the filter calls now run before `Play()`
+  creates a track, and the old `!track_` guard would make them silent no-ops again).
+  `git stash`-verified in two stages: (1) stashing only `SoundEffectInstance.{hpp,cpp}` while
+  keeping `Cue.cpp`'s reorder and all new tests reproduces exactly the 3 `CueTests.cpp` failures
+  described above; (2) stashing all three production files (`SoundEffectInstance.{hpp,cpp}`,
+  `Cue.cpp`) together reproduces the 5 new `SoundEffectInstanceTests.cpp` failures (the 3
+  `CueTests.cpp` tests pass in this fully-reverted state too, since reverting *both* files together
+  returns to the original, already-self-consistent pre-`P14-ORDER-002` baseline where the filter
+  calls ran after `Play()` against the old `!track_`-guarded methods -- exactly as before this task
+  touched anything; stage (1) above is what isolates this task's own specific contribution).
+  Audio-scoped suite 552/552 pass post-fix (was 549/549 pre-existing; +3 net new tests -- 5 added,
+  2 renamed/replaced -- zero regressions). Full whole-repo `CnaTests` suite also reverified green:
+  4651/4653 pass (2 pre-existing hardware-only skips). A fresh one-off ASan+UBSan build of the
+  audio-scoped subset: all 552 tests pass; LeakSanitizer flags 9024 bytes across 12 allocations,
+  every one in an `<unknown module>` frame or `libdrm.so.2` (graphics/driver init, not audio) --
+  re-running just the 8 new/updated P14-ORDER-002 tests in isolation under the same ASan+UBSan
+  binary produces zero leak reports at all, confirming the full-suite leaks are pre-existing
+  environment/driver noise unrelated to `filterState_` or this task's code paths. The existing
+  `SoundEffectInstanceTest.ConcurrentFilterUpdatesDoNotRaceWithRealMixingThread` stress test
+  (`P11-PAN-001`'s own ThreadSanitizer coverage) re-verified passing in the normal build; a fresh
+  one-off ThreadSanitizer rebuild and 10-repeat re-run of that same stress test is clean -- 10/10
+  passed, zero `WARNING: ThreadSanitizer` / data-race reports -- confirming no new race from this
+  task's own `filterState_`-without-a-track code path.
 
 * [x] P14-PARSER-001 (external audit finding 4, medium severity): `XactParser.cpp`'s internal
   `Ctx::cstr()` helper (reads a null-terminated string) could push its cursor one byte past the

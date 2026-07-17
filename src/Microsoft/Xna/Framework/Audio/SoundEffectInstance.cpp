@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <exception>
 #include <numbers>
 #include <utility>
 
@@ -173,6 +174,29 @@ namespace Microsoft::Xna::Framework::Audio
                 MIX_StopTrack(track, 0);
                 MIX_DestroyTrack(track);
                 trackPtr = nullptr;
+            }
+        }
+
+        // P14-ORDER-002: CNA::Internal::Audio::GetMixer() throws a raw std::runtime_error on its
+        // very first-ever call if no audio hardware/device is available (P9-HARDWARE-002). Every
+        // INTERNAL_apply*Filter call site used to be reachable only after Play() had already
+        // called GetMixer() successfully at least once (gated by an `if (!track_) return;` guard
+        // this task removes), so a throw here was never actually observable. Now that filter
+        // setup can run before Play() too (order-independent, matching how FACT establishes a
+        // track's filter atomically alongside the voice itself), this may genuinely be the first
+        // GetMixer() call in the process. These are all NOXNA-internal, no-op-if-not-ready methods
+        // that never throw -- swallow the failure here rather than let a raw std::runtime_error
+        // escape into Cue::Play(), which isn't a sanctioned raw-exception boundary the way
+        // XactParser/SoundBank's constructor are.
+        MIX_Mixer* TryGetMixer()
+        {
+            try
+            {
+                return CNA::Internal::Audio::GetMixer();
+            }
+            catch (const std::exception&)
+            {
+                return nullptr;
             }
         }
 
@@ -632,10 +656,17 @@ namespace Microsoft::Xna::Framework::Audio
     void SoundEffectInstance::INTERNAL_applyLowPassFilter(float cutoff, float oneOverQ)
     {
 #ifdef SOUND_ENABLED
-        if (!track_) return; // matches FNA's `handle == IntPtr.Zero` guard
+        // P14-ORDER-002: was `if (!track_) return;` -- now establishes/updates the pending filter
+        // state regardless of whether a live track exists yet, so a caller (Cue::Play()) can wire
+        // a filter before or after inst->Play() with an identical final result.
+        // EnsureTrackDspState()/INTERNAL_applyComposedTrackProperties() (called from Play()) picks
+        // up whatever kind/frequency/oneOverQ is already sitting in filterState_ from a call like
+        // this one and registers the real SDL3_mixer callback once a track actually exists.
+        MIX_Mixer* mixer = TryGetMixer();
+        if (!mixer) return; // no audio hardware -- matches the prior no-track no-op exactly
+
         if (!filterState_) filterState_ = std::make_unique<FilterState>();
 
-        MIX_Mixer* mixer = CNA::Internal::Audio::GetMixer();
         MIX_LockMixer(mixer);
         filterState_->kind         = FilterState::Kind::LowPass;
         filterState_->frequency    = cutoff;
@@ -644,7 +675,10 @@ namespace Microsoft::Xna::Framework::Audio
         filterState_->baseOneOverQ  = oneOverQ;
         MIX_UnlockMixer(mixer);
 
-        MIX_SetTrackCookedCallback(AsTrack(track_), FilterMixCallback, filterState_.get());
+        // Only registers the real callback once there's a track to attach it to (matches
+        // MIX_SetTrackCookedCallback's own "may be called... at any time" contract) -- otherwise
+        // this is deferred to EnsureTrackDspState(), called from Play() once a track is created.
+        if (track_) MIX_SetTrackCookedCallback(AsTrack(track_), FilterMixCallback, filterState_.get());
 #else
         (void)cutoff; (void)oneOverQ;
 #endif
@@ -653,10 +687,12 @@ namespace Microsoft::Xna::Framework::Audio
     void SoundEffectInstance::INTERNAL_applyHighPassFilter(float cutoff, float oneOverQ)
     {
 #ifdef SOUND_ENABLED
-        if (!track_) return;
+        // P14-ORDER-002: see INTERNAL_applyLowPassFilter's identical comment above.
+        MIX_Mixer* mixer = TryGetMixer();
+        if (!mixer) return;
+
         if (!filterState_) filterState_ = std::make_unique<FilterState>();
 
-        MIX_Mixer* mixer = CNA::Internal::Audio::GetMixer();
         MIX_LockMixer(mixer);
         filterState_->kind         = FilterState::Kind::HighPass;
         filterState_->frequency    = cutoff;
@@ -665,7 +701,7 @@ namespace Microsoft::Xna::Framework::Audio
         filterState_->baseOneOverQ  = oneOverQ;
         MIX_UnlockMixer(mixer);
 
-        MIX_SetTrackCookedCallback(AsTrack(track_), FilterMixCallback, filterState_.get());
+        if (track_) MIX_SetTrackCookedCallback(AsTrack(track_), FilterMixCallback, filterState_.get());
 #else
         (void)cutoff; (void)oneOverQ;
 #endif
@@ -674,10 +710,12 @@ namespace Microsoft::Xna::Framework::Audio
     void SoundEffectInstance::INTERNAL_applyBandPassFilter(float center, float oneOverQ)
     {
 #ifdef SOUND_ENABLED
-        if (!track_) return;
+        // P14-ORDER-002: see INTERNAL_applyLowPassFilter's identical comment above.
+        MIX_Mixer* mixer = TryGetMixer();
+        if (!mixer) return;
+
         if (!filterState_) filterState_ = std::make_unique<FilterState>();
 
-        MIX_Mixer* mixer = CNA::Internal::Audio::GetMixer();
         MIX_LockMixer(mixer);
         filterState_->kind         = FilterState::Kind::BandPass;
         filterState_->frequency    = center;
@@ -686,7 +724,7 @@ namespace Microsoft::Xna::Framework::Audio
         filterState_->baseOneOverQ  = oneOverQ;
         MIX_UnlockMixer(mixer);
 
-        MIX_SetTrackCookedCallback(AsTrack(track_), FilterMixCallback, filterState_.get());
+        if (track_) MIX_SetTrackCookedCallback(AsTrack(track_), FilterMixCallback, filterState_.get());
 #else
         (void)center; (void)oneOverQ;
 #endif
@@ -765,9 +803,13 @@ namespace Microsoft::Xna::Framework::Audio
         uint8_t filterType, float frequencyHz, uint8_t qfactorRaw)
     {
 #ifdef SOUND_ENABLED
-        if (!track_) return;
+        // P14-ORDER-002: was `if (!track_) return;` -- the mixer's own format (sample rate) is a
+        // device-level property, available as soon as the mixer exists, independent of whether
+        // this particular instance has a track yet; see INTERNAL_applyLowPassFilter's comment for
+        // why the underlying filter state itself is now order-independent too.
+        MIX_Mixer* mixer = TryGetMixer();
+        if (!mixer) return;
 
-        MIX_Mixer* mixer = CNA::Internal::Audio::GetMixer();
         SDL_AudioSpec spec{};
         if (!MIX_GetMixerFormat(mixer, &spec) || spec.freq <= 0) return;
 
@@ -790,9 +832,10 @@ namespace Microsoft::Xna::Framework::Audio
         uint8_t filterType, float frequencyHz, float oneOverQ)
     {
 #ifdef SOUND_ENABLED
-        if (!track_) return;
+        // P14-ORDER-002: see INTERNAL_applyXactTrackFilter's identical comment above.
+        MIX_Mixer* mixer = TryGetMixer();
+        if (!mixer) return;
 
-        MIX_Mixer* mixer = CNA::Internal::Audio::GetMixer();
         SDL_AudioSpec spec{};
         if (!MIX_GetMixerFormat(mixer, &spec) || spec.freq <= 0) return;
 
@@ -817,7 +860,14 @@ namespace Microsoft::Xna::Framework::Audio
         // 0xFF)`) -- an RPC targeting filter frequency/Q is a no-op for a track with no filter
         // at all, same as this method's caller (Cue::ReconcileState()) applying it uniformly to
         // every active wave reference regardless of whether that particular one has a filter.
-        if (!track_ || !filterState_ || filterState_->kind == FilterState::Kind::None) return;
+        // P14-ORDER-002: `!track_` removed from this guard -- an RPC override can now update the
+        // pending filter state before a track exists too, the same as the base filter above; a
+        // non-`None` kind already implies a base filter was established (which itself requires the
+        // mixer to already exist), so this is safe to apply regardless of `track_`.
+        if (!filterState_ || filterState_->kind == FilterState::Kind::None) return;
+
+        MIX_Mixer* mixer = TryGetMixer();
+        if (!mixer) return;
 
         // rpcFrequencyHz needs the real device sample rate to convert Hz -> SDL3_mixer's
         // normalized cutoff domain (same conversion INTERNAL_applyXactTrackFilter uses); if the
@@ -826,7 +876,6 @@ namespace Microsoft::Xna::Framework::Audio
         float frequency = filterState_->baseFrequency;
         if (rpcFrequencyHz >= 0.0f)
         {
-            MIX_Mixer* mixer = CNA::Internal::Audio::GetMixer();
             SDL_AudioSpec spec{};
             if (MIX_GetMixerFormat(mixer, &spec) && spec.freq > 0)
                 frequency = INTERNAL_calculateFilterCutoff(rpcFrequencyHz, static_cast<float>(spec.freq));
@@ -838,7 +887,6 @@ namespace Microsoft::Xna::Framework::Audio
         // own already-in-Q-units output).
         const float oneOverQ = (rpcQFactor >= 0.0f) ? (1.0f / rpcQFactor) : filterState_->baseOneOverQ;
 
-        MIX_Mixer* mixer = CNA::Internal::Audio::GetMixer();
         MIX_LockMixer(mixer);
         filterState_->frequency = frequency;
         filterState_->oneOverQ  = oneOverQ;

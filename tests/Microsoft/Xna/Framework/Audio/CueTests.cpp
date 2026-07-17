@@ -3832,6 +3832,12 @@ TEST(CueTest, PlayWiresEffectVariationVolumeIntoSpawnedInstance)
     EXPECT_NEAR(inst->getVolumeProperty(), expected, 1e-4f);
 }
 
+// P14-ORDER-002: Cue::Play()'s per-wave loop now calls INTERNAL_applyEffectVariationFilter()
+// BEFORE inst->Play() rather than after (the filter no longer requires a live track_ to establish
+// its pending state, only to register the real SDL3_mixer callback) -- this test's assertions
+// only pass if that pending-state path actually works, since by the time it runs here the base
+// filter/RPC-override calls above it already exercised the exact same no-track-yet code path this
+// task added.
 TEST(CueTest, PlayWiresEffectVariationFilterFrequencyAndQIntoSpawnedInstance)
 {
     auto cue = std::unique_ptr<Cue>(SharedEffectVariationBank().GetCue("EffectVarCue"));
@@ -4199,6 +4205,14 @@ TEST(CueTest, Apply3DUpdatesOrientationAngleVariableToReflectLiveRelativeFacing)
 // (type=2, frequency=8000Hz, qfactor=6 -> oneOverQ=0.5). Play() must reach all the way from
 // XactParser's retained XsbWaveRef fields through Cue::Play()'s new
 // INTERNAL_applyXactTrackFilter() call into the spawned SoundEffectInstance's real filter state.
+// P14-ORDER-002: this call now happens BEFORE the spawned instance's own inst->Play() (see
+// Cue::Play()'s per-wave loop) instead of after -- this test's assertions only pass because
+// INTERNAL_applyXactTrackFilter() establishes the pending filter state in filterState_ regardless
+// of whether a live track exists yet, then Play() (via EnsureTrackDspState()) attaches the real
+// SDL3_mixer callback to that already-populated state. Reverting just the SoundEffectInstance-side
+// fix while keeping this ordering would make this filter call a no-op (its old `if (!track_)
+// return;` guard would trip, since track_ is still null at that point), so this test doubles as a
+// regression guard for the pending-state path, not just "the final result is correct".
 TEST(CueTest, PlayWiresRealXactTrackFilterIntoSpawnedInstance)
 {
     auto cue = std::unique_ptr<Cue>(SharedFilterBank().GetCue("FilterCue"));
@@ -4229,7 +4243,11 @@ TEST(CueTest, PlayWiresRealXactTrackFilterIntoSpawnedInstance)
 // Play() must apply the RPC's initial evaluation (variable defaults to 0.0 -> curve's 2000Hz
 // endpoint) on top of the track's own authored base filter -- proving the wiring reaches all the
 // way from Cue::Play()'s new INTERNAL_applyRpcFilterOverride() call into the spawned instance's
-// real filter state, not just the one-shot XACT-authored value.
+// real filter state, not just the one-shot XACT-authored value. P14-ORDER-002: both the base
+// filter and this RPC override now run BEFORE the spawned instance's inst->Play() (see
+// Cue::Play()'s per-wave loop) -- same pending-state-path regression coverage rationale as
+// PlayWiresRealXactTrackFilterIntoSpawnedInstance above, for the RPC-override entry point
+// specifically.
 TEST(CueTest, PlayAppliesInitialFilterFrequencyRpcEvaluationOverridingTrackBaseValue)
 {
     auto cue = std::unique_ptr<Cue>(FilterFreqRpcBank().GetCue("FilterFreqRpcCue"));
