@@ -27,6 +27,23 @@ namespace Microsoft::Devices::Sensors::Detail
         // remembering to repeat it manually). Defined locally here rather
         // than reusing that header's version to avoid pulling SDL3 headers
         // into this deliberately SDL-free, NDK-only file.
+        //
+        // Task ANDR2-004 (2026-07-17, external audit `audit_devices_2026-07-17.md`):
+        // previously called onExit_() directly, with no explicit noexcept
+        // and no try/catch -- a destructor with a user-provided body is
+        // implicitly noexcept(true) unless stated otherwise (this one was
+        // never stated otherwise), so a throwing onExit_() (e.g. Run()'s own
+        // exit guard's std::lock_guard construction, if std::mutex::lock()
+        // ever threw std::system_error for a genuine OS-level failure) would
+        // have already called std::terminate() immediately -- matching
+        // ScopeExit's own already-fixed reasoning (Task P7-5) exactly, just
+        // never applied here when this class was defined locally for
+        // AndroidSensorBridge. Run()'s own exit guard is the one thing that
+        // *must* still publish runState_ = NotRunning and notify
+        // runExitedCv_ even if some earlier part of its own body somehow
+        // threw -- an unswallowed exception here would strand every
+        // Stop()/destructor caller waiting on that notification forever, in
+        // addition to crashing the process outright.
         template <typename F>
         class RunExitGuard
         {
@@ -36,9 +53,21 @@ namespace Microsoft::Devices::Sensors::Detail
             {
             }
 
-            ~RunExitGuard()
+            ~RunExitGuard() noexcept
             {
-                onExit_();
+                try
+                {
+                    onExit_();
+                }
+                catch (...)
+                {
+                    // Swallowed deliberately -- see this class's own doc
+                    // comment: letting this propagate would std::terminate()
+                    // the whole process (this destructor is noexcept) and,
+                    // even if it somehow didn't, would skip publishing the
+                    // terminal run state every Stop()/destructor caller is
+                    // waiting on.
+                }
             }
 
             RunExitGuard(const RunExitGuard&) = delete;

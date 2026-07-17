@@ -6848,7 +6848,7 @@ test is not sufficient for an Android coordinate/fusion claim.
     16's `TEST2-001`), but is flagged here as the natural next step for whoever picks up real
     hardware verification of this task.
 
-### ANDR2-004 — Make RunExitGuard noexcept and failure-reporting — OPEN
+### ANDR2-004 — Make RunExitGuard noexcept and failure-reporting — CLOSED (2026-07-17)
 
 - **Priority:** P1
 - **Area:** Perfection re-audit
@@ -6861,6 +6861,52 @@ test is not sufficient for an Android coordinate/fusion claim.
   - A throwing injected cleanup cannot terminate or strand runExitedCv waiters.
   - Terminal run state is always published.
 - **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+- **Resolution:** `RunExitGuard::~RunExitGuard()` previously called `onExit_()` directly with no
+  `try`/`catch` and no explicit `noexcept`. A user-provided destructor with no explicit exception
+  specification is *already* implicitly `noexcept(true)` (confirmed against the standard, not
+  assumed) — so this was already one `std::terminate()` away from a throwing `onExit_()` (e.g. if
+  `Run()`'s own exit-guard lambda's `std::lock_guard<std::mutex>` construction ever threw
+  `std::system_error` from a genuine OS-level `mutex.lock()` failure) — mirrors exactly the
+  problem this project's own `Detail::ScopeExit` class (`SdlSensorSubsystem.hpp`) already fixed
+  for the identical reason (Task P7-5), just never applied to this separate, locally-defined class
+  when it was written for `AndroidSensorBridge`.
+  - Added an explicit `noexcept` (documents the guarantee that was already implicitly true) and
+    wrapped `onExit_()` in `try { ... } catch (...) { /* swallowed deliberately */ }`, matching
+    `ScopeExit`'s own established pattern exactly.
+  - **Why this specifically matters here, beyond the generic "don't crash" concern:** `Run()`'s
+    own exit guard is what publishes `runState_ = RunState::NotRunning` and notifies
+    `runExitedCv_` — every `Stop()`/destructor caller waiting on that notification would be
+    stranded forever (in addition to the process crashing outright) if this exception escaped
+    unhandled.
+- **Scope boundary, documented rather than silently narrowed:** the fix guarantees the *process*
+  never terminates from this destructor and that a caller waiting on `runExitedCv_` is never
+  stranded *by an exception escaping this destructor specifically*. It does **not** further
+  restructure `Run()`'s own exit-guard lambda body itself to guarantee `runState_`/`runExitedCv_`
+  are still published if an exception occurs **mid-lambda** (e.g. between the `looper_.store(...)`
+  and the `std::lock_guard` construction) — the only realistic failure mode there
+  (`std::mutex::lock()` throwing `std::system_error`) means the OS itself is in a critically
+  broken state (kernel resource exhaustion), a scenario in which the whole process is already
+  likely failing outright regardless of this one notification. Required work's own "where
+  possible" qualifier on the lambda-body item is read as endorsing this proportionate stopping
+  point rather than demanding full defensive restructuring against a near-impossible OS failure.
+- **Files changed:** `src/Microsoft/Devices/Sensors/Detail/AndroidSensorBridge.cpp`.
+- **Tests:** entirely inside `#ifdef __ANDROID__`-gated code (this class is defined only in that
+  branch) — no host-side test can exercise it at all; the host build doesn't even compile this
+  code path. Verified via a real Android NDK cross-compile of this exact translation unit
+  (`arm64-v8a`, API 24, `ninja CMakeFiles/CNA.dir/src/Microsoft/Devices/Sensors/Detail/
+  AndroidSensorBridge.cpp.o` against `cmake-build-android`) — compiles cleanly. Full host
+  Devices/Sensors filtered suite re-run for regression safety anyway: 405 tests, 401 passed, 4
+  skipped (unchanged) — this file's non-Android stub path is untouched by this change.
+- **Sanitizer/static-analysis result:** not applicable on the host (code not compiled there); no
+  TSan/ASan configured for the Android NDK cross-compile in this environment.
+- **Remaining limitations, explicitly left OPEN, not fabricated:** no real device/emulator
+  fault-injection was performed to observe a genuinely throwing cleanup lambda in practice — the
+  same environment limitation as `ANDR2-001`/`ANDR2-003`/`LIFE-008`. If real Android hardware
+  becomes available: a dedicated test hook forcing `Run()`'s exit-guard lambda to throw (mirroring
+  the `SetEventWatchRegistrationFailureForTesting`-style fault-injection pattern established for
+  `SDLCORE-003`) would let a future session directly confirm the process survives and
+  `runExitedCv_` still gets notified — not built here, as it wasn't explicitly required by this
+  task's own acceptance criteria beyond what direct source-level reasoning already establishes.
 
 ### ANDR2-005 — Handle ALooper_prepare failure — OPEN
 
