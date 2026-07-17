@@ -278,6 +278,17 @@ namespace CNA::Internal::Backends::WebGPU
             for (int i = 25; i < 32; ++i) out[i] = 0.0f;
         }
 
+        // pbr3d.wgsl's third (small) uniform buffer: PbrEffect's MetallicFactor/RoughnessFactor,
+        // the only per-draw PBR-specific scalars not already covered by FillExtUniforms()'s
+        // diffuseColor/ambientColor or FillLitLightUniforms()'s emissiveColor/world/eyePos.
+        void FillPbrFactors(std::array<float, 4>& out, const GpuDrawParams& p)
+        {
+            out[0] = p.pbrMetallicFactor;
+            out[1] = p.pbrRoughnessFactor;
+            out[2] = 0.0f;
+            out[3] = 0.0f;
+        }
+
         [[nodiscard]] bool IsSurfaceRecoverable(WGPUSurfaceGetCurrentTextureStatus status)
         {
             return status == WGPUSurfaceGetCurrentTextureStatus_Timeout ||
@@ -594,6 +605,9 @@ namespace CNA::Internal::Backends::WebGPU
         DestroyLitTexturedResources();
         DestroyAlphaTestResources();
         DestroyDualTextureResources();
+        DestroyPbrResources();
+        pbrDefaultWhiteTexture_.reset();
+        pbrDefaultFlatNormalTexture_.reset();
         for (WGPUBindGroup bg : pendingBindGroupReleases_) wgpuBindGroupRelease(bg);
         for (WGPUBuffer buf : pendingBufferReleases_) wgpuBufferRelease(buf);
         for (WGPUSampler& sampler : samplerCache_)
@@ -812,6 +826,8 @@ namespace CNA::Internal::Backends::WebGPU
             CreateAlphaTestResources();
         if (formatChanged || dualTextureShader_ == nullptr)
             CreateDualTextureResources();
+        if (formatChanged || pbrShader_ == nullptr)
+            CreatePbrResources();
     }
 
     void WebGPUGraphicsBackend::RecreateDepthTexture()
@@ -2556,6 +2572,7 @@ struct VertexOutput {
         RenderLitTexturedDraws(pass);
         RenderAlphaTestDraws(pass);
         RenderDualTextureDraws(pass);
+        RenderPbrDraws(pass);
         RenderSprites(pass);
         wgpuRenderPassEncoderEnd(pass);
         wgpuRenderPassEncoderRelease(pass);
@@ -2928,9 +2945,21 @@ struct VertexOutput {
             QueueLitTexturedDraw(vb, nullptr, world, view, projection, primitive, primitiveCount, params);
             return;
         }
-        // No env-map/skinned shader exists yet (Phase 58 remaining WGSL variants) -- fall back
-        // exactly like IGraphicsBackend's own default implementation did before this override
-        // existed. This will itself throw for anything other than a stride-16 buffer
+        // Unskinned PbrEffect (stride 48, VertexPositionNormalTangentTexture). Gated on
+        // !params.skinned directly (rather than needsUnsupportedEffect, which already excludes
+        // skinned draws via its own OR-condition) so a SkinnedPbrEffect draw -- stride 68, a
+        // separate pre-existing gap since this backend has no skinning shader at all -- keeps
+        // falling through to the fallback below unchanged.
+        if (!needsAlphaTest && !needsDualTexture && params.pbr && !params.skinned && stride == 48 &&
+            params.texture0 != nullptr)
+        {
+            QueuePbrDraw(vb, nullptr, world, view, projection, primitive, primitiveCount, params);
+            return;
+        }
+        // No env-map/skinned shader exists yet (env-map: Phase 58 remaining WGSL variant;
+        // skinned: this backend has no skinning support at all, a separate pre-existing gap) --
+        // fall back exactly like IGraphicsBackend's own default implementation did before this
+        // override existed. This will itself throw for anything other than a stride-16 buffer
         // (DrawColoredPrimitives' own requirement), matching the pre-existing "unsupported, fail
         // loudly" behaviour.
         DrawColoredPrimitives(vb, world, view, projection, primitive, primitiveCount);
@@ -2973,6 +3002,14 @@ struct VertexOutput {
             params.texture0 != nullptr)
         {
             QueueLitTexturedDraw(vb, &ib, world, view, projection, primitive, primitiveCount, params);
+            return;
+        }
+        // See DrawPrimitivesEx()'s identical branch for why this is gated on !params.skinned
+        // directly rather than needsUnsupportedEffect.
+        if (!needsAlphaTest && !needsDualTexture && params.pbr && !params.skinned && stride == 48 &&
+            params.texture0 != nullptr)
+        {
+            QueuePbrDraw(vb, &ib, world, view, projection, primitive, primitiveCount, params);
             return;
         }
         DrawIndexedColoredPrimitives(vb, ib, world, view, projection, primitive, primitiveCount);
@@ -3569,7 +3606,498 @@ struct VertexOutput {
         texturedDrawCommands_.push_back(std::move(command));
         framePending_ = true;
     }
+
+    void WebGPUGraphicsBackend::DestroyPbrResources()
+    {
+        for (auto& [key, pipe] : pbrPipelines_)
+        {
+            if (pipe != nullptr) wgpuRenderPipelineRelease(pipe);
+        }
+        pbrPipelines_.clear();
+        if (pbrPipelineLayout_ != nullptr) wgpuPipelineLayoutRelease(pbrPipelineLayout_);
+        if (pbrBindGroupLayout1_ != nullptr) wgpuBindGroupLayoutRelease(pbrBindGroupLayout1_);
+        if (pbrBindGroupLayout0_ != nullptr) wgpuBindGroupLayoutRelease(pbrBindGroupLayout0_);
+        if (pbrShader_ != nullptr) wgpuShaderModuleRelease(pbrShader_);
+        pbrPipelineLayout_ = nullptr;
+        pbrBindGroupLayout1_ = nullptr;
+        pbrBindGroupLayout0_ = nullptr;
+        pbrShader_ = nullptr;
+    }
+
+    void WebGPUGraphicsBackend::CreatePbrResources()
+    {
+        DestroyPbrResources();
+        if (surfaceFormat_ == WGPUTextureFormat_Undefined)
+            return;
+
+        // Ported from EasyGLGraphicsBackend::EnsurePbrProgram()'s GLSL PbrLight() helper
+        // unchanged: GGX/Trowbridge-Reitz D, Smith-Schlick-GGX visibility (direct-lighting
+        // k=(roughness+1)^2/8), and Schlick Fresnel -- the glTF 2.0 spec's own reference BRDF
+        // (Appendix B.3.3/B.3.4/B.3.2). The TBN basis is built per-pixel from the vertex tangent
+        // (Gram-Schmidt re-orthogonalized against the interpolated world normal), with the
+        // bitangent sign from tangent.w (glTF convention) -- identical to the EasyGL fragment
+        // shader's own construction. Group 0's Uniforms/LitLightParams struct shapes match
+        // lit_textured3d.wgsl's own field-for-field (populated by the same
+        // FillExtUniforms()/FillLitLightUniforms() helpers); PbrFactors is the one genuinely new
+        // (small) buffer this shader needs.
+        static constexpr char shaderSource[] = R"WGSL(
+struct Uniforms {
+    mvp: mat4x4f,
+    diffuseColor: vec4f,
+    ambientLighting: vec4f,
+    light0DirTexture: vec4f,
+    light0DiffuseVertexColor: vec4f,
+};
+@group(0) @binding(0) var<uniform> u: Uniforms;
+
+struct LitLightParams {
+    light1Dir: vec4f,
+    light1Diffuse: vec4f,
+    light2Dir: vec4f,
+    light2Diffuse: vec4f,
+    emissiveColor: vec4f,
+    world: mat4x4f,
+    eyePos: vec4f,
+    light0Specular: vec4f,
+    light1Specular: vec4f,
+    light2Specular: vec4f,
+    specularColorPower: vec4f,
+    normalMatrixCol0: vec4f,
+    normalMatrixCol1: vec4f,
+    normalMatrixCol2: vec4f,
+};
+@group(0) @binding(1) var<uniform> lp: LitLightParams;
+
+struct PbrFactors {
+    metallicRoughness: vec4f,
+};
+@group(0) @binding(2) var<uniform> pf: PbrFactors;
+
+@group(1) @binding(0) var texSampler: sampler;
+@group(1) @binding(1) var baseColorTex: texture_2d<f32>;
+@group(1) @binding(2) var normalTex: texture_2d<f32>;
+@group(1) @binding(3) var metallicRoughnessTex: texture_2d<f32>;
+@group(1) @binding(4) var emissiveTex: texture_2d<f32>;
+@group(1) @binding(5) var occlusionTex: texture_2d<f32>;
+
+struct VertexInput {
+    @location(0) position: vec3f,
+    @location(1) normal: vec3f,
+    @location(2) tangent: vec4f,
+    @location(3) uv: vec2f,
+};
+struct VertexOutput {
+    @builtin(position) position: vec4f,
+    @location(0) uv: vec2f,
+    @location(1) worldNormal: vec3f,
+    @location(2) worldTangent: vec3f,
+    @location(3) bitangentSign: f32,
+    @location(4) worldPos: vec3f,
+};
+@vertex fn vs_main(input: VertexInput) -> VertexOutput {
+    var output: VertexOutput;
+    output.position = u.mvp * vec4f(input.position, 1.0);
+    output.uv = input.uv;
+    let normalMatrix = mat3x3f(lp.normalMatrixCol0.xyz, lp.normalMatrixCol1.xyz, lp.normalMatrixCol2.xyz);
+    output.worldNormal = normalMatrix * input.normal;
+    // Tangent transforms as a plain direction under mat3(world) (uniform-scale assumption),
+    // matching EnsurePbrProgram()'s own documented simplification.
+    let worldMat3 = mat3x3f(lp.world[0].xyz, lp.world[1].xyz, lp.world[2].xyz);
+    output.worldTangent = worldMat3 * input.tangent.xyz;
+    output.bitangentSign = input.tangent.w;
+    output.worldPos = (lp.world * vec4f(input.position, 1.0)).xyz;
+    return output;
 }
+
+fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: vec3f, roughness: f32, metallic: f32) -> vec3f {
+    let h = normalize(v + l);
+    let ndotl = max(dot(n, l), 0.0);
+    let ndotv = max(dot(n, v), 1e-4);
+    let ndoth = max(dot(n, h), 0.0);
+    let vdoth = max(dot(v, h), 0.0);
+    let a2 = pow(roughness, 4.0);
+    let dTerm = ndoth * ndoth * (a2 - 1.0) + 1.0;
+    let d = a2 / (3.14159265 * dTerm * dTerm + 1e-7);
+    var k = roughness + 1.0;
+    k = k * k / 8.0;
+    let g = (ndotv / (ndotv * (1.0 - k) + k)) * (ndotl / (ndotl * (1.0 - k) + k));
+    let f = f0 + (vec3f(1.0) - f0) * pow(clamp(1.0 - vdoth, 0.0, 1.0), 5.0);
+    let specular = (d * g * f) / max(4.0 * ndotv * ndotl, 1e-4);
+    let diffuseColor = albedo * (1.0 - metallic);
+    let kd = vec3f(1.0) - f;
+    return (kd * diffuseColor / 3.14159265 + specular) * lightColor * ndotl;
+}
+
+@fragment fn fs_main(input: VertexOutput) -> @location(0) vec4f {
+    let baseColorSample = textureSample(baseColorTex, texSampler, input.uv);
+    let albedo = baseColorSample.rgb * u.diffuseColor.rgb;
+    let alpha = baseColorSample.a * u.diffuseColor.a;
+
+    let n0 = normalize(input.worldNormal);
+    let t0 = normalize(input.worldTangent - n0 * dot(n0, input.worldTangent));
+    let b0 = cross(n0, t0) * input.bitangentSign;
+    let tbn = mat3x3f(t0, b0, n0);
+    let sampledNormal = textureSample(normalTex, texSampler, input.uv).rgb * 2.0 - 1.0;
+    let finalNormal = normalize(tbn * sampledNormal);
+
+    let mr = textureSample(metallicRoughnessTex, texSampler, input.uv);
+    let roughness = clamp(mr.g * pf.metallicRoughness.y, 0.045, 1.0);
+    let metallic = clamp(mr.b * pf.metallicRoughness.x, 0.0, 1.0);
+
+    let eye = normalize(lp.eyePos.xyz - input.worldPos);
+    let f0 = mix(vec3f(0.04), albedo, metallic);
+
+    // Same disabled-light NaN guard as lit_textured3d.wgsl: a disabled DirectionalLight forwards
+    // Direction=(0,0,0) (only DiffuseColor is zeroed), and normalize() on a true zero vector is
+    // undefined and can poison the whole sum with NaN.
+    let dir0sq = dot(u.light0DirTexture.xyz, u.light0DirTexture.xyz);
+    let dir1sq = dot(lp.light1Dir.xyz, lp.light1Dir.xyz);
+    let dir2sq = dot(lp.light2Dir.xyz, lp.light2Dir.xyz);
+    let l0 = select(vec3f(0.0), normalize(-u.light0DirTexture.xyz), dir0sq > 0.0);
+    let l1 = select(vec3f(0.0), normalize(-lp.light1Dir.xyz), dir1sq > 0.0);
+    let l2 = select(vec3f(0.0), normalize(-lp.light2Dir.xyz), dir2sq > 0.0);
+
+    var lo = vec3f(0.0);
+    lo += pbrLight(finalNormal, eye, l0, u.light0DiffuseVertexColor.xyz, albedo, f0, roughness, metallic);
+    lo += pbrLight(finalNormal, eye, l1, lp.light1Diffuse.xyz, albedo, f0, roughness, metallic);
+    lo += pbrLight(finalNormal, eye, l2, lp.light2Diffuse.xyz, albedo, f0, roughness, metallic);
+
+    let occlusion = textureSample(occlusionTex, texSampler, input.uv).r;
+    let ambient = u.ambientLighting.xyz * albedo * occlusion;
+    let emissive = lp.emissiveColor.xyz * textureSample(emissiveTex, texSampler, input.uv).rgb;
+
+    return vec4f(ambient + lo + emissive, alpha);
+}
+)WGSL";
+
+        WGPUShaderSourceWGSL wgsl{};
+        wgsl.chain.sType = WGPUSType_ShaderSourceWGSL;
+        wgsl.code = StringView(shaderSource);
+        WGPUShaderModuleDescriptor shaderDescriptor{};
+        shaderDescriptor.label = StringView("CNA WebGPU Pbr3D WGSL");
+        shaderDescriptor.nextInChain = &wgsl.chain;
+        pbrShader_ = wgpuDeviceCreateShaderModule(device_, &shaderDescriptor);
+        if (pbrShader_ == nullptr)
+            throw std::runtime_error("CNA WebGPU: failed to create Pbr3D shader");
+
+        std::array<WGPUBindGroupLayoutEntry, 3> uboEntries{};
+        uboEntries[0].binding = 0;
+        uboEntries[0].visibility = WGPUShaderStage_Vertex | WGPUShaderStage_Fragment;
+        uboEntries[0].buffer.type = WGPUBufferBindingType_Uniform;
+        uboEntries[0].buffer.minBindingSize = 128;
+        uboEntries[1].binding = 1;
+        uboEntries[1].visibility = WGPUShaderStage_Vertex | WGPUShaderStage_Fragment;
+        uboEntries[1].buffer.type = WGPUBufferBindingType_Uniform;
+        uboEntries[1].buffer.minBindingSize = 272;
+        uboEntries[2].binding = 2;
+        uboEntries[2].visibility = WGPUShaderStage_Fragment;
+        uboEntries[2].buffer.type = WGPUBufferBindingType_Uniform;
+        uboEntries[2].buffer.minBindingSize = 16;
+        WGPUBindGroupLayoutDescriptor uboLayoutDescriptor{};
+        uboLayoutDescriptor.label = StringView("CNA WebGPU Pbr3D BindGroupLayout0");
+        uboLayoutDescriptor.entryCount = uboEntries.size();
+        uboLayoutDescriptor.entries = uboEntries.data();
+        pbrBindGroupLayout0_ = wgpuDeviceCreateBindGroupLayout(device_, &uboLayoutDescriptor);
+
+        std::array<WGPUBindGroupLayoutEntry, 6> texEntries{};
+        texEntries[0].binding = 0;
+        texEntries[0].visibility = WGPUShaderStage_Fragment;
+        texEntries[0].sampler.type = WGPUSamplerBindingType_Filtering;
+        for (std::uint32_t i = 1; i <= 5; ++i)
+        {
+            texEntries[i].binding = i;
+            texEntries[i].visibility = WGPUShaderStage_Fragment;
+            texEntries[i].texture.sampleType = WGPUTextureSampleType_Float;
+            texEntries[i].texture.viewDimension = WGPUTextureViewDimension_2D;
+            texEntries[i].texture.multisampled = false;
+        }
+        WGPUBindGroupLayoutDescriptor texLayoutDescriptor{};
+        texLayoutDescriptor.label = StringView("CNA WebGPU Pbr3D BindGroupLayout1");
+        texLayoutDescriptor.entryCount = texEntries.size();
+        texLayoutDescriptor.entries = texEntries.data();
+        pbrBindGroupLayout1_ = wgpuDeviceCreateBindGroupLayout(device_, &texLayoutDescriptor);
+
+        std::array<WGPUBindGroupLayout, 2> groupLayouts{pbrBindGroupLayout0_, pbrBindGroupLayout1_};
+        WGPUPipelineLayoutDescriptor pipelineLayoutDescriptor{};
+        pipelineLayoutDescriptor.label = StringView("CNA WebGPU Pbr3D PipelineLayout");
+        pipelineLayoutDescriptor.bindGroupLayoutCount = groupLayouts.size();
+        pipelineLayoutDescriptor.bindGroupLayouts = groupLayouts.data();
+        pbrPipelineLayout_ = wgpuDeviceCreatePipelineLayout(device_, &pipelineLayoutDescriptor);
+
+        if (pbrBindGroupLayout0_ == nullptr || pbrBindGroupLayout1_ == nullptr || pbrPipelineLayout_ == nullptr)
+            throw std::runtime_error("CNA WebGPU: failed to create Pbr3D GPU resources");
+    }
+
+    WGPURenderPipeline WebGPUGraphicsBackend::GetOrCreatePipelinePbr3D(WGPUPrimitiveTopology topology,
+                                                                         bool depthTest, bool depthWrite,
+                                                                         int depthFunc)
+    {
+        const int key = (static_cast<int>(topology) * 8 + depthFunc) * 4 + (depthTest ? 2 : 0) + (depthWrite ? 1 : 0);
+        if (auto it = pbrPipelines_.find(key); it != pbrPipelines_.end())
+            return it->second;
+
+        // Matches VertexPositionNormalTangentTexture's 48-byte layout: Position(12) + Normal(12)
+        // + Tangent(16, xyz + bitangent-handedness in w) + TextureCoordinate(8).
+        struct PbrVertex { float x, y, z, nx, ny, nz, tx, ty, tz, tw, u, v; };
+        static_assert(sizeof(PbrVertex) == 48, "PbrVertex must be 48 bytes");
+        std::array<WGPUVertexAttribute, 4> attributes{};
+        attributes[0].format = WGPUVertexFormat_Float32x3;
+        attributes[0].offset = offsetof(PbrVertex, x);
+        attributes[0].shaderLocation = 0;
+        attributes[1].format = WGPUVertexFormat_Float32x3;
+        attributes[1].offset = offsetof(PbrVertex, nx);
+        attributes[1].shaderLocation = 1;
+        attributes[2].format = WGPUVertexFormat_Float32x4;
+        attributes[2].offset = offsetof(PbrVertex, tx);
+        attributes[2].shaderLocation = 2;
+        attributes[3].format = WGPUVertexFormat_Float32x2;
+        attributes[3].offset = offsetof(PbrVertex, u);
+        attributes[3].shaderLocation = 3;
+        WGPUVertexBufferLayout vertexBufferLayout{};
+        vertexBufferLayout.arrayStride = sizeof(PbrVertex);
+        vertexBufferLayout.stepMode = WGPUVertexStepMode_Vertex;
+        vertexBufferLayout.attributeCount = attributes.size();
+        vertexBufferLayout.attributes = attributes.data();
+
+        WGPUColorTargetState target{};
+        target.format = surfaceFormat_;
+        target.writeMask = WGPUColorWriteMask_All;
+        WGPUFragmentState fragment{};
+        fragment.module = pbrShader_;
+        fragment.entryPoint = StringView("fs_main");
+        fragment.targetCount = 1;
+        fragment.targets = &target;
+
+        WGPURenderPipelineDescriptor pipeline{};
+        pipeline.label = StringView("CNA WebGPU Pbr3D Pipeline");
+        pipeline.layout = pbrPipelineLayout_;
+        pipeline.vertex.module = pbrShader_;
+        pipeline.vertex.entryPoint = StringView("vs_main");
+        pipeline.vertex.bufferCount = 1;
+        pipeline.vertex.buffers = &vertexBufferLayout;
+        pipeline.primitive.topology = topology;
+        pipeline.primitive.frontFace = WGPUFrontFace_CCW;
+        pipeline.primitive.cullMode = WGPUCullMode_None;
+        pipeline.multisample.count = 1;
+        pipeline.multisample.mask = std::numeric_limits<std::uint32_t>::max();
+        pipeline.multisample.alphaToCoverageEnabled = false;
+        pipeline.fragment = &fragment;
+
+        WGPUDepthStencilState depthStencil = WGPU_DEPTH_STENCIL_STATE_INIT;
+        depthStencil.format = WGPUTextureFormat_Depth24PlusStencil8;
+        depthStencil.depthWriteEnabled = depthWrite ? WGPUOptionalBool_True : WGPUOptionalBool_False;
+        depthStencil.depthCompare = depthTest ? ToWGPUCompareFunction(depthFunc) : WGPUCompareFunction_Always;
+        pipeline.depthStencil = &depthStencil;
+
+        WGPURenderPipeline created = wgpuDeviceCreateRenderPipeline(device_, &pipeline);
+        if (created == nullptr)
+            throw std::runtime_error("CNA WebGPU: failed to create Pbr3D pipeline");
+        pbrPipelines_[key] = created;
+        return created;
+    }
+
+    void WebGPUGraphicsBackend::EnsurePbrDefaultTextures()
+    {
+        // Mirrors EasyGLGraphicsBackend::EnsureDefaultWhiteTexture()/
+        // EnsureDefaultFlatNormalTexture(): a 1x1 flat tangent-space normal (0,0,1), encoded as
+        // RGB (128,128,255), so the sampled/decoded (rgb*2-1) normal is exactly the geometric
+        // normal (no perturbation) when PbrEffect::NormalMap is unbound. The other 3 PBR map
+        // fallbacks (metallic-roughness, emissive, occlusion) all reuse a shared 1x1 white texture
+        // -- their respective factor/no-op semantics already make (1,1,1,1) the correct "map
+        // absent" value (factor*1.0=factor; emissive tint*1.0=tint; occlusion 1.0=unoccluded).
+        if (pbrDefaultWhiteTexture_ == nullptr)
+        {
+            ImageData white{};
+            white.width = 1;
+            white.height = 1;
+            white.mipLevels = 1;
+            white.pixels = {255, 255, 255, 255};
+            pbrDefaultWhiteTexture_ = std::make_unique<WebGPUTextureBackend>(*this, white);
+        }
+        if (pbrDefaultFlatNormalTexture_ == nullptr)
+        {
+            ImageData flatNormal{};
+            flatNormal.width = 1;
+            flatNormal.height = 1;
+            flatNormal.mipLevels = 1;
+            flatNormal.pixels = {128, 128, 255, 255};
+            pbrDefaultFlatNormalTexture_ = std::make_unique<WebGPUTextureBackend>(*this, flatNormal);
+        }
+    }
+
+    void WebGPUGraphicsBackend::QueuePbrDraw(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
+                                              const Matrix& world, const Matrix& view, const Matrix& projection,
+                                              PrimitiveType primitive, int primitiveCount,
+                                              const GpuDrawParams& params)
+    {
+        const auto& webgpuVb = static_cast<const WebGPUVertexBufferBackend&>(vb);
+        if (webgpuVb.Stride() != 48)
+            throw std::invalid_argument("CNA WebGPU: QueuePbrDraw requires a stride-48 "
+                                        "(VertexPositionNormalTangentTexture) vertex buffer");
+        if (params.texture0 == nullptr)
+            throw std::invalid_argument("CNA WebGPU: QueuePbrDraw requires a bound texture0");
+
+        EnsurePbrDefaultTextures();
+
+        PbrDrawCommand command;
+        const auto& shadow = webgpuVb.ShadowData();
+        const std::size_t byteOffset = static_cast<std::size_t>(params.vertexStart) * 48u;
+        if (byteOffset <= shadow.size())
+            command.vertexData.assign(shadow.begin() + static_cast<std::ptrdiff_t>(byteOffset), shadow.end());
+        command.topology = ToTopology(primitive);
+        command.depthTest = depthTestEnabled_;
+        command.depthFunc = depthCompareFunction_;
+        command.depthWrite = depthWriteEnabled_;
+        command.baseColorTexture = static_cast<const WebGPUTextureBackend*>(params.texture0);
+        command.normalMap = params.pbrNormalMap != nullptr
+            ? static_cast<const WebGPUTextureBackend*>(params.pbrNormalMap)
+            : pbrDefaultFlatNormalTexture_.get();
+        command.metallicRoughnessMap = params.pbrMetallicRoughnessMap != nullptr
+            ? static_cast<const WebGPUTextureBackend*>(params.pbrMetallicRoughnessMap)
+            : pbrDefaultWhiteTexture_.get();
+        command.emissiveMap = params.pbrEmissiveMap != nullptr
+            ? static_cast<const WebGPUTextureBackend*>(params.pbrEmissiveMap)
+            : pbrDefaultWhiteTexture_.get();
+        command.occlusionMap = params.pbrOcclusionMap != nullptr
+            ? static_cast<const WebGPUTextureBackend*>(params.pbrOcclusionMap)
+            : pbrDefaultWhiteTexture_.get();
+
+        const Matrix wvp = world * view * projection;
+        FillExtUniforms(command.uniforms, wvp, params);
+        FillLitLightUniforms(command.lightUniforms, params);
+        FillPbrFactors(command.pbrFactors, params);
+
+        if (ib != nullptr)
+        {
+            const auto& webgpuIb = static_cast<const WebGPUIndexBufferBackend&>(*ib);
+            command.indexed = true;
+            command.index32 = webgpuIb.IsThirtyTwoBit();
+            command.indexData = webgpuIb.ShadowData();
+            command.indexCount = static_cast<std::uint32_t>(PrimitiveIndexCount(primitive, primitiveCount));
+            command.vertexCount = static_cast<std::uint32_t>(webgpuVb.GetVertexCount()) -
+                                  static_cast<std::uint32_t>(params.vertexStart);
+        }
+        else
+        {
+            command.vertexCount = static_cast<std::uint32_t>(PrimitiveVertexCount(primitive, primitiveCount));
+        }
+
+        pbrDrawCommands_.push_back(std::move(command));
+        framePending_ = true;
+    }
+
+    void WebGPUGraphicsBackend::RenderPbrDraws(WGPURenderPassEncoder pass)
+    {
+        for (const PbrDrawCommand& command : pbrDrawCommands_)
+        {
+            if (command.vertexCount == 0 || command.vertexData.empty() || command.baseColorTexture == nullptr ||
+                command.normalMap == nullptr || command.metallicRoughnessMap == nullptr ||
+                command.emissiveMap == nullptr || command.occlusionMap == nullptr)
+                continue;
+
+            WGPUBufferDescriptor vbDescriptor{};
+            vbDescriptor.label = StringView("CNA WebGPU Pbr3D VertexBuffer");
+            vbDescriptor.usage = WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst;
+            vbDescriptor.size = Align4(command.vertexData.size());
+            WGPUBuffer vertexBuffer = wgpuDeviceCreateBuffer(device_, &vbDescriptor);
+            wgpuQueueWriteBuffer(queue_, vertexBuffer, 0, command.vertexData.data(), command.vertexData.size());
+
+            WGPUBufferDescriptor uboDescriptor{};
+            uboDescriptor.label = StringView("CNA WebGPU Pbr3D UBO");
+            uboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
+            uboDescriptor.size = sizeof(command.uniforms);
+            WGPUBuffer uniformBuffer = wgpuDeviceCreateBuffer(device_, &uboDescriptor);
+            wgpuQueueWriteBuffer(queue_, uniformBuffer, 0, command.uniforms.data(), sizeof(command.uniforms));
+
+            WGPUBufferDescriptor lightUboDescriptor{};
+            lightUboDescriptor.label = StringView("CNA WebGPU Pbr3D LightUBO");
+            lightUboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
+            lightUboDescriptor.size = sizeof(command.lightUniforms);
+            WGPUBuffer lightUniformBuffer = wgpuDeviceCreateBuffer(device_, &lightUboDescriptor);
+            wgpuQueueWriteBuffer(queue_, lightUniformBuffer, 0, command.lightUniforms.data(), sizeof(command.lightUniforms));
+
+            WGPUBufferDescriptor factorsUboDescriptor{};
+            factorsUboDescriptor.label = StringView("CNA WebGPU Pbr3D FactorsUBO");
+            factorsUboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
+            factorsUboDescriptor.size = sizeof(command.pbrFactors);
+            WGPUBuffer factorsUniformBuffer = wgpuDeviceCreateBuffer(device_, &factorsUboDescriptor);
+            wgpuQueueWriteBuffer(queue_, factorsUniformBuffer, 0, command.pbrFactors.data(), sizeof(command.pbrFactors));
+
+            std::array<WGPUBindGroupEntry, 3> uboEntries{};
+            uboEntries[0].binding = 0;
+            uboEntries[0].buffer = uniformBuffer;
+            uboEntries[0].size = sizeof(command.uniforms);
+            uboEntries[1].binding = 1;
+            uboEntries[1].buffer = lightUniformBuffer;
+            uboEntries[1].size = sizeof(command.lightUniforms);
+            uboEntries[2].binding = 2;
+            uboEntries[2].buffer = factorsUniformBuffer;
+            uboEntries[2].size = sizeof(command.pbrFactors);
+            WGPUBindGroupDescriptor uboBindDescriptor{};
+            uboBindDescriptor.label = StringView("CNA WebGPU Pbr3D UBO BindGroup");
+            uboBindDescriptor.layout = pbrBindGroupLayout0_;
+            uboBindDescriptor.entryCount = uboEntries.size();
+            uboBindDescriptor.entries = uboEntries.data();
+            WGPUBindGroup uboBindGroup = wgpuDeviceCreateBindGroup(device_, &uboBindDescriptor);
+
+            WGPUSampler sampler = GetOrCreateSampler(command.textureFilter, command.addressU, command.addressV);
+            std::array<WGPUBindGroupEntry, 6> texEntries{};
+            texEntries[0].binding = 0;
+            texEntries[0].sampler = sampler;
+            texEntries[1].binding = 1;
+            texEntries[1].textureView = command.baseColorTexture->View();
+            texEntries[2].binding = 2;
+            texEntries[2].textureView = command.normalMap->View();
+            texEntries[3].binding = 3;
+            texEntries[3].textureView = command.metallicRoughnessMap->View();
+            texEntries[4].binding = 4;
+            texEntries[4].textureView = command.emissiveMap->View();
+            texEntries[5].binding = 5;
+            texEntries[5].textureView = command.occlusionMap->View();
+            WGPUBindGroupDescriptor texBindDescriptor{};
+            texBindDescriptor.label = StringView("CNA WebGPU Pbr3D Texture BindGroup");
+            texBindDescriptor.layout = pbrBindGroupLayout1_;
+            texBindDescriptor.entryCount = texEntries.size();
+            texBindDescriptor.entries = texEntries.data();
+            WGPUBindGroup texBindGroup = wgpuDeviceCreateBindGroup(device_, &texBindDescriptor);
+
+            WGPURenderPipeline pipe = GetOrCreatePipelinePbr3D(command.topology, command.depthTest,
+                                                               command.depthWrite, command.depthFunc);
+            wgpuRenderPassEncoderSetPipeline(pass, pipe);
+            wgpuRenderPassEncoderSetBindGroup(pass, 0, uboBindGroup, 0, nullptr);
+            wgpuRenderPassEncoderSetBindGroup(pass, 1, texBindGroup, 0, nullptr);
+            wgpuRenderPassEncoderSetVertexBuffer(pass, 0, vertexBuffer, 0, command.vertexData.size());
+
+            if (command.indexed && !command.indexData.empty())
+            {
+                WGPUBufferDescriptor ibDescriptor{};
+                ibDescriptor.label = StringView("CNA WebGPU Pbr3D IndexBuffer");
+                ibDescriptor.usage = WGPUBufferUsage_Index | WGPUBufferUsage_CopyDst;
+                ibDescriptor.size = Align4(command.indexData.size());
+                WGPUBuffer indexBuffer = wgpuDeviceCreateBuffer(device_, &ibDescriptor);
+                wgpuQueueWriteBuffer(queue_, indexBuffer, 0, command.indexData.data(), command.indexData.size());
+                wgpuRenderPassEncoderSetIndexBuffer(pass, indexBuffer,
+                    command.index32 ? WGPUIndexFormat_Uint32 : WGPUIndexFormat_Uint16,
+                    0, command.indexData.size());
+                wgpuRenderPassEncoderDrawIndexed(pass, command.indexCount, 1, 0, 0, 0);
+                pendingBufferReleases_.push_back(indexBuffer);
+            }
+            else
+            {
+                wgpuRenderPassEncoderDraw(pass, command.vertexCount, 1, 0, 0);
+            }
+
+            pendingBindGroupReleases_.push_back(uboBindGroup);
+            pendingBindGroupReleases_.push_back(texBindGroup);
+            pendingBufferReleases_.push_back(uniformBuffer);
+            pendingBufferReleases_.push_back(lightUniformBuffer);
+            pendingBufferReleases_.push_back(factorsUniformBuffer);
+            pendingBufferReleases_.push_back(vertexBuffer);
+        }
+        pbrDrawCommands_.clear();
+    }
+}
+
 
 namespace CNA::Internal::Backends
 {

@@ -185,6 +185,29 @@ real XNA API surface almost every game/effect uses — had zero effect on this b
 older `SetDepthTestEnabled()`/`SetDepthWriteEnabled()` convenience methods worked. Now implements
 the depth portion (stencil ops remain open, `WEBGPU-83`).
 
+## PbrEffect (unskinned metallic-roughness BRDF)
+
+`pbr3d.wgsl` / `GetOrCreatePipelinePbr3D()` implement `PbrEffect`'s real glTF 2.0
+metallic-roughness BRDF (GGX distribution + Smith-Schlick-GGX visibility + Schlick Fresnel),
+ported from `EasyGLGraphicsBackend::EnsurePbrProgram()`'s GLSL shader, for stride-48
+(`VertexPositionNormalTangentTexture`) draws. Base color, normal, metallic-roughness, emissive
+and occlusion maps are all supported, each falling back to a 1x1 default texture (flat normal /
+white, matching the EasyGL backend's own "map absent" convention) when `PbrEffect` leaves that
+map unbound. Group 0 reuses the existing `Uniforms`/`LitLightParams` UBO shapes byte-for-byte
+(populated by the already-existing `FillExtUniforms()`/`FillLitLightUniforms()` helpers) plus one
+new small `PbrFactors` UBO for `MetallicFactor`/`RoughnessFactor`; group 1 is a new 5-texture +
+1-sampler bind group. New `WebGPU_Pbr3D` CTest hand-derives the exact GGX/Fresnel formula for a
+fixed light/view/normal geometry and independently confirms the observed pixel values are within
+a few 8-bit units of the analytic prediction (after accounting for the sRGB swapchain's gamma
+encoding), plus qualitative ambient/facing/back-facing/normal-map/metallic-vs-dielectric checks.
+
+**Scope**: unskinned only. `SkinnedPbrEffect` (stride 68) is a separate, pre-existing gap — this
+backend has no skinning shader variant at all yet for any stock effect (`SkinnedEffect` included),
+so a skinned PBR draw continues to fall back exactly as it did before this work. Fog and alpha-test
+are deliberately not wired into `pbr3d.wgsl`: every other WebGPU 3D shader already defers fog
+identically, and `PbrEffect::FillGpuDrawParams()` never sets `GpuDrawParams::alphaTest` away from
+its always-pass default, so that branch would be permanently dead code.
+
 ## Implemented baseline
 
 The initial backend is deliberately useful rather than an empty scaffold. It currently provides:
