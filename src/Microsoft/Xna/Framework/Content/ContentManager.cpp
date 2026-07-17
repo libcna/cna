@@ -18,6 +18,7 @@
 #include "Microsoft/Xna/Framework/Graphics/DualTextureEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EnvironmentMapEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/IEffectLights.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Model.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelBone.hpp"
@@ -1689,6 +1690,32 @@ namespace Microsoft::Xna::Framework::Content
             return vb;
         }
 
+        // CNB-97 (Phase 14H): applies up to 3 KHR_lights_punctual-derived directional lights
+        // (see GltfImportCore::ExtractPunctualLightsEXT's own doc comment) to any effect
+        // implementing IEffectLights -- a single dynamic_cast against the interface covers
+        // BasicEffect/SkinnedEffect/PbrEffect/SkinnedPbrEffect uniformly, rather than one branch
+        // per concrete type. A no-op for DualTextureEffect/AlphaTestEffect (neither implements
+        // IEffectLights, matching real XNA's own lighting-less shape for both). Any DirectionalLight
+        // slot beyond lights.size() is left at the effect's own default (disabled).
+        void ApplyPunctualLightsEXT(Graphics::Effect& fx, const std::vector<CNA::Internal::GltfImport::LightOut>& lights)
+        {
+            if (lights.empty()) { return; }
+            auto* lit = dynamic_cast<Graphics::IEffectLights*>(&fx);
+            if (!lit) { return; }
+
+            Graphics::DirectionalLight* slots[3] = {
+                &lit->getDirectionalLight0Property(),
+                &lit->getDirectionalLight1Property(),
+                &lit->getDirectionalLight2Property(),
+            };
+            for (std::size_t i = 0; i < lights.size() && i < 3; ++i)
+            {
+                slots[i]->setDirectionProperty(lights[i].direction);
+                slots[i]->setDiffuseColorProperty(lights[i].diffuseColor);
+                slots[i]->setEnabledProperty(true);
+            }
+        }
+
         // plan_cnj.md CNB-70/71 (Phase 13D): loads a .gltf/.glb file directly into a real Model,
         // with no intermediate .cnj/binary sidecar files -- reuses the same
         // CNA::Internal::GltfImport::GltfImportCore parsing/skeleton/animation/mesh-extraction
@@ -1739,6 +1766,11 @@ namespace Microsoft::Xna::Framework::Content
                 throw ContentLoadException("glTF file '" + path + "' contains no mesh instances to import.");
             }
             const MeshGroup& group = groups.front();
+
+            // CNB-97 (Phase 14H): KHR_lights_punctual, approximated as up to 3 directional lights
+            // (see ExtractPunctualLightsEXT's own doc comment) -- applied to every mesh part's
+            // effect below via ApplyPunctualLightsEXT, for whichever ones implement IEffectLights.
+            const std::vector<LightOut> punctualLights = ExtractPunctualLightsEXT(data);
 
             const bool hasSkin = group.skin != nullptr;
             SkeletonResult skeleton;
@@ -2026,6 +2058,8 @@ namespace Microsoft::Xna::Framework::Content
                         }
                     }
 
+                    ApplyPunctualLightsEXT(*fx, punctualLights);
+
                     partPtr->setEffectProperty(fx.get());
                     res->effectOwners.push_back(std::move(fx));
 
@@ -2166,6 +2200,20 @@ namespace Microsoft::Xna::Framework::Content
                     }
 
                     res->skinningData = std::move(skinningData);
+                }
+
+                // CNB-97 (Phase 14H): KHR_lights_punctual, written by gltf_to_cnj.cpp as a
+                // top-level "lights" array (see that file's own doc comment) -- applied to every
+                // mesh part's effect below via ApplyPunctualLightsEXT.
+                std::vector<CNA::Internal::GltfImport::LightOut> punctualLights;
+                for (const std::string& lg : ParseFlatObjectArrayEXT(json, "lights"))
+                {
+                    CNA::Internal::GltfImport::LightOut light;
+                    const auto dir = JsonFloatArray3(lg, FindKeyArray(lg, "direction"));
+                    const auto diff = JsonFloatArray3(lg, FindKeyArray(lg, "diffuseColor"));
+                    light.direction = Vector3(dir[0], dir[1], dir[2]);
+                    light.diffuseColor = Vector3(diff[0], diff[1], diff[2]);
+                    punctualLights.push_back(light);
                 }
 
                 // Meshes
@@ -2496,6 +2544,8 @@ namespace Microsoft::Xna::Framework::Content
                                     skinnedFx->VertexColorEnabled = true;
                                 }
                             }
+
+                            ApplyPunctualLightsEXT(*fx, punctualLights);
 
                             partPtr->setEffectProperty(fx.get());
                             res->effectOwners.push_back(std::move(fx));

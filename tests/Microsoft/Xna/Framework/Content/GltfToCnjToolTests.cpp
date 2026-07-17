@@ -616,6 +616,46 @@ namespace
   ]
 })GLTF";
 
+    // glTF extensions (CNB-97, Phase 14H): identical fixture and reasoning to
+    // RuntimeGltfModelTests.cpp's own kBasicTexturedWithLightGltf -- see that file's own doc
+    // comment. Reused here to prove the offline CLI/.cnj path's own separate "lights" JSON
+    // field writer (gltf_to_cnj.cpp) and reader (ContentManager.cpp's .cnj JSON path) both wire
+    // correctly, independent of the runtime glTF path's own wiring.
+    const char* kBasicTexturedWithLightGltf = R"GLTF({
+  "asset": { "version": "2.0" },
+  "scene": 0,
+  "scenes": [ { "nodes": [0, 1] } ],
+  "nodes": [
+    { "name": "MeshNode", "mesh": 0 },
+    { "name": "Light", "extensions": { "KHR_lights_punctual": { "light": 0 } } }
+  ],
+  "meshes": [ { "primitives": [ { "attributes": { "POSITION": 0, "NORMAL": 1, "TEXCOORD_0": 2 }, "material": 0 } ] } ],
+  "materials": [ { "pbrMetallicRoughness": { "baseColorTexture": { "index": 0 } } } ],
+  "textures": [ { "source": 0 } ],
+  "images": [ { "bufferView": 3, "mimeType": "image/png" } ],
+  "extensions": {
+    "KHR_lights_punctual": {
+      "lights": [ { "type": "directional", "color": [0.25, 0.5, 0.75], "intensity": 1.0 } ]
+    }
+  },
+  "extensionsUsed": [ "KHR_lights_punctual" ],
+  "buffers": [ {
+    "byteLength": 165,
+    "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC"
+  } ],
+  "bufferViews": [
+    { "buffer": 0, "byteOffset": 0,  "byteLength": 36 },
+    { "buffer": 0, "byteOffset": 36, "byteLength": 36 },
+    { "buffer": 0, "byteOffset": 72, "byteLength": 24 },
+    { "buffer": 0, "byteOffset": 96, "byteLength": 69 }
+  ],
+  "accessors": [
+    { "bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3", "min": [0,0,0], "max": [1,1,0] },
+    { "bufferView": 1, "componentType": 5126, "count": 3, "type": "VEC3" },
+    { "bufferView": 2, "componentType": 5126, "count": 3, "type": "VEC2" }
+  ]
+})GLTF";
+
     // CNB-72/73 (Phase 13E): an unskinned, uncolored mesh whose material has both a base-color
     // and an occlusion texture must import through DualTextureEffect (stride-20 VertexPosition
     // Texture, Texture=base color, Texture2=occlusion) instead of BasicEffect.
@@ -1559,3 +1599,43 @@ TEST(GltfToCnjToolTest, ConvertsDracoCompressedTriangleAndLoadsBackThroughConten
     ASSERT_NE(basicFx, nullptr);
 }
 #endif
+
+// glTF extensions (CNB-97, Phase 14H): the offline CLI/.cnj path's own "lights" JSON field
+// (gltf_to_cnj.cpp's writer, ContentManager.cpp's .cnj JSON reader) must round-trip a
+// KHR_lights_punctual directional light onto the loaded BasicEffect's own DirectionalLight0.
+TEST(GltfToCnjToolTest, SerializesAndReloadsKhrLightsPunctualThroughTheOfflineCnjPath)
+{
+    ScratchDir gltfDir;
+    ScratchDir contentRoot;
+
+    const std::filesystem::path gltfPath = gltfDir.path() / "lit.gltf";
+    WriteFile(gltfPath, kBasicTexturedWithLightGltf);
+
+    const int exitCode = RunGltfToCnjTool(gltfPath.string(), contentRoot.path().string(), "lit");
+    ASSERT_EQ(exitCode, 0);
+
+    const std::filesystem::path cnjPath = contentRoot.path() / "lit.cnj";
+    std::ifstream f(cnjPath);
+    const std::string cnjText((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+    EXPECT_NE(cnjText.find("\"lights\""), std::string::npos);
+
+    GraphicsDevice gd;
+    ContentManager cm(nullptr, contentRoot.path().string());
+    cm.setGraphicsDevice(gd);
+    Model model = cm.Load<Model>("lit");
+    ASSERT_EQ(model.getMeshesProperty().getCountProperty(), 1);
+    ModelMesh* mesh = model.getMeshesProperty()[0];
+
+    auto* basicFx = dynamic_cast<BasicEffect*>(mesh->getMeshPartsProperty()[0]->getEffectProperty());
+    ASSERT_NE(basicFx, nullptr);
+
+    EXPECT_TRUE(basicFx->DirectionalLight0.getEnabledProperty());
+    const Vector3 dir = basicFx->DirectionalLight0.getDirectionProperty();
+    EXPECT_NEAR(dir.X, 0.0f, 1e-4f);
+    EXPECT_NEAR(dir.Y, 0.0f, 1e-4f);
+    EXPECT_NEAR(dir.Z, -1.0f, 1e-4f);
+    const Vector3 color = basicFx->DirectionalLight0.getDiffuseColorProperty();
+    EXPECT_NEAR(color.X, 0.25f, 1e-5f);
+    EXPECT_NEAR(color.Y, 0.5f, 1e-5f);
+    EXPECT_NEAR(color.Z, 0.75f, 1e-5f);
+}

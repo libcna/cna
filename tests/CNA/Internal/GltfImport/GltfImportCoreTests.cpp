@@ -235,6 +235,50 @@ namespace
     { "bufferView": 3, "componentType": 5123, "count": 6, "type": "SCALAR" }
   ]
 })GLTF";
+
+    // glTF extensions (CNB-97, Phase 14H): a single triangle whose material combines
+    // KHR_texture_transform (on the base-color texture: offset=[0.1,0.2], scale=[2.0,0.5],
+    // rotation=0 -- chosen to avoid trig in hand-verification) and KHR_materials_emissive_strength
+    // (emissiveFactor=[0.2,0.3,0.1] * strength=3.0 -> [0.6,0.9,0.3], deliberately > 1 on one
+    // channel to prove the multiplier is NOT clamped, unlike ExtractPunctualLightsEXT's own
+    // DiffuseColor, since glTF's own emissive-strength extension exists specifically to allow real
+    // HDR emissive values beyond [0,1]).
+    const char* kTextureTransformAndEmissiveStrengthGltf = R"GLTF({
+  "asset": { "version": "2.0" },
+  "scene": 0,
+  "scenes": [ { "nodes": [0] } ],
+  "nodes": [ { "name": "MeshNode", "mesh": 0 } ],
+  "meshes": [ { "primitives": [ { "attributes": {
+      "POSITION": 0, "NORMAL": 1, "TEXCOORD_0": 2
+  }, "material": 0 } ] } ],
+  "materials": [ {
+    "pbrMetallicRoughness": {
+      "baseColorTexture": { "index": 0, "extensions": {
+        "KHR_texture_transform": { "offset": [0.1, 0.2], "scale": [2.0, 0.5] }
+      } }
+    },
+    "normalTexture": { "index": 0 },
+    "emissiveFactor": [0.2, 0.3, 0.1],
+    "extensions": { "KHR_materials_emissive_strength": { "emissiveStrength": 3.0 } }
+  } ],
+  "textures": [ { "source": 0 } ],
+  "images": [ { "bufferView": 3, "mimeType": "image/png" } ],
+  "buffers": [ {
+    "byteLength": 165,
+    "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC"
+  } ],
+  "bufferViews": [
+    { "buffer": 0, "byteOffset": 0,  "byteLength": 36 },
+    { "buffer": 0, "byteOffset": 36, "byteLength": 36 },
+    { "buffer": 0, "byteOffset": 72, "byteLength": 24 },
+    { "buffer": 0, "byteOffset": 96, "byteLength": 69 }
+  ],
+  "accessors": [
+    { "bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3", "min": [0,0,0], "max": [1,1,0] },
+    { "bufferView": 1, "componentType": 5126, "count": 3, "type": "VEC3" },
+    { "bufferView": 2, "componentType": 5126, "count": 3, "type": "VEC2" }
+  ]
+})GLTF";
 }
 
 TEST(GltfImportCoreTest, ExtractMeshDetectsMismatchedPbrMapUvSets)
@@ -437,3 +481,131 @@ TEST(GltfImportCoreTest, ComputeTangentsEXTWorksOnADracoCompressedPbrPrimitiveWi
     }
 }
 #endif
+
+TEST(GltfImportCoreTest, ExtractMeshAppliesTextureTransformAndEmissiveStrength)
+{
+    const MeshOut out = ExtractPrimitive0(kTextureTransformAndEmissiveStrengthGltf);
+    ASSERT_TRUE(out.usePbr);
+    ASSERT_EQ(out.stride, 48);
+    ASSERT_EQ(out.vertexBytes.size(), 3u * 48u);
+
+    // KHR_materials_emissive_strength: [0.2,0.3,0.1] * 3.0 = [0.6,0.9,0.3], not clamped to [0,1]
+    // (unlike ExtractPunctualLightsEXT's own DiffuseColor) -- glTF's emissive-strength extension
+    // exists specifically to allow real HDR emissive values beyond 1.0.
+    EXPECT_NEAR(out.emissiveFactor.X, 0.6f, 1e-5f);
+    EXPECT_NEAR(out.emissiveFactor.Y, 0.9f, 1e-5f);
+    EXPECT_NEAR(out.emissiveFactor.Z, 0.3f, 1e-5f);
+
+    // KHR_texture_transform (offset=[0.1,0.2], scale=[2.0,0.5], rotation=0): u'=u*2.0+0.1,
+    // v'=v*0.5+0.2. Stride 48 = Position(12)+Normal(12)+Tangent(16)+UV(8); UV is the last 8 bytes.
+    auto readUv = [&](std::size_t vertexIndex) {
+        float uv[2];
+        std::memcpy(uv, out.vertexBytes.data() + vertexIndex * 48 + 40, sizeof(uv));
+        return std::pair<float, float>(uv[0], uv[1]);
+    };
+    auto [u0, v0] = readUv(0); // source uv (0,0)
+    EXPECT_NEAR(u0, 0.1f, 1e-5f);
+    EXPECT_NEAR(v0, 0.2f, 1e-5f);
+    auto [u1, v1] = readUv(1); // source uv (1,0)
+    EXPECT_NEAR(u1, 2.1f, 1e-5f);
+    EXPECT_NEAR(v1, 0.2f, 1e-5f);
+    auto [u2, v2] = readUv(2); // source uv (0,1)
+    EXPECT_NEAR(u2, 0.1f, 1e-5f);
+    EXPECT_NEAR(v2, 0.7f, 1e-5f);
+}
+
+TEST(GltfImportCoreTest, ExtractPunctualLightsEXTApproximatesDirectionalAndPointLights)
+{
+    const char* kLightsGltf = R"GLTF({
+  "asset": { "version": "2.0" },
+  "scene": 0,
+  "scenes": [ { "nodes": [0, 1] } ],
+  "nodes": [
+    { "name": "DirLight", "translation": [0, 5, 0], "rotation": [-0.7071068, 0, 0, 0.7071068], "extensions": { "KHR_lights_punctual": { "light": 0 } } },
+    { "name": "PointLight", "translation": [0, 0, -5], "extensions": { "KHR_lights_punctual": { "light": 1 } } }
+  ],
+  "extensions": {
+    "KHR_lights_punctual": {
+      "lights": [
+        { "type": "directional", "color": [1, 0, 0], "intensity": 1.0 },
+        { "type": "point", "color": [0, 1, 0], "intensity": 1.0 }
+      ]
+    }
+  },
+  "extensionsUsed": [ "KHR_lights_punctual" ]
+})GLTF";
+
+    ScratchDir dir;
+    const std::filesystem::path gltfPath = dir.path() / "lights.gltf";
+    WriteFile(gltfPath, kLightsGltf);
+
+    cgltf_options options{};
+    cgltf_data* data = nullptr;
+    ASSERT_EQ(cgltf_parse_file(&options, gltfPath.string().c_str(), &data), cgltf_result_success);
+    ASSERT_EQ(cgltf_load_buffers(&options, data, gltfPath.string().c_str()), cgltf_result_success);
+
+    const auto lights = ExtractPunctualLightsEXT(data);
+    ASSERT_EQ(lights.size(), 2u);
+
+    // Light 0: directional, rotated -90 degrees about X from its own local -Z -- glTF's own
+    // rotation quaternion (-0.7071068,0,0,0.7071068) applied to (0,0,-1) yields world direction
+    // (0,-1,0) (points straight down), independently verified via scipy's own quaternion rotation.
+    EXPECT_NEAR(lights[0].direction.X, 0.0f, 1e-4f);
+    EXPECT_NEAR(lights[0].direction.Y, -1.0f, 1e-4f);
+    EXPECT_NEAR(lights[0].direction.Z, 0.0f, 1e-4f);
+    EXPECT_NEAR(lights[0].diffuseColor.X, 1.0f, 1e-5f);
+    EXPECT_NEAR(lights[0].diffuseColor.Y, 0.0f, 1e-5f);
+    EXPECT_NEAR(lights[0].diffuseColor.Z, 0.0f, 1e-5f);
+
+    // Light 1: point light at world position (0,0,-5) -- approximated as directional pointing from
+    // the light toward the scene origin, i.e. direction = normalize(-worldPos) = (0,0,1).
+    EXPECT_NEAR(lights[1].direction.X, 0.0f, 1e-4f);
+    EXPECT_NEAR(lights[1].direction.Y, 0.0f, 1e-4f);
+    EXPECT_NEAR(lights[1].direction.Z, 1.0f, 1e-4f);
+    EXPECT_NEAR(lights[1].diffuseColor.X, 0.0f, 1e-5f);
+    EXPECT_NEAR(lights[1].diffuseColor.Y, 1.0f, 1e-5f);
+    EXPECT_NEAR(lights[1].diffuseColor.Z, 0.0f, 1e-5f);
+
+    cgltf_free(data);
+}
+
+TEST(GltfImportCoreTest, ExtractPunctualLightsEXTCapsAtThreeLights)
+{
+    const char* kFourLightsGltf = R"GLTF({
+  "asset": { "version": "2.0" },
+  "scene": 0,
+  "scenes": [ { "nodes": [0, 1, 2, 3] } ],
+  "nodes": [
+    { "name": "L0", "extensions": { "KHR_lights_punctual": { "light": 0 } } },
+    { "name": "L1", "extensions": { "KHR_lights_punctual": { "light": 1 } } },
+    { "name": "L2", "extensions": { "KHR_lights_punctual": { "light": 2 } } },
+    { "name": "L3", "extensions": { "KHR_lights_punctual": { "light": 3 } } }
+  ],
+  "extensions": {
+    "KHR_lights_punctual": {
+      "lights": [
+        { "type": "directional", "color": [1, 1, 1], "intensity": 1.0 },
+        { "type": "directional", "color": [1, 1, 1], "intensity": 1.0 },
+        { "type": "directional", "color": [1, 1, 1], "intensity": 1.0 },
+        { "type": "directional", "color": [1, 1, 1], "intensity": 1.0 }
+      ]
+    }
+  },
+  "extensionsUsed": [ "KHR_lights_punctual" ]
+})GLTF";
+
+    ScratchDir dir;
+    const std::filesystem::path gltfPath = dir.path() / "fourlights.gltf";
+    WriteFile(gltfPath, kFourLightsGltf);
+
+    cgltf_options options{};
+    cgltf_data* data = nullptr;
+    ASSERT_EQ(cgltf_parse_file(&options, gltfPath.string().c_str(), &data), cgltf_result_success);
+    ASSERT_EQ(cgltf_load_buffers(&options, data, gltfPath.string().c_str()), cgltf_result_success);
+
+    ASSERT_EQ(data->lights_count, 4u);
+    const auto lights = ExtractPunctualLightsEXT(data);
+    EXPECT_EQ(lights.size(), 3u); // capped, not all 4 -- matches every CNA stock effect's own MaxLights=3.
+
+    cgltf_free(data);
+}

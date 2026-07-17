@@ -852,12 +852,20 @@ namespace CNA::Internal::GltfImport
         // Use whichever TEXCOORD set the base-color texture actually references (glTF allows a
         // texture reference to select TEXCOORD_1/2/... via its own "texcoord" index, defaulting
         // to 0) -- a hardcoded TEXCOORD_0 would silently mismatch a texture authored against a
-        // different UV set.
+        // different UV set. CNB-97 (Phase 14H): KHR_texture_transform's own "texcoord" (when
+        // present) overrides the base-color texture view's own material-level one, per spec.
         int texcoordIndex = 0;
+        const cgltf_texture_transform* baseColorTransform = nullptr;
         if (prim.material && prim.material->has_pbr_metallic_roughness &&
             prim.material->pbr_metallic_roughness.base_color_texture.texture)
         {
-            texcoordIndex = prim.material->pbr_metallic_roughness.base_color_texture.texcoord;
+            const cgltf_texture_view& baseColorView = prim.material->pbr_metallic_roughness.base_color_texture;
+            texcoordIndex = baseColorView.texcoord;
+            if (baseColorView.has_transform)
+            {
+                baseColorTransform = &baseColorView.transform;
+                if (baseColorTransform->has_texcoord) { texcoordIndex = baseColorTransform->texcoord; }
+            }
         }
         const cgltf_accessor* uvAcc = cgltf_find_accessor(&prim, cgltf_attribute_type_texcoord, texcoordIndex);
 
@@ -907,9 +915,14 @@ namespace CNA::Internal::GltfImport
         }
         if (out.usePbr && prim.material)
         {
+            // CNB-97 (Phase 14H): KHR_materials_emissive_strength extends EmissiveFactor's own
+            // [0,1] range with a multiplier (real HDR-authored content routinely uses > 1), before
+            // the emissive texture (if any) is applied -- glTF's own spec order.
+            const float emissiveStrength = prim.material->has_emissive_strength
+                ? prim.material->emissive_strength.emissive_strength : 1.0f;
             out.emissiveFactor = Vector3(prim.material->emissive_factor[0],
                                           prim.material->emissive_factor[1],
-                                          prim.material->emissive_factor[2]);
+                                          prim.material->emissive_factor[2]) * emissiveStrength;
         }
 
         // occlusionImage is populated whenever eligible (unskinned, uncolored) regardless of
@@ -1023,8 +1036,25 @@ namespace CNA::Internal::GltfImport
         // (DualTextureEffect) layouts have no room for a per-vertex Normal.
         const std::vector<float> normals = (normAcc && out.stride != 24 && out.stride != 20)
             ? unpackSemantic(cgltf_attribute_type_normal, 0, normAcc, 3, "NORMAL") : std::vector<float>();
-        const std::vector<float> uvs = uvAcc
+        std::vector<float> uvs = uvAcc
             ? unpackSemantic(cgltf_attribute_type_texcoord, texcoordIndex, uvAcc, 2, "TEXCOORD") : std::vector<float>();
+        // CNB-97 (Phase 14H): KHR_texture_transform, applied to the shared UV channel baked into
+        // TextureCoordinate (matching PbrEffect's own single-shared-UV-channel limitation --
+        // see MeshOut::pbrUv2Mismatch's own doc comment) -- the glTF spec's own reference formula
+        // (scale, then rotate, then translate).
+        if (baseColorTransform)
+        {
+            const float ox = baseColorTransform->offset[0], oy = baseColorTransform->offset[1];
+            const float sx = baseColorTransform->scale[0],  sy = baseColorTransform->scale[1];
+            const float rot = baseColorTransform->rotation;
+            const float cosR = std::cos(rot), sinR = std::sin(rot);
+            for (std::size_t i = 0; i + 1 < uvs.size(); i += 2)
+            {
+                const float u = uvs[i], v = uvs[i + 1];
+                uvs[i]     = cosR * u * sx - sinR * v * sy + ox;
+                uvs[i + 1] = sinR * u * sx + cosR * v * sy + oy;
+            }
+        }
         const std::vector<float> weights = out.skinned
             ? unpackSemantic(cgltf_attribute_type_weights, 0, weightsAcc, 4, "WEIGHTS_0") : std::vector<float>();
         const std::vector<float> joints = out.skinned
@@ -1234,6 +1264,58 @@ namespace CNA::Internal::GltfImport
         }
 
         return groups;
+    }
+
+    std::vector<LightOut> ExtractPunctualLightsEXT(const cgltf_data* data)
+    {
+        std::vector<LightOut> result;
+        if (data->lights_count == 0) { return result; }
+
+        const std::unordered_set<const cgltf_node*> reachable = CollectSceneReachableNodes(data);
+
+        for (cgltf_size i = 0; i < data->nodes_count && result.size() < 3; ++i)
+        {
+            const cgltf_node& node = data->nodes[i];
+            if (!node.light) { continue; }
+            if (!reachable.empty() && reachable.find(&node) == reachable.end()) { continue; }
+
+            float worldMat[16];
+            cgltf_node_transform_world(&node, worldMat);
+            // Column-major 4x4: translation is the 4th column; a light's own local -Z axis
+            // (glTF's own convention for the direction it travels) is the 3rd column, negated.
+            const Vector3 worldPos(worldMat[12], worldMat[13], worldMat[14]);
+            const Vector3 forward(-worldMat[8], -worldMat[9], -worldMat[10]);
+
+            const cgltf_light& src = *node.light;
+            Vector3 direction;
+            switch (src.type)
+            {
+            case cgltf_light_type_directional:
+                direction = (forward.LengthSquared() > 1e-12f) ? Vector3::Normalize(forward) : Vector3(0.0f, -1.0f, 0.0f);
+                break;
+            case cgltf_light_type_point:
+            case cgltf_light_type_spot:
+            default:
+                // No point/spot light support in any CNA stock effect shader -- approximated as a
+                // directional light pointing from the light's own world position toward the scene
+                // origin (see ExtractPunctualLightsEXT's own doc comment for the full rationale).
+                direction = (worldPos.LengthSquared() > 1e-12f)
+                    ? Vector3::Normalize(Vector3(-worldPos.X, -worldPos.Y, -worldPos.Z))
+                    : Vector3(0.0f, -1.0f, 0.0f);
+                break;
+            }
+
+            const float intensity = std::max(src.intensity, 0.0f);
+            LightOut light;
+            light.direction = direction;
+            light.diffuseColor = Vector3(
+                std::clamp(src.color[0] * intensity, 0.0f, 1.0f),
+                std::clamp(src.color[1] * intensity, 0.0f, 1.0f),
+                std::clamp(src.color[2] * intensity, 0.0f, 1.0f));
+            result.push_back(light);
+        }
+
+        return result;
     }
 
     std::vector<float> GetMeshDefaultWeights(const cgltf_mesh* mesh, std::size_t targetCount)

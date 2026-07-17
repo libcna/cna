@@ -103,6 +103,46 @@ namespace
   ]
 })GLTF";
 
+    // glTF extensions (CNB-97, Phase 14H): identical geometry to kBasicTexturedGltf above, plus a
+    // second scene node carrying one KHR_lights_punctual directional light pointing straight down
+    // (no rotation authored -- glTF's own default node orientation already points -Z, i.e.
+    // world-space (0,0,-1), so this deliberately does NOT re-derive the quaternion-rotation case
+    // GltfImportCoreTests.cpp's own ExtractPunctualLightsEXT test already covers byte-for-byte).
+    const char* kBasicTexturedWithLightGltf = R"GLTF({
+  "asset": { "version": "2.0" },
+  "scene": 0,
+  "scenes": [ { "nodes": [0, 1] } ],
+  "nodes": [
+    { "name": "MeshNode", "mesh": 0 },
+    { "name": "Light", "extensions": { "KHR_lights_punctual": { "light": 0 } } }
+  ],
+  "meshes": [ { "primitives": [ { "attributes": { "POSITION": 0, "NORMAL": 1, "TEXCOORD_0": 2 }, "material": 0 } ] } ],
+  "materials": [ { "pbrMetallicRoughness": { "baseColorTexture": { "index": 0 } } } ],
+  "textures": [ { "source": 0 } ],
+  "images": [ { "bufferView": 3, "mimeType": "image/png" } ],
+  "extensions": {
+    "KHR_lights_punctual": {
+      "lights": [ { "type": "directional", "color": [0.25, 0.5, 0.75], "intensity": 1.0 } ]
+    }
+  },
+  "extensionsUsed": [ "KHR_lights_punctual" ],
+  "buffers": [ {
+    "byteLength": 165,
+    "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC"
+  } ],
+  "bufferViews": [
+    { "buffer": 0, "byteOffset": 0,  "byteLength": 36 },
+    { "buffer": 0, "byteOffset": 36, "byteLength": 36 },
+    { "buffer": 0, "byteOffset": 72, "byteLength": 24 },
+    { "buffer": 0, "byteOffset": 96, "byteLength": 69 }
+  ],
+  "accessors": [
+    { "bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3", "min": [0,0,0], "max": [1,1,0] },
+    { "bufferView": 1, "componentType": 5126, "count": 3, "type": "VEC3" },
+    { "bufferView": 2, "componentType": 5126, "count": 3, "type": "VEC2" }
+  ]
+})GLTF";
+
     // Two bones: ParentBone (node 0, root) -> ChildBone (node 1). skin.joints = [1, 0] --
     // deliberately reversed (child listed before parent), the same topological-reorder stress
     // case GltfToCnjToolTests.cpp's own kTinySkinnedGltf uses. All 3 vertices are fully weighted
@@ -685,3 +725,39 @@ TEST(RuntimeGltfModelTest, LoadsDracoCompressedTriangleDirectlyFromGltf)
     EXPECT_FALSE(basicFx->getTextureEnabledProperty());
 }
 #endif
+
+// glTF extensions (CNB-97, Phase 14H): a KHR_lights_punctual directional light in the file must
+// end up on the constructed BasicEffect's own DirectionalLight0, enabled, with the file's own
+// color -- proves ApplyPunctualLightsEXT's own IEffectLights wiring end-to-end through the
+// runtime glTF path (ExtractPunctualLightsEXT's own extraction math is already covered
+// byte-for-byte in GltfImportCoreTests.cpp).
+TEST(RuntimeGltfModelTest, AppliesKhrLightsPunctualToBasicEffectFromGltf)
+{
+    ScratchDir contentRoot;
+    WriteFile(contentRoot.path() / "lit.gltf", kBasicTexturedWithLightGltf);
+
+    GraphicsDevice gd;
+    ContentManager cm(nullptr, contentRoot.path().string());
+    cm.setGraphicsDevice(gd);
+
+    Model model = cm.Load<Model>("lit");
+    ASSERT_EQ(model.getMeshesProperty().getCountProperty(), 1);
+    ModelMesh* mesh = model.getMeshesProperty()[0];
+
+    auto* basicFx = dynamic_cast<BasicEffect*>(mesh->getMeshPartsProperty()[0]->getEffectProperty());
+    ASSERT_NE(basicFx, nullptr);
+
+    EXPECT_TRUE(basicFx->DirectionalLight0.getEnabledProperty());
+    const Vector3 dir = basicFx->DirectionalLight0.getDirectionProperty();
+    EXPECT_NEAR(dir.X, 0.0f, 1e-4f);
+    EXPECT_NEAR(dir.Y, 0.0f, 1e-4f);
+    EXPECT_NEAR(dir.Z, -1.0f, 1e-4f);
+    const Vector3 color = basicFx->DirectionalLight0.getDiffuseColorProperty();
+    EXPECT_NEAR(color.X, 0.25f, 1e-5f);
+    EXPECT_NEAR(color.Y, 0.5f, 1e-5f);
+    EXPECT_NEAR(color.Z, 0.75f, 1e-5f);
+
+    // Unused slots stay at BasicEffect's own default (disabled).
+    EXPECT_FALSE(basicFx->DirectionalLight1.getEnabledProperty());
+    EXPECT_FALSE(basicFx->DirectionalLight2.getEnabledProperty());
+}

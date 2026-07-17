@@ -169,6 +169,20 @@ namespace CNA::Internal::GltfImport
         std::vector<const cgltf_mesh*> meshes;
     };
 
+    /**
+     * @brief A `KHR_lights_punctual` light, already approximated down to CNA's own
+     * `DirectionalLight`-only shape (see `ExtractPunctualLightsEXT`'s own doc comment).
+     *
+     * @note NOXNA — not part of the XNA 4.0 API.
+     */
+    struct LightOut
+    {
+        /** @brief World-space direction the light travels in, normalized. */
+        Microsoft::Xna::Framework::Vector3 direction;
+        /** @brief `color * intensity`, clamped to [0,1] per channel. */
+        Microsoft::Xna::Framework::Vector3 diffuseColor;
+    };
+
     /** @brief One keyframe of a morph-weight animation track: a full weight vector at a point in time. */
     struct MorphWeightKeyframeOut
     {
@@ -320,6 +334,30 @@ namespace CNA::Internal::GltfImport
      * @return One `MeshGroup` per distinct skin (plus one for unskinned meshes, if any exist).
      */
     std::vector<MeshGroup> CollectMeshGroups(const cgltf_data* data);
+
+    /**
+     * @brief Extracts up to 3 `KHR_lights_punctual` lights from the file's default scene,
+     * approximated as directional lights.
+     *
+     * No CNA stock effect shader (`BasicEffect`/`SkinnedEffect`/`PbrEffect`/`SkinnedPbrEffect`)
+     * supports point or spot lights at all — real XNA predates any such concept, and every one of
+     * them hard-caps at exactly 3 `DirectionalLight`s + ambient, matching real XNA's own
+     * `BasicEffect`/`SkinnedEffect`. A `directional` light's own world-space -Z axis (glTF's own
+     * convention for the direction a light travels) is used directly; a `point`/`spot` light is
+     * approximated as a directional light pointing from the light's own world position toward the
+     * scene origin — a documented, deliberate approximation, not physically accurate falloff or
+     * cone-angle behavior. `color * intensity` is clamped to [0,1] per channel — glTF's own
+     * photometric units (lux for directional, candela for point/spot) have no defined mapping onto
+     * XNA's own unitless `DiffuseColor` convention, so this is intentionally simple rather than a
+     * false claim of photometric correctness. Only the first 3 lights found (in node-array order,
+     * restricted to nodes reachable from the default scene) are used; any beyond that are silently
+     * dropped — callers wanting to surface that should compare the returned count against
+     * `data->lights_count`.
+     *
+     * @param data The parsed glTF file.
+     * @return Up to 3 approximated directional lights, empty if the file has no `KHR_lights_punctual` lights.
+     */
+    std::vector<LightOut> ExtractPunctualLightsEXT(const cgltf_data* data);
 
     /**
      * @brief Returns a mesh's default morph target weights (its own "weights" array), zero-filled

@@ -1,5 +1,16 @@
 # `.cnj` content format — implementation plan for CNA
 
+> **Status update (2026-07-17): Phases 14G and 14H also closed.** 14G (`CNB-94`–`CNB-96`) adds
+> real angle-weighted per-corner tangent/bitangent accumulation to `ComputeTangentsEXT` (scoped
+> down from bit-for-bit MikkTSpace, whose reference implementation isn't available to vendor here),
+> and fixes a real, previously-unexercised bug where it re-read `prim.indices` directly instead of
+> the Draco-decoded face list. 14H (`CNB-97`–`CNB-102`) adds three glTF extensions already fully
+> parsed by the vendored `cgltf.h`: `KHR_materials_emissive_strength` (a scalar multiplier on
+> `emissiveFactor`), `KHR_texture_transform` (offset/rotation/scale on the base-color UV set), and
+> `KHR_lights_punctual` (approximated down to CNA's existing 3-slot `DirectionalLight0/1/2` shape,
+> wired through both the runtime glTF path and the offline `.cnj` JSON path). See Phases 14G/14H's
+> own sections for full detail.
+>
 > **Status update (2026-07-17): Phase 14F also closed.** `KHR_draco_mesh_compression` primitives
 > now decode for real (a new optional system dependency, `libdraco-dev`, detected via CMake and
 > gated behind `CNA_DRACO_AVAILABLE` — mirrors `CNA_FFMPEG_AVAILABLE`'s own established pattern),
@@ -611,13 +622,33 @@ onto `.cnj`, `RegisterCnjLoader<T>`, and Phase 9's hardening of those mechanisms
 | CNB-95 | Fix a real bug found during this work: `ComputeTangentsEXT` re-read `prim.indices` directly, which has no backing data for a Draco-compressed primitive (14F's own "metadata-only accessor" situation) | ✅ | `ExtractMesh`'s own triangle-connectivity extraction (previously computed twice — once early, silently unused, and again just before writing `out.indexBytes`) is now built exactly once, immediately after the per-primitive Draco decode, as a plain source-agnostic `std::vector<std::uint32_t> indices` (from the decoded Draco mesh's own face list, or from `prim.indices`/sequential order otherwise) — reused by both `ComputeTangentsEXT` (now takes this vector instead of re-deriving indices from `prim` itself) and the final index-byte-writing loop, which collapses to a single unconditional loop over it. This was a real, previously-unexercised correctness gap: every existing Draco test (14F) used a fixture with no PBR material, so `ComputeTangentsEXT`'s fallback never actually ran against Draco-sourced data until this task's own new fixture exercised it. |
 | CNB-96 | Tests | ✅ | New `GltfImportCoreTest.ComputeTangentsEXTAngleWeightsTriangleContributions` (the hand-derived two-triangle fixture above, asserting the exact angle-weighted tangent at the shared vertex) and `GltfImportCoreTest.ComputeTangentsEXTWorksOnADracoCompressedPbrPrimitiveWithNoTangentAccessor` (`#ifdef CNA_DRACO_AVAILABLE`-gated regression test for the CNB-95 bug fix — a Draco-compressed triangle with a `normalTexture` and no TANGENT attribute, asserting every vertex's tangent is finite and unit-length rather than garbage/NaN). Full-suite regression (including a full re-run after the `ExtractMesh`/`ComputeTangentsEXT` restructuring, since it touches the shared extraction path every other glTF test in this project also exercises): **4840 tests, 0 failures.** |
 
-### 14H — Remaining "vse udelej prosim" items ⬜ NOT STARTED
+### 14H — glTF extensions: `KHR_texture_transform`, `KHR_lights_punctual`, `KHR_materials_emissive_strength` ✅ CLOSED 2026-07-17
 
-> Task numbering reserved (`CNB-97`+) for whichever item is picked up next: true multi-UV-channel
-> rendering support for PBR maps (14B's own explicitly-deferred full fix), newer glTF extensions
-> (`KHR_texture_transform`/`KHR_lights_punctual`/`KHR_materials_emissive_strength`), and PBR/
-> skinned-vertex-color shader support on the other 7+ graphics backends (CNB-61/13C's own
-> deliberately-deferred scope, now being taken up).
+> All three extensions are already fully parsed by the vendored `cgltf.h` — no custom JSON parsing
+> needed for any of them. `KHR_materials_emissive_strength` is a plain scalar multiplier on
+> `emissiveFactor` (`cgltf_material::emissive_strength`/`has_emissive_strength`). `KHR_texture_transform`
+> is an offset/rotation/scale embedded directly in every `cgltf_texture_view`
+> (`cgltf_texture_transform`), applied here only to the base-color UV set (the one CNA already
+> samples for every stock effect). `KHR_lights_punctual` (`data->lights[]`/`node->light`) is
+> approximated down to CNA's existing 3-slot `DirectionalLight0/1/2` shape (every stock
+> lighting-capable effect's own hard cap) rather than adding a new punctual/point/spot light model —
+> a deliberate scope decision, since XNA 4.0 itself has no punctual light concept at all.
+
+| # | Task | Status | Notes |
+|---|---|---|---|
+| CNB-97 | `KHR_materials_emissive_strength` in `ExtractMesh` | ✅ | `out.emissiveFactor` is now `emissiveFactor * (has_emissive_strength ? emissive_strength.emissive_strength : 1.0f)` instead of the raw `emissiveFactor` alone — a one-line change once the multiplier's location in `cgltf_material` was confirmed. |
+| CNB-98 | `KHR_texture_transform` on the base-color UV set | ✅ | `ExtractMesh` now also captures `baseColorView.has_transform`'s own `cgltf_texture_transform` (offset/rotation/scale, plus its own `has_texcoord`/`texcoord` override, which takes priority over the material-level texcoord index when set — per spec) and applies the official reference formula in-place to every base-color UV pair after unpacking: `u' = cos(r)*u*sx − sin(r)*v*sy + ox; v' = sin(r)*u*sx + cos(r)*v*sy + oy` (scale, then rotate, then translate — verified against the extension's own published reference pseudocode, not derived from scratch). Scoped to the base-color map only (not every PBR map independently) — CNA's stock PBR shaders already sample every map through the single UV set 14B's own diagnostic covers; a per-map-independent transform would need the same multi-UV-channel rendering rework 14B explicitly deferred. |
+| CNB-99 | `KHR_lights_punctual` extraction: `ExtractPunctualLightsEXT` | ✅ | New `LightOut{direction, diffuseColor}` (NOXNA) and `ExtractPunctualLightsEXT(const cgltf_data*) -> std::vector<LightOut>`, capped at 3 lights (CNA's own hard per-effect limit) and restricted to nodes reachable from the default scene (reusing 13-something's existing `CollectSceneReachableNodes` helper). World transform via cgltf's own `cgltf_node_transform_world` (walks ancestors automatically) — `directional` lights use their own local −Z axis directly as world-space direction; `point`/`spot` lights (no directional concept in XNA) are approximated as pointing from the light's world position toward the scene origin, a documented, honest approximation rather than a silent one. `color * intensity` is clamped to `[0,1]` per channel before being stored as `diffuseColor` — also documented as approximate, since glTF's photometric units (lux for directional, candela for point/spot) have no defined mapping onto XNA's own unitless `DiffuseColor`. |
+| CNB-100 | Apply extracted lights to loaded effects: `ApplyPunctualLightsEXT` | ✅ | New file-scope helper in `ContentManager.cpp`, called from both the runtime glTF path (`ReadGltfModel`) and the offline `.cnj` JSON path (`ModelTypeReader::Read`) right before each part's `setEffectProperty` call. A single `dynamic_cast<Graphics::IEffectLights*>` covers `BasicEffect`/`SkinnedEffect`/`PbrEffect`/`SkinnedPbrEffect` uniformly and is a no-op for `DualTextureEffect`/`AlphaTestEffect` (which don't implement `IEffectLights` in real XNA either) — no per-effect-type branching needed. Fills `DirectionalLight0`/`1`/`2` (via `IEffectLights`'s own property accessors) for however many lights were found and sets each `Enabled`; any unused slots are left at the effect's own default (disabled), not zeroed. |
+| CNB-101 | Offline `.cnj` serialization of extracted lights | ✅ | New top-level `"lights"` JSON array (sibling to `"skeleton"`/`"animations"`/`"meshes"`), each entry `{"direction":[x,y,z],"diffuseColor":[r,g,b]}`. Written once per scene by `gltf_to_cnj.cpp`'s `ConvertGroup` (so the same extracted lights land in every mesh group's own `.cnj` output for a multi-skin file) and read back by `ContentManager.cpp`'s `.cnj` path via the existing `ParseFlatObjectArrayEXT`/`JsonFloatArray3`/`FindKeyArray` helpers, reusing the exact same `ApplyPunctualLightsEXT` call as the runtime glTF path. |
+| CNB-102 | Tests | ✅ | `GltfImportCoreTests.cpp`: `ExtractMeshAppliesTextureTransformAndEmissiveStrength` (single triangle, base-color `KHR_texture_transform` offset=[0.1,0.2]/scale=[2.0,0.5]/rotation=0 plus `KHR_materials_emissive_strength` strength=3.0 on emissiveFactor=[0.2,0.3,0.1]); `ExtractPunctualLightsEXTApproximatesDirectionalAndPointLights` (a rotated directional light — expected world direction independently derived via a from-scratch Python quaternion-rotation re-implementation, not the production code's own math — plus a point light, asserting the position-toward-origin approximation); `ExtractPunctualLightsEXTCapsAtThreeLights` (4-light fixture, asserts exactly 3 survive). `RuntimeGltfModelTests.cpp`: `AppliesKhrLightsPunctualToBasicEffectFromGltf`. `GltfToCnjToolTests.cpp`: `SerializesAndReloadsKhrLightsPunctualThroughTheOfflineCnjPath` (asserts both the raw `.cnj` text contains `"lights"` and the round-tripped effect is correctly configured). All 5 new tests passed on first run. Full-suite regression: **4845 tests, 0 failures.** |
+
+### 14I — Remaining "vse udelej prosim" items ⬜ NOT STARTED
+
+> Task numbering reserved (`CNB-103`+) for whichever item is picked up next: true multi-UV-channel
+> rendering support for PBR maps (14B's own explicitly-deferred full fix), and PBR/skinned-vertex-
+> color shader support on the other 7+ graphics backends (CNB-61/13C's own deliberately-deferred
+> scope, now being taken up: Bgfx, D3D9, D3D11, D3D12, SdlGpu, Vulkan, WebGPU).
 
 ## Relationship to other plan files
 

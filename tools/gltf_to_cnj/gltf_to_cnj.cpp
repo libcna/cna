@@ -425,6 +425,23 @@ namespace
         {
             json << "  \"skeleton\": \"" << JsonEscape(skeletonFile) << "\",\n";
         }
+
+        // CNB-97 (Phase 14H): KHR_lights_punctual, approximated as up to 3 directional lights
+        // (see ExtractPunctualLightsEXT's own doc comment) -- scene-level, so the same extracted
+        // lights are emitted into every mesh group's own .cnj output.
+        const std::vector<LightOut> punctualLights = ExtractPunctualLightsEXT(data);
+        if (!punctualLights.empty())
+        {
+            json << "  \"lights\": [\n";
+            for (std::size_t i = 0; i < punctualLights.size(); ++i)
+            {
+                const LightOut& l = punctualLights[i];
+                json << "    { \"direction\": [" << l.direction.X << ", " << l.direction.Y << ", " << l.direction.Z
+                     << "], \"diffuseColor\": [" << l.diffuseColor.X << ", " << l.diffuseColor.Y << ", " << l.diffuseColor.Z
+                     << "] }" << (i + 1 < punctualLights.size() ? "," : "") << "\n";
+            }
+            json << "  ],\n";
+        }
         if (!clipEntries.empty())
         {
             json << "  \"animations\": [\n";
