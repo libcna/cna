@@ -90,6 +90,29 @@ current rather than cumulative).
    for the shared-global-counter pollution risk that would have created for other
    tests in the same binary). Re-verified clean across 4 consecutive `devices-tsan`
    runs (this touches shared locking used by all four sensor classes).
+9. `COMP2-009` (`aaaa54e4`, docs-only, no source change) — closed by reference: its
+   own core concern ("destruction in either event cannot invoke the other on a dead
+   owner") is the exact hazard `LIFE-005` (same pass) already fully closed for both
+   `Compass`/`Motion`. Re-verified directly against current code before closing on
+   that basis, rather than assuming the earlier task's own claim.
+10. `MOT2-002` (`107e3e0d`) — hardened `AndroidMotionMath.hpp`'s quaternion math
+    against invalid/non-unit input (`Detail::NormalizeOrIdentity()`, new shared
+    helper; `asin()` argument now clamped to `[-1,1]`). **Found and fixed a real gap
+    beyond the one function the task named**: `AndroidMotionBackend::HandleAttitudeSample()`
+    separately builds the *published* `AttitudeReading::RotationMatrix` from the raw
+    (previously unvalidated) quaternion, independently of the yaw/pitch/roll
+    extraction — moved validation into `ConvertRotationVectorToXnaQuaternion()` itself
+    so every downstream consumer stays consistent. One pre-existing test needed
+    updating (its own non-unit-input assumption was intentionally superseded, not
+    weakened); 8 new fuzz/gimbal-lock tests added.
+11. `COMP2-002` (`7e366cf9`) — the Compass analogue of `MOT2-002`, for
+    `AndroidCompassMath.hpp`'s different, non-`Quaternion`-typed `atan2()`-based
+    formulas. New `Detail::NormalizeCompassQuaternion()`, wired into the one
+    production entry point (`ConvertRotationVectorToMagneticHeadingDegreesWithTiltMode()`)
+    so the tilt-mode decision and heading formula never see inconsistent (one raw,
+    one normalized) data. Confirmed this file's pre-existing `double` arithmetic
+    already avoids the `float`-overflow risk `MOT2-002` had to fix separately. 9 new
+    tests, zero pre-existing tests needed changes.
 
 **Pattern across `ANDR2-004`/`005`/`006`:** all three are inside `#ifdef __ANDROID__`
 code with **zero host-side test coverage possible** — verified instead via a real
@@ -104,16 +127,24 @@ link time — flag for whoever next fixes the `sharp-runtime` blocker.
 **Build:** `cmake-build-devices-ubsan` and `cmake-build-android` both still build
 clean (the latter for individual translation units only, per above).
 
-**Tests:** Devices/Sensors filtered suite — **406 tests, 402 passed, 4 skipped**
+**Tests:** Devices/Sensors filtered suite — **424 tests, 420 passed, 4 skipped**
 (hardware-only, unchanged all pass). Zero regressions across every P1 task above.
 
 **Sanitizers:** `devices-ubsan` clean on every P1 change. `devices-tsan` re-run (4
 consecutive clean runs) specifically for `LIFE-006`, since that one touches shared,
 genuinely concurrent base-class locking used by all four sensor classes — the other
-7 P1 tasks this pass (`BASE2-007`/`VIB2-*`/`LIFE-008`/`ANDR2-004/005/006`) don't add
-new concurrency (exception-safety, NaN-handling, Android-only sequential-logic
-fixes), so weren't separately TSan-verified. Re-run TSan if a future P1 task touches
-concurrent logic.
+P1 tasks this pass (`BASE2-007`/`VIB2-*`/`LIFE-008`/`ANDR2-004/005/006`/`MOT2-002`/
+`COMP2-002`) don't add new concurrency (exception-safety, NaN-handling, Android-only
+sequential-logic fixes, pure host-testable math), so weren't separately TSan-verified.
+Re-run TSan if a future P1 task touches concurrent logic.
+
+**Emerging pattern worth knowing about:** two tasks this pass (`MOT2-002`/`COMP2-002`)
+were found to have a *second*, related task in the same P1 backlog whose own concern
+turned out to already be resolved (`COMP2-009`) or whose fix needed to reach further
+than the literal task wording named (a separately-published `RotationMatrix`, not just
+the one function `MOT2-002` explicitly called out). Before starting a new math/lifecycle
+task, grep `plan_devices.md` for other tasks touching the same file/function — some of
+the remaining backlog may already be partly or fully addressed by a sibling fix.
 
 ---
 
@@ -203,23 +234,40 @@ Continue the P1 backlog. Not yet triaged/started, roughly in the order encounter
 scanning `plan_devices.md` Section 16 (no mandated order within P1 — pick by
 tractability, same reasoning as this pass's choices):
 
+- **`LIFE-007`/`010`/`011` — deliberately set aside, not merely unstarted.** These are
+  large architecture tasks (a full explicit state machine; failure-class-to-state
+  mapping; per-generation in-flight callback counters) — investigated `LIFE-011`
+  specifically far enough to find a **real design tension**: its literal ask ("Stop()
+  guarantees no further callback after return") cannot be satisfied by naively making
+  `Stop()` wait for `backendCallsInFlight_ == 0` before returning — that reintroduces
+  the *exact* deadlock `TEST2-001` fixed (`ConcurrentStopDuringStartDoesNotDeadlock`'s
+  synchronous-join scenario). Resolving it properly needs the required work's own
+  "per-generation in-flight counters" (distinguishing "waiting on a call this Stop()
+  itself superseded" from "waiting on a call this Stop() is legitimately stopping"),
+  which is real design work, not a quick fix — do not attempt a naive symmetric wait.
 - `DEVPERF-002`–`005` — API/behavioral oracle generation, callback/threading contract
   documentation, structured diagnostic channel. Larger, more design-heavy P1 tasks;
   `DEVPERF-005` (diagnostic channel) in particular has been referenced as "future
   scope" by several tasks closed this pass (`ANDR2-006` especially) — worth
   considering next since multiple other tasks are implicitly waiting on it.
-- `SDLCORE-005`/`007`/`009`/`011` — hotplug handling, event timestamps, callback
-  exception consistency, shutdown ordering.
-- `LIFE-007`/`010`/`011` — one explicit lifecycle state machine, transient-vs-permanent
-  failure distinction, Stop/Dispose quiescence (`LIFE-006`, disposal exception-safety,
-  is now done — see Section 2 item 8).
+- `SDLCORE-005`/`009` — hotplug handling, callback exception consistency.
+  `SDLCORE-007` (acquisition timestamps) is a meaningful policy change (dispatch-time
+  wall clock → calibrated monotonic-to-UTC bridge) — design-heavy, not a quick fix.
+  `SDLCORE-011` (shutdown ordering) investigated briefly: nothing in production code
+  currently calls `SDL_Quit()` (only one example demo does, in its own `main()`), so
+  the actual risk in *this* codebase today is narrower than the task's framing
+  suggests — worth re-confirming that's still true before deciding how much this one
+  actually needs, rather than assuming the full fix is urgent.
 - `ANDR2-002`/`007`/`009`–`012`/`014`/`015` — remaining Android-only items (several are
   real-hardware-only by nature: `014`/`015` explicitly want fuzzing/instrumented
-  hardware runs).
-- `COMP2-*`/`MOT2-*` — mostly math/coordinate-derivation and hardware-truth-table
-  tasks (`COMP2-004`/`005`, `MOT2-010` explicitly need physical devices — scope those
-  like `ANDR2-001`/`003` did: implement what's implementable, document the device
-  procedure, leave hardware validation OPEN).
+  hardware runs). `ANDR2-007`'s "calibrated boot/monotonic-to-UTC offset" is the same
+  design-heavy concern as `SDLCORE-007` above, for the Android-native path specifically.
+- `COMP2-001`/`003`/`004`/`005`/`008` — `MOT2-002`/`COMP2-002` (quaternion math
+  hardening) are done; remaining Compass items are timestamp alignment, axis-basis
+  derivation, and hardware-truth-table/verification tasks (`COMP2-004`/`005`
+  explicitly need physical devices — scope those like `ANDR2-001`/`003` did).
+- `MOT2-001`/`003`/`005`/`006`/`008`/`009`/`010` — remaining Motion items (`MOT2-010`
+  needs physical hardware).
 - `BASE2-001`–`005` — mostly "verify against a behavioral oracle" tasks; this
   environment has no WP7 SDK/MonoGame reference to compare against directly, so these
   may need to be scoped down to "verify current behavior is internally consistent and
@@ -227,7 +275,10 @@ tractability, same reasoning as this pass's choices):
   making explicit if picked up.
 - `VIB2-003`–`007`, `PERF2-*`, `TEST2-002`+ — remaining P1/P2 items in those areas.
 
-Read each task's full `plan_devices.md` entry before starting.
+Before starting any task, grep `plan_devices.md` for other tasks touching the same
+file/function first — this pass found two cases (`COMP2-009`, and part of `MOT2-002`'s
+own fix) where a task's concern overlapped with or was already resolved by a sibling
+task. Read each task's full `plan_devices.md` entry before starting.
 
 ---
 
