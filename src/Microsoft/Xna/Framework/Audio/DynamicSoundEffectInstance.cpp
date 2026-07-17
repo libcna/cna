@@ -430,11 +430,24 @@ namespace Microsoft::Xna::Framework::Audio
                 std::lock_guard<std::mutex> lock(queueMutex_);
                 std::size_t total = 0;
                 for (std::size_t size : submittedChunkSizes_) total += size;
-                while (!submittedChunkSizes_.empty() &&
-                       total > static_cast<std::size_t>(queuedBytes))
+
+                // AUDIO-BUFFER-001 (external audit, 2026-07-16): was `while (total >
+                // queuedBytes) pop_front()`, which dropped an ENTIRE chunk the instant the
+                // stream had consumed even a single byte of it (any total > queuedBytes at all),
+                // not once that chunk's own full byte count had actually been played. `consumed`
+                // is how many bytes have genuinely been played since these chunks were tracked --
+                // only pop a chunk once `consumed` covers that chunk's whole size, decrementing
+                // the budget as each one is confirmed, so a second chunk isn't credited with
+                // bytes the first one hasn't finished consuming yet.
+                if (static_cast<std::size_t>(queuedBytes) <= total)
                 {
-                    total -= submittedChunkSizes_.front();
-                    submittedChunkSizes_.pop_front();
+                    std::size_t consumed = total - static_cast<std::size_t>(queuedBytes);
+                    while (!submittedChunkSizes_.empty() &&
+                           consumed >= submittedChunkSizes_.front())
+                    {
+                        consumed -= submittedChunkSizes_.front();
+                        submittedChunkSizes_.pop_front();
+                    }
                 }
             }
         }

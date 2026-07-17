@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
 
+#include <chrono>
 #include <cstdlib>
+#include <thread>
 #include <vector>
 
 #include "Microsoft/Xna/Framework/Audio/DynamicSoundEffectInstance.hpp"
@@ -667,6 +669,51 @@ TEST(DynamicSoundEffectInstanceTest, SubmitBufferWhilePlayingIncrementsPendingBu
     d.SubmitBuffer(pcm);
 
     EXPECT_EQ(d.getPendingBufferCountProperty(), before + 1);
+}
+
+// AUDIO-BUFFER-001 (external audit, 2026-07-16): Update()'s byte-accounting loop used to pop an
+// entire submitted chunk from tracking the instant SDL reported ANY consumption at all (any
+// `total > queuedBytes`), not once that chunk's own full byte count had actually been played --
+// confirmed real by tracing the algorithm: `while (total > queuedBytes) { total -= front;
+// pop_front(); }` drops a WHOLE chunk per iteration regardless of how much of the drop in
+// `queuedBytes` actually came from that specific chunk, so two whole-second chunks could report
+// PendingBufferCount == 1 after only ~50ms of real playback (should still be 2), and == 0 after
+// ~1.2s (should still be about 1, since only the first chunk's second has actually elapsed).
+TEST(DynamicSoundEffectInstanceTest, PendingBufferCountOnlyDropsOnceAWholeChunkIsActuallyConsumed)
+{
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+    DynamicSoundEffectInstance d(44100, AudioChannels::Stereo);
+
+    // Two whole-second, 16-bit stereo chunks: 44100 frames/sec * 2 channels * 2 bytes/sample.
+    std::vector<unsigned char> oneSecond(static_cast<std::size_t>(44100) * 2 * 2, 0);
+    d.SubmitBuffer(oneSecond);
+    d.SubmitBuffer(oneSecond);
+    ASSERT_EQ(d.getPendingBufferCountProperty(), 2);
+
+    try
+    {
+        d.Play();
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+    if (d.getStateProperty() == SoundState::Stopped)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    d.Update();
+    EXPECT_EQ(d.getPendingBufferCountProperty(), 2)
+        << "only ~50ms of a full second-long chunk has played -- neither whole chunk should have "
+           "been dropped from tracking yet";
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(1150)); // ~1.2s total real playback
+    d.Update();
+    EXPECT_EQ(d.getPendingBufferCountProperty(), 1)
+        << "about 1.2s has passed -- exactly the first whole one-second chunk should now be "
+           "confirmed consumed, leaving the second one still tracked";
 }
 
 // P9-DYNAMIC-001: BufferNeeded must fire once per every subscriber, not just the first --

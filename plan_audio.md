@@ -5486,6 +5486,37 @@ written, per this branch's established practice.
   cue happens to still literally be in `activeCues_`) and the original `DisposeForceStopsCueObtainedViaGetCue`
   (unchanged, still passes).
 
+* [x] P14-BUFFER-001 (external audit finding 2, high severity): `DynamicSoundEffectInstance::Update()`'s
+  byte-accounting loop (`while (total > queuedBytes) { total -= front; pop_front(); }`) popped an
+  *entire* submitted chunk off `submittedChunkSizes_` the instant SDL reported *any* consumption at
+  all (any `total > queuedBytes`, even by one byte), not once that chunk's own full byte count had
+  actually been played -- so `PendingBufferCount` could under-report by a full buffer or more well
+  before the audio had genuinely finished playing it, and correspondingly fire `BufferNeeded` too
+  early.
+  *Status:* Fixed. Independently confirmed by hand-tracing the algorithm against two whole-second
+  chunks (matches the audit's own reproduction numbers): after ~30ms, `total(8192) > queuedBytes(~8100)`
+  is already true, so the *entire* first chunk (4096 bytes, in the audit's own byte-count example)
+  got popped for a mere ~92 bytes of real consumption; after ~1017ms (barely past the first
+  chunk's own 1-second duration), the loop's *second* iteration also fired since decrementing
+  `total` by a full chunk each time (not proportionally to real consumption) kept the comparison
+  true, popping *both* chunks. Replaced with a `consumed = total - queuedBytes` budget computed
+  once per `Update()` call, only popping a chunk once `consumed` covers that chunk's *entire* size,
+  decrementing the budget as each one is confirmed -- so a second chunk is never credited with
+  bytes the first one hasn't finished consuming yet. Guarded with `queuedBytes <= total` first
+  (rather than relying on unsigned subtraction wrapping) so a transient SDL report of more queued
+  bytes than we're tracking (e.g. right after a fresh `SubmitBuffer` mid-`Update()`) can't underflow
+  the budget computation.
+  *Tests:* 1 new (`DynamicSoundEffectInstanceTests.cpp`,
+  `PendingBufferCountOnlyDropsOnceAWholeChunkIsActuallyConsumed`), using the same two-whole-second-chunk
+  shape and timing windows (~50ms, ~1.2s) the audit's own reproduction used, with real
+  `std::this_thread::sleep_for` under `SDL_AUDIODRIVER=dummy` (matching this test file's own
+  existing timing-based-test precedent). `git stash`-verified: stashing the production file alone
+  reproduces the audit's exact numbers (count drops to 1 after ~50ms, to 0 after ~1.2s -- both
+  wrong; post-fix, 2 and 1 respectively, both correct). Full existing `DynamicSoundEffectInstanceTests.cpp`
+  suite re-verified passing unchanged -- none of the pre-existing `PendingBufferCount` tests
+  exercise real elapsed-time partial consumption, which is exactly why this was a previously
+  untested gap, not a re-confirmation of something already known.
+
 * [x] P14-ORDER-001 (external audit finding 3, medium severity, **partial fix -- see scope note**):
   `Cue::Play()`'s per-wave-reference loop called `inst->Play()` (starting SDL3_mixer playback)
   *before* seeding the instance's 3D state (`Apply3D`) and before establishing its per-track filter
