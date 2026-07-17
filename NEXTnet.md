@@ -10,10 +10,13 @@ fidelity to FNA (`/rv/data/library/github.com/FNA-XNA/FNA` for most namespaces,
 `/rv/data/library/github.com/FNA-XNA/FNA.NetStub/src/GamerServices/` for GamerServices), backed by
 unit tests.
 
-**Current phase:** a fresh second-pass hardening plan, `plan_net.md` ("2026-07-07 Re-Audit and
-Hardening"), covering `Net`, `GamerServices`, and Avatar. The prior first-implementation pass
-(132/132 tasks) is complete and archived at `plan_net_20260707.md`. The new plan has 11 phases;
-**Phase 1 is in progress** (2 of 6 tasks remain), Phase 2 is done, Phases 3-11 have not started.
+**Current phase:** `plan_net.md` ("2026-07-07 Re-Audit and Hardening"), covering `Net`,
+`GamerServices`, and Avatar. **All 11 phases are done** (every task `[x]` with a write-up) except
+Task 11.7 itself (the final user-facing summary — write it, then this plan is fully closed out).
+The prior first-implementation pass (132/132 tasks) is complete; its own archive file
+(`plan_net_20260707.md`) no longer exists in the working tree (deleted by a later, separate,
+deliberate repo-wide cleanup commit, `e86b7cba` — still fully recoverable via git history, see
+Task 11.3's write-up in `plan_net.md`).
 
 **Key architectural decisions (see `CLAUDE.md` for the full rules):**
 - Strict separation: `Microsoft::Xna::Framework::*` types must match real XNA/FNA behavior exactly.
@@ -22,258 +25,189 @@ Hardening"), covering `Net`, `GamerServices`, and Avatar. The prior first-implem
 - `sharp-runtime` (sibling repo, `../sharp-runtime/`) supplies all `System.*` types via a direct
   filesystem include path, not a git submodule. Never modify existing `sharp-runtime` files
   without asking the user first, for every commit.
+- **Decision 1a**: the Xbox 360 XNA 4.0 reference behavior (not Windows' PC no-op stubs) is the
+  correctness bar for Net/GamerServices/Avatar, since CNA already has its own real
+  avatar/networking implementations. This is why GamerServices/Net/Avatar are real, tested
+  implementations now, not the "Xbox Live exclusive, not planned" stubs older docs described.
 - Real networking is ENet-backed (`CNA::Internal::Net::ENetBackend`), star topology only — clients
-  connect directly to the host, never to each other. This matters for the planned host-migration
-  work (Phase 5).
+  connect directly to the host, never to each other.
 - Avatar has two parallel surfaces: the faithful XNA `AvatarRenderer` API (intentionally a
-  no-op-by-design, matching real XNA/FNA), and a CNA-original real-rendering extension
-  (`EnableRealRenderingEXT`/`DrawRealEXT`, backed by `SkinnedModelEXT`). The current avatar art
-  pipeline is Blender-script-based (`tools/avatar_builder/`); this pass is planning (not yet
-  started) a shift to author body/head *shape* geometry in the sibling `../mesh-craft` tool
-  (a constructive `.mc3.xml` scene editor, `mc3togltf` exports to glTF) feeding into the existing
-  Blender rig/skin/animation stages — mesh-craft itself has no skeletal-skinning concept.
+  no-op-by-design, matching real XNA/FNA off-Xbox — see `demo_avatar_bone_state_boundary` for a
+  live comparison), and a CNA-original real-rendering extension (`EnableRealRenderingEXT`/
+  `DrawRealEXT`, backed by `SkinnedModelEXT`). The avatar art pipeline is Blender-script-based
+  (`tools/avatar_builder/`), with body/clothing *shape* geometry now generated via the sibling
+  `../mesh-craft` tool's CSG engine (Phase 7) rather than Blender's plain datablock-join — see
+  `docs/avatar-real-rendering-ext.md`'s "Phase 7" section for why that mattered (it fixed the
+  "monster avatar" mesh-explosion bug).
 
 ## 2. Current status
 
-- **Build status:** last known-good build is at commit `77beeeed` (2026-07-07 19:07), configured
-  with `-DCNA_GRAPHICS_BACKEND=EASYGL` in `cmake-build-debug/` (confirmed via `CMakeCache.txt`).
-  The one commit since (`f6b74020`) is docs-only — no source changed, so the build should still be
-  current, but it has not been re-verified.
-- **Test status:** full `CnaTests` suite was **3405/3405 passing** (2 expected skips —
-  `AccelerometerTests`/`GyroscopeTests`, hardware-dependent) as of `77beeeed`. Not rerun since.
-- **Tools/apps available:** 24+ demo executables build directly under `cmake-build-debug/` (e.g.
-  `cna_demo_avatar`, `cna_demo_avatar_animation_gallery`, `cna_demo_net_avatar_sync`).
-  `tools/avatar_builder/` (Blender/`bpy` procedural avatar generator, offline, produces
-  body+skeleton+animations). `tools/avatar_asset_pipeline/convert_avatar.py` (MakeHuman body +
-  Mixamo animation clips → CNA's own `.skinnedmodel.json`/`.skeleton.bin`/`.clip.bin`).
-- **Recently implemented:** `NetworkSession`'s destructor now falls back to `Dispose()` if not
-  already disposed (fixes a real bug — see section 3).
-- **Confirmed-correct, left unchanged:** `NetworkMachine::RemoveFromSession`,
-  `NetworkSession::BeginCreate`'s hardcoded-69 `maxGamers` quirk, and
-  `PropertyDictionary::CopyTo`'s always-throw are all genuine, source-verified FNA fidelity, not
-  bugs.
-- **Known working demo:** `cna_demo_avatar --gender male|female [--wardrobe-hair Cap|Ponytail]`
-  renders a real, procedurally-generated, animated avatar through the real engine (confirmed
-  working as of the prior 132-task pass; not re-verified this session).
-- **Does NOT work yet:** `Guide.BeginShowMessageBox` (always throws `NotSupportedException`),
-  `Guide.BeginShowKeyboardInput` (always returns an empty string), achievement/leaderboard
-  persistence (in-memory only, not confirmed to survive process exit), `AllowHostMigration`
-  (stored, no effect — host disconnect always ends the session immediately), `SimulatedLatency`/
-  `SimulatedPacketLoss` (stored, no effect on real traffic), and avatar mesh quality (a confirmed
-  elbow/sleeve tear and vertex-weight gaps — see section 5 — are the actual root cause of the
-  "avatars look like monsters" complaint that triggered this whole re-audit pass, not yet fixed).
+- **Build status:** full project rebuild is clean (`cmake --build cmake-build-debug -j$(nproc)`)
+  except one pre-existing, unrelated, already-documented failure: `cna_demo_xact`'s Content-copy
+  step (XACT audio demo, nothing to do with Net/GamerServices/Avatar — see
+  `scripts/run-all-backend-smoke-tests.sh`'s own comment referencing it). `CNA_GRAPHICS_BACKEND=EASYGL`,
+  `CNA_BUILD_TESTS=ON`, `CNA_BUILD_EXAMPLES=ON` are all set in `cmake-build-debug/CMakeCache.txt`.
+- **Test status:** `ctest -j$(nproc)` → **4884/4935 passing (99%)**. All 51 failures individually
+  investigated (not assumed pre-existing) — none traced to this plan's own work:
+  - Missing `.xnb`/MonoGame test fixture files (majority) — an environment/checkout gap.
+  - Mesa llvmpipe/Xvfb software-rendering limitations (`EasyGL_MRT_TwoAttachments`,
+    `EasyGL_GraphicsDevice_ReferenceStencil`, `EasyGL_RealWindowResize` timeout,
+    `easy-gl-resource-smoke-tests` abort).
+  - Parallel-`ctest`-execution contention, confirmed benign: every one of
+    `LeaderboardReaderTest`/`AudioCategoryTest`/`WaveBankTest`/`ENetBackendTest`/
+    `ENetDiscoveryServiceTest`'s failing cases passes cleanly standalone or under `ctest -j1` (the
+    `ENet*` cases line up with a real, already-documented design property — many parallel test
+    *processes* sharing one well-known discovery port, 61190, is expected OS-arbitrary contention,
+    not a bug). See `plan_net.md`'s own Task 10.7 write-up for the full per-category detail.
+- **Tools/apps available:** 24+ demo executables under `cmake-build-debug/`, including 8
+  avatar-related demos, all now with an in-app **F1 help overlay** (Phase 8) — press F1 in any of
+  them for its exact current controls. `docs/avatar-demos.md` is the controls/troubleshooting
+  reference. `tools/avatar_builder/` now builds production avatar content via
+  `generate_body_meshcraft.py`/`generate_clothes_meshcraft.py` (mesh-craft CSG pipeline, Phase 7),
+  not the older plain-primitive-join `generate_body.py`/`generate_clothes.py` (still
+  standalone-runnable, but superseded for real content generation).
+- **Real, working features added this pass:**
+  - `Guide.BeginShowMessageBox` — real `SpriteBatch`-based overlay (Phase 3).
+  - `Guide.BeginShowKeyboardInput` — real captured text via `TextInputEXT` (Phase 3).
+  - Achievements/Leaderboards — real disk persistence via `LocalGamerServicesStore`
+    (`StorageDevice::GetStorageRootEXT()`-backed), not in-memory-only (Phase 4).
+  - Real host migration for `SystemLink` sessions (Phase 5).
+  - Real `SimulatedLatency`/`SimulatedPacketLoss` on actual ENet traffic (Phase 6).
+  - Fixed the "monster avatar" mesh-explosion bug via a mesh-craft CSG-based body/clothing
+    pipeline (Phase 7) — see `docs/avatar-real-rendering-ext.md`'s "Phase 7" section.
+  - F1 help overlay across all 8 avatar-related demos (Phase 8) — and along the way, found and
+    fixed a real, previously-undetected rendering bug: the shared `MakeSimpleFont` helper's glyph
+    `bounds` were `(0,0,1,1)`, so every character rendered as a single sub-pixel dot instead of a
+    visible block (fixed to `(0,0,6,10)`/`(0,0,0,0)` for space), plus a panel-width calculation
+    that assumed the wrong per-character advance. Both fixed in every demo that has the F1
+    overlay. **The same broken `MakeSimpleFont` pattern still exists, unfixed, in 10 other
+    pre-existing demos outside this plan's scope** — see section 5 below, it's a real follow-up
+    item, not silently dropped.
+  - `docs/xna-4-api-coverage.md`, `docs/avatar-real-rendering-ext.md`,
+    `tools/avatar_builder/README.md`, `docs/coverage.md` all corrected to describe real
+    GamerServices/Net status instead of "Guide-stub-only"/"Xbox Live exclusive, not planned"
+    (Phase 9). New `docs/avatar-demos.md` (controls + troubleshooting).
+- **Real, pre-existing bugs found and fixed this pass (Phase 12-14, done before Phase 2 in
+  session order):** `NetworkSession::Dispose()` double-call use-after-free, async completion
+  callbacks never invoked, `GamerCollectionEnumerator::MoveNext()` null-deref after `Dispose()`.
 
-## 3. Recent changes
+## 3. Known gaps (honest, not glossed over)
 
-Since the prior 132-task pass closed out (`a3f1c618`), in order:
+- **`SignedInGamer::GetFriends()`** always returns an empty `FriendCollection` — no friend-list
+  population source exists at all (found during Phase 11's final audit; self-documented in
+  `FriendCollection.hpp`'s own comment, out of Phase 4's specific persistence scope, a real
+  follow-up if friend-list functionality is ever prioritized).
+- **The shared `MakeSimpleFont` glyph-bounds bug** (see section 2) is fixed everywhere Phase 8
+  touched, but the *same* broken pattern (`bounds.push_back(Rectangle(0, 0, 1, 1))`) still exists,
+  unfixed, in 10 other pre-existing demos entirely outside this plan: `demo_leaderboard_viewer`,
+  `demo_gamerservices_signin_presence`, `demo_gamer_roster_hud` (the origin this pattern was
+  copied from), `demo_net_client_server_arena`, `demo_gamerservices_dispatcher_watchdog`,
+  `demo_achievement_showcase`, `demo_simulated_network_conditions`, `demo_gamer_profile_privileges`,
+  `demo_session_browser`, `demo_friends_and_gamercard` (found via `grep -rl
+  "bounds.push_back(Rectangle(0, 0, 1, 1))" examples/`). Every on-screen text label in those demos
+  is almost certainly rendering as dots too. Deliberately left unfixed — out of this plan's own
+  scope (avatar demos only) and too large a blast radius (11 files across unrelated
+  plans/subsystems) to take on unprompted.
+- **Avatar mesh quality**: the core "monster" complaint (disproportionate limbs, mesh explosions
+  at joints) is genuinely fixed (Phase 7). Smaller, real gaps remain open: a residual shoe-area
+  dark artifact, a `Wave`-pose chest-band artifact, and `validate_gltf.py` still lacking NaN/Inf/
+  bone-index-bounds checks on generated content.
+- **`NetworkSessionType::PlayerMatch`/`Ranked`, session invites** remain documented stubs — no
+  matchmaking/invite backend exists to implement them against (not "Xbox Live exclusive," just no
+  online service to connect to).
+- **`Guide.Show`** remains a no-op — there is no system UI to show (consistent with FNA's own
+  minimal PC `Guide`).
+- **`cna_demo_xact`** fails to build (Content-copy step) — pre-existing, unrelated to this plan,
+  already documented elsewhere.
 
-- `eefaeea3` — archived `plan_net.md` → `plan_net_20260707.md` (132/132 done); wrote a fresh
-  `plan_net.md` for this second-pass hardening plan.
-- `f7daecea` — Phase 1 investigation only: confirmed `NetworkMachine::RemoveFromSession` and
-  `BeginCreate`'s hardcoded `maxGamers=69` are genuine FNA fidelity. No code change.
-- `77beeeed` — **fix**: `NetworkSession::~NetworkSession()` now calls `Dispose()` if not already
-  disposed. Previously, deleting a session without an explicit `Dispose()` call left the
-  `activeSession_` process-wide singleton dangling and skipped ENet transport teardown —
-  permanently blocking any new session for the rest of the process. 2 new tests added
-  (`NetworkSessionTests.cpp`); verified via revert-verify-restore (tests fail without the fix).
-  Full suite 3405/3405.
-- `f6b74020` — docs only: confirmed `PropertyDictionary::CopyTo`'s always-throw is genuine,
-  source-verified FNA fidelity (checked FNA's real `PropertyDictionary.cs` directly), not a bug —
-  a "fix" was implemented, then fully reverted after verification.
-
-Two Phase 1 tasks are written into the plan but **not yet implemented**: `AvatarRenderer::Draw`
-and `AvatarRenderer::EnableRealRenderingEXT` both have missing null-argument checks (found by a
-separate read-only inventory pass, confirmed by direct code reading, not yet fixed).
-
-## 4. Current blocker / main problem
-
-**There is no failing build or failing test right now.** The nearest thing to a blocker is scope,
-not a crash:
-
-- Phase 1 has 2 small unfinished tasks before it can close out (see section 8, tasks 1-2).
-- The larger, structural open problem is **Phase 7 (avatar asset quality)** — the actual reason
-  this re-audit was requested. It requires prototyping a new pipeline stage (author body/head
-  shape in the sibling `../mesh-craft` tool, export via `mc3togltf`, feed into the existing
-  Blender rig/skin stage) that has not been prototyped at all yet, only planned on paper
-  (`plan_net.md` Phase 7, Task 7.4).
-- **Phase 5 (real host migration)** has an explicitly-unresolved design question written into the
-  plan itself (Task 5.1): in this star-topology transport, a promoted host has no pre-existing
-  connections to the surviving peers, so migration needs a genuine reconnect, not a live socket
-  handoff. This needs to be confirmed as acceptable "simple" scope before implementing anything.
-- **Process note:** earlier in this pass, a background research agent was unintentionally given
-  too much autonomy (it inherited broader "work autonomously" instructions from its parent
-  context) and pushed 3 commits — archiving the plan, writing the new plan, and the
-  `NetworkSession` destructor fix — without the review checkpoint that was intended. Those commits
-  were reviewed afterward and are correct/kept, but it's why Phase 0-2 finished before Phase 1's
-  remaining 2 small tasks did.
-
-## 5. Known bugs and limitations
-
-- **Confirmed bug, not fixed:** `AvatarRenderer::Draw(IAvatarAnimation* animation)`
-  (`src/Microsoft/Xna/Framework/GamerServices/AvatarRenderer.cpp:101-105`) has no null check —
-  passing `nullptr` is undefined behavior (crash), not a catchable exception.
-- **Confirmed bug, not fixed:** `AvatarRenderer::EnableRealRenderingEXT(GraphicsDevice&,
-  shared_ptr<SkinnedModelEXT>)` (`AvatarRenderer.cpp:121-134`) does not validate its `model`
-  argument is non-null — a null model crashes later, inside `DrawRealEXT`, not at the call site.
-- **Confirmed bug, fixed:** `NetworkSession` destructor not calling `Dispose()` — see section 3.
-- **Confirmed bug, not fixed** (pre-existing, from the prior Avatar-generation pass, not touched
-  this session): the procedural avatar body/clothes rig has a real elbow/sleeve tear under bending
-  (visible at the `Wave` animation's peak fold) — the forearm/hand visibly separates from the
-  shirt sleeve. Root cause: automatic Blender weight-painting, never hand-corrected.
-- **Confirmed limitation, not fixed** (same root cause): 32 of 1086 body-mesh vertices have zero
-  total bone weight; 24 shirt vertices exceed glTF's 4-joint-influence limit. Both are silently
-  handled (a synthetic `neutral_bone` joint; glTF's own trim/renormalize) rather than crashing or
-  failing export, but are real visual-quality gaps.
-- **Confirmed, intentional — verified against real FNA source, not bugs:**
-  `PropertyDictionary::CopyTo` always throws `NotImplementedException`;
-  `NetworkMachine::RemoveFromSession` always throws `NotImplementedException`;
-  `NetworkSession::BeginCreate`'s simplest overload hardcodes `maxGamers=69` regardless of the
-  caller's argument.
-- **Incomplete (planned, Phase 3):** `Guide.BeginShowMessageBox`/`BeginShowKeyboardInput` have no
-  real overlay/text-capture implementation.
-- **Incomplete (planned, Phase 4):** achievement/leaderboard state has no disk persistence.
-  Exactly how "earned" state is populated today needs re-confirming (`plan_net.md` Task 4.1) —
-  not fully nailed down yet.
-- **Incomplete (planned, Phase 5):** `AllowHostMigration` is stored but inert.
-- **Incomplete (planned, Phase 6):** `SimulatedLatency`/`SimulatedPacketLoss` are stored but have
-  no effect on real traffic.
-- **Incomplete (planned, Phase 7):** avatar mesh-craft integration not started.
-- **Stale docs, not fixed (planned, Task 9.1):** `docs/xna-4-api-coverage.md` has multiple
-  sections still claiming Net/GamerServices/Avatar are unimplemented or intentionally excluded —
-  false, per Task 1.1's own line-by-line citations in `plan_net.md`.
-- **Needs verification:** whether all 24 demos still build cleanly after the `NetworkSession`
-  destructor fix (not re-tested since; the fix is Net-side and unlikely to affect unrelated
-  demos, but unconfirmed).
-- **Risky assumption, flagged in the plan itself (Task 5.1):** the "simple" host-migration design
-  assumes surviving peers can just reconnect fresh to a promoted host. Not yet confirmed as
-  acceptable scope.
-
-## 6. Architecture notes
+## 4. Architecture notes
 
 - **Namespace split:** `Microsoft::Xna::Framework::*` = must match real XNA/FNA behavior exactly —
   **check the real FNA source before assuming any `NotImplementedException`/stub is a bug**
-  (`FNA` for most namespaces, `FNA.NetStub/src/GamerServices/` for GamerServices). A near-miss on
-  `PropertyDictionary::CopyTo` (section 3) is the concrete lesson here. `CNA::*`/`NOXNA`/`*EXT` =
-  CNA-original, opt-in extensions.
+  (`FNA` for most namespaces, `FNA.NetStub/src/GamerServices/` for GamerServices). Phase 11's own
+  165-hit grep audit re-confirmed this discipline held throughout the whole pass — 162/165 hits
+  were correctly intentional FNA-fidelity, 0 were a stale comment describing pre-fix behavior as
+  current, only 1 was a genuine new follow-up item (`GetFriends()`, section 3).
 - **`sharp-runtime`:** sibling repo (`../sharp-runtime/`), included via direct filesystem path
   (not a submodule) — any local change there is immediately visible to this build. Never modify
   existing `sharp-runtime` files without asking the user first, for every commit.
-- **Real networking:** `CNA::Internal::Net::ENetBackend` wraps ENet. Star topology only. Key
-  state: `SessionState::WireIdToGamer`/`WireIdToPeer`/`PeerWireIds`/`HostPeer`. Wire protocol:
-  `NetPacketCodec` — opcode `0x05` (`HostChangeBroadcast`) is reserved but unimplemented, the
-  natural hook for Phase 5.
-- **`NetworkSession`** is a process-wide singleton (`activeSession_`) — only one active session
-  per game, enforced by `BeginCreate`/`BeginFind`/`BeginJoin` throwing if already set.
-  `Create`/`Find`/`Join` hand back a caller-owned raw pointer (documented ownership contract); the
-  destructor is now a `Dispose()` safety net, but callers should still prefer explicit `Dispose()`.
-- **Avatar pipeline today:** `tools/avatar_builder/` (Blender/`bpy` script, offline) →
-  `tools/avatar_asset_pipeline/convert_avatar.py` (MakeHuman+Mixamo → CNA's own
-  `.skinnedmodel.json`+`.skeleton.bin`+`.clip.bin`) → loaded at runtime via
-  `SkinnedModelTypeReader`. Planned change (Phase 7, not started): author body/head *shape*
-  geometry in `../mesh-craft` (`.mc3.xml` → `mc3togltf` → `.glb`), which has no skinning concept,
-  so rig/skin/animation stays in the existing Blender stage.
-- **Demos:** 24 executables under `examples/`, each building to a standalone binary directly under
-  `cmake-build-debug/` (e.g. `cmake-build-debug/cna_demo_avatar`). No shared `examples/common/`
-  library exists — a `MakeSimpleFont`/rectangle-drawing SpriteBatch helper is duplicated verbatim
-  across 11 demos already (established convention: copy-paste per demo).
-- **Testing scope for this hardening pass (explicit user decision, do not deviate without
-  asking):** EASYGL graphics backend, `cmake-build-debug` only.
+- **Real networking:** `CNA::Internal::Net::ENetBackend` wraps ENet. Star topology only. Discovery
+  uses a well-known UDP port (61190, `SO_REUSEADDR`-shared across processes) plus broadcast +
+  loopback fallback; the real game-session transport port is OS-assigned/ephemeral (`CreateHost(0,
+  ...)`), so it essentially never has a fixed-port binding conflict — see `docs/avatar-demos.md`'s
+  troubleshooting section for the full detail (search-window/retry timing, launch ordering, etc.).
+- **Avatar pipeline today:** `tools/avatar_builder/generate_avatar.py`/`generate_wardrobe.py` now
+  build via `generate_body_meshcraft.py`/`generate_clothes_meshcraft.py` (aliased in as drop-in
+  replacements) → `mc3togltf` (mesh-craft's CSG exporter) → Blender import/rig/skin/animation →
+  `export_gltf.py` → `.glb` → `tools/avatar_asset_pipeline/convert_avatar.py --embedded-clips` →
+  `.skinnedmodel.json`/`.skeleton.bin`/`.clip.bin`, loaded at runtime via `SkinnedModelTypeReader`.
+- **Demos:** 24+ executables under `examples/`, each building to a standalone binary directly under
+  `cmake-build-debug/`. No shared `examples/common/` library exists for the F1-overlay
+  `MakeSimpleFont`/rectangle-drawing helper — deliberately duplicated per demo, matching this
+  project's established convention (see any Phase 8 commit's own comment for why).
+- **Testing scope for this hardening pass:** EASYGL graphics backend, `cmake-build-debug` only.
 - **Invariant to preserve:** one task = one commit; every behavior change needs a test that
   provably fails without the fix (revert-verify-restore discipline used throughout this project).
 
-## 7. Useful commands
+## 5. Useful commands
 
 ```sh
-# Confirm/configure build (already configured for EASYGL as of the last build)
-cmake -S . -B cmake-build-debug -DCNA_GRAPHICS_BACKEND=EASYGL
+# Confirm/configure build
+cmake -S . -B cmake-build-debug -DCNA_GRAPHICS_BACKEND=EASYGL -DCNA_BUILD_TESTS=ON -DCNA_BUILD_EXAMPLES=ON
 
-# Build the main test target
-cmake --build cmake-build-debug --target CnaTests -j$(nproc)
+# Full rebuild (keep going past the known cna_demo_xact failure)
+cmake --build cmake-build-debug -j$(nproc) -- -k 0
 
-# Run the full test suite
-./cmake-build-debug/CnaTests
+# Full test suite
+ctest --test-dir cmake-build-debug -j$(nproc)
 
-# Run a filtered subset, e.g. just NetworkSession tests
-./cmake-build-debug/CnaTests --gtest_filter="NetworkSessionTest.*"
-
-# Run just the Avatar tests relevant to Phase 1's remaining tasks (1.5, 1.6)
-./cmake-build-debug/CnaTests --gtest_filter="AvatarRendererTest.*"
-
-# Build and run the primary avatar demo
+# Build + run an avatar demo with its F1 help overlay forced on, non-interactively
 cmake --build cmake-build-debug --target cna_demo_avatar -j$(nproc)
-./cmake-build-debug/cna_demo_avatar --gender male
-./cmake-build-debug/cna_demo_avatar --gender female --wardrobe-hair Ponytail
+SDL_AUDIODRIVER=dummy xvfb-run -a ./cmake-build-debug/cna_demo_avatar --show-help --smoke 30 --screenshot /tmp/out.png
 
-# Graphics smoke/pixel-readback tests (separate from CnaTests, via ctest)
-ctest --test-dir cmake-build-debug
+# Two-process real Net test (host + join)
+./cmake-build-debug/cna_demo_net_avatar_sync --host --smoke 150 &
+./cmake-build-debug/cna_demo_net_avatar_sync --join --smoke 150 &
+wait
 ```
 
 No `.clang-format` or other lint/format config was found in the repo — none is currently enforced.
 
-## 8. Next smallest tasks
+## 6. Next smallest tasks
 
-1. **Add a null check to `AvatarRenderer::Draw(IAvatarAnimation* animation)`.**
-   Goal: throw `System::ArgumentNullException("animation")` instead of crashing on `nullptr`.
-   Files: `include/Microsoft/Xna/Framework/GamerServices/AvatarRenderer.hpp`,
-   `src/Microsoft/Xna/Framework/GamerServices/AvatarRenderer.cpp`,
-   `tests/Microsoft/Xna/Framework/GamerServices/AvatarRendererTests.cpp`.
-   Verify: `./cmake-build-debug/CnaTests --gtest_filter="AvatarRendererTest.*"`, then full suite.
+1. **Write `plan_net.md`'s own Task 11.7** — the final user-facing summary (what changed, tests
+   run/results, remaining gaps, recommended next steps). This is the one remaining unchecked task
+   in the whole plan.
+2. **Optional follow-up, not started, not scoped to this plan:** fix the same `MakeSimpleFont`
+   glyph-bounds bug (section 3) in the 10 other pre-existing demos it also affects. Each fix is
+   the same 3-line change already applied 8 times in Phase 8 — low risk, but touches 10 files
+   across unrelated subsystems, so treat as its own small task/commit per demo, same as Phase 8
+   did, rather than one giant commit.
+3. **Optional follow-up, not started:** real friend-list population for
+   `SignedInGamer::GetFriends()` (section 3) — needs its own design decision (a local-fake-friends
+   catalog? Always-empty is arguably correct off-Xbox?), not just a mechanical fix.
+4. **Optional follow-up, not started:** `validate_gltf.py`'s NaN/Inf/bone-index-bounds gap
+   (`plan_net.md` Task 7.8/7.10) and the residual shoe-area/`Wave`-chest-band avatar artifacts
+   (Phase 7's own honest "still open" list).
 
-2. **Add a null check to `AvatarRenderer::EnableRealRenderingEXT(GraphicsDevice&,
-   shared_ptr<SkinnedModelEXT>)`.**
-   Goal: throw `System::ArgumentNullException("model")` at the call site instead of deferring the
-   crash to a later `DrawRealEXT` call.
-   Files: same as task 1.
-   Verify: same as task 1.
-
-3. **Close out Phase 1 in `plan_net.md`** once tasks 1-2 land (mark `[x]`, write up, commit,
-   push) — this finishes Phase 1 (6/6 tasks).
-   Files: `plan_net.md`.
-   Verify: `git log --oneline -5` shows the closing commit; full suite still passing.
-
-4. **Phase 3, Task 3.1 — investigate before coding.** Read
-   `src/Microsoft/Xna/Framework/GamerServices/Guide.cpp:116-142` to confirm the exact current
-   `BeginShowMessageBox`/`EndShowMessageBox` signatures and behavior before designing the overlay.
-   No code change in this step — pure investigation, matching the plan's own Task 3.1 checklist.
-   Files: `src/Microsoft/Xna/Framework/GamerServices/Guide.cpp`.
-   Verify: n/a (investigation only).
-
-5. **Phase 4, Task 4.1 — re-confirm achievement state population.** Read
-   `AchievementCollection`'s constructor(s) and `examples/demo_achievement_showcase` to determine
-   whether "earned" state is currently in-memory-only or already touches disk anywhere.
-   Files: `include/Microsoft/Xna/Framework/GamerServices/AchievementCollection.hpp`,
-   `examples/demo_achievement_showcase/`.
-   Verify: n/a (investigation only).
-
-## 9. Do not do yet
+## 7. Do not do yet
 
 - Do not modify any existing `sharp-runtime` file without asking the user first — for every
   single commit, no exceptions.
-- Do not start Phase 7 (mesh-craft avatar pipeline integration) or Phase 5 (host migration) before
-  Phases 1-4 are done — both are large and design-heavy, and Phase 5 has an explicitly-unconfirmed
-  scope question (Task 5.1) that needs a decision first.
-- Do not refactor the 11-demo `MakeSimpleFont` copy-paste pattern into a shared
-  `examples/common/` header as a side effect of Phase 8 — the plan explicitly defers that as a
-  possible future cleanup, out of scope for this pass.
 - Do not "fix" any `NotImplementedException`/`NotSupportedException`/stub-looking code without
-  first checking the real FNA source (`FNA`/`FNA.NetStub`) — Task 1.4 already cost real time on
-  exactly this mistake once.
+  first checking the real FNA source (`FNA`/`FNA.NetStub`) first.
 - Do not build or test against any backend other than EASYGL, or any build directory other than
-  `cmake-build-debug`, for this pass (explicit user decision).
-- Do not delete or rewrite `plan_net_20260707.md` — it's archived, not deleted, and referenced by
-  file/line throughout the current `plan_net.md`.
+  `cmake-build-debug`, for this plan's own scope (explicit user decision).
+- Do not fix the 10-other-demos `MakeSimpleFont` bug (section 6, item 2) without checking in first
+  — it's real and worth doing, but it's outside `plan_net.md`'s own stated scope (avatar demos
+  only) and touches files across multiple unrelated plans.
 - No mass rewrites, no speculative architecture changes, no unrelated cleanup.
 
-## 10. Resume prompt
+## 8. Resume prompt
 
 ```text
-Read NEXT.md first. Inspect only the files needed for the first unfinished task in section 8
-(currently: adding a null check to AvatarRenderer::Draw). Do not refactor unrelated code. Make one
-small, verified improvement: implement the fix, add a test that fails without it (revert-verify-
-restore), then restore the fix. Run:
-  cmake --build cmake-build-debug --target CnaTests -j$(nproc)
-  ./cmake-build-debug/CnaTests --gtest_filter="AvatarRendererTest.*"
-followed by the full suite (./cmake-build-debug/CnaTests) to confirm no regressions. Commit with a
-message referencing the plan_net.md task ID, then update NEXT.md's sections 2, 3, 4, and 8 to
-reflect the new state before finishing.
+Read NEXT.md first. plan_net.md is fully done except Task 11.7 (final user summary) - write that
+first if it's still missing. After that, this plan is closed out; check with the user before
+starting any of the "optional follow-up" items in section 6, since none of them are in
+plan_net.md's own original scope.
 ```
