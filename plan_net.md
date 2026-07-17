@@ -1299,20 +1299,47 @@ case more exist).
 
 ## Phase 9 — Docs and demo cleanup
 
-- [ ] **Task 9.1** — Execute Task 1.1's `docs/xna-4-api-coverage.md` fixes (staged here since
-  Phase 1 only investigated).
+- [x] **Task 9.1** — Executed Task 1.1's `docs/xna-4-api-coverage.md` fixes. All 8 flagged
+  locations corrected: §2's GamerServices namespace row (was "❌/Stub – Guide only"), §3's
+  GamerServices "missing class" table (every single class it listed as missing - `Gamer`,
+  `SignedInGamer`, `GamerCollection`, `SignedInGamerCollection`, `GamerPresence`,
+  `GamerPresenceMode`, privilege types, `GameDefaults`, `FriendCollection`, `FriendGamer`,
+  `GamerServicesComponent`, `GamerServicesNotAvailableException` - turned out to already exist
+  with real `.cpp` implementations, confirmed by listing `include/.../GamerServices/*.hpp` and
+  checking `.cpp` line counts before writing a single correction, not assumed), §4's
+  "`Guide`-only" characterization, §5's "not planned"/"intentionally excluded" framing for
+  GamerServices/Avatar/Net (superseded by decision 1a - corrected with a cross-reference to the
+  new §9 rather than just flipping words), §8's `GamerServices` (~5%) and `Framework.Net` (0%)
+  coverage-estimate rows, §10 item 7, and §11's "what remains missing"/"what is intentionally
+  excluded" lists (including one already-stale "add compile-compatibility stubs for
+  `Gamer`/`SignedInGamer`/`GamerCollection`" next-step, now struck through as done). Also fixed a
+  pre-existing, unrelated §8→§10 section-numbering gap (no §9 existed) while adding the new §9
+  below.
+  **Also completes Task 9.4 in full and Task 9.3's GamerServices half, and Task 9.5 for this
+  file** (bundled into one commit since it is genuinely one coherent edit to one file, not
+  unrelated work): added a new **§9 GamerServices / Net support matrix** with the
+  Implemented/Locally-persisted/CNA-extension/No-op/Documented-stub categorization Task 9.3/9.4
+  asked for, covering every GamerServices feature area (Achievements/Leaderboards correctly
+  labeled "Locally persisted" - Phase 4 is real disk persistence via
+  `StorageDevice::GetStorageRootEXT()`, not the "local-fake-persisted" framing this task's own
+  original wording used, which predates Phase 4 shipping) and every Net feature area
+  (`SystemLink`/host-migration/simulated-conditions real; `PlayerMatch`/`Ranked`/invites
+  documented stubs with the accurate reason - no matchmaking/invite backend exists to implement
+  them against, not "Xbox Live exclusive"). Grepped this file afterward for
+  "Xbox Live exclusive"/"not planned"/"never implemented by FNA" - zero remaining stale hits
+  outside the new corrected text itself.
 - [ ] **Task 9.2** — Update `docs/avatar-real-rendering-ext.md` with the new mesh-craft-based
   asset pipeline description (Phase 7) and current real-rendering status.
-- [ ] **Task 9.3** — Update `tools/avatar_builder/README.md` to describe the new mesh-craft →
-  Blender pipeline stages (Phase 7).
-  Add a support-matrix table to GamerServices docs: implemented / local-fake-persisted (Phase 4) /
-  CNA extension / no-op / genuinely unsupported — replacing whatever currently-stale
-  characterization exists.
-- [ ] **Task 9.4** — Update Net docs similarly: SystemLink-real, PlayerMatch/Ranked/Invite-stub,
-  host-migration-real (Phase 5), simulated-conditions-real (Phase 6).
-- [ ] **Task 9.5** — Confirm no doc claims Xbox Live compatibility (only SystemLink-style local
-  play is real; PlayerMatch/Ranked/Invite remain documented stubs per the networking-scope
-  decision).
+- [ ] **Task 9.3 (remaining half)** — Update `tools/avatar_builder/README.md` to describe the new
+  mesh-craft → Blender pipeline stages (Phase 7). (The GamerServices support-matrix half of this
+  task is done - see Task 9.1's write-up above.)
+- [x] **Task 9.4** — Done as part of Task 9.1 above (new §9 in `docs/xna-4-api-coverage.md`
+  covers Net: `SystemLink`-real, `PlayerMatch`/`Ranked`/invite-stub, host-migration-real (Phase
+  5), simulated-conditions-real (Phase 6)).
+- [ ] **Task 9.5 (remaining scope)** — `docs/xna-4-api-coverage.md` itself is confirmed clean (see
+  Task 9.1's grep). Still need a repo-wide sweep of other docs (`README.md`,
+  `docs/avatar-real-rendering-ext.md`, `NEXTnet.md`, etc.) for any Xbox-Live-compatibility claims
+  before this task can be marked fully done.
 - [ ] **Task 9.6** — Add a troubleshooting section for avatar asset generation (mesh-craft +
   Blender pipeline) and network demo startup (ENet port binding, discovery).
 - [ ] **Task 9.7** — Add a short README for avatar demo controls/command-line args if one doesn't
