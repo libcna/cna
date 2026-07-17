@@ -3,13 +3,16 @@
 > **Status update (2026-07-17): Phases 10, 11, and 12 also closed.** Phase 10 (`CNB-40`–`CNB-42`,
 > standalone `AnimationClipTypeReader`); Phase 11 (`CNB-43`–`CNB-49`, `Texture3D`/`Curve`/5 stock
 > effects + `AnimationClip` sharing, closing every remaining `.xnb`-vs-`.cnj` type-coverage gap);
-> Phase 12 (`CNB-50`–`CNB-53`, a real glTF 2.0 → `Model`/`AnimationClip` import tool, including
-> skeleton/skinning/animation/textures/multi-skin/sparse-accessor support, verified against both a
-> real Khronos sample model and a permanent adversarial regression test). See each phase's own
-> section below for full details. Final full-suite regression: **4689 tests, 4687 passed, same 2
-> pre-existing hardware skips, 0 failures.** Everything below this line describes the original
-> 9-phase scope as it stood on 2026-07-15; Phases 10-12 were added later as follow-ups this plan's
-> own "Genuinely new `.cnj` types" note (via `cnj.md`) had already flagged.
+> Phase 12 (`CNB-50`–`CNB-55`, a real glTF 2.0 → `Model`/`AnimationClip` import tool, including
+> skeleton/skinning/animation/textures/multi-skin/sparse-accessor/vertex-color support, verified
+> against both a real Khronos sample model and a permanent adversarial regression test). See each
+> phase's own section below for full details. Final full-suite regression: **4696 tests, 4694
+> passed, same 2 pre-existing hardware skips, 0 failures.** Phase 13 (`CNB-56`–`CNB-74`) logs the
+> remaining, genuinely large engine-level gaps (PBR materials, morph targets, skinned vertex color,
+> runtime glTF loading, a second texture layer) as tracked-but-not-started tasks — do not begin any
+> of them without an explicit request. Everything below this line describes the original 9-phase
+> scope as it stood on 2026-07-15; Phases 10-13 were added later as follow-ups this plan's own
+> "Genuinely new `.cnj` types" note (via `cnj.md`) had already flagged.
 >
 > **Status: ✅ COMPLETE 2026-07-15 — all 9 phases (`CNB-1`–`CNB-39`) closed.** Phases 0–8
 > (`CNB-1`–`CNB-31`) were completed first on `feature/cnb`. A subsequent external review found
@@ -335,6 +338,80 @@ onto `.cnj`, `RegisterCnjLoader<T>`, and Phase 9's hardening of those mechanisms
 | CNB-53 | Close the 3 gaps flagged in CNB-50/51's original notes, at the project owner's explicit follow-up request | ✅ | **(1) Sparse accessors**: every accessor read switched from per-element `cgltf_accessor_read_float` (rejects sparse accessors outright) to bulk `cgltf_accessor_unpack_floats` (correctly resolves base values + sparse overrides, and also correctly zero-fills an accessor with no base `bufferView` at all -- a valid glTF shape for a fully-sparse accessor). Verified with a dedicated fixture: a 3-vertex POSITION accessor with no base bufferView and one sparse override on vertex 1 -- vertices 0/2 come out as the implicit-zero base value, vertex 1 comes out as the real overridden `(2,3,4)`. **(2) Textures**: `ExtractImage()` handles all three ways a glTF image can be stored -- embedded `bufferView` (the common `.glb` case, used by `CesiumMan.glb`'s own real JPEG), an external file reference (percent-decoded via `cgltf_decode_uri`, resolved relative to the source `.gltf`'s own directory), and an inline base64 `data:` URI (decoded via `cgltf_load_buffer_base64`, the same function `cgltf_load_buffers` itself uses for buffers) -- only the material's base-color texture is extracted (no normal/metallic-roughness/emissive/occlusion maps, no PBR factor values), written to a real image file, and wired into the mesh's `.cnj` `"texture"` field, reusing `Texture2DTypeReader`'s existing native-extension loading with no CNA core change. A texture referenced by multiple primitives is written once and reused (cached by `cgltf_image*`). **(3) Multi-skin**: mesh-bearing scene nodes are now grouped by which skin (if any) they reference (`CollectMeshGroups`) instead of the file's meshes array being imported flat against only the first skin; each group becomes its own `Model` `.cnj` (`<baseName>_<skinName>.cnj`), with unskinned mesh instances forming their own `<baseName>_static` group -- the original single-file naming (`<baseName>.cnj` alone) is preserved when a file has exactly one group, so existing single-skin output/tests are unaffected. 3 new tests in `GltfToCnjToolTests.cpp` (one per gap, using dedicated small fixtures -- the sparse-accessor and multi-skin fixtures independently caught a real bug in the *test fixture generation script itself*, an `inverseBindMatrices` accessor-index off-by-one, before either was committed, confirming `UnpackAccessor`'s own component-count validation actually works). Full-suite regression: 4689 tests, 4687 passed, same 2 pre-existing hardware skips, 0 failures. Remaining, still-deliberate scope cuts: only the base-color texture (no other PBR maps), `CUBICSPLINE` tangents discarded. |
 | CNB-54 | Fix a real regression introduced by CNB-53's own sparse-safe refactor: `STEP` animation interpolation silently became `LINEAR` | ✅ | Found by self-review while answering the project owner's follow-up "what other gaps does it have" -- `SampledChannel` (introduced by CNB-53 to unpack accessors once instead of per-element) only tracked `cubicSpline`, not whether the sampler was `STEP`; `EvaluateVec3Channel`/`EvaluateQuatChannel` therefore fell through to `Vector3::Lerp`/`Quaternion::Slerp` for `STEP` channels instead of holding the last key's value. Only actually observable when a bone has multiple channels with different keyframe times (the union-time resampling forces evaluating a channel at a time it has no native key at -- a single-channel bone's own keyframes are unaffected either way, since they're always sampled exactly at their own native times). Added `stepInterpolation` back onto `SampledChannel` and restored the check. New regression test (`StepInterpolatedChannelHoldsValueAcrossAForeignResampleTime`) with a bone that has a `STEP` translation channel and a `LINEAR` rotation channel on different keyframe times, verifying the `STEP` channel correctly holds its value at the foreign resample time. Full-suite regression: 4690 tests, 4688 passed, same 2 pre-existing hardware skips, 0 failures. |
 | CNB-55 | Close the 6 further gaps flagged 2026-07-17, at the project owner's explicit "oprav vsechny tyto diry" request | ✅ | **(1) TEXCOORD selection**: the base-color texture's own `"texcoord"` index (defaulting to 0) now selects which `TEXCOORD_N` accessor is read, instead of always `TEXCOORD_0` -- a texture authored against `TEXCOORD_1`+ no longer silently mismatches. **(2) Scene-scoped traversal**: `CollectSceneReachableNodes()` walks only nodes reachable from `data->scene` (or the first scene if unset) via each node's own `children[]`; a node that exists but isn't listed in any scene's node list is no longer imported (files with zero scenes at all still fall back to every node, unchanged). **(3) Unit scale**: an optional 5th CLI argument (`unitScale`, default 1.0) multiplies every position, bone bind-pose translation, and animated translation keyframe (tangents included) by the same factor -- derived and verified algebraically that scaling a bone's local translation by `k` scales its (separately glTF-authored) inverse bind matrix's own translation by the same `k`, not `1/k` (`Inverse([R\|t])=[R^-1\|-R^-1*t]`). **(4) Draco rejection**: `prim.has_draco_mesh_compression` is checked up front and throws a clear error (cgltf itself never decodes Draco) instead of silently reading garbage from the compressed buffer. **(5) Real `CUBICSPLINE` Hermite interpolation**: replaces the old "value-only, tangents discarded" behavior with the glTF spec's actual cubic Hermite basis (`HermiteEvaluate`, both in/out tangents used, tangents scaled by the real keyframe interval per spec); quaternion channels apply the same formula component-wise then renormalize (standard treatment, since component-wise Hermite doesn't preserve unit length). **(6) Vertex color**: `COLOR_0` (unskinned meshes only) reuses the existing real-XNA `VertexPositionColorTexture` layout (stride 24) and `BasicEffect`'s already-working, all-backend `VertexColorEnabled` shader path, rather than inventing a new vertex format needing a new shader permutation -- required one small `ModelTypeReader` change (`ContentManager.cpp`, new `JsonBool()` helper + an optional `"vertexColorEnabled"` mesh-entry field that flips `BasicEffect::VertexColorEnabled`, since that property defaults to `false` and the shader ignores per-vertex color bytes without it). **Explicit design decision, not a gap left open by accident**: vertex color is deliberately *not* supported for skinned meshes -- real XNA's `SkinnedEffect` has no `VertexColorEnabled` property at all, so a skinned+colored combination has no XNA-faithful shader path to render through; `COLOR_0` on a skinned primitive is silently dropped, matching this tool's pre-existing behavior, now scoped to only the unavoidable case. 6 new tests in `GltfToCnjToolTests.cpp` (one per fix; the `CUBICSPLINE` test's fixture deliberately forces evaluation at a time foreign to the spline channel via a second differently-timed channel, so a value-only or linear fallback would provably fail it — verified against a hand-computed expected value, not just "didn't crash"). Full-suite regression: 4696 tests, 4694 passed, same 2 pre-existing hardware skips, 0 failures. **Explicitly out of scope, not silently skipped**: PBR maps beyond base color (normal/metallic-roughness/emissive/occlusion) have no shader path on CNA's real-XNA-faithful `BasicEffect`/`SkinnedEffect` at all (unlike `VertexColorEnabled`, which is real XNA functionality with already-working shader code on every backend) -- adding them would mean either violating XNA fidelity or building a new custom PBR shader pipeline, a separate, much larger design decision; morph targets (blend shapes) have no support anywhere in CNA's `Model`/`ModelMeshPart`/`VertexBuffer`/effect pipeline, a structural absence, not a converter bug. |
+
+---
+
+## Phase 13 — Remaining glTF import gaps (deferred, large engine work)
+
+> Added 2026-07-17 at the project owner's explicit request, after being asked "jak moc dobre CNA
+> nyni umoznuje do hry nahrat gltf" (how well CNA now supports loading glTF into a game) and
+> answering that the honest remaining gaps are all real engine-level absences, not converter bugs.
+> **Not started; do not begin any task below without the project owner explicitly asking for it by
+> name**, matching this plan's own established pattern for large deferred phases (Phase 6/9/12's own
+> precedent before Phase 12 was greenlit). Every task here is genuinely large (new vertex formats,
+> new shader code on one or more of CNA's 10+ graphics backends, or a new runtime subsystem) — none
+> of them are "just fix the converter" the way CNB-43–CNB-55 mostly were.
+
+### 13A — PBR material support (normal/metallic-roughness/emissive/occlusion maps)
+
+> The single biggest gap: CNA's real-XNA-faithful `BasicEffect`/`SkinnedEffect` have no shader path
+> for any of these at all (unlike `VertexColorEnabled`, which is real XNA functionality already
+> wired on every backend) — real XNA 4.0 predates PBR entirely. Closing this properly means a new
+> NOXNA effect/shader system, not a `BasicEffect` extension.
+
+| # | Task | Status | Notes |
+|---|---|---|---|
+| CNB-56 | Design decision: a new NOXNA `PbrEffect` class (namespace, public API shape, which maps it supports first) — or some other shape entirely | ⬜ | Needs the project owner's own call, same as `CNA_GRAPHICS_BACKEND`-level decisions historically have (e.g. WebGPU's adoption). Candidate shape: `Microsoft::Xna::Framework::Graphics::PbrEffect` (NOXNA-tagged, mirroring `SkinnedModelEXT`'s own "real XNA shape, CNA-original content" precedent) with `Texture2D* NormalMap/MetallicRoughnessMap/EmissiveMap/OcclusionMap`, `float MetallicFactor/RoughnessFactor`, `Vector3 EmissiveFactor`. |
+| CNB-57 | New vertex format carrying tangent vectors (required for normal mapping — `VertexPositionNormalTangentTexture[Skinned]` or similar) | ⬜ | New struct(s) + `VertexDeclaration` wiring + `ModelTypeReader` stride-dispatch entries, matching the precedent `VertexPositionNormalTextureSkinned`/CNB-55's `VertexPositionColorTexture` reuse already set. `gltf_to_cnj` would need to read/compute `TANGENT` (present in-file, or computed via `mikktspace`-style generation when absent per `gltf.md` §5's own already-flagged quality item). |
+| CNB-58 | Shader implementation on the primary (EasyGL) backend | ⬜ | New GLSL program(s) for normal mapping + a metallic-roughness (or simplified Blinn-Phong-approximation) lighting response. Scope this to EasyGL only first — do not attempt all backends in one task. |
+| CNB-59 | Extend `gltf_to_cnj` to extract the 4 PBR maps + factor values, wire into the new effect's `.cnj` fields | ⬜ | Reuses `ExtractImage()` (already generic) for the map extraction; new JSON fields on the mesh entry. |
+| CNB-60 | Tests + docs | ⬜ | Both engine-side (new effect/vertex-format tests, `CHECKLIST.md` compliance) and tool-side (fixture-based `GltfToCnjToolTests.cpp` cases). |
+| CNB-61 | Other backends (Vulkan/Bgfx/D3D9/D3D11/D3D12/SdlGpu/WebGPU/Software/Canvas/Ascii/Dx3) | ⬜ | Deliberately separate, later follow-ups — do not bundle with CNB-58. Some (Ascii/Software/Canvas) may reasonably never need a real PBR response depending on what they're for; decide per backend when reached. |
+
+### 13B — Morph targets (blend shapes)
+
+> No support anywhere in CNA's `Model`/`ModelMeshPart`/`VertexBuffer`/effect pipeline today — a
+> structural absence, not a converter-only gap.
+
+| # | Task | Status | Notes |
+|---|---|---|---|
+| CNB-62 | Design decision: CPU-blended (re-upload blended vertex buffer each frame) vs GPU-blended (multiple vertex streams + blend-weight uniforms in the shader) morph targets, and where the blend-weight state lives (`ModelMesh`? a new `MorphedModel`-style NOXNA type, mirroring `SkinnedModelEXT`'s own precedent of not forcing new capability onto real XNA's `Model`?) | ⬜ | Needs the project owner's own call — real tradeoff between simplicity (CPU) and performance (GPU), and between XNA-shape fidelity (`Model`) vs a parallel NOXNA type. |
+| CNB-63 | Engine-side blending implementation (whichever direction CNB-62 picks) | ⬜ | |
+| CNB-64 | Extend `gltf_to_cnj` to extract morph target position/normal deltas (`mesh.primitives[].targets`) and animation weight channels (`cgltf_animation_path_type_weights`, currently explicitly skipped with a warning) | ⬜ | |
+| CNB-65 | Tests + docs | ⬜ | |
+
+### 13C — Vertex color on skinned meshes
+
+> Smaller than 13A/13B, but still a real XNA-fidelity question: real XNA's `SkinnedEffect` has no
+> `VertexColorEnabled` property at all, unlike `BasicEffect`/`AlphaTestEffect`/`DualTextureEffect`.
+
+| # | Task | Status | Notes |
+|---|---|---|---|
+| CNB-66 | Design decision: add a NOXNA `VertexColorEnabled`-equivalent to `SkinnedEffect` (an explicit, documented deviation from real XNA, same category of decision `CLAUDE.md`'s "Interfaces and Inheritance" section asks to flag) vs a new combined vertex format + dedicated shader variant | ⬜ | Needs the project owner's own call — this is the kind of "intentional deviation from FNA logic" `CLAUDE.md` requires documenting explicitly wherever it lands. |
+| CNB-67 | Implementation across at least the EasyGL backend | ⬜ | |
+| CNB-68 | Extend `gltf_to_cnj`: drop the current "skinned meshes never get COLOR_0" restriction once a real shader path exists | ⬜ | |
+| CNB-69 | Tests + docs | ⬜ | |
+
+### 13D — Runtime (non-CLI) glTF loading
+
+> `gltf_to_cnj` is an offline developer tool today (matches `gltf.md`'s own recommended "phase 1"
+> for the Avatar-specific path) — a game cannot `Content.Load<Model>("character.glb")` directly.
+
+| # | Task | Status | Notes |
+|---|---|---|---|
+| CNB-70 | Factor `gltf_to_cnj`'s parsing/skeleton/animation core into a reusable library (not just a CLI `main()`), then add a `ContentManager` `LooseFileContentTypeReader<Model>` (or similar) that parses `.gltf`/`.glb` directly into memory, no intermediate `.cnj`/binary sidecars | ⬜ | Mirrors `gltf.md` §4.2's own "item 2" recommendation for the Avatar-specific path, applied to the general-purpose `Model` path this phase already covers. |
+| CNB-71 | Tests + docs | ⬜ | |
+
+### 13E — Second texture via existing `DualTextureEffect` (smaller, more tractable)
+
+> Unlike 13A, this reuses an existing, already-shader-complete real XNA effect (`DualTextureEffect`,
+> confirmed working on every backend already) — no new shader code needed, just detection + wiring.
+
+| # | Task | Status | Notes |
+|---|---|---|---|
+| CNB-72 | Research: which glTF construct(s) most sensibly map to a second texture layer (a second UV set with its own distinct image reference? `KHR_materials_pbrSpecularGlossiness`'s specular texture used as a crude second layer? something else?) — no single obvious glTF-native "second diffuse texture" convention exists, unlike `baseColorTexture` | ⬜ | Needs a concrete decision before implementation — flag the ambiguity to the project owner rather than guessing a convention. |
+| CNB-73 | Extend `gltf_to_cnj` + `ModelTypeReader`'s existing `"texture"` field precedent with a second `"texture2"` field, wire to `DualTextureEffect` (already registered by `ModelTypeReader`'s `effectStr` dispatch) | ⬜ | |
+| CNB-74 | Tests + docs | ⬜ | |
 
 ---
 
