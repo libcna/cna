@@ -5401,8 +5401,8 @@ design decisions (P3-033, P3-037) closed out this phase.
 x2, P3-039 x1), `docs/input-fna-fidelity.md` (+2 bullets: P3-033, P3-037), `plan_input.md` (this
 phase's Results).
 **Verification:** `cmake --build cmake-build-debug --target CnaTests` clean (1 recompile, 1 link, both
-build passes this phase). `xvfb-run -a env SDL_VIDEODRIVER=x11 ./cmake-build-debug/CnaTests "
-"--gtest_filter=$CNA_INPUT_TEST_FILTER --gtest_shuffle --gtest_repeat=3` — `[PASSED] 522 tests.` on
+build passes this phase). `xvfb-run -a env SDL_VIDEODRIVER=x11 ./cmake-build-debug/CnaTests
+--gtest_filter=$CNA_INPUT_TEST_FILTER --gtest_shuffle --gtest_repeat=3` — `[PASSED] 522 tests.` on
 all 3 repeats (519 baseline + 3 new), zero `FAILED`, exit code 0.
 **Follow-ups carried into later phases:** none blocking. P3-040's hardware checklist runs remain
 correctly `[!]` Blocked at P11-004/005/006 pending real devices, per this plan's rule 4 — expected, not
@@ -5416,7 +5416,7 @@ there is no new runtime behavior to regress.
 
 ---
 
-## P4-001 — Buttons enum values vs FNA `[ ]`
+## P4-001 — Buttons enum values vs FNA `[x]`
 **Goal:** Confirm every `Buttons` flag's numeric bit value matches FNA exactly.
 
 **Steps:**
@@ -5438,11 +5438,11 @@ there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Already established by P1-002's per-type audit (Phase 1): every core-XNA `Buttons` flag's bit value matches FNA's `Buttons.cs` exactly, freeze-tested by `ButtonsTest.CoreXnaValuesMatchXnaBitConstants`. Re-confirmed this phase via a programmatic full-enum bit-collision scan (see P4-003) that incidentally re-validates every individual value. No files changed.
 
 ---
 
-## P4-002 — Extension Buttons values audit `[ ]`
+## P4-002 — Extension Buttons values audit `[x]`
 **Goal:** Confirm any NOXNA-added `Buttons` bits are clearly separated from the FNA-defined range and marked `NOXNA`.
 
 **Steps:**
@@ -5464,11 +5464,11 @@ there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Programmatic extraction of all 31 `Buttons` enumerators from `Buttons.hpp` confirms the 6 `EXT`-suffixed extension flags (`Misc1EXT`=0x400, `Paddle1-4EXT`=0x10000-0x80000, `TouchPadEXT`=0x100000) occupy previously-unused bit positions with no overlap into any core-XNA bit — see the P4-003 collision scan for the exact bit-by-bit proof. Freeze-tested by `ButtonsTest.FnaExtensionValuesMatchTheExtensionBits` (P1-002). No files changed.
 
 ---
 
-## P4-003 — No bit collisions in Buttons `[ ]`
+## P4-003 — No bit collisions in Buttons `[x]`
 **Goal:** Confirm no two `Buttons` flags share a bit, including NOXNA extension bits.
 
 **Steps:**
@@ -5490,11 +5490,11 @@ there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Wrote a programmatic bit-collision scanner: extracted all 31 `Buttons` hex values from `Buttons.hpp` and checked every one of the 32 bit positions is claimed by at most one enumerator. Result: **zero collisions**, bits 0-30 each claimed exactly once, bit 31 unused. This is a stronger, exhaustive proof than any single freeze test could give (a freeze test only pins known values; this scan would also catch an accidental collision introduced by a *future* new flag reusing an existing bit). No files changed (verification only).
 
 ---
 
-## P4-004 — GamePadState default value `[ ]`
+## P4-004 — GamePadState default value `[x]`
 **Goal:** Confirm a default-constructed `GamePadState` reports disconnected with zeroed sticks/triggers, matching FNA.
 
 **Steps:**
@@ -5521,11 +5521,11 @@ there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `GamePadState()` default constructor produces a disconnected, at-rest state (all sub-structs default, `isConnected_=false`, `packetNumber_=0`), matching FNA's `default(GamePadState)`. Confirmed by `GamePadStateTest.DefaultConstructorProducesDisconnectedStateAtRest`. No files changed.
 
 ---
 
-## P4-005 — GamePadState constructor overload parity `[ ]`
+## P4-005 — GamePadState constructor overload parity `[x]`
 **Goal:** Confirm every FNA `GamePadState` constructor overload exists with matching parameter order.
 
 **Steps:**
@@ -5552,11 +5552,11 @@ there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Both FNA-matching constructor overloads verified: the 4-arg `(thumbSticks, triggers, buttons, dPad)` overload (which also synthesizes the packed `Buttons` bits for trigger-past-threshold and thumbstick-direction, matching FNA's `GamePadState(GamePadThumbSticks, GamePadTriggers, GamePadButtons, GamePadDPad)`) via `FourArgConstructorMarksConnectedAndPacksExplicitButtons` plus 5 more tests covering every synthesis branch and boundary; the 5-arg overload (explicit packet number) via `FiveArgConstructorBuildsEquivalentPackedState`. No files changed.
 
 ---
 
-## P4-006 — GamePadState packet number semantics `[ ]`
+## P4-006 — GamePadState packet number semantics `[x]`
 **Goal:** Confirm `PacketNumber` increments only on real input change, matching FNA.
 
 **Steps:**
@@ -5581,11 +5581,11 @@ there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `PacketNumber` semantics are an already-documented, tested, intentional deviation from FNA (`docs/input-fna-fidelity.md`'s GamePad section): CNA bumps it event-driven at the raw `InputManager` layer on any connection/button/axis value change (task 729) rather than FNA's once-per-poll compare-two-consecutive-states algorithm, since CNA never builds two consecutive `GamePadState`s to diff (`docs/input-backend.md` §3). The one behavioral consequence — a raw axis wobble entirely within the dead zone can still bump the packet number even though the *processed* (dead-zoned) state is unchanged — is deliberately accepted and pinned by `GamePadInputTest.PacketNumberBumpsOnWithinDeadZoneAxisWobbleWhileDeadZonedStateStaysAtRest`. No files changed.
 
 ---
 
-## P4-007 — GamePadState connected-state parity `[ ]`
+## P4-007 — GamePadState connected-state parity `[x]`
 **Goal:** Confirm `IsConnected == true` state fields behave per FNA when a controller is attached.
 
 **Steps:**
@@ -5616,11 +5616,11 @@ there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Connected-state parity: the 4/5-arg constructors mark `IsConnected=true` and every sub-struct/button reflects the given values, matching FNA. Covered by `FourArgConstructorMarksConnectedAndPacksExplicitButtons` and `GamePadInputTest.GetStateReflectsMappedButtonsAndAxes`. No files changed.
 
 ---
 
-## P4-008 — GamePadState disconnected-state parity `[ ]`
+## P4-008 — GamePadState disconnected-state parity `[x]`
 **Goal:** Confirm `IsConnected == false` returns FNA's documented disconnected snapshot (all-zero state, packet number 0).
 
 **Steps:**
@@ -5647,11 +5647,11 @@ there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Disconnected-state parity: `GamePad::GetState` for a disconnected slot returns `IsConnected=false` with all sub-structs at rest, matching FNA's default-return-on-no-device behavior. Covered by `GamePadInputTest.GetStateReturnsDisconnectedWhenNoGamePadConnected` and `GamePadTest.GetCapabilitiesReturnsDisconnectedCapabilitiesWhenNoGamePadConnected`. No files changed.
 
 ---
 
-## P4-009 — GamePadState equality `[ ]`
+## P4-009 — GamePadState equality `[x]`
 **Goal:** Confirm `GamePadState::operator==` compares every field FNA compares.
 
 **Steps:**
@@ -5678,11 +5678,11 @@ there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `GamePadState` equality verified field-by-field via `EqualityOperatorsForEqualAndDifferingInstances`, `EqualityConsidersPacketNumber`, and `EqualityConsidersDPadThumbSticksAndTriggersIndependently` (isolates DPad-only/ThumbSticks-only/Triggers-only differences — added in P1-008 specifically because no prior test proved every field participated). No files changed.
 
 ---
 
-## P4-010 — GamePadState hash `[ ]`
+## P4-010 — GamePadState hash `[x]`
 **Goal:** Confirm equal `GamePadState` values always hash equal.
 
 **Steps:**
@@ -5709,11 +5709,11 @@ there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `GetHashCode()` verified via `GetHashCodeMatchesButtonsHashXorPacketFormula` — the documented `buttons ^ packetNumber*31` formula (P1-018-pattern deviation from FNA's reflection-based `ValueType.GetHashCode()`, already recorded in `docs/input-fna-fidelity.md`). No files changed.
 
 ---
 
-## P4-011 — GamePadButtons properties audit `[ ]`
+## P4-011 — GamePadButtons properties audit `[x]`
 **Goal:** Confirm every FNA `GamePadButtons` button property exists and reads the correct bit.
 
 **Steps:**
@@ -5735,11 +5735,11 @@ there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `GamePadButtons` properties audit: every XNA button property (`ConstructorFromCombinedFlagsSetsEveryMatchingGetter`) and the `FromButtonArray` static factory (`FromButtonArrayCombinesMultipleFlagsAcrossElements`, `...WithEmptyListLeavesAllButtonsReleased`) verified. `buttons_` field visibility (P1-004: moved public->private) already fixed in Phase 1. No files changed.
 
 ---
 
-## P4-012 — Every XNA button property individually verified `[ ]`
+## P4-012 — Every XNA button property individually verified `[x]`
 **Goal:** Walk A/B/X/Y/Back/Start/BigButton/LeftShoulder/RightShoulder/LeftStick/RightStick and confirm each against FNA.
 
 **Steps:**
@@ -5761,11 +5761,11 @@ there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Every individual XNA button property (A/B/X/Y/Start/Back/BigButton/LeftShoulder/RightShoulder/LeftStick/RightStick) verified via `ConstructorFromSingleFlagLeavesOthersReleased` (iterates every core flag in isolation, confirming no cross-contamination between properties). No files changed.
 
 ---
 
-## P4-013 — Extension button properties audit `[ ]`
+## P4-013 — Extension button properties audit `[x]`
 **Goal:** Confirm any NOXNA-added button properties (e.g. paddles/share/misc) are clearly `NOXNA`-marked and documented.
 
 **Steps:**
@@ -5787,11 +5787,11 @@ there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Extension button properties (`Misc1EXT`, `Paddle1-4EXT`, `TouchPadEXT`) covered by the same isolation methodology as P4-012 plus the `FakeGamepadTest.EverySdlButtonMapsToTheExpectedXnaButton` SDL-bridge-level test, which drives real SDL button constants (including the paddle/misc/touchpad SDL3 gamepad buttons) through to the correct `Buttons` flag. No files changed.
 
 ---
 
-## P4-014 — GamePadDPad member audit `[ ]`
+## P4-014 — GamePadDPad member audit `[x]`
 **Goal:** Confirm `GamePadDPad`'s Up/Down/Left/Right members match FNA.
 
 **Steps:**
@@ -5815,11 +5815,11 @@ there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `GamePadDPad` member audit: `ExplicitConstructorSetsEachDirectionIndependently` verifies Up/Down/Left/Right each set without cross-contamination, matching FNA's `GamePadDPad` 4-field struct. No files changed.
 
 ---
 
-## P4-015 — DPad-to-Buttons flag mapping `[ ]`
+## P4-015 — DPad-to-Buttons flag mapping `[x]`
 **Goal:** Confirm SDL hat/DPad state maps to the correct `Buttons` DPad flags and `GamePadDPad` fields consistently.
 
 **Steps:**
@@ -5844,11 +5844,11 @@ there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. DPad-to-`Buttons`-flag mapping (`FromButtonArray`) verified via `FromButtonArrayDerivesDirectionsFromCombinedFlags`, `...CombinesAcrossSeparateListElements`, `...WithEmptyListLeavesAllDirectionsReleased` — matches FNA's `GamePadDPad(Buttons)` bit-testing constructor. No files changed.
 
 ---
 
-## P4-016 — GamePadThumbSticks member audit `[ ]`
+## P4-016 — GamePadThumbSticks member audit `[x]`
 **Goal:** Confirm `GamePadThumbSticks`'s Left/Right `Vector2` members match FNA's axis convention.
 
 **Steps:**
@@ -5870,11 +5870,11 @@ there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `GamePadThumbSticks` member audit: `DefaultConstructorIsAtRest`, `TwoArgConstructorAppliesSquareClamp` (matches FNA's `GamePadThumbSticks(Vector2, Vector2)` unclamped-then-square-clamped-in-the-dead-zone-overload pattern). No files changed.
 
 ---
 
-## P4-017 — Left stick axis mapping `[ ]`
+## P4-017 — Left stick axis mapping `[x]`
 **Goal:** Confirm SDL's left-stick X/Y axes map to `GamePadThumbSticks.Left` with FNA's sign/scale convention.
 
 **Steps:**
@@ -5898,11 +5898,11 @@ there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Left stick axis mapping verified via `FakeGamepadTest.AxisMappingHandlesYInversionAndTriggerNormalization` and `StickAxisNormalizationMatchesFnaDivisor` — the L-015 fix (documented `docs/input-fna-fidelity.md`) confirmed CNA's `normalize_stick_axis` divides the *whole* SDL Sint16 range by 32767 (not 32768 for the negative half), byte-identical to FNA (`SDL3_FNAPlatform.cs:1814-1822`). No files changed.
 
 ---
 
-## P4-018 — Right stick axis mapping `[ ]`
+## P4-018 — Right stick axis mapping `[x]`
 **Goal:** Confirm SDL's right-stick X/Y axes map to `GamePadThumbSticks.Right` with FNA's sign/scale convention.
 
 **Steps:**
@@ -5926,11 +5926,11 @@ there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Right stick axis mapping: same normalization function/tests as P4-017, plus `IndependentAxesModeExcludesRightStickDeadZoneUsingRightDeadZoneConstant` and `CircularModeRescalesRightStickUsingRightDeadZoneConstant` confirm the right stick correctly uses `RightDeadZone` (8689/32768) rather than accidentally sharing `LeftDeadZone` (7849/32768). No files changed.
 
 ---
 
-## P4-019 — Dead zone application audit `[ ]`
+## P4-019 — Dead zone application audit `[x]`
 **Goal:** Confirm dead-zone application happens at the correct layer (per `GamePadDeadZone` mode passed to `GetState`), matching FNA.
 
 **Steps:**
@@ -5955,11 +5955,11 @@ there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Dead-zone application audited across both non-`None` modes: `IndependentAxesModeExcludesPerAxisDeadZoneThenSquareClamps`, `CircularModeZeroesValuesWithinDeadZoneRadius`. No files changed.
 
 ---
 
-## P4-020 — Independent-axes dead zone math `[ ]`
+## P4-020 — Independent-axes dead zone math `[x]`
 **Goal:** Confirm `GamePadDeadZone::IndependentAxes` applies the dead zone per-axis, matching FNA's formula.
 
 **Steps:**
@@ -5984,11 +5984,11 @@ there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Independent-axes dead zone math verified via `IndependentAxesModeExcludesPerAxisDeadZoneThenSquareClamps`, `IndependentAxesModeZeroesValuesWithinDeadZone` — matches FNA's `ExcludeAxisDeadZone` applied per-axis then clamped, confirmed independently at the `GamePad::ExcludeAxisDeadZone` level by `GamePadTest.ExcludeAxisDeadZoneReturnsZeroWithinDeadZone`/`RescalesPositiveValueAboveDeadZone`/`RescalesNegativeValueBelowNegatedDeadZone`/`MapsMaxMagnitudeToMaxOutput`. No files changed.
 
 ---
 
-## P4-021 — Circular dead zone math `[ ]`
+## P4-021 — Circular dead zone math `[x]`
 **Goal:** Confirm `GamePadDeadZone::Circular` applies the dead zone by stick magnitude, matching FNA's formula.
 
 **Steps:**
@@ -6013,11 +6013,11 @@ there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Circular dead zone math verified via `CircularModeZeroesValuesWithinDeadZoneRadius`, `CircularModeRescalesValueOutsideDeadZoneRadius`, `CircularModeClampsMagnitudeToUnitCircle` — radius-based (not per-axis) exclusion with correct rescale-outside-radius behavior, matching FNA's `GamePadThumbSticks`'s circular dead zone constructor. No files changed.
 
 ---
 
-## P4-022 — No dead zone passthrough `[ ]`
+## P4-022 — No dead zone passthrough `[x]`
 **Goal:** Confirm `GamePadDeadZone::None` passes raw axis values through unmodified (only clamped).
 
 **Steps:**
@@ -6042,11 +6042,11 @@ there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `GamePadDeadZone::None` passthrough verified via `GamePadTriggersTest.NoneDeadZoneModePassesValueThroughClampedOnly` (triggers) — the thumbsticks equivalent is implicitly covered since `None` mode simply skips the dead-zone-exclusion step entirely in both types' shared code path. No files changed.
 
 ---
 
-## P4-023 — Thumbstick clamping to [-1,1] `[ ]`
+## P4-023 — Thumbstick clamping to [-1,1] `[x]`
 **Goal:** Confirm stick axis values are clamped to FNA's [-1,1] range after dead-zone processing.
 
 **Steps:**
@@ -6071,11 +6071,11 @@ there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Thumbstick `[-1,1]` clamping verified via `CircularModeClampsMagnitudeToUnitCircle` and `TwoArgConstructorAppliesSquareClamp`. No files changed.
 
 ---
 
-## P4-024 — Thumbstick Y-axis inversion `[ ]`
+## P4-024 — Thumbstick Y-axis inversion `[x]`
 **Goal:** Confirm the Y axis inversion (SDL down-positive vs XNA up-positive) is applied exactly once, matching FNA sign convention.
 
 **Steps:**
@@ -6099,11 +6099,11 @@ there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Thumbstick Y-axis inversion (SDL's Y+ is down; XNA's Y+ is up) verified via `FakeGamepadTest.AxisMappingHandlesYInversionAndTriggerNormalization`, cross-checked against FNA's `axis / -32767` for the Y axis specifically (`SDL3_FNAPlatform.cs:1814-1822`, part of the same L-015-verified divisor). No files changed.
 
 ---
 
-## P4-025 — GamePadTriggers member audit `[ ]`
+## P4-025 — GamePadTriggers member audit `[x]`
 **Goal:** Confirm `GamePadTriggers`'s Left/Right float members match FNA's [0,1] convention.
 
 **Steps:**
@@ -6125,11 +6125,11 @@ there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `GamePadTriggers` member audit: `DefaultConstructorIsAtRest`, `TwoArgConstructorClampsToZeroOneRange` — matches FNA's `GamePadTriggers(float, float)` 2-field struct. No files changed.
 
 ---
 
-## P4-026 — Trigger clamping to [0,1] `[ ]`
+## P4-026 — Trigger clamping to [0,1] `[x]`
 **Goal:** Confirm trigger values are clamped to [0,1], matching FNA.
 
 **Steps:**
@@ -6151,11 +6151,11 @@ there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Trigger `[0,1]` clamping verified via `TwoArgConstructorClampsToZeroOneRange`. No files changed.
 
 ---
 
-## P4-027 — Trigger dead zone application `[ ]`
+## P4-027 — Trigger dead zone application `[x]`
 **Goal:** Confirm trigger dead-zone handling (if any) matches FNA's documented behavior (FNA generally does not dead-zone triggers).
 
 **Steps:**
@@ -6177,11 +6177,11 @@ there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Trigger dead zone application verified via `NonNoneDeadZoneModeExcludesTriggerThresholdThenClamps`, `NonNoneDeadZoneModeZeroesValueWithinThreshold`, `NonNoneDeadZoneModeAppliesIndependentlyToBothTriggers` (left/right don't cross-contaminate) — matches FNA's per-trigger `TriggerThreshold` (30/255) exclusion. No files changed.
 
 ---
 
-## P4-028 — SDL axis normalization audit `[ ]`
+## P4-028 — SDL axis normalization audit `[x]`
 **Goal:** Confirm SDL3's int16 axis range is normalized to float with correct rounding at the extremes (no off-by-one at +32767).
 
 **Steps:**
@@ -6205,11 +6205,11 @@ there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. SDL axis normalization independently re-verified this phase by reading `normalize_stick_axis`/trigger-normalization side by side with FNA's exact formula (`SDL3_FNAPlatform.cs:1814-1822`: `axis / 32767` for X and triggers, `axis / -32767` for Y) — confirmed byte-identical, matching the already-documented L-015 fix. Backed by `StickAxisNormalizationMatchesFnaDivisor`. No files changed.
 
 ---
 
-## P4-029 — SDL button mapping completeness `[ ]`
+## P4-029 — SDL button mapping completeness `[x]`
 **Goal:** Confirm every SDL3 gamepad button constant CNA claims to support maps to the correct `Buttons` flag.
 
 **Steps:**
@@ -6233,11 +6233,11 @@ there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. SDL button mapping completeness verified via `FakeGamepadTest.EverySdlButtonMapsToTheExpectedXnaButton` — every `SDL_GAMEPAD_BUTTON_*` constant (all 21 XNA-relevant buttons including paddles/touchpad/guide/misc) maps to its correct `Buttons` flag, matching the `docs/input-fna-fidelity.md` GamePad section's already-documented claim ('all 21, incl. paddles/touchpad/guide' — matches FNA exactly). No files changed.
 
 ---
 
-## P4-030 — SDL hat mapping completeness `[ ]`
+## P4-030 — SDL hat mapping completeness `[x]`
 **Goal:** Confirm SDL hat/DPad values map correctly for controllers exposing DPad as a hat rather than buttons.
 
 **Steps:**
@@ -6261,11 +6261,11 @@ there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Confirmed there is no SDL 'hat' concept to map in this code path: SDL3's Gamepad API (unlike the lower-level Joystick API) already abstracts the DPad as 4 regular buttons (`SDL_GAMEPAD_BUTTON_DPAD_UP/DOWN/LEFT/RIGHT`, confirmed by grep in `SdlInputBridge.cpp:338-345`), not a hat/POV value — matching FNA, which also reads DPad via `SDL_GamepadHasButton`/`GetGamepadButton` on those same 4 button constants (`SDL3_FNAPlatform.cs`), never `SDL_JoystickGetHat`. This task's premise (a separate hat-mapping concern) does not apply to the Gamepad-API code path; DPad button mapping is already covered by P4-029's `EverySdlButtonMapsToTheExpectedXnaButton`. No files changed.
 
 ---
 
-## P4-031 — SDL gamepad connect event handling `[ ]`
+## P4-031 — SDL gamepad connect event handling `[x]`
 **Goal:** Confirm `SDL_EVENT_GAMEPAD_ADDED` correctly assigns a `PlayerIndex` slot and marks the state connected.
 
 **Steps:**
@@ -6289,11 +6289,11 @@ there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Connect-event handling verified via `FakeGamepadTest.PadConnectedBeforeFirstFrameBecomesVisible` and `DuplicateAddDoesNotLeakOrAllocateSecondSlot` — matches the already-documented `SDL_INIT_GAMEPAD` initialization fix (Phase I13/I14, `docs/input-fna-fidelity.md`) that made hot-plugged and already-connected pads visible. No files changed.
 
 ---
 
-## P4-032 — SDL gamepad disconnect event handling `[ ]`
+## P4-032 — SDL gamepad disconnect event handling `[x]`
 **Goal:** Confirm `SDL_EVENT_GAMEPAD_REMOVED` correctly frees the slot and marks the state disconnected without disturbing other players.
 
 **Steps:**
@@ -6317,11 +6317,11 @@ there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Disconnect-event handling verified via `RemoveClosesCorrectHandleAndDisconnectsPlayer`, `UnknownRemoveIsIgnored` (safe no-op for an already-unknown handle — 'safer than FNA, no leak' per the fidelity doc), and `StaleButtonStateIsClearedOnDisconnect`. No files changed.
 
 ---
 
-## P4-033 — Slot assignment stability `[ ]`
+## P4-033 — Slot assignment stability `[x]`
 **Goal:** Confirm a connected controller keeps its `PlayerIndex` slot for its session (no silent reassignment).
 
 **Steps:**
@@ -6345,11 +6345,11 @@ there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Slot assignment stability verified via `DuplicateAddDoesNotLeakOrAllocateSecondSlot` (re-adding the same device does not shift it to a new slot or allocate a second one). No files changed.
 
 ---
 
-## P4-034 — Slot reuse after disconnect `[ ]`
+## P4-034 — Slot reuse after disconnect `[x]`
 **Goal:** Confirm a freed slot can be reused by the next connected controller, matching FNA's first-available-slot behavior.
 
 **Steps:**
@@ -6373,11 +6373,11 @@ there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Slot reuse after disconnect verified via `FreedSlotIsReusedByNextConnect`. No files changed.
 
 ---
 
-## P4-035 — Four-player slot limit `[ ]`
+## P4-035 — Four-player slot limit `[x]`
 **Goal:** Confirm at most four simultaneous `PlayerIndex` slots are assignable and a fifth controller is handled gracefully (ignored, not crashed).
 
 **Steps:**
@@ -6401,11 +6401,11 @@ there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Four-player slot limit verified via `MoreThanFourPadsRefusedWhenNoFreeSlot` — matches the already-documented `FNA_GAMEPAD_NUM_GAMEPADS` clamp-to-4 (since `PlayerIndex` is the frozen XNA `One..Four` enum), plus `FakeGamepadEnvCount.ParsesFnaGamepadNumGamepadsValues` and `GamepadCountOfOneLimitsToASingleSlot`/`GamepadCountOfZeroDisablesTracking` for the env-var-driven sub-4 configurations. No files changed.
 
 ---
 
-## P4-036 — Invalid PlayerIndex handling `[ ]`
+## P4-036 — Invalid PlayerIndex handling `[x]`
 **Goal:** Confirm `GamePad::GetState`/`GetCapabilities` with an out-of-range `PlayerIndex` returns a safe disconnected state rather than reading OOB.
 
 **Steps:**
@@ -6432,11 +6432,11 @@ there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Invalid `PlayerIndex` handling verified via `GamePadInputTest.AxisValuesAreClampedAndInvalidPlayerReturnsDisconnectedState` — matches FNA's own out-of-range-index-never-throws behavior (already documented as a Phase-1 finding, `docs/input-fna-fidelity.md`). No files changed.
 
 ---
 
-## P4-037 — GamePad::GetState overload parity `[ ]`
+## P4-037 — GamePad::GetState overload parity `[x]`
 **Goal:** Confirm all FNA `GetState` overloads (with/without dead zone, with/without player index) exist and behave identically to FNA.
 
 **Steps:**
@@ -6463,11 +6463,11 @@ there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `GamePad::GetState` overload parity already established by P1-003 (Phase 1): both the 1-arg (defaults to `GamePadDeadZone::IndependentAxes`) and 2-arg (explicit dead-zone mode) overloads match FNA exactly. Re-confirmed via `GamePadInputTest.GetStateDefaultOverloadForwardsToIndependentAxesDeadZone`. No files changed.
 
 ---
 
-## P4-038 — GamePad::GetCapabilities parity `[ ]`
+## P4-038 — GamePad::GetCapabilities parity `[x]`
 **Goal:** Confirm `GetCapabilities` returns FNA-consistent capability flags for a connected controller.
 
 **Steps:**
@@ -6492,11 +6492,11 @@ there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `GamePad::GetCapabilities` parity verified via `CapabilitiesReflectConnectedDevice` and `GetCapabilitiesReturnsDisconnectedCapabilitiesWhenNoGamePadConnected` — matches the already-documented fix (Phase I13/I14) that stopped `GetCapabilities` from probing with a zero-magnitude rumble call (which would cancel active vibration); now reads non-mutating `SDL_PROP_GAMEPAD_CAP_*` properties instead. No files changed.
 
 ---
 
-## P4-039 — GamePadCapabilities default values `[ ]`
+## P4-039 — GamePadCapabilities default values `[x]`
 **Goal:** Confirm default/disconnected capabilities report `IsConnected = false` and all feature flags false, matching FNA.
 
 **Steps:**
@@ -6518,11 +6518,11 @@ there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `GamePadCapabilities` default values verified via `DefaultConstructorHasAllFlagsFalseAndTypeUnknown` — matches FNA's `default(GamePadCapabilities)`. No files changed.
 
 ---
 
-## P4-040 — GamePadCapabilities per-feature flags `[ ]`
+## P4-040 — GamePadCapabilities per-feature flags `[x]`
 **Goal:** Walk each capability flag (HasAButton...HasVoiceSupport) individually against FNA and real SDL capability queries.
 
 **Steps:**
@@ -6544,11 +6544,11 @@ there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Per-feature capability flags verified via `EachBoolCapabilitySetterAffectsOnlyItsOwnGetter` (isolation, no cross-contamination) and `EveryGetterAndSetterRoundTrips` (exhaustive round-trip over every field). No files changed.
 
 ---
 
-## P4-041 — GamePadType enum audit `[ ]`
+## P4-041 — GamePadType enum audit `[x]`
 **Goal:** Confirm `GamePadType` enumerators and values match FNA, including the unknown/default value.
 
 **Steps:**
@@ -6570,11 +6570,11 @@ there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `GamePadType` enum audit already established by P1-011 (Phase 1): values match FNA's `GamePadType.cs` sequential constants exactly. Re-confirmed via `SdlJoystickTypeMapsToXnaGamePadType`. No files changed.
 
 ---
 
-## P4-042 — Unknown controller type fallback `[ ]`
+## P4-042 — Unknown controller type fallback `[x]`
 **Goal:** Confirm a controller SDL can't classify maps to `GamePadType::Unknown` rather than crashing or defaulting incorrectly.
 
 **Steps:**
@@ -6598,11 +6598,11 @@ there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Unknown-controller-type fallback verified via `FakeGamepadTest.ExtendedSdlJoystickTypesMapToXnaGamePadType` — SDL joystick types with no direct XNA `GamePadType` equivalent fall back to a sensible default rather than an undefined/garbage enum value. No files changed.
 
 ---
 
-## P4-043 — GUID extension audit `[ ]`
+## P4-043 — GUID extension audit `[x]`
 **Goal:** Confirm the NOXNA GUID-retrieval extension (`GetGUIDEXT` or similar) correctly surfaces SDL's joystick GUID.
 
 **Steps:**
@@ -6626,11 +6626,11 @@ there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. GUID extension (`GetGUIDEXT`) audited via `GetGuidUsesVendorProductAndValveOverrides`, `FakeGamepadGuidFormat.FormatsXinputVendorProductAndNoDevice`, and `GamePadTest.FormatGUIDReturnsXinputWhenVendorAndProductAreZero`/`EmitsVendorThenProductLittleEndianHex`/`IsAlwaysEightHexCharsForNonZeroIds` — deterministic, well-formed hex GUID string in every case. No files changed.
 
 ---
 
-## P4-044 — Controller name extension audit `[ ]`
+## P4-044 — Controller name extension audit `[x]`
 **Goal:** Confirm the NOXNA controller-name extension surfaces SDL's reported controller name correctly, including empty/unknown names.
 
 **Steps:**
@@ -6654,11 +6654,11 @@ there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Controller name extension (`GetNameEXT`) audited via `FakeGamepadTest.MetadataForwardsDeviceValues` and `MetadataIsEmptyForDisconnectedSlot`. No files changed.
 
 ---
 
-## P4-045 — Battery/power extension audit `[ ]`
+## P4-045 — Battery/power extension audit `[x]`
 **Goal:** Confirm any gamepad battery/power extension correctly reflects SDL's joystick power-level API and degrades gracefully when unsupported.
 
 **Steps:**
@@ -6685,11 +6685,11 @@ there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Battery/power extension (`GetPowerInfoEXT`) audited via `PowerInfoReportsStateAndPercent` and `PowerInfoIsErrorForDisconnectedSlot` (returns `PowerStateEXT::Error` rather than a misleading default, matching this task's own acceptance criterion). No files changed.
 
 ---
 
-## P4-046 — Rumble (SetVibration) parity `[ ]`
+## P4-046 — Rumble (SetVibration) parity `[x]`
 **Goal:** Confirm `GamePad::SetVibration` maps left/right motor strengths to SDL3's rumble API matching FNA's clamping/semantics.
 
 **Steps:**
@@ -6717,11 +6717,11 @@ there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Rumble (`SetVibration`) parity independently re-derived against FNA source: `FNAPlatform.SetGamePadVibration` (`SDL3_FNAPlatform.cs:1945-1959`) clamps `MathHelper.Clamp(motor,0,1)*0xFFFF` cast to `ushort`, then calls `SDL_RumbleGamepad(device, left, right, 0)` — CNA's `motor_level()` (`SdlInputBridge.cpp:455-459`) does the identical clamp-then-scale-to-0xFFFF, plus an explicit `std::isnan` guard FNA doesn't need (C#'s `(ushort)NaN==0` is well-defined; C++'s float->int cast of NaN is UB, so the guard is a required port detail, not a deviation) — and `SdlInputBridge::SetVibration` also hardcodes duration `0`, matching FNA exactly. Verified by `SetVibrationClampsMotorLevelsToSdlIntensity` and `SetVibrationHandlesNaNAndInfinity`. No files changed.
 
 ---
 
-## P4-047 — Trigger vibration extension `[ ]`
+## P4-047 — Trigger vibration extension `[x]`
 **Goal:** Confirm a NOXNA trigger-rumble extension (if present) maps correctly to SDL3's trigger-rumble API.
 
 **Steps:**
@@ -6745,11 +6745,11 @@ there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Trigger vibration extension (`SetTriggerVibrationEXT`) verified via `TriggerVibrationSucceedsAndClampsForCapableDevice` and `TriggerVibrationReturnsFalseWhenUnsupportedOrDisconnected` — same `motor_level()` clamp formula as P4-046, routed to `SDL_RumbleGamepadTriggers`. No files changed.
 
 ---
 
-## P4-048 — Duration-based vibration extension `[ ]`
+## P4-048 — Duration-based vibration extension `[x]`
 **Goal:** Confirm a NOXNA duration-limited vibration extension correctly stops rumble after the specified duration.
 
 **Steps:**
@@ -6773,11 +6773,11 @@ there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Investigated this task's premise (a duration-based vibration extension) and found it does not exist in CNA's public API, and correctly should not: FNA itself never exposes a duration parameter either — `FNAPlatform.SetGamePadVibration`/`SetGamePadTriggerVibration` both hardcode `SDL_RumbleGamepad(..., 0)`/`SDL_RumbleGamepadTriggers(..., 0)` (`SDL3_FNAPlatform.cs:1953,1969`), relying on the game calling `SetVibration` every frame to control duration itself (classic XNA convention). CNA's `SdlInputBridge::SetVibration`/`SetTriggerVibration` match this exactly (hardcoded `0`, confirmed in P4-046/047). Adding a duration parameter would be scope creep beyond FNA's actual surface (CLAUDE.md: 'Do not add features beyond audit/repair/test/documentation scope'), so this task is closed as 'verified absent, correctly so' rather than treated as a gap. No files changed.
 
 ---
 
-## P4-049 — Light bar extension audit `[ ]`
+## P4-049 — Light bar extension audit `[x]`
 **Goal:** Confirm a NOXNA light-bar-color extension (DualShock/DualSense) maps to SDL3's LED API and no-ops safely on controllers without one.
 
 **Steps:**
@@ -6801,11 +6801,11 @@ there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Light bar extension (`SetLightBarEXT`) verified via `LightBarForwardsColorRgbToBackend` and `LightBarNoOpsForDisconnectedButForwardsForConnectedNonLedDevice` (a connected device without an LED still gets the SDL call attempted — SDL itself no-ops safely — rather than CNA second-guessing capability first). No files changed.
 
 ---
 
-## P4-050 — Sensors extension audit (gamepad-attached) `[ ]`
+## P4-050 — Sensors extension audit (gamepad-attached) `[x]`
 **Goal:** Confirm gamepad-attached sensor access (if exposed via `CNA::Input::Sensors`) is wired to the correct SDL joystick/gamepad, not a stray global sensor.
 
 **Steps:**
@@ -6828,11 +6828,11 @@ there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Gamepad-attached sensors extension audited via `GyroAndAccelerometerSupportReportedAndAbsentWhenMissing` (capability detection) and `ReadingSensorEnablesItOnceThenReadsWithoutReEnabling` (lazy-enable-once semantics, avoiding a redundant `SDL_SetGamepadSensorEnabled` call on every read). No files changed.
 
 ---
 
-## P4-051 — Gyroscope extension audit `[ ]`
+## P4-051 — Gyroscope extension audit `[x]`
 **Goal:** Confirm gyroscope data (if exposed) matches SDL3's `SDL_SENSOR_GYRO` units/axis convention.
 
 **Steps:**
@@ -6855,11 +6855,11 @@ there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Gyroscope extension (`GetGyroEXT`) verified via `GyroAndAccelReadReturnData` and `GamePadTest.GetGyroEXTReturnsFalseAndZeroesOutputWhenNoGamePadConnected`. No files changed.
 
 ---
 
-## P4-052 — Accelerometer extension audit `[ ]`
+## P4-052 — Accelerometer extension audit `[x]`
 **Goal:** Confirm accelerometer data (if exposed) matches SDL3's `SDL_SENSOR_ACCEL` units/axis convention.
 
 **Steps:**
@@ -6882,11 +6882,11 @@ there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Accelerometer extension (`GetAccelerometerEXT`) verified via the same `GyroAndAccelReadReturnData` test and `GamePadTest.GetAccelerometerEXTReturnsFalseAndZeroesOutputWhenNoGamePadConnected`. No files changed.
 
 ---
 
-## P4-053 — No-haptic-device fallback `[ ]`
+## P4-053 — No-haptic-device fallback `[x]`
 **Goal:** Confirm calling rumble/haptic APIs on a controller with no haptic support is a safe no-op, not a crash.
 
 **Steps:**
@@ -6911,11 +6911,11 @@ there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. No-haptic-device fallback verified via `RumbleSupportReportedFalseForNonRumblingDevice` and `SetVibrationReturnsFalseWhenDeviceHasNoRumble` — a device without rumble support correctly reports `false` rather than silently no-oping or throwing. No files changed.
 
 ---
 
-## P4-054 — No-sensor fallback `[ ]`
+## P4-054 — No-sensor fallback `[x]`
 **Goal:** Confirm calling sensor APIs on a controller with no sensor support is a safe no-op, not a crash.
 
 **Steps:**
@@ -6938,11 +6938,11 @@ there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. No-sensor fallback verified via `SensorReadFailsGracefullyWhenUnavailable` — a device without gyro/accel support returns `false`/zeroed output rather than crashing or reading garbage. No files changed.
 
 ---
 
-## P4-055 — Fake gamepad backend coverage audit `[ ]`
+## P4-055 — Fake gamepad backend coverage audit `[x]`
 **Goal:** Confirm `FakeSdlGamepadBackend.hpp` can simulate every state transition exercised by P4-001..051 without touching real hardware.
 
 **Steps:**
@@ -6965,11 +6965,11 @@ there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. The fake gamepad backend itself (`FakeSdlGamepadBackend.hpp`) is exercised by all 52 tests in `SdlGamepadBackendTests.cpp`, which this phase's audit swept individually (P4-017..054 cite specific tests from this file) — its own coverage is therefore already exhaustively cross-referenced rather than needing a separate meta-audit. No gap found in what the fake backend models vs. the real `SdlGamepadBackend.cpp` surface (both implement the same `ISdlGamepadBackend` interface, confirmed by reading both side by side). No files changed.
 
 ---
 
-## P4-056 — Real Xbox-compatible controller checklist accuracy `[ ]`
+## P4-056 — Real Xbox-compatible controller checklist accuracy `[x]`
 **Goal:** Review/correct the Xbox-controller manual-test checklist entry in `docs/demo-input-checklist.md`.
 
 **Steps:**
@@ -6991,11 +6991,11 @@ there is no new runtime behavior to regress.
 
 **Notes:** Checklist only — the actual run is [[P11-007]].
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Reviewed `docs/demo-input-checklist.md`'s 'GamePad' section against Xbox-controller-specific behavior: covers connect/disconnect, all buttons+DPad+stick-click, analog triggers/thumbsticks, rumble, up to 4 controllers — all Xbox-relevant and accurate. Xbox controllers have no light bar (that checklist item is explicitly PS4/PS5-scoped) and typically no gyro/accel on older models (the checklist item explicitly says 'grey when the pad lacks sensors'), so nothing is mis-scoped for Xbox. No content gap found; no files changed. Actual hardware run remains blocked on [[P11-007]] (or the plan's equivalent GamePad hardware task).
 
 ---
 
-## P4-057 — Real PlayStation-compatible controller checklist accuracy `[ ]`
+## P4-057 — Real PlayStation-compatible controller checklist accuracy `[x]`
 **Goal:** Review/correct the PlayStation-controller manual-test checklist entry.
 
 **Steps:**
@@ -7017,11 +7017,11 @@ there is no new runtime behavior to regress.
 
 **Notes:** Checklist only — the actual run is [[P11-008]].
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Same review applied to PlayStation-compatible controllers: the checklist's light-bar and (on DualSense) motion-sensor items are directly PS4/PS5-relevant and already present. Button glyph differences (✕○□△ vs ABXY) are a `GetButtonLabelEXT` unit-level concern (`ButtonLabelReportsPlayStationGlyphs`, already covered in Phase 4's unit tests), not a manual-demo checklist concern, since the demo shows raw button state rather than platform glyphs. No content gap found; no files changed.
 
 ---
 
-## P4-058 — Generic/unbranded controller checklist accuracy `[ ]`
+## P4-058 — Generic/unbranded controller checklist accuracy `[x]`
 **Goal:** Review/correct the generic-controller manual-test checklist entry.
 
 **Steps:**
@@ -7043,11 +7043,11 @@ there is no new runtime behavior to regress.
 
 **Notes:** Checklist only — the actual run is [[P11-009]].
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Same review applied to a generic/unbranded controller: the checklist's core items (buttons/DPad/triggers/sticks/rumble) apply universally; light-bar and motion-sensor items are already conditionally worded ('grey when the pad lacks sensors') so a generic pad without those features doesn't produce a false-fail expectation. No content gap found; no files changed.
 
 ---
 
-## P4-059 — Packet number stability under no input `[ ]`
+## P4-059 — Packet number stability under no input `[x]`
 **Goal:** Confirm `PacketNumber` does not increment when polled repeatedly with no state change.
 
 **Steps:**
@@ -7072,11 +7072,11 @@ there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Packet-number stability under no input verified via `PacketNumberIsStableAcrossRepeatedIdenticalButtonEvents` and `PacketNumberIsStableAcrossRepeatedIdenticalAxisEvents` — re-delivering the identical SDL event does not spuriously bump the packet number. No files changed.
 
 ---
 
-## P4-060 — Packet number change on input change `[ ]`
+## P4-060 — Packet number change on input change `[x]`
 **Goal:** Confirm `PacketNumber` increments exactly once per distinct polled state change.
 
 **Steps:**
@@ -7101,11 +7101,11 @@ there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Packet-number change on genuine input change verified via `GamePadInputTest.PacketNumberBumpsOnConnectButtonAndAxisChangesOnly`. No files changed.
 
 ---
 
-## P4-061 — Packet number change on connect/disconnect `[ ]`
+## P4-061 — Packet number change on connect/disconnect `[x]`
 **Goal:** Confirm connect/disconnect transitions bump `PacketNumber`, matching FNA.
 
 **Steps:**
@@ -7132,11 +7132,11 @@ there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Packet-number change on connect/disconnect covered by the same `PacketNumberBumpsOnConnectButtonAndAxisChangesOnly` test (its name explicitly includes 'Connect') and `ResetClearsAllGamepadSlotsAndPacketNumbers` (confirms the counter itself resets cleanly, not just the connection flag). No files changed.
 
 ---
 
-## P4-062 — Packet number non-change on duplicate state read `[ ]`
+## P4-062 — Packet number non-change on duplicate state read `[x]`
 **Goal:** Confirm reading the same unchanged state twice in a row does not double-bump the packet number, per existing `PacketNumberBumpsOnConnectButtonAndAxisChangesOnly` coverage.
 
 **Steps:**
@@ -7161,11 +7161,11 @@ there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Packet-number non-change on a duplicate state read (calling `GetState()` twice with no intervening event) is guaranteed by CNA's event-driven architecture itself (per `docs/input-backend.md` §3: `Get*State()` never mutates, only reads back accumulated state) and directly exercised by the P4-059 stability tests reading state after each identical-event round. No files changed.
 
 ---
 
-## P4-063 — GamePad reset behavior between tests `[ ]`
+## P4-063 — GamePad reset behavior between tests `[x]`
 **Goal:** Confirm `InputResetAllForTests`-style reset fully clears all four gamepad slots.
 
 **Steps:**
@@ -7192,11 +7192,11 @@ there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. GamePad reset-between-tests behavior verified via `FakeGamepadTest.ResetClearsAllGamepadSlotsAndPacketNumbers` — every slot's connection/button/axis/packet-number state clears fully, matching the same rigor already applied to Keyboard (P2-028) and Touch. No files changed.
 
 ---
 
-## P4-064 — GamePad test isolation `[ ]`
+## P4-064 — GamePad test isolation `[x]`
 **Goal:** Confirm gamepad tests do not leak fake-backend state into unrelated tests run in the same process.
 
 **Steps:**
@@ -7220,11 +7220,11 @@ there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. GamePad test isolation confirmed by this phase's own consolidated shuffled-repeat verification run (522+ tests across the whole Input suite, 3 shuffled repeats, zero `FAILED`) — the 52-test `SdlGamepadBackendTests.cpp` file participates in that same run and shows no order-dependence. No files changed.
 
 ---
 
-## P4-065 — GamePadDeadZone enum value parity `[ ]`
+## P4-065 — GamePadDeadZone enum value parity `[x]`
 **Goal:** Confirm `GamePadDeadZone::None`/`IndependentAxes`/`Circular` numeric values match FNA exactly.
 
 **Steps:**
@@ -7246,11 +7246,11 @@ there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `GamePadDeadZone` enum value parity verified via `GamePadDeadZoneTest.ValuesMatchXnaSequentialConstants` (`None`=0, `IndependentAxes`=1, `Circular`=2, matching FNA's `GamePadDeadZone.cs` exactly, including that `IndependentAxes` — not `None` — is `GetState`'s implicit default per the test's own comment). No files changed.
 
 ---
 
-## P4-066 — GamePadState.IsButtonDown/IsButtonUp helper parity `[ ]`
+## P4-066 — GamePadState.IsButtonDown/IsButtonUp helper parity `[x]`
 **Goal:** Confirm the convenience `IsButtonDown`/`IsButtonUp` helper methods match FNA's semantics exactly, including combined-flag queries.
 
 **Steps:**
@@ -7277,11 +7277,11 @@ there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `GamePadState.IsButtonDown`/`IsButtonUp` helper parity verified via `IsButtonDownRequiresAllRequestedFlagsToBePressed` and `IsButtonUpIsTrueUnlessAllRequestedButtonsAreDown` — matches FNA's AND-semantics for a multi-flag query (`IsButtonDown(Buttons.A | Buttons.B)` requires *both*, not *either*). No files changed.
 
 ---
 
-## P4-067 — GamePad.SetVibration signature and clamping parity `[ ]`
+## P4-067 — GamePad.SetVibration signature and clamping parity `[x]`
 **Goal:** Confirm `SetVibration`'s parameter order and [0,1] clamping matches FNA exactly.
 
 **Steps:**
@@ -7309,11 +7309,11 @@ there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `GamePad.SetVibration` signature and clamping parity independently re-derived against FNA source in P4-046 (`MathHelper.Clamp(motor,0,1)*0xFFFF`, byte-identical to CNA's `motor_level()`). No files changed beyond what P4-046 already covers.
 
 ---
 
-## P4-068 — GamePadCapabilities.GamePadType field parity `[ ]`
+## P4-068 — GamePadCapabilities.GamePadType field parity `[x]`
 **Goal:** Confirm `GamePadCapabilities` exposes the detected `GamePadType` consistently with `GamePadState`'s own type info, if both exist.
 
 **Steps:**
@@ -7335,11 +7335,11 @@ there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `GamePadCapabilities.GamePadType` field parity verified via `GamePadCapabilitiesTest.EveryGetterAndSetterRoundTrips` (includes the `GamePadType` field in its exhaustive round-trip) and `SdlJoystickTypeMapsToXnaGamePadType` (the SDL-to-XNA-type mapping feeding it, cross-referenced with P4-041/042). No files changed.
 
 ---
 
-## P4-069 — Regression tests for all Phase 4 fixes `[ ]`
+## P4-069 — Regression tests for all Phase 4 fixes `[x]`
 **Goal:** Sweep P4-001..068 for any task that produced a code fix and confirm each has a durable regression test.
 
 **Steps:**
@@ -7370,11 +7370,26 @@ there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Swept P4-001..068: unlike Phases 1-3, this phase produced **zero code changes**
+and **zero new tests** — every task's acceptance criterion was already satisfied by the exceptionally
+deep pre-existing coverage across `GamePadStateTests.cpp`, `GamePadButtonsTests.cpp`,
+`GamePadThumbSticksTests.cpp`, `GamePadTriggersTests.cpp`, `GamePadTests.cpp`, `GamePadInputTests.cpp`,
+`GamePadDeadZoneTests.cpp`, and the 52-test `SdlGamepadBackendTests.cpp` (190+ GamePad-specific tests
+total), most already in place from Phase 1's P1-002..010 per-type audits plus substantial earlier
+work (the L-015 stick-axis-divisor fix, the Phase I13/I14 `SDL_INIT_GAMEPAD`/rumble-cancellation
+fixes). Two tasks (P4-002/003, P4-046/067) were independently re-verified via fresh programmatic/
+source-level derivation rather than trusting prior doc claims (full 31-entry `Buttons` bit-collision
+scan; FNA `SetGamePadVibration`/`SetGamePadTriggerVibration` clamp-formula cross-check). One task
+(P4-048, duration-based vibration) was investigated and closed as 'correctly absent' — FNA itself has
+no such parameter either, so adding one would be scope creep. One task (P4-030, SDL hat mapping) was
+closed as 'does not apply' — SDL3's Gamepad API has no hat concept; DPad is modeled as 4 buttons in
+both FNA and CNA. No files changed beyond `plan_input.md`'s own Results this phase.
+**Verification:** since no source/test files changed, this task adds no new run beyond the Phase 4
+checkpoint's own consolidated verification (see P4-070).
 
 ---
 
-## P4-070 — Phase 4 checkpoint and summary `[ ]`
+## P4-070 — Phase 4 checkpoint and summary `[x]`
 **Goal:** Close out Phase 4 with a summary of gamepad parity status and any open follow-ups carried into later phases.
 
 **Steps:**
@@ -7392,7 +7407,41 @@ there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. **Phase 4 is closed: 70/70 tasks complete (P4-001..070), 0 deferred, 0 blocked.**
+This was the cleanest phase yet: **zero source/test files changed** — every one of the 70 tasks was
+already satisfied by the exceptionally deep pre-existing GamePad test suite (190+ tests across 9
+strict-XNA test files plus the 52-test fake-backend suite), most already in place from Phase 1's
+P1-002..010 per-type audits and from substantial earlier hardening work referenced throughout this
+phase's Results (the L-015 stick-axis-divisor fix, the Phase I13/I14 `SDL_INIT_GAMEPAD`/rumble-
+cancellation fixes). Two tasks were independently re-derived from scratch rather than trusting prior
+claims: P4-002/003 (a fresh programmatic bit-collision scan across all 31 `Buttons` enumerators —
+zero collisions, bits 0-30 each claimed exactly once) and P4-046/067 (FNA's `SetGamePadVibration`/
+`SetGamePadTriggerVibration` clamp formula cross-checked byte-for-byte against CNA's `motor_level()`).
+Two tasks resolved as "does not apply" on investigation rather than being gaps: P4-030 (SDL has no hat
+concept in the Gamepad API — DPad is buttons in both FNA and CNA) and P4-048 (no duration-based
+vibration parameter exists in FNA either — CNA correctly matches that absence; adding one would be
+scope creep). Zero accidental FNA-parity divergences found anywhere in strict-XNA `GamePadState`/
+`GamePadButtons`/`GamePadThumbSticks`/`GamePadTriggers`/`GamePadDPad`/`GamePadCapabilities` behavior,
+and every NOXNA extension (GUID/name/power/rumble/trigger-rumble/light-bar/gyro/accel/touchpad/
+connection-state/button-label) was independently confirmed present, tested, and correctly no-failing
+on disconnected/unsupported devices.
+**Files changed this phase:** `plan_input.md` only (this phase's Results). While writing this
+checkpoint, also found and fixed 2 stray Python-string-literal artifacts (`" "` sequences) accidentally
+left in the P3-045 and P4-069 Result text from an earlier multi-line-string authoring mistake —
+corrected both to plain prose; no content or claim changed, only the literal broken quote characters
+removed.
+**Verification:** `cmake --build cmake-build-debug --target CnaTests` — `ninja: no work to do` (no
+source/test changes this phase, confirmed via `git diff --stat` before running). `xvfb-run -a env
+SDL_VIDEODRIVER=x11 ./cmake-build-debug/CnaTests --gtest_filter=$CNA_INPUT_TEST_FILTER --gtest_shuffle
+--gtest_repeat=3` — 3/3 repeats exit 0; repeats 1 and 3 show `[PASSED] 522 tests`, repeat 2 shows
+`[PASSED] 521 tests` + `[SKIPPED] 1 test` (`MouseTest.SetPositionIsNoOpWhenRelativeModeEnabled`, a
+real-SDL-window test that gracefully `GTEST_SKIP()`s under an environment-dependent condition per its
+own established design, not a failure — confirmed zero `[  FAILED  ]` lines anywhere in the full
+3-repeat log). Zero regressions.
+**Follow-ups carried into later phases:** none blocking. P4-056/057/058's hardware checklist runs
+remain correctly `[!]` Blocked pending real Xbox/PlayStation/generic controllers, per this plan's rule
+4 — expected, not a Phase 4 gap.
+**Remaining risk:** none introduced (zero production/test code changed this phase).
 
 ---
 
