@@ -855,7 +855,7 @@ free to override a row — the tasks that depend on it are cited so the blast ra
 
 ### Phase 7 — Documentation and closure
 
-- [ ] **MEDIA-121 — Add every new deviation to `CHECKLIST.md`.** New Media-specific rows: (a) real
+- [x] **MEDIA-121 — Add every new deviation to `CHECKLIST.md`.** New Media-specific rows: (a) real
   local media library vs. FNA's permanent stub — the single biggest one, explain the "no FNA logic to
   port, built from scratch per §4" framing; (b) SDL-user-folder root discovery (D1); (c) internal
   from-scratch Vorbis/ID3v2 tag parser instead of a third-party tag library (D2); (d) M3U/M3U8 as the
@@ -866,34 +866,45 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   content-based vs. FNA's identity-based (§2.4); (j) the project-wide out-of-range-indexer exception-type
   inconsistency and Media's chosen resolution (§2.7).
 
-- [ ] **MEDIA-122 — Update `AUDIT.md`'s `Microsoft::Xna::Framework::Media` table.** Replace every
+- [x] **MEDIA-122 — Update `AUDIT.md`'s `Microsoft::Xna::Framework::Media` table.** Replace every
   "(stub behavior)" row with the real post-Phase-4 status. Do **not** add the new
   `CNA::Internal::Media::*` internal types to this table — matching the existing convention that Audio's
   internal `XactParser`/`AudioMixer` aren't listed in the public `Microsoft::Xna::Framework::Audio`
   table either.
 
-- [ ] **MEDIA-123 — Create `NEXTmedia.md`.** Matching the existing `NEXTaudio.md`/`NEXTdevices.md`/
+- [x] **MEDIA-123 — Create `NEXTmedia.md`.** Matching the existing `NEXTaudio.md`/`NEXTdevices.md`/
   `NEXTinput.md`/`NEXTnet.md` per-domain convention — summarize this plan's outcome, open follow-ups
   (e.g. NOXNA `Refresh()`, a playlist-writer, a taglib upgrade path if the internal parser ever proves
   insufficient, embedded-`APIC`-frame album art as a `GetAlbumArt` enhancement beyond MEDIA-65's
   filename-only lookup, the `TouchCollection` exception-type inconsistency flagged in §2.7 as an
   Input-namespace follow-up out of this plan's scope), for a future session's quick pickup.
 
-- [ ] **MEDIA-124 — Build & report.** `cmake --build cmake-build-debug --target CNA` and
+- [x] **MEDIA-124 — Build & report.** `cmake --build cmake-build-debug --target CNA` and
   `--target CnaTests` green. Report per `CLAUDE.md`'s "Build and Report" section: changed files, added
   stubs (should be none left unexplained), missing dependencies (should be none — §0 confirmed no new
   third-party libraries), intentional deviations (point at MEDIA-121), build result.
+  *Verified:* both `CNA` and `CnaTests` targets build clean (0 errors, 0 new warnings) against the
+  project's `tests` preset (`cmake-build-tests`, equivalent build tree to `cmake-build-debug` for this
+  purpose — `EASYGL` backend, `CNA_BUILD_TESTS=ON`). No new stubs, no missing dependencies (no new
+  third-party libraries added this whole plan). Deviations: see `CHECKLIST.md`'s new Media rows
+  (MEDIA-121).
 
-- [ ] **MEDIA-125 — Full-suite regression run.** Confirm zero regressions in the rest of `CnaTests`
+- [x] **MEDIA-125 — Full-suite regression run.** Confirm zero regressions in the rest of `CnaTests`
   (grep the **full** log for `FAILED` — do not trust a truncated tail) beyond MEDIA-120's Media-scoped
   pass, and confirm headless-safety project-wide is unaffected.
+  *Verified:* 4846 tests, 4844 passed, 0 failed, 2 pre-existing hardware skips (Accelerometer/
+  Gyroscope) — identical count to MEDIA-120's own pass, as expected since Phase 7 is
+  documentation-only (no code changes). Grepped in full, not a truncated tail.
 
-- [ ] **MEDIA-126 — Establish this plan's own future-addendum convention.** Matching `plan_audio.md`'s
+- [x] **MEDIA-126 — Establish this plan's own future-addendum convention.** Matching `plan_audio.md`'s
   real evolution (an initial plan, then supplementary `P9-*`/`Phase 10` sections appended as later
   re-audits found more), record explicitly at the top of this file (already done in the provenance note)
   that any future Media re-audit should append a new numbered phase here rather than silently rewriting
   earlier phases' history — so this plan's own completion record stays trustworthy over time.
   *Accept:* convention documented; no further code change.
+  *Verified:* the provenance note at the top of this file (line ~14) already states this convention
+  explicitly, written when this plan was first drafted — no further edit needed, just this
+  confirmation record.
 
 ---
 

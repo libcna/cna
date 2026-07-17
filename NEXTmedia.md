@@ -6,7 +6,7 @@
 > **do not edit it from this branch.** Full task-by-task detail lives in `plan_media.md`
 > (`MEDIA-1`–`MEDIA-126`); this file is a short current-state index.
 
-## 1. Status (2026-07-17)
+## 1. Status (2026-07-17) — `plan_media.md` COMPLETE (126/126 tasks, all 7 phases)
 
 **Phase 0 complete** (`MEDIA-1`..`MEDIA-8`, commits `eb3c48a3`, `3d6a7508` on `feature/media`). Test
 infra (`tests/Microsoft/Xna/Framework/Media/` + `Video/`) and a full, verified fixture corpus
@@ -239,9 +239,26 @@ Full-suite regression after Phase 6: **4846 tests, 4844 passed, 0 failed, 2 pre-
 skips** (Accelerometer/Gyroscope) — grepped in full for `FAILED`, not a truncated tail, per
 `MEDIA-120`'s own requirement.
 
-**Now starting Phase 7** (`MEDIA-121`..`MEDIA-126`, documentation and closure): add every new
-deviation to `CHECKLIST.md`'s table, update `AUDIT.md`'s Media table, finalize this file, final
-build & report, one more full-suite regression run, and the future-addendum convention note.
+**Phase 7 complete** (`MEDIA-121`..`MEDIA-126`, documentation and closure — **`plan_media.md` is now
+fully complete, 126/126 tasks across all 7 phases**). Added 10 new Media-specific rows to
+`CHECKLIST.md`'s deviations table (the real from-scratch library implementation itself, D1/D2/D5/D6
+from §4, the FFmpeg-unified video decode backend, `VideoSoundtrackType` metadata-only fidelity, AV1
+keeping its audio track, `Song::GetHashCode()`'s content-based semantics, and the project-wide
+out-of-range-indexer exception-type inconsistency). Updated `AUDIT.md`'s
+`Microsoft::Xna::Framework::Media` table: every `Album`/`Artist`/`Genre`/`MediaLibrary`/`Picture`/
+`PictureAlbum`/`Playlist`/`MediaSource` row's stale "(stub behavior)" note replaced with a real
+status description (none of the new internal `CNA::Internal::Media::*` types were added as their own
+rows, matching Audio's existing `XactParser`/`AudioMixer` convention of keeping internal backend
+types out of the public API table). Final build (`CNA` + `CnaTests`, both targets, `tests` preset)
+and one more full-suite regression run: **4846 tests, 4844 passed, 0 failed, 2 pre-existing hardware
+skips** — identical count to Phase 6's own pass, as expected since Phase 7 touched no code, only
+documentation. The future-addendum convention (MEDIA-126) was already recorded in this plan's own
+provenance note at the time it was first drafted — confirmed, no further edit needed.
+
+This file's own remaining open items (NOXNA `Refresh()`, a Playlist writer, a taglib upgrade path,
+embedded-`APIC`-frame album art, the `TouchCollection` exception-type inconsistency, and
+`MEDIA-94`'s allocation-fault-injection gap) are recorded in §5 below for a future session to pick up
+— none of them block calling this plan complete.
 
 ## 2. Correction to Phase 0's own build-verification record
 
@@ -294,11 +311,49 @@ display at all — not needed here since one exists.
 
 ## 4. Immediate next steps
 
-Phases 0-5 are complete (see §1). Work through `plan_media.md` Phase 6 (`MEDIA-76`..`MEDIA-120`,
-consolidated test-completeness audit against `CLAUDE.md`'s per-overload mandate) next, then Phase 7
-(`MEDIA-121`..`MEDIA-126`: `CHECKLIST.md` deviations table, `AUDIT.md`'s Media table, final
-`NEXTmedia.md` update, final build + full-suite regression, future-addendum convention note).
+**`plan_media.md` is complete — all 126 tasks across all 7 phases, checked and verified.** There is
+no required next step for this plan itself. This file's role now is a pure handoff/reference
+document: a future session picking up Media-namespace work should read §1 for what was built and
+why, and §5 for the real, deliberately-deferred follow-ups that were surfaced but not required for
+this plan's own "not just stubs" goal. Any future Media re-audit should append a new phase to
+`plan_media.md` (see `MEDIA-126`'s own convention) rather than rewriting this history, and update
+this file's §1/§5 in place rather than starting a new NEXT file.
 
 ## 5. Open items / blocked
 
-None yet.
+Nothing is currently blocking. The following are real, deliberately-deferred follow-ups — not bugs,
+not required for "not just stubs" — surfaced during this plan's own design/audit work:
+
+- **NOXNA `MediaLibrary::Refresh()`.** The library scan is a synchronous, point-in-time snapshot
+  taken once at construction (`plan_media.md` D6) — there is no live filesystem-watching, and no way
+  to re-scan an already-constructed `MediaLibrary` short of constructing a new one. A `Refresh()`
+  method would be a reasonable NOXNA addition if a game needs to observe library changes without a
+  full reconstruction.
+- **A real Playlist writer.** `PlaylistParser`/`PlaylistCollection` are read-only (parses existing
+  `.m3u`/`.m3u8` files found under the Music root) — there is no API to create or modify a playlist
+  from within CNA. XNA's own `Playlist` API is also read-only, so this isn't a fidelity gap, just a
+  capability a future NOXNA extension could add.
+- **A taglib upgrade path**, if `AudioTagParser`'s internal from-scratch Vorbis/ID3v2 parser (D2)
+  ever proves insufficient for some real-world tag variant it doesn't handle (e.g. ID3v1, APEv2,
+  FLAC-native `VORBIS_COMMENT` outside an Ogg container, MP4/`M4A` `ilst` atoms). Not needed today —
+  the fixture corpus's real-world tag variety (ID3v2.3, ID3v2.4, Vorbis comments, untagged
+  fallback) is fully covered — but worth tracking if a future session's real-world test collection
+  surfaces a format this parser can't read.
+- **Embedded `APIC`-frame album art**, as a `GetAlbumArt`/`GetThumbnail` enhancement beyond
+  `MEDIA-65`'s current filename-only lookup (`cover.jpg`/`folder.jpg` in the album's own folder).
+  Real-world ID3v2 tags frequently embed cover art directly in the `APIC` frame instead of (or in
+  addition to) a sibling image file — `AudioTagParser` does not currently extract it. Flagged as
+  `plan_media.md` R2, default recommendation "start with the 2 filename conventions," this is the
+  natural next increment if that ever proves insufficient.
+- **`Input::Touch::TouchCollection`'s exception-type inconsistency**, found during this plan's own
+  audit (`plan_media.md` §2 item 7 / `CHECKLIST.md`'s new project-wide deviation row) but explicitly
+  out of scope here: `TouchCollection.cpp`'s indexer throws `std::out_of_range` instead of the
+  project's majority `System::ArgumentOutOfRangeException` (used by `BoundingBox`/`VertexBuffer`/
+  `NetworkSessionProperties`, and now `MediaQueue`/`SongCollection` too). A future `Input`-namespace
+  task should decide whether to bring `TouchCollection` in line with the majority or formally adopt
+  it as a second accepted pattern.
+- **`MEDIA-94`'s allocation-failure fault injection** (see Phase 6's own note above): closing this
+  for real would need process-level fault-injection infrastructure (e.g. an `LD_PRELOAD` malloc
+  interceptor) that doesn't exist in this repo today. Only worth building if this specific hardening
+  ever needs direct proof beyond code review — the corrupt/truncated-fixture and I/O-error-vs-EOF
+  halves of the same task are already covered.
