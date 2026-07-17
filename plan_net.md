@@ -1459,13 +1459,72 @@ status. This unblocked the build/test run needed to close out Phase 12/13/14's v
   reproduces-then-fixes the exact Critical finding 1 repro).
 - [x] **Task 10.4** — Built with `cmake-build-debug`, `EASYGL` backend, exactly as decision 6d
   specifies, via the exact configure command logged above.
-- [ ] **Task 10.5** — Add demo smoke-build targets for the affected avatar and network demos if
-  the build system already supports this pattern (check for precedent before inventing one).
-- [ ] **Task 10.6** — Record exact commands and pass/fail counts in this plan as each phase
-  closes out (matching the prior pass's own documentation style — see
-  `plan_net_20260707.md` for the level of detail expected per task write-up).
-- [ ] **Task 10.7** — Fix all failures caused by this pass's own changes before considering any
-  task done.
+- [x] **Task 10.5** — Checked for precedent per this task's own explicit instruction: grepped
+  `cmake/*.cmake`/`CMakeLists.txt` for `add_custom_target` (zero matches project-wide) and for any
+  existing "build a named group of demos together" pattern. None exists — every demo is its own
+  independent `add_executable` target; the closest analog,
+  `scripts/run-all-backend-smoke-tests.sh` (Task 457), is a *different* concept (orchestrating one
+  already-built graphics-backend smoke test across 4 separate CMake build directories, not
+  grouping multiple demo targets within one build). Per this task's own conditional ("if the build
+  system already supports this pattern... check for precedent before inventing one"), decided
+  **not** to invent a new CMake abstraction for this. The practical no-new-code equivalent already
+  works today with CMake's own native multi-target support:
+  `cmake --build cmake-build-debug --target cna_demo_avatar cna_demo_avatar_animation_gallery
+  cna_demo_avatar_appearance_tint_studio cna_demo_avatar_bone_state_boundary
+  cna_demo_avatar_dual_compare cna_demo_avatar_multi_attach_stress cna_demo_avatar_wardrobe_hotswap
+  cna_demo_net_avatar_sync` — used throughout Phase 8's own per-demo verification passes.
+- [x] **Task 10.6** — Done continuously throughout this pass, not as a single end-of-phase step —
+  every phase/task write-up above (Phases 2-9) records the exact verification commands run and
+  their results (build output, screenshot inspection, `--smoke`/`--show-help` runs, real
+  multi-process test runs) at the point that task closed out, matching the prior pass's
+  documentation style. This entry adds the final, whole-suite numbers for Task 10.7 below.
+- [x] **Task 10.7** — Full rebuild (`cmake --build cmake-build-debug -j$(nproc) -- -k 0`, so one
+  failure doesn't hide others) plus a full `ctest -j$(nproc)` run, to check this entire pass
+  (Phases 2-9, not just this pass's own newest changes) didn't regress anything:
+  - **Build:** every target builds cleanly except `cna_demo_xact`, which fails at its
+    Content-copy step - a pre-existing, already-documented issue
+    (`scripts/run-all-backend-smoke-tests.sh`'s own comment references it, "see
+    NEXT.md/plan_graphics.md"), unrelated to anything in this plan (XACT audio content, not
+    Net/GamerServices/Avatar). Not caused by this pass.
+  - **Tests:** 4884/4935 passed (99%), 51 failed. Investigated by category, not assumed benign -
+    every distinct failing test suite was re-run standalone/serially to check root cause:
+    - **Missing test fixtures** (majority of the 51): `LzxDecoderTest`/`LzxDecoderFuzzTest`/
+      `LzxDecoderDifferentialTest`, `ModelContentTypeReaderTest`, `SongContentTypeReaderTest`,
+      `SoundEffectContentTypeReaderTest`, `StockEffectContentTypeReaderTest`,
+      `Texture3DTextureCubeContentTypeReaderTest`, `XnbBuiltInReaderRegistrationTest`,
+      `XnbContainerFuzzTest`, `ContentManagerSongXnbTest`/`ContentManagerSoundEffectXnbTest`/
+      `ContentManagerSpriteFontXnbTest`/`ContentManagerTexture2DXnbTest`,
+      `ContentReaderTest`/`ContentReaderExternalReferenceTest` - confirmed via direct output:
+      `"Failed to load image: tests/assets/xnb/monogame/windows/uncompressed/white-1: No such
+      file or directory"` - real `.xnb`/MonoGame test fixture assets are absent from this
+      checkout, an environment/checkout gap unrelated to any code in this plan (XNB content
+      pipeline, not Net/GamerServices/Avatar).
+    - **Graphics-driver/software-rendering limitations under this sandbox's Mesa llvmpipe +
+      Xvfb**: `EasyGL_MRT_TwoAttachments` (confirmed real pixel mismatch: `right=(0,0,0) [expect
+      blue]`), `EasyGL_GraphicsDevice_ReferenceStencil`, `EasyGL_RealWindowResize` (timeout),
+      `easy-gl-resource-smoke-tests` (subprocess aborted) - all pre-existing EasyGL/graphics
+      concerns, unrelated to this plan's own Net/GamerServices/Avatar scope.
+    - **Parallel-test-execution contention, not a real regression**: `LeaderboardReaderTest.Read
+      CentersOnPivotGamer`/`ReadRestrictsToGivenGamersList`, `AudioCategoryTest.GetHashCodeConsistent
+      ForSameName`, `WaveBankTest.StreamingCtorDoesNotLoadWaveDataSegmentIntoMemory`,
+      `ENetBackendTest.ClientPromotesItselfWhenItIsTheOnlyKnownSurvivor`, and all 6
+      `ENetDiscoveryServiceTest` cases - **every one of these was re-run and confirmed to pass
+      cleanly, standalone or with `ctest -j1`** (verified directly, not assumed). The
+      `ENetDiscoveryServiceTest`/`ENetBackendTest` cases in particular line up exactly with a
+      real, already-documented design property of `ENetDiscoveryService.cpp`: many independent
+      test *processes* all binding the same well-known discovery port (61190) concurrently under
+      a highly parallel `ctest -j$(nproc)` run is expected, order-arbitrary contention (the
+      source's own comment: "which specific socket actually receives a given incoming datagram
+      when multiple sockets share one port is inherently OS-arbitrary either way"), not a bug in
+      this plan's own Phase 2/5/6 work.
+  - **Conclusion**: zero of the 51 failures are caused by this pass's own changes (Phases 2-9,
+    including the demo-only F1-overlay/font-bug-fix work in Phase 8 and the docs-only work in
+    Phase 9) - every one is either a pre-existing missing-fixture/environment gap, a pre-existing
+    graphics-driver limitation, or confirmed-benign parallel-execution contention that this same
+    codebase's own source comments already document as an expected property. Task 10.7's bar
+    ("fix all failures caused by this pass's own changes") is met with zero fixes needed, not by
+    ignoring the 51 failures - each was individually investigated and reproduced, not assumed
+    pre-existing.
 
 ---
 
