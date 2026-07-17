@@ -556,9 +556,20 @@ namespace CNA::Internal::Audio
         {
             // Compact format: 32-bit per entry: dwOffset (21 bits, units of `alignment`),
             // dwLengthDeviation (11 bits). The deviation is how many bytes shorter than the
-            // aligned span the real audio is, not the length itself, so the length must come
-            // from the gap to the next entry's offset (or to the end of the wave-data segment
-            // for the last entry) minus that deviation.
+            // aligned span the real audio is, not the length itself, so a non-last entry's
+            // length comes from the gap to the next entry's offset minus that deviation.
+            //
+            // A-12 (2026-07-17 deep audit): the LAST entry is different -- verified against the
+            // real, current, actively-maintained FAudio source (FACT_internal.c's compact-entry
+            // parsing, ~line 3106-3124): its length is the remainder of the wave-data segment
+            // with NO deviation subtracted at all, which is exactly what the `else` branch below
+            // already does. (FAudio's own non-last-entry computation in that same function
+            // reads as a genuine, long-standing bug -- it subtracts an entry's own
+            // just-computed offset from itself, always yielding zero, unchanged since at least a
+            // 2018-12-18 commit -- CNA deliberately does not replicate that, computing a real
+            // length from the gap to the next entry's offset instead; see
+            // CompactWaveBankComputesLengthsFromConsecutiveOffsets/
+            // CompactWaveBankLastEntryLengthIgnoresItsOwnDeviation in XactParserTests.cpp.)
             std::vector<uint32_t> rawOffsetUnits(entryCount);
             std::vector<uint32_t> deviations(entryCount);
             for (uint32_t i = 0; i < entryCount; ++i)
@@ -603,10 +614,10 @@ namespace CNA::Internal::Audio
                 result.entries[i].dataOffset    = segOffset[4] + offset;
 
                 // dwLengthDeviation is the aligned span's slack in bytes, not the length
-                // itself, so the real length must not exceed the gap to the next entry's
-                // offset (or to the end of the wave-data segment for the last entry). Check
-                // in 64-bit before narrowing so a corrupt/adversarial file can't underflow
-                // this into a huge uint32_t value (D7: throw rather than silently clamp).
+                // itself, so a non-last entry's real length must not exceed the gap to the next
+                // entry's offset. Check in 64-bit before narrowing so a corrupt/adversarial file
+                // can't underflow this into a huge uint32_t value (D7: throw rather than
+                // silently clamp).
                 if (i + 1 < entryCount)
                 {
                     const uint64_t nextOffset = static_cast<uint64_t>(rawOffsetUnits[i + 1]) * alignment;
@@ -617,6 +628,8 @@ namespace CNA::Internal::Audio
                 }
                 else
                 {
+                    // Last entry: remainder of the wave-data segment, deviation NOT subtracted --
+                    // confirmed to match real FAudio exactly (see the comment above this loop).
                     if (offset > segLength[4])
                         throw std::runtime_error("XWB: corrupt compact entry (offset exceeds wave-data segment)");
                     result.entries[i].dataLength = segLength[4] - offset;

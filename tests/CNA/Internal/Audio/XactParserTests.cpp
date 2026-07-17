@@ -253,6 +253,73 @@ namespace
         return data;
     }
 
+    // A-12 (2026-07-17 deep audit): compact .xwb with a SINGLE entry (so it is simultaneously the
+    // first and last entry) carrying a nonzero deviation field. Verified against the real,
+    // current, actively-maintained FAudio source (FACT_internal.c's compact-entry parsing loop,
+    // `~line 3106-3124`): the last entry's PlayRegion.dwLength is computed as
+    // `ENTRYWAVEDATA segment length - offset`, with NO deviation subtraction at all -- unlike the
+    // non-last-entry loop just above it, which (due to what reads as a genuine, long-standing
+    // FAudio bug -- it subtracts an entry's own just-computed offset from itself, always
+    // yielding zero, present unchanged since at least a 2018-12-18 commit in the locally
+    // available FAudio checkout) never produces a usable non-last-entry length at all. CNA
+    // deliberately does not replicate that non-last-entry bug (see
+    // CompactWaveBankComputesLengthsFromConsecutiveOffsets, which proves non-last entries get
+    // real, non-zero lengths derived from the gap to the next entry's offset) but DOES correctly
+    // match FAudio's last-entry behavior of never subtracting the deviation. This fixture proves
+    // that specific behavior with a deviation value that would change the answer if it were
+    // (incorrectly) subtracted.
+    std::vector<uint8_t> BuildCompactXwbFixtureWithNonzeroLastEntryDeviation()
+    {
+        constexpr uint32_t alignment         = 4;
+        constexpr uint32_t headerSize        = 48;
+        constexpr uint32_t bankDataSize      = 96;
+        constexpr uint32_t entryCount        = 1;
+        constexpr uint32_t entryMetaDataSize = 4;
+        constexpr uint32_t entryMetaSegSize  = entryCount * entryMetaDataSize;
+        constexpr uint32_t waveDataLength    = 20;
+
+        const uint32_t segOffset[5] = {
+            headerSize,
+            headerSize + bankDataSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+            headerSize + bankDataSize + entryMetaSegSize,
+        };
+        const uint32_t segLength[5] = { bankDataSize, entryMetaSegSize, 0, 0, waveDataLength };
+
+        std::vector<uint8_t> data;
+        data.reserve(headerSize + bankDataSize + entryMetaSegSize + waveDataLength);
+
+        const char magic[4] = { 'W', 'B', 'N', 'D' };
+        data.insert(data.end(), magic, magic + 4);
+        AppendU32(data, 1);
+        for (int i = 0; i < 5; ++i)
+        {
+            AppendU32(data, segOffset[i]);
+            AppendU32(data, segLength[i]);
+        }
+
+        AppendU32(data, 0x00020000u); // wbFlags: COMPACT only, no names
+        AppendU32(data, entryCount);
+        AppendPadded(data, "A-12", 64);
+        AppendU32(data, entryMetaDataSize);
+        AppendU32(data, 0);
+        AppendU32(data, alignment);
+        const uint32_t compactFormat =
+              (0u) | (1u << 2) | (44100u << 5) | (2u << 23) | (1u << 31);
+        AppendU32(data, compactFormat);
+        for (int i = 0; i < 8; ++i) data.push_back(0);
+
+        // Single (last) entry: offset=2*4=8, deviation=5 -- if (incorrectly) subtracted, length
+        // would be (20-8)-5=7 instead of the correct 20-8=12.
+        AppendU32(data, (2u) | (5u << 21));
+
+        for (uint32_t i = 0; i < waveDataLength; ++i)
+            data.push_back(static_cast<uint8_t>(i));
+
+        return data;
+    }
+
     // Compact .xwb whose single (and therefore last) entry's offset lies past the end of the
     // wave-data segment -- the "remainder of segment" length computation must throw rather than
     // underflow (regression fixture for IN-3's second underflow site).
@@ -1213,6 +1280,20 @@ TEST(XactParserTest, CompactWaveBankComputesLengthsFromConsecutiveOffsets)
     const auto& first = wb.entries[0];
     const uint32_t bytesPerSample = static_cast<uint32_t>(first.bitsPerSample / 8) * first.channels;
     EXPECT_EQ(first.dataLength / bytesPerSample, 5u);
+}
+
+// A-12 (2026-07-17 deep audit): confirmed NOT a defect after checking real FAudio source
+// (FACT_internal.c) directly -- the last compact entry's length must NOT subtract its own
+// deviation field, matching FAudio's own (verified) behavior exactly. See
+// BuildCompactXwbFixtureWithNonzeroLastEntryDeviation's own comment for the full citation.
+TEST(XactParserTest, CompactWaveBankLastEntryLengthIgnoresItsOwnDeviation)
+{
+    const XwbData wb = ParseXwb(BuildCompactXwbFixtureWithNonzeroLastEntryDeviation());
+    ASSERT_EQ(wb.entries.size(), 1u);
+    EXPECT_EQ(wb.entries[0].dataOffset, 148u + 8u); // segOffset[4] (48+96+4) + offset(8)
+    EXPECT_EQ(wb.entries[0].dataLength, 12u)        // 20 - 8, deviation NOT subtracted
+        << "last entry must not subtract its own deviation (matches real FAudio's "
+           "FACT_internal.c compact-entry parsing exactly)";
 }
 
 TEST(XactParserTest, CompactWaveBankThrowsWhenDeviationExceedsGapToNextEntry)
