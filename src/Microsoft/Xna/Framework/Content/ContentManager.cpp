@@ -21,6 +21,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SkinnedModelEXT.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteFont.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTextureSkinned.hpp"
@@ -313,6 +314,11 @@ namespace Microsoft::Xna::Framework::Content
         // (plan_cnj.md CNB-8), ahead of where it's textually defined.
         std::string ReadTextFile(const std::string& path);
 
+        // Forward declaration -- defined below (originally added for the skeleton/clip binary
+        // sidecars). plan_cnj.md CNB-43: Texture3DTypeReader needs it ahead of where it's
+        // textually defined, same reason as ReadTextFile above.
+        std::vector<std::uint8_t> ReadBinaryFile(const std::string& path);
+
         // plan_cnj.md CNB-34: SpriteFont/Effect/Model .cnj documents are self-contained
         // descriptors -- unlike Texture2D/SoundEffect/TextureCube, they have no meaning for a
         // "sourceFile" field. Reject it explicitly with a clear error instead of silently
@@ -469,6 +475,91 @@ namespace Microsoft::Xna::Framework::Content
                     CNA::Internal::ResolveCnjSourceFileSafely(
                         path, cm.getRootDirectoryProperty(), envelope.sourceFile);
                 return cm.Load<Graphics::TextureCube>(resolved.logicalName);
+            }
+        };
+
+        // plan_cnj.md CNB-43: no native "3D texture" file format exists in CNA the way .dds serves
+        // TextureCube (Texture3D has no FromStream/DDSFromStream equivalent) -- so unlike
+        // TextureCubeTypeReader, this is self-contained JSON + a raw binary pixel-data sidecar
+        // (mirrors Model's own vertex/index binary-sidecar convention), not a sourceFile delegation.
+        // Single mip level only; deliberately skips the .xnb Texture3DReader's mip-chain/DXT
+        // handling -- no real sample content needs either (plan_cnj.md CNB-43's own survey), and
+        // .cnj content is hand-authored, so pre-compressed DXT data has no natural place to come
+        // from here the way it does inside a real XNA content-pipeline build.
+        class Texture3DTypeReader : public LooseFileContentTypeReader<std::shared_ptr<Graphics::Texture3D>>
+        {
+        public:
+            [[nodiscard]] std::vector<std::string> GetExtensions() const override
+            {
+                return {".cnj"};
+            }
+
+            // Targets std::shared_ptr<Texture3D>, not a bare Texture3D: Texture3D is move-only
+            // (copy deleted), and ContentManager's generic asset cache stores results in a
+            // std::any, which requires CopyConstructible -- the same reason the .xnb-side
+            // Texture3DReader/StockEffectContentTypeReaders already return shared_ptr instead of
+            // a bare value.
+            std::shared_ptr<Graphics::Texture3D> Read(const std::string& path, ContentManager& cm) override
+            {
+                namespace fs = std::filesystem;
+                using CNA::Internal::JsonValue;
+
+                const std::string json = ReadTextFile(path);
+                const CNA::Internal::CnjEnvelope envelope = CNA::Internal::ParseCnjEnvelope(json);
+                CNA::Internal::ValidateCnjEnvelope(envelope, "Texture3D", path);
+                RejectSourceFileForSelfContainedCnj(envelope, "Texture3D", path);
+
+                const JsonValue root = CNA::Internal::ParseJson(json);
+                const JsonValue* widthField  = root.FindMember("width");
+                const JsonValue* heightField = root.FindMember("height");
+                const JsonValue* depthField  = root.FindMember("depth");
+                const JsonValue* dataField   = root.FindMember("data");
+
+                if (widthField == nullptr || !widthField->IsNumber() ||
+                    heightField == nullptr || !heightField->IsNumber() ||
+                    depthField == nullptr || !depthField->IsNumber())
+                {
+                    throw ContentLoadException(
+                        "Texture3D .cnj '" + path + "' is missing a numeric 'width'/'height'/'depth' field.");
+                }
+                if (dataField == nullptr || !dataField->IsString() || dataField->stringValue.empty())
+                {
+                    throw ContentLoadException(
+                        "Texture3D .cnj '" + path + "' is missing a non-empty 'data' field naming a raw pixel sidecar.");
+                }
+
+                const int width  = static_cast<int>(widthField->numberValue);
+                const int height = static_cast<int>(heightField->numberValue);
+                const int depth  = static_cast<int>(depthField->numberValue);
+                if (width <= 0 || height <= 0 || depth <= 0)
+                {
+                    throw ContentLoadException(
+                        "Texture3D .cnj '" + path + "' has a non-positive 'width'/'height'/'depth'.");
+                }
+
+                const auto bytes = ReadBinaryFile((fs::path(cm.getRootDirectoryProperty()) / dataField->stringValue).string());
+                const std::size_t expectedBytes =
+                    static_cast<std::size_t>(width) * static_cast<std::size_t>(height) *
+                    static_cast<std::size_t>(depth) * 4;
+                if (bytes.size() != expectedBytes)
+                {
+                    throw ContentLoadException(
+                        "Texture3D .cnj '" + path + "': 'data' sidecar has " + std::to_string(bytes.size()) +
+                        " bytes, expected " + std::to_string(expectedBytes) + " for " +
+                        std::to_string(width) + "x" + std::to_string(height) + "x" + std::to_string(depth) + ".");
+                }
+
+                std::vector<Color> colors;
+                colors.reserve(expectedBytes / 4);
+                for (std::size_t i = 0; i < expectedBytes; i += 4)
+                {
+                    colors.emplace_back(bytes[i], bytes[i + 1], bytes[i + 2], bytes[i + 3]);
+                }
+
+                auto texture = std::make_shared<Graphics::Texture3D>(
+                    cm.getGraphicsDeviceInternal(), width, height, depth, false, Graphics::SurfaceFormat::Color);
+                texture->SetData(colors.data(), static_cast<int>(colors.size()));
+                return texture;
             }
         };
 
@@ -753,7 +844,7 @@ namespace Microsoft::Xna::Framework::Content
             }
         };
 
-        static std::vector<std::uint8_t> ReadBinaryFile(const std::string& path)
+        std::vector<std::uint8_t> ReadBinaryFile(const std::string& path)
         {
             std::ifstream file(path, std::ios::binary);
             if (!file.is_open())
@@ -1623,6 +1714,7 @@ namespace Microsoft::Xna::Framework::Content
     {
         RegisterTypeReader<Graphics::Texture2D>(std::make_unique<Texture2DTypeReader>());
         RegisterTypeReader<Graphics::TextureCube>(std::make_unique<TextureCubeTypeReader>());
+        RegisterTypeReader<std::shared_ptr<Graphics::Texture3D>>(std::make_unique<Texture3DTypeReader>());
         RegisterTypeReader<Audio::SoundEffect>(std::make_unique<SoundEffectTypeReader>());
         RegisterTypeReader<std::shared_ptr<Graphics::Effect>>(std::make_unique<EffectTypeReader>());
         RegisterTypeReader<Graphics::SpriteFont>(std::make_unique<SpriteFontTypeReader>());
