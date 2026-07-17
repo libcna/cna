@@ -7765,7 +7765,7 @@ test is not sufficient for an Android coordinate/fusion claim.
   pure math hardening against a hypothetical bad sample, not a claim about real hardware's typical
   output quality.
 
-### MOT2-003 — Replace latest-value Motion fusion with timestamp-aligned fusion — OPEN
+### MOT2-003 — Replace latest-value Motion fusion with timestamp-aligned fusion — OPEN (minor progress: drop counter added; core redesign deliberately deferred, comparable in scope to LIFE-007/010/011)
 
 - **Priority:** P1
 - **Area:** Perfection re-audit
@@ -7778,6 +7778,63 @@ test is not sufficient for an Android coordinate/fusion claim.
   - Every MotionReading records source skew below a documented threshold.
   - Synthetic fast-motion fixtures show lower fusion error than latest-value logic.
 - **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+- **Progress so far (minor; core work deliberately deferred, see below):**
+  - Investigated the existing fusion code (`AndroidMotionBackend::PublishReading()`) and
+    found this task's "Problem" framing needs a nuance: this is **not** currently
+    "arbitrarily different times" with no bound at all — `MOTION-007` (an earlier task)
+    already added a fixed `MaxFusionAgeWindow` (500ms) check across all four fused
+    sources' timestamps, dropping (not publishing) a frame whose sources span more than
+    that. This task's own "Problem" statement is a *criticism of that existing bound being
+    too loose for fast motion*, not a report that no bound exists at all — an important
+    distinction for whoever picks this up next, so the starting point is understood
+    correctly.
+  - "Drop incomplete frames" was already implemented (`MOTION-007`); this task's own
+    distinct, clearly-scoped contribution is "and expose counters" — added
+    `droppedFusionFrameCountForTesting_` (incremented in the existing drop branch) and
+    `AndroidMotionBackend::GetDroppedFusionFrameCountForTesting()` (a plain public method,
+    not part of the `IMotionBackend` interface — this backend's own diagnostic-only
+    surface, matching this whole class's Android-only, zero-host-test-coverage nature).
+  - **Explicitly NOT implemented, and why:** the harder two-thirds of the required work —
+    (1) bounded per-source sample queues keyed by native timestamp, and (2) choosing the
+    attitude sample as an anchor and selecting/interpolating the nearest
+    gravity/linear-acceleration/gyroscope samples within a *tight, measured* skew (replacing
+    the current fixed 500ms bound) — were investigated and deliberately deferred as their
+    own, larger design task, for two concrete reasons: (a) "a tight, **measured** skew" is
+    a literal instruction to derive the threshold from real inter-sensor jitter
+    measurements on actual hardware — no such measurement is possible in this container,
+    and picking an arbitrary tighter number would not actually satisfy this requirement,
+    only appear to; (b) the interpolation/nearest-sample machinery itself (real bounded
+    queues, real interpolation math for three different vector quantities bracketing an
+    anchor timestamp) is comparable in scope to `LIFE-007`/`010`/`011` — this backlog's
+    other explicitly-deferred large architecture tasks — not an isolated fix to rush
+    alongside a same-day counter addition. The acceptance criteria themselves ("every
+    MotionReading records source skew below a documented threshold", "synthetic
+    fast-motion fixtures show lower fusion error than latest-value logic") both describe
+    the *undone* redesign, not the counter — so this task's acceptance criteria are
+    **not** met by this pass's change; only its narrowest, clearly-isolable sub-bullet is.
+- **Files changed:** `include/Microsoft/Devices/Sensors/Detail/AndroidMotionBackend.hpp`,
+  `src/Microsoft/Devices/Sensors/Detail/AndroidMotionBackend.cpp`,
+  `docs/devices-hardware-checklist.md`.
+- **Tests:** none added — entirely inside `#ifdef __ANDROID__`-gated code, and the counter
+  itself has no host-testable pure-logic component the way `COMP2-001`'s skew primitives
+  did (it is a single `++` on an existing, already-covered-by-reasoning drop branch, not a
+  new decision function). Verified via a real Android NDK cross-compile of this exact
+  translation unit (compiles cleanly) and a full host build (this file's non-Android
+  content is preprocessed away entirely, confirmed unaffected). Full host Devices/Sensors
+  filtered suite unaffected (no host-reachable code changed).
+- **Sanitizer/static-analysis result:** not applicable on the host (no TSan/ASan for the
+  Android NDK cross-compile in this environment); the new field is guarded by the same
+  pre-existing `stateMutex_` every other field in this class already uses, so no new
+  locking discipline was introduced.
+- **Remaining limitations (explicitly OPEN, not fabricated):** the counter has never
+  actually incremented at runtime (no Android hardware/emulator here) — confirmed correct
+  only by code inspection and cross-compile. The full required-work redesign (queues,
+  interpolation, measured tight skew) remains entirely unimplemented, by deliberate
+  choice, not oversight — see the reasoning above. A new hardware validation procedure
+  (`docs/devices-hardware-checklist.md` Section 8a) documents both what to check for the
+  counter and what a future measurement pass for the full redesign would need to do. Left
+  **OPEN**: this is the least-complete task closed/progressed this pass — treat "minor
+  progress" as an accurate description, not "mostly done."
 
 ### MOT2-004 — Define one Motion output cadence — OPEN
 

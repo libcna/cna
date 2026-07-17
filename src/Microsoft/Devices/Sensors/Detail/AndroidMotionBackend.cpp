@@ -139,6 +139,12 @@ namespace Microsoft::Devices::Sensors::Detail
         magneticFieldBridge_.SetSampleInterval(timeBetweenUpdates);
     }
 
+    int AndroidMotionBackend::GetDroppedFusionFrameCountForTesting()
+    {
+        std::lock_guard<std::mutex> lock(stateMutex_);
+        return droppedFusionFrameCountForTesting_;
+    }
+
     void AndroidMotionBackend::HandleAttitudeSample(const AndroidSensorSample& sample)
     {
         // Always the OS-fused rotation vector / game rotation vector output
@@ -341,6 +347,20 @@ namespace Microsoft::Devices::Sensors::Detail
                 {attitudeTimestamp, gravityTimestamp_, linearAccelerationTimestamp_, gyroscopeTimestamp_});
             if ((newest - oldest) > MaxFusionAgeWindow)
             {
+                // Task MOT2-003 (2026-07-17, external audit
+                // `audit_devices_2026-07-17.md`): "drop incomplete frames
+                // and expose counters" -- the drop itself already existed
+                // (MOTION-007); this only adds the counter, so a caller/test
+                // can observe how often it actually fires rather than
+                // trusting it silently works. Does not implement this
+                // task's larger remaining ask (bounded per-source sample
+                // queues, nearest/interpolated selection within a tight,
+                // hardware-measured skew, replacing this fixed 500ms
+                // latest-value bound) -- see this method's own class-level
+                // doc comment and plan_devices.md's MOT2-003 resolution
+                // note for why that is deliberately deferred as its own,
+                // larger design task rather than rushed here.
+                ++droppedFusionFrameCountForTesting_;
                 return;
             }
 

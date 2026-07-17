@@ -72,6 +72,15 @@ namespace Microsoft::Devices::Sensors::Detail
 
         void SetSampleInterval(const System::TimeSpan& timeBetweenUpdates) override;
 
+        /**
+         * @brief Test-only hook (Task MOT2-003): total fused frames dropped for exceeding `MaxFusionAgeWindow`.
+         *
+         * @return The number of times `PublishReading()` has skipped
+         * publishing because the four fused sources' most recent samples
+         * spanned more than `MaxFusionAgeWindow`.
+         */
+        [[nodiscard]] int GetDroppedFusionFrameCountForTesting();
+
     private:
         void HandleAttitudeSample(const AndroidSensorSample& sample);
         void HandleGravitySample(const AndroidSensorSample& sample);
@@ -128,6 +137,21 @@ namespace Microsoft::Devices::Sensors::Detail
          * healthy operation.
          */
         static const System::TimeSpan MaxFusionAgeWindow;
+
+        /**
+         * @brief Test-only hook (Task MOT2-003): total fused frames dropped for exceeding `MaxFusionAgeWindow`.
+         *
+         * Satisfies the required work's "expose counters" bullet for the
+         * drop path that already existed (`MOTION-007`) before this task —
+         * see this class's own `.cpp` `PublishReading()` and
+         * `plan_devices.md`'s `MOT2-003` resolution note for what this task
+         * does and, just as importantly, does *not* yet implement (bounded
+         * per-source sample queues and nearest/interpolated selection
+         * within a tight, hardware-measured skew — deliberately deferred as
+         * its own, larger design task, not rushed here). Guarded by
+         * `stateMutex_`, same as every other field in this class.
+         */
+        int droppedFusionFrameCountForTesting_ = 0;
 
         ReadingCallback onReading_;
 
