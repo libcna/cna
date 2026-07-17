@@ -130,6 +130,12 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_backend_test(NAME EasyGL_SkinnedEffect_Golden COMMAND cna_test_easygl_skinnedeffect_golden
             TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # CNB-67 (Phase 13C): SkinnedEffect's new NOXNA VertexColorEnabled property.
+        cna_easygl_test(cna_test_easygl_skinnedeffect_vertexcolor
+                        examples/easygl_skinnedeffect_vertexcolor_test.cpp)
+        cna_register_backend_test(NAME EasyGL_SkinnedEffect_VertexColor COMMAND cna_test_easygl_skinnedeffect_vertexcolor
+            TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 87: RenderTarget2D → texture → readback
         cna_easygl_test(cna_test_easygl_render_target
                         examples/easygl_render_target_test.cpp)

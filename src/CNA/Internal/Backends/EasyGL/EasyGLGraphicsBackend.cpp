@@ -2268,6 +2268,28 @@ void main()
             vao.enable_attribute(4);
             vao.set_attribute_i_pointer(4, 4, ::easygl::DataType::UnsignedByte, s, (void*)48);
             break;
+        case 56:
+            // CNB-67 (Phase 13C): the stride-52 SkinnedVertex layout above with a per-vertex
+            // Color (normalized ubyte4) appended at the end (offset 52), rather than inserted
+            // mid-layout -- keeps attribute locations 0-4 byte-identical to the stride-52 case
+            // above, so EnsureSkinnedProgram()/EnsureSkinnedVertexLitProgram()'s single shader
+            // pair serves both strides; location 5 (aColor) is simply left unbound for stride-52
+            // draws, and GpuDrawParams::vertexColorEnabled (gated by SkinnedEffect::
+            // VertexColorEnabled, see FillGpuDrawParams) already governs whether the shader reads
+            // it at all.
+            vao.enable_attribute(0);
+            vao.set_attribute_pointer(0, 3, ::easygl::DataType::Float, false, s, (void*)0);
+            vao.enable_attribute(1);
+            vao.set_attribute_pointer(1, 3, ::easygl::DataType::Float, false, s, (void*)12);
+            vao.enable_attribute(2);
+            vao.set_attribute_pointer(2, 2, ::easygl::DataType::Float, false, s, (void*)24);
+            vao.enable_attribute(3);
+            vao.set_attribute_pointer(3, 4, ::easygl::DataType::Float, false, s, (void*)32);
+            vao.enable_attribute(4);
+            vao.set_attribute_i_pointer(4, 4, ::easygl::DataType::UnsignedByte, s, (void*)48);
+            vao.enable_attribute(5);
+            vao.set_attribute_pointer(5, 4, ::easygl::DataType::UnsignedByte, true, s, (void*)52);
+            break;
         default:
             // Unknown layout: bind position-only as a safe fallback
             vao.enable_attribute(0);
@@ -3204,6 +3226,7 @@ void main()
 "layout(location=2) in vec2 aUV;\n"
 "layout(location=3) in vec4 aBoneWeights;\n"
 "layout(location=4) in uvec4 aBoneIndices;\n"
+"layout(location=5) in vec4 aColor;\n"
 "uniform mat4 uWVP;\n"
 "uniform mat4 uWorld;\n"
 "uniform mat4 uBones[72];\n"
@@ -3215,6 +3238,7 @@ void main()
 "out vec2 vUV;\n"
 "out float vFogFactor;\n"
 "out vec3 vWorldPos;\n"
+"out vec4 vColor;\n"
 "void main(){\n"
 // Task 895: FNA's real Skin(vin, boneCount) only sums the first WeightsPerVertex (1, 2, or 4)
 // weight/index pairs -- matches XNA's own validated property range, so >=2/>=4 gating suffices.
@@ -3226,6 +3250,7 @@ void main()
 "    vNormal=normalize(mat3(skinMat)*aNormal);\n"
 "    vUV=aUV;\n"
 "    vWorldPos=(uWorld*skinnedPos).xyz;\n"
+"    vColor=aColor;\n"
 // Task 1111: matches FNA's EffectHelpers.SetFogVector/Common.fxh ComputeFogFactor exactly
 // (fogFactor=saturate(scale*(z+fogStart)), scale=1/(fogStart-fogEnd), dotted with object-space
 // position since World=View=Identity in every CNA fog test/scene) -- NOT a naive (fogEnd-z)/
@@ -3245,6 +3270,7 @@ void main()
 "in vec2 vUV;\n"
 "in float vFogFactor;\n"
 "in vec3 vWorldPos;\n"
+"in vec4 vColor;\n"
 "uniform sampler2D uTexture;\n"
 "uniform vec4 uDiffuseColor;\n"
 "uniform vec3 uEmissiveColor;\n"
@@ -3262,6 +3288,7 @@ void main()
 "uniform vec3 uEyePosition;\n"
 "uniform vec4 uAlphaTest;\n"
 "uniform vec3 uFogColor;\n"
+"uniform float uVertexColorEnabled;\n"
 "out vec4 FragColor;\n"
 "void main(){\n"
 "    vec3 N=normalize(vNormal);\n"
@@ -3276,8 +3303,13 @@ void main()
 "    vec3 h2=normalize(E-uLight2Dir); float spec2=pow(max(dot(h2,N),0.0)*zeroL2,uSpecularPower);\n"
 "    vec3 specularRGB=(spec0*uLight0Specular+spec1*uLight1Specular+spec2*uLight2Specular)*uSpecularColor;\n"
 "    vec4 texColor=texture(uTexture,vUV);\n"
-"    FragColor=vec4(litRGB*texColor.rgb,uDiffuseColor.a*texColor.a);\n"
+"    vec4 vc=(uVertexColorEnabled>0.5)?vColor:vec4(1.0,1.0,1.0,1.0);\n"
+"    FragColor=vec4(litRGB*texColor.rgb,uDiffuseColor.a*texColor.a*vc.a);\n"
 "    FragColor.rgb+=specularRGB*FragColor.a;\n"
+// Vertex color modulates the whole combined diffuse+specular output, not just diffuse -- applied
+// after the specular add so VertexColorEnabled=true with a black vertex color genuinely zeroes
+// the pixel (a specular highlight added afterward would otherwise leak through unmodulated).
+"    FragColor.rgb*=vc.rgb;\n"
 "    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
 "    if(_at<0.0)discard;\n"
 "    FragColor.rgb=mix(uFogColor,FragColor.rgb,vFogFactor);\n"
@@ -3309,6 +3341,7 @@ void main()
         p.loc_fog_color   = p.prog.uniform_location("uFogColor");
         p.loc_fog_start   = p.prog.uniform_location("uFogStart");
         p.loc_fog_end     = p.prog.uniform_location("uFogEnd");
+        p.loc_vertexcolor = p.prog.uniform_location("uVertexColorEnabled");
         p.ready         = true;
         CNA_RENDER_LOG("skinned3D ready loc_wvp=" << p.loc_wvp << " loc_bones=" << p.loc_bones);
     }
@@ -3341,6 +3374,7 @@ void main()
 "layout(location=2) in vec2 aUV;\n"
 "layout(location=3) in vec4 aBoneWeights;\n"
 "layout(location=4) in uvec4 aBoneIndices;\n"
+"layout(location=5) in vec4 aColor;\n"
 "uniform mat4 uWVP;\n"
 "uniform mat4 uWorld;\n"
 "uniform mat4 uBones[72];\n"
@@ -3370,6 +3404,7 @@ void main()
 "out float vFogFactor;\n"
 "out vec3 vLitRGB;\n"
 "out vec3 vSpecularRGB;\n"
+"out vec4 vColor;\n"
 "void main(){\n"
 "    mat4 skinMat=uBones[aBoneIndices.x]*aBoneWeights.x;\n"
 "    if(uWeightsPerVertex>=2) skinMat+=uBones[aBoneIndices.y]*aBoneWeights.y;\n"
@@ -3377,6 +3412,7 @@ void main()
 "    vec4 skinnedPos=skinMat*vec4(aPos,1.0);\n"
 "    gl_Position=uWVP*skinnedPos;\n"
 "    vUV=aUV;\n"
+"    vColor=aColor;\n"
 // Task 1111: matches FNA's EffectHelpers.SetFogVector/Common.fxh ComputeFogFactor exactly
 // (fogFactor=saturate(scale*(z+fogStart)), scale=1/(fogStart-fogEnd), dotted with object-space
 // position since World=View=Identity in every CNA fog test/scene) -- NOT a naive (fogEnd-z)/
@@ -3408,15 +3444,21 @@ void main()
 "in float vFogFactor;\n"
 "in vec3 vLitRGB;\n"
 "in vec3 vSpecularRGB;\n"
+"in vec4 vColor;\n"
 "uniform sampler2D uTexture;\n"
 "uniform highp vec4 uDiffuseColor;\n"
 "uniform vec4 uAlphaTest;\n"
 "uniform vec3 uFogColor;\n"
+"uniform float uVertexColorEnabled;\n"
 "out vec4 FragColor;\n"
 "void main(){\n"
 "    vec4 texColor=texture(uTexture,vUV);\n"
-"    FragColor=vec4(vLitRGB*texColor.rgb,uDiffuseColor.a*texColor.a);\n"
+"    vec4 vc=(uVertexColorEnabled>0.5)?vColor:vec4(1.0,1.0,1.0,1.0);\n"
+"    FragColor=vec4(vLitRGB*texColor.rgb,uDiffuseColor.a*texColor.a*vc.a);\n"
 "    FragColor.rgb+=vSpecularRGB*FragColor.a;\n"
+// See EnsureSkinnedProgram()'s identical comment: vertex color modulates the whole combined
+// diffuse+specular output, applied after the specular add.
+"    FragColor.rgb*=vc.rgb;\n"
 "    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
 "    if(_at<0.0)discard;\n"
 "    FragColor.rgb=mix(uFogColor,FragColor.rgb,vFogFactor);\n"
@@ -3448,6 +3490,7 @@ void main()
         p.loc_fog_color   = p.prog.uniform_location("uFogColor");
         p.loc_fog_start   = p.prog.uniform_location("uFogStart");
         p.loc_fog_end     = p.prog.uniform_location("uFogEnd");
+        p.loc_vertexcolor = p.prog.uniform_location("uVertexColorEnabled");
         p.ready         = true;
         CNA_RENDER_LOG("skinned3D (vertex-lit) ready loc_wvp=" << p.loc_wvp << " loc_bones=" << p.loc_bones);
     }

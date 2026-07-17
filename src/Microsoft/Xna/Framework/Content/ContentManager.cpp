@@ -1791,6 +1791,14 @@ namespace Microsoft::Xna::Framework::Content
                                 // through with no C++ struct reinterpretation at all, so this
                                 // branch has no analogue of Task 927's own vtable-inflation risk.
                                 vb->SetDataRaw(vertBytes.data(), numVertices, 52);
+                            } else if (stride == 56) {
+                                // CNB-67 (Phase 13C): the stride-52 GPU-skinned layout with a
+                                // per-vertex Color (normalized ubyte4) appended at the end --
+                                // matches EasyGLGraphicsBackend::ApplyLayout's stride==56 case,
+                                // which keeps attribute locations 0-4 identical to stride-52 and
+                                // only adds location 5 (aColor). Raw byte upload for the same
+                                // vtable-inflation reason as the stride-52 branch above.
+                                vb->SetDataRaw(vertBytes.data(), numVertices, 56);
                             }
 
                             auto ib = std::make_unique<Graphics::IndexBuffer>(
@@ -1884,16 +1892,19 @@ namespace Microsoft::Xna::Framework::Content
                                 }
                             }
 
-                            // Task 1115: a "vertexStride": 24 (VertexPositionColorTexture) mesh
-                            // may set "vertexColorEnabled" to actually light the per-vertex color
-                            // data it already uploads -- BasicEffect defaults VertexColorEnabled
-                            // to false (matching real XNA), so without this the color bytes are
-                            // present in the vertex buffer but the shader ignores them. Real XNA's
-                            // SkinnedEffect has no VertexColorEnabled property at all, so this is
-                            // only meaningful for BasicEffect.
+                            // Task 1115 / CNB-67 (Phase 13C): a "vertexStride": 24
+                            // (VertexPositionColorTexture) or 56 (skinned + Color) mesh may set
+                            // "vertexColorEnabled" to actually light the per-vertex color data it
+                            // already uploads -- both BasicEffect and SkinnedEffect default
+                            // VertexColorEnabled to false, so without this the color bytes are
+                            // present in the vertex buffer but the shader ignores them.
+                            // SkinnedEffect's VertexColorEnabled is a NOXNA addition (real XNA's
+                            // SkinnedEffect has no such property at all).
                             if (vertexColorEnabled) {
                                 if (auto* basicFx = dynamic_cast<Graphics::BasicEffect*>(fx.get())) {
                                     basicFx->VertexColorEnabled = true;
+                                } else if (auto* skinnedFx = dynamic_cast<Graphics::SkinnedEffect*>(fx.get())) {
+                                    skinnedFx->VertexColorEnabled = true;
                                 }
                             }
 

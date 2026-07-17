@@ -57,15 +57,20 @@
 // than the byte-for-byte passthrough ExtractImage() does today -- left as a documented follow-up,
 // not implemented here to avoid vendoring an image codec for a single-purpose remap.
 //
+// CNB-66/67/68 (Phase 13C): a primitive's COLOR_0 attribute is now imported for skinned meshes
+// too, using a new stride-56 vertex layout (the stride-52 GPU-skinned layout with a per-vertex
+// Color appended at the end) and SkinnedEffect's own NOXNA VertexColorEnabled addition (real XNA's
+// SkinnedEffect has no such property -- see SkinnedEffect.hpp's own doc comment). DualTextureEffect
+// (CNB-72/73 above) remains unskinned-only and mutually exclusive with vertex color, since both
+// still need the mesh's one shared vertex layout and DualTextureEffect's own vertex shader has no
+// room for a per-vertex Normal, BlendWeight/BlendIndices, or Color between its Position/
+// TextureCoordinate attributes.
+//
 // Known, deliberate MVP scope cuts (see plan_cnj.md CNB-50/51's own notes for the full list): only
 // the base-color and (per above) occlusion textures are extracted (no normal/metallic-roughness/
 // emissive maps, no PBR factor values -- CNA's real-XNA-faithful BasicEffect/SkinnedEffect/
-// DualTextureEffect have no shader path for any of these, unlike VertexColorEnabled); vertex color
-// and DualTextureEffect's Texture2 are each only supported for unskinned, and mutually exclusive
-// with each other, since both need the mesh's one shared vertex layout (real XNA's SkinnedEffect
-// has no VertexColorEnabled property, and DualTextureEffect's own vertex shader has no room for a
-// per-vertex Normal or Color between its Position/TextureCoordinate attributes); morph targets
-// (blend shapes) are not imported.
+// DualTextureEffect have no shader path for any of these); morph targets (blend shapes) are not
+// imported.
 
 #define CGLTF_IMPLEMENTATION
 #include "cgltf.h"
@@ -777,12 +782,12 @@ namespace
         MeshOut out;
         out.name = name;
         out.skinned = (jointsAcc != nullptr) && (weightsAcc != nullptr);
-        // Vertex color (COLOR_0) is only supported for unskinned meshes: real XNA's SkinnedEffect
-        // has no VertexColorEnabled property at all (unlike BasicEffect/AlphaTestEffect/
-        // DualTextureEffect), so a skinned+colored combination has no XNA-faithful shader path to
-        // render through -- COLOR_0 is intentionally dropped for skinned meshes rather than
-        // silently doing nothing with a real capability request.
-        out.colored = (!out.skinned) && (colorAcc != nullptr);
+        // CNB-68 (Phase 13C): vertex color (COLOR_0) is supported for both skinned and unskinned
+        // meshes. A skinned+colored primitive uses a new stride-56 layout (the stride-52 GPU-
+        // skinned layout with a per-vertex Color appended at the end) and SkinnedEffect's own
+        // NOXNA VertexColorEnabled addition (see SkinnedEffect.hpp -- real XNA's SkinnedEffect has
+        // no such property).
+        out.colored = (colorAcc != nullptr);
         out.baseColorImage = FindBaseColorImage(prim);
         // CNB-73: an unskinned, uncolored primitive with both a base-color and an occlusion
         // texture is imported through DualTextureEffect (Texture=base color, Texture2=occlusion)
@@ -796,19 +801,21 @@ namespace
         // not an oversight.
         out.occlusionImage = (!out.skinned && !out.colored) ? FindOcclusionImage(prim) : nullptr;
         out.useDualTexture = (out.occlusionImage != nullptr) && (out.baseColorImage != nullptr);
-        // Colored meshes reuse the real XNA VertexPositionColorTexture layout (stride 24,
-        // Position+Color+TextureCoordinate) -- already fully supported end-to-end by
-        // ModelTypeReader and every graphics backend's existing VertexColorEnabled shader path,
-        // rather than inventing a new Position+Normal+Color+TextureCoordinate layout that would
-        // need a brand new shader permutation on every backend. The tradeoff (no per-vertex
-        // Normal when colored) is a deliberate, documented scope cut.
-        out.stride = out.skinned ? 52 : (out.colored ? 24 : (out.useDualTexture ? 20 : 32));
+        // Unskinned colored meshes reuse the real XNA VertexPositionColorTexture layout (stride
+        // 24, Position+Color+TextureCoordinate, no Normal) -- already fully supported end-to-end
+        // by ModelTypeReader and every graphics backend's existing VertexColorEnabled shader path.
+        // Skinned colored meshes use the new stride-56 layout instead (Position+Normal+
+        // TextureCoordinate+BlendWeight+BlendIndices+Color -- see CNB-67).
+        out.stride = out.skinned ? (out.colored ? 56 : 52) : (out.colored ? 24 : (out.useDualTexture ? 20 : 32));
 
         const cgltf_size vertexCount = posAcc->count;
         out.vertexBytes.reserve(static_cast<std::size_t>(vertexCount) * static_cast<std::size_t>(out.stride));
 
         const std::vector<float> positions = UnpackAccessor(posAcc, 3, "POSITION");
-        const std::vector<float> normals = (normAcc && !out.colored) ? UnpackAccessor(normAcc, 3, "NORMAL") : std::vector<float>();
+        // Only the unskinned stride-24 (Position+Color+TextureCoordinate) and stride-20
+        // (DualTextureEffect) layouts have no room for a per-vertex Normal.
+        const std::vector<float> normals = (normAcc && out.stride != 24 && out.stride != 20)
+            ? UnpackAccessor(normAcc, 3, "NORMAL") : std::vector<float>();
         const std::vector<float> uvs = uvAcc ? UnpackAccessor(uvAcc, 2, "TEXCOORD") : std::vector<float>();
         const std::vector<float> weights = out.skinned ? UnpackAccessor(weightsAcc, 4, "WEIGHTS_0") : std::vector<float>();
         const std::vector<float> joints = out.skinned ? UnpackAccessor(jointsAcc, 4, "JOINTS_0") : std::vector<float>();
@@ -832,23 +839,32 @@ namespace
 
             AppendFloat(out.vertexBytes, px); AppendFloat(out.vertexBytes, py); AppendFloat(out.vertexBytes, pz);
 
-            if (out.colored)
+            const std::size_t co = static_cast<std::size_t>(i) * static_cast<std::size_t>(colorComponents);
+            auto appendColor = [&]()
             {
-                const std::size_t co = static_cast<std::size_t>(i) * static_cast<std::size_t>(colorComponents);
                 out.vertexBytes.push_back(ToByteColorChannel(colors[co]));
                 out.vertexBytes.push_back(ToByteColorChannel(colors[co + 1]));
                 out.vertexBytes.push_back(ToByteColorChannel(colors[co + 2]));
                 out.vertexBytes.push_back(colorComponents >= 4 ? ToByteColorChannel(colors[co + 3]) : std::uint8_t{255});
+            };
+
+            if (out.colored && !out.skinned)
+            {
+                // stride 24: Position + Color + TextureCoordinate.
+                appendColor();
                 AppendFloat(out.vertexBytes, u); AppendFloat(out.vertexBytes, v);
                 continue;
             }
 
             if (out.useDualTexture)
             {
+                // stride 20: Position + TextureCoordinate.
                 AppendFloat(out.vertexBytes, u); AppendFloat(out.vertexBytes, v);
                 continue;
             }
 
+            // stride 32/52/56: Position + Normal + TextureCoordinate [+ BlendWeight +
+            // BlendIndices] [+ Color] -- Color, when present, is always appended last (CNB-67).
             const float nx = normals.empty() ? 0.0f : normals[i3];
             const float ny = normals.empty() ? 0.0f : normals[i3 + 1];
             const float nz = normals.empty() ? 1.0f : normals[i3 + 2];
@@ -870,6 +886,8 @@ namespace
                     }
                     out.vertexBytes.push_back(static_cast<std::uint8_t>(newJointIdx));
                 }
+
+                if (out.colored) { appendColor(); }
             }
         }
 

@@ -10,10 +10,15 @@
 > engine-level gaps (PBR materials, morph targets, skinned vertex color, runtime glTF loading, a
 > second texture layer) — implementation began 2026-07-17 at the project owner's explicit request
 > ("implementuj prosim postupne fazi 13"), working through sub-phases in order of tractability.
-> **13E (`CNB-72`–`CNB-74`, second texture via `DualTextureEffect`) is now ✅ CLOSED** — occlusion
-> texture wired to `Texture2`, see 13E's own section for the documented brightness-approximation
-> caveat. 13A/13B/13C/13D remain ⬜ not started. Final full-suite regression after 13E: **4697
-> tests, 4695 passed, same 2 pre-existing hardware skips, 0 failures.** Everything below this line
+> **13E (`CNB-72`–`CNB-74`, second texture via `DualTextureEffect`) and 13C (`CNB-66`–`CNB-69`,
+> vertex color on skinned meshes) are now ✅ CLOSED** — 13E wired occlusion texture to `Texture2`
+> (see its own section for the documented brightness-approximation caveat); 13C added a NOXNA
+> `SkinnedEffect::VertexColorEnabled`, a new stride-56 vertex layout, and real EasyGL shader
+> support (both the per-pixel-lit and vertex-lit skinned programs), catching and fixing a real
+> vertex-color/specular-compositing bug along the way — see its own section for detail. 13A/13B/13D
+> remain ⬜ not started. Final full-suite regression after 13C: **4698 tests, 4696 passed, same 2
+> pre-existing hardware skips, 0 failures** (CnaTests), plus all 15 EasyGL SkinnedEffect-family
+> ctest cases passing. Everything below this line
 > describes the original 9-phase scope as it stood on 2026-07-15; Phases 10-13 were added later as
 > follow-ups this plan's own "Genuinely new `.cnj` types" note (via `cnj.md`) had already flagged.
 >
@@ -383,17 +388,17 @@ onto `.cnj`, `RegisterCnjLoader<T>`, and Phase 9's hardening of those mechanisms
 | CNB-64 | Extend `gltf_to_cnj` to extract morph target position/normal deltas (`mesh.primitives[].targets`) and animation weight channels (`cgltf_animation_path_type_weights`, currently explicitly skipped with a warning) | ⬜ | |
 | CNB-65 | Tests + docs | ⬜ | |
 
-### 13C — Vertex color on skinned meshes
+### 13C — Vertex color on skinned meshes ✅ CLOSED 2026-07-17
 
 > Smaller than 13A/13B, but still a real XNA-fidelity question: real XNA's `SkinnedEffect` has no
 > `VertexColorEnabled` property at all, unlike `BasicEffect`/`AlphaTestEffect`/`DualTextureEffect`.
 
 | # | Task | Status | Notes |
 |---|---|---|---|
-| CNB-66 | Design decision: add a NOXNA `VertexColorEnabled`-equivalent to `SkinnedEffect` (an explicit, documented deviation from real XNA, same category of decision `CLAUDE.md`'s "Interfaces and Inheritance" section asks to flag) vs a new combined vertex format + dedicated shader variant | ⬜ | Needs the project owner's own call — this is the kind of "intentional deviation from FNA logic" `CLAUDE.md` requires documenting explicitly wherever it lands. |
-| CNB-67 | Implementation across at least the EasyGL backend | ⬜ | |
-| CNB-68 | Extend `gltf_to_cnj`: drop the current "skinned meshes never get COLOR_0" restriction once a real shader path exists | ⬜ | |
-| CNB-69 | Tests + docs | ⬜ | |
+| CNB-66 | Design decision: add a NOXNA `VertexColorEnabled`-equivalent to `SkinnedEffect` (an explicit, documented deviation from real XNA, same category of decision `CLAUDE.md`'s "Interfaces and Inheritance" section asks to flag) vs a new combined vertex format + dedicated shader variant | ✅ | Decided: added `NOXNA bool VertexColorEnabled = false;` directly to `SkinnedEffect` (mirrors `BasicEffect::VertexColorEnabled`'s own public-field shape), rather than a wholly separate NOXNA effect/type. `SkinnedEffect::FillGpuDrawParams()` now forwards it into the already-existing, already-generic `GpuDrawParams::vertexColorEnabled` field (previously hardcoded `false` there) — no `IGraphicsBackend` interface change needed. A new vertex format was still required regardless of which side of this decision was picked (no existing skinned layout had room for Color at all): stride 56 = the existing stride-52 GPU-skinned layout (Position+Normal+TextureCoordinate+BlendWeight+BlendIndices) with a normalized-ubyte4 Color **appended at the end** (offset 52) rather than inserted mid-layout, so attribute locations 0-4 stay byte-identical to stride-52 and only new location 5 (`aColor`) is added — the plain stride-52 draw path is provably unaffected (verified below). No new public `IVertexType` C++ struct was added (matches the established stride-52 precedent, where `VertexPositionNormalTextureSkinned` exists but `ModelTypeReader`'s content-pipeline path bypasses it entirely via `VertexBuffer::SetDataRaw` to avoid `IVertexType`'s vtable inflating `sizeof()` past the clean packed size, per Task 927) — a documented, deliberate scope cut, not an oversight. |
+| CNB-67 | Implementation across at least the EasyGL backend | ✅ | `EasyGLGraphicsBackend.cpp`: `ApplyLayout`'s new `case 56:` (locations 0-4 identical to `case 52:`, new location 5 = normalized ubyte4 Color at offset 52); both `EnsureSkinnedProgram()` (per-pixel-lit) and `EnsureSkinnedVertexLitProgram()` (vertex-lit, real XNA's own `PreferPerPixelLighting=false` default, i.e. the actually-more-common path) get a new `aColor`/`vColor`/`uVertexColorEnabled` attribute-varying-uniform triple, gated with the same `(uVertexColorEnabled>0.5)?vColor:vec4(1,1,1,1)` pattern already used by `BasicEffect`'s colored shaders. One shader pair serves both stride 52 and 56 (location 5 simply unbound for stride-52 draws) — no 4th program permutation needed. Found and fixed a real bug during verification (not just wiring the feature): the vertex-color multiply was initially applied only to the diffuse term, before the specular-highlight add, so `VertexColorEnabled=true` with a pure-black vertex color left a small non-black specular residual (`(18,17,15)` instead of `(0,0,0)`) — fixed by moving `FragColor.rgb*=vc.rgb` to after the specular add, so vertex color modulates the whole combined diffuse+specular output. New golden test `examples/easygl_skinnedeffect_vertexcolor_test.cpp` (ctest `EasyGL_SkinnedEffect_VertexColor`) exercises exactly this: quad A (`VertexColorEnabled=false`) reproduces `easygl_skinnedeffect_golden_test.cpp`'s own literal lit-red value unchanged; quad B (`VertexColorEnabled=true`, black vertex color) must render pure `(0,0,0,255)` regardless of lighting — an unambiguous, lighting-math-independent check. All 15 EasyGL SkinnedEffect-family ctest cases (existing + new) re-verified passing after the fix, confirming no regression to the un-colored stride-52 path. Other backends (Bgfx/Vulkan/D3D9-12/SdlGpu/Software/WebGPU) remain unimplemented — same "EasyGL first, others as separate follow-ups" scoping as CNB-61/CNB-73. |
+| CNB-68 | Extend `gltf_to_cnj`: drop the current "skinned meshes never get COLOR_0" restriction once a real shader path exists | ✅ | `ExtractMesh()`: `out.colored` no longer excludes skinned meshes; stride selection is now `skinned?(colored?56:52):(colored?24:(useDualTexture?20:32))`; the per-vertex write loop gained a shared `appendColor()` lambda used by both the unskinned stride-24 branch (Color right after Position, unchanged) and a new skinned+colored path (Color appended after BlendIndices, matching CNB-67's stride-56 layout); `normals` unpacking condition changed from `!out.colored` to `stride != 24 && stride != 20` (the two layouts with no Normal slot at all), since colored no longer implies unskinned/no-normal. `ConvertGroup`'s existing `entry.vertexColorEnabled = meshOut.colored;` needed no change — it already applies uniformly regardless of effect. |
+| CNB-69 | Tests + docs | ✅ | New `GltfToCnjToolTest.ExtractsVertexColorOnASkinnedMeshAndEnablesItOnSkinnedEffect` (fixture `kSkinnedVertexColorGltf`: one bone, 3 vertices each fully weighted to it, distinct RGBA colors) asserts the raw vertex buffer is `3*56` bytes with Color at the correct offset-52 position, and that a full `ContentManager::Load<Model>` round-trip produces a `SkinnedEffect` with `VertexColorEnabled == true`. Plus the EasyGL rendering-correctness golden test described under CNB-67. Full-suite regression after this task: **4698 tests, 4696 passed, same 2 pre-existing hardware skips, 0 failures** (CnaTests), plus all 15 EasyGL SkinnedEffect-family ctest cases passing separately. |
 
 ### 13D — Runtime (non-CLI) glTF loading
 

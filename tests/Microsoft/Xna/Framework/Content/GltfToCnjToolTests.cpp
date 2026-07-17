@@ -563,6 +563,46 @@ namespace
   ]
 })GLTF";
 
+    // CNB-66/67/68 (Phase 13C): a skinned mesh with a COLOR_0 attribute must import through the
+    // new stride-56 (skinned + Color) layout, with "vertexColorEnabled": true wired to
+    // SkinnedEffect's new NOXNA VertexColorEnabled property. One bone (identity inverse bind
+    // matrix), 3 vertices each fully weighted to that bone, distinct RGBA colors per vertex.
+    const char* kSkinnedVertexColorGltf = R"GLTF({
+  "asset": { "version": "2.0" },
+  "scene": 0,
+  "scenes": [ { "nodes": [0, 1] } ],
+  "nodes": [
+    { "name": "RootBone" },
+    { "name": "MeshNode", "mesh": 0, "skin": 0 }
+  ],
+  "meshes": [ { "primitives": [ { "attributes": {
+      "POSITION": 0, "NORMAL": 1, "TEXCOORD_0": 2, "JOINTS_0": 3, "WEIGHTS_0": 4, "COLOR_0": 5
+  } } ] } ],
+  "skins": [ { "joints": [0], "inverseBindMatrices": 6 } ],
+  "buffers": [ {
+    "byteLength": 280,
+    "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAACAPwAAAAAAAIA/AAAAAAAAgD8AAAAAAAAAAAAAgD8AAIA/AACAPwAAAAAAAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAAAAAACAPw=="
+  } ],
+  "bufferViews": [
+    { "buffer": 0, "byteOffset": 0,   "byteLength": 36 },
+    { "buffer": 0, "byteOffset": 36,  "byteLength": 36 },
+    { "buffer": 0, "byteOffset": 72,  "byteLength": 24 },
+    { "buffer": 0, "byteOffset": 96,  "byteLength": 24 },
+    { "buffer": 0, "byteOffset": 120, "byteLength": 48 },
+    { "buffer": 0, "byteOffset": 168, "byteLength": 48 },
+    { "buffer": 0, "byteOffset": 216, "byteLength": 64 }
+  ],
+  "accessors": [
+    { "bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3", "min": [0,0,0], "max": [1,1,0] },
+    { "bufferView": 1, "componentType": 5126, "count": 3, "type": "VEC3" },
+    { "bufferView": 2, "componentType": 5126, "count": 3, "type": "VEC2" },
+    { "bufferView": 3, "componentType": 5123, "count": 3, "type": "VEC4" },
+    { "bufferView": 4, "componentType": 5126, "count": 3, "type": "VEC4" },
+    { "bufferView": 5, "componentType": 5126, "count": 3, "type": "VEC4" },
+    { "bufferView": 6, "componentType": 5126, "count": 1, "type": "MAT4" }
+  ]
+})GLTF";
+
     // Spawns the real cna_tool_gltf_to_cnj executable and waits for it to exit. Returns the exit
     // code, or -1 on a spawn-side failure (already reported via ADD_FAILURE). unitScale is passed
     // as the tool's optional 5th CLI argument when non-empty.
@@ -1019,4 +1059,43 @@ TEST(GltfToCnjToolTest, WiresBaseColorAndOcclusionTexturesThroughDualTextureEffe
     ASSERT_NE(tex2, nullptr);
     EXPECT_EQ(tex1->getWidthProperty(), 1);
     EXPECT_EQ(tex2->getWidthProperty(), 1);
+}
+
+// CNB-66/67/68: a skinned mesh with a COLOR_0 attribute must import through the new stride-56
+// (skinned + Color) layout, wiring "vertexColorEnabled": true to SkinnedEffect's new NOXNA
+// VertexColorEnabled property, and the loaded vertex buffer must carry the real per-vertex colors.
+TEST(GltfToCnjToolTest, ExtractsVertexColorOnASkinnedMeshAndEnablesItOnSkinnedEffect)
+{
+    ScratchDir gltfDir;
+    ScratchDir contentRoot;
+
+    const std::filesystem::path gltfPath = gltfDir.path() / "skincolor.gltf";
+    WriteFile(gltfPath, kSkinnedVertexColorGltf);
+
+    const int exitCode = RunGltfToCnjTool(gltfPath.string(), contentRoot.path().string(), "skincolor");
+    ASSERT_EQ(exitCode, 0);
+
+    const std::filesystem::path vertsPath = contentRoot.path() / "skincolor_mesh0_verts.bin";
+    std::ifstream f(vertsPath, std::ios::binary);
+    std::vector<char> bytes((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+    ASSERT_EQ(bytes.size(), 3u * 56u); // stride 56, skinned + Color
+
+    // Color is appended after BlendIndices (offset 52); vertex 0 was authored fully-opaque red.
+    unsigned char color0[4];
+    std::memcpy(color0, bytes.data() + 0 * 56 + 52, sizeof(color0));
+    EXPECT_EQ(static_cast<int>(color0[0]), 255);
+    EXPECT_EQ(static_cast<int>(color0[1]), 0);
+    EXPECT_EQ(static_cast<int>(color0[2]), 0);
+    EXPECT_EQ(static_cast<int>(color0[3]), 255);
+
+    GraphicsDevice gd;
+    ContentManager cm(nullptr, contentRoot.path().string());
+    cm.setGraphicsDevice(gd);
+    Model model = cm.Load<Model>("skincolor");
+    ASSERT_EQ(model.getMeshesProperty().getCountProperty(), 1);
+    ModelMesh* mesh = model.getMeshesProperty()[0];
+
+    auto* skinnedFx = dynamic_cast<SkinnedEffect*>(mesh->getMeshPartsProperty()[0]->getEffectProperty());
+    ASSERT_NE(skinnedFx, nullptr);
+    EXPECT_TRUE(skinnedFx->VertexColorEnabled);
 }
