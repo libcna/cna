@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: MS-PL
-// CNA::UnsupportedGraphicsCallBehavior: verifies SDL_Renderer's 2D-only "fire and forget" 3D
-// calls (state toggles, clears, draws) can be configured to silently no-op instead of throwing,
-// while resource-creation calls (VertexBuffer/IndexBuffer/OcclusionQuery construction) always
-// throw regardless -- see that enum's own header comment for why the split is deliberate.
+// CNA::Unsupported3DGraphicsCallBehavior: verifies Canvas's 2D-only "fire and forget" 3D calls
+// (state toggles, clears, draws) can be configured to silently no-op instead of throwing,
+// while resource-creation calls (VertexBuffer/IndexBuffer construction) always throw regardless
+// -- see that enum's own header comment for why the split is deliberate. Twin of
+// sdlrenderer_unsupported_3d_call_behavior_test.cpp/dx3_unsupported_3d_call_behavior_test.cpp.
 //
 // Exit code 0 = PASS, 1 = FAIL.
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
-#include "CNA/UnsupportedGraphicsCallBehavior.hpp"
+#include "CNA/Unsupported3DGraphicsCallBehavior.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
-#include "Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 
 #include <cstdio>
@@ -18,9 +18,9 @@
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
-using CNA::UnsupportedGraphicsCallBehavior;
+using CNA::Unsupported3DGraphicsCallBehavior;
 
-class SdlUnsupportedCallBehaviorTest : public Game
+class CanvasUnsupported3DCallBehaviorTest : public Game
 {
     std::unique_ptr<GraphicsDeviceManager> gdm_;
     int pass_ = 0;
@@ -48,15 +48,15 @@ protected:
 
         auto& dev = getGraphicsDeviceProperty();
 
-        check(dev.GetUnsupportedGraphicsCallBehavior() == UnsupportedGraphicsCallBehavior::Throw,
+        check(dev.GetUnsupported3DGraphicsCallBehavior() == Unsupported3DGraphicsCallBehavior::Throw,
               "Default behavior is Throw");
 
         check(Throws([&] { dev.SetDepthTestEnabled(true); }),
               "SetDepthTestEnabled throws by default");
 
-        dev.SetUnsupportedGraphicsCallBehavior(UnsupportedGraphicsCallBehavior::Ignore);
-        check(dev.GetUnsupportedGraphicsCallBehavior() == UnsupportedGraphicsCallBehavior::Ignore,
-              "GetUnsupportedGraphicsCallBehavior reflects Ignore after being set");
+        dev.SetUnsupported3DGraphicsCallBehavior(Unsupported3DGraphicsCallBehavior::Ignore);
+        check(dev.GetUnsupported3DGraphicsCallBehavior() == Unsupported3DGraphicsCallBehavior::Ignore,
+              "GetUnsupported3DGraphicsCallBehavior reflects Ignore after being set");
 
         check(!Throws([&] { dev.SetDepthTestEnabled(true); }),
               "SetDepthTestEnabled no longer throws once Ignore is set");
@@ -64,14 +64,14 @@ protected:
               "SetBlendEnabled no longer throws once Ignore is set");
 
         // Resource creation always throws, deliberately ignoring this setting -- a silently
-        // null-backed VertexBuffer would crash (or silently misbehave) on first real use,
-        // which is worse than an immediate, honest exception at construction time.
+        // null-backed VertexBuffer would crash on first real use, worse than an immediate,
+        // honest exception at construction time.
         check(Throws([&] { VertexBuffer vb(dev, 4); (void)vb; }),
               "Constructing a VertexBuffer still throws even with Ignore set");
 
-        dev.SetUnsupportedGraphicsCallBehavior(UnsupportedGraphicsCallBehavior::Throw);
-        check(dev.GetUnsupportedGraphicsCallBehavior() == UnsupportedGraphicsCallBehavior::Throw,
-              "GetUnsupportedGraphicsCallBehavior reflects Throw after being set back");
+        dev.SetUnsupported3DGraphicsCallBehavior(Unsupported3DGraphicsCallBehavior::Throw);
+        check(dev.GetUnsupported3DGraphicsCallBehavior() == Unsupported3DGraphicsCallBehavior::Throw,
+              "GetUnsupported3DGraphicsCallBehavior reflects Throw after being set back");
         check(Throws([&] { dev.SetDepthTestEnabled(true); }),
               "SetDepthTestEnabled throws again after switching back to Throw");
 
@@ -80,12 +80,11 @@ protected:
     }
 
 public:
-    SdlUnsupportedCallBehaviorTest()
+    CanvasUnsupported3DCallBehaviorTest()
     {
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
         gdm_->setPreferredBackBufferWidthProperty(32);
-        gdm_->setPreferredBackBufferHeightProperty(16);
-        gdm_->setPreferredPresentationModeProperty(PresentationMode::NativeBackBuffer);
+        gdm_->setPreferredBackBufferHeightProperty(32);
     }
 
     int getResult() const { return fail_ > 0 ? 1 : 0; }
@@ -93,7 +92,7 @@ public:
 
 int main()
 {
-    SdlUnsupportedCallBehaviorTest game;
+    CanvasUnsupported3DCallBehaviorTest game;
     game.Run();
     return game.getResult();
 }

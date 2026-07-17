@@ -775,19 +775,19 @@ namespace CNA::Internal::Backends::SdlRenderer
 
     // ---- 3D: SDL_Renderer is intentionally 2D-only. ----
     // "Fire and forget" state/draw calls (no meaningful return value) honor
-    // CNA::UnsupportedGraphicsCallBehavior: throw by default, or silently do nothing if the
-    // caller opted into Ignore via SetUnsupportedGraphicsCallBehavior(). Resource-creation calls
+    // CNA::Unsupported3DGraphicsCallBehavior: throw by default, or silently do nothing if the
+    // caller opted into Ignore via SetUnsupported3DGraphicsCallBehavior(). Resource-creation calls
     // (below) always throw regardless -- see ThrowNo3DResource's own comment.
     static void HandleUnsupported3DCall(SdlGraphicsBackend& backend, const char* methodName)
     {
-        if (backend.GetUnsupportedGraphicsCallBehavior() == CNA::UnsupportedGraphicsCallBehavior::Ignore)
+        if (backend.GetUnsupported3DGraphicsCallBehavior() == CNA::Unsupported3DGraphicsCallBehavior::Ignore)
             return;
 
         throw std::runtime_error(
             std::string("SDL_Renderer does not support 3D: ") + methodName);
     }
 
-    // Resource-creation calls always throw, ignoring CNA::UnsupportedGraphicsCallBehavior:
+    // Resource-creation calls always throw, ignoring CNA::Unsupported3DGraphicsCallBehavior:
     // silently handing back a null-backed VertexBuffer/IndexBuffer/OcclusionQuery would let a
     // game hold a "successfully constructed" resource that crashes (or, per Task 727's own
     // finding for OcclusionQuery, silently does nothing) the moment it's actually used --

@@ -30,19 +30,19 @@ namespace CNA::Internal::Backends::Dx3
         }
 
         // ---- 3D pipeline: DirectDraw is 2D-only. ----
-        // "Fire and forget" state/draw calls honor CNA::UnsupportedGraphicsCallBehavior: throw by
+        // "Fire and forget" state/draw calls honor CNA::Unsupported3DGraphicsCallBehavior: throw by
         // default, or silently do nothing if the caller opted into Ignore via
-        // SetUnsupportedGraphicsCallBehavior(). Resource-creation calls (CreateVertexBuffer/
+        // SetUnsupported3DGraphicsCallBehavior(). Resource-creation calls (CreateVertexBuffer/
         // CreateIndexBuffer16) always throw regardless -- see ThrowNo3DResource's own comment.
         void HandleUnsupported3DCall(Dx3GraphicsBackend& backend, const char* methodName)
         {
-            if (backend.GetUnsupportedGraphicsCallBehavior() == CNA::UnsupportedGraphicsCallBehavior::Ignore)
+            if (backend.GetUnsupported3DGraphicsCallBehavior() == CNA::Unsupported3DGraphicsCallBehavior::Ignore)
                 return;
 
             throw std::runtime_error(std::string("DX3 (DirectDraw) does not support 3D: ") + methodName);
         }
 
-        // Resource-creation calls always throw, ignoring CNA::UnsupportedGraphicsCallBehavior --
+        // Resource-creation calls always throw, ignoring CNA::Unsupported3DGraphicsCallBehavior --
         // silently handing back a null-backed VertexBuffer/IndexBuffer would let a game hold a
         // "successfully constructed" resource that crashes the moment it's actually used, a worse
         // failure mode than an immediate, honest exception at construction time (same reasoning
@@ -445,7 +445,7 @@ namespace CNA::Internal::Backends::Dx3
         // Default AlphaBlend matches SpriteBatch::Begin()'s own default blend state.
         Dx3BlendMode currentBlendMode = Dx3BlendMode::AlphaBlend;
 
-        CNA::UnsupportedGraphicsCallBehavior unsupportedGraphicsCallBehavior = CNA::UnsupportedGraphicsCallBehavior::Throw;
+        CNA::Unsupported3DGraphicsCallBehavior unsupported3DGraphicsCallBehavior = CNA::Unsupported3DGraphicsCallBehavior::Throw;
 
         // Resolves to whichever surface Clear()/ReadBackbuffer() should currently target: the
         // bound render target's surface if one is bound, else the shadow backbuffer. Present()
@@ -1007,14 +1007,14 @@ namespace CNA::Internal::Backends::Dx3
                                                   colorBlendFunc, alphaBlendFunc);
     }
 
-    void Dx3GraphicsBackend::SetUnsupportedGraphicsCallBehavior(CNA::UnsupportedGraphicsCallBehavior behavior)
+    void Dx3GraphicsBackend::SetUnsupported3DGraphicsCallBehavior(CNA::Unsupported3DGraphicsCallBehavior behavior)
     {
-        impl_->unsupportedGraphicsCallBehavior = behavior;
+        impl_->unsupported3DGraphicsCallBehavior = behavior;
     }
 
-    CNA::UnsupportedGraphicsCallBehavior Dx3GraphicsBackend::GetUnsupportedGraphicsCallBehavior() const
+    CNA::Unsupported3DGraphicsCallBehavior Dx3GraphicsBackend::GetUnsupported3DGraphicsCallBehavior() const
     {
-        return impl_->unsupportedGraphicsCallBehavior;
+        return impl_->unsupported3DGraphicsCallBehavior;
     }
 
     void Dx3GraphicsBackend::ClearColorAndDepth(float, float, float, float, float) { HandleUnsupported3DCall(*this, "ClearColorAndDepth"); }

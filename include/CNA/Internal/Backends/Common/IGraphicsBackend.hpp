@@ -17,7 +17,7 @@
 #include <unordered_map>
 #include <vector>
 #include "CNA/Internal/Graphics/ImageData.hpp"
-#include "CNA/UnsupportedGraphicsCallBehavior.hpp"
+#include "CNA/Unsupported3DGraphicsCallBehavior.hpp"
 
 struct SDL_Window;
 struct SDL_Renderer;
@@ -814,16 +814,16 @@ namespace CNA::Internal::Backends
 
         /// Configures whether an unsupported "fire and forget" state/draw call (e.g. any 3D
         /// call on the 2D-only SDL_Renderer backend) throws std::runtime_error (the default)
-        /// or is silently ignored -- see CNA::UnsupportedGraphicsCallBehavior. Default
+        /// or is silently ignored -- see CNA::Unsupported3DGraphicsCallBehavior. Default
         /// implementation is a no-op; only SDL_Renderer overrides it today (the only backend
         /// with genuinely unsupported operations by design, not by omission).
-        virtual void SetUnsupportedGraphicsCallBehavior(CNA::UnsupportedGraphicsCallBehavior /*behavior*/) {}
+        virtual void SetUnsupported3DGraphicsCallBehavior(CNA::Unsupported3DGraphicsCallBehavior /*behavior*/) {}
 
-        /// Returns the current CNA::UnsupportedGraphicsCallBehavior (CNA::UnsupportedGraphicsCallBehavior::Throw
-        /// on every backend that doesn't override SetUnsupportedGraphicsCallBehavior()).
-        [[nodiscard]] virtual CNA::UnsupportedGraphicsCallBehavior GetUnsupportedGraphicsCallBehavior() const
+        /// Returns the current CNA::Unsupported3DGraphicsCallBehavior (CNA::Unsupported3DGraphicsCallBehavior::Throw
+        /// on every backend that doesn't override SetUnsupported3DGraphicsCallBehavior()).
+        [[nodiscard]] virtual CNA::Unsupported3DGraphicsCallBehavior GetUnsupported3DGraphicsCallBehavior() const
         {
-            return CNA::UnsupportedGraphicsCallBehavior::Throw;
+            return CNA::Unsupported3DGraphicsCallBehavior::Throw;
         }
 
         // ---- Debug / testing ----

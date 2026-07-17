@@ -36,7 +36,7 @@
 #include "System/Object.hpp"
 #include "CNA/CNAHelper.hpp"
 #include "CNA/GraphicsBackendType.hpp"
-#include "CNA/UnsupportedGraphicsCallBehavior.hpp"
+#include "CNA/Unsupported3DGraphicsCallBehavior.hpp"
 
 struct SDL_Window;
 struct SDL_Renderer;
@@ -737,15 +737,15 @@ namespace Microsoft::Xna::Framework::Graphics
         /**
          * @brief Configures whether an unsupported "fire and forget" graphics call (e.g. any 3D
          * call on the 2D-only SDL_Renderer backend) throws std::runtime_error (the default) or
-         * is silently ignored -- see CNA::UnsupportedGraphicsCallBehavior. A no-op on backends
+         * is silently ignored -- see CNA::Unsupported3DGraphicsCallBehavior. A no-op on backends
          * that don't have unsupported operations by design (every backend except SDL_Renderer).
          *
          * @param behavior The desired behavior.
          */
-        NOXNA void SetUnsupportedGraphicsCallBehavior(CNA::UnsupportedGraphicsCallBehavior behavior);
+        NOXNA void SetUnsupported3DGraphicsCallBehavior(CNA::Unsupported3DGraphicsCallBehavior behavior);
 
-        /** @brief Returns the current CNA::UnsupportedGraphicsCallBehavior (CNA::UnsupportedGraphicsCallBehavior::Throw by default). */
-        NOXNA [[nodiscard]] CNA::UnsupportedGraphicsCallBehavior GetUnsupportedGraphicsCallBehavior() const;
+        /** @brief Returns the current CNA::Unsupported3DGraphicsCallBehavior (CNA::Unsupported3DGraphicsCallBehavior::Throw by default). */
+        NOXNA [[nodiscard]] CNA::Unsupported3DGraphicsCallBehavior GetUnsupported3DGraphicsCallBehavior() const;
 
         /**
          * @brief Sets the currently active Effect for draw calls.

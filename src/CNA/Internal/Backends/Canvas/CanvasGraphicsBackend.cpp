@@ -101,11 +101,11 @@ namespace CNA::Internal::Backends::Canvas
         // has no remaining callers -- Phases C2-C4 replaced all of them with real implementations.
         // Only the inherently-3D-only surface still throws (permanent, not a placeholder --
         // Phase C7 just formalizes/audits this same wiring). "Fire and forget" calls honor
-        // CNA::UnsupportedGraphicsCallBehavior (throw by default, or silently do nothing under
+        // CNA::Unsupported3DGraphicsCallBehavior (throw by default, or silently do nothing under
         // Ignore); resource-creation calls always throw regardless -- see ThrowNo3DResource.
         void HandleUnsupported3DCall(CanvasGraphicsBackend& backend, const char* methodName)
         {
-            if (backend.GetUnsupportedGraphicsCallBehavior() == CNA::UnsupportedGraphicsCallBehavior::Ignore)
+            if (backend.GetUnsupported3DGraphicsCallBehavior() == CNA::Unsupported3DGraphicsCallBehavior::Ignore)
                 return;
 
             throw std::runtime_error(

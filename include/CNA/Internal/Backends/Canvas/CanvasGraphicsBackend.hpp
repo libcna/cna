@@ -85,15 +85,15 @@ namespace CNA::Internal::Backends::Canvas
         // override, CANVAS-23), same as SDL_RENDERER's own override for the same reason.
         [[nodiscard]] bool SupportsDepthStencil() const override { return false; }
         // "Fire and forget" 3D calls below honor this (throw by default, or silently ignore --
-        // see CNA::UnsupportedGraphicsCallBehavior); CreateVertexBuffer/CreateIndexBuffer16
+        // see CNA::Unsupported3DGraphicsCallBehavior); CreateVertexBuffer/CreateIndexBuffer16
         // always throw regardless -- same split SDL_Renderer/DX3 use, same reasoning.
-        void SetUnsupportedGraphicsCallBehavior(CNA::UnsupportedGraphicsCallBehavior behavior) override
+        void SetUnsupported3DGraphicsCallBehavior(CNA::Unsupported3DGraphicsCallBehavior behavior) override
         {
-            unsupportedGraphicsCallBehavior_ = behavior;
+            unsupported3DGraphicsCallBehavior_ = behavior;
         }
-        [[nodiscard]] CNA::UnsupportedGraphicsCallBehavior GetUnsupportedGraphicsCallBehavior() const override
+        [[nodiscard]] CNA::Unsupported3DGraphicsCallBehavior GetUnsupported3DGraphicsCallBehavior() const override
         {
-            return unsupportedGraphicsCallBehavior_;
+            return unsupported3DGraphicsCallBehavior_;
         }
 
         void ClearColorAndDepth(float r, float g, float b, float a, float depth) override;
@@ -128,6 +128,6 @@ namespace CNA::Internal::Backends::Canvas
         int virtualWidth_ = 0;
         int virtualHeight_ = 0;
         CnaPresentationMode presentationMode_ = CnaPresentationMode::FixedHeightDynamicWidth;
-        CNA::UnsupportedGraphicsCallBehavior unsupportedGraphicsCallBehavior_ = CNA::UnsupportedGraphicsCallBehavior::Throw;
+        CNA::Unsupported3DGraphicsCallBehavior unsupported3DGraphicsCallBehavior_ = CNA::Unsupported3DGraphicsCallBehavior::Throw;
     };
 }

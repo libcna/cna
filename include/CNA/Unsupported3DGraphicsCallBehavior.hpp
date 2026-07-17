@@ -11,7 +11,7 @@ namespace CNA
      * similar) always throw regardless of this setting, since silently handing back an unusable
      * null-backed resource is a worse failure mode than an immediate, honest exception.
      */
-    enum class UnsupportedGraphicsCallBehavior
+    enum class Unsupported3DGraphicsCallBehavior
     {
         /** @brief Throw std::runtime_error (the default -- matches CNA's established behavior). */
         Throw,
