@@ -291,6 +291,44 @@ validation open.**
    resource usage) that each failed `Run()` is followed by a clean `leftRightEffectId_`
    reset rather than an accumulating series of orphaned uploaded effects.
 
+## 4b. Haptic device disconnect/reconnect mid-session (Task VIB2-004, 2026-07-17)
+
+**Code under test:** `Detail::SdlHapticVibrateBackend`'s new `ReleaseHapticDeviceIfStale()` /
+`IsHapticDeviceStillConnected()` pair, called from `Start()`, `Stop()`, `StartLeftRight()`, and
+`AcquireHapticDeviceForProbe()` (so `IsSupported()`/`GetDeviceName()` are covered too). Before
+this fix, `haptic_` was opened once and reused forever — a device unplugged mid-session left a
+cached (but no-longer-live) `SDL_Haptic*` in place, and there was no path back to a working
+device even if the same or a different one reconnected, short of destroying and recreating the
+whole `SdlHapticVibrateBackend` (which the `VibrateController` singleton never does).
+
+**Why this needs real hardware:** SDL3 has no haptic-specific hotplug event, so this fix detects
+disconnect by re-querying `SDL_GetHaptics()` and comparing instance IDs before every operation —
+this container never has a haptic device open in the first place (`OpenFirstHapticDevice()`
+always returns `nullptr`), so `ReleaseHapticDeviceIfStale()`'s actual staleness branch
+(`haptic_ != nullptr && !IsHapticDeviceStillConnected(haptic_)`) is never taken; every test run
+here only exercises the no-op path where `haptic_` stays `nullptr` throughout. **Status: NOT
+RUN — hardware validation open.**
+
+**Steps:**
+1. Connect a real haptic-capable device (phone motor via Android, USB force-feedback wheel, or
+   any non-gamepad-excluded rumble device — see `IsConnectedGamepadHapticDevice()`). Confirm
+   `VibrateController::getDefaultProperty()->getIsSupportedProperty()` returns `true` and
+   `Start(TimeSpan::FromSeconds(1))` actually vibrates it.
+2. Physically disconnect the device. Immediately call `Start()`, `Stop()`, and
+   `StartLeftRight()` again — confirm none crash (VIB2-003 already makes the underlying SDL
+   calls fail gracefully; this task additionally expects the stale handle to be closed and
+   discarded on the very first post-disconnect call).
+3. Call `getIsSupportedProperty()` after the disconnect — confirm it now returns `false` (not a
+   stale cached `true`), and `getDeviceNameProperty()` returns an empty string, matching the
+   "no device" contract `UnsupportedEnvironmentFullContract` already asserts for the
+   never-had-a-device case.
+4. Reconnect the same device (or connect a different rumble-capable one). Call
+   `getIsSupportedProperty()` again — confirm it returns `true` again, and `Start()` actually
+   vibrates the (re)connected device — all without recreating `VibrateController`'s singleton or
+   restarting the process.
+5. Repeat steps 2-4 a few times in a row to confirm the release-and-retry cycle is stable, not
+   just a one-shot recovery.
+
 ## 5. Gamepad-exclusion filter doesn't compete with `GamePad::SetVibration()`
 
 **Code under test:** `VibrateController.cpp`'s `IsConnectedGamepadHapticDevice()` (Task

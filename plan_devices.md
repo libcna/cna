@@ -7981,7 +7981,7 @@ test is not sufficient for an Android coordinate/fusion claim.
   `SDL_RunHapticEffect()`-failure → `DestroyLeftRightEffectIfAny()` path actually fires and
   leaves no orphaned effect.
 
-### VIB2-004 — Handle haptic disconnect/reconnect — OPEN
+### VIB2-004 — Handle haptic disconnect/reconnect — OPEN (implementation done; disconnect/reconnect acceptance criteria need real hardware)
 
 - **Priority:** P1
 - **Area:** Perfection re-audit
@@ -7994,6 +7994,68 @@ test is not sufficient for an Android coordinate/fusion claim.
   - Disconnect during vibration/Stop/IsSupported does not crash or retain stale support.
   - Reconnect restores operation without recreating the singleton.
 - **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+- **Progress so far (not yet CLOSED — see Remaining limitations):**
+  - Confirmed by reading `third_party/SDL/include/SDL3/SDL_events.h` that SDL3 has no
+    haptic-specific hotplug event (unlike `SDL_EVENT_JOYSTICK_REMOVED`/`SDL_EVENT_GAMEPAD_REMOVED`),
+    and by reading `third_party/SDL/src/haptic/SDL_haptic.c` that `SDL_GetHapticID()`'s
+    `CHECK_HAPTIC_MAGIC` guard only rejects an already-closed/never-valid handle, not one whose
+    physical device has since disconnected — `haptic->instance_id` is fixed at open time and does
+    not reflect live connection state. This rules out "listen for device removal" and leaves
+    "validate before each operation" (the required work's own alternative) as the only viable
+    approach: added `IsHapticDeviceStillConnected(SDL_Haptic*)` (anonymous-namespace helper,
+    `SdlHapticVibrateBackend.cpp`), which re-queries `SDL_GetHaptics()` and checks whether the
+    cached instance ID is still present.
+  - Added `SdlHapticVibrateBackend::ReleaseHapticDeviceIfStale()` (new private method): closes and
+    discards `haptic_` (and resets `leftRightEffectId_` directly, not via
+    `DestroyLeftRightEffectIfAny()`, which would call `SDL_DestroyHapticEffect()` against the
+    handle being closed) if its device is no longer connected. Called at the top of `Start()`,
+    `Stop()`, `StartLeftRight()`, and `AcquireHapticDeviceForProbe()` (covering
+    `IsSupported()`/`GetDeviceName()` too) — every public entry point now either sees a genuinely
+    live device or `nullptr`, never a stale handle.
+  - "Close/invalidate stale handle and retry deterministic selection": after
+    `ReleaseHapticDeviceIfStale()` resets `haptic_` to `nullptr`, every call site's existing
+    `if (haptic_ == nullptr) haptic_ = OpenFirstHapticDevice();` (or
+    `AcquireHapticDeviceForProbe()`'s equivalent temporary-open path) transparently retries the
+    same deterministic, gamepad-exclusion-aware selection `OpenFirstHapticDevice()` already
+    performed — no new selection logic needed, since that function already re-evaluates
+    `IsConnectedGamepadHapticDevice()` fresh on every call rather than caching anything.
+  - "Synchronize with GamePad/joystick hotplug": satisfied by the point above — `OpenFirstHapticDevice()`'s
+    existing per-call gamepad-exclusion re-evaluation means a reconnect retry always reflects
+    whatever gamepads/joysticks are connected *at that moment*, not a stale snapshot.
+  - `Stop()` specifically: now calls `ReleaseHapticDeviceIfStale()` before its existing
+    `if (haptic_ != nullptr)` body, so a `Stop()` call against an already-disconnected device
+    releases the stale handle and returns immediately, rather than issuing
+    `SDL_StopHapticEffects()`/`SDL_DestroyHapticEffect()` calls against it that (per VIB2-003)
+    would merely fail gracefully and log.
+- **Files changed:** `include/Microsoft/Devices/Detail/SdlHapticVibrateBackend.hpp`,
+  `src/Microsoft/Devices/Detail/SdlHapticVibrateBackend.cpp`,
+  `docs/devices-hardware-checklist.md`.
+- **Tests:** no new automated test could exercise the actual staleness-detected branch (see
+  Remaining limitations) — regression safety confirmed via the existing full Devices/Sensors
+  filtered suite: 284 tests, 280 passed, 4 pre-existing hardware-only skips, 0 failures (all
+  `VibrateControllerTests` — 59/59 — including `RepeatedProbeCallsStayConsistent` and
+  `RepeatedStartStopSequencesDoNotDegrade`/`RepeatedStartLeftRightStopSequencesDoNotDegrade`,
+  which now also exercise `ReleaseHapticDeviceIfStale()`'s no-op path — `haptic_ == nullptr`
+  throughout every one of the 50 iterations in this container — on every repeated call).
+- **Sanitizer/static-analysis result:** built and run under `devices-ubsan`. Clean: 0 UBSan
+  findings.
+- **Remaining limitations (explicitly OPEN, not fabricated):** this container never has a real
+  haptic device open (`OpenFirstHapticDevice()` always returns `nullptr`), so
+  `ReleaseHapticDeviceIfStale()`'s actual staleness branch
+  (`haptic_ != nullptr && !IsHapticDeviceStillConnected(haptic_)`) is never taken by any test
+  here — every run only exercises the "nothing cached yet" no-op path. Confirming the acceptance
+  criteria themselves ("disconnect does not retain stale support", "reconnect restores operation
+  without recreating the singleton") requires a real haptic device physically
+  disconnected/reconnected mid-session. Documented as a new hardware validation procedure in
+  `docs/devices-hardware-checklist.md` Section 4b. Left **OPEN** rather than CLOSED for the same
+  reason as `VIB2-003`: the acceptance criteria name behavior that can only be demonstrated on
+  real hardware, not a host-verifiable software-correctness property alone. Re-close this task
+  once a real device run confirms Section 4b's steps. One accepted, undocumented-as-a-defect
+  cost: every public entry point now re-queries `SDL_GetHaptics()` once per call (typically a
+  0-2-entry list) to check staleness — a small, unavoidable per-call overhead inherent to
+  "validate before each operation" with no hotplug event to lean on instead; not flagged as a
+  performance concern here, but a natural candidate for the existing `PERF2-*` backlog if it ever
+  needs benchmarking.
 
 ### VIB2-005 — Validate Android phone-vibrator behavior against a direct backend — OPEN
 

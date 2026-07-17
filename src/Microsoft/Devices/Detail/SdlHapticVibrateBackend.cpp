@@ -103,6 +103,44 @@ namespace Microsoft::Devices::Detail
         {
             return static_cast<Uint16>(SanitizeSdlHapticInput(magnitude) * 65535.0f);
         }
+
+        /**
+         * @brief Returns true if `haptic`'s device is still enumerated by `SDL_GetHaptics()`.
+         *
+         * Task VIB2-004: unlike joystick/gamepad hotplug
+         * (`SDL_EVENT_JOYSTICK_REMOVED`), SDL3 has no haptic-specific
+         * removal event, and `SDL_GetHapticID()` only returns the instance
+         * ID captured when the device was opened (per
+         * `third_party/SDL/src/haptic/SDL_haptic.c`, its `CHECK_HAPTIC_MAGIC`
+         * guard only rejects an already-closed/never-valid handle, not one
+         * whose physical device has since disappeared) — re-querying the
+         * live device list and comparing IDs is the only way to detect a
+         * mid-session disconnect.
+         */
+        [[nodiscard]] bool IsHapticDeviceStillConnected(SDL_Haptic* haptic)
+        {
+            const SDL_HapticID id = SDL_GetHapticID(haptic);
+            if (id == 0)
+            {
+                return false;
+            }
+
+            int hapticCount = 0;
+            SDL_HapticID* haptics = SDL_GetHaptics(&hapticCount);
+            if (haptics == nullptr)
+            {
+                return false;
+            }
+
+            bool stillConnected = false;
+            for (int i = 0; i < hapticCount && !stillConnected; ++i)
+            {
+                stillConnected = haptics[i] == id;
+            }
+
+            SDL_free(haptics);
+            return stillConnected;
+        }
     } // namespace
 
     SdlHapticVibrateBackend::~SdlHapticVibrateBackend()
@@ -193,6 +231,13 @@ namespace Microsoft::Devices::Detail
     // GetGlobalSdlSubsystemMutex().
     SDL_Haptic* SdlHapticVibrateBackend::AcquireHapticDeviceForProbe(bool& openedTemporary)
     {
+        // Task VIB2-004: without this, IsSupported()/GetDeviceName() would
+        // keep reporting a disconnected device's cached capabilities/name
+        // forever (SDL_HapticRumbleSupported() reads a bitmask captured at
+        // open time, not a live re-query) -- the exact "retain stale
+        // support" failure this task's acceptance criteria call out.
+        ReleaseHapticDeviceIfStale();
+
         if (haptic_ != nullptr)
         {
             openedTemporary = false;
@@ -225,6 +270,31 @@ namespace Microsoft::Devices::Detail
         leftRightEffectId_ = -1;
     }
 
+    // Task VIB2-004: closes and discards `haptic_` if its device has
+    // disappeared since it was opened, so every caller below always either
+    // sees `nullptr` (not-yet-reopened) or a genuinely live device — never a
+    // stale one that would silently no-op every SDL call against it (VIB2-003
+    // already makes those failures non-crashing, but a stale handle must not
+    // be mistaken for a present device by e.g. IsSupported()) or report an
+    // uploaded effect (`leftRightEffectId_`) that could not possibly still be
+    // running on hardware that's gone. Deliberately resets `leftRightEffectId_`
+    // directly rather than routing through DestroyLeftRightEffectIfAny(),
+    // which would call SDL_DestroyHapticEffect() against the very handle
+    // being closed. Does not attempt to reopen a replacement device -- every
+    // caller already has its own "if (haptic_ == nullptr) ..." reopen policy
+    // (persist for Start()/StartLeftRight(), temporary-only for
+    // AcquireHapticDeviceForProbe()). Caller must already hold
+    // GetGlobalSdlSubsystemMutex().
+    void SdlHapticVibrateBackend::ReleaseHapticDeviceIfStale()
+    {
+        if (haptic_ != nullptr && !IsHapticDeviceStillConnected(haptic_))
+        {
+            SDL_CloseHaptic(haptic_);
+            haptic_ = nullptr;
+            leftRightEffectId_ = -1;
+        }
+    }
+
     void SdlHapticVibrateBackend::Start(const System::TimeSpan& duration, float intensity)
     {
         const Uint32 durationMs = static_cast<Uint32>(duration.getTotalMillisecondsProperty());
@@ -235,6 +305,11 @@ namespace Microsoft::Devices::Detail
         {
             return; // Silent no-op: haptic subsystem unavailable on this platform.
         }
+
+        // Task VIB2-004: a previously-opened device may have disconnected
+        // since the last call -- discard it before deciding whether a
+        // (re)open is needed.
+        ReleaseHapticDeviceIfStale();
 
         if (haptic_ == nullptr)
         {
@@ -278,6 +353,12 @@ namespace Microsoft::Devices::Detail
     void SdlHapticVibrateBackend::Stop()
     {
         std::lock_guard<std::mutex> lock(GetGlobalSdlSubsystemMutex());
+
+        // Task VIB2-004: if the device is already gone, release the stale
+        // handle and return -- there is nothing left to stop, and issuing
+        // SDL calls against a disconnected device would just log doomed
+        // failures (VIB2-003) for no benefit.
+        ReleaseHapticDeviceIfStale();
 
         if (haptic_ != nullptr)
         {
@@ -381,6 +462,9 @@ namespace Microsoft::Devices::Detail
         {
             return; // Silent no-op: haptic subsystem unavailable on this platform.
         }
+
+        // Task VIB2-004: see Start()'s identical call for the reasoning.
+        ReleaseHapticDeviceIfStale();
 
         if (haptic_ == nullptr)
         {

@@ -65,6 +65,15 @@ namespace Microsoft::Devices::Detail
          * serialized via the process-wide `Detail::GetGlobalSdlSubsystemMutex()`
          * instead of a private per-instance mutex — see that function's doc
          * comment. This backend no longer declares its own mutex member.
+         *
+         * Task VIB2-004 (2026-07-17): a cached pointer here can outlive its
+         * physical device — SDL3 has no haptic-specific hotplug event and
+         * `SDL_GetHapticID()` only returns the ID captured at open time, not
+         * a liveness check — so every public entry point re-validates via
+         * `ReleaseHapticDeviceIfStale()` before use, closing and discarding a
+         * disconnected device and letting `OpenFirstHapticDevice()` retry
+         * deterministic selection on the next access. See that method's own
+         * doc comment.
          */
         SDL_Haptic* haptic_ = nullptr;
 
@@ -90,5 +99,6 @@ namespace Microsoft::Devices::Detail
         SDL_Haptic* OpenFirstHapticDevice();
         SDL_Haptic* AcquireHapticDeviceForProbe(bool& openedTemporary);
         void DestroyLeftRightEffectIfAny();
+        void ReleaseHapticDeviceIfStale();
     };
 } // namespace Microsoft::Devices::Detail
