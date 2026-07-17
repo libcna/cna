@@ -550,7 +550,7 @@ own header, above its first task, for how it relates to the generic Phase 2/5/8 
 
 ---
 
-## P1-001 — Audit ButtonState member parity vs FNA `[ ]`
+## P1-001 — Audit ButtonState member parity vs FNA `[x]`
 **Goal:** Perform a full member-by-member audit of `ButtonState` (constructors, methods, operators, enum values, defaults, equality, hash) against its FNA reference.
 
 **Steps:**
@@ -587,7 +587,7 @@ end of the P13-006 pass, and nothing has touched `ButtonState` or its test since
 
 ---
 
-## P1-002 — Audit Buttons member parity vs FNA `[ ]`
+## P1-002 — Audit Buttons member parity vs FNA `[x]`
 **Goal:** Perform a full member-by-member audit of `Buttons` (constructors, methods, operators, enum values, defaults, equality, hash) against its FNA reference.
 
 **Steps:**
@@ -720,7 +720,7 @@ Consolidated build+test verification (2026-07-17, after all 9 parallel P1 GamePa
 
 ---
 
-## P1-005 — Audit GamePadCapabilities member parity vs FNA `[ ]`
+## P1-005 — Audit GamePadCapabilities member parity vs FNA `[x]`
 **Goal:** Perform a full member-by-member audit of `GamePadCapabilities` (constructors, methods, operators, enum values, defaults, equality, hash) against its FNA reference.
 
 **Steps:**
