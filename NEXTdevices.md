@@ -37,178 +37,176 @@ by itself a reason to skip re-examining a Section 16 finding.
   remaining limitations, hardware evidence status) **and** a focused git commit.
 - Keep `plan_devices.md` updated continuously, and update this file periodically —
   especially before context grows large enough that another session must resume cold.
-- **Recurring theme this pass:** several P1 tasks' literal "required work" wording
-  (RAII quota tokens, EXPECT_DEATH tests, etc.) was deliberately *not* followed to the
-  letter — each such deviation is documented with reasoning in `plan_devices.md`'s own
-  resolution note, not silently narrowed. Read those reasoning sections before assuming
-  a task needs "more" done to satisfy its literal wording.
+
+**Important labeling convention established this pass — read before closing anything:**
+A task whose **acceptance criteria themselves name an empirical/dynamic result**
+("fault injection leaves no leak", "TSan-clean under stress", "a fake service restart
+re-probes successfully") must stay **OPEN** even once its code fix is implemented,
+built, and reasoned through as correct — use the heading form
+`### TASK-ID — Title — OPEN (implementation done; <what needs hardware/tooling>)`
+and a `**Progress so far (not yet CLOSED — see Remaining limitations):**` body instead
+of `**Resolution:**`. This is *stricter* than the earlier `ANDR2-004`/`005`/`006`
+precedent, which correctly closed similar Android-only, host-uncompilable fixes —
+the distinction is that those tasks' acceptance criteria were **logical/structural
+claims fully provable by code inspection + compilation** ("no NDK function receives a
+null looper", "Start returns the documented failure promptly" — true by construction
+once the guard exists), not claims requiring a sanitizer or real hardware to actually
+observe. Apply this distinction task-by-task: read the acceptance criteria literally
+and ask "can this specific sentence be verified by reading the code, or does it name a
+run that must actually happen?" `VIB2-003`, `VIB2-004`, and `ANDR2-002` (this pass) are
+the first three examples of the "stays OPEN" case — read their `plan_devices.md`
+resolution notes as the template.
 
 ---
 
 ## 2. Current status (2026-07-17, mid-P1)
 
-**All P0 tasks closed** (see Section 3 of the prior checkpoint, preserved in git
-history / `plan_devices.md` for full detail — not repeated here to keep this file
-current rather than cumulative).
+**All P0 tasks closed** (see prior checkpoints / `plan_devices.md` for full detail).
 
 **P1 tasks closed so far, in the order worked (all committed):**
-1. `BASE2-007` (`aaf3dae8`) — counter-underflow clamping → loud `assert()`. Deliberately
-   did not build a full RAII quota-token class (investigated and rejected — see its own
-   resolution note for why the *release* side can't simply live in a destructor given
-   this API's early-explicit-`Dispose()` semantics).
+1. `BASE2-007` (`aaf3dae8`) — counter-underflow clamping → loud `assert()`.
 2. `VIB2-002` (`129fa2af`) — NaN/infinity handling for vibration intensity/motor
-   magnitudes. Fixed at two layers (`VibrateController`'s own canonicalization +
-   `SdlHapticVibrateBackend`'s own checked, saturating conversion) — real UB
-   (`static_cast<Uint16>(NaN * 65535.0f)`) confirmed and closed, with 6 new tests.
+   magnitudes, at both `VibrateController` and `SdlHapticVibrateBackend` layers.
 3. `VIB2-001` (`74ec2077`) — `IsSupported()` now also requires
-   `SDL_HapticRumbleSupported(device)`, not just "some haptic device opened." Found
-   that a prior session's `VIB-005` investigation had correctly rejected
-   `SDL_InitHapticRumble()` (uploads a real effect) but overlooked this genuinely
-   read-only sibling function — confirmed via direct SDL source reading.
-4. `LIFE-008` (`856608a8`) — `Compass`/`Motion` constructors now roll back
-   `instanceCount_` on any exception after reserving a slot, matching
-   `Accelerometer`/`Gyroscope`'s already-correct pattern (a real, if currently
-   unreachable-on-this-host, quota leak).
+   `SDL_HapticRumbleSupported(device)`.
+4. `LIFE-008` (`856608a8`) — `Compass`/`Motion` constructors roll back
+   `instanceCount_` on any post-reservation exception.
 5. `ANDR2-004` (`0599ebe2`) — `AndroidSensorBridge`'s `RunExitGuard` destructor is now
-   explicit `noexcept` + `try`/`catch`, matching `Detail::ScopeExit`'s own established
-   pattern — closes a real (if narrow) crash-and-strand-every-waiter risk.
-6. `ANDR2-005` (`a879f6ab`) — `ALooper_prepare()`'s return value is now null-checked
-   before use.
-7. `ANDR2-006` (`f7750da3`) — `ASensorEventQueue_getEvents()` negative returns (genuine
-   read errors) are now distinguished from `0` ("no events yet") and trigger a
-   persistent-failure shutdown after 5 consecutive errors, instead of retrying
-   forever; `disableSensor()`/`destroyEventQueue()` failures are now checked and
-   logged (debug builds, `__android_log_print` — needed a new `liblog.so` CMake link
-   dependency, added).
-8. `LIFE-006` (`de79d923`) — new `SensorBase<T>::DisposalTerminalStateGuard`, used by
-   all four sensor classes, guarantees `disposed_` is published (unblocking every
-   concurrent losing `Dispose()` waiter) even if the winning caller's own cleanup
-   throws — closes a gap `WaitForDisposalToComplete()`'s own prior doc comment
-   explicitly flagged as a known, unfixed assumption. Directly, deterministically
-   tested (not just reasoned about) via a new isolated `SensorBaseTests.cpp` fixture
-   extension (deliberately *not* a real `Accelerometer` — see its own resolution note
-   for the shared-global-counter pollution risk that would have created for other
-   tests in the same binary). Re-verified clean across 4 consecutive `devices-tsan`
-   runs (this touches shared locking used by all four sensor classes).
-9. `COMP2-009` (`aaaa54e4`, docs-only, no source change) — closed by reference: its
-   own core concern ("destruction in either event cannot invoke the other on a dead
-   owner") is the exact hazard `LIFE-005` (same pass) already fully closed for both
-   `Compass`/`Motion`. Re-verified directly against current code before closing on
-   that basis, rather than assuming the earlier task's own claim.
-10. `MOT2-002` (`107e3e0d`) — hardened `AndroidMotionMath.hpp`'s quaternion math
-    against invalid/non-unit input (`Detail::NormalizeOrIdentity()`, new shared
-    helper; `asin()` argument now clamped to `[-1,1]`). **Found and fixed a real gap
-    beyond the one function the task named**: `AndroidMotionBackend::HandleAttitudeSample()`
-    separately builds the *published* `AttitudeReading::RotationMatrix` from the raw
-    (previously unvalidated) quaternion, independently of the yaw/pitch/roll
-    extraction — moved validation into `ConvertRotationVectorToXnaQuaternion()` itself
-    so every downstream consumer stays consistent. One pre-existing test needed
-    updating (its own non-unit-input assumption was intentionally superseded, not
-    weakened); 8 new fuzz/gimbal-lock tests added.
-11. `COMP2-002` (`7e366cf9`) — the Compass analogue of `MOT2-002`, for
-    `AndroidCompassMath.hpp`'s different, non-`Quaternion`-typed `atan2()`-based
-    formulas. New `Detail::NormalizeCompassQuaternion()`, wired into the one
-    production entry point (`ConvertRotationVectorToMagneticHeadingDegreesWithTiltMode()`)
-    so the tilt-mode decision and heading formula never see inconsistent (one raw,
-    one normalized) data. Confirmed this file's pre-existing `double` arithmetic
-    already avoids the `float`-overflow risk `MOT2-002` had to fix separately. 9 new
-    tests, zero pre-existing tests needed changes.
+   explicit `noexcept` + `try`/`catch`.
+6. `ANDR2-005` (`a879f6ab`) — `ALooper_prepare()`'s return value is now null-checked.
+7. `ANDR2-006` (`f7750da3`) — `ASensorEventQueue_getEvents()` negative returns now
+   trigger persistent-failure shutdown after 5 consecutive errors;
+   `disableSensor()`/`destroyEventQueue()` failures checked + logged.
+8. `LIFE-006` (`de79d923`) — new `SensorBase<T>::DisposalTerminalStateGuard` guarantees
+   `disposed_` publication even if the winning `Dispose()` caller's cleanup throws.
+9. `COMP2-009` (`aaaa54e4`, docs-only) — closed by reference to `LIFE-005`.
+10. `MOT2-002` (`107e3e0d`) — hardened `AndroidMotionMath.hpp` quaternion math against
+    invalid/non-unit input; also fixed `AndroidMotionBackend`'s separately-published
+    `RotationMatrix`, beyond the one function the task named.
+11. `COMP2-002` (`7e366cf9`) — Compass analogue of `MOT2-002` for
+    `AndroidCompassMath.hpp`'s `atan2()`-based formulas.
+12. `VIB2-003` (`2d3abdf7`) — `SdlHapticVibrateBackend`'s `SDL_PlayHapticRumble`/
+    `SDL_StopHapticEffects`/`SDL_StopHapticRumble`/`SDL_RunHapticEffect` return values
+    are now checked (debug-only `SDL_Log()` diagnostics); a failed `Run()` after a
+    successful `Create()` now destroys the just-uploaded effect immediately instead of
+    leaving it allocated until the next call happens to reclaim it. **Left OPEN**
+    (implementation done) — see the labeling convention above; acceptance criterion
+    "fault injection leaves no leak" needs a real haptic device, never opened in this
+    container.
+13. `VIB2-004` (`2ca5aed6`) — `SdlHapticVibrateBackend` now detects a disconnected
+    haptic device (`IsHapticDeviceStillConnected()` re-queries `SDL_GetHaptics()` and
+    compares instance IDs — confirmed SDL3 has no haptic hotplug event and
+    `SDL_GetHapticID()` only returns the ID captured at open time) and
+    closes/discards the stale handle (`ReleaseHapticDeviceIfStale()`), called from
+    every public entry point, so the existing `OpenFirstHapticDevice()` reopen path
+    transparently retries on the next call. **Left OPEN** (implementation done) — same
+    reasoning as `VIB2-003`; disconnect/reconnect needs real hardware.
+14. `ANDR2-002` (`753e0631`) — `AndroidSensorBridge::IsAvailable()` called `Probe()`
+    (plain, non-atomic `manager_`/`sensor_` pointers) with **no lock**, while `Start()`
+    already called the same `Probe()` under `stateMutex_` — a genuine data race, now
+    fixed by locking `IsAvailable()`'s call too. Also added `InvalidateProbeCache()`,
+    called from `Run()` on a failed queue-creation/enable-sensor call or
+    `ANDR2-006`'s own consecutive-`getEvents`-failure threshold, so a subsequent
+    `Start()` re-probes from scratch instead of reusing possibly-dead cached handles
+    forever. **Left OPEN** (implementation done) — "Concurrent ... TSan-clean" and "a
+    fake service restart re-probes" both name empirical results this Android-only code
+    (uncompilable on this host outside the NDK cross-compile) cannot produce here;
+    genuinely needs real hardware/emulator or `TEST2-005`'s future fault-injection
+    layer. "App lifecycle changes" from the required work deliberately left to
+    `ANDR2-012`'s own separate scope, not silently dropped.
 
-**Pattern across `ANDR2-004`/`005`/`006`:** all three are inside `#ifdef __ANDROID__`
-code with **zero host-side test coverage possible** — verified instead via a real
-Android NDK cross-compile of the exact translation unit each time
-(`cmake-build-android`, `arm64-v8a`, API 24). The **full** `CNA` library Android
-cross-compile remains blocked by a pre-existing, unrelated `sharp-runtime` failure
-(`RandomNumberGenerator.cpp`'s `::getrandom()` call missing for this NDK/API
-combination) — only single-translation-unit compiles work. This means `ANDR2-006`'s
-new `liblog.so` link dependency has **not** been confirmed to actually resolve at
-link time — flag for whoever next fixes the `sharp-runtime` blocker.
+**Pattern across `ANDR2-002`/`004`/`005`/`006`:** all inside `#ifdef __ANDROID__` code
+with **zero host-side test coverage possible** — verified instead via a real Android
+NDK cross-compile of the exact translation unit each time (`cmake-build-android`,
+`arm64-v8a`, API 24). The **full** `CNA` library Android cross-compile remains blocked
+by a pre-existing, unrelated `sharp-runtime` failure (`RandomNumberGenerator.cpp`'s
+`::getrandom()` call missing for this NDK/API combination) — only single-translation-unit
+compiles work. `ANDR2-006`'s `liblog.so` link dependency has still **not** been
+confirmed to actually resolve at link time.
 
 **Build:** `cmake-build-devices-ubsan` and `cmake-build-android` both still build
 clean (the latter for individual translation units only, per above).
 
-**Tests:** Devices/Sensors filtered suite — **424 tests, 420 passed, 4 skipped**
-(hardware-only, unchanged all pass). Zero regressions across every P1 task above.
+**Tests:** Devices/Sensors filtered suite — **284 tests** (narrower, precise filter
+used from `VIB2-003` onward: `AccelerometerTests.*:GyroscopeTests.*:CompassTests.*:
+MotionTests.*:SensorBaseTests.*:SensorSubsystemOwnershipTests.*:VibrateControllerTests.*:
+AndroidMotionMathTests.*:AndroidCompassMathTests.*`) — **280 passed, 4 skipped**
+(hardware-only, unchanged), 0 failures across every task above. Note: a broader,
+unscoped `*Devices*:*Sensor*:...` filter also incidentally matches
+`AccelerometerReadingTests`/`*EventArgsTests` (plain data-holder tests), one of which
+(`GetHashCodeConsistency`) trips a **pre-existing, unrelated** UBSan finding in
+`Vector3::GetHashCode()` (signed-int overflow in hash-combining) — not touched by any
+task this pass, out of scope for Devices work, not silenced, just avoid the broad
+filter and use the precise one above (or expect and ignore that one specific failure
+if using a broader filter for some other reason).
 
-**Sanitizers:** `devices-ubsan` clean on every P1 change. `devices-tsan` re-run (4
-consecutive clean runs) specifically for `LIFE-006`, since that one touches shared,
-genuinely concurrent base-class locking used by all four sensor classes — the other
-P1 tasks this pass (`BASE2-007`/`VIB2-*`/`LIFE-008`/`ANDR2-004/005/006`/`MOT2-002`/
-`COMP2-002`) don't add new concurrency (exception-safety, NaN-handling, Android-only
-sequential-logic fixes, pure host-testable math), so weren't separately TSan-verified.
-Re-run TSan if a future P1 task touches concurrent logic.
-
-**Emerging pattern worth knowing about:** two tasks this pass (`MOT2-002`/`COMP2-002`)
-were found to have a *second*, related task in the same P1 backlog whose own concern
-turned out to already be resolved (`COMP2-009`) or whose fix needed to reach further
-than the literal task wording named (a separately-published `RotationMatrix`, not just
-the one function `MOT2-002` explicitly called out). Before starting a new math/lifecycle
-task, grep `plan_devices.md` for other tasks touching the same file/function — some of
-the remaining backlog may already be partly or fully addressed by a sibling fix.
+**Sanitizers:** `devices-ubsan` clean on every P1 change this pass. `devices-tsan` was
+NOT re-run for `VIB2-003`/`004`/`ANDR2-002` — none add new locking/concurrency
+structure beyond what already existed (same mutex scope, same call ordering; the one
+new mutex use in `ANDR2-002`, `IsAvailable()`'s lock, is Android-only and can't run
+under host TSan at all). Re-run TSan if a future P1 task touches concurrent
+*host-buildable* logic.
 
 ---
 
-## 3. Recent changes — see Section 2's numbered list (this pass) plus the prior
-checkpoint's own Section 3 (P0 phase, preserved in git history) for full technical
-detail on each. Not duplicated here — read each task's own `plan_devices.md`
-resolution note for the complete reasoning; this file only summarizes.
+## 3. Recent changes — see Section 2's numbered list plus prior checkpoints (git
+history / `plan_devices.md`) for full technical detail on each. Not duplicated here.
 
 ---
 
 ## 4. Current blocker / main problem
 
-**No blocker for continuing P1.** Same two flagged, out-of-scope items as the prior
-checkpoint (unchanged):
+**No blocker for continuing P1.** Same flagged, out-of-scope items as prior
+checkpoints (unchanged):
 1. Pre-existing `Net`/`NetworkSession.cpp` UBSan finding + full-suite segfault.
 2. Pre-existing `sharp-runtime` Android cross-compile failure
-   (`RandomNumberGenerator.cpp`'s `::getrandom()`) — now *additionally* blocking
-   confirmation that `ANDR2-006`'s new `liblog.so` link dependency actually resolves.
+   (`RandomNumberGenerator.cpp`'s `::getrandom()`) — blocks confirming `ANDR2-006`'s
+   `liblog.so` link dependency resolves, and blocks any real TSan/ASan Android run.
+3. Pre-existing, unrelated UBSan finding in `Vector3::GetHashCode()` (see Section 2's
+   Tests note) — only surfaces via an overly-broad test filter; not a Devices issue.
 
 ---
 
 ## 5. Known bugs and limitations
 
-- Everything from the prior checkpoint's Section 5 still applies (LIFE-* concurrency
-  boundary, ANDR2-001/003 host-untestability, Net/sharp-runtime gaps).
-- **New this pass:** `VIB2-001`'s `SDL_HapticRumbleSupported()` check has no real
-  haptic device to exercise it against (this container has none) — the new code path
-  itself was never actually reached by any test, only reasoned about via direct SDL
-  source reading. `LIFE-008`'s rollback `catch` block is similarly never actually
-  reached on this host (no throwing path exists here today) — both are documented,
-  honest "implemented but not behaviorally exercised" gaps, not fabricated evidence.
-- 40+ more Section 16 tasks remain OPEN across P1/P2/P3 (`plan_devices.md` is the
-  actual source of truth — this file only tracks what's been *closed*).
+- Everything from prior checkpoints still applies (LIFE-* concurrency boundary,
+  ANDR2-001/003 host-untestability, Net/sharp-runtime gaps, VIB2-001/LIFE-008's
+  never-actually-reached-on-this-host new code paths).
+- **New this pass:** `VIB2-003`'s `SDL_RunHapticEffect()`-failure cleanup path,
+  `VIB2-004`'s disconnect/reconnect detection, and `ANDR2-002`'s lock/invalidation
+  fixes are all implemented and reasoned-through-correct but **never actually
+  exercised** — no haptic device and no Android hardware/emulator exist in this
+  container. Each has a documented hardware validation procedure in
+  `docs/devices-hardware-checklist.md` (Sections 4a, 4b, 6a respectively) and is
+  explicitly left **OPEN** in `plan_devices.md` (see Section 1's labeling convention).
+- 35+ more Section 16 tasks remain OPEN across P1/P2/P3 (`plan_devices.md` is the
+  actual source of truth — this file only tracks what's been *closed or progressed*).
 
 ---
 
 ## 6. Architecture notes
 
-No new architectural pieces this P1 pass (unlike the P0 phase's `SensorOwnerControlBlock`/
-`DispatchRegistration`/`SdlSubsystemMutex` additions) — every fix so far has been a
-localized change to existing code:
-- `Compass`/`Motion` constructors: now wrap the post-quota-reservation body in
-  `try`/`catch(...) { --instanceCount_; throw; }`, matching
-  `Accelerometer`/`Gyroscope`.
-- `VibrateController.cpp`/`SdlHapticVibrateBackend.cpp`: NaN-canonicalizing helpers
-  (`CanonicalizeVibrationMagnitude`, `SanitizeSdlHapticInput`, `ToSdlHapticMagnitude`).
-- `AndroidSensorBridge.cpp`'s `RunExitGuard`: now `noexcept` + `try`/`catch`.
-  `Run()`: null-checks `ALooper_prepare()`; tracks `consecutiveGetEventsFailures`
-  across poll iterations; checks `disableSensor()`/`destroyEventQueue()` return values
-  with a debug-only `__android_log_print()`.
-- `cmake/CnaLibrary.cmake`: Android's `target_link_libraries(CNA PUBLIC android)` now
-  also links `log` (for `__android_log_print`).
+No new architectural pieces this pass beyond the P0 phase's additions. Localized
+changes only:
+- `SdlHapticVibrateBackend.cpp`: every real SDL haptic call's return value is now
+  checked (debug-only `SDL_Log()` diagnostics); new `IsHapticDeviceStillConnected()`
+  (anonymous namespace) and `ReleaseHapticDeviceIfStale()` (private member), called
+  from `Start()`/`Stop()`/`StartLeftRight()`/`AcquireHapticDeviceForProbe()`.
+- `AndroidSensorBridge.cpp`: `IsAvailable()`'s `Probe()` call now locked under
+  `stateMutex_` (matching `Start()`'s pre-existing discipline); new
+  `Impl::InvalidateProbeCache()`, called from `Run()`'s three native-failure sites.
 
 ---
 
 ## 7. Useful commands
 
 ```bash
-# Build + test (unchanged from the P0 checkpoint):
+# Build + test (precise filter — avoids the pre-existing Vector3 UBSan finding, see
+# Section 2/4):
 cmake --build cmake-build-devices-ubsan --target CnaTests -j4
-./cmake-build-devices-ubsan/CnaTests --gtest_filter="*Accelerometer*:*Gyroscope*:*Compass*:*Motion*:*Sensor*:*VibrateController*:*Haptic*"
+UBSAN_OPTIONS=halt_on_error=1 ./cmake-build-devices-ubsan/CnaTests --gtest_filter="AccelerometerTests.*:GyroscopeTests.*:CompassTests.*:MotionTests.*:SensorBaseTests.*:SensorSubsystemOwnershipTests.*:VibrateControllerTests.*:AndroidMotionMathTests.*:AndroidCompassMathTests.*"
 
-# TSan (re-run if a P1 task touches concurrent logic; repeat 3-4x, this pass's own P0
-# bug was timing-dependent):
+# TSan (re-run if a P1 task touches concurrent *host-buildable* logic; repeat 3-4x):
 cmake --build cmake-build-devices-tsan --target CnaTests -j3
 TSAN_OPTIONS="halt_on_error=0" ./cmake-build-devices-tsan/CnaTests --gtest_filter="..."
 # ALWAYS grep the full log for "WARNING: ThreadSanitizer" -- exit code alone (66) is
@@ -217,12 +215,11 @@ TSAN_OPTIONS="halt_on_error=0" ./cmake-build-devices-tsan/CnaTests --gtest_filte
 
 # Android cross-compile (single translation unit -- full CNA link still blocked):
 cd cmake-build-android && ninja CMakeFiles/CNA.dir/<path-to-file>.cpp.o
-# (cmake-build-android already configured from the P0 phase; re-run cmake -S . -B
-# cmake-build-android ... from NEXTdevices.md's own prior-checkpoint command only if
-# the build dir is missing/stale)
+# (cmake-build-android already configured; re-run cmake -S . -B cmake-build-android
+# ... only if the build dir is missing/stale)
 
 # Thermal check (this container's Tctl runs high independent of this session's own
-# builds -- pace with -j3-4 if >75C, don't wait for it to drop below 70C, it may not):
+# builds -- pace with -j3-6 if >75C, don't wait for it to drop below 70C, it may not):
 sensors | grep -i tctl
 ```
 
@@ -232,68 +229,61 @@ sensors | grep -i tctl
 
 Continue the P1 backlog. Not yet triaged/started, roughly in the order encountered
 scanning `plan_devices.md` Section 16 (no mandated order within P1 — pick by
-tractability, same reasoning as this pass's choices):
+tractability):
 
-- **`LIFE-007`/`010`/`011` — deliberately set aside, not merely unstarted.** These are
-  large architecture tasks (a full explicit state machine; failure-class-to-state
-  mapping; per-generation in-flight callback counters) — investigated `LIFE-011`
-  specifically far enough to find a **real design tension**: its literal ask ("Stop()
-  guarantees no further callback after return") cannot be satisfied by naively making
-  `Stop()` wait for `backendCallsInFlight_ == 0` before returning — that reintroduces
-  the *exact* deadlock `TEST2-001` fixed (`ConcurrentStopDuringStartDoesNotDeadlock`'s
-  synchronous-join scenario). Resolving it properly needs the required work's own
-  "per-generation in-flight counters" (distinguishing "waiting on a call this Stop()
-  itself superseded" from "waiting on a call this Stop() is legitimately stopping"),
-  which is real design work, not a quick fix — do not attempt a naive symmetric wait.
+- **`LIFE-007`/`010`/`011` — deliberately set aside, not merely unstarted.** Large
+  architecture tasks; `LIFE-011` specifically has a **real design tension** already
+  found (see prior checkpoint / its own `plan_devices.md` notes) — do not attempt a
+  naive symmetric `Stop()` wait, it reintroduces `TEST2-001`'s fixed deadlock.
 - `DEVPERF-002`–`005` — API/behavioral oracle generation, callback/threading contract
-  documentation, structured diagnostic channel. Larger, more design-heavy P1 tasks;
-  `DEVPERF-005` (diagnostic channel) in particular has been referenced as "future
-  scope" by several tasks closed this pass (`ANDR2-006` especially) — worth
-  considering next since multiple other tasks are implicitly waiting on it.
-- `SDLCORE-005`/`009` — hotplug handling, callback exception consistency.
-  `SDLCORE-007` (acquisition timestamps) is a meaningful policy change (dispatch-time
-  wall clock → calibrated monotonic-to-UTC bridge) — design-heavy, not a quick fix.
-  `SDLCORE-011` (shutdown ordering) investigated briefly: nothing in production code
-  currently calls `SDL_Quit()` (only one example demo does, in its own `main()`), so
-  the actual risk in *this* codebase today is narrower than the task's framing
-  suggests — worth re-confirming that's still true before deciding how much this one
-  actually needs, rather than assuming the full fix is urgent.
-- `ANDR2-002`/`007`/`009`–`012`/`014`/`015` — remaining Android-only items (several are
-  real-hardware-only by nature: `014`/`015` explicitly want fuzzing/instrumented
-  hardware runs). `ANDR2-007`'s "calibrated boot/monotonic-to-UTC offset" is the same
-  design-heavy concern as `SDLCORE-007` above, for the Android-native path specifically.
-- `COMP2-001`/`003`/`004`/`005`/`008` — `MOT2-002`/`COMP2-002` (quaternion math
-  hardening) are done; remaining Compass items are timestamp alignment, axis-basis
-  derivation, and hardware-truth-table/verification tasks (`COMP2-004`/`005`
-  explicitly need physical devices — scope those like `ANDR2-001`/`003` did).
-- `MOT2-001`/`003`/`005`/`006`/`008`/`009`/`010` — remaining Motion items (`MOT2-010`
-  needs physical hardware).
+  documentation, structured diagnostic channel. `DEVPERF-005` (diagnostic channel) is
+  referenced as "future scope" by several already-closed tasks — worth considering
+  next since multiple other tasks implicitly wait on it.
+- `SDLCORE-005`/`009` — hotplug handling, callback exception consistency (host-buildable,
+  unlike the ANDR2-* Android items — worth prioritizing for actual TSan coverage).
+  `SDLCORE-007`/`011` — investigated briefly last pass, still open, see prior notes.
+- `ANDR2-007`/`009`–`012`/`014`/`015` — remaining Android-only items (`014`/`015`
+  explicitly want fuzzing/instrumented hardware runs; `ANDR2-012` is the right home for
+  the "app lifecycle changes" scope `ANDR2-002` deliberately deferred).
+- `COMP2-001`/`003`/`004`/`005`/`008` — remaining Compass items (`004`/`005` need
+  physical devices).
+- `MOT2-001`/`003`/`005`/`006`/`008`/`009`/`010` — remaining Motion items (`010` needs
+  physical hardware).
 - `BASE2-001`–`005` — mostly "verify against a behavioral oracle" tasks; this
-  environment has no WP7 SDK/MonoGame reference to compare against directly, so these
-  may need to be scoped down to "verify current behavior is internally consistent and
-  documented" rather than "verify against a real oracle" — a scope decision worth
-  making explicit if picked up.
-- `VIB2-003`–`007`, `PERF2-*`, `TEST2-002`+ — remaining P1/P2 items in those areas.
+  environment has no WP7 SDK/MonoGame reference — may need scoping down to "verify
+  internal consistency", a decision worth making explicit if picked up.
+- `VIB2-005`–`007` — remaining Vibrate items (`005` needs a direct-backend Android
+  validation; `006`/`007` are host-testable design/behavior questions).
+- `PERF2-001`–`003`, `TEST2-002`/`004`–`006`/`010` — remaining P1 perf/test-infra items.
+  `TEST2-005` ("Build a native fault-injection layer") is now referenced by three
+  closed-but-OPEN tasks (`VIB2-003`/`004`, `ANDR2-002`) as the thing that would let
+  their acceptance criteria actually be verified — worth prioritizing highly if
+  picked up, since it unblocks re-closing multiple tasks at once, not just its own.
 
 Before starting any task, grep `plan_devices.md` for other tasks touching the same
-file/function first — this pass found two cases (`COMP2-009`, and part of `MOT2-002`'s
-own fix) where a task's concern overlapped with or was already resolved by a sibling
-task. Read each task's full `plan_devices.md` entry before starting.
+file/function first — several tasks this pass and last overlapped with or were
+already resolved by a sibling task. Read each task's full `plan_devices.md` entry
+before starting, and read Section 1's labeling-convention note above before deciding
+whether a finished implementation should be marked CLOSED or left OPEN.
 
 ---
 
 ## 9. Do not do yet
 
-- Everything from the prior checkpoint's Section 9 still applies (no `Net` fix, no
-  broad `sharp-runtime` change, no `SDL_RunOnMainThread()` redesign, no symmetric
+- Everything from prior checkpoints still applies (no `Net` fix, no broad
+  `sharp-runtime` change, no `SDL_RunOnMainThread()` redesign, no symmetric
   `backendQuiescent_` wait in `Stop()`, no `third_party/SDL` edits, no fabricated
   hardware evidence, no push without asking).
 - Do not re-litigate `BASE2-007`/`LIFE-008`'s "no RAII quota token" decision without a
-  concrete new reason — both were investigated and documented, not skipped out of
-  laziness.
-- Do not add `SDL_Log()` (or any SDL call) to `AndroidSensorBridge.cpp` — it is
-  deliberately SDL-free; use `__android_log_print()` (already wired up, `liblog.so`
-  linked) for anything debug-diagnostic in that specific file.
+  concrete new reason.
+- Do not add `SDL_Log()` (or any SDL call) to `AndroidSensorBridge.cpp` — deliberately
+  SDL-free; use `__android_log_print()` there instead.
+- Do not mark a task fully `CLOSED` just because `ANDR2-004`/`005`/`006` were, if its
+  own acceptance criteria name an empirical/dynamic result those three didn't — see
+  Section 1's labeling convention. Check the literal wording every time.
+- Do not build a full native fault-injection layer (`TEST2-005`) as a side effect of
+  some other task "just to make its test pass" — it's valuable enough to be its own
+  properly-scoped task; note the dependency in that task's resolution instead.
 
 ---
 
@@ -302,26 +292,33 @@ task. Read each task's full `plan_devices.md` entry before starting.
 ```
 Read plan_devices.md's "Section 16. Independent perfection re-audit backlog
 (2026-07-17)" first -- it is the source of truth for current work. Read this
-file (NEXTdevices.md) for what's been done: all P0 tasks are closed (see git
-log for the full list, commits through TEST2-001), and 7 P1 tasks are closed
-so far (BASE2-007, VIB2-002, VIB2-001, LIFE-008, ANDR2-004, ANDR2-005,
-ANDR2-006 -- see Section 2 for commit hashes and a one-line summary of each).
+file (NEXTdevices.md) for what's been done: all P0 tasks are closed, and 14 P1
+tasks are closed or progressed so far (BASE2-007, VIB2-002, VIB2-001, LIFE-008,
+ANDR2-004, ANDR2-005, ANDR2-006, LIFE-006, COMP2-009, MOT2-002, COMP2-002,
+VIB2-003, VIB2-004, ANDR2-002 -- see Section 2 for commit hashes and a one-line
+summary of each). Read Section 1's "labeling convention" note carefully before
+closing anything -- it distinguishes tasks provable by code inspection (CLOSED)
+from tasks whose acceptance criteria name an empirical/hardware result (stays
+OPEN even once implemented).
 
 Continue the P1 backlog (Section 8 lists untriaged candidates with rough
 tractability notes). Read each task's full plan_devices.md entry before
 starting. For each task worked: implement, add/extend tests where a real
 test seam exists (several P1 items are Android-only with zero host
 coverage -- verify those via a real NDK cross-compile of the exact
-translation unit instead, matching this pass's own established practice),
-build cmake-build-devices-ubsan and re-run the Devices/Sensors filtered
-suite, run devices-tsan (3-4x) if the task touches any concurrent logic,
-update plan_devices.md's Section 16 entry with a full resolution note, and
-make one focused git commit per task or tightly-related group.
+translation unit instead), build cmake-build-devices-ubsan and re-run the
+Devices/Sensors filtered suite (use the precise filter in Section 7, not a
+broad one -- it incidentally trips a pre-existing, unrelated Vector3 UBSan
+finding), run devices-tsan (3-4x) if the task touches concurrent
+host-buildable logic, update plan_devices.md's Section 16 entry with a full
+resolution/progress note, and make one focused git commit per task or
+tightly-related group.
 
 Do not mark anything CLOSED on insufficient grounds (Section 1's mandatory
-rules) and do not fabricate hardware evidence -- leave hardware-only
-validation explicitly OPEN with a documented device test procedure, exactly
-as ANDR2-001/003/VIB2-001/LIFE-008 all did this pass.
+rules and labeling convention) and do not fabricate hardware evidence --
+leave hardware-only validation explicitly OPEN with a documented device test
+procedure in docs/devices-hardware-checklist.md, exactly as this pass's tasks
+did.
 
 Work autonomously through the backlog without stopping for confirmation
 unless you hit a genuine architectural decision, a hardware-only validation
