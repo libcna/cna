@@ -54,29 +54,40 @@ namespace Microsoft::Devices::Sensors
             ++instanceCount_;
         }
 
+        // Task LIFE-008: see Compass::Compass()'s identical fix for the full
+        // rationale.
+        try
+        {
 #if defined(__ANDROID__)
-        backend_ = std::make_unique<Detail::AndroidMotionBackend>();
+            backend_ = std::make_unique<Detail::AndroidMotionBackend>();
 #endif
 
-        const bool supported = backend_ ? backend_->IsSupported() : getIsSupportedProperty();
-        state_ = supported ? SensorState::Initializing : SensorState::NotSupported;
-        setIsSupportedProperty(supported);
+            const bool supported = backend_ ? backend_->IsSupported() : getIsSupportedProperty();
+            state_ = supported ? SensorState::Initializing : SensorState::NotSupported;
+            setIsSupportedProperty(supported);
 
-        // Task ANDROID-BRIDGE-002/DEV-AUD-006: see Compass::Compass()'s
-        // identical fix for the full rationale (captures the new interval
-        // before locking the lock, closing a race between this handler and
-        // SetBackendForTesting() on the shared backend_ pointer). Runs on
-        // `this` directly, not through the control block -- see
-        // Compass::Compass()'s identical comment for why that's safe here.
-        TimeBetweenUpdatesChanged += [this](System::Object*, const System::EventArgs&)
-        {
-            const System::TimeSpan newInterval = getTimeBetweenUpdatesProperty();
-            std::lock_guard<std::mutex> lock(control_->mutex);
-            if (backend_)
+            // Task ANDROID-BRIDGE-002/DEV-AUD-006: see Compass::Compass()'s
+            // identical fix for the full rationale (captures the new interval
+            // before locking the lock, closing a race between this handler and
+            // SetBackendForTesting() on the shared backend_ pointer). Runs on
+            // `this` directly, not through the control block -- see
+            // Compass::Compass()'s identical comment for why that's safe here.
+            TimeBetweenUpdatesChanged += [this](System::Object*, const System::EventArgs&)
             {
-                backend_->SetSampleInterval(newInterval);
-            }
-        };
+                const System::TimeSpan newInterval = getTimeBetweenUpdatesProperty();
+                std::lock_guard<std::mutex> lock(control_->mutex);
+                if (backend_)
+                {
+                    backend_->SetSampleInterval(newInterval);
+                }
+            };
+        }
+        catch (...)
+        {
+            std::lock_guard<std::mutex> lock(instanceCountMutex_);
+            --instanceCount_;
+            throw;
+        }
     }
 
     Motion::~Motion()

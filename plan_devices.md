@@ -6561,7 +6561,7 @@ test is not sufficient for an Android coordinate/fusion claim.
   - No Start can race past a disposal claim and no old callback can commit a new value.
 - **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
 
-### LIFE-008 — Rollback Compass/Motion instance count on constructor failure — OPEN
+### LIFE-008 — Rollback Compass/Motion instance count on constructor failure — CLOSED (2026-07-17)
 
 - **Priority:** P1
 - **Area:** Perfection re-audit
@@ -6574,6 +6574,49 @@ test is not sufficient for an Android coordinate/fusion claim.
   - After any constructor failure, ten subsequent valid objects can still be created.
   - Concurrent construction/destruction keeps exact count with no clamp-to-zero masking.
 - **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+- **Resolution:** confirmed the exact gap by comparing against `Accelerometer`/`Gyroscope`'s own
+  constructors, which already wrap everything after `++instanceCount_` in a `try { ... } catch
+  (...) { --instanceCount_; throw; }` block (Task P6-1) — `Compass`/`Motion`'s constructors did
+  **not**: `std::make_unique<Detail::AndroidCompassBackend>()`'s own allocation,
+  `backend_->IsSupported()`/`getIsSupportedProperty()`'s probing, `setIsSupportedProperty()`, and
+  the `TimeBetweenUpdatesChanged +=` subscription all ran completely unguarded after the quota
+  slot was reserved. A C++ constructor that throws means the object was never fully
+  constructed — its destructor (and therefore `Dispose(bool)`) never runs — so any exception from
+  that unguarded code would have permanently leaked one of the 10-instance quota slots forever.
+  - Fixed by wrapping that same span in an identical `try`/`catch (...) { --instanceCount_; throw;
+    }` block in both `Compass::Compass()` and `Motion::Motion()`, mirroring
+    `Accelerometer`/`Gyroscope`'s already-correct pattern exactly (all four classes now share the
+    same construct-or-rollback discipline, closing the divergence the required work's second
+    bullet calls out).
+  - **"Use an RAII quota reservation" — same scope decision as `BASE2-007`, not repeated in
+    full:** kept the manual `try`/`catch` pairing (matching the two already-correct classes)
+    rather than introducing a new RAII wrapper type. Re-examined given this is now three of four
+    classes needing the identical pattern — still concluded a dedicated RAII helper is not clearly
+    justified: the pairing is a single, small, now-identical block in all four constructors, easy
+    to keep in sync by direct comparison, and (per `BASE2-007`'s own investigation) the *release*
+    side of any such helper cannot simply live in a destructor without reproducing that task's own
+    early-explicit-`Dispose()`-vs-object-destruction timing conflict.
+- **Files changed:** `src/Microsoft/Devices/Sensors/Compass.cpp`, `src/Microsoft/Devices/Sensors/Motion.cpp`.
+- **Tests:** full Devices/Sensors filtered suite, 405 tests, 401 passed, 4 skipped (hardware-only,
+  unchanged) — no regressions. **No new fault-injection test added**, documented honestly rather
+  than fabricated: on this non-Android host, `backend_` stays null and the only Task-reachable
+  calls in the guarded span (`getIsSupportedProperty()`, `setIsSupportedProperty()`, the event
+  subscription) do not throw in practice today, so there is currently no real path on this
+  platform to exercise the new `catch` block at all — the fix is specifically future-proofing
+  against a real Android backend construction (or any future addition to that span) throwing, not
+  a currently-reproducible defect. Adding a new test-only "make the constructor probe throw" hook
+  purely to synthesize a failure no real code path produces here was judged the same kind of
+  unwarranted new test-only surface `BASE2-007` already declined to add for an analogous reason.
+- **Sanitizer/static-analysis result:** clean under `devices-ubsan`. Not separately re-run under
+  `devices-tsan`: this change adds no new concurrency (a straightforward sequential
+  `try`/`catch`/rollback around existing, already-sequential constructor code), unlike `LIFE-001`'s
+  own genuinely concurrent lifecycle redesign that `TEST2-001` specifically needed TSan to verify.
+- **Remaining limitations:** "Fault-inject allocation/probe exceptions" and "after any constructor
+  failure, ten subsequent valid objects can still be created" are both architecturally satisfied
+  (the rollback is unconditional, in a `catch (...)` covering every exception type, not a
+  specific one) but not behaviorally exercised by a real fault injection in this environment — see
+  the tests note above for why, and the same honest-gap framing this pass has used throughout
+  (`ANDR2-001`/`003`, `VIB2-001`) rather than claiming false certainty.
 
 ### LIFE-009 — Keep State and IsSupported coherent when swapping test backends — OPEN
 

@@ -55,45 +55,65 @@ namespace Microsoft::Devices::Sensors
             ++instanceCount_;
         }
 
+        // Task LIFE-008 (2026-07-17, external audit `audit_devices_2026-07-17.md`):
+        // everything below this point can throw (std::make_unique's own
+        // allocation, IsSupported()/getIsSupportedProperty() probing a real
+        // backend, even the event-handler subscription below) -- previously
+        // none of it was guarded, so a genuine failure here would propagate
+        // out of this constructor without ever decrementing instanceCount_
+        // (a constructor that throws means the object is never fully
+        // constructed, so its destructor -- and therefore Dispose(bool) --
+        // never runs to release the slot it already reserved above).
+        // Mirrors Accelerometer/Gyroscope's own already-correct
+        // construct-or-rollback discipline (Task P6-1).
+        try
+        {
 #if defined(__ANDROID__)
-        backend_ = std::make_unique<Detail::AndroidCompassBackend>();
+            backend_ = std::make_unique<Detail::AndroidCompassBackend>();
 #endif
 
-        const bool supported = backend_ ? backend_->IsSupported() : getIsSupportedProperty();
-        state_ = supported ? SensorState::Initializing : SensorState::NotSupported;
-        setIsSupportedProperty(supported);
+            const bool supported = backend_ ? backend_->IsSupported() : getIsSupportedProperty();
+            state_ = supported ? SensorState::Initializing : SensorState::NotSupported;
+            setIsSupportedProperty(supported);
 
-        // Task ANDROID-BRIDGE-002: forwards a TimeBetweenUpdates change to
-        // the live backend (if any) without requiring Stop()/Start(). Reads
-        // backend_ fresh each time this fires, not a captured copy, so it
-        // still reaches a backend swapped in later via
-        // SetBackendForTesting(). A safe no-op if not currently started —
-        // ICompassBackend::SetSampleInterval()'s own contract.
-        //
-        // Task DEV-AUD-006 (2026-07-16, external audit `audit_devices.md`):
-        // previously read backend_ here without holding the lock, while
-        // SetBackendForTesting() replaces the same unique_ptr under it -- a
-        // concurrent setTimeBetweenUpdatesProperty() call and the NOXNA
-        // test seam could race on the pointer. The new interval is
-        // captured first (getTimeBetweenUpdatesProperty() takes its own,
-        // separate SensorBase<T>::mutex_, already released by the time this
-        // lambda runs -- see that method's own doc comment), then
-        // control_->mutex is locked before touching backend_, matching
-        // Start()/Stop()/SetBackendForTesting()'s existing discipline
-        // exactly. This handler runs on `this` directly (not through the
-        // control block) -- it is only ever installed once, from this
-        // constructor, and only ever fires while `this` is genuinely alive
-        // (SensorBase<T>'s own TimeBetweenUpdatesChanged is a plain member
-        // event, not reachable from a destroyed instance).
-        TimeBetweenUpdatesChanged += [this](System::Object*, const System::EventArgs&)
-        {
-            const System::TimeSpan newInterval = getTimeBetweenUpdatesProperty();
-            std::lock_guard<std::mutex> lock(control_->mutex);
-            if (backend_)
+            // Task ANDROID-BRIDGE-002: forwards a TimeBetweenUpdates change to
+            // the live backend (if any) without requiring Stop()/Start(). Reads
+            // backend_ fresh each time this fires, not a captured copy, so it
+            // still reaches a backend swapped in later via
+            // SetBackendForTesting(). A safe no-op if not currently started —
+            // ICompassBackend::SetSampleInterval()'s own contract.
+            //
+            // Task DEV-AUD-006 (2026-07-16, external audit `audit_devices.md`):
+            // previously read backend_ here without holding the lock, while
+            // SetBackendForTesting() replaces the same unique_ptr under it -- a
+            // concurrent setTimeBetweenUpdatesProperty() call and the NOXNA
+            // test seam could race on the pointer. The new interval is
+            // captured first (getTimeBetweenUpdatesProperty() takes its own,
+            // separate SensorBase<T>::mutex_, already released by the time this
+            // lambda runs -- see that method's own doc comment), then
+            // control_->mutex is locked before touching backend_, matching
+            // Start()/Stop()/SetBackendForTesting()'s existing discipline
+            // exactly. This handler runs on `this` directly (not through the
+            // control block) -- it is only ever installed once, from this
+            // constructor, and only ever fires while `this` is genuinely alive
+            // (SensorBase<T>'s own TimeBetweenUpdatesChanged is a plain member
+            // event, not reachable from a destroyed instance).
+            TimeBetweenUpdatesChanged += [this](System::Object*, const System::EventArgs&)
             {
-                backend_->SetSampleInterval(newInterval);
-            }
-        };
+                const System::TimeSpan newInterval = getTimeBetweenUpdatesProperty();
+                std::lock_guard<std::mutex> lock(control_->mutex);
+                if (backend_)
+                {
+                    backend_->SetSampleInterval(newInterval);
+                }
+            };
+        }
+        catch (...)
+        {
+            std::lock_guard<std::mutex> lock(instanceCountMutex_);
+            --instanceCount_;
+            throw;
+        }
     }
 
     Compass::~Compass()
