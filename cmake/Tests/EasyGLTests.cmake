@@ -142,6 +142,12 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_backend_test(NAME EasyGL_PbrEffect_Golden COMMAND cna_test_easygl_pbreffect_golden
             TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # PBR + skinning combo: SkinnedPbrEffect's shader (EnsurePbrSkinnedProgram()).
+        cna_easygl_test(cna_test_easygl_skinnedpbreffect_golden
+                        examples/easygl_skinnedpbreffect_golden_test.cpp)
+        cna_register_backend_test(NAME EasyGL_SkinnedPbrEffect_Golden COMMAND cna_test_easygl_skinnedpbreffect_golden
+            TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 87: RenderTarget2D → texture → readback
         cna_easygl_test(cna_test_easygl_render_target
                         examples/easygl_render_target_test.cpp)

@@ -1,0 +1,419 @@
+// SPDX-License-Identifier: MS-PL
+#include "Microsoft/Xna/Framework/Graphics/SkinnedPbrEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EffectParameter.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EffectParameterCollection.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EffectParameterClass.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EffectParameterType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Vector4.hpp"
+#include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
+
+#include <stdexcept>
+
+namespace Microsoft::Xna::Framework::Graphics
+{
+    namespace
+    {
+        constexpr int DirtyWorldViewProj = 1;
+        constexpr int DirtyMaterialColor = 8;
+        constexpr int DirtyFog          = 16;
+        constexpr int DirtyFogEnable    = 32;
+        constexpr int DirtyAll          = -1;
+
+        void AddParam(EffectParameterCollection& params, const std::string& name,
+                      int rows, int cols,
+                      EffectParameterClass pc, EffectParameterType pt)
+        {
+            params.Add(EffectParameter(name, "", rows, cols, pc, pt));
+        }
+    }
+
+    const int SkinnedPbrEffect::MaxBones;
+
+    SkinnedPbrEffect::SkinnedPbrEffect(GraphicsDevice& device)
+        : Effect(device)
+        , dirtyFlags_(DirtyAll)
+    {
+        CacheEffectParameters();
+
+        // Initialise bone transforms to identity, mirroring SkinnedEffect's own constructor.
+        std::vector<Matrix> identityBones(MaxBones, Matrix::getIdentityProperty());
+        SetBoneTransforms(identityBones);
+    }
+
+    SkinnedPbrEffect::SkinnedPbrEffect(const SkinnedPbrEffect& src)
+        : Effect(*src.device_)
+        , dirtyFlags_(DirtyAll)
+    {
+        CacheEffectParameters();
+
+        fogEnabled_ = src.fogEnabled_;
+        weightsPerVertex_ = src.weightsPerVertex_;
+
+        world_      = src.world_;
+        view_       = src.view_;
+        projection_ = src.projection_;
+
+        diffuseColor_      = src.diffuseColor_;
+        alpha_             = src.alpha_;
+        ambientLightColor_ = src.ambientLightColor_;
+        emissiveFactor_    = src.emissiveFactor_;
+        metallicFactor_    = src.metallicFactor_;
+        roughnessFactor_   = src.roughnessFactor_;
+
+        DirectionalLight0 = src.DirectionalLight0;
+        DirectionalLight1 = src.DirectionalLight1;
+        DirectionalLight2 = src.DirectionalLight2;
+
+        fogStart_ = src.fogStart_;
+        fogEnd_   = src.fogEnd_;
+        if (fogColorParam_) fogColorParam_->SetValue(src.getFogColorProperty());
+
+        if (src.bonesParam_ && bonesParam_)
+        {
+            auto bones = src.bonesParam_->GetValueMatrixArray(MaxBones);
+            bonesParam_->SetValue(bones);
+        }
+
+        texture_                = src.texture_;
+        normalMap_              = src.normalMap_;
+        metallicRoughnessMap_   = src.metallicRoughnessMap_;
+        emissiveMap_            = src.emissiveMap_;
+        occlusionMap_           = src.occlusionMap_;
+        ownedTexture_               = src.ownedTexture_;
+        ownedNormalMap_             = src.ownedNormalMap_;
+        ownedMetallicRoughnessMap_  = src.ownedMetallicRoughnessMap_;
+        ownedEmissiveMap_           = src.ownedEmissiveMap_;
+        ownedOcclusionMap_          = src.ownedOcclusionMap_;
+    }
+
+    Effect* SkinnedPbrEffect::Clone()
+    {
+        return new SkinnedPbrEffect(*this);
+    }
+
+    void SkinnedPbrEffect::CacheEffectParameters()
+    {
+        auto& params = getParametersProperty();
+        AddParam(params, "DiffuseColor",  1, 4, EffectParameterClass::Vector, EffectParameterType::Single);
+        AddParam(params, "FogColor",      1, 3, EffectParameterClass::Vector, EffectParameterType::Single);
+        AddParam(params, "FogVector",     1, 4, EffectParameterClass::Vector, EffectParameterType::Single);
+        AddParam(params, "WorldViewProj", 4, 4, EffectParameterClass::Matrix, EffectParameterType::Single);
+        AddParam(params, "Bones",         MaxBones, 4, EffectParameterClass::Matrix, EffectParameterType::Single);
+
+        diffuseColorParam_  = params["DiffuseColor"];
+        fogColorParam_      = params["FogColor"];
+        fogVectorParam_     = params["FogVector"];
+        worldViewProjParam_ = params["WorldViewProj"];
+        bonesParam_         = params["Bones"];
+    }
+
+    // IEffectMatrices
+    Matrix SkinnedPbrEffect::getWorldProperty() const      { return world_; }
+    void   SkinnedPbrEffect::setWorldProperty(const Matrix& v)
+    {
+        world_ = v;
+        dirtyFlags_ |= DirtyWorldViewProj | DirtyFog;
+    }
+
+    Matrix SkinnedPbrEffect::getViewProperty() const       { return view_; }
+    void   SkinnedPbrEffect::setViewProperty(const Matrix& v)
+    {
+        view_ = v;
+        dirtyFlags_ |= DirtyWorldViewProj | DirtyFog;
+    }
+
+    Matrix SkinnedPbrEffect::getProjectionProperty() const { return projection_; }
+    void   SkinnedPbrEffect::setProjectionProperty(const Matrix& v)
+    {
+        projection_ = v;
+        dirtyFlags_ |= DirtyWorldViewProj;
+    }
+
+    Vector3 SkinnedPbrEffect::getDiffuseColorProperty() const { return diffuseColor_; }
+    void    SkinnedPbrEffect::setDiffuseColorProperty(const Vector3& v)
+    {
+        diffuseColor_ = v;
+        dirtyFlags_ |= DirtyMaterialColor;
+    }
+
+    float SkinnedPbrEffect::getAlphaProperty() const { return alpha_; }
+    void  SkinnedPbrEffect::setAlphaProperty(float v)
+    {
+        alpha_ = v;
+        dirtyFlags_ |= DirtyMaterialColor;
+    }
+
+    // IEffectLights
+    Vector3 SkinnedPbrEffect::getAmbientLightColorProperty() const { return ambientLightColor_; }
+    void    SkinnedPbrEffect::setAmbientLightColorProperty(const Vector3& v) { ambientLightColor_ = v; }
+
+    bool SkinnedPbrEffect::getLightingEnabledProperty() const { return true; }
+    void SkinnedPbrEffect::setLightingEnabledProperty(bool value)
+    {
+        if (!value)
+            throw std::runtime_error("SkinnedPbrEffect does not support setting LightingEnabled to false.");
+    }
+
+    DirectionalLight& SkinnedPbrEffect::getDirectionalLight0Property() { return DirectionalLight0; }
+    DirectionalLight& SkinnedPbrEffect::getDirectionalLight1Property() { return DirectionalLight1; }
+    DirectionalLight& SkinnedPbrEffect::getDirectionalLight2Property() { return DirectionalLight2; }
+
+    void SkinnedPbrEffect::EnableDefaultLighting()
+    {
+        DirectionalLight0.setDirectionProperty(Vector3{-0.5265408f, -0.5735765f, -0.6275069f});
+        DirectionalLight0.setDiffuseColorProperty(Vector3{1.0f, 0.9607844f, 0.8078432f});
+        DirectionalLight0.setEnabledProperty(true);
+        DirectionalLight1.setDirectionProperty(Vector3{0.7198464f, 0.3420201f, 0.6040227f});
+        DirectionalLight1.setDiffuseColorProperty(Vector3{0.9647059f, 0.7607844f, 0.4078432f});
+        DirectionalLight1.setEnabledProperty(true);
+        DirectionalLight2.setDirectionProperty(Vector3{0.4545195f, -0.7660444f, 0.4545195f});
+        DirectionalLight2.setDiffuseColorProperty(Vector3{0.3231373f, 0.3607844f, 0.3937255f});
+        DirectionalLight2.setEnabledProperty(true);
+
+        setAmbientLightColorProperty(Vector3{0.05333332f, 0.09882354f, 0.1819608f});
+    }
+
+    // IEffectFog
+    Vector3 SkinnedPbrEffect::getFogColorProperty() const
+    {
+        return fogColorParam_ ? fogColorParam_->GetValueVector3() : Vector3{0.0f, 0.0f, 0.0f};
+    }
+    void SkinnedPbrEffect::setFogColorProperty(const Vector3& v)
+    {
+        if (fogColorParam_) fogColorParam_->SetValue(v);
+    }
+
+    bool SkinnedPbrEffect::getFogEnabledProperty() const { return fogEnabled_; }
+    void SkinnedPbrEffect::setFogEnabledProperty(bool v)
+    {
+        if (fogEnabled_ != v)
+        {
+            fogEnabled_ = v;
+            dirtyFlags_ |= DirtyFogEnable;
+        }
+    }
+
+    float SkinnedPbrEffect::getFogStartProperty() const { return fogStart_; }
+    void  SkinnedPbrEffect::setFogStartProperty(float v)
+    {
+        fogStart_ = v;
+        dirtyFlags_ |= DirtyFog;
+    }
+
+    float SkinnedPbrEffect::getFogEndProperty() const { return fogEnd_; }
+    void  SkinnedPbrEffect::setFogEndProperty(float v)
+    {
+        fogEnd_ = v;
+        dirtyFlags_ |= DirtyFog;
+    }
+
+    Texture2D* SkinnedPbrEffect::getTextureProperty() const       { return texture_; }
+    void       SkinnedPbrEffect::setTextureProperty(Texture2D* v) { texture_ = v; }
+    void SkinnedPbrEffect::SetOwnedTexture(std::shared_ptr<Texture2D> texture)
+    {
+        ownedTexture_ = std::move(texture);
+        texture_ = ownedTexture_.get();
+    }
+
+    Texture2D* SkinnedPbrEffect::getNormalMapProperty() const       { return normalMap_; }
+    void       SkinnedPbrEffect::setNormalMapProperty(Texture2D* v) { normalMap_ = v; }
+    void SkinnedPbrEffect::SetOwnedNormalMap(std::shared_ptr<Texture2D> texture)
+    {
+        ownedNormalMap_ = std::move(texture);
+        normalMap_ = ownedNormalMap_.get();
+    }
+
+    Texture2D* SkinnedPbrEffect::getMetallicRoughnessMapProperty() const       { return metallicRoughnessMap_; }
+    void       SkinnedPbrEffect::setMetallicRoughnessMapProperty(Texture2D* v) { metallicRoughnessMap_ = v; }
+    void SkinnedPbrEffect::SetOwnedMetallicRoughnessMap(std::shared_ptr<Texture2D> texture)
+    {
+        ownedMetallicRoughnessMap_ = std::move(texture);
+        metallicRoughnessMap_ = ownedMetallicRoughnessMap_.get();
+    }
+
+    Texture2D* SkinnedPbrEffect::getEmissiveMapProperty() const       { return emissiveMap_; }
+    void       SkinnedPbrEffect::setEmissiveMapProperty(Texture2D* v) { emissiveMap_ = v; }
+    void SkinnedPbrEffect::SetOwnedEmissiveMap(std::shared_ptr<Texture2D> texture)
+    {
+        ownedEmissiveMap_ = std::move(texture);
+        emissiveMap_ = ownedEmissiveMap_.get();
+    }
+
+    Texture2D* SkinnedPbrEffect::getOcclusionMapProperty() const       { return occlusionMap_; }
+    void       SkinnedPbrEffect::setOcclusionMapProperty(Texture2D* v) { occlusionMap_ = v; }
+    void SkinnedPbrEffect::SetOwnedOcclusionMap(std::shared_ptr<Texture2D> texture)
+    {
+        ownedOcclusionMap_ = std::move(texture);
+        occlusionMap_ = ownedOcclusionMap_.get();
+    }
+
+    float SkinnedPbrEffect::getMetallicFactorProperty() const  { return metallicFactor_; }
+    void  SkinnedPbrEffect::setMetallicFactorProperty(float v) { metallicFactor_ = v; }
+
+    float SkinnedPbrEffect::getRoughnessFactorProperty() const  { return roughnessFactor_; }
+    void  SkinnedPbrEffect::setRoughnessFactorProperty(float v) { roughnessFactor_ = v; }
+
+    Vector3 SkinnedPbrEffect::getEmissiveFactorProperty() const { return emissiveFactor_; }
+    void    SkinnedPbrEffect::setEmissiveFactorProperty(const Vector3& v) { emissiveFactor_ = v; }
+
+    int  SkinnedPbrEffect::getWeightsPerVertexProperty() const { return weightsPerVertex_; }
+    void SkinnedPbrEffect::setWeightsPerVertexProperty(int v)
+    {
+        if (v != 1 && v != 2 && v != 4)
+            throw std::out_of_range("WeightsPerVertex must be 1, 2, or 4.");
+        weightsPerVertex_ = v;
+    }
+
+    void SkinnedPbrEffect::SetBoneTransforms(const std::vector<Matrix>& boneTransforms)
+    {
+        if (boneTransforms.empty())
+            throw std::invalid_argument("boneTransforms must not be empty.");
+        if (static_cast<int>(boneTransforms.size()) > MaxBones)
+            throw std::invalid_argument("boneTransforms exceeds MaxBones.");
+
+        if (bonesParam_) bonesParam_->SetValue(boneTransforms);
+    }
+
+    std::vector<Matrix> SkinnedPbrEffect::GetBoneTransforms(int count) const
+    {
+        if (count <= 0 || count > MaxBones)
+            throw std::out_of_range("count must be in range [1, MaxBones].");
+
+        std::vector<Matrix> bones = bonesParam_
+            ? bonesParam_->GetValueMatrixArray(count)
+            : std::vector<Matrix>(count, Matrix::getIdentityProperty());
+
+        for (auto& m : bones)
+            m.M44 = 1.0f;
+
+        return bones;
+    }
+
+    void SkinnedPbrEffect::OnApply()
+    {
+        if ((dirtyFlags_ & DirtyWorldViewProj) != 0)
+        {
+            Matrix worldViewProj;
+            Matrix::Multiply(world_, view_, worldView_);
+            Matrix::Multiply(worldView_, projection_, worldViewProj);
+            if (worldViewProjParam_) worldViewProjParam_->SetValue(worldViewProj);
+            dirtyFlags_ &= ~DirtyWorldViewProj;
+        }
+
+        if (fogEnabled_)
+        {
+            if ((dirtyFlags_ & (DirtyFog | DirtyFogEnable)) != 0)
+            {
+                if (fogVectorParam_)
+                {
+                    if (fogStart_ == fogEnd_)
+                    {
+                        fogVectorParam_->SetValue(Vector4{0.0f, 0.0f, 0.0f, 1.0f});
+                    }
+                    else
+                    {
+                        float scale = 1.0f / (fogStart_ - fogEnd_);
+                        fogVectorParam_->SetValue(Vector4{
+                            worldView_.M13 * scale,
+                            worldView_.M23 * scale,
+                            worldView_.M33 * scale,
+                            (worldView_.M43 + fogStart_) * scale});
+                    }
+                }
+                dirtyFlags_ &= ~(DirtyFog | DirtyFogEnable);
+            }
+        }
+        else if ((dirtyFlags_ & DirtyFogEnable) != 0)
+        {
+            if (fogVectorParam_) fogVectorParam_->SetValue(Vector4::Zero);
+            dirtyFlags_ &= ~DirtyFogEnable;
+        }
+
+        if ((dirtyFlags_ & DirtyMaterialColor) != 0)
+        {
+            if (diffuseColorParam_)
+                diffuseColorParam_->SetValue(Vector4{
+                    diffuseColor_.X, diffuseColor_.Y, diffuseColor_.Z, alpha_});
+            dirtyFlags_ &= ~DirtyMaterialColor;
+        }
+    }
+
+    void SkinnedPbrEffect::FillGpuDrawParams(CNA::Internal::Backends::GpuDrawParams& p) const
+    {
+        using namespace CNA::Internal::Backends;
+
+        p.pbr             = true;
+        p.skinned         = true;
+        p.textureEnabled  = true;
+        p.lightingEnabled = true;
+
+        if (texture_)              p.texture0 = &texture_->GetBackend();
+        if (normalMap_)             p.pbrNormalMap = &normalMap_->GetBackend();
+        if (metallicRoughnessMap_)  p.pbrMetallicRoughnessMap = &metallicRoughnessMap_->GetBackend();
+        if (emissiveMap_)           p.pbrEmissiveMap = &emissiveMap_->GetBackend();
+        if (occlusionMap_)          p.pbrOcclusionMap = &occlusionMap_->GetBackend();
+
+        p.diffuseColor[0] = diffuseColor_.X;
+        p.diffuseColor[1] = diffuseColor_.Y;
+        p.diffuseColor[2] = diffuseColor_.Z;
+        p.diffuseColor[3] = alpha_;
+
+        p.ambientColor[0] = ambientLightColor_.X;
+        p.ambientColor[1] = ambientLightColor_.Y;
+        p.ambientColor[2] = ambientLightColor_.Z;
+
+        p.emissiveColor[0] = emissiveFactor_.X;
+        p.emissiveColor[1] = emissiveFactor_.Y;
+        p.emissiveColor[2] = emissiveFactor_.Z;
+
+        p.pbrMetallicFactor  = metallicFactor_;
+        p.pbrRoughnessFactor = roughnessFactor_;
+
+        const bool    light0On = DirectionalLight0.getEnabledProperty();
+        const Vector3 ld0  = light0On ? DirectionalLight0.getDiffuseColorProperty() : Vector3::Zero;
+        const Vector3 dir0 = DirectionalLight0.getDirectionProperty();
+        p.light0Dir[0] = dir0.X; p.light0Dir[1] = dir0.Y; p.light0Dir[2] = dir0.Z;
+        p.light0Diffuse[0] = ld0.X; p.light0Diffuse[1] = ld0.Y; p.light0Diffuse[2] = ld0.Z;
+
+        const bool    light1On = DirectionalLight1.getEnabledProperty();
+        const Vector3 ld1  = light1On ? DirectionalLight1.getDiffuseColorProperty() : Vector3::Zero;
+        const Vector3 dir1 = DirectionalLight1.getDirectionProperty();
+        p.light1Dir[0] = dir1.X; p.light1Dir[1] = dir1.Y; p.light1Dir[2] = dir1.Z;
+        p.light1Diffuse[0] = ld1.X; p.light1Diffuse[1] = ld1.Y; p.light1Diffuse[2] = ld1.Z;
+
+        const bool    light2On = DirectionalLight2.getEnabledProperty();
+        const Vector3 ld2  = light2On ? DirectionalLight2.getDiffuseColorProperty() : Vector3::Zero;
+        const Vector3 dir2 = DirectionalLight2.getDirectionProperty();
+        p.light2Dir[0] = dir2.X; p.light2Dir[1] = dir2.Y; p.light2Dir[2] = dir2.Z;
+        p.light2Diffuse[0] = ld2.X; p.light2Diffuse[1] = ld2.Y; p.light2Diffuse[2] = ld2.Z;
+
+        const Matrix viewInverse = Matrix::Invert(view_);
+        const Vector3 eyePos     = viewInverse.getTranslationProperty();
+        p.eyePositionWorld[0] = eyePos.X;
+        p.eyePositionWorld[1] = eyePos.Y;
+        p.eyePositionWorld[2] = eyePos.Z;
+
+        world_.ToColumnMajor(p.worldColMajor);
+
+        const std::vector<Matrix> bones = GetBoneTransforms(MaxBones);
+        p.boneCount = static_cast<int>(bones.size());
+        for (int i = 0; i < p.boneCount; ++i)
+            bones[i].ToColumnMajor(p.boneTransforms + i * 16);
+        p.weightsPerVertex = weightsPerVertex_;
+
+        p.fogEnabled = fogEnabled_;
+        const Vector3 fogColor = getFogColorProperty();
+        p.fogColor[0] = fogColor.X;
+        p.fogColor[1] = fogColor.Y;
+        p.fogColor[2] = fogColor.Z;
+        p.fogStart    = fogStart_;
+        p.fogEnd      = fogEnd_;
+    }
+
+    const std::string& SkinnedPbrEffect::GetTypeName() const
+    {
+        static const std::string name = "Microsoft.Xna.Framework.Graphics.SkinnedPbrEffect";
+        return name;
+    }
+}

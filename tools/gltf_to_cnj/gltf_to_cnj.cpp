@@ -245,13 +245,14 @@ namespace
                 entry.vertFile = vertFile;
                 entry.idxFile = idxFile;
                 entry.stride = meshOut.stride;
-                // meshOut.usePbr forces stride 48 (VertexPositionNormalTangentTexture) --
-                // BasicEffect/DualTextureEffect/SkinnedEffect don't understand that layout at
+                // meshOut.usePbr forces stride 48 (unskinned) / 68 (skinned) --
+                // BasicEffect/DualTextureEffect/SkinnedEffect don't understand either layout at
                 // all, so this branch must never fall through to any of them (unlike
                 // useDualTexture's own "fall back to BasicEffect if Texture2 extraction failed"
                 // case just above, where the vertex layout stays a BasicEffect-compatible
                 // stride 20/24/32 either way).
-                entry.effect = meshOut.usePbr ? "PbrEffect"
+                entry.effect = (meshOut.usePbr && meshOut.skinned) ? "SkinnedPbrEffect"
+                              : meshOut.usePbr ? "PbrEffect"
                               : meshOut.skinned ? "SkinnedEffect"
                               : meshOut.useDualTexture ? "DualTextureEffect"
                               : "BasicEffect";
@@ -356,7 +357,7 @@ namespace
             if (!e.textureFile.empty()) { json << ", \"texture\": \"" << JsonEscape(e.textureFile) << "\""; }
             if (!e.texture2File.empty()) { json << ", \"texture2\": \"" << JsonEscape(e.texture2File) << "\""; }
             if (e.vertexColorEnabled) { json << ", \"vertexColorEnabled\": true"; }
-            if (e.effect == "PbrEffect")
+            if (e.effect == "PbrEffect" || e.effect == "SkinnedPbrEffect")
             {
                 if (!e.normalMapFile.empty()) { json << ", \"normalMap\": \"" << JsonEscape(e.normalMapFile) << "\""; }
                 if (!e.metallicRoughnessMapFile.empty()) { json << ", \"metallicRoughnessMap\": \"" << JsonEscape(e.metallicRoughnessMapFile) << "\""; }

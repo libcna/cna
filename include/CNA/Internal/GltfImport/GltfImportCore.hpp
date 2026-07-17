@@ -98,7 +98,7 @@ namespace CNA::Internal::GltfImport
         std::string name;
         /** @brief Tightly-packed vertex bytes, `vertexBytes.size() / stride` vertices. */
         std::vector<std::uint8_t> vertexBytes;
-        /** @brief Byte stride of one vertex (16/20/24/32/52/56 — see CLAUDE.md's stride table). */
+        /** @brief Byte stride of one vertex (16/20/24/32/48/52/56/68 — see CLAUDE.md's stride table). */
         int stride = 32;
         /** @brief Tightly-packed index bytes (16- or 32-bit, per `use32BitIndices`). */
         std::vector<std::uint8_t> indexBytes;
@@ -127,9 +127,11 @@ namespace CNA::Internal::GltfImport
         std::vector<std::vector<Microsoft::Xna::Framework::Vector3>> morphNormalDeltas;
         /**
          * @brief True when this primitive is imported through PbrEffect (stride 48,
-         * VertexPositionNormalTangentTexture) instead of BasicEffect/DualTextureEffect --
-         * unskinned, uncolored, and has a normal map or metallic-roughness map (see
-         * ExtractMesh's own doc comment for the exact eligibility rule).
+         * VertexPositionNormalTangentTexture, unskinned) or SkinnedPbrEffect (stride 68,
+         * VertexPositionNormalTangentTextureSkinned, skinned) instead of BasicEffect/
+         * DualTextureEffect/SkinnedEffect -- uncolored, and has a normal map or
+         * metallic-roughness map (see ExtractMesh's own doc comment for the exact eligibility
+         * rule).
          */
         bool usePbr = false;
         /** @brief The material's normal map image, or nullptr if none. */

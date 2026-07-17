@@ -1,5 +1,15 @@
 # `.cnj` content format — implementation plan for CNA
 
+> **Status update (2026-07-17): Phase 14A also closed.** Phase 14 (`CNB-75`–) is a follow-up to
+> Phase 13, opened by the project owner's "vse udelej prosim" (please do everything) after a
+> post-Phase-13 gap survey. 14A (`CNB-75`–`CNB-79`, PBR + skinning combo) is done: a new
+> `SkinnedPbrEffect` (NOXNA, combines `PbrEffect`'s BRDF with `SkinnedEffect`'s bone API) and a new
+> stride-68 `VertexPositionNormalTangentTextureSkinned` vertex format, with a real EasyGL shader,
+> full `gltf_to_cnj`/`ContentManager` wiring on both the offline and runtime glTF paths, and tests
+> (including a golden-image test that reproduces `PbrEffect`'s own golden PNGs pixel-for-pixel
+> under an identity bind pose). See Phase 14's own section for full detail; 14B (the other 9 items
+> from the same gap survey) is queued next.
+>
 > **Status update (2026-07-17): Phases 10, 11, and 12 also closed.** Phase 10 (`CNB-40`–`CNB-42`,
 > standalone `AnimationClipTypeReader`); Phase 11 (`CNB-43`–`CNB-49`, `Texture3D`/`Curve`/5 stock
 > effects + `AnimationClip` sharing, closing every remaining `.xnb`-vs-`.cnj` type-coverage gap);
@@ -444,6 +454,40 @@ onto `.cnj`, `RegisterCnjLoader<T>`, and Phase 9's hardening of those mechanisms
 | CNB-74 | Tests + docs | ✅ | New `GltfToCnjToolTest.WiresBaseColorAndOcclusionTexturesThroughDualTextureEffect` (fixture `kDualTextureGltf`: unskinned single-triangle mesh, base-color + occlusion textures, no NORMAL attribute at all) asserts: both textures written to disk, vertex buffer is exactly `3*20` bytes (stride 20, no Normal baked in), and after a full `ContentManager::Load<Model>` round-trip the mesh's effect is a real `DualTextureEffect` with both `getTextureProperty()`/`getTexture2Property()` non-null and correctly sized. Full-suite regression after this task: **4697 tests, 4695 passed, same 2 pre-existing hardware skips, 0 failures.** |
 
 ---
+
+## Phase 14 — Post-Phase-13 glTF/PBR extensions ("vse udelej prosim")
+
+> Added 2026-07-17. After Phase 13 fully closed, the project owner asked "pushni co dale?
+> jestebeco v gltf konvertoru lze doimplementovat?" (push, what's next, anything else in the gltf
+> converter that could be implemented?). A survey turned up 10 remaining gaps (PBR+skinning combo,
+> per-map UV set selection, morph target `.cnj` serialization, CUBICSPLINE morph-weight animation,
+> `DualTextureEffect` occlusion brightness fix, Draco mesh compression, full MikkTSpace tangents,
+> newer glTF extensions, PBR/skinned-vertex-color on other backends), and the project owner
+> answered **"vse udelej prosim" (please do everything)** — standing authorization to work through
+> the full list without re-confirming at each item.
+
+### 14A — PBR + skinning combo ✅ CLOSED 2026-07-17
+
+> `PbrEffect` (13A) was unskinned-only and `SkinnedEffect` has no PBR maps — a skinned mesh with a
+> normal/metallic-roughness map had no correct effect to import through at all.
+
+| # | Task | Status | Notes |
+|---|---|---|---|
+| CNB-75 | New vertex format: `VertexPositionNormalTangentTextureSkinned` (stride 68) | ✅ | NOXNA struct (`include/.../VertexPositionNormalTangentTextureSkinned.hpp`), the stride-48 `VertexPositionNormalTangentTexture` layout (Position12+Normal12+Tangent16+TextureCoordinate8) with the stride-52/56 skinning suffix (BlendWeight16+BlendIndices4) appended — offsets 0/12/24/40/48/64, total 68 bytes. Mirrors the established "append rather than insert" precedent from 13C's own stride-56 (Color appended after the stride-52 skinning suffix). |
+| CNB-76 | Design decision: a `skinned` flag on `PbrEffect`, or a separate `SkinnedPbrEffect` class | ✅ | Separate class — `Microsoft::Xna::Framework::Graphics::SkinnedPbrEffect` (NOXNA), mirroring real XNA's own `BasicEffect`/`SkinnedEffect` precedent of genuinely distinct classes per major shader variant rather than one class with a mode flag. Combines `PbrEffect`'s full property surface (4 maps + factors, 3 lights + ambient, fog, base color + alpha) with `SkinnedEffect`'s bone API (`MaxBones=72`, `SetBoneTransforms`/`GetBoneTransforms`, `WeightsPerVertex`). Bone transforms are not set by the content loader — exactly like `SkinnedEffect`, game code feeds `AnimationPlayer::GetSkinTransforms()` into `SetBoneTransforms()` itself every frame. |
+| CNB-77 | Shader implementation on the primary (EasyGL) backend | ✅ | `EasyGLGraphicsBackend::EnsurePbrSkinnedProgram()`: `EnsureSkinnedProgram()`'s own bone-palette vertex transform (`mat4 skinMat = uBones[aBoneIndices.x]*aBoneWeights.x + ...`), extended to also skin the Tangent (not just Position/Normal, needed for a skinned TBN basis), feeding `EnsurePbrProgram()`'s own fragment-stage BRDF completely unchanged (same `PbrLight()` GGX/Schlick-GGX/Schlick-Fresnel helper). New `Prog3D prog_pbr_skinned_` cache slot; `SelectProgram()` gains a `params.pbr && params.skinned` branch checked before the standalone `pbr`-only and `skinned`-only branches; `ApplyLayout()` gains a `case 68:` (locations 0-3 byte-identical to the stride-48 PBR layout, locations 4-5 mirror the stride-52 skinning suffix). No new `GpuDrawParams` fields needed at all — `pbr` and `skinned` are independent booleans that can both be true on the same draw, and every field either shader needs (4 PBR textures/factors, `boneTransforms`/`boneCount`/`weightsPerVertex`) already existed from 13A/`SkinnedEffect` respectively; `BindDrawParams()` was already written generically enough (`if (p.loc_X >= 0)` gating per uniform) to need zero changes. |
+| CNB-78 | Extend `GltfImportCore`/`gltf_to_cnj`/`ContentManager` to select `SkinnedPbrEffect` + stride 68 | ✅ | `GltfImportCore::ExtractMesh`: `usePbr` eligibility relaxed from `!skinned && !colored && (normalImage\|\|metallicRoughnessImage)` to `!colored && (normalImage\|\|metallicRoughnessImage)` (the `!skinned` exclusion dropped); `occlusionImage` extraction relaxed to also cover skinned meshes (needed for `SkinnedPbrEffect::OcclusionMap`), while `useDualTexture` stays gated to unskinned primitives (`SkinnedEffect`/`SkinnedPbrEffect` have no `Texture2` slot); stride selection extended to `skinned ? (colored?56:(usePbr?68:52)) : ...`; the vertex-write loop's tangent computation and `usePbr` branch both extended to append the skinning suffix (shared `appendSkinning()` lambda, deduplicating the logic already used by the plain stride-52/56 branch) when `skinned` is also true. `gltf_to_cnj.cpp`: `ConvertGroup`'s effect selection gains `(usePbr && skinned) ? "SkinnedPbrEffect" : ...` ahead of the plain `usePbr`/`skinned` checks; PBR JSON-field emission (`normalMap`/`metallicRoughnessMap`/`emissiveMap`/`occlusionMap`/factors) extended to also fire for `"SkinnedPbrEffect"` entries. `ContentManager.cpp`: `BuildVertexBufferFromRawBytes` gains a stride-68 raw-upload case (same vtable-inflation reasoning as strides 48/52/56); both `ReadGltfModel()` and `ModelTypeReader::Read()`'s `.cnj` JSON path construct `SkinnedPbrEffect` when `usePbr && skinned` (checked before the plain `skinned`/`usePbr` branches) and wire all 4 maps + factors + base texture identically to the existing `PbrEffect` wiring. |
+| CNB-79 | Tests + docs | ✅ | Engine-side: `SkinnedPbrEffectTests.cpp` (mirrors `PbrEffectTests.cpp`'s defaults/round-trip/`Clone`/`GetTypeName`/`FillGpuDrawParams` coverage, plus `SkinnedEffectTests.cpp`'s own `MaxBones`/`WeightsPerVertex`/`SetBoneTransforms`/`GetBoneTransforms` coverage) — caught a **real bug** during authoring: the constructor didn't default-initialize the 72 bone slots to identity (unlike `SkinnedEffect`'s own constructor), so `GetBoneTransforms(MaxBones)` returned an empty vector until `SetBoneTransforms` was called explicitly; fixed by adding the same `SetBoneTransforms(identityBones)` call `SkinnedEffect`'s own constructor makes. `VertexPositionNormalTangentTextureSkinnedTests.cpp` (declaration/ctor/equality/`ToString` coverage, mirrors `VertexPositionNormalTextureSkinnedTests.cpp`). New EasyGL golden test `examples/easygl_skinnedpbreffect_golden_test.cpp` (ctest `EasyGL_SkinnedPbrEffect_Golden`) reuses `easygl_pbreffect_golden_test.cpp`'s exact 4-quad scene through `SkinnedPbrEffect` with a single identity bone (weight 1.0 on bone 0) — an identity bind pose is a mathematical no-op for the skin transform, so the golden oracle is literally the same already-verified `PbrEffect` golden PNGs/pixel values, which the new shader reproduced pixel-for-pixel on the first run, proving the bone-palette multiply in `EnsurePbrSkinnedProgram()`'s vertex shader is wired correctly. Tool-side: `GltfToCnjToolTest.SerializesAndReloadsSkinnedPbrMaterialThroughTheOfflineCnjPath` (CLI → `.cnj` → `ContentManager` round-trip, verifies stride-68 byte layout including tangent+weight fields) and `RuntimeGltfModelTest.LoadsSkinnedPbrMaterialDirectlyFromGltf` (direct glTF loading, no sidecars) — both new fixtures are single-bone-skinned triangles with base-color+normal maps. Full-suite regression after this task: **4824 tests, 0 failures** (CnaTests). |
+
+### 14B — Remaining "vse udelej prosim" items ⬜ NOT STARTED
+
+> Task numbering reserved (`CNB-80`+) for whichever item is picked up next: per-map UV set
+> selection for PBR textures, morph target `.cnj`/CLI serialization, CUBICSPLINE morph-weight
+> animation interpolation, `DualTextureEffect` occlusion brightness fix (needs an image codec),
+> Draco mesh compression, full MikkTSpace tangent generation, newer glTF extensions
+> (`KHR_texture_transform`/`KHR_lights_punctual`/`KHR_materials_emissive_strength`), and PBR/
+> skinned-vertex-color shader support on the other 7+ graphics backends (CNB-61/13C's own
+> deliberately-deferred scope, now being taken up).
 
 ## Relationship to other plan files
 

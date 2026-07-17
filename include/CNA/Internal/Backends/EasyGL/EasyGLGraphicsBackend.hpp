@@ -453,6 +453,7 @@ namespace CNA::Internal::Backends::EasyGL
         Prog3D prog_skinned_;        ///< stride=52: aPos + aNormal + aUV + weights + indices (SkinnedEffect, PreferPerPixelLighting=true: per-pixel Blinn-Phong)
         Prog3D prog_skinned_vertexlit_;  ///< stride=52: aPos + aNormal + aUV + weights + indices (SkinnedEffect, PreferPerPixelLighting=false, XNA's own default: per-vertex/Gouraud-shaded Blinn-Phong, Task 1102b)
         Prog3D prog_pbr_;            ///< stride=48: aPos + aNormal + aTangent + aUV, real glTF metallic-roughness BRDF (PbrEffect, plan_cnj.md CNB-58)
+        Prog3D prog_pbr_skinned_;    ///< stride=68: aPos + aNormal + aTangent + aUV + weights + indices, PBR BRDF + skinning (SkinnedPbrEffect, PBR+skinning combo)
 
         ::easygl::Texture default_white_texture_;
         bool default_white_texture_ready_ = false;
@@ -499,6 +500,7 @@ namespace CNA::Internal::Backends::EasyGL
         void EnsureSkinnedProgram();
         void EnsureSkinnedVertexLitProgram();
         void EnsurePbrProgram();
+        void EnsurePbrSkinnedProgram();
         void EnsureDefaultWhiteTexture();
         void EnsureDefaultFlatNormalTexture();
         Prog3D& SelectProgram(std::size_t stride, const GpuDrawParams& params);

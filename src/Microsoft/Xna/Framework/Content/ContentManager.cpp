@@ -28,6 +28,7 @@
 #include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedModelEXT.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SkinnedPbrEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteFont.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
@@ -1646,6 +1647,10 @@ namespace Microsoft::Xna::Framework::Content
                 vb->SetDataRaw(vertBytes.data(), numVertices, 52);
             } else if (stride == 56) {
                 vb->SetDataRaw(vertBytes.data(), numVertices, 56);
+            } else if (stride == 68) {
+                // PBR + skinning combo: VertexPositionNormalTangentTextureSkinned (SkinnedPbrEffect)
+                // -- raw byte upload for the same vtable-inflation reason as stride 48/52/56 above.
+                vb->SetDataRaw(vertBytes.data(), numVertices, 68);
             }
             return vb;
         }
@@ -1878,7 +1883,11 @@ namespace Microsoft::Xna::Framework::Content
                     res->boneOwners.push_back(std::move(meshBone));
 
                     std::shared_ptr<Graphics::Effect> fx;
-                    if (meshOut.skinned) { fx = std::make_shared<Graphics::SkinnedEffect>(device); }
+                    // PBR + skinning combo: SkinnedPbrEffect is a separate class from both
+                    // SkinnedEffect and PbrEffect (see that header's own doc comment), so it must
+                    // be checked before either single-flag branch below.
+                    if (meshOut.skinned && meshOut.usePbr) { fx = std::make_shared<Graphics::SkinnedPbrEffect>(device); }
+                    else if (meshOut.skinned) { fx = std::make_shared<Graphics::SkinnedEffect>(device); }
                     else if (meshOut.usePbr) { fx = std::make_shared<Graphics::PbrEffect>(device); }
                     else if (meshOut.useDualTexture) { fx = std::make_shared<Graphics::DualTextureEffect>(device); }
                     else { fx = std::make_shared<Graphics::BasicEffect>(device); }
@@ -1894,6 +1903,8 @@ namespace Microsoft::Xna::Framework::Content
                             dualFx->setTextureProperty(tex);
                         } else if (auto* pbrFx = dynamic_cast<Graphics::PbrEffect*>(fx.get())) {
                             pbrFx->setTextureProperty(tex);
+                        } else if (auto* skinnedPbrFx = dynamic_cast<Graphics::SkinnedPbrEffect*>(fx.get())) {
+                            skinnedPbrFx->setTextureProperty(tex);
                         }
                     }
 
@@ -1926,6 +1937,20 @@ namespace Microsoft::Xna::Framework::Content
                             pbrFx->setMetallicFactorProperty(meshOut.metallicFactor);
                             pbrFx->setRoughnessFactorProperty(meshOut.roughnessFactor);
                             pbrFx->setEmissiveFactorProperty(meshOut.emissiveFactor);
+                        }
+                        else if (auto* skinnedPbrFx = dynamic_cast<Graphics::SkinnedPbrEffect*>(fx.get()))
+                        {
+                            if (Graphics::Texture2D* normalTex = loadTexture(meshOut.normalImage))
+                                skinnedPbrFx->setNormalMapProperty(normalTex);
+                            if (Graphics::Texture2D* mrTex = loadTexture(meshOut.metallicRoughnessImage))
+                                skinnedPbrFx->setMetallicRoughnessMapProperty(mrTex);
+                            if (Graphics::Texture2D* emissiveTex = loadTexture(meshOut.emissiveImage))
+                                skinnedPbrFx->setEmissiveMapProperty(emissiveTex);
+                            if (Graphics::Texture2D* occlusionTex = loadTexture(meshOut.occlusionImage))
+                                skinnedPbrFx->setOcclusionMapProperty(occlusionTex);
+                            skinnedPbrFx->setMetallicFactorProperty(meshOut.metallicFactor);
+                            skinnedPbrFx->setRoughnessFactorProperty(meshOut.roughnessFactor);
+                            skinnedPbrFx->setEmissiveFactorProperty(meshOut.emissiveFactor);
                         }
                     }
 
@@ -2199,6 +2224,13 @@ namespace Microsoft::Xna::Framework::Content
                                 // VertexPositionNormalTangentTexture shape (Position+Normal+
                                 // Tangent+TextureCoordinate), never stride-32.
                                 fx = std::make_shared<Graphics::PbrEffect>(device);
+                            } else if (effectStr == "SkinnedPbrEffect") {
+                                // PBR + skinning combo: PbrEffect's own BRDF applied to a
+                                // GPU-skinned mesh -- its vertex buffer must be the stride-68
+                                // VertexPositionNormalTangentTextureSkinned shape. Bone transforms
+                                // are fed by AnimationPlayer::GetSkinTransforms() at draw time,
+                                // same as SkinnedEffect above -- not through this reader.
+                                fx = std::make_shared<Graphics::SkinnedPbrEffect>(device);
                             } else {
                                 fx = cm.Load<std::shared_ptr<Graphics::Effect>>(effectStr);
                             }
@@ -2224,6 +2256,9 @@ namespace Microsoft::Xna::Framework::Content
                                     res->textureOwners.push_back(std::move(tex));
                                 } else if (auto* pbrFx = dynamic_cast<Graphics::PbrEffect*>(fx.get())) {
                                     pbrFx->setTextureProperty(tex.get());
+                                    res->textureOwners.push_back(std::move(tex));
+                                } else if (auto* skinnedPbrFx = dynamic_cast<Graphics::SkinnedPbrEffect*>(fx.get())) {
+                                    skinnedPbrFx->setTextureProperty(tex.get());
                                     res->textureOwners.push_back(std::move(tex));
                                 }
                             }
@@ -2261,6 +2296,27 @@ namespace Microsoft::Xna::Framework::Content
                                 pbrFx->setMetallicFactorProperty(metallicFactor);
                                 pbrFx->setRoughnessFactorProperty(roughnessFactor);
                                 pbrFx->setEmissiveFactorProperty(Vector3(
+                                    emissiveFactorArr[0], emissiveFactorArr[1], emissiveFactorArr[2]));
+                            } else if (auto* skinnedPbrFx = dynamic_cast<Graphics::SkinnedPbrEffect*>(fx.get())) {
+                                auto loadPbrMap = [&](const std::string& file) -> Graphics::Texture2D* {
+                                    if (file.empty()) { return nullptr; }
+                                    auto tex = std::make_unique<Graphics::Texture2D>(
+                                        cm.Load<Graphics::Texture2D>(file));
+                                    Graphics::Texture2D* texPtr = tex.get();
+                                    res->textureOwners.push_back(std::move(tex));
+                                    return texPtr;
+                                };
+                                if (Graphics::Texture2D* t = loadPbrMap(normalMapFile))
+                                    skinnedPbrFx->setNormalMapProperty(t);
+                                if (Graphics::Texture2D* t = loadPbrMap(metallicRoughnessMapFile))
+                                    skinnedPbrFx->setMetallicRoughnessMapProperty(t);
+                                if (Graphics::Texture2D* t = loadPbrMap(emissiveMapFile))
+                                    skinnedPbrFx->setEmissiveMapProperty(t);
+                                if (Graphics::Texture2D* t = loadPbrMap(occlusionMapFile))
+                                    skinnedPbrFx->setOcclusionMapProperty(t);
+                                skinnedPbrFx->setMetallicFactorProperty(metallicFactor);
+                                skinnedPbrFx->setRoughnessFactorProperty(roughnessFactor);
+                                skinnedPbrFx->setEmissiveFactorProperty(Vector3(
                                     emissiveFactorArr[0], emissiveFactorArr[1], emissiveFactorArr[2]));
                             }
 

@@ -710,7 +710,11 @@ namespace CNA::Internal::GltfImport
         out.normalImage = FindNormalImage(prim);
         out.metallicRoughnessImage = FindMetallicRoughnessImage(prim);
         out.emissiveImage = FindEmissiveImage(prim);
-        out.usePbr = (!out.skinned) && (!out.colored) &&
+        // PBR + skinning combo: a skinned primitive with a normal/metallic-roughness map is
+        // imported through SkinnedPbrEffect (stride 68) instead of plain SkinnedEffect -- the
+        // vertex-color combo (usePbr && colored) is still not attempted, matching PbrEffect's own
+        // unskinned scope cut (no PBR shader currently reads a vertex Color stream).
+        out.usePbr = (!out.colored) &&
                      (out.normalImage != nullptr || out.metallicRoughnessImage != nullptr);
         if (out.usePbr && prim.material && prim.material->has_pbr_metallic_roughness)
         {
@@ -729,14 +733,20 @@ namespace CNA::Internal::GltfImport
         // (CNB-72/73) only when usePbr is false, or PbrEffect's own real OcclusionMap when true
         // (see the useDualTexture computation immediately below, and ExtractMesh's caller for the
         // PbrEffect wiring).
-        out.occlusionImage = (!out.skinned && !out.colored) ? FindOcclusionImage(prim) : nullptr;
-        out.useDualTexture = (!out.usePbr) && (out.occlusionImage != nullptr) && (out.baseColorImage != nullptr);
+        // PBR + skinning combo: occlusionImage is now also extracted for skinned, uncolored
+        // primitives (needed for SkinnedPbrEffect's own OcclusionMap), but useDualTexture stays
+        // gated to unskinned primitives -- SkinnedEffect has no Texture2 slot, so a skinned
+        // non-PBR mesh with an occlusion+base-color pair simply leaves occlusionImage unused.
+        out.occlusionImage = (!out.colored) ? FindOcclusionImage(prim) : nullptr;
+        out.useDualTexture = (!out.usePbr) && (!out.skinned) &&
+                              (out.occlusionImage != nullptr) && (out.baseColorImage != nullptr);
         // Unskinned colored meshes reuse the real XNA VertexPositionColorTexture layout (stride
         // 24, Position+Color+TextureCoordinate, no Normal) -- already fully supported end-to-end
         // by ModelTypeReader and every graphics backend's existing VertexColorEnabled shader path.
         // Skinned colored meshes use the stride-56 layout instead (Position+Normal+
-        // TextureCoordinate+BlendWeight+BlendIndices+Color).
-        out.stride = out.skinned ? (out.colored ? 56 : 52)
+        // TextureCoordinate+BlendWeight+BlendIndices+Color). Skinned + PBR meshes use the new
+        // stride-68 layout (Position+Normal+Tangent+TextureCoordinate+BlendWeight+BlendIndices).
+        out.stride = out.skinned ? (out.colored ? 56 : (out.usePbr ? 68 : 52))
                                  : (out.colored ? 24 : (out.usePbr ? 48 : (out.useDualTexture ? 20 : 32)));
 
         const cgltf_size vertexCount = posAcc->count;
@@ -802,6 +812,24 @@ namespace CNA::Internal::GltfImport
                 out.vertexBytes.push_back(ToByteColorChannel(colors[co + 2]));
                 out.vertexBytes.push_back(colorComponents >= 4 ? ToByteColorChannel(colors[co + 3]) : std::uint8_t{255});
             };
+            // Shared by the usePbr (stride 68) and stride-32/52/56 branches below -- BlendWeight
+            // (4 floats) followed by BlendIndices (4 bytes, remapped through skel->oldToNew).
+            auto appendSkinning = [&]()
+            {
+                AppendFloat(out.vertexBytes, weights[i4]);     AppendFloat(out.vertexBytes, weights[i4 + 1]);
+                AppendFloat(out.vertexBytes, weights[i4 + 2]); AppendFloat(out.vertexBytes, weights[i4 + 3]);
+
+                for (int k = 0; k < 4; ++k)
+                {
+                    const int oldJointIdx = static_cast<int>(joints[i4 + static_cast<std::size_t>(k)] + 0.5f);
+                    int newJointIdx = 0;
+                    if (oldJointIdx >= 0 && static_cast<std::size_t>(oldJointIdx) < skel->oldToNew.size())
+                    {
+                        newJointIdx = skel->oldToNew[static_cast<std::size_t>(oldJointIdx)];
+                    }
+                    out.vertexBytes.push_back(static_cast<std::uint8_t>(newJointIdx));
+                }
+            };
 
             if (out.colored && !out.skinned)
             {
@@ -813,7 +841,8 @@ namespace CNA::Internal::GltfImport
 
             if (out.usePbr)
             {
-                // stride 48: Position + Normal + Tangent + TextureCoordinate.
+                // stride 48 (unskinned) / 68 (skinned): Position + Normal + Tangent +
+                // TextureCoordinate [+ BlendWeight + BlendIndices].
                 const float nx = normals.empty() ? 0.0f : normals[i3];
                 const float ny = normals.empty() ? 0.0f : normals[i3 + 1];
                 const float nz = normals.empty() ? 1.0f : normals[i3 + 2];
@@ -822,6 +851,7 @@ namespace CNA::Internal::GltfImport
                 AppendFloat(out.vertexBytes, tan.X); AppendFloat(out.vertexBytes, tan.Y);
                 AppendFloat(out.vertexBytes, tan.Z); AppendFloat(out.vertexBytes, tan.W);
                 AppendFloat(out.vertexBytes, u); AppendFloat(out.vertexBytes, v);
+                if (out.skinned) { appendSkinning(); }
                 continue;
             }
 
@@ -842,19 +872,7 @@ namespace CNA::Internal::GltfImport
 
             if (out.skinned)
             {
-                AppendFloat(out.vertexBytes, weights[i4]);     AppendFloat(out.vertexBytes, weights[i4 + 1]);
-                AppendFloat(out.vertexBytes, weights[i4 + 2]); AppendFloat(out.vertexBytes, weights[i4 + 3]);
-
-                for (int k = 0; k < 4; ++k)
-                {
-                    const int oldJointIdx = static_cast<int>(joints[i4 + static_cast<std::size_t>(k)] + 0.5f);
-                    int newJointIdx = 0;
-                    if (oldJointIdx >= 0 && static_cast<std::size_t>(oldJointIdx) < skel->oldToNew.size())
-                    {
-                        newJointIdx = skel->oldToNew[static_cast<std::size_t>(oldJointIdx)];
-                    }
-                    out.vertexBytes.push_back(static_cast<std::uint8_t>(newJointIdx));
-                }
+                appendSkinning();
 
                 if (out.colored) { appendColor(); }
             }

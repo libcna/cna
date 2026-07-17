@@ -2304,6 +2304,26 @@ void main()
             vao.enable_attribute(5);
             vao.set_attribute_pointer(5, 4, ::easygl::DataType::UnsignedByte, true, s, (void*)52);
             break;
+        case 68:
+            // PBR + skinning combo (VertexPositionNormalTangentTextureSkinned): the stride-48
+            // Position+Normal+Tangent+TextureCoordinate layout with the stride-52/56 skinning
+            // suffix (BlendWeight, BlendIndices) appended, matching those precedents' own
+            // "append rather than insert" convention -- locations 0-3 stay byte-identical to the
+            // stride-48 PbrEffect layout, locations 4-5 mirror the stride-52 skinning suffix's
+            // own attribute shape.
+            vao.enable_attribute(0);
+            vao.set_attribute_pointer(0, 3, ::easygl::DataType::Float, false, s, (void*)0);
+            vao.enable_attribute(1);
+            vao.set_attribute_pointer(1, 3, ::easygl::DataType::Float, false, s, (void*)12);
+            vao.enable_attribute(2);
+            vao.set_attribute_pointer(2, 4, ::easygl::DataType::Float, false, s, (void*)24);
+            vao.enable_attribute(3);
+            vao.set_attribute_pointer(3, 2, ::easygl::DataType::Float, false, s, (void*)40);
+            vao.enable_attribute(4);
+            vao.set_attribute_pointer(4, 4, ::easygl::DataType::Float, false, s, (void*)48);
+            vao.enable_attribute(5);
+            vao.set_attribute_i_pointer(5, 4, ::easygl::DataType::UnsignedByte, s, (void*)64);
+            break;
         default:
             // Unknown layout: bind position-only as a safe fallback
             vao.enable_attribute(0);
@@ -3665,6 +3685,157 @@ void main()
         CNA_RENDER_LOG("pbr3D ready loc_wvp=" << p.loc_wvp);
     }
 
+    // PBR + skinning combo: EnsureSkinnedProgram()'s bone-palette vertex transform (applied to
+    // Position, Normal, and now also Tangent, since a skinned normal map needs a skinned TBN
+    // basis too) feeding EnsurePbrProgram()'s own fragment-stage BRDF unchanged -- the two
+    // programs' logic is additive, not a new algorithm (SkinnedPbrEffect, PBR+skinning combo).
+    void EasyGLGraphicsBackend::EnsurePbrSkinnedProgram()
+    {
+        if (prog_pbr_skinned_.ready) return;
+
+        static const char* vsrc =
+"#version 300 es\n"
+"precision highp float;\n"
+"layout(location=0) in vec3 aPos;\n"
+"layout(location=1) in vec3 aNormal;\n"
+"layout(location=2) in vec4 aTangent;\n"
+"layout(location=3) in vec2 aUV;\n"
+"layout(location=4) in vec4 aBoneWeights;\n"
+"layout(location=5) in uvec4 aBoneIndices;\n"
+"uniform mat4 uWVP;\n"
+"uniform mat4 uWorld;\n"
+"uniform mat4 uBones[72];\n"
+"uniform int uWeightsPerVertex;\n"
+"uniform float uFogEnabled;\n"
+"uniform float uFogStart;\n"
+"uniform float uFogEnd;\n"
+"out vec3 vNormal;\n"
+"out vec3 vTangent;\n"
+"out float vBitangentSign;\n"
+"out vec2 vUV;\n"
+"out float vFogFactor;\n"
+"out vec3 vWorldPos;\n"
+"void main(){\n"
+"    mat4 skinMat=uBones[aBoneIndices.x]*aBoneWeights.x;\n"
+"    if(uWeightsPerVertex>=2) skinMat+=uBones[aBoneIndices.y]*aBoneWeights.y;\n"
+"    if(uWeightsPerVertex>=4) skinMat+=uBones[aBoneIndices.z]*aBoneWeights.z+uBones[aBoneIndices.w]*aBoneWeights.w;\n"
+"    vec4 skinnedPos=skinMat*vec4(aPos,1.0);\n"
+"    gl_Position=uWVP*skinnedPos;\n"
+"    mat3 skinNormalMat=mat3(skinMat);\n"
+"    vNormal=normalize(mat3(uWorld)*(skinNormalMat*aNormal));\n"
+"    vTangent=mat3(uWorld)*(skinNormalMat*aTangent.xyz);\n"
+"    vBitangentSign=aTangent.w;\n"
+"    vUV=aUV;\n"
+"    vWorldPos=(uWorld*skinnedPos).xyz;\n"
+"    vFogFactor=(uFogEnabled>0.5)?((abs(uFogEnd-uFogStart)<1e-6)?0.0:clamp((aPos.z+uFogEnd)/(uFogEnd-uFogStart),0.0,1.0)):1.0;\n"
+"}\n";
+
+        static const char* fsrc =
+"#version 300 es\n"
+"precision mediump float;\n"
+"in vec3 vNormal;\n"
+"in vec3 vTangent;\n"
+"in float vBitangentSign;\n"
+"in vec2 vUV;\n"
+"in float vFogFactor;\n"
+"in vec3 vWorldPos;\n"
+"uniform sampler2D uTexture;\n"
+"uniform sampler2D uNormalMap;\n"
+"uniform sampler2D uMetallicRoughnessMap;\n"
+"uniform sampler2D uEmissiveMap;\n"
+"uniform sampler2D uOcclusionMap;\n"
+"uniform vec4 uDiffuseColor;\n"
+"uniform vec3 uAmbientColor;\n"
+"uniform vec3 uEmissiveColor;\n"
+"uniform float uMetallicFactor;\n"
+"uniform float uRoughnessFactor;\n"
+"uniform vec3 uLight0Dir;\n"
+"uniform vec3 uLight0Diffuse;\n"
+"uniform vec3 uLight1Dir;\n"
+"uniform vec3 uLight1Diffuse;\n"
+"uniform vec3 uLight2Dir;\n"
+"uniform vec3 uLight2Diffuse;\n"
+"uniform vec3 uEyePosition;\n"
+"uniform vec4 uAlphaTest;\n"
+"uniform vec3 uFogColor;\n"
+"out vec4 FragColor;\n"
+"vec3 PbrLight(vec3 N, vec3 V, vec3 L, vec3 lightColor, vec3 albedo, vec3 F0, float roughness, float metallic){\n"
+"    vec3 H=normalize(V+L);\n"
+"    float NdotL=max(dot(N,L),0.0);\n"
+"    float NdotV=max(dot(N,V),1e-4);\n"
+"    float NdotH=max(dot(N,H),0.0);\n"
+"    float VdotH=max(dot(V,H),0.0);\n"
+"    float a2=pow(roughness,4.0);\n"
+"    float dTerm=(NdotH*NdotH*(a2-1.0)+1.0);\n"
+"    float D=a2/(3.14159265*dTerm*dTerm+1e-7);\n"
+"    float k=(roughness+1.0); k=k*k/8.0;\n"
+"    float G=(NdotV/(NdotV*(1.0-k)+k))*(NdotL/(NdotL*(1.0-k)+k));\n"
+"    vec3 F=F0+(vec3(1.0)-F0)*pow(clamp(1.0-VdotH,0.0,1.0),5.0);\n"
+"    vec3 specular=(D*G*F)/max(4.0*NdotV*NdotL,1e-4);\n"
+"    vec3 diffuseColor=albedo*(1.0-metallic);\n"
+"    vec3 kd=vec3(1.0)-F;\n"
+"    return (kd*diffuseColor/3.14159265+specular)*lightColor*NdotL;\n"
+"}\n"
+"void main(){\n"
+"    vec4 baseColorTex=texture(uTexture,vUV);\n"
+"    vec3 albedo=baseColorTex.rgb*uDiffuseColor.rgb;\n"
+"    float alpha=baseColorTex.a*uDiffuseColor.a;\n"
+"    vec3 N=normalize(vNormal);\n"
+"    vec3 T=normalize(vTangent-N*dot(N,vTangent));\n"
+"    vec3 B=cross(N,T)*vBitangentSign;\n"
+"    mat3 TBN=mat3(T,B,N);\n"
+"    vec3 sampledNormal=texture(uNormalMap,vUV).rgb*2.0-1.0;\n"
+"    vec3 finalNormal=normalize(TBN*sampledNormal);\n"
+"    vec4 mr=texture(uMetallicRoughnessMap,vUV);\n"
+"    float roughness=clamp(mr.g*uRoughnessFactor,0.045,1.0);\n"
+"    float metallic=clamp(mr.b*uMetallicFactor,0.0,1.0);\n"
+"    vec3 V=normalize(uEyePosition-vWorldPos);\n"
+"    vec3 F0=mix(vec3(0.04),albedo,metallic);\n"
+"    vec3 Lo=vec3(0.0);\n"
+"    Lo+=PbrLight(finalNormal,V,normalize(-uLight0Dir),uLight0Diffuse,albedo,F0,roughness,metallic);\n"
+"    Lo+=PbrLight(finalNormal,V,normalize(-uLight1Dir),uLight1Diffuse,albedo,F0,roughness,metallic);\n"
+"    Lo+=PbrLight(finalNormal,V,normalize(-uLight2Dir),uLight2Diffuse,albedo,F0,roughness,metallic);\n"
+"    float occlusion=texture(uOcclusionMap,vUV).r;\n"
+"    vec3 ambient=uAmbientColor*albedo*occlusion;\n"
+"    vec3 emissive=uEmissiveColor*texture(uEmissiveMap,vUV).rgb;\n"
+"    FragColor=vec4(ambient+Lo+emissive,alpha);\n"
+"    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
+"    if(_at<0.0)discard;\n"
+"    FragColor.rgb=mix(uFogColor,FragColor.rgb,vFogFactor);\n"
+"}\n";
+
+        CompileAndLink(prog_pbr_skinned_.prog, vsrc, fsrc, "pbr_skinned");
+        auto& p = prog_pbr_skinned_;
+        p.loc_wvp       = p.prog.uniform_location("uWVP");
+        p.loc_world     = p.prog.uniform_location("uWorld");
+        p.loc_bones     = p.prog.uniform_location("uBones[0]");
+        p.loc_weightsPerVertex = p.prog.uniform_location("uWeightsPerVertex");
+        p.loc_diffuse   = p.prog.uniform_location("uDiffuseColor");
+        p.loc_ambient   = p.prog.uniform_location("uAmbientColor");
+        p.loc_emissive  = p.prog.uniform_location("uEmissiveColor");
+        p.loc_l0dir     = p.prog.uniform_location("uLight0Dir");
+        p.loc_l0diff    = p.prog.uniform_location("uLight0Diffuse");
+        p.loc_l1dir     = p.prog.uniform_location("uLight1Dir");
+        p.loc_l1diff    = p.prog.uniform_location("uLight1Diffuse");
+        p.loc_l2dir     = p.prog.uniform_location("uLight2Dir");
+        p.loc_l2diff    = p.prog.uniform_location("uLight2Diffuse");
+        p.loc_eyepos    = p.prog.uniform_location("uEyePosition");
+        p.loc_texture   = p.prog.uniform_location("uTexture");
+        p.loc_pbr_normalmap     = p.prog.uniform_location("uNormalMap");
+        p.loc_pbr_mr            = p.prog.uniform_location("uMetallicRoughnessMap");
+        p.loc_pbr_emissivemap   = p.prog.uniform_location("uEmissiveMap");
+        p.loc_pbr_occlusionmap  = p.prog.uniform_location("uOcclusionMap");
+        p.loc_pbr_metallic      = p.prog.uniform_location("uMetallicFactor");
+        p.loc_pbr_roughness     = p.prog.uniform_location("uRoughnessFactor");
+        p.loc_alphatest = p.prog.uniform_location("uAlphaTest");
+        p.loc_fog_enabled = p.prog.uniform_location("uFogEnabled");
+        p.loc_fog_color   = p.prog.uniform_location("uFogColor");
+        p.loc_fog_start   = p.prog.uniform_location("uFogStart");
+        p.loc_fog_end     = p.prog.uniform_location("uFogEnd");
+        p.ready         = true;
+        CNA_RENDER_LOG("pbr_skinned3D ready loc_wvp=" << p.loc_wvp << " loc_bones=" << p.loc_bones);
+    }
+
     void EasyGLGraphicsBackend::EnsureDefaultWhiteTexture()
     {
         if (default_white_texture_ready_) return;
@@ -3692,6 +3863,11 @@ void main()
     EasyGLGraphicsBackend::Prog3D& EasyGLGraphicsBackend::SelectProgram(std::size_t stride,
                                                                           const GpuDrawParams& params)
     {
+        if (params.pbr && params.skinned)
+        {
+            EnsurePbrSkinnedProgram();
+            return prog_pbr_skinned_;
+        }
         if (params.pbr)
         {
             EnsurePbrProgram();

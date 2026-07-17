@@ -36,6 +36,7 @@
 #include "Microsoft/Xna/Framework/Graphics/MorphTargetEXT.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PbrEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SkinnedPbrEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 
 using namespace Microsoft::Xna::Framework;
@@ -244,6 +245,57 @@ namespace
     { "bufferView": 3, "componentType": 5126, "count": 3, "type": "VEC2" }
   ]
 })GLTF";
+
+    // PBR + skinning combo: a single-bone skinned triangle whose material has base-color + normal
+    // maps and an explicit TANGENT accessor -- proves ReadGltfModel() wires up SkinnedPbrEffect
+    // (stride 68) directly, with no .cnj/binary sidecars, same as kPbrTriangleGltf above but with
+    // JOINTS_0/WEIGHTS_0/skin added (mirrors GltfToCnjToolTests.cpp's own kSkinnedPbrGltf fixture).
+    const char* kSkinnedPbrTriangleGltf = R"GLTF({
+  "asset": { "version": "2.0" },
+  "scene": 0,
+  "scenes": [ { "nodes": [0, 1] } ],
+  "nodes": [
+    { "name": "RootBone", "translation": [0, 0, 0] },
+    { "name": "MeshNode", "mesh": 0, "skin": 0 }
+  ],
+  "meshes": [ { "primitives": [ { "attributes": {
+      "POSITION": 0, "NORMAL": 1, "TANGENT": 2, "TEXCOORD_0": 3, "JOINTS_0": 4, "WEIGHTS_0": 5
+  }, "material": 0 } ] } ],
+  "materials": [ {
+    "pbrMetallicRoughness": { "baseColorTexture": { "index": 0 } },
+    "normalTexture": { "index": 1 }
+  } ],
+  "textures": [ { "source": 0 }, { "source": 1 } ],
+  "images": [
+    { "bufferView": 7, "mimeType": "image/png" },
+    { "bufferView": 8, "mimeType": "image/png" }
+  ],
+  "skins": [ { "joints": [0], "inverseBindMatrices": 6 } ],
+  "buffers": [ {
+    "byteLength": 418,
+    "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AACAPwAAAAAAAAAAAACAPwAAgD8AAAAAAAAAAAAAgD8AAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAAAAAACAP4lQTkcNChoKAAAADUlIRFIAAAABAAAAAQgCAAAAkHdT3gAAAAxJREFUeJxj+M/AAAADAQEAyf6S7wAAAABJRU5ErkJggolQTkcNChoKAAAADUlIRFIAAAABAAAAAQgCAAAAkHdT3gAAAAxJREFUeJxj+M/AAAADAQEAyf6S7wAAAABJRU5ErkJggg=="
+  } ],
+  "bufferViews": [
+    { "buffer": 0, "byteOffset": 0,   "byteLength": 36 },
+    { "buffer": 0, "byteOffset": 36,  "byteLength": 36 },
+    { "buffer": 0, "byteOffset": 72,  "byteLength": 48 },
+    { "buffer": 0, "byteOffset": 120, "byteLength": 24 },
+    { "buffer": 0, "byteOffset": 144, "byteLength": 24 },
+    { "buffer": 0, "byteOffset": 168, "byteLength": 48 },
+    { "buffer": 0, "byteOffset": 216, "byteLength": 64 },
+    { "buffer": 0, "byteOffset": 280, "byteLength": 69 },
+    { "buffer": 0, "byteOffset": 349, "byteLength": 69 }
+  ],
+  "accessors": [
+    { "bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3", "min": [0,0,0], "max": [1,1,0] },
+    { "bufferView": 1, "componentType": 5126, "count": 3, "type": "VEC3" },
+    { "bufferView": 2, "componentType": 5126, "count": 3, "type": "VEC4" },
+    { "bufferView": 3, "componentType": 5126, "count": 3, "type": "VEC2" },
+    { "bufferView": 4, "componentType": 5123, "count": 3, "type": "VEC4" },
+    { "bufferView": 5, "componentType": 5126, "count": 3, "type": "VEC4" },
+    { "bufferView": 6, "componentType": 5126, "count": 1, "type": "MAT4" }
+  ]
+})GLTF";
 }
 
 TEST(RuntimeGltfModelTest, LoadsUnskinnedTexturedModelDirectlyFromGltf)
@@ -399,4 +451,35 @@ TEST(RuntimeGltfModelTest, LoadsPbrMaterialWithAllFourMapsAndFactorsFromGltf)
     EXPECT_NEAR(emissiveFactor.X, 0.1f, 1e-5f);
     EXPECT_NEAR(emissiveFactor.Y, 0.2f, 1e-5f);
     EXPECT_NEAR(emissiveFactor.Z, 0.3f, 1e-5f);
+}
+
+// PBR + skinning combo: a skinned, PBR-mapped mesh loaded directly from a .gltf file (no
+// .cnj/binary sidecars) must wire up SkinnedPbrEffect (stride 68), not fall back to plain
+// SkinnedEffect or plain PbrEffect.
+TEST(RuntimeGltfModelTest, LoadsSkinnedPbrMaterialDirectlyFromGltf)
+{
+    ScratchDir contentRoot;
+    WriteFile(contentRoot.path() / "skinnedpbr.gltf", kSkinnedPbrTriangleGltf);
+
+    GraphicsDevice gd;
+    ContentManager cm(nullptr, contentRoot.path().string());
+    cm.setGraphicsDevice(gd);
+
+    Model model = cm.Load<Model>("skinnedpbr");
+    ASSERT_EQ(model.getMeshesProperty().getCountProperty(), 1);
+    ModelMesh* mesh = model.getMeshesProperty()[0];
+
+    auto* skinnedPbrFx = dynamic_cast<SkinnedPbrEffect*>(mesh->getMeshPartsProperty()[0]->getEffectProperty());
+    ASSERT_NE(skinnedPbrFx, nullptr);
+
+    Texture2D* baseColor = skinnedPbrFx->getTextureProperty();
+    Texture2D* normalMap = skinnedPbrFx->getNormalMapProperty();
+    ASSERT_NE(baseColor, nullptr);
+    ASSERT_NE(normalMap, nullptr);
+    EXPECT_EQ(baseColor->getWidthProperty(), 1);
+    EXPECT_EQ(normalMap->getWidthProperty(), 1);
+
+    auto* skinningData = static_cast<SkinningData*>(model.getTagProperty());
+    ASSERT_NE(skinningData, nullptr);
+    EXPECT_EQ(skinningData->BoneCount, 1);
 }

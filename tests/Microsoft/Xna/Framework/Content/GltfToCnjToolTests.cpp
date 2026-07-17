@@ -59,6 +59,7 @@
 #include "Microsoft/Xna/Framework/Graphics/PbrEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshPartCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SkinnedPbrEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 
@@ -656,6 +657,57 @@ namespace
   ]
 })GLTF";
 
+    // PBR + skinning combo: a single-bone skinned triangle whose material has base-color + normal
+    // maps and an explicit TANGENT accessor -- proves the offline CLI tool serializes
+    // SkinnedPbrEffect (stride 68, VertexPositionNormalTangentTextureSkinned) rather than falling
+    // back to SkinnedEffect or PbrEffect alone.
+    const char* kSkinnedPbrGltf = R"GLTF({
+  "asset": { "version": "2.0" },
+  "scene": 0,
+  "scenes": [ { "nodes": [0, 1] } ],
+  "nodes": [
+    { "name": "RootBone", "translation": [0, 0, 0] },
+    { "name": "MeshNode", "mesh": 0, "skin": 0 }
+  ],
+  "meshes": [ { "primitives": [ { "attributes": {
+      "POSITION": 0, "NORMAL": 1, "TANGENT": 2, "TEXCOORD_0": 3, "JOINTS_0": 4, "WEIGHTS_0": 5
+  }, "material": 0 } ] } ],
+  "materials": [ {
+    "pbrMetallicRoughness": { "baseColorTexture": { "index": 0 } },
+    "normalTexture": { "index": 1 }
+  } ],
+  "textures": [ { "source": 0 }, { "source": 1 } ],
+  "images": [
+    { "bufferView": 7, "mimeType": "image/png" },
+    { "bufferView": 8, "mimeType": "image/png" }
+  ],
+  "skins": [ { "joints": [0], "inverseBindMatrices": 6 } ],
+  "buffers": [ {
+    "byteLength": 418,
+    "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AACAPwAAAAAAAAAAAACAPwAAgD8AAAAAAAAAAAAAgD8AAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAAAAAACAP4lQTkcNChoKAAAADUlIRFIAAAABAAAAAQgCAAAAkHdT3gAAAAxJREFUeJxj+M/AAAADAQEAyf6S7wAAAABJRU5ErkJggolQTkcNChoKAAAADUlIRFIAAAABAAAAAQgCAAAAkHdT3gAAAAxJREFUeJxj+M/AAAADAQEAyf6S7wAAAABJRU5ErkJggg=="
+  } ],
+  "bufferViews": [
+    { "buffer": 0, "byteOffset": 0,   "byteLength": 36 },
+    { "buffer": 0, "byteOffset": 36,  "byteLength": 36 },
+    { "buffer": 0, "byteOffset": 72,  "byteLength": 48 },
+    { "buffer": 0, "byteOffset": 120, "byteLength": 24 },
+    { "buffer": 0, "byteOffset": 144, "byteLength": 24 },
+    { "buffer": 0, "byteOffset": 168, "byteLength": 48 },
+    { "buffer": 0, "byteOffset": 216, "byteLength": 64 },
+    { "buffer": 0, "byteOffset": 280, "byteLength": 69 },
+    { "buffer": 0, "byteOffset": 349, "byteLength": 69 }
+  ],
+  "accessors": [
+    { "bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3", "min": [0,0,0], "max": [1,1,0] },
+    { "bufferView": 1, "componentType": 5126, "count": 3, "type": "VEC3" },
+    { "bufferView": 2, "componentType": 5126, "count": 3, "type": "VEC4" },
+    { "bufferView": 3, "componentType": 5126, "count": 3, "type": "VEC2" },
+    { "bufferView": 4, "componentType": 5123, "count": 3, "type": "VEC4" },
+    { "bufferView": 5, "componentType": 5126, "count": 3, "type": "VEC4" },
+    { "bufferView": 6, "componentType": 5126, "count": 1, "type": "MAT4" }
+  ]
+})GLTF";
+
     // Spawns the real cna_tool_gltf_to_cnj executable and waits for it to exit. Returns the exit
     // code, or -1 on a spawn-side failure (already reported via ADD_FAILURE). unitScale is passed
     // as the tool's optional 5th CLI argument when non-empty.
@@ -1200,4 +1252,52 @@ TEST(GltfToCnjToolTest, SerializesAndReloadsPbrMaterialThroughTheOfflineCnjPath)
     EXPECT_NEAR(emissiveFactor.X, 0.1f, 1e-5f);
     EXPECT_NEAR(emissiveFactor.Y, 0.2f, 1e-5f);
     EXPECT_NEAR(emissiveFactor.Z, 0.3f, 1e-5f);
+}
+
+// PBR + skinning combo: the offline CLI tool must serialize a skinned, PBR-mapped mesh through
+// SkinnedPbrEffect (stride 68), not fall back to plain SkinnedEffect (losing the normal map) or
+// plain PbrEffect (losing the skin -- see gltf_to_cnj.cpp's own effect-selection comment).
+TEST(GltfToCnjToolTest, SerializesAndReloadsSkinnedPbrMaterialThroughTheOfflineCnjPath)
+{
+    ScratchDir gltfDir;
+    ScratchDir contentRoot;
+
+    const std::filesystem::path gltfPath = gltfDir.path() / "skinnedpbr.gltf";
+    WriteFile(gltfPath, kSkinnedPbrGltf);
+
+    const int exitCode = RunGltfToCnjTool(gltfPath.string(), contentRoot.path().string(), "skinnedpbr");
+    ASSERT_EQ(exitCode, 0);
+    ASSERT_TRUE(std::filesystem::exists(contentRoot.path() / "skinnedpbr_tex0.png"));
+    ASSERT_TRUE(std::filesystem::exists(contentRoot.path() / "skinnedpbr_tex1.png"));
+    ASSERT_TRUE(std::filesystem::exists(contentRoot.path() / "skinnedpbr.skeleton.bin"));
+
+    const std::filesystem::path vertsPath = contentRoot.path() / "skinnedpbr_mesh0_verts.bin";
+    std::ifstream f(vertsPath, std::ios::binary);
+    std::vector<char> bytes((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+    ASSERT_EQ(bytes.size(), 3u * 68u); // stride 68, VertexPositionNormalTangentTextureSkinned
+
+    float tangent0[4];
+    std::memcpy(tangent0, bytes.data() + 24, sizeof(tangent0));
+    EXPECT_NEAR(tangent0[0], 1.0f, 1e-5f);
+    EXPECT_NEAR(tangent0[3], 1.0f, 1e-5f);
+
+    float weight0[4];
+    std::memcpy(weight0, bytes.data() + 48, sizeof(weight0));
+    EXPECT_NEAR(weight0[0], 1.0f, 1e-5f);
+
+    GraphicsDevice gd;
+    ContentManager cm(nullptr, contentRoot.path().string());
+    cm.setGraphicsDevice(gd);
+    Model model = cm.Load<Model>("skinnedpbr");
+    ASSERT_EQ(model.getMeshesProperty().getCountProperty(), 1);
+    ModelMesh* mesh = model.getMeshesProperty()[0];
+
+    auto* skinningData = static_cast<SkinningData*>(model.getTagProperty());
+    ASSERT_NE(skinningData, nullptr);
+    EXPECT_EQ(skinningData->BoneCount, 1);
+
+    auto* skinnedPbrFx = dynamic_cast<SkinnedPbrEffect*>(mesh->getMeshPartsProperty()[0]->getEffectProperty());
+    ASSERT_NE(skinnedPbrFx, nullptr);
+    ASSERT_NE(skinnedPbrFx->getTextureProperty(), nullptr);
+    ASSERT_NE(skinnedPbrFx->getNormalMapProperty(), nullptr);
 }
