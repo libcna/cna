@@ -24,11 +24,13 @@
 // DualTextureEffect's Texture2 are each mutually exclusive with the other and, for Texture2, with
 // skinning.
 //
-// CNB-64 (Phase 13B): GltfImportCore::ExtractMesh always extracts morph target deltas, but this
-// offline .cnj export does not yet serialize them (a warning is emitted per morphed primitive
-// rather than silently dropping them) -- morph targets are fully supported through the runtime
-// glTF path only (Content.Load<Model>("*.gltf"), see ModelTypeReader::ReadGltfModel() in
-// ContentManager.cpp and MorphTargetEXT.hpp's own doc comments).
+// plan_cnj.md CNB-82/83 (Phase 14C): morph target position/normal deltas (GltfImportCore::
+// ExtractMesh always extracts them), the default blend weights, and an optional weight animation
+// track are serialized to a per-primitive binary sidecar (BuildMorphBytes) plus "morphTargets"/
+// "morphWeights"/"morphWeightTrack" mesh-entry JSON fields, read back by ModelTypeReader::Read()'s
+// own .cnj JSON path in ContentManager.cpp (mirroring the runtime glTF path's own MorphTargetDataEXT
+// wiring -- see MorphTargetEXT.hpp's own doc comments). Formerly a documented scope cut (CNB-64,
+// Phase 13B); now fully serialized through both the offline CLI/.cnj path and the runtime glTF path.
 
 #include "CNA/Internal/GltfImport/GltfImportCore.hpp"
 
@@ -38,6 +40,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <optional>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -78,6 +81,43 @@ namespace
         AppendFloat(out, m.M21); AppendFloat(out, m.M22); AppendFloat(out, m.M23); AppendFloat(out, m.M24);
         AppendFloat(out, m.M31); AppendFloat(out, m.M32); AppendFloat(out, m.M33); AppendFloat(out, m.M34);
         AppendFloat(out, m.M41); AppendFloat(out, m.M42); AppendFloat(out, m.M43); AppendFloat(out, m.M44);
+    }
+
+    // Morph target CLI/.cnj serialization: one binary sidecar per morphed primitive, format:
+    //   int32 targetCount
+    //   repeat targetCount times:
+    //     int32 vertexCount
+    //     vertexCount * float32[3]   (position deltas)
+    //     int32 hasNormalDeltas (0 or 1)
+    //     if hasNormalDeltas: vertexCount * float32[3]   (normal deltas)
+    // Mirrors BinReaderEXT's own byte order (sequential little-endian floats/int32s, native
+    // memcpy) already used by the .skeleton.bin/.clip.bin formats in ContentManager.cpp.
+    std::vector<std::uint8_t> BuildMorphBytes(const MeshOut& meshOut)
+    {
+        std::vector<std::uint8_t> out;
+        const auto targetCount = meshOut.morphPositionDeltas.size();
+        AppendInt32(out, static_cast<std::int32_t>(targetCount));
+        for (std::size_t t = 0; t < targetCount; ++t)
+        {
+            const auto& positions = meshOut.morphPositionDeltas[t];
+            AppendInt32(out, static_cast<std::int32_t>(positions.size()));
+            for (const Vector3& p : positions)
+            {
+                AppendFloat(out, p.X); AppendFloat(out, p.Y); AppendFloat(out, p.Z);
+            }
+
+            const bool hasNormals = t < meshOut.morphNormalDeltas.size()
+                                     && !meshOut.morphNormalDeltas[t].empty();
+            AppendInt32(out, hasNormals ? 1 : 0);
+            if (hasNormals)
+            {
+                for (const Vector3& n : meshOut.morphNormalDeltas[t])
+                {
+                    AppendFloat(out, n.X); AppendFloat(out, n.Y); AppendFloat(out, n.Z);
+                }
+            }
+        }
+        return out;
     }
 
     void WriteBinaryFile(const std::filesystem::path& path, const std::vector<std::uint8_t>& bytes)
@@ -150,6 +190,12 @@ namespace
             std::string normalMapFile, metallicRoughnessMapFile, emissiveMapFile, pbrOcclusionMapFile;
             float metallicFactor = 1.0f, roughnessFactor = 1.0f;
             Vector3 emissiveFactor;
+            // Morph target CLI/.cnj serialization: morphFile is the binary sidecar path (empty =
+            // no morph targets on this primitive), morphWeights are the default blend weights, and
+            // morphWeightTrack (optional) is the "weights" animation channel, if any.
+            std::string morphFile;
+            std::vector<float> morphWeights;
+            std::optional<MorphWeightTrackOut> morphWeightTrack;
         };
         std::vector<MeshEntry> meshEntries;
 
@@ -163,19 +209,20 @@ namespace
                     : ("mesh" + std::to_string(meshCounter));
                 MeshOut meshOut = ExtractMesh(mesh->primitives[p], partName, hasSkin ? &skeleton : nullptr, unitScale);
 
-                // CNB-64 (Phase 13B): morph targets are extracted (GltfImportCore::ExtractMesh
-                // always populates them) but this offline .cnj export does not yet serialize them
-                // -- a documented, deliberate scope cut, not silent data loss. Runtime loading
-                // (Content.Load<Model>("*.gltf"), ModelTypeReader::ReadGltfModel) does support
-                // morph targets fully; use that path instead if morph targets matter.
+                // Morph target CLI/.cnj serialization: write the position/normal deltas to a
+                // binary sidecar (BuildMorphBytes) plus the default weights and (if present) the
+                // weight animation track, both threaded through MeshEntry into the JSON below.
+                std::string morphFile;
+                std::vector<float> morphWeights;
+                std::optional<MorphWeightTrackOut> morphWeightTrack;
                 if (!meshOut.morphPositionDeltas.empty())
                 {
-                    warnings.push_back(
-                        "Primitive '" + partName + "' has " +
-                        std::to_string(meshOut.morphPositionDeltas.size()) +
-                        " morph target(s), which this offline .cnj export does not yet serialize "
-                        "-- load the .gltf/.glb file directly via Content.Load<Model>() instead "
-                        "if morph targets are needed.");
+                    morphFile = outName + "_mesh" + std::to_string(meshCounter) + "_morph.bin";
+                    WriteBinaryFile(outputDir / morphFile, BuildMorphBytes(meshOut));
+
+                    const std::size_t targetCount = meshOut.morphPositionDeltas.size();
+                    morphWeights = GetMeshDefaultWeights(mesh, targetCount);
+                    morphWeightTrack = ExtractMorphWeightTrack(data, mesh, targetCount);
                 }
 
                 // Per-map UV set selection: PbrEffect/SkinnedPbrEffect sample every map from a
@@ -289,6 +336,9 @@ namespace
                 entry.roughnessFactor = meshOut.roughnessFactor;
                 entry.emissiveFactor = meshOut.emissiveFactor;
                 entry.vertexColorEnabled = meshOut.colored;
+                entry.morphFile = morphFile;
+                entry.morphWeights = morphWeights;
+                entry.morphWeightTrack = morphWeightTrack;
                 meshEntries.push_back(entry);
                 ++meshCounter;
             }
@@ -378,6 +428,32 @@ namespace
                 json << ", \"metallicFactor\": " << e.metallicFactor
                      << ", \"roughnessFactor\": " << e.roughnessFactor
                      << ", \"emissiveFactor\": [" << e.emissiveFactor.X << ", " << e.emissiveFactor.Y << ", " << e.emissiveFactor.Z << "]";
+            }
+            if (!e.morphFile.empty())
+            {
+                json << ", \"morphTargets\": \"" << JsonEscape(e.morphFile) << "\", \"morphWeights\": [";
+                for (std::size_t w = 0; w < e.morphWeights.size(); ++w)
+                {
+                    json << e.morphWeights[w] << (w + 1 < e.morphWeights.size() ? ", " : "");
+                }
+                json << "]";
+                if (e.morphWeightTrack)
+                {
+                    const MorphWeightTrackOut& track = *e.morphWeightTrack;
+                    json << ", \"morphWeightTrack\": { \"stepInterpolation\": "
+                         << (track.stepInterpolation ? "true" : "false") << ", \"keys\": [\n";
+                    for (std::size_t ki = 0; ki < track.keys.size(); ++ki)
+                    {
+                        const MorphWeightKeyframeOut& k = track.keys[ki];
+                        json << "        { \"time\": " << k.time << ", \"weights\": [";
+                        for (std::size_t w = 0; w < k.weights.size(); ++w)
+                        {
+                            json << k.weights[w] << (w + 1 < k.weights.size() ? ", " : "");
+                        }
+                        json << "] }" << (ki + 1 < track.keys.size() ? "," : "") << "\n";
+                    }
+                    json << "      ] }";
+                }
             }
             json << " }" << (i + 1 < meshEntries.size() ? "," : "") << "\n";
         }

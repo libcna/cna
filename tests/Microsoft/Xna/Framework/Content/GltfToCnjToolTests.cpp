@@ -58,6 +58,7 @@
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshPart.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PbrEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshPartCollection.hpp"
+#include "Microsoft/Xna/Framework/Graphics/MorphTargetEXT.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedPbrEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
@@ -213,6 +214,47 @@ namespace
     { "bufferView": 3, "componentType": 5123, "count": 3, "type": "VEC4" },
     { "bufferView": 4, "componentType": 5126, "count": 3, "type": "VEC4" },
     { "bufferView": 6, "componentType": 5126, "count": 1, "type": "MAT4" }
+  ]
+})GLTF";
+
+    // Morph target CLI/.cnj serialization: an unskinned triangle with one morph target (POSITION
+    // delta only, uniform +Z=1 per vertex), a non-zero default weight (mesh.weights=[0.5]), and a
+    // LINEAR "weights" animation channel (0.0 at t=0 -> 1.0 at t=1) -- identical fixture to
+    // RuntimeGltfModelTests.cpp's own kMorphedTriangleGltf, reused here to prove the offline CLI/
+    // .cnj round-trip produces the same MorphTargetDataEXT the runtime glTF path already does.
+    const char* kMorphedTriangleGltf = R"GLTF({
+  "asset": { "version": "2.0" },
+  "scene": 0,
+  "scenes": [ { "nodes": [0] } ],
+  "nodes": [ { "name": "MeshNode", "mesh": 0 } ],
+  "meshes": [ {
+    "primitives": [ { "attributes": { "POSITION": 0, "NORMAL": 1, "TEXCOORD_0": 2 }, "targets": [ { "POSITION": 3 } ] } ],
+    "weights": [0.5]
+  } ],
+  "animations": [ {
+    "name": "Morph",
+    "samplers": [ { "input": 4, "output": 5, "interpolation": "LINEAR" } ],
+    "channels": [ { "sampler": 0, "target": { "node": 0, "path": "weights" } } ]
+  } ],
+  "buffers": [ {
+    "byteLength": 148,
+    "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAgD8AAAAAAACAPw=="
+  } ],
+  "bufferViews": [
+    { "buffer": 0, "byteOffset": 0,   "byteLength": 36 },
+    { "buffer": 0, "byteOffset": 36,  "byteLength": 36 },
+    { "buffer": 0, "byteOffset": 72,  "byteLength": 24 },
+    { "buffer": 0, "byteOffset": 96,  "byteLength": 36 },
+    { "buffer": 0, "byteOffset": 132, "byteLength": 8 },
+    { "buffer": 0, "byteOffset": 140, "byteLength": 8 }
+  ],
+  "accessors": [
+    { "bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3", "min": [0,0,0], "max": [1,1,0] },
+    { "bufferView": 1, "componentType": 5126, "count": 3, "type": "VEC3" },
+    { "bufferView": 2, "componentType": 5126, "count": 3, "type": "VEC2" },
+    { "bufferView": 3, "componentType": 5126, "count": 3, "type": "VEC3" },
+    { "bufferView": 4, "componentType": 5126, "count": 2, "type": "SCALAR", "min": [0.0], "max": [1.0] },
+    { "bufferView": 5, "componentType": 5126, "count": 2, "type": "SCALAR", "min": [0.0], "max": [1.0] }
   ]
 })GLTF";
 
@@ -1300,4 +1342,54 @@ TEST(GltfToCnjToolTest, SerializesAndReloadsSkinnedPbrMaterialThroughTheOfflineC
     ASSERT_NE(skinnedPbrFx, nullptr);
     ASSERT_NE(skinnedPbrFx->getTextureProperty(), nullptr);
     ASSERT_NE(skinnedPbrFx->getNormalMapProperty(), nullptr);
+}
+
+// Morph target CLI/.cnj serialization: the offline CLI tool must write a binary morph sidecar +
+// "morphTargets"/"morphWeights"/"morphWeightTrack" JSON fields, and ModelTypeReader's own .cnj
+// JSON path must reconstruct the same MorphTargetDataEXT the runtime glTF path already builds
+// directly (formerly a documented scope cut -- CNB-64/Phase 13B -- that only emitted a warning).
+TEST(GltfToCnjToolTest, SerializesAndReloadsMorphTargetsThroughTheOfflineCnjPath)
+{
+    ScratchDir gltfDir;
+    ScratchDir contentRoot;
+
+    const std::filesystem::path gltfPath = gltfDir.path() / "morph.gltf";
+    WriteFile(gltfPath, kMorphedTriangleGltf);
+
+    const int exitCode = RunGltfToCnjTool(gltfPath.string(), contentRoot.path().string(), "morph");
+    ASSERT_EQ(exitCode, 0);
+    ASSERT_TRUE(std::filesystem::exists(contentRoot.path() / "morph_mesh0_morph.bin"));
+
+    GraphicsDevice gd;
+    ContentManager cm(nullptr, contentRoot.path().string());
+    cm.setGraphicsDevice(gd);
+    Model model = cm.Load<Model>("morph");
+    ASSERT_EQ(model.getMeshesProperty().getCountProperty(), 1);
+    ModelMesh* mesh = model.getMeshesProperty()[0];
+    ModelMeshPart* part = mesh->getMeshPartsProperty()[0];
+
+    auto* morph = dynamic_cast<MorphTargetDataEXT*>(part->getTagProperty());
+    ASSERT_NE(morph, nullptr);
+    ASSERT_EQ(morph->PositionDeltas.size(), 1u);
+    ASSERT_EQ(morph->PositionDeltas[0].size(), 3u);
+    EXPECT_NEAR(morph->PositionDeltas[0][0].Z, 1.0f, 1e-5f);
+    EXPECT_TRUE(morph->NormalDeltas[0].empty());
+
+    // mesh.weights=[0.5] must already be reflected in both Weights and the uploaded vertex
+    // buffer, exactly like RuntimeGltfModelTest's own identical assertion for the runtime path.
+    ASSERT_EQ(morph->Weights.size(), 1u);
+    EXPECT_NEAR(morph->Weights[0], 0.5f, 1e-5f);
+    const auto blendedAtDefault = BlendMorphTargetsEXT(*morph, morph->Weights);
+    float z0;
+    std::memcpy(&z0, blendedAtDefault.data() + 2 * sizeof(float), sizeof(float));
+    EXPECT_NEAR(z0, 0.5f, 1e-5f);
+
+    // Weight animation: LINEAR 0.0 at t=0 -> 1.0 at t=1.
+    ASSERT_EQ(morph->WeightTrack.Keys.size(), 2u);
+    EXPECT_FALSE(morph->WeightTrack.StepInterpolation);
+    EXPECT_NEAR(morph->WeightTrack.Keys[0].Weights[0], 0.0f, 1e-5f);
+    EXPECT_NEAR(morph->WeightTrack.Keys[1].Weights[0], 1.0f, 1e-5f);
+    const auto midWeights = EvaluateMorphWeightsEXT(morph->WeightTrack, 0.5);
+    ASSERT_EQ(midWeights.size(), 1u);
+    EXPECT_NEAR(midWeights[0], 0.5f, 1e-5f);
 }

@@ -1,5 +1,11 @@
 # `.cnj` content format — implementation plan for CNA
 
+> **Status update (2026-07-17): Phase 14C also closed.** Morph target position/normal deltas,
+> default weights, and weight-track animation now serialize through the offline `gltf_to_cnj`
+> CLI/`.cnj` path too (a new binary sidecar + 3 new mesh-entry JSON fields), not just the runtime
+> glTF path — closing a scope cut CNB-64 (Phase 13B) had left open. See Phase 14's own section for
+> full detail.
+>
 > **Status update (2026-07-17): Phase 14A and 14B also closed.** Phase 14 (`CNB-75`–) is a
 > follow-up to Phase 13, opened by the project owner's "vse udelej prosim" (please do everything)
 > after a post-Phase-13 gap survey. 14A (`CNB-75`–`CNB-79`, PBR + skinning combo) is done: a new
@@ -503,15 +509,29 @@ onto `.cnj`, `RegisterCnjLoader<T>`, and Phase 9's hardening of those mechanisms
 | CNB-80 | Detect per-map UV-set divergence in `GltfImportCore::ExtractMesh` | ✅ | New `MeshOut::pbrUv2Mismatch` (bool): true when `usePbr` is true and any present map's own `cgltf_texture_view::texcoord` (read directly off `material->normal_texture`/`emissive_texture`/`occlusion_texture`/`pbr_metallic_roughness.metallic_roughness_texture`) differs from the base-color texture's own `texcoordIndex` (the one actually baked into the vertex buffer's `TextureCoordinate` slot). Zero behavior change to rendering or to the common (non-divergent) case — purely additive detection. |
 | CNB-81 | Surface the divergence as a warning (offline CLI path); tests | ✅ | `gltf_to_cnj.cpp`'s `ConvertGroup` pushes a warning (mirrors the pre-existing morph-target-not-serialized warning's exact pattern) when `meshOut.pbrUv2Mismatch` is true, printed to stdout at the end of a run alongside any other warnings. New direct-unit-test file `tests/CNA/Internal/GltfImport/GltfImportCoreTests.cpp` (`GltfImportCoreTest.ExtractMeshDetectsMismatchedPbrMapUvSets` / `...DoesNotFlagMatchedPbrMapUvSets`) calls `ExtractMesh()` in-process against two small fixtures (base color on `TEXCOORD_0` + normal map on `TEXCOORD_1` vs. both on `TEXCOORD_0`) — the first test genuinely caught a fixture-authoring bug during development (used the invalid lowercase JSON key `"texcoord"` instead of the glTF spec's actual `"texCoord"`, which `cgltf` silently ignores and defaults to 0 -- both fixtures looked "matched" until the key casing was fixed). `CnaTests` needed a new `target_include_directories` entry for `third_party/cgltf` (previously only `PRIVATE` on the `CNA` target itself, not propagated to the separate `CnaTests` target) to include `GltfImportCore.hpp` directly. Full-suite regression: **4826 tests, 0 failures.** |
 
-### 14C — Remaining "vse udelej prosim" items ⬜ NOT STARTED
+### 14C — Morph target CLI/`.cnj` serialization ✅ CLOSED 2026-07-17
 
-> Task numbering reserved (`CNB-82`+) for whichever item is picked up next: true multi-UV-channel
-> rendering support for PBR maps (14B's own explicitly-deferred full fix), morph target `.cnj`/CLI
-> serialization, CUBICSPLINE morph-weight animation interpolation, `DualTextureEffect` occlusion
-> brightness fix (needs an image codec), Draco mesh compression, full MikkTSpace tangent
-> generation, newer glTF extensions (`KHR_texture_transform`/`KHR_lights_punctual`/
-> `KHR_materials_emissive_strength`), and PBR/skinned-vertex-color shader support on the other 7+
-> graphics backends (CNB-61/13C's own deliberately-deferred scope, now being taken up).
+> CNB-64 (Phase 13B) deliberately did not serialize morph target data through the offline CLI/
+> `.cnj` path (only through `ContentManager::ReadGltfModel()`'s direct-glTF runtime path) — a
+> per-primitive warning was emitted instead. This phase closes that gap: a new binary sidecar
+> format plus 3 new `.cnj` mesh-entry JSON fields, read back by `ModelTypeReader::Read()`'s own
+> `.cnj` JSON path.
+
+| # | Task | Status | Notes |
+|---|---|---|---|
+| CNB-82 | Design + write a binary sidecar format for morph position/normal deltas, and extend `gltf_to_cnj.cpp`'s `ConvertGroup` to write it (plus default weights + weight-track JSON) | ✅ | New `BuildMorphBytes(meshOut)`: `int32 targetCount`, then per target `int32 vertexCount` + `vertexCount × float32[3]` position deltas + `int32 hasNormalDeltas` + (if set) `vertexCount × float32[3]` normal deltas — sequential little-endian, matching `BinReaderEXT`'s own byte order already used by `.skeleton.bin`/`.clip.bin`. Written to `<outName>_mesh<N>_morph.bin` whenever `meshOut.morphPositionDeltas` is non-empty (replacing the old warning-only branch). New `.cnj` mesh-entry JSON fields: `"morphTargets"` (sidecar path), `"morphWeights"` (default blend weights, from the now-called `GetMeshDefaultWeights`), `"morphWeightTrack"` (optional nested object — `"stepInterpolation"` + `"keys"` array of `{"time","weights"}`, from the now-called `ExtractMorphWeightTrack`). |
+| CNB-83 | Extend `ModelTypeReader::Read()`'s `.cnj` JSON path (`ContentManager.cpp`) to read the sidecar + JSON fields back into a real `MorphTargetDataEXT`, attached the same way `ReadGltfModel()` already does | ✅ | Two new generic JSON helpers (`JsonFloatArrayN` — a variable-length generalization of the existing fixed-3 `JsonFloatArray3`; `ExtractJsonObjectFieldEXT` — extracts a nested object's substring by key, bracket-depth-aware via the existing `FindMatchingBracketEXT`). The mesh-loop reads `"morphTargets"`/`"morphWeights"`/`"morphWeightTrack"`, decodes the binary sidecar via `BinReaderEXT` (mirroring the existing `.skeleton.bin` reader's own shape, including the same corrupt-file sanity-check-then-throw pattern), builds a `MorphTargetDataEXT`, attaches it via `partPtr->setTagProperty()`, and — exactly like `ReadGltfModel()` — immediately applies a non-zero default weight via `SetMorphWeightsEXT` so the initial upload reflects the file's own authored default pose. |
+| CNB-84 | Tests + docs | ✅ | New `GltfToCnjToolTest.SerializesAndReloadsMorphTargetsThroughTheOfflineCnjPath` reuses `RuntimeGltfModelTests.cpp`'s own `kMorphedTriangleGltf` fixture verbatim (one POSITION-only target, non-zero `mesh.weights=[0.5]` default, a LINEAR weight-animation channel) through the real CLI subprocess → `.cnj` → `ContentManager::Load<Model>` round-trip, asserting the exact same things `RuntimeGltfModelTest.LoadsMorphTargetDataWithDefaultWeightsAndWeightAnimationFromGltf` already does for the runtime path — proving the two paths now produce equivalent `MorphTargetDataEXT` results. Manually inspected the generated `.cnj` JSON and binary sidecar byte count (48 bytes = 4 + 4 + 3×3×4 + 4, exactly matching `BuildMorphBytes`'s own format for this fixture) before trusting the test. Full-suite regression: **4827 tests, 0 failures.** |
+
+### 14D — Remaining "vse udelej prosim" items ⬜ NOT STARTED
+
+> Task numbering reserved (`CNB-85`+) for whichever item is picked up next: true multi-UV-channel
+> rendering support for PBR maps (14B's own explicitly-deferred full fix), CUBICSPLINE morph-weight
+> animation interpolation, `DualTextureEffect` occlusion brightness fix (needs an image codec),
+> Draco mesh compression, full MikkTSpace tangent generation, newer glTF extensions
+> (`KHR_texture_transform`/`KHR_lights_punctual`/`KHR_materials_emissive_strength`), and PBR/
+> skinned-vertex-color shader support on the other 7+ graphics backends (CNB-61/13C's own
+> deliberately-deferred scope, now being taken up).
 
 ## Relationship to other plan files
 

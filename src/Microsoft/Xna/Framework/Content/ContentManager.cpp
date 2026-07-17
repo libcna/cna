@@ -982,6 +982,27 @@ namespace Microsoft::Xna::Framework::Content
             return r;
         }
 
+        // Morph target CLI/.cnj serialization: variable-length float array (mesh entry's own
+        // "morphWeights" field, and each morph weight-track keyframe's own "weights" field) --
+        // generalizes JsonFloatArray3's identical scan logic to an unbounded count, stopping at
+        // the array's own closing bracket.
+        static std::vector<float> JsonFloatArrayN(const std::string& j, std::size_t from)
+        {
+            std::vector<float> r;
+            if (from == std::string::npos) return r;
+            std::size_t pos = from + 1;
+            while (pos < j.size() && j[pos] != ']')
+            {
+                while (pos < j.size() && j[pos] != ']' &&
+                       !std::isdigit(static_cast<unsigned char>(j[pos])) && j[pos] != '-') ++pos;
+                if (pos >= j.size() || j[pos] == ']') break;
+                r.push_back(std::stof(j.substr(pos)));
+                while (pos < j.size() && j[pos] != ',' && j[pos] != ']') ++pos;
+                if (pos < j.size() && j[pos] == ',') ++pos;
+            }
+            return r;
+        }
+
         class SpriteFontTypeReader : public LooseFileContentTypeReader<Graphics::SpriteFont>
         {
         public:
@@ -1146,6 +1167,19 @@ namespace Microsoft::Xna::Framework::Content
                 ++pos;
             }
             return pos;
+        }
+
+        // Morph target CLI/.cnj serialization: extracts a single nested JSON object's substring
+        // by key (e.g. a mesh entry's own "morphWeightTrack" field), bracket-depth-aware via
+        // FindMatchingBracketEXT so a nested "keys" array's own braces don't truncate it early.
+        std::string ExtractJsonObjectFieldEXT(const std::string& json, const std::string& key)
+        {
+            const std::size_t k = json.find("\"" + key + "\"");
+            if (k == std::string::npos) { return {}; }
+            const std::size_t os = json.find('{', k);
+            if (os == std::string::npos) { return {}; }
+            const std::size_t oe = FindMatchingBracketEXT(json, os, '{', '}');
+            return json.substr(os, oe - os);
         }
 
         // Parses a flat JSON array of small objects bounded to the array's own closing
@@ -2140,6 +2174,14 @@ namespace Microsoft::Xna::Framework::Content
                             const float metallicFactor  = JsonFloat(mg, "metallicFactor", 1.0f);
                             const float roughnessFactor = JsonFloat(mg, "roughnessFactor", 1.0f);
                             const auto emissiveFactorArr = JsonFloatArray3(mg, FindKeyArray(mg, "emissiveFactor"));
+                            // Morph target CLI/.cnj serialization: "morphTargets" is the binary
+                            // sidecar path (BuildMorphBytes' own format, see gltf_to_cnj.cpp),
+                            // "morphWeights" the default blend weights, and "morphWeightTrack"
+                            // (optional) the weight animation track.
+                            const std::string morphTargetsFile = ExtractJsonStringField(mg, "morphTargets");
+                            const std::vector<float> morphWeightsField =
+                                JsonFloatArrayN(mg, FindKeyArray(mg, "morphWeights"));
+                            const std::string morphWeightTrackJson = ExtractJsonObjectFieldEXT(mg, "morphWeightTrack");
 
                             if (vertFile.empty() || idxFile.empty())
                                 continue;
@@ -2181,6 +2223,92 @@ namespace Microsoft::Xna::Framework::Content
                             auto part = std::make_unique<Graphics::ModelMeshPart>(
                                 vb.get(), ib.get(), numVertices, primCount, 0, 0);
                             Graphics::ModelMeshPart* partPtr = part.get();
+
+                            // Morph target CLI/.cnj serialization: read BuildMorphBytes' own
+                            // binary sidecar format back and attach the result to this part's own
+                            // real XNA Tag property, mirroring ReadGltfModel()'s identical
+                            // MorphTargetDataEXT wiring for the runtime glTF path (see
+                            // MorphTargetEXT.hpp's own doc comments).
+                            if (!morphTargetsFile.empty())
+                            {
+                                const auto morphBytes = ReadBinaryFile(
+                                    (fs::path(root) / morphTargetsFile).string());
+                                BinReaderEXT morphReader{morphBytes};
+                                const int targetCount = morphReader.Read<std::int32_t>();
+                                constexpr int kMaxSaneTargetCount = 100000;
+                                if (targetCount < 0 || targetCount > kMaxSaneTargetCount)
+                                {
+                                    throw ContentLoadException(
+                                        "Model mesh has an invalid morph target count ("
+                                            + std::to_string(targetCount) + "): " + path);
+                                }
+
+                                auto morph = std::make_unique<Graphics::MorphTargetDataEXT>();
+                                morph->BaseVertexBytes = vertBytes;
+                                morph->Stride = stride;
+                                morph->PositionDeltas.reserve(static_cast<std::size_t>(targetCount));
+                                morph->NormalDeltas.reserve(static_cast<std::size_t>(targetCount));
+                                for (int t = 0; t < targetCount; ++t)
+                                {
+                                    const int vertexCount = morphReader.Read<std::int32_t>();
+                                    std::vector<Vector3> positions;
+                                    positions.reserve(static_cast<std::size_t>(vertexCount));
+                                    for (int v = 0; v < vertexCount; ++v)
+                                    {
+                                        const float x = morphReader.Read<float>();
+                                        const float y = morphReader.Read<float>();
+                                        const float z = morphReader.Read<float>();
+                                        positions.emplace_back(x, y, z);
+                                    }
+                                    morph->PositionDeltas.push_back(std::move(positions));
+
+                                    std::vector<Vector3> normals;
+                                    if (morphReader.Read<std::int32_t>() != 0)
+                                    {
+                                        normals.reserve(static_cast<std::size_t>(vertexCount));
+                                        for (int v = 0; v < vertexCount; ++v)
+                                        {
+                                            const float x = morphReader.Read<float>();
+                                            const float y = morphReader.Read<float>();
+                                            const float z = morphReader.Read<float>();
+                                            normals.emplace_back(x, y, z);
+                                        }
+                                    }
+                                    morph->NormalDeltas.push_back(std::move(normals));
+                                }
+
+                                morph->Weights = !morphWeightsField.empty()
+                                    ? morphWeightsField
+                                    : std::vector<float>(static_cast<std::size_t>(targetCount), 0.0f);
+
+                                if (!morphWeightTrackJson.empty())
+                                {
+                                    morph->WeightTrack.StepInterpolation =
+                                        JsonBool(morphWeightTrackJson, "stepInterpolation", false);
+                                    for (const std::string& kg : ParseFlatObjectArrayEXT(morphWeightTrackJson, "keys"))
+                                    {
+                                        Graphics::MorphWeightKeyframeEXT key;
+                                        key.Time = System::TimeSpan::FromSeconds(JsonFloat(kg, "time", 0.0f));
+                                        key.Weights = JsonFloatArrayN(kg, FindKeyArray(kg, "weights"));
+                                        morph->WeightTrack.Keys.push_back(std::move(key));
+                                    }
+                                }
+
+                                partPtr->setTagProperty(morph.get());
+                                // glTF's "mesh.weights" is the default/initial blend state, not
+                                // necessarily all-zero -- apply it now so the uploaded vertex
+                                // buffer reflects the file author's own intended default pose, not
+                                // always the raw zero-weight base (mirrors ReadGltfModel()'s
+                                // identical logic).
+                                const bool hasNonZeroDefault = std::any_of(
+                                    morph->Weights.begin(), morph->Weights.end(),
+                                    [](float w) { return w != 0.0f; });
+                                if (hasNonZeroDefault)
+                                {
+                                    Graphics::SetMorphWeightsEXT(*partPtr, morph->Weights);
+                                }
+                                res->morphOwners.push_back(std::move(morph));
+                            }
 
                             auto mesh = std::make_unique<Graphics::ModelMesh>(
                                 &device, meshName.empty() ? "mesh" : meshName,
