@@ -1263,6 +1263,13 @@ case more exist).
   scope (avatar demos only) and too large a blast radius (11 files across unrelated plans/
   subsystems) to take on unprompted while unattended; flagging as a follow-up task for a future
   session/plan rather than silently expanding scope.
+- [x] **Task 8.5 (demo_avatar_wardrobe_hotswap)** — Same pattern, built from scratch (this demo
+  had no prior `SpriteBatch`/font plumbing at all). Help text documents the Tab-cycle-hair control
+  and what the demo proves (`AttachPartEXT`/`RemovePartEXT` working live at runtime). The
+  window-title string (rebuilt on every `ApplyHairState()` call, not just once in `LoadContent()`)
+  now mentions "F1: help" too, so the reminder survives every hair-state change. Verified via
+  `--show-help --smoke 30 --screenshot` (overlay legible, fits panel) and a default `--smoke`-only
+  run (overlay hidden, hair-cycling unaffected - no regression).
 - [ ] **Task 8.6** — One commit per demo is likely excessive for 8 near-identical additions built
   on the same Task 8.1 helper — since the user's "one task = one commit" rule maps to *this
   plan's tasks*, treat Task 8.1+8.2+8.3 (the shared helper + its first real usage in
