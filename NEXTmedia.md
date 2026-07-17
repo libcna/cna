@@ -51,12 +51,41 @@ skips.** New Media-scoped tests: 38 (`VideoDecoderTests.cpp` new under
 extended) -- includes two real-wall-clock-timing tests (~2-2.5s each) that actually play a fixture
 video past its duration to prove the EOS/looping state machine, not just unit-test the pieces.
 
-**Now starting Phase 3** (`MEDIA-46`..`MEDIA-60`, the real from-scratch local media-library
-backend) -- the largest, most novel remaining chunk: `MediaLibraryPaths`, `AudioTagParser` (Ogg
-Vorbis-comment + ID3v2.3/2.4 + filename-fallback), `MediaLibraryIndex` (incl. symlink-loop/
-permission hardening), `MediaCollectionBase<T>`, `PictureLibraryIndex` (reusing the existing
-`CNA::Internal::Graphics::ImageLoader`, do not reimplement image decoding), `PlaylistParser`
-(M3U/M3U8), `SavedPictureStore`.
+**Phase 3 complete** (`MEDIA-46`..`MEDIA-60`, the real from-scratch local media-library backend).
+7 new internal classes under `CNA::Internal::Media::*`, all `NOXNA`: `MediaLibraryPaths` (real
+`SDL_GetUserFolder` resolution + test override hooks), `AudioTagParser` (real from-scratch Ogg
+page framing + Vorbis-comment extraction, real ID3v2.3/2.4 synchsafe frame parsing with full
+text-encoding handling -- Latin-1/UTF-16+BOM/UTF-16BE/UTF-8 -- plus filename/folder fallback),
+`MediaLibraryIndex` (recursive scan, symlink-cycle + permission-denied hardening, case-insensitive
+Artist/Genre normalization), `MediaCollectionBase<T>` (shared collection template),
+`PictureLibraryIndex` (real Picture/PictureAlbum tree, reusing the existing
+`CNA::Internal::Graphics::ImageLoader` rather than reimplementing image decoding),
+`PlaylistParser` (M3U/M3U8), `SavedPictureStore`.
+
+**Real bug found via testing, not just planned work**: `std::filesystem::directory_iterator`'s
+enumeration order is filesystem-dependent, not alphabetical -- the first version of
+`MediaLibraryIndex`'s case-insensitive Artist/Genre normalization (D10, "first-seen casing wins")
+was therefore non-deterministic: which of "Artist One"/"ARTIST ONE" won depended on arbitrary
+filesystem entry order, not scan-source order as intended. Caught by
+`MediaLibraryIndexTest.NormalizesCaseVariantArtistNamesToOneCanonicalValue` actually failing (not
+by inspection). Fixed by sorting directory entries before processing in all three scanners
+(`MediaLibraryIndex`, `PictureLibraryIndex`, `PlaylistParser::ScanDirectory`) -- makes library-scan
+output reproducible across platforms/filesystems, not just "first-seen" in an unpredictable sense.
+
+Also found and fixed: `PictureLibraryIndex` called `ImageLoader::Load()` unguarded, which throws
+`std::runtime_error` on a corrupted/unsupported image -- would have aborted an entire library scan
+over one bad file. Now caught and skipped per-file.
+
+40 new tests across `AudioTagParserTests.cpp`, `MediaLibraryIndexTests.cpp` (incl. a real
+self-referential-symlink fixture proving the cycle guard actually terminates, not just reasoning
+about it), `PictureLibraryIndexTests.cpp`, `PlaylistParserTests.cpp`, `SavedPictureStoreTests.cpp`,
+`MediaLibraryPathsTests.cpp`, `MediaCollectionBaseTests.cpp`. Full-suite regression: **4733 tests,
+4731 passed, 0 failed, 2 pre-existing hardware skips.**
+
+**Now starting Phase 4** (`MEDIA-61`..`MEDIA-69`, wiring the real backend onto the public XNA API)
+-- `MediaSource`/`MediaLibrary` first (they gate everything else), then the 6 item+collection
+pairs (`Genre`, `Artist`, `Album`, `Picture`, `PictureAlbum`, `Playlist`), then `MEDIA-69`'s
+cross-class object-graph integration audit as the capstone.
 
 ## 2. Correction to Phase 0's own build-verification record
 

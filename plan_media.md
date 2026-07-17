@@ -462,7 +462,7 @@ free to override a row — the tasks that depend on it are cited so the blast ra
 > Per §4's decisions. This is genuinely new engineering, not a port — there is no FNA logic here to
 > compare against, only the public XNA API shape/exception contract from Phase 4 to satisfy.
 
-- [ ] **MEDIA-46 — `MediaLibraryPaths`: real per-OS root discovery (D1).** New
+- [x] **MEDIA-46 — `MediaLibraryPaths`: real per-OS root discovery (D1).** New
   `CNA::Internal::Media::MediaLibraryPaths` resolving the Music/Pictures roots via
   `SDL_GetUserFolder(SDL_FOLDER_MUSIC)`/`SDL_GetUserFolder(SDL_FOLDER_PICTURES)`; plus NOXNA static
   override hooks (`MediaLibrary::SetMusicRootEXT(path)` / `SetPictureRootEXT(path)`) so tests don't
@@ -471,24 +471,24 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   graceful fallback if the OS folder doesn't exist); override hook redirects scanning to MEDIA-3/4's
   fixture trees.
 
-- [ ] **MEDIA-47 — `AudioTagParser`: Ogg page-framing primitive (D2).** New
+- [x] **MEDIA-47 — `AudioTagParser`: Ogg page-framing primitive (D2).** New
   `CNA::Internal::Media::AudioTagParser` internals — minimal from-scratch Ogg page/segment parsing
   sufficient to locate the Vorbis comment header packet within an `.ogg` file, independent of the
   comment-field extraction itself.
   *Accept:* correctly locates the comment-header packet boundary against MEDIA-3's `.ogg` fixture(s).
 
-- [ ] **MEDIA-48 — `AudioTagParser`: Vorbis comment-field extraction (D2).** On top of MEDIA-47, extract
+- [x] **MEDIA-48 — `AudioTagParser`: Vorbis comment-field extraction (D2).** On top of MEDIA-47, extract
   `TITLE`/`ARTIST`/`ALBUM`/`GENRE`/`TRACKNUMBER` fields from the located comment header.
   *Accept:* MEDIA-3's tagged `.ogg` fixture parses to the exact documented tag values; malformed input
   fails gracefully (no crash), falling through to MEDIA-51's heuristics.
 
-- [ ] **MEDIA-49 — `AudioTagParser`: ID3v2 synchsafe frame-size decoding primitive (D2).** Minimal header
+- [x] **MEDIA-49 — `AudioTagParser`: ID3v2 synchsafe frame-size decoding primitive (D2).** Minimal header
   parsing for ID3v2.3/2.4: the 10-byte tag header, synchsafe-integer size decoding, and per-frame header
   (`id[4]`, `size`, `flags`) iteration, independent of interpreting any specific frame's payload.
   *Accept:* correctly enumerates every frame (id + byte range) in MEDIA-3's ID3v2.3 and ID3v2.4
   fixtures.
 
-- [ ] **MEDIA-50 — `AudioTagParser`: ID3v2 text-frame extraction with encoding handling (D2/D11).** On
+- [x] **MEDIA-50 — `AudioTagParser`: ID3v2 text-frame extraction with encoding handling (D2/D11).** On
   top of MEDIA-49, extract the 5 relevant text frames (`TIT2`/`TPE1`/`TALB`/`TCON`/`TRCK`), decoding the
   text-encoding byte (`0x00` Latin-1, `0x01` UTF-16+BOM, `0x02` UTF-16BE, `0x03` UTF-8) rather than
   assuming ASCII.
@@ -496,20 +496,20 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   non-Latin-1 encoded frame (if authored in MEDIA-3) decodes correctly; a file with no ID3v2 tag (or
   ID3v1-only) falls through cleanly to MEDIA-51.
 
-- [ ] **MEDIA-51 — `AudioTagParser`: filename/folder fallback heuristics (D2).** When a file has no
+- [x] **MEDIA-51 — `AudioTagParser`: filename/folder fallback heuristics (D2).** When a file has no
   usable tags (or is `.wav`/an otherwise-unsupported-for-tagging format), derive Title from the
   filename, Album from the parent directory name, Artist from the grandparent directory name.
   *Accept:* MEDIA-3's untagged `.wav` fixture (in a `Music/SomeArtist/SomeAlbum/Track.wav`-shaped tree)
   produces the expected inferred Artist/Album/Title.
 
-- [ ] **MEDIA-52 — `MediaLibraryIndex`: recursive song scan + grouping (D3).** New
+- [x] **MEDIA-52 — `MediaLibraryIndex`: recursive song scan + grouping (D3).** New
   `CNA::Internal::Media::MediaLibraryIndex` — one-shot recursive scan of the Music root, building an
   in-memory index of every audio file found (`.ogg`/`.mp3`/`.wav`, tagged via MEDIA-48/50/51) as a real
   `Song`, grouped Artist→Album→Song and flat Genre→Song.
   *Accept:* against MEDIA-3's fixture tree, the resulting groupings are exactly correct; a file with an
   unsupported extension is skipped, not errored.
 
-- [ ] **MEDIA-53 — `MediaLibraryIndex`: harden the recursive scan against symlink loops and
+- [x] **MEDIA-53 — `MediaLibraryIndex`: harden the recursive scan against symlink loops and
   permission errors.** A real filesystem scan of a real user directory can encounter a symlink cycle
   (infinite recursion risk) or a subdirectory the process can't read (permission-denied). Add loop
   detection (e.g. track visited canonical/real paths) and treat unreadable entries as skip-with-warning,
@@ -517,12 +517,12 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   *Accept:* a synthetic fixture with a self-referential symlink terminates instead of hanging; a
   permission-denied subdirectory (where the test environment allows creating one) is skipped, not fatal.
 
-- [ ] **MEDIA-54 — Case-insensitive Artist/Genre name normalization (D10).** Grouping key for
+- [x] **MEDIA-54 — Case-insensitive Artist/Genre name normalization (D10).** Grouping key for
   Artist/Genre is case-folded + trimmed; displayed `Name` keeps first-seen original casing.
   *Accept:* a fixture with the same artist tagged as `"Artist A"` in one file and `"artist a"` in another
   (add to MEDIA-3 if not already present) produces exactly one `Artist` grouping both songs.
 
-- [ ] **MEDIA-55 — `MediaCollectionBase<T>`: shared collection backend (D9).** New NOXNA internal
+- [x] **MEDIA-55 — `MediaCollectionBase<T>`: shared collection backend (D9).** New NOXNA internal
   template backing storage/indexer/enumerator/`Dispose` logic reused by all 6 public collection types
   (`AlbumCollection`/`ArtistCollection`/`GenreCollection`/`PictureCollection`/
   `PictureAlbumCollection`/`PlaylistCollection`). Public class names and exception contracts stay fully
@@ -530,7 +530,7 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   *Accept:* instantiates cleanly for at least 2 different `T`s in a throwaway test; no XNA-facing class
   is renamed or merged.
 
-- [ ] **MEDIA-56 — `PictureLibraryIndex`: real Picture/PictureAlbum tree scan, reusing `ImageLoader`
+- [x] **MEDIA-56 — `PictureLibraryIndex`: real Picture/PictureAlbum tree scan, reusing `ImageLoader`
   (D4).** New `CNA::Internal::Media::PictureLibraryIndex` — recursive scan of the Pictures root; one
   `PictureAlbum` node per real subdirectory (with real `Parent` links forming an actual tree), one
   `Picture` leaf per image file; dimensions read via the **existing**
@@ -539,24 +539,24 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   *Accept:* against MEDIA-4's fixture Pictures tree, the resulting tree's parent/child links and
   per-picture metadata are exactly correct.
 
-- [ ] **MEDIA-57 — `PlaylistParser`: M3U reader (D5).** New `CNA::Internal::Media::PlaylistParser` —
+- [x] **MEDIA-57 — `PlaylistParser`: M3U reader (D5).** New `CNA::Internal::Media::PlaylistParser` —
   reads path-per-line `.m3u` files (with optional `#EXTINF` comments tolerated/ignored or used for a
   title hint), resolving each entry against the already-built `MediaLibraryIndex`.
   *Accept:* MEDIA-5's `.m3u` fixture resolves to the correct `Song` sequence; an entry pointing at a
   nonexistent file is skipped, not fatal.
 
-- [ ] **MEDIA-58 — `PlaylistParser`: M3U8 (UTF-8) support (D5).** Extend MEDIA-57 to treat `.m3u8` as
+- [x] **MEDIA-58 — `PlaylistParser`: M3U8 (UTF-8) support (D5).** Extend MEDIA-57 to treat `.m3u8` as
   UTF-8-encoded (vs. `.m3u`'s local/legacy encoding), otherwise identical parsing logic.
   *Accept:* MEDIA-5's `.m3u8` fixture (with a non-ASCII filename/title) resolves correctly.
 
-- [ ] **MEDIA-59 — `SavedPictureStore`: real `SavePicture` backing (D7).** New
+- [x] **MEDIA-59 — `SavedPictureStore`: real `SavePicture` backing (D7).** New
   `CNA::Internal::Media::SavedPictureStore` — writes `SavePicture(name, buffer)`/`SavePicture(name,
   Stream)` output to a real `Saved Pictures` subfolder of the Pictures root; the result backs
   `MediaLibrary::SavedPictures`/`RootPictureAlbum` for real.
   *Accept:* calling `SavePicture` creates a real file on disk, readable back as a `Picture` with correct
   `GetImage()` content.
 
-- [ ] **MEDIA-60 — Internal-backend compliance pass.** SPDX + Doxygen (brief, internal-header style —
+- [x] **MEDIA-60 — Internal-backend compliance pass.** SPDX + Doxygen (brief, internal-header style —
   matching `XactParser`/`AudioMixer`'s existing precedent, not the full public-API Doxygen bar) across
   every new file from MEDIA-46-59; confirm the new `.cpp` files are picked up by the existing
   `GLOB_RECURSE` with zero `CMakeLists.txt` changes needed.
