@@ -1,5 +1,17 @@
 # `.cnj` content format — implementation plan for CNA
 
+> **Status update (2026-07-17): Phase 14J also closed, and `feature/graphics` merged into
+> `develop`.** WebGPU now has real skinning shaders too — `SkinnedEffect` (both lighting variants,
+> `VertexColorEnabled`) and `SkinnedPbrEffect` — closing the one gap 14I's own backend sweep left
+> open (this backend previously had no skinning shader at all for any stock effect). Also fixed
+> along the way: a real, previously-undetected bug where several PBR/vertex-color golden-image
+> tests passed a vertex count instead of a primitive count to `DrawPrimitives` — silently tolerated
+> by OpenGL/D3D11 but caught immediately by WebGPU's stricter buffer-bounds validation; corrected
+> across all 4 affected files, re-verified with no behavior change on EasyGL/Vulkan. With this,
+> every item from the post-Phase-13 gap survey that opened Phase 14 is done except true
+> multi-UV-channel PBR rendering, which stays deliberately deferred (rare authoring pattern, would
+> need another full multi-backend effort). See Phase 14J's own section for full detail.
+>
 > **Status update (2026-07-17): Phase 14I also closed — Phase 14 is now fully done.** `PbrEffect`/
 > `SkinnedPbrEffect`'s metallic-roughness BRDF and `SkinnedEffect.VertexColorEnabled` now have real
 > shaders on all 7 remaining graphics backends (Vulkan, Bgfx, SdlGpu, WebGPU, D3D9, D3D11, D3D12),
@@ -705,14 +717,32 @@ onto `.cnj`, `RegisterCnjLoader<T>`, and Phase 9's hardening of those mechanisms
 
 Full-suite regression across every backend touched today, cross-checked against each backend's own pre-existing baseline (via direct binary invocation from the repo root, not `ctest --test-dir`, which changes the test process's working directory and produces spurious fixture-path failures unrelated to any of this work): EasyGL's `CnaTests` **4843/4845** (2 pre-existing hardware-dependent skips, 0 failures) plus per-backend example suites as itemized above. Also fixed, opportunistically, while investigating spurious failures: three build directories (`cmake-build-debug`, `cmake-build-vulkan`, `cmake-build-sdl`, `cmake-build-dx3`, `cmake-build-canvas`) had a stale `CNA_TEST_DISPLAY=:0` CMake cache value left over from before this session's mid-stream switch to a dedicated Xvfb `:99` display — reconfigured all of them to `:99` so no future test run can pop a window on the project owner's real desktop.
 
-### 14J — Remaining items ⬜ NOT STARTED
+### 14J — WebGPU skinning shaders (SkinnedEffect, SkinnedPbrEffect) ✅ CLOSED 2026-07-17
 
-> With 14I closed, every item from the post-Phase-13 gap survey that opened Phase 14 (`CNB-75`–)
-> is now done. Task numbering reserved (`CNB-110`+) for whatever is picked up next — no specific
-> item is currently queued. Candidates noted along the way but explicitly out of scope for Phase 14:
-> true multi-UV-channel rendering support for PBR maps (14B's own deferred full fix, a rare
-> real-world authoring pattern); closing WebGPU's pre-existing no-skinning gap (would unblock
-> `SkinnedPbrEffect`/skinned-vertex-color on that one remaining backend).
+> Closes 14I's own explicitly-noted follow-up: WebGPU had no skinning shader at all for *any*
+> stock effect (not just `SkinnedPbrEffect` — plain `SkinnedEffect` didn't render correctly on this
+> backend either), a pre-existing gap tracked in `docs/webgpu-backend.md`/`plan_webgpu.md`
+> (`WEBGPU-26/37/75/97/66`). Full scope landed in one pass rather than the smaller fallback the task
+> was authorized to scope down to if needed.
+
+| # | Task | Status | Notes |
+|---|---|---|---|
+| CNB-110 | WebGPU: real WGSL skinning shaders for `SkinnedEffect` (stride 52/56, both lighting variants + `VertexColorEnabled`) and `SkinnedPbrEffect` (stride 68) | ✅ | Five new WGSL shaders (`skinned3d` pixel-lit/vertex-lit × plain/colored, `skinned_pbr3d`) ported line-for-line from `EasyGLGraphicsBackend`'s own `EnsureSkinnedProgram()`/`EnsureSkinnedVertexLitProgram()`/`EnsurePbrSkinnedProgram()`, including the same vertex-color-modulates-the-combined-diffuse-plus-specular-output ordering (not just the diffuse term) those references already got right. `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx`'s dispatch restructured so a `params.skinned` draw at a recognized stride now routes to the new pipelines instead of the old blanket "unsupported effect" fallback. New `webgpu_skinned3d_test.cpp` (9 checks) and `webgpu_skinnedpbr3d_test.cpp` (5 checks); a Gouraud-averaged-vs-fresh-per-fragment specular check at a triangle seam proves the two lighting variants are genuinely different shaders, not one shader with a toggle. Full `ctest -L WebGPU`: **13/13** (11 pre-existing + 2 new), no regressions. |
+
+Also fixed while this work was in progress (found because WebGPU's `wgpu-native` strictly validates vertex-buffer bounds, where OpenGL/D3D11 silently tolerate the same mistake): `DrawPrimitives(TriangleList, vertexStart, primitiveCount)`'s third argument is a **primitive** (triangle) count, not a vertex count. Four EasyGL-family test files (`easygl_pbreffect_golden_test.cpp`, `easygl_skinnedpbreffect_golden_test.cpp`, `easygl_skinnedeffect_vertexcolor_test.cpp` — also reused verbatim by Vulkan's own `Pbr`/`SkinnedPbr`/`SkinnedEffect_VertexColor` tests — and the newer `d3d11_pbr_vertexcolor_test.cpp`) passed `6` instead of `2` for every 2-triangle quad, silently reading past the intended vertex range on backends tolerant enough not to notice. Corrected all 10 call sites; re-verified EasyGL's and Vulkan's own copies still pass, including exact golden-image pixel matches, confirming the fix is a correctness improvement rather than a behavior change. (Bgfx's, SdlGpu's, and WebGPU's own independently-written vertex-color tests already used the correct value, and D3D9's tests don't use this draw call at all.)
+
+Full-suite regression: EasyGL `CnaTests` (direct binary invocation) **4843/4845 passed, 2 skipped, 0 failed** (the 2 skips are the same pre-existing hardware-dependent Accelerometer/Gyroscope checks as every other regression run this session; a separate develop-worktree run also hit one transient `SDL_InitSubSystem` X11 flake under heavy concurrent window creation, reproduced as 5/5 pass in isolation — not a real failure); WebGPU `ctest -L WebGPU` 13/13; EasyGL and Vulkan's own copies of all 4 `DrawPrimitives`-fixed tests re-verified individually post-fix.
+
+`feature/graphics` (Phases 13–14 in full) merged into `develop`.
+
+### 14K — Remaining items ⬜ NOT STARTED
+
+> With 14J closed, the only known remaining item from this plan's own gap surveys is true
+> multi-UV-channel rendering support for PBR maps (14B's own deferred full fix — different UV set
+> per map, e.g. base color on UV0 and normal map on UV1). Explicitly deferred again: touches the
+> vertex format, glTF import, and all 7 PBR-capable backends, for a pattern rare in real-world PBR
+> authoring content (most tools put every map on one UV set). Task numbering reserved (`CNB-111`+)
+> for whenever this or something else is picked up next.
 
 ## Relationship to other plan files
 
