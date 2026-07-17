@@ -4,15 +4,21 @@
 #include <limits>
 
 #include "Microsoft/Devices/Sensors/Detail/AndroidCompassMath.hpp"
+#include "System/DateTimeOffset.hpp"
+#include "System/TimeSpan.hpp"
 
 using Microsoft::Devices::Sensors::Detail::AndroidSensorAccuracyStatus;
+using Microsoft::Devices::Sensors::Detail::ComputeCompassMaxSampleSkew;
 using Microsoft::Devices::Sensors::Detail::ConvertMagneticFieldAccuracyStatusToHeadingAccuracyDegrees;
 using Microsoft::Devices::Sensors::Detail::ConvertRotationVectorToMagneticHeadingDegrees;
 using Microsoft::Devices::Sensors::Detail::ConvertRotationVectorToMagneticHeadingDegreesWithTiltMode;
 using Microsoft::Devices::Sensors::Detail::ConvertRotationVectorToUprightMagneticHeadingDegrees;
+using Microsoft::Devices::Sensors::Detail::IsCompassSampleFresh;
 using Microsoft::Devices::Sensors::Detail::IsDeviceInUprightCompassMode;
 using Microsoft::Devices::Sensors::Detail::NormalizeCompassQuaternion;
 using Microsoft::Devices::Sensors::Detail::ShouldRaiseCalibrateForAccuracyStatus;
+using System::DateTimeOffset;
+using System::TimeSpan;
 
 namespace
 {
@@ -323,4 +329,76 @@ TEST(AndroidCompassMathTests, CalibrateDecisionIsConsistentWithHeadingAccuracyTh
             << headingAccuracy << " but its Calibrate-firing decision doesn't match "
             << "the documented \"exceeds 20 degrees\" rule";
     }
+}
+
+// Task COMP2-001 (2026-07-17, external audit `audit_devices_2026-07-17.md`):
+// ComputeCompassMaxSampleSkew()/IsCompassSampleFresh() together back
+// AndroidCompassBackend's "don't fuse indefinitely stale data" fix. Both are
+// pure functions (no Android/sensor dependency at all), so -- unlike
+// AndroidCompassBackend.cpp itself, entirely #ifdef __ANDROID__-gated -- they
+// are fully host-testable, matching this file's own established pattern for
+// every other pure Compass math helper.
+
+TEST(AndroidCompassMathTests, ComputeCompassMaxSampleSkewFlooredForSmallInterval)
+{
+    // 10ms * 5 == 50ms, well below the 500ms floor.
+    EXPECT_EQ(ComputeCompassMaxSampleSkew(TimeSpan::FromMilliseconds(10.0)), TimeSpan::FromMilliseconds(500.0));
+}
+
+TEST(AndroidCompassMathTests, ComputeCompassMaxSampleSkewFlooredForZeroInterval)
+{
+    EXPECT_EQ(ComputeCompassMaxSampleSkew(TimeSpan::Zero), TimeSpan::FromMilliseconds(500.0));
+}
+
+TEST(AndroidCompassMathTests, ComputeCompassMaxSampleSkewScalesToFiveTimesLargeInterval)
+{
+    // 200ms * 5 == 1000ms, above the 500ms floor -- the scaled value wins.
+    EXPECT_EQ(ComputeCompassMaxSampleSkew(TimeSpan::FromMilliseconds(200.0)), TimeSpan::FromMilliseconds(1000.0));
+}
+
+TEST(AndroidCompassMathTests, IsCompassSampleFreshTrueForExactlySimultaneousTimestamp)
+{
+    const DateTimeOffset now = DateTimeOffset::getUtcNowProperty();
+    EXPECT_TRUE(IsCompassSampleFresh(now, now, TimeSpan::FromMilliseconds(500.0)));
+}
+
+TEST(AndroidCompassMathTests, IsCompassSampleFreshTrueForFutureTimestamp)
+{
+    // A sample timestamp "after now" (clock-read ordering edge case, not a
+    // real future sample) is treated as fresh rather than rejected -- see
+    // IsCompassSampleFresh()'s own doc comment.
+    const DateTimeOffset now = DateTimeOffset::getUtcNowProperty();
+    const DateTimeOffset sampleInFuture = now.AddMilliseconds(50.0);
+    EXPECT_TRUE(IsCompassSampleFresh(sampleInFuture, now, TimeSpan::FromMilliseconds(500.0)));
+}
+
+TEST(AndroidCompassMathTests, IsCompassSampleFreshTrueWellWithinMaxSkew)
+{
+    const DateTimeOffset now = DateTimeOffset::getUtcNowProperty();
+    const DateTimeOffset sample = now - TimeSpan::FromMilliseconds(100.0);
+    EXPECT_TRUE(IsCompassSampleFresh(sample, now, TimeSpan::FromMilliseconds(500.0)));
+}
+
+TEST(AndroidCompassMathTests, IsCompassSampleFreshTrueExactlyAtMaxSkewBoundary)
+{
+    // The boundary itself ("<=") is still fresh, not stale.
+    const DateTimeOffset now = DateTimeOffset::getUtcNowProperty();
+    const DateTimeOffset sample = now - TimeSpan::FromMilliseconds(500.0);
+    EXPECT_TRUE(IsCompassSampleFresh(sample, now, TimeSpan::FromMilliseconds(500.0)));
+}
+
+TEST(AndroidCompassMathTests, IsCompassSampleFreshFalseBeyondMaxSkew)
+{
+    const DateTimeOffset now = DateTimeOffset::getUtcNowProperty();
+    const DateTimeOffset sample = now - TimeSpan::FromMilliseconds(501.0);
+    EXPECT_FALSE(IsCompassSampleFresh(sample, now, TimeSpan::FromMilliseconds(500.0)));
+}
+
+TEST(AndroidCompassMathTests, IsCompassSampleFreshFalseForLongStaleSample)
+{
+    // The scenario IsCompassSampleFresh() exists for: a stream that stopped
+    // delivering minutes ago must not still be considered fresh.
+    const DateTimeOffset now = DateTimeOffset::getUtcNowProperty();
+    const DateTimeOffset sample = now - TimeSpan::FromMinutes(5.0);
+    EXPECT_FALSE(IsCompassSampleFresh(sample, now, TimeSpan::FromMilliseconds(500.0)));
 }

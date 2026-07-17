@@ -4,8 +4,65 @@
 
 #include <cmath>
 
+#include "System/DateTimeOffset.hpp"
+#include "System/TimeSpan.hpp"
+
 namespace Microsoft::Devices::Sensors::Detail
 {
+    /**
+     * @brief Computes the maximum allowed time gap between the compass's two fused sensor streams (Task COMP2-001).
+     *
+     * `AndroidCompassBackend` fuses heading (from the rotation-vector
+     * stream) with magnetometer vector/accuracy (from the magnetic-field
+     * stream) — two independently-delivered Android sensor streams, each
+     * polled at roughly `timeBetweenUpdates`. Normal OS scheduling jitter
+     * can delay either stream by a sample or two without either having
+     * genuinely failed; this returns a generous, deliberately simple bound
+     * (5x the requested interval, floored at 500ms so a very fast requested
+     * rate — or a degenerate zero/negative one — does not produce an
+     * unreasonably tight or nonsensical threshold) rather than a
+     * statistically-derived one, since no real-hardware jitter measurement
+     * exists to derive a tighter bound from (see
+     * `docs/devices-hardware-checklist.md`). `IsCompassSampleFresh()` below
+     * is what this bound is compared against.
+     *
+     * @param timeBetweenUpdates The interval both fused streams were started with.
+     * @return The maximum age either stream's last sample may have, relative to "now", before it is treated as stale.
+     */
+    [[nodiscard]] inline System::TimeSpan ComputeCompassMaxSampleSkew(const System::TimeSpan& timeBetweenUpdates)
+    {
+        const System::TimeSpan floor = System::TimeSpan::FromMilliseconds(500.0);
+        const System::TimeSpan scaled = timeBetweenUpdates * 5.0;
+        return scaled > floor ? scaled : floor;
+    }
+
+    /**
+     * @brief Whether a sample delivered at `sampleTimestamp` is still fresh enough to fuse, as of `now` (Task COMP2-001).
+     *
+     * `sampleTimestamp >= now` (the sample is not older than "now" at all —
+     * covers both a genuinely simultaneous sample and any clock-read
+     * ordering edge case) is always fresh; otherwise fresh only if the
+     * elapsed time does not exceed `maxSkew`. Pure function, deliberately
+     * independent of any specific stream's identity — used identically for
+     * both the rotation-vector and magnetic-field streams in
+     * `AndroidCompassBackend::PublishReading()`.
+     *
+     * @param sampleTimestamp Wall-clock delivery time of the sample being checked.
+     * @param now Wall-clock time of the freshness check itself.
+     * @param maxSkew Maximum allowed age, from `ComputeCompassMaxSampleSkew()`.
+     * @return true if the sample is still fresh enough to fuse.
+     */
+    [[nodiscard]] inline bool IsCompassSampleFresh(
+        const System::DateTimeOffset& sampleTimestamp, const System::DateTimeOffset& now,
+        const System::TimeSpan& maxSkew)
+    {
+        if (sampleTimestamp >= now)
+        {
+            return true;
+        }
+        return (now - sampleTimestamp) <= maxSkew;
+    }
+
     /**
      * @brief Minimum squared length a raw quaternion must have before this
      * file will normalize and use it (Task COMP2-002).

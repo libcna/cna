@@ -561,6 +561,53 @@ If step 2 or 3 reveals a wrong sign/zero-point, the fix belongs in
 new self-consistency test case should be added for whatever convention turns out correct,
 matching Section 1's own reporting convention.
 
+## 7a. Compass fusion freshness/skew handling (Task COMP2-001, 2026-07-17)
+
+**Code under test:** `AndroidCompassBackend::PublishReading()`'s new freshness check —
+before fusing the rotation-vector stream's heading with the magnetic-field stream's
+magnetometer/accuracy, both streams' most recent sample must be no older than
+`ComputeCompassMaxSampleSkew(timeBetweenUpdates)` relative to "now" (`IsCompassSampleFresh()`,
+`AndroidCompassMath.hpp`) — otherwise the publish is skipped entirely, rather than fusing a
+fresh sample from one stream with an arbitrarily-stale one from the other.
+
+**What is already verified, without hardware:** `ComputeCompassMaxSampleSkew()`/
+`IsCompassSampleFresh()` are pure functions with no Android/sensor dependency, unlike the
+rest of `AndroidCompassBackend`/`AndroidCompassMath.hpp` (entirely `#ifdef __ANDROID__`- or
+hardware-behavior-dependent) — 9 new host-run unit tests
+(`AndroidCompassMathTests.cpp`) directly prove the skew-threshold derivation (floored at
+500ms, scales to 5x a larger requested interval) and the freshness boundary itself
+(exactly-at-threshold is fresh, one unit beyond is stale, a future-dated sample is treated
+as fresh, a multi-minute-old sample is correctly rejected). This is a **stronger**
+evidentiary position than most other Section 16 fixes this pass (e.g. `VIB2-004`,
+`SDLCORE-005`) — the underlying decision logic is directly tested, not merely reasoned
+about.
+
+**What is NOT verified without hardware:** the actual wiring inside
+`AndroidCompassBackend::PublishReading()` — confirmed correct by code review and a
+successful Android NDK cross-compile of this exact translation unit, but never run. This
+container has no way to start a real `AndroidCompassBackend` (no Android device/emulator),
+so the specific runtime scenario the required work and acceptance criteria describe — one
+underlying `AndroidSensorBridge` (rotation-vector or magnetic-field) silently stopping mid-session
+while the other keeps delivering, and confirming `Compass.CurrentValue` genuinely stops
+advancing rather than continuing to report a fused-but-half-stale reading — has not been
+observed. **Status: NOT RUN — hardware validation open** (matching this pass's
+`VIB2-003`/`004`/`ANDR2-002`/`SDLCORE-005` precedent).
+
+**Steps (once real hardware is available):**
+1. Start `Compass` on a real device and confirm normal fused readings arrive.
+2. Force one of the two underlying Android sensors (rotation vector or magnetic field) to
+   stop delivering mid-session without the other stopping — e.g. via whatever
+   emulator/ADB-level sensor control is available, or physically shielding a magnetometer
+   from all magnetic fields for an extended period to trigger persistent read errors
+   (`ANDR2-006`'s `MaxConsecutiveGetEventsFailures` path in the underlying bridge).
+3. Confirm `Compass.CurrentValueChanged` stops firing (or `Compass.CurrentValue` stops
+   changing) once the stalled stream's last sample exceeds `ComputeCompassMaxSampleSkew()`'s
+   threshold — rather than continuing to publish readings that combine the still-live
+   stream's fresh values with the stalled stream's frozen ones.
+4. Let the stalled sensor resume (if possible) and confirm fused readings resume
+   automatically, with no special recovery action needed (per `PublishReading()`'s own
+   "self-heals once the stalled stream delivers again" design).
+
 ## 8. `Motion` real Android backend (`plan_devices.md` Phase 8, Tasks DEVICES-0101-0119)
 
 **Code under test:** `Detail::AndroidMotionBackend` (`src/Microsoft/Devices/Sensors/Detail/AndroidMotionBackend.cpp`)

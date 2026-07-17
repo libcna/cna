@@ -7392,7 +7392,7 @@ test is not sufficient for an Android coordinate/fusion claim.
   - No Android-only path is marked closed solely because host fake tests pass.
 - **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
 
-### COMP2-001 — Add timestamp/freshness alignment for Compass sources — OPEN
+### COMP2-001 — Add timestamp/freshness alignment for Compass sources — OPEN (implementation done and directly unit-tested; end-to-end hardware behavior needs a real device)
 
 - **Priority:** P1
 - **Area:** Perfection re-audit
@@ -7405,6 +7405,68 @@ test is not sufficient for an Android coordinate/fusion claim.
   - A stopped source cannot keep producing apparently fresh CompassReading values.
   - Synthetic skew tests prove pairing boundaries.
 - **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+- **Progress so far (not yet CLOSED — see Remaining limitations):**
+  - "Store native timestamps for both streams": `AndroidCompassBackend` gained
+    `rotationVectorTimestamp_`/`magneticFieldTimestamp_` (both `System::DateTimeOffset`),
+    updated from each stream's own `AndroidSensorSample::Timestamp` (already the real
+    per-sample delivery time — no new plumbing needed in `AndroidSensorBridge` itself).
+  - "Define a maximum skew and pairing policy; drop... rather than fuse indefinitely stale
+    data": new pure functions in `AndroidCompassMath.hpp` —
+    `ComputeCompassMaxSampleSkew(timeBetweenUpdates)` (5x the requested interval, floored
+    at 500ms so a very fast or degenerate/zero interval doesn't produce an unreasonable
+    bound — a deliberately simple, documented choice, not a statistically-derived one,
+    since no real-hardware jitter measurement exists to derive a tighter bound from) and
+    `IsCompassSampleFresh(sampleTimestamp, now, maxSkew)`. Chosen policy is **drop**, not
+    wait or interpolate: `PublishReading()` now requires both streams' last sample to pass
+    `IsCompassSampleFresh()` (in addition to the pre-existing "both have delivered at least
+    one sample ever" check) before fusing and publishing; a stale pairing simply skips that
+    publish attempt, exactly as if the required sample had never arrived — the next fresh
+    sample from the still-live stream re-attempts the same check, so recovery is automatic
+    with no separate "resume" logic needed. Wait was rejected (this is a callback-driven,
+    non-blocking architecture — nothing to block on); interpolate was rejected (would need
+    retaining multiple historical samples per stream, real new complexity, for a benefit
+    the drop policy already delivers: never publishing frankenstein data).
+  - "Reset freshness on Start/resume/source failure": `Start()` now seeds both timestamps
+    to "now" (not left at a stale value from a previous run) whenever
+    `hasRotationVectorSample_`/`hasMagneticFieldSample_` are reset. "Source failure"
+    specifically needs no separate handling: a silently-dying stream's timestamp simply
+    stops advancing, so it naturally ages past `maxSampleSkew_` and the freshness check
+    already catches it — the same mechanism serves both "stream never started" and "stream
+    died mid-session" without distinguishing the two.
+- **Files changed:** `include/Microsoft/Devices/Sensors/Detail/AndroidCompassMath.hpp`,
+  `include/Microsoft/Devices/Sensors/Detail/AndroidCompassBackend.hpp`,
+  `src/Microsoft/Devices/Sensors/Detail/AndroidCompassBackend.cpp`,
+  `tests/Microsoft/Devices/Sensors/Detail/AndroidCompassMathTests.cpp`,
+  `docs/devices-hardware-checklist.md`.
+- **Tests:** 9 new host-run tests in `AndroidCompassMathTests.cpp` — unlike most other
+  Android-only fixes this pass, `ComputeCompassMaxSampleSkew()`/`IsCompassSampleFresh()` are
+  pure functions with zero Android dependency (matching this file's own established
+  pattern for every other Compass math helper), so they are fully host-testable:
+  skew-threshold derivation (floored at 500ms; scales to 5x a larger interval; handles a
+  zero/degenerate interval) and the freshness boundary itself (exactly-at-threshold is
+  fresh, one unit beyond is stale, a future-dated timestamp is treated as fresh per the
+  documented edge-case policy, a multi-minute-old sample is correctly rejected — the
+  scenario this task exists for). "Synthetic skew tests prove pairing boundaries"
+  (acceptance criterion) is satisfied directly by these. Scoped filtered run: 296 tests,
+  292 passed, 4 pre-existing hardware-only skips, 0 failures — 9 new, all passing.
+- **Sanitizer/static-analysis result:** clean under `devices-ubsan`. Not re-verified under
+  TSan — no new concurrent-access pattern (the new fields are read/written under the
+  pre-existing `stateMutex_`, same discipline as every other field in this class).
+  `AndroidCompassBackend.cpp` itself (the actual runtime wiring, `#ifdef __ANDROID__`-gated)
+  verified via a successful Android NDK cross-compile of this exact translation unit.
+- **Remaining limitations (explicitly OPEN, not fabricated):** the underlying
+  skew-detection *primitive* is directly, thoroughly unit-tested — a stronger evidentiary
+  position than most other Section 16 fixes this pass. What remains genuinely
+  unverified is `PublishReading()`'s actual end-to-end runtime behavior: this container
+  has no Android device/emulator, so the specific scenario the acceptance criteria
+  describe (one real `AndroidSensorBridge` stream silently dying mid-session while the
+  other keeps delivering, and confirming `Compass.CurrentValue` genuinely stops advancing
+  rather than continuing to fuse the stale value) has never been observed running. New
+  hardware validation procedure documented in `docs/devices-hardware-checklist.md` Section
+  7a. Left **OPEN** rather than CLOSED, consistent with `VIB2-003`/`004`/`ANDR2-002`/
+  `SDLCORE-005`: the acceptance criteria describe end-to-end hardware behavior this
+  session cannot produce, even though the decision logic driving that behavior is more
+  thoroughly tested here than in any of those four.
 
 ### COMP2-002 — Normalize and validate rotation quaternions before heading math — CLOSED (2026-07-17)
 

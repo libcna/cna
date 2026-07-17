@@ -9,6 +9,7 @@
 #include "Microsoft/Devices/Sensors/Detail/AndroidSensorBridge.hpp"
 #include "Microsoft/Devices/Sensors/Detail/ICompassBackend.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "System/DateTimeOffset.hpp"
 
 namespace Microsoft::Devices::Sensors::Detail
 {
@@ -72,6 +73,29 @@ namespace Microsoft::Devices::Sensors::Detail
         Microsoft::Xna::Framework::Vector3 magnetometerReading_;
         bool hasRotationVectorSample_ = false;
         bool hasMagneticFieldSample_ = false;
+
+        /**
+         * @brief Wall-clock delivery time of the most recent sample from each fused stream (Task COMP2-001).
+         *
+         * Compared against `maxSampleSkew_` in `PublishReading()` so a
+         * stream that has silently stopped delivering (its own
+         * `AndroidSensorBridge` worker died, or the underlying device
+         * disappeared) cannot keep its last, now-stale value fused
+         * indefinitely with the other, still-live stream's fresh samples —
+         * see `PublishReading()`'s own comment for the full rationale.
+         */
+        System::DateTimeOffset rotationVectorTimestamp_;
+
+        /** @brief See `rotationVectorTimestamp_`'s own doc comment; the magnetic-field stream's counterpart. */
+        System::DateTimeOffset magneticFieldTimestamp_;
+
+        /**
+         * @brief Maximum allowed age either fused stream's last sample may have, set from `Start()`'s own `timeBetweenUpdates` (Task COMP2-001).
+         *
+         * See `Detail::ComputeCompassMaxSampleSkew()`'s own doc comment for
+         * how this is derived.
+         */
+        System::TimeSpan maxSampleSkew_;
 
         ReadingCallback onReading_;
         CalibrationCallback onCalibrationNeeded_;
