@@ -87,4 +87,17 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_webgpu_test(cna_test_webgpu_pbr3d examples/webgpu_pbr3d_test.cpp)
     cna_register_backend_test(NAME WebGPU_Pbr3D COMMAND cna_test_webgpu_pbr3d
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_cnj.md Phase 14J WebGPU counterpart: skinned3d.wgsl family / GetOrCreatePipelineSkinned3D
+    # / SkinnedEffect (strides 52/56, both PreferPerPixelLighting variants, VertexColorEnabled) --
+    # closes this backend's pre-existing "no skinning shader at all" gap.
+    cna_webgpu_test(cna_test_webgpu_skinned3d examples/webgpu_skinned3d_test.cpp)
+    cna_register_backend_test(NAME WebGPU_Skinned3D COMMAND cna_test_webgpu_skinned3d
+        TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # plan_cnj.md Phase 14J WebGPU counterpart: skinned_pbr3d.wgsl / GetOrCreatePipelineSkinnedPbr3D
+    # / SkinnedPbrEffect (stride 68, PBR + skinning combo).
+    cna_webgpu_test(cna_test_webgpu_skinnedpbr3d examples/webgpu_skinnedpbr3d_test.cpp)
+    cna_register_backend_test(NAME WebGPU_SkinnedPbr3D COMMAND cna_test_webgpu_skinnedpbr3d
+        TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()

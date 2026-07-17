@@ -660,5 +660,125 @@ namespace CNA::Internal::Backends::WebGPU
         std::vector<PbrDrawCommand> pbrDrawCommands_;
         std::unique_ptr<WebGPUTextureBackend> pbrDefaultWhiteTexture_;
         std::unique_ptr<WebGPUTextureBackend> pbrDefaultFlatNormalTexture_;
+
+        // plan_cnj.md Phase 14J: closing this backend's pre-existing "no skinning shader at all"
+        // gap for SkinnedEffect -- both PreferPerPixelLighting lighting variants (matching every
+        // other backend's own established "two skinned shader variants" convention) plus
+        // SkinnedEffect.VertexColorEnabled (stride-56 vertex colour on skinned meshes). Ported
+        // from EasyGLGraphicsBackend::EnsureSkinnedProgram()/EnsureSkinnedVertexLitProgram()'s GLSL
+        // shaders line-for-line, including their exact formula shape -- SkinnedEffect's own
+        // emissiveColor pre-folds AmbientLightColor*DiffuseColor on the CPU side
+        // (SkinnedEffect::FillGpuDrawParams) and is THEN multiplied again by DiffuseColor in the
+        // shader (litRGB=(emissive+lightSum)*diffuseColor), unlike BasicEffect's lit_textured3d.wgsl
+        // (lit=lightSum*diffuseColor+emissive, emissive NOT re-multiplied) -- and the vertex-colour
+        // gate multiplies the FINAL combined diffuse+specular output (applied AFTER the specular
+        // add, not just to the diffuse term -- a real ordering bug was once found and fixed in the
+        // EasyGL reference, replicated here to avoid the same trap). Bone-palette skinning matches
+        // Task 895's convention (weightsPerVertex 1/2/4 -- only the first N weight/index pairs are
+        // summed). Since a WebGPU pipeline must supply every vertex-shader-referenced attribute
+        // location from its own vertex buffer layout (unlike GL's "simply leave an attribute
+        // unbound" precedent for stride 52 in EasyGLGraphicsBackend::ApplyLayout), the stride-52
+        // and stride-56 cases each get their own shader module pair (mirrors this backend's own
+        // existing texturedShader_/coloredTexturedShader_ precedent for the analogous stride-20/24
+        // split), all four sharing skinnedBindGroupLayout_/skinnedPipelineLayout_ (identical UBO
+        // shape). No fog/alpha-test wired in, matching every other WebGPU 3D shader's own
+        // deliberate deferral (SkinnedEffect never sets GpuDrawParams::alphaTest away from its
+        // always-pass default).
+        struct SkinnedDrawCommand
+        {
+            std::vector<std::uint8_t> vertexData;
+            std::vector<std::uint8_t> indexData;
+            bool indexed = false;
+            bool index32 = false;
+            std::uint32_t vertexCount = 0;
+            std::uint32_t indexCount = 0;
+            WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
+            std::array<float, 32> uniforms{};
+            std::array<float, 68> lightUniforms{};
+            /// SkinningParams UBO: [0] = WeightsPerVertex (Task 895's 1/2/4 convention, stored as a
+            /// float in the x component of a padding vec4), [4 .. 4+72*16) = 72 column-major bone
+            /// matrices (FillSkinningParams()).
+            std::array<float, 4 + 72 * 16> skinningParams{};
+            bool depthTest = false;
+            bool depthWrite = false;
+            int depthFunc = 3;
+            const WebGPUTextureBackend* texture = nullptr;
+            int textureFilter = 0;
+            int addressU = 1;
+            int addressV = 1;
+            std::size_t stride = 52;   ///< 52 (no vertex colour) or 56 (vertex colour appended)
+            bool preferVertexLit = false;
+        };
+        void CreateSkinnedResources();
+        void DestroySkinnedResources();
+        [[nodiscard]] WGPURenderPipeline GetOrCreatePipelineSkinned3D(std::size_t stride, bool preferVertexLit,
+                                                                        WGPUPrimitiveTopology topology,
+                                                                        bool depthTest, bool depthWrite,
+                                                                        int depthFunc);
+        void QueueSkinnedDraw(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
+                              const Matrix& world, const Matrix& view, const Matrix& projection,
+                              PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
+        void RenderSkinnedDraws(WGPURenderPassEncoder pass);
+
+        WGPUShaderModule skinnedShader_ = nullptr;               ///< stride 52, per-pixel-lit
+        WGPUShaderModule skinnedColorShader_ = nullptr;          ///< stride 56, per-pixel-lit
+        WGPUShaderModule skinnedVertexLitShader_ = nullptr;      ///< stride 52, per-vertex-lit
+        WGPUShaderModule skinnedVertexLitColorShader_ = nullptr; ///< stride 56, per-vertex-lit
+        WGPUBindGroupLayout skinnedBindGroupLayout_ = nullptr;   ///< group 0: Uniforms + LitLightParams + SkinningParams UBOs
+        WGPUPipelineLayout skinnedPipelineLayout_ = nullptr;     ///< group 0 (above) + group 1 (texture, texturedBindGroupLayout_ reused)
+        std::unordered_map<int, WGPURenderPipeline> skinnedPipelines_;
+        std::unordered_map<int, WGPURenderPipeline> skinnedColorPipelines_;
+        std::unordered_map<int, WGPURenderPipeline> skinnedVertexLitPipelines_;
+        std::unordered_map<int, WGPURenderPipeline> skinnedVertexLitColorPipelines_;
+        std::vector<SkinnedDrawCommand> skinnedDrawCommands_;
+
+        // SkinnedPbrEffect (PBR + skinning combo, stride 68, VertexPositionNormalTangentTextureSkinned).
+        // Bone-palette skinning (the same vertex transform as the SkinnedEffect shaders above,
+        // extended to also skin Tangent) feeding pbr3d.wgsl's own fragment BRDF unchanged, matching
+        // EasyGLGraphicsBackend::EnsurePbrSkinnedProgram()'s combination exactly -- including its
+        // own (different from unskinned PbrEffect) normal/tangent transform, which uses the raw
+        // World rotation directly (mat3(uWorld)*(skinMat3*normal)) rather than the precomputed
+        // inverse-transpose normal matrix pbr3d.wgsl's own unskinned vertex shader uses. No vertex
+        // colour (SkinnedPbrEffect has no VertexColorEnabled, matching the EasyGL reference).
+        struct SkinnedPbrDrawCommand
+        {
+            std::vector<std::uint8_t> vertexData;
+            std::vector<std::uint8_t> indexData;
+            bool indexed = false;
+            bool index32 = false;
+            std::uint32_t vertexCount = 0;
+            std::uint32_t indexCount = 0;
+            WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
+            std::array<float, 32> uniforms{};
+            std::array<float, 68> lightUniforms{};
+            std::array<float, 4> pbrFactors{};
+            std::array<float, 4 + 72 * 16> skinningParams{};
+            bool depthTest = false;
+            bool depthWrite = false;
+            int depthFunc = 3;
+            const WebGPUTextureBackend* baseColorTexture = nullptr;
+            const WebGPUTextureBackend* normalMap = nullptr;
+            const WebGPUTextureBackend* metallicRoughnessMap = nullptr;
+            const WebGPUTextureBackend* emissiveMap = nullptr;
+            const WebGPUTextureBackend* occlusionMap = nullptr;
+            int textureFilter = 0;
+            int addressU = 1;
+            int addressV = 1;
+        };
+        void CreateSkinnedPbrResources();
+        void DestroySkinnedPbrResources();
+        [[nodiscard]] WGPURenderPipeline GetOrCreatePipelineSkinnedPbr3D(WGPUPrimitiveTopology topology,
+                                                                           bool depthTest, bool depthWrite,
+                                                                           int depthFunc);
+        void QueueSkinnedPbrDraw(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
+                                 const Matrix& world, const Matrix& view, const Matrix& projection,
+                                 PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
+        void RenderSkinnedPbrDraws(WGPURenderPassEncoder pass);
+
+        WGPUShaderModule skinnedPbrShader_ = nullptr;
+        WGPUBindGroupLayout skinnedPbrBindGroupLayout0_ = nullptr;  ///< group 0: Uniforms + LitLightParams + PbrFactors + SkinningParams UBOs
+        WGPUPipelineLayout skinnedPbrPipelineLayout_ = nullptr;     ///< group 0 (above) + group 1 (pbrBindGroupLayout1_ reused)
+        std::unordered_map<int, WGPURenderPipeline> skinnedPbrPipelines_;
+        std::vector<SkinnedPbrDrawCommand> skinnedPbrDrawCommands_;
     };
 }
