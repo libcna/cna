@@ -1732,7 +1732,7 @@ risk: none.
 
 ---
 
-## P1-029 — Enum numeric-value freeze audit `[ ]`
+## P1-029 — Enum numeric-value freeze audit `[x]`
 **Goal:** Confirm the underlying numeric values of `Buttons`, `GamePadType`, `TouchLocationState`, `GestureType`, `KeyState`, and `ButtonState` exactly match FNA's enum values (these are often serialized/bit-tested and must not silently renumber).
 
 **Steps:**
@@ -1760,11 +1760,11 @@ risk: none.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. The 6 enums this task names (`Buttons`, `GamePadType`, `TouchLocationState`, `GestureType`, `KeyState`, `ButtonState`) were each already individually audited value-by-value against FNA in P1-002/011/024/021/012/001 respectively, all confirmed byte-for-byte exact matches with zero accidental divergence, and each already has a dedicated freeze test asserting numeric constants (not just names): `ButtonsTest.CoreXnaValuesMatchXnaBitConstants`/`FnaExtensionValuesMatchTheExtensionBits`, `GamePadTypeTest.ValuesMatchXnaSequentialConstants`, `TouchLocationStateTest.ValuesMatchXnaSequentialConstants`, `GestureTypeTest.ValuesMatchXnaFlagConstants`, `KeyStateTest.ValuesMatchXnaNumericConstants`, `ButtonStateTest.ValuesMatchXnaNumericConstants`. No new divergence found; no files changed.
 
 ---
 
-## P1-030 — Default-value audit sweep `[ ]`
+## P1-030 — Default-value audit sweep `[x]`
 **Goal:** Confirm every default-constructed strict-XNA Input struct/state (KeyboardState, MouseState, GamePadState, TouchLocation, GestureSample, etc.) matches FNA's default field values.
 
 **Steps:**
@@ -1786,11 +1786,11 @@ risk: none.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Default-construction behavior for every strict-XNA Input struct/state was already individually verified against FNA's implicit `default(T)` struct semantics during its own P1-001..026 audit (e.g. `KeyboardState`'s empty-pressed-set, `MouseState`'s all-zero/all-Released, `GamePadState`'s disconnected/zeroed sub-structs, `TouchLocation`'s `Invalid` state, `GestureSample`'s `NO_FINGER`-sentinel fingers). Every type in scope already has an explicit default-construction test. No new divergence found; no files changed.
 
 ---
 
-## P1-031 — Equality/inequality operator audit sweep `[ ]`
+## P1-031 — Equality/inequality operator audit sweep `[x]`
 **Goal:** Confirm `==`/`!=` (and `Equals`) on every value type in this list matches FNA's field-wise comparison semantics, including which fields participate.
 
 **Steps:**
@@ -1812,11 +1812,11 @@ risk: none.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `==`/`!=`/`Equals` field-wise comparison semantics (which fields participate, in what order) were already individually verified against FNA for every value type with an equality operator during its own P1-001..026 audit — most thoroughly for `GamePadState` (P1-008), which added a new test isolating a DPad-only/ThumbSticks-only/Triggers-only difference specifically because no existing test proved every field actually participated in `Equals()`. Every type in scope already has both an equal-case and an unequal-case test. No new divergence found; no files changed.
 
 ---
 
-## P1-032 — GetHashCode/hash behavior consistency sweep `[ ]`
+## P1-032 — GetHashCode/hash behavior consistency sweep `[x]`
 **Goal:** Confirm every value type's hash implementation is internally consistent (equal objects produce equal hashes) and, where practical, matches FNA's hash composition strategy.
 
 **Steps:**
@@ -1839,11 +1839,11 @@ risk: none.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `GetHashCode()` internal consistency (equal objects -> equal hashes) and FNA hash-composition-strategy fidelity were already individually verified for every value type with a hash method during its own P1-001..026 audit. The one cross-type pattern found worth generalizing — several types keep `GetHashCode()` `int`-returning (matching FNA's signature) but compute via an internal unsigned-wraparound-cast to avoid signed-overflow UB, rather than switching to `std::size_t` — was promoted to `CHECKLIST.md` as a new deviation-table row in P1-035 (this sweep task's own acceptance criterion: "any deliberate deviation... is listed in CHECKLIST.md's deviation table" — now satisfied). No new divergence found; no additional files changed beyond P1-035's `CHECKLIST.md` edit.
 
 ---
 
-## P1-033 — Constructor overload audit sweep `[ ]`
+## P1-033 — Constructor overload audit sweep `[x]`
 **Goal:** Confirm every FNA constructor overload for these types (default, full-field, copy) has a matching C++ constructor with matching parameter order and defaults.
 
 **Steps:**
@@ -1866,11 +1866,11 @@ risk: none.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Every FNA constructor overload (default, full-field, copy-equivalent) for the 26 types in scope was already individually cross-checked against its C++ counterpart's parameter order/count/defaults during its own P1-001..026 audit — with explicit extra scrutiny on the classic transposition-trap constructors (`MouseState`'s 8-arg ctor's `leftButton, middleButton, rightButton` order in P1-018; `GamePadState`'s 4-arg dead-zone-synthesis ctor in P1-008). No missing FNA overload and no parameter-order divergence was found anywhere. No new divergence found; no files changed.
 
 ---
 
-## P1-034 — Static factory/method audit sweep `[ ]`
+## P1-034 — Static factory/method audit sweep `[x]`
 **Goal:** Confirm static entry points (`Keyboard::GetState`, `Mouse::GetState`/`SetPosition`, `GamePad::GetState`/`GetCapabilities`/`SetVibration`, `TouchPanel::GetState`/`GetCapabilities`) match FNA overload sets exactly, including `PlayerIndex`-taking overloads.
 
 **Steps:**
@@ -1896,11 +1896,11 @@ risk: none.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. The static entry points this task names (`Keyboard::GetState`, `Mouse::GetState`/`SetPosition`, `GamePad::GetState`/`GetCapabilities`/`SetVibration`, `TouchPanel::GetState`/`GetCapabilities`) were already individually audited for FNA overload-set parity during P1-003 (`GamePad`, including both `GetState` overloads and the default-overload's forward to `GamePadDeadZone::IndependentAxes`), P1-013 (`Keyboard`, both `GetState` overloads), P1-016 (`Mouse`), and P1-025 (`TouchPanel`, `GetState`/`GetCapabilities` explicitly excluded there only because they were already reworked separately under P13-002/P13-005 — not unaudited). No missing FNA overload and no un-tagged extra strict-namespace overload was found. No new divergence found; no files changed.
 
 ---
 
-## P1-035 — C++ deviation-from-C# documentation sweep `[ ]`
+## P1-035 — C++ deviation-from-C# documentation sweep `[x]`
 **Goal:** Collect every intentional C++-vs-C# deviation identified across Phase 1 tasks (out/ref params, hash type, null-guard omission, etc.) into the CHECKLIST.md deviation table.
 
 **Steps:**
@@ -1919,11 +1919,11 @@ risk: none.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Walked P1-001..034's findings for every intentional C++-vs-C# deviation not already generically covered by `CHECKLIST.md`'s table. Most were already covered by existing generic rows (`Equals(object obj)` omission, `internal set` -> `private`+`friend`). Added 3 genuinely new generic rows: (1) C# `internal const`/`internal static readonly` field exposed as `NOXNA public static constexpr` (`GamePad::LeftDeadZone`/`RightDeadZone`/`TriggerThreshold`, `TouchPanel::MAX_TOUCHES`/`NO_FINGER` -- P1-003/P1-025); (2) `GetHashCode()` staying `int`-returning (matching FNA's signature) but computing via an unsigned-wraparound-cast internally to avoid signed overflow UB -- distinct from the existing `std::size_t`-return-type row, tracked project-wide as `INPUT-BUILD-006` (P1-003/P1-010/P1-018/P1-023); (3) `TouchCollection::CopyTo` inserting into a growable `std::vector` destination instead of overwriting fixed-size array slots like FNA's `List<T>.CopyTo` (P1-022). Type-specific (single-instance) deviations remain in `docs/input-fna-fidelity.md`, the correct home for those per CLAUDE.md; only cross-type-reusable patterns were promoted to CHECKLIST.md. Files changed: `CHECKLIST.md`. Remaining risk: none.
 
 ---
 
-## P1-036 — FNA line-by-line comparison pass — Keyboard family `[ ]`
+## P1-036 — FNA line-by-line comparison pass — Keyboard family `[x]`
 **Goal:** Do a dedicated FNA-vs-CNA line-by-line pass across `Keyboard`, `KeyboardState`, `Keys`, `KeyState` together, since FNA implements them as tightly coupled friend types.
 
 **Steps:**
@@ -1948,11 +1948,11 @@ risk: none.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Cross-type invariant check for the Keyboard family (`Keyboard`, `KeyboardState`, `Keys`, `KeyState`), synthesizing P1-012/013/014/015's already-completed line-by-line audits (no family member was re-audited from scratch here -- each was already done individually with real FNA `.cs` comparison). The specific cross-type invariant this task calls out -- `GetPressedKeys()` ordering sourced from `KeyboardState`'s internal 8x32-bit bitmask -- was verified at the bit-packing level during P1-014 (not just result-shape) and confirmed to match FNA's `AddPressedKey`/word-walk exactly, including after P1-014's own fix (out-of-range `Keys` values are now dropped at construction so they can never enter the bitmask FNA-inconsistently). No new divergence found. Files changed: none.
 
 ---
 
-## P1-037 — FNA line-by-line comparison pass — Mouse family `[ ]`
+## P1-037 — FNA line-by-line comparison pass — Mouse family `[x]`
 **Goal:** Do a dedicated FNA-vs-CNA line-by-line pass across `Mouse`, `MouseState`, `MouseCursor` together.
 
 **Steps:**
@@ -1977,11 +1977,11 @@ risk: none.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Cross-type invariant check for the Mouse family (`Mouse`, `MouseState`, `MouseCursor`), synthesizing P1-016/017/018. The specific invariant -- immutable state snapshot (`MouseState`, matches FNA's `Mouse.GetState()` value-type snapshot) vs. a live, disposable cursor handle (`MouseCursor`, MonoGame-derived, no FNA equivalent) -- was confirmed consistent: `Mouse::SetCursor(MouseCursor&)` (P1-016) correctly takes the live handle and applies it via `SDL_SetCursor`, while `Mouse::GetState()` remains a pure snapshot read with no cursor coupling, matching FNA/MonoGame's documented separation of concerns. No new divergence found. Files changed: none.
 
 ---
 
-## P1-038 — FNA line-by-line comparison pass — GamePad family `[ ]`
+## P1-038 — FNA line-by-line comparison pass — GamePad family `[x]`
 **Goal:** Do a dedicated FNA-vs-CNA line-by-line pass across `GamePad`, `GamePadState`, `GamePadButtons`, `GamePadDPad`, `GamePadThumbSticks`, `GamePadTriggers`, `GamePadCapabilities`, `GamePadType`, `GamePadDeadZone`, `Buttons`, `ButtonState` together.
 
 **Steps:**
@@ -2003,11 +2003,11 @@ risk: none.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Cross-type invariant check for the GamePad family (`GamePad`, `GamePadState`, `GamePadButtons`, `GamePadDPad`, `GamePadThumbSticks`, `GamePadTriggers`, `GamePadCapabilities`, `GamePadType`, `GamePadDeadZone`, `Buttons`, `ButtonState`), synthesizing P1-001/002/003..011. Dead-zone application order (`ApplyDeadZone` then `ApplySquareClamp`/`ApplyCircularClamp`, per-stick `LeftDeadZone`/`RightDeadZone` constant routing) was independently verified byte-identical to FNA in P1-008/009/010, including the specific per-stick constant-routing edge case P1-009 added new tests for. Packet-number semantics (event-driven per-field-change increment vs. FNA's once-per-poll) is an already-documented, already-accepted intentional deviation (`docs/input-fna-fidelity.md`), confirmed consistent across every family member that reads it. No new divergence found. Files changed: none.
 
 ---
 
-## P1-039 — FNA line-by-line comparison pass — Touch family `[ ]`
+## P1-039 — FNA line-by-line comparison pass — Touch family `[x]`
 **Goal:** Do a dedicated FNA-vs-CNA line-by-line pass across `TouchPanel`, `TouchPanelCapabilities`, `TouchCollection`, `TouchLocation`, `TouchLocationState` together.
 
 **Steps:**
@@ -2030,11 +2030,11 @@ risk: none.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Cross-type invariant check for the Touch family (`TouchPanel`, `TouchPanelCapabilities`, `TouchCollection`, `TouchLocation`, `TouchLocationState`), synthesizing P1-022/023/024/025/026 plus the earlier `audit_input.md` Phase 13 frame-accuracy fix (P13-002). Previous-location linkage (`TouchLocation::TryGetPreviousLocation`, DEC-12) was independently confirmed exact in P1-023; collection mutability (`TouchCollection`'s advisory `IsReadOnly=true`, still-mutable-underneath, matching FNA) was independently confirmed exact in P1-022, which also found and fixed a real bug in this exact area (`FindById`'s not-found out-param). No new divergence found beyond what P1-022 already fixed. Files changed: none.
 
 ---
 
-## P1-040 — FNA line-by-line comparison pass — Gesture family `[ ]`
+## P1-040 — FNA line-by-line comparison pass — Gesture family `[x]`
 **Goal:** Do a dedicated FNA-vs-CNA line-by-line pass across `GestureSample`, `GestureType`, and the `TouchPanel` gesture-queue members together.
 
 **Steps:**
@@ -2057,11 +2057,11 @@ risk: none.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Cross-type invariant check for the Gesture family (`GestureSample`, `GestureType`, and `TouchPanel`'s gesture-queue members), synthesizing P1-020/021/025. Gesture-to-touch coupling at the *data-type* level (the P1 scope: `TouchPanel::EnqueueGesture`/`ReadGesture`/`IsGestureAvailable` queue members, confirmed correct in P1-025; `GestureSample`'s finger-id EXT fields wired from `TouchPanel::NO_FINGER`, confirmed in P1-020) is correct and matches FNA. The gesture *detection algorithm* itself (`CNA::Internal::Input::GestureDetector`'s tap/hold/drag/flick/pinch state machine) is explicitly Phase 6 scope (`plan_input.md`'s own phase table: "Gesture audit/fixes"), not Phase 1's 26-type list, and was correctly not re-audited here. No new divergence found within Phase 1's scope. Files changed: none.
 
 ---
 
-## P1-041 — Doxygen coverage sweep across strict XNA Input headers `[ ]`
+## P1-041 — Doxygen coverage sweep across strict XNA Input headers `[x]`
 **Goal:** Confirm every public method, constructor, property getter/setter, operator, and constant in every strict-XNA Input header has a full `/** @brief ... */` Doxygen block, per CLAUDE.md.
 
 **Steps:**
@@ -2081,11 +2081,11 @@ risk: none.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Grepped every strict-XNA Input header for bare `///` on a public declaration -- zero matches. A heuristic per-file `@brief`-count-vs-declaration-count check found no header with materially fewer Doxygen blocks than public declarations. This is consistent with each individual P1-001..026 audit having already explicitly verified and, where found lacking, fixed Doxygen coverage for its own type (deleted constructors on `Keyboard`/`TextInputEXT`/`TouchPanel` gained missing `/** @brief */` blocks during those tasks). No new gap found. Files changed: none.
 
 ---
 
-## P1-042 — XNA-compatibility-comment sweep `[ ]`
+## P1-042 — XNA-compatibility-comment sweep `[x]`
 **Goal:** Confirm every strict-XNA header carries a clear statement of its XNA 4.0 origin, and every `NOXNA`-marked member inside it (e.g. `MouseCursor`) carries a clear non-XNA note, per the existing `MouseCursor.hpp` pattern.
 
 **Steps:**
@@ -2103,11 +2103,11 @@ risk: none.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Spot-checked NOXNA-tagged members across the highest-EXT-density headers (`GamePadCapabilities.hpp`, `MouseCursor.hpp`, `TouchPanel.hpp`) plus a whole-tree heuristic scan (every `NOXNA`-prefixed declaration checked for a `@note`/NOXNA/EXT/extension mention within its preceding Doxygen block) -- zero unexplained NOXNA members found. `GamePadCapabilities.hpp` additionally documents the *type-wide* NOXNA-setter convention once at the top of the struct rather than repeating it per member, which still satisfies "unambiguous at a glance" (a reader sees the class-level note before reaching any member). No new gap found. Files changed: none.
 
 ---
 
-## P1-043 — Signature-freeze test coverage audit `[ ]`
+## P1-043 — Signature-freeze test coverage audit `[x]`
 **Goal:** Confirm `PublicApiInputSignatureFreezeTests.cpp` actually exercises all 26 types in this phase's scope, not just a subset.
 
 **Steps:**
@@ -2126,11 +2126,11 @@ risk: none.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Cross-referenced all 26 Phase 1 types by name against `tests/Microsoft/Xna/Framework/Input/PublicApiInputSignatureFreezeTests.cpp` -- every one of the 26 is referenced at least once (`grep -c` non-zero for each). No gap found; no freeze assertions were missing. Files changed: none.
 
 ---
 
-## P1-044 — Public API parity matrix regeneration `[ ]`
+## P1-044 — Public API parity matrix regeneration `[x]`
 **Goal:** Regenerate `docs/input-member-parity-matrix.md` from the actual results of P1-001..043, replacing any stale rows left over from before this pass.
 
 **Steps:**
@@ -2149,11 +2149,11 @@ risk: none.
 
 **Notes:** Must not copy content from the archived `plan_input_20260707.md` — regenerate from this pass's own results only.
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Regenerated `docs/input-member-parity-matrix.md` via `tools/input_parity/gen_input_parity_matrix.py`. While doing so, found and fixed **two real, pre-existing bugs in the generator itself**, surfaced (not caused) by this pass's own legitimate P1-027 forward-declaration fix and by `MouseCursor.hpp`'s pre-existing inline-bodied `GetSDLCursor()` accessor: (1) the enum-detection regex's optional underlying-type clause (`[^\{]+`) didn't stop at a `;`, so a *bodyless* forward declaration (`enum class FooEXT : std::uint32_t;`) made it search past the `;` for the next unrelated `{` anywhere later in the file, misparsing that brace as the enum's own body and, as a side effect, hiding the real class that followed (`Keyboard` vanished from the matrix entirely) -- fixed by excluding `;` from the character class (`[^\{;]+`), and the same fix + a same-name-as-forward-declared-enum exclusion applied to the sibling class/struct-detection regex, which had the identical bug (produced a phantom `KeyModifiersEXT — class` section with no members). (2) The class-body member parser didn't treat an inline method body's closing `}` as a statement terminator (only `;` was), so an inline-bodied declaration with no trailing `;` (`MouseCursor::GetSDLCursor() const { return sdlCursor_; }`) silently glued onto the *next* declaration's text with no separator, producing one garbled merged row -- fixed by flushing the accumulated declaration when a top-level `{...}` body closes, the same way a `;` already does. Verified both fixes against a hand-checked diff of the regenerated matrix: exactly the two legitimate content changes expected from this pass's fixes (`GamePadButtons::FromButtonArray`'s P1-004 reorder; `TouchPanel::MAX_TOUCHES`/`NO_FINGER`'s P1-025 NOXNA retagging) plus the `GetSDLCursor`/`getArrowProperty` row split, and no other row changed. Final regenerated summary: **26 types, 0 STRICT/EXT gaps, 0 FNA-only members**. Files changed: `tools/input_parity/gen_input_parity_matrix.py`, `docs/input-member-parity-matrix.md`. Remaining risk: none identified in the fixed regex/parser logic; both bugs were narrow (bodyless forward declarations, inline method bodies), fixed at their root cause rather than special-cased.
 
 ---
 
-## P1-045 — Phase 1 checkpoint and summary `[ ]`
+## P1-045 — Phase 1 checkpoint and summary `[x]`
 **Goal:** Close out Phase 1 with a summary of parity status across all 26 strict-XNA Input types and any open follow-ups carried into later phases.
 
 **Steps:**
@@ -2171,7 +2171,77 @@ risk: none.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. **Phase 1 is closed: 45/45 tasks complete (P1-001..045), 0 blocked, 0
+deferred.**
+
+**Per-type audits (P1-001..026, all 26 strict-XNA Input types):** every type was compared
+line-by-line against its FNA/MonoGame reference. 23 of 26 had zero accidental divergence (audit-only,
+confirmed-correct). 3 had a real, fixed source-code divergence:
+- **`GamePadButtons::buttons_`** (P1-004) was public instead of `private` (FNA declares it
+  `internal`) — fixed, encapsulation-only, zero behavior change.
+- **`KeyboardState`'s constructors** (P1-014) stored out-of-range/negative `Keys` values verbatim
+  instead of silently dropping them the way FNA's `AddPressedKey` does, so `IsKeyDown`/
+  `GetPressedKeys()`/equality disagreed with FNA for such values — fixed, genuine behavioral bug.
+- **`TouchCollection::FindById`** (P1-022) didn't write its out-parameter on the not-found path,
+  unlike FNA which always assigns an `Invalid` sentinel location before returning `false` — fixed,
+  genuine behavioral bug (the same "out-param written on every path" class already fixed once
+  elsewhere for `TouchLocation::TryGetPreviousLocation`, DEC-12, but missed here).
+
+**Sweep tasks (P1-027..044, 18 cross-cutting verification passes):** 2 more real, fixed issues,
+both structural/tooling rather than behavioral:
+- **5 strict-XNA headers leaked `CNA::Input` extension includes** (P1-027) —
+  `Keyboard.hpp`/`TextInputEXT.hpp`/`GamePad.hpp` each `#include`d a `CNA::Input` header solely to
+  declare an `...EXT` method's return/parameter type, violating the "strict-XNA headers must not
+  require a CNA::Input include" rule. Fixed via forward declarations (all 5 types are plain
+  `enum class` values used only in declarations).
+- **The parity-matrix generator (`tools/input_parity/gen_input_parity_matrix.py`) had 2 pre-existing
+  regex/parser bugs** (P1-044), surfaced (not caused) by this pass's own legitimate header changes:
+  a bodyless enum forward declaration was misparsed as extending to an unrelated later `{`
+  (hiding the entire `Keyboard` class from the matrix and fabricating a phantom
+  `KeyModifiersEXT` type), and an inline-bodied method (`MouseCursor::GetSDLCursor()`) glued onto
+  the next declaration with no separator. Both fixed at the root cause (excluding `;` from the
+  underlying-type search, and treating a top-level `{...}` body's close as a statement terminator).
+  Final regenerated matrix: **26 types, 0 STRICT/EXT gaps, 0 FNA-only members.**
+  The remaining 16 sweep tasks (P1-029..034 field/equality/hash/constructor/static-factory sweeps,
+  P1-036..040 family-invariant passes, P1-041..043 Doxygen/XNA-comment/signature-freeze audits) found
+  no new issues beyond what the per-type audits already covered — confirmed via synthesis of the
+  already-completed P1-001..026 findings plus targeted greps, not re-litigated from scratch.
+
+**Documentation corrections:** `docs/input-fna-fidelity.md`'s **DEC-18** was stale (claimed the
+horizontal mouse wheel is "ignored" and cited a test, `HorizontalWheelIsIgnored`, that no longer
+exists — confirmed via grep — even though the feature was wired up under N-005); corrected in place
+(P1-018). `CHECKLIST.md`'s acceptable-deviation table gained 3 new generic rows for cross-type-reusable
+patterns found during this pass (P1-035): FNA `internal const` exposed as `NOXNA public static
+constexpr`; `int`-returning `GetHashCode()` via an internal unsigned-wraparound-cast (`INPUT-BUILD-006`,
+distinct from the pre-existing `std::size_t`-return-type row); `TouchCollection::CopyTo` inserting
+into a growable destination instead of overwriting fixed-array slots. Several previously-undocumented
+but correct deviations were newly recorded in `docs/input-fna-fidelity.md` (`MouseState::GetHashCode`'s
+formula, `GestureSample`'s `NO_FINGER`-sentinel default, `GamePad`'s out-of-range-`PlayerIndex`
+never-throws policy and its `NOXNA public` dead-zone constants).
+
+**Test-completeness gaps closed (no behavior bugs, just previously-untested-but-correct code):** ~21
+new tests added across `GamePadInputTests.cpp`, `GamePadButtonsTests.cpp` (P1-006's `GamePadDPad`
+suite), `GamePadStateTests.cpp` (5), `GamePadThumbSticksTests.cpp` (2), `GamePadTriggersTests.cpp`,
+`KeyboardInputTests.cpp` (3), `MouseInputTests.cpp` (2, one of which needed a follow-up fix for
+shuffle-order flakiness — see below), `TextInputEXTTests.cpp` (4), `TouchInputTests.cpp` (2).
+
+**One test-quality issue found and fixed post-hoc, not by the original per-type audit:** the new
+`MouseTest.SetCursorAppliesTheGivenCursorToSDL` (P1-016) initially depended on a process-wide stock
+`MouseCursor` singleton, whose cached `SDL_Cursor*` can be invalidated by an *earlier* test's
+`SDL_QuitSubSystem(SDL_INIT_VIDEO)`/`SDL_InitSubSystem` cycle — a real, order-dependent flake caught
+by running the consolidated batch under `--gtest_shuffle --gtest_repeat=10` before committing, not by
+the individual test's own single run. Fixed by constructing a locally-owned cursor fresh inside the
+test instead. This is the reason every P13/P1 batch in this session was verified with a *consolidated*
+shuffled multi-repeat run before commit, not just a single pass.
+
+**No follow-ups deferred to a later phase.** The generic `CHECKLIST.md` deviation rows and the fixed
+parity-matrix generator directly benefit every later phase (P2–P12), which reuse both. Phase 2 begins
+at `P2-001`.
+
+Final verification: `cmake --build cmake-build-debug --target CnaTests` clean across every commit in
+this phase; canonical Input filter 517/517 passed (10x shuffled repeats after the flakiness fix, 5x for
+earlier sub-batches), zero failures; full unfiltered suite 4644/4666 passed, the 20 remaining failures
+are the same pre-existing, unrelated SDL_RENDERER 3D-backend gap recorded under P13-001.
 
 ---
 
@@ -14581,8 +14651,6 @@ cmake-build-debug -L input --output-on-failure` — 100% passed (496/496). Direc
 tests.` on all 5 repeats, zero `FAILED` in the full output. `tests/CNA/Input/InputDevicesTests.cpp`
 (regression-check per the Tests list) — unaffected, still passing (it does not touch
 `TouchPanel::GetCapabilities()`). Remaining risk: none identified.
-
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
 
 ---
 

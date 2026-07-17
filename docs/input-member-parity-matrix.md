@@ -114,11 +114,11 @@ documented collection-interface deviations below). Full per-type tables follow.
 | `ButtonState getBigButtonProperty() const` | STRICT | yes | matched |
 | `NOXNA GamePadButtons()` | NOXNA | yes | maps FNA non-public |
 | `explicit GamePadButtons(Buttons buttons)` | STRICT | yes | matched |
+| `NOXNA static GamePadButtons FromButtonArray(std::initializer_list<Buttons> btns)` | NOXNA | internal | maps FNA non-public |
 | `bool Equals(const GamePadButtons& other) const` | STRICT | yes | matched |
 | `int GetHashCode() const` | STRICT | yes | matched |
 | `friend bool operator==(const GamePadButtons& left, const GamePadButtons& right)` | STRICT | yes | matched |
 | `friend bool operator!=(const GamePadButtons& left, const GamePadButtons& right)` | STRICT | yes | matched |
-| `NOXNA static GamePadButtons FromButtonArray(std::initializer_list<Buttons> btns)` | NOXNA | internal | maps FNA non-public |
 
 ## `GamePadCapabilities` — struct (FNA `GamePadCapabilities.cs`)
 
@@ -552,7 +552,8 @@ documented collection-interface deviations below). Full per-type tables follow.
 | `MouseCursor(MouseCursor&& other) noexcept` | NOXNA | no | CNA-only |
 | `~MouseCursor() override` | NOXNA | no | CNA-only |
 | `NOXNA void Dispose() override` | NOXNA | no | CNA-only |
-| `NOXNA SDL_Cursor* GetSDLCursor() const NOXNA static MouseCursor& getArrowProperty()` | NOXNA | no | CNA-only |
+| `NOXNA SDL_Cursor* GetSDLCursor() const` | NOXNA | no | CNA-only |
+| `NOXNA static MouseCursor& getArrowProperty()` | NOXNA | no | CNA-only |
 | `NOXNA static MouseCursor& getCrosshairProperty()` | NOXNA | no | CNA-only |
 | `NOXNA static MouseCursor& getHandProperty()` | NOXNA | no | CNA-only |
 | `NOXNA static MouseCursor& getIBeamProperty()` | NOXNA | no | CNA-only |
@@ -670,8 +671,8 @@ documented collection-interface deviations below). Full per-type tables follow.
 | Member | Tag | In FNA | Note |
 |--------|-----|--------|------|
 | `TouchPanel() = delete` | STRICT | no | C++ special-member idiom (no XNA counterpart expected) |
-| `static constexpr intcs MAX_TOUCHES = 8` | STRICT | internal | FNA-internal (review tag) |
-| `static constexpr intcs NO_FINGER = -1` | STRICT | internal | FNA-internal (review tag) |
+| `NOXNA static constexpr intcs MAX_TOUCHES = 8` | NOXNA | internal | maps FNA non-public |
+| `NOXNA static constexpr intcs NO_FINGER = -1` | NOXNA | internal | maps FNA non-public |
 | `static intcs getDisplayWidthProperty()` | STRICT | yes | matched |
 | `static void setDisplayWidthProperty(intcs value)` | STRICT | yes | matched |
 | `static intcs getDisplayHeightProperty()` | STRICT | yes | matched |

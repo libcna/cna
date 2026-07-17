@@ -112,8 +112,20 @@ def parse_class(name: str, kind: str, body: str, header_text: str) -> CppType:
             i += 1
             continue
         if c == "}":
+            closed_top_level_body = depth == 1
             depth = max(0, depth - 1)
             i += 1
+            if closed_top_level_body and stmt:
+                # An inline method body (`Foo() const { return x_; }`, no trailing `;`) — the text
+                # collected before the `{` is the whole declaration; flush it now the same way a
+                # `;` would, otherwise it silently glues onto the *next* declaration's text (they
+                # share no `;` between them), producing a garbled merged row in the rendered matrix.
+                decl = "".join(stmt).strip()
+                stmt = []
+                if access == "public" and decl:
+                    member = classify_cpp_decl(decl, is_noxna_class)
+                    if member:
+                        t.members.append(member)
             continue
         if depth > 0:
             i += 1
@@ -173,13 +185,25 @@ def classify_cpp_decl(decl: str, is_noxna_class: bool):
 def parse_header(path: str) -> list:
     text = strip_cpp_comments(open(path, encoding="utf-8").read())
     types = []
-    # enums first (so their bodies are not re-scanned as class bodies)
-    for m in re.finditer(r"enum\s+class\s+([A-Za-z_]\w*)\s*(?::[^\{]+)?\{(.*?)\}", text, flags=re.S):
+    # enums first (so their bodies are not re-scanned as class bodies). [^\{;]+ (not just [^\{]+)
+    # in the optional underlying-type clause is deliberate: a *bodyless* forward declaration like
+    # `enum class FooEXT : std::uint32_t;` (used by strict-XNA headers per P1-027/P1-028 to avoid
+    # #including a CNA::Input header just to declare an EXT method's return type) must NOT match
+    # here. Without the `;` exclusion, the optional clause happily skips past the `;` hunting for
+    # the next `{` anywhere later in the file (e.g. the following `namespace ... { class Keyboard`
+    # block), misparsing that unrelated brace as the enum's own body and, as a side effect, hiding
+    # the real class from the class-boundary scan below (which skips anything inside a "consumed"
+    # enum span).
+    ENUM_CLASS_RE = r"enum\s+class\s+([A-Za-z_]\w*)\s*(?::[^\{;]+)?\{(.*?)\}"
+    for m in re.finditer(ENUM_CLASS_RE, text, flags=re.S):
         types.append(parse_enum(m.group(1), m.group(2)))
-    consumed_enum_spans = [(m.start(), m.end()) for m in
-                           re.finditer(r"enum\s+class\s+[A-Za-z_]\w*\s*(?::[^\{]+)?\{.*?\}", text, flags=re.S)]
+    consumed_enum_spans = [(m.start(), m.end()) for m in re.finditer(ENUM_CLASS_RE, text, flags=re.S)]
 
-    for m in re.finditer(r"\b(class|struct)\s+([A-Za-z_]\w*)\s*(?:final)?\s*(?::[^\{]+)?\{", text):
+    # (?<!enum ) excludes the "class" in "enum class Foo" (a fixed-width lookbehind, matching this
+    # codebase's consistent single-space "enum class" style — see ENUM_CLASS_RE's own note above for
+    # why a *bodyless* enum-class forward declaration must not be misread as starting a same-named
+    # ordinary class here too; [^\{;]+ carries the same `;`-stops-the-search fix as ENUM_CLASS_RE).
+    for m in re.finditer(r"(?<!enum )\b(class|struct)\s+([A-Za-z_]\w*)\s*(?:final)?\s*(?::[^\{;]+)?\{", text):
         kind, name = m.group(1), m.group(2)
         if any(a <= m.start() < b for a, b in consumed_enum_spans):
             continue
