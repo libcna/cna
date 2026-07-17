@@ -5433,3 +5433,114 @@ an audit's claims without cross-checking them against the real code first.
   override) re-verified passing unchanged: 49/49 (was 45/45; +4 new tests, zero regressions).
   Full audio-scoped suite 545/545 pass (was 541/541; +4 new tests). Full whole-repo `CnaTests`
   suite also reverified green.
+
+# Phase 14 — Second external audit: Cue lifetime, buffer accounting, ordering, parser safety (2026-07-17)
+
+User-provided, external audit (Czech-language report, dated 2026-07-17, not authored by a fork of
+this branch), delivered as a standalone review of the state after Phase 13 landed. Four findings,
+all independently re-verified by reading the actual current source line-by-line (and, where a
+claim could be traced to a concrete algorithmic trace, by hand-simulating it) before any fix was
+written, per this branch's established practice.
+
+* [x] P14-LIFECYCLE-001 (external audit finding 1, high severity): `SoundBank::GetCue()` created a
+  `Cue` without registering it with the bank at all -- `Cue`'s constructor never called
+  `bank_->RegisterCue(this)`; only `Cue::Play()` did, at three separate exit points (P12-BANK-001).
+  A cue obtained via `GetCue()` but never `Play()`'d was therefore invisible to
+  `SoundBank::Dispose()`'s force-stop cascade (which only ever walks `activeCues_`), so it could
+  outlive its bank entirely -- `Play()` could still be called on it afterward, dereferencing a
+  `bank_` pointer that would be dangling once the `SoundBank` object itself was actually destructed
+  (not merely `Dispose()`'d). This directly contradicts `P12-BANK-001`'s whole purpose and its own
+  doc comment ("if this bank is itself disposed while the cue is still playing... so it never
+  outlives the bank") -- the doc comment implicitly assumed "still playing" was the only case that
+  mattered, missing "never played at all" and (less severely) "played, then stopped, but not yet
+  disposed by the caller" entirely.
+  *Status:* Fixed. Independently confirmed by reading `Cue::Cue()` (no registration call at all),
+  `SoundBank::GetCue()` (constructs and returns without registering), and `SoundBank::Dispose()`'s
+  cascade (only walks `activeCues_`, which the never-played cue was never in) -- all three exactly
+  as the audit described. Moved registration to the constructor itself: `Cue::Cue()` now calls
+  `bank_->RegisterCue(this)` unconditionally, matching real FACT (a cue's native handle exists and
+  is reachable by `FACTSoundBank_Destroy` from the moment of `FACTSoundBank_GetCue`, independent of
+  whether `FACTCue_Play` has run yet). Removed the three now-redundant `bank_->RegisterCue(this)`
+  calls from `Play()`'s exit points (`SoundBank::RegisterCue()` has no duplicate-entry guard,
+  unlike `AudioEngine::RegisterCue()`, so registering both at construction and again at Play() would
+  have double-added the same pointer). Also moved `bank_->UnregisterCue(this)` out of
+  `StopInternal()` (which used to unregister the moment a cue genuinely stopped playing, even if
+  the caller was still holding it, undisposed) and into `Cue::Dispose()` instead -- a cue now stays
+  registered with its bank for its *entire* C++ lifetime (Prepared, Playing, Stopping, or Stopped),
+  not just while actively playing, closing both the "never played" gap and the narrower
+  "played-then-stopped-but-undisposed" gap in the same fix. `AudioEngine::RegisterCue`/
+  `WaveBank::RegisterCue` (the category-operations and per-wave-usage registries, respectively)
+  are unaffected -- both are correctly scoped to *actual playback*, not raw lifetime, since neither
+  a resolved category index nor a resolved wave bank exists before `Play()` actually runs; only
+  `SoundBank::activeCues_`'s specific job (a lifetime safety net preventing a dangling `bank_`) needed
+  this change.
+  *Tests:* 2 new (`SoundBankTests.cpp`): `DisposeForceStopsNeverPlayedCueObtainedViaGetCue` (the
+  audit's exact reproduction -- `GetCue()`, no `Play()`, `bank.Dispose()`, confirms the cue is now
+  disposed and a subsequent `Play()` throws `ObjectDisposedException` instead of silently running),
+  `DisposeForceStopsAlreadyStoppedButUndisposedCueObtainedViaGetCue` (the narrower stopped-but-
+  undisposed case). `git stash`-verified: stashing `Cue.cpp`/`Cue.hpp` while keeping the new tests
+  reproduces both failures exactly (pre-fix, `getIsDisposedProperty()` stays false and `Play()`
+  doesn't throw). All pre-existing `SoundBankTest`/`CueTest` tests re-verified passing unchanged,
+  including `IsInUseTrueForCueObtainedViaGetCueNotJustFireAndForget` (still correct: `getIsInUseProperty()`
+  only depends on what `IsPlaying`/`IsPaused` report for cues in the list, not on whether a stopped
+  cue happens to still literally be in `activeCues_`) and the original `DisposeForceStopsCueObtainedViaGetCue`
+  (unchanged, still passes).
+
+* [x] P14-ORDER-001 (external audit finding 3, medium severity, **partial fix -- see scope note**):
+  `Cue::Play()`'s per-wave-reference loop called `inst->Play()` (starting SDL3_mixer playback)
+  *before* seeding the instance's 3D state (`Apply3D`) and before establishing its per-track filter
+  and RPC-filter override; the cue-level fade-in (`P9-CATEGORY-007`) similarly forced every
+  instance's volume to `0.0f` in a *separate trailing loop* run only after every instance in the
+  cue had already started playing at its full `combinedVol`. `SoundBank::PlayCueInternal()` had
+  the same shape one level up: `cue->Play()` ran before `cue->Apply3D()`. FNA's own reference
+  ordering (`SoundEffectInstance.cs`'s `Play()`) configures Volume/Pitch/Pan/the 3D output matrix
+  fully *before* calling `FAudioSourceVoice_Start` -- CNA's ordering only approximately matched
+  this ("synchronously, before the next real audio callback"), not literally.
+  *Status:* Partially fixed -- the 3D and fade-in cases were both safely reorderable with
+  already-existing, already-tested infrastructure; the filter/RPC-filter case is a genuine,
+  narrower architectural constraint that is **not** fixed this pass (see scope note).
+  Moved the per-instance `if (has3D_) inst->Apply3D(...)` seeding call to run *before*
+  `inst->Play()` instead of after -- safe because `P13-3D-001` already made `Apply3D()` persist its
+  result (`attenuation_`/`dopplerFactor_`/`spatialPan_`) even with no live track yet, and
+  `SoundEffectInstance::Play()` already applies the composed Volume/Pitch/Pan/spatial state as its
+  own first real track-property write, *before* `MIX_PlayTrack` actually starts the track -- so
+  calling `Apply3D()` first means that composed-properties write already reflects the 3D result by
+  the time the track starts, instead of the track briefly starting unspatialized until a moment
+  later. Also moved the fade-in's silent starting volume inline into the per-wave loop (`inst->
+  setVolumeProperty(categoryFadeInMS > 0 ? 0.0f : combinedVol)`, called before `inst->Play()`) and
+  removed the now-redundant trailing per-instance zero-volume loop entirely, so a fading-in
+  instance now starts genuinely silent from its first frame instead of momentarily starting at
+  full `combinedVol` and being silenced a few C++ statements later. Reordered
+  `SoundBank::PlayCueInternal()` to call `cue->Apply3D()` before `cue->Play()` for the same reason,
+  now that `Cue::Play()`'s own per-wave loop correctly seeds every newly created instance from
+  `has3D_`/`pending3DListener_`/`pending3DEmitter_` before that instance ever starts.
+  *Scope note (not fixed):* the per-track filter (`INTERNAL_applyXactTrackFilter`/
+  `INTERNAL_applyEffectVariationFilter`) and RPC-filter-override calls still run *after*
+  `inst->Play()`, and were deliberately left there. Both hard-require a live `track_`
+  (`if (!track_) return;`, matching FNA's own identical `if (handle == IntPtr.Zero) return;` guard
+  on its own `INTERNAL_applyLowPassFilter`/etc.) because establishing the filter also registers
+  SDL3_mixer's per-track cooked callback (`MIX_SetTrackCookedCallback`), which requires a real
+  `MIX_Track*` to attach to -- there is no track to attach to before `Play()` creates one. Making
+  this fully order-independent (matching the 3D/fade-in fix's shape) would mean persisting pending
+  filter kind/frequency/Q *before* a track exists and having `EnsureTrackDspState()` apply it once
+  one is created, which is a real, separable follow-up, not a one-line reorder -- and, unlike the
+  3D/volume case, FNA's own filter API has the identical "requires a live voice" constraint, so
+  this is a narrower, more defensible architectural characteristic than a straightforward ordering
+  bug. Recorded as `P14-ORDER-002` below for a future pass, not force-fit into this one.
+  *Tests:* none added specifically for the ordering fix itself -- the actual benefit (whether the
+  audio thread's very first output frame reflects the 3D/volume state or a later one does) is a
+  real-time interleaving question a synchronous single-threaded test can't distinguish without
+  decoding actual mixed PCM output frame-by-frame, a materially larger test-infrastructure
+  investment than this fix's own risk profile justifies; the *final* state after `Play()` returns
+  was already correct before this fix (per Phase 13's own tests) and remains correct now. Verified
+  via the full existing `Cue`/`SoundBank`/`SoundEffectInstance` test suites re-passing unchanged
+  (no regression from the reorder) -- see Verification below.
+
+* [ ] P14-ORDER-002 (follow-up from `P14-ORDER-001`'s scope note, **not fixed this pass**): make
+  per-track XACT filter establishment order-independent of `Play()`, the same way `P13-3D-001`
+  already made spatial state order-independent -- persist pending filter kind/frequency/oneOverQ
+  on `SoundEffectInstance` even before a track exists, and have `EnsureTrackDspState()`/
+  `INTERNAL_applyComposedTrackProperties()` apply it once a track is actually created. Left
+  unchecked deliberately: needs its own scoped task (touches `SoundEffectInstance`'s already
+  carefully-tuned DSP-callback machinery, `P9-XACT-011`/`P10-FILTER-002/003/004`/`P11-PAN-001`),
+  not a rushed side-fix bolted onto this pass.

@@ -639,6 +639,45 @@ TEST(SoundBankTest, DisposeForceStopsCueObtainedViaGetCue)
     delete cue; // caller-owned; Cue::Dispose() is idempotent so the already-forced disposal is safe
 }
 
+// AUDIO-LIFECYCLE-001 (external audit, 2026-07-16): a cue obtained via GetCue() but never Play()'d
+// was invisible to SoundBank::Dispose()'s force-stop cascade -- P12-BANK-001's own RegisterCue()
+// call only ever ran from inside Cue::Play(), so this cue's constructor never registered it at
+// all. Confirmed real by reading the source directly: with the bank disposed and the cue never
+// having played, Play() would still run to completion afterward (dereferencing a bank_ that could
+// be dangling once the SoundBank itself is later destructed), instead of throwing
+// ObjectDisposedException like every other post-Dispose() call on this cue already does.
+TEST(SoundBankTest, DisposeForceStopsNeverPlayedCueObtainedViaGetCue)
+{
+    SoundBank bank(&SharedEngine(), XsbFixturePath());
+    Cue* cue = bank.GetCue("Explosion");
+    ASSERT_FALSE(cue->getIsDisposedProperty());
+    ASSERT_TRUE(cue->getIsPreparedProperty()); // never played
+
+    bank.Dispose();
+
+    EXPECT_TRUE(cue->getIsDisposedProperty());
+    EXPECT_THROW(cue->Play(), System::ObjectDisposedException);
+    delete cue; // caller-owned; Cue::Dispose() is idempotent so the already-forced disposal is safe
+}
+
+// AUDIO-LIFECYCLE-001: a cue that already played and then genuinely stopped (but that the caller
+// hasn't disposed yet) must also stay reachable by the bank's force-stop cascade -- registration
+// now lasts for this cue's entire C++ lifetime (constructor to Dispose()), not just while playing.
+TEST(SoundBankTest, DisposeForceStopsAlreadyStoppedButUndisposedCueObtainedViaGetCue)
+{
+    SoundBank bank(&SharedEngine(), XsbFixturePath());
+    Cue* cue = bank.GetCue("Explosion");
+    cue->Play();
+    cue->Stop(AudioStopOptions::Immediate);
+    ASSERT_TRUE(cue->getIsStoppedProperty());
+    ASSERT_FALSE(cue->getIsDisposedProperty());
+
+    bank.Dispose();
+
+    EXPECT_TRUE(cue->getIsDisposedProperty());
+    delete cue;
+}
+
 // P9-LIFECYCLE-003/006: unlike "Explosion" above, "Apply3DCue" has a real (200-byte, ~1.13ms)
 // WaveBank-backed instance, so its fire-and-forget cue actually finishes naturally -- IsInUse must
 // become false soon afterward without any explicit Stop() or a second PlayCue() call to trigger
