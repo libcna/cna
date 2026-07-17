@@ -27,6 +27,7 @@ None — every Input type has a dedicated suite or a documented sibling-suite co
 | `GamePadType` | `include/Microsoft/Xna/Framework/Input/GamePadType.hpp` | yes | 6 |  |
 | `GestureSample` | `include/Microsoft/Xna/Framework/Input/Touch/GestureSample.hpp` | yes | 6 |  |
 | `GestureType` | `include/Microsoft/Xna/Framework/Input/Touch/GestureType.hpp` | yes | 9 |  |
+| `KeyModifiersEXT` | `include/Microsoft/Xna/Framework/Input/Keyboard.hpp` | no | 2 | covered via KeyboardModStateTests.cpp (KeyboardModStateEXTTest) — every flag tested individually + combined |
 | `KeyState` | `include/Microsoft/Xna/Framework/Input/KeyState.hpp` | yes | 4 |  |
 | `Keyboard` | `include/Microsoft/Xna/Framework/Input/Keyboard.hpp` | yes | 11 |  |
 | `KeyboardState` | `include/Microsoft/Xna/Framework/Input/KeyboardState.hpp` | yes | 3 |  |
@@ -35,6 +36,7 @@ None — every Input type has a dedicated suite or a documented sibling-suite co
 | `MouseCursor` | `include/Microsoft/Xna/Framework/Input/MouseCursor.hpp` | yes | 5 |  |
 | `MouseState` | `include/Microsoft/Xna/Framework/Input/MouseState.hpp` | yes | 6 |  |
 | `TextInputEXT` | `include/Microsoft/Xna/Framework/Input/TextInputEXT.hpp` | yes | 9 |  |
+| `TextInputTypeEXT` | `include/Microsoft/Xna/Framework/Input/TextInputEXT.hpp` | no | 2 | covered via TextInputEXTTests.cpp (TextInputEXTTest) — all 9 values iterated in StartTextInputWithTypeWithoutWindowIsSafeNoOpForEveryType and StartTextInputWithTypeRoundTripsThroughRealWindowForEveryType |
 | `TouchCollection` | `include/Microsoft/Xna/Framework/Input/Touch/TouchCollection.hpp` | yes | 7 |  |
 | `TouchLocation` | `include/Microsoft/Xna/Framework/Input/Touch/TouchLocation.hpp` | yes | 5 |  |
 | `TouchLocationState` | `include/Microsoft/Xna/Framework/Input/Touch/TouchLocationState.hpp` | yes | 9 |  |

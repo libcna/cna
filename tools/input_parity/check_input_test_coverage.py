@@ -61,6 +61,13 @@ KNOWN_COVERED_ELSEWHERE = {
     "ISystemMouseBackend": "MouseGlobalTests.cpp (MouseGlobalEXTTest) via a fake system-mouse-backend seam",
     "ISystemPowerBackend": "PowerTests.cpp (CnaInputPowerTest) via a fake system-power-backend seam",
     "ISystemSensorBackend": "SensorsTests.cpp (CnaInputSensorsTest) via a fake system-sensor-backend seam",
+    # P9-027: both are enums, not classes, so their suite is named after the *class* whose behavior
+    # they parameterize, not the enum itself. Confirmed real, exhaustive coverage exists (all
+    # flags/values iterated) before adding the exemption.
+    "KeyModifiersEXT": "KeyboardModStateTests.cpp (KeyboardModStateEXTTest) — every flag tested individually + combined",
+    "TextInputTypeEXT": "TextInputEXTTests.cpp (TextInputEXTTest) — all 9 values iterated in "
+                         "StartTextInputWithTypeWithoutWindowIsSafeNoOpForEveryType and "
+                         "StartTextInputWithTypeRoundTripsThroughRealWindowForEveryType",
 }
 
 

@@ -13,7 +13,7 @@ CNA input depends on three kinds of external code:
 
 | Dependency | How it is obtained | Notes |
 |---|---|---|
-| `third_party/SDL`, `third_party/SDL_image`, `third_party/SDL_mixer` | **git submodules** of this repo | `git submodule update --init --recursive` |
+| `third_party/SDL`, `third_party/SDL_image`, `third_party/SDL_mixer` | **git submodules** of this repo | `git submodule update --init --recursive`. Alternative: `-DCNA_USE_SYSTEM_SDL=ON` builds against installed system SDL3/SDL3_image/SDL3_mixer packages instead (`find_package(SDL3 REQUIRED)` etc., `cmake/ThirdPartySDL.cmake`) — no Input behavior differs either way, it is purely a build-time source-of-headers/libs choice (P9-025). |
 | `vendor/googletest` | **git submodule** | test framework |
 | `../sharp-runtime` | **sibling repository** (NOT a submodule) | CNA's C++ `System.*` runtime; must sit next to `cna_input` |
 | `../easy-gl` | **sibling repository** (NOT a submodule) | only for the `EASYGL` backend |
