@@ -125,8 +125,8 @@ protected:
 
         WriteFile(root / "dm.vert.glsl", kVertSrc);
         WriteFile(root / "dm.frag.glsl", kFragSrc);
-        WriteFile(root / "dm.cnb", R"({
-  "cnbVersion": 1,
+        WriteFile(root / "dm.cnj", R"({
+  "cnjVersion": 1,
   "type": "Effect",
   "vertex": "dm.vert.glsl",
   "fragment": "dm.frag.glsl"
@@ -165,7 +165,7 @@ protected:
         auto* fx = dynamic_cast<ShaderEffect*>(fxBase_.get());
         if (!fx || !fx->IsEffectValid())
         {
-            std::printf("[FAIL] EasyGLDistortersDisplacementMapped: .cnb load or GLSL compile failed\n");
+            std::printf("[FAIL] EasyGLDistortersDisplacementMapped: .cnj load or GLSL compile failed\n");
             Exit();
             return;
         }

@@ -139,8 +139,8 @@ protected:
 
         WriteFile(root / "lambert.vert.glsl", kVertSrc);
         WriteFile(root / "lambert.frag.glsl", kFragSrc);
-        WriteFile(root / "lambert.cnb", R"({
-  "cnbVersion": 1,
+        WriteFile(root / "lambert.cnj", R"({
+  "cnjVersion": 1,
   "type": "Effect",
   "vertex": "lambert.vert.glsl",
   "fragment": "lambert.frag.glsl"
@@ -211,7 +211,7 @@ protected:
         auto* fx = dynamic_cast<ShaderEffect*>(fxBase_.get());
         if (!fx || !fx->IsEffectValid())
         {
-            std::printf("[FAIL] EasyGLCartoonEffectLambert: .cnb load or GLSL compile failed\n");
+            std::printf("[FAIL] EasyGLCartoonEffectLambert: .cnj load or GLSL compile failed\n");
             Exit();
             return;
         }

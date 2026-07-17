@@ -4,9 +4,9 @@
 > Phase E (`SpriteFont`, stock effects, `SoundEffect`/`Song`, `ReadExternalReference<T>()`) fully
 > complete; broad coverage past that still deferred.** CNA's owner decided `.xnb` should become a
 > real, additional runtime format again, alongside the already-implemented
-> [`cnb.md`](cnb.md)/[`plan_cnb.md`](plan_cnb.md) `.cnb` strategy — not a replacement for it.
+> [`cnj.md`](cnj.md)/[`plan_cnj.md`](plan_cnj.md) `.cnj` strategy — not a replacement for it.
 > `ContentManager`'s resolution order now ranks `.xnb` **above** both the literal caller-given path
-> and `.cnb` (see `cnb.md`'s "Core rule"). [`plan_xnb.md`](plan_xnb.md)'s Phase 0/A/B/B2/B3/C
+> and `.cnj` (see `cnj.md`'s "Core rule"). [`plan_xnb.md`](plan_xnb.md)'s Phase 0/A/B/B2/B3/C
 > (container parsing, binary primitives, the uncompressed-only case, and a first real `Texture2D`
 > reader — this plan's own M1/M2 milestones) is fully complete. CNA's owner then explicitly
 > requested Phase D (LZX decompression) next: it is now implemented and verified against real
@@ -25,7 +25,7 @@
 > pending a future decision to resume them; nothing there is started. **Phase H (Lua-scripted custom
 > `ContentTypeReader` support) is rejected outright, not merely deferred** — see `plan_xnb.md`'s own
 > note; custom readers stay a plain C++ registration API (this document's own Phase G), the same
-> shape `.cnb`'s `RegisterCnbLoader<T>` already uses. A new content-manifest feature (`ContentManager`
+> shape `.cnj`'s `RegisterCnjLoader<T>` already uses. A new content-manifest feature (`ContentManager`
 > scans the `Content` root once — internal perf cache + a public introspection API + the `.xnb`
 > reader-name inventory) is now part of the active scope too, folded into `plan_xnb.md`'s Phase B3.
 > See `plan_xnb.md`'s own top-of-file note for the complete list of what changed in this revision.

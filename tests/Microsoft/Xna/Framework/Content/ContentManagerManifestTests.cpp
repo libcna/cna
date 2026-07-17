@@ -101,11 +101,11 @@ namespace
     };
 }
 
-TEST_F(ContentManagerManifestTest, ManifestFindsNativeCnbAndXnbFiles)
+TEST_F(ContentManagerManifestTest, ManifestFindsNativeCnjAndXnbFiles)
 {
     ScratchContentRoot root;
     WriteBytes(root.path() / "player.png", {0x89, 'P', 'N', 'G'});
-    WriteFile(root.path() / "font.cnb", R"({"cnbVersion": 1, "type": "SpriteFont"})");
+    WriteFile(root.path() / "font.cnj", R"({"cnjVersion": 1, "type": "SpriteFont"})");
     WriteBytes(root.path() / "tex.xnb", BuildXnbFile("Microsoft.Xna.Framework.Content.Texture2DReader", 1));
 
     ContentManager cm(nullptr, root.path().string());
@@ -115,12 +115,12 @@ TEST_F(ContentManagerManifestTest, ManifestFindsNativeCnbAndXnbFiles)
     ASSERT_NE(player, nullptr);
     ASSERT_EQ(player->nativeExtensions.size(), 1u);
     EXPECT_EQ(player->nativeExtensions[0], ".png");
-    EXPECT_FALSE(player->hasCnb);
+    EXPECT_FALSE(player->hasCnj);
     EXPECT_FALSE(player->hasXnb);
 
     const auto* font = FindEntry(manifest, "font");
     ASSERT_NE(font, nullptr);
-    EXPECT_TRUE(font->hasCnb);
+    EXPECT_TRUE(font->hasCnj);
 
     const auto* tex = FindEntry(manifest, "tex");
     ASSERT_NE(tex, nullptr);
@@ -131,7 +131,7 @@ TEST_F(ContentManagerManifestTest, ManifestGroupsMultipleExtensionsUnderOneLogic
 {
     ScratchContentRoot root;
     WriteBytes(root.path() / "player.xnb", BuildXnbFile("Microsoft.Xna.Framework.Content.Texture2DReader", 1));
-    WriteFile(root.path() / "player.cnb", R"({"cnbVersion": 1, "type": "Texture2D"})");
+    WriteFile(root.path() / "player.cnj", R"({"cnjVersion": 1, "type": "Texture2D"})");
     WriteBytes(root.path() / "player.png", {0x89, 'P', 'N', 'G'});
 
     ContentManager cm(nullptr, root.path().string());
@@ -140,7 +140,7 @@ TEST_F(ContentManagerManifestTest, ManifestGroupsMultipleExtensionsUnderOneLogic
     const auto* player = FindEntry(manifest, "player");
     ASSERT_NE(player, nullptr);
     EXPECT_TRUE(player->hasXnb);
-    EXPECT_TRUE(player->hasCnb);
+    EXPECT_TRUE(player->hasCnj);
     ASSERT_EQ(player->nativeExtensions.size(), 1u);
     EXPECT_EQ(player->nativeExtensions[0], ".png");
 }

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_cnb.md CNB-15/CNB-16: first-ever gtest coverage for EffectTypeReader, migrated from
-// .shader.json to .cnb (CNB-14). The only prior exercise of this reader anywhere in the repo was
+// plan_cnj.md CNB-15/CNB-16: first-ever gtest coverage for EffectTypeReader, migrated from
+// .shader.json to .cnj (CNB-14). The only prior exercise of this reader anywhere in the repo was
 // examples/easygl_bloom_extract_test.cpp (a standalone example program, not part of CnaTests),
-// which CNB-15 also migrated to .cnb.
+// which CNB-15 also migrated to .cnj.
 
 #include <filesystem>
 #include <fstream>
@@ -31,7 +31,7 @@ namespace
     public:
         ScratchContentRoot()
             : dir_(std::filesystem::temp_directory_path()
-                   / ("cna_cnb_effect_test_" + std::to_string(reinterpret_cast<std::uintptr_t>(this))))
+                   / ("cna_cnj_effect_test_" + std::to_string(reinterpret_cast<std::uintptr_t>(this))))
         {
             std::filesystem::create_directories(dir_);
         }
@@ -81,20 +81,20 @@ void main() {
 )";
 }
 
-class CnbEffectTest : public ::testing::Test
+class CnjEffectTest : public ::testing::Test
 {
 protected:
     GraphicsDevice gd;
 };
 
-TEST_F(CnbEffectTest, LoadsRealCnbFixture)
+TEST_F(CnjEffectTest, LoadsRealCnjFixture)
 {
     ScratchContentRoot root;
 
     WriteFile(root.path() / "passthrough.vert.glsl", kVertSrc);
     WriteFile(root.path() / "passthrough.frag.glsl", kFragSrc);
-    WriteFile(root.path() / "passthrough.cnb", R"({
-        "cnbVersion": 1,
+    WriteFile(root.path() / "passthrough.cnj", R"({
+        "cnjVersion": 1,
         "type": "Effect",
         "vertex": "passthrough.vert.glsl",
         "fragment": "passthrough.frag.glsl"
@@ -111,12 +111,12 @@ TEST_F(CnbEffectTest, LoadsRealCnbFixture)
     EXPECT_TRUE(shaderEffect->IsEffectValid());
 }
 
-TEST_F(CnbEffectTest, MismatchedTypeThrowsContentLoadException)
+TEST_F(CnjEffectTest, MismatchedTypeThrowsContentLoadException)
 {
     ScratchContentRoot root;
 
-    WriteFile(root.path() / "wrong.cnb", R"({
-        "cnbVersion": 1,
+    WriteFile(root.path() / "wrong.cnj", R"({
+        "cnjVersion": 1,
         "type": "SpriteFont"
     })");
 

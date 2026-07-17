@@ -124,7 +124,7 @@ namespace Microsoft::Xna::Framework::Content
          *
          * The path is resolved relative to this `ContentReader`'s own asset name (matching FNA's
          * `MonoGame.Utilities.FileHelpers.ResolveRelativePath`), then loaded via
-         * `ContentManager::Load<T>()` -- so it goes through the exact same `.xnb`/`.cnb`/native
+         * `ContentManager::Load<T>()` -- so it goes through the exact same `.xnb`/`.cnj`/native
          * resolution order a direct `Load<T>()` call would. As a hardening addition with no FNA
          * equivalent (FNA simply lets the OS fail to find an escaping path), a reference that
          * resolves above the content root's own logical space is rejected outright rather than

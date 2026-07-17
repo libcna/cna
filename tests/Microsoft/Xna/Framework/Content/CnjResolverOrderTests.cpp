@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_cnb.md CNB-6: proves ContentManager::ResolveAssetPath tries ".cnb" before any
+// plan_cnj.md CNB-6: proves ContentManager::ResolveAssetPath tries ".cnj" before any
 // reader-declared native extension (CNB-4), using pixel color as the observable signal for which
 // candidate path actually got picked. Originally written before Phase 2 (CNB-7/CNB-8) existed, by
-// writing raw PNG bytes straight into a "*.cnb" path and relying on Texture2D's decoder sniffing
+// writing raw PNG bytes straight into a "*.cnj" path and relying on Texture2D's decoder sniffing
 // real image bytes regardless of extension -- that trick stopped working once
-// Texture2DTypeReader started actually parsing ".cnb" as a JSON envelope (CNB-8), so the two
-// tests that write a ".cnb" file now use a real envelope + "sourceFile" instead. Only
-// OnlyNativeFileStillResolvesUnchanged remains a pure resolver-only probe (no .cnb involved).
+// Texture2DTypeReader started actually parsing ".cnj" as a JSON envelope (CNB-8), so the two
+// tests that write a ".cnj" file now use a real envelope + "sourceFile" instead. Only
+// OnlyNativeFileStillResolvesUnchanged remains a pure resolver-only probe (no .cnj involved).
 
 #include <cstdint>
 #include <filesystem>
@@ -34,7 +34,7 @@ namespace
     public:
         ScratchContentRoot()
             : dir_(std::filesystem::temp_directory_path()
-                   / ("cna_cnb_resolver_order_test_" + std::to_string(reinterpret_cast<std::uintptr_t>(this))))
+                   / ("cna_cnj_resolver_order_test_" + std::to_string(reinterpret_cast<std::uintptr_t>(this))))
         {
             std::filesystem::create_directories(dir_);
         }
@@ -69,13 +69,13 @@ namespace
     }
 }
 
-class CnbResolverOrderTest : public ::testing::Test
+class CnjResolverOrderTest : public ::testing::Test
 {
 protected:
     GraphicsDevice gd;
 };
 
-TEST_F(CnbResolverOrderTest, OnlyNativeFileStillResolvesUnchanged)
+TEST_F(CnjResolverOrderTest, OnlyNativeFileStillResolvesUnchanged)
 {
     ScratchContentRoot root;
     WriteSolidColorPng(gd, root.path() / "foo.png", Color(0, 0, 255, 255));
@@ -90,12 +90,12 @@ TEST_F(CnbResolverOrderTest, OnlyNativeFileStillResolvesUnchanged)
     EXPECT_EQ(pixels[0], Color(0, 0, 255, 255));
 }
 
-TEST_F(CnbResolverOrderTest, OnlyCnbFileResolvesViaExtension)
+TEST_F(CnjResolverOrderTest, OnlyCnjFileResolvesViaExtension)
 {
     ScratchContentRoot root;
     WriteSolidColorPng(gd, root.path() / "foo_src.png", Color(255, 0, 0, 255));
-    WriteFile(root.path() / "foo.cnb", R"({
-        "cnbVersion": 1,
+    WriteFile(root.path() / "foo.cnj", R"({
+        "cnjVersion": 1,
         "type": "Texture2D",
         "sourceFile": "foo_src.png"
     })");
@@ -110,13 +110,13 @@ TEST_F(CnbResolverOrderTest, OnlyCnbFileResolvesViaExtension)
     EXPECT_EQ(pixels[0], Color(255, 0, 0, 255));
 }
 
-TEST_F(CnbResolverOrderTest, CnbTakesPriorityOverNativeFileOfSameName)
+TEST_F(CnjResolverOrderTest, CnjTakesPriorityOverNativeFileOfSameName)
 {
     ScratchContentRoot root;
     WriteSolidColorPng(gd, root.path() / "foo.png", Color(0, 0, 255, 255));
     WriteSolidColorPng(gd, root.path() / "foo_src.png", Color(255, 0, 0, 255));
-    WriteFile(root.path() / "foo.cnb", R"({
-        "cnbVersion": 1,
+    WriteFile(root.path() / "foo.cnj", R"({
+        "cnjVersion": 1,
         "type": "Texture2D",
         "sourceFile": "foo_src.png"
     })");
@@ -129,5 +129,5 @@ TEST_F(CnbResolverOrderTest, CnbTakesPriorityOverNativeFileOfSameName)
     std::vector<Color> pixels(4, Color(0, 0, 0, 0));
     loaded.GetData(pixels.data(), 4);
     EXPECT_EQ(pixels[0], Color(255, 0, 0, 255))
-        << ".cnb must win over a same-named native file, per cnb.md's core rule";
+        << ".cnj must win over a same-named native file, per cnj.md's core rule";
 }

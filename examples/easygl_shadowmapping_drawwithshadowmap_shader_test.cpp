@@ -232,8 +232,8 @@ protected:
 
         WriteFile(root / "dwsm.vert.glsl", kVertSrc);
         WriteFile(root / "dwsm.frag.glsl", kFragSrc);
-        WriteFile(root / "dwsm.cnb", R"({
-  "cnbVersion": 1,
+        WriteFile(root / "dwsm.cnj", R"({
+  "cnjVersion": 1,
   "type": "Effect",
   "vertex": "dwsm.vert.glsl",
   "fragment": "dwsm.frag.glsl"
@@ -321,7 +321,7 @@ protected:
         auto* fx = dynamic_cast<ShaderEffect*>(fxBase_.get());
         if (!fx || !fx->IsEffectValid())
         {
-            std::printf("[FAIL] EasyGLShadowMappingDrawWithShadowMap: .cnb load or GLSL compile failed\n");
+            std::printf("[FAIL] EasyGLShadowMappingDrawWithShadowMap: .cnj load or GLSL compile failed\n");
             Exit();
             return;
         }

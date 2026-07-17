@@ -139,8 +139,8 @@ protected:
 
         WriteFile(root / "lit3d.vert.glsl", kVertSrc);
         WriteFile(root / "lit3d.frag.glsl", kFragSrc);
-        WriteFile(root / "lit3d.cnb", R"({
-  "cnbVersion": 1,
+        WriteFile(root / "lit3d.cnj", R"({
+  "cnjVersion": 1,
   "type": "Effect",
   "vertex": "lit3d.vert.glsl",
   "fragment": "lit3d.frag.glsl"
@@ -212,7 +212,7 @@ protected:
         auto* fx = dynamic_cast<ShaderEffect*>(fxBase_.get());
         if (!fx || !fx->IsEffectValid())
         {
-            std::printf("[FAIL] EasyGLShaderEffect3D: .cnb load or GLSL compile failed\n");
+            std::printf("[FAIL] EasyGLShaderEffect3D: .cnj load or GLSL compile failed\n");
             Exit();
             return;
         }

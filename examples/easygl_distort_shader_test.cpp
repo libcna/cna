@@ -130,8 +130,8 @@ protected:
 
         WriteFile(root / "distort.vert.glsl", kVertSrc);
         WriteFile(root / "distort.frag.glsl", kFragSrc);
-        WriteFile(root / "distort.cnb", R"({
-  "cnbVersion": 1,
+        WriteFile(root / "distort.cnj", R"({
+  "cnjVersion": 1,
   "type": "Effect",
   "vertex": "distort.vert.glsl",
   "fragment": "distort.frag.glsl"
@@ -168,7 +168,7 @@ protected:
         auto* fx = dynamic_cast<ShaderEffect*>(fxBase_.get());
         if (!fx || !fx->IsEffectValid())
         {
-            std::printf("[FAIL] EasyGLDistort: .cnb load or GLSL compile failed\n");
+            std::printf("[FAIL] EasyGLDistort: .cnj load or GLSL compile failed\n");
             Exit();
             return;
         }

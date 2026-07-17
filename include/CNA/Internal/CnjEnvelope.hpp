@@ -9,30 +9,30 @@
 namespace CNA::Internal
 {
     /**
-     * @brief Parsed top-level fields of a `.cnb` content envelope (see `cnb.md`).
+     * @brief Parsed top-level fields of a `.cnj` content envelope (see `cnj.md`).
      *
-     * A `.cnb` file is a JSON document whose top level always carries a `"cnbVersion"`
+     * A `.cnj` file is a JSON document whose top level always carries a `"cnjVersion"`
      * schema version and a `"type"` identifying which per-type CNA loader should handle
      * the rest of the document, plus an optional `"sourceFile"` naming another asset this
-     * document is metadata for (see `cnb.md`'s `sourceFile` section). Everything else in a
-     * `.cnb` document is per-type and parsed by that type's own reader, not by this struct.
+     * document is metadata for (see `cnj.md`'s `sourceFile` section). Everything else in a
+     * `.cnj` document is per-type and parsed by that type's own reader, not by this struct.
      */
-    struct CnbEnvelope
+    struct CnjEnvelope
     {
-        /** @brief Whether the document had a top-level `"cnbVersion"` field. */
-        bool hasCnbVersion = false;
+        /** @brief Whether the document had a top-level `"cnjVersion"` field. */
+        bool hasCnjVersion = false;
 
-        /** @brief Parsed `"cnbVersion"` value truncated to `int`, or 0 if the field was absent. */
-        int cnbVersion = 0;
+        /** @brief Parsed `"cnjVersion"` value truncated to `int`, or 0 if the field was absent. */
+        int cnjVersion = 0;
 
         /**
-         * @brief Exact parsed `"cnbVersion"` value as a double, or 0.0 if absent.
+         * @brief Exact parsed `"cnjVersion"` value as a double, or 0.0 if absent.
          *
-         * Kept separately from @ref cnbVersion (which truncates) so ValidateCnbEnvelope() can
+         * Kept separately from @ref cnjVersion (which truncates) so ValidateCnjEnvelope() can
          * strictly reject a non-integer version like `1.5` instead of silently accepting it as
          * `1`.
          */
-        double cnbVersionRaw = 0.0;
+        double cnjVersionRaw = 0.0;
 
         /** @brief Whether the document had a top-level `"type"` field. */
         bool hasType = false;
@@ -55,19 +55,19 @@ namespace CNA::Internal
     };
 
     /**
-     * @brief Parses the top-level `.cnb` envelope fields out of a raw JSON document.
+     * @brief Parses the top-level `.cnj` envelope fields out of a raw JSON document.
      *
      * Pure extraction -- never throws. A malformed document or a non-object root leaves every
-     * `hasXxx` flag false and records @ref CnbEnvelope::parseErrorDetail "parseErrorDetail";
+     * `hasXxx` flag false and records @ref CnjEnvelope::parseErrorDetail "parseErrorDetail";
      * a well-formed object missing individual fields leaves just those flags false. Use
-     * ValidateCnbEnvelope() separately to enforce well-formedness and throw on either case.
+     * ValidateCnjEnvelope() separately to enforce well-formedness and throw on either case.
      *
-     * @param json Raw `.cnb` file contents.
+     * @param json Raw `.cnj` file contents.
      * @return The parsed envelope, with a `hasXxx` flag set for each field actually found.
      */
-    inline CnbEnvelope ParseCnbEnvelope(const std::string& json)
+    inline CnjEnvelope ParseCnjEnvelope(const std::string& json)
     {
-        CnbEnvelope env;
+        CnjEnvelope env;
 
         JsonValue root;
         try
@@ -86,13 +86,13 @@ namespace CNA::Internal
             return env;
         }
 
-        if (const JsonValue* v = root.FindMember("cnbVersion"))
+        if (const JsonValue* v = root.FindMember("cnjVersion"))
         {
             if (v->IsNumber())
             {
-                env.hasCnbVersion = true;
-                env.cnbVersionRaw = v->numberValue;
-                env.cnbVersion = static_cast<int>(v->numberValue);
+                env.hasCnjVersion = true;
+                env.cnjVersionRaw = v->numberValue;
+                env.cnjVersion = static_cast<int>(v->numberValue);
             }
         }
         if (const JsonValue* v = root.FindMember("type"))
@@ -117,44 +117,44 @@ namespace CNA::Internal
 
     /**
      * @brief Validates an envelope's baseline requirements: well-formed JSON, a supported
-     *        `"cnbVersion"`, and a present `"type"` -- without checking @p envelope's `"type"`
+     *        `"cnjVersion"`, and a present `"type"` -- without checking @p envelope's `"type"`
      *        value against any specific expectation.
      *
-     * Shared by ValidateCnbEnvelope() (which additionally checks `"type"` equality against a
-     * fixed expected value) and `ContentManager::RegisterCnbLoader<T>()`'s dispatch path (which
+     * Shared by ValidateCnjEnvelope() (which additionally checks `"type"` equality against a
+     * fixed expected value) and `ContentManager::RegisterCnjLoader<T>()`'s dispatch path (which
      * uses `"type"` as a runtime lookup key instead of an equality check, so it cannot use
-     * ValidateCnbEnvelope() directly).
+     * ValidateCnjEnvelope() directly).
      *
-     * @param envelope Envelope previously returned by ParseCnbEnvelope().
+     * @param envelope Envelope previously returned by ParseCnjEnvelope().
      * @param path     File path, used only to build exception messages.
      * @throws Microsoft::Xna::Framework::Content::ContentLoadException if the document was not
-     *         valid JSON, its root was not an object, `"cnbVersion"` is missing or is not
+     *         valid JSON, its root was not an object, `"cnjVersion"` is missing or is not
      *         exactly `1` (the only currently-supported envelope version), or `"type"` is
      *         missing.
      */
-    inline void ValidateCnbEnvelopeBaseline(const CnbEnvelope& envelope, const std::string& path)
+    inline void ValidateCnjEnvelopeBaseline(const CnjEnvelope& envelope, const std::string& path)
     {
         using Microsoft::Xna::Framework::Content::ContentLoadException;
 
         if (!envelope.parseErrorDetail.empty())
         {
             throw ContentLoadException(
-                "ContentManager: '" + path + "' could not be parsed as a .cnb document (" +
+                "ContentManager: '" + path + "' could not be parsed as a .cnj document (" +
                 envelope.parseErrorDetail + ").");
         }
 
-        if (!envelope.hasCnbVersion)
+        if (!envelope.hasCnjVersion)
         {
             throw ContentLoadException(
-                "ContentManager: '" + path + "' is missing the required 'cnbVersion' field.");
+                "ContentManager: '" + path + "' is missing the required 'cnjVersion' field.");
         }
 
-        constexpr double kSupportedCnbVersion = 1.0;
-        if (envelope.cnbVersionRaw != kSupportedCnbVersion)
+        constexpr double kSupportedCnjVersion = 1.0;
+        if (envelope.cnjVersionRaw != kSupportedCnjVersion)
         {
             throw ContentLoadException(
-                "ContentManager: '" + path + "' has unsupported 'cnbVersion' (" +
-                std::to_string(envelope.cnbVersionRaw) + "); only version 1 is supported.");
+                "ContentManager: '" + path + "' has unsupported 'cnjVersion' (" +
+                std::to_string(envelope.cnjVersionRaw) + "); only version 1 is supported.");
         }
 
         if (!envelope.hasType)
@@ -165,28 +165,28 @@ namespace CNA::Internal
     }
 
     /**
-     * @brief Validates a parsed `.cnb` envelope against the type a reader expected.
+     * @brief Validates a parsed `.cnj` envelope against the type a reader expected.
      *
-     * Calls ValidateCnbEnvelopeBaseline() first, then additionally checks that `"type"` matches
-     * @p expectedType exactly. This is the integrity check described in `cnb.md`'s "Note on
+     * Calls ValidateCnjEnvelopeBaseline() first, then additionally checks that `"type"` matches
+     * @p expectedType exactly. This is the integrity check described in `cnj.md`'s "Note on
      * dispatch" -- the primary dispatch key stays the caller's compile-time `T` at the
-     * `Load<T>()` call site; this only catches a `.cnb` file that doesn't actually hold what the
+     * `Load<T>()` call site; this only catches a `.cnj` file that doesn't actually hold what the
      * caller asked for.
      *
-     * @param envelope     Envelope previously returned by ParseCnbEnvelope().
+     * @param envelope     Envelope previously returned by ParseCnjEnvelope().
      * @param expectedType The type name the calling reader produces (e.g. `"SpriteFont"`).
      * @param path         File path, used only to build the exception message.
      * @throws Microsoft::Xna::Framework::Content::ContentLoadException for any
-     *         ValidateCnbEnvelopeBaseline() failure, or if `"type"` does not equal
+     *         ValidateCnjEnvelopeBaseline() failure, or if `"type"` does not equal
      *         @p expectedType.
      */
-    inline void ValidateCnbEnvelope(const CnbEnvelope& envelope,
+    inline void ValidateCnjEnvelope(const CnjEnvelope& envelope,
                                      const std::string& expectedType,
                                      const std::string& path)
     {
         using Microsoft::Xna::Framework::Content::ContentLoadException;
 
-        ValidateCnbEnvelopeBaseline(envelope, path);
+        ValidateCnjEnvelopeBaseline(envelope, path);
 
         if (envelope.type != expectedType)
         {

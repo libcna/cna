@@ -164,8 +164,8 @@ protected:
 
         WriteFile(root / "cvl.vert.glsl", kVertSrc);
         WriteFile(root / "cvl.frag.glsl", kFragSrc);
-        WriteFile(root / "cvl.cnb", R"({
-  "cnbVersion": 1,
+        WriteFile(root / "cvl.cnj", R"({
+  "cnjVersion": 1,
   "type": "Effect",
   "vertex": "cvl.vert.glsl",
   "fragment": "cvl.frag.glsl"
@@ -250,7 +250,7 @@ protected:
         auto* fx = dynamic_cast<ShaderEffect*>(fxBase_.get());
         if (!fx || !fx->IsEffectValid())
         {
-            std::printf("[FAIL] EasyGLCustomVertexLayout: .cnb load or GLSL compile failed\n");
+            std::printf("[FAIL] EasyGLCustomVertexLayout: .cnj load or GLSL compile failed\n");
             Exit();
             return;
         }

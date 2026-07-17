@@ -203,8 +203,8 @@ protected:
 
         WriteFile(root / "pp.vert.glsl", kVertSrc);
         WriteFile(root / "pp.frag.glsl", kFragSrc);
-        WriteFile(root / "pp.cnb", R"({
-  "cnbVersion": 1,
+        WriteFile(root / "pp.cnj", R"({
+  "cnjVersion": 1,
   "type": "Effect",
   "vertex": "pp.vert.glsl",
   "fragment": "pp.frag.glsl"
@@ -289,7 +289,7 @@ protected:
         auto* fx = dynamic_cast<ShaderEffect*>(fxBase_.get());
         if (!fx || !fx->IsEffectValid())
         {
-            std::printf("[FAIL] EasyGLPostprocessEffect: .cnb load or GLSL compile failed\n");
+            std::printf("[FAIL] EasyGLPostprocessEffect: .cnj load or GLSL compile failed\n");
             Exit();
             return;
         }

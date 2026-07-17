@@ -125,8 +125,8 @@ protected:
 
         WriteFile(root / "nd.vert.glsl", kVertSrc);
         WriteFile(root / "nd.frag.glsl", kFragSrc);
-        WriteFile(root / "nd.cnb", R"({
-  "cnbVersion": 1,
+        WriteFile(root / "nd.cnj", R"({
+  "cnjVersion": 1,
   "type": "Effect",
   "vertex": "nd.vert.glsl",
   "fragment": "nd.frag.glsl"
@@ -188,7 +188,7 @@ protected:
         auto* fx = dynamic_cast<ShaderEffect*>(fxBase_.get());
         if (!fx || !fx->IsEffectValid())
         {
-            std::printf("[FAIL] EasyGLCartoonEffectNormalDepth: .cnb load or GLSL compile failed\n");
+            std::printf("[FAIL] EasyGLCartoonEffectNormalDepth: .cnj load or GLSL compile failed\n");
             Exit();
             return;
         }

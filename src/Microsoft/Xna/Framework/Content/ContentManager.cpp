@@ -2,8 +2,8 @@
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "System/IServiceProvider.hpp"
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
-#include "CNA/Internal/CnbEnvelope.hpp"
-#include "CNA/Internal/CnbSourceFile.hpp"
+#include "CNA/Internal/CnjEnvelope.hpp"
+#include "CNA/Internal/CnjSourceFile.hpp"
 #include "CNA/Internal/Xnb/XnbTypeReaderTable.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
@@ -220,9 +220,9 @@ namespace Microsoft::Xna::Framework::Content
                 entry.hasXnb = true;
                 entry.xnbReaderNames = ScanXnbReaderNames(path);
             }
-            else if (ext == ".cnb")
+            else if (ext == ".cnj")
             {
-                entry.hasCnb = true;
+                entry.hasCnj = true;
             }
             else
             {
@@ -308,28 +308,28 @@ namespace Microsoft::Xna::Framework::Content
     namespace
     {
         // Forward declaration -- defined below, alongside the other minimal JSON helpers used by
-        // .cnb/.font.json-style readers. Texture2DTypeReader needs it for the .cnb sidecar path
-        // (plan_cnb.md CNB-8), ahead of where it's textually defined.
+        // .cnj/.font.json-style readers. Texture2DTypeReader needs it for the .cnj sidecar path
+        // (plan_cnj.md CNB-8), ahead of where it's textually defined.
         std::string ReadTextFile(const std::string& path);
 
-        // plan_cnb.md CNB-34: SpriteFont/Effect/Model .cnb documents are self-contained
+        // plan_cnj.md CNB-34: SpriteFont/Effect/Model .cnj documents are self-contained
         // descriptors -- unlike Texture2D/SoundEffect/TextureCube, they have no meaning for a
         // "sourceFile" field. Reject it explicitly with a clear error instead of silently
         // ignoring it (the previous behavior) or letting some future field-parsing change
         // accidentally half-honor it.
-        void RejectSourceFileForSelfContainedCnb(const CNA::Internal::CnbEnvelope& envelope,
+        void RejectSourceFileForSelfContainedCnj(const CNA::Internal::CnjEnvelope& envelope,
                                                   const std::string& typeName, const std::string& path)
         {
             if (envelope.hasSourceFile)
             {
                 throw ContentLoadException(
-                    "ContentManager: " + typeName + " .cnb '" + path + "' has a 'sourceFile' "
-                    "field, but " + typeName + " .cnb documents are self-contained and do not "
+                    "ContentManager: " + typeName + " .cnj '" + path + "' has a 'sourceFile' "
+                    "field, but " + typeName + " .cnj documents are self-contained and do not "
                     "support 'sourceFile'.");
             }
         }
 
-        // Minimal "colorKey": [r, g, b] extractor for a Texture2D .cnb sidecar (CNB-8). Kept
+        // Minimal "colorKey": [r, g, b] extractor for a Texture2D .cnj sidecar (CNB-8). Kept
         // local/self-contained rather than reusing JsonIntArray4 (a 4-element parser) below, since
         // colorKey is always exactly 3 components and duplicating this ~10-line scan is cheaper and
         // safer than coaxing a 4-element parser into stopping after 3.
@@ -392,30 +392,30 @@ namespace Microsoft::Xna::Framework::Content
             {
                 Graphics::GraphicsDevice& gd = cm.getGraphicsDeviceInternal();
 
-                if (std::filesystem::path(path).extension() == ".cnb")
+                if (std::filesystem::path(path).extension() == ".cnj")
                 {
-                    return ReadCnb(path, cm);
+                    return ReadCnj(path, cm);
                 }
 
                 return Graphics::Texture2D(path, gd);
             }
 
         private:
-            static Graphics::Texture2D ReadCnb(const std::string& path, ContentManager& cm)
+            static Graphics::Texture2D ReadCnj(const std::string& path, ContentManager& cm)
             {
                 const std::string json = ReadTextFile(path);
-                const CNA::Internal::CnbEnvelope envelope = CNA::Internal::ParseCnbEnvelope(json);
-                CNA::Internal::ValidateCnbEnvelope(envelope, "Texture2D", path);
+                const CNA::Internal::CnjEnvelope envelope = CNA::Internal::ParseCnjEnvelope(json);
+                CNA::Internal::ValidateCnjEnvelope(envelope, "Texture2D", path);
 
                 if (!envelope.hasSourceFile)
                 {
                     throw ContentLoadException(
-                        "ContentManager: Texture2D .cnb '" + path + "' has no 'sourceFile' field "
-                        "(a self-contained, non-sourceFile Texture2D .cnb is not supported).");
+                        "ContentManager: Texture2D .cnj '" + path + "' has no 'sourceFile' field "
+                        "(a self-contained, non-sourceFile Texture2D .cnj is not supported).");
                 }
 
-                const CNA::Internal::CnbSourceFileResult resolved =
-                    CNA::Internal::ResolveCnbSourceFileSafely(
+                const CNA::Internal::CnjSourceFileResult resolved =
+                    CNA::Internal::ResolveCnjSourceFileSafely(
                         path, cm.getRootDirectoryProperty(), envelope.sourceFile);
                 Graphics::Texture2D result = cm.Load<Graphics::Texture2D>(resolved.logicalName);
 
@@ -439,9 +439,9 @@ namespace Microsoft::Xna::Framework::Content
 
             Graphics::TextureCube Read(const std::string& path, ContentManager& cm) override
             {
-                if (std::filesystem::path(path).extension() == ".cnb")
+                if (std::filesystem::path(path).extension() == ".cnj")
                 {
-                    return ReadCnb(path, cm);
+                    return ReadCnj(path, cm);
                 }
 
                 Graphics::GraphicsDevice& gd = cm.getGraphicsDeviceInternal();
@@ -450,22 +450,22 @@ namespace Microsoft::Xna::Framework::Content
             }
 
         private:
-            static Graphics::TextureCube ReadCnb(const std::string& path, ContentManager& cm)
+            static Graphics::TextureCube ReadCnj(const std::string& path, ContentManager& cm)
             {
                 const std::string json = ReadTextFile(path);
-                const CNA::Internal::CnbEnvelope envelope = CNA::Internal::ParseCnbEnvelope(json);
-                CNA::Internal::ValidateCnbEnvelope(envelope, "TextureCube", path);
+                const CNA::Internal::CnjEnvelope envelope = CNA::Internal::ParseCnjEnvelope(json);
+                CNA::Internal::ValidateCnjEnvelope(envelope, "TextureCube", path);
 
                 if (!envelope.hasSourceFile)
                 {
                     throw ContentLoadException(
-                        "ContentManager: TextureCube .cnb '" + path + "' has no 'sourceFile' "
-                        "field (a self-contained, non-sourceFile TextureCube .cnb is not "
+                        "ContentManager: TextureCube .cnj '" + path + "' has no 'sourceFile' "
+                        "field (a self-contained, non-sourceFile TextureCube .cnj is not "
                         "supported).");
                 }
 
-                const CNA::Internal::CnbSourceFileResult resolved =
-                    CNA::Internal::ResolveCnbSourceFileSafely(
+                const CNA::Internal::CnjSourceFileResult resolved =
+                    CNA::Internal::ResolveCnjSourceFileSafely(
                         path, cm.getRootDirectoryProperty(), envelope.sourceFile);
                 return cm.Load<Graphics::TextureCube>(resolved.logicalName);
             }
@@ -481,31 +481,31 @@ namespace Microsoft::Xna::Framework::Content
 
             Audio::SoundEffect Read(const std::string& path, ContentManager& cm) override
             {
-                if (std::filesystem::path(path).extension() == ".cnb")
+                if (std::filesystem::path(path).extension() == ".cnj")
                 {
-                    return ReadCnb(path, cm);
+                    return ReadCnj(path, cm);
                 }
 
                 return Audio::SoundEffect(path);
             }
 
         private:
-            static Audio::SoundEffect ReadCnb(const std::string& path, ContentManager& cm)
+            static Audio::SoundEffect ReadCnj(const std::string& path, ContentManager& cm)
             {
                 const std::string json = ReadTextFile(path);
-                const CNA::Internal::CnbEnvelope envelope = CNA::Internal::ParseCnbEnvelope(json);
-                CNA::Internal::ValidateCnbEnvelope(envelope, "SoundEffect", path);
+                const CNA::Internal::CnjEnvelope envelope = CNA::Internal::ParseCnjEnvelope(json);
+                CNA::Internal::ValidateCnjEnvelope(envelope, "SoundEffect", path);
 
                 if (!envelope.hasSourceFile)
                 {
                     throw ContentLoadException(
-                        "ContentManager: SoundEffect .cnb '" + path + "' has no 'sourceFile' "
-                        "field (a self-contained, non-sourceFile SoundEffect .cnb is not "
+                        "ContentManager: SoundEffect .cnj '" + path + "' has no 'sourceFile' "
+                        "field (a self-contained, non-sourceFile SoundEffect .cnj is not "
                         "supported).");
                 }
 
-                const CNA::Internal::CnbSourceFileResult resolved =
-                    CNA::Internal::ResolveCnbSourceFileSafely(
+                const CNA::Internal::CnjSourceFileResult resolved =
+                    CNA::Internal::ResolveCnjSourceFileSafely(
                         path, cm.getRootDirectoryProperty(), envelope.sourceFile);
                 return cm.Load<Audio::SoundEffect>(resolved.logicalName);
             }
@@ -548,14 +548,14 @@ namespace Microsoft::Xna::Framework::Content
         public:
             [[nodiscard]] std::vector<std::string> GetExtensions() const override
             {
-                return {".cnb"};
+                return {".cnj"};
             }
 
             std::shared_ptr<Graphics::Effect> Read(const std::string& path, ContentManager& cm) override
             {
-                // If path doesn't already end with .cnb, append it.
+                // If path doesn't already end with .cnj, append it.
                 std::string jsonPath = path;
-                const std::string ext = ".cnb";
+                const std::string ext = ".cnj";
                 if (jsonPath.size() < ext.size() ||
                     jsonPath.substr(jsonPath.size() - ext.size()) != ext)
                 {
@@ -564,9 +564,9 @@ namespace Microsoft::Xna::Framework::Content
 
                 const std::string jsonText = ReadTextFile(jsonPath);
 
-                const CNA::Internal::CnbEnvelope envelope = CNA::Internal::ParseCnbEnvelope(jsonText);
-                CNA::Internal::ValidateCnbEnvelope(envelope, "Effect", jsonPath);
-                RejectSourceFileForSelfContainedCnb(envelope, "Effect", jsonPath);
+                const CNA::Internal::CnjEnvelope envelope = CNA::Internal::ParseCnjEnvelope(jsonText);
+                CNA::Internal::ValidateCnjEnvelope(envelope, "Effect", jsonPath);
+                RejectSourceFileForSelfContainedCnj(envelope, "Effect", jsonPath);
 
                 const std::string vertRel = ExtractJsonStringField(jsonText, "vertex");
                 const std::string fragRel = ExtractJsonStringField(jsonText, "fragment");
@@ -666,7 +666,7 @@ namespace Microsoft::Xna::Framework::Content
         public:
             [[nodiscard]] std::vector<std::string> GetExtensions() const override
             {
-                return {".cnb"};
+                return {".cnj"};
             }
 
             Graphics::SpriteFont Read(const std::string& path, ContentManager& cm) override
@@ -676,9 +676,9 @@ namespace Microsoft::Xna::Framework::Content
 
                 const std::string json = ReadTextFile(path);
 
-                const CNA::Internal::CnbEnvelope envelope = CNA::Internal::ParseCnbEnvelope(json);
-                CNA::Internal::ValidateCnbEnvelope(envelope, "SpriteFont", path);
-                RejectSourceFileForSelfContainedCnb(envelope, "SpriteFont", path);
+                const CNA::Internal::CnjEnvelope envelope = CNA::Internal::ParseCnjEnvelope(json);
+                CNA::Internal::ValidateCnjEnvelope(envelope, "SpriteFont", path);
+                RejectSourceFileForSelfContainedCnj(envelope, "SpriteFont", path);
 
                 const std::string textureName   = ExtractJsonStringField(json, "texture");
                 const int         lineSpacing    = JsonInt(json, "lineSpacing");
@@ -911,7 +911,7 @@ namespace Microsoft::Xna::Framework::Content
         public:
             [[nodiscard]] std::vector<std::string> GetExtensions() const override
             {
-                return {".cnb"};
+                return {".cnj"};
             }
 
             Graphics::Model Read(const std::string& path, ContentManager& cm) override
@@ -920,9 +920,9 @@ namespace Microsoft::Xna::Framework::Content
 
                 const std::string json = ReadTextFile(path);
 
-                const CNA::Internal::CnbEnvelope envelope = CNA::Internal::ParseCnbEnvelope(json);
-                CNA::Internal::ValidateCnbEnvelope(envelope, "Model", path);
-                RejectSourceFileForSelfContainedCnb(envelope, "Model", path);
+                const CNA::Internal::CnjEnvelope envelope = CNA::Internal::ParseCnjEnvelope(json);
+                CNA::Internal::ValidateCnjEnvelope(envelope, "Model", path);
+                RejectSourceFileForSelfContainedCnj(envelope, "Model", path);
 
                 const std::string root = cm.getRootDirectoryProperty();
                 Graphics::GraphicsDevice& device = cm.getGraphicsDeviceInternal();
@@ -1512,7 +1512,7 @@ namespace Microsoft::Xna::Framework::Content
             textureCache_.erase(cacheIt);
         }
 
-        // .xnb always wins first (cnb.md's "Core rule", 2026-07-16 decision) -- same reasoning
+        // .xnb always wins first (cnj.md's "Core rule", 2026-07-16 decision) -- same reasoning
         // as the generic Load<T>() template; this specialization needs its own copy since it
         // doesn't call that template body at all (weak-cache semantics require a bespoke
         // implementation here).
@@ -1574,7 +1574,7 @@ namespace Microsoft::Xna::Framework::Content
 
         log::Debug(std::string("Loading asset: ") + assetName);
 
-        // .xnb always wins first (cnb.md's "Core rule") -- same reasoning as Load<Texture2D>'s
+        // .xnb always wins first (cnj.md's "Core rule") -- same reasoning as Load<Texture2D>'s
         // own specialisation; this one needs its own copy too since move-only types skip the
         // generic Load<T>() template's any-cache body entirely.
         const std::string xnbCandidate = BuildAssetPath(assetName) + ".xnb";
@@ -1616,7 +1616,7 @@ namespace Microsoft::Xna::Framework::Content
 
         log::Debug(std::string("Loading asset: ") + assetName);
 
-        // .xnb always wins first (cnb.md's "Core rule") -- same reasoning as Load<Texture2D>'s and
+        // .xnb always wins first (cnj.md's "Core rule") -- same reasoning as Load<Texture2D>'s and
         // Load<SoundEffect>'s own specialisations above; this one needs its own copy too since
         // move-only types skip the generic Load<T>() template's any-cache body entirely
         // (plan_xnb.md XNB-25).

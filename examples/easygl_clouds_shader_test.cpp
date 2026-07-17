@@ -137,8 +137,8 @@ protected:
 
         WriteFile(root / "clouds.vert.glsl", kVertSrc);
         WriteFile(root / "clouds.frag.glsl", kFragSrc);
-        WriteFile(root / "clouds.cnb", R"({
-  "cnbVersion": 1,
+        WriteFile(root / "clouds.cnj", R"({
+  "cnjVersion": 1,
   "type": "Effect",
   "vertex": "clouds.vert.glsl",
   "fragment": "clouds.frag.glsl"
@@ -169,7 +169,7 @@ protected:
         auto* fx = dynamic_cast<ShaderEffect*>(fxBase_.get());
         if (!fx || !fx->IsEffectValid())
         {
-            std::printf("[FAIL] EasyGLCloudsShader: .cnb load or GLSL compile failed\n");
+            std::printf("[FAIL] EasyGLCloudsShader: .cnj load or GLSL compile failed\n");
             Exit();
             return;
         }

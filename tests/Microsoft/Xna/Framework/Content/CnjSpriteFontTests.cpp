@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_cnb.md CNB-12/CNB-13: first-ever test coverage for SpriteFontTypeReader, migrated from
-// .font.json to .cnb (CNB-11). No prior test or example anywhere exercised this reader.
+// plan_cnj.md CNB-12/CNB-13: first-ever test coverage for SpriteFontTypeReader, migrated from
+// .font.json to .cnj (CNB-11). No prior test or example anywhere exercised this reader.
 
 #include <cstdint>
 #include <filesystem>
@@ -32,7 +32,7 @@ namespace
     public:
         ScratchContentRoot()
             : dir_(std::filesystem::temp_directory_path()
-                   / ("cna_cnb_spritefont_test_" + std::to_string(reinterpret_cast<std::uintptr_t>(this))))
+                   / ("cna_cnj_spritefont_test_" + std::to_string(reinterpret_cast<std::uintptr_t>(this))))
         {
             std::filesystem::create_directories(dir_);
         }
@@ -59,13 +59,13 @@ namespace
     }
 }
 
-class CnbSpriteFontTest : public ::testing::Test
+class CnjSpriteFontTest : public ::testing::Test
 {
 protected:
     GraphicsDevice gd;
 };
 
-TEST_F(CnbSpriteFontTest, LoadsRealCnbFixture)
+TEST_F(CnjSpriteFontTest, LoadsRealCnjFixture)
 {
     ScratchContentRoot root;
 
@@ -74,8 +74,8 @@ TEST_F(CnbSpriteFontTest, LoadsRealCnbFixture)
     atlas.SetData(pixels.data(), static_cast<int>(pixels.size()));
     atlas.SaveAsPng((root.path() / "atlas.png").string());
 
-    WriteFile(root.path() / "arial.cnb", R"({
-        "cnbVersion": 1,
+    WriteFile(root.path() / "arial.cnj", R"({
+        "cnjVersion": 1,
         "type": "SpriteFont",
         "texture": "atlas.png",
         "lineSpacing": 24,
@@ -99,12 +99,12 @@ TEST_F(CnbSpriteFontTest, LoadsRealCnbFixture)
     EXPECT_EQ(font.getCharactersProperty()[0], u'A');
 }
 
-TEST_F(CnbSpriteFontTest, MismatchedTypeThrowsContentLoadException)
+TEST_F(CnjSpriteFontTest, MismatchedTypeThrowsContentLoadException)
 {
     ScratchContentRoot root;
 
-    WriteFile(root.path() / "wrong.cnb", R"({
-        "cnbVersion": 1,
+    WriteFile(root.path() / "wrong.cnj", R"({
+        "cnjVersion": 1,
         "type": "Model"
     })");
 
@@ -114,15 +114,15 @@ TEST_F(CnbSpriteFontTest, MismatchedTypeThrowsContentLoadException)
     EXPECT_THROW(cm.Load<SpriteFont>("wrong"), ContentLoadException);
 }
 
-// plan_cnb.md CNB-35: end-to-end proof that the strict envelope/version policy is wired through
-// a real built-in reader, not just unit-tested against ParseCnbEnvelope/ValidateCnbEnvelope in
+// plan_cnj.md CNB-35: end-to-end proof that the strict envelope/version policy is wired through
+// a real built-in reader, not just unit-tested against ParseCnjEnvelope/ValidateCnjEnvelope in
 // isolation.
-TEST_F(CnbSpriteFontTest, UnsupportedCnbVersionThrowsThroughRealReader)
+TEST_F(CnjSpriteFontTest, UnsupportedCnjVersionThrowsThroughRealReader)
 {
     ScratchContentRoot root;
 
-    WriteFile(root.path() / "future.cnb", R"({
-        "cnbVersion": 2,
+    WriteFile(root.path() / "future.cnj", R"({
+        "cnjVersion": 2,
         "type": "SpriteFont"
     })");
 

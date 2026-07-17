@@ -135,8 +135,8 @@ protected:
 
         WriteFile(root / "csm.vert.glsl", kVertSrc);
         WriteFile(root / "csm.frag.glsl", kFragSrc);
-        WriteFile(root / "csm.cnb", R"({
-  "cnbVersion": 1,
+        WriteFile(root / "csm.cnj", R"({
+  "cnjVersion": 1,
   "type": "Effect",
   "vertex": "csm.vert.glsl",
   "fragment": "csm.frag.glsl"
@@ -198,7 +198,7 @@ protected:
         auto* fx = dynamic_cast<ShaderEffect*>(fxBase_.get());
         if (!fx || !fx->IsEffectValid())
         {
-            std::printf("[FAIL] EasyGLShadowMappingCreateShadowMap: .cnb load or GLSL compile failed\n");
+            std::printf("[FAIL] EasyGLShadowMappingCreateShadowMap: .cnj load or GLSL compile failed\n");
             Exit();
             return;
         }

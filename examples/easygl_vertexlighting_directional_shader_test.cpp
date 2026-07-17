@@ -143,8 +143,8 @@ protected:
 
         WriteFile(root / "vldir.vert.glsl", kVertSrc);
         WriteFile(root / "vldir.frag.glsl", kFragSrc);
-        WriteFile(root / "vldir.cnb", R"({
-  "cnbVersion": 1,
+        WriteFile(root / "vldir.cnj", R"({
+  "cnjVersion": 1,
   "type": "Effect",
   "vertex": "vldir.vert.glsl",
   "fragment": "vldir.frag.glsl"
@@ -209,7 +209,7 @@ protected:
         auto* fx = dynamic_cast<ShaderEffect*>(fxBase_.get());
         if (!fx || !fx->IsEffectValid())
         {
-            std::printf("[FAIL] EasyGLVertexLightingDirectional: .cnb load or GLSL compile failed\n");
+            std::printf("[FAIL] EasyGLVertexLightingDirectional: .cnj load or GLSL compile failed\n");
             Exit();
             return;
         }

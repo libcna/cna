@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_cnb.md CNB-36: ContentManager's general loadedAssets_ cache must be keyed by (type, name),
+// plan_cnj.md CNB-36: ContentManager's general loadedAssets_ cache must be keyed by (type, name),
 // not name alone -- otherwise Load<T2>() for a logical name a different T1 is already cached
 // under throws std::bad_any_cast (an unrelated, undocumented exception type) instead of reaching
-// normal .cnb envelope validation and a clear ContentLoadException.
+// normal .cnj envelope validation and a clear ContentLoadException.
 
 #include <filesystem>
 #include <fstream>
@@ -24,7 +24,7 @@ namespace
     public:
         ScratchContentRoot()
             : dir_(std::filesystem::temp_directory_path()
-                   / ("cna_cnb_cache_type_safety_test_" + std::to_string(reinterpret_cast<std::uintptr_t>(this))))
+                   / ("cna_cnj_cache_type_safety_test_" + std::to_string(reinterpret_cast<std::uintptr_t>(this))))
         {
             std::filesystem::create_directories(dir_);
         }
@@ -54,34 +54,34 @@ namespace
     struct GameDataB { int value = 0; };
 }
 
-TEST(CnbAssetCacheTypeSafetyTest, DifferentTypeSameNameThrowsContentLoadExceptionNotBadAnyCast)
+TEST(CnjAssetCacheTypeSafetyTest, DifferentTypeSameNameThrowsContentLoadExceptionNotBadAnyCast)
 {
     ScratchContentRoot root;
-    WriteFile(root.path() / "goblin.cnb", R"({"cnbVersion": 1, "type": "A"})");
+    WriteFile(root.path() / "goblin.cnj", R"({"cnjVersion": 1, "type": "A"})");
 
     ContentManager cm(nullptr, root.path().string());
-    cm.RegisterCnbLoader<GameDataA>("A",
+    cm.RegisterCnjLoader<GameDataA>("A",
         [](const std::string&, ContentManager&) { return GameDataA{"enemy"}; });
-    cm.RegisterCnbLoader<GameDataB>("B",
+    cm.RegisterCnjLoader<GameDataB>("B",
         [](const std::string&, ContentManager&) { return GameDataB{42}; });
 
     GameDataA a = cm.Load<GameDataA>("goblin");
     EXPECT_EQ(a.kind, "enemy");
 
-    // Same logical name "goblin", but a different T, whose .cnb "type" ("A") doesn't match what
+    // Same logical name "goblin", but a different T, whose .cnj "type" ("A") doesn't match what
     // GameDataB's factory is registered under ("B") -- this must reach normal envelope
     // validation and throw a clean ContentLoadException, not std::bad_any_cast.
     EXPECT_THROW(cm.Load<GameDataB>("goblin"), ContentLoadException);
 }
 
-TEST(CnbAssetCacheTypeSafetyTest, SameTypeSameNameStillReturnsCachedInstance)
+TEST(CnjAssetCacheTypeSafetyTest, SameTypeSameNameStillReturnsCachedInstance)
 {
     ScratchContentRoot root;
-    WriteFile(root.path() / "goblin.cnb", R"({"cnbVersion": 1, "type": "A"})");
+    WriteFile(root.path() / "goblin.cnj", R"({"cnjVersion": 1, "type": "A"})");
 
     ContentManager cm(nullptr, root.path().string());
     int callCount = 0;
-    cm.RegisterCnbLoader<GameDataA>("A",
+    cm.RegisterCnjLoader<GameDataA>("A",
         [&callCount](const std::string&, ContentManager&)
         {
             ++callCount;

@@ -305,8 +305,8 @@ protected:
 
         WriteFile(root / "pe.vert.glsl", kVertSrc);
         WriteFile(root / "pe.frag.glsl", kFragSrc);
-        WriteFile(root / "pe.cnb", R"({
-  "cnbVersion": 1,
+        WriteFile(root / "pe.cnj", R"({
+  "cnjVersion": 1,
   "type": "Effect",
   "vertex": "pe.vert.glsl",
   "fragment": "pe.frag.glsl"
@@ -403,7 +403,7 @@ protected:
         auto* fx = dynamic_cast<ShaderEffect*>(fxBase_.get());
         if (!fx || !fx->IsEffectValid())
         {
-            std::printf("[FAIL] EasyGLParticleEffect: .cnb load or GLSL compile failed\n");
+            std::printf("[FAIL] EasyGLParticleEffect: .cnj load or GLSL compile failed\n");
             Exit();
             return;
         }

@@ -167,8 +167,8 @@ protected:
 
         WriteFile(root / "vdpp.vert.glsl", kVertSrc);
         WriteFile(root / "vdpp.frag.glsl", kFragSrc);
-        WriteFile(root / "vdpp.cnb", R"({
-  "cnbVersion": 1,
+        WriteFile(root / "vdpp.cnj", R"({
+  "cnjVersion": 1,
   "type": "Effect",
   "vertex": "vdpp.vert.glsl",
   "fragment": "vdpp.frag.glsl"
@@ -237,7 +237,7 @@ protected:
         auto* fx = dynamic_cast<ShaderEffect*>(fxBase_.get());
         if (!fx || !fx->IsEffectValid())
         {
-            std::printf("[FAIL] EasyGLPerPixelLightingVertexDiffusePixelPhong: .cnb load or GLSL compile failed\n");
+            std::printf("[FAIL] EasyGLPerPixelLightingVertexDiffusePixelPhong: .cnj load or GLSL compile failed\n");
             Exit();
             return;
         }

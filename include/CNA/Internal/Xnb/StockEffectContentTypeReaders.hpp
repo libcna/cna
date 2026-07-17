@@ -20,7 +20,7 @@
 // clone-only copy constructors and no move constructor, so a bare-value ContentTypeReader<T>
 // cannot even return from Read() (no accessible copy or move to elide to on every compiler).
 // Matching an existing CNA convention for GC-tracked XNA reference types passed through the
-// content pipeline (ContentManager.cpp's own EffectTypeReader for .cnb custom effects returns
+// content pipeline (ContentManager.cpp's own EffectTypeReader for .cnj custom effects returns
 // std::shared_ptr<Effect>), these readers target std::shared_ptr<T> instead of a bare T.
 //
 // Target the common std::shared_ptr<Effect> base, not std::shared_ptr<ConcreteEffectType>: unlike

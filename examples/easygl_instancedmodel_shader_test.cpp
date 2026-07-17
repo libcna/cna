@@ -200,8 +200,8 @@ protected:
 
         WriteFile(root / "im.vert.glsl", kVertSrc);
         WriteFile(root / "im.frag.glsl", kFragSrc);
-        WriteFile(root / "im.cnb", R"({
-  "cnbVersion": 1,
+        WriteFile(root / "im.cnj", R"({
+  "cnjVersion": 1,
   "type": "Effect",
   "vertex": "im.vert.glsl",
   "fragment": "im.frag.glsl"
@@ -256,7 +256,7 @@ protected:
         auto* fx = dynamic_cast<ShaderEffect*>(fxBase_.get());
         if (!fx || !fx->IsEffectValid())
         {
-            std::printf("[FAIL] EasyGLInstancedModel: .cnb load or GLSL compile failed\n");
+            std::printf("[FAIL] EasyGLInstancedModel: .cnj load or GLSL compile failed\n");
             Exit();
             return;
         }

@@ -126,8 +126,8 @@ protected:
 
         WriteFile(root / "diffuseonly.vert.glsl", kVertSrc);
         WriteFile(root / "diffuseonly.frag.glsl", kFragSrc);
-        WriteFile(root / "diffuseonly.cnb", R"({
-  "cnbVersion": 1,
+        WriteFile(root / "diffuseonly.cnj", R"({
+  "cnjVersion": 1,
   "type": "Effect",
   "vertex": "diffuseonly.vert.glsl",
   "fragment": "diffuseonly.frag.glsl"
@@ -192,7 +192,7 @@ protected:
         auto* fx = dynamic_cast<ShaderEffect*>(fxBase_.get());
         if (!fx || !fx->IsEffectValid())
         {
-            std::printf("[FAIL] EasyGLPerPixelLightingDiffuseOnly: .cnb load or GLSL compile failed\n");
+            std::printf("[FAIL] EasyGLPerPixelLightingDiffuseOnly: .cnj load or GLSL compile failed\n");
             Exit();
             return;
         }

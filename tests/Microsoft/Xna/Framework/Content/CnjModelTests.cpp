@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_cnb.md CNB-19/CNB-20: first-ever gtest coverage for ModelTypeReader, migrated from
-// .model.json to .cnb (CNB-17). Prior exercise of this reader was example-program only (7
-// examples/*model_json*.cpp files, migrated to .cnb by CNB-18) -- no gtest coverage existed
+// plan_cnj.md CNB-19/CNB-20: first-ever gtest coverage for ModelTypeReader, migrated from
+// .model.json to .cnj (CNB-17). Prior exercise of this reader was example-program only (7
+// examples/*model_json*.cpp files, migrated to .cnj by CNB-18) -- no gtest coverage existed
 // before this, per docs/model-content-pipeline-support.md's own flagged gap.
 
 #include <cstdint>
@@ -35,7 +35,7 @@ namespace
     public:
         ScratchContentRoot()
             : dir_(std::filesystem::temp_directory_path()
-                   / ("cna_cnb_model_test_" + std::to_string(reinterpret_cast<std::uintptr_t>(this))))
+                   / ("cna_cnj_model_test_" + std::to_string(reinterpret_cast<std::uintptr_t>(this))))
         {
             std::filesystem::create_directories(dir_);
         }
@@ -76,7 +76,7 @@ namespace
     }
 
     // Writes a minimal stride-32 VertexPositionNormalTexture quad fixture (verts + indices +
-    // .cnb), matching examples/easygl_model_json_reader_test.cpp's own fixture shape.
+    // .cnj), matching examples/easygl_model_json_reader_test.cpp's own fixture shape.
     void WriteQuadModelFixture(const std::filesystem::path& root)
     {
         struct V { float x, y, z, nx, ny, nz, u, v; };
@@ -105,8 +105,8 @@ namespace
                    static_cast<std::streamsize>(idxBytes.size()));
         idxf.close();
 
-        WriteFile(root / "quad.cnb", R"({
-  "cnbVersion": 1,
+        WriteFile(root / "quad.cnj", R"({
+  "cnjVersion": 1,
   "type": "Model",
   "meshes": [
     {
@@ -121,13 +121,13 @@ namespace
     }
 }
 
-class CnbModelTest : public ::testing::Test
+class CnjModelTest : public ::testing::Test
 {
 protected:
     GraphicsDevice gd;
 };
 
-TEST_F(CnbModelTest, LoadsRealCnbFixture)
+TEST_F(CnjModelTest, LoadsRealCnjFixture)
 {
     ScratchContentRoot root;
     WriteQuadModelFixture(root.path());
@@ -144,12 +144,12 @@ TEST_F(CnbModelTest, LoadsRealCnbFixture)
     ASSERT_EQ(mesh->getMeshPartsProperty().getCountProperty(), 1);
 }
 
-TEST_F(CnbModelTest, MismatchedTypeThrowsContentLoadException)
+TEST_F(CnjModelTest, MismatchedTypeThrowsContentLoadException)
 {
     ScratchContentRoot root;
 
-    WriteFile(root.path() / "wrong.cnb", R"({
-        "cnbVersion": 1,
+    WriteFile(root.path() / "wrong.cnj", R"({
+        "cnjVersion": 1,
         "type": "SpriteFont"
     })");
 

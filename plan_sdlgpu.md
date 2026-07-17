@@ -133,7 +133,7 @@
 > and skipping the transfer-buffer upload entirely when the logical size is 0 (the public
 > `vertexCount_`/`indexCount_`/`shadowData_` still report the real, possibly-zero size).
 >
-> **Known gap surfaced by the same merge, left open:** `CnbEffectTest.LoadsRealCnbFixture` (a
+> **Known gap surfaced by the same merge, left open:** `CnjEffectTest.LoadsRealCnjFixture` (a
 > `develop`-only test — it doesn't exist on `feature/sdlgpu`, so this is the first time it has run
 > under `CNA_GRAPHICS_BACKEND=SDL_GPU`) fails because its fixture's custom `ShaderEffect` GLSL is
 > not written in the SPIR-V-compatible dialect SDL_GPU's shader compiler requires (needs an

@@ -172,8 +172,8 @@ protected:
                    static_cast<std::streamsize>(idxBytes.size()));
         idxf.close();
 
-        WriteFile(root / "quad.cnb", R"({
-  "cnbVersion": 1,
+        WriteFile(root / "quad.cnj", R"({
+  "cnjVersion": 1,
   "type": "Model",
   "meshes": [
     {

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_cnb.md CNB-9: tests for CNB-7 (generic sourceFile resolution) and CNB-8 (colorKey wired
+// plan_cnj.md CNB-9: tests for CNB-7 (generic sourceFile resolution) and CNB-8 (colorKey wired
 // into Texture2DTypeReader as the first real sourceFile consumer).
 
 #include <cstdint>
@@ -31,7 +31,7 @@ namespace
     public:
         ScratchContentRoot()
             : dir_(std::filesystem::temp_directory_path()
-                   / ("cna_cnb_sourcefile_test_" + std::to_string(reinterpret_cast<std::uintptr_t>(this))))
+                   / ("cna_cnj_sourcefile_test_" + std::to_string(reinterpret_cast<std::uintptr_t>(this))))
         {
             std::filesystem::create_directories(dir_);
         }
@@ -58,13 +58,13 @@ namespace
     }
 }
 
-class CnbSourceFileTest : public ::testing::Test
+class CnjSourceFileTest : public ::testing::Test
 {
 protected:
     GraphicsDevice gd;
 };
 
-TEST_F(CnbSourceFileTest, ColorKeyMakesMatchingPixelsTransparentOthersUnchanged)
+TEST_F(CnjSourceFileTest, ColorKeyMakesMatchingPixelsTransparentOthersUnchanged)
 {
     ScratchContentRoot root;
 
@@ -79,8 +79,8 @@ TEST_F(CnbSourceFileTest, ColorKeyMakesMatchingPixelsTransparentOthersUnchanged)
     source.SetData(sourcePixels.data(), 4);
     source.SaveAsPng((root.path() / "ahoj.png").string());
 
-    WriteFile(root.path() / "ahoj.cnb", R"({
-        "cnbVersion": 1,
+    WriteFile(root.path() / "ahoj.cnj", R"({
+        "cnjVersion": 1,
         "type": "Texture2D",
         "sourceFile": "ahoj.png",
         "colorKey": [255, 0, 255]
@@ -100,7 +100,7 @@ TEST_F(CnbSourceFileTest, ColorKeyMakesMatchingPixelsTransparentOthersUnchanged)
     EXPECT_EQ(pixels[3], Color(0, 255, 0, 255)) << "green pixel 3 should be unchanged";
 }
 
-TEST_F(CnbSourceFileTest, NativeFileAloneStillLoadsUnchanged)
+TEST_F(CnjSourceFileTest, NativeFileAloneStillLoadsUnchanged)
 {
     ScratchContentRoot root;
 
@@ -119,12 +119,12 @@ TEST_F(CnbSourceFileTest, NativeFileAloneStillLoadsUnchanged)
     EXPECT_EQ(pixels[0], Color(0, 128, 255, 255));
 }
 
-TEST_F(CnbSourceFileTest, MissingSourceFileThrows)
+TEST_F(CnjSourceFileTest, MissingSourceFileThrows)
 {
     ScratchContentRoot root;
 
-    WriteFile(root.path() / "broken.cnb", R"({
-        "cnbVersion": 1,
+    WriteFile(root.path() / "broken.cnj", R"({
+        "cnjVersion": 1,
         "type": "Texture2D",
         "sourceFile": "does_not_exist.png"
     })");
@@ -135,16 +135,16 @@ TEST_F(CnbSourceFileTest, MissingSourceFileThrows)
     // The missing sourceFile ultimately fails inside the same native image decode path an
     // ordinary missing Texture2D file would (ImageLoader::Load throws std::runtime_error, not
     // ContentLoadException) -- CNB-7/8 deliberately don't re-wrap that failure into a different
-    // exception type, since it's not a .cnb-specific error.
+    // exception type, since it's not a .cnj-specific error.
     EXPECT_THROW(cm.Load<Texture2D>("broken"), std::runtime_error);
 }
 
-TEST_F(CnbSourceFileTest, MismatchedTypeThrowsContentLoadException)
+TEST_F(CnjSourceFileTest, MismatchedTypeThrowsContentLoadException)
 {
     ScratchContentRoot root;
 
-    WriteFile(root.path() / "wrong.cnb", R"({
-        "cnbVersion": 1,
+    WriteFile(root.path() / "wrong.cnj", R"({
+        "cnjVersion": 1,
         "type": "SpriteFont",
         "sourceFile": "ahoj.png"
     })");

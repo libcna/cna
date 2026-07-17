@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_cnb.md CNB-32: safe, non-recursive "sourceFile" resolution. A .cnb's "sourceFile" must
-// never be able to escape the content root, chain into another .cnb, or cycle back into itself.
+// plan_cnj.md CNB-32: safe, non-recursive "sourceFile" resolution. A .cnj's "sourceFile" must
+// never be able to escape the content root, chain into another .cnj, or cycle back into itself.
 
 #include <filesystem>
 #include <fstream>
@@ -29,7 +29,7 @@ namespace
     public:
         ScratchDir()
             : dir_(std::filesystem::temp_directory_path()
-                   / ("cna_cnb_sourcefile_safety_test_" + std::to_string(reinterpret_cast<std::uintptr_t>(this))))
+                   / ("cna_cnj_sourcefile_safety_test_" + std::to_string(reinterpret_cast<std::uintptr_t>(this))))
         {
             std::filesystem::create_directories(dir_);
         }
@@ -66,19 +66,19 @@ namespace
     }
 }
 
-class CnbSourceFileSafetyTest : public ::testing::Test
+class CnjSourceFileSafetyTest : public ::testing::Test
 {
 protected:
     GraphicsDevice gd;
 };
 
-TEST_F(CnbSourceFileSafetyTest, InRootSiblingResolvesCorrectly)
+TEST_F(CnjSourceFileSafetyTest, InRootSiblingResolvesCorrectly)
 {
     ScratchDir scratch;
     const auto root = scratch.path() / "content_root";
 
     WriteSolidColorPng(gd, root / "ahoj.png", Color(255, 0, 0, 255));
-    WriteFile(root / "ahoj.cnb", R"({"cnbVersion": 1, "type": "Texture2D", "sourceFile": "ahoj.png"})");
+    WriteFile(root / "ahoj.cnj", R"({"cnjVersion": 1, "type": "Texture2D", "sourceFile": "ahoj.png"})");
 
     ContentManager cm(nullptr, root.string());
     cm.setGraphicsDevice(gd);
@@ -90,15 +90,15 @@ TEST_F(CnbSourceFileSafetyTest, InRootSiblingResolvesCorrectly)
     EXPECT_EQ(pixels[0], Color(255, 0, 0, 255));
 }
 
-TEST_F(CnbSourceFileSafetyTest, InRootNestedPayloadResolvesCorrectly)
+TEST_F(CnjSourceFileSafetyTest, InRootNestedPayloadResolvesCorrectly)
 {
     ScratchDir scratch;
     const auto root = scratch.path() / "content_root";
 
-    // .cnb lives directly under root; its payload lives in a nested subdirectory.
+    // .cnj lives directly under root; its payload lives in a nested subdirectory.
     WriteSolidColorPng(gd, root / "textures" / "diffuse.png", Color(0, 255, 0, 255));
-    WriteFile(root / "thing.cnb",
-              R"({"cnbVersion": 1, "type": "Texture2D", "sourceFile": "textures/diffuse.png"})");
+    WriteFile(root / "thing.cnj",
+              R"({"cnjVersion": 1, "type": "Texture2D", "sourceFile": "textures/diffuse.png"})");
 
     ContentManager cm(nullptr, root.string());
     cm.setGraphicsDevice(gd);
@@ -110,7 +110,7 @@ TEST_F(CnbSourceFileSafetyTest, InRootNestedPayloadResolvesCorrectly)
     EXPECT_EQ(pixels[0], Color(0, 255, 0, 255));
 }
 
-TEST_F(CnbSourceFileSafetyTest, DotDotEscapeIsRejected)
+TEST_F(CnjSourceFileSafetyTest, DotDotEscapeIsRejected)
 {
     ScratchDir scratch;
     const auto root = scratch.path() / "content_root";
@@ -118,8 +118,8 @@ TEST_F(CnbSourceFileSafetyTest, DotDotEscapeIsRejected)
 
     WriteSolidColorPng(gd, outside / "secret.png", Color(1, 2, 3, 255));
     std::filesystem::create_directories(root);
-    WriteFile(root / "evil.cnb",
-              R"({"cnbVersion": 1, "type": "Texture2D", "sourceFile": "../outside_root/secret.png"})");
+    WriteFile(root / "evil.cnj",
+              R"({"cnjVersion": 1, "type": "Texture2D", "sourceFile": "../outside_root/secret.png"})");
 
     ContentManager cm(nullptr, root.string());
     cm.setGraphicsDevice(gd);
@@ -127,7 +127,7 @@ TEST_F(CnbSourceFileSafetyTest, DotDotEscapeIsRejected)
     EXPECT_THROW(cm.Load<Texture2D>("evil"), ContentLoadException);
 }
 
-TEST_F(CnbSourceFileSafetyTest, AbsolutePathIsRejected)
+TEST_F(CnjSourceFileSafetyTest, AbsolutePathIsRejected)
 {
     ScratchDir scratch;
     const auto root = scratch.path() / "content_root";
@@ -135,8 +135,8 @@ TEST_F(CnbSourceFileSafetyTest, AbsolutePathIsRejected)
 
     WriteSolidColorPng(gd, absoluteTarget, Color(1, 2, 3, 255));
     std::filesystem::create_directories(root);
-    WriteFile(root / "evil.cnb",
-              R"({"cnbVersion": 1, "type": "Texture2D", "sourceFile": ")" + absoluteTarget.string() + R"("})");
+    WriteFile(root / "evil.cnj",
+              R"({"cnjVersion": 1, "type": "Texture2D", "sourceFile": ")" + absoluteTarget.string() + R"("})");
 
     ContentManager cm(nullptr, root.string());
     cm.setGraphicsDevice(gd);
@@ -144,13 +144,13 @@ TEST_F(CnbSourceFileSafetyTest, AbsolutePathIsRejected)
     EXPECT_THROW(cm.Load<Texture2D>("evil"), ContentLoadException);
 }
 
-TEST_F(CnbSourceFileSafetyTest, CnbChainIsRejected)
+TEST_F(CnjSourceFileSafetyTest, CnjChainIsRejected)
 {
     ScratchDir scratch;
     const auto root = scratch.path() / "content_root";
 
-    WriteFile(root / "other.cnb", R"({"cnbVersion": 1, "type": "Texture2D", "sourceFile": "real.png"})");
-    WriteFile(root / "chain.cnb", R"({"cnbVersion": 1, "type": "Texture2D", "sourceFile": "other.cnb"})");
+    WriteFile(root / "other.cnj", R"({"cnjVersion": 1, "type": "Texture2D", "sourceFile": "real.png"})");
+    WriteFile(root / "chain.cnj", R"({"cnjVersion": 1, "type": "Texture2D", "sourceFile": "other.cnj"})");
 
     ContentManager cm(nullptr, root.string());
     cm.setGraphicsDevice(gd);
@@ -158,14 +158,14 @@ TEST_F(CnbSourceFileSafetyTest, CnbChainIsRejected)
     EXPECT_THROW(cm.Load<Texture2D>("chain"), ContentLoadException);
 }
 
-TEST_F(CnbSourceFileSafetyTest, SelfCycleViaExtensionlessNameIsRejected)
+TEST_F(CnjSourceFileSafetyTest, SelfCycleViaExtensionlessNameIsRejected)
 {
     ScratchDir scratch;
     const auto root = scratch.path() / "content_root";
 
-    // "loop.cnb" points sourceFile at "loop" (no extension) -- the normal resolver would pick
-    // the sibling "loop.cnb" (itself) over any other candidate, cycling forever if not rejected.
-    WriteFile(root / "loop.cnb", R"({"cnbVersion": 1, "type": "Texture2D", "sourceFile": "loop"})");
+    // "loop.cnj" points sourceFile at "loop" (no extension) -- the normal resolver would pick
+    // the sibling "loop.cnj" (itself) over any other candidate, cycling forever if not rejected.
+    WriteFile(root / "loop.cnj", R"({"cnjVersion": 1, "type": "Texture2D", "sourceFile": "loop"})");
 
     ContentManager cm(nullptr, root.string());
     cm.setGraphicsDevice(gd);

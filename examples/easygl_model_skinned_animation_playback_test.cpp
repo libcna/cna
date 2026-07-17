@@ -210,8 +210,8 @@ protected:
 
         WriteSolidColorQoi(root / "solid_red.qoi", 2, 2, 255, 0, 0, 255);
 
-        WriteFile(root / "rig.cnb", R"({
-  "cnbVersion": 1,
+        WriteFile(root / "rig.cnj", R"({
+  "cnjVersion": 1,
   "type": "Model",
   "skeleton": "rig.skeleton.bin",
   "animations": [

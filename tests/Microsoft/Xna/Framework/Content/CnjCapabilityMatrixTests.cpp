@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_cnb.md CNB-34: the .cnb "sourceFile" capability matrix. Texture2D's support (sourceFile +
-// colorKey) is already covered by CnbSourceFileTests.cpp/CnbCacheIsolationTests.cpp -- this file
+// plan_cnj.md CNB-34: the .cnj "sourceFile" capability matrix. Texture2D's support (sourceFile +
+// colorKey) is already covered by CnjSourceFileTests.cpp/CnjCacheIsolationTests.cpp -- this file
 // covers the other five branches: SoundEffect and TextureCube delegate via sourceFile (no
 // metadata fields yet); SpriteFont, Effect, and Model explicitly reject a "sourceFile" field
-// with a clear ContentLoadException, since their .cnb documents are self-contained descriptors.
+// with a clear ContentLoadException, since their .cnj documents are self-contained descriptors.
 
 #include <cstdint>
 #include <cstring>
@@ -46,7 +46,7 @@ namespace
     public:
         ScratchContentRoot()
             : dir_(std::filesystem::temp_directory_path()
-                   / ("cna_cnb_capability_matrix_test_" + std::to_string(reinterpret_cast<std::uintptr_t>(this))))
+                   / ("cna_cnj_capability_matrix_test_" + std::to_string(reinterpret_cast<std::uintptr_t>(this))))
         {
             std::filesystem::create_directories(dir_);
         }
@@ -164,20 +164,20 @@ namespace
     }
 }
 
-class CnbCapabilityMatrixTest : public ::testing::Test
+class CnjCapabilityMatrixTest : public ::testing::Test
 {
 protected:
     GraphicsDevice gd;
 };
 
-TEST_F(CnbCapabilityMatrixTest, SoundEffectDelegatesViaSourceFile)
+TEST_F(CnjCapabilityMatrixTest, SoundEffectDelegatesViaSourceFile)
 {
     System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
 
     ScratchContentRoot root;
     WriteBytes(root.path() / "beep.wav", BuildMinimalWavBytes());
-    WriteFile(root.path() / "beep.cnb",
-              R"({"cnbVersion": 1, "type": "SoundEffect", "sourceFile": "beep.wav"})");
+    WriteFile(root.path() / "beep.cnj",
+              R"({"cnjVersion": 1, "type": "SoundEffect", "sourceFile": "beep.wav"})");
 
     ContentManager cm(nullptr, root.path().string());
 
@@ -185,12 +185,12 @@ TEST_F(CnbCapabilityMatrixTest, SoundEffectDelegatesViaSourceFile)
     EXPECT_GT(loaded.getDurationProperty().getTotalMillisecondsProperty(), 0.0);
 }
 
-TEST_F(CnbCapabilityMatrixTest, TextureCubeDelegatesViaSourceFile)
+TEST_F(CnjCapabilityMatrixTest, TextureCubeDelegatesViaSourceFile)
 {
     ScratchContentRoot root;
     WriteBytes(root.path() / "cube.dds", BuildMinimalCubeDds());
-    WriteFile(root.path() / "cube.cnb",
-              R"({"cnbVersion": 1, "type": "TextureCube", "sourceFile": "cube.dds"})");
+    WriteFile(root.path() / "cube.cnj",
+              R"({"cnjVersion": 1, "type": "TextureCube", "sourceFile": "cube.dds"})");
 
     ContentManager cm(nullptr, root.path().string());
     cm.setGraphicsDevice(gd);
@@ -199,11 +199,11 @@ TEST_F(CnbCapabilityMatrixTest, TextureCubeDelegatesViaSourceFile)
     EXPECT_EQ(loaded.getSizeProperty(), 4);
 }
 
-TEST_F(CnbCapabilityMatrixTest, SpriteFontRejectsSourceFile)
+TEST_F(CnjCapabilityMatrixTest, SpriteFontRejectsSourceFile)
 {
     ScratchContentRoot root;
-    WriteFile(root.path() / "wrong.cnb",
-              R"({"cnbVersion": 1, "type": "SpriteFont", "sourceFile": "atlas.png"})");
+    WriteFile(root.path() / "wrong.cnj",
+              R"({"cnjVersion": 1, "type": "SpriteFont", "sourceFile": "atlas.png"})");
 
     ContentManager cm(nullptr, root.path().string());
     cm.setGraphicsDevice(gd);
@@ -211,11 +211,11 @@ TEST_F(CnbCapabilityMatrixTest, SpriteFontRejectsSourceFile)
     EXPECT_THROW(cm.Load<SpriteFont>("wrong"), ContentLoadException);
 }
 
-TEST_F(CnbCapabilityMatrixTest, EffectRejectsSourceFile)
+TEST_F(CnjCapabilityMatrixTest, EffectRejectsSourceFile)
 {
     ScratchContentRoot root;
-    WriteFile(root.path() / "wrong.cnb",
-              R"({"cnbVersion": 1, "type": "Effect", "sourceFile": "shader.glsl"})");
+    WriteFile(root.path() / "wrong.cnj",
+              R"({"cnjVersion": 1, "type": "Effect", "sourceFile": "shader.glsl"})");
 
     ContentManager cm(nullptr, root.path().string());
     cm.setGraphicsDevice(gd);
@@ -223,11 +223,11 @@ TEST_F(CnbCapabilityMatrixTest, EffectRejectsSourceFile)
     EXPECT_THROW(cm.Load<std::shared_ptr<Effect>>("wrong"), ContentLoadException);
 }
 
-TEST_F(CnbCapabilityMatrixTest, ModelRejectsSourceFile)
+TEST_F(CnjCapabilityMatrixTest, ModelRejectsSourceFile)
 {
     ScratchContentRoot root;
-    WriteFile(root.path() / "wrong.cnb",
-              R"({"cnbVersion": 1, "type": "Model", "sourceFile": "mesh.obj"})");
+    WriteFile(root.path() / "wrong.cnj",
+              R"({"cnjVersion": 1, "type": "Model", "sourceFile": "mesh.obj"})");
 
     ContentManager cm(nullptr, root.path().string());
     cm.setGraphicsDevice(gd);

@@ -116,8 +116,8 @@ protected:
 
         WriteFile(root / "flatshaded.vert.glsl", kVertSrc);
         WriteFile(root / "flatshaded.frag.glsl", kFragSrc);
-        WriteFile(root / "flatshaded.cnb", R"({
-  "cnbVersion": 1,
+        WriteFile(root / "flatshaded.cnj", R"({
+  "cnjVersion": 1,
   "type": "Effect",
   "vertex": "flatshaded.vert.glsl",
   "fragment": "flatshaded.frag.glsl"
@@ -179,7 +179,7 @@ protected:
         auto* fx = dynamic_cast<ShaderEffect*>(fxBase_.get());
         if (!fx || !fx->IsEffectValid())
         {
-            std::printf("[FAIL] EasyGLFlatShaded: .cnb load or GLSL compile failed\n");
+            std::printf("[FAIL] EasyGLFlatShaded: .cnj load or GLSL compile failed\n");
             Exit();
             return;
         }

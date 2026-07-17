@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_cnb.md CNB-33: a .cnb sidecar's metadata transform (colorKey) must never leak into a
+// plan_cnj.md CNB-33: a .cnj sidecar's metadata transform (colorKey) must never leak into a
 // separately-cached, separately-requested load of the same underlying native file, in either
 // load order. Investigation found the specific mechanism the task described -- ApplyColorKey's
 // SetData() mutating a texture backend shared through the weak cache -- does not currently
 // reproduce: Texture2D::SetData(const Color*, int) reassigns backend_/cpuPixels_ to freshly
-// created targets rather than mutating the existing shared objects in place, so a .cnb's
+// created targets rather than mutating the existing shared objects in place, so a .cnj's
 // recursively-loaded source texture is already effectively detached before ApplyColorKey runs.
 // These tests pin that invariant as a permanent regression guard (including the case that
 // actually exercises the weak-cache reuse path, by keeping a live handle so the cached entry's
@@ -37,7 +37,7 @@ namespace
     public:
         ScratchContentRoot()
             : dir_(std::filesystem::temp_directory_path()
-                   / ("cna_cnb_cache_isolation_test_" + std::to_string(reinterpret_cast<std::uintptr_t>(this))))
+                   / ("cna_cnj_cache_isolation_test_" + std::to_string(reinterpret_cast<std::uintptr_t>(this))))
         {
             std::filesystem::create_directories(dir_);
         }
@@ -73,8 +73,8 @@ namespace
         source.SetData(pixels.data(), 4);
         source.SaveAsPng((root / "ahoj.png").string());
 
-        WriteFile(root / "ahoj.cnb", R"({
-            "cnbVersion": 1,
+        WriteFile(root / "ahoj.cnj", R"({
+            "cnjVersion": 1,
             "type": "Texture2D",
             "sourceFile": "ahoj.png",
             "colorKey": [255, 0, 255]
@@ -82,13 +82,13 @@ namespace
     }
 }
 
-class CnbCacheIsolationTest : public ::testing::Test
+class CnjCacheIsolationTest : public ::testing::Test
 {
 protected:
     GraphicsDevice gd;
 };
 
-TEST_F(CnbCacheIsolationTest, SidecarLoadedFirstDoesNotCorruptLaterNativeLoad)
+TEST_F(CnjCacheIsolationTest, SidecarLoadedFirstDoesNotCorruptLaterNativeLoad)
 {
     ScratchContentRoot root;
     WriteColorKeyedFixture(gd, root.path());
@@ -108,7 +108,7 @@ TEST_F(CnbCacheIsolationTest, SidecarLoadedFirstDoesNotCorruptLaterNativeLoad)
         << "explicit native load must return the original, un-color-keyed pixels";
 }
 
-TEST_F(CnbCacheIsolationTest, NativeLoadedFirstWithLiveHandleUnaffectedBySidecar)
+TEST_F(CnjCacheIsolationTest, NativeLoadedFirstWithLiveHandleUnaffectedBySidecar)
 {
     ScratchContentRoot root;
     WriteColorKeyedFixture(gd, root.path());
@@ -117,7 +117,7 @@ TEST_F(CnbCacheIsolationTest, NativeLoadedFirstWithLiveHandleUnaffectedBySidecar
     cm.setGraphicsDevice(gd);
 
     // Keep a live handle so the weak texture cache's entry for "ahoj.png" can still lock() when
-    // the .cnb sidecar recursively loads it below -- this is what actually exercises the
+    // the .cnj sidecar recursively loads it below -- this is what actually exercises the
     // cache-reuse code path, not a fresh reload from disk.
     Texture2D nativeHandle = cm.Load<Texture2D>("ahoj.png");
 

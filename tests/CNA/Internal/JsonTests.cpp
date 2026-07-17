@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_cnb.md CNB-35: unit tests for the minimal JSON parser backing .cnb envelope parsing.
+// plan_cnj.md CNB-35: unit tests for the minimal JSON parser backing .cnj envelope parsing.
 
 #include <gtest/gtest.h>
 
@@ -99,7 +99,7 @@ TEST(JsonParseTest, ParsesNumberVariants)
 
 TEST(JsonParseTest, RejectsTrailingGarbageAfterNumber)
 {
-    EXPECT_THROW(ParseJson(R"({"cnbVersion": 1abc})"), JsonParseException);
+    EXPECT_THROW(ParseJson(R"({"cnjVersion": 1abc})"), JsonParseException);
 }
 
 TEST(JsonParseTest, RejectsUnterminatedString)

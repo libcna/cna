@@ -159,8 +159,8 @@ protected:
 
         WriteFile(root / "as.vert.glsl", kVertSrc);
         WriteFile(root / "as.frag.glsl", kFragSrc);
-        WriteFile(root / "as.cnb", R"({
-  "cnbVersion": 1,
+        WriteFile(root / "as.cnj", R"({
+  "cnjVersion": 1,
   "type": "Effect",
   "vertex": "as.vert.glsl",
   "fragment": "as.frag.glsl"
@@ -237,7 +237,7 @@ protected:
         auto* fx = dynamic_cast<ShaderEffect*>(fxBase_.get());
         if (!fx || !fx->IsEffectValid())
         {
-            std::printf("[FAIL] EasyGLAnimSprite: .cnb load or GLSL compile failed\n");
+            std::printf("[FAIL] EasyGLAnimSprite: .cnj load or GLSL compile failed\n");
             Exit();
             return;
         }
