@@ -1337,9 +1337,21 @@ case more exist).
   fixed-vs-still-open gap list (verbatim from `plan_net.md`'s own "Honest overall assessment").
   Also corrected the old "confirmed elbow/sleeve tear ... remain unfixed" closing line, which
   predated this pipeline and is now superseded.
-- [ ] **Task 9.3 (remaining half)** — Update `tools/avatar_builder/README.md` to describe the new
-  mesh-craft → Blender pipeline stages (Phase 7). (The GamerServices support-matrix half of this
-  task is done - see Task 9.1's write-up above.)
+- [x] **Task 9.3 (complete)** — Added a "Mesh-craft CSG pipeline (Phase 7)" section to
+  `tools/avatar_builder/README.md`, placed right after "Procedural body" (the stage it directly
+  replaces in production): the datablock-join-vs-CSG-union root cause, the `.mc3.xml`/
+  `mc3togltf` pipeline, the Y-up/Z-up coordinate remap, why CSG's limitations are a non-issue
+  here, and the `BONE_RADII`/blend-radius/garment-padding fixes — same content as
+  `docs/avatar-real-rendering-ext.md`'s own Phase 7 section, adapted for this file's own
+  per-stage structure. Updated the "Status" section to point at the new pipeline as what
+  `generate_avatar.py`/`generate_wardrobe.py` actually build with now (the original
+  `generate_body.py`/`generate_clothes.py` remain standalone-runnable but no longer describe
+  production output). Annotated the two older "confirmed elbow/sleeve tear ... still open"
+  findings (Bend-artifact check, Orchestration-and-export's own findings list) as historical —
+  measured against the pre-Phase-7 pipeline, not re-measured against the mesh-craft geometry —
+  rather than deleting them, since they remain valid history of the original Task 11.2/11.6
+  investigation. (The GamerServices support-matrix half of this task was already done as part of
+  Task 9.1.)
 - [x] **Task 9.4** — Done as part of Task 9.1 above (new §9 in `docs/xna-4-api-coverage.md`
   covers Net: `SystemLink`-real, `PlayerMatch`/`Ranked`/invite-stub, host-migration-real (Phase
   5), simulated-conditions-real (Phase 6)).
