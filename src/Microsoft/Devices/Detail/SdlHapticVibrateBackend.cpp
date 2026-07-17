@@ -258,7 +258,21 @@ namespace Microsoft::Devices::Detail
 
         // Task VIB2-002: see SanitizeSdlHapticInput()'s own doc comment --
         // an unsanitized NaN `intensity` must not reach this real SDL call.
-        SDL_PlayHapticRumble(haptic_, SanitizeSdlHapticInput(intensity), durationMs);
+        //
+        // Task VIB2-003 (2026-07-17, external audit
+        // `audit_devices_2026-07-17.md`): the return value was previously
+        // ignored entirely. Start(TimeSpan, float)'s own strict XNA contract
+        // is `void` (no return value, does not throw for a runtime playback
+        // failure) -- matched here by remaining a silent no-op on failure,
+        // same as every other already-established early return in this
+        // method, just now with a debug-only diagnostic so a caller has some
+        // way to notice "vibration silently did nothing" during development.
+        if (!SDL_PlayHapticRumble(haptic_, SanitizeSdlHapticInput(intensity), durationMs))
+        {
+#ifndef NDEBUG
+            SDL_Log("SdlHapticVibrateBackend: SDL_PlayHapticRumble failed: %s", SDL_GetError());
+#endif
+        }
     }
 
     void SdlHapticVibrateBackend::Stop()
@@ -267,7 +281,17 @@ namespace Microsoft::Devices::Detail
 
         if (haptic_ != nullptr)
         {
-            SDL_StopHapticEffects(haptic_);
+            // Task VIB2-003: checked, not just called -- nothing actionable
+            // differs on failure (DestroyLeftRightEffectIfAny() below still
+            // needs to run regardless, and Stop()'s own contract is `void`),
+            // so this is a debug-only diagnostic, matching Start()'s
+            // identical treatment of SDL_PlayHapticRumble() above.
+            if (!SDL_StopHapticEffects(haptic_))
+            {
+#ifndef NDEBUG
+                SDL_Log("SdlHapticVibrateBackend: SDL_StopHapticEffects failed: %s", SDL_GetError());
+#endif
+            }
             DestroyLeftRightEffectIfAny();
         }
     }
@@ -379,7 +403,17 @@ namespace Microsoft::Devices::Detail
         // way to stop specifically the rumble path — its effect slot
         // (haptic->rumble_id) is private to SDL, so a general
         // SDL_StopHapticEffect(id) isn't reachable here.
-        SDL_StopHapticRumble(haptic_);
+        //
+        // Task VIB2-003: checked for a debug-only diagnostic only -- there is
+        // no corrective action available (the rumble path is private to SDL,
+        // nothing here to destroy or roll back), and StartLeftRight()'s own
+        // contract is `void`.
+        if (!SDL_StopHapticRumble(haptic_))
+        {
+#ifndef NDEBUG
+            SDL_Log("SdlHapticVibrateBackend: SDL_StopHapticRumble failed: %s", SDL_GetError());
+#endif
+        }
 
         // Replaces any previous StartLeftRight() effect (re-entry case).
         DestroyLeftRightEffectIfAny();
@@ -396,6 +430,21 @@ namespace Microsoft::Devices::Detail
             return; // Silent no-op: effect could not be uploaded.
         }
 
-        SDL_RunHapticEffect(haptic_, leftRightEffectId_, 1);
+        // Task VIB2-003 (external audit, required work: "Destroy a newly
+        // uploaded effect if Run fails when appropriate"): without this, a
+        // failed Run() would leave `leftRightEffectId_` pointing at an
+        // uploaded-but-never-playing effect. That is not a permanent SDL-side
+        // leak (DestroyLeftRightEffectIfAny() would still reclaim it on the
+        // next Start()/StartLeftRight()/Stop()/destructor call), but it is
+        // observably wrong: Vibrate() would report having started dual-motor
+        // playback while nothing is actually running, and the stale id would
+        // linger for however long the controller stays otherwise idle.
+        if (!SDL_RunHapticEffect(haptic_, leftRightEffectId_, 1))
+        {
+#ifndef NDEBUG
+            SDL_Log("SdlHapticVibrateBackend: SDL_RunHapticEffect failed: %s", SDL_GetError());
+#endif
+            DestroyLeftRightEffectIfAny();
+        }
     }
 } // namespace Microsoft::Devices::Detail

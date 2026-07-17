@@ -255,6 +255,42 @@ effect upload.
    independent physical actuators, not just independent intensity scalars on the same
    motor.
 
+## 4a. `StartLeftRight()` cleans up an effect whose `SDL_RunHapticEffect()` fails (Task VIB2-003, 2026-07-17)
+
+**Code under test:** `Detail::SdlHapticVibrateBackend::StartLeftRight()`'s handling of a
+successfully-uploaded (`SDL_CreateHapticEffect()` succeeds) but then failing
+`SDL_RunHapticEffect()` call — the fix destroys the just-uploaded effect
+(`SDL_DestroyHapticEffect()`) and resets `leftRightEffectId_` immediately, rather than
+leaving an uploaded-but-never-playing effect slot allocated until the next
+`Start()`/`StartLeftRight()`/`Stop()`/destructor call happens to reclaim it.
+
+**Why this needs real hardware:** in this dev container no haptic device is ever opened
+(`OpenFirstHapticDevice()` returns `nullptr`), so `StartLeftRight()` always returns at the
+earlier "no haptic device found" guard — `SDL_CreateHapticEffect()`/`SDL_RunHapticEffect()`
+are never reached at all, let alone the specific case of the former succeeding while the
+latter fails. There is no mockable SDL boundary in this codebase for haptics (unlike
+`Detail::IVibrateBackend`'s own fake used by `VibrateControllerTests`' fake-backend suite,
+which only exercises `VibrateController`'s forwarding/clamping logic, not
+`SdlHapticVibrateBackend`'s internal SDL call sequence), so this specific failure path has
+only been reasoned about from SDL3's own `SDL_RunHapticEffect()` documented failure modes
+(e.g. device removed between create and run), not exercised. **Status: NOT RUN — hardware
+validation open.**
+
+**Steps:**
+1. On a real haptic device, call `StartLeftRight(1.0f, 1.0f, TimeSpan::FromSeconds(2))` in
+   a loop while physically disconnecting/reconnecting the device (or otherwise forcing
+   `SDL_RunHapticEffect()` to fail after a successful `SDL_CreateHapticEffect()` — e.g. via
+   a debugger breakpoint between the two calls that unplugs the device) to try to trigger
+   the failing-`Run()` path.
+2. Confirm (via a debug build, so the new `SDL_Log("SdlHapticVibrateBackend:
+   SDL_RunHapticEffect failed: ...")` diagnostic is compiled in) that a failure is actually
+   observed and logged.
+3. Confirm no effect id is leaked: repeat step 1 many times and check (via SDL's own
+   haptic effect count, if exposed by the platform, or simply that subsequent
+   `StartLeftRight()`/`Start()`/`Stop()` calls keep behaving normally with no growing
+   resource usage) that each failed `Run()` is followed by a clean `leftRightEffectId_`
+   reset rather than an accumulating series of orphaned uploaded effects.
+
 ## 5. Gamepad-exclusion filter doesn't compete with `GamePad::SetVibration()`
 
 **Code under test:** `VibrateController.cpp`'s `IsConnectedGamepadHapticDevice()` (Task

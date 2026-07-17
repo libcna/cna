@@ -7895,7 +7895,7 @@ test is not sufficient for an Android coordinate/fusion claim.
   container — but this is a deterministic, host-verifiable software correctness fix, not a
   hardware-behavior question, so no device procedure is warranted here (unlike `ANDR2-001`/`003`).
 
-### VIB2-003 — Handle and report every haptic operation result — OPEN
+### VIB2-003 — Handle and report every haptic operation result — OPEN (implementation done; fault-injection acceptance criterion needs real hardware)
 
 - **Priority:** P2
 - **Area:** Perfection re-audit
@@ -7908,6 +7908,78 @@ test is not sufficient for an Android coordinate/fusion claim.
   - Fault injection leaves no uploaded-effect/resource leak.
   - Users can diagnose no-op vibration.
 - **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+- **Progress so far (not yet CLOSED — see Remaining limitations):**
+  - `SdlHapticVibrateBackend::Start()`: `SDL_PlayHapticRumble()`'s previously-discarded `bool`
+    return is now checked; on failure a debug-only `SDL_Log()` diagnostic is emitted
+    (`#ifndef NDEBUG`, matching the codebase's established pattern for
+    `Accelerometer.cpp`'s own Android debug log). No corrective action beyond logging exists —
+    `Start()`'s own contract is `void` (matches the real WP7 `VibrateController` API, which does
+    not throw or report a runtime playback failure), so the previously-established
+    "silent no-op" behavior for every other early-return branch in this method is preserved,
+    just now observable in a debug build.
+  - `SdlHapticVibrateBackend::Stop()`: `SDL_StopHapticEffects()`'s return is now checked with the
+    same debug-only diagnostic. `DestroyLeftRightEffectIfAny()` still runs unconditionally
+    afterward regardless of that result, since effect-slot cleanup and rumble-stop are
+    independent concerns.
+  - `SdlHapticVibrateBackend::StartLeftRight()`: `SDL_StopHapticRumble()`'s return is now checked
+    (debug-only diagnostic; no corrective action possible — the rumble effect slot is private to
+    SDL, nothing here to roll back). `SDL_RunHapticEffect()`'s return is now checked and, on
+    failure, immediately calls `DestroyLeftRightEffectIfAny()` — the required work's explicit
+    "Destroy a newly uploaded effect if Run fails when appropriate": without this, a failed
+    `Run()` after a successful `SDL_CreateHapticEffect()` would leave `leftRightEffectId_` pointing
+    at an uploaded-but-never-playing effect until the *next* Start()/StartLeftRight()/Stop()/
+    destructor call happened to reclaim it via the same helper — not a permanent SDL-side leak,
+    but an observably wrong intermediate state (a caller would believe dual-motor playback started
+    when nothing is actually running).
+  - Diagnostic channel choice: `SDL_Log()`, not `__android_log_print()` (the choice made for
+    `AndroidSensorBridge.cpp`/`ANDR2-006`) — that file is deliberately SDL-free (Android-only NDK
+    code), whereas `SdlHapticVibrateBackend.cpp` already includes `<SDL3/SDL.h>` and serves both
+    desktop and Android, making `SDL_Log()` the consistent, already-established choice here (see
+    also `Accelerometer.cpp`'s own `SDL_Log()`-based debug diagnostic).
+  - Query-result calls not touched: `SDL_GetHapticFeatures()` (a bitmask query, not a
+    pass/fail operation — nothing to "check" beyond the mask test already performed) and
+    `SDL_CreateHapticEffect()`/`SDL_HapticRumbleSupported()` (already checked before this task, by
+    `VIB2-001`/pre-existing code).
+- **Files changed:** `src/Microsoft/Devices/Detail/SdlHapticVibrateBackend.cpp`,
+  `tests/Microsoft/Devices/VibrateControllerTests.cpp`, `docs/devices-hardware-checklist.md`.
+- **Tests:** added `VibrateControllerTests.RepeatedStartLeftRightStopSequencesDoNotDegrade`
+  (regression coverage for the new checks not changing observable `StartLeftRight()`/`Stop()`
+  behavior across repeated cycles, extending the existing `RepeatedStartStopSequencesDoNotDegrade`
+  pattern to the dual-motor path). Scoped filtered run (`AccelerometerTests.*:GyroscopeTests.*:
+  CompassTests.*:MotionTests.*:SensorBaseTests.*:SensorSubsystemOwnershipTests.*:
+  VibrateControllerTests.*:AndroidMotionMathTests.*:AndroidCompassMathTests.*`): 284 tests, 280
+  passed, 4 skipped (pre-existing hardware-only skips, unchanged), 0 failures — 1 new, passing.
+  `VibrateControllerTests.*` alone: 59/59 passing (58 pre-existing + 1 new).
+- **Sanitizer/static-analysis result:** built and run under `devices-ubsan`. Clean: 0 UBSan
+  findings in every Devices/Sensors-relevant test above. (A separate, pre-existing, unrelated
+  UBSan finding — signed integer overflow in `Vector3::GetHashCode()`'s hash-combining, hit via
+  `AccelerometerReadingTests.GetHashCodeConsistency`, a data-holder test unrelated to this task —
+  was observed incidentally via a broader test-filter pass; it predates this task, is not touched
+  by this change, and is out of scope for a haptics task. Not silenced, not fixed here; flagged
+  for separate attention.)
+  TSan was not re-run for this task: the change adds no new locking/synchronization (same
+  `GetGlobalSdlSubsystemMutex()` scope as before, same call ordering), only return-value checks
+  and an existing cleanup helper's early invocation, so there is no new concurrency surface to
+  exercise.
+- **Remaining limitations (explicitly OPEN, not fabricated):** true fault-injection of a failing
+  `SDL_PlayHapticRumble()`/`SDL_StopHapticEffects()`/`SDL_StopHapticRumble()`/
+  `SDL_RunHapticEffect()` call, and confirmation that the `SDL_RunHapticEffect()`-failure cleanup
+  path actually fires and leaves no orphaned effect, requires either a real haptic device or a
+  mockable SDL boundary that does not currently exist for this backend — in this container no
+  haptic device is ever opened, so `StartLeftRight()`/`Start()` always return at the earlier
+  "no device found" guard and never reach any of the newly-checked calls at all. Documented as a
+  new hardware-validation procedure in `docs/devices-hardware-checklist.md` Section 4a
+  ("`StartLeftRight()` cleans up an effect whose `SDL_RunHapticEffect()` fails"). Marked CLOSED
+  for the host-verifiable software-correctness scope (the checks exist, compile, and are provably
+  harmless/regression-free); the fault-injection acceptance criterion itself remains OPEN pending
+  real hardware, consistent with this backlog's rule against fabricating hardware evidence.
+  Left **OPEN** rather than CLOSED: unlike `VIB2-001`/`VIB2-002` (deterministic, purely
+  host-verifiable correctness fixes), this task's own acceptance criteria explicitly name
+  "fault injection" as the bar to clear, and that has not been demonstrated — only the code
+  believed to satisfy it once a real failure occurs. Re-close this task once either a real
+  device run or a genuine SDL-level fault-injection harness confirms the
+  `SDL_RunHapticEffect()`-failure → `DestroyLeftRightEffectIfAny()` path actually fires and
+  leaves no orphaned effect.
 
 ### VIB2-004 — Handle haptic disconnect/reconnect — OPEN
 

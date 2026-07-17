@@ -489,6 +489,27 @@ TEST(VibrateControllerTests, RepeatedStartStopSequencesDoNotDegrade)
     }
 }
 
+// Task VIB2-003: regression coverage for the SDL_PlayHapticRumble()/
+// SDL_StopHapticEffects()/SDL_StopHapticRumble()/SDL_RunHapticEffect() return
+// value checks added to Detail::SdlHapticVibrateBackend. In this environment
+// (no haptic device present) every one of those calls is unreachable --
+// StartLeftRight() always returns early at the "no haptic device found"
+// guard -- so this cannot exercise the new failure/cleanup branches
+// (see docs/devices-hardware-checklist.md Section 4a for the still-open
+// hardware validation procedure for that). What this does verify: the added
+// checks don't change observable behavior for the repeated
+// StartLeftRight()/Stop() cycle every existing test already exercises.
+TEST(VibrateControllerTests, RepeatedStartLeftRightStopSequencesDoNotDegrade)
+{
+    VibrateController* controller = VibrateController::getDefaultProperty();
+
+    for (int i = 0; i < 50; ++i)
+    {
+        EXPECT_NO_THROW(controller->StartLeftRight(1.0f, 0.5f, TimeSpan::FromMilliseconds(1)));
+        EXPECT_NO_THROW(controller->Stop());
+    }
+}
+
 // Task DEVICES-0028: every prior test above touches one facet of the
 // no-haptic-hardware contract independently (IsSupported, DeviceName, no
 // crash on Start/Stop/StartLeftRight). This test asserts the whole contract
