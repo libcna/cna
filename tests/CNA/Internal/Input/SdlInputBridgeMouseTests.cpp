@@ -32,6 +32,18 @@ namespace
         e.button.y = 0.0f;
         return e;
     }
+
+    SDL_Event mouseMotionEvent(const float x, const float y, const float xrel, const float yrel)
+    {
+        SDL_Event e{};
+        e.type = SDL_EVENT_MOUSE_MOTION;
+        e.motion.windowID = 0; // no window -> to_logical_position passes raw coords through
+        e.motion.x = x;
+        e.motion.y = y;
+        e.motion.xrel = xrel;
+        e.motion.yrel = yrel;
+        return e;
+    }
 }
 
 TEST(SdlInputBridgeMouseTest, ButtonDownFiresClickedEXTWithZeroBasedIndex)
@@ -166,6 +178,97 @@ TEST(SdlInputBridgeMouseTest, ButtonUpDoesNotFireClickedEXT)
     EXPECT_FALSE(fired);
 
     Mouse::ClickedEXT = nullptr;
+}
+
+// P3-013: SDL_EVENT_MOUSE_MOTION is the only source of absolute mouse position updates outside a
+// button event, so the ProcessEvent wiring itself (not just InputManager::SetMousePosition called
+// directly, as the InputManager-level tests do) must be exercised end-to-end.
+TEST(SdlInputBridgeMouseTest, MotionEventUpdatesAbsolutePosition)
+{
+    InputManager::ResetForTests();
+
+    SdlInputBridge::ProcessEvent(mouseMotionEvent(123.0f, 456.0f, 0.0f, 0.0f));
+
+    const auto state = Mouse::GetState();
+    EXPECT_EQ(state.getXProperty(), 123);
+    EXPECT_EQ(state.getYProperty(), 456);
+
+    InputManager::ResetForTests();
+}
+
+// P3-039: to_logical_position's SDL_Renderer branch (SDL_RenderCoordinatesFromWindow) is the read
+// side of the exact transform MouseInputTests.cpp's SetPositionConvertsLogicalToWindowForLetterboxedRenderer
+// already proves for the write side (SDL_RenderCoordinatesToWindow) — a motion event delivered in
+// *window*-space coordinates on a letterboxed renderer must report back in *logical* space, not raw
+// window pixels, so a DPI/logical-presentation scale doesn't leak into Mouse::GetState().
+TEST(SdlInputBridgeMouseTest, MotionEventConvertsWindowCoordinatesToLogicalForLetterboxedRenderer)
+{
+    InputManager::ResetForTests();
+
+    if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
+    {
+        GTEST_SKIP() << "SDL_InitSubSystem(SDL_INIT_VIDEO) failed: " << SDL_GetError();
+    }
+    SDL_Window* window = SDL_CreateWindow("SdlInputBridgeMouseMotionDpiTest", 200, 200, SDL_WINDOW_HIDDEN);
+    if (!window)
+    {
+        SDL_QuitSubSystem(SDL_INIT_VIDEO);
+        GTEST_SKIP() << "SDL_CreateWindow failed: " << SDL_GetError();
+    }
+    SDL_Renderer* renderer = SDL_CreateRenderer(window, nullptr);
+    if (!renderer)
+    {
+        SDL_DestroyWindow(window);
+        SDL_QuitSubSystem(SDL_INIT_VIDEO);
+        GTEST_SKIP() << "SDL_CreateRenderer failed: " << SDL_GetError();
+    }
+
+    // Logical 100x100 presented into a 200x200 window -> a uniform 2x scale (square, no bars).
+    SDL_SetRenderLogicalPresentation(renderer, 100, 100, SDL_LOGICAL_PRESENTATION_LETTERBOX);
+
+    SDL_Event e{};
+    e.type = SDL_EVENT_MOUSE_MOTION;
+    e.motion.windowID = SDL_GetWindowID(window);
+    e.motion.x = 100.0f; // window-space center
+    e.motion.y = 100.0f;
+    e.motion.xrel = 0.0f;
+    e.motion.yrel = 0.0f;
+    SdlInputBridge::ProcessEvent(e);
+
+    // Window (100,100) -> logical (50,50) at 2x scale, matching the write-side test's inverse.
+    const auto state = Mouse::GetState();
+    EXPECT_NEAR(state.getXProperty(), 50, 1);
+    EXPECT_NEAR(state.getYProperty(), 50, 1);
+
+    SDL_DestroyRenderer(renderer);
+    SDL_DestroyWindow(window);
+    SDL_QuitSubSystem(SDL_INIT_VIDEO);
+    InputManager::ResetForTests();
+}
+
+// P3-013/P3-025: a motion event's xrel/yrel fields (event.motion.xrel/yrel) must reach
+// InputManager::AddMouseRelativeDelta through the real ProcessEvent path — the existing
+// RelativeModeAccumulatesDeltaAndDrainsOnRead test in MouseInputTests.cpp calls
+// AddMouseRelativeDelta directly, which proves the accumulation/drain logic but not this wiring.
+TEST(SdlInputBridgeMouseTest, MotionEventRelativeDeltaReachesInputManagerThroughBridge)
+{
+    InputManager::ResetForTests();
+    InputManager::SetMouseRelativeMode(true);
+
+    SdlInputBridge::ProcessEvent(mouseMotionEvent(0.0f, 0.0f, 5.0f, -7.0f));
+    SdlInputBridge::ProcessEvent(mouseMotionEvent(0.0f, 0.0f, 2.0f, 1.0f));
+
+    const auto state = Mouse::GetState();
+    EXPECT_EQ(state.getXProperty(), 7);
+    EXPECT_EQ(state.getYProperty(), -6);
+
+    // Draining semantics: a second read with no new motion returns 0,0.
+    const auto drained = Mouse::GetState();
+    EXPECT_EQ(drained.getXProperty(), 0);
+    EXPECT_EQ(drained.getYProperty(), 0);
+
+    InputManager::SetMouseRelativeMode(false);
+    InputManager::ResetForTests();
 }
 
 namespace

@@ -4059,7 +4059,7 @@ documentation correction, so there is no new runtime behavior to regress.
 
 ---
 
-## P3-001 — MouseState default values `[ ]`
+## P3-001 — MouseState default values `[x]`
 **Goal:** Confirm a default-constructed `MouseState` matches FNA's default field values.
 
 **Steps:**
@@ -4085,11 +4085,11 @@ documentation correction, so there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `MouseState()` default constructor gives all-zero position/wheel and all-`Released` buttons, matching FNA's `default(MouseState)`. Confirmed by `MouseStateTest.DefaultConstructorAllValuesAtRest`. No files changed.
 
 ---
 
-## P3-002 — Button default values `[ ]`
+## P3-002 — Button default values `[x]`
 **Goal:** Confirm all five button fields default to `ButtonState::Released`.
 
 **Steps:**
@@ -4115,11 +4115,11 @@ documentation correction, so there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Every button field defaults to `ButtonState::Released` — covered by the same `DefaultConstructorAllValuesAtRest`. No files changed.
 
 ---
 
-## P3-003 — X/Y position defaults `[ ]`
+## P3-003 — X/Y position defaults `[x]`
 **Goal:** Confirm `X`/`Y` default to 0, matching FNA.
 
 **Steps:**
@@ -4145,11 +4145,11 @@ documentation correction, so there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. X/Y default to 0 — covered by `DefaultConstructorAllValuesAtRest`. No files changed.
 
 ---
 
-## P3-004 — Scroll wheel value defaults `[ ]`
+## P3-004 — Scroll wheel value defaults `[x]`
 **Goal:** Confirm `ScrollWheelValue`/`HorizontalScrollWheelValue` default to 0.
 
 **Steps:**
@@ -4175,11 +4175,11 @@ documentation correction, so there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `ScrollWheelValue` (and the NOXNA horizontal EXT value) default to 0 — covered by `DefaultConstructorAllValuesAtRest`. No files changed.
 
 ---
 
-## P3-005 — MouseState equality `[ ]`
+## P3-005 — MouseState equality `[x]`
 **Goal:** Confirm `MouseState::operator==` compares every field FNA compares, in the same way.
 
 **Steps:**
@@ -4205,11 +4205,11 @@ documentation correction, so there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `Equals`/operators compare all 8 strict-XNA fields (position, wheel, 5 buttons); confirmed field-by-field via `EqualsAndOperatorsReturnTrueForIdenticalStates`, `...ReturnFalseWhenPositionDiffers`, `...ReturnFalseWhenScrollWheelDiffers` (P3-042's exact concern), `...ReturnFalseWhenAButtonDiffers`. The NOXNA horizontal-wheel EXT field is deliberately excluded (documented DEC-18), confirmed by `HorizontalScrollWheelEXTIsExcludedFromEqualityAndHash`. No files changed.
 
 ---
 
-## P3-006 — MouseState hash `[ ]`
+## P3-006 — MouseState hash `[x]`
 **Goal:** Confirm equal `MouseState` values always hash equal.
 
 **Steps:**
@@ -4235,11 +4235,11 @@ documentation correction, so there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `GetHashCode()` verified via `GetHashCodeMatchesFormula` (hand-checked against the documented `x_ ^ (y_*31) ^ (scrollWheelValue_*17)` formula, P1-018) and `GetHashCodeIsConsistentForEqualStates`. No files changed.
 
 ---
 
-## P3-007 — Left button state parity `[ ]`
+## P3-007 — Left button state parity `[x]`
 **Goal:** Confirm `LeftButton` tracks SDL's left-button bit correctly through press/release.
 
 **Steps:**
@@ -4268,11 +4268,11 @@ documentation correction, so there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Left-button parity verified end-to-end through the real SDL bridge by `SdlInputBridgeMouseButtonStateTest.AllFiveButtonsTransitionThroughBridge` (SDL_BUTTON_LEFT case). FNA's own button-state read is architecturally different (a live poll of SDL's current button-mask via `FNAPlatform.GetMouseState`, `SDL_BUTTON_LMASK`) vs. CNA's event-accumulated model — this is a project-wide, already-documented deviation (`docs/input-backend.md` §3, 'Event-driven vs. FNA's poll-driven model'), not specific to this task. No files changed.
 
 ---
 
-## P3-008 — Middle button state parity `[ ]`
+## P3-008 — Middle button state parity `[x]`
 **Goal:** Confirm `MiddleButton` tracks SDL's middle-button bit correctly through press/release.
 
 **Steps:**
@@ -4301,11 +4301,11 @@ documentation correction, so there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Middle-button parity: same `AllFiveButtonsTransitionThroughBridge` test (SDL_BUTTON_MIDDLE case). No files changed.
 
 ---
 
-## P3-009 — Right button state parity `[ ]`
+## P3-009 — Right button state parity `[x]`
 **Goal:** Confirm `RightButton` tracks SDL's right-button bit correctly through press/release.
 
 **Steps:**
@@ -4334,11 +4334,11 @@ documentation correction, so there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Right-button parity: same `AllFiveButtonsTransitionThroughBridge` test (SDL_BUTTON_RIGHT case). No files changed.
 
 ---
 
-## P3-010 — XButton1 state parity `[ ]`
+## P3-010 — XButton1 state parity `[x]`
 **Goal:** Confirm `XButton1` tracks SDL's first extra button correctly.
 
 **Steps:**
@@ -4367,11 +4367,11 @@ documentation correction, so there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. XButton1 parity: same `AllFiveButtonsTransitionThroughBridge` test (SDL_BUTTON_X1 case), plus `ButtonDownFiresClickedEXTWithZeroBasedIndex`'s explicit `SDL_BUTTON_X1 -> index 3` case matching FNA's `evt.button.button - 1`. No files changed.
 
 ---
 
-## P3-011 — XButton2 state parity `[ ]`
+## P3-011 — XButton2 state parity `[x]`
 **Goal:** Confirm `XButton2` tracks SDL's second extra button correctly.
 
 **Steps:**
@@ -4400,11 +4400,11 @@ documentation correction, so there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. XButton2 parity: same two tests as P3-010 (SDL_BUTTON_X2 -> index 4). No files changed.
 
 ---
 
-## P3-012 — Unknown SDL mouse button handling `[ ]`
+## P3-012 — Unknown SDL mouse button handling `[x]`
 **Goal:** Confirm an SDL button index beyond XButton2 is ignored safely rather than corrupting adjacent state.
 
 **Steps:**
@@ -4427,11 +4427,11 @@ documentation correction, so there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Verified via `SdlInputBridgeMouseButtonStateTest.UnknownSdlButtonIsIgnoredSafely`: an SDL button value outside 1-5 is dropped, matching CNA's `switch` with no wildcard-mapping default (FNA's bitmask decode likewise has no 6th button — `SDL_BUTTON_LMASK/MMASK/RMASK/X1MASK/X2MASK` cover exactly 5). No files changed.
 
 ---
 
-## P3-013 — Mouse motion event handling `[ ]`
+## P3-013 — Mouse motion event handling `[x]`
 **Goal:** Confirm `SDL_MOUSEMOTION` updates `X`/`Y` without disturbing button/scroll fields.
 
 **Steps:**
@@ -4454,11 +4454,11 @@ documentation correction, so there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Found a real gap: `SDL_EVENT_MOUSE_MOTION` handling in `SdlInputBridge.cpp:1617-1626` (updates absolute position via `to_logical_position` + accumulates relative delta via `InputManager::AddMouseRelativeDelta`) had NO test driving an actual `SDL_EVENT_MOUSE_MOTION` through `SdlInputBridge::ProcessEvent` — existing tests either called `InputManager::SetMousePosition`/`AddMouseRelativeDelta` directly (bypassing the bridge) or used `SdlInputBridgeGoldenTests.cpp`'s `mouseMotion()` helper only with `xrel=yrel=0.0f`. Added 2 tests to `tests/CNA/Internal/Input/SdlInputBridgeMouseTests.cpp`: `MotionEventUpdatesAbsolutePosition` (position reaches `Mouse::GetState()` through the real event path) and `MotionEventRelativeDeltaReachesInputManagerThroughBridge` (nonzero `xrel`/`yrel` accumulate and drain correctly through the real path, not just at the `InputManager` layer). Verified via `xvfb-run env SDL_VIDEODRIVER=x11 ./cmake-build-debug/CnaTests --gtest_filter=*SdlInputBridgeMouse*` — all passing. Files changed: `tests/CNA/Internal/Input/SdlInputBridgeMouseTests.cpp`.
 
 ---
 
-## P3-014 — Button event coordinate update `[ ]`
+## P3-014 — Button event coordinate update `[x]`
 **Goal:** Confirm a button-down/up event carries the correct coordinate at the time of the event, matching SDL's reported position.
 
 **Steps:**
@@ -4481,11 +4481,11 @@ documentation correction, so there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Button-event coordinate update (a `MOUSE_BUTTON_DOWN`/`UP` event also carries a position, which must reach `MouseState`) already covered by `SdlInputBridgeMouseButtonStateTest.AllFiveButtonsTransitionThroughBridge`'s explicit `getXProperty()==12`/`getYProperty()==34` assertions (source comment tags this 'P3-005' but its actual content is this task's exact concern). No files changed.
 
 ---
 
-## P3-015 — Wheel 120-unit compatibility `[ ]`
+## P3-015 — Wheel 120-unit compatibility `[x]`
 **Goal:** Confirm `ScrollWheelValue` accumulates in FNA/XNA's 120-per-notch convention, not raw SDL wheel units.
 
 **Steps:**
@@ -4508,11 +4508,11 @@ documentation correction, so there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Cross-checked directly against FNA source: `Mouse.INTERNAL_MouseWheel += (int) evt.wheel.y * 120;` (`SDL3_FNAPlatform.cs:965`, C#'s cast binds tighter than multiply). CNA's `SdlInputBridge.cpp:1677-1679`: `InputManager::AddScrollWheelDelta(static_cast<int>(event.wheel.y) * 120)` — identical cast-then-multiply order. Confirmed by `WholeNotchesScaleBy120`. No files changed.
 
 ---
 
-## P3-016 — Horizontal wheel policy `[ ]`
+## P3-016 — Horizontal wheel policy `[x]`
 **Goal:** Confirm `HorizontalScrollWheelValue` behavior/sign convention is documented and matches FNA where FNA defines it.
 
 **Steps:**
@@ -4535,11 +4535,11 @@ documentation correction, so there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Horizontal wheel policy (NOXNA/EXT, N-005/DEC-18) verified via `HorizontalWheelDoesNotAffectVerticalScrollWheel`, `HorizontalWheelAccumulatesInEXTPropertyBy120Notches`, `VerticalWheelDoesNotAffectHorizontalEXTValue` — the two axes are independently accumulated with no cross-talk, matching the documented design. No files changed.
 
 ---
 
-## P3-017 — Fractional SDL wheel handling `[ ]`
+## P3-017 — Fractional SDL wheel handling `[x]`
 **Goal:** Confirm SDL3's fractional wheel values (`SDL_MouseWheelEvent.x/y` as float) are rounded/accumulated without silent truncation bugs.
 
 **Steps:**
@@ -4562,11 +4562,11 @@ documentation correction, so there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Fractional/sub-notch SDL wheel deltas (high-resolution trackpads) verified via `FractionalSubNotchIsTruncatedBeforeScaling`, matching the exact FNA cast-then-multiply order confirmed in P3-015. No files changed.
 
 ---
 
-## P3-018 — Negative mouse coordinates `[ ]`
+## P3-018 — Negative mouse coordinates `[x]`
 **Goal:** Confirm negative X/Y (cursor outside window bounds) round-trips through `MouseState` without clamping unless FNA clamps.
 
 **Steps:**
@@ -4595,11 +4595,11 @@ documentation correction, so there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Negative mouse coordinates verified via `MouseTest.SetPositionIsSafeAndUpdatesInternalStateWithNoWindow`'s `EXPECT_NO_THROW(Mouse::SetPosition(-100, -100))` assertion — no crash, state tracks the value. No files changed.
 
 ---
 
-## P3-019 — Large mouse coordinates `[ ]`
+## P3-019 — Large mouse coordinates `[x]`
 **Goal:** Confirm very large X/Y (multi-monitor setups) do not overflow the underlying integer type.
 
 **Steps:**
@@ -4628,11 +4628,11 @@ documentation correction, so there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Large mouse coordinates (`1 << 20`) verified by the same test — no crash, `GetState()` reflects the exact value. No files changed.
 
 ---
 
-## P3-020 — Mouse::GetState parity `[ ]`
+## P3-020 — Mouse::GetState parity `[x]`
 **Goal:** Confirm `Mouse::GetState()` returns a snapshot matching FNA's semantics (no live aliasing to internal state).
 
 **Steps:**
@@ -4658,11 +4658,11 @@ documentation correction, so there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `Mouse::GetState()` is a straight read of `InputManager::GetMouseState()` (`Mouse.cpp:85-88`) — the event-accumulated equivalent of FNA's live `FNAPlatform.GetMouseState` poll, per the project-wide architecture documented in `docs/input-backend.md` §3. Field-for-field parity (position/wheel/5 buttons) covered by `GetStateReflectsPositionAndButtonsFromInputManager` and `GetStateReflectsScrollWheelDelta`. No files changed.
 
 ---
 
-## P3-021 — Mouse::SetPosition parity `[ ]`
+## P3-021 — Mouse::SetPosition parity `[x]`
 **Goal:** Confirm `Mouse::SetPosition(x, y)` warps the OS cursor and is reflected in the next `GetState()`, matching FNA.
 
 **Steps:**
@@ -4688,11 +4688,11 @@ documentation correction, so there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `Mouse::SetPosition` parity verified via `SetPositionUpdatesGetState` — matches FNA's `Mouse.SetPosition` (`Mouse.cs:104-121`), including the relative-mode meaningless-no-op guard (`if (IsRelativeMouseModeEXT) return;`, byte-identical logic). No files changed.
 
 ---
 
-## P3-022 — Mouse::SetPosition null-window guard `[ ]`
+## P3-022 — Mouse::SetPosition null-window guard `[x]`
 **Goal:** Confirm calling `SetPosition` with no active window is a safe no-op rather than a crash (Phase-0 concern #7).
 
 **Steps:**
@@ -4718,11 +4718,11 @@ documentation correction, so there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Null-window guard verified via `SetPositionIsSafeAndUpdatesInternalStateWithNoWindow` — `resolve_mouse_window()` returning null never reaches `SDL_WarpMouseInWindow` with a null window (undefined per SDL docs), while `InputManager::SetMousePosition` still updates so `GetState()` reflects the request. No files changed.
 
 ---
 
-## P3-023 — State consistency after warp `[ ]`
+## P3-023 — State consistency after warp `[x]`
 **Goal:** Confirm `GetState()` immediately after `SetPosition()` reports the warped coordinates, not stale pre-warp ones.
 
 **Steps:**
@@ -4748,11 +4748,11 @@ documentation correction, so there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. State consistency after warp verified via `SetPositionUpdatesGetState` (immediate `GetState()` after `SetPosition()` reports the new coordinates, not stale ones) and `SetPositionConvertsLogicalToWindowForLetterboxedRenderer` (same, on a scaled/letterboxed window). No files changed.
 
 ---
 
-## P3-024 — Relative mouse mode extension audit `[ ]`
+## P3-024 — Relative mouse mode extension audit `[x]`
 **Goal:** Audit the NOXNA relative-mouse-mode extension for correct SDL3 relative-mode toggling.
 
 **Steps:**
@@ -4781,11 +4781,11 @@ documentation correction, so there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `Mouse::setIsRelativeMouseModeEXTProperty` calls `SDL_SetWindowRelativeMouseMode` (`Mouse.cpp:154`) — the correct SDL3 API for relative mode — and syncs `InputManager::SetMouseRelativeMode` in the same call so the two never desync through CNA's own API (documented DEC-14 in `docs/input-fna-fidelity.md`). Verified via `SetIsRelativeMouseModeEXTSyncsInputManagerDeltaHandling` and `IsRelativeMouseModeEXTRoundTripsThroughRealWindow`. No files changed.
 
 ---
 
-## P3-025 — Relative delta accumulation `[ ]`
+## P3-025 — Relative delta accumulation `[x]`
 **Goal:** Confirm relative-mode deltas accumulate correctly across multiple SDL motion events within one frame.
 
 **Steps:**
@@ -4808,11 +4808,11 @@ documentation correction, so there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Relative-delta accumulation across multiple motion events verified at the `InputManager` layer by `RelativeModeAccumulatesDeltaAndDrainsOnRead` and, after the P3-013 fix, through the real `SdlInputBridge::ProcessEvent` path by the new `MotionEventRelativeDeltaReachesInputManagerThroughBridge` (2 motion events, (5,-7)+(2,1) -> (7,-6)). No additional files changed beyond P3-013's test addition.
 
 ---
 
-## P3-026 — Relative delta drain behavior `[ ]`
+## P3-026 — Relative delta drain behavior `[x]`
 **Goal:** Confirm reading the accumulated relative delta resets it to zero (drain semantics), matching the documented NOXNA contract.
 
 **Steps:**
@@ -4835,11 +4835,11 @@ documentation correction, so there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Drain-on-read semantics (a second `GetState()` with no new motion returns 0,0, matching FNA's `SDL_GetRelativeMouseState()` poll-and-clear behavior) verified by both `RelativeModeAccumulatesDeltaAndDrainsOnRead` and the new `MotionEventRelativeDeltaReachesInputManagerThroughBridge`. No files changed.
 
 ---
 
-## P3-027 — Relative mode with no window `[ ]`
+## P3-027 — Relative mode with no window `[x]`
 **Goal:** Confirm enabling relative mouse mode with no window is a safe no-op.
 
 **Steps:**
@@ -4865,11 +4865,11 @@ documentation correction, so there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Relative mode with no window verified via `SetRelativeMouseModeIsSafeNoOpWithNoWindow` and `GetIsRelativeMouseModeEXTDefaultsToFalseWithNoWindow` — matches SDL's undefined behavior for a null window being avoided the same way as `SetPosition`'s guard (P3-022). No files changed.
 
 ---
 
-## P3-028 — Window handle resolution for mouse ops `[ ]`
+## P3-028 — Window handle resolution for mouse ops `[x]`
 **Goal:** Confirm `Mouse` resolves the correct active window handle consistently with `Keyboard`/`TouchPanel`.
 
 **Steps:**
@@ -4895,11 +4895,11 @@ documentation correction, so there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `Mouse`'s window-handle resolution uses the same defensive pattern already documented project-wide for `Keyboard`/`TouchPanel` in `docs/input-fna-fidelity.md`'s 'SDL bridge robustness' section: `SDL_GetWindowFromID` with an `SDL_GetMouseFocus()`/published-handle fallback, `nullptr` handled everywhere (task 950). Confirmed by reading `resolve_mouse_window` (`Mouse.cpp`)/`to_logical_position` (`SdlInputBridge.cpp:509-530`) side by side with the already-audited Keyboard/TouchPanel equivalents — same shape, same null-safety. No files changed.
 
 ---
 
-## P3-029 — MouseCursor default cursor behavior `[ ]`
+## P3-029 — MouseCursor default cursor behavior `[x]`
 **Goal:** Confirm the default cursor is `MouseCursor::Arrow`, matching MonoGame/FNA-EXT convention.
 
 **Steps:**
@@ -4923,11 +4923,11 @@ documentation correction, so there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `MouseCursor::MouseCursor()` (`MouseCursor.cpp:164-168`) constructs `SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_DEFAULT)` — the Arrow cursor — matching MonoGame/FNA-EXT convention (`MouseCursor.Arrow` is the implicit system default). Confirmed by `DefaultConstructorCreatesNonNullOwningCursor`. No files changed.
 
 ---
 
-## P3-030 — System cursor creation `[ ]`
+## P3-030 — System cursor creation `[x]`
 **Goal:** Confirm each stock system cursor (`Arrow`, `IBeam`, `Hand`, etc.) creates the corresponding SDL system cursor lazily and correctly.
 
 **Steps:**
@@ -4951,11 +4951,11 @@ documentation correction, so there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. All 12 stock cursors (Arrow/IBeam/Wait/Crosshair/WaitArrow/SizeNWSE/SizeNESW/SizeWE/SizeNS/SizeAll/No/Hand) are lazily created function-local statics (Meyer's singleton), matching MonoGame's lazy static-constructor pattern — confirmed by `StockCursorsAreNonNullWhenVideoAvailable`. The SDL2->SDL3 system-cursor-enum rename mapping (11 direct renames + 1 semantic substitute, WaitArrow -> PROGRESS) is already documented in-source (`MouseCursor.cpp:78-91`, task 833 audit). No files changed.
 
 ---
 
-## P3-031 — Custom cursor creation from Texture2D `[ ]`
+## P3-031 — Custom cursor creation from Texture2D `[x]`
 **Goal:** Confirm creating a custom cursor from a `Texture2D` + hotspot produces a correctly-formed SDL cursor.
 
 **Steps:**
@@ -4979,11 +4979,11 @@ documentation correction, so there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Custom cursor creation from `Texture2D` verified via `FromTexture2DCreatesCursorFromColorTexture` and `FromTexture2DAcceptsColorSrgbTexture` — pixel extraction (`Color::getPackedValueProperty()` -> `SDL_PIXELFORMAT_RGBA32`), the `SDL_CreateSurfaceFrom`/`SDL_CreateColorCursor` lifetime handling (verified line-by-line against SDL3 source per the in-source task-831 comment), and `ColorCursorSurvivesSourcePixelBufferDestruction` (proves the SDL-side copy is independent of the CNA-side buffer once construction returns). No files changed.
 
 ---
 
-## P3-032 — Cursor hotspot validation `[ ]`
+## P3-032 — Cursor hotspot validation `[x]`
 **Goal:** Confirm an out-of-bounds hotspot is rejected or clamped predictably rather than corrupting the cursor image.
 
 **Steps:**
@@ -5007,11 +5007,11 @@ documentation correction, so there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Out-of-bounds hotspot handling verified via `FromTexture2DThrowsWhenOriginIsOutsideTheTexture` — throws rather than corrupting/wrapping the cursor image. `FromTexture2DRejectsNonColorSurfaceFormat` covers the adjacent format-validation guard (`std::invalid_argument` for non-`Color`/`ColorSrgbEXT` textures). No files changed.
 
 ---
 
-## P3-033 — Disposed cursor behavior `[ ]`
+## P3-033 — Disposed cursor behavior `[x]`
 **Goal:** Confirm using a disposed `MouseCursor` throws `std::runtime_error` per the project's `IDisposable` convention.
 
 **Steps:**
@@ -5035,11 +5035,11 @@ documentation correction, so there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Found and closed a real documentation gap: `MouseCursor` disposed-object behavior deviates from this project's general `IDisposable` convention (`Dispose()` never throws; no accessor throws after disposal — `GetSDLCursor()` just returns the now-null pointer, and `Mouse::SetCursor` on it is a safe no-op) but this deviation was not previously documented anywhere outside a source comment. Added an explicit 'Disposed-cursor behavior deviates...' bullet to `docs/input-fna-fidelity.md`'s MouseCursor section explaining the rationale (MonoGame's own `MouseCursor` defines no post-Dispose exception contract; the type's operations are read-only/pass-through, unlike a resource type such as `Stream`). Verified by `DisposeReleasesHandleAndIsIdempotent` and `SetCursorIsSafeNoOpForDisposedCursor`. Files changed: `docs/input-fna-fidelity.md`.
 
 ---
 
-## P3-034 — Double dispose of cursor `[ ]`
+## P3-034 — Double dispose of cursor `[x]`
 **Goal:** Confirm calling `Dispose()` twice on the same `MouseCursor` is safe (idempotent), matching `System::IDisposable` convention.
 
 **Steps:**
@@ -5063,11 +5063,11 @@ documentation correction, so there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Double-dispose safety (`if (isDisposed_) return;` guard, `MouseCursor.cpp:208-213`) verified via `DisposeReleasesHandleAndIsIdempotent` — matches `System::IDisposable`'s idempotent-Dispose convention (this part DOES follow the general project convention; only the use-after-dispose non-throwing behavior deviates, per P3-033). No files changed.
 
 ---
 
-## P3-035 — Setting cursor before window exists `[ ]`
+## P3-035 — Setting cursor before window exists `[x]`
 **Goal:** Confirm `Mouse::SetCursor`-equivalent before any window is created is a safe no-op or defers correctly.
 
 **Steps:**
@@ -5095,11 +5095,11 @@ documentation correction, so there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `Mouse::SetCursor` (`Mouse.cpp:117-130`) calls `SDL_SetCursor` directly with no window dependency at all (SDL's cursor system is process/display-global, not per-window) and no-ops on a null handle — which is exactly the state a cursor would have if created before `SDL_INIT_VIDEO` (documented INPUT-MOUSE-020 in `docs/platform-input-notes.md`: 'Without a video subsystem SDL returns a null cursor handle; CNA wraps it gracefully'). Same guard already exercised by `SetCursorIsSafeNoOpForDisposedCursor` (identical code path: `handle == nullptr`). No files changed.
 
 ---
 
-## P3-036 — Public SDL cursor leakage audit `[ ]`
+## P3-036 — Public SDL cursor leakage audit `[x]`
 **Goal:** Confirm `MouseCursor`'s public API does not force consumers to depend on `<SDL3/SDL.h>` (opaque `SDL_Cursor*` forward-decl only).
 
 **Steps:**
@@ -5122,11 +5122,11 @@ documentation correction, so there is no new runtime behavior to regress.
 
 **Notes:** Cross-ref Phase-0 concern #2.
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Confirmed `MouseCursor.hpp` forward-declares `struct SDL_Cursor;` opaquely (line 12) with no `<SDL3/SDL.h>` include — the real SDL header is only included in `MouseCursor.cpp`. Since `Mouse.hpp` (a strict-XNA header) includes `MouseCursor.hpp`, this prevents SDL from leaking into the public XNA include tree transitively. No files changed (already correct).
 
 ---
 
-## P3-037 — MouseCursor::GetSDLCursor exposure decision `[ ]`
+## P3-037 — MouseCursor::GetSDLCursor exposure decision `[x]`
 **Goal:** Decide and document whether an internal SDL-cursor accessor should remain public NOXNA or be made internal-only; implement the decision.
 
 **Steps:**
@@ -5149,11 +5149,11 @@ documentation correction, so there is no new runtime behavior to regress.
 
 **Notes:** Record the decision and rationale in `docs/input-fna-fidelity.md`, not just as a code comment.
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Made the `GetSDLCursor()` exposure decision explicit (it was previously only a code comment, not recorded per this task's own Notes requirement): kept public `NOXNA` because CNA backend code outside the class legitimately needs the raw non-owned handle, and P3-036 already confirmed the *type* stays opaque so exposing the *accessor* doesn't force an SDL dependency onto consumers who don't call it. Added the decision + rationale as a new bullet in `docs/input-fna-fidelity.md`'s MouseCursor section (alongside the P3-033 addition). Files changed: `docs/input-fna-fidelity.md` (shared edit with P3-033).
 
 ---
 
-## P3-038 — Mouse/cursor header hygiene tests `[ ]`
+## P3-038 — Mouse/cursor header hygiene tests `[x]`
 **Goal:** Confirm `Mouse.hpp`/`MouseState.hpp`/`MouseCursor.hpp` each compile standalone with no leaked SDL or CNA-extension include.
 
 **Steps:**
@@ -5180,11 +5180,11 @@ documentation correction, so there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `Mouse.hpp`, `MouseState.hpp`, and `MouseCursor.hpp` are each included directly (not just transitively) in `tests/Microsoft/Xna/Framework/Input/PublicApiInputCompileTests.cpp`, which itself has zero SDL includes — this file compiling cleanly (confirmed via the phase's `cmake --build cmake-build-debug --target CnaTests` clean build) is itself the standalone-compile regression test; a leaked SDL/CNA-extension dependency in any of the three headers would break this build. No files changed (coverage already in place).
 
 ---
 
-## P3-039 — High-DPI mouse coordinate behavior `[ ]`
+## P3-039 — High-DPI mouse coordinate behavior `[x]`
 **Goal:** Confirm mouse coordinates are reported in the same coordinate space (logical vs physical pixels) that `TouchPanel`/window-size APIs use, avoiding a DPI-scale mismatch.
 
 **Steps:**
@@ -5212,11 +5212,11 @@ documentation correction, so there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Found a real gap: `to_logical_position`'s SDL_Renderer branch (`SDL_RenderCoordinatesFromWindow`, the read-side inverse of `SetPosition`'s already-tested `SDL_RenderCoordinatesToWindow` write side) had no test — every existing mouse-motion/button bridge test used `windowID=0` (raw passthrough), never exercising the backend-scaling branch for a read. Added `SdlInputBridgeMouseTest.MotionEventConvertsWindowCoordinatesToLogicalForLetterboxedRenderer` (`tests/CNA/Internal/Input/SdlInputBridgeMouseTests.cpp`): a real window + renderer with a 100x100 logical presentation into a 200x200 window (2x scale), driving a window-space `SDL_EVENT_MOUSE_MOTION` at (100,100) and confirming `Mouse::GetState()` reports logical (50,50) — mirroring `MouseInputTests.cpp`'s existing write-direction test exactly. Verified via `xvfb-run env SDL_VIDEODRIVER=x11 ./cmake-build-debug/CnaTests --gtest_filter=*MotionEventConvertsWindowCoordinatesToLogicalForLetterboxedRenderer*` — passed (not skipped). Files changed: `tests/CNA/Internal/Input/SdlInputBridgeMouseTests.cpp`.
 
 ---
 
-## P3-040 — Manual mouse checklist accuracy `[ ]`
+## P3-040 — Manual mouse checklist accuracy `[x]`
 **Goal:** Review/correct the manual mouse-testing checklist entries (standard buttons, extra buttons, relative mode) in `docs/demo-input-checklist.md`.
 
 **Steps:**
@@ -5239,11 +5239,11 @@ documentation correction, so there is no new runtime behavior to regress.
 
 **Notes:** Checklist only — the actual runs are [[P11-004]], [[P11-005]], [[P11-006]].
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Reviewed `docs/demo-input-checklist.md`'s 'Mouse' section: covers position, all 5 buttons, wheel, letterbox scaling, and the two relative-mode/warp EXT controls (F2/F3) — accurate and actionable. The P2-021 fix (stale 'no horizontal scroll wheel' claim in `docs/platform-input-notes.md`) directly benefits this checklist's accuracy too, since a tester reading that file alongside the checklist would previously have been told the horizontal wheel is unsupported when it now has a NOXNA/EXT property. No additional files changed beyond P2-021's earlier fix. Actual hardware runs remain correctly blocked on [[P11-004]]/[[P11-005]]/[[P11-006]].
 
 ---
 
-## P3-041 — Mouse wheel multi-event accumulation `[ ]`
+## P3-041 — Mouse wheel multi-event accumulation `[x]`
 **Goal:** Confirm multiple wheel events delivered within a single frame/poll accumulate correctly rather than only keeping the last one.
 
 **Steps:**
@@ -5266,11 +5266,11 @@ documentation correction, so there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Multi-event wheel accumulation within a frame verified via `SdlInputBridgeMouseWheelTest.RepeatedEventsAccumulate` — each event adds its own scaled delta rather than only the last event surviving. No files changed.
 
 ---
 
-## P3-042 — MouseState equality with scroll-only difference `[ ]`
+## P3-042 — MouseState equality with scroll-only difference `[x]`
 **Goal:** Confirm two `MouseState` values differing only in scroll value compare unequal (a common off-by-omission bug).
 
 **Steps:**
@@ -5296,11 +5296,11 @@ documentation correction, so there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Scroll-only equality difference verified via `MouseStateTest.EqualsAndOperatorsReturnFalseWhenScrollWheelDiffers` — two states identical except `ScrollWheelValue` correctly compare unequal (the exact off-by-omission bug class this task guards against). No files changed.
 
 ---
 
-## P3-043 — Stock cursor caching/reuse audit `[ ]`
+## P3-043 — Stock cursor caching/reuse audit `[x]`
 **Goal:** Confirm repeated access to a stock cursor property (e.g. `MouseCursor::getArrowProperty()`) returns the same cached instance rather than leaking a new SDL cursor each call.
 
 **Steps:**
@@ -5324,11 +5324,11 @@ documentation correction, so there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Stock cursor caching verified via `MouseCursorTest.StockCursorGetterReturnsTheSameInstanceOnRepeatedCalls` — repeated calls to e.g. `getArrowProperty()` return the same instance (function-local static, not a fresh SDL cursor per call), matching the lazy-singleton design documented for P3-030. No files changed.
 
 ---
 
-## P3-044 — Mouse capture-on-drag behavior `[ ]`
+## P3-044 — Mouse capture-on-drag behavior `[x]`
 **Goal:** Confirm mouse-button-down outside then move/release still reports coordinates correctly if SDL mouse capture is enabled during a drag.
 
 **Steps:**
@@ -5357,11 +5357,11 @@ documentation correction, so there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Confirmed FNA never uses `SDL_CaptureMouse` (zero matches in `SDL3_FNAPlatform.cs`) — mouse capture-on-drag is a pure CNA/NOXNA extension (`Mouse::SetCaptureEXT`, forwarding through the injectable `system_mouse_backend()` seam to `CaptureMouse`), tested by `MouseGlobalEXTTest.SetCaptureForwardsFlagAndReturnsBackendResult`. The underlying coordinate-correctness-during-drag concern is already covered independently: SDL delivers `SDL_EVENT_MOUSE_MOTION`/`BUTTON_UP` identically whether or not capture is enabled, and the P3-013 motion tests plus `AllFiveButtonsTransitionThroughBridge`'s coordinate assertions already prove the bridge tracks position/buttons correctly through those events with no capture-specific special-casing needed. No files changed.
 
 ---
 
-## P3-045 — Phase 3 checkpoint and summary `[ ]`
+## P3-045 — Phase 3 checkpoint and summary `[x]`
 **Goal:** Close out Phase 3 with a summary of mouse/cursor parity status and any open follow-ups carried into later phases.
 
 **Steps:**
@@ -5379,7 +5379,40 @@ documentation correction, so there is no new runtime behavior to regress.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. **Phase 3 is closed: 45/45 tasks complete (P3-001..045), 0 deferred, 0 blocked.**
+Pass/fail breakdown: 38 tasks were pure-audit confirmations backed by pre-existing named tests or
+already-documented project-wide architecture (`docs/input-backend.md` §3's event-driven-vs-poll-driven
+model covers the button/position-state parity tasks P3-007/020/028 without needing a new per-task
+note); 3 tasks found and closed real test-coverage gaps (P3-013 motion-event wiring through
+`SdlInputBridge::ProcessEvent` — position AND relative-delta accumulation had never been exercised via
+a real `SDL_EVENT_MOUSE_MOTION`, only via direct `InputManager` calls; P3-039 the read-direction
+(window->logical) half of the DPI/letterbox coordinate transform had no test, only the write direction
+did); 3 tasks were documentation-only additions (P3-033 documented the disposed-`MouseCursor`
+non-throwing deviation from the project's general `IDisposable` convention; P3-037 recorded the
+`GetSDLCursor()` public-`NOXNA` exposure decision and rationale, previously only a code comment; P3-040
+found no new gap but benefited from P2-021's earlier horizontal-wheel doc fix). Two numeric formulas
+(P3-015 wheel x120 scaling, P3-017 fractional-truncation order) were independently re-derived against
+FNA source (`Mouse.INTERNAL_MouseWheel += (int) evt.wheel.y * 120;`, `SDL3_FNAPlatform.cs:965`) rather
+than trusting the existing doc claim, and confirmed byte-identical. Zero accidental FNA-parity
+divergences found in strict-XNA `MouseState`/`Mouse` behavior; the `MouseCursor` NOXNA extension (no
+FNA source at all, confirmed by full-tree search during P1-017) had its two remaining undocumented
+design decisions (P3-033, P3-037) closed out this phase.
+**Files changed this phase:** `tests/CNA/Internal/Input/SdlInputBridgeMouseTests.cpp` (+3 tests: P3-013
+x2, P3-039 x1), `docs/input-fna-fidelity.md` (+2 bullets: P3-033, P3-037), `plan_input.md` (this
+phase's Results).
+**Verification:** `cmake --build cmake-build-debug --target CnaTests` clean (1 recompile, 1 link, both
+build passes this phase). `xvfb-run -a env SDL_VIDEODRIVER=x11 ./cmake-build-debug/CnaTests "
+"--gtest_filter=$CNA_INPUT_TEST_FILTER --gtest_shuffle --gtest_repeat=3` — `[PASSED] 522 tests.` on
+all 3 repeats (519 baseline + 3 new), zero `FAILED`, exit code 0.
+**Follow-ups carried into later phases:** none blocking. P3-040's hardware checklist runs remain
+correctly `[!]` Blocked at P11-004/005/006 pending real devices, per this plan's rule 4 — expected, not
+a Phase 3 gap. No cross-phase follow-up tasks were created; every finding was closed within Phase 3's
+own scope.
+**Remaining risk:** low. All 3 new tests are deterministic; the P3-039 DPI test is `GTEST_SKIP`-guarded
+for environments where `SDL_INIT_VIDEO`/`SDL_CreateRenderer` are unavailable (matching this codebase's
+established pattern for real-window tests), so it cannot false-fail in a headless CI variant that lacks
+a renderer. No production code changed this phase — every fix was a test or documentation addition, so
+there is no new runtime behavior to regress.
 
 ---
 

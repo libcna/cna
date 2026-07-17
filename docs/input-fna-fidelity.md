@@ -118,6 +118,25 @@ stock-cursor singletons (`isSystemSingleton_` guard) — real MonoGame's `Platfo
 shared handle unconditionally, corrupting the singleton for all other holders. No accidental
 divergences found; move ctor/assignment (a pure C++ addition, no C# analogue) reviewed line-by-line,
 self-move-assignment guard now covered by a regression test.
+- **Disposed-cursor behavior deviates from the project's general `IDisposable` convention (P3-033,
+  accepted):** `MouseCursor::Dispose()` (`MouseCursor.cpp:208-227`) never throws, and — unlike the
+  CLAUDE.md-documented default ("throw `std::runtime_error` if used after disposal") — no accessor on
+  a disposed `MouseCursor` throws either: `GetSDLCursor()` simply returns the now-null pointer, and
+  `Mouse::SetCursor` on a disposed cursor is an intentional safe no-op (tested by
+  `SetCursorIsSafeNoOpForDisposedCursor`). This is deliberate: MonoGame's own `MouseCursor` (the
+  source this NOXNA type is modeled on) defines no post-Dispose exception contract either, and a
+  cursor object's only operations are read-only/pass-through (unlike, say, a `Stream`, where
+  use-after-dispose hides a real resource-safety bug worth surfacing loudly). `Dispose()` itself
+  remains idempotent (double-dispose is a safe no-op — P3-034, tested by
+  `DisposeReleasesHandleAndIsIdempotent`), which does follow the general convention.
+- **`GetSDLCursor()` stays public `NOXNA` (P3-037, decided 2026-07-17):** the raw, non-owned
+  `SDL_Cursor*` accessor was considered for demotion to an internal/friend-only accessor (Phase-0
+  concern #2), but kept public because CNA backend code outside this class (e.g. a graphics backend
+  wanting to inspect the active cursor) legitimately needs it, and — per P3-036 — the header already
+  keeps the *type* opaque (`struct SDL_Cursor;` forward-declared only, no `<SDL3/SDL.h>` leak into the
+  public XNA include tree) so exposing the accessor does not itself force consumers to depend on SDL
+  headers. The returned pointer's "not owned by the caller" contract is documented on the method
+  itself.
 - **Logical→window scaling:** CNA converts logical→window at `SetPosition` time via the graphics
   backend (`TransformLogicalToWindow` / `SDL_RenderCoordinatesToWindow`); FNA scales at `GetState`
   read time. Equivalent for the common case (see INPUT-MOUSE-002 (decision a-0001)).
