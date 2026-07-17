@@ -46,18 +46,24 @@
 > Task 947's own row (chronological per-shader history, discriminating-power mutation testing for
 > every one) and Tasks 1079–1082's own rows; `plan_samples.md` for the per-sample CNA-gap tracking.
 
-> **Separate, unrelated track — `feature/input` branch, `audit_input.md` Phase 13 remediation +
-> Phase 1 audit, in progress as of 2026-07-17.** Completely independent of the D3D9 work below (this
-> `NEXT.md`/`plan_dx9.md` pair is D3D9-only) — tracked in full in `plan_input.md`
-> (`P0-001`–`P13-006` + ongoing `P1-*`), not duplicated here. Status: Phase 0 and Phase 13
-> (`P13-001..006`, the 4 confirmed defects from `../audit_input.md`) are fully closed and pushed
-> (commits `864f9b76`..`8561a1e9` on `feature/input`). Phase 1 ("Strict XNA Input public API audit",
-> 45 tasks, member-by-member parity checks against the local FNA reference tree) is now in progress
-> at the user's explicit request to work autonomously through `plan_input.md`'s remaining ~450 open
-> tasks. Each task's own `plan_input.md` entry is the authoritative record (Goal/Steps/Result);
-> commits are per-task or per-small-batch, `git log --oneline` on `feature/input` is the index. If
-> resuming this track: read `plan_input.md`'s Phase overview + the last few `[x]`-marked `P1-*` tasks
-> for the exact stopping point, not this file.
+> **Separate, unrelated track — `feature/input` branch, `audit_input.md` remediation + full
+> phase-by-phase FNA-parity audit, in progress as of 2026-07-17.** Completely independent of the D3D9
+> work below (this `NEXT.md`/`plan_dx9.md` pair is D3D9-only) — tracked in full in `plan_input.md`,
+> not duplicated here. Status: **Phases 0, 1, 2, 3, and 13 are fully closed and pushed**
+> (`P0-001..020`, `P1-001..045`, `P2-001..060`, `P3-001..045`, `P13-001..006` — 216/506 tasks total;
+> latest pushed commit `d8283b92` on `feature/input`). Working autonomously at the user's explicit
+> request through `plan_input.md`'s remaining tasks (Phase 4 GamePad onward, ~290 tasks across Phases
+> 4–13 excluding the already-closed Phase 13). Each phase closes with a checkpoint task (`P{N}-0XX —
+> Phase N checkpoint and summary`) recording pass/fail counts, files changed, and follow-ups — read
+> the **last completed phase's checkpoint Result** for the most efficient overview, then check
+> `plan_input.md`'s Phase overview table for the next open phase's starting task ID. Commits are
+> per-phase (one `git commit` per closed phase, occasionally per-large-batch within a phase); `git log
+> --oneline` on `feature/input` is the index. A whole-file status/Result consistency check (see any
+> recent commit message for the Python snippet) is run before every commit as a safety net — a prior
+> session hit an unexplained checkbox-revert bug once, never repeated since. Thermal pacing rule in
+> effect: pause new heavy work (builds, large audits) at CPU Tctl >=85°C, resume at <=75°C
+> (`sensors | grep Tctl`). If resuming this track: read `plan_input.md`'s Phase overview + the last
+> `[x]`-marked checkpoint task's Result for the exact stopping point, not this file.
 
 ## 1. Project summary
 
