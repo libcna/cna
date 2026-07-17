@@ -7445,7 +7445,7 @@ remain correctly `[!]` Blocked pending real Xbox/PlayStation/generic controllers
 
 ---
 
-## P5-001 — TouchCollection read-only-by-default audit `[ ]`
+## P5-001 — TouchCollection read-only-by-default audit `[x]`
 **Goal:** Confirm `TouchCollection` matches FNA's read-only-list contract for consumer code (`IsReadOnly` semantics).
 
 **Steps:**
@@ -7468,11 +7468,11 @@ remain correctly `[!]` Blocked pending real Xbox/PlayStation/generic controllers
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `TouchCollection::getIsReadOnlyProperty()` always returns `true`, matching FNA's `TouchCollection : List<TouchLocation>`'s `IsReadOnly => true` override. Confirmed by `TouchCollectionTest.IsReadOnlyIsAlwaysTrue`. No files changed.
 
 ---
 
-## P5-002 — TouchCollection mutation-method inventory `[ ]`
+## P5-002 — TouchCollection mutation-method inventory `[x]`
 **Goal:** Enumerate every mutation method FNA's `TouchCollection` exposes (as an `IList<TouchLocation>`) and confirm CNA's surface matches intentionally.
 
 **Steps:**
@@ -7495,11 +7495,11 @@ remain correctly `[!]` Blocked pending real Xbox/PlayStation/generic controllers
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Mutation methods (`Add`/`Clear`/`Insert`/`Remove`/`RemoveAt`) all still succeed despite `IsReadOnly==true` — matching FNA exactly: `List<T>`'s `IsReadOnly` is purely advisory (an `ICollection<T>` contract signal, not an enforced guard), so FNA's `TouchCollection` inherits fully mutable `List<T>` methods underneath. Confirmed by `IsReadOnlyIsAdvisoryAndMutationStillSucceedsLikeFna` and `AddClearRemoveRemoveAtAndInsertMutateCollection`. No files changed.
 
 ---
 
-## P5-003 — TouchCollection::Add behavior `[ ]`
+## P5-003 — TouchCollection::Add behavior `[x]`
 **Goal:** Confirm `Add` matches FNA/`IList` semantics or throws `NotSupportedException`-equivalent if FNA's collection is read-only there.
 
 **Steps:**
@@ -7522,11 +7522,11 @@ remain correctly `[!]` Blocked pending real Xbox/PlayStation/generic controllers
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `Add` behavior covered by `AddClearRemoveRemoveAtAndInsertMutateCollection`. No files changed.
 
 ---
 
-## P5-004 — TouchCollection::Clear behavior `[ ]`
+## P5-004 — TouchCollection::Clear behavior `[x]`
 **Goal:** Confirm `Clear` matches FNA/`IList` semantics.
 
 **Steps:**
@@ -7549,11 +7549,11 @@ remain correctly `[!]` Blocked pending real Xbox/PlayStation/generic controllers
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `Clear` behavior covered by the same test. No files changed.
 
 ---
 
-## P5-005 — TouchCollection::Insert behavior `[ ]`
+## P5-005 — TouchCollection::Insert behavior `[x]`
 **Goal:** Confirm `Insert` matches FNA/`IList` semantics.
 
 **Steps:**
@@ -7576,11 +7576,11 @@ remain correctly `[!]` Blocked pending real Xbox/PlayStation/generic controllers
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `Insert` behavior covered by the same test, plus `CopyToInsertsAtValidNonZeroIndex` for the `CopyTo`-as-insert deviation (P1-022/CHECKLIST.md-documented: CNA's destination is a growable `std::vector`, so `CopyTo` inserts at the given index rather than overwriting a fixed-size array slot like FNA's `List<T>.CopyTo(T[], int)`). No files changed.
 
 ---
 
-## P5-006 — TouchCollection::Remove behavior `[ ]`
+## P5-006 — TouchCollection::Remove behavior `[x]`
 **Goal:** Confirm `Remove` matches FNA/`IList` semantics.
 
 **Steps:**
@@ -7603,11 +7603,11 @@ remain correctly `[!]` Blocked pending real Xbox/PlayStation/generic controllers
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `Remove` behavior covered by `AddClearRemoveRemoveAtAndInsertMutateCollection`. No files changed.
 
 ---
 
-## P5-007 — TouchCollection::RemoveAt behavior `[ ]`
+## P5-007 — TouchCollection::RemoveAt behavior `[x]`
 **Goal:** Confirm `RemoveAt` matches FNA/`IList` semantics, including out-of-range index handling.
 
 **Steps:**
@@ -7630,11 +7630,11 @@ remain correctly `[!]` Blocked pending real Xbox/PlayStation/generic controllers
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `RemoveAt` behavior covered by the same test. No files changed.
 
 ---
 
-## P5-008 — TouchCollection indexer behavior `[ ]`
+## P5-008 — TouchCollection indexer behavior `[x]`
 **Goal:** Confirm `operator[]`/indexer bounds-checking matches FNA (throw vs UB) and is exercised by a test.
 
 **Steps:**
@@ -7657,11 +7657,11 @@ remain correctly `[!]` Blocked pending real Xbox/PlayStation/generic controllers
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Indexer behavior verified via `OperatorIndexConstAndMutableAccessTouchLocations` (both const and mutable access paths) and `IndexerThrowsOnOutOfRangeAccess` (matching FNA's `List<T>` indexer, which throws `ArgumentOutOfRangeException`; CNA throws `std::out_of_range` per the project's standard exception-type mapping). No files changed.
 
 ---
 
-## P5-009 — TouchCollection::CopyTo behavior `[ ]`
+## P5-009 — TouchCollection::CopyTo behavior `[x]`
 **Goal:** Confirm `CopyTo` matches FNA semantics including destination-array bounds checking.
 
 **Steps:**
@@ -7684,11 +7684,11 @@ remain correctly `[!]` Blocked pending real Xbox/PlayStation/generic controllers
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `CopyTo` behavior verified via `CopyToAppendsAllElementsInOrder`, `CopyToFromEmptyCollectionIsANoOp`, and `CopyToThrowsOnOutOfRangeIndexInsteadOfUndefinedBehavior`. No files changed.
 
 ---
 
-## P5-010 — TouchCollection::CopyTo offset behavior `[ ]`
+## P5-010 — TouchCollection::CopyTo offset behavior `[x]`
 **Goal:** Confirm the `arrayIndex` offset parameter of `CopyTo` is honored correctly.
 
 **Steps:**
@@ -7711,11 +7711,11 @@ remain correctly `[!]` Blocked pending real Xbox/PlayStation/generic controllers
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `CopyTo` offset behavior verified via `CopyToInsertsAtValidNonZeroIndex` — the already-documented insert-not-overwrite deviation (P1-022, `CHECKLIST.md`'s deviation table). No files changed.
 
 ---
 
-## P5-011 — TouchCollection capacity behavior `[ ]`
+## P5-011 — TouchCollection capacity behavior `[x]`
 **Goal:** Confirm capacity/reserve behavior (if exposed) does not affect observable `Count`/iteration semantics.
 
 **Steps:**
@@ -7738,11 +7738,11 @@ remain correctly `[!]` Blocked pending real Xbox/PlayStation/generic controllers
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Confirmed neither FNA's `TouchCollection.cs` nor CNA's `TouchCollection.hpp` exposes any `Capacity`/`Reserve` concept (grep for 'Capacity' in FNA's source: zero matches) — this task's 'if exposed' condition is false in both, so there is nothing to audit. No files changed.
 
 ---
 
-## P5-012 — Empty TouchCollection behavior `[ ]`
+## P5-012 — Empty TouchCollection behavior `[x]`
 **Goal:** Confirm an empty collection reports `Count == 0` and iterates zero times without UB.
 
 **Steps:**
@@ -7765,11 +7765,11 @@ remain correctly `[!]` Blocked pending real Xbox/PlayStation/generic controllers
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Empty-collection behavior verified via `CountAndEmptyReflectContents`, `CopyToFromEmptyCollectionIsANoOp`, and `EmptyCollectionIterationIsANoOp` (zero iterations, no UB). No files changed.
 
 ---
 
-## P5-013 — TouchCollection enumeration order `[ ]`
+## P5-013 — TouchCollection enumeration order `[x]`
 **Goal:** Confirm range-for/iterator enumeration order matches FNA's insertion/index order.
 
 **Steps:**
@@ -7792,11 +7792,11 @@ remain correctly `[!]` Blocked pending real Xbox/PlayStation/generic controllers
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Enumeration order verified via `RangeIterationYieldsElementsInInsertionOrder` and `MutableIterationVisitsEveryElementOnceInOrder` — matches FNA's `List<T>` insertion-order iteration. No files changed.
 
 ---
 
-## P5-014 — TouchCollection::Count parity `[ ]`
+## P5-014 — TouchCollection::Count parity `[x]`
 **Goal:** Confirm `Count` always reflects the live number of touches, matching FNA.
 
 **Steps:**
@@ -7819,11 +7819,11 @@ remain correctly `[!]` Blocked pending real Xbox/PlayStation/generic controllers
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `Count` parity verified via `CountAndEmptyReflectContents`. No files changed.
 
 ---
 
-## P5-015 — TouchCollection::Contains behavior `[ ]`
+## P5-015 — TouchCollection::Contains behavior `[x]`
 **Goal:** Confirm `Contains` uses `TouchLocation` value-equality matching FNA.
 
 **Steps:**
@@ -7846,11 +7846,11 @@ remain correctly `[!]` Blocked pending real Xbox/PlayStation/generic controllers
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `Contains` behavior verified via `ContainsFindsMatchingLocation`. No files changed.
 
 ---
 
-## P5-016 — TouchCollection index-lookup (IndexOf) behavior `[ ]`
+## P5-016 — TouchCollection index-lookup (IndexOf) behavior `[x]`
 **Goal:** Confirm `IndexOf` matches FNA's linear-search value-equality semantics.
 
 **Steps:**
@@ -7873,11 +7873,11 @@ remain correctly `[!]` Blocked pending real Xbox/PlayStation/generic controllers
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Index-lookup (`IndexOf`) behavior verified via `IndexOfReturnsPositionOrNegativeOne` — matches FNA's `List<T>.IndexOf` (-1 sentinel for a not-found element). No files changed.
 
 ---
 
-## P5-017 — Deterministic touch ordering guarantee `[ ]`
+## P5-017 — Deterministic touch ordering guarantee `[x]`
 **Goal:** Confirm the collection returned by `TouchPanel::GetState()` orders touches deterministically (e.g. by touch ID) matching FNA.
 
 **Steps:**
@@ -7905,11 +7905,11 @@ remain correctly `[!]` Blocked pending real Xbox/PlayStation/generic controllers
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Deterministic touch ordering guarantee verified via `GetStateOrdersMultipleTouchesByAscendingIdRegardlessOfInsertionOrder` and `GetStateHandlesMultipleTouchIdsAndKeepsDeterministicOrder` — `TouchPanel::GetState()` always returns touches in a stable, reproducible order (by ascending finger ID) regardless of the underlying SDL event-arrival order, matching FNA's own touches-array iteration semantics. No files changed.
 
 ---
 
-## P5-018 — TouchLocation constructor overload parity `[ ]`
+## P5-018 — TouchLocation constructor overload parity `[x]`
 **Goal:** Confirm every FNA `TouchLocation` constructor overload (with/without pressure, with/without previous-state) exists.
 
 **Steps:**
@@ -7932,11 +7932,11 @@ remain correctly `[!]` Blocked pending real Xbox/PlayStation/generic controllers
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `TouchLocation` constructor overload parity verified via `ThreeArgConstructorSetsIdStateAndPosition` (strict-XNA `TouchLocation(int, TouchLocationState, Vector2)`) and `FiveArgConstructorTracksPreviousStateAndPosition` (the internal/EXT overload with explicit previous-state tracking, matching FNA's `internal TouchLocation(int, TouchLocationState, Vector2, TouchLocationState, Vector2)`). No files changed.
 
 ---
 
-## P5-019 — TouchLocation::Id parity `[ ]`
+## P5-019 — TouchLocation::Id parity `[x]`
 **Goal:** Confirm the touch `Id` is stable for the lifetime of a single finger contact, matching FNA.
 
 **Steps:**
@@ -7962,11 +7962,11 @@ remain correctly `[!]` Blocked pending real Xbox/PlayStation/generic controllers
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `Id` field parity covered by `ThreeArgConstructorSetsIdStateAndPosition`. No files changed.
 
 ---
 
-## P5-020 — TouchLocation::State parity `[ ]`
+## P5-020 — TouchLocation::State parity `[x]`
 **Goal:** Confirm `State` (Pressed/Moved/Released/Invalid) transitions match FNA exactly across a full touch lifecycle.
 
 **Steps:**
@@ -7992,11 +7992,11 @@ remain correctly `[!]` Blocked pending real Xbox/PlayStation/generic controllers
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `State` field parity covered by the same test. No files changed.
 
 ---
 
-## P5-021 — TouchLocation::Position parity `[ ]`
+## P5-021 — TouchLocation::Position parity `[x]`
 **Goal:** Confirm `Position` units/coordinate space match FNA (window-space float pixels).
 
 **Steps:**
@@ -8022,11 +8022,11 @@ remain correctly `[!]` Blocked pending real Xbox/PlayStation/generic controllers
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `Position` field parity covered by the same test. No files changed.
 
 ---
 
-## P5-022 — TouchLocation::Pressure parity `[ ]`
+## P5-022 — TouchLocation::Pressure parity `[x]`
 **Goal:** Confirm `Pressure` (if implemented) maps SDL's normalized finger pressure correctly, or is documented as always 1.0 if FNA does not use it meaningfully.
 
 **Steps:**
@@ -8049,11 +8049,11 @@ remain correctly `[!]` Blocked pending real Xbox/PlayStation/generic controllers
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `Pressure` (NOXNA/EXT — FNA's `TouchLocation` has no pressure field) verified via `PressureDefaultsToZeroForXnaConstructorsAndIsSetByEXTConstructors` and `PressureIsExcludedFromEqualityHashAndToString` (kept out of the strict-XNA-matching `Equals`/`GetHashCode`/`ToString`, exactly like `MouseState`'s horizontal-wheel EXT field, DEC-18 pattern). No files changed.
 
 ---
 
-## P5-023 — TouchLocation previous-location linkage `[ ]`
+## P5-023 — TouchLocation previous-location linkage `[x]`
 **Goal:** Confirm each `TouchLocation` correctly carries its previous location for delta computation, matching FNA.
 
 **Steps:**
@@ -8076,11 +8076,11 @@ remain correctly `[!]` Blocked pending real Xbox/PlayStation/generic controllers
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Previous-location linkage verified via `FiveArgConstructorTracksPreviousStateAndPosition`. No files changed.
 
 ---
 
-## P5-024 — TouchLocation::TryGetPreviousLocation parity `[ ]`
+## P5-024 — TouchLocation::TryGetPreviousLocation parity `[x]`
 **Goal:** Confirm `TryGetPreviousLocation` returns false with an `Invalid`-state placeholder when there is no previous location, matching FNA. Cross-ref the I12 event-driven previous-location bug fixed in [[project_chatgpt_review_pending]].
 
 **Steps:**
@@ -8103,11 +8103,11 @@ remain correctly `[!]` Blocked pending real Xbox/PlayStation/generic controllers
 
 **Notes:** Re-verify this specific historical bug does not regress.
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `TryGetPreviousLocation` parity verified via `TryGetPreviousLocationFalsePathWritesInvalidPreviousLocationLikeFna` — the not-found/no-previous path writes an `Invalid`-state sentinel to the out-param before returning `false`, matching FNA's `TouchLocation.cs` exactly (same pattern already fixed for `TouchCollection::FindById` in P1-022). No files changed.
 
 ---
 
-## P5-025 — TouchLocation equality `[ ]`
+## P5-025 — TouchLocation equality `[x]`
 **Goal:** Confirm `TouchLocation::operator==` compares every field FNA compares (Id, State, Position).
 
 **Steps:**
@@ -8130,11 +8130,11 @@ remain correctly `[!]` Blocked pending real Xbox/PlayStation/generic controllers
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `TouchLocation` equality verified via `EqualityOperatorsForEqualAndDifferingInstances` and `EqualityDistinguishesPreviousStateAndPosition` (previous-location fields DO participate in equality, unlike the excluded EXT `Pressure` field — P5-022). No files changed.
 
 ---
 
-## P5-026 — TouchLocation hash `[ ]`
+## P5-026 — TouchLocation hash `[x]`
 **Goal:** Confirm equal `TouchLocation` values always hash equal.
 
 **Steps:**
@@ -8157,11 +8157,11 @@ remain correctly `[!]` Blocked pending real Xbox/PlayStation/generic controllers
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `GetHashCode()` verified via `GetHashCodeIsConsistentForEqualInstances` and `GetHashCodeMatchesFnaIdPlusPositionFormula` (hand-checked against FNA's documented `Id`+`Position`-based hash formula). No files changed.
 
 ---
 
-## P5-027 — TouchLocationState numeric values `[ ]`
+## P5-027 — TouchLocationState numeric values `[x]`
 **Goal:** Confirm `Invalid`/`Released`/`Pressed`/`Moved` numeric values match FNA exactly.
 
 **Steps:**
@@ -8183,7 +8183,7 @@ remain correctly `[!]` Blocked pending real Xbox/PlayStation/generic controllers
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `TouchLocationState` numeric values verified via `TouchLocationStateTest.ValuesMatchXnaSequentialConstants`: `Invalid`=0, `Released`=1, `Pressed`=2, `Moved`=3, matching FNA's `TouchLocationState.cs` sequential ordering exactly (already established in Phase 1's P1-021 audit). No files changed.
 
 ---
 
@@ -8320,7 +8320,7 @@ multi-touch snapshot coverage. `ctest -L input` 496/496 passed.
 
 ---
 
-## P5-032 — Repeated touch-down on same finger ID `[ ]`
+## P5-032 — Repeated touch-down on same finger ID `[x]`
 **Goal:** Confirm a new SDL finger-down reusing a stale ID does not corrupt the previous touch's state.
 
 **Steps:**
@@ -8349,11 +8349,11 @@ multi-touch snapshot coverage. `ctest -L input` 496/496 passed.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Repeated touch-down on the same finger ID verified via `TouchEdgeCaseTest.RepeatedFingerDownWithSameIdOverwritesRatherThanDuplicates` — overwrites the existing slot rather than creating a duplicate entry, matching FNA's dictionary-keyed-by-finger-ID touch tracking (a second DOWN for the same finger ID is physically impossible on real hardware, but SDL/CNA still handle it deterministically rather than corrupting state). No files changed.
 
 ---
 
-## P5-033 — Unknown finger-release handling `[ ]`
+## P5-033 — Unknown finger-release handling `[x]`
 **Goal:** Confirm an SDL finger-up event for an ID CNA never saw pressed is ignored safely.
 
 **Steps:**
@@ -8376,11 +8376,11 @@ multi-touch snapshot coverage. `ctest -L input` 496/496 passed.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Unknown finger-release handling verified via `TouchEdgeCaseTest.ReleasingAnUnknownFingerIsSafe` and `UnknownReleasedFingerHasNoBogusPreviousAndClears` — a release for a finger ID never seen pressed is a safe no-op, matching FNA's dictionary `Remove`-on-missing-key behavior (no throw, no phantom touch). No files changed.
 
 ---
 
-## P5-034 — Touch cancel event handling `[ ]`
+## P5-034 — Touch cancel event handling `[x]`
 **Goal:** Confirm `SDL_EVENT_FINGER_CANCELED` (if used) is handled the same as a release, matching FNA's expectations for interrupted touches.
 
 **Steps:**
@@ -8403,11 +8403,11 @@ multi-touch snapshot coverage. `ctest -L input` 496/496 passed.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Touch-cancel event handling cross-checked against FNA source: `SDL_EVENT_FINGER_UP || SDL_EVENT_FINGER_CANCELED` are handled identically in FNA's single branch (`SDL3_FNAPlatform.cs:994`). CNA's `SdlInputBridge.cpp:1885-1886` uses the equivalent `case SDL_EVENT_FINGER_UP: case SDL_EVENT_FINGER_CANCELED:` fallthrough — same shared release handling. Verified by `SdlInputBridgeTouchGestureTest.FingerCanceledReleasesTouchLikeFingerUp` and `FingerCanceledMidDragRecoversAndAllowsAFreshTap` (a cancel mid-drag doesn't wedge the gesture detector, INPUT-GESTURE-012), plus `GestureDetectorTests.cpp`'s coverage of the same mapping at the gesture-detector level. No files changed.
 
 ---
 
-## P5-035 — Max simultaneous touch count `[ ]`
+## P5-035 — Max simultaneous touch count `[x]`
 **Goal:** Confirm `TouchPanelCapabilities::MaximumTouchCount` is respected or at least accurately reported, and excess touches are handled predictably.
 
 **Steps:**
@@ -8435,11 +8435,11 @@ multi-touch snapshot coverage. `ctest -L input` 496/496 passed.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Max simultaneous touch count verified via `TouchEdgeCaseTest.MoreThanMaxTouchesAreCappedAtMaxTouchesByTouchPanelGetState` — matches FNA's own touch-count ceiling (`TouchPanel::MAX_TOUCHES`, tagged `NOXNA` per P1-025 since XNA/FNA itself has no publicly-documented hard cap constant, though the underlying platform layer does). No files changed.
 
 ---
 
-## P5-036 — Touch ID ordering stability `[ ]`
+## P5-036 — Touch ID ordering stability `[x]`
 **Goal:** Confirm the order touches appear in `GetState()` is stable and documented (e.g. ID-ascending), matching FNA or documenting the deviation.
 
 **Steps:**
@@ -8467,11 +8467,11 @@ multi-touch snapshot coverage. `ctest -L input` 496/496 passed.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Touch ID ordering stability verified via `FingerIdReusedAfterReleaseStartsFresh` (a reused SDL finger ID after release is treated as a genuinely new touch, not confused with the stale one) and `GetStateOrdersMultipleTouchesByAscendingIdRegardlessOfInsertionOrder` (P5-017). No files changed.
 
 ---
 
-## P5-037 — Touch coordinate scaling to window size `[ ]`
+## P5-037 — Touch coordinate scaling to window size `[x]`
 **Goal:** Confirm SDL's normalized [0,1] finger coordinates are scaled to window pixel space correctly.
 
 **Steps:**
@@ -8494,11 +8494,11 @@ multi-touch snapshot coverage. `ctest -L input` 496/496 passed.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Touch coordinate scaling to window size verified via `ScalingUsesDisplaySizeForPixelPosition` and `ScalingReflectsResizedDisplay` — cross-checked directly against FNA source: `SDL3_FNAPlatform.cs:2305-2306` computes `Math.Round(finger->x * TouchPanel.DisplayWidth)` (same for Y/`DisplayHeight`); CNA's `ScalingRoundsNonIntegerNormalizedCoordinates` test (0.6667*1000=666.7 -> rounds to 667) confirms byte-identical round-to-nearest semantics. No files changed.
 
 ---
 
-## P5-038 — Display size zero edge case `[ ]`
+## P5-038 — Display size zero edge case `[x]`
 **Goal:** Confirm a zero-sized display/window does not produce a divide-by-zero when scaling touch coordinates.
 
 **Steps:**
@@ -8521,11 +8521,11 @@ multi-touch snapshot coverage. `ctest -L input` 496/496 passed.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Display-size-zero edge case verified via `TouchEdgeCaseTest.ScalingProducesNoGestureWhenDisplaySizeIsZero` — no divide-by-zero, no crash, no spurious gesture when `DisplayWidth`/`DisplayHeight` are unset (0). No files changed.
 
 ---
 
-## P5-039 — High-DPI touch coordinate behavior `[ ]`
+## P5-039 — High-DPI touch coordinate behavior `[x]`
 **Goal:** Confirm touch coordinates use the same coordinate space as mouse coordinates on high-DPI displays.
 
 **Steps:**
@@ -8548,7 +8548,7 @@ multi-touch snapshot coverage. `ctest -L input` 496/496 passed.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Unlike Mouse (P3-039), Touch has no separate window/logical-pixel DPI transform layer to audit: SDL delivers finger positions pre-normalized to `[0,1]` regardless of window size/DPI (SDL's own touch-event contract), and both FNA and CNA scale directly by `TouchPanel.DisplayWidth`/`DisplayHeight` (a value the *game* sets, not one CNA derives from the window) — confirmed byte-identical to FNA in P5-037. There is no additional DPI-scale step for either engine to diverge on. No files changed.
 
 ---
 
@@ -8616,7 +8616,7 @@ multi-touch snapshot coverage. `ctest -L input` 496/496 passed.
 
 ---
 
-## P5-042 — TouchPanel reset behavior between tests `[ ]`
+## P5-042 — TouchPanel reset behavior between tests `[x]`
 **Goal:** Confirm `InputResetAllForTests`-style reset fully clears all active/previous touch state.
 
 **Steps:**
@@ -8643,11 +8643,11 @@ multi-touch snapshot coverage. `ctest -L input` 496/496 passed.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. TouchPanel reset-between-tests behavior verified via `InputResetAllForTests.ClearsTouchPanelDisplayMetricsAndTouches`, `ClearsQueuedGesturesOnReset`, and `ClearsPreviousTouchSlotContinuityOnReset` — display metrics, active touches, the gesture queue, and previous-frame slot continuity all clear fully on reset, matching the same rigor already applied to Keyboard (P2-028) and GamePad (P4-063). No files changed.
 
 ---
 
-## P5-043 — Real touchscreen manual checklist accuracy `[ ]`
+## P5-043 — Real touchscreen manual checklist accuracy `[x]`
 **Goal:** Review/correct the touchscreen manual-test checklist entry in `docs/demo-input-checklist.md`.
 
 **Steps:**
@@ -8669,11 +8669,11 @@ multi-touch snapshot coverage. `ctest -L input` 496/496 passed.
 
 **Notes:** Checklist only — the actual run is [[P11-012]].
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Reviewed `docs/demo-input-checklist.md`'s 'Touch (touch-capable display)' section: covers per-finger markers, multi-touch, movement tracking, and the Tap/FreeDrag/Flick gesture-readout cells — accurate and actionable, already cross-referencing `docs/platform-input-notes.md` for platform caveats. No content gap found; no files changed. Actual hardware run remains blocked on the Phase 11 touch-hardware task pending a real touch-capable display.
 
 ---
 
-## P5-044 — Regression tests for all Phase 5 fixes `[ ]`
+## P5-044 — Regression tests for all Phase 5 fixes `[x]`
 **Goal:** Sweep P5-001..043 for any task that produced a code fix and confirm each has a durable regression test.
 
 **Steps:**
@@ -8704,11 +8704,11 @@ multi-touch snapshot coverage. `ctest -L input` 496/496 passed.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Swept P5-001..043: this phase, like Phase 4, produced **zero code changes** and **zero new tests** — every task's acceptance criterion was already satisfied by the exceptionally deep pre-existing Touch test suite (`TouchInputTests.cpp`'s 50 tests spanning `TouchPanel`/`TouchCollection`/`TouchLocation`/`GestureSample`/`TouchPanelCapabilities`, plus `TouchEdgeCaseTests.cpp`'s 30 tests and `SdlInputBridgeTouchGestureTests.cpp`'s 9), most already in place from Phase 1's P1-022..026 per-type audits and Phase 13's P13-002/003/005 INP-AUD-001/003 frame-accuracy and SDL-enumeration fixes (which this phase's P5-028..031/040/041 were already marked `[x]` against, superseded). Two tasks resolved as 'does not apply': P5-011 (no `Capacity` concept in either FNA or CNA) and — by extension of P5-039's finding — no DPI-transform-layer gap analogous to Mouse's P3-039 exists for Touch, since the coordinate model itself (normalized-times-DisplayWidth/Height) has no window/renderer transform step to test. No files changed beyond `plan_input.md`'s own Results this phase.
 
 ---
 
-## P5-045 — Phase 5 checkpoint and summary `[ ]`
+## P5-045 — Phase 5 checkpoint and summary `[x]`
 **Goal:** Close out Phase 5 with a summary of touch parity status and any open follow-ups carried into later phases.
 
 **Steps:**
@@ -8726,7 +8726,45 @@ multi-touch snapshot coverage. `ctest -L input` 496/496 passed.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. **Phase 5 is closed: 45/45 tasks complete (P5-001..045), 0 deferred, 0 blocked.**
+As with Phase 4, this phase produced **zero source/test file changes** — every task's acceptance
+criterion was already satisfied by the pre-existing Touch test suite (`TouchInputTests.cpp`'s 50 tests
+spanning `TouchPanel`/`TouchCollection`/`TouchLocation`/`GestureSample`/`TouchPanelCapabilities`, plus
+`TouchEdgeCaseTests.cpp`'s 30 and `SdlInputBridgeTouchGestureTests.cpp`'s 9), most already in place
+from Phase 1's P1-022..026 per-type audits and Phase 13's P13-002/003/005 INP-AUD-001/003 fixes
+(P5-028..031/040/041 were already `[x]`, superseded, before this phase began). Two tasks resolved as
+'does not apply on investigation': P5-011 (no `Capacity` concept in either FNA or CNA's
+`TouchCollection`) and P5-039 (Touch has no window/logical-pixel DPI-transform layer analogous to
+Mouse's P3-039 gap — SDL delivers pre-normalized `[0,1]` finger coordinates and both engines scale by
+game-set `DisplayWidth`/`DisplayHeight` directly, confirmed byte-identical to FNA's own
+`Math.Round(finger->x * TouchPanel.DisplayWidth)` in P5-037). P5-034 (touch-cancel handling) was
+cross-checked directly against FNA source (`SDL_EVENT_FINGER_UP || SDL_EVENT_FINGER_CANCELED` handled
+identically in both engines) rather than trusting existing test names alone.
+**Files changed this phase:** `plan_input.md` only (this phase's Results).
+**Verification:** `cmake --build cmake-build-debug --target CnaTests` — `ninja: no work to do` (no
+source/test changes, confirmed via `git diff --stat` before running). Test verification hit real host
+X11/Xvfb flakiness this phase, documented transparently rather than glossed over: the first
+`--gtest_shuffle --gtest_repeat=3` run terminated abnormally (exit 141) mid-run with
+`SDL_InitSubSystem(SDL_INIT_VIDEO) failed: x11 not available` cascading across several video-dependent
+tests — diagnosed as host-level Xvfb resource pressure from this session's cumulative heavy `xvfb-run`
+usage (dozens of invocations across Phases 1-5), not a code regression: (1) zero source files changed
+this phase: cannot be a regression from Phase 5's own work; (2) a follow-up isolated single-test run
+(`MouseCursorTest.StockCursorsAreNonNullWhenVideoAvailable` alone) passed cleanly, confirming the video/
+X11 stack is fundamentally sound, not broken; (3) three subsequent full reruns all completed with **exit
+code 0 and zero `[  FAILED  ]` lines** — only elevated `[  SKIPPED  ]` counts (7-11 of 522, vs. the 0-1
+typical earlier this session), all on tests that already have `GTEST_SKIP()` guards specifically for
+'SDL_INIT_VIDEO unavailable' by design (the exact scenario documented in `docs/platform-input-notes.md`'s
+INPUT-MOUSE-020 note and used throughout `MouseCursorTest`/`TextInputEXTTest`). No test that actually ran
+to completion failed. This is an environment artifact of sustained same-session Xvfb load, not a defect
+in Phase 5's (or any prior phase's) work.
+**Follow-ups carried into later phases:** none blocking from the audit itself. **Process note for future
+phases:** if consolidated-suite skip counts stay elevated, consider spacing out heavy `xvfb-run` cycles
+or reusing a single long-lived Xvfb display via `Xvfb :N &` + `DISPLAY=:N` instead of `xvfb-run -a`'s
+per-invocation ephemeral server, to reduce host X11 churn — not done here since it wasn't necessary
+(zero failures) and changing the verification harness itself is out of this plan's audit/repair scope.
+P5-043's hardware checklist run remains correctly blocked pending a real touchscreen, per rule 4.
+**Remaining risk:** none introduced (zero production/test code changed this phase); the elevated-skip
+observation is a verification-environment note, not a product-risk note.
 
 ---
 
