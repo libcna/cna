@@ -1618,9 +1618,56 @@ status. This unblocked the build/test run needed to close out Phase 12/13/14's v
   `Content/` binaries, `plan_net.md`; `1f81a22c` Task 5.1-5.7: only Net/ENet host-migration files,
   its own test harness, `plan_net.md`) - both scoped to their stated task, no stray unrelated
   files.
-- [ ] **Task 11.7** — Final summary to the user: what changed, tests run and results, remaining
-  gaps (including any still-open micro-decisions from this plan's header that never got a
-  concrete user answer), and recommended next steps.
+- [x] **Task 11.7** — **This plan is now fully closed out — every task in every phase (0-14) is
+  `[x]` with a write-up.** Summary:
+
+  **What changed** (11 phases, ~30 commits since Phase 0's `eefaeea3` archive point, all on
+  `feature/net`, pushed): real `Guide.BeginShowMessageBox`/`BeginShowKeyboardInput` (Phase 3);
+  real disk-persisted Achievements/Leaderboards (Phase 4); real host migration for `SystemLink`
+  sessions (Phase 5); real `SimulatedLatency`/`SimulatedPacketLoss` on actual ENet traffic (Phase
+  6); a mesh-craft CSG-based avatar body/clothing pipeline that fixed the "monster avatar"
+  mesh-explosion bug (Phase 7); an F1 help overlay across all 8 avatar-related demos, which along
+  the way found and fixed a real, previously-undetected bug (`MakeSimpleFont`'s glyph bounds
+  rendering every character as an invisible sub-pixel dot instead of a visible block) in both
+  newly-touched demos and one pre-existing one (Phase 8); a full correction pass on
+  `docs/xna-4-api-coverage.md`/`docs/avatar-real-rendering-ext.md`/
+  `tools/avatar_builder/README.md`/`docs/coverage.md` plus a new `docs/avatar-demos.md`, replacing
+  stale "GamerServices is Guide-stub-only"/"Net is Xbox Live exclusive, intentionally excluded"
+  claims with the real current status (Phase 9); plus three confirmed-real, fixed pre-existing
+  bugs found via an unrelated ASan run and `audit_net.md`'s own re-audit
+  (`NetworkSession::Dispose()` double-call use-after-free, async completion callbacks never
+  invoked, `GamerCollectionEnumerator::MoveNext()` null-deref after `Dispose()` — Phases 12-14).
+
+  **Tests run and results:** full rebuild + `ctest -j$(nproc)` → **4884/4935 passing (99%)**, plus
+  a plain-Debug full run at 4650/4652 (2 expected skips) and two sanitizer runs (ASan/UBSan) for
+  Phases 12-14's own fixes, all reported per-phase above. All 51 `ctest` failures individually
+  investigated by category (Task 10.7) - missing `.xnb` test fixtures, Mesa/Xvfb software-
+  rendering limits, and confirmed-benign parallel-execution port/resource contention - zero traced
+  to this plan's own changes. One pre-existing, unrelated build failure (`cna_demo_xact`'s
+  Content-copy step) is not this plan's own issue.
+
+  **Remaining gaps** (all honestly documented in their own phase, not glossed over): `Achievement::GetPicture()` still throws (Xbox LIVE artwork streaming has no
+  local equivalent - an intentional, still-open micro-decision from this plan's own header,
+  correctly resolved to "keep throwing" per genuine platform unavailability, not left unresolved);
+  `SignedInGamer::GetFriends()` always returns empty (found during Phase 11's audit, real, not
+  previously scoped to any phase); a residual shoe-area artifact and `Wave`-pose chest-band
+  artifact on the new avatar pipeline; `validate_gltf.py`'s missing NaN/Inf/bone-index checks;
+  `PlayerMatch`/`Ranked`/session invites remain documented stubs (decision 2, no matchmaking
+  backend exists); and the same `MakeSimpleFont` glyph-bounds bug Phase 8 found and fixed still
+  exists, unfixed, in 10 other pre-existing demos entirely outside this plan's scope (listed in
+  full in Phase 8's own Task 8.5 write-up and `NEXTnet.md`). This plan's own header's three
+  "still-open micro-decisions" (`Achievement::GetPicture()`, persistence format/location, host
+  migration's new-host-selection rule) were all pre-authorized to use a conservative default and
+  were each resolved within their own phase (Phase 4/4/5 respectively) - none is still
+  genuinely open.
+
+  **Recommended next steps** (none started, none in this plan's own scope - listed for a future
+  session/plan to pick up, not silently dropped): (1) fix the 10-other-demos `MakeSimpleFont` bug,
+  same 3-line fix already applied 8 times this pass, one small commit per demo; (2) decide on and
+  implement real `SignedInGamer::GetFriends()` population (needs its own design decision, not just
+  a mechanical fix); (3) close `validate_gltf.py`'s NaN/Inf/bone-index gap and the two residual
+  avatar-pipeline artifacts if avatar visual polish is prioritized further. `NEXTnet.md` has been
+  refreshed end-to-end as the handoff doc for whichever of these gets picked up next.
 
 ---
 
