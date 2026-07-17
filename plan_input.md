@@ -1656,7 +1656,7 @@ P1 batch 2 audit run. Remaining risk: none.
 
 ---
 
-## P1-027 — Header self-containment audit across strict XNA Input headers `[ ]`
+## P1-027 — Header self-containment audit across strict XNA Input headers `[x]`
 **Goal:** Confirm every header under `include/Microsoft/Xna/Framework/Input` compiles standalone and does not require an application to also include a `CNA::Input` extension header.
 
 **Steps:**
@@ -1678,11 +1678,30 @@ P1 batch 2 audit run. Remaining risk: none.
 
 **Notes:** Direct implementation of CLAUDE.md rule: "Public XNA-compatible headers must not require users to include CNA extension headers."
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `grep -rn 'include.*"CNA/Input' include/Microsoft/Xna/Framework/Input/` found
+**5 real violations**: `Keyboard.hpp` (`CNA/Input/KeyModifiers.hpp`), `TextInputEXT.hpp`
+(`CNA/Input/TextInputType.hpp`), and `GamePad.hpp` (`CNA/Input/GamePadButtonLabel.hpp`,
+`CNA/Input/GamePadConnectionState.hpp`, `CNA/Input/PowerState.hpp`) — each pulled in a CNA::Input
+extension header just to declare an `...EXT` method's return/parameter type. All 5 types are plain
+`enum class` values used only as return/parameter types in method declarations (no inline bodies, no
+default values needing the complete type), so all 5 were fixed by replacing the `#include` with a
+forward declaration (matching the underlying type where one is explicitly specified, e.g.
+`KeyModifiersEXT : std::uint32_t`). `GamePad.cpp` needed no new include (already gets the real
+definitions transitively via `CNA/Internal/Input/SdlInputBridge.hpp`, which every EXT method there
+delegates to); `TextInputEXT.cpp` genuinely switches over `TextInputTypeEXT`'s values, so it got an
+explicit `#include "CNA/Input/TextInputType.hpp"`; `Keyboard.cpp` needed no new include for the same
+transitive reason as `GamePad.cpp`. Files changed:
+`include/Microsoft/Xna/Framework/Input/Keyboard.hpp`,
+`include/Microsoft/Xna/Framework/Input/TextInputEXT.hpp`,
+`include/Microsoft/Xna/Framework/Input/GamePad.hpp`,
+`src/Microsoft/Xna/Framework/Input/TextInputEXT.cpp`. `cmake --build cmake-build-debug --target
+CnaTests` — clean, no errors. `xvfb-run -a env SDL_VIDEODRIVER=x11 CnaTests
+--gtest_filter=$CNA_INPUT_TEST_FILTER --gtest_shuffle --gtest_repeat=5` — `[PASSED] 517 tests.` on all
+5 repeats, zero `FAILED`. Re-ran the grep post-fix: zero matches. Remaining risk: none.
 
 ---
 
-## P1-028 — SDL include-leakage audit across strict XNA Input headers `[ ]`
+## P1-028 — SDL include-leakage audit across strict XNA Input headers `[x]`
 **Goal:** Confirm no strict-XNA Input header pulls `<SDL3/SDL.h>` (or any SDL header) into consumer translation units.
 
 **Steps:**
@@ -1702,7 +1721,14 @@ P1 batch 2 audit run. Remaining risk: none.
 
 **Notes:** MouseCursor.hpp already documents the intended pattern (opaque `struct SDL_Cursor;` forward decl) — use it as the reference example.
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `grep -rn '^\s*#include\s*[<"]SDL' include/Microsoft/Xna/Framework/Input/`
+returns zero matches — no strict-XNA Input header pulls in an actual SDL header. The one textual hit
+from a looser grep (`MouseCursor.hpp:9`) is a comment describing the file's own opaque-forward-decl
+pattern (`struct SDL_Cursor;`, already the reference example this task's Notes point to), not an
+`#include`. **No divergence found; no files changed.** Files changed: none (this task ran cleanly
+alongside P1-027's fix — no rebuild/retest needed beyond what P1-027 already verified: `CnaTests`
+builds clean, canonical Input filter 517/517 passed, 5x shuffled repeats, zero failures). Remaining
+risk: none.
 
 ---
 

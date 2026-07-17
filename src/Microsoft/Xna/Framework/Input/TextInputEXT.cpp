@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Input/TextInputEXT.hpp"
 
+#include "CNA/Input/TextInputType.hpp"
+
 #include <SDL3/SDL.h>
 
 namespace
