@@ -289,6 +289,22 @@ namespace CNA::Internal::Backends::WebGPU
             out[3] = 0.0f;
         }
 
+        // New bone-palette uniform buffer for the skinned shaders (skinned3d.wgsl/skinned_pbr3d.wgsl):
+        // a small vec4f header (x = WeightsPerVertex, Task 895's 1/2/4 convention -- only the first
+        // N weight/index pairs are summed) followed by all 72 column-major bone matrices, matching
+        // EasyGLGraphicsBackend's own uBones[72] uniform array shape. Always copies the full fixed
+        // 72-entry array regardless of GpuDrawParams::boneCount: the tail is guaranteed zero
+        // (GpuDrawParams::boneTransforms's own default member initializer, since
+        // SkinnedEffect::FillGpuDrawParams only overwrites the first boneCount entries), and
+        // well-formed vertex data never indexes past boneCount anyway.
+        void FillSkinningParams(std::array<float, 4 + 72 * 16>& out, const GpuDrawParams& p)
+        {
+            out[0] = static_cast<float>(p.weightsPerVertex);
+            out[1] = 0.0f; out[2] = 0.0f; out[3] = 0.0f;
+            for (int i = 0; i < 72 * 16; ++i)
+                out[4 + i] = p.boneTransforms[i];
+        }
+
         [[nodiscard]] bool IsSurfaceRecoverable(WGPUSurfaceGetCurrentTextureStatus status)
         {
             return status == WGPUSurfaceGetCurrentTextureStatus_Timeout ||
@@ -606,6 +622,8 @@ namespace CNA::Internal::Backends::WebGPU
         DestroyAlphaTestResources();
         DestroyDualTextureResources();
         DestroyPbrResources();
+        DestroySkinnedResources();
+        DestroySkinnedPbrResources();
         pbrDefaultWhiteTexture_.reset();
         pbrDefaultFlatNormalTexture_.reset();
         for (WGPUBindGroup bg : pendingBindGroupReleases_) wgpuBindGroupRelease(bg);
@@ -828,6 +846,12 @@ namespace CNA::Internal::Backends::WebGPU
             CreateDualTextureResources();
         if (formatChanged || pbrShader_ == nullptr)
             CreatePbrResources();
+        if (formatChanged || skinnedShader_ == nullptr)
+            CreateSkinnedResources();
+        // Must run after CreatePbrResources(): reuses pbrBindGroupLayout1_ (group 1: sampler + 5
+        // textures) unchanged for its own texture bind group.
+        if (formatChanged || skinnedPbrShader_ == nullptr)
+            CreateSkinnedPbrResources();
     }
 
     void WebGPUGraphicsBackend::RecreateDepthTexture()
@@ -2573,6 +2597,8 @@ struct VertexOutput {
         RenderAlphaTestDraws(pass);
         RenderDualTextureDraws(pass);
         RenderPbrDraws(pass);
+        RenderSkinnedDraws(pass);
+        RenderSkinnedPbrDraws(pass);
         RenderSprites(pass);
         wgpuRenderPassEncoderEnd(pass);
         wgpuRenderPassEncoderRelease(pass);
@@ -2945,23 +2971,38 @@ struct VertexOutput {
             QueueLitTexturedDraw(vb, nullptr, world, view, projection, primitive, primitiveCount, params);
             return;
         }
+        // SkinnedPbrEffect (PBR + skinning combo, stride 68). Checked BEFORE the unskinned-PBR
+        // branch below, matching EasyGLGraphicsBackend::SelectProgram()'s own priority order
+        // (pbr&&skinned combo first, then pbr-only, then skinned-only).
+        if (!needsAlphaTest && !needsDualTexture && params.pbr && params.skinned && stride == 68 &&
+            params.texture0 != nullptr)
+        {
+            QueueSkinnedPbrDraw(vb, nullptr, world, view, projection, primitive, primitiveCount, params);
+            return;
+        }
         // Unskinned PbrEffect (stride 48, VertexPositionNormalTangentTexture). Gated on
         // !params.skinned directly (rather than needsUnsupportedEffect, which already excludes
-        // skinned draws via its own OR-condition) so a SkinnedPbrEffect draw -- stride 68, a
-        // separate pre-existing gap since this backend has no skinning shader at all -- keeps
-        // falling through to the fallback below unchanged.
+        // skinned draws via its own OR-condition).
         if (!needsAlphaTest && !needsDualTexture && params.pbr && !params.skinned && stride == 48 &&
             params.texture0 != nullptr)
         {
             QueuePbrDraw(vb, nullptr, world, view, projection, primitive, primitiveCount, params);
             return;
         }
-        // No env-map/skinned shader exists yet (env-map: Phase 58 remaining WGSL variant;
-        // skinned: this backend has no skinning support at all, a separate pre-existing gap) --
-        // fall back exactly like IGraphicsBackend's own default implementation did before this
-        // override existed. This will itself throw for anything other than a stride-16 buffer
-        // (DrawColoredPrimitives' own requirement), matching the pre-existing "unsupported, fail
-        // loudly" behaviour.
+        // SkinnedEffect (stride 52, or 56 with VertexColorEnabled). Gated on !params.pbr directly
+        // (rather than needsUnsupportedEffect, which already excludes skinned draws via its own
+        // OR-condition) so the SkinnedPbrEffect branch above keeps first priority, matching
+        // EasyGLGraphicsBackend::SelectProgram()'s own ordering.
+        if (!needsAlphaTest && !needsDualTexture && params.skinned && !params.pbr &&
+            (stride == 52 || stride == 56) && params.texture0 != nullptr)
+        {
+            QueueSkinnedDraw(vb, nullptr, world, view, projection, primitive, primitiveCount, params);
+            return;
+        }
+        // No env-map shader exists yet (Phase 58 remaining WGSL variant) -- fall back exactly like
+        // IGraphicsBackend's own default implementation did before this override existed. This
+        // will itself throw for anything other than a stride-16 buffer (DrawColoredPrimitives' own
+        // requirement), matching the pre-existing "unsupported, fail loudly" behaviour.
         DrawColoredPrimitives(vb, world, view, projection, primitive, primitiveCount);
     }
 
@@ -3004,12 +3045,24 @@ struct VertexOutput {
             QueueLitTexturedDraw(vb, &ib, world, view, projection, primitive, primitiveCount, params);
             return;
         }
-        // See DrawPrimitivesEx()'s identical branch for why this is gated on !params.skinned
-        // directly rather than needsUnsupportedEffect.
+        // See DrawPrimitivesEx()'s identical branch for the SkinnedPbrEffect/PbrEffect/SkinnedEffect
+        // priority ordering rationale.
+        if (!needsAlphaTest && !needsDualTexture && params.pbr && params.skinned && stride == 68 &&
+            params.texture0 != nullptr)
+        {
+            QueueSkinnedPbrDraw(vb, &ib, world, view, projection, primitive, primitiveCount, params);
+            return;
+        }
         if (!needsAlphaTest && !needsDualTexture && params.pbr && !params.skinned && stride == 48 &&
             params.texture0 != nullptr)
         {
             QueuePbrDraw(vb, &ib, world, view, projection, primitive, primitiveCount, params);
+            return;
+        }
+        if (!needsAlphaTest && !needsDualTexture && params.skinned && !params.pbr &&
+            (stride == 52 || stride == 56) && params.texture0 != nullptr)
+        {
+            QueueSkinnedDraw(vb, &ib, world, view, projection, primitive, primitiveCount, params);
             return;
         }
         DrawIndexedColoredPrimitives(vb, ib, world, view, projection, primitive, primitiveCount);
@@ -4095,6 +4148,1287 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
             pendingBufferReleases_.push_back(vertexBuffer);
         }
         pbrDrawCommands_.clear();
+    }
+
+    // ------------------------------------------------------------------------------------------
+    // plan_cnj.md Phase 14J: SkinnedEffect (skinned3d.wgsl family) -- closes this backend's
+    // pre-existing "no skinning shader at all" gap. See CreateSkinnedResources()'s own doc
+    // comment for the full formula-fidelity rationale (ported line-for-line from
+    // EasyGLGraphicsBackend::EnsureSkinnedProgram()/EnsureSkinnedVertexLitProgram()).
+    // ------------------------------------------------------------------------------------------
+
+    void WebGPUGraphicsBackend::DestroySkinnedResources()
+    {
+        for (auto* cache : { &skinnedPipelines_, &skinnedColorPipelines_,
+                             &skinnedVertexLitPipelines_, &skinnedVertexLitColorPipelines_ })
+        {
+            for (auto& [key, pipe] : *cache)
+            {
+                if (pipe != nullptr) wgpuRenderPipelineRelease(pipe);
+            }
+            cache->clear();
+        }
+        if (skinnedPipelineLayout_ != nullptr) wgpuPipelineLayoutRelease(skinnedPipelineLayout_);
+        if (skinnedBindGroupLayout_ != nullptr) wgpuBindGroupLayoutRelease(skinnedBindGroupLayout_);
+        if (skinnedShader_ != nullptr) wgpuShaderModuleRelease(skinnedShader_);
+        if (skinnedColorShader_ != nullptr) wgpuShaderModuleRelease(skinnedColorShader_);
+        if (skinnedVertexLitShader_ != nullptr) wgpuShaderModuleRelease(skinnedVertexLitShader_);
+        if (skinnedVertexLitColorShader_ != nullptr) wgpuShaderModuleRelease(skinnedVertexLitColorShader_);
+        skinnedPipelineLayout_ = nullptr;
+        skinnedBindGroupLayout_ = nullptr;
+        skinnedShader_ = nullptr;
+        skinnedColorShader_ = nullptr;
+        skinnedVertexLitShader_ = nullptr;
+        skinnedVertexLitColorShader_ = nullptr;
+    }
+
+    void WebGPUGraphicsBackend::CreateSkinnedResources()
+    {
+        DestroySkinnedResources();
+        if (surfaceFormat_ == WGPUTextureFormat_Undefined || texturedBindGroupLayout_ == nullptr)
+            return;
+
+        // Ported from EasyGLGraphicsBackend::EnsureSkinnedProgram()'s GLSL shader line-for-line:
+        // bone-palette skinning (Task 895's weightsPerVertex 1/2/4 convention -- only the first N
+        // weight/index pairs are summed), then Blinn-Phong lighting identical in shape to
+        // lit_textured3d.wgsl's own per-pixel-lit shader, EXCEPT SkinnedEffect has no separate
+        // AmbientLightColor uniform: SkinnedEffect::FillGpuDrawParams() pre-folds
+        // AmbientLightColor*DiffuseColor into emissiveColor on the CPU side, and this shader
+        // multiplies that combined value by DiffuseColor AGAIN (litRGB=(emissive+lightSum)*diffuse),
+        // matching the EasyGL reference exactly (not a bug to "fix" here -- replicating it is what
+        // makes this backend's rendered output consistent with every other backend for the same
+        // scene). No fog/alpha-test (SkinnedEffect never sets GpuDrawParams::alphaTest away from
+        // its always-pass default; fog is deferred uniformly across every WebGPU 3D shader so far).
+        static constexpr char shaderSource[] = R"WGSL(
+struct Uniforms {
+    mvp: mat4x4f,
+    diffuseColor: vec4f,
+    ambientLighting: vec4f,
+    light0DirTexture: vec4f,
+    light0DiffuseVertexColor: vec4f,
+};
+@group(0) @binding(0) var<uniform> u: Uniforms;
+
+struct LitLightParams {
+    light1Dir: vec4f,
+    light1Diffuse: vec4f,
+    light2Dir: vec4f,
+    light2Diffuse: vec4f,
+    emissiveColor: vec4f,
+    world: mat4x4f,
+    eyePos: vec4f,
+    light0Specular: vec4f,
+    light1Specular: vec4f,
+    light2Specular: vec4f,
+    specularColorPower: vec4f,
+    normalMatrixCol0: vec4f,
+    normalMatrixCol1: vec4f,
+    normalMatrixCol2: vec4f,
+};
+@group(0) @binding(1) var<uniform> lp: LitLightParams;
+
+struct SkinningParams {
+    weightsPerVertex: vec4f,
+    bones: array<mat4x4f, 72>,
+};
+@group(0) @binding(2) var<uniform> sk: SkinningParams;
+
+@group(1) @binding(0) var texSampler: sampler;
+@group(1) @binding(1) var tex: texture_2d<f32>;
+
+struct VertexInput {
+    @location(0) position: vec3f,
+    @location(1) normal: vec3f,
+    @location(2) uv: vec2f,
+    @location(3) blendWeight: vec4f,
+    @location(4) blendIndices: vec4<u32>,
+};
+struct VertexOutput {
+    @builtin(position) position: vec4f,
+    @location(0) uv: vec2f,
+    @location(1) worldNormal: vec3f,
+    @location(2) worldPos: vec3f,
+};
+
+fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
+    var skinMat = sk.bones[blendIndices.x] * blendWeight.x;
+    if (sk.weightsPerVertex.x >= 2.0) {
+        skinMat = skinMat + sk.bones[blendIndices.y] * blendWeight.y;
+    }
+    if (sk.weightsPerVertex.x >= 4.0) {
+        skinMat = skinMat + sk.bones[blendIndices.z] * blendWeight.z
+                           + sk.bones[blendIndices.w] * blendWeight.w;
+    }
+    return skinMat;
+}
+
+@vertex fn vs_main(input: VertexInput) -> VertexOutput {
+    var output: VertexOutput;
+    let skinMat = skinMatrix(input.blendWeight, input.blendIndices);
+    let skinnedPos = skinMat * vec4f(input.position, 1.0);
+    output.position = u.mvp * skinnedPos;
+    output.uv = input.uv;
+    let skinMat3 = mat3x3f(skinMat[0].xyz, skinMat[1].xyz, skinMat[2].xyz);
+    output.worldNormal = normalize(skinMat3 * input.normal);
+    output.worldPos = (lp.world * skinnedPos).xyz;
+    return output;
+}
+
+@fragment fn fs_main(input: VertexOutput) -> @location(0) vec4f {
+    let n = normalize(input.worldNormal);
+    let e = normalize(lp.eyePos.xyz - input.worldPos);
+    // Same disabled-light NaN guard as lit_textured3d.wgsl/pbr3d.wgsl: a disabled DirectionalLight
+    // forwards Direction=(0,0,0) (only DiffuseColor/SpecularColor are zeroed), and normalize() on a
+    // true zero vector is undefined and can poison the whole sum with NaN.
+    let dir0sq = dot(u.light0DirTexture.xyz, u.light0DirTexture.xyz);
+    let dir1sq = dot(lp.light1Dir.xyz, lp.light1Dir.xyz);
+    let dir2sq = dot(lp.light2Dir.xyz, lp.light2Dir.xyz);
+    let nl0 = select(vec3f(0.0), normalize(u.light0DirTexture.xyz), dir0sq > 0.0);
+    let nl1 = select(vec3f(0.0), normalize(lp.light1Dir.xyz), dir1sq > 0.0);
+    let nl2 = select(vec3f(0.0), normalize(lp.light2Dir.xyz), dir2sq > 0.0);
+    let dotl0 = dot(n, -nl0); let zerol0 = step(0.0, dotl0); let ndotl0 = max(dotl0, 0.0);
+    let dotl1 = dot(n, -nl1); let zerol1 = step(0.0, dotl1); let ndotl1 = max(dotl1, 0.0);
+    let dotl2 = dot(n, -nl2); let zerol2 = step(0.0, dotl2); let ndotl2 = max(dotl2, 0.0);
+    let lightSum = ndotl0 * u.light0DiffuseVertexColor.xyz + ndotl1 * lp.light1Diffuse.xyz
+                  + ndotl2 * lp.light2Diffuse.xyz;
+    let litRGB = (lp.emissiveColor.xyz + lightSum) * u.diffuseColor.rgb;
+    let h0 = normalize(e - nl0); let spec0 = pow(max(dot(h0, n), 0.0) * zerol0, lp.specularColorPower.w);
+    let h1 = normalize(e - nl1); let spec1 = pow(max(dot(h1, n), 0.0) * zerol1, lp.specularColorPower.w);
+    let h2 = normalize(e - nl2); let spec2 = pow(max(dot(h2, n), 0.0) * zerol2, lp.specularColorPower.w);
+    let specularRGB = (spec0 * lp.light0Specular.xyz + spec1 * lp.light1Specular.xyz
+                       + spec2 * lp.light2Specular.xyz) * lp.specularColorPower.xyz;
+    let texColor = textureSample(tex, texSampler, input.uv);
+    var color = vec4f(litRGB * texColor.rgb, u.diffuseColor.a * texColor.a);
+    color = vec4f(color.rgb + specularRGB * color.a, color.a);
+    return color;
+}
+)WGSL";
+
+        WGPUShaderSourceWGSL wgsl{};
+        wgsl.chain.sType = WGPUSType_ShaderSourceWGSL;
+        wgsl.code = StringView(shaderSource);
+        WGPUShaderModuleDescriptor shaderDescriptor{};
+        shaderDescriptor.label = StringView("CNA WebGPU Skinned3D WGSL");
+        shaderDescriptor.nextInChain = &wgsl.chain;
+        skinnedShader_ = wgpuDeviceCreateShaderModule(device_, &shaderDescriptor);
+
+        // Stride-56 sibling: adds the CNB-67 trailing per-vertex Color (normalized ubyte4, offset
+        // 52), gated by uVertexColorEnabled (u.light0DiffuseVertexColor.w). A WebGPU pipeline must
+        // supply every vertex-shader-referenced attribute location from its own vertex buffer
+        // layout (unlike EasyGL's own "simply leave attribute 5 unbound" precedent for stride 52),
+        // so this is a genuinely separate shader module rather than a conditionally-bound
+        // attribute, mirroring this backend's own existing texturedShader_/coloredTexturedShader_
+        // precedent for the analogous stride-20/24 split. The vertex-colour gate multiplies the
+        // FINAL combined diffuse+specular output, applied AFTER the specular add -- matches the
+        // EasyGL reference exactly (a real ordering bug was once found and fixed there: applying
+        // the gate to the diffuse term alone lets an unmodulated specular highlight leak through).
+        static constexpr char colorShaderSource[] = R"WGSL(
+struct Uniforms {
+    mvp: mat4x4f,
+    diffuseColor: vec4f,
+    ambientLighting: vec4f,
+    light0DirTexture: vec4f,
+    light0DiffuseVertexColor: vec4f,
+};
+@group(0) @binding(0) var<uniform> u: Uniforms;
+
+struct LitLightParams {
+    light1Dir: vec4f,
+    light1Diffuse: vec4f,
+    light2Dir: vec4f,
+    light2Diffuse: vec4f,
+    emissiveColor: vec4f,
+    world: mat4x4f,
+    eyePos: vec4f,
+    light0Specular: vec4f,
+    light1Specular: vec4f,
+    light2Specular: vec4f,
+    specularColorPower: vec4f,
+    normalMatrixCol0: vec4f,
+    normalMatrixCol1: vec4f,
+    normalMatrixCol2: vec4f,
+};
+@group(0) @binding(1) var<uniform> lp: LitLightParams;
+
+struct SkinningParams {
+    weightsPerVertex: vec4f,
+    bones: array<mat4x4f, 72>,
+};
+@group(0) @binding(2) var<uniform> sk: SkinningParams;
+
+@group(1) @binding(0) var texSampler: sampler;
+@group(1) @binding(1) var tex: texture_2d<f32>;
+
+struct VertexInput {
+    @location(0) position: vec3f,
+    @location(1) normal: vec3f,
+    @location(2) uv: vec2f,
+    @location(3) blendWeight: vec4f,
+    @location(4) blendIndices: vec4<u32>,
+    @location(5) color: vec4f,
+};
+struct VertexOutput {
+    @builtin(position) position: vec4f,
+    @location(0) uv: vec2f,
+    @location(1) worldNormal: vec3f,
+    @location(2) worldPos: vec3f,
+    @location(3) color: vec4f,
+};
+
+fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
+    var skinMat = sk.bones[blendIndices.x] * blendWeight.x;
+    if (sk.weightsPerVertex.x >= 2.0) {
+        skinMat = skinMat + sk.bones[blendIndices.y] * blendWeight.y;
+    }
+    if (sk.weightsPerVertex.x >= 4.0) {
+        skinMat = skinMat + sk.bones[blendIndices.z] * blendWeight.z
+                           + sk.bones[blendIndices.w] * blendWeight.w;
+    }
+    return skinMat;
+}
+
+@vertex fn vs_main(input: VertexInput) -> VertexOutput {
+    var output: VertexOutput;
+    let skinMat = skinMatrix(input.blendWeight, input.blendIndices);
+    let skinnedPos = skinMat * vec4f(input.position, 1.0);
+    output.position = u.mvp * skinnedPos;
+    output.uv = input.uv;
+    let skinMat3 = mat3x3f(skinMat[0].xyz, skinMat[1].xyz, skinMat[2].xyz);
+    output.worldNormal = normalize(skinMat3 * input.normal);
+    output.worldPos = (lp.world * skinnedPos).xyz;
+    output.color = input.color;
+    return output;
+}
+
+@fragment fn fs_main(input: VertexOutput) -> @location(0) vec4f {
+    let n = normalize(input.worldNormal);
+    let e = normalize(lp.eyePos.xyz - input.worldPos);
+    let dir0sq = dot(u.light0DirTexture.xyz, u.light0DirTexture.xyz);
+    let dir1sq = dot(lp.light1Dir.xyz, lp.light1Dir.xyz);
+    let dir2sq = dot(lp.light2Dir.xyz, lp.light2Dir.xyz);
+    let nl0 = select(vec3f(0.0), normalize(u.light0DirTexture.xyz), dir0sq > 0.0);
+    let nl1 = select(vec3f(0.0), normalize(lp.light1Dir.xyz), dir1sq > 0.0);
+    let nl2 = select(vec3f(0.0), normalize(lp.light2Dir.xyz), dir2sq > 0.0);
+    let dotl0 = dot(n, -nl0); let zerol0 = step(0.0, dotl0); let ndotl0 = max(dotl0, 0.0);
+    let dotl1 = dot(n, -nl1); let zerol1 = step(0.0, dotl1); let ndotl1 = max(dotl1, 0.0);
+    let dotl2 = dot(n, -nl2); let zerol2 = step(0.0, dotl2); let ndotl2 = max(dotl2, 0.0);
+    let lightSum = ndotl0 * u.light0DiffuseVertexColor.xyz + ndotl1 * lp.light1Diffuse.xyz
+                  + ndotl2 * lp.light2Diffuse.xyz;
+    let litRGB = (lp.emissiveColor.xyz + lightSum) * u.diffuseColor.rgb;
+    let h0 = normalize(e - nl0); let spec0 = pow(max(dot(h0, n), 0.0) * zerol0, lp.specularColorPower.w);
+    let h1 = normalize(e - nl1); let spec1 = pow(max(dot(h1, n), 0.0) * zerol1, lp.specularColorPower.w);
+    let h2 = normalize(e - nl2); let spec2 = pow(max(dot(h2, n), 0.0) * zerol2, lp.specularColorPower.w);
+    let specularRGB = (spec0 * lp.light0Specular.xyz + spec1 * lp.light1Specular.xyz
+                       + spec2 * lp.light2Specular.xyz) * lp.specularColorPower.xyz;
+    let texColor = textureSample(tex, texSampler, input.uv);
+    let vertexColorEnabled = u.light0DiffuseVertexColor.w;
+    let vc = select(vec4f(1.0, 1.0, 1.0, 1.0), input.color, vertexColorEnabled > 0.5);
+    var color = vec4f(litRGB * texColor.rgb, u.diffuseColor.a * texColor.a * vc.a);
+    color = vec4f(color.rgb + specularRGB * color.a, color.a);
+    color = vec4f(color.rgb * vc.rgb, color.a);
+    return color;
+}
+)WGSL";
+
+        WGPUShaderSourceWGSL colorWgsl{};
+        colorWgsl.chain.sType = WGPUSType_ShaderSourceWGSL;
+        colorWgsl.code = StringView(colorShaderSource);
+        WGPUShaderModuleDescriptor colorShaderDescriptor{};
+        colorShaderDescriptor.label = StringView("CNA WebGPU Skinned3D VertexColor WGSL");
+        colorShaderDescriptor.nextInChain = &colorWgsl.chain;
+        skinnedColorShader_ = wgpuDeviceCreateShaderModule(device_, &colorShaderDescriptor);
+
+        // Real per-vertex-lit sibling of both shaders above -- Task 1102b's identical technique
+        // (move the Blinn-Phong math from fs_main into vs_main, Gouraud-interpolate via varyings),
+        // applied to EnsureSkinnedVertexLitProgram()'s GLSL shader, selected when
+        // params.skinned && params.lightingEnabled && !params.preferPerPixelLighting (XNA's own
+        // SkinnedEffect.PreferPerPixelLighting==false default, matching every other backend).
+        static constexpr char vertexLitShaderSource[] = R"WGSL(
+struct Uniforms {
+    mvp: mat4x4f,
+    diffuseColor: vec4f,
+    ambientLighting: vec4f,
+    light0DirTexture: vec4f,
+    light0DiffuseVertexColor: vec4f,
+};
+@group(0) @binding(0) var<uniform> u: Uniforms;
+
+struct LitLightParams {
+    light1Dir: vec4f,
+    light1Diffuse: vec4f,
+    light2Dir: vec4f,
+    light2Diffuse: vec4f,
+    emissiveColor: vec4f,
+    world: mat4x4f,
+    eyePos: vec4f,
+    light0Specular: vec4f,
+    light1Specular: vec4f,
+    light2Specular: vec4f,
+    specularColorPower: vec4f,
+    normalMatrixCol0: vec4f,
+    normalMatrixCol1: vec4f,
+    normalMatrixCol2: vec4f,
+};
+@group(0) @binding(1) var<uniform> lp: LitLightParams;
+
+struct SkinningParams {
+    weightsPerVertex: vec4f,
+    bones: array<mat4x4f, 72>,
+};
+@group(0) @binding(2) var<uniform> sk: SkinningParams;
+
+@group(1) @binding(0) var texSampler: sampler;
+@group(1) @binding(1) var tex: texture_2d<f32>;
+
+struct VertexInput {
+    @location(0) position: vec3f,
+    @location(1) normal: vec3f,
+    @location(2) uv: vec2f,
+    @location(3) blendWeight: vec4f,
+    @location(4) blendIndices: vec4<u32>,
+};
+struct VertexOutput {
+    @builtin(position) position: vec4f,
+    @location(0) uv: vec2f,
+    @location(1) litRGB: vec3f,
+    @location(2) specularRGB: vec3f,
+};
+
+fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
+    var skinMat = sk.bones[blendIndices.x] * blendWeight.x;
+    if (sk.weightsPerVertex.x >= 2.0) {
+        skinMat = skinMat + sk.bones[blendIndices.y] * blendWeight.y;
+    }
+    if (sk.weightsPerVertex.x >= 4.0) {
+        skinMat = skinMat + sk.bones[blendIndices.z] * blendWeight.z
+                           + sk.bones[blendIndices.w] * blendWeight.w;
+    }
+    return skinMat;
+}
+
+@vertex fn vs_main(input: VertexInput) -> VertexOutput {
+    var output: VertexOutput;
+    let skinMat = skinMatrix(input.blendWeight, input.blendIndices);
+    let skinnedPos = skinMat * vec4f(input.position, 1.0);
+    output.position = u.mvp * skinnedPos;
+    output.uv = input.uv;
+    let skinMat3 = mat3x3f(skinMat[0].xyz, skinMat[1].xyz, skinMat[2].xyz);
+    let n = normalize(skinMat3 * input.normal);
+    let worldPos = (lp.world * skinnedPos).xyz;
+    let e = normalize(lp.eyePos.xyz - worldPos);
+    let dir0sq = dot(u.light0DirTexture.xyz, u.light0DirTexture.xyz);
+    let dir1sq = dot(lp.light1Dir.xyz, lp.light1Dir.xyz);
+    let dir2sq = dot(lp.light2Dir.xyz, lp.light2Dir.xyz);
+    let nl0 = select(vec3f(0.0), normalize(u.light0DirTexture.xyz), dir0sq > 0.0);
+    let nl1 = select(vec3f(0.0), normalize(lp.light1Dir.xyz), dir1sq > 0.0);
+    let nl2 = select(vec3f(0.0), normalize(lp.light2Dir.xyz), dir2sq > 0.0);
+    let dotl0 = dot(n, -nl0); let zerol0 = step(0.0, dotl0); let ndotl0 = max(dotl0, 0.0);
+    let dotl1 = dot(n, -nl1); let zerol1 = step(0.0, dotl1); let ndotl1 = max(dotl1, 0.0);
+    let dotl2 = dot(n, -nl2); let zerol2 = step(0.0, dotl2); let ndotl2 = max(dotl2, 0.0);
+    let lightSum = ndotl0 * u.light0DiffuseVertexColor.xyz + ndotl1 * lp.light1Diffuse.xyz
+                  + ndotl2 * lp.light2Diffuse.xyz;
+    output.litRGB = (lp.emissiveColor.xyz + lightSum) * u.diffuseColor.rgb;
+    let h0 = normalize(e - nl0); let spec0 = pow(max(dot(h0, n), 0.0) * zerol0, lp.specularColorPower.w);
+    let h1 = normalize(e - nl1); let spec1 = pow(max(dot(h1, n), 0.0) * zerol1, lp.specularColorPower.w);
+    let h2 = normalize(e - nl2); let spec2 = pow(max(dot(h2, n), 0.0) * zerol2, lp.specularColorPower.w);
+    output.specularRGB = (spec0 * lp.light0Specular.xyz + spec1 * lp.light1Specular.xyz
+                          + spec2 * lp.light2Specular.xyz) * lp.specularColorPower.xyz;
+    return output;
+}
+
+@fragment fn fs_main(input: VertexOutput) -> @location(0) vec4f {
+    let texColor = textureSample(tex, texSampler, input.uv);
+    var color = vec4f(input.litRGB * texColor.rgb, u.diffuseColor.a * texColor.a);
+    color = vec4f(color.rgb + input.specularRGB * color.a, color.a);
+    return color;
+}
+)WGSL";
+
+        WGPUShaderSourceWGSL vertexLitWgsl{};
+        vertexLitWgsl.chain.sType = WGPUSType_ShaderSourceWGSL;
+        vertexLitWgsl.code = StringView(vertexLitShaderSource);
+        WGPUShaderModuleDescriptor vertexLitShaderDescriptor{};
+        vertexLitShaderDescriptor.label = StringView("CNA WebGPU Skinned3D VertexLit WGSL");
+        vertexLitShaderDescriptor.nextInChain = &vertexLitWgsl.chain;
+        skinnedVertexLitShader_ = wgpuDeviceCreateShaderModule(device_, &vertexLitShaderDescriptor);
+
+        // Vertex-lit + vertex-colour combo (stride 56).
+        static constexpr char vertexLitColorShaderSource[] = R"WGSL(
+struct Uniforms {
+    mvp: mat4x4f,
+    diffuseColor: vec4f,
+    ambientLighting: vec4f,
+    light0DirTexture: vec4f,
+    light0DiffuseVertexColor: vec4f,
+};
+@group(0) @binding(0) var<uniform> u: Uniforms;
+
+struct LitLightParams {
+    light1Dir: vec4f,
+    light1Diffuse: vec4f,
+    light2Dir: vec4f,
+    light2Diffuse: vec4f,
+    emissiveColor: vec4f,
+    world: mat4x4f,
+    eyePos: vec4f,
+    light0Specular: vec4f,
+    light1Specular: vec4f,
+    light2Specular: vec4f,
+    specularColorPower: vec4f,
+    normalMatrixCol0: vec4f,
+    normalMatrixCol1: vec4f,
+    normalMatrixCol2: vec4f,
+};
+@group(0) @binding(1) var<uniform> lp: LitLightParams;
+
+struct SkinningParams {
+    weightsPerVertex: vec4f,
+    bones: array<mat4x4f, 72>,
+};
+@group(0) @binding(2) var<uniform> sk: SkinningParams;
+
+@group(1) @binding(0) var texSampler: sampler;
+@group(1) @binding(1) var tex: texture_2d<f32>;
+
+struct VertexInput {
+    @location(0) position: vec3f,
+    @location(1) normal: vec3f,
+    @location(2) uv: vec2f,
+    @location(3) blendWeight: vec4f,
+    @location(4) blendIndices: vec4<u32>,
+    @location(5) color: vec4f,
+};
+struct VertexOutput {
+    @builtin(position) position: vec4f,
+    @location(0) uv: vec2f,
+    @location(1) litRGB: vec3f,
+    @location(2) specularRGB: vec3f,
+    @location(3) color: vec4f,
+};
+
+fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
+    var skinMat = sk.bones[blendIndices.x] * blendWeight.x;
+    if (sk.weightsPerVertex.x >= 2.0) {
+        skinMat = skinMat + sk.bones[blendIndices.y] * blendWeight.y;
+    }
+    if (sk.weightsPerVertex.x >= 4.0) {
+        skinMat = skinMat + sk.bones[blendIndices.z] * blendWeight.z
+                           + sk.bones[blendIndices.w] * blendWeight.w;
+    }
+    return skinMat;
+}
+
+@vertex fn vs_main(input: VertexInput) -> VertexOutput {
+    var output: VertexOutput;
+    let skinMat = skinMatrix(input.blendWeight, input.blendIndices);
+    let skinnedPos = skinMat * vec4f(input.position, 1.0);
+    output.position = u.mvp * skinnedPos;
+    output.uv = input.uv;
+    output.color = input.color;
+    let skinMat3 = mat3x3f(skinMat[0].xyz, skinMat[1].xyz, skinMat[2].xyz);
+    let n = normalize(skinMat3 * input.normal);
+    let worldPos = (lp.world * skinnedPos).xyz;
+    let e = normalize(lp.eyePos.xyz - worldPos);
+    let dir0sq = dot(u.light0DirTexture.xyz, u.light0DirTexture.xyz);
+    let dir1sq = dot(lp.light1Dir.xyz, lp.light1Dir.xyz);
+    let dir2sq = dot(lp.light2Dir.xyz, lp.light2Dir.xyz);
+    let nl0 = select(vec3f(0.0), normalize(u.light0DirTexture.xyz), dir0sq > 0.0);
+    let nl1 = select(vec3f(0.0), normalize(lp.light1Dir.xyz), dir1sq > 0.0);
+    let nl2 = select(vec3f(0.0), normalize(lp.light2Dir.xyz), dir2sq > 0.0);
+    let dotl0 = dot(n, -nl0); let zerol0 = step(0.0, dotl0); let ndotl0 = max(dotl0, 0.0);
+    let dotl1 = dot(n, -nl1); let zerol1 = step(0.0, dotl1); let ndotl1 = max(dotl1, 0.0);
+    let dotl2 = dot(n, -nl2); let zerol2 = step(0.0, dotl2); let ndotl2 = max(dotl2, 0.0);
+    let lightSum = ndotl0 * u.light0DiffuseVertexColor.xyz + ndotl1 * lp.light1Diffuse.xyz
+                  + ndotl2 * lp.light2Diffuse.xyz;
+    output.litRGB = (lp.emissiveColor.xyz + lightSum) * u.diffuseColor.rgb;
+    let h0 = normalize(e - nl0); let spec0 = pow(max(dot(h0, n), 0.0) * zerol0, lp.specularColorPower.w);
+    let h1 = normalize(e - nl1); let spec1 = pow(max(dot(h1, n), 0.0) * zerol1, lp.specularColorPower.w);
+    let h2 = normalize(e - nl2); let spec2 = pow(max(dot(h2, n), 0.0) * zerol2, lp.specularColorPower.w);
+    output.specularRGB = (spec0 * lp.light0Specular.xyz + spec1 * lp.light1Specular.xyz
+                          + spec2 * lp.light2Specular.xyz) * lp.specularColorPower.xyz;
+    return output;
+}
+
+@fragment fn fs_main(input: VertexOutput) -> @location(0) vec4f {
+    let texColor = textureSample(tex, texSampler, input.uv);
+    let vertexColorEnabled = u.light0DiffuseVertexColor.w;
+    let vc = select(vec4f(1.0, 1.0, 1.0, 1.0), input.color, vertexColorEnabled > 0.5);
+    var color = vec4f(input.litRGB * texColor.rgb, u.diffuseColor.a * texColor.a * vc.a);
+    color = vec4f(color.rgb + input.specularRGB * color.a, color.a);
+    color = vec4f(color.rgb * vc.rgb, color.a);
+    return color;
+}
+)WGSL";
+
+        WGPUShaderSourceWGSL vertexLitColorWgsl{};
+        vertexLitColorWgsl.chain.sType = WGPUSType_ShaderSourceWGSL;
+        vertexLitColorWgsl.code = StringView(vertexLitColorShaderSource);
+        WGPUShaderModuleDescriptor vertexLitColorShaderDescriptor{};
+        vertexLitColorShaderDescriptor.label = StringView("CNA WebGPU Skinned3D VertexLit VertexColor WGSL");
+        vertexLitColorShaderDescriptor.nextInChain = &vertexLitColorWgsl.chain;
+        skinnedVertexLitColorShader_ = wgpuDeviceCreateShaderModule(device_, &vertexLitColorShaderDescriptor);
+
+        std::array<WGPUBindGroupLayoutEntry, 3> layoutEntries{};
+        layoutEntries[0].binding = 0;
+        layoutEntries[0].visibility = WGPUShaderStage_Vertex | WGPUShaderStage_Fragment;
+        layoutEntries[0].buffer.type = WGPUBufferBindingType_Uniform;
+        layoutEntries[0].buffer.minBindingSize = 128;
+        layoutEntries[1].binding = 1;
+        layoutEntries[1].visibility = WGPUShaderStage_Vertex | WGPUShaderStage_Fragment;
+        layoutEntries[1].buffer.type = WGPUBufferBindingType_Uniform;
+        layoutEntries[1].buffer.minBindingSize = 272;
+        layoutEntries[2].binding = 2;
+        layoutEntries[2].visibility = WGPUShaderStage_Vertex;
+        layoutEntries[2].buffer.type = WGPUBufferBindingType_Uniform;
+        layoutEntries[2].buffer.minBindingSize = (4 + 72 * 16) * sizeof(float);
+        WGPUBindGroupLayoutDescriptor bindLayoutDescriptor{};
+        bindLayoutDescriptor.label = StringView("CNA WebGPU Skinned3D BindGroupLayout");
+        bindLayoutDescriptor.entryCount = layoutEntries.size();
+        bindLayoutDescriptor.entries = layoutEntries.data();
+        skinnedBindGroupLayout_ = wgpuDeviceCreateBindGroupLayout(device_, &bindLayoutDescriptor);
+
+        std::array<WGPUBindGroupLayout, 2> groupLayouts{skinnedBindGroupLayout_, texturedBindGroupLayout_};
+        WGPUPipelineLayoutDescriptor pipelineLayoutDescriptor{};
+        pipelineLayoutDescriptor.label = StringView("CNA WebGPU Skinned3D PipelineLayout");
+        pipelineLayoutDescriptor.bindGroupLayoutCount = groupLayouts.size();
+        pipelineLayoutDescriptor.bindGroupLayouts = groupLayouts.data();
+        skinnedPipelineLayout_ = wgpuDeviceCreatePipelineLayout(device_, &pipelineLayoutDescriptor);
+
+        if (skinnedShader_ == nullptr || skinnedColorShader_ == nullptr ||
+            skinnedVertexLitShader_ == nullptr || skinnedVertexLitColorShader_ == nullptr ||
+            skinnedBindGroupLayout_ == nullptr || skinnedPipelineLayout_ == nullptr)
+            throw std::runtime_error("CNA WebGPU: failed to create Skinned3D GPU resources");
+    }
+
+    WGPURenderPipeline WebGPUGraphicsBackend::GetOrCreatePipelineSkinned3D(std::size_t stride, bool preferVertexLit,
+                                                                             WGPUPrimitiveTopology topology,
+                                                                             bool depthTest, bool depthWrite,
+                                                                             int depthFunc)
+    {
+        const bool hasVertexColor = (stride == 56);
+        const int key = (static_cast<int>(topology) * 8 + depthFunc) * 4 + (depthTest ? 2 : 0) + (depthWrite ? 1 : 0);
+        auto& cache = preferVertexLit
+            ? (hasVertexColor ? skinnedVertexLitColorPipelines_ : skinnedVertexLitPipelines_)
+            : (hasVertexColor ? skinnedColorPipelines_ : skinnedPipelines_);
+        if (auto it = cache.find(key); it != cache.end())
+            return it->second;
+
+        WGPUShaderModule shaderModule = preferVertexLit
+            ? (hasVertexColor ? skinnedVertexLitColorShader_ : skinnedVertexLitShader_)
+            : (hasVertexColor ? skinnedColorShader_ : skinnedShader_);
+
+        // Matches ApplyLayout's stride==52/56 cases (VertexPositionNormalTextureSkinned, with an
+        // optional trailing Color appended at offset 52 for stride 56 -- CNB-67's own "append
+        // rather than insert" convention keeps locations 0-4 byte-identical between the two
+        // strides). BlendIndices (Byte4/Uint8x4) is read as a true unsigned integer, not
+        // normalized -- matches EasyGLGraphicsBackend::ApplyLayout's glVertexAttribIPointer path.
+        std::array<WGPUVertexAttribute, 6> attributes{};
+        attributes[0].format = WGPUVertexFormat_Float32x3;
+        attributes[0].offset = 0;
+        attributes[0].shaderLocation = 0;
+        attributes[1].format = WGPUVertexFormat_Float32x3;
+        attributes[1].offset = 12;
+        attributes[1].shaderLocation = 1;
+        attributes[2].format = WGPUVertexFormat_Float32x2;
+        attributes[2].offset = 24;
+        attributes[2].shaderLocation = 2;
+        attributes[3].format = WGPUVertexFormat_Float32x4;
+        attributes[3].offset = 32;
+        attributes[3].shaderLocation = 3;
+        attributes[4].format = WGPUVertexFormat_Uint8x4;
+        attributes[4].offset = 48;
+        attributes[4].shaderLocation = 4;
+        std::uint32_t attributeCount = 5;
+        std::uint64_t arrayStride = 52;
+        if (hasVertexColor)
+        {
+            attributes[5].format = WGPUVertexFormat_Unorm8x4;
+            attributes[5].offset = 52;
+            attributes[5].shaderLocation = 5;
+            attributeCount = 6;
+            arrayStride = 56;
+        }
+
+        WGPUVertexBufferLayout vertexBufferLayout{};
+        vertexBufferLayout.arrayStride = arrayStride;
+        vertexBufferLayout.stepMode = WGPUVertexStepMode_Vertex;
+        vertexBufferLayout.attributeCount = attributeCount;
+        vertexBufferLayout.attributes = attributes.data();
+
+        WGPUColorTargetState target{};
+        target.format = surfaceFormat_;
+        target.writeMask = WGPUColorWriteMask_All;
+        WGPUFragmentState fragment{};
+        fragment.module = shaderModule;
+        fragment.entryPoint = StringView("fs_main");
+        fragment.targetCount = 1;
+        fragment.targets = &target;
+
+        WGPURenderPipelineDescriptor pipeline{};
+        pipeline.label = StringView("CNA WebGPU Skinned3D Pipeline");
+        pipeline.layout = skinnedPipelineLayout_;
+        pipeline.vertex.module = shaderModule;
+        pipeline.vertex.entryPoint = StringView("vs_main");
+        pipeline.vertex.bufferCount = 1;
+        pipeline.vertex.buffers = &vertexBufferLayout;
+        pipeline.primitive.topology = topology;
+        pipeline.primitive.frontFace = WGPUFrontFace_CCW;
+        pipeline.primitive.cullMode = WGPUCullMode_None;
+        pipeline.multisample.count = 1;
+        pipeline.multisample.mask = std::numeric_limits<std::uint32_t>::max();
+        pipeline.multisample.alphaToCoverageEnabled = false;
+        pipeline.fragment = &fragment;
+
+        WGPUDepthStencilState depthStencil = WGPU_DEPTH_STENCIL_STATE_INIT;
+        depthStencil.format = WGPUTextureFormat_Depth24PlusStencil8;
+        depthStencil.depthWriteEnabled = depthWrite ? WGPUOptionalBool_True : WGPUOptionalBool_False;
+        depthStencil.depthCompare = depthTest ? ToWGPUCompareFunction(depthFunc) : WGPUCompareFunction_Always;
+        pipeline.depthStencil = &depthStencil;
+
+        WGPURenderPipeline created = wgpuDeviceCreateRenderPipeline(device_, &pipeline);
+        if (created == nullptr)
+            throw std::runtime_error("CNA WebGPU: failed to create Skinned3D pipeline");
+        cache[key] = created;
+        return created;
+    }
+
+    void WebGPUGraphicsBackend::QueueSkinnedDraw(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
+                                                  const Matrix& world, const Matrix& view, const Matrix& projection,
+                                                  PrimitiveType primitive, int primitiveCount,
+                                                  const GpuDrawParams& params)
+    {
+        const auto& webgpuVb = static_cast<const WebGPUVertexBufferBackend&>(vb);
+        const std::size_t stride = webgpuVb.Stride();
+        if (stride != 52 && stride != 56)
+            throw std::invalid_argument("CNA WebGPU: QueueSkinnedDraw requires a stride-52 "
+                                        "(VertexPositionNormalTextureSkinned) or stride-56 "
+                                        "(with vertex colour) vertex buffer");
+        if (params.texture0 == nullptr)
+            throw std::invalid_argument("CNA WebGPU: QueueSkinnedDraw requires a bound texture0");
+
+        SkinnedDrawCommand command;
+        command.stride = stride;
+        const auto& shadow = webgpuVb.ShadowData();
+        const std::size_t byteOffset = static_cast<std::size_t>(params.vertexStart) * stride;
+        if (byteOffset <= shadow.size())
+            command.vertexData.assign(shadow.begin() + static_cast<std::ptrdiff_t>(byteOffset), shadow.end());
+        command.topology = ToTopology(primitive);
+        command.depthTest = depthTestEnabled_;
+        command.depthFunc = depthCompareFunction_;
+        command.depthWrite = depthWriteEnabled_;
+        command.texture = static_cast<const WebGPUTextureBackend*>(params.texture0);
+        // Real XNA's SkinnedEffect.PreferPerPixelLighting default is false (per-vertex), matching
+        // every other backend's own dispatch condition for this flag (Task 1102b).
+        command.preferVertexLit = params.lightingEnabled && !params.preferPerPixelLighting;
+        const Matrix wvp = world * view * projection;
+        FillExtUniforms(command.uniforms, wvp, params);
+        FillLitLightUniforms(command.lightUniforms, params);
+        FillSkinningParams(command.skinningParams, params);
+
+        if (ib != nullptr)
+        {
+            const auto& webgpuIb = static_cast<const WebGPUIndexBufferBackend&>(*ib);
+            command.indexed = true;
+            command.index32 = webgpuIb.IsThirtyTwoBit();
+            command.indexData = webgpuIb.ShadowData();
+            command.indexCount = static_cast<std::uint32_t>(PrimitiveIndexCount(primitive, primitiveCount));
+            command.vertexCount = static_cast<std::uint32_t>(webgpuVb.GetVertexCount()) -
+                                  static_cast<std::uint32_t>(params.vertexStart);
+        }
+        else
+        {
+            command.vertexCount = static_cast<std::uint32_t>(PrimitiveVertexCount(primitive, primitiveCount));
+        }
+
+        skinnedDrawCommands_.push_back(std::move(command));
+        framePending_ = true;
+    }
+
+    void WebGPUGraphicsBackend::RenderSkinnedDraws(WGPURenderPassEncoder pass)
+    {
+        for (const SkinnedDrawCommand& command : skinnedDrawCommands_)
+        {
+            if (command.vertexCount == 0 || command.vertexData.empty() || command.texture == nullptr)
+                continue;
+
+            WGPUBufferDescriptor vbDescriptor{};
+            vbDescriptor.label = StringView("CNA WebGPU Skinned3D VertexBuffer");
+            vbDescriptor.usage = WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst;
+            vbDescriptor.size = Align4(command.vertexData.size());
+            WGPUBuffer vertexBuffer = wgpuDeviceCreateBuffer(device_, &vbDescriptor);
+            wgpuQueueWriteBuffer(queue_, vertexBuffer, 0, command.vertexData.data(), command.vertexData.size());
+
+            WGPUBufferDescriptor uboDescriptor{};
+            uboDescriptor.label = StringView("CNA WebGPU Skinned3D UBO");
+            uboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
+            uboDescriptor.size = sizeof(command.uniforms);
+            WGPUBuffer uniformBuffer = wgpuDeviceCreateBuffer(device_, &uboDescriptor);
+            wgpuQueueWriteBuffer(queue_, uniformBuffer, 0, command.uniforms.data(), sizeof(command.uniforms));
+
+            WGPUBufferDescriptor lightUboDescriptor{};
+            lightUboDescriptor.label = StringView("CNA WebGPU Skinned3D LightUBO");
+            lightUboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
+            lightUboDescriptor.size = sizeof(command.lightUniforms);
+            WGPUBuffer lightUniformBuffer = wgpuDeviceCreateBuffer(device_, &lightUboDescriptor);
+            wgpuQueueWriteBuffer(queue_, lightUniformBuffer, 0, command.lightUniforms.data(), sizeof(command.lightUniforms));
+
+            WGPUBufferDescriptor skinningUboDescriptor{};
+            skinningUboDescriptor.label = StringView("CNA WebGPU Skinned3D SkinningUBO");
+            skinningUboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
+            skinningUboDescriptor.size = sizeof(command.skinningParams);
+            WGPUBuffer skinningUniformBuffer = wgpuDeviceCreateBuffer(device_, &skinningUboDescriptor);
+            wgpuQueueWriteBuffer(queue_, skinningUniformBuffer, 0, command.skinningParams.data(), sizeof(command.skinningParams));
+
+            std::array<WGPUBindGroupEntry, 3> uboEntries{};
+            uboEntries[0].binding = 0;
+            uboEntries[0].buffer = uniformBuffer;
+            uboEntries[0].size = sizeof(command.uniforms);
+            uboEntries[1].binding = 1;
+            uboEntries[1].buffer = lightUniformBuffer;
+            uboEntries[1].size = sizeof(command.lightUniforms);
+            uboEntries[2].binding = 2;
+            uboEntries[2].buffer = skinningUniformBuffer;
+            uboEntries[2].size = sizeof(command.skinningParams);
+            WGPUBindGroupDescriptor uboBindDescriptor{};
+            uboBindDescriptor.label = StringView("CNA WebGPU Skinned3D UBO BindGroup");
+            uboBindDescriptor.layout = skinnedBindGroupLayout_;
+            uboBindDescriptor.entryCount = uboEntries.size();
+            uboBindDescriptor.entries = uboEntries.data();
+            WGPUBindGroup uboBindGroup = wgpuDeviceCreateBindGroup(device_, &uboBindDescriptor);
+
+            WGPUSampler sampler = GetOrCreateSampler(command.textureFilter, command.addressU, command.addressV);
+            std::array<WGPUBindGroupEntry, 2> texEntries{};
+            texEntries[0].binding = 0;
+            texEntries[0].sampler = sampler;
+            texEntries[1].binding = 1;
+            texEntries[1].textureView = command.texture->View();
+            WGPUBindGroupDescriptor texBindDescriptor{};
+            texBindDescriptor.label = StringView("CNA WebGPU Skinned3D Texture BindGroup");
+            texBindDescriptor.layout = texturedBindGroupLayout_;
+            texBindDescriptor.entryCount = texEntries.size();
+            texBindDescriptor.entries = texEntries.data();
+            WGPUBindGroup texBindGroup = wgpuDeviceCreateBindGroup(device_, &texBindDescriptor);
+
+            WGPURenderPipeline pipe = GetOrCreatePipelineSkinned3D(command.stride, command.preferVertexLit,
+                                                                    command.topology, command.depthTest,
+                                                                    command.depthWrite, command.depthFunc);
+            wgpuRenderPassEncoderSetPipeline(pass, pipe);
+            wgpuRenderPassEncoderSetBindGroup(pass, 0, uboBindGroup, 0, nullptr);
+            wgpuRenderPassEncoderSetBindGroup(pass, 1, texBindGroup, 0, nullptr);
+            wgpuRenderPassEncoderSetVertexBuffer(pass, 0, vertexBuffer, 0, command.vertexData.size());
+
+            if (command.indexed && !command.indexData.empty())
+            {
+                WGPUBufferDescriptor ibDescriptor{};
+                ibDescriptor.label = StringView("CNA WebGPU Skinned3D IndexBuffer");
+                ibDescriptor.usage = WGPUBufferUsage_Index | WGPUBufferUsage_CopyDst;
+                ibDescriptor.size = Align4(command.indexData.size());
+                WGPUBuffer indexBuffer = wgpuDeviceCreateBuffer(device_, &ibDescriptor);
+                wgpuQueueWriteBuffer(queue_, indexBuffer, 0, command.indexData.data(), command.indexData.size());
+                wgpuRenderPassEncoderSetIndexBuffer(pass, indexBuffer,
+                    command.index32 ? WGPUIndexFormat_Uint32 : WGPUIndexFormat_Uint16,
+                    0, command.indexData.size());
+                wgpuRenderPassEncoderDrawIndexed(pass, command.indexCount, 1, 0, 0, 0);
+                pendingBufferReleases_.push_back(indexBuffer);
+            }
+            else
+            {
+                wgpuRenderPassEncoderDraw(pass, command.vertexCount, 1, 0, 0);
+            }
+
+            pendingBindGroupReleases_.push_back(uboBindGroup);
+            pendingBindGroupReleases_.push_back(texBindGroup);
+            pendingBufferReleases_.push_back(uniformBuffer);
+            pendingBufferReleases_.push_back(lightUniformBuffer);
+            pendingBufferReleases_.push_back(skinningUniformBuffer);
+            pendingBufferReleases_.push_back(vertexBuffer);
+        }
+        skinnedDrawCommands_.clear();
+    }
+
+    // ------------------------------------------------------------------------------------------
+    // SkinnedPbrEffect (skinned_pbr3d.wgsl) -- the PBR + skinning combo, stride 68
+    // (VertexPositionNormalTangentTextureSkinned). Bone-palette skinning identical to
+    // skinned3d.wgsl above (extended to also skin Tangent), feeding pbr3d.wgsl's own fragment BRDF
+    // unchanged, matching EasyGLGraphicsBackend::EnsurePbrSkinnedProgram()'s combination exactly.
+    // ------------------------------------------------------------------------------------------
+
+    void WebGPUGraphicsBackend::DestroySkinnedPbrResources()
+    {
+        for (auto& [key, pipe] : skinnedPbrPipelines_)
+        {
+            if (pipe != nullptr) wgpuRenderPipelineRelease(pipe);
+        }
+        skinnedPbrPipelines_.clear();
+        if (skinnedPbrPipelineLayout_ != nullptr) wgpuPipelineLayoutRelease(skinnedPbrPipelineLayout_);
+        if (skinnedPbrBindGroupLayout0_ != nullptr) wgpuBindGroupLayoutRelease(skinnedPbrBindGroupLayout0_);
+        if (skinnedPbrShader_ != nullptr) wgpuShaderModuleRelease(skinnedPbrShader_);
+        skinnedPbrPipelineLayout_ = nullptr;
+        skinnedPbrBindGroupLayout0_ = nullptr;
+        skinnedPbrShader_ = nullptr;
+    }
+
+    void WebGPUGraphicsBackend::CreateSkinnedPbrResources()
+    {
+        DestroySkinnedPbrResources();
+        // Reuses pbrBindGroupLayout1_ (group 1: sampler + 5 textures) unchanged, so this must run
+        // after CreatePbrResources() -- enforced by ConfigureSurface()'s own call ordering.
+        if (surfaceFormat_ == WGPUTextureFormat_Undefined || pbrBindGroupLayout1_ == nullptr)
+            return;
+
+        // Vertex stage: skinned3d.wgsl's bone-palette transform (skinMatrix()), extended to also
+        // skin Tangent, feeding pbr3d.wgsl's own pbrLight()/fs_main BRDF unchanged. Matches
+        // EasyGLGraphicsBackend::EnsurePbrSkinnedProgram(): the normal/tangent transform here uses
+        // the raw World rotation directly (mat3(uWorld)*(skinMat3*normal)), NOT the precomputed
+        // inverse-transpose normal matrix pbr3d.wgsl's own unskinned vertex shader uses -- an
+        // intentional difference from unskinned PbrEffect, replicated here for cross-backend
+        // consistency rather than "fixed". No vertex colour (SkinnedPbrEffect has none).
+        static constexpr char shaderSource[] = R"WGSL(
+struct Uniforms {
+    mvp: mat4x4f,
+    diffuseColor: vec4f,
+    ambientLighting: vec4f,
+    light0DirTexture: vec4f,
+    light0DiffuseVertexColor: vec4f,
+};
+@group(0) @binding(0) var<uniform> u: Uniforms;
+
+struct LitLightParams {
+    light1Dir: vec4f,
+    light1Diffuse: vec4f,
+    light2Dir: vec4f,
+    light2Diffuse: vec4f,
+    emissiveColor: vec4f,
+    world: mat4x4f,
+    eyePos: vec4f,
+    light0Specular: vec4f,
+    light1Specular: vec4f,
+    light2Specular: vec4f,
+    specularColorPower: vec4f,
+    normalMatrixCol0: vec4f,
+    normalMatrixCol1: vec4f,
+    normalMatrixCol2: vec4f,
+};
+@group(0) @binding(1) var<uniform> lp: LitLightParams;
+
+struct PbrFactors {
+    metallicRoughness: vec4f,
+};
+@group(0) @binding(2) var<uniform> pf: PbrFactors;
+
+struct SkinningParams {
+    weightsPerVertex: vec4f,
+    bones: array<mat4x4f, 72>,
+};
+@group(0) @binding(3) var<uniform> sk: SkinningParams;
+
+@group(1) @binding(0) var texSampler: sampler;
+@group(1) @binding(1) var baseColorTex: texture_2d<f32>;
+@group(1) @binding(2) var normalTex: texture_2d<f32>;
+@group(1) @binding(3) var metallicRoughnessTex: texture_2d<f32>;
+@group(1) @binding(4) var emissiveTex: texture_2d<f32>;
+@group(1) @binding(5) var occlusionTex: texture_2d<f32>;
+
+struct VertexInput {
+    @location(0) position: vec3f,
+    @location(1) normal: vec3f,
+    @location(2) tangent: vec4f,
+    @location(3) uv: vec2f,
+    @location(4) blendWeight: vec4f,
+    @location(5) blendIndices: vec4<u32>,
+};
+struct VertexOutput {
+    @builtin(position) position: vec4f,
+    @location(0) uv: vec2f,
+    @location(1) worldNormal: vec3f,
+    @location(2) worldTangent: vec3f,
+    @location(3) bitangentSign: f32,
+    @location(4) worldPos: vec3f,
+};
+
+fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
+    var skinMat = sk.bones[blendIndices.x] * blendWeight.x;
+    if (sk.weightsPerVertex.x >= 2.0) {
+        skinMat = skinMat + sk.bones[blendIndices.y] * blendWeight.y;
+    }
+    if (sk.weightsPerVertex.x >= 4.0) {
+        skinMat = skinMat + sk.bones[blendIndices.z] * blendWeight.z
+                           + sk.bones[blendIndices.w] * blendWeight.w;
+    }
+    return skinMat;
+}
+
+@vertex fn vs_main(input: VertexInput) -> VertexOutput {
+    var output: VertexOutput;
+    let skinMat = skinMatrix(input.blendWeight, input.blendIndices);
+    let skinnedPos = skinMat * vec4f(input.position, 1.0);
+    output.position = u.mvp * skinnedPos;
+    let skinMat3 = mat3x3f(skinMat[0].xyz, skinMat[1].xyz, skinMat[2].xyz);
+    let worldMat3 = mat3x3f(lp.world[0].xyz, lp.world[1].xyz, lp.world[2].xyz);
+    output.worldNormal = normalize(worldMat3 * (skinMat3 * input.normal));
+    output.worldTangent = worldMat3 * (skinMat3 * input.tangent.xyz);
+    output.bitangentSign = input.tangent.w;
+    output.worldPos = (lp.world * skinnedPos).xyz;
+    output.uv = input.uv;
+    return output;
+}
+
+fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: vec3f, roughness: f32, metallic: f32) -> vec3f {
+    let h = normalize(v + l);
+    let ndotl = max(dot(n, l), 0.0);
+    let ndotv = max(dot(n, v), 1e-4);
+    let ndoth = max(dot(n, h), 0.0);
+    let vdoth = max(dot(v, h), 0.0);
+    let a2 = pow(roughness, 4.0);
+    let dTerm = ndoth * ndoth * (a2 - 1.0) + 1.0;
+    let d = a2 / (3.14159265 * dTerm * dTerm + 1e-7);
+    var k = roughness + 1.0;
+    k = k * k / 8.0;
+    let g = (ndotv / (ndotv * (1.0 - k) + k)) * (ndotl / (ndotl * (1.0 - k) + k));
+    let f = f0 + (vec3f(1.0) - f0) * pow(clamp(1.0 - vdoth, 0.0, 1.0), 5.0);
+    let specular = (d * g * f) / max(4.0 * ndotv * ndotl, 1e-4);
+    let diffuseColor = albedo * (1.0 - metallic);
+    let kd = vec3f(1.0) - f;
+    return (kd * diffuseColor / 3.14159265 + specular) * lightColor * ndotl;
+}
+
+@fragment fn fs_main(input: VertexOutput) -> @location(0) vec4f {
+    let baseColorSample = textureSample(baseColorTex, texSampler, input.uv);
+    let albedo = baseColorSample.rgb * u.diffuseColor.rgb;
+    let alpha = baseColorSample.a * u.diffuseColor.a;
+
+    let n0 = normalize(input.worldNormal);
+    let t0 = normalize(input.worldTangent - n0 * dot(n0, input.worldTangent));
+    let b0 = cross(n0, t0) * input.bitangentSign;
+    let tbn = mat3x3f(t0, b0, n0);
+    let sampledNormal = textureSample(normalTex, texSampler, input.uv).rgb * 2.0 - 1.0;
+    let finalNormal = normalize(tbn * sampledNormal);
+
+    let mr = textureSample(metallicRoughnessTex, texSampler, input.uv);
+    let roughness = clamp(mr.g * pf.metallicRoughness.y, 0.045, 1.0);
+    let metallic = clamp(mr.b * pf.metallicRoughness.x, 0.0, 1.0);
+
+    let eye = normalize(lp.eyePos.xyz - input.worldPos);
+    let f0 = mix(vec3f(0.04), albedo, metallic);
+
+    let dir0sq = dot(u.light0DirTexture.xyz, u.light0DirTexture.xyz);
+    let dir1sq = dot(lp.light1Dir.xyz, lp.light1Dir.xyz);
+    let dir2sq = dot(lp.light2Dir.xyz, lp.light2Dir.xyz);
+    let l0 = select(vec3f(0.0), normalize(-u.light0DirTexture.xyz), dir0sq > 0.0);
+    let l1 = select(vec3f(0.0), normalize(-lp.light1Dir.xyz), dir1sq > 0.0);
+    let l2 = select(vec3f(0.0), normalize(-lp.light2Dir.xyz), dir2sq > 0.0);
+
+    var lo = vec3f(0.0);
+    lo += pbrLight(finalNormal, eye, l0, u.light0DiffuseVertexColor.xyz, albedo, f0, roughness, metallic);
+    lo += pbrLight(finalNormal, eye, l1, lp.light1Diffuse.xyz, albedo, f0, roughness, metallic);
+    lo += pbrLight(finalNormal, eye, l2, lp.light2Diffuse.xyz, albedo, f0, roughness, metallic);
+
+    let occlusion = textureSample(occlusionTex, texSampler, input.uv).r;
+    let ambient = u.ambientLighting.xyz * albedo * occlusion;
+    let emissive = lp.emissiveColor.xyz * textureSample(emissiveTex, texSampler, input.uv).rgb;
+
+    return vec4f(ambient + lo + emissive, alpha);
+}
+)WGSL";
+
+        WGPUShaderSourceWGSL wgsl{};
+        wgsl.chain.sType = WGPUSType_ShaderSourceWGSL;
+        wgsl.code = StringView(shaderSource);
+        WGPUShaderModuleDescriptor shaderDescriptor{};
+        shaderDescriptor.label = StringView("CNA WebGPU SkinnedPbr3D WGSL");
+        shaderDescriptor.nextInChain = &wgsl.chain;
+        skinnedPbrShader_ = wgpuDeviceCreateShaderModule(device_, &shaderDescriptor);
+        if (skinnedPbrShader_ == nullptr)
+            throw std::runtime_error("CNA WebGPU: failed to create SkinnedPbr3D shader");
+
+        std::array<WGPUBindGroupLayoutEntry, 4> uboEntries{};
+        uboEntries[0].binding = 0;
+        uboEntries[0].visibility = WGPUShaderStage_Vertex | WGPUShaderStage_Fragment;
+        uboEntries[0].buffer.type = WGPUBufferBindingType_Uniform;
+        uboEntries[0].buffer.minBindingSize = 128;
+        uboEntries[1].binding = 1;
+        uboEntries[1].visibility = WGPUShaderStage_Vertex | WGPUShaderStage_Fragment;
+        uboEntries[1].buffer.type = WGPUBufferBindingType_Uniform;
+        uboEntries[1].buffer.minBindingSize = 272;
+        uboEntries[2].binding = 2;
+        uboEntries[2].visibility = WGPUShaderStage_Fragment;
+        uboEntries[2].buffer.type = WGPUBufferBindingType_Uniform;
+        uboEntries[2].buffer.minBindingSize = 16;
+        uboEntries[3].binding = 3;
+        uboEntries[3].visibility = WGPUShaderStage_Vertex;
+        uboEntries[3].buffer.type = WGPUBufferBindingType_Uniform;
+        uboEntries[3].buffer.minBindingSize = (4 + 72 * 16) * sizeof(float);
+        WGPUBindGroupLayoutDescriptor uboLayoutDescriptor{};
+        uboLayoutDescriptor.label = StringView("CNA WebGPU SkinnedPbr3D BindGroupLayout0");
+        uboLayoutDescriptor.entryCount = uboEntries.size();
+        uboLayoutDescriptor.entries = uboEntries.data();
+        skinnedPbrBindGroupLayout0_ = wgpuDeviceCreateBindGroupLayout(device_, &uboLayoutDescriptor);
+
+        std::array<WGPUBindGroupLayout, 2> groupLayouts{skinnedPbrBindGroupLayout0_, pbrBindGroupLayout1_};
+        WGPUPipelineLayoutDescriptor pipelineLayoutDescriptor{};
+        pipelineLayoutDescriptor.label = StringView("CNA WebGPU SkinnedPbr3D PipelineLayout");
+        pipelineLayoutDescriptor.bindGroupLayoutCount = groupLayouts.size();
+        pipelineLayoutDescriptor.bindGroupLayouts = groupLayouts.data();
+        skinnedPbrPipelineLayout_ = wgpuDeviceCreatePipelineLayout(device_, &pipelineLayoutDescriptor);
+
+        if (skinnedPbrBindGroupLayout0_ == nullptr || skinnedPbrPipelineLayout_ == nullptr)
+            throw std::runtime_error("CNA WebGPU: failed to create SkinnedPbr3D GPU resources");
+    }
+
+    WGPURenderPipeline WebGPUGraphicsBackend::GetOrCreatePipelineSkinnedPbr3D(WGPUPrimitiveTopology topology,
+                                                                                bool depthTest, bool depthWrite,
+                                                                                int depthFunc)
+    {
+        const int key = (static_cast<int>(topology) * 8 + depthFunc) * 4 + (depthTest ? 2 : 0) + (depthWrite ? 1 : 0);
+        if (auto it = skinnedPbrPipelines_.find(key); it != skinnedPbrPipelines_.end())
+            return it->second;
+
+        // Matches ApplyLayout's stride==68 case (VertexPositionNormalTangentTextureSkinned):
+        // Position(12)+Normal(12)+Tangent(16)+TextureCoordinate(8)+BlendWeight(16)+BlendIndices(4).
+        std::array<WGPUVertexAttribute, 6> attributes{};
+        attributes[0].format = WGPUVertexFormat_Float32x3;
+        attributes[0].offset = 0;
+        attributes[0].shaderLocation = 0;
+        attributes[1].format = WGPUVertexFormat_Float32x3;
+        attributes[1].offset = 12;
+        attributes[1].shaderLocation = 1;
+        attributes[2].format = WGPUVertexFormat_Float32x4;
+        attributes[2].offset = 24;
+        attributes[2].shaderLocation = 2;
+        attributes[3].format = WGPUVertexFormat_Float32x2;
+        attributes[3].offset = 40;
+        attributes[3].shaderLocation = 3;
+        attributes[4].format = WGPUVertexFormat_Float32x4;
+        attributes[4].offset = 48;
+        attributes[4].shaderLocation = 4;
+        attributes[5].format = WGPUVertexFormat_Uint8x4;
+        attributes[5].offset = 64;
+        attributes[5].shaderLocation = 5;
+        WGPUVertexBufferLayout vertexBufferLayout{};
+        vertexBufferLayout.arrayStride = 68;
+        vertexBufferLayout.stepMode = WGPUVertexStepMode_Vertex;
+        vertexBufferLayout.attributeCount = attributes.size();
+        vertexBufferLayout.attributes = attributes.data();
+
+        WGPUColorTargetState target{};
+        target.format = surfaceFormat_;
+        target.writeMask = WGPUColorWriteMask_All;
+        WGPUFragmentState fragment{};
+        fragment.module = skinnedPbrShader_;
+        fragment.entryPoint = StringView("fs_main");
+        fragment.targetCount = 1;
+        fragment.targets = &target;
+
+        WGPURenderPipelineDescriptor pipeline{};
+        pipeline.label = StringView("CNA WebGPU SkinnedPbr3D Pipeline");
+        pipeline.layout = skinnedPbrPipelineLayout_;
+        pipeline.vertex.module = skinnedPbrShader_;
+        pipeline.vertex.entryPoint = StringView("vs_main");
+        pipeline.vertex.bufferCount = 1;
+        pipeline.vertex.buffers = &vertexBufferLayout;
+        pipeline.primitive.topology = topology;
+        pipeline.primitive.frontFace = WGPUFrontFace_CCW;
+        pipeline.primitive.cullMode = WGPUCullMode_None;
+        pipeline.multisample.count = 1;
+        pipeline.multisample.mask = std::numeric_limits<std::uint32_t>::max();
+        pipeline.multisample.alphaToCoverageEnabled = false;
+        pipeline.fragment = &fragment;
+
+        WGPUDepthStencilState depthStencil = WGPU_DEPTH_STENCIL_STATE_INIT;
+        depthStencil.format = WGPUTextureFormat_Depth24PlusStencil8;
+        depthStencil.depthWriteEnabled = depthWrite ? WGPUOptionalBool_True : WGPUOptionalBool_False;
+        depthStencil.depthCompare = depthTest ? ToWGPUCompareFunction(depthFunc) : WGPUCompareFunction_Always;
+        pipeline.depthStencil = &depthStencil;
+
+        WGPURenderPipeline created = wgpuDeviceCreateRenderPipeline(device_, &pipeline);
+        if (created == nullptr)
+            throw std::runtime_error("CNA WebGPU: failed to create SkinnedPbr3D pipeline");
+        skinnedPbrPipelines_[key] = created;
+        return created;
+    }
+
+    void WebGPUGraphicsBackend::QueueSkinnedPbrDraw(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
+                                                     const Matrix& world, const Matrix& view, const Matrix& projection,
+                                                     PrimitiveType primitive, int primitiveCount,
+                                                     const GpuDrawParams& params)
+    {
+        const auto& webgpuVb = static_cast<const WebGPUVertexBufferBackend&>(vb);
+        if (webgpuVb.Stride() != 68)
+            throw std::invalid_argument("CNA WebGPU: QueueSkinnedPbrDraw requires a stride-68 "
+                                        "(VertexPositionNormalTangentTextureSkinned) vertex buffer");
+        if (params.texture0 == nullptr)
+            throw std::invalid_argument("CNA WebGPU: QueueSkinnedPbrDraw requires a bound texture0");
+
+        EnsurePbrDefaultTextures();
+
+        SkinnedPbrDrawCommand command;
+        const auto& shadow = webgpuVb.ShadowData();
+        const std::size_t byteOffset = static_cast<std::size_t>(params.vertexStart) * 68u;
+        if (byteOffset <= shadow.size())
+            command.vertexData.assign(shadow.begin() + static_cast<std::ptrdiff_t>(byteOffset), shadow.end());
+        command.topology = ToTopology(primitive);
+        command.depthTest = depthTestEnabled_;
+        command.depthFunc = depthCompareFunction_;
+        command.depthWrite = depthWriteEnabled_;
+        command.baseColorTexture = static_cast<const WebGPUTextureBackend*>(params.texture0);
+        command.normalMap = params.pbrNormalMap != nullptr
+            ? static_cast<const WebGPUTextureBackend*>(params.pbrNormalMap)
+            : pbrDefaultFlatNormalTexture_.get();
+        command.metallicRoughnessMap = params.pbrMetallicRoughnessMap != nullptr
+            ? static_cast<const WebGPUTextureBackend*>(params.pbrMetallicRoughnessMap)
+            : pbrDefaultWhiteTexture_.get();
+        command.emissiveMap = params.pbrEmissiveMap != nullptr
+            ? static_cast<const WebGPUTextureBackend*>(params.pbrEmissiveMap)
+            : pbrDefaultWhiteTexture_.get();
+        command.occlusionMap = params.pbrOcclusionMap != nullptr
+            ? static_cast<const WebGPUTextureBackend*>(params.pbrOcclusionMap)
+            : pbrDefaultWhiteTexture_.get();
+
+        const Matrix wvp = world * view * projection;
+        FillExtUniforms(command.uniforms, wvp, params);
+        FillLitLightUniforms(command.lightUniforms, params);
+        FillPbrFactors(command.pbrFactors, params);
+        FillSkinningParams(command.skinningParams, params);
+
+        if (ib != nullptr)
+        {
+            const auto& webgpuIb = static_cast<const WebGPUIndexBufferBackend&>(*ib);
+            command.indexed = true;
+            command.index32 = webgpuIb.IsThirtyTwoBit();
+            command.indexData = webgpuIb.ShadowData();
+            command.indexCount = static_cast<std::uint32_t>(PrimitiveIndexCount(primitive, primitiveCount));
+            command.vertexCount = static_cast<std::uint32_t>(webgpuVb.GetVertexCount()) -
+                                  static_cast<std::uint32_t>(params.vertexStart);
+        }
+        else
+        {
+            command.vertexCount = static_cast<std::uint32_t>(PrimitiveVertexCount(primitive, primitiveCount));
+        }
+
+        skinnedPbrDrawCommands_.push_back(std::move(command));
+        framePending_ = true;
+    }
+
+    void WebGPUGraphicsBackend::RenderSkinnedPbrDraws(WGPURenderPassEncoder pass)
+    {
+        for (const SkinnedPbrDrawCommand& command : skinnedPbrDrawCommands_)
+        {
+            if (command.vertexCount == 0 || command.vertexData.empty() || command.baseColorTexture == nullptr ||
+                command.normalMap == nullptr || command.metallicRoughnessMap == nullptr ||
+                command.emissiveMap == nullptr || command.occlusionMap == nullptr)
+                continue;
+
+            WGPUBufferDescriptor vbDescriptor{};
+            vbDescriptor.label = StringView("CNA WebGPU SkinnedPbr3D VertexBuffer");
+            vbDescriptor.usage = WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst;
+            vbDescriptor.size = Align4(command.vertexData.size());
+            WGPUBuffer vertexBuffer = wgpuDeviceCreateBuffer(device_, &vbDescriptor);
+            wgpuQueueWriteBuffer(queue_, vertexBuffer, 0, command.vertexData.data(), command.vertexData.size());
+
+            WGPUBufferDescriptor uboDescriptor{};
+            uboDescriptor.label = StringView("CNA WebGPU SkinnedPbr3D UBO");
+            uboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
+            uboDescriptor.size = sizeof(command.uniforms);
+            WGPUBuffer uniformBuffer = wgpuDeviceCreateBuffer(device_, &uboDescriptor);
+            wgpuQueueWriteBuffer(queue_, uniformBuffer, 0, command.uniforms.data(), sizeof(command.uniforms));
+
+            WGPUBufferDescriptor lightUboDescriptor{};
+            lightUboDescriptor.label = StringView("CNA WebGPU SkinnedPbr3D LightUBO");
+            lightUboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
+            lightUboDescriptor.size = sizeof(command.lightUniforms);
+            WGPUBuffer lightUniformBuffer = wgpuDeviceCreateBuffer(device_, &lightUboDescriptor);
+            wgpuQueueWriteBuffer(queue_, lightUniformBuffer, 0, command.lightUniforms.data(), sizeof(command.lightUniforms));
+
+            WGPUBufferDescriptor factorsUboDescriptor{};
+            factorsUboDescriptor.label = StringView("CNA WebGPU SkinnedPbr3D FactorsUBO");
+            factorsUboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
+            factorsUboDescriptor.size = sizeof(command.pbrFactors);
+            WGPUBuffer factorsUniformBuffer = wgpuDeviceCreateBuffer(device_, &factorsUboDescriptor);
+            wgpuQueueWriteBuffer(queue_, factorsUniformBuffer, 0, command.pbrFactors.data(), sizeof(command.pbrFactors));
+
+            WGPUBufferDescriptor skinningUboDescriptor{};
+            skinningUboDescriptor.label = StringView("CNA WebGPU SkinnedPbr3D SkinningUBO");
+            skinningUboDescriptor.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
+            skinningUboDescriptor.size = sizeof(command.skinningParams);
+            WGPUBuffer skinningUniformBuffer = wgpuDeviceCreateBuffer(device_, &skinningUboDescriptor);
+            wgpuQueueWriteBuffer(queue_, skinningUniformBuffer, 0, command.skinningParams.data(), sizeof(command.skinningParams));
+
+            std::array<WGPUBindGroupEntry, 4> uboEntries{};
+            uboEntries[0].binding = 0;
+            uboEntries[0].buffer = uniformBuffer;
+            uboEntries[0].size = sizeof(command.uniforms);
+            uboEntries[1].binding = 1;
+            uboEntries[1].buffer = lightUniformBuffer;
+            uboEntries[1].size = sizeof(command.lightUniforms);
+            uboEntries[2].binding = 2;
+            uboEntries[2].buffer = factorsUniformBuffer;
+            uboEntries[2].size = sizeof(command.pbrFactors);
+            uboEntries[3].binding = 3;
+            uboEntries[3].buffer = skinningUniformBuffer;
+            uboEntries[3].size = sizeof(command.skinningParams);
+            WGPUBindGroupDescriptor uboBindDescriptor{};
+            uboBindDescriptor.label = StringView("CNA WebGPU SkinnedPbr3D UBO BindGroup");
+            uboBindDescriptor.layout = skinnedPbrBindGroupLayout0_;
+            uboBindDescriptor.entryCount = uboEntries.size();
+            uboBindDescriptor.entries = uboEntries.data();
+            WGPUBindGroup uboBindGroup = wgpuDeviceCreateBindGroup(device_, &uboBindDescriptor);
+
+            WGPUSampler sampler = GetOrCreateSampler(command.textureFilter, command.addressU, command.addressV);
+            std::array<WGPUBindGroupEntry, 6> texEntries{};
+            texEntries[0].binding = 0;
+            texEntries[0].sampler = sampler;
+            texEntries[1].binding = 1;
+            texEntries[1].textureView = command.baseColorTexture->View();
+            texEntries[2].binding = 2;
+            texEntries[2].textureView = command.normalMap->View();
+            texEntries[3].binding = 3;
+            texEntries[3].textureView = command.metallicRoughnessMap->View();
+            texEntries[4].binding = 4;
+            texEntries[4].textureView = command.emissiveMap->View();
+            texEntries[5].binding = 5;
+            texEntries[5].textureView = command.occlusionMap->View();
+            WGPUBindGroupDescriptor texBindDescriptor{};
+            texBindDescriptor.label = StringView("CNA WebGPU SkinnedPbr3D Texture BindGroup");
+            texBindDescriptor.layout = pbrBindGroupLayout1_;
+            texBindDescriptor.entryCount = texEntries.size();
+            texBindDescriptor.entries = texEntries.data();
+            WGPUBindGroup texBindGroup = wgpuDeviceCreateBindGroup(device_, &texBindDescriptor);
+
+            WGPURenderPipeline pipe = GetOrCreatePipelineSkinnedPbr3D(command.topology, command.depthTest,
+                                                                      command.depthWrite, command.depthFunc);
+            wgpuRenderPassEncoderSetPipeline(pass, pipe);
+            wgpuRenderPassEncoderSetBindGroup(pass, 0, uboBindGroup, 0, nullptr);
+            wgpuRenderPassEncoderSetBindGroup(pass, 1, texBindGroup, 0, nullptr);
+            wgpuRenderPassEncoderSetVertexBuffer(pass, 0, vertexBuffer, 0, command.vertexData.size());
+
+            if (command.indexed && !command.indexData.empty())
+            {
+                WGPUBufferDescriptor ibDescriptor{};
+                ibDescriptor.label = StringView("CNA WebGPU SkinnedPbr3D IndexBuffer");
+                ibDescriptor.usage = WGPUBufferUsage_Index | WGPUBufferUsage_CopyDst;
+                ibDescriptor.size = Align4(command.indexData.size());
+                WGPUBuffer indexBuffer = wgpuDeviceCreateBuffer(device_, &ibDescriptor);
+                wgpuQueueWriteBuffer(queue_, indexBuffer, 0, command.indexData.data(), command.indexData.size());
+                wgpuRenderPassEncoderSetIndexBuffer(pass, indexBuffer,
+                    command.index32 ? WGPUIndexFormat_Uint32 : WGPUIndexFormat_Uint16,
+                    0, command.indexData.size());
+                wgpuRenderPassEncoderDrawIndexed(pass, command.indexCount, 1, 0, 0, 0);
+                pendingBufferReleases_.push_back(indexBuffer);
+            }
+            else
+            {
+                wgpuRenderPassEncoderDraw(pass, command.vertexCount, 1, 0, 0);
+            }
+
+            pendingBindGroupReleases_.push_back(uboBindGroup);
+            pendingBindGroupReleases_.push_back(texBindGroup);
+            pendingBufferReleases_.push_back(uniformBuffer);
+            pendingBufferReleases_.push_back(lightUniformBuffer);
+            pendingBufferReleases_.push_back(factorsUniformBuffer);
+            pendingBufferReleases_.push_back(skinningUniformBuffer);
+            pendingBufferReleases_.push_back(vertexBuffer);
+        }
+        skinnedPbrDrawCommands_.clear();
     }
 }
 

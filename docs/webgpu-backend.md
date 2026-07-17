@@ -201,12 +201,45 @@ fixed light/view/normal geometry and independently confirms the observed pixel v
 a few 8-bit units of the analytic prediction (after accounting for the sRGB swapchain's gamma
 encoding), plus qualitative ambient/facing/back-facing/normal-map/metallic-vs-dielectric checks.
 
-**Scope**: unskinned only. `SkinnedPbrEffect` (stride 68) is a separate, pre-existing gap — this
-backend has no skinning shader variant at all yet for any stock effect (`SkinnedEffect` included),
-so a skinned PBR draw continues to fall back exactly as it did before this work. Fog and alpha-test
-are deliberately not wired into `pbr3d.wgsl`: every other WebGPU 3D shader already defers fog
-identically, and `PbrEffect::FillGpuDrawParams()` never sets `GpuDrawParams::alphaTest` away from
-its always-pass default, so that branch would be permanently dead code.
+**Scope**: unskinned only, at the time this shader was added. Fog and alpha-test are deliberately
+not wired into `pbr3d.wgsl`: every other WebGPU 3D shader already defers fog identically, and
+`PbrEffect::FillGpuDrawParams()` never sets `GpuDrawParams::alphaTest` away from its always-pass
+default, so that branch would be permanently dead code. `SkinnedPbrEffect` (stride 68) is now
+implemented separately — see "SkinnedEffect and SkinnedPbrEffect (bone-palette skinning)" below.
+
+## SkinnedEffect and SkinnedPbrEffect (bone-palette skinning)
+
+`skinned3d.wgsl`'s four shader-module variants (per-pixel-lit/per-vertex-lit ×
+without/with vertex colour) plus `skinned_pbr3d.wgsl` close this backend's former "no skinning
+shader at all" gap, ported line-for-line from
+`EasyGLGraphicsBackend::EnsureSkinnedProgram()`/`EnsureSkinnedVertexLitProgram()`/
+`EnsurePbrSkinnedProgram()`. Bone-palette skinning (up to 72 bones, a new `SkinningParams` UBO —
+a `WeightsPerVertex` header plus `array<mat4x4f, 72>`) matches Task 895's convention: only the
+first `WeightsPerVertex` (1, 2, or 4) weight/index pairs are summed. Because a WebGPU pipeline must
+supply every vertex-shader-referenced attribute location from its own vertex buffer layout (unlike
+`EasyGLGraphicsBackend::ApplyLayout`'s own "leave attribute 5 unbound" precedent for stride 52),
+the stride-52 (`VertexPositionNormalTextureSkinned`) and stride-56 (with a trailing per-vertex
+`Color`, CNB-67) cases each get their own shader module pair, mirroring this backend's existing
+`texturedShader_`/`coloredTexturedShader_` precedent for the analogous stride-20/24 split; the
+vertex-colour gate multiplies the *final* combined diffuse+specular output, applied after the
+specular add (matching the EasyGL reference's own fix for that exact ordering trap).
+`skinned_pbr3d.wgsl` (stride 68, `VertexPositionNormalTangentTextureSkinned`) reuses the same
+bone-palette vertex transform (extended to also skin Tangent) feeding `pbr3d.wgsl`'s own BRDF
+fragment stage unchanged, and reuses `pbrBindGroupLayout1_` (the 5-texture group) unchanged for its
+own group 1. No vertex colour on the PBR+skinning combo (matches the EasyGL reference, which has
+none either) and no fog/alpha-test on any of the new shaders (same deliberate deferral as every
+other WebGPU 3D shader — `SkinnedEffect`/`SkinnedPbrEffect` never set `GpuDrawParams::alphaTest`
+away from its always-pass default).
+
+New `WebGPU_Skinned3D` (9 checks) and `WebGPU_SkinnedPbr3D` (5 checks) CTests both pass 100%: a
+hand-derived NDC-shift check (two bones, one identity and one a translation, summed under a
+uniform-scale-then-perspective-divide argument worked out algebraically, not measured) proves both
+the bone-palette translation genuinely reaches the vertex shader *and* that `WeightsPerVertex`
+correctly gates which bones contribute; ambient/facing/back-facing checks prove real lighting
+reaches both shader families; a `VertexColorEnabled` check (pure black per-vertex colour, mirroring
+`examples/easygl_skinnedeffect_vertexcolor_test.cpp`'s own convention) proves the stride-56 colour
+path; and a `PreferPerPixelLighting` check (Gouraud-averaged vs fresh-per-fragment specular at a
+triangle seam) proves the vertex-lit/pixel-lit dispatch selects two genuinely different shaders.
 
 ## Implemented baseline
 
@@ -232,8 +265,9 @@ The initial backend is deliberately useful rather than an empty scaffold. It cur
 This is **not yet equivalent to CNA's Vulkan, EasyGL or Bgfx 3D backends**. The following remain
 open in `plan_webgpu.md`:
 
-- stock effects (`BasicEffect`'s real lighting/texture dispatch, `SkinnedEffect`, etc.), the other
-  8 WGSL shader variants beyond `colored3d.wgsl`/`sprite2d.wgsl`, and instancing;
+- `EnvironmentMapEffect` (`env_map3d.wgsl`, cube-map sampling) and instancing (`BasicEffect`,
+  `AlphaTestEffect`, `DualTextureEffect`, `PbrEffect`, `SkinnedEffect` and `SkinnedPbrEffect` real
+  dispatch are all now implemented, see above);
 - render targets, cube/3D textures, compressed formats, MSAA and multiple render targets;
 - `Texture2D.GetData()` (arbitrary-texture readback — distinct from the now-implemented backbuffer
   readback, `WEBGPU-51`);
