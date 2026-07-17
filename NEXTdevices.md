@@ -145,6 +145,35 @@ resolution notes as the template.
     dropped. **Left OPEN** (implementation done) — same reasoning as `VIB2-003`/`004`/
     `ANDR2-002`. Re-verified clean under `devices-tsan` (new call site from `Start()`'s
     locked section).
+17. `COMP2-001` (`91f6ff14`) — `AndroidCompassBackend` fuses two independent Android
+    streams (rotation-vector heading + magnetic-field magnetometer/accuracy) purely by
+    "last value from each," with no check they came from around the same moment — a
+    silently-dead stream's frozen value could get fused with the other's fresh samples
+    forever. Added `ComputeCompassMaxSampleSkew()`/`IsCompassSampleFresh()` (pure
+    functions, `AndroidCompassMath.hpp`) and per-stream timestamps (from
+    `AndroidSensorSample`'s own existing delivery time); `PublishReading()` now drops
+    (skips) a stale pairing instead of fusing it — self-heals automatically once the
+    stalled stream resumes. **Unlike most Android-only fixes this pass, the new
+    primitives are pure/host-testable** — 9 new tests directly prove the threshold
+    derivation and freshness boundary, satisfying "synthetic skew tests prove pairing
+    boundaries" outright. **Left OPEN** (implementation done) — the end-to-end runtime
+    behavior (`PublishReading()`'s actual wiring) still needs real hardware to observe,
+    same reasoning as `VIB2-003`/`004`/`ANDR2-002`/`SDLCORE-005`, but this task's
+    decision *logic* is more thoroughly tested than any of those four.
+18. `MOT2-003` (`c03b86b2`) — **minor progress only, explicitly not a full fix.**
+    `AndroidMotionBackend` already had a `MOTION-007` fixed 500ms freshness bound across
+    its four fused sources (attitude/gravity/linear-acceleration/gyroscope) — this task's
+    "Problem" wording criticizes that bound as too loose for fast motion, it does not
+    describe an unbounded system. Added only the required work's narrowest, clearly
+    isolable bullet: `droppedFusionFrameCountForTesting_`/
+    `GetDroppedFusionFrameCountForTesting()`, exposing how often the existing drop
+    already fires. **Deliberately did NOT implement** the harder two-thirds (bounded
+    per-source sample queues, nearest/interpolated selection within a tight,
+    *hardware-measured* skew) — genuinely comparable in scope to `LIFE-007`/`010`/`011`,
+    and "measured" is a literal instruction requiring real device jitter data this
+    container cannot produce. Both acceptance criteria describe the undone redesign, not
+    the counter — this task's acceptance criteria remain **unmet**, not just
+    hardware-unverified; the least-complete task touched this pass.
 
 **Pattern across `ANDR2-002`/`004`/`005`/`006`:** all inside `#ifdef __ANDROID__` code
 with **zero host-side test coverage possible** — verified instead via a real Android
@@ -159,12 +188,13 @@ confirmed to actually resolve at link time.
 `cmake-build-android` all still build clean (the last for individual translation units
 only, per above).
 
-**Tests:** Devices/Sensors filtered suite — **287 tests** (precise filter, used from
+**Tests:** Devices/Sensors filtered suite — **296 tests** (precise filter, used from
 `VIB2-003` onward: `AccelerometerTests.*:GyroscopeTests.*:CompassTests.*:MotionTests.*:
 SensorBaseTests.*:SensorSubsystemOwnershipTests.*:VibrateControllerTests.*:
-AndroidMotionMathTests.*:AndroidCompassMathTests.*`) — **283 passed, 4 skipped**
-(hardware-only, unchanged), 0 failures across every task above. Note: a broader,
-unscoped `*Devices*:*Sensor*:...` filter also incidentally matches
+AndroidMotionMathTests.*:AndroidCompassMathTests.*`) — **292 passed, 4 skipped**
+(hardware-only, unchanged), 0 failures across every task above. `MOT2-003` added no
+tests (Android-only, no pure-logic component to test the way `COMP2-001` had). Note: a
+broader, unscoped `*Devices*:*Sensor*:...` filter also incidentally matches
 `AccelerometerReadingTests`/`*EventArgsTests` (plain data-holder tests), one of which
 (`GetHashCodeConsistency`) trips a **pre-existing, unrelated** UBSan finding in
 `Vector3::GetHashCode()` (signed-int overflow in hash-combining) — not touched by any
@@ -173,12 +203,12 @@ filter and use the precise one above (or expect and ignore that one specific fai
 if using a broader filter for some other reason).
 
 **Sanitizers:** `devices-ubsan` clean on every P1 change this pass. `devices-tsan` was
-NOT re-run for `VIB2-003`/`004`/`ANDR2-002` (none add new locking/concurrency structure
-beyond what already existed, or the new lock is Android-only and can't run under host
-TSan at all) but WAS re-run for `SDLCORE-009` and `SDLCORE-005` (both add a new,
-host-buildable lock-acquisition site) — 3 consecutive clean runs each, 0
-`WARNING: ThreadSanitizer` occurrences. Re-run TSan if a future P1 task touches
-concurrent *host-buildable* logic.
+NOT re-run for `VIB2-003`/`004`/`ANDR2-002`/`COMP2-001`/`MOT2-003` (none add new
+locking/concurrency structure beyond what already existed, or the new lock is
+Android-only and can't run under host TSan at all) but WAS re-run for `SDLCORE-009` and
+`SDLCORE-005` (both add a new, host-buildable lock-acquisition site) — 3 consecutive
+clean runs each, 0 `WARNING: ThreadSanitizer` occurrences. Re-run TSan if a future P1
+task touches concurrent *host-buildable* logic.
 
 ---
 
@@ -206,19 +236,25 @@ checkpoints (unchanged):
   ANDR2-001/003 host-untestability, Net/sharp-runtime gaps, VIB2-001/LIFE-008's
   never-actually-reached-on-this-host new code paths).
 - **New this pass:** `VIB2-003`'s `SDL_RunHapticEffect()`-failure cleanup path,
-  `VIB2-004`'s and `SDLCORE-005`'s disconnect/reconnect detection, and `ANDR2-002`'s
-  lock/invalidation fixes are all implemented and reasoned-through-correct (and, for
-  `SDLCORE-005`, TSan-clean) but **never actually exercised on real hardware** — no
-  haptic device, no real SDL sensor, and no Android hardware/emulator exist in this
-  container. Each has a documented hardware validation procedure in
-  `docs/devices-hardware-checklist.md` (Sections 2a, 4a, 4b, 6a respectively) and is
-  explicitly left **OPEN** in `plan_devices.md` (see Section 1's labeling convention).
-  `SDLCORE-005` additionally leaves its required work's mid-session live-disconnect
-  bullet entirely unimplemented (see Section 2's own entry) — a real architectural gap,
-  not just an untested one.
+  `VIB2-004`'s and `SDLCORE-005`'s disconnect/reconnect detection, `ANDR2-002`'s
+  lock/invalidation fixes, and `COMP2-001`'s fusion-freshness check are all implemented
+  and reasoned-through-correct (and, for `SDLCORE-005`, TSan-clean; for `COMP2-001`, the
+  underlying decision logic is directly unit-tested) but **never actually exercised
+  end-to-end on real hardware** — no haptic device, no real SDL sensor, and no Android
+  hardware/emulator exist in this container. Each has a documented hardware validation
+  procedure in `docs/devices-hardware-checklist.md` (Sections 2a, 4a, 4b, 6a, 7a
+  respectively) and is explicitly left **OPEN** in `plan_devices.md` (see Section 1's
+  labeling convention). `SDLCORE-005` additionally leaves its required work's
+  mid-session live-disconnect bullet entirely unimplemented (see Section 2's own entry)
+  — a real architectural gap, not just an untested one.
 - `SDLCORE-009` (in contrast) **is fully closed** — its acceptance criteria describe
   purely in-process exception handling, exercised with real, passing, TSan-clean tests.
-- 33+ more Section 16 tasks remain OPEN across P1/P2/P3 (`plan_devices.md` is the
+- `MOT2-003` is the **least complete** task touched this pass — only its narrowest
+  "expose counters" sub-bullet was implemented; the harder redesign (bounded queues,
+  interpolation, a hardware-measured tight skew) is genuinely unimplemented, comparable
+  in scope to `LIFE-007`/`010`/`011`, not merely untested. Its acceptance criteria are
+  **unmet**, not just hardware-unverified — do not mistake this for a near-complete fix.
+- 31+ more Section 16 tasks remain OPEN across P1/P2/P3 (`plan_devices.md` is the
   actual source of truth — this file only tracks what's been *closed or progressed*).
 
 ---
@@ -242,6 +278,13 @@ changes only:
   `Accelerometer`/`Gyroscope` each gained 3 new `NOXNA` static test hooks forwarding to
   these (`GetDispatchExceptionCountForTesting`/`GetLastDispatchExceptionMessageForTesting`/
   `IsSensorConnectedForTesting`).
+- `AndroidCompassMath.hpp`: new pure `ComputeCompassMaxSampleSkew()`/
+  `IsCompassSampleFresh()`; `AndroidCompassBackend` gained two per-stream
+  `System::DateTimeOffset` timestamps and a `maxSampleSkew_`, checked in
+  `PublishReading()` before fusing.
+- `AndroidMotionBackend.hpp`/`.cpp`: new `droppedFusionFrameCountForTesting_`/
+  `GetDroppedFusionFrameCountForTesting()`, incremented in the pre-existing
+  `MOTION-007` drop branch.
 
 ---
 
@@ -292,10 +335,12 @@ tractability):
   explicitly want fuzzing/instrumented hardware runs; `ANDR2-012` is the right home for
   the "app lifecycle changes"/mid-session-recovery scope both `ANDR2-002` and
   `SDLCORE-005` deliberately deferred this pass).
-- `COMP2-001`/`003`/`004`/`005`/`008` — remaining Compass items (`004`/`005` need
-  physical devices).
-- `MOT2-001`/`003`/`005`/`006`/`008`/`009`/`010` — remaining Motion items (`010` needs
-  physical hardware).
+- `COMP2-003`/`004`/`005`/`008` — remaining Compass items (`COMP2-001` done this pass;
+  `004`/`005` need physical devices).
+- `MOT2-001`/`005`/`006`/`008`/`009`/`010` — remaining Motion items (`MOT2-003` only
+  minimally progressed this pass, see Section 5 — its core redesign is still fully
+  open and would be a substantial task if picked up properly, not a quick follow-up;
+  `MOT2-010` needs physical hardware).
 - `BASE2-001`–`005` — mostly "verify against a behavioral oracle" tasks; this
   environment has no WP7 SDK/MonoGame reference — may need scoping down to "verify
   internal consistency", a decision worth making explicit if picked up.
@@ -347,15 +392,18 @@ whether a finished implementation should be marked CLOSED or left OPEN.
 ```
 Read plan_devices.md's "Section 16. Independent perfection re-audit backlog
 (2026-07-17)" first -- it is the source of truth for current work. Read this
-file (NEXTdevices.md) for what's been done: all P0 tasks are closed, and 16 P1
+file (NEXTdevices.md) for what's been done: all P0 tasks are closed, and 18 P1
 tasks are closed or progressed so far (BASE2-007, VIB2-002, VIB2-001, LIFE-008,
 ANDR2-004, ANDR2-005, ANDR2-006, LIFE-006, COMP2-009, MOT2-002, COMP2-002,
-VIB2-003, VIB2-004, ANDR2-002, SDLCORE-009, SDLCORE-005 -- see Section 2 for
-commit hashes and a one-line summary of each). Read Section 1's "labeling
-convention" note carefully before closing anything -- it distinguishes tasks
-provable by code inspection (CLOSED, e.g. SDLCORE-009) from tasks whose
-acceptance criteria name an empirical/hardware result (stays OPEN even once
-implemented, e.g. VIB2-003/004, ANDR2-002, SDLCORE-005).
+VIB2-003, VIB2-004, ANDR2-002, SDLCORE-009, SDLCORE-005, COMP2-001, MOT2-003 --
+see Section 2 for commit hashes and a one-line summary of each). Read Section
+1's "labeling convention" note carefully before closing anything -- it
+distinguishes tasks provable by code inspection (CLOSED, e.g. SDLCORE-009)
+from tasks whose acceptance criteria name an empirical/hardware result (stays
+OPEN even once implemented, e.g. VIB2-003/004, ANDR2-002, SDLCORE-005,
+COMP2-001). MOT2-003 is a special case: only its narrowest sub-bullet was
+implemented, its acceptance criteria remain genuinely unmet (not just
+hardware-unverified) -- don't mistake it for a near-complete fix.
 
 Continue the P1 backlog (Section 8 lists untriaged candidates with rough
 tractability notes). Read each task's full plan_devices.md entry before
