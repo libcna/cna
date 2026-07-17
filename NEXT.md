@@ -49,12 +49,12 @@
 > **Separate, unrelated track — `feature/input` branch, `audit_input.md` remediation + full
 > phase-by-phase FNA-parity audit, in progress as of 2026-07-17.** Completely independent of the D3D9
 > work below (this `NEXT.md`/`plan_dx9.md` pair is D3D9-only) — tracked in full in `plan_input.md`,
-> not duplicated here. Status: **Phases 0, 1, 2, 3, 4, 5, 6, and 13 are fully closed and pushed**
+> not duplicated here. Status: **Phases 0, 1, 2, 3, 4, 5, 6, 7, and 13 are fully closed and pushed**
 > (`P0-001..020`, `P1-001..045`, `P2-001..060`, `P3-001..045`, `P4-001..070`, `P5-001..045`,
-> `P6-001..045`, `P13-001..006` — 336/506 tasks total; latest pushed commit `63ec2c11` on
-> `feature/input`). Working autonomously at the user's explicit request through `plan_input.md`'s
-> remaining tasks (Phase 7 CNA/NOXNA extensions onward — Phases 7–12, ~170 tasks, minus Phase 11's
-> hardware-gated ones which stay `[!]` Blocked pending real devices). Each phase closes with a
+> `P6-001..045`, `P7-001..040`, `P13-001..006` — 376/506 tasks total, ~74%; latest pushed commit
+> `7b9ae7e3` on `feature/input`). Working autonomously at the user's explicit request through
+> `plan_input.md`'s remaining tasks (Phase 8 SDL bridge/backend integration onward — Phases 8–12,
+> ~130 tasks, minus Phase 11's hardware-gated ones which stay `[!]` Blocked pending real devices). Each phase closes with a
 > checkpoint task (`P{N}-0XX — Phase N checkpoint and summary`) recording pass/fail counts, files
 > changed, and follow-ups — read the **last completed phase's checkpoint Result** for the most
 > efficient overview, then check `plan_input.md`'s Phase overview table for the next open phase's
