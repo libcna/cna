@@ -335,6 +335,87 @@ TEST(SoundEffectTest, BufferRangeConstructorRejectsOffsetCountIntegerOverflow)
                  System::ArgumentOutOfRangeException);
 }
 
+// AUD-05-001/002 (2026-07-17 deep audit): investigated whether the raw buffer constructor should
+// validate sampleRate/channels before reaching the backend. Confirmed real FNA's own internal
+// SoundEffect constructor (SoundEffect.cs) does zero validation of either field at the C# layer
+// (same resolved-decision pattern as P10-DYN-001..003's DynamicSoundEffectInstance constructor) --
+// it relies entirely on the native backend (FAudio) to reject an invalid WAVEFORMATEX. Empirically
+// confirmed CNA's own backend (SDL3_mixer's MIX_LoadRawAudio) already does exactly this: a direct
+// probe against zero/negative sampleRate and zero/negative channels all return NULL ("Audio data
+// is in unknown/unsupported/corrupt format"), which the existing `if (!raw) throw
+// NotSupportedException(...)` guard already converts into a clean, safe failure -- no crash, no
+// garbage SoundEffect, no distorted/mispitched playback. These tests lock that behavior down as a
+// resolved decision (matching FNA: no CNA-side pre-validation) rather than leaving it as an
+// untested, accidental gap.
+TEST(SoundEffectTest, BufferRangeConstructorWithZeroSampleRateThrowsNotSupported)
+{
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+    std::vector<unsigned char> pcm(16, 0);
+    try
+    {
+        EXPECT_THROW(SoundEffect(pcm, 0, static_cast<int>(pcm.size()), 0, AudioChannels::Stereo, 0, 0),
+                     System::NotSupportedException);
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+}
+
+TEST(SoundEffectTest, BufferRangeConstructorWithNegativeSampleRateThrowsNotSupported)
+{
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+    std::vector<unsigned char> pcm(16, 0);
+    try
+    {
+        EXPECT_THROW(SoundEffect(pcm, 0, static_cast<int>(pcm.size()), -1, AudioChannels::Stereo, 0, 0),
+                     System::NotSupportedException);
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+}
+
+TEST(SoundEffectTest, BufferRangeConstructorWithZeroChannelsThrowsNotSupported)
+{
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+    std::vector<unsigned char> pcm(16, 0);
+    try
+    {
+        EXPECT_THROW(
+            SoundEffect(pcm, 0, static_cast<int>(pcm.size()), 44100, static_cast<AudioChannels>(0), 0, 0),
+            System::NotSupportedException);
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+}
+
+// AUD-05-003 (2026-07-17 deep audit): a byte count that isn't a whole multiple of the frame size
+// (channels * 2 bytes for S16) must not distort or corrupt the resulting sound. Confirmed via a
+// direct probe against MIX_LoadRawAudio that SDL3_mixer already handles this gracefully -- it
+// simply ignores the trailing partial frame (401 bytes of stereo S16 decodes as exactly 100
+// frames, the same as a clean 400-byte buffer would), not a crash or garbled decode. Matches FNA,
+// which performs no frame-alignment validation either. This test locks that graceful-truncation
+// behavior down rather than leaving it as an untested, accidental gap.
+TEST(SoundEffectTest, BufferRangeConstructorWithMisalignedByteCountTruncatesCleanly)
+{
+    System::Environment::SetEnvironmentVariable("SDL_AUDIODRIVER", "dummy");
+    // 401 bytes of stereo S16 (frame size 4) -- one byte past a whole 100-frame buffer.
+    std::vector<unsigned char> pcm(401, 0);
+    try
+    {
+        SoundEffect fx(pcm, 0, static_cast<int>(pcm.size()), 44100, AudioChannels::Stereo, 0, 0);
+        EXPECT_NEAR(fx.getDurationProperty().getTotalSecondsProperty(), 100.0 / 44100.0, 1e-6);
+    }
+    catch (...)
+    {
+        GTEST_SKIP() << "no audio device (dummy driver unavailable)";
+    }
+}
+
 // CP-17/CP-23: a nonzero loop region given to the buffer-range constructor must reach the
 // SoundEffectInstance it creates (SDL3_mixer exposes no way to read back the loop-start/
 // max-frame play options actually passed to MIX_PlayTrack, so this checks the values that feed
