@@ -29,8 +29,25 @@ namespace CNA::Internal::Backends::Dx3
                                       std::to_string(static_cast<unsigned long>(hr)));
         }
 
-        // ---- 3D pipeline: DirectDraw is 2D-only. All 3D calls throw. ----
-        [[noreturn]] void ThrowNo3D(const char* methodName)
+        // ---- 3D pipeline: DirectDraw is 2D-only. ----
+        // "Fire and forget" state/draw calls honor CNA::UnsupportedGraphicsCallBehavior: throw by
+        // default, or silently do nothing if the caller opted into Ignore via
+        // SetUnsupportedGraphicsCallBehavior(). Resource-creation calls (CreateVertexBuffer/
+        // CreateIndexBuffer16) always throw regardless -- see ThrowNo3DResource's own comment.
+        void HandleUnsupported3DCall(Dx3GraphicsBackend& backend, const char* methodName)
+        {
+            if (backend.GetUnsupportedGraphicsCallBehavior() == CNA::UnsupportedGraphicsCallBehavior::Ignore)
+                return;
+
+            throw std::runtime_error(std::string("DX3 (DirectDraw) does not support 3D: ") + methodName);
+        }
+
+        // Resource-creation calls always throw, ignoring CNA::UnsupportedGraphicsCallBehavior --
+        // silently handing back a null-backed VertexBuffer/IndexBuffer would let a game hold a
+        // "successfully constructed" resource that crashes the moment it's actually used, a worse
+        // failure mode than an immediate, honest exception at construction time (same reasoning
+        // SDL_Renderer's identical split uses).
+        [[noreturn]] void ThrowNo3DResource(const char* methodName)
         {
             throw std::runtime_error(std::string("DX3 (DirectDraw) does not support 3D: ") + methodName);
         }
@@ -427,6 +444,8 @@ namespace CNA::Internal::Backends::Dx3
         // path (design decision 5, Opaque only) and selects CompositeQuad's per-formula math.
         // Default AlphaBlend matches SpriteBatch::Begin()'s own default blend state.
         Dx3BlendMode currentBlendMode = Dx3BlendMode::AlphaBlend;
+
+        CNA::UnsupportedGraphicsCallBehavior unsupportedGraphicsCallBehavior = CNA::UnsupportedGraphicsCallBehavior::Throw;
 
         // Resolves to whichever surface Clear()/ReadBackbuffer() should currently target: the
         // bound render target's surface if one is bound, else the shadow backbuffer. Present()
@@ -988,34 +1007,44 @@ namespace CNA::Internal::Backends::Dx3
                                                   colorBlendFunc, alphaBlendFunc);
     }
 
-    void Dx3GraphicsBackend::ClearColorAndDepth(float, float, float, float, float) { ThrowNo3D("ClearColorAndDepth"); }
-    void Dx3GraphicsBackend::ClearDepth(float) { ThrowNo3D("ClearDepth"); }
-    void Dx3GraphicsBackend::ClearStencil(int) { ThrowNo3D("ClearStencil"); }
-    void Dx3GraphicsBackend::ClearDepthAndStencil(float, int) { ThrowNo3D("ClearDepthAndStencil"); }
-    void Dx3GraphicsBackend::ClearColorAndStencil(float, float, float, float, int) { ThrowNo3D("ClearColorAndStencil"); }
-    void Dx3GraphicsBackend::ClearColorDepthAndStencil(float, float, float, float, float, int) { ThrowNo3D("ClearColorDepthAndStencil"); }
-    void Dx3GraphicsBackend::SetDepthTestEnabled(bool)  { ThrowNo3D("SetDepthTestEnabled"); }
-    void Dx3GraphicsBackend::SetBlendEnabled(bool)      { ThrowNo3D("SetBlendEnabled"); }
-    void Dx3GraphicsBackend::SetDepthWriteEnabled(bool) { ThrowNo3D("SetDepthWriteEnabled"); }
+    void Dx3GraphicsBackend::SetUnsupportedGraphicsCallBehavior(CNA::UnsupportedGraphicsCallBehavior behavior)
+    {
+        impl_->unsupportedGraphicsCallBehavior = behavior;
+    }
+
+    CNA::UnsupportedGraphicsCallBehavior Dx3GraphicsBackend::GetUnsupportedGraphicsCallBehavior() const
+    {
+        return impl_->unsupportedGraphicsCallBehavior;
+    }
+
+    void Dx3GraphicsBackend::ClearColorAndDepth(float, float, float, float, float) { HandleUnsupported3DCall(*this, "ClearColorAndDepth"); }
+    void Dx3GraphicsBackend::ClearDepth(float) { HandleUnsupported3DCall(*this, "ClearDepth"); }
+    void Dx3GraphicsBackend::ClearStencil(int) { HandleUnsupported3DCall(*this, "ClearStencil"); }
+    void Dx3GraphicsBackend::ClearDepthAndStencil(float, int) { HandleUnsupported3DCall(*this, "ClearDepthAndStencil"); }
+    void Dx3GraphicsBackend::ClearColorAndStencil(float, float, float, float, int) { HandleUnsupported3DCall(*this, "ClearColorAndStencil"); }
+    void Dx3GraphicsBackend::ClearColorDepthAndStencil(float, float, float, float, float, int) { HandleUnsupported3DCall(*this, "ClearColorDepthAndStencil"); }
+    void Dx3GraphicsBackend::SetDepthTestEnabled(bool)  { HandleUnsupported3DCall(*this, "SetDepthTestEnabled"); }
+    void Dx3GraphicsBackend::SetBlendEnabled(bool)      { HandleUnsupported3DCall(*this, "SetBlendEnabled"); }
+    void Dx3GraphicsBackend::SetDepthWriteEnabled(bool) { HandleUnsupported3DCall(*this, "SetDepthWriteEnabled"); }
 
     std::unique_ptr<IVertexBufferBackend> Dx3GraphicsBackend::CreateVertexBuffer(int)
     {
-        ThrowNo3D("CreateVertexBuffer");
+        ThrowNo3DResource("CreateVertexBuffer");
     }
 
     std::unique_ptr<IIndexBufferBackend> Dx3GraphicsBackend::CreateIndexBuffer16(int)
     {
-        ThrowNo3D("CreateIndexBuffer16");
+        ThrowNo3DResource("CreateIndexBuffer16");
     }
 
     void Dx3GraphicsBackend::DrawColoredPrimitives(const IVertexBufferBackend&,
                                                    const Matrix&, const Matrix&, const Matrix&,
-                                                   PrimitiveType, int) { ThrowNo3D("DrawColoredPrimitives"); }
+                                                   PrimitiveType, int) { HandleUnsupported3DCall(*this, "DrawColoredPrimitives"); }
 
     void Dx3GraphicsBackend::DrawIndexedColoredPrimitives(const IVertexBufferBackend&,
                                                           const IIndexBufferBackend&,
                                                           const Matrix&, const Matrix&, const Matrix&,
-                                                          PrimitiveType, int) { ThrowNo3D("DrawIndexedColoredPrimitives"); }
+                                                          PrimitiveType, int) { HandleUnsupported3DCall(*this, "DrawIndexedColoredPrimitives"); }
 }
 
 namespace CNA::Internal::Backends

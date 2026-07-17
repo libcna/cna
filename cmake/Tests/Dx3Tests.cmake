@@ -51,6 +51,12 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_backend_test(NAME Dx3_No3D COMMAND cna_test_dx3_no3d
         TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=dummy" LABELS "DX3")
 
+    # CNA::UnsupportedGraphicsCallBehavior: DX3's unsupported "fire and forget" 3D calls can be
+    # configured to silently no-op instead of throwing; resource creation always throws.
+    cna_dx3_test(cna_test_dx3_unsupported_call_behavior examples/dx3_unsupported_call_behavior_test.cpp)
+    cna_register_backend_test(NAME Dx3_UnsupportedCallBehavior COMMAND cna_test_dx3_unsupported_call_behavior
+        TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=dummy" LABELS "DX3")
+
     # plan_dx3.md Phase X7 (DX3-68): logical/window coordinate transform CTest. Note:
     # SDL_VIDEODRIVER=dummy reports a fixed 1024x768 "window" size (no real display to query), so
     # this test's letterbox-invariant checks run against that fixed size rather than whatever a
