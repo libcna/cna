@@ -2,12 +2,12 @@
 
 #pragma once
 
-#include <mutex>
 #include <string>
 
 #include <SDL3/SDL_haptic.h>
 
 #include "Microsoft/Devices/Detail/IVibrateBackend.hpp"
+#include "Microsoft/Devices/Detail/SdlSubsystemMutex.hpp"
 #include "System/TimeSpan.hpp"
 
 namespace Microsoft::Devices::Detail
@@ -57,10 +57,15 @@ namespace Microsoft::Devices::Detail
         void StartLeftRight(float largeMotor, float smallMotor, const System::TimeSpan& duration) override;
 
     private:
-        /** @brief Guards every member below against concurrent access from multiple application threads. */
-        std::mutex mutex_;
-
-        /** @brief The currently-open haptic device, if any. Reused across calls so Stop() can act on it. */
+        /**
+         * @brief The currently-open haptic device, if any. Reused across calls so Stop() can act on it.
+         *
+         * Task SDLCORE-001 (2026-07-17): every real SDL call touching this
+         * device (and the `SDL_INIT_HAPTIC` subsystem itself) is now
+         * serialized via the process-wide `Detail::GetGlobalSdlSubsystemMutex()`
+         * instead of a private per-instance mutex — see that function's doc
+         * comment. This backend no longer declares its own mutex member.
+         */
         SDL_Haptic* haptic_ = nullptr;
 
         /**

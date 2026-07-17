@@ -16,6 +16,8 @@
 #include <SDL3/SDL_init.h>
 #include <SDL3/SDL_sensor.h>
 
+#include "Microsoft/Devices/Detail/SdlSubsystemMutex.hpp"
+
 namespace Microsoft::Devices::Sensors::Detail
 {
     /**
@@ -95,10 +97,24 @@ namespace Microsoft::Devices::Sensors::Detail
      * SDL_QuitSubSystem() "is not thread safe"; SDL_GetSensors()/
      * SDL_OpenSensor()/SDL_GetSensorType()/SDL_CloseSensor() carry no
      * `\threadsafety` annotation at all, so none of them can be assumed safe
-     * for concurrent access either. This single mutex, function-local static
-     * inside an `inline` function (one instance for the whole process, per
-     * ordinary C++ inline-function singleton rules), serializes all of them
+     * for concurrent access either. This single mutex serializes all of them
      * across both sensor classes.
+     *
+     * Task SDLCORE-001 (2026-07-17, external audit `audit_devices_2026-07-17.md`):
+     * this is now a thin forwarding call to
+     * `Detail::GetGlobalSdlSubsystemMutex()` (`include/Microsoft/Devices/
+     * Detail/SdlSubsystemMutex.hpp`) — the *same* process-wide mutex
+     * `Detail::SdlHapticVibrateBackend` (`SDL_INIT_HAPTIC`, used by
+     * `VibrateController`) now also uses, instead of each having its own,
+     * entirely independent lock. Kept under this existing name (rather than
+     * updating every call site in `Accelerometer.cpp`/`Gyroscope.cpp` to a
+     * new name) purely to minimize diff — see that header's own doc comment
+     * for the full rationale, including why this remains a plain mutex
+     * rather than the audit's originally-suggested `SDL_RunOnMainThread()`-
+     * based main-thread dispatch (a naive version of that redesign would
+     * deadlock this project's own existing, legitimate multi-threaded
+     * `Start()`/`Stop()` usage, since nothing in this project's Devices
+     * usage guarantees an active SDL event pump to drain it).
      *
      * Lock order (Task P7-1): whenever a caller already holds a
      * `SdlSensorSubsystem<TSensor>::mutex_`, it must acquire *this* mutex
@@ -112,8 +128,7 @@ namespace Microsoft::Devices::Sensors::Detail
      */
     inline std::mutex& GetGlobalSdlSensorMutex()
     {
-        static std::mutex mutex;
-        return mutex;
+        return Microsoft::Devices::Detail::GetGlobalSdlSubsystemMutex();
     }
 
     /**

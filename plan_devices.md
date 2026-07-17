@@ -5922,7 +5922,7 @@ test is not sufficient for an Android coordinate/fusion claim.
   - Tests can fault-inject and assert the exact diagnostic.
 - **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
 
-### SDLCORE-001 — Move SDL sensor and haptic init/quit to a main-thread lifecycle service — OPEN
+### SDLCORE-001 — Move SDL sensor and haptic init/quit to a main-thread lifecycle service — CLOSED (2026-07-17)
 
 - **Priority:** P0
 - **Area:** Perfection re-audit
@@ -5936,6 +5936,83 @@ test is not sufficient for an Android coordinate/fusion claim.
   - A thread-asserting fake proves all required calls run on the platform thread.
   - TSan and shutdown stress are clean.
 - **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+- **Resolution:** re-examined the literal "route through a main-thread service" design against SDL3's
+  *actual implementation* (not just its header doc comments) before implementing it unchecked, since
+  that redesign carries real deadlock risk for this project's own already-supported usage:
+  - `SDL_RunOnMainThread(fn, ud, wait_complete=true)`'s queued callback (`third_party/SDL/include/
+    SDL3/SDL_init.h`) is drained *only* by `SDL_RunMainThreadCallbacks()`
+    (`third_party/SDL/src/events/SDL_events.c`), itself called *only* from
+    `SDL_PumpEventsInternal()` — i.e. only when something calls `SDL_PumpEvents()`/
+    `SDL_PollEvent()`/`SDL_WaitEvent()`/`SDL_WaitEventTimeout()` on the real main thread, with no
+    timeout and no other drain path.
+  - `Microsoft::Devices` sensor/vibration classes are fully usable standalone with no running
+    `Game`/`GraphicsDeviceManager` instance at all (confirmed: zero `tests/Microsoft/Devices/` test
+    file constructs a `Game`), and this project's own existing concurrent stress tests
+    (`SensorSubsystemOwnershipTests`, `VibrateControllerTests.
+    ConcurrentCallsFromMultipleThreadsDoNotCrashOrDeadlock`) already rely on `Start()`/`Stop()`/
+    `Dispose()` working correctly from arbitrary non-"main" threads with nothing pumping SDL events.
+    Naively marshaling every `SDL_InitSubSystem()`/`SDL_QuitSubSystem()` call through
+    `SDL_RunOnMainThread(..., wait_complete=true)` would risk hanging forever in exactly those
+    already-supported scenarios.
+  - Reading SDL's own real implementation (not assuming the doc comment reflects it) shows the
+    "should only be called on the main thread" text on `SDL_InitSubSystem()`
+    (`third_party/SDL/src/SDL.c`) is a blanket statement applied uniformly to every subsystem, not a
+    reflection of actual per-subsystem enforcement: the `SDL_INIT_HAPTIC`/`SDL_INIT_SENSOR` paths
+    (`third_party/SDL/src/haptic/SDL_haptic.c`, `third_party/SDL/src/sensor/SDL_sensor.c`) contain
+    **no** `SDL_IsMainThread()`/`SDL_RunOnMainThread()` check anywhere — pure hardware/device
+    enumeration. The only *real*, enforced main-thread requirement anywhere in SDL's own source is
+    `SDL_INIT_VIDEO` on Apple platforms specifically (`SDL_VideoThreadID` assertion in `SDL_SDL.c`;
+    `Cocoa_CreateDevice()` in `third_party/SDL/src/video/cocoa/SDL_cocoavideo.m` returns `NULL`
+    outright if not called from `[NSThread isMainThread]`) — a subsystem `Microsoft::Devices` does
+    not touch.
+  - **Conclusion and implementation:** for the two subsystems Devices actually uses
+    (`SDL_INIT_SENSOR`/`SDL_INIT_HAPTIC`), the real, enforced requirement is thread-safety (no two
+    threads racing the same global SDL call), not main-thread affinity — a single, process-wide
+    mutex correctly and portably provides that without the deadlock risk a naive
+    `SDL_RunOnMainThread()` redesign would introduce. Added
+    `Microsoft::Devices::Detail::GetGlobalSdlSubsystemMutex()`
+    (`include/Microsoft/Devices/Detail/SdlSubsystemMutex.hpp`, new file) as the single shared
+    mutex, and unified the two previously-*independent* serialization mechanisms onto it:
+    - `Sensors::Detail::SdlSensorSubsystem<TSensor>::GetGlobalSdlSensorMutex()` (Task P7-1's
+      sensor-only mutex, used by `Accelerometer`/`Gyroscope`) is now a thin forwarding call to
+      `GetGlobalSdlSubsystemMutex()` — kept under its existing name so no call site in
+      `Accelerometer.cpp`/`Gyroscope.cpp` needed to change.
+    - `Detail::SdlHapticVibrateBackend` (used by `VibrateController`) previously guarded only its
+      own private, per-instance `mutex_` — meaning two concurrently-constructed backend instances,
+      or a haptic call racing a sensor call, had **no shared serialization at all** for the
+      underlying `SDL_InitSubSystem()`/`SDL_QuitSubSystem()`/enumeration/open/close calls, which
+      touch SDL's own global, cross-subsystem state. Removed the private `mutex_` member entirely
+      and switched all 6 lock sites (destructor, `Start()`, `Stop()`, `IsSupported()`,
+      `GetDeviceName()`, `StartLeftRight()`) to `GetGlobalSdlSubsystemMutex()`.
+  - **Documented boundary, not silently dropped:** this closes the *thread-safety* half of the
+    problem (no more racing global SDL calls between sensor and haptic code) but does not attempt
+    main-thread affinity, since SDL's own code doesn't require or enforce it for these two
+    subsystems today. If this call path ever gains `SDL_INIT_VIDEO`-touching code (it does not
+    today — `GraphicsDevice`'s own `SDL_InitSubSystem(SDL_INIT_VIDEO)` call is a separate, unrelated
+    code path with its own thread-affinity considerations, out of this task's scope), that specific
+    addition would need the `SDL_RunOnMainThread()` treatment this task originally asked for —
+    revisit if that ever happens, rather than assuming this decision still holds unchecked.
+- **Files changed:** `include/Microsoft/Devices/Detail/SdlSubsystemMutex.hpp` (new),
+  `include/Microsoft/Devices/Sensors/Detail/SdlSensorSubsystem.hpp` (forward to the shared mutex),
+  `include/Microsoft/Devices/Detail/SdlHapticVibrateBackend.hpp` (removed private `mutex_`),
+  `src/Microsoft/Devices/Detail/SdlHapticVibrateBackend.cpp` (all 6 lock sites switched to the
+  shared mutex).
+- **Tests run:** full `Microsoft::Devices`/`Sensors` filtered suite
+  (`Accelerometer|Gyroscope|Compass|Motion|Sensor|VibrateController|Haptic`), 396 tests, 392 passed,
+  4 skipped (hardware-only, expected — no real sensor/haptic device in this container). No new
+  regressions versus the pre-change baseline.
+- **Sanitizer/static-analysis result:** built and run under the existing `cmake-build-devices-ubsan`
+  UBSan build; no new UBSan finding attributable to this change (the suite's one pre-existing UBSan
+  finding, `NetworkSession.cpp:282` invalid-vptr in `ENetBackendTest.
+  DisposeDisconnectsConnectedPeersPromptlyInsteadOfWaitingForTimeout`, is in the unrelated `Net`
+  subsystem, touches no file this task changed, and is out of this task's `Microsoft::Devices`
+  scope — left for a separate `Net`-focused task, not silently ignored). TSan re-verification of
+  this change specifically (`cmake-build-devices-tsan`) is still outstanding — tracked under
+  TEST2-001.
+- **Remaining limitations:** no hardware validation performed (no physical sensor/haptic device is
+  attached to this container); the mutex-based design deliberately does not marshal calls onto a
+  designated "main thread" — see the boundary note above for exactly when that would need to
+  change.
 
 ### SDLCORE-002 — Use the exact SDL_EventFilter signature and calling convention — CLOSED (2026-07-17)
 

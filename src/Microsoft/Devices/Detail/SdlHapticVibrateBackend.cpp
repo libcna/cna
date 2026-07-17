@@ -67,7 +67,7 @@ namespace Microsoft::Devices::Detail
 
     SdlHapticVibrateBackend::~SdlHapticVibrateBackend()
     {
-        std::lock_guard<std::mutex> lock(mutex_);
+        std::lock_guard<std::mutex> lock(GetGlobalSdlSubsystemMutex());
 
         // SDL_CloseHaptic() implicitly invalidates any effect still uploaded
         // on this device (SDL3 does not require destroying uploaded effects
@@ -150,7 +150,7 @@ namespace Microsoft::Devices::Detail
     // openedTemporary so the caller knows whether it must close the
     // returned device again — probing must not hold a device open as a
     // side effect (that's what Start() is for). Caller must already hold
-    // mutex_.
+    // GetGlobalSdlSubsystemMutex().
     SDL_Haptic* SdlHapticVibrateBackend::AcquireHapticDeviceForProbe(bool& openedTemporary)
     {
         if (haptic_ != nullptr)
@@ -173,7 +173,8 @@ namespace Microsoft::Devices::Detail
     // Shared by Stop(), Start() (so the plain rumble path never runs
     // layered on top of a still-active StartLeftRight() effect), and
     // StartLeftRight()'s own re-entry path (replacing a previous dual-motor
-    // effect with a new one). Caller must already hold mutex_.
+    // effect with a new one). Caller must already hold
+    // GetGlobalSdlSubsystemMutex().
     void SdlHapticVibrateBackend::DestroyLeftRightEffectIfAny()
     {
         if (haptic_ != nullptr && leftRightEffectId_ >= 0)
@@ -188,7 +189,7 @@ namespace Microsoft::Devices::Detail
     {
         const Uint32 durationMs = static_cast<Uint32>(duration.getTotalMillisecondsProperty());
 
-        std::lock_guard<std::mutex> lock(mutex_);
+        std::lock_guard<std::mutex> lock(GetGlobalSdlSubsystemMutex());
 
         if (!EnsureHapticSubsystemInitialized())
         {
@@ -220,7 +221,7 @@ namespace Microsoft::Devices::Detail
 
     void SdlHapticVibrateBackend::Stop()
     {
-        std::lock_guard<std::mutex> lock(mutex_);
+        std::lock_guard<std::mutex> lock(GetGlobalSdlSubsystemMutex());
 
         if (haptic_ != nullptr)
         {
@@ -231,7 +232,7 @@ namespace Microsoft::Devices::Detail
 
     bool SdlHapticVibrateBackend::IsSupported()
     {
-        std::lock_guard<std::mutex> lock(mutex_);
+        std::lock_guard<std::mutex> lock(GetGlobalSdlSubsystemMutex());
 
         bool openedTemporary = false;
         SDL_Haptic* device = AcquireHapticDeviceForProbe(openedTemporary);
@@ -264,7 +265,7 @@ namespace Microsoft::Devices::Detail
 
     std::string SdlHapticVibrateBackend::GetDeviceName()
     {
-        std::lock_guard<std::mutex> lock(mutex_);
+        std::lock_guard<std::mutex> lock(GetGlobalSdlSubsystemMutex());
 
         bool openedTemporary = false;
         SDL_Haptic* device = AcquireHapticDeviceForProbe(openedTemporary);
@@ -291,7 +292,7 @@ namespace Microsoft::Devices::Detail
     {
         const Uint32 durationMs = static_cast<Uint32>(duration.getTotalMillisecondsProperty());
 
-        std::lock_guard<std::mutex> lock(mutex_);
+        std::lock_guard<std::mutex> lock(GetGlobalSdlSubsystemMutex());
 
         if (!EnsureHapticSubsystemInitialized())
         {
