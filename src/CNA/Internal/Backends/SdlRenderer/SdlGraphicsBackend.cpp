@@ -773,67 +773,51 @@ namespace CNA::Internal::Backends::SdlRenderer
         return std::make_unique<SdlSpriteBatchBackend>(renderer);
     }
 
-    // ---- 3D: SDL_Renderer is intentionally 2D-only. ----
-    // "Fire and forget" state/draw calls (no meaningful return value) honor
-    // CNA::Unsupported3DGraphicsCallBehavior: throw by default, or silently do nothing if the
-    // caller opted into Ignore via SetUnsupported3DGraphicsCallBehavior(). Resource-creation calls
-    // (below) always throw regardless -- see ThrowNo3DResource's own comment.
-    static void HandleUnsupported3DCall(SdlGraphicsBackend& backend, const char* methodName)
-    {
-        if (backend.GetUnsupported3DGraphicsCallBehavior() == CNA::Unsupported3DGraphicsCallBehavior::Ignore)
-            return;
-
-        throw std::runtime_error(
-            std::string("SDL_Renderer does not support 3D: ") + methodName);
-    }
-
-    // Resource-creation calls always throw, ignoring CNA::Unsupported3DGraphicsCallBehavior:
-    // silently handing back a null-backed VertexBuffer/IndexBuffer/OcclusionQuery would let a
-    // game hold a "successfully constructed" resource that crashes (or, per Task 727's own
-    // finding for OcclusionQuery, silently does nothing) the moment it's actually used --
-    // a worse failure mode than an immediate, honest exception at construction time.
-    static void ThrowNo3DResource(const char* methodName)
+    // ---- 3D: SDL_Renderer is intentionally 2D-only. All 3D calls throw. ----
+    // Callers can check GraphicsDevice::SupportsCapability(GraphicsCapability::ThreeD) ahead of
+    // time instead of relying on this throw -- see SupportsCapability() in the header.
+    static void ThrowNo3D(const char* methodName)
     {
         throw std::runtime_error(
             std::string("SDL_Renderer does not support 3D: ") + methodName);
     }
 
-    void SdlGraphicsBackend::ClearColorAndDepth(float, float, float, float, float) { HandleUnsupported3DCall(*this, "ClearColorAndDepth"); }
-    void SdlGraphicsBackend::ClearDepth(float) { HandleUnsupported3DCall(*this, "ClearDepth"); }
-    void SdlGraphicsBackend::ClearStencil(int) { HandleUnsupported3DCall(*this, "ClearStencil"); }
-    void SdlGraphicsBackend::ClearDepthAndStencil(float, int) { HandleUnsupported3DCall(*this, "ClearDepthAndStencil"); }
-    void SdlGraphicsBackend::ClearColorAndStencil(float, float, float, float, int) { HandleUnsupported3DCall(*this, "ClearColorAndStencil"); }
-    void SdlGraphicsBackend::ClearColorDepthAndStencil(float, float, float, float, float, int) { HandleUnsupported3DCall(*this, "ClearColorDepthAndStencil"); }
-    void SdlGraphicsBackend::SetDepthTestEnabled(bool)  { HandleUnsupported3DCall(*this, "SetDepthTestEnabled"); }
-    void SdlGraphicsBackend::SetBlendEnabled(bool)      { HandleUnsupported3DCall(*this, "SetBlendEnabled"); }
-    void SdlGraphicsBackend::SetDepthWriteEnabled(bool) { HandleUnsupported3DCall(*this, "SetDepthWriteEnabled"); }
+    void SdlGraphicsBackend::ClearColorAndDepth(float, float, float, float, float) { ThrowNo3D("ClearColorAndDepth"); }
+    void SdlGraphicsBackend::ClearDepth(float) { ThrowNo3D("ClearDepth"); }
+    void SdlGraphicsBackend::ClearStencil(int) { ThrowNo3D("ClearStencil"); }
+    void SdlGraphicsBackend::ClearDepthAndStencil(float, int) { ThrowNo3D("ClearDepthAndStencil"); }
+    void SdlGraphicsBackend::ClearColorAndStencil(float, float, float, float, int) { ThrowNo3D("ClearColorAndStencil"); }
+    void SdlGraphicsBackend::ClearColorDepthAndStencil(float, float, float, float, float, int) { ThrowNo3D("ClearColorDepthAndStencil"); }
+    void SdlGraphicsBackend::SetDepthTestEnabled(bool)  { ThrowNo3D("SetDepthTestEnabled"); }
+    void SdlGraphicsBackend::SetBlendEnabled(bool)      { ThrowNo3D("SetBlendEnabled"); }
+    void SdlGraphicsBackend::SetDepthWriteEnabled(bool) { ThrowNo3D("SetDepthWriteEnabled"); }
 
     std::unique_ptr<IVertexBufferBackend> SdlGraphicsBackend::CreateVertexBuffer(int)
     {
-        ThrowNo3DResource("CreateVertexBuffer");
+        ThrowNo3D("CreateVertexBuffer");
         return nullptr;
     }
 
     std::unique_ptr<IIndexBufferBackend> SdlGraphicsBackend::CreateIndexBuffer16(int)
     {
-        ThrowNo3DResource("CreateIndexBuffer16");
+        ThrowNo3D("CreateIndexBuffer16");
         return nullptr;
     }
 
     std::unique_ptr<IOcclusionQueryBackend> SdlGraphicsBackend::CreateOcclusionQuery()
     {
-        ThrowNo3DResource("CreateOcclusionQuery");
+        ThrowNo3D("CreateOcclusionQuery");
         return nullptr;
     }
 
     void SdlGraphicsBackend::DrawColoredPrimitives(const IVertexBufferBackend&,
                                                    const Matrix&, const Matrix&, const Matrix&,
-                                                   PrimitiveType, int) { HandleUnsupported3DCall(*this, "DrawColoredPrimitives"); }
+                                                   PrimitiveType, int) { ThrowNo3D("DrawColoredPrimitives"); }
 
     void SdlGraphicsBackend::DrawIndexedColoredPrimitives(const IVertexBufferBackend&,
                                                           const IIndexBufferBackend&,
                                                           const Matrix&, const Matrix&, const Matrix&,
-                                                          PrimitiveType, int) { HandleUnsupported3DCall(*this, "DrawIndexedColoredPrimitives"); }
+                                                          PrimitiveType, int) { ThrowNo3D("DrawIndexedColoredPrimitives"); }
 }
 
 namespace CNA::Internal::Backends

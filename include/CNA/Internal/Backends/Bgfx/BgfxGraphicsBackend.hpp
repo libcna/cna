@@ -530,6 +530,10 @@ namespace CNA::Internal::Backends::Bgfx
 
         explicit BgfxGraphicsBackend(SDL_Window* window, int swapInterval = 1);
         ~BgfxGraphicsBackend() override;
+        // OcclusionQuery reflects the real, live bgfx::getCaps() device query (BGFX_CAPS_OCCLUSION_QUERY).
+        // Everything else CNA::GraphicsCapability currently enumerates is genuinely supported
+        // here, so falls through to the shared default (true).
+        [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
         void Clear(float r, float g, float b, float a) override;
         void Present() override;
         void GetViewportSize(int& width, int& height) override;

@@ -104,14 +104,17 @@ namespace CNA::Internal::Backends::Dx3
                              int colorBlendFunc, int alphaBlendFunc) override;
 
         // ---- 3D pipeline: NOT supported by DX3 (DirectDraw is 2D-only). ----
-        // @note Status: STUB. Every "fire and forget" entry point throws std::runtime_error by
-        // default, or is silently ignored if SetUnsupported3DGraphicsCallBehavior(Ignore) was
-        // called -- see CNA::Unsupported3DGraphicsCallBehavior. CreateVertexBuffer/
-        // CreateIndexBuffer16 always throw regardless (CreateOcclusionQuery deliberately doesn't
-        // override the shared nullptr-returning default at all -- see DX3-66's own comment below).
+        // @note Status: STUB. Every entry point throws std::runtime_error (CreateOcclusionQuery
+        // deliberately doesn't override the shared nullptr-returning default at all -- see
+        // DX3-66's own comment below). SupportsCapability() lets callers check ahead of time
+        // instead of relying on the throw -- see CNA::GraphicsCapability.
         [[nodiscard]] bool SupportsDepthStencil() const override { return false; }
-        void SetUnsupported3DGraphicsCallBehavior(CNA::Unsupported3DGraphicsCallBehavior behavior) override;
-        [[nodiscard]] CNA::Unsupported3DGraphicsCallBehavior GetUnsupported3DGraphicsCallBehavior() const override;
+        [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability /*capability*/) const override
+        {
+            // 2D-only by design: none of the capabilities CNA::GraphicsCapability currently
+            // enumerates are supported on this backend.
+            return false;
+        }
         void ClearColorAndDepth(float r, float g, float b, float a, float depth) override;
         void ClearDepth(float depth) override;
         void ClearStencil(int stencil) override;

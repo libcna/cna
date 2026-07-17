@@ -1214,6 +1214,17 @@ namespace CNA::Internal::Backends::Bgfx
         }
     }
 
+    bool BgfxGraphicsBackend::SupportsCapability(CNA::GraphicsCapability capability) const
+    {
+        switch (capability)
+        {
+            case CNA::GraphicsCapability::OcclusionQuery:
+                return (bgfx::getCaps()->supported & BGFX_CAPS_OCCLUSION_QUERY) != 0;
+            default:
+                return true;
+        }
+    }
+
     BgfxGraphicsBackend::~BgfxGraphicsBackend()
     {
         auto destroyU = [](bgfx::UniformHandle& h) { if (bgfx::isValid(h)) { bgfx::destroy(h); h = BGFX_INVALID_HANDLE; } };

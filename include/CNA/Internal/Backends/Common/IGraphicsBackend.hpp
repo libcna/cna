@@ -17,7 +17,7 @@
 #include <unordered_map>
 #include <vector>
 #include "CNA/Internal/Graphics/ImageData.hpp"
-#include "CNA/Unsupported3DGraphicsCallBehavior.hpp"
+#include "CNA/GraphicsCapability.hpp"
 
 struct SDL_Window;
 struct SDL_Renderer;
@@ -812,18 +812,14 @@ namespace CNA::Internal::Backends
         /// will skip registry registration and CPU shadow copies.
         virtual void SetContextRecoveryEnabled(bool /*enabled*/) {}
 
-        /// Configures whether an unsupported "fire and forget" state/draw call (e.g. any 3D
-        /// call on the 2D-only SDL_Renderer backend) throws std::runtime_error (the default)
-        /// or is silently ignored -- see CNA::Unsupported3DGraphicsCallBehavior. Default
-        /// implementation is a no-op; only SDL_Renderer overrides it today (the only backend
-        /// with genuinely unsupported operations by design, not by omission).
-        virtual void SetUnsupported3DGraphicsCallBehavior(CNA::Unsupported3DGraphicsCallBehavior /*behavior*/) {}
-
-        /// Returns the current CNA::Unsupported3DGraphicsCallBehavior (CNA::Unsupported3DGraphicsCallBehavior::Throw
-        /// on every backend that doesn't override SetUnsupported3DGraphicsCallBehavior()).
-        [[nodiscard]] virtual CNA::Unsupported3DGraphicsCallBehavior GetUnsupported3DGraphicsCallBehavior() const
+        /// Returns whether this backend (and, for device-dependent entries, the current runtime
+        /// device/driver) supports the given CNA::GraphicsCapability. Default implementation
+        /// returns true for everything -- most backends are fully 3D-capable, so only backends
+        /// with a genuine, known gap (SDL_Renderer/DX3/Canvas's 2D-only design, or a specific
+        /// device-dependent feature like anisotropic filtering) need to override this.
+        [[nodiscard]] virtual bool SupportsCapability(CNA::GraphicsCapability /*capability*/) const
         {
-            return CNA::Unsupported3DGraphicsCallBehavior::Throw;
+            return true;
         }
 
         // ---- Debug / testing ----

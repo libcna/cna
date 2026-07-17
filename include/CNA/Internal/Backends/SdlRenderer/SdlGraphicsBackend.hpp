@@ -139,21 +139,15 @@ namespace CNA::Internal::Backends::SdlRenderer
 
         SDL_BlendMode blendMode_ = SDL_BLENDMODE_BLEND;
 
-        CNA::Unsupported3DGraphicsCallBehavior unsupported3DGraphicsCallBehavior_ = CNA::Unsupported3DGraphicsCallBehavior::Throw;
-
-        // 3D pipeline: NOT supported by the SDL_Renderer backend.
-        // @note Status: STUB. Every "fire and forget" entry point throws std::runtime_error by
-        // default, or is silently ignored if SetUnsupported3DGraphicsCallBehavior(Ignore) was
-        // called -- see CNA::Unsupported3DGraphicsCallBehavior. The resource-creation entry points
-        // (CreateVertexBuffer/CreateIndexBuffer16/CreateOcclusionQuery) always throw regardless.
+        // 3D pipeline: NOT supported by the SDL_Renderer backend. Every entry point below
+        // unconditionally throws std::runtime_error. SupportsCapability() lets callers check
+        // ahead of time instead of relying on the throw -- see CNA::GraphicsCapability.
         [[nodiscard]] bool SupportsDepthStencil() const override { return false; }
-        void SetUnsupported3DGraphicsCallBehavior(CNA::Unsupported3DGraphicsCallBehavior behavior) override
+        [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability /*capability*/) const override
         {
-            unsupported3DGraphicsCallBehavior_ = behavior;
-        }
-        [[nodiscard]] CNA::Unsupported3DGraphicsCallBehavior GetUnsupported3DGraphicsCallBehavior() const override
-        {
-            return unsupported3DGraphicsCallBehavior_;
+            // 2D-only by design (Tasks 720-729's own exhaustive audit): none of the capabilities
+            // CNA::GraphicsCapability currently enumerates are supported on this backend.
+            return false;
         }
         void ClearColorAndDepth(float r, float g, float b, float a, float depth) override;
         void ClearDepth(float depth) override;

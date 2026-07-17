@@ -1105,6 +1105,19 @@ namespace CNA::Internal::Backends::Vulkan
     // VulkanGraphicsBackend — destruction
     // =========================================================================
 
+    bool VulkanGraphicsBackend::SupportsCapability(CNA::GraphicsCapability capability) const
+    {
+        switch (capability)
+        {
+            case CNA::GraphicsCapability::AnisotropicFiltering:
+                return anisotropySupported_;
+            case CNA::GraphicsCapability::WireFrame:
+                return fillModeNonSolidSupported_;
+            default:
+                return true;
+        }
+    }
+
     VulkanGraphicsBackend::~VulkanGraphicsBackend()
     {
         if (device_ == VK_NULL_HANDLE) {

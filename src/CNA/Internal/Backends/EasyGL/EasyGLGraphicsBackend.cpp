@@ -1396,6 +1396,27 @@ void main()
         // No SDL_Quit or subsystem shutdown here - managed centrally.
     }
 
+    bool EasyGLGraphicsBackend::SupportsCapability(CNA::GraphicsCapability capability) const
+    {
+        switch (capability)
+        {
+            case CNA::GraphicsCapability::MultiSampleAntiAliasing:
+            {
+                GLint maxSamplesCap = 0;
+                metagl::glGetIntegerv(::metagl::GetParameter::MaxSamples, &maxSamplesCap);
+                return maxSamplesCap > 1;
+            }
+            case CNA::GraphicsCapability::AnisotropicFiltering:
+                return metagl::HasExtension("GL_EXT_texture_filter_anisotropic");
+            case CNA::GraphicsCapability::WireFrame:
+                // GLES3 (EasyGL's underlying API) has no wireframe fill mode at all -- matches
+                // the XNA 4.0 Graphics API coverage table's own "EasyGL N/A (GLES3)" entry.
+                return false;
+            default:
+                return true;
+        }
+    }
+
     void EasyGLGraphicsBackend::DebugSimulateContextLoss()
     {
 #if defined(__EMSCRIPTEN__)

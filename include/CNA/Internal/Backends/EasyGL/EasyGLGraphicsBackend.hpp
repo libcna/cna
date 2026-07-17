@@ -502,6 +502,13 @@ namespace CNA::Internal::Backends::EasyGL
                                        int multiSampleCount = 1,
                                        int swapInterval = 1);
         ~EasyGLGraphicsBackend() override;
+        // AnisotropicFiltering/MultiSampleAntiAliasing re-query the same live GL state the
+        // startup capability dump (EnsureGL()) already prints, since they're cheap, idempotent GL
+        // queries -- no need to cache them. WireFrame is always false: GLES3 (EasyGL's underlying
+        // API) has no wireframe fill mode at all. Everything else CNA::GraphicsCapability
+        // currently enumerates is genuinely supported here, so falls through to the shared
+        // default (true).
+        [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
         void Clear(float r, float g, float b, float a) override;
         void Present() override;
         void SetSwapInterval(int interval) override;

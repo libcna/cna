@@ -668,6 +668,12 @@ namespace CNA::Internal::Backends::Vulkan
         explicit VulkanGraphicsBackend(SDL_Window* window, int multiSampleCount = 1, int swapInterval = 1);
         ~VulkanGraphicsBackend() override;
 
+        // AnisotropicFiltering/WireFrame reflect real, already-cached device feature queries
+        // (anisotropySupported_/fillModeNonSolidSupported_, both set once at device creation).
+        // Everything else CNA::GraphicsCapability currently enumerates is genuinely supported
+        // here, so falls through to the shared default (true).
+        [[nodiscard]] bool SupportsCapability(CNA::GraphicsCapability capability) const override;
+
         void Clear(float r, float g, float b, float a) override;
         void Present() override;
         void GetViewportSize(int& width, int& height) override;

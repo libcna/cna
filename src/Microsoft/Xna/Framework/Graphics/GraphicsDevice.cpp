@@ -1320,14 +1320,9 @@ namespace Microsoft::Xna::Framework::Graphics
         return *backend_;
     }
 
-    void GraphicsDevice::SetUnsupported3DGraphicsCallBehavior(CNA::Unsupported3DGraphicsCallBehavior behavior)
+    bool GraphicsDevice::SupportsCapability(CNA::GraphicsCapability capability) const
     {
-        GetBackend().SetUnsupported3DGraphicsCallBehavior(behavior);
-    }
-
-    CNA::Unsupported3DGraphicsCallBehavior GraphicsDevice::GetUnsupported3DGraphicsCallBehavior() const
-    {
-        return GetBackend().GetUnsupported3DGraphicsCallBehavior();
+        return GetBackend().SupportsCapability(capability);
     }
 
     void GraphicsDevice::SetCurrentEffect(Effect* effect)
