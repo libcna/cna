@@ -183,10 +183,13 @@ void SimGame::Update(GameTime& gameTime)
     localPaddlePos_.Y = std::clamp(localPaddlePos_.Y, 0.0f, kScreenHeight - kPaddleHeight);
 
     // 1/2 lower/raise simulated latency by 100ms per press; 3/4 lower/raise simulated packet loss
-    // by 10 percentage points per press. Neither has ever been wired to any real delay queue or
-    // synthetic packet drop anywhere in ENetBackend (Task 4.3, deliberately matching FNA's own
-    // non-functional reference stub) - the HUD's "Real measured RTT" column never moves in
-    // response to these, which is the honest point of this demo.
+    // by 10 percentage points per press. Task 6.1-6.5 (plan_net.md Phase 6): both now drive a
+    // real receive-side delayed-delivery queue and probabilistic drop in ENetBackend - raising
+    // either one now visibly stutters/drops the remote paddle and (on the client) the
+    // host-authoritative ball position. The HUD's "Real measured RTT" column still won't move in
+    // response to these (ENet's own per-peer RTT measurement happens below this simulated-delivery
+    // layer, at the raw transport level, and is unaffected by it - an honest, separate limitation,
+    // not a regression of this task).
     if (keys.IsKeyDown(Keys::D1))
     {
         simulatedLatency_ = System::TimeSpan::FromMilliseconds(
@@ -269,7 +272,9 @@ void SimGame::Update(GameTime& gameTime)
             realRttMs = remotes[0]->getRoundtripTimeProperty().getTotalMillisecondsProperty();
         }
         std::printf("[SimNet] simulatedLatency=%.0fms simulatedPacketLoss=%.0f%% realMeasuredRTT=%.1fms "
-                    "(simulated values have no effect on real traffic - Task 4.3)\n",
+                    "(simulated values now have a real effect on remote-paddle/ball AppData "
+                    "delivery - realMeasuredRTT stays unaffected, ENet's own RTT tracking is a "
+                    "lower transport layer)\n",
                     simulatedLatency_.getTotalMillisecondsProperty(), simulatedPacketLoss_ * 100.0f, realRttMs);
     }
 
@@ -308,7 +313,7 @@ void SimGame::Draw(const GameTime& /*gameTime*/)
     spriteBatch_->Draw(*whitePixel_, ballRect, Color(240, 220, 80, 255));
 
     char hud[256];
-    std::snprintf(hud, sizeof(hud), "SimLatency:%.0fms SimPacketLoss:%.0f%% (1/2/3/4 to adjust, no real effect)",
+    std::snprintf(hud, sizeof(hud), "SimLatency:%.0fms SimPacketLoss:%.0f%% (1/2/3/4 to adjust - now a real effect)",
                   simulatedLatency_.getTotalMillisecondsProperty(), simulatedPacketLoss_ * 100.0f);
     spriteBatch_->DrawString(*font_, hud, Vector2(16.0f, 8.0f), Color(255, 255, 255, 255));
 

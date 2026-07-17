@@ -896,36 +896,64 @@ FNA" conclusion for *this specific pair of properties* — the user decided to i
 effect this pass. (`SimulatedLatency`/`SimulatedPacketLoss` getters/setters already exist,
 `NetworkSession.hpp`/`.cpp:258-262`, currently read nowhere else — confirmed in Phase 0.)
 
-- [ ] **Task 6.1** — Identify the exact hook points: outbound send (`ENetBackend`'s `SendTo`,
-  `ENetBackend.cpp:170`) and/or inbound receive processing (`PumpSession`'s
-  `ENET_EVENT_TYPE_RECEIVE` branch, `ENetBackend.cpp:579`). Decide whether simulated latency/loss
-  applies per-send (delay when a packet is handed to ENet) or as a receive-side hold-and-release
-  queue (delay when a packet would otherwise be delivered to game code) — the latter is closer to
-  real network jitter and doesn't require faking ENet's own reliability/ack timing, so prefer it
-  unless investigation shows a strong reason not to.
-- [ ] **Task 6.2** — Implement a per-session delayed-delivery queue keyed off `simulatedLatency_`:
-  received packets are timestamped and only handed to game code once
-  `now >= receiveTime + simulatedLatency_`. Implement probabilistic drop keyed off
-  `simulatedPacketLoss_` (a `[0,1]` drop probability per packet, matching the property's
-  documented range — confirm exact documented range in `NetworkSession.hpp` before implementing).
-- [ ] **Task 6.3** — **Determinism for tests is a hard requirement** (explicit user instruction:
-  "implementovat reálný efekt" with no flakiness). Use an injectable/seedable RNG for the drop
-  decision (do not call an unseeded global RNG) and a controllable time source (reuse whatever
-  time abstraction `GameTime`/existing tests already use — do not add `std::chrono::steady_clock`
-  calls directly into test-exercised code paths if an injectable clock exists; if none exists,
-  add a minimal one scoped to this feature only, per `CLAUDE.md`'s minimal-stub rule).
-- [ ] **Task 6.4** — Add tests: zero latency/loss behaves exactly as before (regression guard);
-  a fixed non-zero latency measurably delays delivery by at least that amount, deterministically
-  (using the injectable clock, not a real sleep + flaky timing assertion); a drop probability of
-  1.0 deterministically drops every packet (seeded RNG); a drop probability of 0.0 drops none.
-- [ ] **Task 6.5** — Verify real effect end-to-end over a real loopback ENet connection (not just
-  unit-level queue logic) — send N packets with simulated loss=1.0, confirm zero arrive; send with
-  a fixed latency, confirm none arrive before the expected delay.
-- [ ] **Task 6.6** — Update `examples/demo_simulated_network_conditions` to actually demonstrate
-  the now-real effect (check its current content first — it may currently just set the properties
-  and claim they work, or may already honestly disclaim they're placeholders; either way it needs
-  to now show real, observable behavior).
-- [ ] **Task 6.7** — Revert-verify the fix, run the full suite, update this plan with results.
+- [x] **Task 6.1** — Hook point: receive-side, exactly at `HandleAppData`'s existing
+  `target->getIsLocalProperty()` branch in `ENetBackend.cpp` — matching the plan's own preference
+  (closer to real network jitter, no faked ENet reliability/ack timing). Deliberately scoped to
+  *only* AppData delivered to a local gamer, not the CNA-internal session-management protocol
+  (`ClientHello`/`ServerWelcome`/etc. - never part of the real XNA API surface these properties
+  govern, and needs to stay reliable for the session itself to function) and not a host's own
+  relay hop for two *other* peers passing through (not data this machine's own game code ever
+  sees). This scoping decision is documented directly on the hook point in `HandleAppData`.
+- [x] **Task 6.2** — Real per-session delayed-delivery queue (`SessionState::PendingDeliveries`,
+  a `std::vector<PendingDelayedDelivery>`): each held packet carries its target/sender/payload/
+  options and a `ReleaseTime`; `ReleaseDuePendingDeliveries` (called once per `PumpSession`, after
+  the ENet event loop) hands off anything whose `ReleaseTime` has passed. Zero latency (the
+  default) takes a separate, unconditional fast path with no queue involvement at all - a real
+  regression guard, not just a documented intent. `SimulatedPacketLoss`'s documented `[0,1]` range
+  confirmed in `NetworkSession.hpp`; `ShouldDropForSimulatedLoss` checked *before* the latency
+  path, so a dropped packet is dropped immediately, never queued.
+- [x] **Task 6.3** — Added two minimal, scoped-to-this-feature testing hooks on `ENetBackend`
+  (matching `CLAUDE.md`'s minimal-stub rule - no existing injectable clock/RNG abstraction was
+  found anywhere in the codebase to reuse): `SetClockForTesting`/`ResetClockForTesting` override
+  the `Now()` helper `ReleaseDuePendingDeliveries`/the delay-queue math read from (a fixed
+  `std::optional<std::chrono::steady_clock::time_point>` override, real `steady_clock::now()`
+  otherwise), and `SeedPacketLossRngForTesting` reseeds the process-wide `std::mt19937` behind
+  `ShouldDropForSimulatedLoss` (not itself needed for the required 0.0/1.0 test cases - both are
+  handled without ever touching the RNG - but added anyway per the explicit "seedable, not
+  unseeded" instruction, for future intermediate-probability tests and general good practice).
+- [x] **Task 6.4/6.5** — Combined into the same 4 real-loopback tests (`ENetBackendTests.cpp`,
+  `ConnectFakeClientAndCompleteHandshake` factored out of the old test's own boilerplate to keep
+  them short), satisfying both tasks together rather than duplicating unit-level and loopback
+  tiers: `ZeroSimulatedLatencyAndPacketLossDeliverAppDataImmediately` (regression, replaces the
+  old, now-inverted-premise `SimulatedLatencyAndPacketLossHaveNoEffectOnRealTraffic`),
+  `SimulatedPacketLossOfOneDropsAllAppDataDeterministically` (5 real packets sent, zero arrive),
+  `SimulatedPacketLossOfZeroDropsNoAppData` (5 real packets sent, all 5 arrive),
+  `SimulatedLatencyDelaysAppDataDeliveryUntilTheClockAdvances` (real ENet delivery confirmed
+  received-and-queued while the clock is frozen at send time, confirmed *not* yet handed to game
+  code, then released the instant the clock is advanced by exactly the simulated latency).
+- [x] **Task 6.6** — `examples/demo_simulated_network_conditions` already had 1/2/3/4 keys live-
+  adjusting both properties and an honest "(simulated values have no effect - Task 4.3)" HUD/log
+  disclaimer - updated both doc comments (`SimGame.hpp`'s class comment, `SimGame.cpp`'s key-
+  handling/HUD/per-second-log text) to describe the real effect instead, and clarified that the
+  HUD's separate "real measured RTT" column deliberately stays unaffected (ENet's own RTT tracking
+  is a lower transport layer, below this delayed-delivery queue). Manually verified via a real
+  2-process run under `xvfb-run`: with the demo's own aggressive smoke-test ramp (+20ms latency,
+  +2% loss every frame) pushing loss to 100% within ~50 frames, the host ended its run with
+  `haveRemotePaddle=false` while the client (which got at least one early paddle update through
+  before loss ramped up) ended with `haveRemotePaddle=true` - a genuinely asymmetric, real-loss-
+  driven outcome, not the old always-both-true placeholder behavior.
+- [x] **Task 6.7** — Revert-verify: temporarily short-circuited both the drop check and the
+  latency-queue branch in `HandleAppData` (`if (false && ShouldDropForSimulatedLoss(...))` /
+  `if (true || latency <= TimeSpan::Zero)`), rebuilt, and confirmed exactly the 2 tests asserting
+  real drop/delay behavior failed (`SimulatedPacketLossOfOneDropsAllAppDataDeterministically`,
+  `SimulatedLatencyDelaysAppDataDeliveryUntilTheClockAdvances`) while the zero-effect regression
+  test and the drop=0.0 test correctly kept passing - proving the new tests are real, not vacuous.
+  Reverted, rebuilt, ran the full suite twice more (4693/4695 passed both times, 0 failures, 2
+  expected hardware skips). Updated `getSimulatedLatencyProperty()`/`getSimulatedPacketLossProperty()`'s
+  doc comments in `NetworkSession.hpp` (previously said "stored but has no effect") to describe
+  the real behavior and its AppData-only scope.
+
+**Phase 6 complete — 7/7** (Tasks 6.1–6.7).
 
 ---
 

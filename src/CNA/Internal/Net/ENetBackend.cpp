@@ -11,8 +11,11 @@
 #include "Microsoft/Xna/Framework/Net/NetworkSession.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <enet/enet.h>
 #include <memory>
+#include <optional>
+#include <random>
 #include <stdexcept>
 #include <unordered_map>
 #include <vector>
@@ -39,6 +42,59 @@ namespace CNA::Internal::Net
         // at all (browsers cannot open listening sockets), so hosting is moot there regardless.
         constexpr uint16_t kEmscriptenHostPort = 61191;
 #endif
+
+        // Task 6.1-6.3 (plan_net.md Phase 6): injectable time source + seeded RNG backing
+        // SimulatedLatency/SimulatedPacketLoss below - both default to real behavior in
+        // production (real steady_clock, a genuinely-seeded RNG) and are only ever overridden from
+        // test code via ENetBackend's own ForTesting statics, so tests never depend on a real
+        // sleep or unseeded randomness (a hard determinism requirement - see plan_net.md's Task
+        // 6.3's own note).
+        std::optional<std::chrono::steady_clock::time_point>& ClockOverrideForTesting()
+        {
+            static std::optional<std::chrono::steady_clock::time_point> override_;
+            return override_;
+        }
+
+        std::chrono::steady_clock::time_point Now()
+        {
+            return ClockOverrideForTesting().has_value() ? *ClockOverrideForTesting() : std::chrono::steady_clock::now();
+        }
+
+        std::mt19937& PacketLossRng()
+        {
+            static std::mt19937 rng(std::random_device{}());
+            return rng;
+        }
+
+        // Task 6.2: SimulatedPacketLoss is documented as a [0,1] drop probability. 0 and 1 are
+        // handled without ever touching the RNG, so a test using exactly those two values (Task
+        // 6.4's own requirement) is deterministic regardless of RNG state, real or seeded.
+        bool ShouldDropForSimulatedLoss(float lossProbability)
+        {
+            if (lossProbability <= 0.0f)
+            {
+                return false;
+            }
+            if (lossProbability >= 1.0f)
+            {
+                return true;
+            }
+            std::uniform_real_distribution<float> dist(0.0f, 1.0f);
+            return dist(PacketLossRng()) < lossProbability;
+        }
+
+        // Task 6.1/6.2: a real AppData packet, bound for one of this session's own local gamers,
+        // held until ReleaseTime instead of being delivered the instant it's received - see
+        // HandleAppData's own comment for why this is scoped to local delivery only (not
+        // session-management traffic, and not host-relay traffic passing through to someone else).
+        struct PendingDelayedDelivery
+        {
+            NetworkGamer* Target{nullptr};
+            NetworkGamer* Sender{nullptr};
+            std::vector<SharpRuntime::bytecs> Payload;
+            SendDataOptions Options{SendDataOptions::None};
+            std::chrono::steady_clock::time_point ReleaseTime;
+        };
 
         // Per-session ENet transport state. HostPeer is set only when this session itself
         // initiated an outbound ConnectToHost() — it identifies "the one peer we asked to
@@ -85,6 +141,10 @@ namespace CNA::Internal::Net
             // reconnect to can't exist (see ENetBackendTests.cpp's own SystemLinkSessionFixture
             // comment on why). Not part of real XNA.
             std::string LastMigrationReconnectAttemptGamertagForTestingEXT;
+            // Task 6.2 (plan_net.md Phase 6): AppData bound for one of this session's own local
+            // gamers, held here until its ReleaseTime by ReleaseDuePendingDeliveries - see
+            // PendingDelayedDelivery's own comment.
+            std::vector<PendingDelayedDelivery> PendingDeliveries;
         };
 
         // Task 2.13: process-wide, since SendAppData's silent-drop path (sender/target not yet in
@@ -350,14 +410,47 @@ namespace CNA::Internal::Net
 
             if (target->getIsLocalProperty())
             {
+                // Task 6.1/6.2 (plan_net.md Phase 6): SimulatedLatency/SimulatedPacketLoss are
+                // scoped to exactly this point - AppData about to be delivered to one of this
+                // session's own local gamers (real XNA's own documented meaning: what does *my*
+                // network connection do to data addressed to *me*) - not to the CNA-internal
+                // session-management protocol (ClientHello/ServerWelcome/etc., which needs to stay
+                // reliable for the session itself to function coherently and was never part of the
+                // real XNA API surface these properties govern), and not to a host's own relay hop
+                // for two *other* peers just passing through (not data this machine's own game
+                // code ever sees - see the relay branch below, unaffected).
+                if (ShouldDropForSimulatedLoss(session->getSimulatedPacketLossProperty()))
+                {
+                    return;
+                }
+
                 auto senderIt = state.WireIdToGamer.find(msg.SenderWireId);
-                NetworkSession::NetworkEvent evt;
-                evt.Type = NetworkSession::NetworkEventType::PacketSend;
-                evt.Gamer = target;
-                evt.Sender = (senderIt != state.WireIdToGamer.end()) ? senderIt->second : nullptr;
-                evt.Packet = msg.Payload;
-                evt.Reliable = msg.Options;
-                session->SendNetworkEvent(std::move(evt));
+                NetworkGamer* senderGamer = (senderIt != state.WireIdToGamer.end()) ? senderIt->second : nullptr;
+
+                System::TimeSpan latency = session->getSimulatedLatencyProperty();
+                if (latency <= System::TimeSpan::Zero)
+                {
+                    // Task 6.4's own regression requirement: zero latency (the default) behaves
+                    // exactly as before this task - immediate delivery, no queue involved at all.
+                    NetworkSession::NetworkEvent evt;
+                    evt.Type = NetworkSession::NetworkEventType::PacketSend;
+                    evt.Gamer = target;
+                    evt.Sender = senderGamer;
+                    evt.Packet = msg.Payload;
+                    evt.Reliable = msg.Options;
+                    session->SendNetworkEvent(std::move(evt));
+                    return;
+                }
+
+                PendingDelayedDelivery pending;
+                pending.Target = target;
+                pending.Sender = senderGamer;
+                pending.Payload = msg.Payload;
+                pending.Options = msg.Options;
+                pending.ReleaseTime = Now() + std::chrono::microseconds(
+                    static_cast<int64_t>(latency.getTotalMillisecondsProperty() * 1000.0)
+                );
+                state.PendingDeliveries.push_back(std::move(pending));
                 return;
             }
 
@@ -373,6 +466,39 @@ namespace CNA::Internal::Net
             }
             // Else: we're a client that received an AppData for a gamer we don't own and aren't
             // hosting for — shouldn't happen in this star topology; drop defensively.
+        }
+
+        // Task 6.2: delivers every pending delayed AppData whose ReleaseTime has passed - called
+        // once per PumpSession, so a packet queued by SimulatedLatency is handed to game code on
+        // whichever later Update() call first observes Now() >= ReleaseTime, not necessarily the
+        // very next one (matching how a real delayed packet's exact arrival frame isn't
+        // predictable either).
+        void ReleaseDuePendingDeliveries(NetworkSession* session, SessionState& state)
+        {
+            if (state.PendingDeliveries.empty())
+            {
+                return;
+            }
+            auto now = Now();
+            auto it = state.PendingDeliveries.begin();
+            while (it != state.PendingDeliveries.end())
+            {
+                if (it->ReleaseTime <= now)
+                {
+                    NetworkSession::NetworkEvent evt;
+                    evt.Type = NetworkSession::NetworkEventType::PacketSend;
+                    evt.Gamer = it->Target;
+                    evt.Sender = it->Sender;
+                    evt.Packet = std::move(it->Payload);
+                    evt.Reliable = it->Options;
+                    session->SendNetworkEvent(std::move(evt));
+                    it = state.PendingDeliveries.erase(it);
+                }
+                else
+                {
+                    ++it;
+                }
+            }
         }
 
         void HandleGamerLeaveBroadcast(NetworkSession* session, SessionState& state, const GamerLeaveBroadcastMessage& msg)
@@ -821,6 +947,11 @@ namespace CNA::Internal::Net
                 gamerIt->second->SetRoundtripTime(System::TimeSpan::FromMilliseconds(peer->roundTripTime));
             }
         }
+
+        // Task 6.2: hands off any delayed AppData whose SimulatedLatency has now elapsed. Runs
+        // every pump regardless of whether any new ENet events arrived above, so a packet queued
+        // by a previous pump still gets released on schedule even if nothing new comes in.
+        ReleaseDuePendingDeliveries(session, state);
     }
 
     uint16_t ENetBackend::GetBoundPort(NetworkSession* session)
@@ -866,6 +997,21 @@ namespace CNA::Internal::Net
             return {};
         }
         return it->second->LastMigrationReconnectAttemptGamertagForTestingEXT;
+    }
+
+    void ENetBackend::SetClockForTesting(std::chrono::steady_clock::time_point time)
+    {
+        ClockOverrideForTesting() = time;
+    }
+
+    void ENetBackend::ResetClockForTesting()
+    {
+        ClockOverrideForTesting().reset();
+    }
+
+    void ENetBackend::SeedPacketLossRngForTesting(unsigned seed)
+    {
+        PacketLossRng().seed(seed);
     }
 
     void ENetBackend::ConnectToHost(NetworkSession* session, const std::string& address, uint16_t port)

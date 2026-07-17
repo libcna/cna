@@ -285,10 +285,14 @@ namespace Microsoft::Xna::Framework::Net
         /**
          * @brief Gets the artificially simulated network latency.
          *
-         * Implementation note (Task 4.3): this value is stored but has no effect on actual
-         * traffic timing, matching FNA's own reference implementation - FNA's `SimulatedLatency`
-         * is itself a plain auto-property with no delay queue or throttling logic anywhere in its
-         * source. No custom delay queue exists anywhere in `ENetBackend`/`ENetHostHandle` either.
+         * Task 6.1-6.5 (plan_net.md Phase 6): real, receive-side implementation - `ENetBackend`
+         * holds AppData bound for one of this session's own local gamers in a per-session delayed-
+         * delivery queue, releasing it once `now >= receiveTime + SimulatedLatency` (see
+         * `ENetBackend.cpp`'s `HandleAppData`/`ReleaseDuePendingDeliveries`). Scoped to AppData
+         * only - the CNA-internal session-management protocol (join/leave/state-change messages)
+         * and a host's own relay hop for two *other* peers stay unaffected (see `HandleAppData`'s
+         * own comment for why). This is not FNA's own behavior (FNA's `SimulatedLatency` is a
+         * plain, inert auto-property with no delay queue anywhere in its stubbed-out source).
          *
          * @return The simulated latency.
          */
@@ -297,8 +301,8 @@ namespace Microsoft::Xna::Framework::Net
         /**
          * @brief Sets the artificially simulated network latency.
          *
-         * Implementation note: see getSimulatedLatencyProperty()'s doc comment - stored, not
-         * applied to real traffic.
+         * Implementation note: see getSimulatedLatencyProperty()'s doc comment for the real delay
+         * behavior this now drives.
          *
          * @param value The new simulated latency.
          */
@@ -307,10 +311,14 @@ namespace Microsoft::Xna::Framework::Net
         /**
          * @brief Gets the artificially simulated packet loss fraction.
          *
-         * Implementation note (Task 4.3): this value is stored but has no effect on actual packet
-         * delivery, matching FNA's own reference implementation - FNA's `SimulatedPacketLoss` is
-         * itself a plain auto-property with no synthetic-drop logic anywhere in its source. No
-         * such logic exists anywhere in `ENetBackend`/`ENetHostHandle` either.
+         * Task 6.1-6.5 (plan_net.md Phase 6): real implementation - each AppData packet bound for
+         * one of this session's own local gamers is probabilistically dropped before ever
+         * reaching game code, at exactly this rate (`ENetBackend.cpp`'s
+         * `ShouldDropForSimulatedLoss`; 0.0 and 1.0 are handled deterministically without touching
+         * any RNG). Scoped to AppData only - see `getSimulatedLatencyProperty()`'s own doc comment
+         * for why session-management/relay traffic stays unaffected. Not FNA's own behavior (FNA's
+         * `SimulatedPacketLoss` is a plain, inert auto-property with no synthetic-drop logic
+         * anywhere in its stubbed-out source).
          *
          * @return The simulated packet loss, from 0.0 to 1.0.
          */
@@ -319,8 +327,8 @@ namespace Microsoft::Xna::Framework::Net
         /**
          * @brief Sets the artificially simulated packet loss fraction.
          *
-         * Implementation note: see getSimulatedPacketLossProperty()'s doc comment - stored, not
-         * applied to real traffic.
+         * Implementation note: see getSimulatedPacketLossProperty()'s doc comment for the real
+         * drop behavior this now drives.
          *
          * @param value The new simulated packet loss, from 0.0 to 1.0.
          */

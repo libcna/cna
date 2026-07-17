@@ -6,6 +6,7 @@
 #include "Microsoft/Xna/Framework/Net/NetworkSessionType.hpp"
 #include "Microsoft/Xna/Framework/Net/SendDataOptions.hpp"
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
+#include <chrono>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -190,6 +191,35 @@ namespace CNA::Internal::Net
          * (or session has no registered transport).
          */
         static std::string GetLastMigrationReconnectAttemptGamertagForTesting(NetworkSession* session);
+
+        /**
+         * @brief Task 6.3 (plan_net.md Phase 6): overrides the time source SimulatedLatency's
+         * delayed-delivery queue reads `Now()` from, fixing it at `time` instead of the real
+         * `std::chrono::steady_clock`.
+         *
+         * Lets tests advance simulated time deterministically (e.g. confirm a packet is *not* yet
+         * released, then move the clock forward and confirm it now is) instead of depending on a
+         * real sleep and a flaky timing assertion. Not part of real XNA.
+         *
+         * @param time The fixed value `Now()` should report until `ResetClockForTesting()`.
+         */
+        static void SetClockForTesting(std::chrono::steady_clock::time_point time);
+
+        /** @brief Task 6.3: restores the real `std::chrono::steady_clock` as the time source. */
+        static void ResetClockForTesting();
+
+        /**
+         * @brief Task 6.3: reseeds the process-wide RNG behind SimulatedPacketLoss's
+         * probabilistic drop decision.
+         *
+         * Not needed for the documented probability extremes 0.0/1.0 (see
+         * `ShouldDropForSimulatedLoss`'s own comment in `ENetBackend.cpp` - both are handled
+         * without ever touching the RNG), but exists for completeness and any future test needing
+         * a deterministic outcome at an intermediate probability. Not part of real XNA.
+         *
+         * @param seed The seed value.
+         */
+        static void SeedPacketLossRngForTesting(unsigned seed);
 
         /**
          * @brief Broadcasts a session state change (StartGame/EndGame) to every connected peer.
