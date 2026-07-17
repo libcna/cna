@@ -1,5 +1,11 @@
 # `.cnj` content format — implementation plan for CNA
 
+> **Status update (2026-07-17): Phase 14E also closed.** `DualTextureEffect`'s occlusion-as-
+> lightmap texture is now genuinely decoded/halved/re-encoded (via a newly-vendored
+> `stb_image`/`stb_image_write`) before being written or loaded, fixing the ~2x-too-bright
+> approximation from Phase 13E — not just documenting it. See Phase 14's own section for full
+> detail.
+>
 > **Status update (2026-07-17): Phase 14D also closed.** `EvaluateMorphWeightsEXT` now performs
 > real Hermite (CUBICSPLINE) interpolation between morph-weight keyframes when the source glTF
 > channel used it, instead of always falling back to LINEAR between the sampled middle-third
@@ -546,14 +552,31 @@ onto `.cnj`, `RegisterCnjLoader<T>`, and Phase 9's hardening of those mechanisms
 | CNB-86 | Real Hermite evaluation in `EvaluateMorphWeightsEXT` (`MorphTargetEXT.hpp`/`.cpp`) | ✅ | `MorphWeightKeyframeEXT` gains `InTangent`/`OutTangent`; `MorphWeightTrackEXT` gains `CubicSpline`. `EvaluateMorphWeightsEXT` now applies the same component-wise Hermite basis as `GltfImportCore::HermiteEvaluate` (`h00`/`h10`/`h01`/`h11`, tangents scaled by the real bracket time span) when `CubicSpline` is true and both bracketing keyframes have tangent data, falling back to plain LINEAR otherwise (covers a track marked `CubicSpline` but missing tangent data, a defensive fallback rather than a crash). |
 | CNB-87 | Wire the new fields through the offline CLI/`.cnj` path (14C's own newly-added `"morphWeightTrack"` JSON) and tests | ✅ | `gltf_to_cnj.cpp` emits `"cubicSpline"` on the track object plus `"inTangent"`/`"outTangent"` per keyframe when present; `ContentManager.cpp`'s `.cnj` JSON reader (added in 14C) and `ReadGltfModel()`'s own runtime-path construction both now copy the tangent fields through. New tests: 3 new `MorphTargetEXTTests.cpp` cases (`CubicSplineEvaluatesRealHermiteCurveNotLinear` — hand-derived value 0.15625 at s=0.25 with zero endpoint tangents, distinguishing the real Hermite curve from LINEAR's 0.25; `CubicSplineHonorsNonZeroTangents` — a second hand-derived value proving the tangent term itself is read; `FallsBackToLinearWhenTangentsAreMissing`), plus a new fixture (`kCubicSplineMorphedTriangleGltf`) reused verbatim in both `RuntimeGltfModelTest.LoadsCubicSplineMorphWeightAnimationFromGltf` and `GltfToCnjToolTest.SerializesAndReloadsCubicSplineMorphWeightsThroughTheOfflineCnjPath`, both asserting the exact same hand-derived 0.15625 value end-to-end through their respective real pipelines. Full-suite regression: **4832 tests, 0 failures.** |
 
-### 14E — Remaining "vse udelej prosim" items ⬜ NOT STARTED
+### 14E — `DualTextureEffect` occlusion brightness fix ✅ CLOSED 2026-07-17
 
-> Task numbering reserved (`CNB-88`+) for whichever item is picked up next: true multi-UV-channel
-> rendering support for PBR maps (14B's own explicitly-deferred full fix), `DualTextureEffect`
-> occlusion brightness fix (needs an image codec), Draco mesh compression, full MikkTSpace tangent
-> generation, newer glTF extensions (`KHR_texture_transform`/`KHR_lights_punctual`/
-> `KHR_materials_emissive_strength`), and PBR/skinned-vertex-color shader support on the other 7+
-> graphics backends (CNB-61/13C's own deliberately-deferred scope, now being taken up).
+> `DualTextureEffect`'s own occlusion-as-lightmap approximation (CNB-72/73, Phase 13E) wrote the
+> occlusion texture byte-for-byte, unmodified -- but real XNA's `DualTextureEffect` blend shader
+> (`base.rgb *= 2.0; FragColor = base * texture(uTexture2, vUV) * uDiffuseColor;`) expects a baked
+> lightmap where "0.5 = neutral", not glTF's own real occlusion convention of "1.0 = fully
+> visible". A byte-for-byte passthrough therefore rendered roughly 2x too bright wherever the
+> surface was not fully occluded -- a documented, known approximation, not previously fixed
+> because doing so needs a real image codec (decode → halve RGB → re-encode), which this project
+> did not otherwise depend on.
+
+| # | Task | Status | Notes |
+|---|---|---|---|
+| CNB-88 | Vendor a minimal image codec and add `RemapOcclusionImageForDualTextureEXT` to `GltfImportCore` | ✅ | Vendored `third_party/stb/stb_image.h` + `stb_image_write.h` (public-domain single-header libs, matching `cgltf.h`'s own established vendoring precedent) -- the copy initially taken from `third_party/SDL_image`'s own vendored `stb_image.h` turned out to be SDL_image's own stripped-down fork (several functions, including `stbi_load_from_memory`, wrapped in `#if 0 /* not used in SDL_image */`), which failed to compile; replaced with a genuine unmodified upstream copy. Both headers' implementations are compiled with `STB_IMAGE_STATIC`/`STB_IMAGE_WRITE_STATIC` in `GltfImportCore.cpp` (the same one translation unit that already owns `CGLTF_IMPLEMENTATION`) so every `stbi_*`/`stbiw_*` symbol has internal linkage, avoiding a link-time duplicate-symbol collision against SDL_image's own separately-compiled copy in any executable that links both. Also needed explicit `#include <math.h>`/`#include <stdarg.h>` immediately before the stb includes -- this TU's own earlier transitive `<cmath>` inclusion (via `Matrix.hpp`/`Vector3.hpp`) otherwise left `pow`/`ldexp`/`frexp`/`va_arg` unavailable in the global namespace under this toolchain's libstdc++/glibc pairing, which stb's own C-style code relies on unqualified. New `RemapOcclusionImageForDualTextureEXT(const ExtractedImage&) -> std::optional<ExtractedImage>`: decodes via `stbi_load_from_memory` (forcing 4 channels), halves every pixel's R/G/B (alpha untouched), re-encodes via `stbi_write_png_to_func` into an in-memory buffer. Only ever called for the `DualTextureEffect::Texture2` role -- never for `PbrEffect`/`SkinnedPbrEffect`'s own `OcclusionMap`, which needs glTF's real, unmodified occlusion convention. |
+| CNB-89 | Wire into both the offline CLI/`.cnj` path and the runtime glTF path, with a cache-collision fix | ✅ | Both `gltf_to_cnj.cpp`'s `ConvertGroup` and `ContentManager.cpp`'s `ReadGltfModel()` previously shared ONE texture cache (keyed by `cgltf_image*`) across every texture role (base color, occlusion-as-`Texture2`, all 4 PBR maps) -- introducing a byte-content-differing remap for one specific role while keeping the same key would let the SAME physical `cgltf_image*`, if referenced both as `DualTextureEffect::Texture2` on one primitive AND as `PbrEffect::OcclusionMap` (unmodified) on a different primitive in the same file, incorrectly share whichever variant happened to be cached first. Fixed with a genuinely separate cache for the remapped role in both files (`remappedOcclusionTextures`/`remappedOcclusionCache`), using its own `"_texocc"+N` filename sequence in the CLI tool (not `writtenTextures`' own `"_tex"+N`, since summing two independent maps' `.size()` for a shared index still risked two unrelated entries computing the same N and colliding on disk). |
+| CNB-90 | Tests | ✅ | 2 new direct unit tests in `GltfImportCoreTests.cpp` (valid-PNG-in → re-encoded-PNG-out with a real PNG-signature check; undecodable input → `std::nullopt`, no crash). Extended the pre-existing `GltfToCnjToolTest.WiresBaseColorAndOcclusionTexturesThroughDualTextureEffect` (now also asserts the new `dualtex_texocc0.png` filename and, via `Texture2D::GetData`, that the loaded pixel is the halved `(~127,0,0,255)` value, not the raw `(255,0,0,255)` a passthrough would have produced) and added the equivalent new `RuntimeGltfModelTest.RemapsOcclusionTextureBrightnessForDualTextureEffectFromGltf` for the runtime path, both against the fixture's own solid-`(255,0,0)` 1x1 occlusion PNG. Full-suite regression: **4835 tests, 0 failures.** |
+
+### 14F — Remaining "vse udelej prosim" items ⬜ NOT STARTED
+
+> Task numbering reserved (`CNB-91`+) for whichever item is picked up next: true multi-UV-channel
+> rendering support for PBR maps (14B's own explicitly-deferred full fix), Draco mesh compression,
+> full MikkTSpace tangent generation, newer glTF extensions (`KHR_texture_transform`/
+> `KHR_lights_punctual`/`KHR_materials_emissive_strength`), and PBR/skinned-vertex-color shader
+> support on the other 7+ graphics backends (CNB-61/13C's own deliberately-deferred scope, now
+> being taken up).
 
 ## Relationship to other plan files
 

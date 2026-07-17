@@ -1224,7 +1224,11 @@ TEST(GltfToCnjToolTest, WiresBaseColorAndOcclusionTexturesThroughDualTextureEffe
     const int exitCode = RunGltfToCnjTool(gltfPath.string(), contentRoot.path().string(), "dualtex");
     ASSERT_EQ(exitCode, 0);
     ASSERT_TRUE(std::filesystem::exists(contentRoot.path() / "dualtex_tex0.png"));
-    ASSERT_TRUE(std::filesystem::exists(contentRoot.path() / "dualtex_tex1.png"));
+    // CNB-88 (Phase 14E): the occlusion texture is now written through
+    // RemapOcclusionImageForDualTextureEXT into its own "_texocc"-prefixed file (a separate
+    // cache/naming sequence from writtenTextures' own "_tex"+N -- see ConvertGroup's own doc
+    // comment for why), not "dualtex_tex1.png" the way an unmodified passthrough would have been.
+    ASSERT_TRUE(std::filesystem::exists(contentRoot.path() / "dualtex_texocc0.png"));
 
     const std::filesystem::path vertsPath = contentRoot.path() / "dualtex_mesh0_verts.bin";
     std::ifstream f(vertsPath, std::ios::binary);
@@ -1246,6 +1250,16 @@ TEST(GltfToCnjToolTest, WiresBaseColorAndOcclusionTexturesThroughDualTextureEffe
     ASSERT_NE(tex2, nullptr);
     EXPECT_EQ(tex1->getWidthProperty(), 1);
     EXPECT_EQ(tex2->getWidthProperty(), 1);
+
+    // The fixture's occlusion image is a solid (255,0,0) 1x1 PNG -- after the CNB-88 brightness
+    // fix, the loaded Texture2 pixel's RGB must be halved (~127,0,0), not the raw (255,0,0) a
+    // byte-for-byte passthrough would have produced.
+    Color occlusionPixel(0, 0, 0, 0);
+    tex2->GetData(&occlusionPixel, 1);
+    EXPECT_NEAR(occlusionPixel.getRProperty(), 127, 2);
+    EXPECT_EQ(occlusionPixel.getGProperty(), 0);
+    EXPECT_EQ(occlusionPixel.getBProperty(), 0);
+    EXPECT_EQ(occlusionPixel.getAProperty(), 255);
 }
 
 // CNB-66/67/68: a skinned mesh with a COLOR_0 attribute must import through the new stride-56

@@ -9,6 +9,7 @@
 // not asserted on elsewhere in this codebase (see the pre-existing morph-target warning, which
 // has no matching test either).
 
+#include <algorithm>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -168,4 +169,44 @@ TEST(GltfImportCoreTest, ExtractMeshDoesNotFlagMatchedPbrMapUvSets)
     const MeshOut out = ExtractPrimitive0(kMatchedUvGltf);
     ASSERT_TRUE(out.usePbr);
     EXPECT_FALSE(out.pbrUv2Mismatch);
+}
+
+// DualTextureEffect occlusion brightness fix (CNB-88, Phase 14E). Pixel-value verification
+// (the remapped result actually decodes to a halved RGB) is covered end-to-end via Texture2D in
+// GltfToCnjToolTests.cpp/RuntimeGltfModelTests.cpp; this file has no GraphicsDevice/Texture2D
+// infra, so these two cases stick to what's directly observable here: a valid decode succeeds
+// and re-encodes as PNG, and an undecodable input fails gracefully rather than throwing/crashing.
+TEST(GltfImportCoreTest, RemapOcclusionImageSucceedsOnAValidPngAndReencodesAsPng)
+{
+    // The same solid-(255,0,0) 1x1 PNG reused throughout this project's other glTF fixtures
+    // (base64 "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC"),
+    // decoded once to raw bytes to avoid needing a base64 decoder in this test file.
+    ExtractedImage input;
+    input.bytes = {
+        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
+        0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53,
+        0xde, 0x00, 0x00, 0x00, 0x0c, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9c, 0x63, 0xf8, 0xcf, 0xc0, 0x00,
+        0x00, 0x03, 0x01, 0x01, 0x00, 0xc9, 0xfe, 0x92, 0xef, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e,
+        0x44, 0xae, 0x42, 0x60, 0x82,
+    };
+    input.extension = "png";
+
+    const auto result = RemapOcclusionImageForDualTextureEXT(input);
+    ASSERT_TRUE(result.has_value());
+    EXPECT_EQ(result->extension, "png");
+    EXPECT_FALSE(result->bytes.empty());
+    // A real PNG file always starts with this fixed 8-byte signature.
+    static const std::uint8_t kPngSignature[8] = {0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A};
+    ASSERT_GE(result->bytes.size(), sizeof(kPngSignature));
+    EXPECT_TRUE(std::equal(std::begin(kPngSignature), std::end(kPngSignature), result->bytes.begin()));
+}
+
+TEST(GltfImportCoreTest, RemapOcclusionImageReturnsNulloptOnUndecodableInput)
+{
+    ExtractedImage input;
+    input.bytes = {0x00, 0x01, 0x02, 0x03};
+    input.extension = "png";
+
+    const auto result = RemapOcclusionImageForDualTextureEXT(input);
+    EXPECT_FALSE(result.has_value());
 }

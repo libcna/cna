@@ -48,6 +48,10 @@ target_include_directories(CNA
         # plan_cnj.md CNB-70 (Phase 13D): CNA::Internal::GltfImport::GltfImportCore (used by both
         # ContentManager.cpp's GltfModelTypeReader and tools/gltf_to_cnj) needs cgltf.h.
         ${CMAKE_CURRENT_SOURCE_DIR}/third_party/cgltf
+        # plan_cnj.md CNB-88 (Phase 14E): RemapOcclusionImageForDualTextureEXT (decode/remap/
+        # re-encode an occlusion texture for DualTextureEffect's own "0.5 = neutral" blend
+        # convention) needs stb_image.h/stb_image_write.h.
+        ${CMAKE_CURRENT_SOURCE_DIR}/third_party/stb
 )
 
 target_compile_definitions(CNA

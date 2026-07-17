@@ -16,6 +16,26 @@
 #define CGLTF_IMPLEMENTATION
 #include "CNA/Internal/GltfImport/GltfImportCore.hpp"
 
+// RemapOcclusionImageForDualTextureEXT's own decode/re-encode step (plan_cnj.md CNB-88). STATIC
+// so every stbi_*/stbiw_* symbol has internal linkage in this one translation unit -- other parts
+// of the CNA tree (SDL_image's own vendored copy) also compile stb_image.h's implementation, and
+// without STATIC the two would collide at link time (duplicate global symbols) in any executable
+// that links both.
+//
+// The plain C <math.h>/<stdarg.h> headers are included explicitly (not just <cmath>/<cstdarg>)
+// immediately before stb_image.h/stb_image_write.h: this TU's own earlier transitive <cmath>
+// inclusion (via Matrix.hpp/Vector3.hpp) left pow/ldexp/frexp/va_arg unavailable in the global
+// namespace under this toolchain's libstdc++/glibc pairing, which stb_image.h's/stb_image_write.
+// h's own C-style code relies on unqualified.
+#include <math.h>
+#include <stdarg.h>
+#define STB_IMAGE_STATIC
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
+#define STB_IMAGE_WRITE_STATIC
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "stb_image_write.h"
+
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
@@ -615,6 +635,42 @@ namespace CNA::Internal::GltfImport
         }
 
         return std::nullopt;
+    }
+
+    std::optional<ExtractedImage> RemapOcclusionImageForDualTextureEXT(const ExtractedImage& image)
+    {
+        int width = 0, height = 0, channelsInFile = 0;
+        stbi_uc* pixels = stbi_load_from_memory(
+            image.bytes.data(), static_cast<int>(image.bytes.size()),
+            &width, &height, &channelsInFile, 4);
+        if (!pixels) { return std::nullopt; }
+
+        const std::size_t pixelCount = static_cast<std::size_t>(width) * static_cast<std::size_t>(height);
+        for (std::size_t i = 0; i < pixelCount; ++i)
+        {
+            stbi_uc* p = pixels + i * 4;
+            // RGB halved (DualTextureEffect's own "0.5 = neutral" blend convention); alpha (p[3])
+            // left unchanged -- glTF occlusion textures have no meaningful alpha channel anyway.
+            p[0] = static_cast<stbi_uc>(p[0] / 2);
+            p[1] = static_cast<stbi_uc>(p[1] / 2);
+            p[2] = static_cast<stbi_uc>(p[2] / 2);
+        }
+
+        std::vector<std::uint8_t> encoded;
+        const auto writeCallback = [](void* context, void* data, int size)
+        {
+            auto* out = static_cast<std::vector<std::uint8_t>*>(context);
+            const auto* bytes = static_cast<std::uint8_t*>(data);
+            out->insert(out->end(), bytes, bytes + size);
+        };
+        const int ok = stbi_write_png_to_func(writeCallback, &encoded, width, height, 4, pixels, width * 4);
+        stbi_image_free(pixels);
+        if (!ok) { return std::nullopt; }
+
+        ExtractedImage result;
+        result.bytes = std::move(encoded);
+        result.extension = "png";
+        return result;
     }
 
     const cgltf_image* FindBaseColorImage(const cgltf_primitive& prim)

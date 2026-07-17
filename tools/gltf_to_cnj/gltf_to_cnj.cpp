@@ -177,6 +177,7 @@ namespace
     void ConvertGroup(const cgltf_data* data, const MeshGroup& group, const std::string& outName,
                        const std::filesystem::path& gltfDir, const std::filesystem::path& outputDir,
                        std::unordered_map<const cgltf_image*, std::string>& writtenTextures,
+                       std::unordered_map<const cgltf_image*, std::string>& remappedOcclusionTextures,
                        float unitScale, std::vector<std::string>& warnings)
     {
         const bool hasSkin = group.skin != nullptr;
@@ -261,16 +262,40 @@ namespace
                 std::string texture2File;
                 if (meshOut.useDualTexture && meshOut.occlusionImage)
                 {
-                    auto cached = writtenTextures.find(meshOut.occlusionImage);
-                    if (cached != writtenTextures.end())
+                    // CNB-88 (Phase 14E): DualTextureEffect's own occlusion-as-lightmap blend
+                    // expects "0.5 = neutral", not glTF's own real "1.0 = fully visible"
+                    // occlusion convention (see RemapOcclusionImageForDualTextureEXT's own doc
+                    // comment for the full derivation) -- decode/halve/re-encode before writing,
+                    // fixing the ~2x-too-bright approximation. Cached separately from
+                    // writtenTextures: the SAME image could in principle also be referenced,
+                    // unmodified, as a different primitive's PbrEffect::OcclusionMap elsewhere in
+                    // this same file, and that must not observe the remapped bytes (or vice versa).
+                    auto cached = remappedOcclusionTextures.find(meshOut.occlusionImage);
+                    if (cached != remappedOcclusionTextures.end())
                     {
                         texture2File = cached->second;
                     }
                     else if (auto img = ExtractImage(meshOut.occlusionImage, gltfDir))
                     {
-                        texture2File = outName + "_tex" + std::to_string(writtenTextures.size()) + "." + img->extension;
-                        WriteBinaryFile(outputDir / texture2File, img->bytes);
-                        writtenTextures[meshOut.occlusionImage] = texture2File;
+                        auto remapped = RemapOcclusionImageForDualTextureEXT(*img);
+                        if (!remapped)
+                        {
+                            warnings.push_back(
+                                "Primitive '" + partName + "' has an occlusion texture that "
+                                "could not be decoded for the DualTextureEffect brightness fix "
+                                "-- written unmodified (still ~2x too bright where unoccluded).");
+                            remapped = img;
+                        }
+                        // Distinct "_texocc" prefix + its own independent counter (rather than
+                        // sharing writtenTextures' own "_tex"+N sequence): this cache is a
+                        // genuinely separate namespace from writtenTextures (same cgltf_image*
+                        // key can validly appear in both, with different byte content), so
+                        // deriving a shared index from either map's .size() alone risks two
+                        // unrelated entries computing the same N and colliding on disk.
+                        texture2File = outName + "_texocc" + std::to_string(remappedOcclusionTextures.size())
+                                     + "." + remapped->extension;
+                        WriteBinaryFile(outputDir / texture2File, remapped->bytes);
+                        remappedOcclusionTextures[meshOut.occlusionImage] = texture2File;
                     }
                 }
 
@@ -534,6 +559,7 @@ namespace
         std::filesystem::create_directories(opts.outputDir);
         const std::filesystem::path gltfDir = opts.inputPath.parent_path();
         std::unordered_map<const cgltf_image*, std::string> writtenTextures;
+        std::unordered_map<const cgltf_image*, std::string> remappedOcclusionTextures;
 
         for (std::size_t g = 0; g < groups.size(); ++g)
         {
@@ -547,7 +573,8 @@ namespace
                                                              : ("skin" + std::to_string(g)));
                 }
             }
-            ConvertGroup(data, groups[g], outName, gltfDir, opts.outputDir, writtenTextures, opts.unitScale, warnings);
+            ConvertGroup(data, groups[g], outName, gltfDir, opts.outputDir, writtenTextures,
+                         remappedOcclusionTextures, opts.unitScale, warnings);
         }
 
         if (groups.size() > 1)

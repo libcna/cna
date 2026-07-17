@@ -246,6 +246,26 @@ namespace CNA::Internal::GltfImport
                                                 const std::filesystem::path& gltfDir);
 
     /**
+     * @brief Decodes an extracted occlusion image, halves every RGB channel (alpha left
+     * unchanged), and re-encodes the result as PNG -- the real fix for `DualTextureEffect`'s own
+     * occlusion-as-lightmap approximation (plan_cnj.md CNB-72/73).
+     *
+     * glTF's own occlusion texture convention is "1.0 = fully visible" (correctly consumed as-is
+     * by `PbrEffect::OcclusionMap`), but `DualTextureEffect`'s real XNA blend shader
+     * (`base.rgb *= 2.0; FragColor = base * texture(uTexture2, vUV) * uDiffuseColor;`) expects a
+     * baked lightmap where "0.5 = neutral" -- a byte-for-byte passthrough of a real occlusion
+     * texture therefore renders roughly 2x too bright wherever it is not fully occluded. Only call
+     * this for an image being used as `DualTextureEffect::Texture2`, never for `PbrEffect::
+     * OcclusionMap`, which needs the original, unmodified image.
+     *
+     * @param image The extracted occlusion image bytes (from ExtractImage), any format
+     * stb_image.h can decode (PNG/JPEG/BMP/TGA/...).
+     * @return The remapped image, re-encoded as PNG (extension "png"), or std::nullopt if the
+     * source bytes could not be decoded.
+     */
+    std::optional<ExtractedImage> RemapOcclusionImageForDualTextureEXT(const ExtractedImage& image);
+
+    /**
      * @brief Returns a primitive's material's base-color texture image, honoring its own
      * TEXCOORD-set selection, or nullptr if the primitive has no material or base color texture.
      */

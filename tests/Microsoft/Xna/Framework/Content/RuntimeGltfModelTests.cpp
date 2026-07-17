@@ -27,6 +27,7 @@
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Graphics/AnimationPlayer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DualTextureEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Model.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMesh.hpp"
@@ -338,6 +339,39 @@ namespace
     { "bufferView": 6, "componentType": 5126, "count": 1, "type": "MAT4" }
   ]
 })GLTF";
+
+    // DualTextureEffect occlusion brightness fix (CNB-88, Phase 14E): an unskinned, uncolored mesh
+    // whose material has both a base-color and an occlusion texture, imported through
+    // DualTextureEffect -- identical fixture to GltfToCnjToolTests.cpp's own kDualTextureGltf.
+    // The occlusion image is a solid (255,0,0) 1x1 PNG; RemapOcclusionImageForDualTextureEXT must
+    // halve it (~127,0,0) before it reaches the loaded Texture2D.
+    const char* kDualTextureGltf = R"GLTF({
+  "asset": { "version": "2.0" },
+  "scene": 0,
+  "scenes": [ { "nodes": [0] } ],
+  "nodes": [ { "name": "MeshNode", "mesh": 0 } ],
+  "meshes": [ { "primitives": [ { "attributes": { "POSITION": 0, "TEXCOORD_0": 1 }, "material": 0 } ] } ],
+  "materials": [ { "pbrMetallicRoughness": { "baseColorTexture": { "index": 0 } }, "occlusionTexture": { "index": 1 } } ],
+  "textures": [ { "source": 0 }, { "source": 1 } ],
+  "images": [
+    { "bufferView": 2, "mimeType": "image/png" },
+    { "bufferView": 3, "mimeType": "image/png" }
+  ],
+  "buffers": [ {
+    "byteLength": 198,
+    "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCCiVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC"
+  } ],
+  "bufferViews": [
+    { "buffer": 0, "byteOffset": 0,   "byteLength": 36 },
+    { "buffer": 0, "byteOffset": 36,  "byteLength": 24 },
+    { "buffer": 0, "byteOffset": 60,  "byteLength": 69 },
+    { "buffer": 0, "byteOffset": 129, "byteLength": 69 }
+  ],
+  "accessors": [
+    { "bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3", "min": [0,0,0], "max": [1,1,0] },
+    { "bufferView": 1, "componentType": 5126, "count": 3, "type": "VEC2" }
+  ]
+})GLTF";
 }
 
 TEST(RuntimeGltfModelTest, LoadsUnskinnedTexturedModelDirectlyFromGltf)
@@ -558,4 +592,36 @@ TEST(RuntimeGltfModelTest, LoadsSkinnedPbrMaterialDirectlyFromGltf)
     auto* skinningData = static_cast<SkinningData*>(model.getTagProperty());
     ASSERT_NE(skinningData, nullptr);
     EXPECT_EQ(skinningData->BoneCount, 1);
+}
+
+// DualTextureEffect occlusion brightness fix (CNB-88, Phase 14E): the runtime glTF path must
+// also apply RemapOcclusionImageForDualTextureEXT before loading the occlusion image into
+// DualTextureEffect::Texture2, not just the offline CLI/.cnj path.
+TEST(RuntimeGltfModelTest, RemapsOcclusionTextureBrightnessForDualTextureEffectFromGltf)
+{
+    ScratchDir contentRoot;
+    WriteFile(contentRoot.path() / "dualtex.gltf", kDualTextureGltf);
+
+    GraphicsDevice gd;
+    ContentManager cm(nullptr, contentRoot.path().string());
+    cm.setGraphicsDevice(gd);
+
+    Model model = cm.Load<Model>("dualtex");
+    ASSERT_EQ(model.getMeshesProperty().getCountProperty(), 1);
+    ModelMesh* mesh = model.getMeshesProperty()[0];
+
+    auto* dualFx = dynamic_cast<DualTextureEffect*>(mesh->getMeshPartsProperty()[0]->getEffectProperty());
+    ASSERT_NE(dualFx, nullptr);
+    Texture2D* tex2 = dualFx->getTexture2Property();
+    ASSERT_NE(tex2, nullptr);
+    EXPECT_EQ(tex2->getWidthProperty(), 1);
+
+    // Source occlusion image is solid (255,0,0); the loaded texture must be halved (~127,0,0),
+    // not the raw passthrough value.
+    Color occlusionPixel(0, 0, 0, 0);
+    tex2->GetData(&occlusionPixel, 1);
+    EXPECT_NEAR(occlusionPixel.getRProperty(), 127, 2);
+    EXPECT_EQ(occlusionPixel.getGProperty(), 0);
+    EXPECT_EQ(occlusionPixel.getBProperty(), 0);
+    EXPECT_EQ(occlusionPixel.getAProperty(), 255);
 }

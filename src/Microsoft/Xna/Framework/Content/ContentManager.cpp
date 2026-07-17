@@ -1824,6 +1824,32 @@ namespace Microsoft::Xna::Framework::Content
                 return texPtr;
             };
 
+            // CNB-88 (Phase 14E): DualTextureEffect's own occlusion-as-lightmap blend expects
+            // "0.5 = neutral", not glTF's own real "1.0 = fully visible" occlusion convention --
+            // decode/halve/re-encode before loading (see RemapOcclusionImageForDualTextureEXT's
+            // own doc comment). A separate cache from textureCache above: the SAME cgltf_image*
+            // could in principle also be referenced, unmodified, by a different primitive's
+            // PbrEffect::OcclusionMap elsewhere in this same file.
+            std::unordered_map<const cgltf_image*, Graphics::Texture2D*> remappedOcclusionCache;
+            auto loadOcclusionTextureForDualTextureEXT = [&](const cgltf_image* image) -> Graphics::Texture2D*
+            {
+                if (!image) { return nullptr; }
+                auto cached = remappedOcclusionCache.find(image);
+                if (cached != remappedOcclusionCache.end()) { return cached->second; }
+                auto extracted = ExtractImage(image, gltfDir);
+                if (!extracted) { return nullptr; }
+                auto remapped = RemapOcclusionImageForDualTextureEXT(*extracted);
+                const ExtractedImage& toLoad = remapped ? *remapped : *extracted;
+                System::IO::MemoryStream ms(toLoad.bytes.data(),
+                                             static_cast<std::int32_t>(toLoad.bytes.size()));
+                auto tex = std::make_unique<Graphics::Texture2D>(
+                    Graphics::Texture2D::FromStream(device, ms));
+                Graphics::Texture2D* texPtr = tex.get();
+                res->textureOwners.push_back(std::move(tex));
+                remappedOcclusionCache[image] = texPtr;
+                return texPtr;
+            };
+
             int meshCounter = 0;
             for (const cgltf_mesh* mesh : group.meshes)
             {
@@ -1947,7 +1973,7 @@ namespace Microsoft::Xna::Framework::Content
 
                     if (meshOut.useDualTexture)
                     {
-                        if (Graphics::Texture2D* tex2 = loadTexture(meshOut.occlusionImage))
+                        if (Graphics::Texture2D* tex2 = loadOcclusionTextureForDualTextureEXT(meshOut.occlusionImage))
                         {
                             if (auto* dualFx = dynamic_cast<Graphics::DualTextureEffect*>(fx.get())) {
                                 dualFx->setTexture2Property(tex2);
