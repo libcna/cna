@@ -1242,6 +1242,27 @@ case more exist).
   `TintStudioDemo`, which also has both). Verified via `--show-help --smoke 30 --screenshot`
   (overlay legible, fits panel, both avatars still visible/distinctly tinted below it) and a
   default `--smoke`-only run (overlay hidden, both avatars render normally - no regression).
+- [x] **Task 8.5 (demo_avatar_multi_attach_stress)** — Same pattern; this demo already had its own
+  `MakeSimpleFont`/`SpriteBatch`/font plumbing (used for an on-screen `Parts.size()` counter), so
+  it carried the *same* `Rectangle(0,0,1,1)` glyph-bounds bug documented above - the counter text
+  was silently rendering as dots this whole time, a pre-existing bug Task 8's own new code didn't
+  introduce but is fixed here alongside the F1 rollout (confirmed via before/after screenshot: the
+  counter is legible blocky text now). Help text documents the Space-attach-next control and what
+  the counter proves. Verified via `--show-help --smoke 60 --screenshot` (overlay legible, fits
+  panel) and a default `--smoke`-only run (`Parts.size()` counter now legible, hair part visibly
+  attached, no regression).
+  **Wider finding, out of this plan's scope:** the same broken `MakeSimpleFont` (copied from
+  `demo_gamer_roster_hud/src/RosterGame.cpp`, per Task 8.1's own note) exists verbatim in 10 more
+  pre-existing demos entirely outside `plan_net.md` - `demo_leaderboard_viewer`,
+  `demo_gamerservices_signin_presence`, `demo_gamer_roster_hud` (the origin), 
+  `demo_net_client_server_arena`, `demo_gamerservices_dispatcher_watchdog`,
+  `demo_achievement_showcase`, `demo_simulated_network_conditions`, `demo_gamer_profile_privileges`,
+  `demo_session_browser`, `demo_friends_and_gamercard` (found via
+  `grep -rl "bounds.push_back(Rectangle(0, 0, 1, 1))" examples/`). Every on-screen text label in
+  those demos is almost certainly rendering as dots too. Left unfixed here - out of Phase 8's
+  scope (avatar demos only) and too large a blast radius (11 files across unrelated plans/
+  subsystems) to take on unprompted while unattended; flagging as a follow-up task for a future
+  session/plan rather than silently expanding scope.
 - [ ] **Task 8.6** — One commit per demo is likely excessive for 8 near-identical additions built
   on the same Task 8.1 helper — since the user's "one task = one commit" rule maps to *this
   plan's tasks*, treat Task 8.1+8.2+8.3 (the shared helper + its first real usage in
