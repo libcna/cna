@@ -1555,8 +1555,15 @@ status. This unblocked the build/test run needed to close out Phase 12/13/14's v
     had listed `FriendCollection`/`FriendGamer` as flatly "Implemented" without this caveat -
     corrected both to note the `GetFriends()` population gap, rather than let a final-audit
     finding sit uncorrected in the very doc the audit is supposed to keep accurate.
-- [ ] **Task 11.2** — Re-verify `docs/xna-4-api-coverage.md` matches actual code state after all
-  phases (not just after Phase 1/9's initial pass — things may have changed further by then).
+- [x] **Task 11.2** — No Net/GamerServices *code* changed between Task 9.1's correction pass and
+  now (Phase 10 was tests/verification-only, Phase 11's own work so far is docs/audit-only), so
+  the real question is whether Task 9.1's pass missed anything - which Task 11.1's exhaustive
+  165-hit grep sweep exists specifically to catch, and did: the `FriendCollection`/`FriendGamer`
+  population-gap overclaim, already fixed in both §3 and §9 (Task 11.1's own write-up above).
+  Additionally spot-checked two §9 entries not individually verified during Task 9.1's original
+  pass: `GamerProfile.cpp` (45 real lines, no `NotImplementedException`/`NotSupportedException`)
+  and `GamerZone` (header-only enum, no `.cpp` needed) - both consistent with their §9
+  "Implemented" rating. No further staleness found.
 - [x] **Task 11.3** — **Correction, not silently ignored:** `plan_net_20260707.md` no longer
   exists in the working tree — `git log --diff-filter=A -- plan_net_20260707.md` shows it was
   created by Phase 0 (`eefaeea3`, 2026-07-07), then genuinely *deleted* by a later, separate,
@@ -1598,8 +1605,19 @@ status. This unblocked the build/test run needed to close out Phase 12/13/14's v
   specifically about proprietary Xbox Avatar *visual content* - body meshes, skin textures, hair
   models - none of which appears anywhere in this pass's own new work.) Also scanned the sibling
   `mesh-craft` repo for anything Xbox/proprietary-named - nothing found.
-- [ ] **Task 11.6** — Confirm commits are clean and logically separated (one task = one commit,
-  per decision 6c) — spot-check `git log` against this plan's task list.
+- [x] **Task 11.6** — `git log --first-parent --oneline eefaeea3..HEAD -- plan_net.md` (isolates
+  this pass's own commits from the much larger cross-branch history a plain `eefaeea3..HEAD`
+  range pulls in via merges) lists 27 commits since Phase 0's archive point; the first 3
+  (`a1166a8c`/`a60a1c1b`/`95579c96`) are pre-existing repo-maintenance/merge commits from before
+  this pass's own work began, not authored by it. The remaining 24, from `a048e88e` (Phase
+  12-14/1.5-1.6) through `2ae44b41` (Task 11.1/11.3/11.4/11.5), each map to one specific,
+  named task or tightly-coupled task cluster, matching decision 6c - no unrelated work bundled
+  into any of them. Spot-checked commit-message trailers (`Co-Authored-By`/`Claude-Session`) on 5
+  commits spanning the full range - consistent on every one. Spot-checked file scope on 2
+  representative commits (`87e76c8a` Task 7.4-7.13: only `tools/avatar_builder/`, avatar
+  `Content/` binaries, `plan_net.md`; `1f81a22c` Task 5.1-5.7: only Net/ENet host-migration files,
+  its own test harness, `plan_net.md`) - both scoped to their stated task, no stray unrelated
+  files.
 - [ ] **Task 11.7** — Final summary to the user: what changed, tests run and results, remaining
   gaps (including any still-open micro-decisions from this plan's header that never got a
   concrete user answer), and recommended next steps.
