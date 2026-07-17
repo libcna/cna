@@ -280,41 +280,62 @@ namespace CNA::Internal::GltfImport
             return static_cast<std::uint8_t>(std::clamp(v, 0.0f, 1.0f) * 255.0f + 0.5f);
         }
 
-        // plan_cnj.md CNB-57 (Phase 13A): computes a per-vertex tangent basis when the file has
-        // no TANGENT accessor of its own, for PbrEffect's normal mapping. This is Lengyel's
-        // method (accumulate a per-triangle tangent/bitangent from position+UV deltas onto each
-        // of its 3 vertices, then per vertex: Gram-Schmidt orthogonalize the summed tangent
-        // against the vertex normal, and derive the handedness sign from whether the
-        // orthogonalized tangent's cross product with the normal agrees with the summed
-        // bitangent) -- the same real-time-engine-standard technique real XNA's own content
-        // pipeline (MeshHelper.CalculateTangentFrames) implements, though not bit-for-bit
-        // identical to the full MikkTSpace algorithm the glTF spec itself recommends (which
-        // additionally angle-weights contributions and has explicit degenerate-UV handling) --
-        // a documented, deliberate scope cut, not an oversight.
+        // The interior angle at the corner where edges `a` and `b` (both pointing away from that
+        // corner) meet, in radians, clamped to a safe acos() domain -- 0.0 for a degenerate
+        // (zero-length) edge, which naturally zeroes that corner's contribution below rather than
+        // needing a separate special case.
+        float CornerAngleEXT(const Vector3& a, const Vector3& b)
+        {
+            const float lenA = a.Length(), lenB = b.Length();
+            if (lenA < 1e-12f || lenB < 1e-12f) { return 0.0f; }
+            const float cosAngle = std::clamp(Vector3::Dot(a, b) / (lenA * lenB), -1.0f, 1.0f);
+            return std::acos(cosAngle);
+        }
+
+        // plan_cnj.md CNB-57/CNB-94 (Phase 13A/14G): computes a per-vertex tangent basis when the
+        // file has no TANGENT accessor of its own, for PbrEffect's normal mapping.
+        //
+        // Per triangle: the same position+UV-gradient tangent/bitangent formula Lengyel's method
+        // and MikkTSpace both start from, skipped entirely for a degenerate-UV triangle (near-zero
+        // UV parallelogram area) so it contributes neither a real value nor NaN/Inf to any of its
+        // 3 corners. That per-triangle tangent/bitangent is then accumulated onto each of its 3
+        // corners weighted by the triangle's own interior angle at that specific corner (via
+        // CornerAngleEXT) rather than an unweighted sum -- the real MikkTSpace algorithm's own
+        // rationale: an unweighted sum implicitly lets a large or thin triangle sharing a vertex
+        // dominate a small one, which angle-weighting corrects for. Finalized per vertex via
+        // Gram-Schmidt orthogonalization against the vertex normal and a handedness sign derived
+        // from agreement with the accumulated bitangent -- the same finalization step real
+        // MikkTSpace itself also uses.
+        //
+        // This is NOT a bit-for-bit port of Morten Mikkelsen's own reference `mikktspace.c`
+        // implementation (not available to vendor in this environment, unlike cgltf.h/stb_image.h,
+        // for which genuine unmodified upstream copies were found locally) -- in particular, real
+        // MikkTSpace additionally welds corners sharing the same position+normal (but not
+        // necessarily the same UV, e.g. across a hard-seam boundary) into shared "TSpace" groups
+        // before angle-weighted accumulation, which this simpler per-glTF-vertex accumulation does
+        // not replicate. A documented, deliberate scope cut, not an oversight.
         std::vector<Vector4> ComputeTangentsEXT(const std::vector<float>& positions,
                                                  const std::vector<float>& normals,
                                                  const std::vector<float>& uvs,
-                                                 const cgltf_primitive& prim, cgltf_size vertexCount)
+                                                 const std::vector<std::uint32_t>& indices,
+                                                 cgltf_size vertexCount)
         {
             std::vector<Vector3> tanAccum(vertexCount);
             std::vector<Vector3> bitanAccum(vertexCount);
 
-            auto pos = [&](cgltf_size idx) {
+            auto pos = [&](std::uint32_t idx) {
                 const std::size_t o = static_cast<std::size_t>(idx) * 3;
                 return Vector3(positions[o], positions[o + 1], positions[o + 2]);
             };
-            auto uv = [&](cgltf_size idx) {
+            auto uv = [&](std::uint32_t idx) {
                 if (uvs.empty()) { return Vector2(0.0f, 0.0f); }
                 const std::size_t o = static_cast<std::size_t>(idx) * 2;
                 return Vector2(uvs[o], uvs[o + 1]);
             };
 
-            const cgltf_size indexCount = prim.indices ? prim.indices->count : vertexCount;
-            for (cgltf_size i = 0; i + 2 < indexCount; i += 3)
+            for (std::size_t i = 0; i + 2 < indices.size(); i += 3)
             {
-                const cgltf_size i0 = prim.indices ? cgltf_accessor_read_index(prim.indices, i) : i;
-                const cgltf_size i1 = prim.indices ? cgltf_accessor_read_index(prim.indices, i + 1) : i + 1;
-                const cgltf_size i2 = prim.indices ? cgltf_accessor_read_index(prim.indices, i + 2) : i + 2;
+                const std::uint32_t i0 = indices[i], i1 = indices[i + 1], i2 = indices[i + 2];
 
                 const Vector3 p0 = pos(i0), p1 = pos(i1), p2 = pos(i2);
                 const Vector2 uv0 = uv(i0), uv1 = uv(i1), uv2 = uv(i2);
@@ -329,12 +350,20 @@ namespace CNA::Internal::GltfImport
                 const Vector3 tangent   = f * (dv2 * edge1 - dv1 * edge2);
                 const Vector3 bitangent = f * (du1 * edge2 - du2 * edge1);
 
-                tanAccum[i0] = tanAccum[i0] + tangent;
-                tanAccum[i1] = tanAccum[i1] + tangent;
-                tanAccum[i2] = tanAccum[i2] + tangent;
-                bitanAccum[i0] = bitanAccum[i0] + bitangent;
-                bitanAccum[i1] = bitanAccum[i1] + bitangent;
-                bitanAccum[i2] = bitanAccum[i2] + bitangent;
+                // Angle-weighted accumulation: the interior angle at each of the 3 corners,
+                // computed from the two triangle edges meeting there (note edge3 = p2-p1, needed
+                // only for corner i1/i2's own angle, not the tangent formula above).
+                const Vector3 edge3 = p2 - p1;
+                const float angle0 = CornerAngleEXT(edge1, edge2);           // corner i0: edges (p1-p0),(p2-p0)
+                const float angle1 = CornerAngleEXT(-edge1, edge3);          // corner i1: edges (p0-p1),(p2-p1)
+                const float angle2 = CornerAngleEXT(-edge2, -edge3);         // corner i2: edges (p0-p2),(p1-p2)
+
+                tanAccum[i0] = tanAccum[i0] + tangent * angle0;
+                tanAccum[i1] = tanAccum[i1] + tangent * angle1;
+                tanAccum[i2] = tanAccum[i2] + tangent * angle2;
+                bitanAccum[i0] = bitanAccum[i0] + bitangent * angle0;
+                bitanAccum[i1] = bitanAccum[i1] + bitangent * angle1;
+                bitanAccum[i2] = bitanAccum[i2] + bitangent * angle2;
             }
 
             std::vector<Vector4> result(vertexCount);
@@ -956,6 +985,39 @@ namespace CNA::Internal::GltfImport
         };
 #endif
 
+        // Triangle connectivity as a flat, source-agnostic index list -- built once here (rather
+        // than at the very end of this function, its own previous location) so ComputeTangentsEXT
+        // below can use it too, matching CNB-91's own Draco fix: a Draco-compressed primitive's
+        // real connectivity lives in the decoded mesh's own face list, not prim.indices (which has
+        // no backing data in that case).
+        std::vector<std::uint32_t> indices;
+#ifdef CNA_DRACO_AVAILABLE
+        if (dracoMesh)
+        {
+            indices.reserve(static_cast<std::size_t>(dracoMesh->num_faces()) * 3);
+            for (draco::FaceIndex fi(0); fi < dracoMesh->num_faces(); ++fi)
+            {
+                const draco::Mesh::Face& face = dracoMesh->face(fi);
+                for (int c = 0; c < 3; ++c)
+                {
+                    indices.push_back(static_cast<std::uint32_t>(face[static_cast<std::size_t>(c)].value()));
+                }
+            }
+        }
+        else
+#endif
+        {
+            const cgltf_size indexCount = prim.indices ? prim.indices->count : vertexCount;
+            indices.reserve(static_cast<std::size_t>(indexCount));
+            for (cgltf_size i = 0; i < indexCount; ++i)
+            {
+                // Non-indexed primitive (prim.indices == nullptr): implicit sequential vertex
+                // order per the glTF spec -- Khronos's own "Fox" sample has exactly this shape.
+                indices.push_back(static_cast<std::uint32_t>(
+                    prim.indices ? cgltf_accessor_read_index(prim.indices, i) : i));
+            }
+        }
+
         const std::vector<float> positions = unpackSemantic(cgltf_attribute_type_position, 0, posAcc, 3, "POSITION");
         // Only the unskinned stride-24 (Position+Color+TextureCoordinate) and stride-20
         // (DualTextureEffect) layouts have no room for a per-vertex Normal.
@@ -995,7 +1057,7 @@ namespace CNA::Internal::GltfImport
             }
             else
             {
-                tangents = ComputeTangentsEXT(positions, normals, uvs, prim, vertexCount);
+                tangents = ComputeTangentsEXT(positions, normals, uvs, indices, vertexCount);
             }
         }
 
@@ -1085,45 +1147,13 @@ namespace CNA::Internal::GltfImport
             }
         }
 
-#ifdef CNA_DRACO_AVAILABLE
-        const cgltf_size indexCount = dracoMesh
-            ? static_cast<cgltf_size>(dracoMesh->num_faces()) * 3
-            : (prim.indices ? prim.indices->count : vertexCount);
-#else
-        const cgltf_size indexCount = prim.indices ? prim.indices->count : vertexCount;
-#endif
         out.use32BitIndices = vertexCount > 65535;
-        out.indexBytes.reserve(static_cast<std::size_t>(indexCount) *
+        out.indexBytes.reserve(indices.size() *
                                 (out.use32BitIndices ? sizeof(std::uint32_t) : sizeof(std::uint16_t)));
-
-#ifdef CNA_DRACO_AVAILABLE
-        if (dracoMesh)
+        for (std::uint32_t v : indices)
         {
-            // A Draco-compressed primitive's triangle connectivity comes directly from the
-            // decoded mesh's own face list -- prim.indices has no backing data to read (same
-            // "metadata-only accessor" situation as the per-attribute accessors above).
-            for (draco::FaceIndex fi(0); fi < dracoMesh->num_faces(); ++fi)
-            {
-                const draco::Mesh::Face& face = dracoMesh->face(fi);
-                for (int c = 0; c < 3; ++c)
-                {
-                    const auto v = static_cast<std::uint32_t>(face[static_cast<std::size_t>(c)].value());
-                    if (out.use32BitIndices) { AppendUint32(out.indexBytes, v); }
-                    else { AppendUint16(out.indexBytes, static_cast<std::uint16_t>(v)); }
-                }
-            }
-        }
-        else
-#endif
-        {
-            for (cgltf_size i = 0; i < indexCount; ++i)
-            {
-                // Non-indexed primitive (prim.indices == nullptr): implicit sequential vertex
-                // order per the glTF spec -- Khronos's own "Fox" sample has exactly this shape.
-                const cgltf_size v = prim.indices ? cgltf_accessor_read_index(prim.indices, i) : i;
-                if (out.use32BitIndices) { AppendUint32(out.indexBytes, static_cast<std::uint32_t>(v)); }
-                else { AppendUint16(out.indexBytes, static_cast<std::uint16_t>(v)); }
-            }
+            if (out.use32BitIndices) { AppendUint32(out.indexBytes, v); }
+            else { AppendUint16(out.indexBytes, static_cast<std::uint16_t>(v)); }
         }
 
         // CNB-64 (Phase 13B): morph target position/normal deltas. TANGENT deltas are not

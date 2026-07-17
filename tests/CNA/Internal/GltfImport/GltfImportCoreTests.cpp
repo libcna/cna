@@ -10,6 +10,7 @@
 // has no matching test either).
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
@@ -194,6 +195,46 @@ namespace
     { "componentType": 5126, "count": 3, "type": "VEC2" }
   ]
 })GLTF";
+
+    // Full MikkTSpace-style tangent generation (CNB-94, Phase 14G): two triangles sharing vertex 0
+    // (index 0), with distinctly different UV-gradient tangent directions AND distinctly different
+    // interior angles at the shared vertex (90 degrees for triangle A=(0,1,2), ~42.14 degrees for
+    // triangle B=(0,3,4)) -- no TANGENT accessor, so ComputeTangentsEXT's fallback runs. Chosen
+    // specifically so angle-weighted accumulation produces a genuinely different final tangent
+    // direction at vertex 0 than an unweighted (Lengyel's-method) sum would: hand-derived (via an
+    // independent Python re-implementation of the same formula, not just captured-and-trusted)
+    // weighted result is (0.91369578, 0.40639884, 0) with handedness +1, vs. the unweighted sum's
+    // own (0.72499943, 0.68874946, 0) -- a materially different direction, not a rounding-level
+    // difference, proving the angle-weighting term itself is what changed the output.
+    const char* kAngleWeightedTangentGltf = R"GLTF({
+  "asset": { "version": "2.0" },
+  "scene": 0,
+  "scenes": [ { "nodes": [0] } ],
+  "nodes": [ { "name": "MeshNode", "mesh": 0 } ],
+  "meshes": [ { "primitives": [ { "attributes": {
+      "POSITION": 0, "NORMAL": 1, "TEXCOORD_0": 2
+  }, "indices": 3, "material": 0 } ] } ],
+  "materials": [ { "normalTexture": { "index": 0 } } ],
+  "textures": [ { "source": 0 } ],
+  "images": [ { "bufferView": 4, "mimeType": "image/png" } ],
+  "buffers": [ {
+    "byteLength": 241,
+    "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAACAv83MTD0AAAAAAACAvwAAgD8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAgD8AAIA/AACAPwAAAQACAAAAAwAEAIlQTkcNChoKAAAADUlIRFIAAAABAAAAAQgCAAAAkHdT3gAAAAxJREFUeJxj+M/AAAADAQEAyf6S7wAAAABJRU5ErkJggg=="
+  } ],
+  "bufferViews": [
+    { "buffer": 0, "byteOffset": 0,   "byteLength": 60 },
+    { "buffer": 0, "byteOffset": 60,  "byteLength": 60 },
+    { "buffer": 0, "byteOffset": 120, "byteLength": 40 },
+    { "buffer": 0, "byteOffset": 160, "byteLength": 12 },
+    { "buffer": 0, "byteOffset": 172, "byteLength": 69 }
+  ],
+  "accessors": [
+    { "bufferView": 0, "componentType": 5126, "count": 5, "type": "VEC3", "min": [-1,0,0], "max": [1,1,0] },
+    { "bufferView": 1, "componentType": 5126, "count": 5, "type": "VEC3" },
+    { "bufferView": 2, "componentType": 5126, "count": 5, "type": "VEC2" },
+    { "bufferView": 3, "componentType": 5123, "count": 6, "type": "SCALAR" }
+  ]
+})GLTF";
 }
 
 TEST(GltfImportCoreTest, ExtractMeshDetectsMismatchedPbrMapUvSets)
@@ -305,5 +346,94 @@ TEST(GltfImportCoreTest, ExtractMeshDecodesDracoCompressedTriangle)
     EXPECT_EQ(i0, 0);
     EXPECT_EQ(i1, 1);
     EXPECT_EQ(i2, 2);
+}
+#endif
+
+TEST(GltfImportCoreTest, ComputeTangentsEXTAngleWeightsTriangleContributions)
+{
+    const MeshOut out = ExtractPrimitive0(kAngleWeightedTangentGltf);
+    ASSERT_TRUE(out.usePbr);
+    ASSERT_EQ(out.stride, 48);
+    ASSERT_EQ(out.vertexBytes.size(), 5u * 48u);
+
+    // Vertex 0's own Tangent field: stride 48 = Position(12)+Normal(12)+Tangent(16)+UV(8), vertex
+    // 0 is the first 48 bytes, so Tangent starts at byte offset 24.
+    float tangent[4];
+    std::memcpy(tangent, out.vertexBytes.data() + 24, sizeof(tangent));
+
+    EXPECT_NEAR(tangent[0], 0.91369578f, 1e-4f);
+    EXPECT_NEAR(tangent[1], 0.40639884f, 1e-4f);
+    EXPECT_NEAR(tangent[2], 0.0f, 1e-4f);
+    EXPECT_FLOAT_EQ(tangent[3], 1.0f); // handedness
+}
+
+#ifdef CNA_DRACO_AVAILABLE
+// Regression test for a real bug found while implementing angle-weighted tangent generation
+// (CNB-94, Phase 14G): ComputeTangentsEXT's fallback (no TANGENT accessor) used to re-read
+// prim.indices directly, which has no backing data for a Draco-compressed primitive (CNB-91's own
+// "metadata-only accessor" situation) -- previously an unnoticed correctness gap since 14F's own
+// Draco tests all had an explicit TANGENT-free, non-PBR material. This fixture is the same
+// Draco-compressed triangle as kDracoTriangleGltf, but with a normalTexture (forcing usePbr=true
+// and no TANGENT attribute in the Draco stream), so ComputeTangentsEXT's fallback actually runs
+// against Draco-sourced indices.
+TEST(GltfImportCoreTest, ComputeTangentsEXTWorksOnADracoCompressedPbrPrimitiveWithNoTangentAccessor)
+{
+    const char* kDracoPbrNoTangentGltf = R"GLTF({
+  "asset": { "version": "2.0" },
+  "scene": 0,
+  "scenes": [ { "nodes": [0] } ],
+  "nodes": [ { "name": "MeshNode", "mesh": 0 } ],
+  "extensionsUsed": [ "KHR_draco_mesh_compression" ],
+  "extensionsRequired": [ "KHR_draco_mesh_compression" ],
+  "meshes": [ { "primitives": [ {
+      "attributes": { "POSITION": 0, "NORMAL": 1, "TEXCOORD_0": 2 },
+      "material": 0,
+      "extensions": {
+        "KHR_draco_mesh_compression": {
+          "bufferView": 0,
+          "attributes": { "POSITION": 0, "NORMAL": 1, "TEXCOORD_0": 2 }
+        }
+      }
+  } ] } ],
+  "materials": [ { "normalTexture": { "index": 0 } } ],
+  "textures": [ { "source": 0 } ],
+  "images": [ { "bufferView": 1, "mimeType": "image/png" } ],
+  "buffers": [ {
+    "byteLength": 225,
+    "uri": "data:application/octet-stream;base64,RFJBQ08CAgEBAAAAAwECAQAAAQf/AREBAQABAQAD/wAAAAAAAQAAAQAJAwAAAAEBCQMAAQABAwkCAAIAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AACAPwAAAAAAAAAAAACAPwAAAAAAAAAAiVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC"
+  } ],
+  "bufferViews": [
+    { "buffer": 0, "byteOffset": 0,   "byteLength": 156 },
+    { "buffer": 0, "byteOffset": 156, "byteLength": 69 }
+  ],
+  "accessors": [
+    { "componentType": 5126, "count": 3, "type": "VEC3", "min": [0,0,0], "max": [1,1,0] },
+    { "componentType": 5126, "count": 3, "type": "VEC3" },
+    { "componentType": 5126, "count": 3, "type": "VEC2" }
+  ]
+})GLTF";
+
+    const MeshOut out = ExtractPrimitive0(kDracoPbrNoTangentGltf);
+    ASSERT_TRUE(out.usePbr);
+    ASSERT_EQ(out.stride, 48);
+    ASSERT_EQ(out.vertexBytes.size(), 3u * 48u);
+    ASSERT_EQ(out.indexBytes.size(), 3u * sizeof(std::uint16_t));
+
+    // The exact tangent value isn't the point here (this triangle's own values are already
+    // covered byte-for-byte by ExtractMeshDecodesDracoCompressedTriangle) -- this test's own job
+    // is proving ComputeTangentsEXT no longer reads through the Draco-compressed primitive's own
+    // backing-less prim.indices (previously undefined behavior/garbage indices), by asserting
+    // every vertex's Tangent is a finite, genuinely-unit-length-in-plane vector.
+    for (int v = 0; v < 3; ++v)
+    {
+        float tangent[4];
+        std::memcpy(tangent, out.vertexBytes.data() + static_cast<std::size_t>(v) * 48 + 24, sizeof(tangent));
+        ASSERT_TRUE(std::isfinite(tangent[0]));
+        ASSERT_TRUE(std::isfinite(tangent[1]));
+        ASSERT_TRUE(std::isfinite(tangent[2]));
+        const float lenSq = tangent[0] * tangent[0] + tangent[1] * tangent[1] + tangent[2] * tangent[2];
+        EXPECT_NEAR(lenSq, 1.0f, 1e-4f);
+        EXPECT_TRUE(tangent[3] == 1.0f || tangent[3] == -1.0f);
+    }
 }
 #endif
