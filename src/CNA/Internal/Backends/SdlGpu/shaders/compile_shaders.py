@@ -160,6 +160,13 @@ def main():
         ("skinned3d.vert.glsl", VERTEX_SHADER,   "kSkinned3dVertSpv"),
         # skinned3d's fragment stage reuses lit_textured3d.frag.glsl unchanged (byte-identical
         # varying interface and UBO layout) -- no separate skinned3d.frag.glsl needed.
+        ("skinned_colored3d.vert.glsl", VERTEX_SHADER,   "kSkinnedColored3dVertSpv"),
+        ("skinned_colored3d.frag.glsl", FRAGMENT_SHADER, "kSkinnedColored3dFragSpv"),
+        ("pbr3d.vert.glsl", VERTEX_SHADER,   "kPbr3dVertSpv"),
+        ("pbr3d.frag.glsl", FRAGMENT_SHADER, "kPbr3dFragSpv"),
+        ("pbr_skinned3d.vert.glsl", VERTEX_SHADER, "kPbrSkinned3dVertSpv"),
+        # pbr_skinned3d's fragment stage reuses pbr3d.frag.glsl unchanged (byte-identical varying
+        # interface and UBO layout) -- no separate pbr_skinned3d.frag.glsl needed.
     ]
 
     output_path = Path(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[1] == "--output" else \

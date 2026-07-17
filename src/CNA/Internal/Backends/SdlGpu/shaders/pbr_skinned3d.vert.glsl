@@ -1,0 +1,80 @@
+#version 450
+
+// Stride 68: VertexPositionNormalTangentTextureSkinned -- the stride-48 PBR Position+Normal+
+// Tangent+TextureCoordinate layout with the stride-52 skinning suffix (BlendWeight, BlendIndices)
+// appended, matching skinned3d.vert.glsl's own "append rather than insert" convention.
+layout(location = 0) in vec3  inPos;
+layout(location = 1) in vec3  inNormal;
+layout(location = 2) in vec4  inTangent;
+layout(location = 3) in vec2  inUV;
+layout(location = 4) in vec4  inBoneWeights;
+layout(location = 5) in uvec4 inBoneIndices;
+
+// Interface matches pbr3d.frag.glsl's inputs exactly (same locations/types) -- this shader's
+// fragment stage IS pbr3d.frag.glsl, reused unchanged; SkinnedPbrEffect's BRDF is identical to
+// PbrEffect's once the position/normal/tangent are skinned (SkinnedDrawCommand precedent).
+layout(location = 0) out vec2  fragUV;
+layout(location = 1) out vec3  fragNormal;
+layout(location = 2) out vec3  fragTangent;
+layout(location = 3) out float fragBitangentSign;
+layout(location = 4) out vec3  fragWorldPos;
+
+// 72 * mat4 = 4608 bytes, a real storage buffer rather than a uniform push -- see
+// skinned3d.vert.glsl's own doc comment for why (SDL_gpu's real ~4096-byte push-uniform cap on
+// this Vulkan-backed environment).
+layout(std430, set = 0, binding = 0) readonly buffer BoneBlock {
+    mat4 bones[72];
+} bb;
+
+layout(set = 1, binding = 0) uniform PC {
+    mat4  mvp;
+    vec4  diffuseColor;
+    vec3  ambientColor;
+    float lightingEnabled;
+    vec3  light0Dir;
+    float textureEnabled;
+    vec3  light0Diffuse;
+    float vertexColorEnabled;
+} pc;
+
+// Mirrors skinned3d.vert.glsl's own SkinnedLightParams exactly (byte-identical to
+// LitLightParams, WeightsPerVertex packed into eyePos_weightsPerVertex.w) -- pbr3d.frag.glsl
+// reads this same block as its plain LitLightParams (eyePos_pad.w is simply never read there).
+layout(set = 1, binding = 1) uniform SkinnedLightParams {
+    vec4 light1Dir_pad;
+    vec4 light1Diffuse_pad;
+    vec4 light2Dir_pad;
+    vec4 light2Diffuse_pad;
+    vec4 emissiveColor_pad;
+    mat4 world;
+    vec4 eyePos_weightsPerVertex;  // w = WeightsPerVertex
+    vec4 light0Specular_pad;
+    vec4 light1Specular_pad;
+    vec4 light2Specular_pad;
+    vec4 specularColorPower;
+} lp;
+
+void main() {
+    // Matches skinned3d.vert.glsl: FNA's real Skin(vin, boneCount) only sums the first
+    // WeightsPerVertex (1, 2, or 4) weight/index pairs.
+    float weightsPerVertex = lp.eyePos_weightsPerVertex.w;
+    mat4 skinMat = bb.bones[inBoneIndices.x] * inBoneWeights.x;
+    if (weightsPerVertex >= 2.0) skinMat += bb.bones[inBoneIndices.y] * inBoneWeights.y;
+    if (weightsPerVertex >= 4.0) skinMat += bb.bones[inBoneIndices.z] * inBoneWeights.z
+                                          + bb.bones[inBoneIndices.w] * inBoneWeights.w;
+    vec4 skinnedPos = skinMat * vec4(inPos, 1.0);
+    gl_Position = pc.mvp * skinnedPos;
+    fragUV = inUV;
+
+    // Unlike skinned3d.vert.glsl's plain (non-PBR) SkinnedEffect path -- which transforms the
+    // normal by the skin matrix alone, with no World contribution, an established simplification
+    // shared by every backend's own SkinnedEffect shader -- a skinned normal map needs a real
+    // world-space TBN basis, so both Normal and Tangent additionally go through World's own
+    // normal-safe 3x3 here, exactly mirroring EasyGLGraphicsBackend::EnsurePbrSkinnedProgram()'s
+    // own vTangent/vNormal computation (mat3(uWorld)*(skinNormalMat*aNormal/aTangent.xyz)).
+    mat3 skinNormalMat = mat3(skinMat);
+    fragNormal = normalize(mat3(lp.world) * (skinNormalMat * inNormal));
+    fragTangent = mat3(lp.world) * (skinNormalMat * inTangent.xyz);
+    fragBitangentSign = inTangent.w;
+    fragWorldPos = (lp.world * skinnedPos).xyz;
+}

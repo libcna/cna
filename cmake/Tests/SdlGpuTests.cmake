@@ -77,6 +77,22 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_BACKEND STREQUAL "SDL_GPU")
     cna_register_backend_test(NAME SdlGpu_Skinned COMMAND cna_test_sdlgpu_skinned
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # PbrEffect/SkinnedPbrEffect (metallic-roughness BRDF, stride 48/68) and SkinnedEffect's
+    # stride-56 VertexColorEnabled path -- porting EasyGL's own PBR + skinned-vertex-color shader
+    # support to this backend (see SdlGpuGraphicsBackend::CreatePbrResources()/
+    # GetOrCreatePipelinePbr3D() and GetOrCreatePipelineSkinned3D's hasVertexColor parameter).
+    cna_sdlgpu_test(cna_test_sdlgpu_pbreffect examples/sdlgpu_pbreffect_test.cpp)
+    cna_register_backend_test(NAME SdlGpu_PbrEffect COMMAND cna_test_sdlgpu_pbreffect
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    cna_sdlgpu_test(cna_test_sdlgpu_skinnedpbreffect examples/sdlgpu_skinnedpbreffect_test.cpp)
+    cna_register_backend_test(NAME SdlGpu_SkinnedPbrEffect COMMAND cna_test_sdlgpu_skinnedpbreffect
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    cna_sdlgpu_test(cna_test_sdlgpu_skinnedeffect_vertexcolor examples/sdlgpu_skinnedeffect_vertexcolor_test.cpp)
+    cna_register_backend_test(NAME SdlGpu_SkinnedEffectVertexColor COMMAND cna_test_sdlgpu_skinnedeffect_vertexcolor
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # plan_sdlgpu.md SDLGPU-42/43: custom ShaderEffect (runtime GLSL->SPIR-V via libshaderc).
     cna_sdlgpu_test(cna_test_sdlgpu_shadereffect examples/sdlgpu_shadereffect_test.cpp)
     cna_register_backend_test(NAME SdlGpu_ShaderEffect COMMAND cna_test_sdlgpu_shadereffect
