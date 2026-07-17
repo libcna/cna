@@ -574,7 +574,16 @@ own header, above its first task, for how it relates to the generic Phase 2/5/8 
 
 **Notes:** FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/ButtonState.cs`.
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Audited `include/Microsoft/Xna/Framework/Input/ButtonState.hpp` against FNA's
+`ButtonState.cs` line-by-line. FNA is a plain 2-value `enum` (`Released` implicit 0, `Pressed` implicit
+1) with a `<summary>` on the type and each value; CNA is `enum class ButtonState { Released, Pressed }`
+with matching `/** @brief */` on the type and both values — `enum class` over `enum` is the project's
+accepted idiom (type-safety, no behavior difference). **No divergence found**, accidental or
+intentional; nothing to fix. Doxygen coverage confirmed complete (type + both values). Test coverage:
+`ButtonStateTests.cpp::ValuesMatchXnaNumericConstants` already pins `Released == 0` and `Pressed == 1`
+exactly. Files changed: none (audit-only, no divergence to fix, so no rebuild/retest was needed) — this
+checkout's Input gate was last confirmed green (496/496, `ctest -L input`) immediately prior, at the
+end of the P13-006 pass, and nothing has touched `ButtonState` or its test since. Remaining risk: none.
 
 ---
 
@@ -602,11 +611,24 @@ own header, above its first task, for how it relates to the generic Phase 2/5/8 
 
 **Notes:** FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Buttons.cs`.
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Audited `include/Microsoft/Xna/Framework/Input/Buttons.hpp` against FNA's
+`Buttons.cs` value-by-value. All 24 strict XNA bit values and all 6 `EXT` extension bit values
+(`Misc1EXT`, `Paddle1EXT..4EXT`, `TouchPadEXT`) match FNA exactly, bit-for-bit — **no divergence
+found**. Doxygen present on every value (CNA documents the EXT values too, which FNA leaves
+undocumented in its own source — an improvement, not a gap). One systemic finding, not specific to
+this type: CNA's `enum class` flag types (needed since C++ doesn't auto-generate bitwise operators the
+way C# does for any `enum`) implement `|`/`&`/`~`/`|=`/`&=` but not `^`/`^=` — checked and confirmed no
+CNA source or test XORs a flags enum, and XNA/FNA game code conventionally never does either; recorded
+as an accepted, intentional omission in `docs/input-fna-fidelity.md`'s GamePad section rather than
+pre-emptively adding unused operators. Test coverage: `ButtonsTests.cpp` (not
+`GamePadButtonsTests.cpp`, which tests the unrelated `GamePadButtons` struct — this task's own "Tests"
+field guess was off) already pins every core + EXT bit value exactly and exercises `|`/`&`/`|=`/`&=`/`~`.
+Files changed: `docs/input-fna-fidelity.md` (1 new bullet, the XOR-omission note). No source/test
+change needed. Remaining risk: none.
 
 ---
 
-## P1-003 — Audit GamePad member parity vs FNA `[ ]`
+## P1-003 — Audit GamePad member parity vs FNA `[x]`
 **Goal:** Perform a full member-by-member audit of `GamePad` (constructors, methods, operators, enum values, defaults, equality, hash) against its FNA reference.
 
 **Steps:**
@@ -633,11 +655,29 @@ own header, above its first task, for how it relates to the generic Phase 2/5/8 
 
 **Notes:** FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePad.cs`.
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Audited `GamePad` against FNA's `GamePad.cs`, cross-referencing
+`SDL3_FNAPlatform.cs`'s `GetGamePad*`/`SetGamePad*` implementations for actual runtime semantics.
+Every strict XNA member (`GetCapabilities`, both `GetState` overloads including the default-overload's
+forward to `GamePadDeadZone::IndependentAxes`, `SetVibration`) and every EXT member (`GetGUIDEXT`,
+`SetLightBarEXT`, `SetTriggerVibrationEXT`, `GetGyroEXT`, `GetAccelerometerEXT`) matches FNA's
+signature, overload set, defaults, and zero-out-on-failure behavior exactly; dead-zone constants
+(`7849/32768`, `8689/32768`, `30/255`) and `ExcludeAxisDeadZone` are byte-identical. Two intentional
+(not fixed) deviations were newly identified and documented in `docs/input-fna-fidelity.md`: (1)
+out-of-range `PlayerIndex` gracefully falls back to disconnected/false/empty everywhere in CNA rather
+than throwing as FNA's unbounded array indexing implicitly does (already tested); (2) FNA's `internal`
+dead-zone constants/`ExcludeAxisDeadZone` are `NOXNA public` statics on `GamePad` because C++ lacks
+assembly-scoped visibility and `GamePadThumbSticks.cpp`/`GamePadTriggers.cpp` need cross-TU access —
+the correct translation of FNA's `internal`, not an accidental widening. No accidental divergence
+found; no source fix required. Doxygen coverage complete. Closed one real test gap: added
+`GamePadInputTest.GetStateDefaultOverloadForwardsToIndependentAxesDeadZone`
+(`tests/Microsoft/Xna/Framework/Input/GamePadInputTests.cpp`) — the default-overload-forwards contract
+was previously only exercised with degenerate (always-zero, sub-dead-zone) values that couldn't
+actually distinguish a forwarding bug. Files changed:
+`tests/Microsoft/Xna/Framework/Input/GamePadInputTests.cpp`, `docs/input-fna-fidelity.md`. Consolidated build+test verification (2026-07-17, after all 9 parallel P1 GamePad-family audits landed): `cmake --build cmake-build-debug --target CnaTests` -- clean, no errors. `xvfb-run -a env SDL_VIDEODRIVER=x11 CnaTests --gtest_filter=$CNA_INPUT_TEST_FILTER --gtest_shuffle --gtest_repeat=5` -- `[PASSED] 506 tests.` on all 5 shuffled repeats (up from 496 pre-batch, +10 new tests across this batch), zero `FAILED` in the complete output. Remaining risk: none identified in the public `GamePad` surface itself.
 
 ---
 
-## P1-004 — Audit GamePadButtons member parity vs FNA `[ ]`
+## P1-004 — Audit GamePadButtons member parity vs FNA `[x]`
 **Goal:** Perform a full member-by-member audit of `GamePadButtons` (constructors, methods, operators, enum values, defaults, equality, hash) against its FNA reference.
 
 **Steps:**
@@ -662,7 +702,21 @@ own header, above its first task, for how it relates to the generic Phase 2/5/8 
 
 **Notes:** FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePadButtons.cs`.
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Audited `GamePadButtons` against FNA's `GamePadButtons.cs` line-by-line,
+covering all 11 per-button `ButtonState` properties, both constructors, `FromButtonArray`, `Equals`,
+`GetHashCode`, and equality operators. Found and fixed two accidental, non-behavioral divergences in
+`include/Microsoft/Xna/Framework/Input/GamePadButtons.hpp`: the internal `buttons_` storage field was
+public instead of `private` (FNA declares it `internal`; the existing `friend struct GamePadState;`
+already grants the access `GamePadState.cpp` needs, so nothing else required changes), and
+`FromButtonArray` was declared out of order relative to FNA's source order and the type's own `.cpp`
+definition order — reordered to match. Other candidate deviations (typed-only `Equals(const
+GamePadButtons&)` instead of an `Equals(object)` override; `explicit` on the single-arg constructor)
+are pre-existing, intentional, project-wide C++ value-type conventions already applied consistently
+across sibling Input types, not bugs. Doxygen coverage already complete. No new tests needed — both
+fixes are declaration/encapsulation-only with zero observable behavior change, already covered by
+existing `GamePadButtonsTests.cpp` and (for the friend-access path) `GamePadStateTests.cpp`. Files
+changed: `include/Microsoft/Xna/Framework/Input/GamePadButtons.hpp`, `docs/input-fna-fidelity.md`.
+Consolidated build+test verification (2026-07-17, after all 9 parallel P1 GamePad-family audits landed): `cmake --build cmake-build-debug --target CnaTests` -- clean, no errors. `xvfb-run -a env SDL_VIDEODRIVER=x11 CnaTests --gtest_filter=$CNA_INPUT_TEST_FILTER --gtest_shuffle --gtest_repeat=5` -- `[PASSED] 506 tests.` on all 5 shuffled repeats (up from 496 pre-batch, +10 new tests across this batch), zero `FAILED` in the complete output. Remaining risk: none identified.
 
 ---
 
@@ -691,11 +745,24 @@ own header, above its first task, for how it relates to the generic Phase 2/5/8 
 
 **Notes:** FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePadCapabilities.cs`.
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Audited `GamePadCapabilities` (25 XNA bool properties + `GamePadType` + 10
+`...EXT` bool properties) field-by-field against FNA's `GamePadCapabilities.cs`. **No divergence
+found.** Names, order, defaults (all `false`/`GamePadType::Unknown`, matching C#'s implicit
+`default(GamePadCapabilities)`), and getter/setter shape all match exactly; FNA's `internal set` maps
+to a public `NOXNA`-tagged setter (the project's established, header-documented convention) on every
+XNA property, and all 10 EXT properties are correctly `NOXNA` on both accessors. Confirmed no
+`VendorId`/`ProductId` properties exist anywhere in the current FNA source tree — only the 10 boolean
+`...EXT` flags. FNA defines no `Equals`/`operator==`/`ToString`/`GetHashCode` for this type and CNA
+correctly omits them too. No dedicated `GamePadCapabilitiesTests.cpp` exists, but this is not a gap:
+`GamePadTests.cpp`, `GamePadMappingTests.cpp`, `PublicApiInputSignatureFreezeTests.cpp`, and
+`PublicApiInputCompileTests.cpp` already exhaustively cover default state, per-flag setter isolation
+(all 35 bool flags), full round-trips, partial-capability combinations, and a complete 72-signature
+freeze. Files changed: `docs/input-fna-fidelity.md` (audit-record note only, no code change — none
+was needed). Consolidated build+test verification (2026-07-17, after all 9 parallel P1 GamePad-family audits landed): `cmake --build cmake-build-debug --target CnaTests` -- clean, no errors. `xvfb-run -a env SDL_VIDEODRIVER=x11 CnaTests --gtest_filter=$CNA_INPUT_TEST_FILTER --gtest_shuffle --gtest_repeat=5` -- `[PASSED] 506 tests.` on all 5 shuffled repeats (up from 496 pre-batch, +10 new tests across this batch), zero `FAILED` in the complete output. Remaining risk: none identified.
 
 ---
 
-## P1-006 — Audit GamePadDPad member parity vs FNA `[ ]`
+## P1-006 — Audit GamePadDPad member parity vs FNA `[x]`
 **Goal:** Perform a full member-by-member audit of `GamePadDPad` (constructors, methods, operators, enum values, defaults, equality, hash) against its FNA reference.
 
 **Steps:**
@@ -720,11 +787,27 @@ own header, above its first task, for how it relates to the generic Phase 2/5/8 
 
 **Notes:** FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePadDPad.cs`.
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Audited `GamePadDPad` against FNA's `GamePadDPad.cs` line-by-line: the 4-arg
+constructor's parameter-to-field mapping, `FromButtonArray`'s mask-derivation logic (verified
+equivalent to FNA's monotonic per-element loop via an OR-then-check transformation), `GetHashCode`'s
+bit-weighted formula (`Down=1, Left=2, Right=4, Up=8`, `int` return matching FNA exactly), and
+`Equals`/`operator==`/`operator!=` all match FNA exactly. Confirmed by grepping all of FNA's source
+tree that no FNA code ever mutates `GamePadDPad` fields outside its constructor, so dropping the
+`internal set` public setters is behaviorally exact. Two cosmetic-only notes recorded (not fixed):
+member declaration order differs from strict FNA source order (matches the already-established,
+codebase-wide `GamePadButtons` reordering convention) and an unused `struct GamePadState;` forward
+declaration is vestigial dead plumbing (C# has no forward declarations; harmless, out of scope to
+remove here). Doxygen coverage complete. **No accidental divergence found**, so no `.hpp`/`.cpp`
+change was needed; closed one test-completeness gap instead — added
+`GamePadDPadTest.GetHashCodeIsConsistentForEqualInstances`
+(`tests/Microsoft/Xna/Framework/Input/GamePadButtonsTests.cpp`, where the pre-existing `GamePadDPad`
+suite already lives) to explicitly satisfy the "equal objects produce equal hashes" checklist
+requirement, previously only implied by the formula test. Files changed:
+`tests/Microsoft/Xna/Framework/Input/GamePadButtonsTests.cpp`. Consolidated build+test verification (2026-07-17, after all 9 parallel P1 GamePad-family audits landed): `cmake --build cmake-build-debug --target CnaTests` -- clean, no errors. `xvfb-run -a env SDL_VIDEODRIVER=x11 CnaTests --gtest_filter=$CNA_INPUT_TEST_FILTER --gtest_shuffle --gtest_repeat=5` -- `[PASSED] 506 tests.` on all 5 shuffled repeats (up from 496 pre-batch, +10 new tests across this batch), zero `FAILED` in the complete output. Remaining risk: none.
 
 ---
 
-## P1-007 — Audit GamePadDeadZone member parity vs FNA `[ ]`
+## P1-007 — Audit GamePadDeadZone member parity vs FNA `[x]`
 **Goal:** Perform a full member-by-member audit of `GamePadDeadZone` (constructors, methods, operators, enum values, defaults, equality, hash) against its FNA reference.
 
 **Steps:**
@@ -748,11 +831,20 @@ own header, above its first task, for how it relates to the generic Phase 2/5/8 
 
 **Notes:** FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePadDeadZone.cs`.
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Audited `GamePadDeadZone` (enum: `None`, `IndependentAxes`, `Circular`) against
+FNA's `GamePadDeadZone.cs`. The three values, their declaration order, and their implicit sequential
+numeric constants (0, 1, 2) match FNA exactly; underlying type is left unspecified in both, consistent
+with the sibling `GamePadType` enum. Doxygen coverage complete (FNA's XML-doc prose reworded, not
+copied verbatim — permitted). Cross-checked all three consumers (`GamePad`, `GamePadThumbSticks`,
+`GamePadTriggers`) against their FNA equivalents; default (`IndependentAxes`) and switch/branch usage
+consistent. Existing test `GamePadDeadZoneTest.ValuesMatchXnaSequentialConstants`
+(`tests/Microsoft/Xna/Framework/Input/GamePadDeadZoneTests.cpp`) already covers all three constants.
+**No accidental divergence found; no source or test changes were made.** Consolidated build+test verification (2026-07-17, after all 9 parallel P1 GamePad-family audits landed): `cmake --build cmake-build-debug --target CnaTests` -- clean, no errors. `xvfb-run -a env SDL_VIDEODRIVER=x11 CnaTests --gtest_filter=$CNA_INPUT_TEST_FILTER --gtest_shuffle --gtest_repeat=5` -- `[PASSED] 506 tests.` on all 5 shuffled repeats (up from 496 pre-batch, +10 new tests across this batch), zero `FAILED` in the complete output. Remaining
+risk: none.
 
 ---
 
-## P1-008 — Audit GamePadState member parity vs FNA `[ ]`
+## P1-008 — Audit GamePadState member parity vs FNA `[x]`
 **Goal:** Perform a full member-by-member audit of `GamePadState` (constructors, methods, operators, enum values, defaults, equality, hash) against its FNA reference.
 
 **Steps:**
@@ -777,11 +869,31 @@ own header, above its first task, for how it relates to the generic Phase 2/5/8 
 
 **Notes:** FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePadState.cs`.
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Audited `GamePadState` against FNA's `GamePadState.cs` line-by-line: both
+constructors (including the default `NOXNA` one), the dead-zone-adjacent trigger/thumbstick-to-`Buttons`
+synthesis logic (`StickToButtons`, `TriggerThreshold` checks), `IsButtonDown`/`IsButtonUp`,
+`PacketNumber`/`IsConnected`/`Buttons`/`DPad`/`ThumbSticks`/`Triggers`, `Equals`/`==`/`!=`,
+`GetHashCode`, and `ToString`. Found **no accidental divergences** — the constructor's dead-zone
+synthesis (strict `>`/`<` against `GamePad::LeftDeadZone`/`RightDeadZone`/`TriggerThreshold`, exact
+operation order) is byte-identical to FNA, and `GamePadState`'s own logic is confirmed independent of
+the `GamePadDeadZone` mode enum (that lives in `GamePadThumbSticks`/`GamePadTriggers`'s internal 3-arg
+constructors, invoked separately from `GamePad::GetState`, not from `GamePadState` itself).
+`Equals`/`operator==` compare all 6 fields in FNA's exact order. Both previously-identified intentional
+deviations (`GetHashCode`'s `buttons ^ packetNumber*31` formula vs. FNA's reflection-based
+`ValueType.GetHashCode()`; `PacketNumber`'s event-driven increment semantics, which lives in
+`GamePad.cpp`/`InputManager`, not this file) remain accurately documented in
+`docs/input-fna-fidelity.md`'s "## GamePad" section and needed no changes. Doxygen coverage already
+complete. Strengthened test coverage in `GamePadStateTests.cpp` for previously-untested-but-correct
+branches: the symmetric right-trigger-threshold case, all 8 `StickToButtons` true-branches (previously
+only 2 of 8 were exercised as true), the strict dead-zone/threshold boundary (`>`/`<`, not `>=`/`<=`),
+and DPad-only/ThumbSticks-only/Triggers-only equality isolation (previously only
+`Buttons`/`PacketNumber`/`IsConnected` differences were tested in isolation) — 5 new `TEST`s added,
+zero production-code changes. Files changed: `tests/Microsoft/Xna/Framework/Input/GamePadStateTests.cpp`.
+Consolidated build+test verification (2026-07-17, after all 9 parallel P1 GamePad-family audits landed): `cmake --build cmake-build-debug --target CnaTests` -- clean, no errors. `xvfb-run -a env SDL_VIDEODRIVER=x11 CnaTests --gtest_filter=$CNA_INPUT_TEST_FILTER --gtest_shuffle --gtest_repeat=5` -- `[PASSED] 506 tests.` on all 5 shuffled repeats (up from 496 pre-batch, +10 new tests across this batch), zero `FAILED` in the complete output. Remaining risk: none identified.
 
 ---
 
-## P1-009 — Audit GamePadThumbSticks member parity vs FNA `[ ]`
+## P1-009 — Audit GamePadThumbSticks member parity vs FNA `[x]`
 **Goal:** Perform a full member-by-member audit of `GamePadThumbSticks` (constructors, methods, operators, enum values, defaults, equality, hash) against its FNA reference.
 
 **Steps:**
@@ -806,11 +918,26 @@ own header, above its first task, for how it relates to the generic Phase 2/5/8 
 
 **Notes:** FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePadThumbSticks.cs`.
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Audited `GamePadThumbSticks` against FNA's `GamePadThumbSticks.cs`/`GamePad.cs`
+line-by-line, with extra scrutiny on dead-zone math per this task's note (the prior L-015 bug was in
+upstream SDL-axis normalization, not this type's dead-zone application — confirmed still fixed and out
+of scope for regression here). Both constructors (public 2-arg square-clamp-only; private/friend 3-arg
+dead-zone-then-clamp), `ApplyDeadZone`'s `None`/`IndependentAxes`/`Circular` branches,
+`GamePad::ExcludeAxisDeadZone`, `ExcludeCircularDeadZone`, `ApplySquareClamp`/`ApplyCircularClamp`, the
+`LeftDeadZone`/`RightDeadZone` constants, and `operator==`/`!=`/`Equals`/`GetHashCode` all match FNA's
+formulas and constant wiring exactly — including confirming correct per-stick dead-zone constant
+routing (`left`→`LeftDeadZone`, `right`→`RightDeadZone`) in both `IndependentAxes` and `Circular`
+modes. **No accidental divergence found.** Closed one real test gap: the existing suite only exercised
+`LeftDeadZone` for both dead-zone modes; added
+`IndependentAxesModeExcludesRightStickDeadZoneUsingRightDeadZoneConstant` and
+`CircularModeRescalesRightStickUsingRightDeadZoneConstant`
+(`tests/Microsoft/Xna/Framework/Input/GamePadThumbSticksTests.cpp`) pinning the Right stick against
+`RightDeadZone` specifically. Doxygen coverage already complete. Files changed:
+`tests/Microsoft/Xna/Framework/Input/GamePadThumbSticksTests.cpp`. Consolidated build+test verification (2026-07-17, after all 9 parallel P1 GamePad-family audits landed): `cmake --build cmake-build-debug --target CnaTests` -- clean, no errors. `xvfb-run -a env SDL_VIDEODRIVER=x11 CnaTests --gtest_filter=$CNA_INPUT_TEST_FILTER --gtest_shuffle --gtest_repeat=5` -- `[PASSED] 506 tests.` on all 5 shuffled repeats (up from 496 pre-batch, +10 new tests across this batch), zero `FAILED` in the complete output. Remaining risk: none.
 
 ---
 
-## P1-010 — Audit GamePadTriggers member parity vs FNA `[ ]`
+## P1-010 — Audit GamePadTriggers member parity vs FNA `[x]`
 **Goal:** Perform a full member-by-member audit of `GamePadTriggers` (constructors, methods, operators, enum values, defaults, equality, hash) against its FNA reference.
 
 **Steps:**
@@ -835,11 +962,26 @@ own header, above its first task, for how it relates to the generic Phase 2/5/8 
 
 **Notes:** FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePadTriggers.cs`.
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Audited `GamePadTriggers` against FNA's `GamePadTriggers.cs` line-by-line: the
+read-only `Left`/`Right` `[0,1]`-clamped properties, the public 2-arg clamp-only constructor, the
+private/friend 3-arg dead-zone constructor (`None` clamps only; any other mode runs
+`GamePad::ExcludeAxisDeadZone(value, GamePad::TriggerThreshold)` before clamping, independently per
+trigger), `operator==`/`operator!=` (`MathHelper::WithinEpsilon`-based), and `GetHashCode()`
+(`Left.GetHashCode() + Right.GetHashCode()`) all match FNA exactly. `TriggerThreshold` (`30/255`) and
+`ExcludeAxisDeadZone` confirmed byte-identical to FNA. Two pre-existing, already-documented,
+codebase-wide deviations reconfirmed unchanged: `Equals(object obj)` omitted per CHECKLIST.md's
+standing rule, and `GetHashCode()`'s unsigned-wraparound-cast summation (INPUT-BUILD-006) applied
+identically in five other files. **No accidental divergence found.** Closed one test-coverage gap
+(not a behavior bug): the private dead-zone constructor's `Right` trigger path had no independent
+test (only `Left` was exercised) — added
+`GamePadTriggersTest.NonNoneDeadZoneModeAppliesIndependentlyToBothTriggers`
+(`tests/Microsoft/Xna/Framework/Input/GamePadTriggersTests.cpp`) using distinct left/right raw values
+to guard against a field-swap regression. Doxygen coverage already complete. Files changed:
+`tests/Microsoft/Xna/Framework/Input/GamePadTriggersTests.cpp`. Consolidated build+test verification (2026-07-17, after all 9 parallel P1 GamePad-family audits landed): `cmake --build cmake-build-debug --target CnaTests` -- clean, no errors. `xvfb-run -a env SDL_VIDEODRIVER=x11 CnaTests --gtest_filter=$CNA_INPUT_TEST_FILTER --gtest_shuffle --gtest_repeat=5` -- `[PASSED] 506 tests.` on all 5 shuffled repeats (up from 496 pre-batch, +10 new tests across this batch), zero `FAILED` in the complete output. Remaining risk: none.
 
 ---
 
-## P1-011 — Audit GamePadType member parity vs FNA `[ ]`
+## P1-011 — Audit GamePadType member parity vs FNA `[x]`
 **Goal:** Perform a full member-by-member audit of `GamePadType` (constructors, methods, operators, enum values, defaults, equality, hash) against its FNA reference.
 
 **Steps:**
@@ -863,7 +1005,16 @@ own header, above its first task, for how it relates to the generic Phase 2/5/8 
 
 **Notes:** FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/GamePadType.cs`.
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Audited all 10 `GamePadType` enum members (`Unknown`, `GamePad`, `Wheel`,
+`ArcadeStick`, `FlightStick`, `DancePad`, `Guitar`, `AlternateGuitar`, `DrumKit`, `BigButtonPad`)
+against FNA's `GamePadType.cs` — identical order, identical implicit sequential values (0-9), matching
+exactly, including `AlternateGuitar` (the member most at risk of being dropped in this family). FNA's
+git history for this file shows only copyright-year-bump commits, confirming no upstream member
+additions were missed. Doxygen coverage complete (reworded from FNA's `<summary>` text, not verbatim —
+permitted). Downstream consumers (`GamePadCapabilities.hpp`, `SdlInputBridge.cpp`'s SDL-joystick-type
+mapping) use the enum consistently with FNA's own SDL platform mapping tables. Existing test
+`GamePadTypeTest.ValuesMatchXnaSequentialConstants` already asserts all 10 ordinal values.
+**No accidental or intentional divergence found; no files were edited.** Consolidated build+test verification (2026-07-17, after all 9 parallel P1 GamePad-family audits landed): `cmake --build cmake-build-debug --target CnaTests` -- clean, no errors. `xvfb-run -a env SDL_VIDEODRIVER=x11 CnaTests --gtest_filter=$CNA_INPUT_TEST_FILTER --gtest_shuffle --gtest_repeat=5` -- `[PASSED] 506 tests.` on all 5 shuffled repeats (up from 496 pre-batch, +10 new tests across this batch), zero `FAILED` in the complete output. Remaining risk: none.
 
 ---
 

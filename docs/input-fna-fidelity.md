@@ -151,6 +151,50 @@ byte-identical to FNA. Pinned by `StickAxisNormalizationMatchesFnaDivisor`.
   connect like FNA. Same values for a connected controller (a timing/impl detail, not a behavioral gap);
   `GetCapabilities` also deliberately avoids the zero-magnitude rumble probe FNA's cache path implies
   (would cancel active vibration — INPUT-GAMEPAD-012).
+- **`Buttons` (and every other `[Flags]`-equivalent `enum class` in Input) implements `|`/`&`/`~`/`|=`/`&=`
+  but not `^`/`^=` (P1-002).** C# gives every enum bitwise `|`/`&`/`^`/`~` for free; C++ `enum class`
+  needs each spelled out explicitly. XNA/FNA game code conventionally only ever combines
+  (`a | b`) or tests (`(state & flag) == flag`) flag enums, never XORs them, and no CNA source or test
+  does either. Accepted as intentionally incomplete relative to what C# *permits* but never *uses* —
+  add `operator^`/`operator^=` if a real XOR use case appears, rather than pre-emptively.
+- **Out-of-range `PlayerIndex` never throws (P1-003):** FNA's `SDL3_FNAPlatform.cs` gamepad accessors
+  (`GetGamePadCapabilities`/`GetGamePadState`/`SetGamePadVibration`/`SetGamePadTriggerVibration`/
+  `GetGamePadGUID`/`SetGamePadLightBar`/`GetGamePadGyro`/`GetGamePadAccelerometer`, lines 1796-2074)
+  index a fixed `GAMEPAD_COUNT`-sized array with no bounds check, so an out-of-range `PlayerIndex` cast
+  throws `IndexOutOfRangeException` in FNA. CNA bounds-checks in every delegation path
+  (`InputManager::try_get_player_slot`, `SdlInputBridge::get_sdl_gamepad_for_player`) and returns the
+  graceful disconnected/false/empty fallback instead — safer, deliberate, and already pinned by
+  `GamePadInputTest.AxisValuesAreClampedAndInvalidPlayerReturnsDisconnectedState`.
+- **`GamePad::LeftDeadZone`/`RightDeadZone`/`TriggerThreshold`/`ExcludeAxisDeadZone` are `NOXNA public`
+  (P1-003):** FNA declares these `internal` (`GamePad.cs:21-23,132-147`), relying on same-assembly
+  visibility so `GamePadThumbSticks.cs`/`GamePadTriggers.cs` can read them. C++ has no assembly-scoped
+  visibility; CNA exposes them as `NOXNA`-tagged public statics on `GamePad` so `GamePadThumbSticks.cpp`/
+  `GamePadTriggers.cpp` (separate translation units) can consume them — the correct translation of FNA's
+  `internal`, not an accidental widening of the public surface.
+- `GamePadButtons::buttons_` was public in the header (declared before `private:`) despite FNA's field
+  being `internal`; fixed to `private` with the existing `friend struct GamePadState;` preserved for
+  the same-assembly-style access `GamePadState`'s constructor needs (P1-004).
+- **Struct-level audit (P1-005):** every property of `GamePadCapabilities` (25 XNA bool properties +
+  `GamePadType` + 10 `…EXT` bool properties) was compared field-by-field against FNA
+  (`GamePadCapabilities.cs`): names, order, defaults (all `false` / `GamePadType.Unknown`), and
+  getter/setter shape. Zero divergences found. FNA's `internal set` maps to a public `NOXNA`-tagged
+  setter (documented in the struct's own Doxygen comment) since C++ has no `internal` accessibility;
+  all 10 EXT properties are correctly `NOXNA` on both getter and setter. No `VendorId`/`ProductId`
+  properties exist on this struct in current FNA — only the 10 boolean `…EXT` flags. Test coverage
+  (`GamePadTests.cpp`, `GamePadMappingTests.cpp`, `PublicApiInputSignatureFreezeTests.cpp`,
+  `PublicApiInputCompileTests.cpp`) already exercises every getter/setter individually (default state,
+  per-flag isolation, round-trip, partial-capability combinations) plus full signature-freeze pinning;
+  no gaps found, no new tests added.
+- **Struct-level audit (P1-010):** every member of `GamePadTriggers` was compared line-by-line against
+  FNA (`GamePadTriggers.cs`): the public 2-arg constructor's `[0,1]` clamp, the private/friend 3-arg
+  dead-zone constructor (`GamePadDeadZone.None` clamps only; any other mode runs
+  `GamePad::ExcludeAxisDeadZone` before clamping, applied independently to `Left`/`Right`), the
+  epsilon-tolerant `==`/`!=`/`Equals`, and `GetHashCode()`'s `Left.GetHashCode() + Right.GetHashCode()`
+  formula. Zero divergences found beyond the two already-documented, pre-existing, codebase-wide
+  patterns above (`Equals(object obj)` omission, unsigned-wraparound `GetHashCode()` summation). One
+  test-coverage gap (not a behavior bug) was closed: the private dead-zone constructor's `Right`
+  trigger path had no independent test — added
+  `GamePadTriggersTest.NonNoneDeadZoneModeAppliesIndependentlyToBothTriggers`.
 
 **Fake-SDL unit coverage (Phase I15 — no real hardware):** an internal injectable seam
 (`ISdlGamepadBackend`, production = real SDL) lets a `FakeSdlGamepadBackend` drive the real

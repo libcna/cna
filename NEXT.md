@@ -46,6 +46,19 @@
 > Task 947's own row (chronological per-shader history, discriminating-power mutation testing for
 > every one) and Tasks 1079–1082's own rows; `plan_samples.md` for the per-sample CNA-gap tracking.
 
+> **Separate, unrelated track — `feature/input` branch, `audit_input.md` Phase 13 remediation +
+> Phase 1 audit, in progress as of 2026-07-17.** Completely independent of the D3D9 work below (this
+> `NEXT.md`/`plan_dx9.md` pair is D3D9-only) — tracked in full in `plan_input.md`
+> (`P0-001`–`P13-006` + ongoing `P1-*`), not duplicated here. Status: Phase 0 and Phase 13
+> (`P13-001..006`, the 4 confirmed defects from `../audit_input.md`) are fully closed and pushed
+> (commits `864f9b76`..`8561a1e9` on `feature/input`). Phase 1 ("Strict XNA Input public API audit",
+> 45 tasks, member-by-member parity checks against the local FNA reference tree) is now in progress
+> at the user's explicit request to work autonomously through `plan_input.md`'s remaining ~450 open
+> tasks. Each task's own `plan_input.md` entry is the authoritative record (Goal/Steps/Result);
+> commits are per-task or per-small-batch, `git log --oneline` on `feature/input` is the index. If
+> resuming this track: read `plan_input.md`'s Phase overview + the last few `[x]`-marked `P1-*` tasks
+> for the exact stopping point, not this file.
+
 ## 1. Project summary
 
 **CNA** is a C++23 reimplementation of the XNA 4.0 programming model

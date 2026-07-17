@@ -191,3 +191,33 @@ TEST(GamePadInputTest, PacketNumberBumpsOnWithinDeadZoneAxisWobbleWhileDeadZoned
 
     ResetGamePadState();
 }
+
+// Task P1-003. FNA's GamePad.GetState(PlayerIndex) forwards to GetState(playerIndex,
+// GamePadDeadZone.IndependentAxes) (GamePad.cs:64-70). The existing dead-zone-wobble test above only
+// exercises this with a stick value that reads 0.0f either way, which would not catch a forwarding bug
+// (e.g. accidentally defaulting to GamePadDeadZone::None). Use a value above the dead zone so the
+// IndependentAxes rescale produces a distinct, non-zero, non-raw result, and pin that the 1-arg
+// overload matches the explicit IndependentAxes call exactly while differing from the raw/None reading.
+TEST(GamePadInputTest, GetStateDefaultOverloadForwardsToIndependentAxesDeadZone)
+{
+    using CNA::Internal::Input::InputManager;
+    using CNA::Internal::Input::GamePadAxis;
+
+    ResetGamePadState();
+    InputManager::SetGamePadConnection(PlayerIndex::One, true);
+    InputManager::SetGamePadAxisValue(PlayerIndex::One, GamePadAxis::LeftThumbstickX, 0.5f);
+
+    const auto defaultState = GamePad::GetState(PlayerIndex::One);
+    const auto explicitIndependentAxesState = GamePad::GetState(PlayerIndex::One, GamePadDeadZone::IndependentAxes);
+    const auto noneState = GamePad::GetState(PlayerIndex::One, GamePadDeadZone::None);
+
+    const float expected = GamePad::ExcludeAxisDeadZone(0.5f, GamePad::LeftDeadZone);
+    EXPECT_FLOAT_EQ(defaultState.getThumbSticksProperty().getLeftProperty().X, expected);
+    EXPECT_FLOAT_EQ(defaultState.getThumbSticksProperty().getLeftProperty().X,
+                     explicitIndependentAxesState.getThumbSticksProperty().getLeftProperty().X);
+    EXPECT_FLOAT_EQ(noneState.getThumbSticksProperty().getLeftProperty().X, 0.5f);
+    EXPECT_NE(defaultState.getThumbSticksProperty().getLeftProperty().X,
+              noneState.getThumbSticksProperty().getLeftProperty().X);
+
+    ResetGamePadState();
+}
