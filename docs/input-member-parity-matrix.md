@@ -1,5 +1,7 @@
 # Input member-level parity matrix (INPUT-API-027)
 
+> **Related input docs (INP-0003):** [plan](../plan_input.md) · [backend](input-backend.md) · [FNA fidelity + deviations](input-fna-fidelity.md) · [member-parity matrix](input-member-parity-matrix.md) · [frozen API + tier glossary](input-public-api-frozen.md) · [test coverage](input-test-coverage.md) · [build & test](input-build-and-test.md) · [platform notes](platform-input-notes.md) · [manual results](input-manual-verification-results.md) · [demo checklist](demo-input-checklist.md)
+
 > **Generated** by `tools/input_parity/gen_input_parity_matrix.py` from the public
 > `Microsoft::Xna::Framework::Input` (+ `::Touch`) headers and the FNA reference
 > at `/rv/data/library/github.com/FNA-XNA/FNA/src/Input`. Do not hand-edit — re-run the generator. This is a review aid;

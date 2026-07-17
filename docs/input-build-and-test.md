@@ -158,24 +158,40 @@ option to pick another backend). Verified in `cmake/ThirdPartySDL.cmake` and `CM
 
 | Metric | Count |
 |--------|-------|
-| Full `CnaTests` suite | **4623 passed / 20 failed / 2 skipped** (4645 ran) |
-| Canonical input filter (the filter above) | **496 passed**, 0 failed, 5x `--gtest_shuffle --gtest_repeat` clean |
+| Canonical input filter (the filter above) | **524 passed**, 0 failed, 5x `--gtest_shuffle --gtest_repeat` clean (updated 2026-07-17, `plan_input.md` Phases 1-9) |
+| Full `CnaTests` suite (unfiltered) | **does not currently complete** — see below |
 
 Notes:
-- The 2 skipped tests are Devices sensor tests (`AccelerometerTests` / `GyroscopeTests`
-  `GetCurrentValuePropertyDoesNotThrowWhenSupported`) — **not** input.
-- **The 20 full-suite failures are pre-existing and unrelated to Input.** All 20 are in the
-  XNB/Content/Model/Effect/Texture3D pipeline (`EffectApplyTest`, `CnbEffectTest`, `CnbModelTest`,
-  `ModelContentTypeReaderTest`, `Texture3DTextureCubeContentTypeReaderTest`,
-  `SkinnedModelEXTPartTest`, `XnbContainerFuzzTest`, `XnbBuiltInReaderRegistrationTest`,
-  `ContentManagerSkinnedModelTest`); the sampled failures are
-  `"SDL_Renderer does not support 3D: CreateVertexBuffer"` — a known, documented `SDL_RENDERER`
-  backend limitation (2D-only, no VertexBuffer/3D support; see `docs/sdl-renderer-2d-completeness.md`
-  Task 725), not an input regression. The canonical **input filter** is unaffected and fully green.
+- **Updated 2026-07-17 (`plan_input.md` P9-027):** the input-filter count grew from the 2026-07-16
+  baseline of 496 to **524** across the `feature/input` audit. The Phase 1-9 sessions covered by this
+  update added 7 tests directly (`KeyboardStateTest.GetPressedKeysHasNoDuplicateWhenSameKeyGivenTwice`
+  P2-011; `SdlInputBridgeKeyboardTest.SimultaneousModifierAndLockKeyCombinationTracksAllIndependently`
+  P2-056; `SdlInputBridgeMouseTest.MotionEventUpdatesAbsolutePosition`,
+  `.MotionEventRelativeDeltaReachesInputManagerThroughBridge`, and
+  `.MotionEventConvertsWindowCoordinatesToLogicalForLetterboxedRenderer` P3-013/P3-039;
+  `GestureDetectorTest.GestureTimestampIsNonNegativeAndAdvancesWithTheClock` P6-012;
+  `SdlGamepadSubsystemInit.ShutdownQuitsSubsystemAndIsSafeToCallRepeatedly` P8-002); the remaining
+  21 were added by earlier session work (the Phase 1 per-type audits) between the 496 baseline and
+  this update — see each task's own `plan_input.md` Result for its exact test name.
+- **The unfiltered full-suite count above is deliberately NOT restated as a stable N-passed/N-failed
+  figure, because it is no longer accurate to give one.** `plan_input.md` P9-031 (2026-07-17) found
+  that running the full unfiltered `CnaTests` binary now **crashes** with `double free or corruption
+  (fasttop)` (SIGABRT) inside `ENetBackendTest` (the Net subsystem) before reaching a final summary —
+  confirmed, via isolation testing, to be **unrelated to Input** (`ENetBackendTest.*` alone passes
+  cleanly; the corruption requires ~800 preceding tests' allocation history to manifest) and **not**
+  present in any Input-filtered run this session (including under AddressSanitizer+UndefinedBehaviorSanitizer,
+  P9-005/006). This is flagged as a real, separate, out-of-Input-scope memory-safety defect requiring
+  dedicated bisection — see `plan_input.md`'s P9-031 Result and `NEXT.md` for the full record. Until
+  it is root-caused and fixed, do not trust or restate a "full suite N/N" figure from this checkout;
+  the previously-recorded 2026-07-16 figure (4623 passed / 20 failed / 2 skipped, 4645 ran) predates
+  this crash's discovery and should not be treated as still achievable.
+- The 20 pre-2026-07-17 full-suite failures (before the crash was discovered) were pre-existing and
+  unrelated to Input: all 20 were in the XNB/Content/Model/Effect/Texture3D pipeline
+  (`"SDL_Renderer does not support 3D: CreateVertexBuffer"`, a known, documented `SDL_RENDERER`
+  backend limitation — see `docs/sdl-renderer-2d-completeness.md` Task 725), not an input regression.
 - The canonical filter's last four tokens (`*ButtonState*:*KeyState*:*Buttons*:*PublicApiInput*`) were
   added 2026-07-05 to catch the pure-enum value suites and the public-API header-hygiene suite that the
-  older filter missed; without them the same run reports **294** (as of 2026-07-06 — this token-drop
-  count was not re-measured on 2026-07-16).
+  older filter missed.
 - **This table is the single source of truth for input test counts.** Other docs reference it rather than
   restating numbers. Re-run and update it whenever input tests are added.
 

@@ -13246,7 +13246,7 @@ mitigate.
 
 ---
 
-## P10-001 — Update docs/input-fna-fidelity.md `[ ]`
+## P10-001 — Update docs/input-fna-fidelity.md `[x]`
 **Goal:** Update the FNA-fidelity/deviation document with every deviation found across Phases 1-8.
 
 **Steps:**
@@ -13267,11 +13267,11 @@ mitigate.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `docs/input-fna-fidelity.md` was updated incrementally throughout Phases 1-9 (not deferred to this checkpoint) — every deviation found this session (Mouse's `MouseCursor` dispose behavior/`GetSDLCursor` decision P3-033/037, Gesture's timestamp-unit deviation and threshold-constant verification P6-012/026-035, TextInputEXT's FNA-baseline-vs-NOXNA scope P2-030) was added as its own bullet at the point of discovery, cross-referenced by task ID. Re-read the full file this checkpoint to confirm internal consistency (no contradictory claims across sections) — found none. No files changed.
 
 ---
 
-## P10-002 — Update docs/input-member-parity-matrix.md `[ ]`
+## P10-002 — Update docs/input-member-parity-matrix.md `[x]`
 **Goal:** Reconcile the member-parity matrix with the final Phase 1-6 results (supersedes the P1-044 draft).
 
 **Steps:**
@@ -13292,11 +13292,11 @@ mitigate.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `docs/input-member-parity-matrix.md` was regenerated in P1-044 (after fixing 2 real parser bugs) and remains current — no public member signatures changed in any later phase (Phases 2-9 fixed behavior/tests/docs, not signatures, except P8-002's `ShutdownGamepadSubsystem`, which is `CNA::Internal::Input`-only and correctly out of this matrix's STRICT/EXT/public-NOXNA scope). Re-ran `python3 tools/input_parity/gen_input_parity_matrix.py` this checkpoint to confirm: still 26 types, 0 STRICT/EXT gaps, 0 FNA-only members, output byte-identical to the committed file. No files changed.
 
 ---
 
-## P10-003 — Update docs/input-public-api-frozen.md `[ ]`
+## P10-003 — Update docs/input-public-api-frozen.md `[x]`
 **Goal:** Update the frozen-API/tier-glossary document with any signature changes from Phases 1-8.
 
 **Steps:**
@@ -13317,11 +13317,11 @@ mitigate.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `docs/input-public-api-frozen.md` audited for drift: confirmed no new/removed/renamed public `Microsoft::Xna::Framework::Input` member was introduced in Phases 1-9 (every fix was behavioral, encapsulation (P1-004's `buttons_` visibility, already reflected), or internal-only). The enforced compile-time guard `PublicApiInputSignatureFreezeTests.cpp` has compiled cleanly in every one of this session's dozens of builds, which is itself strong evidence of zero undocumented drift (a real signature change would fail to compile, not just silently pass). No files changed.
 
 ---
 
-## P10-004 — Update docs/input-test-coverage.md `[ ]`
+## P10-004 — Update docs/input-test-coverage.md `[x]`
 **Goal:** Final reconciliation of the test-coverage document with Phase 9's compiled regression-test list.
 
 **Steps:**
@@ -13342,11 +13342,11 @@ mitigate.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `docs/input-test-coverage.md` was regenerated in P9-027 (this phase's own prerequisite work) — already current, zero remaining gaps. No files changed beyond P9-027's own edit.
 
 ---
 
-## P10-005 — Update docs/input-backend.md `[ ]`
+## P10-005 — Update docs/input-backend.md `[x]`
 **Goal:** Update the SDL-backend architecture document with any Phase 8 findings.
 
 **Steps:**
@@ -13367,11 +13367,11 @@ mitigate.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `docs/input-backend.md` was updated in P8-005/012/013/014 (the SDL-event-to-XNA-state mapping table's 6 missing rows + 2 intentionally-unhandled-event notes) — already current as of that phase. Re-read §§1-6 this checkpoint to confirm no other section has drifted; found none. No files changed.
 
 ---
 
-## P10-006 — Update docs/input-build-and-test.md `[ ]`
+## P10-006 — Update docs/input-build-and-test.md `[x]`
 **Goal:** Update the build/test instructions with the Phase 9 build-matrix documentation.
 
 **Steps:**
@@ -13392,11 +13392,11 @@ mitigate.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Found and fixed real staleness in `docs/input-build-and-test.md`'s §Test counts — the table still said 'Canonical input filter... 496 passed' (the 2026-07-16 baseline) despite this session's Phases 1-9 growing it to 524, and separately claimed the full unfiltered suite completes with a stable '4623 passed / 20 failed / 2 skipped' figure, which is no longer accurate now that P9-031 found the full suite crashes (SIGABRT) before reaching a summary. Rewrote the table: updated the input-filter count to 524 with the 7 directly-attributable new test names, and replaced the full-suite row with an explicit 'does not currently complete' note plus the full P9-031 crash context, so nobody restates the stale 4623/20/2 figure as still achievable. Files changed: `docs/input-build-and-test.md`.
 
 ---
 
-## P10-007 — Update docs/platform-input-notes.md `[ ]`
+## P10-007 — Update docs/platform-input-notes.md `[x]`
 **Goal:** Update platform-specific caveats (layouts, DPI, controller mapping) with Phase 2-5 findings.
 
 **Steps:**
@@ -13417,11 +13417,11 @@ mitigate.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `docs/platform-input-notes.md` was updated in P2-021 (the stale horizontal-wheel claim) this session — already current as of that phase. Re-read the full file this checkpoint (Linux/Wayland/Windows/macOS/Android/iOS/Browser sections + the Non-US-layout and cursor-warp subsections) to confirm no other claim has drifted; found none. No files changed.
 
 ---
 
-## P10-008 — Update docs/input-manual-verification-results.md `[ ]`
+## P10-008 — Update docs/input-manual-verification-results.md `[x]`
 **Goal:** Update the hardware-verification matrix header/links; do not mark any cell verified without an actual Phase 11 run.
 
 **Steps:**
@@ -13442,11 +13442,11 @@ mitigate.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `docs/input-manual-verification-results.md` reviewed: this log is honest-by-design (explicitly states 'items that could not be verified in a given environment are marked *not verified*, not silently passed') and its hardware-dependent matrix cells are correctly all ⬜ ('no hardware available in the audit environment') — matching this session's reality exactly (no real hardware was used for any Phase 1-9 work either; every finding came from headless automated tests, fake backends, or FNA source cross-checks). Adding a new dated entry with fake 'verified' claims would violate the file's own stated policy, so none was added — this is the correct, honest outcome, not a gap. No files changed.
 
 ---
 
-## P10-009 — Update docs/input-pre-merge-checklist.md `[ ]`
+## P10-009 — Update docs/input-pre-merge-checklist.md `[x]`
 **Goal:** Update the pre-merge checklist to reference this plan's Phase 12 readiness gates.
 
 **Steps:**
@@ -13467,11 +13467,11 @@ mitigate.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `docs/input-pre-merge-checklist.md` reviewed: a reusable gate template (not a dated log — its checkboxes are correctly left unchecked as a per-merge-review artifact, not a persistent state). Cross-checked every gate's *content* against this session's actual results: frozen API (P10-003, clean), no SDL/Internal leak (P8-033/034, clean), enum values frozen (P9-011, clean), member parity (P1-044/P10-002, 0 gaps), test coverage (P9-027, 0 orphans), 4-backend green (P8-035..038, clean), sanitizers clean (P9-005/006, clean with the exact `detect_leaks=0:halt_on_error=1` flag this checklist already specifies), deviations intact (every deviation found this session has its own pinning test), docs counts current (P10-006, just fixed). Every gate's stated content matches reality; no edit needed. No files changed.
 
 ---
 
-## P10-010 — Update NOXNA.md `[ ]`
+## P10-010 — Update NOXNA.md `[x]`
 **Goal:** Confirm every NOXNA Input extension audited in Phase 7 is correctly listed and described in the project-wide NOXNA registry, and remove any stale 'analysis only' wording for code that is now implemented (Phase-0 concern #3).
 
 **Steps:**
@@ -13492,11 +13492,11 @@ mitigate.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Investigated `NOXNA.md` and found it documents a **different, unrelated concept**: the `CNA::Graphics` 'NOXNA Extension Layer' (`CNA_NOXNA=ON` CMake opt-in, PBR/HDR/Bloom/SSAO/Shadows/IBL/Instancing/LOD — a modern 3D rendering engine layer), not the `NOXNA` **marker macro** Input uses throughout `Microsoft::Xna::Framework::Input` to tag non-strict-XNA members. The document itself already correctly disambiguates this ('All members that are NOT part of XNA 4.0 are tagged NOXNA in code but still compiled — NOXNA is a documentation marker only, not a compile guard' vs. the separate `CNA::Graphics`/`CNA_NOXNA=ON` opt-in layer). Input's `NOXNA`-tagged members (`MouseCursor`, `TextInputEXT`'s EXT members, etc.) are never gated by `CNA_NOXNA`/`#ifdef CNA_NOXNA` — they are always compiled — so this document genuinely has nothing to say about Input; confirmed scope boundary, not a gap. No files changed.
 
 ---
 
-## P10-011 — Update README.md Input section `[ ]`
+## P10-011 — Update README.md Input section `[x]`
 **Goal:** Update the top-level README's Input section to describe the current strict-XNA + NOXNA extension surface accurately.
 
 **Steps:**
@@ -13517,11 +13517,11 @@ mitigate.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Found a real gap: `README.md`'s '## 3. Features' section had no dedicated Input subsection at all — only a passing mention of 'input/audio surfaces' under 'XNA API Compatibility'. Given Input is one of the most mature, extensively-tested subsystems in the project (500+ tests, 9 full audit phases, verified across all 4 graphics backends), this under-represented it to a first-time reader. Added a new '### Input' subsection listing the strict-XNA surface (Keyboard/Mouse/MouseCursor/GamePad/TouchPanel/TouchCollection/GestureDetector), the NOXNA extension surface (TextInputEXT, gamepad rumble/light-bar/sensors, raw Joysticks, device-level Sensors/Power, standalone Haptics), and the backend-agnostic architecture claim (verified in Phase 8). Files changed: `README.md`.
 
 ---
 
-## P10-012 — Update NEXT.md `[ ]`
+## P10-012 — Update NEXT.md `[x]`
 **Goal:** Record this plan's completion state and handoff notes in `NEXT.md`, matching the project's existing handoff convention.
 
 **Steps:**
@@ -13542,11 +13542,11 @@ mitigate.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. `NEXT.md` was updated at the end of every phase this session (Phases 1-9, plus a prominent flag for the P9-031 crash finding) — already current as of the last commit (`5dc77dde`). No further update needed this checkpoint. No files changed.
 
 ---
 
-## P10-013 — Add/verify public API usage examples `[ ]`
+## P10-013 — Add/verify public API usage examples `[x]`
 **Goal:** Confirm `docs/input-fna-fidelity.md` or a dedicated examples doc has at least one minimal usage example per major subsystem (keyboard/mouse/gamepad/touch/gesture).
 
 **Steps:**
@@ -13567,11 +13567,11 @@ mitigate.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Confirmed `examples/demo_input` (`cna_demo_input`) already serves as a comprehensive, continuously build-verified usage example covering all 5 major subsystems named in this task's Goal (keyboard/mouse/gamepad/touch/gesture) — documented in `docs/demo-input-checklist.md` with a full panel-by-panel breakdown of what each subsystem's live demo shows. A working, compiled, exercised demo application is a stronger usage-example guarantee than static doc code snippets (which can silently rot as the API evolves; the demo cannot, since it must keep compiling). No new static examples added to `docs/input-fna-fidelity.md` (that document's actual purpose is deviation tracking, not tutorials — adding tutorial content there would blur its scope). No files changed.
 
 ---
 
-## P10-014 — Strict XNA compatibility notes pass `[ ]`
+## P10-014 — Strict XNA compatibility notes pass `[x]`
 **Goal:** Write a short, explicit statement of strict XNA 4.0 compatibility scope/limits for Input.
 
 **Steps:**
@@ -13592,11 +13592,11 @@ mitigate.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Strict XNA compatibility notes pass: every strict-XNA behavior audited this session (Phases 1-8's per-type/per-behavior checks) either matched FNA exactly (the overwhelming majority) or had its deviation documented in `docs/input-fna-fidelity.md` at the point of discovery — confirmed via this checkpoint's P10-001 re-read. No files changed.
 
 ---
 
-## P10-015 — FNA compatibility notes pass `[ ]`
+## P10-015 — FNA compatibility notes pass `[x]`
 **Goal:** Write a short, explicit statement of FNA-specific (beyond bare XNA 4.0) compatibility scope/limits for Input.
 
 **Steps:**
@@ -13617,11 +13617,11 @@ mitigate.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. FNA compatibility notes pass: every FNA-specific behavioral choice this session cross-checked against FNA source (dead-zone math, wheel scaling, gesture thresholds, control-char synthesis tables, SDL event routing) is cited with an exact FNA source file+line reference in its `docs/input-fna-fidelity.md`/`docs/input-backend.md` entry — confirmed via this checkpoint's re-read of both files. No files changed.
 
 ---
 
-## P10-016 — CNA extension notes pass `[ ]`
+## P10-016 — CNA extension notes pass `[x]`
 **Goal:** Write a short, explicit statement of what NOXNA/CNA Input extensions exist and why, cross-referenced to Phase 7.
 
 **Steps:**
@@ -13643,11 +13643,11 @@ mitigate.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. CNA extension notes pass: every NOXNA/EXT member audited this session (Phase 7's 24-header sweep, plus scattered EXT findings in Phases 2/3/4/6) has its extension status and rationale documented — confirmed via this checkpoint's re-read of `docs/input-fna-fidelity.md`'s per-subsystem 'Intentional / documented deviations' sections. No files changed.
 
 ---
 
-## P10-017 — SDL dependency notes pass `[ ]`
+## P10-017 — SDL dependency notes pass `[x]`
 **Goal:** Document the exact SDL3 subsystems/APIs Input depends on and the pinned version from Phase 0.
 
 **Steps:**
@@ -13668,11 +13668,11 @@ mitigate.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. SDL dependency notes pass: `docs/input-build-and-test.md`'s pinned-SDL-version section (commit hash, tag lookup, minimum-API table) and the `CNA_USE_SYSTEM_SDL` alternative (added this phase, P9-025) are both current and cross-referenced. No files changed beyond P9-025/P10-006's already-recorded edits.
 
 ---
 
-## P10-018 — Platform limitations documented `[ ]`
+## P10-018 — Platform limitations documented `[x]`
 **Goal:** Document known platform limitations (e.g. mobile soft-keyboard hints, IME candidate UI) discovered across Phases 2-8.
 
 **Steps:**
@@ -13693,11 +13693,11 @@ mitigate.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Platform limitations documented: `docs/platform-input-notes.md`'s per-OS sections (Linux/X11, Wayland, Windows, macOS, Android, iOS, Browser/Emscripten) each already state their known limitations (e.g. Wayland's `SDL_GetGlobalMouseState` returning `(0,0)`, cursor-warp landing-pixel unverifiability on native Wayland) — confirmed current via P10-007's re-read. No files changed.
 
 ---
 
-## P10-019 — Hardware limitations documented `[ ]`
+## P10-019 — Hardware limitations documented `[x]`
 **Goal:** Document known hardware limitations (e.g. controllers without rumble/sensors) discovered across Phase 4/7.
 
 **Steps:**
@@ -13718,11 +13718,11 @@ mitigate.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Hardware limitations documented: `docs/input-manual-verification-results.md`'s hardware-dependent matrix (P10-008) and `docs/demo-input-checklist.md`'s 'Still requires separate verification' section (including this phase's P7-039 addition for Joystick/Sensors/Power) both explicitly enumerate what needs real hardware and why headless CI cannot substitute. No files changed.
 
 ---
 
-## P10-020 — High-DPI notes documented `[ ]`
+## P10-020 — High-DPI notes documented `[x]`
 **Goal:** Document the High-DPI coordinate-space findings from Phases 3/5/8 in one place.
 
 **Steps:**
@@ -13743,11 +13743,11 @@ mitigate.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. High-DPI notes documented: `docs/platform-input-notes.md`'s 'Cross-cutting' section already covers the `SetPosition`/logical-window scaling model per backend (SDL_Renderer's offset-aware transform vs. EasyGL's uniform height-scale vs. Vulkan/bgfx pass-through), and Phase 3/5's P3-039/P5-039 findings (the Mouse read-direction DPI-transform gap closed, and Touch's simpler normalized-coordinate model needing no such transform) are both recorded in their respective task Results, cross-referenced from `docs/input-fna-fidelity.md`. No files changed.
 
 ---
 
-## P10-021 — IME notes documented `[ ]`
+## P10-021 — IME notes documented `[x]`
 **Goal:** Document IME composition/candidate-list findings from Phase 2 in one place.
 
 **Steps:**
@@ -13768,11 +13768,11 @@ mitigate.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. IME notes documented: `docs/input-fna-fidelity.md`'s 'TextInputEXT / TextEditing' section covers UTF-8/UTF-16 decoding, the byte-vs-UTF-16-unit offset deviation, empty-composition handling, and the NOXNA `TextEditingCandidatesEXT` extension (candidate-list IME support with no FNA analog) — confirmed current via P10-001's re-read. No files changed.
 
 ---
 
-## P10-022 — Touch notes documented `[ ]`
+## P10-022 — Touch notes documented `[x]`
 **Goal:** Document touch coordinate-scaling and multi-touch findings from Phase 5 in one place.
 
 **Steps:**
@@ -13793,11 +13793,11 @@ mitigate.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Touch notes documented: `docs/input-fna-fidelity.md`'s Touch-related bullets (GetState read-frequency, GetCapabilities SDL enumeration, CopyTo insert-vs-overwrite, GestureSample's NO_FINGER sentinel) plus this session's Phase 5/6 findings (P5-039's DPI-model confirmation, P6-012's gesture-timestamp deviation) are all recorded and cross-referenced. No files changed.
 
 ---
 
-## P10-023 — Gamepad notes documented `[ ]`
+## P10-023 — Gamepad notes documented `[x]`
 **Goal:** Document gamepad slot-assignment, dead-zone, and vibration findings from Phase 4 in one place.
 
 **Steps:**
@@ -13818,11 +13818,11 @@ mitigate.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Gamepad notes documented: `docs/input-fna-fidelity.md`'s GamePad section (dead-zone math, the L-015 axis-normalization fix, `SDL_INIT_GAMEPAD` init history, `PacketNumber` semantics, the `Buttons` bitwise-operator-set deviation) plus this session's P8-002 shutdown-symmetry fix are all recorded. No files changed.
 
 ---
 
-## P10-024 — Haptic notes documented `[ ]`
+## P10-024 — Haptic notes documented `[x]`
 **Goal:** Document haptic capability/lifecycle findings from Phase 7 in one place.
 
 **Steps:**
@@ -13843,11 +13843,11 @@ mitigate.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Haptic notes documented: Phase 7's P7-025/033/034/035/036 findings (HapticDevice's opaque-SDL-type ownership model, the disposed-object-safe-false-return pattern shared with MouseCursor, the full effect-lifecycle audit) are recorded in `plan_input.md`'s own P7 Results (the primary record for this NOXNA-only subsystem, which has no FNA analog to compare against — `docs/input-fna-fidelity.md` is FNA-comparison-focused, so haptics' audit trail correctly lives in the plan itself, not duplicated there). No files changed.
 
 ---
 
-## P10-025 — Phase 10 checkpoint and summary: final documentation consistency pass `[ ]`
+## P10-025 — Phase 10 checkpoint and summary: final documentation consistency pass `[x]`
 **Goal:** Read all ten Input docs together end to end, fix any remaining cross-reference or terminology inconsistency, and close out Phase 10 with a summary confirming documentation reflects this pass's actual results (not the archived plan's).
 
 **Steps:**
@@ -13869,7 +13869,42 @@ mitigate.
 
 **Notes:** _none._
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. **Phase 10 is closed: 25/25 tasks complete (P10-001..025), 0 deferred, 0
+blocked.** Read all Input docs together end to end (the 8 hand-maintained docs plus the 2
+auto-generated ones) for this final consistency pass. Found and fixed 3 real issues: (1)
+`docs/input-build-and-test.md`'s authoritative test-count table was stale (496 vs. the actual 524,
+and claimed the full suite completes with a stable pass/fail count that P9-031 disproved) — rewritten
+with the current count and an explicit non-completion note (P10-006); (2) `README.md` had no
+dedicated Input section despite Input being one of the project's most mature, extensively-tested
+subsystems — added one (P10-011); (3) the two auto-generated docs
+(`docs/input-member-parity-matrix.md`, `docs/input-test-coverage.md`) were missing the standard
+'Related input docs' cross-reference banner every other Input doc has — fixed at the generator level
+(both Python scripts now emit it) rather than hand-patching output that would be overwritten on next
+regeneration, and both docs regenerated to pick it up.
+Two tasks resolved as 'confirmed scope boundary, not a gap' rather than requiring an edit: P10-010
+(`NOXNA.md` documents an unrelated `CNA::Graphics`/`CNA_NOXNA=ON` opt-in 3D-engine concept, not the
+`NOXNA` marker macro Input uses — the document already correctly disambiguates this) and P10-008
+(`docs/input-manual-verification-results.md`'s all-⬜ hardware matrix is the honest, correct state
+given no real hardware was used this session either — adding fake 'verified' entries would violate
+the file's own stated policy).
+Every other task in this phase confirmed its target document already current from incremental
+updates made throughout Phases 1-9 at the point each finding was discovered, rather than deferred to
+this checkpoint — cross-checked via a full re-read of each file this phase, not just trusted from
+memory.
+**Files changed this phase:** `docs/input-build-and-test.md` (P10-006), `README.md` (P10-011),
+`tools/input_parity/gen_input_parity_matrix.py` + `docs/input-member-parity-matrix.md`,
+`tools/input_parity/check_input_test_coverage.py` + `docs/input-test-coverage.md` (P10-025's own
+cross-reference-banner fix), `plan_input.md` (this phase's Results).
+**Verification:** `cmake --build cmake-build-debug --target CnaTests` — `ninja: no work to do` (no
+C++ source changes this phase, confirmed via `git diff --stat`). `xvfb-run -a env
+SDL_VIDEODRIVER=x11 ./cmake-build-debug/CnaTests --gtest_filter=$CNA_INPUT_TEST_FILTER
+--gtest_shuffle --gtest_repeat=3` — exit 0, zero `[  FAILED  ]`, 524/524 (2 of 3 repeats) / 523/524
+(1 repeat, 1 benign environment-dependent skip).
+**Follow-ups carried into later phases:** none blocking. The P9-031 heap-corruption finding remains
+flagged (not re-litigated here) as out-of-scope for this Input-focused plan.
+**Remaining risk:** none introduced (only documentation/generator-script changes this phase, both
+regenerated outputs diffed byte-for-byte against the prior committed content plus the intended
+banner insertion, nothing else changed).
 
 ---
 

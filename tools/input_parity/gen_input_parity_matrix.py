@@ -413,6 +413,15 @@ def render(per_type: dict, gap_strict: list, gap_fna: list, gap_interface: list,
     out = []
     out.append("# Input member-level parity matrix (INPUT-API-027)")
     out.append("")
+    out.append("> **Related input docs (INP-0003):** [plan](../plan_input.md) · "
+               "[backend](input-backend.md) · [FNA fidelity + deviations](input-fna-fidelity.md) · "
+               "[member-parity matrix](input-member-parity-matrix.md) · "
+               "[frozen API + tier glossary](input-public-api-frozen.md) · "
+               "[test coverage](input-test-coverage.md) · [build & test](input-build-and-test.md) · "
+               "[platform notes](platform-input-notes.md) · "
+               "[manual results](input-manual-verification-results.md) · "
+               "[demo checklist](demo-input-checklist.md)")
+    out.append("")
     out.append("> **Generated** by `tools/input_parity/gen_input_parity_matrix.py` from the public")
     out.append("> `Microsoft::Xna::Framework::Input` (+ `::Touch`) headers and the FNA reference")
     out.append(f"> at `{fna_root}`. Do not hand-edit — re-run the generator. This is a review aid;")

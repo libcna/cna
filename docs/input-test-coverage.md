@@ -1,14 +1,16 @@
 # Input source → test coverage (INPUT-AUDIT-002)
 
+> **Related input docs (INP-0003):** [plan](../plan_input.md) · [backend](input-backend.md) · [FNA fidelity + deviations](input-fna-fidelity.md) · [member-parity matrix](input-member-parity-matrix.md) · [frozen API + tier glossary](input-public-api-frozen.md) · [test coverage](input-test-coverage.md) · [build & test](input-build-and-test.md) · [platform notes](platform-input-notes.md) · [manual results](input-manual-verification-results.md) · [demo checklist](demo-input-checklist.md)
+
 > **Generated** by `tools/input_parity/check_input_test_coverage.py`. Maps each Input
 > type to whether it has a dedicated `TEST(<Type>Test, …)` suite and how many test files
-> reference it. Inspection aid — a value type covered inside a sibling suite is not a real
-> gap (see the `note` column). Do not hand-edit; re-run the script.
 ## Gaps (candidate INPUT-TEST-* tasks)
 
 None — every Input type has a dedicated suite or a documented sibling-suite cover.
 
 
+> reference it. Inspection aid — a value type covered inside a sibling suite is not a real
+> gap (see the `note` column). Do not hand-edit; re-run the script.
 
 ## Public XNA Input types
 
