@@ -74,6 +74,7 @@ target_compile_definitions(CNA
         PUBLIC
         SOUND_ENABLED
         XNA5
+        ${CNA_BACKEND_DEFINE}
         $<$<BOOL:${CNA_NOXNA}>:CNA_NOXNA>
         $<$<BOOL:${CNA_DEVICES}>:CNA_DEVICES>
         $<$<BOOL:${CNA_DRACO_AVAILABLE}>:CNA_DRACO_AVAILABLE>
