@@ -1336,10 +1336,29 @@ case more exist).
 - [x] **Task 9.4** — Done as part of Task 9.1 above (new §9 in `docs/xna-4-api-coverage.md`
   covers Net: `SystemLink`-real, `PlayerMatch`/`Ranked`/invite-stub, host-migration-real (Phase
   5), simulated-conditions-real (Phase 6)).
-- [ ] **Task 9.5 (remaining scope)** — `docs/xna-4-api-coverage.md` itself is confirmed clean (see
-  Task 9.1's grep). Still need a repo-wide sweep of other docs (`README.md`,
-  `docs/avatar-real-rendering-ext.md`, `NEXTnet.md`, etc.) for any Xbox-Live-compatibility claims
-  before this task can be marked fully done.
+- [x] **Task 9.5** — Repo-wide sweep (`grep -rn "Xbox Live" --include="*.md" .`, excluding vendored
+  `third_party/`) for stale Net/GamerServices claims:
+  - `docs/xna-4-api-coverage.md` — clean (Task 9.1).
+  - `README.md` — already accurate: correctly describes real GamerServices/Net/Avatar
+    implementations with honest caveats ("Not binary-compatible with real Xbox Live", real
+    `SystemLink` transport, Avatar ported from a decompiled reference assembly). No change needed.
+  - `AUDIT.md` — its one Xbox Live mention is accurate historical context (FNA has zero Avatar
+    implementation because real Avatar required Xbox Live cloud services FNA never built), not a
+    false compatibility claim. No change needed.
+  - `docs/coverage.md` — a separate, older (2026-06-21), one-time "static source inspection"
+    snapshot report (distinct from the continuously-maintained `xna-4-api-coverage.md`) with 5
+    genuinely stale claims: "Framework.Net is 0%", "GamerServices is ~5%", "a multiplayer game
+    will not compile at all", and matching rows in its namespace and "biggest gaps" tables.
+    Corrected in place (not rewritten wholesale, consistent with this file's own existing
+    incremental-update convention at line 24) with cross-references to
+    `docs/xna-4-api-coverage.md` §9 for current status.
+  - `NEXTnet.md` — found to be its own stale artifact (written when Phase 1 was still in
+    progress; explicitly flags this exact `docs/xna-4-api-coverage.md` staleness at its own line
+    141-143), but it is a session handoff note, not a claim doc in Task 9.5's sense — refreshing
+    it belongs at the end of this session (matching the established `plan_xnb.md` handoff-notes
+    precedent), not mid-Phase-9 while more phases remain in flight. Tracked as a to-do for this
+    session's own wrap-up, not left silently unaddressed.
+  - `third_party/SDL/docs/README-gdk.md` — vendored third-party documentation, out of scope.
 - [ ] **Task 9.6** — Add a troubleshooting section for avatar asset generation (mesh-craft +
   Blender pipeline) and network demo startup (ENet port binding, discovery).
 - [ ] **Task 9.7** — Add a short README for avatar demo controls/command-line args if one doesn't
