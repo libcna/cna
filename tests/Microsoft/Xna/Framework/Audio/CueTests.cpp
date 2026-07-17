@@ -3970,6 +3970,38 @@ TEST(CueTest, ChangingBoundVariableAfterPlayContinuouslyUpdatesPitch)
     cue->Stop(AudioStopOptions::Immediate);
 }
 
+// AUD-10-013 (2026-07-17 deep audit): "Verify pitch does not get reapplied on repeated Update
+// calls -- stable parameter values cannot accumulate ratio exponentially." Confirmed by reading
+// Cue.cpp that ReconcileState()'s per-tick RPC re-evaluation always recomputes
+// `pitchCentsSum = basePitchCents_ + rpcPitchCents` fresh from the constant, once-per-Play()
+// `basePitchCents_` member (a plain assignment, never `+=`) plus a freshly re-evaluated RPC curve
+// value -- not an incremental delta applied on top of the previous tick's already-converted
+// result, so there is no code path that could compound. This test locks that down empirically:
+// many ReconcileState() ticks (via repeated getIsPlayingProperty() calls, matching how
+// AudioEngine::Update() drives it every real frame) with the bound variable held CONSTANT must
+// leave the pitch bit-for-bit identical across every tick, not drifting toward +-1.0 or beyond.
+TEST(CueTest, RepeatedReconcileStateTicksWithConstantVariableDoNotDriftPitch)
+{
+    auto cue = std::unique_ptr<Cue>(SharedRpcBank().GetCue("PitchRpcCue"));
+    cue->SetVariable("Volume", 0.75f); // curve -> +300 cents (some non-edge value)
+    cue->Play();
+    auto* inst = CueTestAccess::ActiveInstance(*cue, 0);
+    ASSERT_NE(inst, nullptr);
+
+    const float firstTickPitch = inst->getPitchProperty();
+    EXPECT_NEAR(firstTickPitch, 0.25f, 0.001f); // +300/1200
+
+    for (int i = 0; i < 50; ++i)
+    {
+        ASSERT_TRUE(cue->getIsPlayingProperty()); // ticks ReconcileState() each iteration
+        EXPECT_FLOAT_EQ(inst->getPitchProperty(), firstTickPitch)
+            << "pitch drifted after " << (i + 1) << " ReconcileState() tick(s) with no variable "
+               "change -- possible cents/ratio accumulation bug";
+    }
+
+    cue->Stop(AudioStopOptions::Immediate);
+}
+
 // ===================== AttackTime/ReleaseTime built-in RPC variables (P10-RPC-003) =====================
 //
 // AttackTimeBank()'s "AttackTimeCue" (its own dedicated engine/xgs, see BuildAttackTimeXgsFixtureBytes)
