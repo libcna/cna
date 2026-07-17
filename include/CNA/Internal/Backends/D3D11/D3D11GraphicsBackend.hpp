@@ -345,6 +345,30 @@ namespace CNA::Internal::Backends::D3D11
         ID3D11Buffer* GetOrCreateBoneConstantBufferEXT();
         ID3D11Buffer* GetOrCreateSkinnedExtraConstantBufferEXT();
 
+        // plan_cnj.md CNB-58 follow-up: same "grow, never recreate" persistent dynamic constant
+        // buffers as above, for pbr3d/pbr_skinned3d's own PerDraw (b0, D3DPbrPerDrawConstants) and
+        // PbrLights (b1 unskinned / b2 skinned, D3DPbrLightConstants) cbuffers. PbrSkinned3d's own
+        // BoneBlock (b1) reuses boneConstantBuffer_/GetOrCreateBoneConstantBufferEXT() above
+        // unchanged -- D3DBoneConstants is shape-identical to skinned3d's own BoneBlock.
+        ComPtr<ID3D11Buffer> pbrPerDrawConstantBuffer_;
+        ComPtr<ID3D11Buffer> pbrLightsConstantBuffer_;
+        ID3D11Buffer* GetOrCreatePbrPerDrawConstantBufferEXT();
+        ID3D11Buffer* GetOrCreatePbrLightsConstantBufferEXT();
+
+        // plan_cnj.md CNB-58 follow-up: lazily-created 1x1 fallback SRVs for PbrEffect's optional
+        // normal/metallic-roughness/emissive/occlusion maps when GpuDrawParams leaves the
+        // corresponding pointer null -- mirrors EasyGLGraphicsBackend's own
+        // EnsureDefaultWhiteTexture()/EnsureDefaultFlatNormalTexture() fallback textures so "map
+        // absent" reads as the correct neutral BRDF input on this backend too (flat tangent-space
+        // normal (128,128,255,255); factor-only/no-emissive/fully-lit (255,255,255,255) for the
+        // other three maps, matching EasyGL's own documented mapping one-for-one).
+        ComPtr<ID3D11Texture2D> defaultWhiteTexture_;
+        ComPtr<ID3D11ShaderResourceView> defaultWhiteSrv_;
+        ComPtr<ID3D11Texture2D> defaultFlatNormalTexture_;
+        ComPtr<ID3D11ShaderResourceView> defaultFlatNormalSrv_;
+        ID3D11ShaderResourceView* GetOrCreateDefaultWhiteSrvEXT();
+        ID3D11ShaderResourceView* GetOrCreateDefaultFlatNormalSrvEXT();
+
         // Phase DX8 (DX-68): instanced3d's fixed 5-element input layout (POSITION0 @ slot 0,
         // per-vertex; INSTANCEWORLD0-3 @ slot 1, per-instance, stride 64) -- independent of the
         // bound vertex buffer's own stride (the shader only reads Position, DX-13-hlsl's own row

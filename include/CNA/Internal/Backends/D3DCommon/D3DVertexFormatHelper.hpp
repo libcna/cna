@@ -15,17 +15,25 @@ namespace CNA::Internal::Backends::D3DCommon
 {
     /// Returns the D3D11_INPUT_ELEMENT_DESC array (and its element count via @p count) for the
     /// given vertex stride in bytes, or nullptr / count=0 if the stride is not one of this
-    /// project's 5 established stride-keyed layouts (16/20/24/32/52).
+    /// project's established stride-keyed layouts (16/20/24/32/48/52/56/68).
     ///
     /// Layouts (byte offsets match VertexPositionColor/VertexPositionTexture/
-    /// VertexPositionColorTexture/VertexPositionNormalTexture/VertexPositionNormalTextureSkinned's
-    /// own getVertexDeclarationStatic() layouts exactly):
+    /// VertexPositionColorTexture/VertexPositionNormalTexture/VertexPositionNormalTextureSkinned/
+    /// VertexPositionNormalTangentTexture/VertexPositionNormalTangentTextureSkinned's own
+    /// getVertexDeclarationStatic() layouts exactly, plus the stride-56 skinned+Color layout that
+    /// -- like the stride-24 AlphaTestColored3d precedent -- has no dedicated named XNA-layer
+    /// struct, only a raw VertexDeclaration; see EasyGLGraphicsBackend::ApplyLayout's own
+    /// case 56 comment for the byte-for-byte convention this mirrors):
     ///   16: POSITION0 (R32G32B32_FLOAT, 0), COLOR0 (R8G8B8A8_UNORM, 12)
     ///   20: POSITION0 (R32G32B32_FLOAT, 0), TEXCOORD0 (R32G32_FLOAT, 12)
     ///   24: POSITION0 (R32G32B32_FLOAT, 0), COLOR0 (R8G8B8A8_UNORM, 12), TEXCOORD0 (R32G32_FLOAT, 16)
     ///   32: POSITION0 (R32G32B32_FLOAT, 0), NORMAL0 (R32G32B32_FLOAT, 12), TEXCOORD0 (R32G32_FLOAT, 24)
+    ///   48: POSITION0 (0), NORMAL0 (12), TANGENT0 (R32G32B32A32_FLOAT, 24), TEXCOORD0 (R32G32_FLOAT, 40)
     ///   52: POSITION0 (0), NORMAL0 (12), TEXCOORD0 (24), BLENDWEIGHT0 (R32G32B32A32_FLOAT, 32),
     ///       BLENDINDICES0 (R8G8B8A8_UINT, 48)
+    ///   56: stride-52 layout above + COLOR0 (R8G8B8A8_UNORM, 52)
+    ///   68: stride-48 layout above + BLENDWEIGHT0 (R32G32B32A32_FLOAT, 48), BLENDINDICES0
+    ///       (R8G8B8A8_UINT, 64)
     const D3D11_INPUT_ELEMENT_DESC* InputElementsForStride(std::size_t strideInBytes, UINT& count);
 
     /// plan_dx.md Phase DX12 (DX-107): D3D12 counterpart of InputElementsForStride() above, same 5

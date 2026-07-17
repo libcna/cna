@@ -59,6 +59,16 @@ SHADERS = [
     ("instanced3d.frag.hlsl",        "main", "ps_5_0", "kInstanced3dFragDxbc"),
     ("alpha_test_colored3d.vert.hlsl", "main", "vs_5_0", "kAlphaTestColored3dVertDxbc"),
     ("alpha_test_colored3d.frag.hlsl", "main", "ps_5_0", "kAlphaTestColored3dFragDxbc"),
+    # plan_cnj.md CNB-58/CNB-67 follow-up: PbrEffect/SkinnedPbrEffect + SkinnedEffect vertex-color
+    # (stride 56) D3D11 shader variants.
+    ("pbr3d.vert.hlsl",                       "main", "vs_5_0", "kPbr3dVertDxbc"),
+    ("pbr3d.frag.hlsl",                       "main", "ps_5_0", "kPbr3dFragDxbc"),
+    ("pbr_skinned3d.vert.hlsl",                "main", "vs_5_0", "kPbrSkinned3dVertDxbc"),
+    ("pbr_skinned3d.frag.hlsl",                "main", "ps_5_0", "kPbrSkinned3dFragDxbc"),
+    ("skinned_colored3d.vert.hlsl",            "main", "vs_5_0", "kSkinned3dColoredVertDxbc"),
+    ("skinned_colored3d.frag.hlsl",            "main", "ps_5_0", "kSkinned3dColoredFragDxbc"),
+    ("skinned_colored3d_vertexlit.vert.hlsl",  "main", "vs_5_0", "kSkinned3dVertexLitColoredVertDxbc"),
+    ("skinned_colored3d_vertexlit.frag.hlsl",  "main", "ps_5_0", "kSkinned3dVertexLitColoredFragDxbc"),
 ]
 
 

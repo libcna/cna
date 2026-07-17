@@ -41,6 +41,21 @@ namespace CNA::Internal::Backends::D3DCommon
         /// (XNA's real default) -- identical Blinn-Phong math, evaluated in the vertex stage.
         LitTextured3dVertexLit,
         Skinned3dVertexLit,
+        /// plan_cnj.md CNB-58 follow-up: PbrEffect's metallic-roughness BRDF (unskinned), HLSL
+        /// port of EasyGLGraphicsBackend::EnsurePbrProgram(). Stride 48
+        /// (VertexPositionNormalTangentTexture).
+        Pbr3d,
+        /// plan_cnj.md CNB-58 follow-up: SkinnedPbrEffect -- Pbr3d's own BRDF plus bone skinning,
+        /// HLSL port of EasyGLGraphicsBackend::EnsurePbrSkinnedProgram(). Stride 68
+        /// (VertexPositionNormalTangentTextureSkinned).
+        PbrSkinned3d,
+        /// plan_cnj.md CNB-67 follow-up: Skinned3d's own stride-56 sibling carrying a per-vertex
+        /// Color attribute (SkinnedEffect::VertexColorEnabled), HLSL port of
+        /// EasyGLGraphicsBackend::EnsureSkinnedProgram()'s vertex-color wiring.
+        Skinned3dColored,
+        /// plan_cnj.md CNB-67 follow-up: Skinned3dVertexLit's own stride-56 vertex-color sibling,
+        /// HLSL port of EasyGLGraphicsBackend::EnsureSkinnedVertexLitProgram()'s vertex-color wiring.
+        Skinned3dVertexLitColored,
     };
 
     /// Returns the compiled DXBC bytecode (pointer + length) for a variant's vertex shader stage.
