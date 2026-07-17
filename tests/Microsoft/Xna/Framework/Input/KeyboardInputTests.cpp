@@ -346,6 +346,57 @@ TEST(KeyboardStateTest, AccessorsAreSafeForOutOfRangeKeysValues)
     EXPECT_NO_THROW((void)state.GetHashCode());
 }
 
+// P1-014: the constructors themselves must drop out-of-range Keys values the same way FNA's
+// AddPressedKey does (KeyboardState.cs:220-234 — the switch on `key >> 5` has cases 0..7 and no
+// default, so a value outside 0..255 matches nothing and the key is never marked pressed). Before
+// this fix, CNA's constructors stored every value verbatim into `pressedKeys_` unfiltered, so only
+// GetHashCode (which had its own separate guard) matched FNA for out-of-range keys; IsKeyDown,
+// IsKeyUp, operator[]/getItem, GetPressedKeys, and Equals/operator== all disagreed with FNA (and
+// with GetHashCode) by reporting the out-of-range key as pressed. These tests pin the fixed,
+// FNA-consistent behavior across every accessor, for both the initializer-list and the
+// unordered_set constructor.
+TEST(KeyboardStateTest, InitializerListConstructorDropsOutOfRangeKeysValue)
+{
+    const KeyboardState state{Keys::A, static_cast<Keys>(999)};
+
+    EXPECT_TRUE(state.IsKeyDown(Keys::A));
+    EXPECT_FALSE(state.IsKeyDown(static_cast<Keys>(999)));
+    EXPECT_TRUE(state.IsKeyUp(static_cast<Keys>(999)));
+    EXPECT_EQ(state[static_cast<Keys>(999)], KeyState::Up);
+    EXPECT_EQ(state.getItem(static_cast<Keys>(999)), KeyState::Up);
+
+    const auto pressed = state.GetPressedKeys();
+    EXPECT_EQ(pressed, std::vector<Keys>{Keys::A});
+
+    // Equals/operator== must agree that the out-of-range key never happened.
+    EXPECT_EQ(state, KeyboardState{Keys::A});
+    EXPECT_TRUE(state.Equals(KeyboardState{Keys::A}));
+}
+
+TEST(KeyboardStateTest, InitializerListConstructorDropsNegativeAndBoundaryKeysValues)
+{
+    // -1 (int) casts to a huge unsigned value; 256 is the first value past the representable
+    // 0..255 range (256>>5 == 8, one past the last word). Both must be dropped, same as
+    // GetHashCode already guarded for these exact values.
+    const KeyboardState state{static_cast<Keys>(-1), static_cast<Keys>(256), Keys::B};
+
+    EXPECT_FALSE(state.IsKeyDown(static_cast<Keys>(-1)));
+    EXPECT_FALSE(state.IsKeyDown(static_cast<Keys>(256)));
+    EXPECT_EQ(state.GetPressedKeys(), std::vector<Keys>{Keys::B});
+    EXPECT_EQ(state, KeyboardState{Keys::B});
+}
+
+TEST(KeyboardStateTest, UnorderedSetConstructorDropsOutOfRangeKeysValue)
+{
+    const std::unordered_set<Keys> pressed{Keys::Left, static_cast<Keys>(999)};
+    const KeyboardState state(pressed);
+
+    EXPECT_TRUE(state.IsKeyDown(Keys::Left));
+    EXPECT_FALSE(state.IsKeyDown(static_cast<Keys>(999)));
+    EXPECT_EQ(state.GetPressedKeys(), std::vector<Keys>{Keys::Left});
+    EXPECT_EQ(state, KeyboardState{Keys::Left});
+}
+
 // ===========================================================================
 // KeyboardState — ToString
 // ===========================================================================

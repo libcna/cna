@@ -1018,7 +1018,7 @@ mapping) use the enum consistently with FNA's own SDL platform mapping tables. E
 
 ---
 
-## P1-012 — Audit KeyState member parity vs FNA `[ ]`
+## P1-012 — Audit KeyState member parity vs FNA `[x]`
 **Goal:** Perform a full member-by-member audit of `KeyState` (constructors, methods, operators, enum values, defaults, equality, hash) against its FNA reference.
 
 **Steps:**
@@ -1042,11 +1042,20 @@ mapping) use the enum consistently with FNA's own SDL platform mapping tables. E
 
 **Notes:** FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/KeyState.cs`.
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Audited `KeyState` (enum: `Up`, `Down`) against FNA's `KeyState.cs`: name, member
+order, implicit numeric values (0, 1), and both type-level and per-value Doxygen text match FNA's
+`<summary>` comments verbatim (rephrasing permitted, not required here since verbatim copy already
+matched). Cross-checked against the structurally identical `ButtonState` enum to confirm this file
+follows the project's established, correct pattern for XNA state enums. **No divergence found.**
+Existing test `KeyStateTest.ValuesMatchXnaNumericConstants`
+(`tests/Microsoft/Xna/Framework/Input/KeyStateTests.cpp`) already pins both constants, matching the
+same pattern as `ButtonStateTest`; also exercised indirectly via `KeyboardState`'s indexer and pinned
+in the compile/signature-freeze guard tests. No files changed. Consolidated build+test verification
+pending as part of the parallel P1 batch 2 audit run. Remaining risk: none.
 
 ---
 
-## P1-013 — Audit Keyboard member parity vs FNA `[ ]`
+## P1-013 — Audit Keyboard member parity vs FNA `[x]`
 **Goal:** Perform a full member-by-member audit of `Keyboard` (constructors, methods, operators, enum values, defaults, equality, hash) against its FNA reference.
 
 **Steps:**
@@ -1072,11 +1081,23 @@ mapping) use the enum consistently with FNA's own SDL platform mapping tables. E
 
 **Notes:** FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Keyboard.cs`.
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Audited `Keyboard`'s public API surface against FNA's `Keyboard.cs`
+(SDL event routing/scancode translation lives in `SdlInputBridge`/`InputManager`, already separately
+audited — out of scope here). All members match FNA exactly: the deleted-constructor static-class
+pattern, `GetState()`, `GetState(PlayerIndex)` (index intentionally ignored in both FNA and CNA), and
+the FNA-native extension `GetKeyFromScancodeEXT` (correctly `NOXNA`-tagged, matching FNA's own
+`EXT`-suffixed extension region). Five additional CNA-only `NOXNA`/`EXT` members (`GetModStateEXT`,
+`GetScancodeNameEXT`, `GetScancodeFromNameEXT`, `GetKeyNameEXT`, `GetKeyFromNameEXT`) have no FNA
+equivalent, are correctly tagged, and each already has dedicated test coverage plus compile-time
+signature freezes. **No accidental behavioral or signature divergence found.** One compliance gap
+fixed: added a missing Doxygen block on the deleted default constructor in
+`include/Microsoft/Xna/Framework/Input/Keyboard.hpp` (comment-only, no test impact). Files changed:
+`include/Microsoft/Xna/Framework/Input/Keyboard.hpp`. Consolidated build+test verification pending as
+part of the parallel P1 batch 2 audit run. Remaining risk: none.
 
 ---
 
-## P1-014 — Audit KeyboardState member parity vs FNA `[ ]`
+## P1-014 — Audit KeyboardState member parity vs FNA `[x]`
 **Goal:** Perform a full member-by-member audit of `KeyboardState` (constructors, methods, operators, enum values, defaults, equality, hash) against its FNA reference.
 
 **Steps:**
@@ -1101,11 +1122,32 @@ mapping) use the enum consistently with FNA's own SDL platform mapping tables. E
 
 **Notes:** FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/KeyboardState.cs`.
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Audited `KeyboardState` against FNA's `KeyboardState.cs`, re-verifying (not
+assuming) the fidelity doc's existing claims about `GetPressedKeys()` ordering and the `GetHashCode`
+8×32-bit-word XOR algorithm — both confirmed at the bit-packing level. **Found and fixed one real
+accidental divergence:** both non-default constructors (the public initializer-list constructor and
+the NOXNA `std::unordered_set<Keys>` constructor) stored any `Keys` value verbatim into `pressedKeys_`,
+including out-of-range/negative values, whereas FNA's `AddPressedKey` (`KeyboardState.cs:220-234`)
+silently drops any value outside the representable 0..255 bitfield range. This made `IsKeyDown`,
+`IsKeyUp`, `operator[]`/`getItem`, `GetPressedKeys()`, and `Equals`/`operator==` disagree with FNA (and
+inconsistently with CNA's own `GetHashCode`, which already had a separate out-of-range guard from
+P2-002) for such pathological values. Fixed by routing both constructors through a new shared
+`IsWithinKeyBitfieldRange` helper mirroring FNA's bitfield addressing, and refactored `GetHashCode` to
+reuse the same helper. Two items identified as intentional, not fixed: `getItem`'s name doesn't follow
+the codebase's `getItemProperty`-style indexer convention (`CurveKeyCollection`) but is pinned by name
+in the out-of-scope `PublicApiInputSignatureFreezeTests.cpp`; the NOXNA `unordered_set` constructor's
+public visibility/parameter type intentionally differs from FNA's `internal KeyboardState(List<Keys>)`
+for C++ cross-TU access. Doxygen coverage already complete. Files changed:
+`src/Microsoft/Xna/Framework/Input/KeyboardState.cpp`,
+`tests/Microsoft/Xna/Framework/Input/KeyboardInputTests.cpp` (3 new tests:
+`InitializerListConstructorDropsOutOfRangeKeysValue`,
+`InitializerListConstructorDropsNegativeAndBoundaryKeysValues`,
+`UnorderedSetConstructorDropsOutOfRangeKeysValue`). Consolidated build+test verification pending as
+part of the parallel P1 batch 2 audit run. Remaining risk: none.
 
 ---
 
-## P1-015 — Audit Keys member parity vs FNA `[ ]`
+## P1-015 — Audit Keys member parity vs FNA `[x]`
 **Goal:** Perform a full member-by-member audit of `Keys` (constructors, methods, operators, enum values, defaults, equality, hash) against its FNA reference.
 
 **Steps:**
@@ -1130,11 +1172,26 @@ mapping) use the enum consistently with FNA's own SDL platform mapping tables. E
 
 **Notes:** FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Keys.cs`.
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Audited `Keys` (160-value exhaustive key enum) against FNA's `Keys.cs` by
+programmatically extracting every `Name = value` pair from both files and diffing as name-to-value
+maps (not manual inspection). FNA: 160 entries, no duplicate names/values. CNA: 160 entries, no
+duplicate names/values. **Zero names missing on either side, zero numeric-value mismatches** —
+including every hex-declared outlier (`Pause=0x13`, `Kana=0x15`, `Kanji=0x19`, `ImeConvert=0x1c`,
+`ImeNoConvert=0x1d`, `ChatPadGreen=0xCA`, `ChatPadOrange=0xCB`, `OemAuto=0xf3`, `OemCopy=0xf2`,
+`OemEnlW=0xf4`), all numerically equal to FNA despite FNA declaring them out of ascending order.
+Independently cross-verified the existing exhaustive test table
+(`KeyboardStateTest.KeysValuesMatchXNANumericConstants`,
+`tests/Microsoft/Xna/Framework/Input/KeyboardInputTests.cpp:372-548`, 160 cases with a
+`static_assert` count guard and a runtime duplicate-value check) against the same FNA extraction —
+also zero divergence. Confirmed full Doxygen coverage on all 160 values plus the enum declaration
+(161 `@brief` blocks), zero bare `///` comments. This confirms the prior "matches FNA exactly" claim
+in `docs/input-fna-fidelity.md` is actually accurate, not merely assumed. **No divergence found; no
+files changed.** Consolidated build+test verification pending as part of the parallel P1 batch 2
+audit run. Remaining risk: none.
 
 ---
 
-## P1-016 — Audit Mouse member parity vs FNA `[ ]`
+## P1-016 — Audit Mouse member parity vs FNA `[x]`
 **Goal:** Perform a full member-by-member audit of `Mouse` (constructors, methods, operators, enum values, defaults, equality, hash) against its FNA reference.
 
 **Steps:**
@@ -1160,11 +1217,28 @@ mapping) use the enum consistently with FNA's own SDL platform mapping tables. E
 
 **Notes:** FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Mouse.cs`.
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Audited `Mouse`'s public API surface against FNA's `Mouse.cs` (SDL event
+routing lives in `SdlInputBridge`/`InputManager`, separately audited — out of scope here). All 5 FNA
+members (`WindowHandle` get/set, `IsRelativeMouseModeEXT` get/set — FNA-native EXT, `ClickedEXT`,
+`GetState()`, `SetPosition(int,int)`) match FNA's signatures exactly; all CNA-only additions
+(`SetCursor`, `SetCaptureEXT`, `GetGlobalPositionEXT`, `WarpGlobalEXT`, `INTERNAL_onClicked`,
+`ResetForTests`) correctly tagged NOXNA/EXT. `SetPosition`'s relative-mode early-return verified
+line-by-line identical to FNA. **No behavioral divergence found.** Investigated and ruled out changing
+`WindowHandle`'s raw `std::uintptr_t` to `SharpRuntime::IntPtr`: the same-namespace sibling
+`TextInputEXT` deliberately uses the same raw type, so this is an established, self-consistent
+`Input`-namespace convention, not a gap. Fixed two stale FNA source-line citations in comments
+(`Mouse.cs:99-103` → the correct `Mouse.cs:106-110` for the relative-mode early-return) — not a
+behavioral change. Closed one real test gap: `Mouse::SetCursor`'s actual `SDL_SetCursor()` call had no
+positive-path assertion anywhere in the suite (only the disposed/no-op guard was tested) — added
+`MouseTest.SetCursorAppliesTheGivenCursorToSDL`. All previously-documented deviations in
+`docs/input-fna-fidelity.md`'s Mouse section re-verified accurate. Files changed:
+`src/Microsoft/Xna/Framework/Input/Mouse.cpp`, `tests/Microsoft/Xna/Framework/Input/MouseInputTests.cpp`.
+Consolidated build+test verification pending as part of the parallel P1 batch 2 audit run. Remaining
+risk: none.
 
 ---
 
-## P1-017 — Audit MouseCursor member parity vs FNA `[ ]`
+## P1-017 — Audit MouseCursor member parity vs FNA `[x]`
 **Goal:** Perform a full member-by-member audit of `MouseCursor` (constructors, methods, operators, enum values, defaults, equality, hash) against its FNA reference.
 
 **Steps:**
@@ -1189,11 +1263,24 @@ mapping) use the enum consistently with FNA's own SDL platform mapping tables. E
 
 **Notes:** No FNA/XNA 4.0 equivalent exists — confirm the type is correctly marked `NOXNA` even though it lives under the strict-XNA directory (this is the documented CLAUDE.md mechanism for non-XNA members inside `Microsoft::Xna`).
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Confirmed FNA has no `MouseCursor.cs` (full-tree search of the FNA source root) —
+this is a MonoGame-derived `NOXNA` extension, correctly tagged in the header's own doc comment. Audited
+against MonoGame's `MouseCursor.cs`/`MouseCursor.SDL.cs` instead, plus an independent line-by-line
+review of the move-construction/move-assignment/disposal machinery (no C# analogue). All 12 of
+MonoGame's stock-cursor static properties present with correct SDL3 mappings; `FromTexture2D`
+validation matches MonoGame's exception behavior. One deliberate, already-documented improvement over
+MonoGame confirmed (not a bug): CNA's `isSystemSingleton_` guard makes `Dispose()` a no-op for stock
+cursors, where real MonoGame's SDL backend frees the shared handle unconditionally and would corrupt
+the singleton for every other holder. Doxygen coverage already complete. **No accidental divergence or
+source bug found; `MouseCursor.hpp`/`.cpp` unchanged.** Closed one real test gap: the move-assignment
+operator's self-assignment guard was previously untested — added
+`MouseCursorTest.SelfMoveAssignmentLeavesCursorIntact`
+(`tests/Microsoft/Xna/Framework/Input/MouseInputTests.cpp`). Consolidated build+test verification
+pending as part of the parallel P1 batch 2 audit run. Remaining risk: none.
 
 ---
 
-## P1-018 — Audit MouseState member parity vs FNA `[ ]`
+## P1-018 — Audit MouseState member parity vs FNA `[x]`
 **Goal:** Perform a full member-by-member audit of `MouseState` (constructors, methods, operators, enum values, defaults, equality, hash) against its FNA reference.
 
 **Steps:**
@@ -1218,11 +1305,26 @@ mapping) use the enum consistently with FNA's own SDL platform mapping tables. E
 
 **Notes:** FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/MouseState.cs`.
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Audited `MouseState` against FNA's `MouseState.cs`. Every property, the 8-arg
+constructor's parameter order (specifically checked the `leftButton, middleButton, rightButton` —
+**not** `leftButton, rightButton, middleButton` — ordering trap at `MouseState.cs:110-118`, already
+proven by an existing alternating-Pressed/Released test), `Equals`/`==`/`!=`/`ToString`, and defaults
+all match FNA exactly. The NOXNA/EXT horizontal-scroll-wheel field is correctly tagged and correctly
+excluded from `Equals`/`GetHashCode`/`ToString`/equality operators. **No accidental divergence found.**
+Two documentation items surfaced and fixed in `docs/input-fna-fidelity.md`: `GetHashCode()`'s
+deterministic field-hash formula (vs. FNA's non-reproducible `base.GetHashCode()`) was a real,
+pre-existing, correct deviation that had never been documented — added; and DEC-18 was found stale
+(claimed the horizontal wheel is "ignored" and cited a test, `HorizontalWheelIsIgnored`, that no
+longer exists — confirmed via grep — even though the feature was actually wired up under N-005) —
+corrected in place. Closed one test gap: the true parameterless default constructor's EXT
+horizontal-wheel-field default was only inferred from the 8-arg-ctor test, not asserted directly —
+added an assertion to `MouseStateTest.DefaultConstructorAllValuesAtRest`. Files changed:
+`tests/Microsoft/Xna/Framework/Input/MouseInputTests.cpp`, `docs/input-fna-fidelity.md`. Consolidated
+build+test verification pending as part of the parallel P1 batch 2 audit run. Remaining risk: none.
 
 ---
 
-## P1-019 — Audit TextInputEXT member parity vs FNA `[ ]`
+## P1-019 — Audit TextInputEXT member parity vs FNA `[x]`
 **Goal:** Perform a full member-by-member audit of `TextInputEXT` (constructors, methods, operators, enum values, defaults, equality, hash) against its FNA reference.
 
 **Steps:**
@@ -1247,11 +1349,27 @@ mapping) use the enum consistently with FNA's own SDL platform mapping tables. E
 
 **Notes:** FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/TextInputEXT.cs`.
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Audited `TextInputEXT` against FNA's `TextInputEXT.cs` and its
+`SDL3_FNAPlatform.cs` backing calls. All FNA-original members (`WindowHandle`, `IsTextInputActive`,
+`IsScreenKeyboardShown` (both overloads), `StartTextInput`, `StopTextInput`, `SetInputRectangle`,
+`TextInput`, `TextEditing`) match FNA's signatures and behavior exactly, including the null-window
+guard as a documented intentional addition. The multicast-callback, UTF-8-vs-UTF-16 `TextEditing`, and
+U+FFFD-substitution deviations already recorded in `docs/input-fna-fidelity.md` were re-verified and
+remain accurate. **No new FNA-behavioral divergence found.** Two Doxygen gaps fixed: the deleted
+constructor lacked its `/** @brief */` comment (every sibling static input class has one), and
+`IsTextInputActive()`'s doc had dropped FNA's on-screen-keyboard caveat — restored. A test-completeness
+gap was closed: `TextEditingCandidatesEXT`/`INTERNAL_OnTextEditingCandidates` (a NOXNA/EXT member with
+no FNA counterpart) had zero test coverage; four tests added covering dispatch, multicast fan-out,
+no-subscriber safety, and `ResetForTests()`'s full contract (previously only its window-handle-clearing
+effect was tested) — a latent test-fixture hygiene bug (`TextEditingCandidatesEXT` not reset between
+tests) was fixed alongside. No production `.cpp` changes needed. Files changed:
+`include/Microsoft/Xna/Framework/Input/TextInputEXT.hpp`,
+`tests/Microsoft/Xna/Framework/Input/TextInputEXTTests.cpp`. Consolidated build+test verification
+pending as part of the parallel P1 batch 2 audit run. Remaining risk: none.
 
 ---
 
-## P1-020 — Audit GestureSample member parity vs FNA `[ ]`
+## P1-020 — Audit GestureSample member parity vs FNA `[x]`
 **Goal:** Perform a full member-by-member audit of `GestureSample` (constructors, methods, operators, enum values, defaults, equality, hash) against its FNA reference.
 
 **Steps:**
@@ -1276,11 +1394,20 @@ mapping) use the enum consistently with FNA's own SDL platform mapping tables. E
 
 **Notes:** FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/GestureSample.cs`.
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Audited `GestureSample` against FNA's `GestureSample.cs`. Both constructor
+overloads match FNA's parameter order/count/defaults exactly; all six XNA property getters and the two
+`NOXNA` `FingerIdEXT`/`FingerId2EXT` extension getters (FNA's own `#region Public FNA Extension
+Properties`) are present with correct names/types/Doxygen. **No accidental divergence found.** One
+intentional, already-tested design choice was newly documented in `docs/input-fna-fidelity.md`: the
+`NOXNA` default constructor seeds `FingerIdEXT`/`FingerId2EXT` with `TouchPanel::NO_FINGER` (-1) rather
+than C#'s implicit zero-default, since `0` is a legitimate real SDL finger id. No files changed beyond
+the doc note (`docs/input-fna-fidelity.md`) — existing coverage in `TouchInputTests.cpp` already
+exercises the default ctor, both parameterized ctors, and all getters. Consolidated build+test
+verification pending as part of the parallel P1 batch 2 audit run. Remaining risk: none.
 
 ---
 
-## P1-021 — Audit GestureType member parity vs FNA `[ ]`
+## P1-021 — Audit GestureType member parity vs FNA `[x]`
 **Goal:** Perform a full member-by-member audit of `GestureType` (constructors, methods, operators, enum values, defaults, equality, hash) against its FNA reference.
 
 **Steps:**
@@ -1304,11 +1431,21 @@ mapping) use the enum consistently with FNA's own SDL platform mapping tables. E
 
 **Notes:** FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/GestureType.cs`.
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Audited `GestureType` (`[Flags]` enum) against FNA's `GestureType.cs`: all 11
+bit values (`None` through `PinchComplete`) match exactly. `enum class GestureType : int` correctly
+matches C#'s default `int`-backed `[Flags]` underlying type; the 4 bitwise operators (`|`/`&`/`|=`/`&=`)
+needed to replicate C#'s native enum arithmetic follow the exact same untagged (non-`NOXNA`) convention
+used by every other ported flags enum (`Buttons`, `DisplayOrientation`, `ClearOptions`,
+`ColorWriteChannels`). Checked all call sites (`GestureDetector.cpp`, `TouchPanel.cpp`) and confirmed
+`operator~` (present on `Buttons` but not `GestureType`) is never actually needed — FNA itself never
+XORs or NOTs this enum. Doxygen coverage complete. **No divergence found; no files changed.** Existing
+`GestureTypeTests.cpp` (`ValuesMatchXnaFlagConstants`, `BitwiseOperatorsCombineAndMaskFlags`) already
+covers all 11 values and all 4 operators. Consolidated build+test verification pending as part of the
+parallel P1 batch 2 audit run. Remaining risk: none.
 
 ---
 
-## P1-022 — Audit TouchCollection member parity vs FNA `[ ]`
+## P1-022 — Audit TouchCollection member parity vs FNA `[x]`
 **Goal:** Perform a full member-by-member audit of `TouchCollection` (constructors, methods, operators, enum values, defaults, equality, hash) against its FNA reference.
 
 **Steps:**
@@ -1333,11 +1470,31 @@ mapping) use the enum consistently with FNA's own SDL platform mapping tables. E
 
 **Notes:** FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/TouchCollection.cs`.
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Audited `TouchCollection` against FNA's `TouchCollection.cs`. **Found and fixed
+one real accidental divergence:** `FindById` did not write its `TouchLocation&` out-parameter on the
+not-found path, unlike FNA, which unconditionally assigns `new TouchLocation(-1,
+TouchLocationState.Invalid, Vector2.Zero)` before returning `false` (`TouchCollection.cs:112-131`) —
+the same "out-param written on every path" contract already enforced for `TouchLocation::
+TryGetPreviousLocation` (DEC-12), previously missed for `TouchCollection::FindById`. Fixed in
+`src/Microsoft/Xna/Framework/Input/Touch/TouchCollection.cpp`, documented in the header's Doxygen, with
+two new regression tests. All other members — `Count`, `IsReadOnly`, `IsConnected` (confirmed reading
+the live `TouchPanel::getTouchDeviceExistsProperty()`), the indexer, `Add`/`Insert`/`Remove`/`RemoveAt`/
+`Clear`, `Contains`/`IndexOf`/`CopyTo`, and iteration — verified line-by-line and faithful; previously
+documented deviations (IsReadOnly-is-advisory, CopyTo out-of-range throwing, default-empty-not-null)
+reconfirmed accurate. One additional structurally-necessary deviation found undocumented at the
+fidelity-doc level (already commented in source): `CopyTo` inserts into its growable `std::vector`
+destination rather than overwriting a fixed-size array's slots as FNA's `List<T>.CopyTo` does — now
+documented. Files changed: `include/Microsoft/Xna/Framework/Input/Touch/TouchCollection.hpp`,
+`src/Microsoft/Xna/Framework/Input/Touch/TouchCollection.cpp`,
+`tests/Microsoft/Xna/Framework/Input/TouchInputTests.cpp` (2 new tests:
+`FindByIdWritesInvalidSentinelOnOutParamWhenMissing`,
+`FindByIdWritesInvalidSentinelOnOutParamForEmptyCollection`), `docs/input-fna-fidelity.md`.
+Consolidated build+test verification pending as part of the parallel P1 batch 2 audit run. Remaining
+risk: none.
 
 ---
 
-## P1-023 — Audit TouchLocation member parity vs FNA `[ ]`
+## P1-023 — Audit TouchLocation member parity vs FNA `[x]`
 **Goal:** Perform a full member-by-member audit of `TouchLocation` (constructors, methods, operators, enum values, defaults, equality, hash) against its FNA reference.
 
 **Steps:**
@@ -1363,11 +1520,22 @@ mapping) use the enum consistently with FNA's own SDL platform mapping tables. E
 
 **Notes:** FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/TouchLocation.cs`.
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Audited `TouchLocation` against FNA's `TouchLocation.cs` line-by-line: both
+constructors, `Id`/`State`/`Position` getters, `Equals(TouchLocation)` (all five fields),
+`operator==`/`operator!=`, `GetHashCode()`, `ToString()`, and `TryGetPreviousLocation` all match FNA
+exactly. Three pre-existing, already-documented deviations reconfirmed accurate: `GetHashCode()` is
+exactly `Id.GetHashCode() + Position.GetHashCode()`; `TryGetPreviousLocation`'s false-path out-param
+write (DEC-12) still writes correctly on every call; `Equals(object obj)` remains intentionally omitted
+per the codebase-wide standing rule. The NOXNA/EXT pressure surface is correctly tagged and correctly
+excluded from `Equals`/`GetHashCode`/`ToString`. **No accidental divergence found; no files changed.**
+Existing `TouchLocationTest` (12 cases in `TouchInputTests.cpp`) already exhaustively covers every
+constructor overload, equality/hash/`ToString` exact-format behavior, the DEC-12 false-path write, and
+pressure defaulting/exclusion. Consolidated build+test verification pending as part of the parallel P1
+batch 2 audit run. Remaining risk: none.
 
 ---
 
-## P1-024 — Audit TouchLocationState member parity vs FNA `[ ]`
+## P1-024 — Audit TouchLocationState member parity vs FNA `[x]`
 **Goal:** Perform a full member-by-member audit of `TouchLocationState` (constructors, methods, operators, enum values, defaults, equality, hash) against its FNA reference.
 
 **Steps:**
@@ -1391,11 +1559,20 @@ mapping) use the enum consistently with FNA's own SDL platform mapping tables. E
 
 **Notes:** FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/TouchLocationState.cs`.
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Audited `TouchLocationState` (enum: `Invalid`, `Released`, `Pressed`, `Moved`)
+against FNA's `TouchLocationState.cs`: names, declaration order, and implicit numeric constants
+(0/1/2/3) match exactly. FNA has no per-member `<summary>` doc text (only a source-comment MSDN link),
+so CNA's Doxygen is an original description, not a mistranslation — nothing to reconcile. Call sites
+in `TouchLocation.cpp`, `TouchPanel.cpp`, and `SdlInputBridge.cpp` spot-checked and consistent with
+FNA touch-state semantics. **No divergence found; no files changed.** Test coverage confirmed via the
+existing dedicated `tests/Microsoft/Xna/Framework/Input/Touch/TouchLocationStateTests.cpp`
+(`TouchLocationStateTest.ValuesMatchXnaSequentialConstants`, picked up automatically by the CMake glob
+— not orphaned). Consolidated build+test verification pending as part of the parallel P1 batch 2
+audit run. Remaining risk: none.
 
 ---
 
-## P1-025 — Audit TouchPanel member parity vs FNA `[ ]`
+## P1-025 — Audit TouchPanel member parity vs FNA `[x]`
 **Goal:** Perform a full member-by-member audit of `TouchPanel` (constructors, methods, operators, enum values, defaults, equality, hash) against its FNA reference.
 
 **Steps:**
@@ -1420,11 +1597,27 @@ mapping) use the enum consistently with FNA's own SDL platform mapping tables. E
 
 **Notes:** FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/TouchPanel.cs`.
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Audited `TouchPanel` against FNA's `TouchPanel.cs`, covering every member
+EXCEPT `GetState()`/`Update()`/`GetCapabilities()` (already reworked and tested under [[P13-002]]/
+[[P13-005]] — INP-AUD-001/INP-AUD-003 — not re-examined). **Found and fixed one real divergence:**
+`MAX_TOUCHES`/`NO_FINGER` were public `static constexpr` with no `NOXNA` tag despite FNA declaring both
+`internal const int` (`TouchPanel.cs:23,26`) — fixed to match the established `GamePad::LeftDeadZone`
+-style `NOXNA`-tagging convention for FNA-`internal` constants exposed cross-TU in C++ (documented under
+P1-003). All other members — `ReadGesture`, `EnqueueGesture`, `IsGestureAvailable`,
+`INTERNAL_onTouchEvent`, `SetFinger`, `DisplayWidth`/`DisplayHeight`/`DisplayOrientation`,
+`WindowHandle`, `EnabledGestures`, `TouchDeviceExists`, `ResetForTests` — verified line-by-line against
+FNA and found correct; existing test coverage already adequate. Two already-documented deviations
+reconfirmed (not re-fixed): `SetFinger`'s bounds check throwing `std::out_of_range` where FNA's array
+indexer would throw `IndexOutOfRangeException`; `INTERNAL_onTouchEvent`'s zero-display-size guard
+(task 828/P5-014). Also fixed a missing Doxygen comment on the deleted default constructor. Verified
+the header change compiles cleanly in both normal and `CNA_STRICT_XNA_API` modes with zero runtime
+behavioral effect. Files changed:
+`include/Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp`. Consolidated build+test verification
+pending as part of the parallel P1 batch 2 audit run. Remaining risk: none.
 
 ---
 
-## P1-026 — Audit TouchPanelCapabilities member parity vs FNA `[ ]`
+## P1-026 — Audit TouchPanelCapabilities member parity vs FNA `[x]`
 **Goal:** Perform a full member-by-member audit of `TouchPanelCapabilities` (constructors, methods, operators, enum values, defaults, equality, hash) against its FNA reference.
 
 **Steps:**
@@ -1449,7 +1642,17 @@ mapping) use the enum consistently with FNA's own SDL platform mapping tables. E
 
 **Notes:** FNA reference: `/rv/data/library/github.com/FNA-XNA/FNA/src/Input/Touch/TouchPanelCapabilities.cs`.
 
-**Result:** _(fill in when executed: exact files changed, exact tests run, command + output, remaining risk)_
+**Result:** 2026-07-17. Audited `TouchPanelCapabilities` (a small, self-contained 44-line struct — no
+scope exclusions apply, unlike P1-025) against FNA's `TouchPanelCapabilities.cs`. Both constructors
+(the implicit-default-equivalent `NOXNA TouchPanelCapabilities()` and the FNA-`internal`-mirroring
+`NOXNA TouchPanelCapabilities(bool, int)`), both read-only properties, field defaults
+(`false`/`0`), and the deliberate absence of any equality/hashing/`ToString` members (FNA declares
+none) were verified line-by-line. **No divergence found; no files changed.** Existing tests
+(`TouchPanelCapabilitiesTest.DefaultConstructorProducesDisconnectedZeroCapacity`,
+`ParameterizedConstructorSetsConnectionAndMaxTouchCount` in `TouchInputTests.cpp`, plus indirect
+exercise via the `GetCapabilities`-driven tests in `TouchEdgeCaseTests.cpp`) already cover both
+constructors and both properties. Consolidated build+test verification pending as part of the parallel
+P1 batch 2 audit run. Remaining risk: none.
 
 ---
 

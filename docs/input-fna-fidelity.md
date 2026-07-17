@@ -85,9 +85,39 @@ byte-for-byte by INPUT-KBD-009/010):
 - **Wheel:** fixed in Phase I13/I14 to truncate the SDL float to a whole notch before scaling, so
   `ScrollWheelValue` stays a clean multiple of 120 exactly like XNA. (Previously multiply-then-cast
   leaked sub-notch precision-wheel motion.)
-- **DEC-18 (accepted):** SDL's horizontal wheel (`wheel.x`) is **ignored** — XNA/FNA `MouseState` exposes
-  only the vertical `ScrollWheelValue`, so there is no property to route horizontal scroll to. Tested
-  (`HorizontalWheelIsIgnored`).
+- **DEC-18 (superseded by N-005, corrected 2026-07-17/P1-018):** SDL's horizontal wheel (`wheel.x`) was
+  originally dropped entirely — XNA/FNA `MouseState` exposes only the vertical `ScrollWheelValue`, so
+  there was no property to route horizontal scroll to. N-005 added a NOXNA/EXT field instead: `wheel.x`
+  is now scaled to the same 120-unit notch and surfaced via
+  `MouseState::getHorizontalScrollWheelValueEXTProperty()`
+  (`InputManager::AddHorizontalScrollWheelDelta`, wired in `SdlInputBridge::ProcessEvent`). It is
+  deliberately excluded from `Equals`/`GetHashCode`/`ToString`/`==`/`!=` so those stay byte-identical to
+  FNA. Tested in `SdlInputBridgeMouseTests.cpp` (horizontal-wheel delta/accumulation tests) and
+  `MouseInputTests.cpp` (`NineArgConstructorAlsoSetsHorizontalScrollWheelEXT`,
+  `HorizontalScrollWheelEXTIsExcludedFromEqualityAndHash`). This entry previously cited a test,
+  `HorizontalWheelIsIgnored`, that no longer exists in the repo — the doc had gone stale relative to the
+  N-005 change; corrected here.
+- **`MouseState::GetHashCode()` (P1-018):** hashes `x_ ^ (y_*31) ^ (scrollWheelValue_*17)`
+  (unsigned-wraparound arithmetic to avoid signed-overflow UB) vs. FNA's `return base.GetHashCode();`
+  (`MouseState.cs:173-180`), which delegates to `ValueType.GetHashCode()` — a CLR-internal,
+  reflection-based algorithm with no fixed, reproducible formula. Deliberate; same pattern already
+  accepted for `GamePadState::GetHashCode()` above. Consistent with the `GetHashCode` contract (equal
+  states hash equal — `GetHashCodeIsConsistentForEqualStates` in `MouseInputTests.cpp`); button states
+  and the horizontal wheel EXT field are intentionally excluded from the formula, matching `Equals`'s
+  exclusion of the EXT field.
+
+### MouseCursor
+
+No FNA source exists for `MouseCursor` — confirmed by full-tree search of
+`/rv/data/library/github.com/FNA-XNA/FNA`. It is a MonoGame-derived NOXNA extension
+(`include/Microsoft/Xna/Framework/Input/MouseCursor.hpp`), audited against MonoGame's
+`MouseCursor.cs`/`MouseCursor.SDL.cs` for task P1-017. Full stock-cursor parity confirmed (all 12:
+Arrow, IBeam, Wait, Crosshair, WaitArrow, SizeNWSE, SizeNESW, SizeWE, SizeNS, SizeAll, No, Hand). CNA
+intentionally improves on MonoGame's actual SDL-backend behavior by making `Dispose()` a no-op for the
+stock-cursor singletons (`isSystemSingleton_` guard) — real MonoGame's `PlatformDispose()` frees the
+shared handle unconditionally, corrupting the singleton for all other holders. No accidental
+divergences found; move ctor/assignment (a pure C++ addition, no C# analogue) reviewed line-by-line,
+self-move-assignment guard now covered by a regression test.
 - **Logical→window scaling:** CNA converts logical→window at `SetPosition` time via the graphics
   backend (`TransformLogicalToWindow` / `SDL_RenderCoordinatesToWindow`); FNA scales at `GetState`
   read time. Equivalent for the common case (see INPUT-MOUSE-002 (decision a-0001)).
@@ -225,9 +255,26 @@ from the fake-backend unit tests above.
 | `GetState()` read-frequency dependence | **Fixed (INP-AUD-001, 2026-07-16):** `TouchPanel::GetState()`/`InputManager::GetTouchState()` are now pure reads; see below. |
 | `GetCapabilities()` SDL enumeration | **Fixed (INP-AUD-003, 2026-07-16):** now queries `system_device_backend().GetTouchDevices()` every call, matching FNA; see below. |
 | `TouchCollection::CopyTo` | **Fixed (task 902):** out-of-range index now throws `std::out_of_range` (was UB). |
+| `TouchCollection::FindById` not-found out-param | **Fixed (P1-022):** now writes the `Invalid` sentinel location (`TouchLocation(-1, Invalid, Vector2.Zero)`) on the not-found path — previously left the caller's out-param untouched. Matches FNA `TouchCollection.cs:125-130`. |
 | Empty/default semantics, out-of-range indexer, `IsReadOnly=true` | Equivalent to FNA (empty vector replaces null sentinel; `out_of_range` for bad index). |
 
 **Intentional / documented deviations:**
+- **`TouchCollection::CopyTo` inserts rather than overwrites (P1-022):** FNA's `CopyTo`
+  (`TouchCollection.cs:105-110`) delegates to `List<T>.CopyTo(T[] array, int arrayIndex)`, which
+  overwrites pre-existing slots of a fixed-size destination array starting at `arrayIndex` and throws
+  if there isn't enough room past that index. CNA's destination is a growable
+  `std::vector<TouchLocation>&`, so `CopyTo` instead **inserts** the source elements at `arrayIndex`,
+  shifting later elements right rather than overwriting them — an unavoidable consequence of the
+  fixed-array-vs-growable-vector type difference. Out-of-range `arrayIndex` still throws
+  `std::out_of_range` (task 902), matching FNA's `ArgumentOutOfRangeException` intent. Pinned by
+  `CopyToAppendsAllElementsInOrder`, `CopyToFromEmptyCollectionIsANoOp`,
+  `CopyToThrowsOnOutOfRangeIndexInsteadOfUndefinedBehavior`, `CopyToInsertsAtValidNonZeroIndex`.
+- **`GestureSample`'s `NOXNA` default constructor seeds `FingerIdEXT`/`FingerId2EXT` with
+  `TouchPanel::NO_FINGER` (P1-020):** a strict `default(GestureSample)` in C# would zero every field
+  (`FingerIdEXT == 0`), but `0` is a legitimate real SDL finger id — a zero default would look
+  ambiguously like "touching with finger 0" rather than "no finger". CNA deliberately uses the same
+  `NO_FINGER` (-1) sentinel both FNA-parity constructors already use (`GestureSample.cs:93-94,
+  117-118`) instead. Pinned by `GestureSampleTest.DefaultConstructorProducesZeroedNoneSample`.
 - **Touch IDs** are a compact sequential counter (1,2,3,…) rather than FNA's cast SDL finger id. IDs
   are opaque to games. Overflow only after ~2³¹ distinct fingers in one session (theoretical).
 - **`MAX_TOUCHES` / `MaximumTouchCount` (DEC-09 + DEC-10, fixed 2026-07-05):** now matches FNA on both

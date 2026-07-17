@@ -388,6 +388,37 @@ TEST(TouchCollectionTest, FindByIdReturnsMatchAndFalseWhenMissing)
     EXPECT_FALSE(collection.FindById(999, notFound));
 }
 
+// FNA writes the out-param unconditionally, even on the not-found path (TouchCollection.cs:112-131):
+// the "not found" case still assigns touchLocation = new TouchLocation(-1, Invalid, Vector2.Zero)
+// before returning false, mirroring the same pattern already fixed for
+// TouchLocation::TryGetPreviousLocation (DEC-12). Verify CNA's FindById does the same rather than
+// leaving the caller-supplied out-param untouched.
+TEST(TouchCollectionTest, FindByIdWritesInvalidSentinelOnOutParamWhenMissing)
+{
+    const TouchCollection collection(std::vector<TouchLocation>{
+        TouchLocation(7, TouchLocationState::Pressed, Vector2(9.0f, 9.0f))
+    });
+
+    TouchLocation notFound(42, TouchLocationState::Moved, Vector2(1.0f, 2.0f));
+    EXPECT_FALSE(collection.FindById(999, notFound));
+    EXPECT_EQ(notFound.getIdProperty(), -1);
+    EXPECT_EQ(notFound.getStateProperty(), TouchLocationState::Invalid);
+    EXPECT_EQ(notFound.getPositionProperty(), Vector2::Zero);
+}
+
+// Same not-found out-param contract when the collection itself is default-constructed/empty
+// (CNA's stand-in for FNA's null-backed default TouchCollection, TouchCollection.cs:114 `touches != null`).
+TEST(TouchCollectionTest, FindByIdWritesInvalidSentinelOnOutParamForEmptyCollection)
+{
+    const TouchCollection empty;
+
+    TouchLocation notFound(3, TouchLocationState::Released, Vector2(5.0f, 6.0f));
+    EXPECT_FALSE(empty.FindById(1, notFound));
+    EXPECT_EQ(notFound.getIdProperty(), -1);
+    EXPECT_EQ(notFound.getStateProperty(), TouchLocationState::Invalid);
+    EXPECT_EQ(notFound.getPositionProperty(), Vector2::Zero);
+}
+
 TEST(TouchCollectionTest, CopyToAppendsAllElementsInOrder)
 {
     const TouchCollection collection(std::vector<TouchLocation>{

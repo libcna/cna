@@ -9,6 +9,7 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 using namespace Microsoft::Xna::Framework::Input;
 using Microsoft::Xna::Framework::Rectangle;
@@ -27,6 +28,7 @@ namespace
         {
             TextInputEXT::TextInput = nullptr;
             TextInputEXT::TextEditing = nullptr;
+            TextInputEXT::TextEditingCandidatesEXT = nullptr;
             TextInputEXT::setWindowHandleProperty(0);
         }
     };
@@ -125,6 +127,71 @@ TEST_F(TextInputEXTTest, TextEditingWithoutSubscriberIsSafe)
 {
     TextInputEXT::TextEditing = nullptr;
     EXPECT_NO_THROW(TextInputEXT::INTERNAL_OnTextEditing("x", 0, 1));
+}
+
+// NOXNA/EXT (input_noxna.md N-014): SDL3-new IME candidate list, no FNA counterpart to compare
+// against. Dispatches the candidate strings, the pre-selected index, and the layout orientation.
+TEST_F(TextInputEXTTest, TextEditingCandidatesDispatchesListSelectedAndHorizontal)
+{
+    std::vector<std::string> candidates;
+    int selected = -2;
+    bool horizontal = true;
+    TextInputEXT::TextEditingCandidatesEXT = [&](const std::vector<std::string>& c, int s, bool h)
+    {
+        candidates = c;
+        selected = s;
+        horizontal = h;
+    };
+
+    TextInputEXT::INTERNAL_OnTextEditingCandidates({"a", "b", "c"}, 1, false);
+
+    ASSERT_EQ(candidates.size(), std::size_t{3});
+    EXPECT_EQ(candidates[0], "a");
+    EXPECT_EQ(candidates[1], "b");
+    EXPECT_EQ(candidates[2], "c");
+    EXPECT_EQ(selected, 1);
+    EXPECT_FALSE(horizontal);
+}
+
+TEST_F(TextInputEXTTest, TextEditingCandidatesIsMulticastAndDeliversToEverySubscriber)
+{
+    int calls1 = 0;
+    int calls2 = 0;
+    TextInputEXT::TextEditingCandidatesEXT += [&calls1](const std::vector<std::string>&, int, bool) { ++calls1; };
+    TextInputEXT::TextEditingCandidatesEXT += [&calls2](const std::vector<std::string>&, int, bool) { ++calls2; };
+
+    TextInputEXT::INTERNAL_OnTextEditingCandidates({"x"}, -1, true);
+
+    EXPECT_EQ(calls1, 1);
+    EXPECT_EQ(calls2, 1);
+}
+
+TEST_F(TextInputEXTTest, TextEditingCandidatesWithoutSubscriberIsSafe)
+{
+    EXPECT_NO_THROW(TextInputEXT::INTERNAL_OnTextEditingCandidates({}, -1, false));
+}
+
+// TextInputEXT::ResetForTests documents that it resets "callbacks, window handle" — verify the
+// callback lists are actually cleared, not just the window handle (already covered separately by
+// ResetForTestsClearsWindowHandleSoLaterCallsAreNullGuarded).
+TEST_F(TextInputEXTTest, ResetForTestsClearsAllSubscriberLists)
+{
+    bool textInputCalled = false;
+    bool textEditingCalled = false;
+    bool textEditingCandidatesCalled = false;
+    TextInputEXT::TextInput = [&](charcs) { textInputCalled = true; };
+    TextInputEXT::TextEditing = [&](const std::string&, int, int) { textEditingCalled = true; };
+    TextInputEXT::TextEditingCandidatesEXT = [&](const std::vector<std::string>&, int, bool) { textEditingCandidatesCalled = true; };
+
+    TextInputEXT::ResetForTests();
+
+    TextInputEXT::INTERNAL_OnTextInput(u'x');
+    TextInputEXT::INTERNAL_OnTextEditing("draft", 0, 5);
+    TextInputEXT::INTERNAL_OnTextEditingCandidates({"a"}, 0, false);
+
+    EXPECT_FALSE(textInputCalled);
+    EXPECT_FALSE(textEditingCalled);
+    EXPECT_FALSE(textEditingCandidatesCalled);
 }
 
 TEST_F(TextInputEXTTest, WindowHandlePropertyRoundTrips)

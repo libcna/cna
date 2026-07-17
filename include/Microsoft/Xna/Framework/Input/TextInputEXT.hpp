@@ -31,6 +31,7 @@ namespace Microsoft::Xna::Framework::Input
     NOXNA class TextInputEXT
     {
     public:
+        /** @brief TextInputEXT is a static class (FNA `public static class TextInputEXT`) and cannot be instantiated. */
         TextInputEXT() = delete;
 
         /**
@@ -83,6 +84,10 @@ namespace Microsoft::Xna::Framework::Input
 
         /**
          * @brief Returns true if text input mode is currently active.
+         *
+         * For the on-screen keyboard, this may remain true on some platforms if an external event
+         * closed the keyboard; in that case, check `IsScreenKeyboardShown` instead.
+         *
          * @return True if text input is active; false otherwise.
          */
         NOXNA static bool IsTextInputActive();

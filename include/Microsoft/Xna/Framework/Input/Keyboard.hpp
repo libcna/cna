@@ -17,6 +17,7 @@ namespace Microsoft::Xna::Framework::Input
     class Keyboard
     {
     public:
+        /** @brief Keyboard is a static class (XNA `public static class Keyboard`) and cannot be instantiated. */
         Keyboard() = delete;
 
         /**

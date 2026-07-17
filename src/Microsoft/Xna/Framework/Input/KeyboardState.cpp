@@ -9,18 +9,44 @@
 #include <array>
 #include <cstdint>
 
+namespace
+{
+    // FNA's AddPressedKey/InternalGetKey (KeyboardState.cs:195-214, 220-234) address an 8-word
+    // x 32-bit (256-slot) bitfield via ((int)key)>>5 / ((int)key)&0x1f with switch cases 0..7 and
+    // no default beyond that, so any Keys value outside 0..255 (including negative values, which
+    // wrap to a huge unsigned once cast) is silently dropped and can never become "pressed" -
+    // AddPressedKey's switch has no matching case and does nothing. Both constructors and
+    // GetHashCode below share this same range check to keep that drop consistent everywhere.
+    bool IsWithinKeyBitfieldRange(const Microsoft::Xna::Framework::Input::Keys key)
+    {
+        return static_cast<unsigned int>(key) < 256u;
+    }
+}
+
 namespace Microsoft::Xna::Framework::Input
 {
     KeyboardState::KeyboardState() = default;
 
     KeyboardState::KeyboardState(std::initializer_list<Keys> keys)
-        : pressedKeys_(keys)
     {
+        for (const Keys k : keys)
+        {
+            if (IsWithinKeyBitfieldRange(k))
+            {
+                pressedKeys_.insert(k);
+            }
+        }
     }
 
     KeyboardState::KeyboardState(const std::unordered_set<Keys>& pressedKeys)
-        : pressedKeys_(pressedKeys)
     {
+        for (const Keys k : pressedKeys)
+        {
+            if (IsWithinKeyBitfieldRange(k))
+            {
+                pressedKeys_.insert(k);
+            }
+        }
     }
 
     bool KeyboardState::IsKeyDown(const Keys key) const
@@ -69,14 +95,12 @@ namespace Microsoft::Xna::Framework::Input
         std::array<uint32_t, 8> words{};
         for (const Keys k : pressedKeys_)
         {
-            const auto value = static_cast<unsigned int>(k);
-            // FNA's InternalSetKey (KeyboardState.cs) switches on ((int)key)>>5 with cases
-            // 0..7 and no default, so a Keys value outside 0..255 (out-of-range enum, or a
-            // negative value that wraps to a huge unsigned) maps to no bitfield and is
-            // ignored. Guarding here keeps the same behavior and prevents an out-of-bounds
-            // write into the fixed 8-word array.
-            if (value < 256u)
+            // pressedKeys_ can no longer contain an out-of-range value (the constructors drop
+            // it, see IsWithinKeyBitfieldRange above), but the check is kept here too as a
+            // second line of defense against an out-of-bounds write into the fixed 8-word array.
+            if (IsWithinKeyBitfieldRange(k))
             {
+                const auto value = static_cast<unsigned int>(k);
                 words[value >> 5] |= (1u << (value & 0x1fu));
             }
         }
