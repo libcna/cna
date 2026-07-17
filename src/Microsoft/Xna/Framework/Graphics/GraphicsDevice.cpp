@@ -1320,6 +1320,16 @@ namespace Microsoft::Xna::Framework::Graphics
         return *backend_;
     }
 
+    CNA::GraphicsBackendType GraphicsDevice::GetGraphicsBackendType() const
+    {
+        return CNA::getCurrentGraphicsBackendType();
+    }
+
+    const std::string& GraphicsDevice::GetGraphicsBackendName() const
+    {
+        return CNA::getCurrentGraphicsBackendName();
+    }
+
     void GraphicsDevice::SetCurrentEffect(Effect* effect)
     {
         currentEffect_ = effect;

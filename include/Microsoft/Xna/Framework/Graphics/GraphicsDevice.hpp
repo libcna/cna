@@ -34,6 +34,7 @@
 #include "System/IDisposable.hpp"
 #include "System/Object.hpp"
 #include "CNA/CNAHelper.hpp"
+#include "CNA/GraphicsBackendType.hpp"
 
 struct SDL_Window;
 struct SDL_Renderer;
@@ -710,6 +711,18 @@ namespace Microsoft::Xna::Framework::Graphics
 
         /** @brief Returns a reference to the active graphics backend. */
         NOXNA [[nodiscard]] CNA::Internal::Backends::IGraphicsBackend& GetBackend() const;
+
+        /** @brief Returns which graphics backend was compiled into this build (see CNA_GRAPHICS_BACKEND). */
+        NOXNA [[nodiscard]] CNA::GraphicsBackendType GetGraphicsBackendType() const;
+
+        /**
+         * @brief Returns the human-readable name of the graphics backend compiled into this build.
+         *
+         * Matches the CNA_GRAPHICS_BACKEND CMake option value exactly (e.g. "EASYGL", "D3D9").
+         *
+         * @return The active backend's name.
+         */
+        NOXNA [[nodiscard]] const std::string& GetGraphicsBackendName() const;
         /**
          * @brief Sets the currently active Effect for draw calls.
          *
