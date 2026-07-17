@@ -1,5 +1,4 @@
-// SPDX-License-Identifier: MIT
-// Copyright (c) Robert Vokac and contributors
+// SPDX-License-Identifier: MS-PL
 #include "Microsoft/Xna/Framework/Media/Video/VideoPlayer.hpp"
 
 #include <algorithm>

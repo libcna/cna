@@ -3,7 +3,13 @@
 
 namespace Microsoft::Xna::Framework::Media
 {
-    /** @brief Defines the type of audio content in a video. */
+    /**
+     * @brief Defines the type of audio content in a video.
+     *
+     * Metadata only, on both FNA and CNA: confirmed by reading every FNA Video source file that
+     * nothing in playback logic ever branches on this value to affect volume or ducking. Not a
+     * gap -- do not add new ducking/muting behavior FNA itself never had.
+     */
     enum class VideoSoundtrackType
     {
         /** @brief The video contains music only. */

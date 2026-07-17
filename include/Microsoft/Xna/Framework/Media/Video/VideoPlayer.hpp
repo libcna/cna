@@ -146,16 +146,22 @@ namespace Microsoft::Xna::Framework::Media
         /**
          * @brief Selects which audio track to use (0-based index among audio streams).
          *
+         * An FNA extension beyond the original XNA 4.0 API surface (note the "EXT" suffix),
+         * not a CNA invention.
+         *
          * @param track Zero-based audio stream index.
          */
-        void SetAudioTrackEXT(SharpRuntime::intcs track);
+        NOXNA void SetAudioTrackEXT(SharpRuntime::intcs track);
 
         /**
          * @brief Selects which video track to use (0-based index among video streams).
          *
+         * An FNA extension beyond the original XNA 4.0 API surface (note the "EXT" suffix),
+         * not a CNA invention.
+         *
          * @param track Zero-based video stream index.
          */
-        void SetVideoTrackEXT(SharpRuntime::intcs track);
+        NOXNA void SetVideoTrackEXT(SharpRuntime::intcs track);
 
         /** @brief Stores basic video file metadata (width, height, fps). */
         struct VideoInfo

@@ -1,5 +1,4 @@
-// SPDX-License-Identifier: MIT
-// Copyright (c) Robert Vokac and contributors
+// SPDX-License-Identifier: MS-PL
 #pragma once
 
 #include <cstdint>

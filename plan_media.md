@@ -274,27 +274,27 @@ free to override a row — the tasks that depend on it are cited so the blast ra
 
 ### Phase 1 — Compliance sweep (low effort, high value)
 
-- [ ] **MEDIA-9 — Fix wrong SPDX/license headers (X1).** `Video/VideoPlayer.cpp`,
+- [x] **MEDIA-9 — Fix wrong SPDX/license headers (X1).** `Video/VideoPlayer.cpp`,
   `CNA/Internal/Media/VideoDecoder.hpp`, `CNA/Internal/Media/VideoDecoder.cpp`: replace the `MIT` +
   extraneous copyright-line header with `// SPDX-License-Identifier: MS-PL`, matching every other file
   in the namespace (including `VideoPlayer.cpp`'s own paired `.hpp`).
   *Accept:* all 3 files start with the correct SPDX line; build unchanged.
 
-- [ ] **MEDIA-10 — `Song.cpp:19`: map to `System::IO::FileNotFoundException` (X2).** Matches the
+- [x] **MEDIA-10 — `Song.cpp:19`: map to `System::IO::FileNotFoundException` (X2).** Matches the
   established `AudioEngine`/`SoundBank`/`WaveBank` precedent for exactly this "referenced file doesn't
   exist" case.
   *Accept:* a test asserts the exact `System::IO::FileNotFoundException` type; valid input unaffected.
 
-- [ ] **MEDIA-11 — `MediaQueue.cpp:42`: map to `System::ArgumentOutOfRangeException` (X2/§2.7).**
+- [x] **MEDIA-11 — `MediaQueue.cpp:42`: map to `System::ArgumentOutOfRangeException` (X2/§2.7).**
   Following the majority project precedent (`BoundingBox`/`VertexBuffer`/`NetworkSessionProperties`),
   not `TouchCollection`'s outlier `std::out_of_range` mapping (flagged separately, out of scope, in
   `NEXTmedia.md`).
   *Accept:* a test asserts the exact type for an out-of-bounds index; valid indices unaffected.
 
-- [ ] **MEDIA-12 — `SongCollection.cpp:18`: map to `System::ArgumentOutOfRangeException` (X2/§2.7).**
+- [x] **MEDIA-12 — `SongCollection.cpp:18`: map to `System::ArgumentOutOfRangeException` (X2/§2.7).**
   Same rationale and acceptance shape as MEDIA-11.
 
-- [ ] **MEDIA-13 — Document `Song`'s FNA-faithful hardcoded constants.** `getIsProtectedProperty()`
+- [x] **MEDIA-13 — Document `Song`'s FNA-faithful hardcoded constants.** `getIsProtectedProperty()`
   (`false`), `getIsRatedProperty()` (`false`), `getRatingProperty()` (`0`), `getTrackNumberProperty()`
   (`0`) are **not** unfinished stubs — FNA's own `Song.cs` hardcodes these exact same 4 values on
   desktop, permanently. Add a one-line Doxygen note to each so a future audit doesn't "fix" correct
@@ -302,46 +302,46 @@ free to override a row — the tasks that depend on it are cited so the blast ra
   *FNA:* Song.cs:33-69. *Accept:* Doxygen updated; no behavior change; a test asserts the constant value
   explicitly (documenting intent, not just incidentally passing).
 
-- [ ] **MEDIA-14 — Decide and document `Song::GetHashCode()`'s content-based semantics (§2.4).** Keep
+- [x] **MEDIA-14 — Decide and document `Song::GetHashCode()`'s content-based semantics (§2.4).** Keep
   CNA's current handle-based hash (satisfies the `Equals`/`GetHashCode` contract, unlike FNA's own
   identity-based `base.GetHashCode()`); add a Doxygen/comment note explaining this is a deliberate,
   beneficial deviation, not an unported detail.
   *Accept:* doc note added; no code change; a test asserts two `Song`s with equal `handle` produce equal
   hash codes (locking in the improved behavior).
 
-- [ ] **MEDIA-15 — `Artist`: Doxygen/SPDX/`GetTypeName`/NOXNA compliance pass.**
-- [ ] **MEDIA-16 — `ArtistCollection`: Doxygen/SPDX/`GetTypeName`/NOXNA compliance pass.**
-- [ ] **MEDIA-17 — `GenreCollection`: Doxygen/SPDX/`GetTypeName`/NOXNA compliance pass.**
-- [ ] **MEDIA-18 — `Picture`: Doxygen/SPDX/`GetTypeName`/NOXNA compliance pass.**
-- [ ] **MEDIA-19 — `PictureCollection`: Doxygen/SPDX/`GetTypeName`/NOXNA compliance pass.**
-- [ ] **MEDIA-20 — `PictureAlbum`: Doxygen/SPDX/`GetTypeName`/NOXNA compliance pass.**
-- [ ] **MEDIA-21 — `PictureAlbumCollection`: Doxygen/SPDX/`GetTypeName`/NOXNA compliance pass.**
-- [ ] **MEDIA-22 — `Playlist`: Doxygen/SPDX/`GetTypeName`/NOXNA compliance pass** (incl. a doc note on
+- [x] **MEDIA-15 — `Artist`: Doxygen/SPDX/`GetTypeName`/NOXNA compliance pass.**
+- [x] **MEDIA-16 — `ArtistCollection`: Doxygen/SPDX/`GetTypeName`/NOXNA compliance pass.**
+- [x] **MEDIA-17 — `GenreCollection`: Doxygen/SPDX/`GetTypeName`/NOXNA compliance pass.**
+- [x] **MEDIA-18 — `Picture`: Doxygen/SPDX/`GetTypeName`/NOXNA compliance pass.**
+- [x] **MEDIA-19 — `PictureCollection`: Doxygen/SPDX/`GetTypeName`/NOXNA compliance pass.**
+- [x] **MEDIA-20 — `PictureAlbum`: Doxygen/SPDX/`GetTypeName`/NOXNA compliance pass.**
+- [x] **MEDIA-21 — `PictureAlbumCollection`: Doxygen/SPDX/`GetTypeName`/NOXNA compliance pass.**
+- [x] **MEDIA-22 — `Playlist`: Doxygen/SPDX/`GetTypeName`/NOXNA compliance pass** (incl. a doc note on
   the `operator==`/throwing-`Equals` quirk described in §1 row 24, preserved per FNA fidelity until
   MEDIA-68 makes `Equals` real).
-- [ ] **MEDIA-23 — `PlaylistCollection`: Doxygen/SPDX/`GetTypeName`/NOXNA compliance pass.**
-- [ ] **MEDIA-24 — `MediaSource`: Doxygen/SPDX/`GetTypeName`/NOXNA compliance pass.**
-- [ ] **MEDIA-25 — `MediaLibrary`: Doxygen/SPDX/`GetTypeName`/NOXNA compliance pass.**
-- [ ] **MEDIA-26 — `Video`: Doxygen/SPDX/`GetTypeName`/NOXNA compliance pass** (incl. the `EXT`-suffixed
+- [x] **MEDIA-23 — `PlaylistCollection`: Doxygen/SPDX/`GetTypeName`/NOXNA compliance pass.**
+- [x] **MEDIA-24 — `MediaSource`: Doxygen/SPDX/`GetTypeName`/NOXNA compliance pass.**
+- [x] **MEDIA-25 — `MediaLibrary`: Doxygen/SPDX/`GetTypeName`/NOXNA compliance pass.**
+- [x] **MEDIA-26 — `Video`: Doxygen/SPDX/`GetTypeName`/NOXNA compliance pass** (incl. the `EXT`-suffixed
   members — `FromUriEXT`, `SetAudioTrackEXT`, `SetVideoTrackEXT` — confirmed `NOXNA`-marked, since these
   are FNA extensions beyond the original XNA 4.0 surface, not CNA's own invention).
-- [ ] **MEDIA-27 — `Video/VideoPlayer`: Doxygen/SPDX/`GetTypeName`/NOXNA compliance pass.**
-- [ ] **MEDIA-28 — `CNA/Internal/Media/VideoDecoder`: SPDX/internal-header-style Doxygen compliance
+- [x] **MEDIA-27 — `Video/VideoPlayer`: Doxygen/SPDX/`GetTypeName`/NOXNA compliance pass.**
+- [x] **MEDIA-28 — `CNA/Internal/Media/VideoDecoder`: SPDX/internal-header-style Doxygen compliance
   pass.**
 
   *(MEDIA-15…28 accept criteria, all 14: every public member has a `/** @brief */` block; no bare `///`
   on public API; every concrete `System::Object`-derived class overrides `GetTypeName()`; every
   non-XNA member is `NOXNA`; SPDX header correct.)*
 
-- [ ] **MEDIA-29 — Confirm `MediaSourceType` enum needs no fix.** `LocalDevice=0,WindowsMediaConnect=4`
+- [x] **MEDIA-29 — Confirm `MediaSourceType` enum needs no fix.** `LocalDevice=0,WindowsMediaConnect=4`
   — independently verified against FNA, exact match, correct Doxygen. Close out as confirmed-correct (no
   code change) so a future session doesn't re-open it as a suspected gap.
   *Accept:* a value/order test exists (or is added in MEDIA-96).
 
-- [ ] **MEDIA-30 — Confirm `MediaState` enum needs no fix.** `Stopped,Playing,Paused` — exact match.
+- [x] **MEDIA-30 — Confirm `MediaState` enum needs no fix.** `Stopped,Playing,Paused` — exact match.
   *Accept:* a value/order test exists (MEDIA-96).
 
-- [ ] **MEDIA-31 — Confirm `VideoSoundtrackType` enum needs no fix, and document its metadata-only
+- [x] **MEDIA-31 — Confirm `VideoSoundtrackType` enum needs no fix, and document its metadata-only
   status (§2.5).** `Music,Dialog,MusicAndDialog` — exact match; add a one-line doc note on
   `Video::getVideoSoundtrackTypeProperty()` recording that no playback logic (on either side) ever
   branches on it, so this isn't re-flagged as a gap by a future audit. **Do not** add new ducking/muting

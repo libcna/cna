@@ -70,6 +70,9 @@ namespace Microsoft::Xna::Framework::Media
         /**
          * @brief Gets the type of audio content in this video.
          *
+         * Metadata only -- see VideoSoundtrackType's own doc comment. Nothing in playback logic,
+         * on either FNA or CNA, ever branches on this value.
+         *
          * @return VideoSoundtrackType value.
          */
         [[nodiscard]] VideoSoundtrackType getVideoSoundtrackTypeProperty() const;
@@ -91,25 +94,34 @@ namespace Microsoft::Xna::Framework::Media
         /**
          * @brief Creates a Video from a URI and a graphics device.
          *
+         * An FNA extension beyond the original XNA 4.0 API surface (note the "EXT" suffix),
+         * not a CNA invention.
+         *
          * @param uri    File URI or local path.
          * @param device GraphicsDevice used for frame rendering.
          * @return Pointer to the newly created Video.
          */
-        static Video* FromUriEXT(const std::string& uri, Graphics::GraphicsDevice* device);
+        NOXNA static Video* FromUriEXT(const std::string& uri, Graphics::GraphicsDevice* device);
 
         /**
          * @brief Selects which audio stream to use when the file contains multiple audio tracks.
          *
+         * An FNA extension beyond the original XNA 4.0 API surface (note the "EXT" suffix),
+         * not a CNA invention.
+         *
          * @param track Zero-based audio stream index.
          */
-        void SetAudioTrackEXT(SharpRuntime::intcs track);
+        NOXNA void SetAudioTrackEXT(SharpRuntime::intcs track);
 
         /**
          * @brief Selects which video stream to use when the file contains multiple video tracks.
          *
+         * An FNA extension beyond the original XNA 4.0 API surface (note the "EXT" suffix),
+         * not a CNA invention.
+         *
          * @param track Zero-based video stream index.
          */
-        void SetVideoTrackEXT(SharpRuntime::intcs track);
+        NOXNA void SetVideoTrackEXT(SharpRuntime::intcs track);
 
         /**
          * @brief Returns the file path this Video was loaded from.

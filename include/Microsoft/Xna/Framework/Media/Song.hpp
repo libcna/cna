@@ -59,12 +59,17 @@ namespace Microsoft::Xna::Framework::Media
         /**
          * @brief Gets whether this song has DRM copy protection.
          *
+         * Always returns false; matches FNA, which never varies this value on desktop
+         * (Song.cs hardcodes the same constant, since there is no real DRM-protection source).
+         *
          * @return true if protected; otherwise false.
          */
         [[nodiscard]] bool getIsProtectedProperty() const;
 
         /**
          * @brief Gets whether this song has a user rating.
+         *
+         * Always returns false; matches FNA, which never varies this value on desktop.
          *
          * @return true if a rating has been set; otherwise false.
          */
@@ -87,12 +92,16 @@ namespace Microsoft::Xna::Framework::Media
         /**
          * @brief Gets the user rating for this song.
          *
+         * Always returns 0; matches FNA, which never varies this value on desktop.
+         *
          * @return Rating value.
          */
         [[nodiscard]] SharpRuntime::intcs getRatingProperty() const;
 
         /**
          * @brief Gets the track number of this song within its album.
+         *
+         * Always returns 0; matches FNA, which never varies this value on desktop.
          *
          * @return Track number.
          */
@@ -118,6 +127,13 @@ namespace Microsoft::Xna::Framework::Media
 
         /**
          * @brief Gets the hash code for this Song instance.
+         *
+         * Deliberately content-based (a hash of the resolved file handle), unlike FNA's own
+         * identity-based `base.GetHashCode()` -- FNA's choice means two FNA Songs that are
+         * Equals-equal (same handle) can have different hash codes, violating the usual
+         * Equals/GetHashCode contract. This is a documented, beneficial deviation, not an
+         * unported detail: kept as-is rather than "fixed" to replicate FNA's inconsistency.
+         *
          * @return Hash code of the object.
          */
         [[nodiscard]] int GetHashCode() const;
