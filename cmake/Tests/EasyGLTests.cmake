@@ -136,6 +136,12 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_backend_test(NAME EasyGL_SkinnedEffect_VertexColor COMMAND cna_test_easygl_skinnedeffect_vertexcolor
             TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # CNB-58/60 (Phase 13A): PbrEffect's real glTF metallic-roughness BRDF shader.
+        cna_easygl_test(cna_test_easygl_pbreffect_golden
+                        examples/easygl_pbreffect_golden_test.cpp)
+        cna_register_backend_test(NAME EasyGL_PbrEffect_Golden COMMAND cna_test_easygl_pbreffect_golden
+            TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 87: RenderTarget2D → texture → readback
         cna_easygl_test(cna_test_easygl_render_target
                         examples/easygl_render_target_test.cpp)

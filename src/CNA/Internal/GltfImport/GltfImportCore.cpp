@@ -24,9 +24,13 @@
 #include <stdexcept>
 #include <unordered_set>
 
+#include "Microsoft/Xna/Framework/Vector2.hpp"
+
 using Microsoft::Xna::Framework::Matrix;
 using Microsoft::Xna::Framework::Quaternion;
+using Microsoft::Xna::Framework::Vector2;
 using Microsoft::Xna::Framework::Vector3;
+using Microsoft::Xna::Framework::Vector4;
 
 namespace CNA::Internal::GltfImport
 {
@@ -246,6 +250,78 @@ namespace CNA::Internal::GltfImport
         std::uint8_t ToByteColorChannel(float v)
         {
             return static_cast<std::uint8_t>(std::clamp(v, 0.0f, 1.0f) * 255.0f + 0.5f);
+        }
+
+        // plan_cnj.md CNB-57 (Phase 13A): computes a per-vertex tangent basis when the file has
+        // no TANGENT accessor of its own, for PbrEffect's normal mapping. This is Lengyel's
+        // method (accumulate a per-triangle tangent/bitangent from position+UV deltas onto each
+        // of its 3 vertices, then per vertex: Gram-Schmidt orthogonalize the summed tangent
+        // against the vertex normal, and derive the handedness sign from whether the
+        // orthogonalized tangent's cross product with the normal agrees with the summed
+        // bitangent) -- the same real-time-engine-standard technique real XNA's own content
+        // pipeline (MeshHelper.CalculateTangentFrames) implements, though not bit-for-bit
+        // identical to the full MikkTSpace algorithm the glTF spec itself recommends (which
+        // additionally angle-weights contributions and has explicit degenerate-UV handling) --
+        // a documented, deliberate scope cut, not an oversight.
+        std::vector<Vector4> ComputeTangentsEXT(const std::vector<float>& positions,
+                                                 const std::vector<float>& normals,
+                                                 const std::vector<float>& uvs,
+                                                 const cgltf_primitive& prim, cgltf_size vertexCount)
+        {
+            std::vector<Vector3> tanAccum(vertexCount);
+            std::vector<Vector3> bitanAccum(vertexCount);
+
+            auto pos = [&](cgltf_size idx) {
+                const std::size_t o = static_cast<std::size_t>(idx) * 3;
+                return Vector3(positions[o], positions[o + 1], positions[o + 2]);
+            };
+            auto uv = [&](cgltf_size idx) {
+                if (uvs.empty()) { return Vector2(0.0f, 0.0f); }
+                const std::size_t o = static_cast<std::size_t>(idx) * 2;
+                return Vector2(uvs[o], uvs[o + 1]);
+            };
+
+            const cgltf_size indexCount = prim.indices ? prim.indices->count : vertexCount;
+            for (cgltf_size i = 0; i + 2 < indexCount; i += 3)
+            {
+                const cgltf_size i0 = prim.indices ? cgltf_accessor_read_index(prim.indices, i) : i;
+                const cgltf_size i1 = prim.indices ? cgltf_accessor_read_index(prim.indices, i + 1) : i + 1;
+                const cgltf_size i2 = prim.indices ? cgltf_accessor_read_index(prim.indices, i + 2) : i + 2;
+
+                const Vector3 p0 = pos(i0), p1 = pos(i1), p2 = pos(i2);
+                const Vector2 uv0 = uv(i0), uv1 = uv(i1), uv2 = uv(i2);
+
+                const Vector3 edge1 = p1 - p0, edge2 = p2 - p0;
+                const float du1 = uv1.X - uv0.X, dv1 = uv1.Y - uv0.Y;
+                const float du2 = uv2.X - uv0.X, dv2 = uv2.Y - uv0.Y;
+                const float denom = du1 * dv2 - du2 * dv1;
+                if (std::fabs(denom) < 1e-12f) { continue; } // degenerate UV triangle -- no contribution
+
+                const float f = 1.0f / denom;
+                const Vector3 tangent   = f * (dv2 * edge1 - dv1 * edge2);
+                const Vector3 bitangent = f * (du1 * edge2 - du2 * edge1);
+
+                tanAccum[i0] = tanAccum[i0] + tangent;
+                tanAccum[i1] = tanAccum[i1] + tangent;
+                tanAccum[i2] = tanAccum[i2] + tangent;
+                bitanAccum[i0] = bitanAccum[i0] + bitangent;
+                bitanAccum[i1] = bitanAccum[i1] + bitangent;
+                bitanAccum[i2] = bitanAccum[i2] + bitangent;
+            }
+
+            std::vector<Vector4> result(vertexCount);
+            for (cgltf_size v = 0; v < vertexCount; ++v)
+            {
+                const std::size_t o = static_cast<std::size_t>(v) * 3;
+                const Vector3 n = normals.empty() ? Vector3(0.0f, 0.0f, 1.0f)
+                                                   : Vector3(normals[o], normals[o + 1], normals[o + 2]);
+                Vector3 t = tanAccum[v] - n * Vector3::Dot(n, tanAccum[v]);
+                const float len = t.Length();
+                Vector3 tOrtho = (len > 1e-8f) ? Vector3(t.X / len, t.Y / len, t.Z / len) : Vector3(1.0f, 0.0f, 0.0f);
+                const float handedness = (Vector3::Dot(Vector3::Cross(n, tOrtho), bitanAccum[v]) < 0.0f) ? -1.0f : 1.0f;
+                result[v] = Vector4(tOrtho.X, tOrtho.Y, tOrtho.Z, handedness);
+            }
+            return result;
         }
 
         // cgltf_find_accessor only searches a cgltf_primitive's own attributes[], not a morph
@@ -555,6 +631,26 @@ namespace CNA::Internal::GltfImport
         return prim.material->occlusion_texture.texture->image;
     }
 
+    const cgltf_image* FindNormalImage(const cgltf_primitive& prim)
+    {
+        if (!prim.material || !prim.material->normal_texture.texture) { return nullptr; }
+        return prim.material->normal_texture.texture->image;
+    }
+
+    const cgltf_image* FindMetallicRoughnessImage(const cgltf_primitive& prim)
+    {
+        if (!prim.material || !prim.material->has_pbr_metallic_roughness) { return nullptr; }
+        const cgltf_texture_view& view = prim.material->pbr_metallic_roughness.metallic_roughness_texture;
+        if (!view.texture) { return nullptr; }
+        return view.texture->image;
+    }
+
+    const cgltf_image* FindEmissiveImage(const cgltf_primitive& prim)
+    {
+        if (!prim.material || !prim.material->emissive_texture.texture) { return nullptr; }
+        return prim.material->emissive_texture.texture->image;
+    }
+
     MeshOut ExtractMesh(const cgltf_primitive& prim, const std::string& name, const SkeletonResult* skel,
                          float unitScale)
     {
@@ -603,14 +699,45 @@ namespace CNA::Internal::GltfImport
         // existing effect (SkinnedEffect has no Texture2 slot; the colored VertexPositionColor
         // Texture layout has no room for a second UV/texture either) -- a documented scope cut,
         // not an oversight.
+        // plan_cnj.md CNB-59 (Phase 13A): an unskinned, uncolored primitive with a normal map or
+        // metallic-roughness map is genuinely PBR-authored content (not just "any glTF material"
+        // -- pbrMetallicRoughness is glTF's own default material block even for the simple
+        // base-color-only content BasicEffect already handles) and is imported through PbrEffect
+        // (stride 48, VertexPositionNormalTangentTexture) instead. Takes priority over
+        // useDualTexture below when both would otherwise apply (a material with both an
+        // occlusion map AND a normal/metallic-roughness map is unambiguously meant for real PBR
+        // rendering, not the DualTextureEffect occlusion-as-lightmap approximation).
+        out.normalImage = FindNormalImage(prim);
+        out.metallicRoughnessImage = FindMetallicRoughnessImage(prim);
+        out.emissiveImage = FindEmissiveImage(prim);
+        out.usePbr = (!out.skinned) && (!out.colored) &&
+                     (out.normalImage != nullptr || out.metallicRoughnessImage != nullptr);
+        if (out.usePbr && prim.material && prim.material->has_pbr_metallic_roughness)
+        {
+            out.metallicFactor  = prim.material->pbr_metallic_roughness.metallic_factor;
+            out.roughnessFactor = prim.material->pbr_metallic_roughness.roughness_factor;
+        }
+        if (out.usePbr && prim.material)
+        {
+            out.emissiveFactor = Vector3(prim.material->emissive_factor[0],
+                                          prim.material->emissive_factor[1],
+                                          prim.material->emissive_factor[2]);
+        }
+
+        // occlusionImage is populated whenever eligible (unskinned, uncolored) regardless of
+        // which effect ends up consuming it -- DualTextureEffect's own Texture2 approximation
+        // (CNB-72/73) only when usePbr is false, or PbrEffect's own real OcclusionMap when true
+        // (see the useDualTexture computation immediately below, and ExtractMesh's caller for the
+        // PbrEffect wiring).
         out.occlusionImage = (!out.skinned && !out.colored) ? FindOcclusionImage(prim) : nullptr;
-        out.useDualTexture = (out.occlusionImage != nullptr) && (out.baseColorImage != nullptr);
+        out.useDualTexture = (!out.usePbr) && (out.occlusionImage != nullptr) && (out.baseColorImage != nullptr);
         // Unskinned colored meshes reuse the real XNA VertexPositionColorTexture layout (stride
         // 24, Position+Color+TextureCoordinate, no Normal) -- already fully supported end-to-end
         // by ModelTypeReader and every graphics backend's existing VertexColorEnabled shader path.
         // Skinned colored meshes use the stride-56 layout instead (Position+Normal+
         // TextureCoordinate+BlendWeight+BlendIndices+Color).
-        out.stride = out.skinned ? (out.colored ? 56 : 52) : (out.colored ? 24 : (out.useDualTexture ? 20 : 32));
+        out.stride = out.skinned ? (out.colored ? 56 : 52)
+                                 : (out.colored ? 24 : (out.usePbr ? 48 : (out.useDualTexture ? 20 : 32)));
 
         const cgltf_size vertexCount = posAcc->count;
         out.vertexBytes.reserve(static_cast<std::size_t>(vertexCount) * static_cast<std::size_t>(out.stride));
@@ -630,6 +757,30 @@ namespace CNA::Internal::GltfImport
         const std::vector<float> colors = out.colored
             ? UnpackAccessor(colorAcc, static_cast<cgltf_size>(colorComponents), "COLOR_0")
             : std::vector<float>();
+
+        // plan_cnj.md CNB-57 (Phase 13A): PbrEffect's normal mapping needs a per-vertex tangent
+        // basis -- use the file's own TANGENT accessor when present, or compute one (see
+        // ComputeTangentsEXT's own doc comment for the algorithm and its documented divergence
+        // from full MikkTSpace) when absent, exactly as the glTF spec itself recommends.
+        std::vector<Vector4> tangents;
+        if (out.usePbr)
+        {
+            const cgltf_accessor* tangentAcc = cgltf_find_accessor(&prim, cgltf_attribute_type_tangent, 0);
+            if (tangentAcc)
+            {
+                const std::vector<float> raw = UnpackAccessor(tangentAcc, 4, "TANGENT");
+                tangents.resize(vertexCount);
+                for (cgltf_size v = 0; v < vertexCount; ++v)
+                {
+                    const std::size_t o = static_cast<std::size_t>(v) * 4;
+                    tangents[v] = Vector4(raw[o], raw[o + 1], raw[o + 2], raw[o + 3]);
+                }
+            }
+            else
+            {
+                tangents = ComputeTangentsEXT(positions, normals, uvs, prim, vertexCount);
+            }
+        }
 
         for (cgltf_size i = 0; i < vertexCount; ++i)
         {
@@ -656,6 +807,20 @@ namespace CNA::Internal::GltfImport
             {
                 // stride 24: Position + Color + TextureCoordinate.
                 appendColor();
+                AppendFloat(out.vertexBytes, u); AppendFloat(out.vertexBytes, v);
+                continue;
+            }
+
+            if (out.usePbr)
+            {
+                // stride 48: Position + Normal + Tangent + TextureCoordinate.
+                const float nx = normals.empty() ? 0.0f : normals[i3];
+                const float ny = normals.empty() ? 0.0f : normals[i3 + 1];
+                const float nz = normals.empty() ? 1.0f : normals[i3 + 2];
+                AppendFloat(out.vertexBytes, nx); AppendFloat(out.vertexBytes, ny); AppendFloat(out.vertexBytes, nz);
+                const Vector4& tan = tangents[i];
+                AppendFloat(out.vertexBytes, tan.X); AppendFloat(out.vertexBytes, tan.Y);
+                AppendFloat(out.vertexBytes, tan.Z); AppendFloat(out.vertexBytes, tan.W);
                 AppendFloat(out.vertexBytes, u); AppendFloat(out.vertexBytes, v);
                 continue;
             }

@@ -13,6 +13,7 @@
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Quaternion.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "Microsoft/Xna/Framework/Vector4.hpp"
 
 namespace CNA::Internal::GltfImport
 {
@@ -124,6 +125,25 @@ namespace CNA::Internal::GltfImport
          * a Normal slot (32/52/56) -- see SetMorphWeightsEXT's own doc comment.
          */
         std::vector<std::vector<Microsoft::Xna::Framework::Vector3>> morphNormalDeltas;
+        /**
+         * @brief True when this primitive is imported through PbrEffect (stride 48,
+         * VertexPositionNormalTangentTexture) instead of BasicEffect/DualTextureEffect --
+         * unskinned, uncolored, and has a normal map or metallic-roughness map (see
+         * ExtractMesh's own doc comment for the exact eligibility rule).
+         */
+        bool usePbr = false;
+        /** @brief The material's normal map image, or nullptr if none. */
+        const cgltf_image* normalImage = nullptr;
+        /** @brief The material's metallic-roughness map image, or nullptr if none. */
+        const cgltf_image* metallicRoughnessImage = nullptr;
+        /** @brief The material's emissive map image, or nullptr if none. */
+        const cgltf_image* emissiveImage = nullptr;
+        /** @brief The material's metallic factor [0,1] (glTF default 1.0). */
+        float metallicFactor = 1.0f;
+        /** @brief The material's roughness factor [0,1] (glTF default 1.0). */
+        float roughnessFactor = 1.0f;
+        /** @brief The material's emissive factor (glTF default black/zero). */
+        Microsoft::Xna::Framework::Vector3 emissiveFactor;
     };
 
     /** @brief A group of glTF mesh instances sharing the same skin (or no skin at all). */
@@ -205,6 +225,24 @@ namespace CNA::Internal::GltfImport
      * primitive has no material or occlusion texture.
      */
     const cgltf_image* FindOcclusionImage(const cgltf_primitive& prim);
+
+    /**
+     * @brief Returns a primitive's material's normal map image, or nullptr if the primitive has
+     * no material or normal map (plan_cnj.md CNB-59, Phase 13A).
+     */
+    const cgltf_image* FindNormalImage(const cgltf_primitive& prim);
+
+    /**
+     * @brief Returns a primitive's material's metallic-roughness map image, or nullptr if the
+     * primitive has no material or metallic-roughness map.
+     */
+    const cgltf_image* FindMetallicRoughnessImage(const cgltf_primitive& prim);
+
+    /**
+     * @brief Returns a primitive's material's emissive map image, or nullptr if the primitive has
+     * no material or emissive map.
+     */
+    const cgltf_image* FindEmissiveImage(const cgltf_primitive& prim);
 
     /**
      * @brief Extracts one glTF mesh primitive's vertex/index bytes, selecting the vertex stride

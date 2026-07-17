@@ -34,6 +34,7 @@
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshPart.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshPartCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/MorphTargetEXT.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PbrEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 
@@ -192,6 +193,57 @@ namespace
     { "bufferView": 5, "componentType": 5126, "count": 2, "type": "SCALAR", "min": [0.0], "max": [1.0] }
   ]
 })GLTF";
+
+    // CNB-56/59 (Phase 13A): an unskinned triangle with base-color + normal + metallic-roughness
+    // + emissive maps, an explicit TANGENT accessor (all tangents (1,0,0,1)), and non-default
+    // factor values (metallicFactor=0.5, roughnessFactor=0.3, emissiveFactor=[0.1,0.2,0.3]).
+    const char* kPbrTriangleGltf = R"GLTF({
+  "asset": { "version": "2.0" },
+  "scene": 0,
+  "scenes": [ { "nodes": [0] } ],
+  "nodes": [ { "name": "MeshNode", "mesh": 0 } ],
+  "meshes": [ { "primitives": [ { "attributes": {
+      "POSITION": 0, "NORMAL": 1, "TANGENT": 2, "TEXCOORD_0": 3
+  }, "material": 0 } ] } ],
+  "materials": [ {
+    "pbrMetallicRoughness": {
+      "baseColorTexture": { "index": 0 },
+      "metallicRoughnessTexture": { "index": 2 },
+      "metallicFactor": 0.5,
+      "roughnessFactor": 0.3
+    },
+    "normalTexture": { "index": 1 },
+    "emissiveTexture": { "index": 3 },
+    "emissiveFactor": [0.1, 0.2, 0.3]
+  } ],
+  "textures": [ { "source": 0 }, { "source": 1 }, { "source": 2 }, { "source": 3 } ],
+  "images": [
+    { "bufferView": 4, "mimeType": "image/png" },
+    { "bufferView": 5, "mimeType": "image/png" },
+    { "bufferView": 6, "mimeType": "image/png" },
+    { "bufferView": 7, "mimeType": "image/png" }
+  ],
+  "buffers": [ {
+    "byteLength": 420,
+    "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AACAPwAAAAAAAAAAAACAPwAAgD8AAAAAAAAAAAAAgD8AAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCCiVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCCiVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCCiVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC"
+  } ],
+  "bufferViews": [
+    { "buffer": 0, "byteOffset": 0,   "byteLength": 36 },
+    { "buffer": 0, "byteOffset": 36,  "byteLength": 36 },
+    { "buffer": 0, "byteOffset": 72,  "byteLength": 48 },
+    { "buffer": 0, "byteOffset": 120, "byteLength": 24 },
+    { "buffer": 0, "byteOffset": 144, "byteLength": 69 },
+    { "buffer": 0, "byteOffset": 213, "byteLength": 69 },
+    { "buffer": 0, "byteOffset": 282, "byteLength": 69 },
+    { "buffer": 0, "byteOffset": 351, "byteLength": 69 }
+  ],
+  "accessors": [
+    { "bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3", "min": [0,0,0], "max": [1,1,0] },
+    { "bufferView": 1, "componentType": 5126, "count": 3, "type": "VEC3" },
+    { "bufferView": 2, "componentType": 5126, "count": 3, "type": "VEC4" },
+    { "bufferView": 3, "componentType": 5126, "count": 3, "type": "VEC2" }
+  ]
+})GLTF";
 }
 
 TEST(RuntimeGltfModelTest, LoadsUnskinnedTexturedModelDirectlyFromGltf)
@@ -306,4 +358,45 @@ TEST(RuntimeGltfModelTest, LoadsMorphTargetDataWithDefaultWeightsAndWeightAnimat
     const auto midWeights = EvaluateMorphWeightsEXT(morph->WeightTrack, 0.5);
     ASSERT_EQ(midWeights.size(), 1u);
     EXPECT_NEAR(midWeights[0], 0.5f, 1e-5f);
+}
+
+// CNB-56/59 (Phase 13A): PbrEffect's 4 maps + factor values, extracted directly from a glTF file
+// with an explicit TANGENT accessor, no .cnj/binary sidecars.
+TEST(RuntimeGltfModelTest, LoadsPbrMaterialWithAllFourMapsAndFactorsFromGltf)
+{
+    ScratchDir contentRoot;
+    WriteFile(contentRoot.path() / "pbr.gltf", kPbrTriangleGltf);
+
+    GraphicsDevice gd;
+    ContentManager cm(nullptr, contentRoot.path().string());
+    cm.setGraphicsDevice(gd);
+
+    Model model = cm.Load<Model>("pbr");
+    ASSERT_EQ(model.getMeshesProperty().getCountProperty(), 1);
+    ModelMesh* mesh = model.getMeshesProperty()[0];
+
+    auto* pbrFx = dynamic_cast<PbrEffect*>(mesh->getMeshPartsProperty()[0]->getEffectProperty());
+    ASSERT_NE(pbrFx, nullptr);
+
+    Texture2D* baseColor = pbrFx->getTextureProperty();
+    Texture2D* normalMap = pbrFx->getNormalMapProperty();
+    Texture2D* mrMap     = pbrFx->getMetallicRoughnessMapProperty();
+    Texture2D* emissiveMap = pbrFx->getEmissiveMapProperty();
+    ASSERT_NE(baseColor, nullptr);
+    ASSERT_NE(normalMap, nullptr);
+    ASSERT_NE(mrMap, nullptr);
+    ASSERT_NE(emissiveMap, nullptr);
+    EXPECT_EQ(baseColor->getWidthProperty(), 1);
+    EXPECT_EQ(normalMap->getWidthProperty(), 1);
+    EXPECT_EQ(mrMap->getWidthProperty(), 1);
+    EXPECT_EQ(emissiveMap->getWidthProperty(), 1);
+    // No occlusion texture in this fixture.
+    EXPECT_EQ(pbrFx->getOcclusionMapProperty(), nullptr);
+
+    EXPECT_NEAR(pbrFx->getMetallicFactorProperty(), 0.5f, 1e-5f);
+    EXPECT_NEAR(pbrFx->getRoughnessFactorProperty(), 0.3f, 1e-5f);
+    const Vector3 emissiveFactor = pbrFx->getEmissiveFactorProperty();
+    EXPECT_NEAR(emissiveFactor.X, 0.1f, 1e-5f);
+    EXPECT_NEAR(emissiveFactor.Y, 0.2f, 1e-5f);
+    EXPECT_NEAR(emissiveFactor.Z, 0.3f, 1e-5f);
 }

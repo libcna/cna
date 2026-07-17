@@ -433,6 +433,12 @@ namespace CNA::Internal::Backends::EasyGL
             int loc_fog_start     = -1;  ///< float fog start depth
             int loc_fog_end       = -1;  ///< float fog end depth
             int loc_vertexcolor   = -1;  ///< float 0=ignore vertex color, 1=multiply by it (BasicEffect.VertexColorEnabled)
+            int loc_pbr_normalmap  = -1;  ///< sampler2D tangent-space normal map (PbrEffect only)
+            int loc_pbr_mr         = -1;  ///< sampler2D metallic-roughness map (PbrEffect only, G=roughness/B=metallic)
+            int loc_pbr_emissivemap = -1; ///< sampler2D emissive map (PbrEffect only)
+            int loc_pbr_occlusionmap = -1; ///< sampler2D occlusion map (PbrEffect only, R channel)
+            int loc_pbr_metallic    = -1;  ///< float metallic factor (PbrEffect only)
+            int loc_pbr_roughness   = -1;  ///< float roughness factor (PbrEffect only)
             void reset_no_gl() { prog.reset_handle_no_gl(); ready = false; }
         };
 
@@ -446,9 +452,12 @@ namespace CNA::Internal::Backends::EasyGL
         Prog3D prog_env_mapped_;     ///< stride=32: aPos + aNormal + aUV, cube map (EnvironmentMapEffect)
         Prog3D prog_skinned_;        ///< stride=52: aPos + aNormal + aUV + weights + indices (SkinnedEffect, PreferPerPixelLighting=true: per-pixel Blinn-Phong)
         Prog3D prog_skinned_vertexlit_;  ///< stride=52: aPos + aNormal + aUV + weights + indices (SkinnedEffect, PreferPerPixelLighting=false, XNA's own default: per-vertex/Gouraud-shaded Blinn-Phong, Task 1102b)
+        Prog3D prog_pbr_;            ///< stride=48: aPos + aNormal + aTangent + aUV, real glTF metallic-roughness BRDF (PbrEffect, plan_cnj.md CNB-58)
 
         ::easygl::Texture default_white_texture_;
         bool default_white_texture_ready_ = false;
+        ::easygl::Texture default_flat_normal_texture_;      ///< PbrEffect NormalMap fallback (CNB-58)
+        bool default_flat_normal_texture_ready_ = false;
 
         // Temporary MRT FBO created by SetRenderTargets(count > 1)
         ::easygl::Framebuffer mrtFbo_;
@@ -489,7 +498,9 @@ namespace CNA::Internal::Backends::EasyGL
         void EnsureEnvMapped3DProgram();
         void EnsureSkinnedProgram();
         void EnsureSkinnedVertexLitProgram();
+        void EnsurePbrProgram();
         void EnsureDefaultWhiteTexture();
+        void EnsureDefaultFlatNormalTexture();
         Prog3D& SelectProgram(std::size_t stride, const GpuDrawParams& params);
         void BindDrawParams(Prog3D& p, const Matrix& world, const Matrix& view,
                             const Matrix& projection, const GpuDrawParams& params);

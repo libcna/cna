@@ -24,6 +24,7 @@
 #include "Microsoft/Xna/Framework/Graphics/ModelMesh.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshPart.hpp"
 #include "Microsoft/Xna/Framework/Graphics/MorphTargetEXT.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PbrEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedModelEXT.hpp"
@@ -1637,6 +1638,10 @@ namespace Microsoft::Xna::Framework::Content
                     verts.emplace_back(readVec3(o), readVec3(o + 12), readVec2(o + 24));
                 }
                 vb->SetData(verts.data(), numVertices);
+            } else if (stride == 48) {
+                // plan_cnj.md CNB-57 (Phase 13A): VertexPositionNormalTangentTexture (PbrEffect)
+                // -- raw byte upload for the same vtable-inflation reason as stride 52/56 above.
+                vb->SetDataRaw(vertBytes.data(), numVertices, 48);
             } else if (stride == 52) {
                 vb->SetDataRaw(vertBytes.data(), numVertices, 52);
             } else if (stride == 56) {
@@ -1874,6 +1879,7 @@ namespace Microsoft::Xna::Framework::Content
 
                     std::shared_ptr<Graphics::Effect> fx;
                     if (meshOut.skinned) { fx = std::make_shared<Graphics::SkinnedEffect>(device); }
+                    else if (meshOut.usePbr) { fx = std::make_shared<Graphics::PbrEffect>(device); }
                     else if (meshOut.useDualTexture) { fx = std::make_shared<Graphics::DualTextureEffect>(device); }
                     else { fx = std::make_shared<Graphics::BasicEffect>(device); }
 
@@ -1886,6 +1892,8 @@ namespace Microsoft::Xna::Framework::Content
                             skinnedFx->setTextureProperty(tex);
                         } else if (auto* dualFx = dynamic_cast<Graphics::DualTextureEffect*>(fx.get())) {
                             dualFx->setTextureProperty(tex);
+                        } else if (auto* pbrFx = dynamic_cast<Graphics::PbrEffect*>(fx.get())) {
+                            pbrFx->setTextureProperty(tex);
                         }
                     }
 
@@ -1896,6 +1904,28 @@ namespace Microsoft::Xna::Framework::Content
                             if (auto* dualFx = dynamic_cast<Graphics::DualTextureEffect*>(fx.get())) {
                                 dualFx->setTexture2Property(tex2);
                             }
+                        }
+                    }
+
+                    if (meshOut.usePbr)
+                    {
+                        if (auto* pbrFx = dynamic_cast<Graphics::PbrEffect*>(fx.get()))
+                        {
+                            if (Graphics::Texture2D* normalTex = loadTexture(meshOut.normalImage))
+                                pbrFx->setNormalMapProperty(normalTex);
+                            if (Graphics::Texture2D* mrTex = loadTexture(meshOut.metallicRoughnessImage))
+                                pbrFx->setMetallicRoughnessMapProperty(mrTex);
+                            if (Graphics::Texture2D* emissiveTex = loadTexture(meshOut.emissiveImage))
+                                pbrFx->setEmissiveMapProperty(emissiveTex);
+                            // MeshOut::occlusionImage is shared with useDualTexture's own
+                            // Texture2 approximation (CNB-72/73) -- the two are mutually
+                            // exclusive per-mesh (useDualTexture is forced false whenever usePbr
+                            // is true), so reusing the same field here is unambiguous.
+                            if (Graphics::Texture2D* occlusionTex = loadTexture(meshOut.occlusionImage))
+                                pbrFx->setOcclusionMapProperty(occlusionTex);
+                            pbrFx->setMetallicFactorProperty(meshOut.metallicFactor);
+                            pbrFx->setRoughnessFactorProperty(meshOut.roughnessFactor);
+                            pbrFx->setEmissiveFactorProperty(meshOut.emissiveFactor);
                         }
                     }
 
@@ -2077,6 +2107,14 @@ namespace Microsoft::Xna::Framework::Content
                             const std::string textureFile = ExtractJsonStringField(mg, "texture");
                             const std::string texture2File = ExtractJsonStringField(mg, "texture2");
                             const bool vertexColorEnabled = JsonBool(mg, "vertexColorEnabled", false);
+                            // CNB-59 (Phase 13A): PbrEffect's own 4 maps + factor values.
+                            const std::string normalMapFile = ExtractJsonStringField(mg, "normalMap");
+                            const std::string metallicRoughnessMapFile = ExtractJsonStringField(mg, "metallicRoughnessMap");
+                            const std::string emissiveMapFile = ExtractJsonStringField(mg, "emissiveMap");
+                            const std::string occlusionMapFile = ExtractJsonStringField(mg, "occlusionMap");
+                            const float metallicFactor  = JsonFloat(mg, "metallicFactor", 1.0f);
+                            const float roughnessFactor = JsonFloat(mg, "roughnessFactor", 1.0f);
+                            const auto emissiveFactorArr = JsonFloatArray3(mg, FindKeyArray(mg, "emissiveFactor"));
 
                             if (vertFile.empty() || idxFile.empty())
                                 continue;
@@ -2155,6 +2193,12 @@ namespace Microsoft::Xna::Framework::Content
                                 // (no Normal in between location0/location1, see ApplyLayout's
                                 // stride==20 case) rather than stride-32.
                                 fx = std::make_shared<Graphics::DualTextureEffect>(device);
+                            } else if (effectStr == "PbrEffect") {
+                                // CNB-56/58 (Phase 13A): NOXNA metallic-roughness PBR effect --
+                                // its vertex buffer must be the stride-48
+                                // VertexPositionNormalTangentTexture shape (Position+Normal+
+                                // Tangent+TextureCoordinate), never stride-32.
+                                fx = std::make_shared<Graphics::PbrEffect>(device);
                             } else {
                                 fx = cm.Load<std::shared_ptr<Graphics::Effect>>(effectStr);
                             }
@@ -2178,6 +2222,9 @@ namespace Microsoft::Xna::Framework::Content
                                 } else if (auto* dualFx = dynamic_cast<Graphics::DualTextureEffect*>(fx.get())) {
                                     dualFx->setTextureProperty(tex.get());
                                     res->textureOwners.push_back(std::move(tex));
+                                } else if (auto* pbrFx = dynamic_cast<Graphics::PbrEffect*>(fx.get())) {
+                                    pbrFx->setTextureProperty(tex.get());
+                                    res->textureOwners.push_back(std::move(tex));
                                 }
                             }
 
@@ -2191,6 +2238,30 @@ namespace Microsoft::Xna::Framework::Content
                                     dualFx->setTexture2Property(tex2.get());
                                     res->textureOwners.push_back(std::move(tex2));
                                 }
+                            }
+
+                            // CNB-59 (Phase 13A): PbrEffect's own 4 maps + factor values.
+                            if (auto* pbrFx = dynamic_cast<Graphics::PbrEffect*>(fx.get())) {
+                                auto loadPbrMap = [&](const std::string& file) -> Graphics::Texture2D* {
+                                    if (file.empty()) { return nullptr; }
+                                    auto tex = std::make_unique<Graphics::Texture2D>(
+                                        cm.Load<Graphics::Texture2D>(file));
+                                    Graphics::Texture2D* texPtr = tex.get();
+                                    res->textureOwners.push_back(std::move(tex));
+                                    return texPtr;
+                                };
+                                if (Graphics::Texture2D* t = loadPbrMap(normalMapFile))
+                                    pbrFx->setNormalMapProperty(t);
+                                if (Graphics::Texture2D* t = loadPbrMap(metallicRoughnessMapFile))
+                                    pbrFx->setMetallicRoughnessMapProperty(t);
+                                if (Graphics::Texture2D* t = loadPbrMap(emissiveMapFile))
+                                    pbrFx->setEmissiveMapProperty(t);
+                                if (Graphics::Texture2D* t = loadPbrMap(occlusionMapFile))
+                                    pbrFx->setOcclusionMapProperty(t);
+                                pbrFx->setMetallicFactorProperty(metallicFactor);
+                                pbrFx->setRoughnessFactorProperty(roughnessFactor);
+                                pbrFx->setEmissiveFactorProperty(Vector3(
+                                    emissiveFactorArr[0], emissiveFactorArr[1], emissiveFactorArr[2]));
                             }
 
                             // Task 1115 / CNB-67 (Phase 13C): a "vertexStride": 24

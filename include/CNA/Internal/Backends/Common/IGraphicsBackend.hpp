@@ -443,6 +443,9 @@ namespace CNA::Internal::Backends
         bool envMapping          = false;
         /// When true the backend selects the skinning shader variant.
         bool skinned             = false;
+        /// When true the backend selects the PbrEffect (metallic-roughness BRDF) shader variant
+        /// (plan_cnj.md CNB-58, Phase 13A).
+        bool pbr                 = false;
         /// Number of instances to draw (1 = non-instanced).
         int instanceCount = 1;
         /// Per-instance vertex buffer backend pointer; cast to the concrete type inside the backend.
@@ -462,6 +465,24 @@ namespace CNA::Internal::Backends
         /// safely ignore it, matching the established accepted-and-ignored pattern for other
         /// not-yet-backend-supported `GpuDrawParams` fields.
         IEffectBackend* customEffectBackend = nullptr;
+        /// plan_cnj.md CNB-58 (Phase 13A): PbrEffect's normal map (tangent-space, RGB), or null.
+        /// When null the surface normal from the vertex stream is used unperturbed.
+        const ITextureBackend* pbrNormalMap = nullptr;
+        /// PbrEffect: metallic-roughness map, glTF's own packing convention (G=roughness,
+        /// B=metallic; R/A unused), or null (Metallic/RoughnessFactor alone are then the
+        /// per-material constant values).
+        const ITextureBackend* pbrMetallicRoughnessMap = nullptr;
+        /// PbrEffect: emissive map (RGB), or null (EmissiveFactor alone is then constant).
+        const ITextureBackend* pbrEmissiveMap = nullptr;
+        /// PbrEffect: occlusion map (R channel, 1=fully lit .. 0=fully occluded), or null
+        /// (no occlusion darkening applied).
+        const ITextureBackend* pbrOcclusionMap = nullptr;
+        /// PbrEffect: metallic factor [0,1], multiplied with pbrMetallicRoughnessMap's B channel
+        /// when bound (or used alone as a constant when it isn't).
+        float pbrMetallicFactor = 1.0f;
+        /// PbrEffect: roughness factor [0,1], multiplied with pbrMetallicRoughnessMap's G channel
+        /// when bound (or used alone as a constant when it isn't).
+        float pbrRoughnessFactor = 1.0f;
     };
 
     class IGraphicsBackend

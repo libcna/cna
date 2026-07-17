@@ -56,6 +56,7 @@
 #include "Microsoft/Xna/Framework/Graphics/ModelMesh.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshPart.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PbrEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshPartCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
@@ -603,6 +604,58 @@ namespace
   ]
 })GLTF";
 
+    // CNB-56/59 (Phase 13A): an unskinned triangle with base-color + normal + metallic-roughness
+    // + emissive maps, an explicit TANGENT accessor, and non-default factor values -- proves the
+    // offline CLI tool's own .cnj/binary-sidecar serialization of PbrEffect (unlike morph targets,
+    // which the CLI tool deliberately does not serialize -- see gltf_to_cnj.cpp's own docs).
+    const char* kPbrGltf = R"GLTF({
+  "asset": { "version": "2.0" },
+  "scene": 0,
+  "scenes": [ { "nodes": [0] } ],
+  "nodes": [ { "name": "MeshNode", "mesh": 0 } ],
+  "meshes": [ { "primitives": [ { "attributes": {
+      "POSITION": 0, "NORMAL": 1, "TANGENT": 2, "TEXCOORD_0": 3
+  }, "material": 0 } ] } ],
+  "materials": [ {
+    "pbrMetallicRoughness": {
+      "baseColorTexture": { "index": 0 },
+      "metallicRoughnessTexture": { "index": 2 },
+      "metallicFactor": 0.5,
+      "roughnessFactor": 0.3
+    },
+    "normalTexture": { "index": 1 },
+    "emissiveTexture": { "index": 3 },
+    "emissiveFactor": [0.1, 0.2, 0.3]
+  } ],
+  "textures": [ { "source": 0 }, { "source": 1 }, { "source": 2 }, { "source": 3 } ],
+  "images": [
+    { "bufferView": 4, "mimeType": "image/png" },
+    { "bufferView": 5, "mimeType": "image/png" },
+    { "bufferView": 6, "mimeType": "image/png" },
+    { "bufferView": 7, "mimeType": "image/png" }
+  ],
+  "buffers": [ {
+    "byteLength": 420,
+    "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AACAPwAAAAAAAAAAAACAPwAAgD8AAAAAAAAAAAAAgD8AAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCCiVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCCiVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCCiVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC"
+  } ],
+  "bufferViews": [
+    { "buffer": 0, "byteOffset": 0,   "byteLength": 36 },
+    { "buffer": 0, "byteOffset": 36,  "byteLength": 36 },
+    { "buffer": 0, "byteOffset": 72,  "byteLength": 48 },
+    { "buffer": 0, "byteOffset": 120, "byteLength": 24 },
+    { "buffer": 0, "byteOffset": 144, "byteLength": 69 },
+    { "buffer": 0, "byteOffset": 213, "byteLength": 69 },
+    { "buffer": 0, "byteOffset": 282, "byteLength": 69 },
+    { "buffer": 0, "byteOffset": 351, "byteLength": 69 }
+  ],
+  "accessors": [
+    { "bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3", "min": [0,0,0], "max": [1,1,0] },
+    { "bufferView": 1, "componentType": 5126, "count": 3, "type": "VEC3" },
+    { "bufferView": 2, "componentType": 5126, "count": 3, "type": "VEC4" },
+    { "bufferView": 3, "componentType": 5126, "count": 3, "type": "VEC2" }
+  ]
+})GLTF";
+
     // Spawns the real cna_tool_gltf_to_cnj executable and waits for it to exit. Returns the exit
     // code, or -1 on a spawn-side failure (already reported via ADD_FAILURE). unitScale is passed
     // as the tool's optional 5th CLI argument when non-empty.
@@ -1098,4 +1151,53 @@ TEST(GltfToCnjToolTest, ExtractsVertexColorOnASkinnedMeshAndEnablesItOnSkinnedEf
     auto* skinnedFx = dynamic_cast<SkinnedEffect*>(mesh->getMeshPartsProperty()[0]->getEffectProperty());
     ASSERT_NE(skinnedFx, nullptr);
     EXPECT_TRUE(skinnedFx->VertexColorEnabled);
+}
+
+// CNB-56/59: the offline CLI tool must serialize PbrEffect's 4 maps + factor values to real
+// .cnj/binary-sidecar files (stride 48), and ModelTypeReader's own .cnj JSON path must read them
+// back correctly -- unlike morph targets, which the CLI tool deliberately does not serialize.
+TEST(GltfToCnjToolTest, SerializesAndReloadsPbrMaterialThroughTheOfflineCnjPath)
+{
+    ScratchDir gltfDir;
+    ScratchDir contentRoot;
+
+    const std::filesystem::path gltfPath = gltfDir.path() / "pbr.gltf";
+    WriteFile(gltfPath, kPbrGltf);
+
+    const int exitCode = RunGltfToCnjTool(gltfPath.string(), contentRoot.path().string(), "pbr");
+    ASSERT_EQ(exitCode, 0);
+    ASSERT_TRUE(std::filesystem::exists(contentRoot.path() / "pbr_tex0.png"));
+    ASSERT_TRUE(std::filesystem::exists(contentRoot.path() / "pbr_tex1.png"));
+    ASSERT_TRUE(std::filesystem::exists(contentRoot.path() / "pbr_tex2.png"));
+    ASSERT_TRUE(std::filesystem::exists(contentRoot.path() / "pbr_tex3.png"));
+
+    const std::filesystem::path vertsPath = contentRoot.path() / "pbr_mesh0_verts.bin";
+    std::ifstream f(vertsPath, std::ios::binary);
+    std::vector<char> bytes((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+    ASSERT_EQ(bytes.size(), 3u * 48u); // stride 48, VertexPositionNormalTangentTexture
+
+    float tangent0[4];
+    std::memcpy(tangent0, bytes.data() + 24, sizeof(tangent0));
+    EXPECT_NEAR(tangent0[0], 1.0f, 1e-5f);
+    EXPECT_NEAR(tangent0[3], 1.0f, 1e-5f);
+
+    GraphicsDevice gd;
+    ContentManager cm(nullptr, contentRoot.path().string());
+    cm.setGraphicsDevice(gd);
+    Model model = cm.Load<Model>("pbr");
+    ASSERT_EQ(model.getMeshesProperty().getCountProperty(), 1);
+    ModelMesh* mesh = model.getMeshesProperty()[0];
+
+    auto* pbrFx = dynamic_cast<PbrEffect*>(mesh->getMeshPartsProperty()[0]->getEffectProperty());
+    ASSERT_NE(pbrFx, nullptr);
+    ASSERT_NE(pbrFx->getTextureProperty(), nullptr);
+    ASSERT_NE(pbrFx->getNormalMapProperty(), nullptr);
+    ASSERT_NE(pbrFx->getMetallicRoughnessMapProperty(), nullptr);
+    ASSERT_NE(pbrFx->getEmissiveMapProperty(), nullptr);
+    EXPECT_NEAR(pbrFx->getMetallicFactorProperty(), 0.5f, 1e-5f);
+    EXPECT_NEAR(pbrFx->getRoughnessFactorProperty(), 0.3f, 1e-5f);
+    const Vector3 emissiveFactor = pbrFx->getEmissiveFactorProperty();
+    EXPECT_NEAR(emissiveFactor.X, 0.1f, 1e-5f);
+    EXPECT_NEAR(emissiveFactor.Y, 0.2f, 1e-5f);
+    EXPECT_NEAR(emissiveFactor.Z, 0.3f, 1e-5f);
 }

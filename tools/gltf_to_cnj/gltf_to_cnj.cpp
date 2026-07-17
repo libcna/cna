@@ -47,6 +47,7 @@
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 
 using Microsoft::Xna::Framework::Matrix;
+using Microsoft::Xna::Framework::Vector3;
 using namespace CNA::Internal::GltfImport;
 
 namespace
@@ -142,7 +143,14 @@ namespace
         SkeletonResult skeleton;
         if (hasSkin) { skeleton = BuildSkeleton(group.skin, unitScale); }
 
-        struct MeshEntry { std::string vertFile, idxFile, textureFile, texture2File; int stride; std::string effect; bool vertexColorEnabled; };
+        struct MeshEntry {
+            std::string vertFile, idxFile, textureFile, texture2File;
+            int stride; std::string effect; bool vertexColorEnabled;
+            // CNB-59 (Phase 13A): PbrEffect's own 4 maps + factor values.
+            std::string normalMapFile, metallicRoughnessMapFile, emissiveMapFile, pbrOcclusionMapFile;
+            float metallicFactor = 1.0f, roughnessFactor = 1.0f;
+            Vector3 emissiveFactor;
+        };
         std::vector<MeshEntry> meshEntries;
 
         int meshCounter = 0;
@@ -207,11 +215,44 @@ namespace
                     }
                 }
 
+                // plan_cnj.md CNB-59 (Phase 13A): PbrEffect's own 4 maps. A helper mirroring the
+                // baseColor/occlusion extraction above -- cached by cgltf_image* like the others,
+                // so a texture shared across primitives is only written once.
+                auto extractCached = [&](const cgltf_image* image) -> std::string
+                {
+                    if (!image) { return {}; }
+                    auto cached = writtenTextures.find(image);
+                    if (cached != writtenTextures.end()) { return cached->second; }
+                    if (auto img = ExtractImage(image, gltfDir))
+                    {
+                        std::string file = outName + "_tex" + std::to_string(writtenTextures.size()) + "." + img->extension;
+                        WriteBinaryFile(outputDir / file, img->bytes);
+                        writtenTextures[image] = file;
+                        return file;
+                    }
+                    return {};
+                };
+                std::string normalMapFile, metallicRoughnessMapFile, emissiveMapFile, pbrOcclusionMapFile;
+                if (meshOut.usePbr)
+                {
+                    normalMapFile            = extractCached(meshOut.normalImage);
+                    metallicRoughnessMapFile = extractCached(meshOut.metallicRoughnessImage);
+                    emissiveMapFile          = extractCached(meshOut.emissiveImage);
+                    pbrOcclusionMapFile      = extractCached(meshOut.occlusionImage);
+                }
+
                 MeshEntry entry;
                 entry.vertFile = vertFile;
                 entry.idxFile = idxFile;
                 entry.stride = meshOut.stride;
-                entry.effect = meshOut.skinned ? "SkinnedEffect"
+                // meshOut.usePbr forces stride 48 (VertexPositionNormalTangentTexture) --
+                // BasicEffect/DualTextureEffect/SkinnedEffect don't understand that layout at
+                // all, so this branch must never fall through to any of them (unlike
+                // useDualTexture's own "fall back to BasicEffect if Texture2 extraction failed"
+                // case just above, where the vertex layout stays a BasicEffect-compatible
+                // stride 20/24/32 either way).
+                entry.effect = meshOut.usePbr ? "PbrEffect"
+                              : meshOut.skinned ? "SkinnedEffect"
                               : meshOut.useDualTexture ? "DualTextureEffect"
                               : "BasicEffect";
                 entry.textureFile = textureFile;
@@ -227,6 +268,13 @@ namespace
                 {
                     entry.texture2File = texture2File;
                 }
+                entry.normalMapFile = normalMapFile;
+                entry.metallicRoughnessMapFile = metallicRoughnessMapFile;
+                entry.emissiveMapFile = emissiveMapFile;
+                entry.pbrOcclusionMapFile = pbrOcclusionMapFile;
+                entry.metallicFactor = meshOut.metallicFactor;
+                entry.roughnessFactor = meshOut.roughnessFactor;
+                entry.emissiveFactor = meshOut.emissiveFactor;
                 entry.vertexColorEnabled = meshOut.colored;
                 meshEntries.push_back(entry);
                 ++meshCounter;
@@ -308,6 +356,16 @@ namespace
             if (!e.textureFile.empty()) { json << ", \"texture\": \"" << JsonEscape(e.textureFile) << "\""; }
             if (!e.texture2File.empty()) { json << ", \"texture2\": \"" << JsonEscape(e.texture2File) << "\""; }
             if (e.vertexColorEnabled) { json << ", \"vertexColorEnabled\": true"; }
+            if (e.effect == "PbrEffect")
+            {
+                if (!e.normalMapFile.empty()) { json << ", \"normalMap\": \"" << JsonEscape(e.normalMapFile) << "\""; }
+                if (!e.metallicRoughnessMapFile.empty()) { json << ", \"metallicRoughnessMap\": \"" << JsonEscape(e.metallicRoughnessMapFile) << "\""; }
+                if (!e.emissiveMapFile.empty()) { json << ", \"emissiveMap\": \"" << JsonEscape(e.emissiveMapFile) << "\""; }
+                if (!e.pbrOcclusionMapFile.empty()) { json << ", \"occlusionMap\": \"" << JsonEscape(e.pbrOcclusionMapFile) << "\""; }
+                json << ", \"metallicFactor\": " << e.metallicFactor
+                     << ", \"roughnessFactor\": " << e.roughnessFactor
+                     << ", \"emissiveFactor\": [" << e.emissiveFactor.X << ", " << e.emissiveFactor.Y << ", " << e.emissiveFactor.Z << "]";
+            }
             json << " }" << (i + 1 < meshEntries.size() ? "," : "") << "\n";
         }
         json << "  ]\n}\n";
