@@ -133,6 +133,43 @@ namespace CNA::Internal::Backends::D3DCommon
             { "BLENDWEIGHT",  0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 32, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
             { "BLENDINDICES", 0, DXGI_FORMAT_R8G8B8A8_UINT,      0, 48, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
         };
+
+        // D3D12 PBR/skinned-vertex-color reconciliation follow-up: D3D12 counterparts of
+        // kStride48/56/68 above (D3D11-flavor, InputElementsForStride()) -- same semantic names/
+        // byte offsets, just D3D12_INPUT_ELEMENT_DESC/D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA
+        // typed, same "separate array, not a reinterpret_cast" discipline this file's own
+        // kStride16D3D12 doc comment already established.
+
+        // Stride 48: VertexPositionNormalTangentTexture (PbrEffect). Matches kStride48 exactly.
+        const D3D12_INPUT_ELEMENT_DESC kStride48D3D12[] = {
+            { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT,    0, 0,  D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+            { "NORMAL",   0, DXGI_FORMAT_R32G32B32_FLOAT,    0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+            { "TANGENT",  0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 24, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+            { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT,       0, 40, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+        };
+
+        // Stride 56: the stride-52 SkinnedVertex layout with a per-vertex Color appended at offset
+        // 52 (SkinnedEffect.VertexColorEnabled, Skinned3dColored/Skinned3dVertexLitColored).
+        // Matches kStride56 exactly.
+        const D3D12_INPUT_ELEMENT_DESC kStride56D3D12[] = {
+            { "POSITION",     0, DXGI_FORMAT_R32G32B32_FLOAT,    0, 0,  D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+            { "NORMAL",       0, DXGI_FORMAT_R32G32B32_FLOAT,    0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+            { "TEXCOORD",     0, DXGI_FORMAT_R32G32_FLOAT,       0, 24, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+            { "BLENDWEIGHT",  0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 32, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+            { "BLENDINDICES", 0, DXGI_FORMAT_R8G8B8A8_UINT,      0, 48, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+            { "COLOR",        0, DXGI_FORMAT_R8G8B8A8_UNORM,     0, 52, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+        };
+
+        // Stride 68: VertexPositionNormalTangentTextureSkinned (SkinnedPbrEffect) -- the stride-48
+        // layout above with the stride-52 skinning suffix appended. Matches kStride68 exactly.
+        const D3D12_INPUT_ELEMENT_DESC kStride68D3D12[] = {
+            { "POSITION",     0, DXGI_FORMAT_R32G32B32_FLOAT,    0, 0,  D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+            { "NORMAL",       0, DXGI_FORMAT_R32G32B32_FLOAT,    0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+            { "TANGENT",      0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 24, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+            { "TEXCOORD",     0, DXGI_FORMAT_R32G32_FLOAT,       0, 40, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+            { "BLENDWEIGHT",  0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 48, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+            { "BLENDINDICES", 0, DXGI_FORMAT_R8G8B8A8_UINT,      0, 64, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+        };
     }
 
     const D3D12_INPUT_ELEMENT_DESC* InputElementsForStrideD3D12(std::size_t strideInBytes, UINT& count)
@@ -143,7 +180,10 @@ namespace CNA::Internal::Backends::D3DCommon
             case 20: count = static_cast<UINT>(std::size(kStride20D3D12)); return kStride20D3D12;
             case 24: count = static_cast<UINT>(std::size(kStride24D3D12)); return kStride24D3D12;
             case 32: count = static_cast<UINT>(std::size(kStride32D3D12)); return kStride32D3D12;
+            case 48: count = static_cast<UINT>(std::size(kStride48D3D12)); return kStride48D3D12;
             case 52: count = static_cast<UINT>(std::size(kStride52D3D12)); return kStride52D3D12;
+            case 56: count = static_cast<UINT>(std::size(kStride56D3D12)); return kStride56D3D12;
+            case 68: count = static_cast<UINT>(std::size(kStride68D3D12)); return kStride68D3D12;
             default: count = 0; return nullptr;
         }
     }

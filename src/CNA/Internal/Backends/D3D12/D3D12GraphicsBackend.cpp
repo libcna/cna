@@ -610,6 +610,14 @@ namespace CNA::Internal::Backends::D3D12
         envMapPerDrawConstantBufferMapped_ = nullptr;
         envMapConstantBuffer_.Reset();
         envMapConstantBufferMapped_ = nullptr;
+        // D3D12 PBR reconciliation follow-up: pbr3d/pbr_skinned3d's own persistent constant
+        // buffers, and the lazily-created default-texture fallbacks, are equally device-tied.
+        pbrPerDrawConstantBuffer_.Reset();
+        pbrPerDrawConstantBufferMapped_ = nullptr;
+        pbrLightsConstantBuffer_.Reset();
+        pbrLightsConstantBufferMapped_ = nullptr;
+        defaultWhiteTexture_.reset();
+        defaultFlatNormalTexture_.reset();
         instancedPso_.Reset();
         // The bound off-screen color target (if any) was owned by the caller and lived on the old
         // device -- it's gone too; the caller must recreate its render target and rebind after
@@ -808,6 +816,20 @@ namespace CNA::Internal::Backends::D3D12
         return envMapConstantBuffer_.Get();
     }
 
+    ID3D12Resource* D3D12GraphicsBackend::GetOrCreatePbrPerDrawConstantBufferEXT()
+    {
+        if (!pbrPerDrawConstantBuffer_)
+            CreateUploadConstantBuffer(sizeof(D3DPbrPerDrawConstants), pbrPerDrawConstantBuffer_, pbrPerDrawConstantBufferMapped_);
+        return pbrPerDrawConstantBuffer_.Get();
+    }
+
+    ID3D12Resource* D3D12GraphicsBackend::GetOrCreatePbrLightsConstantBufferEXT()
+    {
+        if (!pbrLightsConstantBuffer_)
+            CreateUploadConstantBuffer(sizeof(D3DPbrLightConstants), pbrLightsConstantBuffer_, pbrLightsConstantBufferMapped_);
+        return pbrLightsConstantBuffer_.Get();
+    }
+
     D3D12_GPU_DESCRIPTOR_HANDLE D3D12GraphicsBackend::GetSrvGpuHandleForTextureCubeEXT(const ITextureCubeBackend* tex) const
     {
         D3D12_GPU_DESCRIPTOR_HANDLE handle{};
@@ -818,6 +840,34 @@ namespace CNA::Internal::Backends::D3D12
         if (const auto* rt = dynamic_cast<const D3D12RenderTargetCubeBackend*>(tex))
             return rt->GetShaderResourceViewGpuHandleEXT();
         return handle;
+    }
+
+    ITextureBackend* D3D12GraphicsBackend::GetOrCreateDefaultWhiteTextureEXT()
+    {
+        if (!defaultWhiteTexture_)
+        {
+            ImageData img;
+            img.width = 1;
+            img.height = 1;
+            img.mipLevels = 1;
+            img.pixels = {255, 255, 255, 255};
+            defaultWhiteTexture_ = CreateTexture(img);
+        }
+        return defaultWhiteTexture_.get();
+    }
+
+    ITextureBackend* D3D12GraphicsBackend::GetOrCreateDefaultFlatNormalTextureEXT()
+    {
+        if (!defaultFlatNormalTexture_)
+        {
+            ImageData img;
+            img.width = 1;
+            img.height = 1;
+            img.mipLevels = 1;
+            img.pixels = {128, 128, 255, 255};
+            defaultFlatNormalTexture_ = CreateTexture(img);
+        }
+        return defaultFlatNormalTexture_.get();
     }
 
     std::unique_ptr<IRenderTargetBackend> D3D12GraphicsBackend::CreateRenderTarget2D(
@@ -1433,12 +1483,20 @@ namespace CNA::Internal::Backends::D3D12
         // DX-111 (closing env_map3d): dual_texture3d, skinned3d, and now env_map3d are all real.
         const bool needsDualTex = params.dualTexture && !needsAlphaTest;
         const bool needsEnvMap  = params.envMapping  && !needsAlphaTest && !needsDualTex;
-        const bool needsSkinned = params.skinned     && !needsAlphaTest && !needsDualTex && !needsEnvMap;
+        // D3D12 PBR/skinned-vertex-color reconciliation follow-up: PbrEffect/SkinnedPbrEffect --
+        // params.skinned further selects Pbr3d vs. PbrSkinned3d below. Priority matches
+        // D3D11GraphicsBackend::DrawPrimitivesExImpl exactly (alpha-test/dual-tex/env-map still
+        // take precedence over PBR here, unlike EasyGLGraphicsBackend.cpp's own SelectProgram()
+        // priority -- the canonical D3D11 dispatch order, verified via real GPU-rendered
+        // pixel-exact tests, is what this backend mirrors rather than re-deriving its own order).
+        const bool needsPbr = params.pbr && !needsAlphaTest && !needsDualTex && !needsEnvMap;
+        const bool needsSkinned = params.skinned && !needsPbr
+                                 && !needsAlphaTest && !needsDualTex && !needsEnvMap;
         // stride==32 always uses lit_textured3d (BasicEffect's VertexPositionNormalTexture path, lit
         // or not -- the shader itself branches on LightingEnabled), unless a higher-priority effect
         // claims the draw first -- same priority D3D11's own DrawPrimitivesExImpl uses.
         const bool needsLitTextured = (stride == 32) && !needsAlphaTest && !needsDualTex
-                                     && !needsEnvMap && !needsSkinned;
+                                     && !needsEnvMap && !needsPbr && !needsSkinned;
 
         // env_map3d.vert.hlsl's VSInput is Position+Normal+UV (32 bytes), same as lit_textured3d.
         if (needsEnvMap && stride != 32)
@@ -1452,11 +1510,14 @@ namespace CNA::Internal::Backends::D3D12
                 "D3D12GraphicsBackend::DrawPrimitivesEx: DualTextureEffect (dual_texture3d) only "
                 "supports stride 20 (VertexPositionTexture); dual_texture_colored3d was not ported "
                 "(plan_dx.md DX-13-hlsl)");
-        // skinned3d.vert.hlsl's VSInput is Position+Normal+UV+BoneWeights+BoneIndices (52 bytes).
-        if (needsSkinned && stride != 52)
+        // skinned3d.vert.hlsl's VSInput is Position+Normal+UV+BoneWeights+BoneIndices (52 bytes);
+        // plan_cnj.md CNB-67 follow-up's own stride-56 sibling (skinned_colored3d) appends a
+        // per-vertex Color, mirrors D3D11's own DrawPrimitivesExImpl exactly.
+        if (needsSkinned && stride != 52 && stride != 56)
             throw std::runtime_error(
                 "D3D12GraphicsBackend::DrawPrimitivesEx: SkinnedEffect (skinned3d) requires stride "
-                "52 (VertexPositionNormalTextureSkinned)");
+                "52 (VertexPositionNormalTextureSkinned) or 56 (skinned + per-vertex Color, "
+                "plan_cnj.md CNB-67)");
         // DX-136: alpha_test3d.vert.hlsl (stride 20, Position+UV) and its sibling
         // alpha_test_colored3d.vert.hlsl (stride 24, Position+Color+UV -- gives
         // AlphaTestEffect.VertexColorEnabled a real vertex-color attribute) are the only two
@@ -1466,6 +1527,18 @@ namespace CNA::Internal::Backends::D3D12
                 "D3D12GraphicsBackend::DrawPrimitivesEx: AlphaTestEffect (alpha_test3d) only "
                 "supports stride 20 (VertexPositionTexture) or 24 "
                 "(VertexPositionColorTexture, plan_dx.md DX-136)");
+        // plan_cnj.md CNB-58 follow-up: pbr3d.vert.hlsl (unskinned) is stride 48
+        // (VertexPositionNormalTangentTexture); pbr_skinned3d.vert.hlsl (SkinnedPbrEffect) is
+        // stride 68 (VertexPositionNormalTangentTextureSkinned), mirrors D3D11's own
+        // DrawPrimitivesExImpl exactly.
+        if (needsPbr && !params.skinned && stride != 48)
+            throw std::runtime_error(
+                "D3D12GraphicsBackend::DrawPrimitivesEx: PbrEffect (pbr3d) requires stride 48 "
+                "(VertexPositionNormalTangentTexture)");
+        if (needsPbr && params.skinned && stride != 68)
+            throw std::runtime_error(
+                "D3D12GraphicsBackend::DrawPrimitivesEx: SkinnedPbrEffect (pbr_skinned3d) requires "
+                "stride 68 (VertexPositionNormalTangentTextureSkinned)");
 
         D3DShaderVariant variant;
         bool hasTexture;
@@ -1502,13 +1575,30 @@ namespace CNA::Internal::Backends::D3D12
             numCbvs = 3;
             numSrvs = 2;
         }
+        else if (needsPbr)
+        {
+            // Mirrors D3D11GraphicsBackend::DrawPrimitivesExImpl's own needsPbr branch exactly.
+            variant = params.skinned ? D3DShaderVariant::PbrSkinned3d : D3DShaderVariant::Pbr3d;
+            hasTexture = true;
+            // PerDraw (b0, D3DPbrPerDrawConstants) [+ BoneBlock (b1) for the skinned variant] +
+            // PbrLights (b1 unskinned / b2 skinned, D3DPbrLightConstants).
+            numCbvs = params.skinned ? 3 : 2;
+            // t0 base color + t1 normal + t2 metallic-roughness + t3 emissive + t4 occlusion.
+            numSrvs = 5;
+        }
         else if (needsSkinned)
         {
             // plan_graphics.md Phase 80 (Task 1107): real XNA renders SkinnedEffect's lit path
-            // per-vertex by default (PreferPerPixelLighting == false), not per-pixel.
-            variant = (params.lightingEnabled && !params.preferPerPixelLighting)
-                    ? D3DShaderVariant::Skinned3dVertexLit
-                    : D3DShaderVariant::Skinned3d;
+            // per-vertex by default (PreferPerPixelLighting == false), not per-pixel. plan_cnj.md
+            // CNB-67 follow-up: stride 56 (per-vertex Color present) routes to the *Colored
+            // siblings instead, mirroring D3D11's own needsSkinned branch exactly.
+            variant = (stride == 56)
+                    ? ((params.lightingEnabled && !params.preferPerPixelLighting)
+                        ? D3DShaderVariant::Skinned3dVertexLitColored
+                        : D3DShaderVariant::Skinned3dColored)
+                    : ((params.lightingEnabled && !params.preferPerPixelLighting)
+                        ? D3DShaderVariant::Skinned3dVertexLit
+                        : D3DShaderVariant::Skinned3d);
             hasTexture = true;
             numCbvs = 3; // PerDraw (b0) + BoneBlock (b1) + skinned3d's own FogParams-equivalent (b2).
             numSrvs = 1;
@@ -1573,10 +1663,13 @@ namespace CNA::Internal::Backends::D3D12
         // which struct/register each variant actually needs, field-for-field matching the real HLSL
         // cbuffer declarations (D3DConstantBuffers.hpp).
         D3D12_GPU_VIRTUAL_ADDRESS cbAddresses[3] = {0, 0, 0};
-        // params.texture0/texture1 for the (up to 2) SRVs this draw binds -- dual_texture3d uses the
-        // 2nd slot for a 2nd Texture2D; env_map3d uses it for a TextureCube instead (srvCubeTexture
-        // below), which is why it isn't part of this Texture2D-only array.
-        const ITextureBackend* srvTextures[2] = {params.texture0, nullptr};
+        // params.texture0/texture1 for the (up to 2) SRVs most variants bind -- dual_texture3d uses
+        // the 2nd slot for a 2nd Texture2D; env_map3d uses it for a TextureCube instead
+        // (srvCubeTexture below), which is why it isn't part of this Texture2D-only array. Sized 5
+        // (not 2) for needsPbr's own 5 texture slots (base color + normal + metallic-roughness +
+        // emissive + occlusion) -- every other variant only ever populates indices 0/1, mirrors
+        // D3D11GraphicsBackend::DrawPrimitivesExImpl's own srvs[5] sizing.
+        const ITextureBackend* srvTextures[5] = {params.texture0, nullptr, nullptr, nullptr, nullptr};
         const ITextureCubeBackend* srvCubeTexture = nullptr; // only set by the needsEnvMap branch
 
         if (needsAlphaTest)
@@ -1704,6 +1797,100 @@ namespace CNA::Internal::Backends::D3D12
 
             srvTextures[0] = params.texture0;
             srvCubeTexture = params.envMap;
+        }
+        else if (needsPbr)
+        {
+            // Mirrors D3D11GraphicsBackend::DrawPrimitivesExImpl's own needsPbr branch exactly --
+            // pbr3d/pbr_skinned3d's shared PerDraw (b0, D3DPbrPerDrawConstants) -- transform +
+            // material constants. PbrLights lives at (b1) for the unskinned Pbr3d variant, or (b2)
+            // for PbrSkinned3d (BoneBlock claims b1 there instead), matching skinned3d's own "next
+            // free slot" precedent.
+            D3DPbrPerDrawConstants perDraw{};
+            wvp.ToColumnMajor(perDraw.Mvp);
+            world.ToColumnMajor(perDraw.World);
+            perDraw.DiffuseColor[0] = params.diffuseColor[0];
+            perDraw.DiffuseColor[1] = params.diffuseColor[1];
+            perDraw.DiffuseColor[2] = params.diffuseColor[2];
+            perDraw.DiffuseColor[3] = params.diffuseColor[3];
+            perDraw.AmbientMetallic[0] = params.ambientColor[0];
+            perDraw.AmbientMetallic[1] = params.ambientColor[1];
+            perDraw.AmbientMetallic[2] = params.ambientColor[2];
+            perDraw.AmbientMetallic[3] = params.pbrMetallicFactor;
+            perDraw.EmissiveRoughness[0] = params.emissiveColor[0];
+            perDraw.EmissiveRoughness[1] = params.emissiveColor[1];
+            perDraw.EmissiveRoughness[2] = params.emissiveColor[2];
+            perDraw.EmissiveRoughness[3] = params.pbrRoughnessFactor;
+
+            D3DPbrLightConstants lights{};
+            lights.EyePosWeights[0] = params.eyePositionWorld[0];
+            lights.EyePosWeights[1] = params.eyePositionWorld[1];
+            lights.EyePosWeights[2] = params.eyePositionWorld[2];
+            // Task 895 convention (skinned3d's own D3DSkinnedExtraConstants::EyePosition.w):
+            // WeightsPerVertex, meaningless/left 0 for the unskinned Pbr3d variant.
+            lights.EyePosWeights[3] = params.skinned ? static_cast<float>(params.weightsPerVertex) : 0.0f;
+            lights.Light0Dir[0] = params.light0Dir[0];
+            lights.Light0Dir[1] = params.light0Dir[1];
+            lights.Light0Dir[2] = params.light0Dir[2];
+            lights.Light0Diffuse[0] = params.light0Diffuse[0];
+            lights.Light0Diffuse[1] = params.light0Diffuse[1];
+            lights.Light0Diffuse[2] = params.light0Diffuse[2];
+            lights.Light1Dir[0] = params.light1Dir[0];
+            lights.Light1Dir[1] = params.light1Dir[1];
+            lights.Light1Dir[2] = params.light1Dir[2];
+            lights.Light1Diffuse[0] = params.light1Diffuse[0];
+            lights.Light1Diffuse[1] = params.light1Diffuse[1];
+            lights.Light1Diffuse[2] = params.light1Diffuse[2];
+            lights.Light2Dir[0] = params.light2Dir[0];
+            lights.Light2Dir[1] = params.light2Dir[1];
+            lights.Light2Dir[2] = params.light2Dir[2];
+            lights.Light2Diffuse[0] = params.light2Diffuse[0];
+            lights.Light2Diffuse[1] = params.light2Diffuse[1];
+            lights.Light2Diffuse[2] = params.light2Diffuse[2];
+            lights.FogColorEnabled[0] = params.fogColor[0];
+            lights.FogColorEnabled[1] = params.fogColor[1];
+            lights.FogColorEnabled[2] = params.fogColor[2];
+            lights.FogColorEnabled[3] = params.fogEnabled ? 1.0f : 0.0f;
+            lights.FogStartEnd[0] = params.fogStart;
+            lights.FogStartEnd[1] = params.fogEnd;
+
+            ID3D12Resource* perDrawCB = GetOrCreatePbrPerDrawConstantBufferEXT();
+            ID3D12Resource* lightsCB  = GetOrCreatePbrLightsConstantBufferEXT();
+            std::memcpy(pbrPerDrawConstantBufferMapped_, &perDraw, sizeof(perDraw));
+            std::memcpy(pbrLightsConstantBufferMapped_, &lights, sizeof(lights));
+            cbAddresses[0] = perDrawCB->GetGPUVirtualAddress();
+            if (params.skinned)
+            {
+                // PbrSkinned3d: BoneBlock at (b1) -- reuses the same D3DBoneConstants shape/buffer
+                // skinned3d's own BoneBlock already uses (DX-60a), PbrLights moves to (b2).
+                D3DBoneConstants bones{};
+                const int boneCount = std::min(params.boneCount, 72);
+                if (boneCount > 0)
+                    std::memcpy(bones.Bones, params.boneTransforms,
+                               static_cast<std::size_t>(boneCount) * 16u * sizeof(float));
+                ID3D12Resource* boneCB = GetOrCreateBoneConstantBufferEXT();
+                std::memcpy(boneConstantBufferMapped_, &bones, sizeof(bones));
+                cbAddresses[1] = boneCB->GetGPUVirtualAddress();
+                cbAddresses[2] = lightsCB->GetGPUVirtualAddress();
+            }
+            else
+            {
+                cbAddresses[1] = lightsCB->GetGPUVirtualAddress();
+            }
+
+            // Real default/fallback textures for every unbound optional PBR map -- flat tangent-
+            // space normal for the normal map, opaque white for the other three (their own
+            // factor/no-op semantics already make white the correct "map absent" value), mirroring
+            // D3D11's own needsPbr branch / EasyGLGraphicsBackend.cpp's own
+            // EnsureDefaultWhiteTexture()/EnsureDefaultFlatNormalTexture() fallback behavior
+            // byte-for-byte. Unlike the 3 optional maps, params.texture0 (base color) is bound as-is
+            // (no fallback) -- same as every other variant's srvTextures[0] in this function; a
+            // null base color texture leaves t0 unbound, matching D3D11's own GetSrvForTextureEXT
+            // null-handling exactly rather than inventing a new deviation here.
+            srvTextures[0] = params.texture0;
+            srvTextures[1] = params.pbrNormalMap ? params.pbrNormalMap : GetOrCreateDefaultFlatNormalTextureEXT();
+            srvTextures[2] = params.pbrMetallicRoughnessMap ? params.pbrMetallicRoughnessMap : GetOrCreateDefaultWhiteTextureEXT();
+            srvTextures[3] = params.pbrEmissiveMap ? params.pbrEmissiveMap : GetOrCreateDefaultWhiteTextureEXT();
+            srvTextures[4] = params.pbrOcclusionMap ? params.pbrOcclusionMap : GetOrCreateDefaultWhiteTextureEXT();
         }
         else if (needsSkinned)
         {
@@ -1894,8 +2081,9 @@ namespace CNA::Internal::Backends::D3D12
         // vkd3d-proton dev loop even though the CPU-side descriptor writes were independently
         // verified correct). Every texture's own SRV -- created once, at texture-construction time --
         // is bound directly, exactly like the original single-SRV path; no per-draw descriptor copy
-        // is needed for any variant, dual_texture3d included.
-        D3D12_GPU_DESCRIPTOR_HANDLE srvHandles[2]{};
+        // is needed for any variant, dual_texture3d included. Sized 5 (not 2), matching
+        // srvTextures[5]'s own sizing above for needsPbr's 5 texture slots.
+        D3D12_GPU_DESCRIPTOR_HANDLE srvHandles[5]{};
         for (int i = 0; i < numSrvs; ++i)
         {
             // env_map3d's 2nd slot (t1) is a TextureCube, not a Texture2D -- srvCubeTexture is only

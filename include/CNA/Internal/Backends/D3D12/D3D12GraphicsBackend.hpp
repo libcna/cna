@@ -444,6 +444,17 @@ namespace CNA::Internal::Backends::D3D12
         /// DX-111 (closing env_map3d): EnvMapParams (b2, D3DEnvMapConstants) -- material/lighting/
         /// fog/Fresnel fields, mirrors D3D11's own GetOrCreateEnvMapConstantBufferEXT.
         ID3D12Resource* GetOrCreateEnvMapConstantBufferEXT();
+        /// D3D12 PBR/skinned-vertex-color reconciliation follow-up: pbr3d.vert.hlsl/.frag.hlsl's
+        /// and pbr_skinned3d.vert.hlsl/.frag.hlsl's shared PerDraw (b0, D3DPbrPerDrawConstants) --
+        /// same "map once, reused every draw" convention as every other GetOrCreate*ConstantBufferEXT
+        /// above, mirrors D3D11's own GetOrCreatePbrPerDrawConstantBufferEXT.
+        ID3D12Resource* GetOrCreatePbrPerDrawConstantBufferEXT();
+        /// D3D12 PBR reconciliation follow-up: pbr3d/pbr_skinned3d's shared PbrLights cbuffer
+        /// (register(b1) for the unskinned Pbr3d variant, (b2) for PbrSkinned3d since BoneBlock
+        /// claims (b1) there instead, D3DPbrLightConstants) -- one shared buffer object; which root
+        /// CBV slot it's bound to is decided per-draw by DrawPrimitivesExImpl, mirrors D3D11's own
+        /// GetOrCreatePbrLightsConstantBufferEXT.
+        ID3D12Resource* GetOrCreatePbrLightsConstantBufferEXT();
 
         /// DX-111 (finish): instanced3d's own hand-built PSO -- deliberately NOT resolved via
         /// D3D12PipelineStateCache/D3DVertexFormatHelper::InputElementsForStrideD3D12 (which only
@@ -470,6 +481,24 @@ namespace CNA::Internal::Backends::D3D12
         /// GetSrvForTextureCubeEXT. Returns a zero-initialized handle if @p tex is null or the
         /// dynamic_cast to D3D12TextureCubeBackend fails.
         D3D12_GPU_DESCRIPTOR_HANDLE GetSrvGpuHandleForTextureCubeEXT(const ITextureCubeBackend* tex) const;
+
+        /// D3D12 PBR reconciliation follow-up: lazily creates (once) a 1x1 opaque-white
+        /// (255,255,255,255) texture -- the fallback bound for PbrEffect/SkinnedPbrEffect's
+        /// metallic-roughness/emissive/occlusion map texture slots when the corresponding
+        /// GpuDrawParams pointer is null, so "map absent" reads as the correct neutral value
+        /// (factor*1.0=factor; emissive tint*1.0=tint; occlusion 1.0=unoccluded) instead of an
+        /// unbound/zero SRV -- mirrors D3D11's own GetOrCreateDefaultWhiteSrvEXT and
+        /// EasyGLGraphicsBackend.cpp's own EnsureDefaultWhiteTexture(). Built via the existing
+        /// CreateTexture(ImageData) path (real D3D12TextureBackend, real SRV), not a hand-rolled
+        /// resource -- same "reuse the established creation path" convention this class's other
+        /// GetOrCreate*EXT accessors already follow.
+        ITextureBackend* GetOrCreateDefaultWhiteTextureEXT();
+        /// D3D12 PBR reconciliation follow-up: lazily creates (once) a 1x1 "flat" tangent-space
+        /// normal (128,128,255,255), decoding to the geometric normal unperturbed (rgb*2-1 ==
+        /// (0,0,1)) -- the fallback bound for PbrEffect/SkinnedPbrEffect's NormalMap slot when
+        /// GpuDrawParams::pbrNormalMap is null. Mirrors D3D11's own
+        /// GetOrCreateDefaultFlatNormalSrvEXT / EnsureDefaultFlatNormalTexture().
+        ITextureBackend* GetOrCreateDefaultFlatNormalTextureEXT();
 
         /// DX-111 (continued): shared implementation for DrawPrimitivesEx/DrawIndexedPrimitivesEx --
         /// @p ib may be null for the non-indexed path (mirrors D3D11GraphicsBackend's own
@@ -613,6 +642,18 @@ namespace CNA::Internal::Backends::D3D12
         void* envMapPerDrawConstantBufferMapped_ = nullptr;
         ComPtr<ID3D12Resource> envMapConstantBuffer_;
         void* envMapConstantBufferMapped_ = nullptr;
+        // D3D12 PBR reconciliation follow-up: pbr3d/pbr_skinned3d's own persistent constant
+        // buffers -- same "map once, reused every draw" convention as above.
+        ComPtr<ID3D12Resource> pbrPerDrawConstantBuffer_;
+        void* pbrPerDrawConstantBufferMapped_ = nullptr;
+        ComPtr<ID3D12Resource> pbrLightsConstantBuffer_;
+        void* pbrLightsConstantBufferMapped_ = nullptr;
+        // D3D12 PBR reconciliation follow-up: lazily-created 1x1 fallback textures for PbrEffect/
+        // SkinnedPbrEffect's optional map slots (see GetOrCreateDefaultWhiteTextureEXT()/
+        // GetOrCreateDefaultFlatNormalTextureEXT()'s own doc comments) -- owned here, reused
+        // across every draw that needs a fallback.
+        std::unique_ptr<ITextureBackend> defaultWhiteTexture_;
+        std::unique_ptr<ITextureBackend> defaultFlatNormalTexture_;
         // DX-111 (finish): instanced3d's own hand-built PSO (see GetOrCreateInstancedPsoEXT's doc
         // comment) -- created once, reused every DrawInstancedPrimitivesEx call.
         ComPtr<ID3D12PipelineState> instancedPso_;
