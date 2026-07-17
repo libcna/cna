@@ -1,11 +1,14 @@
 #include "TintStudioDemo.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/AvatarBodyTypeNamesEXT.hpp"
 #include "Microsoft/Xna/Framework/Input/Keyboard.hpp"
+#include "Microsoft/Xna/Framework/Input/Keys.hpp"
+#include "../../common/ScreenshotEXT.hpp"
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -41,6 +44,50 @@ namespace
         }
         return "?";
     }
+
+    // Task 8 (plan_net.md Phase 8): same pattern as demo_avatar's own AvatarDemo.
+    std::unique_ptr<SpriteFont> MakeSimpleFont(GraphicsDevice& device)
+    {
+        const std::vector<uint8_t> px = {255, 255, 255, 255};
+        Texture2D atlas = Texture2D::CreateFromPixels(device, 1, 1, px);
+
+        std::vector<SharpRuntime::charcs> chars;
+        std::vector<Rectangle> bounds;
+        std::vector<Rectangle> cropping;
+        std::vector<Vector3> kerning;
+        for (char c = 32; c < 127; ++c)
+        {
+            chars.push_back(static_cast<SharpRuntime::charcs>(c));
+            // SpriteBatch::DrawString sizes each glyph's destination rectangle from `bounds`
+            // (glyphData), not `cropping` - a (0,0,1,1) bounds rect draws every character as a
+            // single sub-pixel dot instead of a visible block. Space is left zero-size so word
+            // gaps stay visible against the solid blocks used for every other printable
+            // character.
+            bounds.push_back(c == ' ' ? Rectangle(0, 0, 0, 0) : Rectangle(0, 0, 6, 10));
+            cropping.push_back(Rectangle(0, 0, 8, 14));
+            kerning.push_back(Vector3(0.0f, 8.0f, 0.0f));
+        }
+
+        return std::make_unique<SpriteFont>(atlas, bounds, cropping, chars, 16, 1.0f, kerning,
+                                             static_cast<SharpRuntime::charcs>(' '));
+    }
+
+    // Task 8.2: decision 5a's default text block, adapted per this task's own instruction (keep
+    // the F1/Esc lines identical across every demo, customize the rest).
+    constexpr const char* kHelpLines[] = {
+        "CNA Avatar Tint Studio Help",
+        "",
+        "F1: Show/hide this help",
+        "Esc: Quit",
+        "1-5: Select tint slot (Skin/Hair/Shirt/Pants/Shoes)",
+        "Up/Down: Cycle preset color for selected slot",
+        "",
+        "The 5 swatches top-left show the current tint per slot;",
+        "the selected slot has a white outline.",
+        "",
+        "This demo uses CNA real avatar rendering extensions.",
+        "XNA-compatible AvatarRenderer.Draw remains a no-op on Windows-like platforms.",
+    };
 }
 
 TintStudioDemo::TintStudioDemo()
@@ -87,8 +134,10 @@ void TintStudioDemo::LoadContent()
     const std::vector<uint8_t> px = {255, 255, 255, 255};
     whitePixel_ = std::make_unique<Texture2D>(Texture2D::CreateFromPixels(device, 1, 1, px));
     spriteBatch_ = std::make_unique<SpriteBatch>(device);
+    font_ = MakeSimpleFont(device);
 
-    getWindowProperty().setTitleProperty("CNA Avatar Tint Studio (1-5 select slot, Up/Down cycle color, Esc quit)");
+    getWindowProperty().setTitleProperty(
+        "CNA Avatar Tint Studio (1-5 select slot, Up/Down cycle color, F1: help, Esc quit)");
 }
 
 void TintStudioDemo::Update(GameTime& gameTime)
@@ -97,6 +146,14 @@ void TintStudioDemo::Update(GameTime& gameTime)
 
     const auto kb = Keyboard::GetState();
     if (kb.IsKeyDown(Keys::Escape)) { Exit(); return; }
+
+    // Task 8.2: F1 toggles overlay visibility, edge-triggered.
+    const bool f1Down = kb.IsKeyDown(Keys::F1);
+    if (f1Down && !f1WasDownEXT_)
+    {
+        showHelpEXT_ = !showHelpEXT_;
+    }
+    f1WasDownEXT_ = f1Down;
 
     const float dt = static_cast<float>(gameTime.getElapsedGameTimeProperty().getTotalSecondsProperty());
     cameraYaw_ += 0.4f * dt;
@@ -191,4 +248,41 @@ void TintStudioDemo::Draw(const GameTime& /*gameTime*/)
         }
     }
     spriteBatch_->End();
+
+    // Task 8.2: 2D help overlay drawn last, on top of everything else.
+    if (showHelpEXT_)
+    {
+        constexpr int kLineCount = static_cast<int>(sizeof(kHelpLines) / sizeof(kHelpLines[0]));
+        constexpr float kLineHeight = 18.0f;
+        constexpr float kPadding = 12.0f;
+        // Measure via the actual SpriteFont rather than a hand-rolled char-count * advance guess
+        // - SpriteFont::spacing_ (1px, set in MakeSimpleFont) adds to the per-glyph kerning
+        // advance, so a naive strlen()*8 estimate silently undercounts and the longest line
+        // overflows the panel's right edge.
+        float longestLineWidth = 0.0f;
+        for (const char* line : kHelpLines)
+        {
+            longestLineWidth = std::max(longestLineWidth, font_->MeasureString(line).X);
+        }
+        const Rectangle panel(8, 8, static_cast<int>(longestLineWidth + kPadding * 2.0f),
+                               static_cast<int>(kLineCount * kLineHeight + kPadding * 2.0f));
+
+        spriteBatch_->Begin();
+        spriteBatch_->Draw(*whitePixel_, panel, Color(255, 255, 255, 210));
+        float y = panel.Y + kPadding;
+        for (const char* line : kHelpLines)
+        {
+            spriteBatch_->DrawString(*font_, line, Vector2(panel.X + kPadding, y), Color(0, 0, 0, 255));
+            y += kLineHeight;
+        }
+        spriteBatch_->End();
+    }
+
+    // Task 8.5 (plan_net.md Phase 8): same smokeFramesLeft_==1 timing as demo_avatar's own
+    // AvatarDemo - Game::Exit() suppresses Draw() on the frame Update() actually calls it.
+    if (smokeFramesLeft_ == 1 && !screenshotPathEXT_.empty())
+    {
+        SaveBackBufferScreenshotEXT(device, screenshotPathEXT_);
+        screenshotPathEXT_.clear();
+    }
 }

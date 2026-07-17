@@ -1218,6 +1218,14 @@ case more exist).
   `Update()` calls it, so capturing one frame earlier is required). Verified via
   `--show-help --smoke 30 --screenshot` and a default `--smoke`-only run: overlay renders
   correctly, panel fits the longest line, and stays hidden by default.
+- [x] **Task 8.5 (demo_avatar_appearance_tint_studio)** — Same pattern. This demo already had
+  `SpriteBatch`/`whitePixel_` plumbing (for its 5 tint-slot swatches), so only the `SpriteFont`
+  include/member, `MakeSimpleFont()`, F1 toggle, overlay draw block, and `--show-help`/
+  `--screenshot` testing hooks were new. Help text documents the 1-5 slot-select and Up/Down
+  color-cycle controls plus the swatch-row UI; F1/Esc lines kept identical per decision 5a.
+  Verified via `--show-help --smoke 30 --screenshot` (overlay legible, fits panel, swatches still
+  visible underneath) and a default `--smoke`-only run (overlay hidden, swatches unaffected - no
+  regression to the existing color-picker UI).
 - [ ] **Task 8.6** — One commit per demo is likely excessive for 8 near-identical additions built
   on the same Task 8.1 helper — since the user's "one task = one commit" rule maps to *this
   plan's tasks*, treat Task 8.1+8.2+8.3 (the shared helper + its first real usage in
