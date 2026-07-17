@@ -1660,6 +1660,53 @@ TEST(XactParserTest, ParseXwbTruncatedMidRecordThrows)
     EXPECT_THROW(ParseXwb(truncated), std::runtime_error);
 }
 
+// AUDIO-PARSER-001 (external audit, 2026-07-16): a string with no null terminator anywhere before
+// the buffer's end used to let Ctx::cstr() silently return the truncated content and advance its
+// cursor one byte PAST the buffer's end (`cur += len + 1` where `len == maxlen`) instead of
+// failing safely like every other Ctx accessor already does for an out-of-bounds condition. A
+// single such overrun is bad enough on its own (forming an invalid pointer one past `end`); if
+// this cursor were ever read from again (e.g. a category/variable list with more than one name),
+// the next cstr() call's own `end - cur` would underflow to a huge std::size_t, turning strnlen()
+// into a real out-of-bounds heap read over corrupt/truncated content -- exactly the class of bug
+// this branch's own established "any Ctx accessor throws on out-of-bounds" convention exists to
+// prevent. This fixture deliberately omits the category name's trailing null byte so the buffer
+// ends immediately after "Default" with nothing left to find a terminator in.
+TEST(XactParserTest, ParseXgsUnterminatedCategoryNameThrows)
+{
+    constexpr uint32_t headerSize       = 65;
+    constexpr uint32_t categoryDataSize = 10;
+
+    const uint32_t categoryOffset     = headerSize;
+    const uint32_t variableOffset     = categoryOffset + categoryDataSize;
+    const uint32_t categoryNameOffset = variableOffset; // no variable data segment needed (count=0)
+    const std::string categoryName    = "Default"; // deliberately left unterminated below
+
+    std::vector<uint8_t> data;
+    const char magic[4] = { 'X', 'G', 'S', 'F' };
+    data.insert(data.end(), magic, magic + 4);
+    AppendU16(data, 46); AppendU16(data, 0); AppendU16(data, 0);
+    for (int i = 0; i < 8; ++i) data.push_back(0);
+    AppendU8(data, 3);
+
+    AppendU16(data, 1); // categoryCount
+    AppendU16(data, 0); // variableCount -- zero, so nothing ever reads past the missing terminator
+    AppendU16(data, 0); AppendU16(data, 0); AppendU16(data, 0); AppendU16(data, 0); AppendU16(data, 0);
+
+    AppendU32(data, categoryOffset);
+    AppendU32(data, variableOffset);
+    AppendU32(data, 0); AppendU32(data, 0); AppendU32(data, 0); AppendU32(data, 0);
+    AppendU32(data, categoryNameOffset);
+    AppendU32(data, categoryNameOffset); // variableNameOffset (unused, variableCount==0)
+
+    AppendU8(data, 255); AppendU16(data, 0); AppendU16(data, 0); AppendU8(data, 0);
+    AppendU16(data, 0xFFFF); AppendU8(data, 0xFF); AppendU8(data, 0); // 10-byte category record
+
+    // Category name with NO trailing null terminator -- the buffer ends right after it.
+    data.insert(data.end(), categoryName.begin(), categoryName.end());
+
+    EXPECT_THROW(ParseXgs(data), std::runtime_error);
+}
+
 TEST(XactParserTest, ParseXsbTruncatedMidRecordThrows)
 {
     std::vector<uint8_t> full = BuildXsbWithVariationOfType(3);

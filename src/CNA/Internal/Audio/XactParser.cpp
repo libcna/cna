@@ -61,7 +61,14 @@ namespace CNA::Internal::Audio
 
         void seek(uint32_t absOffset)
         {
-            if (start + absOffset > end)
+            // AUDIO-PARSER-001 (external audit, 2026-07-16): validate against the buffer's own
+            // size as a plain integer comparison BEFORE ever forming `start + absOffset` --
+            // computing that pointer first (the old `if (start + absOffset > end)`) is undefined
+            // behavior for a corrupt/attacker-controlled absOffset large enough to send the
+            // pointer arithmetic outside the buffer, which a malformed .xsb/.xwb/.xgs offset
+            // field can trivially supply.
+            const std::size_t size = static_cast<std::size_t>(end - start);
+            if (static_cast<std::size_t>(absOffset) > size)
                 throw std::runtime_error("XACT parse: seek past end");
             cur = start + absOffset;
         }
@@ -71,9 +78,20 @@ namespace CNA::Internal::Audio
         /// Read a null-terminated string from the current position, advance past it.
         std::string cstr()
         {
+            // AUDIO-PARSER-001 (external audit, 2026-07-16): strnlen() returning exactly `maxlen`
+            // means no null terminator was found within the remaining buffer at all (a corrupt or
+            // truncated file) -- the old code didn't check for this and unconditionally advanced
+            // `cur += len + 1`, pushing `cur` one byte past `end`. That single overrun then made
+            // every later use of `end - cur` in this same function compute a negative
+            // std::ptrdiff_t that wraps to a huge std::size_t once cast to `maxlen`, turning the
+            // *next* cstr() call's strnlen() into a real out-of-bounds read over corrupt input.
+            // Throwing here instead matches every other Ctx accessor's own out-of-bounds
+            // contract (u8/u16/u32/skip/seek all already throw rather than silently continue).
             const char* p = reinterpret_cast<const char*>(cur);
             std::size_t maxlen = static_cast<std::size_t>(end - cur);
             std::size_t len = strnlen(p, maxlen);
+            if (len == maxlen)
+                throw std::runtime_error("XACT parse: unterminated string");
             std::string s(p, len);
             cur += len + 1;
             return s;

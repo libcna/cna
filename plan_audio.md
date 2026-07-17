@@ -5575,3 +5575,58 @@ written, per this branch's established practice.
   unchecked deliberately: needs its own scoped task (touches `SoundEffectInstance`'s already
   carefully-tuned DSP-callback machinery, `P9-XACT-011`/`P10-FILTER-002/003/004`/`P11-PAN-001`),
   not a rushed side-fix bolted onto this pass.
+
+* [x] P14-PARSER-001 (external audit finding 4, medium severity): `XactParser.cpp`'s internal
+  `Ctx::cstr()` helper (reads a null-terminated string) could push its cursor one byte past the
+  buffer's `end` on a corrupt/truncated file with no null terminator anywhere in the remaining
+  bytes (`strnlen(p, maxlen)` returning exactly `maxlen`, then unconditionally advancing
+  `cur += len + 1`) -- a real, if narrow, correctness gap against this codebase's own established
+  "every `Ctx` accessor throws cleanly on any out-of-bounds condition instead of continuing" rule
+  (`u8`/`u16`/`u32`/`skip`/`seek` all already do this; `cstr()` alone didn't). Left unfixed, a
+  *second* `cstr()` call using the now one-past-`end` cursor would compute `end - cur` as a
+  negative `ptrdiff_t` that wraps to a huge `std::size_t` once cast to `maxlen`, turning that call's
+  own `strnlen()` into a genuine out-of-bounds heap read over a corrupt/attacker-controlled file --
+  exactly the kind of gap this codebase's `IN-*`-tagged hardening history (`CHECKLIST.md`) already
+  treats as a real bug class, not a theoretical one. `Ctx::seek()`'s own bounds check
+  (`start + absOffset > end`) additionally formed the pointer `start + absOffset` *before*
+  validating it, which is undefined behavior for a large enough corrupt/attacker-controlled
+  `absOffset` (a raw `uint32_t` read straight from file data) even though, in practice with typical
+  compiler codegen, the resulting comparison still produced the right answer for every offset this
+  pass could construct a concrete failing test for.
+  *Status:* Fixed. `cstr()` now throws `std::runtime_error("XACT parse: unterminated string")`
+  immediately when `strnlen()` returns exactly `maxlen` (no null terminator found), before ever
+  advancing `cur`, matching every other `Ctx` accessor's existing out-of-bounds contract. `seek()`
+  now validates `absOffset` as a plain unsigned-integer comparison against the buffer's own size
+  (`static_cast<std::size_t>(end - start)`) *before* ever computing `start + absOffset`, so the
+  pointer is only ever formed once it's already known to land within `[start, end]`.
+  *Tests:* 1 new (`XactParserTests.cpp`, `ParseXgsUnterminatedCategoryNameThrows`) -- a minimal,
+  from-scratch `.xgs` fixture whose sole category name has no trailing null byte and where the
+  buffer ends immediately after it (`variableCount = 0`, so nothing downstream would have read
+  past the missing terminator to observe the *compounding* SIZE_MAX-underflow scenario directly;
+  this fixture instead proves the narrower, definitely-real, always-triggered part: the parser must
+  throw instead of silently returning the truncated content and continuing). `git stash`-verified:
+  stashing `XactParser.cpp` alone reproduces the failure (pre-fix, `ParseXgs` returns normally with
+  `categories[0].name == "Default"`, looking superficially fine, rather than throwing -- exactly
+  why this was a previously untested gap: the single-category case doesn't corrupt anything
+  *visible*, only the "did we fail safely on malformed input" contract, which is the actual thing
+  this codebase's own established convention cares about). No dedicated test added for `seek()`'s
+  own fix specifically -- every concrete out-of-range offset this pass could construct already
+  throws correctly both before and after the fix (the difference is only in the internal
+  undefined-behavior status of *how* that conclusion gets computed, not the observable outcome for
+  any offset a black-box test can supply), so no test could meaningfully discriminate pre/post-fix
+  behavior; the fix stands on its own as a straightforward, low-risk hardening.
+
+## Phase 14 verification
+
+Full audio-scoped suite (23-suite `--gtest_filter` list from `plan_audio.md`'s own documented
+command): 549/549 pass post-fix (was 545/545 pre-existing across all four fixes; +4 new tests --
+2 `SoundBankTests.cpp`, 1 `DynamicSoundEffectInstanceTests.cpp`, 1 `XactParserTests.cpp` -- zero
+regressions). `git stash`-verified: stashing all five production files
+(`Cue.cpp`, `SoundBank.cpp`/`.hpp`, `DynamicSoundEffectInstance.cpp`, `XactParser.cpp`) while
+keeping the new tests reproduces all 4 target failures exactly (`ParseXgsUnterminatedCategoryNameThrows`
+throws nothing pre-fix; the buffer-count test reports 1/0 instead of 2/1; both `SoundBankTest`
+lifetime tests report the cue still not disposed, and the never-played one's `Play()` doesn't
+throw). Full whole-repo `CnaTests` suite also reverified green after restoring the fix.
+`P14-ORDER-001`'s reorder verified via this same full-suite pass re-confirming zero regressions
+(no dedicated test, per its own rationale above -- the ordering benefit isn't observable from
+synchronous test code).
