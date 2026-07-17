@@ -1328,8 +1328,15 @@ case more exist).
   them against, not "Xbox Live exclusive"). Grepped this file afterward for
   "Xbox Live exclusive"/"not planned"/"never implemented by FNA" - zero remaining stale hits
   outside the new corrected text itself.
-- [ ] **Task 9.2** — Update `docs/avatar-real-rendering-ext.md` with the new mesh-craft-based
-  asset pipeline description (Phase 7) and current real-rendering status.
+- [x] **Task 9.2** — Added a new "Phase 7: mesh-craft CSG-based body/clothing generation" section
+  to `docs/avatar-real-rendering-ext.md`, between the existing "Real content integration" and
+  "What this explicitly is not" sections: the CSG-vs-datablock-join root cause, the `.mc3.xml`/
+  `mc3togltf` pipeline, the Y-up/Z-up coordinate remap (verified empirically), the CSG-limitations-
+  are-a-non-issue reasoning (confirmed against the actual placeholder texture before relying on
+  it), the `BONE_RADII`/blend-radius/garment-padding fixes, and Phase 7's own honest
+  fixed-vs-still-open gap list (verbatim from `plan_net.md`'s own "Honest overall assessment").
+  Also corrected the old "confirmed elbow/sleeve tear ... remain unfixed" closing line, which
+  predated this pipeline and is now superseded.
 - [ ] **Task 9.3 (remaining half)** — Update `tools/avatar_builder/README.md` to describe the new
   mesh-craft → Blender pipeline stages (Phase 7). (The GamerServices support-matrix half of this
   task is done - see Task 9.1's write-up above.)
