@@ -1,23 +1,23 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_xnb.md XNB-33/XNB-33A: SoundEffectReader support-matrix survey + reader unit tests. Real,
-// externally-produced fixtures (MonoGame's own Tests/Assets/Audio/tone_*.xnb, vendored at
-// tests/assets/xnb/monogame/windows/uncompressed/audio/) cover every WaveFormatEx variant this
-// matrix cares about -- never hand-crafted, since a hand-authored PCM buffer would trivially
-// "pass" without proving the real WAVEFORMATEX byte layout was parsed correctly.
+// plan_xnb.md XNB-33/XNB-33A + plan_audio.md AUD-06 (2026-07-17 deep audit): SoundEffectReader
+// support-matrix survey + reader unit tests. Real, externally-produced fixtures (MonoGame's own
+// Tests/Assets/Audio/tone_*.xnb, vendored at tests/assets/xnb/monogame/windows/uncompressed/audio/)
+// cover every WaveFormatEx variant this matrix cares about -- never hand-crafted, since a
+// hand-authored PCM buffer would trivially "pass" without proving the real WAVEFORMATEX byte
+// layout was parsed correctly.
 //
-// Support matrix (plan_xnb.md XNB-33):
-//   | Format                          | Status                                            |
-//   |---------------------------------|----------------------------------------------------|
-//   | PCM 16-bit (mono or stereo)      | Supported (maps directly onto SoundEffect's own    |
-//   |                                  | SDL_AUDIO_S16LE-only PCM constructors)              |
-//   | PCM 8-bit                        | Rejected -- CNA's SoundEffect has no 8-bit path     |
-//   | IEEE float 32-bit                | Rejected -- CNA's SoundEffect has no float path     |
-//   | MS-ADPCM                         | Rejected -- CNA's SoundEffect has no ADPCM decoder  |
-//   | IMA-ADPCM                        | Rejected -- CNA's SoundEffect has no ADPCM decoder  |
-//   | XMA2 (compressed, Xbox-oriented) | Rejected -- CNA's SoundEffect has no XMA2 decoder   |
-// All rejections throw a documented ContentLoadException rather than silently constructing a
-// SoundEffect that would play back as noise.
+// Support matrix (plan_audio.md AUD-06, widened 2026-07-17 from the original PCM16-only baseline):
+//   | Format                          | Status                                                |
+//   |---------------------------------|--------------------------------------------------------|
+//   | PCM 16-bit (mono or stereo)      | Supported (direct SoundEffect raw-buffer constructor)  |
+//   | PCM 8-bit                        | Supported (WAV-wrapped, decoded via SDL3's WAV loader) |
+//   | IEEE float 32-bit                | Supported (WAV-wrapped, decoded via SDL3's WAV loader) |
+//   | MS-ADPCM                         | Supported (WAV-wrapped, decoded via SDL3's WAV loader) |
+//   | IMA-ADPCM                        | Supported (WAV-wrapped, decoded via SDL3's WAV loader) |
+//   | XMA2 (compressed, Xbox-oriented) | Rejected -- no decode path anywhere in this stack      |
+// XMA2 throws a documented ContentLoadException rather than silently constructing a SoundEffect
+// that would play back as noise.
 
 #include <fstream>
 #include <gtest/gtest.h>
@@ -100,22 +100,89 @@ TEST_F(SoundEffectContentTypeReaderTest, Pcm16BitStereoLoadsSuccessfully)
     EXPECT_GT(effect.getDurationProperty().getTicksProperty(), 0);
 }
 
-TEST_F(SoundEffectContentTypeReaderTest, Pcm8BitIsRejected)
+// AUD-06-004 (2026-07-17 deep audit): widened from "rejected" to real support, WAV-wrapped
+// through SoundEffect::FromStream -> SDL3's own native 8-bit PCM decoder.
+TEST_F(SoundEffectContentTypeReaderTest, Pcm8BitLoadsSuccessfully)
 {
-    EXPECT_THROW(LoadFixture(std::string(kAudioDir) + "tone_mono_44khz_8bit.xnb"), ContentLoadException);
+    auto effect = LoadFixture(std::string(kAudioDir) + "tone_mono_44khz_8bit.xnb");
+    EXPECT_EQ(effect.getNameProperty(), "test");
+    EXPECT_GT(effect.getDurationProperty().getTicksProperty(), 0);
 }
 
-TEST_F(SoundEffectContentTypeReaderTest, IeeeFloatIsRejected)
+// AUD-06-008: widened from "rejected" to real support, WAV-wrapped through SDL3's native
+// IEEE-float decoder.
+TEST_F(SoundEffectContentTypeReaderTest, IeeeFloatLoadsSuccessfully)
 {
-    EXPECT_THROW(LoadFixture(std::string(kAudioDir) + "tone_mono_44khz_float.xnb"), ContentLoadException);
+    auto effect = LoadFixture(std::string(kAudioDir) + "tone_mono_44khz_float.xnb");
+    EXPECT_EQ(effect.getNameProperty(), "test");
+    EXPECT_GT(effect.getDurationProperty().getTicksProperty(), 0);
 }
 
-TEST_F(SoundEffectContentTypeReaderTest, MsAdpcmIsRejected)
+// AUD-06-006: widened from "rejected" to real support -- also the first real end-to-end proof
+// (independent of WaveBank.cpp's own AUDIO-ADPCM-001 fix) that the shared WavWrapper's MS-ADPCM
+// coefficient table lets SDL3 decode a *real*, externally-produced MS-ADPCM XNB fixture, not just
+// a hand-built one.
+TEST_F(SoundEffectContentTypeReaderTest, MsAdpcmLoadsSuccessfully)
 {
-    EXPECT_THROW(LoadFixture(std::string(kAudioDir) + "tone_mono_44khz_msadpcm.xnb"), ContentLoadException);
+    auto effect = LoadFixture(std::string(kAudioDir) + "tone_mono_44khz_msadpcm.xnb");
+    EXPECT_EQ(effect.getNameProperty(), "test");
+    EXPECT_GT(effect.getDurationProperty().getTicksProperty(), 0);
 }
 
-TEST_F(SoundEffectContentTypeReaderTest, ImaAdpcmIsRejected)
+// AUD-06-007: widened from "rejected" to real support, WAV-wrapped through SDL3's native
+// IMA-ADPCM decoder.
+TEST_F(SoundEffectContentTypeReaderTest, ImaAdpcmLoadsSuccessfully)
 {
-    EXPECT_THROW(LoadFixture(std::string(kAudioDir) + "tone_mono_44khz_imaadpcm.xnb"), ContentLoadException);
+    auto effect = LoadFixture(std::string(kAudioDir) + "tone_mono_44khz_imaadpcm.xnb");
+    EXPECT_EQ(effect.getNameProperty(), "test");
+    EXPECT_GT(effect.getDurationProperty().getTicksProperty(), 0);
+}
+
+// XMA2 has no decode path anywhere in this stack (SDL3 doesn't decode XMA2 either) -- still
+// correctly rejected. No real XMA2 .xnb fixture is vendored (MonoGame's own test corpus doesn't
+// ship one either); this builds a minimal but complete XNB object stream (type-reader table +
+// shared-resource count + root type id, matching the exact layout confirmed by hex-dumping a real
+// fixture) around the WAVEFORMATEX header FNA's own XMA2 branch parses, since ReadAsset<T>()
+// itself parses that preamble via InitializeTypeReaders() before ever reaching SoundEffectReader.
+TEST_F(SoundEffectContentTypeReaderTest, Xma2IsRejected)
+{
+    const std::string readerName = "Microsoft.Xna.Framework.Content.SoundEffectReader";
+
+    std::vector<uint8_t> bytes;
+    auto w16 = [&bytes](uint16_t v) { bytes.push_back(static_cast<uint8_t>(v)); bytes.push_back(static_cast<uint8_t>(v >> 8)); };
+    auto w32 = [&bytes](uint32_t v) {
+        bytes.push_back(static_cast<uint8_t>(v)); bytes.push_back(static_cast<uint8_t>(v >> 8));
+        bytes.push_back(static_cast<uint8_t>(v >> 16)); bytes.push_back(static_cast<uint8_t>(v >> 24));
+    };
+
+    // Type-reader table: 1 reader, name (7-bit length prefix, fits in one byte since < 128) +
+    // bytes, readerVersion (int32) = 0.
+    bytes.push_back(1); // typeReaderCount (7-bit int)
+    bytes.push_back(static_cast<uint8_t>(readerName.size()));
+    bytes.insert(bytes.end(), readerName.begin(), readerName.end());
+    w32(0); // readerVersion
+
+    bytes.push_back(0); // sharedResourceCount (7-bit int)
+    bytes.push_back(1); // root object's type id (1-based index into the type-reader table)
+
+    // formatLength(4) + wFormatTag(2)=0x166 + nChannels(2)=1 + nSamplesPerSec(4) +
+    // nAvgBytesPerSec(4) + nBlockAlign(2) + wBitsPerSample(2) + cbSize(2)=34 + 34 XMA2-extra
+    // bytes + dataLength(4)=0 + loopStart(4) + loopLength(4) + duration(4).
+    w32(18 + 34);       // formatLength
+    w16(0x166);         // wFormatTag: XMA2
+    w16(1);             // nChannels
+    w32(44100);         // nSamplesPerSec
+    w32(88200);         // nAvgBytesPerSec
+    w16(2);             // nBlockAlign
+    w16(16);            // wBitsPerSample
+    w16(34);            // cbSize
+    for (int i = 0; i < 34; ++i) bytes.push_back(0); // XMA2 extra fields, all zero
+    w32(0);             // data length
+    w32(0);             // loopStart
+    w32(0);             // loopLength
+    w32(0);             // duration
+
+    body_ = std::make_unique<System::IO::MemoryStream>(bytes.data(), static_cast<int32_t>(bytes.size()));
+    reader_ = std::make_unique<ContentReader>(&cm_, body_.get(), "test", 5, 'w');
+    EXPECT_THROW(reader_->ReadAsset<Microsoft::Xna::Framework::Audio::SoundEffect>(), ContentLoadException);
 }

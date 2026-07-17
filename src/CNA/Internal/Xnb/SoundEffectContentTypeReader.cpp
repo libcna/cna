@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Xnb/SoundEffectContentTypeReader.hpp"
 
+#include <memory>
+#include <sstream>
+
+#include "CNA/Internal/Audio/WavWrapper.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
 
@@ -32,7 +36,102 @@ namespace CNA::Internal::Xnb
         }
 
         constexpr uint16_t kWaveFormatPcm = 0x0001;
+        constexpr uint16_t kWaveFormatMsAdpcm = 0x0002;
+        constexpr uint16_t kWaveFormatIeeeFloat = 0x0003;
+        constexpr uint16_t kWaveFormatImaAdpcm = 0x0011;
         constexpr uint16_t kWaveFormatXma2 = 0x0166;
+
+        // AUD-06-004/006/007/008 (2026-07-17 deep audit, A-01): appends a minimal "smpl" chunk
+        // encoding one loop point so SoundEffect::FromStream's own TryParseWavSmplChunk (CP-17)
+        // picks it up automatically -- the synthetic WAV built here has no other way to carry the
+        // XNB's authored loopStart/loopLength through to the resulting SoundEffect, since
+        // FromStream constructs via MIX_LoadAudio_IO, not the raw-buffer constructor that takes
+        // loop points directly.
+        void AppendSmplChunkIfLooped(std::vector<uint8_t>& wav, int32_t loopStart, int32_t loopLength)
+        {
+            if (loopLength <= 0) return;
+
+            auto w32 = [&wav](uint32_t v) {
+                wav.push_back(static_cast<uint8_t>(v));
+                wav.push_back(static_cast<uint8_t>(v >> 8));
+                wav.push_back(static_cast<uint8_t>(v >> 16));
+                wav.push_back(static_cast<uint8_t>(v >> 24));
+            };
+
+            constexpr uint32_t kSmplChunkSize = 36 + 24; // header + one loop entry
+            wav.push_back('s'); wav.push_back('m'); wav.push_back('p'); wav.push_back('l');
+            w32(kSmplChunkSize);
+            for (int i = 0; i < 7; ++i) w32(0); // Manufacturer..SMPTEOffset
+            w32(1); // numSampleLoops
+            w32(0); // samplerData
+            w32(0); // CuePointID
+            w32(0); // Type (loop forward)
+            w32(static_cast<uint32_t>(loopStart));
+            w32(static_cast<uint32_t>(loopStart + loopLength));
+            w32(0); // Fraction
+            w32(0); // PlayCount (0 = infinite, matches XNA's own loop semantics)
+        }
+
+        // AUDIO-XNB-ADPCM-001 (2026-07-17 deep audit follow-up): empirically confirmed against a
+        // *real*, externally-produced MonoGame XNB fixture
+        // (tests/assets/xnb/monogame/windows/uncompressed/audio/tone_mono_44khz_msadpcm.xnb) that
+        // the content pipeline writes cbSize=0 for MS-ADPCM -- no wSamplesPerBlock, no
+        // coefficient table at all in the embedded format block (verified via a direct hex dump
+        // of the file's fmt data: bytes at offset 87-88 are 0x00 0x00). This matches FNA's own
+        // SoundEffectReader.cs, which never captures the extension for any non-XMA2 format either
+        // -- so a real XNA/MonoGame-produced MS-ADPCM asset genuinely has no extension to forward
+        // verbatim. Unlike IMA-ADPCM (SDL3's decoder auto-derives wSamplesPerBlock from
+        // nBlockAlign when absent), SDL3's MS-ADPCM decoder has no such fallback and requires an
+        // explicit, valid coefficient table (SDL_wave.c's MS_ADPCM_Init) -- so this synthesizes
+        // one using the same standard preset coefficients as WaveBank.cpp's ADPCM path
+        // (CNA::Internal::Audio::BuildStandardMsAdpcmExtension) and a samplesPerBlock computed
+        // from nBlockAlign via the MS-ADPCM "Standards Update" formula every encoder (including
+        // XNA's) follows, only when the XNB didn't already supply a real, usable extension.
+        uint16_t ComputeMsAdpcmSamplesPerBlock(uint16_t blockAlign, uint16_t channels)
+        {
+            const uint32_t ch = channels == 0 ? 1u : channels;
+            const uint32_t blockHeaderBits = ch * 7u * 8u;
+            const uint32_t blockBits = static_cast<uint32_t>(blockAlign) * 8u;
+            const uint32_t availableBits = blockBits > blockHeaderBits ? blockBits - blockHeaderBits : 0u;
+            const uint32_t blockDataSamples = availableBits / (4u * ch);
+            return static_cast<uint16_t>(blockDataSamples + 2u);
+        }
+
+        // A real MS-ADPCM extension needs at least wSamplesPerBlock(2) + wNumCoef(2) +
+        // 7 coefficient pairs(28) = 32 bytes.
+        constexpr std::size_t kMinRealMsAdpcmExtensionSize = 32;
+
+        // Builds a SoundEffect for any format SDL3's own WAV decoder understands natively (PCM
+        // 8/16-bit, IEEE float, MS/IMA ADPCM) by wrapping the raw bytes in a minimal in-memory WAV
+        // file and going through SoundEffect::FromStream -- the same technique WaveBank.cpp uses
+        // for its own compressed/8-bit entries (shared via CNA::Internal::Audio::WavWrapper).
+        SoundEffect BuildViaWavWrapper(
+            const std::string& assetName,
+            const std::vector<uint8_t>& data,
+            uint16_t wFormatTag, uint16_t nChannels, uint32_t nSamplesPerSec,
+            uint32_t nAvgBytesPerSec, uint16_t nBlockAlign, uint16_t wBitsPerSample,
+            const std::vector<uint8_t>& extensionData,
+            int32_t loopStart, int32_t loopLength)
+        {
+            const bool needsSynthesizedAdpcmExtension =
+                wFormatTag == kWaveFormatMsAdpcm && extensionData.size() < kMinRealMsAdpcmExtensionSize;
+
+            auto wav = CNA::Internal::Audio::BuildWavFromWaveFormatEx(
+                data.data(), static_cast<uint32_t>(data.size()),
+                wFormatTag, nChannels, nSamplesPerSec, nAvgBytesPerSec, nBlockAlign, wBitsPerSample,
+                needsSynthesizedAdpcmExtension
+                    ? CNA::Internal::Audio::BuildStandardMsAdpcmExtension(
+                          ComputeMsAdpcmSamplesPerBlock(nBlockAlign, nChannels))
+                    : extensionData,
+                /*factSampleFrames=*/0);
+            AppendSmplChunkIfLooped(wav, loopStart, loopLength);
+
+            std::string s(reinterpret_cast<const char*>(wav.data()), wav.size());
+            std::istringstream ss(s);
+            std::unique_ptr<SoundEffect> loaded(SoundEffect::FromStream(ss));
+            loaded->setNameProperty(assetName);
+            return std::move(*loaded);
+        }
     }
 
     SoundEffect SoundEffectReader::Read(ContentReader& input, std::optional<SoundEffect> existingInstance)
@@ -45,10 +144,14 @@ namespace CNA::Internal::Xnb
         const uint16_t wFormatTag = Swap16(se, input.ReadUInt16());
         const uint16_t nChannels = Swap16(se, input.ReadUInt16());
         const uint32_t nSamplesPerSec = Swap32(se, input.ReadUInt32());
-        Swap32(se, input.ReadUInt32());  // nAvgBytesPerSec -- unused, matches FNA
-        Swap16(se, input.ReadUInt16());  // nBlockAlign -- unused, matches FNA
+        // AUD-06-002: previously read-and-discarded ("unused, matches FNA" -- true for FNA's own
+        // FAudio-backed constructor, which recomputes these itself, but CNA's SDL3_mixer-backed
+        // WAV-wrapper path for non-16-bit-PCM formats below genuinely needs them).
+        const uint32_t nAvgBytesPerSec = Swap32(se, input.ReadUInt32());
+        const uint16_t nBlockAlign = Swap16(se, input.ReadUInt16());
         const uint16_t wBitsPerSample = Swap16(se, input.ReadUInt16());
 
+        std::vector<uint8_t> extensionData;
         if (formatLength > 16)
         {
             const uint16_t cbSize = Swap16(se, input.ReadUInt16());
@@ -75,7 +178,7 @@ namespace CNA::Internal::Xnb
                         "'" + input.getAssetNameProperty() + "': SoundEffectReader formatLength too "
                         "small for its XMA2 extension.");
                 }
-                input.ReadBytesExactOrThrow(static_cast<int32_t>(skip), "SoundEffectReader");
+                (void)input.ReadBytesExactOrThrow(static_cast<int32_t>(skip), "SoundEffectReader");
             }
             else
             {
@@ -86,7 +189,14 @@ namespace CNA::Internal::Xnb
                         "'" + input.getAssetNameProperty() + "': SoundEffectReader formatLength too "
                         "small for its format extension.");
                 }
-                input.ReadBytesExactOrThrow(static_cast<int32_t>(skip), "SoundEffectReader");
+                // AUD-06-002: captured verbatim (not discarded) -- for MS-ADPCM/IMA-ADPCM this is
+                // exactly the WAVEFORMATEX extension (wSamplesPerBlock, and for MS-ADPCM the
+                // coefficient table) a synthetic WAV's fmt chunk needs to decode correctly via
+                // SDL3's own WAV/ADPCM decoder below. Not byte-swapped for platform=='x': like the
+                // XMA2 branch above, this is unreachable in practice for any fixture this port
+                // targets, and these bytes are only ever re-embedded verbatim into another WAV
+                // fmt chunk, never individually interpreted as multi-byte integers here.
+                extensionData = input.ReadBytesExactOrThrow(static_cast<int32_t>(skip), "SoundEffectReader");
             }
         }
 
@@ -96,14 +206,6 @@ namespace CNA::Internal::Xnb
         const int32_t loopLength = input.ReadInt32();
         input.ReadUInt32(); // duration in milliseconds -- unused, matches FNA
 
-        if (wFormatTag != kWaveFormatPcm || wBitsPerSample != 16)
-        {
-            throw ContentLoadException(
-                "'" + input.getAssetNameProperty() + "': unsupported SoundEffect wave format "
-                "(formatTag=" + std::to_string(wFormatTag) + ", bitsPerSample=" +
-                std::to_string(wBitsPerSample) + "). CNA's .xnb SoundEffectReader currently only "
-                "supports 16-bit PCM (plan_xnb.md XNB-33 support matrix).");
-        }
         if (nChannels != 1 && nChannels != 2)
         {
             throw ContentLoadException(
@@ -111,13 +213,41 @@ namespace CNA::Internal::Xnb
                 std::to_string(nChannels) + "); only mono and stereo are supported.");
         }
 
-        SoundEffect effect(
-            data, 0, static_cast<int32_t>(data.size()),
-            static_cast<int32_t>(nSamplesPerSec),
-            static_cast<AudioChannels>(nChannels),
-            loopStart, loopLength);
-        effect.setNameProperty(input.getAssetNameProperty());
-        return effect;
+        // AUD-06-004/006/007/008 (2026-07-17 deep audit, A-01): CNA's SoundEffect raw-buffer
+        // constructors are S16-PCM-only, but SDL3's own WAV loader (used via
+        // SoundEffect::FromStream/MIX_LoadAudio_IO) natively decodes PCM 8/16-bit, IEEE float
+        // 32-bit, and MS/IMA ADPCM (SDL_audio.h's own documented SDL_LoadWAV coverage) -- wrapping
+        // the raw bytes in a synthetic WAV file reaches that decoder instead of requiring CNA to
+        // write its own float/ADPCM decode path. XMA2 remains rejected: no decode path exists
+        // anywhere in this stack (SDL3 doesn't decode XMA2 either).
+        if (wFormatTag == kWaveFormatPcm && wBitsPerSample == 16)
+        {
+            // Unchanged fast path: direct construction, no WAV-wrapping overhead.
+            SoundEffect effect(
+                data, 0, static_cast<int32_t>(data.size()),
+                static_cast<int32_t>(nSamplesPerSec),
+                static_cast<AudioChannels>(nChannels),
+                loopStart, loopLength);
+            effect.setNameProperty(input.getAssetNameProperty());
+            return effect;
+        }
+        if ((wFormatTag == kWaveFormatPcm && wBitsPerSample == 8) ||
+            (wFormatTag == kWaveFormatIeeeFloat && wBitsPerSample == 32) ||
+            (wFormatTag == kWaveFormatMsAdpcm && wBitsPerSample == 4) ||
+            (wFormatTag == kWaveFormatImaAdpcm && wBitsPerSample == 4))
+        {
+            return BuildViaWavWrapper(
+                input.getAssetNameProperty(), data,
+                wFormatTag, nChannels, nSamplesPerSec, nAvgBytesPerSec, nBlockAlign, wBitsPerSample,
+                extensionData, loopStart, loopLength);
+        }
+
+        throw ContentLoadException(
+            "'" + input.getAssetNameProperty() + "': unsupported SoundEffect wave format "
+            "(formatTag=" + std::to_string(wFormatTag) + ", bitsPerSample=" +
+            std::to_string(wBitsPerSample) + "). CNA's .xnb SoundEffectReader supports 8/16-bit "
+            "PCM, 32-bit IEEE float, and MS/IMA ADPCM; XMA2 has no decode path anywhere in this "
+            "stack (plan_audio.md AUD-06 support matrix).");
     }
 
     void RegisterSoundEffectXnbReader()
