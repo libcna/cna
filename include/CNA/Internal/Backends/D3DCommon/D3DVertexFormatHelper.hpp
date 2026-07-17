@@ -36,8 +36,10 @@ namespace CNA::Internal::Backends::D3DCommon
     ///       (R8G8B8A8_UINT, 64)
     const D3D11_INPUT_ELEMENT_DESC* InputElementsForStride(std::size_t strideInBytes, UINT& count);
 
-    /// plan_dx.md Phase DX12 (DX-107): D3D12 counterpart of InputElementsForStride() above, same 5
-    /// stride-keyed layouts, same byte offsets/semantic names -- D3D11_INPUT_ELEMENT_DESC and
+    /// plan_dx.md Phase DX12 (DX-107): D3D12 counterpart of InputElementsForStride() above, same
+    /// stride-keyed layouts (16/20/24/32/48/52/56/68 -- the last three added by the D3D12 PBR/
+    /// skinned-vertex-color reconciliation follow-up, additive-only: D3D11's own InputElementsForStride()
+    /// already covered them), same byte offsets/semantic names -- D3D11_INPUT_ELEMENT_DESC and
     /// D3D12_INPUT_ELEMENT_DESC are identical in field shape (verified: same field order/types,
     /// only the struct/enum names carry D3D11_/D3D12_ prefixes -- D3D11_INPUT_PER_VERTEX_DATA == 0
     /// == D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, checked against both SDK headers on this
