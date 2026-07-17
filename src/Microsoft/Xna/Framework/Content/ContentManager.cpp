@@ -4,6 +4,7 @@
 #include "CNA/Internal/Backends/Common/IGraphicsBackend.hpp"
 #include "CNA/Internal/CnjEnvelope.hpp"
 #include "CNA/Internal/CnjSourceFile.hpp"
+#include "CNA/Internal/Json.hpp"
 #include "CNA/Internal/Xnb/XnbTypeReaderTable.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
@@ -902,6 +903,172 @@ namespace Microsoft::Xna::Framework::Content
             return clip;
         }
 
+        // Reads a fixed-length JSON numeric array field (e.g. "translation": [x,y,z]) from a
+        // JSON object, or returns false leaving `out` untouched if the field is absent --
+        // AnimationClipTypeReader's keyframes then keep KeyframeEXT's own default member
+        // initializers (Rotation = Identity, Scale = {1,1,1}) instead of requiring every field
+        // on every key.
+        bool TryReadFloatArrayField(const CNA::Internal::JsonValue& obj, const char* field,
+                                     std::size_t expectedCount, std::vector<float>& out,
+                                     const std::string& path)
+        {
+            const CNA::Internal::JsonValue* v = obj.FindMember(field);
+            if (v == nullptr) { return false; }
+            if (v->type != CNA::Internal::JsonType::Array || v->arrayValue.size() != expectedCount)
+            {
+                throw ContentLoadException(
+                    "AnimationClip .cnj '" + path + "': '" + field + "' must be a " +
+                    std::to_string(expectedCount) + "-element numeric array.");
+            }
+            out.clear();
+            out.reserve(expectedCount);
+            for (const auto& element : v->arrayValue)
+            {
+                if (!element.IsNumber())
+                {
+                    throw ContentLoadException(
+                        "AnimationClip .cnj '" + path + "': '" + field + "' has a non-number element.");
+                }
+                out.push_back(static_cast<float>(element.numberValue));
+            }
+            return true;
+        }
+
+        // plan_cnj.md CNB-40: a directly-loadable .cnj AnimationClip document, independent of
+        // any specific Model -- cnj.md's own per-type conventions table documented this as a
+        // natural, open-ended follow-up beyond plan_cnj.md's original 9 phases. Either inline
+        // JSON keyframe/bone-transform data ("tracks"), or -- for large clips, to avoid bloating
+        // JSON with thousands of matrices, exactly as cnj.md's table describes -- a reference to
+        // an existing raw binary blob via "clipFile", read through the same shared
+        // ReadAnimationClipFileEXT() helper ModelTypeReader's/SkinnedModelTypeReader's own
+        // "animations" field already uses. Self-contained either way: like SpriteFont/Effect/
+        // Model, "sourceFile" is rejected (CNB-34's capability matrix).
+        class AnimationClipTypeReader : public LooseFileContentTypeReader<Graphics::AnimationClipEXT>
+        {
+        public:
+            [[nodiscard]] std::vector<std::string> GetExtensions() const override
+            {
+                return {".cnj"};
+            }
+
+            Graphics::AnimationClipEXT Read(const std::string& path, ContentManager& cm) override
+            {
+                namespace fs = std::filesystem;
+                using CNA::Internal::JsonType;
+                using CNA::Internal::JsonValue;
+
+                const std::string json = ReadTextFile(path);
+
+                const CNA::Internal::CnjEnvelope envelope = CNA::Internal::ParseCnjEnvelope(json);
+                CNA::Internal::ValidateCnjEnvelope(envelope, "AnimationClip", path);
+                RejectSourceFileForSelfContainedCnj(envelope, "AnimationClip", path);
+
+                const JsonValue root = CNA::Internal::ParseJson(json);
+                const JsonValue* clipFileField = root.FindMember("clipFile");
+                const JsonValue* tracksField   = root.FindMember("tracks");
+
+                if ((clipFileField != nullptr) == (tracksField != nullptr))
+                {
+                    throw ContentLoadException(
+                        "AnimationClip .cnj '" + path +
+                        "' must have exactly one of 'clipFile' or 'tracks'.");
+                }
+
+                if (clipFileField != nullptr)
+                {
+                    if (!clipFileField->IsString() || clipFileField->stringValue.empty())
+                    {
+                        throw ContentLoadException(
+                            "AnimationClip .cnj '" + path + "' has a non-string or empty 'clipFile'.");
+                    }
+                    return ReadAnimationClipFileEXT(
+                        (fs::path(cm.getRootDirectoryProperty()) / clipFileField->stringValue).string());
+                }
+
+                const JsonValue* durationField = root.FindMember("duration");
+                if (durationField == nullptr || !durationField->IsNumber())
+                {
+                    throw ContentLoadException(
+                        "AnimationClip .cnj '" + path + "' is missing a numeric 'duration' field.");
+                }
+
+                Graphics::AnimationClipEXT clip;
+                clip.Duration = System::TimeSpan::FromSeconds(durationField->numberValue);
+
+                if (tracksField->type != JsonType::Array)
+                {
+                    throw ContentLoadException(
+                        "AnimationClip .cnj '" + path + "' has a 'tracks' field that is not an array.");
+                }
+
+                std::vector<float> arr;
+                for (const JsonValue& trackValue : tracksField->arrayValue)
+                {
+                    if (!trackValue.IsObject())
+                    {
+                        throw ContentLoadException(
+                            "AnimationClip .cnj '" + path + "' has a non-object entry in 'tracks'.");
+                    }
+
+                    Graphics::BoneTrackEXT track;
+
+                    const JsonValue* boneIndexField = trackValue.FindMember("boneIndex");
+                    if (boneIndexField == nullptr || !boneIndexField->IsNumber())
+                    {
+                        throw ContentLoadException(
+                            "AnimationClip .cnj '" + path + "' has a track missing a numeric 'boneIndex'.");
+                    }
+                    track.BoneIndex = static_cast<int>(boneIndexField->numberValue);
+
+                    const JsonValue* keysField = trackValue.FindMember("keys");
+                    if (keysField == nullptr || keysField->type != JsonType::Array)
+                    {
+                        throw ContentLoadException(
+                            "AnimationClip .cnj '" + path + "' has a track missing a 'keys' array.");
+                    }
+
+                    track.Keys.reserve(keysField->arrayValue.size());
+                    for (const JsonValue& keyValue : keysField->arrayValue)
+                    {
+                        if (!keyValue.IsObject())
+                        {
+                            throw ContentLoadException(
+                                "AnimationClip .cnj '" + path + "' has a non-object entry in a track's 'keys'.");
+                        }
+
+                        Graphics::KeyframeEXT key;
+
+                        const JsonValue* timeField = keyValue.FindMember("time");
+                        if (timeField == nullptr || !timeField->IsNumber())
+                        {
+                            throw ContentLoadException(
+                                "AnimationClip .cnj '" + path + "' has a keyframe missing a numeric 'time'.");
+                        }
+                        key.Time = System::TimeSpan::FromSeconds(timeField->numberValue);
+
+                        if (TryReadFloatArrayField(keyValue, "translation", 3, arr, path))
+                        {
+                            key.Translation = Vector3(arr[0], arr[1], arr[2]);
+                        }
+                        if (TryReadFloatArrayField(keyValue, "rotation", 4, arr, path))
+                        {
+                            key.Rotation = Quaternion(arr[0], arr[1], arr[2], arr[3]);
+                        }
+                        if (TryReadFloatArrayField(keyValue, "scale", 3, arr, path))
+                        {
+                            key.Scale = Vector3(arr[0], arr[1], arr[2]);
+                        }
+
+                        track.Keys.push_back(key);
+                    }
+
+                    clip.Tracks.push_back(std::move(track));
+                }
+
+                return clip;
+            }
+        };
+
         // ---------------------------------------------------------------------------
         // .model.json descriptor reader
         // ---------------------------------------------------------------------------
@@ -1460,6 +1627,7 @@ namespace Microsoft::Xna::Framework::Content
         RegisterTypeReader<std::shared_ptr<Graphics::Effect>>(std::make_unique<EffectTypeReader>());
         RegisterTypeReader<Graphics::SpriteFont>(std::make_unique<SpriteFontTypeReader>());
         RegisterTypeReader<Graphics::Model>(std::make_unique<ModelTypeReader>());
+        RegisterTypeReader<Graphics::AnimationClipEXT>(std::make_unique<AnimationClipTypeReader>());
         RegisterTypeReader<std::shared_ptr<Graphics::SkinnedModelEXT>>(
             std::make_unique<SkinnedModelTypeReader>());
         RegisterTypeReader<Media::Song>(std::make_unique<SongTypeReader>());

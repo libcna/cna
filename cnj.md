@@ -46,6 +46,16 @@
 > "Update 2026-07-16: `.xnb` is back, ranked above `.cnj` (MVP scope)" further down this document.
 > Everything above about `.cnj` itself is unchanged; `.xnb` support was added *alongside* it, not
 > instead of it.
+>
+> **2026-07-17 update — Phase 10, `AnimationClipTypeReader`:** the "Per-type `.cnj` conventions"
+> table's `AnimationClip` row, previously a design sketch only, is now implemented
+> (`plan_cnj.md` `CNB-40`–`CNB-42`) — a standalone `.cnj` `AnimationClip` document, independent of
+> any specific `Model`, loadable via `ContentManager::Load<Graphics::AnimationClipEXT>()`. Supports
+> both inline JSON keyframe tracks and a `"clipFile"` reference to an existing `.clip.bin` binary
+> blob, matching the two options this document's own table already described. 7 new tests (6 in
+> `CnjAnimationClipTests.cpp`, 1 more added to `CnjCapabilityMatrixTests.cpp` for
+> `sourceFile`-rejection); full-suite regression after landing: 4661 tests, 4659 passed, the same 2
+> pre-existing unrelated hardware skips, 0 failures.
 
 ## Why this alternative exists
 
@@ -368,7 +378,7 @@ for real XNA content, so nothing important is silently dropped by switching stra
 |---|---|---|
 | `SpriteFont` | `SpriteFontReader` | JSON metadata (glyphs, kerning, line spacing) + a reference to a plain `.png` glyph atlas texture (no custom pixel packing logic needed inside `.cnj` itself — the atlas is just an ordinary image file). |
 | `Model` | `ModelReader` + `VertexBufferReader`/`IndexBufferReader`/`VertexDeclarationReader` | JSON metadata (bone hierarchy, mesh/mesh-part list, per-part material/effect references) referencing either (a) a conventional interchange mesh format CNA can already load (e.g. glTF/OBJ, if/when supported) for raw vertex/index data, or (b) a small CNA-owned binary vertex/index blob file referenced by path, kept *outside* the JSON (JSON is a poor fit for large raw float/index arrays). |
-| `AnimationClip` / skeletal animation data | `SkinningDataReader`-style custom readers seen in several samples (see `xnb.md`'s Lua discussion) | JSON keyframe/bone-transform data; large tracks may reference an external raw binary blob the same way `Model` does, to avoid bloating JSON with thousands of matrices. |
+| `AnimationClip` / skeletal animation data | `SkinningDataReader`-style custom readers seen in several samples (see `xnb.md`'s Lua discussion) | **Implemented** (`AnimationClipTypeReader`, `plan_cnj.md` `CNB-40`, Phase 10) — either inline JSON keyframe/bone-transform data (`"tracks"`), or, for large clips, a reference to an external raw binary blob via `"clipFile"` (the same `.clip.bin` format and shared reader `Model`'s/`SkinnedModelEXT`'s own `"animations"` field already used), to avoid bloating JSON with thousands of matrices. Standalone and independent of any specific `Model` — loaded via `ContentManager::Load<Graphics::AnimationClipEXT>()` (aliased as `Graphics::AnimationClip`). |
 | Stock effect parameters (`BasicEffect`/`SkinnedEffect`/etc.) | Stock-effect XNA readers (`xnb.md`'s "stock effects" section) | Plain JSON parameter object (colors, texture references, lighting flags) consumed directly by CNA's existing native stock-effect C++ classes — structurally the same idea `plan_xnb.md`'s XNB-32 already committed to (deserialize the stock effect's own fields, construct the native CNA object), just via JSON fields instead of a binary reader. |
 | General custom/`.fx`-based `Effect` | `EffectReader` (compiled platform shader bytecode) | **Explicitly out of scope**, exactly as `plan_xnb.md`'s XNB-32A/XNB-14B already conclude for the binary case: no format, JSON or binary, changes the fact that an original D3D9-era compiled shader blob cannot be run through bgfx. A `.cnj` `Effect` entry can only ever reference a *rebuilt* CNA-native shader (source `.fx`/CNA shader recompiled through CNA's own pipeline), never carry the original bytecode meaningfully. |
 | Game-specific custom data (the ~82 hand-written `ContentTypeReader` classes found across `RolePlayingGame`, `Movipa`, `RobotGame`, etc. — see this session's sample survey) | Custom `ContentTypeReader` subclasses | A game-specific `type` string, with fields chosen by whoever migrates that game's content — no CNA core change needed per game, same "don't grow CNA core for one sample" principle `xnb.md`'s Lua section already argued for, just without needing a Lua sandbox/host at all: it is only ever *data*, read once by a small piece of C++ (or even generic reflection-free JSON field access) written for that one game. |
@@ -566,11 +576,14 @@ Summary of what landed, in the order it happened:
 7. `SkinnedModelTypeReader` decided to stay separate, not migrated — see `plan_cnj.md` `CNB-22` and
    "Relationship to CNA's existing per-type JSON conventions" above — Phase 6.
 8. `RegisterCnjLoader<T>` — Phase 7.
+9. `AnimationClipTypeReader` — a standalone, directly-loadable `.cnj` `AnimationClip` document,
+   independent of any specific `Model` (inline JSON tracks, or a `"clipFile"` reference to an
+   existing `.clip.bin` blob) — Phase 10 (`plan_cnj.md` `CNB-40`–`CNB-42`), added 2026-07-17 as the
+   first of the "genuinely new `.cnj` type" follow-ups this section used to flag as open.
 
-Genuinely new `.cnj` types with no existing reader today (e.g. `AnimationClip` for plain `Model`,
-further game-specific custom data) remain a natural, open-ended follow-up — `RegisterCnjLoader<T>`
-already supports them for game-specific data without any CNA core change; a first-party
-`AnimationClip` reader would be new scope beyond what `plan_cnj.md` covered.
+Further genuinely new `.cnj` types with no existing reader today (game-specific custom data beyond
+what a game registers itself) remain a natural, open-ended follow-up — `RegisterCnjLoader<T>`
+already supports them without any CNA core change.
 
 ## Update 2026-07-16: `.xnb` is back, ranked above `.cnj` (MVP scope)
 

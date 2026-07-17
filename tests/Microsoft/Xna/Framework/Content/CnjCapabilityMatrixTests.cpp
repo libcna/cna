@@ -2,9 +2,10 @@
 //
 // plan_cnj.md CNB-34: the .cnj "sourceFile" capability matrix. Texture2D's support (sourceFile +
 // colorKey) is already covered by CnjSourceFileTests.cpp/CnjCacheIsolationTests.cpp -- this file
-// covers the other five branches: SoundEffect and TextureCube delegate via sourceFile (no
-// metadata fields yet); SpriteFont, Effect, and Model explicitly reject a "sourceFile" field
-// with a clear ContentLoadException, since their .cnj documents are self-contained descriptors.
+// covers the other branches: SoundEffect and TextureCube delegate via sourceFile (no
+// metadata fields yet); SpriteFont, Effect, Model, and AnimationClip (CNB-40) explicitly reject a
+// "sourceFile" field with a clear ContentLoadException, since their .cnj documents are
+// self-contained descriptors.
 
 #include <cstdint>
 #include <cstring>
@@ -21,6 +22,7 @@
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Model.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SkinnedModelEXT.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteFont.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
@@ -30,6 +32,7 @@ using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Content::ContentLoadException;
 using Microsoft::Xna::Framework::Content::ContentManager;
 using Microsoft::Xna::Framework::Audio::SoundEffect;
+using Microsoft::Xna::Framework::Graphics::AnimationClipEXT;
 using Microsoft::Xna::Framework::Graphics::Effect;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::Model;
@@ -233,4 +236,15 @@ TEST_F(CnjCapabilityMatrixTest, ModelRejectsSourceFile)
     cm.setGraphicsDevice(gd);
 
     EXPECT_THROW(cm.Load<Model>("wrong"), ContentLoadException);
+}
+
+TEST_F(CnjCapabilityMatrixTest, AnimationClipRejectsSourceFile)
+{
+    ScratchContentRoot root;
+    WriteFile(root.path() / "wrong.cnj",
+              R"({"cnjVersion": 1, "type": "AnimationClip", "sourceFile": "clip.bin"})");
+
+    ContentManager cm(nullptr, root.path().string());
+
+    EXPECT_THROW(cm.Load<AnimationClipEXT>("wrong"), ContentLoadException);
 }
