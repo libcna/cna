@@ -8,6 +8,8 @@
 #include "CNA/Internal/Xnb/XnbTypeReaderTable.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentTypeReaderManager.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
+#include "Microsoft/Xna/Framework/Curve.hpp"
+#include "Microsoft/Xna/Framework/CurveKey.hpp"
 #include "Microsoft/Xna/Framework/Graphics/AnimationPlayer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
@@ -1160,6 +1162,136 @@ namespace Microsoft::Xna::Framework::Content
             }
         };
 
+        Microsoft::Xna::Framework::CurveLoopType ParseCurveLoopTypeEXT(
+            const std::string& value, const std::string& path)
+        {
+            using Microsoft::Xna::Framework::CurveLoopType;
+            if (value.empty() || value == "Constant") { return CurveLoopType::Constant; }
+            if (value == "Cycle") { return CurveLoopType::Cycle; }
+            if (value == "CycleOffset") { return CurveLoopType::CycleOffset; }
+            if (value == "Oscillate") { return CurveLoopType::Oscillate; }
+            if (value == "Linear") { return CurveLoopType::Linear; }
+            throw ContentLoadException(
+                "Curve .cnj '" + path + "' has an unrecognized CurveLoopType '" + value + "'.");
+        }
+
+        Microsoft::Xna::Framework::CurveContinuity ParseCurveContinuityEXT(
+            const std::string& value, const std::string& path)
+        {
+            using Microsoft::Xna::Framework::CurveContinuity;
+            if (value.empty() || value == "Smooth") { return CurveContinuity::Smooth; }
+            if (value == "Step") { return CurveContinuity::Step; }
+            throw ContentLoadException(
+                "Curve .cnj '" + path + "' has an unrecognized CurveContinuity '" + value + "'.");
+        }
+
+        // plan_cnj.md CNB-44: self-contained JSON port of CurveContentTypeReader.hpp's already-
+        // FNA-verified field order/shape -- "preLoop"/"postLoop" (CurveLoopType names, default
+        // "Constant" when omitted) + "keys" (position/value/tangentIn/tangentOut/continuity,
+        // tangentIn/tangentOut/continuity default to 0.0/0.0/"Smooth" when omitted per key).
+        class CurveTypeReader : public LooseFileContentTypeReader<Microsoft::Xna::Framework::Curve>
+        {
+        public:
+            [[nodiscard]] std::vector<std::string> GetExtensions() const override
+            {
+                return {".cnj"};
+            }
+
+            Microsoft::Xna::Framework::Curve Read(const std::string& path, ContentManager& /*cm*/) override
+            {
+                using CNA::Internal::JsonType;
+                using CNA::Internal::JsonValue;
+                using Microsoft::Xna::Framework::Curve;
+                using Microsoft::Xna::Framework::CurveKey;
+
+                const std::string json = ReadTextFile(path);
+
+                const CNA::Internal::CnjEnvelope envelope = CNA::Internal::ParseCnjEnvelope(json);
+                CNA::Internal::ValidateCnjEnvelope(envelope, "Curve", path);
+                RejectSourceFileForSelfContainedCnj(envelope, "Curve", path);
+
+                const JsonValue root = CNA::Internal::ParseJson(json);
+
+                Curve curve;
+
+                if (const JsonValue* preLoop = root.FindMember("preLoop"))
+                {
+                    if (!preLoop->IsString())
+                    {
+                        throw ContentLoadException("Curve .cnj '" + path + "': 'preLoop' must be a string.");
+                    }
+                    curve.setPreLoopProperty(ParseCurveLoopTypeEXT(preLoop->stringValue, path));
+                }
+                if (const JsonValue* postLoop = root.FindMember("postLoop"))
+                {
+                    if (!postLoop->IsString())
+                    {
+                        throw ContentLoadException("Curve .cnj '" + path + "': 'postLoop' must be a string.");
+                    }
+                    curve.setPostLoopProperty(ParseCurveLoopTypeEXT(postLoop->stringValue, path));
+                }
+
+                const JsonValue* keysField = root.FindMember("keys");
+                if (keysField == nullptr || keysField->type != JsonType::Array)
+                {
+                    throw ContentLoadException("Curve .cnj '" + path + "' is missing a 'keys' array.");
+                }
+
+                for (const JsonValue& keyValue : keysField->arrayValue)
+                {
+                    if (!keyValue.IsObject())
+                    {
+                        throw ContentLoadException(
+                            "Curve .cnj '" + path + "' has a non-object entry in 'keys'.");
+                    }
+
+                    const JsonValue* positionField = keyValue.FindMember("position");
+                    const JsonValue* valueField    = keyValue.FindMember("value");
+                    if (positionField == nullptr || !positionField->IsNumber() ||
+                        valueField == nullptr || !valueField->IsNumber())
+                    {
+                        throw ContentLoadException(
+                            "Curve .cnj '" + path + "' has a key missing numeric 'position'/'value'.");
+                    }
+
+                    float tangentIn = 0.0f;
+                    if (const JsonValue* t = keyValue.FindMember("tangentIn"))
+                    {
+                        if (!t->IsNumber())
+                        {
+                            throw ContentLoadException("Curve .cnj '" + path + "': 'tangentIn' must be numeric.");
+                        }
+                        tangentIn = static_cast<float>(t->numberValue);
+                    }
+                    float tangentOut = 0.0f;
+                    if (const JsonValue* t = keyValue.FindMember("tangentOut"))
+                    {
+                        if (!t->IsNumber())
+                        {
+                            throw ContentLoadException("Curve .cnj '" + path + "': 'tangentOut' must be numeric.");
+                        }
+                        tangentOut = static_cast<float>(t->numberValue);
+                    }
+                    auto continuity = Microsoft::Xna::Framework::CurveContinuity::Smooth;
+                    if (const JsonValue* c = keyValue.FindMember("continuity"))
+                    {
+                        if (!c->IsString())
+                        {
+                            throw ContentLoadException("Curve .cnj '" + path + "': 'continuity' must be a string.");
+                        }
+                        continuity = ParseCurveContinuityEXT(c->stringValue, path);
+                    }
+
+                    curve.getKeysProperty().Add(CurveKey(
+                        static_cast<float>(positionField->numberValue),
+                        static_cast<float>(valueField->numberValue),
+                        tangentIn, tangentOut, continuity));
+                }
+
+                return curve;
+            }
+        };
+
         // ---------------------------------------------------------------------------
         // .model.json descriptor reader
         // ---------------------------------------------------------------------------
@@ -1720,6 +1852,7 @@ namespace Microsoft::Xna::Framework::Content
         RegisterTypeReader<Graphics::SpriteFont>(std::make_unique<SpriteFontTypeReader>());
         RegisterTypeReader<Graphics::Model>(std::make_unique<ModelTypeReader>());
         RegisterTypeReader<Graphics::AnimationClipEXT>(std::make_unique<AnimationClipTypeReader>());
+        RegisterTypeReader<Microsoft::Xna::Framework::Curve>(std::make_unique<CurveTypeReader>());
         RegisterTypeReader<std::shared_ptr<Graphics::SkinnedModelEXT>>(
             std::make_unique<SkinnedModelTypeReader>());
         RegisterTypeReader<Media::Song>(std::make_unique<SongTypeReader>());
