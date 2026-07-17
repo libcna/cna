@@ -1198,6 +1198,30 @@ namespace Microsoft::Xna::Framework::Content
             return clip;
         }
 
+        // plan_cnj.md CNB-48: an "animations" entry's "clip" field may name either a raw
+        // .clip.bin binary blob (ReadAnimationClipFileEXT's original, still-supported shape) or
+        // a standalone .cnj AnimationClip asset (Phase 10) -- letting multiple Models/
+        // SkinnedModels share one clip (e.g. a common "Idle"/"Walk" library) instead of
+        // duplicating the binary per model. Dispatched by extension. The .cnj branch goes
+        // through ContentManager (real caching), so @p baseDir must be re-expressed relative to
+        // @p root first -- cm.Load<T>() always resolves relative to the content root, not
+        // @p baseDir, mirroring SkinnedModelTypeReader's own existing texRootRelative pattern for
+        // textures. The binary branch is unaffected by that distinction (it never goes through
+        // ContentManager) and keeps resolving directly against @p baseDir, exactly as before this
+        // task.
+        Graphics::AnimationClipEXT ReadAnimationClipRefEXT(
+            const std::string& clipFile, const std::filesystem::path& baseDir,
+            const std::string& root, ContentManager& cm)
+        {
+            namespace fs = std::filesystem;
+            if (fs::path(clipFile).extension() == ".cnj")
+            {
+                const std::string rootRelative = fs::relative(baseDir / clipFile, root).string();
+                return cm.Load<Graphics::AnimationClipEXT>(rootRelative);
+            }
+            return ReadAnimationClipFileEXT((baseDir / clipFile).string());
+        }
+
         // Reads a fixed-length JSON numeric array field (e.g. "translation": [x,y,z]) from a
         // JSON object, or returns false leaving `out` untouched if the field is absent --
         // AnimationClipTypeReader's keyframes then keep KeyframeEXT's own default member
@@ -1611,7 +1635,7 @@ namespace Microsoft::Xna::Framework::Content
                         const std::string clipFile = ExtractJsonStringField(ag, "clip");
                         if (name.empty() || clipFile.empty()) { continue; }
                         skinningData->AnimationClips[name] =
-                            ReadAnimationClipFileEXT((fs::path(root) / clipFile).string());
+                            ReadAnimationClipRefEXT(clipFile, fs::path(root), root, cm);
                     }
 
                     res->skinningData = std::move(skinningData);
@@ -2001,7 +2025,10 @@ namespace Microsoft::Xna::Framework::Content
 
                     // Task 941: extracted into the shared ReadAnimationClipFileEXT() helper
                     // (also used by ModelTypeReader's own new .model.json "animations" support).
-                    model->Clips[name] = ReadAnimationClipFileEXT((manifestDir / clipFile).string());
+                    // plan_cnj.md CNB-48: ReadAnimationClipRefEXT additionally lets "clip" name a
+                    // standalone, shareable .cnj AnimationClip asset instead of only a raw
+                    // .clip.bin blob.
+                    model->Clips[name] = ReadAnimationClipRefEXT(clipFile, manifestDir, root, cm);
                 }
 
                 return model;

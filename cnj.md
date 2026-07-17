@@ -66,8 +66,16 @@
 > `.cnj`-loadable, closing every gap identified by cross-referencing FNA's real `ContentTypeReader`
 > inventory against `.xnb`'s (already complete) and `.cnj`'s (previously partial) coverage. 19 new
 > tests across 3 new files; full-suite regression: 4680 tests, 4678 passed, same 2 pre-existing
-> hardware skips, 0 failures. `AnimationClip`-sharing across `Model`/`SkinnedModel` and a
-> glTF→`Model`/`AnimationClip` import tool remain open (`plan_cnj.md` Phase 11 continued/Phase 12).
+> hardware skips, 0 failures.
+>
+> **2026-07-17 update — Phase 11 continued, `AnimationClip` sharing:** `Model`'s/`SkinnedModel`'s
+> `"animations"` field can now name a standalone `.cnj` `AnimationClip` asset instead of only a raw
+> `.clip.bin` blob (`plan_cnj.md` `CNB-48`/`CNB-49`), letting multiple models share one clip
+> (e.g. a common "Idle"/"Walk" library) through `ContentManager`'s normal caching. Dispatched by
+> extension; fully backward compatible with every existing `.clip.bin` reference. 3 new tests;
+> full-suite regression: 4683 tests, 4681 passed, same 2 pre-existing hardware skips, 0 failures.
+> A glTF→`Model`/`AnimationClip` import tool remains open (`plan_cnj.md` Phase 12), deliberately
+> not started without explicit confirmation.
 
 ## Why this alternative exists
 
@@ -598,10 +606,13 @@ Summary of what landed, in the order it happened:
     (`BasicEffect`/`AlphaTestEffect`/`DualTextureEffect`/`EnvironmentMapEffect`/`SkinnedEffect`,
     dispatched from inside `EffectTypeReader`) — Phase 11 (`plan_cnj.md` `CNB-43`–`CNB-47`), closing
     the last `.xnb`-vs-`.cnj` type-coverage gaps identified by cross-referencing FNA's real
-    `ContentTypeReader` inventory. `AnimationClip`-sharing across `Model`/`SkinnedModel` and a
-    glTF→`Model`/`AnimationClip` import tool remain open, tracked separately in `plan_cnj.md`'s
-    Phase 11 (continued)/Phase 12.
+    `ContentTypeReader` inventory.
+11. `Model`'s/`SkinnedModel`'s `"animations"` field can now name a standalone, shareable `.cnj`
+    `AnimationClip` asset (loaded/cached through `ContentManager`, real caching) instead of only a
+    raw `.clip.bin` blob per model — Phase 11 continued (`plan_cnj.md` `CNB-48`/`CNB-49`).
 
+A glTF→`Model`/`AnimationClip` import tool remains open, tracked separately in `plan_cnj.md`'s
+Phase 12 — deliberately not started without explicit confirmation, per that phase's own note.
 Further genuinely new `.cnj` types with no existing reader today (game-specific custom data beyond
 what a game registers itself) remain a natural, open-ended follow-up — `RegisterCnjLoader<T>`
 already supports them without any CNA core change.
