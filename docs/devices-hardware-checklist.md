@@ -402,6 +402,50 @@ sensor-subsystem resource leak?) has never been observed on a real device.
 3. Confirm no crash/use-after-free on subsequent readings (there should be none, since
    the instance is disposed) or on process exit.
 
+## 6a. `AndroidSensorBridge` Probe cache locking and invalidation (Task ANDR2-002, 2026-07-17)
+
+**Code under test:** `AndroidSensorBridge::Impl::Probe()`/`InvalidateProbeCache()` and
+`IsAvailable()`'s now-locked call to `Probe()`. Before this fix, `IsAvailable()` called
+`Probe()` (which reads/writes `manager_`/`sensor_`, plain pointers with no atomics) with no
+lock at all, while `Start()` already called the same `Probe()` under `stateMutex_` — a
+genuine, TSan-detectable data race between a concurrent `IsAvailable()` and `Start()` call
+(or two concurrent `IsAvailable()` calls, before the fields are first populated). The fix
+also adds `InvalidateProbeCache()`, called from three points in `Run()` (a failed
+`ASensorManager_createEventQueue()`, a failed `ASensorEventQueue_enableSensor()`, and a run
+of `MaxConsecutiveGetEventsFailures` consecutive `ASensorEventQueue_getEvents()` errors) —
+each is this bridge's strongest available signal that the cached `manager_`/`sensor_`,
+despite `Probe()` reporting them usable, may no longer be tied to a live sensor service.
+
+**Why this needs real hardware:** confirmed the lock-discipline fix is correct by direct
+code reasoning (the same mutex now serializes every access to `manager_`/`sensor_`,
+matching `Start()`'s pre-existing discipline) and verified via a successful Android NDK
+cross-compile of this exact translation unit. **Neither acceptance criterion could actually
+be run in this environment:**
+- "Concurrent IsAvailable/Start/Stop stress is TSan-clean" — this bridge's `#ifdef
+  __ANDROID__` code (including `manager_`/`sensor_`/`Probe()` themselves) does not exist at
+  all in the non-Android stub `Impl`, so it cannot even compile into a desktop TSan build,
+  let alone run under one. Running an actual TSan-instrumented stress test requires either
+  real Android hardware/an emulator with TSan support, or a future native fault-injection
+  seam (`plan_devices.md` Task `TEST2-005`) that can host this logic off-device.
+- "A fake service restart re-probes successfully" — there is no seam in this codebase today
+  to make `ASensorManager_createEventQueue()`/`ASensorEventQueue_enableSensor()`/
+  `ASensorEventQueue_getEvents()` fail on demand to simulate a service restart; that also
+  depends on `TEST2-005`'s planned fault-injection layer, or a real device/emulator run
+  where the sensor service can genuinely be killed and restarted (e.g. `adb shell` service
+  manipulation, where available) mid-session. **Status: NOT RUN — hardware/TEST2-005
+  validation open.**
+
+**Steps:**
+1. On a real Android device/emulator, call `IsAvailable()`/`getIsSupportedProperty()` and
+   `Start()`/`Stop()` concurrently from several threads in a tight loop (e.g. 30+ seconds)
+   under a TSan-instrumented build, if one can be produced for this target — confirm no
+   race is reported on `manager_`/`sensor_`.
+2. If the device/emulator allows forcibly restarting the sensor service (e.g. via `adb
+   shell`), do so while this bridge is started, and confirm `Run()` observes one of the
+   three failure signals above, `InvalidateProbeCache()` fires, and a subsequent `Start()`
+   call successfully re-probes and resumes delivering samples rather than silently reusing
+   a now-dead cached `manager_`/`sensor_` forever.
+
 ## 7. `Compass` real Android backend (`plan_devices.md` Phase 7, Tasks DEVICES-0086-0100)
 
 **Code under test:** `Detail::AndroidCompassBackend` (`src/Microsoft/Devices/Sensors/Detail/AndroidCompassBackend.cpp`)

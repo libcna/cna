@@ -6795,7 +6795,7 @@ test is not sufficient for an Android coordinate/fusion claim.
     the `Stop()`. This procedure has not been executed — no Android device/emulator run was
     performed in this session; do not claim it was.
 
-### ANDR2-002 — Synchronize and invalidate Android Probe cache — OPEN
+### ANDR2-002 — Synchronize and invalidate Android Probe cache — OPEN (implementation done; TSan-stress and fake-restart acceptance criteria need real hardware or TEST2-005)
 
 - **Priority:** P1
 - **Area:** Perfection re-audit
@@ -6808,6 +6808,68 @@ test is not sufficient for an Android coordinate/fusion claim.
   - Concurrent IsAvailable/Start/Stop stress is TSan-clean.
   - A fake service restart re-probes successfully.
 - **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+- **Progress so far (not yet CLOSED — see Remaining limitations):**
+  - "Guard Probe/IsAvailable with stateMutex": `Probe()` (reads/writes plain, non-atomic
+    `manager_`/`sensor_` pointers) was already called under `stateMutex_` by `Start()`
+    (its own pre-existing locked section), but `IsAvailable()` called the exact same
+    `Probe()` with **no lock at all** — a genuine data race between a concurrent
+    `IsAvailable()`/`Start()` pair, or even two concurrent `IsAvailable()` calls before
+    `manager_`/`sensor_` are first populated (nothing established a happens-before edge
+    between the two accesses). Fixed by wrapping `IsAvailable()`'s call in the same
+    `std::lock_guard<std::mutex> lock(impl_->stateMutex_)` `Start()` already uses. Reasoned
+    through the existing worker-thread design and confirmed no new deadlock risk: `Probe()`
+    itself never blocks, and the worker thread (`Run()`) never holds `stateMutex_` while
+    invoking `callback_()`, so a reentrant `IsAvailable()` call from inside a Compass/Motion
+    callback cannot deadlock against this new lock either.
+  - "Invalidate/reacquire sensor on service/device failure": added
+    `Impl::InvalidateProbeCache()` (resets `manager_`/`sensor_` to `nullptr` under
+    `stateMutex_`), called from three points in `Run()` where a deeper native call fails
+    despite `Probe()` having already reported success — a failed
+    `ASensorManager_createEventQueue()`, a failed `ASensorEventQueue_enableSensor()`, and
+    `ANDR2-006`'s own `MaxConsecutiveGetEventsFailures` threshold being reached. Each is this
+    bridge's strongest available signal that the cached handles, though still structurally
+    valid C pointers, may no longer be tied to a live sensor service (the signature an
+    underlying service crash/restart between `Probe()` and the failure would produce).
+    Without this, `manager_`/`sensor_` were cached exactly once, permanently, for the
+    lifetime of the `Impl` — no code path ever reset them again, so a subsequent `Start()`
+    attempt would keep reusing the same possibly-dead handles forever.
+  - "App lifecycle changes" (from the required work's first bullet) is deliberately **not**
+    addressed here — that is `ANDR2-012`'s own, separately-scoped concern (Android Activity
+    pause/resume integration, a substantially larger task requiring a lifecycle-hook
+    architecture this codebase does not have yet), not a `manager_`/`sensor_` caching-lock
+    question. Not silently dropped: flagged explicitly so it is not mistaken for having been
+    covered here.
+  - "Avoid calling Probe concurrently with queue operations": already true by construction
+    and unaffected by this change — `Probe()` only ever touches `manager_`/`sensor_`, never
+    `queue_` (which is exclusively read/written by the worker thread inside `Run()`, per
+    that field's own pre-existing doc comment). Confirmed by re-reading `Run()` in full: no
+    path reintroduced any `Probe()`/`queue_` interaction.
+- **Files changed:** `src/Microsoft/Devices/Sensors/Detail/AndroidSensorBridge.cpp`,
+  `docs/devices-hardware-checklist.md`.
+- **Tests:** entirely inside `#ifdef __ANDROID__`-gated code — no host-side test can exercise
+  it (the non-Android stub `Impl` has no `manager_`/`sensor_`/`Probe()` members at all).
+  Verified via a real Android NDK cross-compile of this exact translation unit (compiles
+  cleanly, `ninja CMakeFiles/CNA.dir/src/Microsoft/Devices/Sensors/Detail/
+  AndroidSensorBridge.cpp.o` against `cmake-build-android`). Full host Devices/Sensors
+  filtered suite re-run for regression safety (this file's non-Android stub is unaffected):
+  284 tests, 280 passed, 4 pre-existing hardware-only skips, 0 failures.
+- **Sanitizer/static-analysis result:** not applicable on the host; no TSan configured for
+  the Android NDK cross-compile in this environment, and the Android-only code cannot be
+  compiled into a desktop TSan build at all (confirmed: the non-Android `Impl` stub omits
+  `manager_`/`sensor_`/`Probe()` entirely).
+- **Remaining limitations (explicitly OPEN, not fabricated):** both acceptance criteria name
+  behavior only observable via a dynamic tool/scenario this environment cannot run — a real
+  TSan stress test against this exact Android code path, and a genuine (or fault-injected)
+  sensor-service restart. Neither is achievable here: no Android hardware/emulator is
+  available, and no native fault-injection seam exists yet for NDK calls (that is
+  `TEST2-005`'s own, separately-tracked scope — "Build a native fault-injection layer"; per
+  `ANDR2-005`'s own resolution note, extend that seam to cover this bridge's failure points
+  too, rather than building a separate one, once it exists). Documented as a new hardware
+  validation procedure in `docs/devices-hardware-checklist.md` Section 6a. Left **OPEN**
+  rather than CLOSED, consistent with `VIB2-003`/`VIB2-004`: the lock-discipline fix itself
+  is provably correct by code inspection, but the acceptance criteria as written require
+  empirical verification this session cannot perform. Re-close once a real device/emulator
+  TSan run and a real or fault-injected service-restart test confirm both criteria.
 
 ### ANDR2-003 — Make Android startup failure truly time-bounded — CLOSED (2026-07-17)
 

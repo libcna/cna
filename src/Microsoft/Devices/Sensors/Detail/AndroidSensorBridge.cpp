@@ -269,6 +269,16 @@ namespace Microsoft::Devices::Sensors::Detail
 #endif
         }
 
+        // Task ANDR2-002 (2026-07-17, external audit
+        // `audit_devices_2026-07-17.md`): caller must already hold
+        // stateMutex_. Previously this had no lock discipline at all --
+        // Start() called it under stateMutex_ (see its own locked section),
+        // but IsAvailable() called it completely unguarded, so a concurrent
+        // IsAvailable()/Start() pair (or even two concurrent IsAvailable()
+        // calls, before manager_/sensor_ are first populated) could race on
+        // these plain pointer writes with no synchronization at all -- a
+        // genuine data race, not just a theoretical one, since nothing
+        // established a happens-before edge between the two accesses.
         [[nodiscard]] bool Probe()
         {
             if (manager_ == nullptr)
@@ -284,6 +294,24 @@ namespace Microsoft::Devices::Sensors::Detail
                 sensor_ = ASensorManager_getDefaultSensor(manager_, sensorType_);
             }
             return sensor_ != nullptr;
+        }
+
+        // Task ANDR2-002: resets manager_/sensor_ so the next Probe() call
+        // re-acquires both from scratch instead of permanently reusing
+        // whatever this bridge last cached. Called from Run() (see its own
+        // call sites) when a deeper native call fails despite Probe() having
+        // already reported success -- exactly the signature an underlying
+        // Android sensor-service crash/restart between the successful
+        // Probe() and that failure would produce: the cached
+        // ASensorManager*/ASensor* pointers may still be structurally valid
+        // C pointers but no longer tied to a live service. Acquires
+        // stateMutex_ itself -- callers must NOT already hold it (Run()'s
+        // own call sites do not).
+        void InvalidateProbeCache()
+        {
+            std::lock_guard<std::mutex> lock(stateMutex_);
+            manager_ = nullptr;
+            sensor_ = nullptr;
         }
 
         // Runs entirely on the dedicated worker thread. Takes a shared_ptr
@@ -358,6 +386,14 @@ namespace Microsoft::Devices::Sensors::Detail
             queue_ = ASensorManager_createEventQueue(manager_, looper, 0, nullptr, nullptr);
             if (queue_ == nullptr)
             {
+                // Task ANDR2-002: Probe() already reported this exact
+                // manager_ as usable -- a subsequent queue-creation failure
+                // against it is exactly the signature a sensor-service
+                // crash/restart between Probe() and here would produce.
+                // Invalidate so the next Start() attempt re-probes from
+                // scratch rather than reusing what might be a now-stale
+                // handle forever.
+                InvalidateProbeCache();
                 SignalStartOutcome(StartOutcome::Failure);
                 return;
             }
@@ -372,6 +408,10 @@ namespace Microsoft::Devices::Sensors::Detail
             {
                 ASensorManager_destroyEventQueue(manager_, queue_);
                 queue_ = nullptr;
+                // Task ANDR2-002: same reasoning as the queue-creation
+                // failure above -- sensor_ passed Probe() but could not
+                // actually be enabled.
+                InvalidateProbeCache();
                 SignalStartOutcome(StartOutcome::Failure);
                 return;
             }
@@ -481,6 +521,15 @@ namespace Microsoft::Devices::Sensors::Detail
                         ++consecutiveGetEventsFailures;
                         if (consecutiveGetEventsFailures >= MaxConsecutiveGetEventsFailures)
                         {
+                            // Task ANDR2-002: a run of consecutive read
+                            // errors is this bridge's strongest available
+                            // signal that the underlying sensor
+                            // device/service itself failed, not just a
+                            // transient hiccup -- invalidate the cached
+                            // manager_/sensor_ so the next Start() re-probes
+                            // from scratch instead of reopening a queue
+                            // against what may still be a dead service.
+                            InvalidateProbeCache();
                             stopRequested_.store(true, std::memory_order_release);
                         }
                         break;
@@ -604,6 +653,14 @@ namespace Microsoft::Devices::Sensors::Detail
     bool AndroidSensorBridge::IsAvailable() const
     {
 #ifdef __ANDROID__
+        // Task ANDR2-002 (2026-07-17, external audit
+        // `audit_devices_2026-07-17.md`): guards Probe() with the same
+        // stateMutex_ Start() already uses for its own Probe() call (see
+        // Start()'s locked section below) -- previously this call held no
+        // lock at all, letting IsAvailable() race Start() (or a second,
+        // concurrent IsAvailable()) on manager_/sensor_'s plain pointer
+        // writes with no synchronization.
+        std::lock_guard<std::mutex> lock(impl_->stateMutex_);
         return impl_->Probe();
 #else
         return false;
