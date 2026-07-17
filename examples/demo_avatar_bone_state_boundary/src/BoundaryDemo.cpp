@@ -1,5 +1,6 @@
 #include "BoundaryDemo.hpp"
 
+#include <algorithm>
 #include <cstdio>
 
 #include "Microsoft/Xna/Framework/Color.hpp"
@@ -9,7 +10,11 @@
 #include "Microsoft/Xna/Framework/GamerServices/AvatarRendererState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedModelEXT.hpp"
+#include "Microsoft/Xna/Framework/Input/Keyboard.hpp"
+#include "Microsoft/Xna/Framework/Input/KeyboardState.hpp"
+#include "Microsoft/Xna/Framework/Input/Keys.hpp"
 #include "System/InvalidOperationException.hpp"
+#include "../../common/ScreenshotEXT.hpp"
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -17,6 +22,8 @@ using Microsoft::Xna::Framework::GamerServices::AvatarBodyType;
 using Microsoft::Xna::Framework::GamerServices::AvatarBodyTypeToContentNameEXT;
 using Microsoft::Xna::Framework::GamerServices::AvatarRenderer;
 using Microsoft::Xna::Framework::GamerServices::AvatarRendererState;
+using Microsoft::Xna::Framework::Input::Keyboard;
+using Microsoft::Xna::Framework::Input::Keys;
 
 namespace
 {
@@ -30,6 +37,52 @@ namespace
         }
         return "?";
     }
+
+    // Task 8 (plan_net.md Phase 8): same pattern as demo_avatar's own AvatarDemo.
+    std::unique_ptr<SpriteFont> MakeSimpleFont(GraphicsDevice& device)
+    {
+        const std::vector<uint8_t> px = {255, 255, 255, 255};
+        Texture2D atlas = Texture2D::CreateFromPixels(device, 1, 1, px);
+
+        std::vector<SharpRuntime::charcs> chars;
+        std::vector<Rectangle> bounds;
+        std::vector<Rectangle> cropping;
+        std::vector<Vector3> kerning;
+        for (char c = 32; c < 127; ++c)
+        {
+            chars.push_back(static_cast<SharpRuntime::charcs>(c));
+            // SpriteBatch::DrawString sizes each glyph's destination rectangle from `bounds`
+            // (glyphData), not `cropping` - a (0,0,1,1) bounds rect draws every character as a
+            // single sub-pixel dot instead of a visible block. Space is left zero-size so word
+            // gaps stay visible against the solid blocks used for every other printable
+            // character.
+            bounds.push_back(c == ' ' ? Rectangle(0, 0, 0, 0) : Rectangle(0, 0, 6, 10));
+            cropping.push_back(Rectangle(0, 0, 8, 14));
+            kerning.push_back(Vector3(0.0f, 8.0f, 0.0f));
+        }
+
+        return std::make_unique<SpriteFont>(atlas, bounds, cropping, chars, 16, 1.0f, kerning,
+                                             static_cast<SharpRuntime::charcs>(' '));
+    }
+
+    // Task 8.2: decision 5a's default text block, adapted per this task's own instruction (keep
+    // the F1/Esc lines identical across every demo, customize the rest) - this demo's real
+    // content is entirely console output, not on-screen rendering, so the overlay's job is just
+    // to point that out for anyone running it without a terminal attached.
+    constexpr const char* kHelpLines[] = {
+        "CNA Avatar Bone State Boundary Help",
+        "",
+        "F1: Show/hide this help",
+        "Esc: Quit",
+        "",
+        "This demo's real output is printed to the console/terminal, not this",
+        "window - it documents the real AvatarRenderer skeleton API boundary",
+        "(State/ParentBones/BindPose) versus the working SkinnedModelEXT path.",
+        "The window exits itself automatically after a short delay.",
+        "",
+        "This demo uses CNA real avatar rendering extensions.",
+        "XNA-compatible AvatarRenderer.Draw remains a no-op on Windows-like platforms.",
+    };
 }
 
 void BoundaryDemo::Initialize()
@@ -99,10 +152,29 @@ void BoundaryDemo::Initialize()
                 "fixed Xbox-standard entries), BindPose always throws, and the real usable "
                 "skeleton for actual rendering/animation lives entirely in the separate "
                 "SkinnedModelEXT EXT path, not in AvatarRenderer's own faithful-XNA surface. ===\n");
+
+    // Task 8 (plan_net.md Phase 8): F1 help overlay plumbing - see this class's own
+    // AvatarDemo-mirroring comment in BoundaryDemo.hpp.
+    auto& device = getGraphicsDeviceProperty();
+    spriteBatch_ = std::make_unique<SpriteBatch>(device);
+    const std::vector<uint8_t> px = {255, 255, 255, 255};
+    whitePixel_ = std::make_unique<Texture2D>(Texture2D::CreateFromPixels(device, 1, 1, px));
+    font_ = MakeSimpleFont(device);
 }
 
 void BoundaryDemo::Update(GameTime& /*gameTime*/)
 {
+    const auto kb = Keyboard::GetState();
+    if (kb.IsKeyDown(Keys::Escape)) { Exit(); return; }
+
+    // Task 8.2: F1 toggles overlay visibility, edge-triggered.
+    const bool f1Down = kb.IsKeyDown(Keys::F1);
+    if (f1Down && !f1WasDownEXT_)
+    {
+        showHelpEXT_ = !showHelpEXT_;
+    }
+    f1WasDownEXT_ = f1Down;
+
     if (--framesBeforeExit_ <= 0)
     {
         Exit();
@@ -111,5 +183,41 @@ void BoundaryDemo::Update(GameTime& /*gameTime*/)
 
 void BoundaryDemo::Draw(const GameTime& /*gameTime*/)
 {
-    getGraphicsDeviceProperty().Clear(Color(18, 18, 28, 255));
+    auto& device = getGraphicsDeviceProperty();
+    device.Clear(Color(18, 18, 28, 255));
+
+    // Task 8.2: 2D help overlay drawn on top - the only meaningful on-screen content this demo
+    // has, since its real output is the console text printed during Initialize().
+    if (showHelpEXT_)
+    {
+        constexpr int kLineCount = static_cast<int>(sizeof(kHelpLines) / sizeof(kHelpLines[0]));
+        constexpr float kLineHeight = 18.0f;
+        constexpr float kPadding = 12.0f;
+        float longestLineWidth = 0.0f;
+        for (const char* line : kHelpLines)
+        {
+            longestLineWidth = std::max(longestLineWidth, font_->MeasureString(line).X);
+        }
+        const Rectangle panel(8, 8, static_cast<int>(longestLineWidth + kPadding * 2.0f),
+                               static_cast<int>(kLineCount * kLineHeight + kPadding * 2.0f));
+
+        spriteBatch_->Begin();
+        spriteBatch_->Draw(*whitePixel_, panel, Color(255, 255, 255, 210));
+        float y = panel.Y + kPadding;
+        for (const char* line : kHelpLines)
+        {
+            spriteBatch_->DrawString(*font_, line, Vector2(panel.X + kPadding, y), Color(0, 0, 0, 255));
+            y += kLineHeight;
+        }
+        spriteBatch_->End();
+    }
+
+    // Task 8.5 (plan_net.md Phase 8): same framesBeforeExit_==1 timing as demo_avatar's own
+    // smokeFramesLeft_==1 convention - Game::Exit() suppresses Draw() on the frame Update()
+    // actually calls it.
+    if (framesBeforeExit_ == 1 && !screenshotPathEXT_.empty())
+    {
+        SaveBackBufferScreenshotEXT(device, screenshotPathEXT_);
+        screenshotPathEXT_.clear();
+    }
 }

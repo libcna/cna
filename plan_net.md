@@ -1226,6 +1226,14 @@ case more exist).
   Verified via `--show-help --smoke 30 --screenshot` (overlay legible, fits panel, swatches still
   visible underneath) and a default `--smoke`-only run (overlay hidden, swatches unaffected - no
   regression to the existing color-picker UI).
+- [x] **Task 8.5 (demo_avatar_bone_state_boundary)** — This demo's real content is entirely
+  console output (no `--smoke` flag, no prior keyboard handling at all - it just runs a fixed
+  30-frame window and exits). Added Esc-to-quit-early and the F1 overlay for consistency with
+  every other avatar demo's controls rather than special-casing it out of Phase 8's "all
+  avatar-related demos" scope; help text is explicit that the real output is on the console, not
+  in this window. Added `--show-help`/`--screenshot` flags to `Main.cpp` (previously had no CLI
+  parsing at all). Verified via `--show-help --screenshot` (overlay legible, fits panel, console
+  output unaffected) and a default `--screenshot`-only run (plain background, no regression).
 - [ ] **Task 8.6** — One commit per demo is likely excessive for 8 near-identical additions built
   on the same Task 8.1 helper — since the user's "one task = one commit" rule maps to *this
   plan's tasks*, treat Task 8.1+8.2+8.3 (the shared helper + its first real usage in
