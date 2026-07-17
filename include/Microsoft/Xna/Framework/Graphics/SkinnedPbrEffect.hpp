@@ -28,6 +28,11 @@ namespace Microsoft::Xna::Framework::Graphics
      * VertexPositionNormalTangentTextureSkinned vertex layout. Bone transforms are not set by the
      * content loader -- exactly like SkinnedEffect, game code feeds AnimationPlayer::
      * GetSkinTransforms() into SetBoneTransforms() itself, every frame.
+     *
+     * Every backend with a real PbrEffect shader also has one for this class (plan_cnj.md
+     * CNB-75..79, CNB-103..109) except WebGPU, which implements PbrEffect's unskinned case only --
+     * this backend has no skinning shader at all yet for any stock effect, a pre-existing gap
+     * outside PBR's own scope.
      */
     class SkinnedPbrEffect : public Effect, public IEffectMatrices, public IEffectFog, public IEffectLights
     {

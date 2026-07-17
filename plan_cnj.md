@@ -1,5 +1,17 @@
 # `.cnj` content format — implementation plan for CNA
 
+> **Status update (2026-07-17): Phase 14I also closed — Phase 14 is now fully done.** `PbrEffect`/
+> `SkinnedPbrEffect`'s metallic-roughness BRDF and `SkinnedEffect.VertexColorEnabled` now have real
+> shaders on all 7 remaining graphics backends (Vulkan, Bgfx, SdlGpu, WebGPU, D3D9, D3D11, D3D12),
+> closing CNB-61/13C's long-deferred "other backends" scope — one independent agent per backend,
+> each verified against its own backend's real build+test pipeline (D3D9/D3D11/D3D12
+> compile-verified only, Windows-only APIs with no Linux build path; D3D11 additionally got real
+> GPU-rendered pixel verification via this machine's own AMD GPU through Wine+DXVK). WebGPU is
+> unskinned-PBR only (this backend has no skinning shader for any effect yet, a pre-existing gap).
+> D3D11 and D3D12 independently wrote incompatible shaders for the same shared files; D3D11's
+> GPU-verified version was kept canonical and D3D12's dispatch code was redone against it. See
+> Phase 14I's own section for full detail.
+>
 > **Status update (2026-07-17): Phases 14G and 14H also closed.** 14G (`CNB-94`–`CNB-96`) adds
 > real angle-weighted per-corner tangent/bitangent accumulation to `ComputeTangentsEXT` (scoped
 > down from bit-for-bit MikkTSpace, whose reference implementation isn't available to vendor here),
@@ -643,12 +655,64 @@ onto `.cnj`, `RegisterCnjLoader<T>`, and Phase 9's hardening of those mechanisms
 | CNB-101 | Offline `.cnj` serialization of extracted lights | ✅ | New top-level `"lights"` JSON array (sibling to `"skeleton"`/`"animations"`/`"meshes"`), each entry `{"direction":[x,y,z],"diffuseColor":[r,g,b]}`. Written once per scene by `gltf_to_cnj.cpp`'s `ConvertGroup` (so the same extracted lights land in every mesh group's own `.cnj` output for a multi-skin file) and read back by `ContentManager.cpp`'s `.cnj` path via the existing `ParseFlatObjectArrayEXT`/`JsonFloatArray3`/`FindKeyArray` helpers, reusing the exact same `ApplyPunctualLightsEXT` call as the runtime glTF path. |
 | CNB-102 | Tests | ✅ | `GltfImportCoreTests.cpp`: `ExtractMeshAppliesTextureTransformAndEmissiveStrength` (single triangle, base-color `KHR_texture_transform` offset=[0.1,0.2]/scale=[2.0,0.5]/rotation=0 plus `KHR_materials_emissive_strength` strength=3.0 on emissiveFactor=[0.2,0.3,0.1]); `ExtractPunctualLightsEXTApproximatesDirectionalAndPointLights` (a rotated directional light — expected world direction independently derived via a from-scratch Python quaternion-rotation re-implementation, not the production code's own math — plus a point light, asserting the position-toward-origin approximation); `ExtractPunctualLightsEXTCapsAtThreeLights` (4-light fixture, asserts exactly 3 survive). `RuntimeGltfModelTests.cpp`: `AppliesKhrLightsPunctualToBasicEffectFromGltf`. `GltfToCnjToolTests.cpp`: `SerializesAndReloadsKhrLightsPunctualThroughTheOfflineCnjPath` (asserts both the raw `.cnj` text contains `"lights"` and the round-tripped effect is correctly configured). All 5 new tests passed on first run. Full-suite regression: **4845 tests, 0 failures.** |
 
-### 14I — Remaining "vse udelej prosim" items ⬜ NOT STARTED
+### 14I — PBR + skinned-vertex-color shaders on the other 7 graphics backends ✅ CLOSED 2026-07-17
 
-> Task numbering reserved (`CNB-103`+) for whichever item is picked up next: true multi-UV-channel
-> rendering support for PBR maps (14B's own explicitly-deferred full fix), and PBR/skinned-vertex-
-> color shader support on the other 7+ graphics backends (CNB-61/13C's own deliberately-deferred
-> scope, now being taken up: Bgfx, D3D9, D3D11, D3D12, SdlGpu, Vulkan, WebGPU).
+> Closes CNB-61 (Phase 13A's own "other backends" deferral) and 13C's equivalent deferral for
+> `SkinnedEffect.VertexColorEnabled` — the last item from the post-Phase-13 gap survey that opened
+> Phase 14. `GpuDrawParams` (the backend-agnostic struct `PbrEffect`/`SkinnedPbrEffect` already
+> populate identically regardless of backend) needed no changes; this was purely backend-internal
+> shader/dispatch work, one independent worktree-isolated agent per backend, each porting the exact
+> same metallic-roughness BRDF (GGX distribution + Smith-Schlick-GGX visibility + Schlick Fresnel)
+> and vertex-color-modulates-the-combined-diffuse-plus-specular-output wiring that
+> `EasyGLGraphicsBackend::EnsurePbrProgram()`/`EnsurePbrSkinnedProgram()`/`EnsureSkinnedProgram()`
+> already implement, translated to each backend's own shading language and shader-object model.
+>
+> **D3D9/D3D11/D3D12 are Windows-only** (this repo's own `cmake/BackendSelection.cmake` hard-gates
+> them — real Direct3D headers, no Linux build path). Per the project owner's explicit authorization,
+> these three are **compile-verified only**: real HLSL→DXBC compilation via this project's existing
+> Wine + `d3dcompiler_47.dll` pipeline (not hand-written bytecode), plus MinGW-w64 cross-compilation
+> of the touched C++ against the real `d3d9.h`/`d3d11.h`/`d3d12.h` headers. D3D11 additionally got
+> genuine *runtime* verification none of the others could: this dev machine has a real AMD Radeon
+> 780M GPU, so the D3D11 backend's own existing Wine+DXVK harness (`scripts/run-wine-dxvk.sh`,
+> already used for other D3D11 work) could actually run compiled DXBC against real hardware —
+> confirmed via exact pixel matches on a new hand-derived test, and a pre-existing-failure check
+> (one unrelated `D3D11_Smoke` check reproduced identically before/after via `git stash`).
+>
+> **D3D11 and D3D12 conflict, reconciled**: both agents independently wrote new files at the same
+> paths under the backend-shared `D3DCommon/shaders/` (and `D3DConstantBuffers.hpp`) with
+> incompatible cbuffer layouts/register bindings — not a textual merge conflict but two genuinely
+> different designs for the same shader. D3D11's version was kept canonical (real GPU-verified
+> pixels beat compile-only verification as evidence of correctness); a follow-up agent then redid
+> D3D12's dispatch/PSO/root-signature wiring against D3D11's shaders — D3D12's root-signature and
+> PSO caches turned out to need **zero changes**, already being fully generic over
+> `(numCbvs, numSrvs, numSamplers, D3DShaderVariant)`.
+>
+> **WebGPU is unskinned-PBR only**: this backend has no skinning shader at all yet for *any* stock
+> effect (`docs/webgpu-backend.md`'s own documented capability boundary, `Phase 58` in that
+> backend's own numbering) — a pre-existing gap outside this task's scope, not something newly
+> deferred here. `SkinnedPbrEffect` and skinned-vertex-color remain unimplemented on WebGPU until
+> that base skinning gap is closed separately.
+
+| # | Task | Status | Notes |
+|---|---|---|---|
+| CNB-103 | Vulkan: `PbrEffect`/`SkinnedPbrEffect` + `SkinnedEffect.VertexColorEnabled` | ✅ | New `pbr3d`/`pbr3d_skinned` GLSL programs (5-sampler descriptor set + dynamic PBR/bone UBOs), new stride-56 `skinned3d_color`/`skinned3d_vertexlit_color` variants selected by vertex-buffer stride. Fixed a latent pre-existing bug found along the way: the skinned pipeline's vertex-input binding stride was hardcoded to 52 regardless of the actual buffer stride. New `Vulkan_PbrEffect_HandDerived` (closed-form BRDF check via an N=V=L camera placement) and `Vulkan_SkinnedEffect_VertexColor` tests, plus 3 reused EasyGL golden-image test sources now wired up for ctest. Full suite: 137/138 (the one failure, `Vulkan_DepthBias` at an extreme -1e6 case, is a pre-existing llvmpipe driver-precision issue on the unrelated, unmodified `colored3d` pipeline). |
+| CNB-104 | Bgfx: `PbrEffect`/`SkinnedPbrEffect` + `SkinnedEffect.VertexColorEnabled` | ✅ | New `vs_pbr3d.sc`/`fs_pbr3d.sc` (+ `vs_pbr_skinned3d.sc` sharing the same fragment stage — bgfx allows two vertex shaders to share one fragment program at the C++ level, avoiding a duplicated BRDF), new stride-56 `vs_skinned3d.sc`/`vs_skinned3d_vertexlit.sc` siblings. Regenerated `bgfx_shaders.hpp` via a locally built `shaderc` (`CNA_BGFX_BUILD_SHADERC=ON`). New `bgfx_pbreffect_test.cpp`/`bgfx_skinnedpbreffect_test.cpp`/`bgfx_skinnedeffect_vertexcolor_test.cpp` (analytic N=V=H=1 camera setup, exact byte matches against an independent Python BRDF re-implementation). Full suite: 112/114 (2 pre-existing failures — MSAA/Vulkan-DRI3 and a depth-format edge case in unrelated render-target code). |
+| CNB-105 | SdlGpu: `PbrEffect`/`SkinnedPbrEffect` + `SkinnedEffect.VertexColorEnabled` | ✅ | New `pbr3d`/`pbr_skinned3d`/`skinned_colored3d` GLSL sources compiled to SPIR-V at runtime via the backend's existing `libshaderc` dependency. New `sdlgpu_pbreffect_test.cpp`/`sdlgpu_skinnedpbreffect_test.cpp`/`sdlgpu_skinnedeffect_vertexcolor_test.cpp`, pixel values independently hand-derived and matched byte-for-byte (not just within tolerance). Fog intentionally not wired for PBR — no 3D shader family on this backend implements fog yet, a pre-existing gap. Full `ctest -L SdlGpu`: 21/21 (18 pre-existing + 3 new); full `CnaTests`: 4840/4843 (3 pre-existing, documented failures unrelated to this change). |
+| CNB-106 | WebGPU: `PbrEffect` (unskinned only, stride 48) | ✅ | New `pbr3d.wgsl` (GGX/Smith-Schlick-GGX/Schlick Fresnel), a 3-UBO/6-binding bind-group-layout pair, gated on `params.pbr && !params.skinned && stride==48`. `SkinnedPbrEffect` deliberately out of scope (see this section's own intro note on WebGPU's pre-existing no-skinning gap). New `webgpu_pbr3d_test.cpp`: 5 checks, hand-derived metallic/dielectric BRDF values matched within a few 8-bit units after sRGB encoding. Full `ctest -L WebGPU`: 11/11 (10 pre-existing + 1 new). |
+| CNB-107 | D3D9: `PbrEffect`/`SkinnedPbrEffect` + `SkinnedEffect.VertexColorEnabled` (compile-verified only) | ✅ | New CNA-own HLSL (`shaders/cna/Pbr3D.hlsl`/`PbrSkinned3D.hlsl`/`SkinnedVertexColor3D.hlsl`), real `vs_3_0`/`ps_3_0` bytecode (both PBR shaders and the vertex-color shader empirically require SM3 — SM2 fails with real compiler errors, `X4505`/`X5608`, not just an assumed limit). Register layout is real `D3DDisassemble()`-verified, not hand-assumed — caught a real finding: the compiler allocates `World` only 3 registers, with the unallocated 4th reused for a compiler literal constant (matches a prior D3D9 finding, D9-72). One documented deviation from the EasyGL reference: `SkinnedVertexColor3D.hlsl` applies a `(float3x3)World` normal rotation after skinning that EasyGL's own GLSL omits, matching the real, vendored `SkinnedEffect.fx`'s own convention instead (EasyGL itself untouched). New `d3d9_pbr_test.cpp`/`d3d9_skinnedvertexcolor_test.cpp` (written, cross-compiled, not run — no D3D9 device on this machine). |
+| CNB-108 | D3D11: `PbrEffect`/`SkinnedPbrEffect` + `SkinnedEffect.VertexColorEnabled` (GPU-verified via Wine+DXVK) | ✅ | New SM5 HLSL (`pbr3d`/`pbr_skinned3d`/`skinned_colored3d`/`skinned_colored3d_vertexlit`), kept canonical over D3D12's independently-written, incompatible version (see this section's own intro note). `D3DPbrPerDrawConstants`/`D3DPbrLightConstants`, both `static_assert`-verified against the real HLSL cbuffer layout. New `D3D11_Pbr_VertexColor` test actually run on real hardware (AMD Radeon 780M via Wine+DXVK/radv): 4/4 checks pass with exact pixel matches (a degenerate no-light/no-ambient scene collapses PBR output to `EmissiveFactor` exactly; pure-black vertex color zeroes the skinned output regardless of lighting). Full pre-existing D3D11 suite re-run for regressions: 6/7 binaries pass; the 7th's one internal failure (an unrelated Blinn-Phong specular check) was proven pre-existing via a `git stash` baseline comparison. |
+| CNB-109 | D3D12: `PbrEffect`/`SkinnedPbrEffect` + `SkinnedEffect.VertexColorEnabled` (compile-verified only, reconciled against D3D11's canonical shaders) | ✅ | Dispatch/PSO/root-signature wiring in `D3D12GraphicsBackend.cpp/.hpp` rebuilt against D3D11's canonical `D3DCommon` shaders/cbuffers (CNB-108) rather than D3D12's own first, independently-designed attempt — `D3D12RootSignatureCache`/`D3D12PipelineStateCache` needed zero changes, already fully generic over `(numCbvs, numSrvs, numSamplers, D3DShaderVariant)`. `DrawPrimitivesExImpl`'s dispatch priority corrected to match D3D11/EasyGL exactly (alpha-test/dual-texture/env-map still outrank PBR; the first D3D12 attempt had PBR winning unconditionally). Additive-only stride 48/56/68 cases added to the D3D12-flavor `InputElementsForStrideD3D12` (D3D11's own copy already had them). Verified via the same MinGW-w64 cross-compile approach as D3D9/D3D11: 0 errors, warning counts unchanged from a `git stash` baseline. |
+
+Full-suite regression across every backend touched today, cross-checked against each backend's own pre-existing baseline (via direct binary invocation from the repo root, not `ctest --test-dir`, which changes the test process's working directory and produces spurious fixture-path failures unrelated to any of this work): EasyGL's `CnaTests` **4843/4845** (2 pre-existing hardware-dependent skips, 0 failures) plus per-backend example suites as itemized above. Also fixed, opportunistically, while investigating spurious failures: three build directories (`cmake-build-debug`, `cmake-build-vulkan`, `cmake-build-sdl`, `cmake-build-dx3`, `cmake-build-canvas`) had a stale `CNA_TEST_DISPLAY=:0` CMake cache value left over from before this session's mid-stream switch to a dedicated Xvfb `:99` display — reconfigured all of them to `:99` so no future test run can pop a window on the project owner's real desktop.
+
+### 14J — Remaining items ⬜ NOT STARTED
+
+> With 14I closed, every item from the post-Phase-13 gap survey that opened Phase 14 (`CNB-75`–)
+> is now done. Task numbering reserved (`CNB-110`+) for whatever is picked up next — no specific
+> item is currently queued. Candidates noted along the way but explicitly out of scope for Phase 14:
+> true multi-UV-channel rendering support for PBR maps (14B's own deferred full fix, a rare
+> real-world authoring pattern); closing WebGPU's pre-existing no-skinning gap (would unblock
+> `SkinnedPbrEffect`/skinned-vertex-color on that one remaining backend).
 
 ## Relationship to other plan files
 
