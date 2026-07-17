@@ -14,6 +14,7 @@
 #endif
 
 #include <algorithm>
+#include <bit>
 #include <chrono>
 #include <cstddef>
 #include <cmath>
@@ -182,6 +183,164 @@ namespace CNA::Internal::Backends::WebGPU
             const int u = std::clamp(addressU, 0, 2);
             const int v = std::clamp(addressV, 0, 2);
             return filterIndex * 9 + u * 3 + v;
+        }
+
+        // ---- WEBGPU-41/77/78/79/80/81/82/83: graphics-state -> WGPU translation helpers ----
+        // Shared by every 3D GetOrCreatePipeline*() family so the exact same XNA->WGPU mapping is
+        // used everywhere (mirrors ToWGPUCompareFunction()'s own established role/pattern, and
+        // VulkanGraphicsBackend::ToVkBlendFactor()/ToVkBlendOp()/FillBlendAttachmentState()'s
+        // identical purpose on that backend).
+
+        // XNA Blend enum -> WGPUBlendFactor: One=0, Zero=1, SourceColor=2, InverseSourceColor=3,
+        // SourceAlpha=4, InverseSourceAlpha=5, DestinationColor=6, InverseDestinationColor=7,
+        // DestinationAlpha=8, InverseDestinationAlpha=9, BlendFactor=10, InverseBlendFactor=11,
+        // SourceAlphaSaturation=12.
+        [[nodiscard]] WGPUBlendFactor ToWGPUBlendFactor(int xnaBlend)
+        {
+            switch (xnaBlend)
+            {
+                case  1: return WGPUBlendFactor_Zero;
+                case  2: return WGPUBlendFactor_Src;
+                case  3: return WGPUBlendFactor_OneMinusSrc;
+                case  4: return WGPUBlendFactor_SrcAlpha;
+                case  5: return WGPUBlendFactor_OneMinusSrcAlpha;
+                case  6: return WGPUBlendFactor_Dst;
+                case  7: return WGPUBlendFactor_OneMinusDst;
+                case  8: return WGPUBlendFactor_DstAlpha;
+                case  9: return WGPUBlendFactor_OneMinusDstAlpha;
+                case 10: return WGPUBlendFactor_Constant;
+                case 11: return WGPUBlendFactor_OneMinusConstant;
+                case 12: return WGPUBlendFactor_SrcAlphaSaturated;
+                default: return WGPUBlendFactor_One; // Blend::One = 0
+            }
+        }
+
+        // XNA BlendFunction enum -> WGPUBlendOperation: Add=0, Subtract=1, ReverseSubtract=2,
+        // Max=3, Min=4.
+        [[nodiscard]] WGPUBlendOperation ToWGPUBlendOperation(int xnaBlendFunc)
+        {
+            switch (xnaBlendFunc)
+            {
+                case 1: return WGPUBlendOperation_Subtract;
+                case 2: return WGPUBlendOperation_ReverseSubtract;
+                case 3: return WGPUBlendOperation_Max;
+                case 4: return WGPUBlendOperation_Min;
+                default: return WGPUBlendOperation_Add; // BlendFunction::Add = 0
+            }
+        }
+
+        // Fills a WGPUBlendState's real blend factors/op from BlendKeyParams. Caller is
+        // responsible for only setting target.blend to &result when blending is actually enabled
+        // (a disabled WGPUColorTargetState::blend must stay nullptr, not a state with
+        // srcFactor=One/dstFactor=Zero -- see every GetOrCreatePipeline*() call site).
+        void FillWGPUBlendState(WGPUBlendState& blendState, const WebGPUGraphicsBackend::BlendKeyParams& bp)
+        {
+            blendState.color.srcFactor = ToWGPUBlendFactor(bp.colorSrc);
+            blendState.color.dstFactor = ToWGPUBlendFactor(bp.colorDst);
+            blendState.color.operation = ToWGPUBlendOperation(bp.colorFunc);
+            blendState.alpha.srcFactor = ToWGPUBlendFactor(bp.alphaSrc);
+            blendState.alpha.dstFactor = ToWGPUBlendFactor(bp.alphaDst);
+            blendState.alpha.operation = ToWGPUBlendOperation(bp.alphaFunc);
+        }
+
+        // XNA CullMode: None=0, CullClockwiseFace=1, CullCounterClockwiseFace=2. Every 3D pipeline
+        // sets pipeline.primitive.frontFace = WGPUFrontFace_CCW. Empirically verified (not derived
+        // by pure reasoning about NDC/raster-space winding, which turned out backwards on a first
+        // pass) via WebGPU_GraphicsState's differential cull-mode checks: a hand-derived-winding
+        // quad renders under CullCounterClockwiseFace (XNA's own default -- an ordinary
+        // front-facing quad must stay visible) and is culled under CullClockwiseFace. This is the
+        // OPPOSITE pairing of what a naive NDC-vs-raster-space mirroring argument predicts,
+        // confirming this project's established "empirically verify, don't just derive" rule for
+        // this exact class of winding/orientation subtlety (see VulkanGraphicsBackend::
+        // FillDepthStencilState()'s own front/back-swap comment for the analogous precedent there).
+        [[nodiscard]] WGPUCullMode ToWGPUCullMode(int xnaCullMode)
+        {
+            switch (xnaCullMode)
+            {
+                case 1: return WGPUCullMode_Front;  // CullClockwiseFace
+                case 2: return WGPUCullMode_Back;   // CullCounterClockwiseFace
+                default: return WGPUCullMode_None;
+            }
+        }
+
+        // Encodes (topology, depth test/write/func, blend enable+params, cull mode, wireframe,
+        // depth bias, slope-scale depth bias, and a caller-supplied salt for any extra dimension --
+        // e.g. stride for AlphaTest3D/DualTexture3D) into a single uint64_t pipeline cache key.
+        // Mirrors VulkanGraphicsBackend::Make3DKey()/PackBlendBits()'s own role: when blend is
+        // disabled, the (irrelevant) blend factors always collapse to the same bits so different
+        // disabled BlendStates don't create duplicate pipelines.
+        [[nodiscard]] std::uint64_t Make3DPipelineKey(WGPUPrimitiveTopology topology, bool depthTest, bool depthWrite,
+                                                       int depthFunc, bool blend,
+                                                       const WebGPUGraphicsBackend::BlendKeyParams& bp,
+                                                       int cullMode, bool wireframe,
+                                                       float depthBias, float slopeScaleDepthBias,
+                                                       std::uint64_t salt)
+        {
+            std::uint64_t key = static_cast<std::uint64_t>(topology);
+            key = key * 31u + (depthTest ? 1u : 0u);
+            key = key * 31u + (depthWrite ? 1u : 0u);
+            key = key * 31u + static_cast<std::uint64_t>(depthFunc);
+            key = key * 31u + (blend ? 1u : 0u);
+            if (blend)
+            {
+                key = key * 31u + static_cast<std::uint64_t>(bp.colorSrc);
+                key = key * 31u + static_cast<std::uint64_t>(bp.colorDst);
+                key = key * 31u + static_cast<std::uint64_t>(bp.alphaSrc);
+                key = key * 31u + static_cast<std::uint64_t>(bp.alphaDst);
+                key = key * 31u + static_cast<std::uint64_t>(bp.colorFunc);
+                key = key * 31u + static_cast<std::uint64_t>(bp.alphaFunc);
+            }
+            key = key * 31u + static_cast<std::uint64_t>(cullMode);
+            key = key * 31u + (wireframe ? 1u : 0u);
+            // WEBGPU-41/79: DepthBias/SlopeScaleDepthBias are baked into the pipeline object --
+            // wgpu-native has no per-draw depth-bias override (unlike Vulkan's vkCmdSetDepthBias),
+            // so the exact float bits must be part of the cache key, not just approximately
+            // bucketed.
+            key = key * 1000003u + static_cast<std::uint64_t>(std::bit_cast<std::uint32_t>(depthBias));
+            key = key * 1000003u + static_cast<std::uint64_t>(std::bit_cast<std::uint32_t>(slopeScaleDepthBias));
+            key = key * 1000003u + salt;
+            return key;
+        }
+
+        // WEBGPU-82: fills a full WGPUSamplerDescriptor (address modes, mag/min/mipmap filter,
+        // anisotropy) from a real XNA SamplerState -- shared translation used by
+        // GetOrCreateSlotSampler(), mirrors VulkanGraphicsBackend::ApplySamplerState()'s own
+        // filter switch verbatim (magFilter/minFilter split per XNA TextureFilter value).
+        void FillWGPUSamplerDescriptor(WGPUSamplerDescriptor& descriptor, int filter, int addressU,
+                                       int addressV, int maxAnisotropy)
+        {
+            // XNA TextureFilter: 0=Linear,1=Point,2=Anisotropic,3=LinearMipPoint,4=PointMipLinear,
+            // 5=MinLinearMagPointMipLinear,6=MinLinearMagPointMipPoint,
+            // 7=MinPointMagLinearMipLinear,8=MinPointMagLinearMipPoint.
+            WGPUFilterMode magF = WGPUFilterMode_Linear;
+            WGPUFilterMode minF = WGPUFilterMode_Linear;
+            WGPUMipmapFilterMode mipMode = WGPUMipmapFilterMode_Linear;
+            bool enableAniso = false;
+            switch (filter)
+            {
+                case 1: magF = WGPUFilterMode_Nearest; minF = WGPUFilterMode_Nearest; mipMode = WGPUMipmapFilterMode_Nearest; break;
+                case 2: magF = WGPUFilterMode_Linear;  minF = WGPUFilterMode_Linear;  mipMode = WGPUMipmapFilterMode_Linear;  enableAniso = true; break;
+                case 3: magF = WGPUFilterMode_Linear;  minF = WGPUFilterMode_Linear;  mipMode = WGPUMipmapFilterMode_Nearest; break;
+                case 4: magF = WGPUFilterMode_Nearest; minF = WGPUFilterMode_Nearest; mipMode = WGPUMipmapFilterMode_Linear;  break;
+                case 5: magF = WGPUFilterMode_Nearest; minF = WGPUFilterMode_Linear;  mipMode = WGPUMipmapFilterMode_Linear;  break;
+                case 6: magF = WGPUFilterMode_Nearest; minF = WGPUFilterMode_Linear;  mipMode = WGPUMipmapFilterMode_Nearest; break;
+                case 7: magF = WGPUFilterMode_Linear;  minF = WGPUFilterMode_Nearest; mipMode = WGPUMipmapFilterMode_Linear;  break;
+                case 8: magF = WGPUFilterMode_Linear;  minF = WGPUFilterMode_Nearest; mipMode = WGPUMipmapFilterMode_Nearest; break;
+                default: break; // Linear (0)
+            }
+            descriptor.addressModeU = ToAddressMode(addressU);
+            descriptor.addressModeV = ToAddressMode(addressV);
+            descriptor.addressModeW = WGPUAddressMode_ClampToEdge;
+            descriptor.magFilter = magF;
+            descriptor.minFilter = minF;
+            descriptor.mipmapFilter = mipMode;
+            descriptor.lodMaxClamp = 32.0f;
+            // WebGPU requires maxAnisotropy==1 unless mag/min/mipmap are all Linear (true only for
+            // filter==2 above) -- matches VulkanGraphicsBackend::ApplySamplerState()'s identical
+            // enableAniso gate.
+            descriptor.maxAnisotropy = enableAniso
+                ? static_cast<std::uint16_t>(std::clamp(maxAnisotropy, 1, 16))
+                : 1;
         }
 
         // Mirrors VulkanGraphicsBackend::DrawColoredPrimitives()'s own use of
@@ -1117,9 +1276,14 @@ struct VertexOutput {
 
     WGPURenderPipeline WebGPUGraphicsBackend::GetOrCreatePipelineColored3D(WGPUPrimitiveTopology topology,
                                                                             bool depthTest, bool depthWrite,
-                                                                            int depthFunc)
+                                                                            int depthFunc,
+                                                    bool blend, const BlendKeyParams& blendParams,
+                                                    int cullMode, bool wireframe,
+                                                    float depthBias, float slopeScaleDepthBias)
     {
-        const int key = (static_cast<int>(topology) * 8 + depthFunc) * 4 + (depthTest ? 2 : 0) + (depthWrite ? 1 : 0);
+        const std::uint64_t key = Make3DPipelineKey(topology, depthTest, depthWrite, depthFunc,
+                                                     blend, blendParams, cullMode, wireframe,
+                                                     depthBias, slopeScaleDepthBias, 0);
         if (auto it = coloredPipelines_.find(key); it != coloredPipelines_.end())
             return it->second;
 
@@ -1155,7 +1319,13 @@ struct VertexOutput {
         pipeline.vertex.buffers = &vertexBufferLayout;
         pipeline.primitive.topology = topology;
         pipeline.primitive.frontFace = WGPUFrontFace_CCW;
-        pipeline.primitive.cullMode = WGPUCullMode_None;
+        pipeline.primitive.cullMode = ToWGPUCullMode(cullMode);
+        // WEBGPU-78: baked into the pipeline object (no dynamic WGPU blend override) --
+        // target.blend stays null (opaque overwrite) when blend is disabled, matching
+        // WGPUColorTargetState::blend's own "absent = no blending" semantics.
+        WGPUBlendState blendState = WGPU_BLEND_STATE_INIT;
+        FillWGPUBlendState(blendState, blendParams);
+        target.blend = blend ? &blendState : nullptr;
         pipeline.multisample.count = 1;
         pipeline.multisample.mask = std::numeric_limits<std::uint32_t>::max();
         pipeline.multisample.alphaToCoverageEnabled = false;
@@ -1165,6 +1335,15 @@ struct VertexOutput {
         depthStencil.format = WGPUTextureFormat_Depth24PlusStencil8;
         depthStencil.depthWriteEnabled = depthWrite ? WGPUOptionalBool_True : WGPUOptionalBool_False;
         depthStencil.depthCompare = depthTest ? ToWGPUCompareFunction(depthFunc) : WGPUCompareFunction_Always;
+        // WEBGPU-41/79: DepthBias/SlopeScaleDepthBias baked into the pipeline object --
+        // wgpu-native has no per-draw depth-bias override (unlike Vulkan's vkCmdSetDepthBias).
+        // Scale matches FNA's own FNA3D_Driver_OpenGL.c XNAToGL_DepthBiasScale for a 24-bit
+        // depth format ((1<<24)-1): XNA's DepthBias is a fraction of the depth range,
+        // WGPUDepthStencilState::depthBias is an integer count of smallest-representable-
+        // depth-buffer units, exactly like D3D/GL's own "scaled by format precision"
+        // interpretation (this backend's depth attachment is always Depth24PlusStencil8).
+        depthStencil.depthBias = static_cast<std::int32_t>(depthBias * 16777215.0f);
+        depthStencil.depthBiasSlopeScale = slopeScaleDepthBias;
         pipeline.depthStencil = &depthStencil;
 
         WGPURenderPipeline created = wgpuDeviceCreateRenderPipeline(device_, &pipeline);
@@ -1325,9 +1504,14 @@ struct VertexOutput {
 
     WGPURenderPipeline WebGPUGraphicsBackend::GetOrCreatePipelineTextured3D(WGPUPrimitiveTopology topology,
                                                                             bool depthTest, bool depthWrite,
-                                                                            int depthFunc)
+                                                                            int depthFunc,
+                                                    bool blend, const BlendKeyParams& blendParams,
+                                                    int cullMode, bool wireframe,
+                                                    float depthBias, float slopeScaleDepthBias)
     {
-        const int key = (static_cast<int>(topology) * 8 + depthFunc) * 4 + (depthTest ? 2 : 0) + (depthWrite ? 1 : 0);
+        const std::uint64_t key = Make3DPipelineKey(topology, depthTest, depthWrite, depthFunc,
+                                                     blend, blendParams, cullMode, wireframe,
+                                                     depthBias, slopeScaleDepthBias, 0);
         if (auto it = texturedPipelines_.find(key); it != texturedPipelines_.end())
             return it->second;
 
@@ -1363,7 +1547,13 @@ struct VertexOutput {
         pipeline.vertex.buffers = &vertexBufferLayout;
         pipeline.primitive.topology = topology;
         pipeline.primitive.frontFace = WGPUFrontFace_CCW;
-        pipeline.primitive.cullMode = WGPUCullMode_None;
+        pipeline.primitive.cullMode = ToWGPUCullMode(cullMode);
+        // WEBGPU-78: baked into the pipeline object (no dynamic WGPU blend override) --
+        // target.blend stays null (opaque overwrite) when blend is disabled, matching
+        // WGPUColorTargetState::blend's own "absent = no blending" semantics.
+        WGPUBlendState blendState = WGPU_BLEND_STATE_INIT;
+        FillWGPUBlendState(blendState, blendParams);
+        target.blend = blend ? &blendState : nullptr;
         pipeline.multisample.count = 1;
         pipeline.multisample.mask = std::numeric_limits<std::uint32_t>::max();
         pipeline.multisample.alphaToCoverageEnabled = false;
@@ -1373,6 +1563,15 @@ struct VertexOutput {
         depthStencil.format = WGPUTextureFormat_Depth24PlusStencil8;
         depthStencil.depthWriteEnabled = depthWrite ? WGPUOptionalBool_True : WGPUOptionalBool_False;
         depthStencil.depthCompare = depthTest ? ToWGPUCompareFunction(depthFunc) : WGPUCompareFunction_Always;
+        // WEBGPU-41/79: DepthBias/SlopeScaleDepthBias baked into the pipeline object --
+        // wgpu-native has no per-draw depth-bias override (unlike Vulkan's vkCmdSetDepthBias).
+        // Scale matches FNA's own FNA3D_Driver_OpenGL.c XNAToGL_DepthBiasScale for a 24-bit
+        // depth format ((1<<24)-1): XNA's DepthBias is a fraction of the depth range,
+        // WGPUDepthStencilState::depthBias is an integer count of smallest-representable-
+        // depth-buffer units, exactly like D3D/GL's own "scaled by format precision"
+        // interpretation (this backend's depth attachment is always Depth24PlusStencil8).
+        depthStencil.depthBias = static_cast<std::int32_t>(depthBias * 16777215.0f);
+        depthStencil.depthBiasSlopeScale = slopeScaleDepthBias;
         pipeline.depthStencil = &depthStencil;
 
         WGPURenderPipeline created = wgpuDeviceCreateRenderPipeline(device_, &pipeline);
@@ -1384,9 +1583,14 @@ struct VertexOutput {
 
     WGPURenderPipeline WebGPUGraphicsBackend::GetOrCreatePipelineColoredTextured3D(WGPUPrimitiveTopology topology,
                                                                                     bool depthTest, bool depthWrite,
-                                                                                    int depthFunc)
+                                                                                    int depthFunc,
+                                                    bool blend, const BlendKeyParams& blendParams,
+                                                    int cullMode, bool wireframe,
+                                                    float depthBias, float slopeScaleDepthBias)
     {
-        const int key = (static_cast<int>(topology) * 8 + depthFunc) * 4 + (depthTest ? 2 : 0) + (depthWrite ? 1 : 0);
+        const std::uint64_t key = Make3DPipelineKey(topology, depthTest, depthWrite, depthFunc,
+                                                     blend, blendParams, cullMode, wireframe,
+                                                     depthBias, slopeScaleDepthBias, 0);
         if (auto it = coloredTexturedPipelines_.find(key); it != coloredTexturedPipelines_.end())
             return it->second;
 
@@ -1425,7 +1629,13 @@ struct VertexOutput {
         pipeline.vertex.buffers = &vertexBufferLayout;
         pipeline.primitive.topology = topology;
         pipeline.primitive.frontFace = WGPUFrontFace_CCW;
-        pipeline.primitive.cullMode = WGPUCullMode_None;
+        pipeline.primitive.cullMode = ToWGPUCullMode(cullMode);
+        // WEBGPU-78: baked into the pipeline object (no dynamic WGPU blend override) --
+        // target.blend stays null (opaque overwrite) when blend is disabled, matching
+        // WGPUColorTargetState::blend's own "absent = no blending" semantics.
+        WGPUBlendState blendState = WGPU_BLEND_STATE_INIT;
+        FillWGPUBlendState(blendState, blendParams);
+        target.blend = blend ? &blendState : nullptr;
         pipeline.multisample.count = 1;
         pipeline.multisample.mask = std::numeric_limits<std::uint32_t>::max();
         pipeline.multisample.alphaToCoverageEnabled = false;
@@ -1435,6 +1645,15 @@ struct VertexOutput {
         depthStencil.format = WGPUTextureFormat_Depth24PlusStencil8;
         depthStencil.depthWriteEnabled = depthWrite ? WGPUOptionalBool_True : WGPUOptionalBool_False;
         depthStencil.depthCompare = depthTest ? ToWGPUCompareFunction(depthFunc) : WGPUCompareFunction_Always;
+        // WEBGPU-41/79: DepthBias/SlopeScaleDepthBias baked into the pipeline object --
+        // wgpu-native has no per-draw depth-bias override (unlike Vulkan's vkCmdSetDepthBias).
+        // Scale matches FNA's own FNA3D_Driver_OpenGL.c XNAToGL_DepthBiasScale for a 24-bit
+        // depth format ((1<<24)-1): XNA's DepthBias is a fraction of the depth range,
+        // WGPUDepthStencilState::depthBias is an integer count of smallest-representable-
+        // depth-buffer units, exactly like D3D/GL's own "scaled by format precision"
+        // interpretation (this backend's depth attachment is always Depth24PlusStencil8).
+        depthStencil.depthBias = static_cast<std::int32_t>(depthBias * 16777215.0f);
+        depthStencil.depthBiasSlopeScale = slopeScaleDepthBias;
         pipeline.depthStencil = &depthStencil;
 
         WGPURenderPipeline created = wgpuDeviceCreateRenderPipeline(device_, &pipeline);
@@ -1708,9 +1927,14 @@ struct VertexOutput {
 
     WGPURenderPipeline WebGPUGraphicsBackend::GetOrCreatePipelineLitTextured3D(WGPUPrimitiveTopology topology,
                                                                                 bool depthTest, bool depthWrite,
-                                                                                int depthFunc)
+                                                                                int depthFunc,
+                                                    bool blend, const BlendKeyParams& blendParams,
+                                                    int cullMode, bool wireframe,
+                                                    float depthBias, float slopeScaleDepthBias)
     {
-        const int key = (static_cast<int>(topology) * 8 + depthFunc) * 4 + (depthTest ? 2 : 0) + (depthWrite ? 1 : 0);
+        const std::uint64_t key = Make3DPipelineKey(topology, depthTest, depthWrite, depthFunc,
+                                                     blend, blendParams, cullMode, wireframe,
+                                                     depthBias, slopeScaleDepthBias, 0);
         if (auto it = litTexturedPipelines_.find(key); it != litTexturedPipelines_.end())
             return it->second;
 
@@ -1749,7 +1973,13 @@ struct VertexOutput {
         pipeline.vertex.buffers = &vertexBufferLayout;
         pipeline.primitive.topology = topology;
         pipeline.primitive.frontFace = WGPUFrontFace_CCW;
-        pipeline.primitive.cullMode = WGPUCullMode_None;
+        pipeline.primitive.cullMode = ToWGPUCullMode(cullMode);
+        // WEBGPU-78: baked into the pipeline object (no dynamic WGPU blend override) --
+        // target.blend stays null (opaque overwrite) when blend is disabled, matching
+        // WGPUColorTargetState::blend's own "absent = no blending" semantics.
+        WGPUBlendState blendState = WGPU_BLEND_STATE_INIT;
+        FillWGPUBlendState(blendState, blendParams);
+        target.blend = blend ? &blendState : nullptr;
         pipeline.multisample.count = 1;
         pipeline.multisample.mask = std::numeric_limits<std::uint32_t>::max();
         pipeline.multisample.alphaToCoverageEnabled = false;
@@ -1759,6 +1989,15 @@ struct VertexOutput {
         depthStencil.format = WGPUTextureFormat_Depth24PlusStencil8;
         depthStencil.depthWriteEnabled = depthWrite ? WGPUOptionalBool_True : WGPUOptionalBool_False;
         depthStencil.depthCompare = depthTest ? ToWGPUCompareFunction(depthFunc) : WGPUCompareFunction_Always;
+        // WEBGPU-41/79: DepthBias/SlopeScaleDepthBias baked into the pipeline object --
+        // wgpu-native has no per-draw depth-bias override (unlike Vulkan's vkCmdSetDepthBias).
+        // Scale matches FNA's own FNA3D_Driver_OpenGL.c XNAToGL_DepthBiasScale for a 24-bit
+        // depth format ((1<<24)-1): XNA's DepthBias is a fraction of the depth range,
+        // WGPUDepthStencilState::depthBias is an integer count of smallest-representable-
+        // depth-buffer units, exactly like D3D/GL's own "scaled by format precision"
+        // interpretation (this backend's depth attachment is always Depth24PlusStencil8).
+        depthStencil.depthBias = static_cast<std::int32_t>(depthBias * 16777215.0f);
+        depthStencil.depthBiasSlopeScale = slopeScaleDepthBias;
         pipeline.depthStencil = &depthStencil;
 
         WGPURenderPipeline created = wgpuDeviceCreateRenderPipeline(device_, &pipeline);
@@ -1769,9 +2008,14 @@ struct VertexOutput {
     }
 
     WGPURenderPipeline WebGPUGraphicsBackend::GetOrCreatePipelineLitTextured3DVertexLit(
-        WGPUPrimitiveTopology topology, bool depthTest, bool depthWrite, int depthFunc)
+        WGPUPrimitiveTopology topology, bool depthTest, bool depthWrite, int depthFunc,
+                                                    bool blend, const BlendKeyParams& blendParams,
+                                                    int cullMode, bool wireframe,
+                                                    float depthBias, float slopeScaleDepthBias)
     {
-        const int key = (static_cast<int>(topology) * 8 + depthFunc) * 4 + (depthTest ? 2 : 0) + (depthWrite ? 1 : 0);
+        const std::uint64_t key = Make3DPipelineKey(topology, depthTest, depthWrite, depthFunc,
+                                                     blend, blendParams, cullMode, wireframe,
+                                                     depthBias, slopeScaleDepthBias, 0);
         if (auto it = litTexturedVertexLitPipelines_.find(key); it != litTexturedVertexLitPipelines_.end())
             return it->second;
 
@@ -1810,7 +2054,13 @@ struct VertexOutput {
         pipeline.vertex.buffers = &vertexBufferLayout;
         pipeline.primitive.topology = topology;
         pipeline.primitive.frontFace = WGPUFrontFace_CCW;
-        pipeline.primitive.cullMode = WGPUCullMode_None;
+        pipeline.primitive.cullMode = ToWGPUCullMode(cullMode);
+        // WEBGPU-78: baked into the pipeline object (no dynamic WGPU blend override) --
+        // target.blend stays null (opaque overwrite) when blend is disabled, matching
+        // WGPUColorTargetState::blend's own "absent = no blending" semantics.
+        WGPUBlendState blendState = WGPU_BLEND_STATE_INIT;
+        FillWGPUBlendState(blendState, blendParams);
+        target.blend = blend ? &blendState : nullptr;
         pipeline.multisample.count = 1;
         pipeline.multisample.mask = std::numeric_limits<std::uint32_t>::max();
         pipeline.multisample.alphaToCoverageEnabled = false;
@@ -1820,6 +2070,15 @@ struct VertexOutput {
         depthStencil.format = WGPUTextureFormat_Depth24PlusStencil8;
         depthStencil.depthWriteEnabled = depthWrite ? WGPUOptionalBool_True : WGPUOptionalBool_False;
         depthStencil.depthCompare = depthTest ? ToWGPUCompareFunction(depthFunc) : WGPUCompareFunction_Always;
+        // WEBGPU-41/79: DepthBias/SlopeScaleDepthBias baked into the pipeline object --
+        // wgpu-native has no per-draw depth-bias override (unlike Vulkan's vkCmdSetDepthBias).
+        // Scale matches FNA's own FNA3D_Driver_OpenGL.c XNAToGL_DepthBiasScale for a 24-bit
+        // depth format ((1<<24)-1): XNA's DepthBias is a fraction of the depth range,
+        // WGPUDepthStencilState::depthBias is an integer count of smallest-representable-
+        // depth-buffer units, exactly like D3D/GL's own "scaled by format precision"
+        // interpretation (this backend's depth attachment is always Depth24PlusStencil8).
+        depthStencil.depthBias = static_cast<std::int32_t>(depthBias * 16777215.0f);
+        depthStencil.depthBiasSlopeScale = slopeScaleDepthBias;
         pipeline.depthStencil = &depthStencil;
 
         WGPURenderPipeline created = wgpuDeviceCreateRenderPipeline(device_, &pipeline);
@@ -1970,10 +2229,15 @@ struct VertexOutput {
     WGPURenderPipeline WebGPUGraphicsBackend::GetOrCreatePipelineAlphaTest3D(std::size_t stride,
                                                                               WGPUPrimitiveTopology topology,
                                                                               bool depthTest, bool depthWrite,
-                                                                              int depthFunc)
+                                                                              int depthFunc,
+                                                    bool blend, const BlendKeyParams& blendParams,
+                                                    int cullMode, bool wireframe,
+                                                    float depthBias, float slopeScaleDepthBias)
     {
-        const int key = ((static_cast<int>(stride) * 8 + static_cast<int>(topology)) * 8 + depthFunc) * 4 +
-                        (depthTest ? 2 : 0) + (depthWrite ? 1 : 0);
+        const std::uint64_t key = Make3DPipelineKey(topology, depthTest, depthWrite, depthFunc,
+                                                     blend, blendParams, cullMode, wireframe,
+                                                     depthBias, slopeScaleDepthBias,
+                                                     static_cast<std::uint64_t>(stride));
         auto& cache = (stride == 24) ? alphaTestColoredPipelines_ : alphaTestPipelines_;
         if (auto it = cache.find(key); it != cache.end())
             return it->second;
@@ -2051,7 +2315,13 @@ struct VertexOutput {
         pipeline.vertex.buffers = &vertexBufferLayout;
         pipeline.primitive.topology = topology;
         pipeline.primitive.frontFace = WGPUFrontFace_CCW;
-        pipeline.primitive.cullMode = WGPUCullMode_None;
+        pipeline.primitive.cullMode = ToWGPUCullMode(cullMode);
+        // WEBGPU-78: baked into the pipeline object (no dynamic WGPU blend override) --
+        // target.blend stays null (opaque overwrite) when blend is disabled, matching
+        // WGPUColorTargetState::blend's own "absent = no blending" semantics.
+        WGPUBlendState blendState = WGPU_BLEND_STATE_INIT;
+        FillWGPUBlendState(blendState, blendParams);
+        target.blend = blend ? &blendState : nullptr;
         pipeline.multisample.count = 1;
         pipeline.multisample.mask = std::numeric_limits<std::uint32_t>::max();
         pipeline.multisample.alphaToCoverageEnabled = false;
@@ -2061,6 +2331,15 @@ struct VertexOutput {
         depthStencil.format = WGPUTextureFormat_Depth24PlusStencil8;
         depthStencil.depthWriteEnabled = depthWrite ? WGPUOptionalBool_True : WGPUOptionalBool_False;
         depthStencil.depthCompare = depthTest ? ToWGPUCompareFunction(depthFunc) : WGPUCompareFunction_Always;
+        // WEBGPU-41/79: DepthBias/SlopeScaleDepthBias baked into the pipeline object --
+        // wgpu-native has no per-draw depth-bias override (unlike Vulkan's vkCmdSetDepthBias).
+        // Scale matches FNA's own FNA3D_Driver_OpenGL.c XNAToGL_DepthBiasScale for a 24-bit
+        // depth format ((1<<24)-1): XNA's DepthBias is a fraction of the depth range,
+        // WGPUDepthStencilState::depthBias is an integer count of smallest-representable-
+        // depth-buffer units, exactly like D3D/GL's own "scaled by format precision"
+        // interpretation (this backend's depth attachment is always Depth24PlusStencil8).
+        depthStencil.depthBias = static_cast<std::int32_t>(depthBias * 16777215.0f);
+        depthStencil.depthBiasSlopeScale = slopeScaleDepthBias;
         pipeline.depthStencil = &depthStencil;
 
         WGPURenderPipeline created = wgpuDeviceCreateRenderPipeline(device_, &pipeline);
@@ -2234,10 +2513,15 @@ struct VertexOutput {
     WGPURenderPipeline WebGPUGraphicsBackend::GetOrCreatePipelineDualTexture3D(std::size_t stride,
                                                                                 WGPUPrimitiveTopology topology,
                                                                                 bool depthTest, bool depthWrite,
-                                                                                int depthFunc)
+                                                                                int depthFunc,
+                                                    bool blend, const BlendKeyParams& blendParams,
+                                                    int cullMode, bool wireframe,
+                                                    float depthBias, float slopeScaleDepthBias)
     {
-        const int key = ((static_cast<int>(stride) * 8 + static_cast<int>(topology)) * 8 + depthFunc) * 4 +
-                        (depthTest ? 2 : 0) + (depthWrite ? 1 : 0);
+        const std::uint64_t key = Make3DPipelineKey(topology, depthTest, depthWrite, depthFunc,
+                                                     blend, blendParams, cullMode, wireframe,
+                                                     depthBias, slopeScaleDepthBias,
+                                                     static_cast<std::uint64_t>(stride));
         auto& cache = (stride == 24) ? dualTextureColoredPipelines_ : dualTexturePipelines_;
         if (auto it = cache.find(key); it != cache.end())
             return it->second;
@@ -2300,7 +2584,13 @@ struct VertexOutput {
         pipeline.vertex.buffers = &vertexBufferLayout;
         pipeline.primitive.topology = topology;
         pipeline.primitive.frontFace = WGPUFrontFace_CCW;
-        pipeline.primitive.cullMode = WGPUCullMode_None;
+        pipeline.primitive.cullMode = ToWGPUCullMode(cullMode);
+        // WEBGPU-78: baked into the pipeline object (no dynamic WGPU blend override) --
+        // target.blend stays null (opaque overwrite) when blend is disabled, matching
+        // WGPUColorTargetState::blend's own "absent = no blending" semantics.
+        WGPUBlendState blendState = WGPU_BLEND_STATE_INIT;
+        FillWGPUBlendState(blendState, blendParams);
+        target.blend = blend ? &blendState : nullptr;
         pipeline.multisample.count = 1;
         pipeline.multisample.mask = std::numeric_limits<std::uint32_t>::max();
         pipeline.multisample.alphaToCoverageEnabled = false;
@@ -2310,6 +2600,15 @@ struct VertexOutput {
         depthStencil.format = WGPUTextureFormat_Depth24PlusStencil8;
         depthStencil.depthWriteEnabled = depthWrite ? WGPUOptionalBool_True : WGPUOptionalBool_False;
         depthStencil.depthCompare = depthTest ? ToWGPUCompareFunction(depthFunc) : WGPUCompareFunction_Always;
+        // WEBGPU-41/79: DepthBias/SlopeScaleDepthBias baked into the pipeline object --
+        // wgpu-native has no per-draw depth-bias override (unlike Vulkan's vkCmdSetDepthBias).
+        // Scale matches FNA's own FNA3D_Driver_OpenGL.c XNAToGL_DepthBiasScale for a 24-bit
+        // depth format ((1<<24)-1): XNA's DepthBias is a fraction of the depth range,
+        // WGPUDepthStencilState::depthBias is an integer count of smallest-representable-
+        // depth-buffer units, exactly like D3D/GL's own "scaled by format precision"
+        // interpretation (this backend's depth attachment is always Depth24PlusStencil8).
+        depthStencil.depthBias = static_cast<std::int32_t>(depthBias * 16777215.0f);
+        depthStencil.depthBiasSlopeScale = slopeScaleDepthBias;
         pipeline.depthStencil = &depthStencil;
 
         WGPURenderPipeline created = wgpuDeviceCreateRenderPipeline(device_, &pipeline);
@@ -2500,11 +2799,120 @@ struct VertexOutput {
     }
 
     void WebGPUGraphicsBackend::ApplyDepthStencilState(bool depthEnable, bool depthWriteEnable, int depthFunc,
-                                                        bool, int, int, int, int, int, int, int, bool, int, int, int, int)
+                                                        bool stencilEnable, int stencilFunc,
+                                                        int stencilPass, int stencilFail, int stencilDepthFail,
+                                                        int stencilMask, int stencilWriteMask, int referenceStencil,
+                                                        bool twoSidedStencilMode,
+                                                        int ccwStencilFunc, int ccwStencilPass,
+                                                        int ccwStencilFail, int ccwStencilDepthFail)
     {
         depthTestEnabled_ = depthEnable;
         depthWriteEnabled_ = depthWriteEnable;
         depthCompareFunction_ = depthFunc;
+        // WEBGPU-83: stored for a future task -- see stencilEnable_'s own declaration comment for
+        // why baking these into every pipeline's WGPUStencilFaceState is deliberately deferred.
+        stencilEnable_ = stencilEnable;
+        stencilFunc_ = stencilFunc;
+        stencilPass_ = stencilPass;
+        stencilFail_ = stencilFail;
+        stencilDepthFail_ = stencilDepthFail;
+        stencilReadMask_ = stencilMask;
+        stencilWriteMask_ = stencilWriteMask;
+        referenceStencil_ = referenceStencil;
+        twoSidedStencilMode_ = twoSidedStencilMode;
+        ccwStencilFunc_ = ccwStencilFunc;
+        ccwStencilPass_ = ccwStencilPass;
+        ccwStencilFail_ = ccwStencilFail;
+        ccwStencilDepthFail_ = ccwStencilDepthFail;
+    }
+
+    void WebGPUGraphicsBackend::ApplyBlendState(int colorSrcBlend, int alphaSrcBlend,
+                                                int colorDstBlend, int alphaDstBlend,
+                                                int colorBlendFunc, int alphaBlendFunc)
+    {
+        // Blend::One=0, Blend::Zero=1 -> Opaque preset: src=One, dst=Zero -> no blending. Mirrors
+        // VulkanGraphicsBackend::ApplyBlendState()'s identical derivation exactly.
+        blendEnabled_ = !(colorSrcBlend == 0 && colorDstBlend == 1 &&
+                          alphaSrcBlend == 0 && alphaDstBlend == 1);
+        blendParams_.colorSrc  = colorSrcBlend;
+        blendParams_.colorDst  = colorDstBlend;
+        blendParams_.alphaSrc  = alphaSrcBlend;
+        blendParams_.alphaDst  = alphaDstBlend;
+        blendParams_.colorFunc = colorBlendFunc;
+        blendParams_.alphaFunc = alphaBlendFunc;
+    }
+
+    void WebGPUGraphicsBackend::ApplyRasterizerState(int cullMode, int fillMode, bool scissorTestEnable,
+                                                      float depthBias, float slopeScaleDepthBias)
+    {
+        // XNA CullMode: None=0, CullClockwiseFace=1, CullCounterClockwiseFace=2.
+        // XNA FillMode: Solid=0, WireFrame=1.
+        cullMode_ = cullMode;
+        fillModeWireframe_ = (fillMode == 1);
+        scissorEnabled_ = scissorTestEnable;
+        depthBias_ = depthBias;
+        slopeScaleDepthBias_ = slopeScaleDepthBias;
+    }
+
+    void WebGPUGraphicsBackend::ApplySamplerState(int slot, int filter, int addressU, int addressV,
+                                                  int maxAnisotropy)
+    {
+        if (slot < 0 || slot >= static_cast<int>(slotSamplers_.size()))
+            return;
+        slotSamplers_[static_cast<std::size_t>(slot)] = SlotSamplerState{filter, addressU, addressV, maxAnisotropy};
+    }
+
+    void WebGPUGraphicsBackend::SetBlendFactor(float r, float g, float b, float a)
+    {
+        blendFactorR_ = r;
+        blendFactorG_ = g;
+        blendFactorB_ = b;
+        blendFactorA_ = a;
+    }
+
+    void WebGPUGraphicsBackend::SetReferenceStencil(int value)
+    {
+        referenceStencil_ = value;
+    }
+
+    void WebGPUGraphicsBackend::SetScissorRect(int x, int y, int w, int h)
+    {
+        scissorX_ = x;
+        scissorY_ = y;
+        scissorW_ = std::max(0, w);
+        scissorH_ = std::max(0, h);
+    }
+
+    void WebGPUGraphicsBackend::SetViewport(int x, int y, int w, int h, float minDepth, float maxDepth)
+    {
+        viewportX_ = x;
+        viewportY_ = y;
+        viewportW_ = std::max(0, w);
+        viewportH_ = std::max(0, h);
+        viewportMinDepth_ = minDepth;
+        viewportMaxDepth_ = maxDepth;
+        viewportSet_ = true;
+    }
+
+    WGPUSampler WebGPUGraphicsBackend::GetOrCreateSlotSampler(int filter, int addressU, int addressV,
+                                                               int maxAnisotropy)
+    {
+        const int clampedAniso = std::clamp(maxAnisotropy, 1, 16);
+        const std::uint32_t key = (static_cast<std::uint32_t>(filter) & 0xFFu)
+                                 | ((static_cast<std::uint32_t>(addressU) & 0xFFu) << 8)
+                                 | ((static_cast<std::uint32_t>(addressV) & 0xFFu) << 16)
+                                 | ((static_cast<std::uint32_t>(clampedAniso) & 0xFFu) << 24);
+        if (auto it = slotSamplerCache_.find(key); it != slotSamplerCache_.end())
+            return it->second;
+
+        WGPUSamplerDescriptor descriptor{};
+        descriptor.label = StringView("CNA WebGPU 3D SamplerState Sampler");
+        FillWGPUSamplerDescriptor(descriptor, filter, addressU, addressV, clampedAniso);
+        WGPUSampler sampler = wgpuDeviceCreateSampler(device_, &descriptor);
+        if (sampler == nullptr)
+            throw std::runtime_error("CNA WebGPU: failed to create per-slot SamplerState sampler");
+        slotSamplerCache_[key] = sampler;
+        return sampler;
     }
 
     void WebGPUGraphicsBackend::Clear(float r, float g, float b, float a)
@@ -2589,6 +2997,57 @@ struct VertexOutput {
         passDescriptor.colorAttachments = &colorAttachment;
         passDescriptor.depthStencilAttachment = depthView_ != nullptr ? &depthAttachment : nullptr;
         WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(encoder, &passDescriptor);
+
+        // WEBGPU-80/81/29/30: scissor rect, viewport, blend constant and reference stencil are all
+        // genuinely dynamic wgpu-native render-pass state (unlike blend/cull/wireframe/depthBias,
+        // which are baked per-pipeline above) -- applied once here from whatever is currently
+        // stored, exactly like Vulkan's own vkCmdSetScissor/Viewport/BlendConstants/
+        // StencilReference calls at the top of its own single-pass-per-frame record path. A
+        // disabled scissor test still needs an explicit full-backbuffer wgpuRenderPassEncoderSetScissorRect
+        // call: WebGPU has no separate "scissor test enable" toggle the way GL/Vulkan do -- the
+        // scissor rect IS the only clip, so "disabled" means "rect == the whole target".
+        const std::uint32_t fullW = static_cast<std::uint32_t>(std::max(0, physicalWidth_));
+        const std::uint32_t fullH = static_cast<std::uint32_t>(std::max(0, physicalHeight_));
+        if (scissorEnabled_)
+        {
+            const std::uint32_t sx = static_cast<std::uint32_t>(std::clamp(scissorX_, 0, physicalWidth_));
+            const std::uint32_t sy = static_cast<std::uint32_t>(std::clamp(scissorY_, 0, physicalHeight_));
+            const std::uint32_t sw = std::min(static_cast<std::uint32_t>(scissorW_), fullW - std::min(sx, fullW));
+            const std::uint32_t sh = std::min(static_cast<std::uint32_t>(scissorH_), fullH - std::min(sy, fullH));
+            wgpuRenderPassEncoderSetScissorRect(pass, sx, sy, sw, sh);
+        }
+        else
+        {
+            wgpuRenderPassEncoderSetScissorRect(pass, 0, 0, fullW, fullH);
+        }
+        if (viewportSet_)
+        {
+            // wgpu-native requires x+width <= target width and y+height <= target height (a
+            // hard validation rule -- unlike scissor, which wgpu-native happens to accept
+            // out-of-bounds without complaint, an oversized viewport silently distorts geometry
+            // instead of being rejected or clipped). GraphicsDevice.Viewport can legitimately be
+            // stale relative to the CURRENT physical surface across a live window resize (its
+            // default value is only refreshed by GraphicsDevice.UpdateViewportFromWindow(), not
+            // on every frame) -- clamp defensively here so a stale/oversized Viewport degrades to
+            // "as much of it as actually fits" instead of stretching every draw in the pass.
+            const float vx = static_cast<float>(std::clamp(viewportX_, 0, physicalWidth_));
+            const float vy = static_cast<float>(std::clamp(viewportY_, 0, physicalHeight_));
+            const float vw = static_cast<float>(std::min(static_cast<std::uint32_t>(std::max(0, viewportW_)),
+                                                          fullW - std::min(static_cast<std::uint32_t>(vx), fullW)));
+            const float vh = static_cast<float>(std::min(static_cast<std::uint32_t>(std::max(0, viewportH_)),
+                                                          fullH - std::min(static_cast<std::uint32_t>(vy), fullH)));
+            wgpuRenderPassEncoderSetViewport(pass, vx, vy, std::max(vw, 1.0f), std::max(vh, 1.0f),
+                                             viewportMinDepth_, viewportMaxDepth_);
+        }
+        else
+        {
+            wgpuRenderPassEncoderSetViewport(pass, 0.0f, 0.0f, static_cast<float>(fullW), static_cast<float>(fullH),
+                                             0.0f, 1.0f);
+        }
+        const WGPUColor blendConstant{blendFactorR_, blendFactorG_, blendFactorB_, blendFactorA_};
+        wgpuRenderPassEncoderSetBlendConstant(pass, &blendConstant);
+        wgpuRenderPassEncoderSetStencilReference(pass, static_cast<std::uint32_t>(referenceStencil_));
+
         // 3D draws first, 2D SpriteBatch/UI on top -- matches typical XNA game draw order
         // (World.Draw() then a HUD SpriteBatch pass), both collapsed into this one deferred pass.
         RenderColoredDraws(pass);
@@ -2883,6 +3342,15 @@ struct VertexOutput {
         command.depthTest = depthTestEnabled_;
         command.depthFunc = depthCompareFunction_;
         command.depthWrite = depthWriteEnabled_;
+        // WEBGPU-41/77/78/79: captured at queue time exactly like depthTest/depthWrite/
+        // depthFunc above -- each is baked into the pipeline object, so a later ApplyBlendState/
+        // ApplyRasterizerState() call must not retroactively change an already-queued draw.
+        command.blend = blendEnabled_;
+        command.blendParams = blendParams_;
+        command.cullMode = cullMode_;
+        command.wireframe = fillModeWireframe_;
+        command.depthBias = depthBias_;
+        command.slopeScaleDepthBias = slopeScaleDepthBias_;
         if (params != nullptr)
         {
             const Matrix wvp = world * view * projection;
@@ -3101,7 +3569,10 @@ struct VertexOutput {
             WGPUBindGroup bindGroup = wgpuDeviceCreateBindGroup(device_, &bindDescriptor);
 
             WGPURenderPipeline pipe = GetOrCreatePipelineColored3D(command.topology, command.depthTest,
-                                                                   command.depthWrite, command.depthFunc);
+                                                                   command.depthWrite, command.depthFunc,
+                                                                   command.blend, command.blendParams,
+                                                                   command.cullMode, command.wireframe,
+                                                                   command.depthBias, command.slopeScaleDepthBias);
             wgpuRenderPassEncoderSetPipeline(pass, pipe);
             wgpuRenderPassEncoderSetBindGroup(pass, 0, bindGroup, 0, nullptr);
             wgpuRenderPassEncoderSetVertexBuffer(pass, 0, vertexBuffer, 0, command.vertexData.size());
@@ -3164,7 +3635,7 @@ struct VertexOutput {
             uboBindDescriptor.entries = &uboEntry;
             WGPUBindGroup uboBindGroup = wgpuDeviceCreateBindGroup(device_, &uboBindDescriptor);
 
-            WGPUSampler sampler = GetOrCreateSampler(command.textureFilter, command.addressU, command.addressV);
+            WGPUSampler sampler = GetOrCreateSlotSampler(command.textureFilter, command.addressU, command.addressV, command.maxAnisotropy);
             std::array<WGPUBindGroupEntry, 2> texEntries{};
             texEntries[0].binding = 0;
             texEntries[0].sampler = sampler;
@@ -3179,9 +3650,15 @@ struct VertexOutput {
 
             WGPURenderPipeline pipe = command.hasVertexColor
                 ? GetOrCreatePipelineColoredTextured3D(command.topology, command.depthTest,
-                                                       command.depthWrite, command.depthFunc)
+                                                       command.depthWrite, command.depthFunc,
+                                                       command.blend, command.blendParams,
+                                                       command.cullMode, command.wireframe,
+                                                       command.depthBias, command.slopeScaleDepthBias)
                 : GetOrCreatePipelineTextured3D(command.topology, command.depthTest,
-                                                command.depthWrite, command.depthFunc);
+                                                command.depthWrite, command.depthFunc,
+                                                command.blend, command.blendParams,
+                                                command.cullMode, command.wireframe,
+                                                command.depthBias, command.slopeScaleDepthBias);
             wgpuRenderPassEncoderSetPipeline(pass, pipe);
             wgpuRenderPassEncoderSetBindGroup(pass, 0, uboBindGroup, 0, nullptr);
             wgpuRenderPassEncoderSetBindGroup(pass, 1, texBindGroup, 0, nullptr);
@@ -3256,7 +3733,7 @@ struct VertexOutput {
             uboBindDescriptor.entries = uboEntries.data();
             WGPUBindGroup uboBindGroup = wgpuDeviceCreateBindGroup(device_, &uboBindDescriptor);
 
-            WGPUSampler sampler = GetOrCreateSampler(command.textureFilter, command.addressU, command.addressV);
+            WGPUSampler sampler = GetOrCreateSlotSampler(command.textureFilter, command.addressU, command.addressV, command.maxAnisotropy);
             std::array<WGPUBindGroupEntry, 2> texEntries{};
             texEntries[0].binding = 0;
             texEntries[0].sampler = sampler;
@@ -3271,9 +3748,15 @@ struct VertexOutput {
 
             WGPURenderPipeline pipe = command.preferVertexLit
                 ? GetOrCreatePipelineLitTextured3DVertexLit(command.topology, command.depthTest,
-                                                             command.depthWrite, command.depthFunc)
+                                                             command.depthWrite, command.depthFunc,
+                                                             command.blend, command.blendParams,
+                                                             command.cullMode, command.wireframe,
+                                                             command.depthBias, command.slopeScaleDepthBias)
                 : GetOrCreatePipelineLitTextured3D(command.topology, command.depthTest,
-                                                    command.depthWrite, command.depthFunc);
+                                                    command.depthWrite, command.depthFunc,
+                                                    command.blend, command.blendParams,
+                                                    command.cullMode, command.wireframe,
+                                                    command.depthBias, command.slopeScaleDepthBias);
             wgpuRenderPassEncoderSetPipeline(pass, pipe);
             wgpuRenderPassEncoderSetBindGroup(pass, 0, uboBindGroup, 0, nullptr);
             wgpuRenderPassEncoderSetBindGroup(pass, 1, texBindGroup, 0, nullptr);
@@ -3328,7 +3811,22 @@ struct VertexOutput {
         command.depthTest = depthTestEnabled_;
         command.depthFunc = depthCompareFunction_;
         command.depthWrite = depthWriteEnabled_;
+        // WEBGPU-41/77/78/79: captured at queue time exactly like depthTest/depthWrite/
+        // depthFunc above -- each is baked into the pipeline object, so a later ApplyBlendState/
+        // ApplyRasterizerState() call must not retroactively change an already-queued draw.
+        command.blend = blendEnabled_;
+        command.blendParams = blendParams_;
+        command.cullMode = cullMode_;
+        command.wireframe = fillModeWireframe_;
+        command.depthBias = depthBias_;
+        command.slopeScaleDepthBias = slopeScaleDepthBias_;
         command.texture = static_cast<const WebGPUTextureBackend*>(params.texture0);
+        // WEBGPU-82: real per-slot SamplerState (slot 0) instead of the struct's hardcoded
+        // Linear/Clamp/Clamp defaults -- see ApplySamplerState().
+        command.textureFilter = slotSamplers_[0].filter;
+        command.addressU = slotSamplers_[0].addressU;
+        command.addressV = slotSamplers_[0].addressV;
+        command.maxAnisotropy = slotSamplers_[0].maxAnisotropy;
         // Task 1105: XNA's real BasicEffect.PreferPerPixelLighting default is false (per-vertex),
         // matching every other backend's own dispatch condition for this flag.
         command.preferVertexLit = params.lightingEnabled && !params.preferPerPixelLighting;
@@ -3387,7 +3885,7 @@ struct VertexOutput {
             uboBindDescriptor.entries = &uboEntry;
             WGPUBindGroup uboBindGroup = wgpuDeviceCreateBindGroup(device_, &uboBindDescriptor);
 
-            WGPUSampler sampler = GetOrCreateSampler(command.textureFilter, command.addressU, command.addressV);
+            WGPUSampler sampler = GetOrCreateSlotSampler(command.textureFilter, command.addressU, command.addressV, command.maxAnisotropy);
             std::array<WGPUBindGroupEntry, 2> texEntries{};
             texEntries[0].binding = 0;
             texEntries[0].sampler = sampler;
@@ -3402,7 +3900,10 @@ struct VertexOutput {
 
             WGPURenderPipeline pipe = GetOrCreatePipelineAlphaTest3D(command.stride, command.topology,
                                                                      command.depthTest, command.depthWrite,
-                                                                     command.depthFunc);
+                                                                     command.depthFunc,
+                                                                     command.blend, command.blendParams,
+                                                                     command.cullMode, command.wireframe,
+                                                                     command.depthBias, command.slopeScaleDepthBias);
             wgpuRenderPassEncoderSetPipeline(pass, pipe);
             wgpuRenderPassEncoderSetBindGroup(pass, 0, uboBindGroup, 0, nullptr);
             wgpuRenderPassEncoderSetBindGroup(pass, 1, texBindGroup, 0, nullptr);
@@ -3459,7 +3960,22 @@ struct VertexOutput {
         command.depthTest = depthTestEnabled_;
         command.depthFunc = depthCompareFunction_;
         command.depthWrite = depthWriteEnabled_;
+        // WEBGPU-41/77/78/79: captured at queue time exactly like depthTest/depthWrite/
+        // depthFunc above -- each is baked into the pipeline object, so a later ApplyBlendState/
+        // ApplyRasterizerState() call must not retroactively change an already-queued draw.
+        command.blend = blendEnabled_;
+        command.blendParams = blendParams_;
+        command.cullMode = cullMode_;
+        command.wireframe = fillModeWireframe_;
+        command.depthBias = depthBias_;
+        command.slopeScaleDepthBias = slopeScaleDepthBias_;
         command.texture = static_cast<const WebGPUTextureBackend*>(params.texture0);
+        // WEBGPU-82: real per-slot SamplerState (slot 0) instead of the struct's hardcoded
+        // Linear/Clamp/Clamp defaults -- see ApplySamplerState().
+        command.textureFilter = slotSamplers_[0].filter;
+        command.addressU = slotSamplers_[0].addressU;
+        command.addressV = slotSamplers_[0].addressV;
+        command.maxAnisotropy = slotSamplers_[0].maxAnisotropy;
         const Matrix wvp = world * view * projection;
         FillAlphaTestUniforms(command.uniforms, wvp, params);
 
@@ -3515,7 +4031,7 @@ struct VertexOutput {
             uboBindDescriptor.entries = &uboEntry;
             WGPUBindGroup uboBindGroup = wgpuDeviceCreateBindGroup(device_, &uboBindDescriptor);
 
-            WGPUSampler sampler = GetOrCreateSampler(command.textureFilter, command.addressU, command.addressV);
+            WGPUSampler sampler = GetOrCreateSlotSampler(command.textureFilter, command.addressU, command.addressV, command.maxAnisotropy);
             std::array<WGPUBindGroupEntry, 3> texEntries{};
             texEntries[0].binding = 0;
             texEntries[0].sampler = sampler;
@@ -3532,7 +4048,10 @@ struct VertexOutput {
 
             WGPURenderPipeline pipe = GetOrCreatePipelineDualTexture3D(command.hasVertexColor ? 24 : 20,
                                                                        command.topology, command.depthTest,
-                                                                       command.depthWrite, command.depthFunc);
+                                                                       command.depthWrite, command.depthFunc,
+                                                                       command.blend, command.blendParams,
+                                                                       command.cullMode, command.wireframe,
+                                                                       command.depthBias, command.slopeScaleDepthBias);
             wgpuRenderPassEncoderSetPipeline(pass, pipe);
             wgpuRenderPassEncoderSetBindGroup(pass, 0, uboBindGroup, 0, nullptr);
             wgpuRenderPassEncoderSetBindGroup(pass, 1, texBindGroup, 0, nullptr);
@@ -3589,7 +4108,22 @@ struct VertexOutput {
         command.depthTest = depthTestEnabled_;
         command.depthFunc = depthCompareFunction_;
         command.depthWrite = depthWriteEnabled_;
+        // WEBGPU-41/77/78/79: captured at queue time exactly like depthTest/depthWrite/
+        // depthFunc above -- each is baked into the pipeline object, so a later ApplyBlendState/
+        // ApplyRasterizerState() call must not retroactively change an already-queued draw.
+        command.blend = blendEnabled_;
+        command.blendParams = blendParams_;
+        command.cullMode = cullMode_;
+        command.wireframe = fillModeWireframe_;
+        command.depthBias = depthBias_;
+        command.slopeScaleDepthBias = slopeScaleDepthBias_;
         command.texture0 = static_cast<const WebGPUTextureBackend*>(params.texture0);
+        // WEBGPU-82: real per-slot SamplerState (slot 0) instead of the struct's hardcoded
+        // Linear/Clamp/Clamp defaults -- see ApplySamplerState().
+        command.textureFilter = slotSamplers_[0].filter;
+        command.addressU = slotSamplers_[0].addressU;
+        command.addressV = slotSamplers_[0].addressV;
+        command.maxAnisotropy = slotSamplers_[0].maxAnisotropy;
         command.texture1 = static_cast<const WebGPUTextureBackend*>(params.texture1);
         const Matrix wvp = world * view * projection;
         FillExtUniforms(command.uniforms, wvp, params);
@@ -3637,7 +4171,22 @@ struct VertexOutput {
         command.depthTest = depthTestEnabled_;
         command.depthFunc = depthCompareFunction_;
         command.depthWrite = depthWriteEnabled_;
+        // WEBGPU-41/77/78/79: captured at queue time exactly like depthTest/depthWrite/
+        // depthFunc above -- each is baked into the pipeline object, so a later ApplyBlendState/
+        // ApplyRasterizerState() call must not retroactively change an already-queued draw.
+        command.blend = blendEnabled_;
+        command.blendParams = blendParams_;
+        command.cullMode = cullMode_;
+        command.wireframe = fillModeWireframe_;
+        command.depthBias = depthBias_;
+        command.slopeScaleDepthBias = slopeScaleDepthBias_;
         command.texture = static_cast<const WebGPUTextureBackend*>(params.texture0);
+        // WEBGPU-82: real per-slot SamplerState (slot 0) instead of the struct's hardcoded
+        // Linear/Clamp/Clamp defaults -- see ApplySamplerState().
+        command.textureFilter = slotSamplers_[0].filter;
+        command.addressU = slotSamplers_[0].addressU;
+        command.addressV = slotSamplers_[0].addressV;
+        command.maxAnisotropy = slotSamplers_[0].maxAnisotropy;
         const Matrix wvp = world * view * projection;
         FillExtUniforms(command.uniforms, wvp, params);
 
@@ -3883,9 +4432,14 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
 
     WGPURenderPipeline WebGPUGraphicsBackend::GetOrCreatePipelinePbr3D(WGPUPrimitiveTopology topology,
                                                                          bool depthTest, bool depthWrite,
-                                                                         int depthFunc)
+                                                                         int depthFunc,
+                                                    bool blend, const BlendKeyParams& blendParams,
+                                                    int cullMode, bool wireframe,
+                                                    float depthBias, float slopeScaleDepthBias)
     {
-        const int key = (static_cast<int>(topology) * 8 + depthFunc) * 4 + (depthTest ? 2 : 0) + (depthWrite ? 1 : 0);
+        const std::uint64_t key = Make3DPipelineKey(topology, depthTest, depthWrite, depthFunc,
+                                                     blend, blendParams, cullMode, wireframe,
+                                                     depthBias, slopeScaleDepthBias, 0);
         if (auto it = pbrPipelines_.find(key); it != pbrPipelines_.end())
             return it->second;
 
@@ -3930,7 +4484,13 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
         pipeline.vertex.buffers = &vertexBufferLayout;
         pipeline.primitive.topology = topology;
         pipeline.primitive.frontFace = WGPUFrontFace_CCW;
-        pipeline.primitive.cullMode = WGPUCullMode_None;
+        pipeline.primitive.cullMode = ToWGPUCullMode(cullMode);
+        // WEBGPU-78: baked into the pipeline object (no dynamic WGPU blend override) --
+        // target.blend stays null (opaque overwrite) when blend is disabled, matching
+        // WGPUColorTargetState::blend's own "absent = no blending" semantics.
+        WGPUBlendState blendState = WGPU_BLEND_STATE_INIT;
+        FillWGPUBlendState(blendState, blendParams);
+        target.blend = blend ? &blendState : nullptr;
         pipeline.multisample.count = 1;
         pipeline.multisample.mask = std::numeric_limits<std::uint32_t>::max();
         pipeline.multisample.alphaToCoverageEnabled = false;
@@ -3940,6 +4500,15 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
         depthStencil.format = WGPUTextureFormat_Depth24PlusStencil8;
         depthStencil.depthWriteEnabled = depthWrite ? WGPUOptionalBool_True : WGPUOptionalBool_False;
         depthStencil.depthCompare = depthTest ? ToWGPUCompareFunction(depthFunc) : WGPUCompareFunction_Always;
+        // WEBGPU-41/79: DepthBias/SlopeScaleDepthBias baked into the pipeline object --
+        // wgpu-native has no per-draw depth-bias override (unlike Vulkan's vkCmdSetDepthBias).
+        // Scale matches FNA's own FNA3D_Driver_OpenGL.c XNAToGL_DepthBiasScale for a 24-bit
+        // depth format ((1<<24)-1): XNA's DepthBias is a fraction of the depth range,
+        // WGPUDepthStencilState::depthBias is an integer count of smallest-representable-
+        // depth-buffer units, exactly like D3D/GL's own "scaled by format precision"
+        // interpretation (this backend's depth attachment is always Depth24PlusStencil8).
+        depthStencil.depthBias = static_cast<std::int32_t>(depthBias * 16777215.0f);
+        depthStencil.depthBiasSlopeScale = slopeScaleDepthBias;
         pipeline.depthStencil = &depthStencil;
 
         WGPURenderPipeline created = wgpuDeviceCreateRenderPipeline(device_, &pipeline);
@@ -4001,7 +4570,22 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
         command.depthTest = depthTestEnabled_;
         command.depthFunc = depthCompareFunction_;
         command.depthWrite = depthWriteEnabled_;
+        // WEBGPU-41/77/78/79: captured at queue time exactly like depthTest/depthWrite/
+        // depthFunc above -- each is baked into the pipeline object, so a later ApplyBlendState/
+        // ApplyRasterizerState() call must not retroactively change an already-queued draw.
+        command.blend = blendEnabled_;
+        command.blendParams = blendParams_;
+        command.cullMode = cullMode_;
+        command.wireframe = fillModeWireframe_;
+        command.depthBias = depthBias_;
+        command.slopeScaleDepthBias = slopeScaleDepthBias_;
         command.baseColorTexture = static_cast<const WebGPUTextureBackend*>(params.texture0);
+        // WEBGPU-82: real per-slot SamplerState (slot 0) instead of the struct's hardcoded
+        // Linear/Clamp/Clamp defaults -- see ApplySamplerState().
+        command.textureFilter = slotSamplers_[0].filter;
+        command.addressU = slotSamplers_[0].addressU;
+        command.addressV = slotSamplers_[0].addressV;
+        command.maxAnisotropy = slotSamplers_[0].maxAnisotropy;
         command.normalMap = params.pbrNormalMap != nullptr
             ? static_cast<const WebGPUTextureBackend*>(params.pbrNormalMap)
             : pbrDefaultFlatNormalTexture_.get();
@@ -4093,7 +4677,7 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
             uboBindDescriptor.entries = uboEntries.data();
             WGPUBindGroup uboBindGroup = wgpuDeviceCreateBindGroup(device_, &uboBindDescriptor);
 
-            WGPUSampler sampler = GetOrCreateSampler(command.textureFilter, command.addressU, command.addressV);
+            WGPUSampler sampler = GetOrCreateSlotSampler(command.textureFilter, command.addressU, command.addressV, command.maxAnisotropy);
             std::array<WGPUBindGroupEntry, 6> texEntries{};
             texEntries[0].binding = 0;
             texEntries[0].sampler = sampler;
@@ -4115,7 +4699,10 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
             WGPUBindGroup texBindGroup = wgpuDeviceCreateBindGroup(device_, &texBindDescriptor);
 
             WGPURenderPipeline pipe = GetOrCreatePipelinePbr3D(command.topology, command.depthTest,
-                                                               command.depthWrite, command.depthFunc);
+                                                               command.depthWrite, command.depthFunc,
+                                                               command.blend, command.blendParams,
+                                                               command.cullMode, command.wireframe,
+                                                               command.depthBias, command.slopeScaleDepthBias);
             wgpuRenderPassEncoderSetPipeline(pass, pipe);
             wgpuRenderPassEncoderSetBindGroup(pass, 0, uboBindGroup, 0, nullptr);
             wgpuRenderPassEncoderSetBindGroup(pass, 1, texBindGroup, 0, nullptr);
@@ -4703,10 +5290,15 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
     WGPURenderPipeline WebGPUGraphicsBackend::GetOrCreatePipelineSkinned3D(std::size_t stride, bool preferVertexLit,
                                                                              WGPUPrimitiveTopology topology,
                                                                              bool depthTest, bool depthWrite,
-                                                                             int depthFunc)
+                                                                             int depthFunc,
+                                                    bool blend, const BlendKeyParams& blendParams,
+                                                    int cullMode, bool wireframe,
+                                                    float depthBias, float slopeScaleDepthBias)
     {
         const bool hasVertexColor = (stride == 56);
-        const int key = (static_cast<int>(topology) * 8 + depthFunc) * 4 + (depthTest ? 2 : 0) + (depthWrite ? 1 : 0);
+        const std::uint64_t key = Make3DPipelineKey(topology, depthTest, depthWrite, depthFunc,
+                                                     blend, blendParams, cullMode, wireframe,
+                                                     depthBias, slopeScaleDepthBias, 0);
         auto& cache = preferVertexLit
             ? (hasVertexColor ? skinnedVertexLitColorPipelines_ : skinnedVertexLitPipelines_)
             : (hasVertexColor ? skinnedColorPipelines_ : skinnedPipelines_);
@@ -4773,7 +5365,13 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
         pipeline.vertex.buffers = &vertexBufferLayout;
         pipeline.primitive.topology = topology;
         pipeline.primitive.frontFace = WGPUFrontFace_CCW;
-        pipeline.primitive.cullMode = WGPUCullMode_None;
+        pipeline.primitive.cullMode = ToWGPUCullMode(cullMode);
+        // WEBGPU-78: baked into the pipeline object (no dynamic WGPU blend override) --
+        // target.blend stays null (opaque overwrite) when blend is disabled, matching
+        // WGPUColorTargetState::blend's own "absent = no blending" semantics.
+        WGPUBlendState blendState = WGPU_BLEND_STATE_INIT;
+        FillWGPUBlendState(blendState, blendParams);
+        target.blend = blend ? &blendState : nullptr;
         pipeline.multisample.count = 1;
         pipeline.multisample.mask = std::numeric_limits<std::uint32_t>::max();
         pipeline.multisample.alphaToCoverageEnabled = false;
@@ -4783,6 +5381,15 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
         depthStencil.format = WGPUTextureFormat_Depth24PlusStencil8;
         depthStencil.depthWriteEnabled = depthWrite ? WGPUOptionalBool_True : WGPUOptionalBool_False;
         depthStencil.depthCompare = depthTest ? ToWGPUCompareFunction(depthFunc) : WGPUCompareFunction_Always;
+        // WEBGPU-41/79: DepthBias/SlopeScaleDepthBias baked into the pipeline object --
+        // wgpu-native has no per-draw depth-bias override (unlike Vulkan's vkCmdSetDepthBias).
+        // Scale matches FNA's own FNA3D_Driver_OpenGL.c XNAToGL_DepthBiasScale for a 24-bit
+        // depth format ((1<<24)-1): XNA's DepthBias is a fraction of the depth range,
+        // WGPUDepthStencilState::depthBias is an integer count of smallest-representable-
+        // depth-buffer units, exactly like D3D/GL's own "scaled by format precision"
+        // interpretation (this backend's depth attachment is always Depth24PlusStencil8).
+        depthStencil.depthBias = static_cast<std::int32_t>(depthBias * 16777215.0f);
+        depthStencil.depthBiasSlopeScale = slopeScaleDepthBias;
         pipeline.depthStencil = &depthStencil;
 
         WGPURenderPipeline created = wgpuDeviceCreateRenderPipeline(device_, &pipeline);
@@ -4816,7 +5423,22 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
         command.depthTest = depthTestEnabled_;
         command.depthFunc = depthCompareFunction_;
         command.depthWrite = depthWriteEnabled_;
+        // WEBGPU-41/77/78/79: captured at queue time exactly like depthTest/depthWrite/
+        // depthFunc above -- each is baked into the pipeline object, so a later ApplyBlendState/
+        // ApplyRasterizerState() call must not retroactively change an already-queued draw.
+        command.blend = blendEnabled_;
+        command.blendParams = blendParams_;
+        command.cullMode = cullMode_;
+        command.wireframe = fillModeWireframe_;
+        command.depthBias = depthBias_;
+        command.slopeScaleDepthBias = slopeScaleDepthBias_;
         command.texture = static_cast<const WebGPUTextureBackend*>(params.texture0);
+        // WEBGPU-82: real per-slot SamplerState (slot 0) instead of the struct's hardcoded
+        // Linear/Clamp/Clamp defaults -- see ApplySamplerState().
+        command.textureFilter = slotSamplers_[0].filter;
+        command.addressU = slotSamplers_[0].addressU;
+        command.addressV = slotSamplers_[0].addressV;
+        command.maxAnisotropy = slotSamplers_[0].maxAnisotropy;
         // Real XNA's SkinnedEffect.PreferPerPixelLighting default is false (per-vertex), matching
         // every other backend's own dispatch condition for this flag (Task 1102b).
         command.preferVertexLit = params.lightingEnabled && !params.preferPerPixelLighting;
@@ -4896,7 +5518,7 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
             uboBindDescriptor.entries = uboEntries.data();
             WGPUBindGroup uboBindGroup = wgpuDeviceCreateBindGroup(device_, &uboBindDescriptor);
 
-            WGPUSampler sampler = GetOrCreateSampler(command.textureFilter, command.addressU, command.addressV);
+            WGPUSampler sampler = GetOrCreateSlotSampler(command.textureFilter, command.addressU, command.addressV, command.maxAnisotropy);
             std::array<WGPUBindGroupEntry, 2> texEntries{};
             texEntries[0].binding = 0;
             texEntries[0].sampler = sampler;
@@ -4911,7 +5533,10 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
 
             WGPURenderPipeline pipe = GetOrCreatePipelineSkinned3D(command.stride, command.preferVertexLit,
                                                                     command.topology, command.depthTest,
-                                                                    command.depthWrite, command.depthFunc);
+                                                                    command.depthWrite, command.depthFunc,
+                                                                    command.blend, command.blendParams,
+                                                                    command.cullMode, command.wireframe,
+                                                                    command.depthBias, command.slopeScaleDepthBias);
             wgpuRenderPassEncoderSetPipeline(pass, pipe);
             wgpuRenderPassEncoderSetBindGroup(pass, 0, uboBindGroup, 0, nullptr);
             wgpuRenderPassEncoderSetBindGroup(pass, 1, texBindGroup, 0, nullptr);
@@ -5177,9 +5802,14 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
 
     WGPURenderPipeline WebGPUGraphicsBackend::GetOrCreatePipelineSkinnedPbr3D(WGPUPrimitiveTopology topology,
                                                                                 bool depthTest, bool depthWrite,
-                                                                                int depthFunc)
+                                                                                int depthFunc,
+                                                    bool blend, const BlendKeyParams& blendParams,
+                                                    int cullMode, bool wireframe,
+                                                    float depthBias, float slopeScaleDepthBias)
     {
-        const int key = (static_cast<int>(topology) * 8 + depthFunc) * 4 + (depthTest ? 2 : 0) + (depthWrite ? 1 : 0);
+        const std::uint64_t key = Make3DPipelineKey(topology, depthTest, depthWrite, depthFunc,
+                                                     blend, blendParams, cullMode, wireframe,
+                                                     depthBias, slopeScaleDepthBias, 0);
         if (auto it = skinnedPbrPipelines_.find(key); it != skinnedPbrPipelines_.end())
             return it->second;
 
@@ -5228,7 +5858,13 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
         pipeline.vertex.buffers = &vertexBufferLayout;
         pipeline.primitive.topology = topology;
         pipeline.primitive.frontFace = WGPUFrontFace_CCW;
-        pipeline.primitive.cullMode = WGPUCullMode_None;
+        pipeline.primitive.cullMode = ToWGPUCullMode(cullMode);
+        // WEBGPU-78: baked into the pipeline object (no dynamic WGPU blend override) --
+        // target.blend stays null (opaque overwrite) when blend is disabled, matching
+        // WGPUColorTargetState::blend's own "absent = no blending" semantics.
+        WGPUBlendState blendState = WGPU_BLEND_STATE_INIT;
+        FillWGPUBlendState(blendState, blendParams);
+        target.blend = blend ? &blendState : nullptr;
         pipeline.multisample.count = 1;
         pipeline.multisample.mask = std::numeric_limits<std::uint32_t>::max();
         pipeline.multisample.alphaToCoverageEnabled = false;
@@ -5238,6 +5874,15 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
         depthStencil.format = WGPUTextureFormat_Depth24PlusStencil8;
         depthStencil.depthWriteEnabled = depthWrite ? WGPUOptionalBool_True : WGPUOptionalBool_False;
         depthStencil.depthCompare = depthTest ? ToWGPUCompareFunction(depthFunc) : WGPUCompareFunction_Always;
+        // WEBGPU-41/79: DepthBias/SlopeScaleDepthBias baked into the pipeline object --
+        // wgpu-native has no per-draw depth-bias override (unlike Vulkan's vkCmdSetDepthBias).
+        // Scale matches FNA's own FNA3D_Driver_OpenGL.c XNAToGL_DepthBiasScale for a 24-bit
+        // depth format ((1<<24)-1): XNA's DepthBias is a fraction of the depth range,
+        // WGPUDepthStencilState::depthBias is an integer count of smallest-representable-
+        // depth-buffer units, exactly like D3D/GL's own "scaled by format precision"
+        // interpretation (this backend's depth attachment is always Depth24PlusStencil8).
+        depthStencil.depthBias = static_cast<std::int32_t>(depthBias * 16777215.0f);
+        depthStencil.depthBiasSlopeScale = slopeScaleDepthBias;
         pipeline.depthStencil = &depthStencil;
 
         WGPURenderPipeline created = wgpuDeviceCreateRenderPipeline(device_, &pipeline);
@@ -5270,7 +5915,22 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
         command.depthTest = depthTestEnabled_;
         command.depthFunc = depthCompareFunction_;
         command.depthWrite = depthWriteEnabled_;
+        // WEBGPU-41/77/78/79: captured at queue time exactly like depthTest/depthWrite/
+        // depthFunc above -- each is baked into the pipeline object, so a later ApplyBlendState/
+        // ApplyRasterizerState() call must not retroactively change an already-queued draw.
+        command.blend = blendEnabled_;
+        command.blendParams = blendParams_;
+        command.cullMode = cullMode_;
+        command.wireframe = fillModeWireframe_;
+        command.depthBias = depthBias_;
+        command.slopeScaleDepthBias = slopeScaleDepthBias_;
         command.baseColorTexture = static_cast<const WebGPUTextureBackend*>(params.texture0);
+        // WEBGPU-82: real per-slot SamplerState (slot 0) instead of the struct's hardcoded
+        // Linear/Clamp/Clamp defaults -- see ApplySamplerState().
+        command.textureFilter = slotSamplers_[0].filter;
+        command.addressU = slotSamplers_[0].addressU;
+        command.addressV = slotSamplers_[0].addressV;
+        command.maxAnisotropy = slotSamplers_[0].maxAnisotropy;
         command.normalMap = params.pbrNormalMap != nullptr
             ? static_cast<const WebGPUTextureBackend*>(params.pbrNormalMap)
             : pbrDefaultFlatNormalTexture_.get();
@@ -5373,7 +6033,7 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
             uboBindDescriptor.entries = uboEntries.data();
             WGPUBindGroup uboBindGroup = wgpuDeviceCreateBindGroup(device_, &uboBindDescriptor);
 
-            WGPUSampler sampler = GetOrCreateSampler(command.textureFilter, command.addressU, command.addressV);
+            WGPUSampler sampler = GetOrCreateSlotSampler(command.textureFilter, command.addressU, command.addressV, command.maxAnisotropy);
             std::array<WGPUBindGroupEntry, 6> texEntries{};
             texEntries[0].binding = 0;
             texEntries[0].sampler = sampler;
@@ -5395,7 +6055,10 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
             WGPUBindGroup texBindGroup = wgpuDeviceCreateBindGroup(device_, &texBindDescriptor);
 
             WGPURenderPipeline pipe = GetOrCreatePipelineSkinnedPbr3D(command.topology, command.depthTest,
-                                                                      command.depthWrite, command.depthFunc);
+                                                                      command.depthWrite, command.depthFunc,
+                                                                      command.blend, command.blendParams,
+                                                                      command.cullMode, command.wireframe,
+                                                                      command.depthBias, command.slopeScaleDepthBias);
             wgpuRenderPassEncoderSetPipeline(pass, pipe);
             wgpuRenderPassEncoderSetBindGroup(pass, 0, uboBindGroup, 0, nullptr);
             wgpuRenderPassEncoderSetBindGroup(pass, 1, texBindGroup, 0, nullptr);

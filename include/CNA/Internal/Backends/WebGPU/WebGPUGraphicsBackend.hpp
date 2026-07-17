@@ -162,6 +162,22 @@ namespace CNA::Internal::Backends::WebGPU
             int addressV = 1;
         };
 
+        /// WEBGPU-78: real per-draw BlendState factors/op, mirroring
+        /// VulkanGraphicsBackend::BlendKeyParams field-for-field. Declared early (public, top of
+        /// the class) because it is used as a parameter type by several private
+        /// GetOrCreatePipeline*() declarations below -- C++ class member declarations (as opposed
+        /// to member function bodies) are not a complete-class context, so a nested type used in a
+        /// sibling member's signature must already be visible at that point.
+        struct BlendKeyParams
+        {
+            int colorSrc = 0;   ///< Blend::One (BlendState.Opaque's default source factor)
+            int colorDst = 1;   ///< Blend::Zero
+            int alphaSrc = 0;
+            int alphaDst = 1;
+            int colorFunc = 0;  ///< BlendFunction::Add
+            int alphaFunc = 0;
+        };
+
         WebGPUGraphicsBackend(SDL_Window* window, int virtualWidth, int virtualHeight,
                               CnaPresentationMode presentationMode, int swapInterval);
         ~WebGPUGraphicsBackend() override;
@@ -194,8 +210,10 @@ namespace CNA::Internal::Backends::WebGPU
         void SetDepthTestEnabled(bool enabled) override { depthTestEnabled_ = enabled; }
         void SetBlendEnabled(bool enabled) override { blendEnabled_ = enabled; }
         void SetDepthWriteEnabled(bool enabled) override { depthWriteEnabled_ = enabled; }
-        // Depth portion only for this Phase 57/63 vertical slice -- stencil parameters are stored
-        // but not yet wired into any pipeline (WEBGPU-83, still open). Without this override,
+        // Depth portion was the original Phase 57/63 vertical slice; WEBGPU-83 extends this to
+        // also STORE the stencil parameters (dsParams_ below) for a future task to bake into each
+        // pipeline's WGPUStencilFaceState -- see dsParams_'s own comment for why that bake-in step
+        // is deliberately still deferred. Without the depth half of this override,
         // GraphicsDevice.DepthStencilState (the real XNA API surface almost every game/effect
         // uses, as opposed to the older SetDepthTestEnabled()/SetDepthWriteEnabled() convenience
         // methods above) had zero effect on this backend -- found and fixed while verifying
@@ -207,6 +225,34 @@ namespace CNA::Internal::Backends::WebGPU
                                     bool twoSidedStencilMode,
                                     int ccwStencilFunc, int ccwStencilPass,
                                     int ccwStencilFail, int ccwStencilDepthFail) override;
+        // WEBGPU-78: BlendState -> WGPUBlendState (storage-only; consumed by every 3D
+        // GetOrCreatePipeline*() below at pipeline-creation time -- wgpu-native bakes blend state
+        // into the pipeline object, there is no dynamic override).
+        void ApplyBlendState(int colorSrcBlend, int alphaSrcBlend, int colorDstBlend, int alphaDstBlend,
+                             int colorBlendFunc, int alphaBlendFunc) override;
+        // WEBGPU-41/79: CullMode/FillMode -> WGPUPrimitiveState (storage-only; also baked into the
+        // pipeline object). FillMode::WireFrame is stored but has no rendering effect -- wgpu-native
+        // has no polygon-mode API at all (WEBGPU-115, a documented, accepted deviation, same as
+        // Vulkan's own comment references). DepthBias/SlopeScaleDepthBias ARE genuinely supported by
+        // WGPUDepthStencilState (unlike a dynamic vkCmdSetDepthBias-style override) and are baked in too.
+        void ApplyRasterizerState(int cullMode, int fillMode, bool scissorTestEnable,
+                                  float depthBias = 0.0f, float slopeScaleDepthBias = 0.0f) override;
+        // WEBGPU-82: per-slot SamplerState -> a genuine WGPUSampler cache (GetOrCreateSlotSampler()
+        // below), distinct from the SpriteBatch-only 18-entry samplerCache_ (see that member's own
+        // comment). Storage-only here; actually read by every texture-consuming Queue*Draw() at
+        // queue time for slot 0 (see each command's textureFilter/addressU/addressV capture).
+        void ApplySamplerState(int slot, int filter, int addressU, int addressV, int maxAnisotropy) override;
+        // WEBGPU-80/81/29/30: scissor rect, viewport, blend constant and stencil reference are all
+        // genuinely dynamic wgpu-native render-pass state (wgpuRenderPassEncoderSetScissorRect/
+        // SetViewport/SetBlendConstant/SetStencilReference), exactly like Vulkan's own
+        // vkCmdSetScissor/Viewport/BlendConstants/StencilReference -- storage-only here, applied
+        // once per render pass in EnsureFrameRendered() from whatever is current at record time
+        // (this backend's single-deferred-pass-per-frame model, matching
+        // VulkanGraphicsBackend::SetViewport()'s own documented simplification).
+        void SetBlendFactor(float r, float g, float b, float a) override;
+        void SetReferenceStencil(int value) override;
+        void SetScissorRect(int x, int y, int w, int h) override;
+        void SetViewport(int x, int y, int w, int h, float minDepth, float maxDepth) override;
         std::unique_ptr<IVertexBufferBackend> CreateVertexBuffer(int vertexCapacity) override;
         std::unique_ptr<IIndexBufferBackend> CreateIndexBuffer16(int indexCapacity) override;
         std::unique_ptr<IIndexBufferBackend> CreateIndexBuffer32(int indexCapacity) override;
@@ -273,7 +319,10 @@ namespace CNA::Internal::Backends::WebGPU
         void RenderColoredDraws(WGPURenderPassEncoder pass);
         [[nodiscard]] WGPURenderPipeline GetOrCreatePipelineColored3D(WGPUPrimitiveTopology topology,
                                                                        bool depthTest, bool depthWrite,
-                                                                       int depthFunc);
+                                                                       int depthFunc,
+                                                       bool blend, const BlendKeyParams& blendParams,
+                                                       int cullMode, bool wireframe,
+                                                       float depthBias, float slopeScaleDepthBias);
         // params == nullptr: the legacy DrawColoredPrimitives path (hardcoded white diffuse,
         // vertexColorEnabled=true, vertexStart=0). params != nullptr: DrawPrimitivesEx's real
         // GpuDrawParams dispatch (stride-16 only -- caller must have already verified the stride).
@@ -290,6 +339,10 @@ namespace CNA::Internal::Backends::WebGPU
         bool EnsureFrameRendered();
         [[nodiscard]] LogicalViewport ComputeLogicalViewport() const;
         [[nodiscard]] WGPUSampler GetOrCreateSampler(int textureFilter, int addressU, int addressV);
+        // WEBGPU-82: full per-slot SamplerState cache (filter + address mode + anisotropy), used
+        // by every texture-consuming 3D Queue*Draw() -- distinct from GetOrCreateSampler() above,
+        // which only ever needs SpriteBatch's simpler binary linear/nearest split.
+        [[nodiscard]] WGPUSampler GetOrCreateSlotSampler(int filter, int addressU, int addressV, int maxAnisotropy);
         [[nodiscard]] WGPUPrimitiveTopology ToTopology(PrimitiveType primitive) const;
         [[nodiscard]] int PrimitiveVertexCount(PrimitiveType primitive, int primitiveCount) const;
         [[nodiscard]] int PrimitiveIndexCount(PrimitiveType primitive, int primitiveCount) const;
@@ -335,6 +388,67 @@ namespace CNA::Internal::Backends::WebGPU
         bool blendEnabled_ = true;
         int depthCompareFunction_ = 3;  ///< XNA CompareFunction ordinal; 3 = LessEqual (DepthStencilState.Default)
 
+        // WEBGPU-41/77/78/79/80/81/82/83: real BlendState/RasterizerState/SamplerState/scissor/
+        // viewport/blend-factor/reference-stencil storage, extending the depth-only slice above.
+        // See ApplyBlendState()/ApplyRasterizerState()/ApplySamplerState()/SetBlendFactor()/
+        // SetReferenceStencil()/SetScissorRect()/SetViewport()'s own declarations (top of this
+        // class) for which of these are baked into every 3D pipeline object vs. applied once per
+        // render pass as genuine wgpu-native dynamic state.
+        BlendKeyParams blendParams_{};
+        int cullMode_ = 0;                ///< XNA CullMode::None
+        bool fillModeWireframe_ = false;  ///< XNA FillMode::WireFrame -- stored only, see WEBGPU-115
+        bool scissorEnabled_ = false;
+        float depthBias_ = 0.0f;
+        float slopeScaleDepthBias_ = 0.0f;
+        int scissorX_ = 0;
+        int scissorY_ = 0;
+        int scissorW_ = 0;
+        int scissorH_ = 0;
+        bool viewportSet_ = false;
+        int viewportX_ = 0;
+        int viewportY_ = 0;
+        int viewportW_ = 0;
+        int viewportH_ = 0;
+        float viewportMinDepth_ = 0.0f;
+        float viewportMaxDepth_ = 1.0f;
+        float blendFactorR_ = 1.0f;
+        float blendFactorG_ = 1.0f;
+        float blendFactorB_ = 1.0f;
+        float blendFactorA_ = 1.0f;
+        int referenceStencil_ = 0;
+        // WEBGPU-83: stencil op storage only -- captured for a future task to bake into each
+        // pipeline's WGPUStencilFaceState. Deliberately NOT yet applied to any pipeline (stencil
+        // test stays Always/Keep everywhere, unchanged from prior behavior, so this is not a
+        // regression): VulkanGraphicsBackend::FillDepthStencilState()'s own comment documents a
+        // real, empirically-discovered front/back-winding quirk it had to work around on that
+        // backend, and baking stencil ops into this backend's 10 pipeline families without an
+        // equivalent WebGPU-side differential test risks the same silent-wrongness class this
+        // project explicitly avoids -- see plan_webgpu.md's WEBGPU-83 row for the scope cut.
+        bool stencilEnable_ = false;
+        int stencilFunc_ = 0;
+        int stencilPass_ = 0;
+        int stencilFail_ = 0;
+        int stencilDepthFail_ = 0;
+        int stencilReadMask_ = ~0;
+        int stencilWriteMask_ = ~0;
+        bool twoSidedStencilMode_ = false;
+        int ccwStencilFunc_ = 0;
+        int ccwStencilPass_ = 0;
+        int ccwStencilFail_ = 0;
+        int ccwStencilDepthFail_ = 0;
+
+        // WEBGPU-82: per-slot SamplerState (slot 0 is texture0, read by every texture-consuming 3D
+        // Queue*Draw() at queue time -- see GetOrCreateSlotSampler()).
+        struct SlotSamplerState
+        {
+            int filter = 0;    ///< XNA TextureFilter::Linear
+            int addressU = 1;  ///< matches every *DrawCommand struct's own textureFilter/addressU/
+            int addressV = 1;  ///< addressV default (Clamp) -- this file's established convention.
+            int maxAnisotropy = 4;
+        };
+        std::array<SlotSamplerState, 16> slotSamplers_{};
+        std::unordered_map<std::uint32_t, WGPUSampler> slotSamplerCache_;
+
         WGPUBuffer readbackBuffer_ = nullptr;
         std::uint64_t readbackBufferCapacity_ = 0;
         std::uint32_t readbackBytesPerRow_ = 0;
@@ -366,11 +480,20 @@ namespace CNA::Internal::Backends::WebGPU
             bool depthTest = false;
             bool depthWrite = false;
             int depthFunc = 3;  ///< XNA CompareFunction ordinal; 3 = LessEqual
+            // WEBGPU-41/77/78/79: baked into the pipeline object alongside depthTest/
+            // depthWrite/depthFunc above (see BlendKeyParams' own comment for why this must be
+            // captured per-draw-command, not read as frame-global state at render time).
+            bool blend = true;
+            BlendKeyParams blendParams{};
+            int cullMode = 0;
+            bool wireframe = false;
+            float depthBias = 0.0f;
+            float slopeScaleDepthBias = 0.0f;
         };
         WGPUShaderModule coloredShader_ = nullptr;
         WGPUBindGroupLayout coloredBindGroupLayout_ = nullptr;
         WGPUPipelineLayout coloredPipelineLayout_ = nullptr;
-        std::unordered_map<int, WGPURenderPipeline> coloredPipelines_;  ///< keyed by topology*4+depthTest*2+depthWrite
+        std::unordered_map<std::uint64_t, WGPURenderPipeline> coloredPipelines_;  ///< keyed by Make3DPipelineKey() (WEBGPU-30)
         std::vector<ColoredDrawCommand> coloredDrawCommands_;
 
         // WEBGPU-20/33: textured3d (stride 20, VertexPositionTexture). Shares the same UBO layout/
@@ -391,6 +514,15 @@ namespace CNA::Internal::Backends::WebGPU
             bool depthTest = false;
             bool depthWrite = false;
             int depthFunc = 3;
+            // WEBGPU-41/77/78/79: baked into the pipeline object alongside depthTest/
+            // depthWrite/depthFunc above (see BlendKeyParams' own comment for why this must be
+            // captured per-draw-command, not read as frame-global state at render time).
+            bool blend = true;
+            BlendKeyParams blendParams{};
+            int cullMode = 0;
+            bool wireframe = false;
+            float depthBias = 0.0f;
+            float slopeScaleDepthBias = 0.0f;
             // Not shadow-copied like vertex/index data: a bound Texture2D's WebGPUTextureBackend
             // is owned by long-lived game/content state (unlike DrawUserPrimitives' transient
             // vertex buffers), so it is guaranteed to still be alive when this command actually
@@ -399,6 +531,7 @@ namespace CNA::Internal::Backends::WebGPU
             int textureFilter = 0;
             int addressU = 1;
             int addressV = 1;
+            int maxAnisotropy = 4;  ///< WEBGPU-82: per-slot SamplerState anisotropy
             // WEBGPU-21: stride 24 (VertexPositionColorTexture) instead of stride 20
             // (VertexPositionTexture) -- selects coloredTexturedShader_/
             // GetOrCreatePipelineColoredTextured3D() instead of texturedShader_/
@@ -410,10 +543,16 @@ namespace CNA::Internal::Backends::WebGPU
         void DestroyTexturedResources();
         [[nodiscard]] WGPURenderPipeline GetOrCreatePipelineTextured3D(WGPUPrimitiveTopology topology,
                                                                         bool depthTest, bool depthWrite,
-                                                                        int depthFunc);
+                                                                        int depthFunc,
+                                                       bool blend, const BlendKeyParams& blendParams,
+                                                       int cullMode, bool wireframe,
+                                                       float depthBias, float slopeScaleDepthBias);
         [[nodiscard]] WGPURenderPipeline GetOrCreatePipelineColoredTextured3D(WGPUPrimitiveTopology topology,
                                                                                bool depthTest, bool depthWrite,
-                                                                               int depthFunc);
+                                                                               int depthFunc,
+                                                       bool blend, const BlendKeyParams& blendParams,
+                                                       int cullMode, bool wireframe,
+                                                       float depthBias, float slopeScaleDepthBias);
         void QueueTexturedDraw(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
                                const Matrix& world, const Matrix& view, const Matrix& projection,
                                PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
@@ -423,8 +562,8 @@ namespace CNA::Internal::Backends::WebGPU
         WGPUShaderModule coloredTexturedShader_ = nullptr;
         WGPUBindGroupLayout texturedBindGroupLayout_ = nullptr;   ///< group 1: sampler + texture
         WGPUPipelineLayout texturedPipelineLayout_ = nullptr;     ///< group 0 (UBO) + group 1 (texture); shared by textured3d and colored_textured3d
-        std::unordered_map<int, WGPURenderPipeline> texturedPipelines_;
-        std::unordered_map<int, WGPURenderPipeline> coloredTexturedPipelines_;
+        std::unordered_map<std::uint64_t, WGPURenderPipeline> texturedPipelines_;
+        std::unordered_map<std::uint64_t, WGPURenderPipeline> coloredTexturedPipelines_;
         std::vector<TexturedDrawCommand> texturedDrawCommands_;
 
         // Per-draw vertex/uniform/index buffers and bind groups are transient (created fresh
@@ -457,10 +596,20 @@ namespace CNA::Internal::Backends::WebGPU
             bool depthTest = false;
             bool depthWrite = false;
             int depthFunc = 3;
+            // WEBGPU-41/77/78/79: baked into the pipeline object alongside depthTest/
+            // depthWrite/depthFunc above (see BlendKeyParams' own comment for why this must be
+            // captured per-draw-command, not read as frame-global state at render time).
+            bool blend = true;
+            BlendKeyParams blendParams{};
+            int cullMode = 0;
+            bool wireframe = false;
+            float depthBias = 0.0f;
+            float slopeScaleDepthBias = 0.0f;
             const WebGPUTextureBackend* texture = nullptr;
             int textureFilter = 0;
             int addressU = 1;
             int addressV = 1;
+            int maxAnisotropy = 4;  ///< WEBGPU-82: per-slot SamplerState anisotropy
             /// Task 1105 (plan_graphics.md Phase 80): true selects the per-vertex-lit sibling
             /// pipeline/shader (XNA's real BasicEffect.PreferPerPixelLighting==false default);
             /// false keeps the existing per-pixel-lit one. Computed once at queue time from
@@ -472,7 +621,10 @@ namespace CNA::Internal::Backends::WebGPU
         void DestroyLitTexturedResources();
         [[nodiscard]] WGPURenderPipeline GetOrCreatePipelineLitTextured3D(WGPUPrimitiveTopology topology,
                                                                            bool depthTest, bool depthWrite,
-                                                                           int depthFunc);
+                                                                           int depthFunc,
+                                                       bool blend, const BlendKeyParams& blendParams,
+                                                       int cullMode, bool wireframe,
+                                                       float depthBias, float slopeScaleDepthBias);
         /// Task 1105: real per-vertex-lit sibling to GetOrCreatePipelineLitTextured3D above --
         /// identical Blinn-Phong math (FNA's Lighting.fxh ComputeLights()), moved into the vertex
         /// stage and passed to the fragment shader as litRGB/specularRGB varyings instead of being
@@ -481,7 +633,10 @@ namespace CNA::Internal::Backends::WebGPU
         /// shader) -- only a new shader module and a new pipeline cache are needed.
         [[nodiscard]] WGPURenderPipeline GetOrCreatePipelineLitTextured3DVertexLit(WGPUPrimitiveTopology topology,
                                                                                     bool depthTest, bool depthWrite,
-                                                                                    int depthFunc);
+                                                                                    int depthFunc,
+                                                       bool blend, const BlendKeyParams& blendParams,
+                                                       int cullMode, bool wireframe,
+                                                       float depthBias, float slopeScaleDepthBias);
         void QueueLitTexturedDraw(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
                                   const Matrix& world, const Matrix& view, const Matrix& projection,
                                   PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
@@ -490,13 +645,13 @@ namespace CNA::Internal::Backends::WebGPU
         WGPUShaderModule litTexturedShader_ = nullptr;
         WGPUBindGroupLayout litBindGroupLayout_ = nullptr;   ///< group 0: primary UBO (binding 0) + LitLightParams UBO (binding 1)
         WGPUPipelineLayout litPipelineLayout_ = nullptr;     ///< group 0 (lit UBOs) + group 1 (texture, texturedBindGroupLayout_ reused)
-        std::unordered_map<int, WGPURenderPipeline> litTexturedPipelines_;
+        std::unordered_map<std::uint64_t, WGPURenderPipeline> litTexturedPipelines_;
         std::vector<LitTexturedDrawCommand> litTexturedDrawCommands_;
         /// Task 1105: real per-vertex-lit sibling shader module + its own pipeline cache, keyed
         /// identically to litTexturedPipelines_ above. Shares litBindGroupLayout_/litPipelineLayout_
         /// with the per-pixel-lit shader (same UBO/binding shape).
         WGPUShaderModule litTexturedVertexLitShader_ = nullptr;
-        std::unordered_map<int, WGPURenderPipeline> litTexturedVertexLitPipelines_;
+        std::unordered_map<std::uint64_t, WGPURenderPipeline> litTexturedVertexLitPipelines_;
 
         // WEBGPU-23/34/72: alpha_test3d.wgsl -- AlphaTestEffect's per-pixel alpha discard, matching
         // VulkanGraphicsBackend's alpha_test3d.{vert,frag}.glsl / alpha_test_colored3d.vert.glsl.
@@ -522,10 +677,20 @@ namespace CNA::Internal::Backends::WebGPU
             bool depthTest = false;
             bool depthWrite = false;
             int depthFunc = 3;
+            // WEBGPU-41/77/78/79: baked into the pipeline object alongside depthTest/
+            // depthWrite/depthFunc above (see BlendKeyParams' own comment for why this must be
+            // captured per-draw-command, not read as frame-global state at render time).
+            bool blend = true;
+            BlendKeyParams blendParams{};
+            int cullMode = 0;
+            bool wireframe = false;
+            float depthBias = 0.0f;
+            float slopeScaleDepthBias = 0.0f;
             const WebGPUTextureBackend* texture = nullptr;
             int textureFilter = 0;
             int addressU = 1;
             int addressV = 1;
+            int maxAnisotropy = 4;  ///< WEBGPU-82: per-slot SamplerState anisotropy
             std::size_t stride = 20;   ///< 20, 24, or 32 -- selects vertex layout + shader module
             bool hasVertexColor = false;
         };
@@ -534,7 +699,10 @@ namespace CNA::Internal::Backends::WebGPU
         [[nodiscard]] WGPURenderPipeline GetOrCreatePipelineAlphaTest3D(std::size_t stride,
                                                                         WGPUPrimitiveTopology topology,
                                                                         bool depthTest, bool depthWrite,
-                                                                        int depthFunc);
+                                                                        int depthFunc,
+                                                       bool blend, const BlendKeyParams& blendParams,
+                                                       int cullMode, bool wireframe,
+                                                       float depthBias, float slopeScaleDepthBias);
         void QueueAlphaTestDraw(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
                                 const Matrix& world, const Matrix& view, const Matrix& projection,
                                 PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
@@ -542,8 +710,8 @@ namespace CNA::Internal::Backends::WebGPU
 
         WGPUShaderModule alphaTestShader_ = nullptr;          ///< strides 20/32 (no vertex colour)
         WGPUShaderModule alphaTestColoredShader_ = nullptr;   ///< stride 24 (vertex colour tint)
-        std::unordered_map<int, WGPURenderPipeline> alphaTestPipelines_;
-        std::unordered_map<int, WGPURenderPipeline> alphaTestColoredPipelines_;
+        std::unordered_map<std::uint64_t, WGPURenderPipeline> alphaTestPipelines_;
+        std::unordered_map<std::uint64_t, WGPURenderPipeline> alphaTestColoredPipelines_;
         std::vector<AlphaTestDrawCommand> alphaTestDrawCommands_;
 
         // WEBGPU-24: dual_texture3d.wgsl -- DualTextureEffect (two texture layers sampled at the
@@ -569,11 +737,21 @@ namespace CNA::Internal::Backends::WebGPU
             bool depthTest = false;
             bool depthWrite = false;
             int depthFunc = 3;
+            // WEBGPU-41/77/78/79: baked into the pipeline object alongside depthTest/
+            // depthWrite/depthFunc above (see BlendKeyParams' own comment for why this must be
+            // captured per-draw-command, not read as frame-global state at render time).
+            bool blend = true;
+            BlendKeyParams blendParams{};
+            int cullMode = 0;
+            bool wireframe = false;
+            float depthBias = 0.0f;
+            float slopeScaleDepthBias = 0.0f;
             const WebGPUTextureBackend* texture0 = nullptr;
             const WebGPUTextureBackend* texture1 = nullptr;
             int textureFilter = 0;
             int addressU = 1;
             int addressV = 1;
+            int maxAnisotropy = 4;  ///< WEBGPU-82: per-slot SamplerState anisotropy
             bool hasVertexColor = false;   ///< stride 24 vs stride 20
         };
         void CreateDualTextureResources();
@@ -581,7 +759,10 @@ namespace CNA::Internal::Backends::WebGPU
         [[nodiscard]] WGPURenderPipeline GetOrCreatePipelineDualTexture3D(std::size_t stride,
                                                                           WGPUPrimitiveTopology topology,
                                                                           bool depthTest, bool depthWrite,
-                                                                          int depthFunc);
+                                                                          int depthFunc,
+                                                       bool blend, const BlendKeyParams& blendParams,
+                                                       int cullMode, bool wireframe,
+                                                       float depthBias, float slopeScaleDepthBias);
         void QueueDualTextureDraw(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
                                   const Matrix& world, const Matrix& view, const Matrix& projection,
                                   PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
@@ -591,8 +772,8 @@ namespace CNA::Internal::Backends::WebGPU
         WGPUShaderModule dualTextureColoredShader_ = nullptr;   ///< stride 24 (vertex colour tint)
         WGPUBindGroupLayout dualTextureBindGroupLayout_ = nullptr;  ///< group 1: sampler + texture0 + texture1
         WGPUPipelineLayout dualTexturePipelineLayout_ = nullptr;    ///< group 0 (UBO, coloredBindGroupLayout_) + group 1
-        std::unordered_map<int, WGPURenderPipeline> dualTexturePipelines_;
-        std::unordered_map<int, WGPURenderPipeline> dualTextureColoredPipelines_;
+        std::unordered_map<std::uint64_t, WGPURenderPipeline> dualTexturePipelines_;
+        std::unordered_map<std::uint64_t, WGPURenderPipeline> dualTextureColoredPipelines_;
         std::vector<DualTextureDrawCommand> dualTextureDrawCommands_;
 
         // pbr3d.wgsl -- PbrEffect's real glTF 2.0 metallic-roughness BRDF (GGX distribution +
@@ -629,6 +810,15 @@ namespace CNA::Internal::Backends::WebGPU
             bool depthTest = false;
             bool depthWrite = false;
             int depthFunc = 3;
+            // WEBGPU-41/77/78/79: baked into the pipeline object alongside depthTest/
+            // depthWrite/depthFunc above (see BlendKeyParams' own comment for why this must be
+            // captured per-draw-command, not read as frame-global state at render time).
+            bool blend = true;
+            BlendKeyParams blendParams{};
+            int cullMode = 0;
+            bool wireframe = false;
+            float depthBias = 0.0f;
+            float slopeScaleDepthBias = 0.0f;
             const WebGPUTextureBackend* baseColorTexture = nullptr;
             const WebGPUTextureBackend* normalMap = nullptr;
             const WebGPUTextureBackend* metallicRoughnessMap = nullptr;
@@ -637,6 +827,7 @@ namespace CNA::Internal::Backends::WebGPU
             int textureFilter = 0;
             int addressU = 1;
             int addressV = 1;
+            int maxAnisotropy = 4;  ///< WEBGPU-82: per-slot SamplerState anisotropy
         };
         void CreatePbrResources();
         void DestroyPbrResources();
@@ -646,7 +837,10 @@ namespace CNA::Internal::Backends::WebGPU
         void EnsurePbrDefaultTextures();
         [[nodiscard]] WGPURenderPipeline GetOrCreatePipelinePbr3D(WGPUPrimitiveTopology topology,
                                                                     bool depthTest, bool depthWrite,
-                                                                    int depthFunc);
+                                                                    int depthFunc,
+                                                       bool blend, const BlendKeyParams& blendParams,
+                                                       int cullMode, bool wireframe,
+                                                       float depthBias, float slopeScaleDepthBias);
         void QueuePbrDraw(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
                           const Matrix& world, const Matrix& view, const Matrix& projection,
                           PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
@@ -656,7 +850,7 @@ namespace CNA::Internal::Backends::WebGPU
         WGPUBindGroupLayout pbrBindGroupLayout0_ = nullptr;  ///< group 0: Uniforms + LitLightParams + PbrFactors UBOs
         WGPUBindGroupLayout pbrBindGroupLayout1_ = nullptr;  ///< group 1: sampler + 5 textures
         WGPUPipelineLayout pbrPipelineLayout_ = nullptr;
-        std::unordered_map<int, WGPURenderPipeline> pbrPipelines_;
+        std::unordered_map<std::uint64_t, WGPURenderPipeline> pbrPipelines_;
         std::vector<PbrDrawCommand> pbrDrawCommands_;
         std::unique_ptr<WebGPUTextureBackend> pbrDefaultWhiteTexture_;
         std::unique_ptr<WebGPUTextureBackend> pbrDefaultFlatNormalTexture_;
@@ -702,10 +896,20 @@ namespace CNA::Internal::Backends::WebGPU
             bool depthTest = false;
             bool depthWrite = false;
             int depthFunc = 3;
+            // WEBGPU-41/77/78/79: baked into the pipeline object alongside depthTest/
+            // depthWrite/depthFunc above (see BlendKeyParams' own comment for why this must be
+            // captured per-draw-command, not read as frame-global state at render time).
+            bool blend = true;
+            BlendKeyParams blendParams{};
+            int cullMode = 0;
+            bool wireframe = false;
+            float depthBias = 0.0f;
+            float slopeScaleDepthBias = 0.0f;
             const WebGPUTextureBackend* texture = nullptr;
             int textureFilter = 0;
             int addressU = 1;
             int addressV = 1;
+            int maxAnisotropy = 4;  ///< WEBGPU-82: per-slot SamplerState anisotropy
             std::size_t stride = 52;   ///< 52 (no vertex colour) or 56 (vertex colour appended)
             bool preferVertexLit = false;
         };
@@ -714,7 +918,10 @@ namespace CNA::Internal::Backends::WebGPU
         [[nodiscard]] WGPURenderPipeline GetOrCreatePipelineSkinned3D(std::size_t stride, bool preferVertexLit,
                                                                         WGPUPrimitiveTopology topology,
                                                                         bool depthTest, bool depthWrite,
-                                                                        int depthFunc);
+                                                                        int depthFunc,
+                                                       bool blend, const BlendKeyParams& blendParams,
+                                                       int cullMode, bool wireframe,
+                                                       float depthBias, float slopeScaleDepthBias);
         void QueueSkinnedDraw(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
                               const Matrix& world, const Matrix& view, const Matrix& projection,
                               PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
@@ -726,10 +933,10 @@ namespace CNA::Internal::Backends::WebGPU
         WGPUShaderModule skinnedVertexLitColorShader_ = nullptr; ///< stride 56, per-vertex-lit
         WGPUBindGroupLayout skinnedBindGroupLayout_ = nullptr;   ///< group 0: Uniforms + LitLightParams + SkinningParams UBOs
         WGPUPipelineLayout skinnedPipelineLayout_ = nullptr;     ///< group 0 (above) + group 1 (texture, texturedBindGroupLayout_ reused)
-        std::unordered_map<int, WGPURenderPipeline> skinnedPipelines_;
-        std::unordered_map<int, WGPURenderPipeline> skinnedColorPipelines_;
-        std::unordered_map<int, WGPURenderPipeline> skinnedVertexLitPipelines_;
-        std::unordered_map<int, WGPURenderPipeline> skinnedVertexLitColorPipelines_;
+        std::unordered_map<std::uint64_t, WGPURenderPipeline> skinnedPipelines_;
+        std::unordered_map<std::uint64_t, WGPURenderPipeline> skinnedColorPipelines_;
+        std::unordered_map<std::uint64_t, WGPURenderPipeline> skinnedVertexLitPipelines_;
+        std::unordered_map<std::uint64_t, WGPURenderPipeline> skinnedVertexLitColorPipelines_;
         std::vector<SkinnedDrawCommand> skinnedDrawCommands_;
 
         // SkinnedPbrEffect (PBR + skinning combo, stride 68, VertexPositionNormalTangentTextureSkinned).
@@ -756,6 +963,15 @@ namespace CNA::Internal::Backends::WebGPU
             bool depthTest = false;
             bool depthWrite = false;
             int depthFunc = 3;
+            // WEBGPU-41/77/78/79: baked into the pipeline object alongside depthTest/
+            // depthWrite/depthFunc above (see BlendKeyParams' own comment for why this must be
+            // captured per-draw-command, not read as frame-global state at render time).
+            bool blend = true;
+            BlendKeyParams blendParams{};
+            int cullMode = 0;
+            bool wireframe = false;
+            float depthBias = 0.0f;
+            float slopeScaleDepthBias = 0.0f;
             const WebGPUTextureBackend* baseColorTexture = nullptr;
             const WebGPUTextureBackend* normalMap = nullptr;
             const WebGPUTextureBackend* metallicRoughnessMap = nullptr;
@@ -764,12 +980,16 @@ namespace CNA::Internal::Backends::WebGPU
             int textureFilter = 0;
             int addressU = 1;
             int addressV = 1;
+            int maxAnisotropy = 4;  ///< WEBGPU-82: per-slot SamplerState anisotropy
         };
         void CreateSkinnedPbrResources();
         void DestroySkinnedPbrResources();
         [[nodiscard]] WGPURenderPipeline GetOrCreatePipelineSkinnedPbr3D(WGPUPrimitiveTopology topology,
                                                                            bool depthTest, bool depthWrite,
-                                                                           int depthFunc);
+                                                                           int depthFunc,
+                                                       bool blend, const BlendKeyParams& blendParams,
+                                                       int cullMode, bool wireframe,
+                                                       float depthBias, float slopeScaleDepthBias);
         void QueueSkinnedPbrDraw(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
                                  const Matrix& world, const Matrix& view, const Matrix& projection,
                                  PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params);
@@ -778,7 +998,7 @@ namespace CNA::Internal::Backends::WebGPU
         WGPUShaderModule skinnedPbrShader_ = nullptr;
         WGPUBindGroupLayout skinnedPbrBindGroupLayout0_ = nullptr;  ///< group 0: Uniforms + LitLightParams + PbrFactors + SkinningParams UBOs
         WGPUPipelineLayout skinnedPbrPipelineLayout_ = nullptr;     ///< group 0 (above) + group 1 (pbrBindGroupLayout1_ reused)
-        std::unordered_map<int, WGPURenderPipeline> skinnedPbrPipelines_;
+        std::unordered_map<std::uint64_t, WGPURenderPipeline> skinnedPbrPipelines_;
         std::vector<SkinnedPbrDrawCommand> skinnedPbrDrawCommands_;
     };
 }
