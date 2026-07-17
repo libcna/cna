@@ -97,7 +97,21 @@ namespace Microsoft::Devices::Sensors
         std::uint64_t myGeneration;
         Detail::IMotionBackend* backendPtr;
         {
-            std::lock_guard<std::mutex> lock(control_->mutex);
+            std::unique_lock<std::mutex> lock(control_->mutex);
+
+            if (started_ || transitioning_)
+            {
+                throw SensorFailedException("Motion is already started.");
+            }
+
+            // Task TEST2-001 (2026-07-17): see Compass::Start()'s identical
+            // comment for the full rationale (found by a real ThreadSanitizer
+            // run under concurrent multi-thread Start()/Stop() stress) --
+            // waits for any earlier, now-orphaned Start() attempt's own
+            // cleanup call into backend_ to finish before this attempt makes
+            // its own, closing a real overlapping-backend-call data race
+            // started_/transitioning_ alone do not prevent.
+            backendQuiescent_.wait(lock, [this] { return backendCallsInFlight_ == 0; });
 
             if (started_ || transitioning_)
             {
@@ -226,7 +240,9 @@ namespace Microsoft::Devices::Sensors
         System::ObjectDisposedException::ThrowIf(getIsDisposedProperty(), "Motion");
 
         // Task LIFE-001: see Compass::Stop()'s identical fix for the full
-        // rationale.
+        // rationale. Task TEST2-001: also see Compass::Stop()'s comment on
+        // why this deliberately does not wait for backendCallsInFlight_ to
+        // reach zero, unlike Start()'s own reserve phase.
         Detail::IMotionBackend* backendPtr = nullptr;
         {
             std::unique_lock<std::mutex> lock(control_->mutex);

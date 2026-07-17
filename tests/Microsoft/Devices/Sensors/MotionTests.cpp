@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
+#include <atomic>
 #include <functional>
 #include <memory>
 #include <thread>
@@ -44,9 +45,14 @@ namespace
     public:
         bool SupportedResult = true;
         bool StartResult = true;
-        bool StopCalled = false;
+        // Task TEST2-001 (2026-07-17): see FakeCompassBackend's identical
+        // fields for the full rationale -- atomic because LIFE-001's design
+        // deliberately allows a concurrent Stop() and Start()'s own
+        // orphaned-attempt cleanup to both call backend Stop() on this fake
+        // from two different threads.
+        std::atomic<bool> StopCalled{false};
         int StartCallCount = 0;
-        int StopCallCount = 0;
+        std::atomic<int> StopCallCount{0};
         int SetSampleIntervalCallCount = 0;
         System::TimeSpan LastSetSampleInterval;
         ReadingCallback CapturedOnReading;

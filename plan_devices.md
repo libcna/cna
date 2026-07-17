@@ -6367,6 +6367,27 @@ test is not sufficient for an Android coordinate/fusion claim.
   Devices/Sensors suite green (see `VERIFY-001`'s own running count); `devices-tsan` run
   requested as part of `TEST2-001`'s own evidence (see that task). Real-hardware evidence for
   the Android-only backend call paths themselves remains outstanding — see `ANDR2-015`.
+- **Amendment (2026-07-17, found by `TEST2-001`'s own TSan verification pass):** the first real
+  `devices-tsan` run against this design (see `TEST2-001` for full detail) found a genuine,
+  previously-unverified bug in this exact resolution: `backendCallsInFlight_` was tracked but
+  never used to *prevent* an overlap — a fresh `Start()` attempt could begin calling
+  `backend_->Start()` while an *earlier, orphaned* `Start()` attempt's own cleanup
+  `backend_->Stop()` call (this task's own "orphaned start" mechanism, described above) was
+  still physically in flight on a different thread, since a superseding `Stop()` clears
+  `transitioning_` back to `false` as soon as *its own* backend call returns, without waiting for
+  the attempt it superseded to finish tearing itself down. Confirmed as a real bug (not a
+  theoretical one) via an actual TSan data race, which cascaded into a heap corruption/
+  use-after-free in the test fake's own captured-callback bookkeeping under an 8-thread
+  concurrent Start()/Stop() stress test. Fixed by making `Start()`'s reserve phase (only —
+  deliberately not `Stop()`, which must remain non-blocking with respect to an in-flight
+  `Start()` to preserve this very task's own `ConcurrentStopDuringStartDoesNotDeadlock`
+  guarantee) wait on the existing `backendQuiescent_` condition variable for
+  `backendCallsInFlight_ == 0` before proceeding, re-checking `started_`/`transitioning_`
+  afterward. See `TEST2-001`'s resolution for the full fix writeup and verification detail
+  (4 consecutive clean `devices-tsan` runs against the exact stress test that found it, 0
+  warnings each). This is exactly the kind of finding `TEST2-001`'s own acceptance criterion —
+  "tests run in normal and sanitizer presets" — exists to catch, and why this plan's mandatory
+  rules refuse to treat an older CLOSED label as final without re-verification.
 
 ### LIFE-002 — Gate callbacks until Start commits — CLOSED (2026-07-17)
 
@@ -7487,7 +7508,7 @@ test is not sufficient for an Android coordinate/fusion claim.
   - p99 lock waits meet the benchmark budget.
 - **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
 
-### TEST2-001 — Add permanent regression tests for every new P0 finding — OPEN
+### TEST2-001 — Add permanent regression tests for every new P0 finding — CLOSED (2026-07-17)
 
 - **Priority:** P0
 - **Area:** Perfection re-audit
@@ -7499,6 +7520,75 @@ test is not sufficient for an Android coordinate/fusion claim.
   - Each test fails against the pre-fix design and passes only with the intended fix.
   - Tests run in normal and sanitizer presets.
 - **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+- **Resolution:** audited coverage against the required-work list item by item, then ran the
+  outstanding sanitizer verification every earlier P0 resolution note in this pass had deferred.
+  - **Exact SDL callback type:** `SDLCORE-002`'s `static_assert` — a compile-time, not runtime,
+    regression test; fails to compile if `SDL_EventFilter`'s signature ever changes.
+  - **AddEventWatch failure:** `SDLCORE-003`'s `SetEventWatchRegistrationFailureForTesting` hook +
+    `AccelerometerTests`/`GyroscopeTests.FailedEventWatchRegistrationRollsBackAndReportsFailure`
+    (already present; both correctly `GTEST_SKIP()` without real sensor hardware in this
+    container, documented honestly rather than faked).
+  - **Main-thread dispatch:** re-examined against `SDLCORE-001`'s actual resolution (a shared
+    process-wide mutex, not literal main-thread marshaling — see that task's own resolution for
+    why). Added a missing, direct regression test for the part that *is* testable host-side:
+    `SensorSubsystemOwnershipTests.SensorAndHapticSdlCallsShareOneProcessWideMutex` asserts
+    `&Sensors::Detail::GetGlobalSdlSensorMutex() == &Devices::Detail::GetGlobalSdlSubsystemMutex()`
+    by address — proves the two are now the exact same mutex object, not merely two mutexes that
+    happen to behave similarly; would fail immediately against the pre-`SDLCORE-001` design (two
+    independent static locals).
+  - **Callback-before-Start:** `LIFE-002`'s
+    `CompassTests`/`MotionTests.SynchronousReadingCallbackDuringStartIsHandledSafely` (already present).
+  - **Lock/join deadlock:** `LIFE-001`'s
+    `CompassTests`/`MotionTests.ConcurrentStopDuringStartDoesNotDeadlock` (already present).
+  - **Compass two-callback destruction:** `LIFE-005`'s
+    `CompassTests.DestroyingOwnerFromCurrentValueChangedThenFiringCalibrateDoesNotCrash` (already present).
+  - **ABA reuse:** `SDLCORE-004`'s
+    `AccelerometerTests`/`GyroscopeTests.DispatchDoesNotDeliverStaleEventToUnrelatedInstanceReusingSameAddress`
+    (already present; deterministic via placement-new, not dependent on real allocator behavior).
+  - **Stale interval / bounded timeout:** `ANDR2-001`/`ANDR2-003` — both entirely inside
+    `#ifdef __ANDROID__`-gated code with no host-testable seam; verified instead via manual trace
+    plus a real Android NDK cross-compile of the exact translation unit (see those tasks' own
+    resolution notes). Exact device test procedures documented there and left explicitly OPEN —
+    not fabricated.
+  - **Sanitizer re-verification (the acceptance criterion most at risk of being skipped):** built
+    and ran the full `devices-tsan` preset against every `LIFE-*`/`SDLCORE-*` concurrency test
+    added or touched this pass — the first time TSan had actually been run against this pass's
+    redesigned `Compass`/`Motion` two-phase lifecycle. **This found a real, previously-unverified
+    bug**, not a clean pass: a genuine data race (cascading into a heap-corruption/use-after-free
+    in a test fake's own bookkeeping) under `MotionTests.ConcurrentStartStopFromMultipleThreadsDoesNotCrash`'s
+    8-thread stress test. Root cause and fix are documented in full under `LIFE-001`'s own
+    amendment note (added as part of this task, not a separate one — the fix belongs to that
+    task's own design, this task is what caught it). Summary: a superseding `Stop()` could clear
+    `transitioning_` before an *earlier, orphaned* `Start()` attempt's own cleanup call had
+    actually finished, letting a *third* `Start()` attempt's own backend call begin while that
+    orphaned cleanup was still physically in flight — two genuinely overlapping, unsynchronized
+    calls into the same backend object. Fixed by making `Start()`'s reserve phase (not `Stop()`'s,
+    which must remain non-blocking) wait on the existing `backendQuiescent_` condition variable
+    for `backendCallsInFlight_ == 0` before proceeding.
+  - Separately, fixing the two *known-expected* races in `FakeCompassBackend`/`FakeMotionBackend`'s
+    own `StopCalled`/`StopCallCount` bookkeeping (both plain `bool`/`int`, now `std::atomic`) —
+    these fields are legitimately written from two different threads by design
+    (`ConcurrentStopDuringStartDoesNotDeadlock`'s own intentional supersede-while-in-flight
+    scenario), so they needed to become atomic regardless of the deeper bug above; not doing so
+    would have kept surfacing as sanitizer noise even after the real bug was fixed.
+- **Files changed:** `src/Microsoft/Devices/Sensors/Compass.cpp`,
+  `src/Microsoft/Devices/Sensors/Motion.cpp` (the `backendQuiescent_.wait()` fix — no header
+  changes needed, no new member added), `tests/Microsoft/Devices/Sensors/CompassTests.cpp`,
+  `tests/Microsoft/Devices/Sensors/MotionTests.cpp` (atomic fake counters),
+  `tests/Microsoft/Devices/Sensors/SensorSubsystemOwnershipTests.cpp` (new mutex-identity test).
+- **Tests/verification:** full Devices/Sensors filtered suite, 399 tests, 395 passed, 4 skipped
+  (hardware-only, unchanged), clean under both `devices-ubsan` and `devices-tsan`. The exact
+  stress test that originally found the bug
+  (`MotionTests.ConcurrentStartStopFromMultipleThreadsDoesNotCrash`) and the full concurrency
+  suite were re-run **4 consecutive times** under `devices-tsan` after the fix, all 4 clean (0
+  warnings, exit 0) — deliberately more than one run, since this exact bug was timing-dependent
+  and a single clean run would not have been convincing evidence on its own.
+- **Remaining limitations:** `ANDR2-001`/`ANDR2-003`'s Android-only paths remain host-untestable
+  (see those tasks); real-hardware evidence for the Android backend call paths themselves is
+  tracked separately under `ANDR2-015`, not fabricated here. A dedicated fault-injection seam for
+  forcing a genuinely-wedged native call (as sketched in `ANDR2-003`'s own resolution note) was
+  not built as part of this task — it would need its own review and was not explicitly named in
+  this task's own required-work list.
 
 ### TEST2-002 — Re-run all sanitizer presets from a clean complete checkout — OPEN
 

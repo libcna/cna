@@ -117,7 +117,40 @@ namespace Microsoft::Devices::Sensors
         std::uint64_t myGeneration;
         Detail::ICompassBackend* backendPtr;
         {
-            std::lock_guard<std::mutex> lock(control_->mutex);
+            std::unique_lock<std::mutex> lock(control_->mutex);
+
+            if (started_ || transitioning_)
+            {
+                throw SensorFailedException(
+                    "Failed to start compass data acquisition. Data acquisition already started.");
+            }
+
+            // Task TEST2-001 (2026-07-17, found by a real ThreadSanitizer run
+            // under concurrent multi-thread Start()/Stop() stress): wait for
+            // any earlier, now-orphaned Start() attempt's own cleanup call
+            // into backend_ to fully finish before this attempt makes its
+            // own. started_/transitioning_ being false does *not* by itself
+            // guarantee backend_ is quiescent -- a superseding Stop() commits
+            // transitioning_ back to false as soon as *its own* backend_->Stop()
+            // call returns, but the *superseded* Start() attempt's own
+            // orphaned-cleanup backend_->Stop() call (see the `orphanedStart`
+            // branch below) can still be physically running on a different
+            // thread at that exact moment. Without this wait, this fresh
+            // attempt's own backend_->Start() call could begin while that
+            // orphaned cleanup call was still in flight -- two genuinely
+            // concurrent, unsynchronized calls into the same backend_ object
+            // -- confirmed by a real data race (and a resulting heap
+            // corruption/use-after-free) in the test-only fake backend's own
+            // captured-callback bookkeeping. A concurrent Stop() (the
+            // *superseding* side of that same scenario) deliberately does
+            // *not* wait here — see Stop()'s own comment for why: it must
+            // remain non-blocking with respect to an in-flight Start(), and
+            // does not itself risk this overlap (Stop() only touches its own,
+            // separate bookkeeping in the backend). Re-checks
+            // started_/transitioning_ after waking (the predicate below),
+            // since a different thread's Start() could have claimed this
+            // attempt first while this thread was waiting.
+            backendQuiescent_.wait(lock, [this] { return backendCallsInFlight_ == 0; });
 
             if (started_ || transitioning_)
             {
@@ -269,6 +302,17 @@ namespace Microsoft::Devices::Sensors
     {
         System::ObjectDisposedException::ThrowIf(getIsDisposedProperty(), "Compass");
 
+        // Task TEST2-001: deliberately does *not* wait for
+        // backendCallsInFlight_ to reach zero before claiming and calling
+        // backend_->Stop() below, unlike Start()'s own reserve phase (see its
+        // comment) -- a concurrent Stop() superseding an in-flight Start()
+        // (ConcurrentStopDuringStartDoesNotDeadlock) must remain non-blocking
+        // with respect to that Start() call; making Stop() wait here as well
+        // would reintroduce exactly the lock/join stall Task LIFE-001 was
+        // designed to eliminate. This is safe: Stop() only ever touches its
+        // own, separate bookkeeping in the backend, and the *next* Start()
+        // attempt is the one responsible for waiting out any orphaned
+        // cleanup this Stop() call's own supersession leaves behind.
         Detail::ICompassBackend* backendPtr = nullptr;
         {
             std::unique_lock<std::mutex> lock(control_->mutex);

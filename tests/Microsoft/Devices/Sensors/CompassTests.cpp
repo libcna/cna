@@ -39,9 +39,18 @@ namespace
     public:
         bool SupportedResult = true;
         bool StartResult = true;
-        bool StopCalled = false;
+        // Task TEST2-001 (2026-07-17): atomic, not plain bool/int -- LIFE-001's
+        // own design deliberately allows a concurrent Stop() and Start()'s own
+        // orphaned-attempt cleanup to both call backend Stop() on this fake
+        // from two different threads (see ConcurrentStopDuringStartDoesNotDeadlock
+        // below), exactly as the real AndroidSensorBridge already tolerates
+        // (Task ANDROID-BRIDGE-003). A plain bool/int here is a genuine data
+        // race under that scenario -- TSan caught it -- even though the
+        // production two-phase design itself has no bug; only this fake's own
+        // unsynchronized bookkeeping did.
+        std::atomic<bool> StopCalled{false};
         int StartCallCount = 0;
-        int StopCallCount = 0;
+        std::atomic<int> StopCallCount{0};
         int SetSampleIntervalCallCount = 0;
         System::TimeSpan LastSetSampleInterval;
         ReadingCallback CapturedOnReading;
