@@ -351,7 +351,12 @@ namespace CNA::Internal::Backends::D3D9
         /// null for the non-indexed call. Selects which Stock Effect `params` indicates (mirrors
         /// `D3D11GraphicsBackend::DrawPrimitivesExImpl`'s own flag priority-cascade) and dispatches
         /// to that effect's own draw helper; throws a named not-yet-implemented for effects whose
-        /// row hasn't landed yet. Defined in `D3D9EffectDraw.cpp`.
+        /// row hasn't landed yet. D3D9 PBR porting task: `params.pbr` is checked FIRST, ahead of
+        /// every Stock Effect flag (mirrors `EasyGLGraphicsBackend::SelectProgram()`'s own identical
+        /// priority), routing to `DrawPbrEffectEXT()` -- not a Stock Effect at all. The `skinned`
+        /// branch also special-cases stride 56 (`DrawSkinnedVertexColorEXT()`, CNA's own
+        /// vertex-color-on-skinned-mesh extension) ahead of the real `SkinnedEffect` dispatch.
+        /// Defined in `D3D9EffectDraw.cpp`.
         void DrawPrimitivesExImpl(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
                                   const Matrix& world, const Matrix& view, const Matrix& projection,
                                   PrimitiveType primitive, int primitiveCount,
@@ -402,6 +407,42 @@ namespace CNA::Internal::Backends::D3D9
                                   std::size_t stride, const Matrix& world, const Matrix& view,
                                   const Matrix& projection, PrimitiveType primitive, int primitiveCount,
                                   const GpuDrawParams& params);
+        /// D3D9 PBR porting task: real DrawPrimitivesEx dispatch for CNA's own NOXNA PbrEffect/
+        /// SkinnedPbrEffect (`params.pbr`) -- highest-priority branch in `DrawPrimitivesExImpl`'s
+        /// own flag cascade (mirrors `EasyGLGraphicsBackend::SelectProgram()`'s identical
+        /// pbr-before-everything-else priority). Selects the "Pbr3D" shader (stride 48, unskinned)
+        /// or "PbrSkinned3D" shader (stride 68, `params.skinned`) -- CNA's own custom vs_3_0/ps_3_0
+        /// shaders, not a Microsoft Stock Effect (XNA 4.0 has no PBR effect at all). Defined in
+        /// `D3D9PbrDraw.cpp`.
+        void DrawPbrEffectEXT(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
+                              std::size_t stride, const Matrix& world, const Matrix& view,
+                              const Matrix& projection, PrimitiveType primitive, int primitiveCount,
+                              const GpuDrawParams& params);
+        /// D3D9 skinned-vertex-color porting task: real DrawPrimitivesEx dispatch for CNA's own
+        /// NOXNA "SkinnedVertexColor3D" shader (stride 56 -- `SkinnedEffect` plus a vertex `Color`
+        /// real XNA's own compiled `SkinnedEffect.fx` bytecode never carries). Selected ahead of
+        /// the real `SkinnedEffect` dispatch (`DrawSkinnedEffectEXT`) when `params.skinned` and the
+        /// bound vertex buffer's stride is 56. Defined in `D3D9SkinnedVertexColorDraw.cpp`.
+        void DrawSkinnedVertexColorEXT(const IVertexBufferBackend& vb, const IIndexBufferBackend* ib,
+                                       const Matrix& world, const Matrix& view, const Matrix& projection,
+                                       PrimitiveType primitive, int primitiveCount,
+                                       const GpuDrawParams& params);
+        /// NOXNA: returns (creating on first request) a 1x1 flat tangent-space-normal texture
+        /// (RGBA 128,128,255,255 -- decodes in-shader to (0,0,1), the geometric normal
+        /// unperturbed) used as PbrEffect's own NormalMap fallback when
+        /// `GpuDrawParams::pbrNormalMap` is null, mirroring
+        /// `EasyGLGraphicsBackend::EnsureDefaultFlatNormalTexture()`'s identical fallback
+        /// value/reasoning. Built via the existing public `CreateTexture(ImageData)` path (not a
+        /// hand-rolled `LockRect`) so the RGBA8-native byte order every other CNA texture already
+        /// relies on is guaranteed correct here too. Defined in `D3D9PbrDraw.cpp`.
+        ITextureBackend* GetOrCreateDefaultFlatNormalTextureEXT();
+        /// NOXNA: returns (creating on first request) a 1x1 opaque white texture, used as the
+        /// "map absent" fallback for every other optional PBR map
+        /// (`MetallicRoughnessMap`/`EmissiveMap`/`OcclusionMap`) -- (1,1,1,1) is the correct
+        /// neutral value for all three (factor*1=factor, tint*1=tint, occlusion 1=unoccluded),
+        /// mirroring `EasyGLGraphicsBackend::EnsureDefaultWhiteTexture()`. Defined in
+        /// `D3D9PbrDraw.cpp`.
+        ITextureBackend* GetOrCreateDefaultWhiteTextureEXT();
 
         SDL_Window* window_ = nullptr;
         int width_ = 0;
@@ -471,5 +512,22 @@ namespace CNA::Internal::Backends::D3D9
         ComPtr<IDirect3DVertexShader9> instancedVS_;
         ComPtr<IDirect3DPixelShader9> instancedPS_;
         ComPtr<IDirect3DVertexDeclaration9> instancedVertexDecl_;
+
+        /// D3D9 PBR porting task: CNA's own NOXNA Pbr3D/PbrSkinned3D shader pairs, lazily created
+        /// on first `DrawPbrEffectEXT()` call. Not `D3DPOOL_DEFAULT` resources -- survive `Reset()`
+        /// unaffected, same as `shaderCache_`/`instancedVS_` above.
+        ComPtr<IDirect3DVertexShader9> pbrVS_;
+        ComPtr<IDirect3DPixelShader9> pbrPS_;
+        ComPtr<IDirect3DVertexShader9> pbrSkinnedVS_;
+        ComPtr<IDirect3DPixelShader9> pbrSkinnedPS_;
+        /// D3D9 skinned-vertex-color porting task: CNA's own NOXNA SkinnedVertexColor3D shader
+        /// pair, lazily created on first `DrawSkinnedVertexColorEXT()` call.
+        ComPtr<IDirect3DVertexShader9> skinnedVertexColorVS_;
+        ComPtr<IDirect3DPixelShader9> skinnedVertexColorPS_;
+        /// NOXNA: 1x1 fallback textures for PbrEffect's optional maps when unbound. `D3DPOOL_MANAGED`
+        /// (via the normal `CreateTexture()` path) -- survive `Reset()` unaffected like every other
+        /// CNA D3D9 texture. Lazily created by `GetOrCreateDefault{FlatNormal,White}TextureEXT()`.
+        std::unique_ptr<ITextureBackend> defaultFlatNormalTexture_;
+        std::unique_ptr<ITextureBackend> defaultWhiteTexture_;
     };
 }
