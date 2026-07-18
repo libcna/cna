@@ -166,4 +166,24 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_webgpu_test(cna_test_webgpu_texture3d examples/webgpu_texture3d_test.cpp)
     cna_register_backend_test(NAME WebGPU_Texture3D COMMAND cna_test_webgpu_texture3d
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # WEBGPU-114: WebGPURenderTargetCubeBackend / CreateRenderTargetCube() -- this backend's first
+    # real render-into-a-cube-face support (previously IGraphicsBackend's own nullptr-returning
+    # default). Direct face-to-face switching (no intervening backbuffer bind), a real BasicEffect
+    # 3D draw into a face, an EnvironmentMapEffect sampling round trip proving IWebGPUCubeSamplable
+    # resolves a RenderTargetCube (not just a plain TextureCube), and the "an intervening cube-
+    # face-targeted Clear() must not leak into the backbuffer's own render pass" architecture check.
+    cna_webgpu_test(cna_test_webgpu_rendertargetcube examples/webgpu_rendertargetcube_test.cpp)
+    cna_register_backend_test(NAME WebGPU_RenderTargetCube COMMAND cna_test_webgpu_rendertargetcube
+        TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # WEBGPU-52: real, render-pass-based, genuinely-linear-filtered mip generation for a plain
+    # Texture2D/TextureCube from level 0 -- previously mipMap=true only pre-allocated empty
+    # levels. A hard-edged red/blue stripe proves genuine LINEAR blending at the boundary (not a
+    # nearest-neighbor copy), for both Texture2D and one TextureCube face; also documents the
+    # deliberate divergence this introduces from FNA/every sibling CNA backend (which only
+    # auto-regenerate mips for a RENDER TARGET being unbound, never a plain texture).
+    cna_webgpu_test(cna_test_webgpu_mipgen examples/webgpu_mipgen_test.cpp)
+    cna_register_backend_test(NAME WebGPU_MipGen COMMAND cna_test_webgpu_mipgen
+        TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 endif()
