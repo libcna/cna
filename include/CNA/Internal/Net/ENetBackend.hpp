@@ -115,10 +115,12 @@ namespace CNA::Internal::Net
          * through the host if session isn't the one hosting target's connection.
          *
          * No-op if RealNetworkingEnabled(session's type) is false, or session has no registered
-         * transport. Assumes sender and target are both already known to ENetBackend (true
-         * whenever called from NetworkSession::Update()'s PacketSend handling, since both always
-         * come from session->getAllGamersProperty(), which only ever contains gamers already
-         * assigned a wire-id by the Task 5.4 handshake).
+         * transport. sender and/or target need not already be known to ENetBackend's wire-id map:
+         * if either isn't resolved yet (reachable when `SendData` is called immediately after
+         * `Join()`/`ConnectToHost()`, before any `Update()` call has pumped the `ClientHello`/
+         * `ServerWelcome` round-trip - see audit_net.md remediation, 2026-07-18), the call is
+         * queued (bounded, oldest evicted first - see `GetDroppedAppDataCount()`) and delivered
+         * automatically, preserving payload/target/order/options, the moment both sides resolve.
          *
          * @param session The local session sending the data.
          * @param sender The local gamer sending the data.
@@ -135,14 +137,15 @@ namespace CNA::Internal::Net
         );
 
         /**
-         * @brief Task 2.13: how many `SendAppData` calls have been silently dropped because
-         * sender and/or target weren't yet known to ENetBackend's wire-id map.
+         * @brief Task 2.13: how many `SendAppData` calls could not eventually be delivered.
          *
-         * Reachable in practice when `SendData` is called immediately after `Join()`/
-         * `ConnectToHost()`, before any `Update()` call has pumped the `ClientHello`/
-         * `ServerWelcome` round-trip that populates the map. Not part of real XNA; exists purely
-         * so this previously-totally-silent drop is at least observable (e.g. by tests, or a
-         * game's own diagnostics) instead of vanishing with no trace at all.
+         * A `SendAppData` call whose sender and/or target aren't yet known to ENetBackend's
+         * wire-id map (see `SendAppData`'s own doc comment) is queued rather than dropped
+         * outright, and delivered automatically once both resolve. This counter now only
+         * increments when that queue itself overflows its bound (a caller queuing sends far
+         * faster than `Update()` is ever called to resolve them) - a genuinely unresolvable send
+         * is still counted, never silently discarded with no trace. Not part of real XNA; exists
+         * purely for observability (e.g. by tests, or a game's own diagnostics).
          *
          * @return The number of drops observed so far, process-wide, since startup or the last
          * `ResetDroppedAppDataCount()` call.

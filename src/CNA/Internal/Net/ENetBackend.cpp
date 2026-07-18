@@ -34,6 +34,14 @@ namespace CNA::Internal::Net
         constexpr size_t kChannelLimit = 2;
         constexpr uint8_t kControlChannel = 0;
 
+        // audit_net.md remediation (2026-07-18): bound on SessionState::PendingPreHandshakeAppData
+        // below. The real handshake this queue bridges (ConnectToHost() -> ClientHello ->
+        // ServerWelcome) normally completes within a single Update() call, so a healthy caller
+        // queues at most a handful of sends here, briefly. 64 is generous headroom for that real
+        // case while still bounding worst-case memory if a caller spins SendData in a loop before
+        // ever calling Update() (confirmed reachable - see SendAppData's own comment).
+        constexpr size_t kMaxPendingPreHandshakeAppData = 64;
+
 #ifdef __EMSCRIPTEN__
         // Emscripten's SOCKFS bind()/getsockname() shim never reports back a real OS-assigned
         // ephemeral port (see NEXT.md) - hosting on Web must request a fixed, known port instead
@@ -96,6 +104,23 @@ namespace CNA::Internal::Net
             std::chrono::steady_clock::time_point ReleaseTime;
         };
 
+        // audit_net.md remediation (2026-07-18): a real SendAppData call made before the
+        // ClientHello/ServerWelcome handshake has populated SessionState::GamerToWireId for
+        // sender and/or target - see SendAppData's own comment for the confirmed-reachable
+        // scenario. Held here (bounded by kMaxPendingPreHandshakeAppData, oldest evicted first)
+        // instead of silently dropped, and flushed by FlushPendingPreHandshakeAppData once both
+        // ends resolve. Sender/Target are raw NetworkGamer* (not wire-ids, which don't exist yet
+        // for an unresolved entry) - purged by gamer pointer wherever GamerToWireId loses an
+        // entry (HandleDisconnect, host-migration reset), so a removed gamer's pointer is never
+        // dereferenced after the fact.
+        struct PendingPreHandshakeAppData
+        {
+            NetworkGamer* Sender{nullptr};
+            NetworkGamer* Target{nullptr};
+            std::vector<SharpRuntime::bytecs> Payload;
+            SendDataOptions Options{SendDataOptions::None};
+        };
+
         // Per-session ENet transport state. HostPeer is set only when this session itself
         // initiated an outbound ConnectToHost() — it identifies "the one peer we asked to
         // connect to", distinguishing "we are the client of this specific connection" (in
@@ -145,6 +170,8 @@ namespace CNA::Internal::Net
             // gamers, held here until its ReleaseTime by ReleaseDuePendingDeliveries - see
             // PendingDelayedDelivery's own comment.
             std::vector<PendingDelayedDelivery> PendingDeliveries;
+            // audit_net.md remediation (2026-07-18): see PendingPreHandshakeAppData's own comment.
+            std::vector<PendingPreHandshakeAppData> PendingPreHandshakeSends;
         };
 
         // Task 2.13: process-wide, since SendAppData's silent-drop path (sender/target not yet in
@@ -253,6 +280,85 @@ namespace CNA::Internal::Net
             state.Host.Flush();
         }
 
+        // audit_net.md remediation (2026-07-18): the actual wire-send + relay logic, shared by
+        // SendAppData's immediate-resolve path and FlushPendingPreHandshakeAppData's later-resolve
+        // path below - identical routing either way, only the timing of wire-id resolution
+        // differs.
+        void DeliverAppData(
+            SessionState& state,
+            uint8_t senderWireId,
+            uint8_t targetWireId,
+            const std::vector<SharpRuntime::bytecs>& payload,
+            SendDataOptions options
+        )
+        {
+            AppDataMessage msg;
+            msg.SenderWireId = senderWireId;
+            msg.TargetWireId = targetWireId;
+            msg.Options = options;
+            msg.Payload = payload;
+            auto bytes = NetPacketCodec::Encode(msg);
+
+            if (state.HostPeer != nullptr)
+            {
+                // We're a client: everything goes to the host, which relays as needed.
+                SendTo(state, state.HostPeer, bytes, options);
+                return;
+            }
+
+            // We're the host: relay directly to the peer that owns the target wire-id.
+            auto peerIt = state.WireIdToPeer.find(targetWireId);
+            if (peerIt != state.WireIdToPeer.end())
+            {
+                SendTo(state, peerIt->second, bytes, options);
+            }
+        }
+
+        // audit_net.md remediation (2026-07-18): called whenever GamerToWireId gains new entries
+        // (end of HandleClientHello/HandleServerWelcome/HandleGamerJoinBroadcast) - delivers, in
+        // original send order, every queued PendingPreHandshakeAppData entry whose sender AND
+        // target have now resolved to a wire-id, and leaves everything else queued for a later
+        // call (e.g. a target that's still a whole separate handshake away).
+        void FlushPendingPreHandshakeAppData(SessionState& state)
+        {
+            if (state.PendingPreHandshakeSends.empty())
+            {
+                return;
+            }
+            std::vector<PendingPreHandshakeAppData> stillPending;
+            stillPending.reserve(state.PendingPreHandshakeSends.size());
+            for (auto& pending : state.PendingPreHandshakeSends)
+            {
+                auto senderIt = state.GamerToWireId.find(pending.Sender);
+                auto targetIt = state.GamerToWireId.find(pending.Target);
+                if (senderIt == state.GamerToWireId.end() || targetIt == state.GamerToWireId.end())
+                {
+                    stillPending.push_back(std::move(pending));
+                    continue;
+                }
+                DeliverAppData(state, senderIt->second, targetIt->second, pending.Payload, pending.Options);
+            }
+            state.PendingPreHandshakeSends = std::move(stillPending);
+        }
+
+        // audit_net.md remediation (2026-07-18): drops any PendingPreHandshakeSends entries that
+        // reference gamer, called wherever GamerToWireId loses an entry for a gamer that will
+        // never resolve now (HandleDisconnect, host-migration reset) - without this, a queued send
+        // naming a gamer that left before the handshake ever completed would sit in the queue
+        // until evicted by kMaxPendingPreHandshakeAppData churn, or reference a NetworkGamer* that
+        // becomes dangling once its owning SessionState::OwnedRemoteGamers entry is freed.
+        void PurgePendingPreHandshakeSendsFor(SessionState& state, NetworkGamer* gamer)
+        {
+            auto& pending = state.PendingPreHandshakeSends;
+            pending.erase(
+                std::remove_if(
+                    pending.begin(), pending.end(),
+                    [gamer](const PendingPreHandshakeAppData& p) { return p.Sender == gamer || p.Target == gamer; }
+                ),
+                pending.end()
+            );
+        }
+
         void HandleClientHello(NetworkSession* session, SessionState& state, ENetPeer* peer, const ClientHelloMessage& hello)
         {
             // Task 2.7: incoming ClientHello was previously accepted unconditionally regardless of
@@ -315,6 +421,11 @@ namespace CNA::Internal::Net
                 }
                 state.Host.Flush();
             }
+
+            // audit_net.md remediation (2026-07-18): GamerToWireId just gained entries for both
+            // this host's own locals (EnsureLocalWireIds above, first time only) and the newly
+            // joined remote gamers - either could complete a pending pre-handshake send.
+            FlushPendingPreHandshakeAppData(state);
         }
 
         void HandleServerWelcome(NetworkSession* session, SessionState& state, const ServerWelcomeMessage& welcome)
@@ -368,6 +479,11 @@ namespace CNA::Internal::Net
                     session->SendNetworkEvent(std::move(evt));
                 }
             }
+
+            // audit_net.md remediation (2026-07-18): GamerToWireId just gained entries for this
+            // client's own locals and every already-existing roster gamer - either could complete
+            // a pending pre-handshake send queued before this ServerWelcome arrived.
+            FlushPendingPreHandshakeAppData(state);
         }
 
         void HandleGamerJoinBroadcast(NetworkSession* session, SessionState& state, const GamerJoinBroadcastMessage& msg)
@@ -389,6 +505,11 @@ namespace CNA::Internal::Net
                 gamer->SetIsHost(entry.IsHost);
                 session->AddRemoteGamer(gamer);
             }
+
+            // audit_net.md remediation (2026-07-18): a pending send may have been targeting a
+            // gamer this broadcast just introduced (a third gamer that joined after our own
+            // handshake completed, still unresolved until now).
+            FlushPendingPreHandshakeAppData(state);
         }
 
         void HandleStateChangeBroadcast(NetworkSession* session, SessionState& /*state*/, const StateChangeBroadcastMessage& msg)
@@ -619,6 +740,12 @@ namespace CNA::Internal::Net
             state.FreeWireIds.clear();
             state.NextWireId = 0;
             state.OwnedRemoteGamers.clear();
+            // audit_net.md remediation (2026-07-18): OwnedRemoteGamers.clear() just freed every
+            // remote NetworkGamer this peer knew about - any PendingPreHandshakeSends entry still
+            // naming one of them would otherwise dangle. The new topology after migration makes a
+            // pre-migration cross-machine send meaningless regardless, so the whole queue is
+            // dropped rather than selectively purged.
+            state.PendingPreHandshakeSends.clear();
             state.HostPeer = nullptr;
 
             if (selfIsNewHost)
@@ -715,6 +842,10 @@ namespace CNA::Internal::Net
                     session->RemoveGamer(locals[0], NetworkSessionEndReason::HostEndedSession);
                 }
                 state.HostPeer = nullptr;
+                // audit_net.md remediation (2026-07-18): this client's whole view of the session
+                // just ended - any send still queued for a not-yet-resolved target can never be
+                // delivered into a roster that's about to be gone regardless.
+                state.PendingPreHandshakeSends.clear();
                 return;
             }
 
@@ -740,6 +871,9 @@ namespace CNA::Internal::Net
                 state.GamerToWireId.erase(gamer);
                 state.WireIdToGamer.erase(gamerIt);
                 state.WireIdToPeer.erase(wireId);
+                // audit_net.md remediation (2026-07-18): gamer just left and will never resolve
+                // now - any send still queued naming it as sender or target must not linger.
+                PurgePendingPreHandshakeSendsFor(state, gamer);
                 // Task 2.11: reclaim the id for reuse by a future AssignWireId call, instead of
                 // leaving NextWireId to eventually wrap around after enough cumulative join/leave
                 // churn.
@@ -1060,35 +1194,29 @@ namespace CNA::Internal::Net
         auto targetIt = state.GamerToWireId.find(target);
         if (senderIt == state.GamerToWireId.end() || targetIt == state.GamerToWireId.end())
         {
-            // Task 2.13: reachable when SendData is called immediately after Join()/
-            // ConnectToHost(), before any Update() call has pumped the ClientHello/ServerWelcome
-            // round-trip that populates GamerToWireId. Previously a totally silent, unobservable
-            // drop; surfaced via a simple counter rather than a bigger queue-and-flush-once-ready
-            // redesign, since nothing else in this codebase retries a dropped send either.
-            ++droppedAppDataCount_;
+            // audit_net.md remediation (2026-07-18): reachable when SendData is called
+            // immediately after Join()/ConnectToHost(), before any Update() call has pumped the
+            // ClientHello/ServerWelcome round-trip that populates GamerToWireId (confirmed
+            // reachable via the real public LocalNetworkGamer::SendData path, not just internal
+            // plumbing - see ENetBackendTests.cpp's own reachability test). Previously a totally
+            // silent, then a counted-but-still-silent, drop; now queued for delivery once
+            // FlushPendingPreHandshakeAppData resolves both ends (HandleClientHello/
+            // HandleServerWelcome/HandleGamerJoinBroadcast all call it), bounded so a caller that
+            // never calls Update() can't grow this without limit - the oldest queued entry is
+            // evicted (and counted as a drop, same observable meaning GetDroppedAppDataCount()
+            // always had: "a SendAppData call that could not eventually be delivered") to make
+            // room for the newest, once kMaxPendingPreHandshakeAppData is reached.
+            auto& pending = state.PendingPreHandshakeSends;
+            if (pending.size() >= kMaxPendingPreHandshakeAppData)
+            {
+                pending.erase(pending.begin());
+                ++droppedAppDataCount_;
+            }
+            pending.push_back(PendingPreHandshakeAppData{sender, target, payload, options});
             return;
         }
 
-        AppDataMessage msg;
-        msg.SenderWireId = senderIt->second;
-        msg.TargetWireId = targetIt->second;
-        msg.Options = options;
-        msg.Payload = payload;
-        auto bytes = NetPacketCodec::Encode(msg);
-
-        if (state.HostPeer != nullptr)
-        {
-            // We're a client: everything goes to the host, which relays as needed.
-            SendTo(state, state.HostPeer, bytes, options);
-            return;
-        }
-
-        // We're the host: relay directly to the peer that owns the target wire-id.
-        auto peerIt = state.WireIdToPeer.find(msg.TargetWireId);
-        if (peerIt != state.WireIdToPeer.end())
-        {
-            SendTo(state, peerIt->second, bytes, options);
-        }
+        DeliverAppData(state, senderIt->second, targetIt->second, payload, options);
     }
 
     void ENetBackend::BroadcastStateChange(NetworkSession* session, NetworkSessionState newState)
