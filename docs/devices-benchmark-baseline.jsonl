@@ -1,0 +1,10 @@
+{"name":"Accelerometer.Probe","p50_us":6.8130,"p95_us":9.6990,"p99_us":10.6700,"iterations":2000}
+{"name":"Gyroscope.Probe","p50_us":6.6830,"p95_us":9.3480,"p99_us":10.2590,"iterations":2000}
+{"name":"Accelerometer.SingleInstanceDispatch","p50_us":0.4310,"p95_us":0.7310,"p99_us":0.7910,"iterations":2000}
+{"name":"Accelerometer.Fanout.N1","p50_us":0.5110,"p95_us":0.8520,"p99_us":0.9420,"iterations":2000}
+{"name":"Accelerometer.Fanout.N5","p50_us":2.3840,"p95_us":4.2580,"p99_us":4.7990,"iterations":2000}
+{"name":"Accelerometer.Fanout.N10","p50_us":4.8390,"p95_us":8.3150,"p99_us":8.8760,"iterations":2000}
+{"name":"Accelerometer.ThrottledRejectPath","p50_us":0.5510,"p95_us":0.7620,"p99_us":0.9110,"iterations":2000}
+{"name":"Accelerometer.StartStopCycle","p50_us":24.6860,"p95_us":34.5050,"p99_us":41.3770,"iterations":2000}
+{"name":"Compass.HeadingFusion","p50_us":0.0300,"p95_us":0.0300,"p99_us":0.0310,"iterations":2000}
+{"name":"Motion.AttitudeFusion","p50_us":0.1910,"p95_us":0.2310,"p99_us":0.3800,"iterations":2000}

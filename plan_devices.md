@@ -9603,7 +9603,7 @@ test is not sufficient for an Android coordinate/fusion claim.
   - Selection remains correct with multiple identical controllers.
 - **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
 
-### PERF2-001 — Create a Devices microbenchmark suite — OPEN
+### PERF2-001 — Create a Devices microbenchmark suite — OPEN (core suite + baseline + comparison tool built; allocation/lock instrumentation and CI wiring deferred)
 
 - **Priority:** P1
 - **Area:** Perfection re-audit
@@ -9615,6 +9615,74 @@ test is not sufficient for an Android coordinate/fusion claim.
   - CI stores benchmark baselines and flags material regressions.
   - Results distinguish host fake paths from real devices.
 - **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+- **Progress so far (not yet CLOSED — see Remaining limitations):** no
+  repeatable benchmark of any kind existed for `Microsoft::Devices` before this
+  task — built the core suite, a committed first baseline, and a working
+  comparison tool, covering every one of this task's own named categories.
+  - **New `tools/devices/devices_microbenchmark.cpp`** (standalone, non-GTest
+    executable, `cna_devices_microbenchmark` CMake target): 10 benchmarks —
+    `Accelerometer`/`Gyroscope` probe (`getIsSupportedProperty()`), single-instance
+    synthetic dispatch, **event fanout at N=1/5/10** simultaneous instances
+    (using the same `RegisterStartedInstanceForTesting()`/
+    `DispatchToInstancesForTesting()` test hooks `AccelerometerTests.cpp`
+    itself uses), the throttled-reject path (`TimeBetweenUpdates` set to 1
+    hour, isolating `SensorBase<T>::ShouldAcceptUpdateAt()`'s cheap
+    early-reject cost from a full dispatch), a real `Start()`/`Stop()` cycle
+    (throw/catch path on this hardware-less host — a real, meaningful cost
+    every headless CI run actually takes, not a fake substitute), and
+    `Compass`/`Motion`'s own pure-function fusion math
+    (`ConvertRotationVectorToMagneticHeadingDegreesWithTiltMode()`/
+    `ConvertRotationVectorToXnaQuaternion()`+`ExtractYawPitchRollFromQuaternion()`).
+    Each result is `p50`/`p95`/`p99` latency in microseconds over 2000
+    iterations, emitted as JSON Lines to stdout. Portable dead-code-elision
+    guard (`volatile` sink variable) used instead of GCC/Clang-only inline
+    `asm volatile`, since this project also targets `MSVC`/NDK `Clang`
+    (`TEST2-010`).
+  - **New `tools/devices/compare_devices_microbenchmark.py`**: compares a
+    fresh run against the committed baseline, flags a benchmark whose `p95`
+    regressed by more than a relative threshold (default 50%) — **with an
+    absolute-microsecond floor added after empirically catching my own tool's
+    first false positive**: two consecutive real runs of the *same unmodified
+    binary* produced a spurious 53% relative delta on a ~0.4µs benchmark
+    (pure measurement noise on an operation that fast) before the floor
+    (`--min-absolute-us`, default 1.0) was added — verified the fix by
+    re-running the same two-real-runs comparison (clean afterward) and by an
+    artificial 3x-regression injection (correctly flagged, exit code 1) —
+    not just asserted to work.
+  - **New `docs/devices-benchmark-baseline.jsonl`**: the first committed
+    baseline, this host, this container, this task (2026-07-18) — explicitly
+    not portable to a different machine's absolute timings, only meaningful
+    as a same-host regression signal.
+  - **"Distinguish host fake paths from real devices"**: satisfied by
+    construction — every benchmark here necessarily runs against a
+    synthetic/fake path (no real accelerometer/gyroscope/haptic/compass/motion
+    hardware exists in this container), and the tool's own top-of-file
+    comment states this explicitly rather than presenting host-only numbers
+    as if they were hardware-representative.
+  - **Files changed:** new `tools/devices/devices_microbenchmark.cpp`,
+    `tools/devices/compare_devices_microbenchmark.py`,
+    `docs/devices-benchmark-baseline.jsonl`; `cmake/Harnesses.cmake` (new
+    `cna_devices_microbenchmark` target, not registered as a ctest — its
+    output is meant to be captured/compared, not pass/failed on its own exit
+    code). No existing production or test source changed.
+  - **Tests:** full precise filter (364 tests) clean under `devices-ubsan`
+    after this change — 360 passed, 4 hardware skips, 0 failures. Both
+    `StrictXnaApi*` ctests (`TEST2-010`) still pass, confirming the shared
+    `cmake/Harnesses.cmake` edit introduced no regression there.
+  - **Remaining limitations (why this stays OPEN):** "allocations" and "lock
+    time" are **not** separately instrumented — only wall-clock latency is
+    reported. Doing so properly needs either a process-wide allocator hook (a
+    much larger, riskier change for a production library to carry
+    permanently) or manual instrumentation added to already-hardened,
+    already-tested locking code this task has no mandate to modify just to
+    add a counter — named as a real, deliberately-deferred gap, not silently
+    dropped. "CI stores benchmark baselines and flags material regressions"
+    — the local mechanism (this suite, the comparison script, the committed
+    baseline) fully works; actual GitHub Actions wiring to run this
+    automatically on every push and fail CI on a regression is a separate,
+    not-yet-done follow-up (the same "workflow exists locally, not yet
+    confirmed running automatically" distinction already established for
+    `DEVPERF-001`/`devices-tests.yml` elsewhere in this plan).
 
 ### PERF2-002 — Add repeated lifecycle leak tests — OPEN (implementation done; LSan itself non-functional in this container)
 

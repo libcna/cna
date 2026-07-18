@@ -121,3 +121,20 @@ if(CNA_BUILD_TESTS AND (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang"))
     )
     set_tests_properties(StrictXnaApiSurfaceLeakCheck_MustFailToCompile PROPERTIES WILL_FAIL TRUE)
 endif()
+
+# --- Task PERF2-001: Devices microbenchmark suite ---
+# A tiny standalone (non-GTest) executable emitting JSON-Lines latency-percentile results for
+# this task's own named categories. Not registered as a ctest (its output is meant to be
+# captured/compared, not pass/failed on its own exit code) -- run manually or via
+# tools/devices/compare_devices_microbenchmark.py, see that file and
+# devices_microbenchmark.cpp's own top-of-file comment.
+if(CNA_BUILD_TESTS)
+    add_executable(cna_devices_microbenchmark
+        tools/devices/devices_microbenchmark.cpp
+    )
+    target_link_libraries(cna_devices_microbenchmark
+        PRIVATE
+        CNA
+        SHARP_RUNTIME
+    )
+endif()
