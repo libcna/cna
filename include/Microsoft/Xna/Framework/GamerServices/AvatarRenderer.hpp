@@ -134,6 +134,7 @@ namespace Microsoft::Xna::Framework::GamerServices
          * @brief Draws the avatar using the specified animation.
          *
          * @param animation The animation providing bone transforms and facial expression.
+         * @throws System::ArgumentNullException if animation is null.
          * @throws System::ObjectDisposedException if this instance has been disposed.
          */
         void Draw(IAvatarAnimation* animation);
@@ -158,6 +159,8 @@ namespace Microsoft::Xna::Framework::GamerServices
          *
          * @param device Graphics device used for the real render path.
          * @param model  A loaded skinned mesh + skeleton + animation clip set.
+         * @throws System::ArgumentNullException if model is null.
+         * @throws System::ObjectDisposedException if this instance has been disposed.
          */
         NOXNA void EnableRealRenderingEXT(Graphics::GraphicsDevice& device,
                                            std::shared_ptr<Graphics::SkinnedModelEXT> model);

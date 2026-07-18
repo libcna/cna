@@ -100,9 +100,11 @@ void AchievementGame::AwardTile(std::size_t index)
         return;
     }
 
-    // Real API call - confirmed a no-op (SignedInGamer::AwardAchievement's body is empty,
-    // matching FNA's own stub), so this has no effect on GetAchievements() below. Called anyway
-    // to prove it's callable and to honestly demonstrate the gap rather than silently skipping it.
+    // Task 4.5 (plan_net.md Phase 4): real API call - persists to the local GamerServices store,
+    // keyed by gamertag. Real XNA's AwardAchievement only ever takes a key, no name/description/
+    // score, so GetAchievements() below reflects only key+earned+earnedDateTime for real; this
+    // demo's own tiles_ grid (with the real name/description/displayBeforeEarned this local store
+    // has no source of truth for) stays the actual source of truth for what's displayed.
     localGamer_->AwardAchievement(tiles_[index].getKeyProperty());
 
     // Achievement has no isEarned setter (it's immutable once constructed) - "earning" a tile
@@ -115,8 +117,9 @@ void AchievementGame::AwardTile(std::size_t index)
 
     AchievementCollection real = localGamer_->GetAchievements();
     std::printf("[Achievements] Awarded \"%s\" locally. Real GetAchievements() count=%d "
-                "(expected 0 - AwardAchievement()/GetAchievements() are confirmed no-ops here, "
-                "matching FNA's own stub)\n",
+                "(now real disk-backed persistence - survives across process runs for this "
+                "gamertag; Name/Description/GamerScore stay empty since AwardAchievement's real "
+                "API surface never carries them)\n",
                 def.name, real.getCountProperty());
 }
 
@@ -167,7 +170,8 @@ void AchievementGame::Update(GameTime& gameTime)
             }
             AchievementCollection real = localGamer_->GetAchievements();
             std::printf("[Achievements] Smoke test complete: locallyEarned=%d/%zu "
-                        "realGetAchievementsCount=%d (expected 0)\n",
+                        "realGetAchievementsCount=%d (now real disk-backed persistence, expected "
+                        "== locallyEarned)\n",
                         earnedCount, tiles_.size(), real.getCountProperty());
             Exit();
         }

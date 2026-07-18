@@ -41,7 +41,15 @@ MATERIAL_COLORS = {
     "Hair": (0.25, 0.15, 0.08, 1.0),
     "Shirt": (0.20, 0.35, 0.60, 1.0),
     "Pants": (0.15, 0.15, 0.20, 1.0),
-    "Shoes": (0.05, 0.05, 0.05, 1.0),
+    # audit_net.md remediation (2026-07-18): was (0.05, 0.05, 0.05) - dark enough that no
+    # amount of ambient/diffuse light could make joint/seam shading read as anything but
+    # a featureless black blob (0.05 base albedo * any realistic light contribution stays
+    # under ~15/255). Confirmed via direct pixel sampling that neither the AvatarRenderer
+    # ambient-light fix nor the LowerLeg/Foot bend-joint weight fix changed a single foot
+    # pixel - this flat base color was the actual, sole cause of "shoes" reading as solid
+    # black regardless of lighting or skinning changes. Raised enough to still read as a
+    # dark shoe, clearly darker than Pants, while no longer crushing shading detail to 0.
+    "Shoes": (0.14, 0.14, 0.16, 1.0),
 }
 
 

@@ -7,6 +7,7 @@
 #include "Microsoft/Xna/Framework/GamerServices/AvatarRenderer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "System/ArgumentException.hpp"
+#include "System/ArgumentNullException.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/ObjectDisposedException.hpp"
 #include "System/TimeSpan.hpp"
@@ -149,6 +150,13 @@ TEST(AvatarRendererTest, DrawFromAvatarAnimationDelegatesCorrectly) {
     EXPECT_NO_THROW(renderer.Draw(static_cast<IAvatarAnimation*>(&animation)));
 }
 
+// Task 1.5 / audit_net.md Medium finding: a null animation used to dereference unconditionally
+// (undefined behavior) instead of throwing a catchable exception.
+TEST(AvatarRendererTest, DrawWithNullAnimationThrowsArgumentNull) {
+    AvatarRenderer renderer(nullptr);
+    EXPECT_THROW(renderer.Draw(static_cast<IAvatarAnimation*>(nullptr)), System::ArgumentNullException);
+}
+
 TEST(AvatarRendererTest, DisposeSetsIsDisposed) {
     AvatarRenderer renderer(nullptr);
     renderer.Dispose();
@@ -224,6 +232,19 @@ TEST(AvatarRendererTest, EnableRealRenderingThrowsAfterDispose) {
     EXPECT_THROW(
         renderer.EnableRealRenderingEXT(device, nullptr),
         System::ObjectDisposedException);
+}
+
+// Task 1.6 / audit_net.md Medium finding: a null/empty model used to be silently accepted here
+// and only surfaced later, inside DrawRealEXT, as InvalidOperationException("real rendering is
+// disabled") - misleading, since that exception says nothing about the null model actually
+// passed. Confirms it is now rejected at this call site instead.
+TEST(AvatarRendererTest, EnableRealRenderingThrowsArgumentNullForNullModel) {
+    GraphicsDevice device;
+    AvatarRenderer renderer(nullptr);
+    EXPECT_THROW(
+        renderer.EnableRealRenderingEXT(device, nullptr),
+        System::ArgumentNullException);
+    EXPECT_FALSE(renderer.IsRealRenderingEnabledEXT());
 }
 
 TEST(AvatarRendererTest, SetAppearanceThrowsAfterDispose) {

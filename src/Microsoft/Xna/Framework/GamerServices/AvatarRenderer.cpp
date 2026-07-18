@@ -9,6 +9,7 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "System/ArgumentException.hpp"
+#include "System/ArgumentNullException.hpp"
 #include "System/InvalidOperationException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
@@ -100,6 +101,14 @@ namespace Microsoft::Xna::Framework::GamerServices
 
     void AvatarRenderer::Draw(IAvatarAnimation* animation)
     {
+        // Task 1.5: every sibling method on this class throws consistently on invalid input
+        // (ObjectDisposedException for a disposed instance) - a null animation used to
+        // unconditionally dereference here instead, undefined behavior rather than a catchable
+        // exception.
+        if (animation == nullptr)
+        {
+            throw System::ArgumentNullException("animation");
+        }
         auto boneTransforms = animation->getBoneTransformsProperty();
         std::vector<Microsoft::Xna::Framework::Matrix> bones(boneTransforms.begin(), boneTransforms.end());
         Draw(bones, animation->getExpressionProperty());
@@ -127,6 +136,15 @@ namespace Microsoft::Xna::Framework::GamerServices
         if (isDisposed_)
         {
             throw System::ObjectDisposedException("AvatarRenderer");
+        }
+        // Task 1.6: without this, a null/empty model silently succeeded here and only surfaced
+        // later, inside DrawRealEXT, as InvalidOperationException("real rendering is disabled") -
+        // a poor and misleading contract, since that exception says nothing about the null model
+        // actually passed to this call. Reject it at the call site instead, matching the
+        // ArgumentNullException convention used elsewhere in this codebase.
+        if (model == nullptr)
+        {
+            throw System::ArgumentNullException("model");
         }
         realDevice_ = &device;
         realModel_ = std::move(model);
@@ -177,8 +195,16 @@ namespace Microsoft::Xna::Framework::GamerServices
         realEffect_->setViewProperty(view_);
         realEffect_->setProjectionProperty(projection_);
         realEffect_->SetBoneTransforms(boneTransforms);
-        realEffect_->setAmbientLightColorProperty(ambientLightColor_);
+        // EnableDefaultLighting() must run *before* the custom ambient/key-light overrides
+        // below, not after - it unconditionally resets AmbientLightColor and all three
+        // DirectionalLights to XNA's own built-in defaults (confirmed via SkinnedEffect's
+        // own EnableDefaultLighting(), which is itself correct/FNA-faithful). Calling it
+        // after setAmbientLightColorProperty() silently discarded every custom ambient
+        // value this class ever set, floored at XNA's much dimmer default ambient
+        // (~0.05-0.18 instead of the intended 0.35) - the actual cause of shadowed/concave
+        // regions (joints, creases) rendering near-black regardless of avatar pose.
         realEffect_->EnableDefaultLighting();
+        realEffect_->setAmbientLightColorProperty(ambientLightColor_);
         realEffect_->getDirectionalLight0Property().setEnabledProperty(true);
         realEffect_->getDirectionalLight0Property().setDirectionProperty(lightDirection_);
         realEffect_->getDirectionalLight0Property().setDiffuseColorProperty(lightColor_);

@@ -95,7 +95,23 @@ Task 11.9. Phase 11b (real C++ engine integration) is complete as of Task 11.12.
 `docs/avatar-real-rendering-ext.md` and `plan_net.md` for full detail. Phase 11d
 (Task 11.16, optional/future, not scheduled) is all that remains.
 
-Full task detail: `plan_net.md` Phase 11 ("Procedural Avatar Asset Generator").
+**Update (`plan_net.md` Phase 7, decision 4b):** the body/clothing generation this file
+describes below (`generate_body.py`/`generate_clothes.py`, joined via Blender's plain
+`bpy.ops.object.join()`) is what actually produced the "monster" avatars — visible
+self-intersecting mesh explosions at every joint, both statically and mid-animation, since
+a datablock join never welds geometry at the seams. **`generate_avatar.py`/
+`generate_wardrobe.py` now use `generate_body_meshcraft.py`/`generate_clothes_meshcraft.py`
+in production** (aliased in as drop-in replacements: `import generate_body_meshcraft as
+generate_body`), which build the same primitive shapes but merge them with real CSG
+(constructive solid geometry) union via the sibling `mesh-craft` tool instead of a
+datablock join — see "Mesh-craft CSG pipeline (Phase 7)" below for the full pipeline, and
+`docs/avatar-real-rendering-ext.md`'s own "Phase 7" section for the rendering-side story.
+The original `generate_body.py`/`generate_clothes.py` (documented in their original,
+unmodified form in the rest of this file) remain standalone-runnable and are not deleted,
+but are no longer what a normal `generate_avatar.py` run actually builds.
+
+Full task detail: `plan_net.md` Phase 11 ("Procedural Avatar Asset Generator") and Phase 7
+("Avatar asset quality: stop the 'monster' avatars").
 
 ## Canonical skeleton (`generate_skeleton.py`)
 
@@ -169,6 +185,67 @@ correction pass is still needed and not yet done.
 
 Verify: `blender --background --python tools/avatar_builder/generate_body.py` runs
 without error and asserts a non-empty vertex group exists for every bone name in `BONES`.
+
+## Mesh-craft CSG pipeline (Phase 7, `generate_body_meshcraft.py` / `generate_clothes_meshcraft.py`)
+
+**This is what `generate_avatar.py`/`generate_wardrobe.py` actually build with now** — drop-in
+replacements for `generate_body.build_body()`/`generate_clothes.build_clothes()`, aliased in
+(`import generate_body_meshcraft as generate_body`) so the rest of the orchestration pipeline
+needed no rewrite. The original modules above are unchanged and still standalone-runnable.
+
+**Why:** `generate_body.py`'s cylinder-per-bone geometry was always correct in shape; the actual
+bug was how the pieces were combined. `bpy.ops.object.join()` (the original approach) merges mesh
+*datablocks* into one object without welding geometry at the seams — every limb visibly
+self-intersected/exploded at every joint, both statically and mid-animation. That's the "monster"
+avatar this phase exists to fix (decision 4b).
+
+**How:** the same capsule/sphere primitives are written out as a `.mc3.xml` document (the sibling
+[`mesh-craft`](../../../mesh-craft) tool's own format) with every primitive wrapped in one
+`<union material="skin">` — mesh-craft's Manifold-backed CSG engine produces a genuine watertight
+boolean merge, not a datablock join. mesh-craft's own `mc3togltf` CLI (resolved via the
+`$MC3TOGLTF` env var or a conventional build path, `_locate_mc3togltf()`) exports the unioned
+result to `.glb`, which `bpy.ops.import_scene.gltf` then imports, merges/renames to
+`CNAAvatarBody`, and parents to the armature — `generate_body.fix_automatic_weights` still does
+the actual skinning, called with a wider `blend_radius` (`avg_radius*1.6`, up from a flat `0.08`)
+to match the now-merged geometry.
+
+**Coordinate frame (verified empirically, not assumed):** mesh-craft uses a Y-up frame; Blender
+(and this project's own skeleton) is Z-up. `_mc3_position()` applies the remap on every primitive:
+`mc3.X → Blender.X`, `mc3.Y → Blender.Z`, `mc3.Z → Blender.Y`.
+
+**CSG's documented limitations don't matter here:** per mesh-craft's own `MC3_FORMAT.md`, a
+unioned mesh gets a placeholder `UV=(0,0)`, flat recomputed normals, and loses per-child
+materials. Confirmed a non-issue *before* relying on it, not assumed: `CNAAvatarBody.png` (the
+material `generate_materials.py` assigns) is a solid 4×4 white placeholder texture — real skin
+color is a runtime tint (`AvatarAppearanceEXT::setSkinColorProperty`), not baked UVs, so losing
+real UVs costs nothing visually.
+
+**Other changes bundled with this fix:** `BONE_RADII` were thickened (~2× for arms, head grown
+0.11→0.15) — plain-primitive geometry could get away with thinner radii since a visible seam gap
+didn't matter as much; a real watertight merge needed thicker geometry to read as proportioned.
+`generate_clothes_meshcraft.py` needed two of its own real bug fixes, found via screenshot
+inspection after the body-only fix worked: (1) it initially still referenced the *old*, thinner
+`generate_body.BONE_RADII` instead of the new module's; (2) even after that fix, the shirt/pants
+were a barely-visible sliver because their `~0.02m` padding constant (see the garment table
+above) was tuned against the old thin body — fixed with a `padding * 1.8` multiplier, scoped to
+this new generator only (the original `generate_clothes.py`'s own constants are untouched).
+
+**Honest result** (verified via direct screenshot comparison across both genders, 3 angles, and a
+mid-animation pose): the core "monster" complaints — disproportionate stick-thin limbs, a
+too-small head, severe self-intersecting mesh explosions at every joint — are genuinely fixed on
+the body/skin itself. This **directly supersedes** the "confirmed elbow/sleeve tear" findings
+documented below under "Placeholder animations"/"Bend-artifact check" and "Orchestration and
+export" — those were measured against the old `generate_body.py`/`generate_clothes.py` output and
+have not been re-measured against the mesh-craft pipeline's own geometry; treat those sections as
+historical record of the original Phase 11 pipeline, not the current state. Smaller gaps remain
+open on the new pipeline, honestly documented rather than glossed over: a residual shoe-area dark
+artifact, a `Wave`-pose chest-band artifact, and `validate_gltf.py` still lacking NaN/Inf/
+bone-index-bounds checks on generated content (see `plan_net.md` Phase 7's own "Honest overall
+assessment" for the authoritative, up-to-date list).
+
+Verify: `blender --background --python tools/avatar_builder/generate_body_meshcraft.py` runs the
+same way as `generate_body.py` (needs `$MC3TOGLTF` resolvable, or mesh-craft built at one of the
+conventional paths `_locate_mc3togltf()` checks).
 
 ## Placeholder materials (`generate_materials.py`)
 
@@ -372,6 +449,10 @@ without error and asserts both actions exist with a nonzero frame range.
 
 ### Bend-artifact check (deferred from Task 11.2, done here)
 
+**Historical: measured against the original `generate_body.py`/`generate_clothes.py` pipeline,
+before Phase 7's mesh-craft CSG replacement (see "Mesh-craft CSG pipeline" above) — not
+re-measured against the current production pipeline's own geometry.**
+
 Posing the full clothed avatar through `Wave`'s peak elbow-fold frames and rendering a
 close-up confirms a **real, visible tear** at the elbow/wrist: the forearm and hand
 separate from the shirt sleeve (and slightly from each other) at both fold extremes
@@ -427,7 +508,9 @@ animations rather than merged, plus `export_morph`/`export_skins`/`export_yup=Tr
   Satisfies the plan's explicit "byte-identical **or near-identical**" bar.
 
 **Confirmed, not-fixed findings** (same spirit as the elbow-tear check above — direct
-inspection, not guessing):
+inspection, not guessing). **Also historical, same caveat as the Bend-artifact check above:
+measured against the original `generate_body.py`/`generate_clothes.py` pipeline, not
+re-measured against Phase 7's mesh-craft CSG replacement:**
 - The exporter warns `Mesh Cylinder is not valid` — the body mesh's underlying
   data-block still carries its `primitive_cylinder_add`-era name; cosmetic naming
   leftover, unrelated to the warning's actual cause.

@@ -5,12 +5,17 @@
 #include "CNA/Internal/Net/ENetHostHandle.hpp"
 #include "CNA/Internal/Net/NetPacketCodec.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
+#include "Microsoft/Xna/Framework/Net/AvailableNetworkSession.hpp"
 #include "Microsoft/Xna/Framework/Net/LocalNetworkGamer.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkGamer.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkSession.hpp"
 
+#include <algorithm>
+#include <chrono>
 #include <enet/enet.h>
 #include <memory>
+#include <optional>
+#include <random>
 #include <stdexcept>
 #include <unordered_map>
 #include <vector>
@@ -29,6 +34,14 @@ namespace CNA::Internal::Net
         constexpr size_t kChannelLimit = 2;
         constexpr uint8_t kControlChannel = 0;
 
+        // audit_net.md remediation (2026-07-18): bound on SessionState::PendingPreHandshakeAppData
+        // below. The real handshake this queue bridges (ConnectToHost() -> ClientHello ->
+        // ServerWelcome) normally completes within a single Update() call, so a healthy caller
+        // queues at most a handful of sends here, briefly. 64 is generous headroom for that real
+        // case while still bounding worst-case memory if a caller spins SendData in a loop before
+        // ever calling Update() (confirmed reachable - see SendAppData's own comment).
+        constexpr size_t kMaxPendingPreHandshakeAppData = 64;
+
 #ifdef __EMSCRIPTEN__
         // Emscripten's SOCKFS bind()/getsockname() shim never reports back a real OS-assigned
         // ephemeral port (see NEXT.md) - hosting on Web must request a fixed, known port instead
@@ -37,6 +50,76 @@ namespace CNA::Internal::Net
         // at all (browsers cannot open listening sockets), so hosting is moot there regardless.
         constexpr uint16_t kEmscriptenHostPort = 61191;
 #endif
+
+        // Task 6.1-6.3 (plan_net.md Phase 6): injectable time source + seeded RNG backing
+        // SimulatedLatency/SimulatedPacketLoss below - both default to real behavior in
+        // production (real steady_clock, a genuinely-seeded RNG) and are only ever overridden from
+        // test code via ENetBackend's own ForTesting statics, so tests never depend on a real
+        // sleep or unseeded randomness (a hard determinism requirement - see plan_net.md's Task
+        // 6.3's own note).
+        std::optional<std::chrono::steady_clock::time_point>& ClockOverrideForTesting()
+        {
+            static std::optional<std::chrono::steady_clock::time_point> override_;
+            return override_;
+        }
+
+        std::chrono::steady_clock::time_point Now()
+        {
+            return ClockOverrideForTesting().has_value() ? *ClockOverrideForTesting() : std::chrono::steady_clock::now();
+        }
+
+        std::mt19937& PacketLossRng()
+        {
+            static std::mt19937 rng(std::random_device{}());
+            return rng;
+        }
+
+        // Task 6.2: SimulatedPacketLoss is documented as a [0,1] drop probability. 0 and 1 are
+        // handled without ever touching the RNG, so a test using exactly those two values (Task
+        // 6.4's own requirement) is deterministic regardless of RNG state, real or seeded.
+        bool ShouldDropForSimulatedLoss(float lossProbability)
+        {
+            if (lossProbability <= 0.0f)
+            {
+                return false;
+            }
+            if (lossProbability >= 1.0f)
+            {
+                return true;
+            }
+            std::uniform_real_distribution<float> dist(0.0f, 1.0f);
+            return dist(PacketLossRng()) < lossProbability;
+        }
+
+        // Task 6.1/6.2: a real AppData packet, bound for one of this session's own local gamers,
+        // held until ReleaseTime instead of being delivered the instant it's received - see
+        // HandleAppData's own comment for why this is scoped to local delivery only (not
+        // session-management traffic, and not host-relay traffic passing through to someone else).
+        struct PendingDelayedDelivery
+        {
+            NetworkGamer* Target{nullptr};
+            NetworkGamer* Sender{nullptr};
+            std::vector<SharpRuntime::bytecs> Payload;
+            SendDataOptions Options{SendDataOptions::None};
+            std::chrono::steady_clock::time_point ReleaseTime;
+        };
+
+        // audit_net.md remediation (2026-07-18): a real SendAppData call made before the
+        // ClientHello/ServerWelcome handshake has populated SessionState::GamerToWireId for
+        // sender and/or target - see SendAppData's own comment for the confirmed-reachable
+        // scenario. Held here (bounded by kMaxPendingPreHandshakeAppData, oldest evicted first)
+        // instead of silently dropped, and flushed by FlushPendingPreHandshakeAppData once both
+        // ends resolve. Sender/Target are raw NetworkGamer* (not wire-ids, which don't exist yet
+        // for an unresolved entry) - purged by gamer pointer wherever GamerToWireId loses an
+        // entry (HandleDisconnect, host-migration reset), so a removed gamer's pointer is never
+        // dereferenced after the fact.
+        struct PendingPreHandshakeAppData
+        {
+            NetworkGamer* Sender{nullptr};
+            NetworkGamer* Target{nullptr};
+            std::vector<SharpRuntime::bytecs> Payload;
+            SendDataOptions Options{SendDataOptions::None};
+        };
 
         // Per-session ENet transport state. HostPeer is set only when this session itself
         // initiated an outbound ConnectToHost() — it identifies "the one peer we asked to
@@ -71,6 +154,24 @@ namespace CNA::Internal::Net
             // (TeardownSession erasing it from Sessions()), which already happens at the same time
             // NetworkSession::Dispose() frees everything *it* owns.
             std::vector<std::unique_ptr<NetworkGamer>> OwnedRemoteGamers;
+            // Task 5.3 (plan_net.md Phase 5): set by AttemptHostMigration right before issuing the
+            // reconnect Connect() call, so the ServerWelcome that completes it (a genuine
+            // migration, not a plain fresh join) knows to raise NetworkEventType::HostChange once
+            // a real NetworkGamer* for the new host exists - see HandleServerWelcome.
+            bool AwaitingMigrationHostChangeEXT{false};
+            // Task 5.5: the gamertag AttemptHostMigration most recently decided the new host must
+            // be, whenever this peer wasn't that new host itself - set purely so the tie-break
+            // math (excluding the dead host, picking the true minimum remaining wire id) is
+            // testable in a single process, where a second real NetworkSession to actually
+            // reconnect to can't exist (see ENetBackendTests.cpp's own SystemLinkSessionFixture
+            // comment on why). Not part of real XNA.
+            std::string LastMigrationReconnectAttemptGamertagForTestingEXT;
+            // Task 6.2 (plan_net.md Phase 6): AppData bound for one of this session's own local
+            // gamers, held here until its ReleaseTime by ReleaseDuePendingDeliveries - see
+            // PendingDelayedDelivery's own comment.
+            std::vector<PendingDelayedDelivery> PendingDeliveries;
+            // audit_net.md remediation (2026-07-18): see PendingPreHandshakeAppData's own comment.
+            std::vector<PendingPreHandshakeAppData> PendingPreHandshakeSends;
         };
 
         // Task 2.13: process-wide, since SendAppData's silent-drop path (sender/target not yet in
@@ -179,6 +280,88 @@ namespace CNA::Internal::Net
             state.Host.Flush();
         }
 
+        // audit_net.md remediation (2026-07-18): the actual wire-send + relay logic, shared by
+        // SendAppData's immediate-resolve path and FlushPendingPreHandshakeAppData's later-resolve
+        // path below - identical routing either way, only the timing of wire-id resolution
+        // differs.
+        void DeliverAppData(
+            SessionState& state,
+            uint8_t senderWireId,
+            uint8_t targetWireId,
+            const std::vector<SharpRuntime::bytecs>& payload,
+            SendDataOptions options
+        )
+        {
+            AppDataMessage msg;
+            msg.SenderWireId = senderWireId;
+            msg.TargetWireId = targetWireId;
+            msg.Options = options;
+            msg.Payload = payload;
+            auto bytes = NetPacketCodec::Encode(msg);
+
+            if (state.HostPeer != nullptr)
+            {
+                // We're a client: everything goes to the host, which relays as needed.
+                SendTo(state, state.HostPeer, bytes, options);
+                return;
+            }
+
+            // We're the host: relay directly to the peer that owns the target wire-id.
+            auto peerIt = state.WireIdToPeer.find(targetWireId);
+            if (peerIt != state.WireIdToPeer.end())
+            {
+                SendTo(state, peerIt->second, bytes, options);
+            }
+        }
+
+        // audit_net.md remediation (2026-07-18): called whenever GamerToWireId gains new entries
+        // (end of HandleClientHello/HandleServerWelcome/HandleGamerJoinBroadcast) - delivers, in
+        // original send order, every queued PendingPreHandshakeAppData entry whose sender AND
+        // target have now resolved to a wire-id, and leaves everything else queued for a later
+        // call (e.g. a target that's still a whole separate handshake away).
+        void FlushPendingPreHandshakeAppData(SessionState& state)
+        {
+            if (state.PendingPreHandshakeSends.empty())
+            {
+                return;
+            }
+            std::vector<PendingPreHandshakeAppData> stillPending;
+            stillPending.reserve(state.PendingPreHandshakeSends.size());
+            for (auto& pending : state.PendingPreHandshakeSends)
+            {
+                auto senderIt = state.GamerToWireId.find(pending.Sender);
+                auto targetIt = state.GamerToWireId.find(pending.Target);
+                if (senderIt == state.GamerToWireId.end() || targetIt == state.GamerToWireId.end())
+                {
+                    stillPending.push_back(std::move(pending));
+                    continue;
+                }
+                DeliverAppData(state, senderIt->second, targetIt->second, pending.Payload, pending.Options);
+            }
+            state.PendingPreHandshakeSends = std::move(stillPending);
+        }
+
+        // audit_net.md remediation (2026-07-18, third round): drops any PendingPreHandshakeSends
+        // entries that reference gamer, called wherever GamerToWireId loses an entry for a gamer
+        // that will never resolve now (HandleDisconnect, HandleGamerLeaveBroadcast, host-migration
+        // reset) - without this, a queued send naming a gamer that left before the handshake ever
+        // completed would sit in the queue until evicted by kMaxPendingPreHandshakeAppData churn,
+        // or reference a NetworkGamer* that becomes dangling once its owning
+        // SessionState::OwnedRemoteGamers entry is freed. Each entry removed here genuinely can
+        // never be delivered now (its sender or target is gone), so it counts via
+        // droppedAppDataCount_ same as a queue-overflow eviction - GetDroppedAppDataCount()'s own
+        // contract is "could not eventually be delivered" for any reason, not just overflow.
+        void PurgePendingPreHandshakeSendsFor(SessionState& state, NetworkGamer* gamer)
+        {
+            auto& pending = state.PendingPreHandshakeSends;
+            auto removedBegin = std::remove_if(
+                pending.begin(), pending.end(),
+                [gamer](const PendingPreHandshakeAppData& p) { return p.Sender == gamer || p.Target == gamer; }
+            );
+            droppedAppDataCount_ += static_cast<std::size_t>(std::distance(removedBegin, pending.end()));
+            pending.erase(removedBegin, pending.end());
+        }
+
         void HandleClientHello(NetworkSession* session, SessionState& state, ENetPeer* peer, const ClientHelloMessage& hello)
         {
             // Task 2.7: incoming ClientHello was previously accepted unconditionally regardless of
@@ -241,6 +424,11 @@ namespace CNA::Internal::Net
                 }
                 state.Host.Flush();
             }
+
+            // audit_net.md remediation (2026-07-18): GamerToWireId just gained entries for both
+            // this host's own locals (EnsureLocalWireIds above, first time only) and the newly
+            // joined remote gamers - either could complete a pending pre-handshake send.
+            FlushPendingPreHandshakeAppData(state);
         }
 
         void HandleServerWelcome(NetworkSession* session, SessionState& state, const ServerWelcomeMessage& welcome)
@@ -256,6 +444,7 @@ namespace CNA::Internal::Net
                 locals[i]->SetId(id);
             }
 
+            NetworkGamer* welcomedHostGamer = nullptr;
             for (const RosterEntry& entry : welcome.ExistingRoster)
             {
                 if (state.WireIdToGamer.contains(entry.WireId))
@@ -272,7 +461,32 @@ namespace CNA::Internal::Net
                 // which remote gamer is the actual host here instead of always defaulting false.
                 gamer->SetIsHost(entry.IsHost);
                 session->AddRemoteGamer(gamer);
+                if (entry.IsHost)
+                {
+                    welcomedHostGamer = gamer;
+                }
             }
+
+            // Task 5.3: this ServerWelcome completed a migration reconnect (AttemptHostMigration
+            // set the flag right before issuing the Connect() call, and always fully cleared
+            // WireIdToGamer first - see its own doc comment - so the host's own roster entry is
+            // guaranteed fresh here, never skipped by the `contains` check above).
+            if (state.AwaitingMigrationHostChangeEXT)
+            {
+                state.AwaitingMigrationHostChangeEXT = false;
+                if (welcomedHostGamer != nullptr)
+                {
+                    NetworkSession::NetworkEvent evt;
+                    evt.Type = NetworkSession::NetworkEventType::HostChange;
+                    evt.Gamer = welcomedHostGamer;
+                    session->SendNetworkEvent(std::move(evt));
+                }
+            }
+
+            // audit_net.md remediation (2026-07-18): GamerToWireId just gained entries for this
+            // client's own locals and every already-existing roster gamer - either could complete
+            // a pending pre-handshake send queued before this ServerWelcome arrived.
+            FlushPendingPreHandshakeAppData(state);
         }
 
         void HandleGamerJoinBroadcast(NetworkSession* session, SessionState& state, const GamerJoinBroadcastMessage& msg)
@@ -294,6 +508,11 @@ namespace CNA::Internal::Net
                 gamer->SetIsHost(entry.IsHost);
                 session->AddRemoteGamer(gamer);
             }
+
+            // audit_net.md remediation (2026-07-18): a pending send may have been targeting a
+            // gamer this broadcast just introduced (a third gamer that joined after our own
+            // handshake completed, still unresolved until now).
+            FlushPendingPreHandshakeAppData(state);
         }
 
         void HandleStateChangeBroadcast(NetworkSession* session, SessionState& /*state*/, const StateChangeBroadcastMessage& msg)
@@ -315,14 +534,47 @@ namespace CNA::Internal::Net
 
             if (target->getIsLocalProperty())
             {
+                // Task 6.1/6.2 (plan_net.md Phase 6): SimulatedLatency/SimulatedPacketLoss are
+                // scoped to exactly this point - AppData about to be delivered to one of this
+                // session's own local gamers (real XNA's own documented meaning: what does *my*
+                // network connection do to data addressed to *me*) - not to the CNA-internal
+                // session-management protocol (ClientHello/ServerWelcome/etc., which needs to stay
+                // reliable for the session itself to function coherently and was never part of the
+                // real XNA API surface these properties govern), and not to a host's own relay hop
+                // for two *other* peers just passing through (not data this machine's own game
+                // code ever sees - see the relay branch below, unaffected).
+                if (ShouldDropForSimulatedLoss(session->getSimulatedPacketLossProperty()))
+                {
+                    return;
+                }
+
                 auto senderIt = state.WireIdToGamer.find(msg.SenderWireId);
-                NetworkSession::NetworkEvent evt;
-                evt.Type = NetworkSession::NetworkEventType::PacketSend;
-                evt.Gamer = target;
-                evt.Sender = (senderIt != state.WireIdToGamer.end()) ? senderIt->second : nullptr;
-                evt.Packet = msg.Payload;
-                evt.Reliable = msg.Options;
-                session->SendNetworkEvent(std::move(evt));
+                NetworkGamer* senderGamer = (senderIt != state.WireIdToGamer.end()) ? senderIt->second : nullptr;
+
+                System::TimeSpan latency = session->getSimulatedLatencyProperty();
+                if (latency <= System::TimeSpan::Zero)
+                {
+                    // Task 6.4's own regression requirement: zero latency (the default) behaves
+                    // exactly as before this task - immediate delivery, no queue involved at all.
+                    NetworkSession::NetworkEvent evt;
+                    evt.Type = NetworkSession::NetworkEventType::PacketSend;
+                    evt.Gamer = target;
+                    evt.Sender = senderGamer;
+                    evt.Packet = msg.Payload;
+                    evt.Reliable = msg.Options;
+                    session->SendNetworkEvent(std::move(evt));
+                    return;
+                }
+
+                PendingDelayedDelivery pending;
+                pending.Target = target;
+                pending.Sender = senderGamer;
+                pending.Payload = msg.Payload;
+                pending.Options = msg.Options;
+                pending.ReleaseTime = Now() + std::chrono::microseconds(
+                    static_cast<int64_t>(latency.getTotalMillisecondsProperty() * 1000.0)
+                );
+                state.PendingDeliveries.push_back(std::move(pending));
                 return;
             }
 
@@ -340,6 +592,39 @@ namespace CNA::Internal::Net
             // hosting for — shouldn't happen in this star topology; drop defensively.
         }
 
+        // Task 6.2: delivers every pending delayed AppData whose ReleaseTime has passed - called
+        // once per PumpSession, so a packet queued by SimulatedLatency is handed to game code on
+        // whichever later Update() call first observes Now() >= ReleaseTime, not necessarily the
+        // very next one (matching how a real delayed packet's exact arrival frame isn't
+        // predictable either).
+        void ReleaseDuePendingDeliveries(NetworkSession* session, SessionState& state)
+        {
+            if (state.PendingDeliveries.empty())
+            {
+                return;
+            }
+            auto now = Now();
+            auto it = state.PendingDeliveries.begin();
+            while (it != state.PendingDeliveries.end())
+            {
+                if (it->ReleaseTime <= now)
+                {
+                    NetworkSession::NetworkEvent evt;
+                    evt.Type = NetworkSession::NetworkEventType::PacketSend;
+                    evt.Gamer = it->Target;
+                    evt.Sender = it->Sender;
+                    evt.Packet = std::move(it->Payload);
+                    evt.Reliable = it->Options;
+                    session->SendNetworkEvent(std::move(evt));
+                    it = state.PendingDeliveries.erase(it);
+                }
+                else
+                {
+                    ++it;
+                }
+            }
+        }
+
         void HandleGamerLeaveBroadcast(NetworkSession* session, SessionState& state, const GamerLeaveBroadcastMessage& msg)
         {
             for (uint8_t wireId : msg.WireIds)
@@ -353,13 +638,212 @@ namespace CNA::Internal::Net
                 session->RemoveGamer(gamer, NetworkSessionEndReason::Disconnected);
                 state.GamerToWireId.erase(gamer);
                 state.WireIdToGamer.erase(gamerIt);
+                // audit_net.md remediation (2026-07-18, third round): this path was missing the
+                // same purge HandleDisconnect's own per-gamer removal already does - a pending
+                // send naming a gamer who left via this broadcast (not a direct disconnect of
+                // *our* connection) would otherwise sit unresolved in the queue until evicted by
+                // unrelated churn, since GamerToWireId can never gain an entry for it again.
+                PurgePendingPreHandshakeSendsFor(state, gamer);
             }
+        }
+
+        // Task 5.1/5.2/5.3 (plan_net.md Phase 5): called from HandleDisconnect's host-lost branch
+        // when AllowHostMigration is true, instead of ending the session outright. Every survivor
+        // independently computes the same deterministic new host (lowest remaining wire id) from
+        // its own already-cached roster - no extra negotiation round-trip is needed, since every
+        // peer already learned the full roster via ServerWelcome/GamerJoinBroadcast. Returns true
+        // if a migration attempt was made (a real promotion, or a reconnect attempt was actually
+        // launched); false if the caller should fall back to the pre-existing immediate-
+        // session-end behavior (migration disabled, nobody left to migrate to, or no reachable new
+        // host was found - Task 5.1's documented "best-effort, not guaranteed" limitation, no
+        // retry loop here).
+        bool AttemptHostMigration(NetworkSession* session, SessionState& state)
+        {
+            if (!session->getAllowHostMigrationProperty())
+            {
+                return false;
+            }
+
+            // NetworkSession::getHostProperty() cannot be used here: host_ is only ever set to
+            // localGamers_[0] at construction (both for a real Create()-based host and for a real
+            // Join()-based client - see the constructor) and, before this task, was never updated
+            // to reflect an actual remote host afterward (NetworkEventType::HostChange existed but
+            // nothing ever enqueued it - see Task 5.1's own investigation notes). Find the dying
+            // host by its real IsHost flag instead - correctly maintained on every known gamer by
+            // HandleServerWelcome/HandleGamerJoinBroadcast per Task 4.6.
+            // Only ever matches a *remote* gamer: this peer just lost a connection it was the
+            // client of (peer == state.HostPeer, checked by the caller), so the dying host can
+            // never be one of this peer's own local gamers by construction - excluding locals also
+            // sidesteps a real, separate, pre-existing quirk where a NetworkSession constructed
+            // via Create() (unlike a real Join()) leaves its own local gamers' IsHost at whatever
+            // the constructor set, even after ConnectToHost turns it into a client (see
+            // ENetBackendTests.cpp's own SystemLinkSessionFixture comment).
+            uint8_t deadHostId = 0;
+            bool foundDeadHost = false;
+            for (const auto& [id, gamer] : state.WireIdToGamer)
+            {
+                if (!gamer->getIsLocalProperty() && gamer->getIsHostProperty())
+                {
+                    deadHostId = id;
+                    foundDeadHost = true;
+                    break;
+                }
+            }
+            if (!foundDeadHost)
+            {
+                return false; // handshake never completed far enough to even learn who the host was
+            }
+
+            std::vector<uint8_t> survivorIds;
+            for (const auto& [id, gamer] : state.WireIdToGamer)
+            {
+                if (id != deadHostId)
+                {
+                    survivorIds.push_back(id);
+                }
+            }
+            if (survivorIds.empty())
+            {
+                return false; // nothing left to migrate to (shouldn't happen - own locals survive)
+            }
+            uint8_t newHostId = *std::min_element(survivorIds.begin(), survivorIds.end());
+
+            bool selfIsNewHost = false;
+            for (LocalNetworkGamer* local : session->getLocalGamersProperty())
+            {
+                auto it = state.GamerToWireId.find(local);
+                if (it != state.GamerToWireId.end() && it->second == newHostId)
+                {
+                    selfIsNewHost = true;
+                    break;
+                }
+            }
+
+            // Still valid to read here - the shared cleanup below hasn't run yet.
+            std::string newHostGamertag;
+            if (!selfIsNewHost)
+            {
+                newHostGamertag = state.WireIdToGamer.at(newHostId)->getGamertagProperty();
+                state.LastMigrationReconnectAttemptGamertagForTestingEXT = newHostGamertag;
+            }
+
+            // Shared cleanup for both outcomes below: every remote gamer this peer knew about is
+            // really gone from its point of view now (real GamerLeave events - a reconnecting/
+            // promoted peer's roster genuinely gets rebuilt from scratch, not preserved across the
+            // migration - see plan_net.md Task 5.1's own "simple, not seamless" scope note), and
+            // every wire-id bookkeeping structure is reset so the handshake that follows (either
+            // accepting fresh reconnects as the new host, or this peer's own reconnect to whoever
+            // else was promoted) starts from a clean slate - stale entries from the dead host's own
+            // numbering would otherwise collide with freshly (re)assigned ids.
+            std::vector<NetworkGamer*> staleRemotes(
+                session->getRemoteGamersProperty().begin(), session->getRemoteGamersProperty().end()
+            );
+            for (NetworkGamer* gamer : staleRemotes)
+            {
+                session->RemoveGamer(gamer, NetworkSessionEndReason::Disconnected);
+            }
+            state.WireIdToGamer.clear();
+            state.GamerToWireId.clear();
+            state.PeerWireIds.clear();
+            state.WireIdToPeer.clear();
+            state.FreeWireIds.clear();
+            state.NextWireId = 0;
+            state.OwnedRemoteGamers.clear();
+            // audit_net.md remediation (2026-07-18): OwnedRemoteGamers.clear() just freed every
+            // remote NetworkGamer this peer knew about - any PendingPreHandshakeSends entry still
+            // naming one of them would otherwise dangle. The new topology after migration makes a
+            // pre-migration cross-machine send meaningless regardless, so the whole queue is
+            // dropped rather than selectively purged. Counted (third-round remediation): every
+            // entry here genuinely can never be delivered now, matching
+            // GetDroppedAppDataCount()'s "could not eventually be delivered" contract.
+            droppedAppDataCount_ += state.PendingPreHandshakeSends.size();
+            state.PendingPreHandshakeSends.clear();
+            state.HostPeer = nullptr;
+
+            if (selfIsNewHost)
+            {
+                for (LocalNetworkGamer* local : session->getLocalGamersProperty())
+                {
+                    local->SetIsHost(true);
+                }
+                // Task 5.2: this peer's ENetHostHandle is already bound and running -
+                // ConnectToHost's own non-Emscripten path always calls StartHosting first, even
+                // for a pure client - so no new socket is needed to start accepting real incoming
+                // connections.
+                ENetDiscoveryService::RegisterHost(session, state.Host.getBoundPortProperty());
+
+                NetworkSession::NetworkEvent evt;
+                evt.Type = NetworkSession::NetworkEventType::HostChange;
+                evt.Gamer = session->getLocalGamersProperty()[0];
+                session->SendNetworkEvent(std::move(evt));
+                return true;
+            }
+
+            // Task 5.3: a star topology gives surviving clients no direct channel to each other,
+            // and the dead host obviously can't relay anything either - LAN rediscovery (the same
+            // mechanism NetworkSession::Find() already uses) is the only way left to learn the new
+            // host's address. Matches by gamertag - a pre-existing, honest limitation of this
+            // whole discovery layer (two same-gamertag hosts on one LAN are already ambiguous
+            // today), not a new gap host migration introduces.
+            //
+            // A few short attempts, not one: ENetDiscoveryService's own doc comments already
+            // acknowledge that which of several same-port-bound sockets actually *receives* a
+            // given datagram is OS-arbitrary when more than one process shares the discovery port
+            // (exactly the situation here - the newly-promoted peer's own RegisterHost call and
+            // this peer's FindSessions call can be landing at almost the same real wall-clock
+            // moment, across genuinely separate processes on a real multi-machine LAN). A single
+            // 150ms search window occasionally missing a reply it should have gotten is a real,
+            // acknowledged platform characteristic, not a bug this task can fix at the socket
+            // layer - retrying a handful of times (~150ms each, so still well under a second total
+            // even in the worst case) is the pragmatic mitigation, and it's free of cost for the
+            // common single-process case (an unregistered gamertag stays unregistered no matter
+            // how many times it's searched for, so this loop still exits after the first attempt
+            // there).
+            for (int attempt = 0; attempt < 3; ++attempt)
+            {
+                for (const AvailableNetworkSession& candidate
+                     : ENetDiscoveryService::FindSessions(session->getSessionTypeProperty()))
+                {
+                    if (candidate.getHostGamertagProperty() == newHostGamertag)
+                    {
+                        state.AwaitingMigrationHostChangeEXT = true;
+                        // state.Host.Connect(...) is called directly here rather than through the
+                        // public ENetBackend::ConnectToHost(session, ...) wrapper deliberately: on
+                        // Emscripten, that wrapper *replaces* Sessions()[session] outright (a
+                        // fresh client-only SessionState), which would leave this very function's
+                        // own `state` reference - and PumpSession's, still iterating its event
+                        // loop on the stack above this call - dangling for the rest of this pump.
+                        // Calling Connect() directly on the already-existing, already-bound host
+                        // handle reconnects to a new address without ever touching Sessions()
+                        // itself, safe on every platform (and functionally identical to the
+                        // wrapper's own non-Emscripten body once StartHosting's redundant no-op is
+                        // accounted for).
+                        state.HostPeer = state.Host.Connect(
+                            candidate.GetConnectAddress(), candidate.GetConnectPort(), kChannelLimit
+                        );
+                        return true;
+                    }
+                }
+            }
+
+            return false;
         }
 
         void HandleDisconnect(NetworkSession* session, SessionState& state, ENetPeer* peer)
         {
             if (peer == state.HostPeer)
             {
+                // Task 5.2/5.3/5.4: migration replaces the old immediate-end behavior only when
+                // AllowHostMigration is true AND a real migration attempt could be launched (a
+                // promotion, or a reconnect to a discovered new host) - AttemptHostMigration
+                // itself falls back to false for every case that should still behave exactly as
+                // before (disabled, or no reachable new host), so this stays a pure branch, not a
+                // behavior change for the pre-existing default-off path.
+                if (AttemptHostMigration(session, state))
+                {
+                    return;
+                }
+
                 // We're a client and just lost our connection to the host: our own view of this
                 // session is over. RemoveGamer's isLocal branch raises a single session-wide
                 // SessionEnded event no matter which local gamer is passed (see its own doc
@@ -370,6 +854,12 @@ namespace CNA::Internal::Net
                     session->RemoveGamer(locals[0], NetworkSessionEndReason::HostEndedSession);
                 }
                 state.HostPeer = nullptr;
+                // audit_net.md remediation (2026-07-18): this client's whole view of the session
+                // just ended - any send still queued for a not-yet-resolved target can never be
+                // delivered into a roster that's about to be gone regardless. Counted (third-round
+                // remediation) - see the host-migration reset's own identical comment above.
+                droppedAppDataCount_ += state.PendingPreHandshakeSends.size();
+                state.PendingPreHandshakeSends.clear();
                 return;
             }
 
@@ -395,6 +885,9 @@ namespace CNA::Internal::Net
                 state.GamerToWireId.erase(gamer);
                 state.WireIdToGamer.erase(gamerIt);
                 state.WireIdToPeer.erase(wireId);
+                // audit_net.md remediation (2026-07-18): gamer just left and will never resolve
+                // now - any send still queued naming it as sender or target must not linger.
+                PurgePendingPreHandshakeSendsFor(state, gamer);
                 // Task 2.11: reclaim the id for reuse by a future AssignWireId call, instead of
                 // leaving NextWireId to eventually wrap around after enough cumulative join/leave
                 // churn.
@@ -438,7 +931,6 @@ namespace CNA::Internal::Net
             {
                 return;
             }
-
             // Task 1.4: this packet arrived over an already-open ENet channel, but nothing else
             // validates its payload — a truncated/corrupted packet from any connected peer makes
             // any Decode* call below throw std::runtime_error (BinaryReader::ReadBytes/ReadString
@@ -602,6 +1094,11 @@ namespace CNA::Internal::Net
                 gamerIt->second->SetRoundtripTime(System::TimeSpan::FromMilliseconds(peer->roundTripTime));
             }
         }
+
+        // Task 6.2: hands off any delayed AppData whose SimulatedLatency has now elapsed. Runs
+        // every pump regardless of whether any new ENet events arrived above, so a packet queued
+        // by a previous pump still gets released on schedule even if nothing new comes in.
+        ReleaseDuePendingDeliveries(session, state);
     }
 
     uint16_t ENetBackend::GetBoundPort(NetworkSession* session)
@@ -637,6 +1134,31 @@ namespace CNA::Internal::Net
     std::size_t ENetBackend::GetSessionCountForTesting()
     {
         return Sessions().size();
+    }
+
+    std::string ENetBackend::GetLastMigrationReconnectAttemptGamertagForTesting(NetworkSession* session)
+    {
+        auto it = Sessions().find(session);
+        if (it == Sessions().end())
+        {
+            return {};
+        }
+        return it->second->LastMigrationReconnectAttemptGamertagForTestingEXT;
+    }
+
+    void ENetBackend::SetClockForTesting(std::chrono::steady_clock::time_point time)
+    {
+        ClockOverrideForTesting() = time;
+    }
+
+    void ENetBackend::ResetClockForTesting()
+    {
+        ClockOverrideForTesting().reset();
+    }
+
+    void ENetBackend::SeedPacketLossRngForTesting(unsigned seed)
+    {
+        PacketLossRng().seed(seed);
     }
 
     void ENetBackend::ConnectToHost(NetworkSession* session, const std::string& address, uint16_t port)
@@ -685,35 +1207,29 @@ namespace CNA::Internal::Net
         auto targetIt = state.GamerToWireId.find(target);
         if (senderIt == state.GamerToWireId.end() || targetIt == state.GamerToWireId.end())
         {
-            // Task 2.13: reachable when SendData is called immediately after Join()/
-            // ConnectToHost(), before any Update() call has pumped the ClientHello/ServerWelcome
-            // round-trip that populates GamerToWireId. Previously a totally silent, unobservable
-            // drop; surfaced via a simple counter rather than a bigger queue-and-flush-once-ready
-            // redesign, since nothing else in this codebase retries a dropped send either.
-            ++droppedAppDataCount_;
+            // audit_net.md remediation (2026-07-18): reachable when SendData is called
+            // immediately after Join()/ConnectToHost(), before any Update() call has pumped the
+            // ClientHello/ServerWelcome round-trip that populates GamerToWireId (confirmed
+            // reachable via the real public LocalNetworkGamer::SendData path, not just internal
+            // plumbing - see ENetBackendTests.cpp's own reachability test). Previously a totally
+            // silent, then a counted-but-still-silent, drop; now queued for delivery once
+            // FlushPendingPreHandshakeAppData resolves both ends (HandleClientHello/
+            // HandleServerWelcome/HandleGamerJoinBroadcast all call it), bounded so a caller that
+            // never calls Update() can't grow this without limit - the oldest queued entry is
+            // evicted (and counted as a drop, same observable meaning GetDroppedAppDataCount()
+            // always had: "a SendAppData call that could not eventually be delivered") to make
+            // room for the newest, once kMaxPendingPreHandshakeAppData is reached.
+            auto& pending = state.PendingPreHandshakeSends;
+            if (pending.size() >= kMaxPendingPreHandshakeAppData)
+            {
+                pending.erase(pending.begin());
+                ++droppedAppDataCount_;
+            }
+            pending.push_back(PendingPreHandshakeAppData{sender, target, payload, options});
             return;
         }
 
-        AppDataMessage msg;
-        msg.SenderWireId = senderIt->second;
-        msg.TargetWireId = targetIt->second;
-        msg.Options = options;
-        msg.Payload = payload;
-        auto bytes = NetPacketCodec::Encode(msg);
-
-        if (state.HostPeer != nullptr)
-        {
-            // We're a client: everything goes to the host, which relays as needed.
-            SendTo(state, state.HostPeer, bytes, options);
-            return;
-        }
-
-        // We're the host: relay directly to the peer that owns the target wire-id.
-        auto peerIt = state.WireIdToPeer.find(msg.TargetWireId);
-        if (peerIt != state.WireIdToPeer.end())
-        {
-            SendTo(state, peerIt->second, bytes, options);
-        }
+        DeliverAppData(state, senderIt->second, targetIt->second, payload, options);
     }
 
     void ENetBackend::BroadcastStateChange(NetworkSession* session, NetworkSessionState newState)

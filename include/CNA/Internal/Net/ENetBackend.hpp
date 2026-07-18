@@ -6,6 +6,7 @@
 #include "Microsoft/Xna/Framework/Net/NetworkSessionType.hpp"
 #include "Microsoft/Xna/Framework/Net/SendDataOptions.hpp"
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
+#include <chrono>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -114,10 +115,18 @@ namespace CNA::Internal::Net
          * through the host if session isn't the one hosting target's connection.
          *
          * No-op if RealNetworkingEnabled(session's type) is false, or session has no registered
-         * transport. Assumes sender and target are both already known to ENetBackend (true
-         * whenever called from NetworkSession::Update()'s PacketSend handling, since both always
-         * come from session->getAllGamersProperty(), which only ever contains gamers already
-         * assigned a wire-id by the Task 5.4 handshake).
+         * transport. sender and/or target need not already be known to ENetBackend's wire-id map:
+         * if either isn't resolved yet (reachable when `SendData` is called immediately after
+         * `Join()`/`ConnectToHost()`, before any `Update()` call has pumped the `ClientHello`/
+         * `ServerWelcome` round-trip - see audit_net.md remediation, 2026-07-18), the call is
+         * queued (bounded, oldest evicted first - see `GetDroppedAppDataCount()`) and delivered
+         * automatically the moment both sides resolve, preserving each entry's own
+         * payload/target/options exactly. Order is preserved for multiple queued calls sharing
+         * the same (sender, target) pair (they always resolve together, and are drained in
+         * original enqueue order) - across *different* pairs, delivery order follows whenever
+         * each pair happens to resolve, not necessarily original `SendAppData` call order (a
+         * pair that resolves later is queued longer, by definition; nothing here reorders once
+         * two pairs are both resolvable at the same flush).
          *
          * @param session The local session sending the data.
          * @param sender The local gamer sending the data.
@@ -134,14 +143,23 @@ namespace CNA::Internal::Net
         );
 
         /**
-         * @brief Task 2.13: how many `SendAppData` calls have been silently dropped because
-         * sender and/or target weren't yet known to ENetBackend's wire-id map.
+         * @brief Task 2.13: how many queued `SendAppData` calls could not eventually be
+         * delivered, for any reason - counts every case, not just queue overflow.
          *
-         * Reachable in practice when `SendData` is called immediately after `Join()`/
-         * `ConnectToHost()`, before any `Update()` call has pumped the `ClientHello`/
-         * `ServerWelcome` round-trip that populates the map. Not part of real XNA; exists purely
-         * so this previously-totally-silent drop is at least observable (e.g. by tests, or a
-         * game's own diagnostics) instead of vanishing with no trace at all.
+         * A `SendAppData` call whose sender and/or target aren't yet known to ENetBackend's
+         * wire-id map (see `SendAppData`'s own doc comment) is queued rather than dropped
+         * outright, and delivered automatically once both resolve. This counter increments once
+         * per queued entry that turns out to never be deliverable: the queue itself overflowing
+         * its bound (a caller queuing sends far faster than `Update()` is ever called to resolve
+         * them, oldest evicted); a queued entry's sender or target gamer leaving before it ever
+         * resolved (`HandleDisconnect`/`HandleGamerLeaveBroadcast` purge it by name); or the
+         * whole queue being invalidated at once (host migration's full wire-id-map reset, or this
+         * peer's own session ending as a client) - every one of these is a real "could not
+         * eventually be delivered" outcome, counted the same way, never silently discarded with
+         * no trace (third-round remediation, 2026-07-18 - the second round's own version of this
+         * comment claimed this already but the purge/full-reset paths didn't actually count yet).
+         * Not part of real XNA; exists purely for observability (e.g. by tests, or a game's own
+         * diagnostics).
          *
          * @return The number of drops observed so far, process-wide, since startup or the last
          * `ResetDroppedAppDataCount()` call.
@@ -175,6 +193,50 @@ namespace CNA::Internal::Net
          * @return The number of currently-registered sessions.
          */
         static std::size_t GetSessionCountForTesting();
+
+        /**
+         * @brief Task 5.5: the gamertag `AttemptHostMigration` most recently decided the new host
+         * must be, the last time session lost its host connection and this peer itself was *not*
+         * the deterministically-chosen new host.
+         *
+         * Exists purely to make the tie-break math (excluding the dead host, picking the true
+         * minimum remaining wire id) testable in a single process, where a second real
+         * `NetworkSession` to actually reconnect to can't exist. Not part of real XNA.
+         *
+         * @param session The session to query.
+         * @return The gamertag, or an empty string if no such migration attempt has happened yet
+         * (or session has no registered transport).
+         */
+        static std::string GetLastMigrationReconnectAttemptGamertagForTesting(NetworkSession* session);
+
+        /**
+         * @brief Task 6.3 (plan_net.md Phase 6): overrides the time source SimulatedLatency's
+         * delayed-delivery queue reads `Now()` from, fixing it at `time` instead of the real
+         * `std::chrono::steady_clock`.
+         *
+         * Lets tests advance simulated time deterministically (e.g. confirm a packet is *not* yet
+         * released, then move the clock forward and confirm it now is) instead of depending on a
+         * real sleep and a flaky timing assertion. Not part of real XNA.
+         *
+         * @param time The fixed value `Now()` should report until `ResetClockForTesting()`.
+         */
+        static void SetClockForTesting(std::chrono::steady_clock::time_point time);
+
+        /** @brief Task 6.3: restores the real `std::chrono::steady_clock` as the time source. */
+        static void ResetClockForTesting();
+
+        /**
+         * @brief Task 6.3: reseeds the process-wide RNG behind SimulatedPacketLoss's
+         * probabilistic drop decision.
+         *
+         * Not needed for the documented probability extremes 0.0/1.0 (see
+         * `ShouldDropForSimulatedLoss`'s own comment in `ENetBackend.cpp` - both are handled
+         * without ever touching the RNG), but exists for completeness and any future test needing
+         * a deterministic outcome at an intermediate probability. Not part of real XNA.
+         *
+         * @param seed The seed value.
+         */
+        static void SeedPacketLossRngForTesting(unsigned seed);
 
         /**
          * @brief Broadcasts a session state change (StartGame/EndGame) to every connected peer.

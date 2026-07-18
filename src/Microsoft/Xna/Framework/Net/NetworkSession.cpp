@@ -83,6 +83,25 @@ namespace Microsoft::Xna::Framework::Net
         return asyncWaitHandle_;
     }
 
+    // Task 12/audit_net.md High finding: the public headers document that AsyncCallback runs on
+    // completion, but every Begin* used to only store it in NetworkSessionAction, never invoke it.
+    // Every Begin* already completes activeAction_ synchronously at construction time, so this is
+    // called once, right after activeAction_ is assigned - never from inside NetworkSessionAction's
+    // own constructor, so a re-entrant callback always observes activeAction_ already installed.
+    NetworkSession::NetworkSessionAction* NetworkSession::InvokeActiveActionCallback()
+    {
+        // Captured before invoking, not re-read from activeAction_ afterward: a re-entrant
+        // callback that calls the matching End* nulls activeAction_ as a side effect, and the
+        // caller (some Begin* overload, about to `return` this) must still get back the action it
+        // just created, not that now-stale null.
+        NetworkSessionAction* action = activeAction_;
+        if (action->Callback)
+        {
+            action->Callback(*action);
+        }
+        return action;
+    }
+
     // --- Constructor ---
 
     NetworkSession::NetworkSession(
@@ -277,6 +296,18 @@ namespace Microsoft::Xna::Framework::Net
 
     void NetworkSession::Dispose()
     {
+        // Task 12.1: Dispose() itself was not idempotent - a second call (a real, reachable
+        // pattern: e.g. an explicit Dispose() followed by an RAII wrapper/fixture destructor that
+        // also unconditionally calls Dispose()) re-entered the body below and hit a use-after-free
+        // in the ClearPacketQueue() loop, because ownedGamers_.clear() further down destroys the
+        // locally-owned gamer objects while localGamers_/allGamers_ (raw, non-owning views) were
+        // never pruned - only RemoveGamer() prunes them, and Dispose() never called it. Confirmed
+        // under AddressSanitizer (heap-buffer-overflow) - see audit_net.md's Critical finding 1.
+        if (isDisposed_)
+        {
+            return;
+        }
+
         for (LocalNetworkGamer* gamer : localGamers_)
         {
             gamer->ClearPacketQueue();
@@ -289,6 +320,18 @@ namespace Microsoft::Xna::Framework::Net
         // ENetBackend's own per-session wire-id maps (which can hold these same raw pointers) are
         // already torn down first, never left holding a reference to now-freed memory.
         ownedGamers_.clear();
+        // Defense-in-depth, independent of the isDisposed_ guard above: localGamers_/remoteGamers_/
+        // allGamers_/previousGamers_ are all non-owning raw-pointer views that can still hold
+        // pointers into the objects just freed by ownedGamers_.clear() (previousGamers_ especially,
+        // since RemoveGamer() moves a departing gamer's pointer there instead of dropping it) - a
+        // caller reading a public collection property after a *single* Dispose() call must never be
+        // able to observe a dangling pointer, so all four are cleared here rather than relying on
+        // no caller ever calling Dispose() twice.
+        localGamers_.Clear();
+        remoteGamers_.Clear();
+        allGamers_.Clear();
+        previousGamers_.Clear();
+        host_ = nullptr;
         activeSession_ = nullptr;
         isDisposed_ = true;
     }
@@ -631,7 +674,7 @@ namespace Microsoft::Xna::Framework::Net
             std::move(asyncState), std::move(callback), maxLocalGamers, std::nullopt, 0,
             NetworkSessionProperties{}, sessionType
         );
-        return activeAction_;
+        return InvokeActiveActionCallback();
     }
 
     System::IAsyncResult* NetworkSession::BeginCreate(
@@ -661,7 +704,7 @@ namespace Microsoft::Xna::Framework::Net
             std::move(asyncState), std::move(callback), maxLocalGamers, std::nullopt, privateGamerSlots,
             std::move(sessionProperties), sessionType
         );
-        return activeAction_;
+        return InvokeActiveActionCallback();
     }
 
     System::IAsyncResult* NetworkSession::BeginCreate(
@@ -687,7 +730,7 @@ namespace Microsoft::Xna::Framework::Net
             std::move(asyncState), std::move(callback), 0, localGamers, privateGamerSlots,
             std::move(sessionProperties), sessionType
         );
-        return activeAction_;
+        return InvokeActiveActionCallback();
     }
 
     NetworkSession* NetworkSession::EndCreate(System::IAsyncResult* result)
@@ -800,7 +843,7 @@ namespace Microsoft::Xna::Framework::Net
             std::move(asyncState), std::move(callback), maxLocalGamers, std::nullopt, 0,
             std::move(searchProperties), sessionType
         );
-        return activeAction_;
+        return InvokeActiveActionCallback();
     }
 
     System::IAsyncResult* NetworkSession::BeginFind(
@@ -826,7 +869,7 @@ namespace Microsoft::Xna::Framework::Net
             std::move(asyncState), std::move(callback), locals, localGamers, 0,
             std::move(searchProperties), sessionType
         );
-        return activeAction_;
+        return InvokeActiveActionCallback();
     }
 
     AvailableNetworkSessionCollection NetworkSession::EndFind(System::IAsyncResult* result)
@@ -897,7 +940,7 @@ namespace Microsoft::Xna::Framework::Net
             NetworkSessionProperties{},
             availableSession->GetSessionType()
         );
-        return activeAction_;
+        return InvokeActiveActionCallback();
     }
 
     NetworkSession* NetworkSession::EndJoin(System::IAsyncResult* result)
@@ -988,7 +1031,7 @@ namespace Microsoft::Xna::Framework::Net
             NetworkSessionProperties{}, // FNA passes null here (marked FIXME upstream); see BeginJoin.
             NetworkSessionType::PlayerMatch // FIXME upstream
         );
-        return activeAction_;
+        return InvokeActiveActionCallback();
     }
 
     System::IAsyncResult* NetworkSession::BeginJoinInvited(
@@ -1007,7 +1050,7 @@ namespace Microsoft::Xna::Framework::Net
             NetworkSessionProperties{}, // FNA passes null here (marked FIXME upstream); see BeginJoin.
             NetworkSessionType::PlayerMatch // FIXME upstream
         );
-        return activeAction_;
+        return InvokeActiveActionCallback();
     }
 
     NetworkSession* NetworkSession::EndJoinInvited(System::IAsyncResult* result)

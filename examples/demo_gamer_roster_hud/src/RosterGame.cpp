@@ -100,6 +100,15 @@ void RosterGame::Initialize()
         const auto& constAvailable = available;
         session_ = NetworkSession::Join(&constAvailable[0]);
         std::printf("[Roster] Joined the host's session as \"%s\".\n", localGamer_->getGamertagProperty().c_str());
+
+        // Task 5.1-5.4 (plan_net.md Phase 5): real host migration now exists - opting in here (as
+        // the joining/client role, the only side that ever actually loses a host connection) means
+        // OnHostChanged below is no longer permanently dead: if the host process is killed while
+        // this one keeps running, this client either really becomes the new host itself (the only
+        // possible outcome with just one host + one client, per Task 5.1's "lowest remaining wire
+        // id" rule - trivially itself when it's the sole survivor) or, with more client processes
+        // running, genuinely reconnects to whichever one was promoted.
+        session_->setAllowHostMigrationProperty(true);
     }
 
     session_->GamerJoined += [this](System::Object* sender, const GamerJoinedEventArgs& e) { OnGamerJoined(sender, e); };
@@ -135,10 +144,11 @@ void RosterGame::OnGamerLeft(System::Object* /*sender*/, const GamerLeftEventArg
 
 void RosterGame::OnHostChanged(System::Object* /*sender*/, const HostChangedEventArgs& e)
 {
-    // Real host migration is confirmed unimplemented (Task 2.6, matching FNA's own reference) -
-    // this handler is wired and exercised by the event surface, but is expected to never actually
-    // fire in this demo: ENetBackend::HandleDisconnect unconditionally ends the session the
-    // instant the host peer disconnects, with no election logic anywhere.
+    // Task 5.1-5.4 (plan_net.md Phase 5): real host migration - this client session opted in via
+    // setAllowHostMigrationProperty(true) in Initialize() above, so this really can fire now: kill
+    // the host process while this one keeps running and watch it happen live (this client
+    // deterministically becomes the new host itself, or reconnects to whichever other client did -
+    // see Task 5.1's own "lowest remaining wire id" rule).
     ++hostChangedFireCount_;
     std::printf("[Roster] HostChanged: new host is %s\n", e.getNewHostProperty()->getGamertagProperty().c_str());
 }
@@ -208,7 +218,9 @@ void RosterGame::Update(GameTime& gameTime)
         {
             PrintRosterToConsole();
             std::printf("[Roster] Smoke test complete: gamerCount=%d hostChangedFireCount=%d "
-                        "(expected 0 - Task 2.6 documented gap)\n",
+                        "(usually 0 - only nonzero if the host process happened to already exit "
+                        "before this one's own smoke run finished, in which case this client just "
+                        "really migrated - see OnHostChanged's own comment)\n",
                         session_->getAllGamersProperty().getCountProperty(), hostChangedFireCount_);
             Exit();
         }

@@ -153,11 +153,22 @@ namespace Microsoft::Xna::Framework::Net
         /**
          * @brief Gets whether host migration is allowed.
          *
-         * Implementation note: this flag is stored but has no effect on actual behavior, matching
-         * FNA's own reference implementation (a plain auto-property with no real migration logic
-         * anywhere in FNA's stubbed-out networking layer). Setting this to true does not enable
-         * host election: `ENetBackend::HandleDisconnect` unconditionally ends the session the
-         * instant its host peer disconnects, with no election logic, regardless of this flag.
+         * Task 5.1-5.4 (plan_net.md Phase 5): real, local-only implementation - `false` (the
+         * default) keeps FNA's own reference behavior exactly (`ENetBackend::HandleDisconnect`
+         * unconditionally ends the session the instant its host peer disconnects). `true` enables
+         * a real, full-reconnect migration instead: every surviving peer independently computes
+         * the same deterministic new host (the lowest remaining wire id - no election round-trip
+         * needed, since every peer already knows the roster) and either promotes itself (if it's
+         * the chosen peer) or reconnects to the promoted peer via a real LAN discovery search (the
+         * same mechanism `Find()` uses - a star topology gives surviving clients no direct channel
+         * to each other, and the old host obviously can't relay anything either). This is not
+         * FNA's own behavior (FNA's `AllowHostMigration` is a stored-but-inert auto-property, no
+         * migration logic exists anywhere in its stubbed-out networking layer) - see
+         * `ENetBackend.cpp`'s `AttemptHostMigration` for the full implementation, and this
+         * property's own scope note: reconnecting/promoted peers get their remote-gamer roster
+         * rebuilt from scratch (fresh `NetworkGamer*` identities, real `GamerLeave`+`GamerJoin`
+         * events), not preserved across the migration - a full reconnect, not a seamless live
+         * migration of existing sockets.
          *
          * @return true if host migration is allowed.
          */
@@ -166,9 +177,8 @@ namespace Microsoft::Xna::Framework::Net
         /**
          * @brief Sets whether host migration is allowed.
          *
-         * Implementation note: see getAllowHostMigrationProperty()'s doc comment - this value is
-         * stored, but real host migration is not implemented (matching FNA's own reference
-         * behavior).
+         * Implementation note: see getAllowHostMigrationProperty()'s doc comment for the real
+         * migration behavior this now enables.
          *
          * @param value The new value.
          */
@@ -275,10 +285,14 @@ namespace Microsoft::Xna::Framework::Net
         /**
          * @brief Gets the artificially simulated network latency.
          *
-         * Implementation note (Task 4.3): this value is stored but has no effect on actual
-         * traffic timing, matching FNA's own reference implementation - FNA's `SimulatedLatency`
-         * is itself a plain auto-property with no delay queue or throttling logic anywhere in its
-         * source. No custom delay queue exists anywhere in `ENetBackend`/`ENetHostHandle` either.
+         * Task 6.1-6.5 (plan_net.md Phase 6): real, receive-side implementation - `ENetBackend`
+         * holds AppData bound for one of this session's own local gamers in a per-session delayed-
+         * delivery queue, releasing it once `now >= receiveTime + SimulatedLatency` (see
+         * `ENetBackend.cpp`'s `HandleAppData`/`ReleaseDuePendingDeliveries`). Scoped to AppData
+         * only - the CNA-internal session-management protocol (join/leave/state-change messages)
+         * and a host's own relay hop for two *other* peers stay unaffected (see `HandleAppData`'s
+         * own comment for why). This is not FNA's own behavior (FNA's `SimulatedLatency` is a
+         * plain, inert auto-property with no delay queue anywhere in its stubbed-out source).
          *
          * @return The simulated latency.
          */
@@ -287,8 +301,8 @@ namespace Microsoft::Xna::Framework::Net
         /**
          * @brief Sets the artificially simulated network latency.
          *
-         * Implementation note: see getSimulatedLatencyProperty()'s doc comment - stored, not
-         * applied to real traffic.
+         * Implementation note: see getSimulatedLatencyProperty()'s doc comment for the real delay
+         * behavior this now drives.
          *
          * @param value The new simulated latency.
          */
@@ -297,10 +311,14 @@ namespace Microsoft::Xna::Framework::Net
         /**
          * @brief Gets the artificially simulated packet loss fraction.
          *
-         * Implementation note (Task 4.3): this value is stored but has no effect on actual packet
-         * delivery, matching FNA's own reference implementation - FNA's `SimulatedPacketLoss` is
-         * itself a plain auto-property with no synthetic-drop logic anywhere in its source. No
-         * such logic exists anywhere in `ENetBackend`/`ENetHostHandle` either.
+         * Task 6.1-6.5 (plan_net.md Phase 6): real implementation - each AppData packet bound for
+         * one of this session's own local gamers is probabilistically dropped before ever
+         * reaching game code, at exactly this rate (`ENetBackend.cpp`'s
+         * `ShouldDropForSimulatedLoss`; 0.0 and 1.0 are handled deterministically without touching
+         * any RNG). Scoped to AppData only - see `getSimulatedLatencyProperty()`'s own doc comment
+         * for why session-management/relay traffic stays unaffected. Not FNA's own behavior (FNA's
+         * `SimulatedPacketLoss` is a plain, inert auto-property with no synthetic-drop logic
+         * anywhere in its stubbed-out source).
          *
          * @return The simulated packet loss, from 0.0 to 1.0.
          */
@@ -309,8 +327,8 @@ namespace Microsoft::Xna::Framework::Net
         /**
          * @brief Sets the artificially simulated packet loss fraction.
          *
-         * Implementation note: see getSimulatedPacketLossProperty()'s doc comment - stored, not
-         * applied to real traffic.
+         * Implementation note: see getSimulatedPacketLossProperty()'s doc comment for the real
+         * drop behavior this now drives.
          *
          * @param value The new simulated packet loss, from 0.0 to 1.0.
          */
@@ -364,6 +382,11 @@ namespace Microsoft::Xna::Framework::Net
          * pointers, and those are only guaranteed torn down together with this session (via
          * `ENetBackend::TeardownSession`, called from here), not at an arbitrary earlier point in
          * the session's life.
+         *
+         * Task 12.1: idempotent - a second and every subsequent call is a safe no-op. All of
+         * `AllGamers`/`LocalGamers`/`RemoteGamers`/`PreviousGamers` are emptied before returning,
+         * so no caller can observe a dangling pointer into a gamer this call just freed, even
+         * without calling `Dispose()` again.
          */
         void Dispose() override;
 
@@ -881,6 +904,18 @@ namespace Microsoft::Xna::Framework::Net
 
         static NetworkSessionAction* activeAction_;
         static NetworkSession* activeSession_;
+
+        // Task 12: audit_net.md High finding - every Begin* overload used to leave activeAction_'s
+        // Callback stored but never invoked. Every Begin* already fully completes activeAction_
+        // synchronously (see NetworkSessionAction's constructor comment), so the callback is
+        // invoked once, right here, immediately after activeAction_ is assigned - never from
+        // inside NetworkSessionAction's own constructor, so a re-entrant callback (one that itself
+        // calls back into NetworkSession, e.g. a fresh Begin*/End*) always observes activeAction_
+        // already installed, never null/stale. Returns the action captured *before* invoking the
+        // callback, not activeAction_ read again afterward - a re-entrant callback that calls the
+        // matching End* nulls activeAction_ as a side effect, and the Begin* caller must still get
+        // back the real action it just created, not that now-stale null.
+        NOXNA static NetworkSessionAction* InvokeActiveActionCallback();
 
         // Task 2.15: the connect address/port BeginJoin captured from its AvailableNetworkSession
         // argument, consumed by EndJoin to actually call ENetBackend::ConnectToHost once the

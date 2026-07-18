@@ -1,6 +1,8 @@
 # CNA — XNA 4.0 Coverage Report
 
-**Date:** 2026-06-21  
+**Date:** 2026-06-21 (Net/GamerServices rows corrected 2026-07-17, `plan_net.md` Task 9.5 - see
+`docs/xna-4-api-coverage.md` §9 for the current, continuously-maintained per-feature status; this
+file otherwise remains the original one-time dated snapshot, not continuously updated)  
 **Branch:** develop  
 **HEAD:** 04f0692  
 **Analysis method:** static source inspection of `include/`, `src/`, `plan_graphics.md`,
@@ -24,15 +26,21 @@ and `Microphone` capture — see `plan_audio.md` for the full file-by-file histo
 updated 2026-07-04 (Fáze 9 `P9-DOCS-003`; the XACT/Microphone stub status this figure used to
 describe predates that branch's work by roughly two weeks). Media playback (Song/Video via
 SDL3_mixer + FFmpeg) is ~55 %. Content is ~60 % for the custom JSON/PNG/OGG descriptor
-format; the XNA binary `.xnb` format is entirely absent. Framework.Net is 0 %.
-GamerServices is ~5 %.
+format; the XNA binary `.xnb` format is entirely absent. Framework.Net was 0 % and GamerServices
+was ~5 % **as of this report's original 2026-06-21 analysis — both are now stale: `feature/net`
+(decision 1a, `plan_net.md`) implemented real GamerServices (Achievements, Avatar, Friends,
+Presence, Leaderboards, Privileges, Profile, SignedInGamer) and a real ENet-backed Net transport
+(`SystemLink` play, host migration, simulated latency/packet-loss). See
+`docs/xna-4-api-coverage.md` §9 for the current, maintained per-feature breakdown — this file is a
+one-time dated snapshot, not continuously updated.**
 
 Weighted by how commonly each namespace is used in real XNA 4.0 games (Graphics + Input
 dominate; Net appears in fewer than 10 % of XNA titles; GamerServices only in Xbox Live
 games), a game using only Graphics / Input / Audio / Content and no networking can run
 at roughly **80–88 % fidelity**. A game depending on `.xnb` content loading will break
-immediately (the XACT audio runtime itself no longer breaks — see the Audio row below). A
-multiplayer game will not compile at all.
+immediately (the XACT audio runtime itself no longer breaks — see the Audio row below).
+**A multiplayer game will now compile and run (see the Net/GamerServices correction above) —
+this row's original "will not compile at all" claim is stale.**
 
 ---
 
@@ -47,8 +55,8 @@ multiplayer game will not compile at all.
 | **Framework.Media** | ~25 | 24 | ~100 % | ~55 % | MediaPlayer and VideoPlayer real (FFmpeg); Song/Album/Artist/Genre/Picture/MediaLibrary = pure stubs |
 | **Framework.Content** | ~20 | 4 | ~20 % | ~60 % | ContentManager works with custom JSON/PNG/OGG descriptors; **no .xnb binary support** |
 | **Framework.Storage** | ~5 | 3 | ~100 % | ~75 % | StorageDevice/Container with filesystem; async patterns simplified |
-| **Framework.GamerServices** | ~15 | 3 | ~20 % | **~5 %** | Only Guide.Show (no-op warn) + IsTrialMode stub; Gamer, Achievement, Leaderboard absent |
-| **Framework.Net** | ~20 | **0** | **0 %** | **0 %** | NetworkSession, NetworkGamer, PacketReader/Writer entirely absent |
+| **Framework.GamerServices** | ~15 | 54 | **~85 %** | **~85 %** | **Stale row (2026-06-21) — corrected `feature/net`:** Gamer/SignedInGamer/Achievement/Leaderboard/Friends/Presence/Privileges/Avatar all real now, not absent. See `docs/xna-4-api-coverage.md` §9. |
+| **Framework.Net** | ~20 | 23 | **~90 %** | **~80 %** | **Stale row (2026-06-21) — corrected `feature/net`:** NetworkSession/NetworkGamer/PacketReader/PacketWriter/LocalNetworkGamer all real (ENet-backed `SystemLink`, host migration, simulated latency/packet-loss), not absent. `PlayerMatch`/`Ranked`/invites remain stubs (no matchmaking backend exists). See `docs/xna-4-api-coverage.md` §9. |
 
 ---
 
@@ -137,9 +145,8 @@ multiplayer game will not compile at all.
 
 | Gap | Severity | Notes |
 |---|---|---|
-| **Framework.Net — 0 %** | Blocking for multiplayer games | NetworkSession, NetworkGamer, PacketReader/Writer, LocalNetworkGamer entirely absent — no headers, no stubs |
 | **Content pipeline (.xnb) — 0 %** | Blocking for most existing XNA games | XNA binary asset format not supported; ContentManager requires CNA custom JSON/PNG/OGG descriptors |
-| **GamerServices — ~5 %** | Blocking for Xbox Live games | Achievements, leaderboards, Gamer profiles, FriendCollection absent |
+| ~~**Framework.Net — 0 %**~~ / ~~**GamerServices — ~5 %**~~ | **Stale (2026-06-21) — corrected `feature/net`** | Both rows described these as blocking gaps with entirely-absent headers; both are now real, tested implementations (`SystemLink`/host-migration/simulated-conditions for Net; Achievements/Leaderboards/Friends/Presence/Privileges/Avatar for GamerServices). See `docs/xna-4-api-coverage.md` §9 for current per-feature status; `PlayerMatch`/`Ranked`/invites remain stubs (no matchmaking backend exists), not a namespace-wide gap. |
 | **XACT audio runtime — ~90 %** | Mostly closed (updated 2026-07-04) | Real hand-written `.xgs`/`.xsb`/`.xwb` parser + SDL3_mixer playback; remaining gap is documented accepted deviations (`instanceLimit`/fade parsed not enforced, no HRTF/elevation), not stubbing — see `plan_audio.md` |
 | **Microphone — ~95 %** | Minor (updated 2026-07-04) | Real SDL3 capture device enumeration, Start/Stop, GetData/GetQueuedBytes, BufferReady event |
 | **Media library (Album/Artist/Genre) — ~5 %** | Minor for most games | Song/Video playback real; device media-library browsing = pure stubs |

@@ -530,6 +530,16 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_backend_test(NAME EasyGL_EnvironmentMapEffect_Readback COMMAND cna_test_easygl_env_map
             TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # audit_net.md remediation (2026-07-18, sixth round): discriminating regression test for
+        # EmissiveColor composition (light*diffuse + emissive, NOT (emissive+light)*diffuse) across
+        # all three EasyGL shader paths that had the bug. Uses a DiffuseColor strictly between 0
+        # and 1 so a squared term is detectable - every pre-existing test used 0/1 components,
+        # where x*x == x, which is why the bug went unnoticed.
+        cna_easygl_test(cna_test_easygl_emissive_ambient_composition
+                        examples/easygl_emissive_ambient_composition_test.cpp)
+        cna_register_backend_test(NAME EasyGL_EmissiveAmbientComposition COMMAND cna_test_easygl_emissive_ambient_composition
+            TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 393: EnvironmentMapEffect EnvironmentMapAmount=0 should ignore the cube map
         cna_easygl_test(cna_test_easygl_environmentmapeffect_amount_zero
                         examples/easygl_environmentmapeffect_amount_zero_test.cpp)

@@ -47,8 +47,12 @@ TEST(AvatarAppearanceEXTTest, DefaultPantsColorMatchesGenerateMaterialsPlacehold
 
 TEST(AvatarAppearanceEXTTest, DefaultShoesColorMatchesGenerateMaterialsPlaceholder)
 {
+    // audit_net.md remediation (2026-07-18): (0.05,0.05,0.05) was confirmed via direct
+    // runtime pixel sampling to be the sole cause of demo_avatar's shoes rendering as a
+    // featureless black blob regardless of lighting/skinning fixes - raised to
+    // (0.14,0.14,0.16) in lockstep with generate_materials.py's own MATERIAL_COLORS.
     AvatarAppearanceEXT appearance;
-    EXPECT_EQ(appearance.getShoesColorProperty(), Color(0.05f, 0.05f, 0.05f));
+    EXPECT_EQ(appearance.getShoesColorProperty(), Color(0.14f, 0.14f, 0.16f));
 }
 
 TEST(AvatarAppearanceEXTTest, ShirtColorRoundTrips)

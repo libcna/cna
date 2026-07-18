@@ -3205,7 +3205,10 @@ void main()
 "    float NdotL1=max(dot(N,-uLight1Dir),0.0);\n"
 "    float NdotL2=max(dot(N,-uLight2Dir),0.0);\n"
 "    vec3 lightSum=uLight0Diffuse*NdotL0+uLight1Diffuse*NdotL1+uLight2Diffuse*NdotL2;\n"
-"    vec3 litRGB=(uEmissiveColor+lightSum)*uDiffuseColor.rgb;\n"
+// Same FNA-fidelity fix as EnsureSkinnedProgram below - EnvironmentMapEffect.fx routes its own
+// lighting through the identical Lighting.fxh ComputeLights() in FNA, so it composes emissive
+// exactly the same way (added after the diffuse multiply, not multiplied by it).
+"    vec3 litRGB=lightSum*uDiffuseColor.rgb+uEmissiveColor;\n"
 "    vec4 texColor=texture(uTexture,vUV);\n"
 "    vec3 reflDir=reflect(-E,N);\n"
 "    vec4 envSample=texture(uEnvMap,reflDir);\n"
@@ -3281,7 +3284,20 @@ void main()
 "    if(uWeightsPerVertex>=4) skinMat+=uBones[aBoneIndices.z]*aBoneWeights.z+uBones[aBoneIndices.w]*aBoneWeights.w;\n"
 "    vec4 skinnedPos=skinMat*vec4(aPos,1.0);\n"
 "    gl_Position=uWVP*skinnedPos;\n"
-"    vNormal=normalize(mat3(skinMat)*aNormal);\n"
+// A vertex blended near-evenly between two bones whose current relative rotation is
+// close to 180 degrees (reachable in practice: wide weight-blend joint regions x a
+// large-angle animation pose, e.g. Wave) can make the linearly-blended skinMat's
+// rotational part nearly cancel out for this particular normal, so its transformed
+// length collapses toward zero. normalize() of a near-zero vector is numerically
+// unstable (can yield NaN), which then poisons the entire downstream lighting sum --
+// observed as solid-black blotches independent of ambient/diffuse light color, not a
+// plausible-but-wrong shading direction. Falls back to the untransformed bind-pose
+// normal for just that vertex rather than propagating NaN; XNA/FNA's own Skin() was
+// never validated against this degenerate case, so this is a numerical-safety guard,
+// not a deviation from its intended per-vertex transform.
+"    vec3 skinnedNormal=mat3(skinMat)*aNormal;\n"
+"    float skinnedNormalLen=length(skinnedNormal);\n"
+"    vNormal=(skinnedNormalLen>1e-6)?(skinnedNormal/skinnedNormalLen):aNormal;\n"
 "    vUV=aUV;\n"
 "    vWorldPos=(uWorld*skinnedPos).xyz;\n"
 "    vColor=aColor;\n"
@@ -3331,7 +3347,19 @@ void main()
 "    float dotL1=dot(N,-uLight1Dir); float zeroL1=step(0.0,dotL1); float NdotL1=max(dotL1,0.0);\n"
 "    float dotL2=dot(N,-uLight2Dir); float zeroL2=step(0.0,dotL2); float NdotL2=max(dotL2,0.0);\n"
 "    vec3 lightSum=uLight0Diffuse*NdotL0+uLight1Diffuse*NdotL1+uLight2Diffuse*NdotL2;\n"
-"    vec3 litRGB=(uEmissiveColor+lightSum)*uDiffuseColor.rgb;\n"
+// audit_net.md remediation (2026-07-18, fourth round): EmissiveColor is ADDED after the
+// diffuse multiply, never multiplied by it - matches FNA's own Lighting.fxh ComputeLights()
+// verbatim (`mul(diffuse, lightDiffuse) * DiffuseColor.rgb + EmissiveColor`), and matches what
+// EnsureLit3DProgram/EnsureLit3DVertexLitProgram in this same file already did correctly.
+// This shader had `(uEmissiveColor+lightSum)*uDiffuseColor.rgb`, which multiplied the emissive
+// term by DiffuseColor a second time. Since FillGpuDrawParams pre-folds ambient into emissive
+// (`emissive + ambient*diffuse`, itself correct and FNA-faithful), the old form computed
+// ambient*diffuse^2 - a quadratic suppression that crushed DARK materials specifically: the
+// avatar's shoes (diffuse 0.14) got an ambient floor of 0.5*0.14*0.14 = 0.0098 -> 2.5/255
+// (confirmed by direct pixel sampling: the darkest foot pixels read exactly (3,3,3)) instead
+// of the correct 0.5*0.14 = 0.07 -> 18/255. This is the real reason raising ambient kept
+// giving diminishing returns on the dark regions.
+"    vec3 litRGB=lightSum*uDiffuseColor.rgb+uEmissiveColor;\n"
 "    vec3 h0=normalize(E-uLight0Dir); float spec0=pow(max(dot(h0,N),0.0)*zeroL0,uSpecularPower);\n"
 "    vec3 h1=normalize(E-uLight1Dir); float spec1=pow(max(dot(h1,N),0.0)*zeroL1,uSpecularPower);\n"
 "    vec3 h2=normalize(E-uLight2Dir); float spec2=pow(max(dot(h2,N),0.0)*zeroL2,uSpecularPower);\n"
@@ -3458,13 +3486,20 @@ void main()
 // The FogStart==FogEnd degenerate case (FNA forces fully fogged) is guarded, not sign-clamped.
 "    vFogFactor=(uFogEnabled>0.5)?((abs(uFogEnd-uFogStart)<1e-6)?0.0:clamp((aPos.z+uFogEnd)/(uFogEnd-uFogStart),0.0,1.0)):1.0;\n"
 "    vec3 worldPos=(uWorld*skinnedPos).xyz;\n"
-"    vec3 N=normalize(mat3(skinMat)*aNormal);\n"
+// Same degenerate-blend-normal guard as EnsureSkinnedProgram() above (see its own
+// comment for the root cause) -- this vertex-lit sibling does the identical skinning
+// and normal transform, just with lighting evaluated per-vertex instead of per-pixel.
+"    vec3 skinnedNormal=mat3(skinMat)*aNormal;\n"
+"    float skinnedNormalLen=length(skinnedNormal);\n"
+"    vec3 N=(skinnedNormalLen>1e-6)?(skinnedNormal/skinnedNormalLen):aNormal;\n"
 "    vec3 E=normalize(uEyePosition-worldPos);\n"
 "    float dotL0=dot(N,-uLight0Dir); float zeroL0=step(0.0,dotL0); float NdotL0=max(dotL0,0.0);\n"
 "    float dotL1=dot(N,-uLight1Dir); float zeroL1=step(0.0,dotL1); float NdotL1=max(dotL1,0.0);\n"
 "    float dotL2=dot(N,-uLight2Dir); float zeroL2=step(0.0,dotL2); float NdotL2=max(dotL2,0.0);\n"
 "    vec3 lightSum=uLight0Diffuse*NdotL0+uLight1Diffuse*NdotL1+uLight2Diffuse*NdotL2;\n"
-"    vLitRGB=(uEmissiveColor+lightSum)*uDiffuseColor.rgb;\n"
+// Same FNA-fidelity fix as EnsureSkinnedProgram above - see its own comment for the full
+// reasoning; this vertex-lit sibling had the identical emissive-multiplied-twice bug.
+"    vLitRGB=lightSum*uDiffuseColor.rgb+uEmissiveColor;\n"
 "    vec3 h0=normalize(E-uLight0Dir); float spec0=pow(max(dot(h0,N),0.0)*zeroL0,uSpecularPower);\n"
 "    vec3 h1=normalize(E-uLight1Dir); float spec1=pow(max(dot(h1,N),0.0)*zeroL1,uSpecularPower);\n"
 "    vec3 h2=normalize(E-uLight2Dir); float spec2=pow(max(dot(h2,N),0.0)*zeroL2,uSpecularPower);\n"

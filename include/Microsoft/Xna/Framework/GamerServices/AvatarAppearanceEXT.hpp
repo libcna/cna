@@ -86,6 +86,14 @@ namespace Microsoft::Xna::Framework::GamerServices
         // Blender-side preview, not an arbitrary unrelated palette.
         Microsoft::Xna::Framework::Color shirtColor_ = Microsoft::Xna::Framework::Color(0.20f, 0.35f, 0.60f);
         Microsoft::Xna::Framework::Color pantsColor_ = Microsoft::Xna::Framework::Color(0.15f, 0.15f, 0.20f);
-        Microsoft::Xna::Framework::Color shoesColor_ = Microsoft::Xna::Framework::Color(0.05f, 0.05f, 0.05f);
+        // audit_net.md remediation (2026-07-18): was (0.05,0.05,0.05) - confirmed by direct
+        // runtime pixel sampling to be the actual, sole source of demo_avatar's shoes
+        // rendering as a featureless pure-black blob (this property, not
+        // generate_materials.py's MATERIAL_COLORS, is what PartTintEXT()/DrawRealEXT()
+        // actually multiplies into the shader's diffuse color at runtime - the exported
+        // per-part textures are unused 4x4 white placeholders). Raised in lockstep with
+        // generate_materials.py's own MATERIAL_COLORS["Shoes"] update, per this struct's
+        // own "mirror the Blender-side preview" contract above.
+        Microsoft::Xna::Framework::Color shoesColor_ = Microsoft::Xna::Framework::Color(0.14f, 0.14f, 0.16f);
     };
 }

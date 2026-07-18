@@ -2,15 +2,18 @@
 #include <cstdio>
 #include <functional>
 #include <iostream>
+#include <optional>
 #include <string>
 #include <vector>
 
 #include "Microsoft/Xna/Framework/GamerServices/Guide.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/MessageBoxIcon.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/NotificationPosition.hpp"
+#include "Microsoft/Xna/Framework/Input/TextInputEXT.hpp"
 #include "Microsoft/Xna/Framework/PlayerIndex.hpp"
+#include "SharpRuntime/SharpRuntimeHelper.hpp"
+#include "System/ArgumentException.hpp"
 #include "System/AsyncCallback.hpp"
-#include "System/NotSupportedException.hpp"
 #include "System/TimeSpan.hpp"
 
 // Task 15.11: cna_demo_guide_overlay_console. The full Guide static API surface, exercised
@@ -48,39 +51,66 @@ namespace
                     "(no crash, no visible effect).\n");
     }
 
+    // Task 3.2: BeginShowKeyboardInput no longer completes synchronously - it accumulates real
+    // Microsoft::Xna::Framework::Input::TextInputEXT::TextInput code units and completes on Enter,
+    // matching a real on-screen keyboard. This console-only demo has no real window to type into
+    // (see this file's own top-of-file comment), so it drives the exact same event stream
+    // TextInputEXT::INTERNAL_OnTextInput would receive from a real keystroke, one code unit at a
+    // time, ending with Enter (\r) - a headless stand-in for real typing, the same idea as
+    // MenuMessageBox's SimulateMessageBoxClickEXT just below.
     void MenuKeyboardInput()
     {
+        using Microsoft::Xna::Framework::Input::TextInputEXT;
+
         System::IAsyncResult* result = Guide::BeginShowKeyboardInput(
             PlayerIndex::One, "Title", "Description", "default text", System::AsyncCallback{}, std::any{});
+        std::printf("  BeginShowKeyboardInput() returned a real, not-yet-completed IAsyncResult "
+                    "(IsCompleted=%s).\n", result->getIsCompletedProperty() ? "true" : "false");
+
+        const std::string typed = " overridden";
+        for (const char c : typed)
+        {
+            TextInputEXT::INTERNAL_OnTextInput(static_cast<SharpRuntime::charcs>(c));
+        }
+        TextInputEXT::INTERNAL_OnTextInput(static_cast<SharpRuntime::charcs>(u'\r')); // Enter confirms
+
         const std::string text = Guide::EndShowKeyboardInput(result);
         delete result;
-        std::printf("  BeginShowKeyboardInput()+EndShowKeyboardInput() completed instantly, "
-                    "result=\"%s\" (expected: always empty in this platform's implementation).\n",
-                    text.c_str());
+        std::printf("  Simulated typing \"%s\" + Enter -> EndShowKeyboardInput() returned "
+                    "\"%s\" (default text + what was typed), as expected for a real implementation.\n",
+                    typed.c_str(), text.c_str());
     }
 
+    // Task 3.1: BeginShowMessageBox/EndShowMessageBox are now a real (not NotSupportedException)
+    // implementation - but the real, mouse-driven completion path (RenderPendingMessageBoxEXT)
+    // needs a SpriteBatch/GraphicsDevice this console-only demo intentionally has none of (see
+    // this file's own top-of-file comment). SimulateMessageBoxClickEXT is the dedicated headless
+    // entry point for exactly this case - exercises the full real Begin -> completion -> End
+    // cycle without needing a window.
     void MenuMessageBox()
     {
-        try
-        {
-            System::IAsyncResult* result = Guide::BeginShowMessageBox(
-                "Title", "Text", {"OK", "Cancel"}, 0, MessageBoxIcon::Alert,
-                System::AsyncCallback{}, std::any{});
-            delete result;
-            std::printf("  BeginShowMessageBox() unexpectedly did not throw.\n");
-        }
-        catch (const System::NotSupportedException&)
-        {
-            std::printf("  BeginShowMessageBox() threw NotSupportedException as expected.\n");
-        }
+        System::IAsyncResult* result = Guide::BeginShowMessageBox(
+            "Title", "Text", {"OK", "Cancel"}, 0, MessageBoxIcon::Alert,
+            System::AsyncCallback{}, std::any{});
+        std::printf("  BeginShowMessageBox() returned a real, not-yet-completed IAsyncResult "
+                    "(IsCompleted=%s).\n", result->getIsCompletedProperty() ? "true" : "false");
+
+        Guide::SimulateMessageBoxClickEXT(1); // headless stand-in for a real "Cancel" click
+        std::optional<int> selected = Guide::EndShowMessageBox(result);
+        std::printf("  SimulateMessageBoxClickEXT(1) + EndShowMessageBox() -> selected button %d "
+                    "(\"%s\"), as expected for a real implementation.\n",
+                    selected.value_or(-1), selected.value_or(-1) == 1 ? "Cancel" : "?");
+        delete result;
+
         try
         {
             [[maybe_unused]] auto unused = Guide::EndShowMessageBox(nullptr);
             std::printf("  EndShowMessageBox(nullptr) unexpectedly did not throw.\n");
         }
-        catch (const System::NotSupportedException&)
+        catch (const System::ArgumentException&)
         {
-            std::printf("  EndShowMessageBox(nullptr) threw NotSupportedException as expected.\n");
+            std::printf("  EndShowMessageBox(nullptr) threw ArgumentException as expected "
+                        "(not a result BeginShowMessageBox returned).\n");
         }
     }
 
@@ -156,7 +186,7 @@ int main(int argc, char* argv[])
     const std::vector<MenuItem> items = {
         {"ShowSignIn", MenuShowSignIn},
         {"BeginShowKeyboardInput/EndShowKeyboardInput", MenuKeyboardInput},
-        {"BeginShowMessageBox/EndShowMessageBox (expected to throw)", MenuMessageBox},
+        {"BeginShowMessageBox/SimulateMessageBoxClickEXT/EndShowMessageBox", MenuMessageBox},
         {"Toggle IsTrialMode", MenuTrialMode},
         {"Toggle SimulateTrialMode", MenuSimulateTrialMode},
         {"Toggle IsScreenSaverEnabled", MenuScreenSaver},

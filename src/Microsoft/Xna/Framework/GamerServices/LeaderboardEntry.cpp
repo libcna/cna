@@ -20,8 +20,21 @@ namespace Microsoft::Xna::Framework::GamerServices
     const PropertyDictionary& LeaderboardEntry::getColumnsProperty() const { return columns_; }
     Gamer* LeaderboardEntry::getGamerProperty() const                      { return gamer_; }
     long long LeaderboardEntry::getRatingProperty() const                  { return rating_; }
-    void LeaderboardEntry::setRatingProperty(long long value)              { rating_ = value; }
     int LeaderboardEntry::getRankingEXTProperty() const                    { return rankingEXT_; }
+
+    void LeaderboardEntry::setRatingProperty(long long value)
+    {
+        rating_ = value;
+        if (onRatingChangedEXT_)
+        {
+            onRatingChangedEXT_();
+        }
+    }
+
+    void LeaderboardEntry::SetOnRatingChangedHookEXT(std::function<void()> hook)
+    {
+        onRatingChangedEXT_ = std::move(hook);
+    }
 
     bool LeaderboardEntry::operator==(const LeaderboardEntry& other) const
     {

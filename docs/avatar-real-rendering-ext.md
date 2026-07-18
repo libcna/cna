@@ -166,8 +166,61 @@ renders the distinct, correctly-scaled female body (0.93× overall, per
 `tools/avatar_builder/generate_avatar.py`'s coarse female-scale placeholder), not just "the
 mapping function returns a different string."
 
-The confirmed elbow/sleeve tear and zero-weight vertices (`tools/avatar_builder/README.md`) are
-unrelated content-quality gaps, not rendering bugs, and remain unfixed.
+The confirmed elbow/sleeve tear and zero-weight vertices (`tools/avatar_builder/README.md`) were
+unrelated content-quality gaps, not rendering bugs — see "Phase 7" below for the mesh-craft-based
+pipeline that has since superseded the body/clothing generation approach these gaps were found in.
+
+## Phase 7: mesh-craft CSG-based body/clothing generation (`plan_net.md`, decision 4b/4c)
+
+**Problem:** the original `tools/avatar_builder/generate_body.py`/`generate_clothes.py` built body
+geometry from separate capsule/sphere primitives joined only via Blender's
+`bpy.ops.object.join()`, which merges *datablocks* (mesh data into one object) without welding
+geometry at the seams — so limbs visibly self-intersected/exploded at every joint, both statically
+and mid-animation ("monster" avatars, decision 4b's own framing for what this phase exists to fix).
+
+**Fix:** two new drop-in generator modules, `generate_body_meshcraft.py` and
+`generate_clothes_meshcraft.py`, replace the primitive-join approach with real CSG (constructive
+solid geometry) union via the sibling [`mesh-craft`](../../mesh-craft) tool:
+
+- Body/clothing primitives are written as a `.mc3.xml` document (mesh-craft's own format) with
+  every capsule/sphere wrapped in a single `<union material="...">` — a genuine watertight boolean
+  merge (via mesh-craft's Manifold-backed CSG engine), not a datablock join. mesh-craft's own
+  `mc3togltf` CLI exports the unioned result to `.glb`, which Blender then imports and parents to
+  the existing armature (`generate_body.fix_automatic_weights` still handles skinning, with a
+  widened blend radius to match the new geometry).
+- **Coordinate frame note:** mesh-craft uses a Y-up frame; CNA's skeleton (and Blender's default)
+  is Z-up. Verified empirically, not assumed: `mc3.X → Blender.X`, `mc3.Y → Blender.Z`,
+  `mc3.Z → Blender.Y`. `generate_body_meshcraft.py`'s `_mc3_position()` applies this remap on every
+  primitive.
+- **CSG's documented limitations** (`MC3_FORMAT.md`): unioned geometry gets a placeholder
+  `UV=(0,0)`, flat recomputed normals, and loses per-child materials. Confirmed a non-issue here
+  *before* committing to this approach, not assumed: `CNAAvatarBody.png` is a solid 4×4 white
+  placeholder texture (real skin color is a runtime tint via `AvatarAppearanceEXT::setSkinColorProperty`,
+  not baked UVs), so losing real UVs costs nothing visually.
+- `BONE_RADII` were thickened (~2× for arms, head grown 0.11→0.15) to look proportioned once
+  actually watertight-merged, and the skin-weight blend radius widened (`blend_radius=avg_radius*1.6`,
+  up from a flat `0.08`) to match. `generate_clothes_meshcraft.py` needed two of its own real bug
+  fixes found via screenshot inspection after the body-only fix worked: it was initially still
+  referencing the *old* thinner `generate_body.BONE_RADII` instead of the new module's, and even
+  after that fix the shirt/pants were a barely-visible sliver because their `~0.02m` padding
+  constant was tuned for the old thin body (fixed with a `padding * 1.8` multiplier, scoped to the
+  new generator only — the original `generate_clothes.py` is untouched and still independently
+  runnable).
+- `generate_avatar.py`/`generate_wardrobe.py` alias-import the new modules
+  (`import generate_body_meshcraft as generate_body`) so the rest of the orchestration pipeline
+  needed no rewrite; the original bpy-only modules remain standalone-runnable for reference.
+- `docs/avatar-art-direction.md` (new) restates the body-proportion/topology/skinning requirements
+  this pipeline targets, in head-heights-unit terms.
+
+**Honest result** (verified via direct screenshot comparison across both genders, 3 angles, and a
+mid-animation pose — not just plausible-sounding claims): the core "monster" complaints —
+disproportionate stick-thin limbs, a too-small head, severe self-intersecting mesh explosions at
+every joint — are genuinely fixed on the body/skin itself. Smaller gaps remain open and
+honestly documented, not glossed over: a residual shoe-area dark artifact, a `Wave`-pose
+chest-band artifact, and `tools/avatar_asset_pipeline/validate_gltf.py` still lacking NaN/Inf/
+bone-index-bounds checks on generated content. None of these block the decision-4c acceptance bar
+(front/side/back screenshots, male + female, animation gallery, no mesh explosions, no distorted
+limbs), which this phase does meet.
 
 ## What this explicitly is not
 

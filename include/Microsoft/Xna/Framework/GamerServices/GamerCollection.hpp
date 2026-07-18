@@ -84,9 +84,19 @@ namespace Microsoft::Xna::Framework::GamerServices
              * @brief Advances the enumerator to the next element.
              *
              * @return true if there is a next element; otherwise false.
+             * @throws System::ArgumentOutOfRangeException if called after Dispose().
              */
             bool MoveNext()
             {
+                // Unlike getCurrent(), this previously dereferenced collection_ unconditionally,
+                // so it.Dispose(); it.MoveNext(); was an immediate null-pointer dereference for
+                // every GamerCollection specialization - Dispose() sets collection_ to nullptr,
+                // and nothing here checked for it. Same guard/exception as getCurrent() above,
+                // for a consistent post-Dispose() contract across both methods.
+                if (collection_ == nullptr)
+                {
+                    throw System::ArgumentOutOfRangeException("position");
+                }
                 ++position_;
                 return position_ < static_cast<int>(collection_->size());
             }
@@ -258,6 +268,19 @@ namespace Microsoft::Xna::Framework::GamerServices
         NOXNA void Remove(T* item)
         {
             collection_.erase(std::remove(collection_.begin(), collection_.end(), item), collection_.end());
+        }
+
+        /**
+         * @brief Removes every element from the collection.
+         *
+         * Same same-library mutation access as Add()/Remove(), for the same reason
+         * (NetworkSession::Dispose() dropping every non-owning view onto gamers it is about to
+         * free, so a raw pointer into a just-destroyed object can never be observed through a
+         * collection accessor).
+         */
+        NOXNA void Clear()
+        {
+            collection_.clear();
         }
 
     protected:

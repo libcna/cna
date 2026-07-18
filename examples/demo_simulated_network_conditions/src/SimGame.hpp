@@ -17,10 +17,14 @@
 // Task 15.4: cna_demo_simulated_network_conditions. Real two-process NetworkSession over real
 // ENet, rendered as a small Pong-style match (two paddles, one host-authoritative ball). Number
 // keys 1/2/3/4 raise/lower NetworkSession::SimulatedLatencyProperty/SimulatedPacketLossProperty
-// live, and the HUD honestly shows both the requested simulated values and the real measured RTT
-// (Task 4.1) side by side - Task 4.3 confirmed these two properties are stored but never applied
-// to real traffic anywhere (deliberately matching FNA's own non-functional reference stub), so
-// this demo proves that live, rather than pretending a stutter effect exists that does not.
+// live, and the HUD shows both the requested simulated values and the real measured RTT (Task
+// 4.1) side by side. Task 4.3 originally confirmed these two properties were stored but never
+// applied to real traffic anywhere (deliberately matching FNA's own non-functional reference
+// stub); Task 6.1-6.5 (plan_net.md Phase 6) implemented a real receive-side delayed-delivery
+// queue and probabilistic drop for them, scoped to AppData delivered to local gamers (see
+// ENetBackend.cpp's own HandleAppData comment for why session-management traffic and host-relay
+// traffic stay unaffected) - raising SimLatency/SimPacketLoss here now produces a genuinely
+// visible remote-paddle/ball stutter, not just a HUD number that moves in isolation.
 class SimGame : public Microsoft::Xna::Framework::Game
 {
 public:

@@ -3,10 +3,12 @@
 #include <cstdio>
 
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/Gamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/LeaderboardKey.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/LeaderboardWriter.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp"
 #include "Microsoft/Xna/Framework/Input/Keyboard.hpp"
-#include "System/NotSupportedException.hpp"
+#include "Microsoft/Xna/Framework/Storage/StorageDevice.hpp"
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -44,63 +46,55 @@ LeaderboardGame::LeaderboardGame()
 {
 }
 
-void LeaderboardGame::RebuildReaderForCurrentPage()
-{
-    // LeaderboardReader's real constructor loop is `for (i = pageStart; i < size && i <
-    // entryCache.size(); i++)` (Task 10.6's confirmed, FNA-faithful loop-bound quirk) - "size" is
-    // an absolute upper index bound, not a page length, for any page beyond the first. Passing
-    // the FULL fabricated entry list plus [pageStart, pageStart+kPageSize) as start/size is the
-    // correct way to get exactly kPageSize real entries back for page N.
-    const int start = currentPage_ * kPageSize;
-    reader_ = LeaderboardReader::CreateInternal(identity_, start, start + kPageSize, fullEntries_, false);
-}
-
 void LeaderboardGame::Initialize()
 {
     Game::Initialize();
 
+    // Task 4.3/4.4 (plan_net.md Phase 4): real persistence needs a real, distinct app-data
+    // location - this demo uses its own dedicated app name so its 20 synthetic gamertags never
+    // collide with any other CNA app's own local GamerServices store.
+    Storage::StorageDevice::SetAppNameEXT("CnaDemoLeaderboardViewer");
+
+    // 20 synthetic gamers, published as "signed in" (LeaderboardReader::Read only attaches to
+    // currently signed-in gamers - see its own doc comment on this documented, honest local-only
+    // limitation), each given a real rating through LeaderboardWriter - the real "write path"
+    // (LeaderboardEntry::setRatingProperty() persists on every call - see its own doc comment for
+    // why that, not a separate commit method, is the real XNA-faithful trigger).
+    //
+    // Each gamer is constructed with `new SignedInGamer(SignedInGamer::CreateInternal(tag))`, not
+    // a plain push_back of the by-value CreateInternal() result - see syntheticGamers_'s own doc
+    // comment in LeaderboardGame.hpp for why: this exact spelling is what makes C++17's mandatory
+    // prvalue-elision rule construct the object directly at its final heap address, with no
+    // intermediate move ever touching the Gamer subobject's self-captured LeaderboardWriter owner
+    // pointer.
+    std::vector<SignedInGamer*> signedInPointers;
     for (int i = 0; i < kTotalEntries; ++i)
     {
-        const int ranking = i + 1;
+        char tag[32];
+        std::snprintf(tag, sizeof(tag), "Player%02d", i + 1);
+        syntheticGamers_.push_back(
+            std::unique_ptr<SignedInGamer>(new SignedInGamer(SignedInGamer::CreateInternal(tag)))
+        );
+    }
+    for (const std::unique_ptr<SignedInGamer>& gamer : syntheticGamers_)
+    {
+        signedInPointers.push_back(gamer.get());
+    }
+    Gamer::setSignedInGamersProperty(new SignedInGamerCollection(
+        SignedInGamerCollection::CreateInternal(signedInPointers)
+    ));
+
+    for (int i = 0; i < kTotalEntries; ++i)
+    {
         const long long rating = 1000 - i * 10;
-        fullEntries_.push_back(LeaderboardEntry::CreateInternal(nullptr, rating, ranking));
-    }
-    RebuildReaderForCurrentPage();
-
-    // Real API calls, once each, proving the always-throws boundary is real rather than assumed.
-    try
-    {
-        reader_->PageDown();
-        std::printf("[Leaderboard] PageDown() unexpectedly did not throw.\n");
-    }
-    catch (const System::NotSupportedException&)
-    {
-        std::printf("[Leaderboard] PageDown() threw NotSupportedException as expected.\n");
-    }
-    try
-    {
-        reader_->PageUp();
-        std::printf("[Leaderboard] PageUp() unexpectedly did not throw.\n");
-    }
-    catch (const System::NotSupportedException&)
-    {
-        std::printf("[Leaderboard] PageUp() threw NotSupportedException as expected.\n");
-    }
-    try
-    {
-        LeaderboardWriter writer;
-        [[maybe_unused]] LeaderboardEntry* unused = writer.GetLeaderboard(identity_);
-        std::printf("[Leaderboard] LeaderboardWriter::GetLeaderboard() unexpectedly did not throw.\n");
-    }
-    catch (const System::NotSupportedException&)
-    {
-        std::printf("[Leaderboard] LeaderboardWriter::GetLeaderboard() threw NotSupportedException "
-                    "as expected.\n");
+        syntheticGamers_[static_cast<std::size_t>(i)]->getLeaderboardWriterProperty()
+            .GetLeaderboard(identity_)->setRatingProperty(rating);
     }
 
-    // The 3 real throwing calls above may have left the reader in an unspecified state (they're
-    // stubs, not tested for post-throw side effects) - rebuild fresh before actually displaying it.
-    RebuildReaderForCurrentPage();
+    reader_ = LeaderboardReader::Read(identity_, 0, kPageSize);
+    std::printf("[Leaderboard] Wrote %d real ratings via LeaderboardWriter, read back "
+                "totalOnFirstPage=%d via a real LeaderboardReader::Read().\n",
+                kTotalEntries, reader_->getEntriesProperty().getCountProperty());
 }
 
 void LeaderboardGame::LoadContent()
@@ -115,16 +109,19 @@ void LeaderboardGame::LoadContent()
 
 void LeaderboardGame::Update(GameTime& /*gameTime*/)
 {
+    // Task 4.4 (plan_net.md Phase 4): PageDown()/PageUp() are now real - they mutate reader_ in
+    // place (reslicing the already-cached full leaderboard, no new disk read), so no separate
+    // "rebuild the reader" step is needed anymore.
     KeyboardState keys = Keyboard::GetState();
     if (keys.IsKeyDown(Keys::Down) && !previousKeys_.IsKeyDown(Keys::Down) && reader_->getCanPageDownProperty())
     {
         ++currentPage_;
-        RebuildReaderForCurrentPage();
+        reader_->PageDown();
     }
     if (keys.IsKeyDown(Keys::Up) && !previousKeys_.IsKeyDown(Keys::Up) && reader_->getCanPageUpProperty())
     {
         --currentPage_;
-        RebuildReaderForCurrentPage();
+        reader_->PageUp();
     }
     previousKeys_ = keys;
 
@@ -137,7 +134,7 @@ void LeaderboardGame::Update(GameTime& /*gameTime*/)
     if (smokeFramesLeft_ > 0 && smokeFramesLeft_ % 30 == 0 && reader_->getCanPageDownProperty())
     {
         ++currentPage_;
-        RebuildReaderForCurrentPage();
+        reader_->PageDown();
     }
 
     if (smokeFramesLeft_ > 0)

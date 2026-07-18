@@ -75,7 +75,18 @@ GARMENT_STYLES = {
     },
     "Shoes": {
         "Shoes": (
-            ["Foot.L", "Foot.R"],
+            # audit_net.md remediation (2026-07-18, fourth round): LowerLeg.L/R added. Covering
+            # only Foot made the shoe shell a capsule around the *foot* axis whose rear
+            # hemispherical cap (radius 0.087) burrowed up into the body's own LowerLeg capsule
+            # (radius 0.08, vertical) - the two surfaces genuinely CROSSED, so the render
+            # alternated between shoe and skin along a low-poly intersection curve, which is
+            # exactly the jagged dark/light interleaving the audit reported at the feet
+            # (measured: 18.9% of shoe vertices were strictly inside the body, worst -74mm).
+            # A shell that also spans LowerLeg has radius 0.08+0.027 = 0.107 > the leg's own
+            # 0.08, so it strictly ENCLOSES the leg instead of crossing it, and 0.107 < the
+            # Pants shell's 0.116 at the same bone, so the added shaft stays hidden inside the
+            # pants rather than reading as knee-high boots.
+            ["Foot.L", "Foot.R", "LowerLeg.L", "LowerLeg.R"],
             0.015,
             "Shoes",
         ),

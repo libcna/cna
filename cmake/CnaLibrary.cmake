@@ -42,6 +42,7 @@ list(FILTER CNA_SOURCES EXCLUDE REGEX "src/CNA/Internal/Backends/.*")
 
 # Exclude Net / GamerServices sources — they live in CNA_GamerServices and CNA_Net targets
 list(FILTER CNA_SOURCES EXCLUDE REGEX "src/Microsoft/Xna/Framework/GamerServices/.*")
+list(FILTER CNA_SOURCES EXCLUDE REGEX "src/CNA/Internal/GamerServices/.*")
 list(FILTER CNA_SOURCES EXCLUDE REGEX "src/Microsoft/Xna/Framework/Net/.*")
 list(FILTER CNA_SOURCES EXCLUDE REGEX "src/CNA/Internal/Net/.*")
 
@@ -158,6 +159,7 @@ endif()
 if(CNA_ENABLE_NET)
     file(GLOB_RECURSE CNA_GAMERSERVICES_SOURCES CONFIGURE_DEPENDS
         "src/Microsoft/Xna/Framework/GamerServices/*.cpp"
+        "src/CNA/Internal/GamerServices/*.cpp"
     )
     add_library(CNA_GamerServices STATIC ${CNA_GAMERSERVICES_SOURCES})
     target_include_directories(CNA_GamerServices
