@@ -17,22 +17,31 @@ single-file backend adapters (`backend-dx3`, `backend-easygl`, `backend-webgpu`)
 backends (`backend-ascii`, `backend-canvas`, `backend-d3d11/12/9`, `backend-sdlgpu`, `backend-bgfx`,
 `backend-vulkan`, `backend-d3dcommon`), then CNA core / Microsoft.Xna / Microsoft.Devices shards.
 
-Background Workflow in flight: `examples-tests-easygl` (218 files, run ID `wf_0b3830f6-648`) — first mechanical
-batch, testing the hybrid pattern before scaling it to the remaining ~700 example files and ~400 test files. A
-first attempt at this workflow (run ID `wf_8c4ac6b8-702`, using an `args`-based file list) failed instantly with
-`args.files` undefined — worked around by inlining the file list as a literal JS array in the script body instead
-of passing it via the `args` parameter; note this workaround for any future mechanical-batch workflow authored for
-this audit.
+Background Workflow COMPLETE: `examples-tests-easygl` (218 files, run ID `wf_0b3830f6-648`, 28 agents, 0 errors,
+~1.8M subagent tokens, ~30 min wall-clock) — the first mechanical-batch trial, and it worked very well: all 218
+reports genuinely evidence-based (spot-checked 3, all did real formula re-derivation, git-log cross-referencing,
+and production-code reading, not boilerplate). Found 4 HIGH-severity issues worth flagging prominently (see
+`AUDIT_FINDINGS_INDEX.md`), the most significant being a **production** EasyGL bug (skinned-effect shaders skip
+the WorldInverseTranspose normal transform) that no existing test can detect because they all use World=Identity —
+queued as a priority verification item for the `backend-easygl` direct audit. A first attempt at this workflow
+(run ID `wf_8c4ac6b8-702`, using an `args`-based file list) failed instantly with `args.files` undefined — worked
+around by inlining the file list as a literal JS array in the script body instead of passing it via the `args`
+parameter; **use this workaround for every future mechanical-batch workflow in this audit** (don't retry passing
+file lists via `args`).
+
+Next mechanical-batch candidates (same pattern, same prompt template): `examples-tests-bgfx` (98),
+`examples-tests-vulkan` (70), `examples-tests-sdlrenderer` (67), remaining `examples-tests-*` shards, then
+`tests-*` shards, then `tools-*` shards.
 
 ## Counts (as of this update, 2026-07-18)
 
 - Total tracked files: **2634**
 - AUDIT-eligible: **2297** (105 manifest shards)
 - EXEMPT: **337** (8 reason categories)
-- AUDITED so far: **8** (backend-common ×2, backend-headless ×2, backend-software ×2, backend-sdlrenderer ×2)
-- PENDING: **2289** (+ 218 currently IN_PROGRESS via the background workflow, not yet reflected in manifest until
-  the workflow's results are processed)
-- IN_PROGRESS: **0** manifest-tracked (workflow-in-flight files remain PENDING in the manifest until processed)
+- AUDITED so far: **226** (backend-common ×2, backend-headless ×2, backend-software ×2, backend-sdlrenderer ×2,
+  examples-tests-easygl ×218)
+- PENDING: **2071**
+- IN_PROGRESS: **0**
 - BLOCKED: **0**
 
 ## Findings recorded so far (see AUDIT_FINDINGS_INDEX.md for full detail)
