@@ -8349,7 +8349,7 @@ test is not sufficient for an Android coordinate/fusion claim.
   verified, and complete, but the task's core lifecycle-verification ask remains
   blocked on other unstarted work, not on hardware.
 
-### BASE2-003 — Verify public SensorState transitions and timing — OPEN
+### BASE2-003 — Verify public SensorState transitions and timing — OPEN (race-freedom confirmed; enum reachability documented; strict-oracle comparison remains blocked)
 
 - **Priority:** P1
 - **Area:** Perfection re-audit
@@ -8362,6 +8362,60 @@ test is not sufficient for an Android coordinate/fusion claim.
   - Every enum value has reachable, documented semantics or is intentionally never produced.
   - State updates are race-free and observable in tests.
 - **Evidence required before CLOSED:** source diff/commit, focused regression test output, relevant sanitizer/static-analysis output, and hardware report where requested.
+- **Progress so far (not yet CLOSED — see Remaining limitations):**
+  - "State updates are race-free and observable in tests": **confirmed already satisfied**,
+    not newly fixed — `getStateProperty()` on all four classes is guarded by the same lock
+    each class's own `Start()`/`Stop()` writes `state_` under (`Task P6-3`/`SENSORBASE-004`,
+    prior sessions; `Gyroscope::getStateProperty()`'s own comment explicitly cross-references
+    `Accelerometer`'s identical fix). This session's own repeated `devices-tsan` runs across
+    every task touching these classes (`SDLCORE-009`, `SDLCORE-005`, `MOT2-005`, `BASE2-002`,
+    all this pass) have produced zero race reports on `state_` or any other field — real,
+    accumulated evidence, not merely re-asserted from an old note.
+  - "Every enum value has reachable, documented semantics or is intentionally never
+    produced": investigated directly — grepped every `state_ = SensorState::...`
+    assignment across `Accelerometer.cpp`/`Gyroscope.cpp`/`Compass.cpp`/`Motion.cpp`.
+    **Finding:** `NotSupported`/`Initializing`/`Ready`/`Disabled` are produced by all four
+    classes; `NoData`/`NoPermissions` are produced by **none** of them, on any class, today.
+    Added Doxygen documentation to `SensorState.hpp` recording this precisely — but
+    deliberately did **not** claim this is "intentional" (the acceptance criterion's own
+    fallback wording): this codebase has no local WP7 SDK/MonoGame reference to confirm
+    whether real `Accelerometer.State` (the one strict-API member) is documented to ever
+    report these, so the honest claim is "currently never produced, unverified against
+    real WP7 behavior," not "intentionally never produced." Noted one plausible, but
+    independently *unconfirmed*, reason `NoPermissions` specifically might be genuinely
+    unreachable on this project's supported platforms: Android's basic motion sensors
+    (accelerometer/gyroscope/magnetometer/rotation vector) do not require a runtime
+    permission grant in Android's own permission model, unlike e.g. location/camera/
+    microphone — this claim was not independently verified against Android's official
+    documentation the way other platform-contract claims in this codebase have been
+    (e.g. `MOTION-012`'s `sensors_motion`/`sensors_overview` citations), so it is
+    presented as a plausible hypothesis, not a confirmed fact.
+  - "Record exact Accelerometer reference transitions" / "Define separate CNA policy for
+    Gyroscope/Compass/Motion NOXNA State" / "Cover... transient failures": **not
+    attempted** — recording the *exact* reference transitions requires the real WP7
+    oracle (`DEVPERF-002`/`003`, not yet built); "transient failures" (a source
+    disappearing mid-session, e.g.) is also the same open architectural gap `MOT2-006`
+    already investigated and found genuinely unimplemented (`Motion.state_` never reacts
+    to mid-session backend degradation) — not duplicated here, see that task's own entry.
+- **Files changed:** `include/Microsoft/Devices/Sensors/SensorState.hpp`.
+- **Tests:** none added — this is a documentation-only change; existing tests already
+  assert specific `SensorState` values at each transition point per class
+  (`GetStatePropertyReflectsSupportStatus` for `Initializing`, etc.) and already satisfy
+  "observable in tests." Rebuilt and re-ran the affected suites for regression safety:
+  162 tests (`AccelerometerTests.*:GyroscopeTests.*:CompassTests.*:MotionTests.*`), 158
+  passed, 4 pre-existing hardware-only skips, 0 failures.
+- **Sanitizer/static-analysis result:** clean under `devices-ubsan`. No new TSan run
+  needed for this doc-only change — race-freedom evidence already accumulated from this
+  pass's own other tasks (see above).
+- **Remaining limitations (explicitly OPEN, not fabricated):** whether `NoData`/
+  `NoPermissions` *should* actually be wired up (and under what specific condition) is a
+  real WP7-behavior question this session cannot answer without `DEVPERF-002`/`003`'s
+  oracle — deliberately not guessed at or implemented speculatively. The Android
+  permission-model hypothesis above is unconfirmed. "Transient failures" state coverage
+  is `MOT2-006`'s own, separately-tracked, larger gap. Left **OPEN**, same reasoning as
+  `BASE2-001`/`002`: the race-freedom claim is real and verified, the enum-reachability
+  documentation is accurate and new, but the task's core oracle-comparison ask remains
+  blocked on other unstarted work.
 
 ### BASE2-004 — Verify exception types, ErrorId and messages — OPEN
 
