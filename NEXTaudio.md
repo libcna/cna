@@ -1256,6 +1256,32 @@ concurrent process -- check `git status`/`git diff --stat` in those sibling repo
 a build failure is caused by anything on this branch (it was not, the one time this happened
 2026-07-18 -- see §3's `AUD-11-024` entry).
 
+**`AUD-11` is now FULLY CLOSED (2026-07-18, commit `be9b39ea`): 28/28 tasks `[x]`, 0 open.** 5 more
+commits after `ed3b16b6`: `AUD-11-025` was upgraded from "investigated but not fixed" to a real,
+ASan-reproduced fix -- the initially-proposed generation-counter shape (matching `AUD-04-008/009`)
+turned out to be over-engineered for this specific case (`Dispose()` and `GetSoundEffect()` are
+both methods on the *same* `WaveBank` instance, so a single mutex serializing both against each
+other is sufficient); a real `heap-use-after-free` was reproduced and fixed. `AUD-11-019`/`020`:
+zero-length entries and padding-between-entries both confirmed already-safe by construction, new
+tests lock it in. `AUD-11-021`: found a genuine, real gap -- every existing fixture in this
+codebase used the older XWB header format (`version<=43`); the newer format (`version>43`, extra
+`headerVersion` field) had zero coverage anywhere despite a real desync risk if the branch were
+ever wrong -- closed with a new test, confirmed to catch a deliberately-broken branch condition.
+`AUD-11-022`: seek tables confirmed genuinely not applicable (real FAudio source shows they're
+only used for XMA2/WMA, neither of which CNA decodes). `AUD-11-027`/`028`: the WAV wrapper's own
+byte-level output had never been directly tested (only indirectly via "did SDL3 decode it") --
+closed with 6 new direct field-level tests, plus a new standalone `cna_xwb_inspect` tool
+(metadata-JSON + `.wav` export, mirrors `AUD-06-025`'s pattern) verified end-to-end against a real
+hand-built fixture. **Incidental finding, not fixed (out of scope):** a whole-repo test run hit a
+real crash (`malloc(): unsorted double linked list corrupted`) in an unrelated `ENetBackendTest` --
+consistent with the already-documented `NetworkSession::Dispose()` double-free corrupting heap
+metadata that later surfaces unpredictably; confirmed via an isolated audio-scoped rerun (660/660
+pass) that this is unrelated to any commit on this branch. See the project memory file for detail.
+With both `AUD-06` and `AUD-11` now fully closed, the next natural section to pick up is `AUD-15`
+(thread-safety/lifetime, 18 open) -- this pass's own investigative pattern ("what if X runs
+concurrently with Y," "what if this file is truncated/corrupt") found and fixed real defects
+repeatedly, and should transfer directly.
+
 **Do not re-run a fresh full audit or restart from AUD-00** -- the audit and the 438-task plan
 already exist; work through the existing list. See §9 for what to still confirm with the user
 before doing (backend/API-surface changes), which remains unchanged from before.
